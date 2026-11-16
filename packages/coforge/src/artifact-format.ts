@@ -45,6 +45,30 @@ type ArtifactUnseen = {
   versions: UnseenVersion[];
 };
 
+/** The server's answer to `move`. */
+export type ArtifactMovedAnswer = {
+  artifact: { id: string; title: string };
+  from: string;
+  to: string;
+};
+
+/** The server's answer to `delete`. */
+export type ArtifactDeletedAnswer = {
+  artifact: { id: string; title: string };
+  deleted: true;
+};
+
+export function formatArtifactMoved({ artifact }: ArtifactMovedAnswer): string {
+  return [
+    `Moved "${foldUntrustedLine(artifact.title)}" (id ${artifact.id}) to the Workspace: every member and every Agent of it can now see it, with its comments and every version.`,
+    "Only a person can move it back to its conversation (Who can see, on its page); you cannot.",
+  ].join("\n");
+}
+
+export function formatArtifactDeleted({ artifact }: ArtifactDeletedAnswer): string {
+  return `Deleted "${foldUntrustedLine(artifact.title)}" (id ${artifact.id}) with every version and comment. No one can open it any more, and this cannot be undone.`;
+}
+
 /** How many files `read` lists unless asked for all. */
 const READ_FILES_SHOWN = 10;
 

@@ -27,7 +27,7 @@ export function agentWrites(services: Services, workspaceId: string, agentId: st
   return {
     /** A new artifact of these files (version 1). */
     create: async (input: {
-      conversationId?: string;
+      conversationId: string;
       title: string;
       description?: string;
       files: Record<string, string>;

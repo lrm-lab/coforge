@@ -36,6 +36,7 @@ export function publicPageLookup(
             currentVersion: true,
             entryPath: true,
             homeKey: true,
+            access: true,
           },
         },
       },
@@ -55,8 +56,7 @@ export function publicPageLookup(
           files: { where: { path: path ?? artifact.entryPath }, select: { sha256: true } },
         },
       }),
-      // A home the Workspace hides is gone for everyone, its public page with it (task #20).
-      artifactHomeHidden(db, artifact.workspaceId, artifact.homeKey),
+      artifactHomeHidden(db, artifact.workspaceId, artifact),
     ]);
     const file = version?.files[0];
     if (!on || homeHidden || !version || version.entryPath !== artifact.entryPath || !file)

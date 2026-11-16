@@ -1,4 +1,7 @@
-import type { ArtifactVersionPublishedEvent } from "#src/features/artifacts/artifact-realtime";
+import type {
+  ArtifactAccessChangedEvent,
+  ArtifactVersionPublishedEvent,
+} from "#src/features/artifacts/artifact-realtime";
 import {
   conversationRealtimeChannel,
   workspaceConversationChannel,
@@ -10,7 +13,10 @@ import { artifactHomeConversationId } from "./artifact-access.server";
 
 /** Where an artifact's events go: one realtime channel at a time. */
 export type ArtifactSignals = {
-  publish(channel: string, event: ArtifactVersionPublishedEvent): Promise<void>;
+  publish(
+    channel: string,
+    event: ArtifactVersionPublishedEvent | ArtifactAccessChangedEvent,
+  ): Promise<void>;
 };
 
 /** The signals over Centrifugo; the API is built only when one is sent. */
@@ -20,36 +26,75 @@ export function centrifugoArtifactSignals(
   return { publish: (channel, event) => centrifugo().publishJson(channel, event) };
 }
 
+function channelsOf(input: { workspaceId: string; homeKey: string; wide: boolean }) {
+  const conversationId = artifactHomeConversationId(input.homeKey);
+  const workspaceChannel = workspaceConversationChannel(input.workspaceId);
+  if (!conversationId) return [workspaceChannel];
+  const homeChannel = conversationRealtimeChannel(conversationId);
+  return input.wide ? [homeChannel, workspaceChannel] : [homeChannel];
+}
+
+async function publishBestEffort(
+  signals: ArtifactSignals,
+  channels: readonly string[],
+  event: ArtifactVersionPublishedEvent | ArtifactAccessChangedEvent,
+  failure: string,
+) {
+  for (const channel of channels) {
+    try {
+      await signals.publish(channel, event);
+    } catch (error) {
+      console.warn(JSON.stringify({ event: failure, error_type: errorType(error) }));
+    }
+  }
+}
+
 /**
- * Tells the pages of the artifact's home that a version was saved: a conversation's pages, or
- * the Workspace's for a Workspace artifact (whose every member reads it). Best effort, after the
- * commit: a page that misses it reads the version on its next read.
+ * Tells the pages of the artifact's home conversation that a version was saved, and the
+ * Workspace's too while everyone reads it. Best effort, after the commit: a page that misses it
+ * reads the version on its next read.
  */
 export async function announceVersion(
   signals: ArtifactSignals | undefined,
   input: {
     workspaceId: string;
     homeKey: string;
+    wide: boolean;
     artifactId: string;
     number: number;
   },
 ) {
   if (!signals) return;
-  const conversationId = artifactHomeConversationId(input.homeKey);
-  const channel = conversationId
-    ? conversationRealtimeChannel(conversationId)
-    : workspaceConversationChannel(input.workspaceId);
-  const event: ArtifactVersionPublishedEvent = {
-    type: REALTIME_EVENTS.artifactVersionPublished,
-    workspaceId: input.workspaceId,
-    artifactId: input.artifactId,
-    number: input.number,
-  };
-  try {
-    await signals.publish(channel, event);
-  } catch (error) {
-    console.warn(
-      JSON.stringify({ event: "artifacts:version_signal_failed", error_type: errorType(error) }),
-    );
-  }
+  await publishBestEffort(
+    signals,
+    channelsOf(input),
+    {
+      type: REALTIME_EVENTS.artifactVersionPublished,
+      workspaceId: input.workspaceId,
+      artifactId: input.artifactId,
+      number: input.number,
+    },
+    "artifacts:version_signal_failed",
+  );
+}
+
+/**
+ * Tells the pages of the home conversation and of the Workspace that who can see the artifact
+ * changed, so each reads it again. Best effort, after the commit.
+ */
+export async function announceAccessChange(
+  signals: ArtifactSignals | undefined,
+  input: { workspaceId: string; homeKey: string; artifactId: string },
+) {
+  if (!signals) return;
+  await publishBestEffort(
+    signals,
+    channelsOf({ ...input, wide: true }),
+    {
+      type: REALTIME_EVENTS.artifactAccessChanged,
+      workspaceId: input.workspaceId,
+      artifactId: input.artifactId,
+    },
+    "artifacts:access_signal_failed",
+  );
 }

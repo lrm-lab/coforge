@@ -12,9 +12,11 @@ import {
   type ArtifactFileRow as FileRow,
 } from "./artifact-files.server";
 import {
-  requireArtifactHome,
-  requireArtifactWrite,
+  requireArtifactRead,
+  requireConversationHome,
+  artifactTier,
   artifactsDisabled,
+  inWorkspace,
   artifactsEnabled,
   canDeleteArtifact,
   type ArtifactActor,
@@ -33,6 +35,7 @@ import { ArtifactReads } from "./artifact-reads.server";
 import { requireNoUnseenCommentsOnPush } from "./artifact-comment-gate.server";
 import { lockComments } from "./artifact-comment-write.server";
 import { announceVersion, type ArtifactSignals } from "./artifact-signals.server";
+import { ArtifactVisibility } from "./artifact-visibility.server";
 import { writeVersion } from "./artifact-version-write.server";
 
 /** Where an artifact lives; its home is its only access rule. */
@@ -67,6 +70,8 @@ export class Artifacts {
   private readonly enabled: (workspaceId: string) => Promise<boolean>;
   /** Reading artifacts: a version, a list and cards (`ArtifactReads`). */
   readonly reads: ArtifactReads;
+  /** Who can see an artifact: a person's change, its loss count, and an Agent's move. */
+  readonly visibility: ArtifactVisibility;
   private readonly signals?: ArtifactSignals;
 
   constructor(
@@ -82,17 +87,7 @@ export class Artifacts {
     this.enabled = options.enabled ?? ((workspaceId) => artifactsEnabled(db, workspaceId));
     this.reads = new ArtifactReads(db, this.enabled);
     this.signals = options.signals;
-  }
-
-  /** The actor's access to a home: `NOT_FOUND` where it cannot read, as if nothing were there,
-   * and `ACCESS_DENIED` where it reads but may not write. */
-  private async requireHome(
-    workspaceId: string,
-    actor: ArtifactActor,
-    homeKey: string,
-    need: "read" | "write",
-  ) {
-    await requireArtifactHome(this.db, workspaceId, actor, homeKey, need);
+    this.visibility = new ArtifactVisibility(db, this.enabled, options.signals);
   }
 
   /** A live artifact's home, author and entry, after the experiment check: what every access needs. */
@@ -101,7 +96,12 @@ export class Artifacts {
     const artifact = await this.db.artifact.findFirst({
       where: { id: artifactId, workspaceId, deletedAt: null },
       select: {
+        id: true,
+        name: true,
+        title: true,
+        currentVersion: true,
         homeKey: true,
+        access: true,
         authorAgentId: true,
         entryPath: true,
       },
@@ -140,7 +140,16 @@ export class Artifacts {
     // Anyone with the link is a home a later step adds, with its own switch and refusals.
     if (input.home.kind === "public") invalid("artifact-home");
     const homeKey = artifactHomeKey(input.home);
-    await this.requireHome(input.workspaceId, input.author, homeKey, "write");
+    if (input.home.kind === "conversation")
+      await requireConversationHome(
+        this.db,
+        input.workspaceId,
+        input.author,
+        input.home.conversationId,
+        "write",
+      );
+    else if (!(await inWorkspace(this.db, input.workspaceId, input.author)))
+      throw new AppError("NOT_FOUND");
     const { home: _home, ...rest } = input;
     const saved = await createVersionedArtifact(this.db, this.blobs, { ...rest, homeKey });
     if (saved.fresh && input.version !== undefined) {
@@ -148,6 +157,7 @@ export class Artifacts {
       await announceVersion(this.signals, {
         workspaceId: input.workspaceId,
         homeKey,
+        wide: input.home.kind !== "conversation",
         artifactId: saved.artifact.id,
         number: 1,
       });
@@ -191,7 +201,7 @@ export class Artifacts {
     const { homeKey } = live;
     if ((input.note?.length ?? 0) > ARTIFACT_NOTE_LIMIT) invalid("artifact-note");
     if ((input.label?.length ?? 0) > ARTIFACT_LABEL_LIMIT) invalid("artifact-label");
-    await requireArtifactWrite(this.db, input.workspaceId, input.publisher, live, "write");
+    await requireArtifactRead(this.db, input.workspaceId, input.publisher, live);
     const added = [...(input.files ?? [])];
     const deleted = [...new Set(input.deletedPaths ?? [])];
     // Every path is valid and named once: a file is added or deleted, not both, nor twice.
@@ -389,6 +399,7 @@ export class Artifacts {
       await announceVersion(this.signals, {
         workspaceId: input.workspaceId,
         homeKey,
+        wide: artifactTier(live) === "workspace",
         artifactId: input.artifactId,
         number: saved.number,
       });
@@ -400,9 +411,14 @@ export class Artifacts {
    * the authoring Agent's owner, among those who can read it. An Agent deletes only its own. */
   async delete(input: { workspaceId: string; artifactId: string; actor: ArtifactActor }) {
     const artifact = await this.live(input.workspaceId, input.artifactId);
-    await requireArtifactWrite(this.db, input.workspaceId, input.actor, artifact, "read");
+    await requireArtifactRead(this.db, input.workspaceId, input.actor, artifact);
     if (!(await canDeleteArtifact(this.db, input.workspaceId, input.actor, artifact)))
-      throw new AppError("ACCESS_DENIED");
+      throw new AppError("ACCESS_DENIED", {
+        errorId: "artifact-delete-forbidden",
+        ...(input.actor.agentId
+          ? { hint: "only the Agent that made an artifact can delete it" }
+          : {}),
+      });
     await this.db.artifact.updateMany({
       where: { id: input.artifactId, workspaceId: input.workspaceId, deletedAt: null },
       data: {
@@ -412,5 +428,11 @@ export class Artifacts {
           : { deletedByUserId: input.actor.userId }),
       },
     });
+    return {
+      id: artifact.id,
+      name: artifact.name,
+      title: artifact.title,
+      currentVersion: artifact.currentVersion,
+    };
   }
 }

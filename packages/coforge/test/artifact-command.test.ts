@@ -27,11 +27,57 @@ test("each request command parses into its own request", () => {
     command: "artifact",
     request: { operation: "list", limit: 20 },
   });
+  expect(parseArgs(["artifact", "move", ID, "--to", "workspace"])).toEqual({
+    command: "artifact",
+    request: { operation: "move", artifact: ID, to: "workspace" },
+  });
+  expect(parseArgs(["artifact", "delete", ID])).toEqual({
+    command: "artifact",
+    request: { operation: "delete", artifact: ID },
+  });
+});
+
+test("moving to public is refused before anything is sent, and says only a person can", () => {
+  try {
+    parseArgs(["artifact", "move", ID, "--to", "public"]);
+    throw new Error("did not refuse");
+  } catch (error) {
+    expect(error).toBeInstanceOf(CliError);
+    expect((error as CliError).code).toBe("FORBIDDEN");
+    expect((error as CliError).message).toContain("Only a person");
+  }
+});
+
+test("move and delete print what happened", async () => {
+  const moved = transportAnswering({
+    artifact: { id: ID, name: "plan", title: "Plan", currentVersion: 2 },
+    from: "conversation",
+    to: "workspace",
+  });
+  const movedSaid = (await runArtifact(
+    invocation(["move", ID, "--to", "workspace"]),
+    moved.transport,
+  )) as string;
+  expect(moved.sent[0]).toEqual({ operation: "move", artifact: ID, to: "workspace" });
+  expect(movedSaid).toContain('"Plan"');
+  expect(movedSaid).toContain("every member and every Agent");
+  const deleted = transportAnswering({
+    artifact: { id: ID, name: "plan", title: "Plan", currentVersion: 2 },
+    deleted: true,
+  });
+  const deletedSaid = (await runArtifact(invocation(["delete", ID]), deleted.transport)) as string;
+  expect(deleted.sent[0]).toEqual({ operation: "delete", artifact: ID });
+  expect(deletedSaid).toContain("Plan");
+  expect(deletedSaid.toLowerCase()).toContain("deleted");
 });
 
 test("an artifact command missing what it needs, or removed, names its help", () => {
   for (const args of [
-    ["artifact", "delete", ID],
+    ["artifact", "delete"],
+    ["artifact", "move", ID],
+    ["artifact", "move", ID, "--to", "public"],
+    ["artifact", "move", ID, "--to", "anyone-with-link"],
+    ["artifact", "move", ID, "--to", "elsewhere"],
     ["artifact", "read"],
     ["artifact", "read", ID, "--exact-base"],
     // The single-text artifact, its history and revert, and the Agent's share are gone.
@@ -46,7 +92,7 @@ test("an artifact command missing what it needs, or removed, names its help", ()
 test("artifact --help describes the family and each command", async () => {
   const transport = {} as MessageTransport;
   const family = await run(["artifact", "--help"], transport);
-  expect(family).toContain("coforge artifact list|read|pull|push|download");
+  expect(family).toContain("coforge artifact list|read|pull|push|download|move|delete");
   for (const removed of ["create", "history", "revert", "share"])
     expect(family).not.toContain(`artifact ${removed}`);
   expect(await run(["artifact", "push", "--help"], transport)).toContain("artifact-base-moved");

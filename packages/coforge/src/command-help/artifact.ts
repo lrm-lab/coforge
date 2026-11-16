@@ -1,25 +1,25 @@
 import type { HelpEntry } from "./entry";
 
-/** The `artifact` family's help (task #385): artifacts kept in a channel, a DM or the Workspace. */
+/** The `artifact` family's help (task #385): artifacts kept in a channel or a DM. */
 export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
   artifact: {
     syntax:
-      "coforge artifact list|read|pull|push|download|comments|comment|review|resolve|reopen ...",
+      "coforge artifact list|read|pull|push|download|move|delete|comments|comment|review|resolve|reopen ...",
     guidance:
-      "An artifact is a set of files with an entry file, kept in a channel, a DM, or the Workspace, with every version; its entry file gives its type (a .md file is a document, an .html file a web page). Every member of the Workspace reads it; only Agents change one, by `pull` into a directory, edit, and `push` of the directory (only the files that changed are sent), and a push of a directory that was not pulled makes a new artifact. People and Agents comment on an artifact: `comments` reads what others wrote, `comment` and `review` write, `resolve` closes a thread. The Workspace must have artifacts switched on (Settings > Experiments).",
+      "An artifact is a set of files with an entry file, kept in a channel or a DM, with every version; its entry file gives its type (a .md file is a document, an .html file a web page). Whoever can see that conversation can open it; `move` widens that to the whole Workspace. Only Agents change one, by `pull` into a directory, edit, and `push` of the directory (only the files that changed are sent; any Agent that can see it may push), and a push of a directory that was not pulled makes a new artifact in the conversation `--target` names. Pushing posts nothing: send its link in a message to tell people. People and Agents comment on an artifact: `comments` reads what others wrote, `comment` and `review` write, `resolve` closes a thread. The Workspace must have artifacts switched on (Settings > Experiments).",
     example: "coforge artifact pull 0f8c…e1 --dir plan && coforge artifact push plan",
   },
   "artifact list": {
     syntax:
       "coforge artifact list [--target '#channel'|'@name'] [--query <words>] [--after <c>] [--limit <n>] [--json]",
     flags: [
-      "--target  the channel, or the DM with @name (@name~agent for an Agent); none lists the Workspace's",
+      "--target  the channel, or the DM with @name (@name~agent for an Agent), or a thread of one ('#channel:<message-id>', which lists its channel's); none lists every artifact you can see",
       "--query  only artifacts matching these words",
       "--after  the next page: the cursor the previous page's last line named",
       "--limit  how many to list in a page",
     ],
     guidance:
-      "Lists the artifacts you can read in a channel, a DM, or the Workspace, newest first, a page at a time; when more exist the last line is the command for the next page. Read-only; use it to check whether a `push` that made a new artifact and timed out actually made it.",
+      "Lists the artifacts you can read, in one channel or DM or everywhere you can see, newest first, a page at a time; when more exist the last line is the command for the next page. Read-only; use it to check whether a `push` that made a new artifact and timed out actually made it.",
     example: "coforge artifact list --target '#launch'",
   },
   "artifact read": {
@@ -48,7 +48,7 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
       "coforge artifact push [<dir>] [--target '#channel'|'@name'] [--title <t>] [--description <t>] [--entry <file>] [--note <t>] [--label <t>] [--delete <path>]... [--include-hidden] [--json]",
     flags: [
       "<dir>  the directory to push; the current one by default",
-      "--target  make a new artifact in this channel or DM (@name~agent for an Agent; none: the Workspace); only for a directory that was not pulled",
+      "--target  the channel or DM a new artifact is made in (@name~agent for an Agent; a thread of one homes it in its channel); required for a directory that was not pulled, and refused for one that was",
       "--title  the title, from which a new artifact's name is made; required to make a new artifact, a setting to change otherwise",
       "--description  one line saying what it is, shown on its card",
       "--entry  the file it opens at, an .md or .html file; a new artifact uses index.html, or its only file, by default",
@@ -70,6 +70,19 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
     ],
     guidance: "Saves one file's exact bytes, whatever its type.",
     example: "coforge artifact download 0f8c…e1 img/logo.png --output logo.png",
+  },
+  "artifact move": {
+    syntax: "coforge artifact move <id> --to workspace [--json]",
+    flags: ["--to  workspace: every member and Agent of the Workspace can then see it"],
+    guidance:
+      "Widens who can see an artifact you made from its conversation to the whole Workspace, with its comments and every version. Only the Agent that made it may, and only while the person who owns you can see it and could widen it themselves; otherwise it is refused with the reason (owner-cannot-see, owner-cannot-move, no-owner). Already Workspace-wide is a conflict (artifact-home-not-wider). You cannot move it back, and only a person can turn on link sharing (`--to public` is refused): a person does both from the artifact's page.",
+    example: "coforge artifact move 0f8c…e1 --to workspace",
+  },
+  "artifact delete": {
+    syntax: "coforge artifact delete <id> [--json]",
+    guidance:
+      "Deletes an artifact you made, with every version and comment. No one can open it afterwards and it cannot be undone. Only the Agent that made it may; another Agent that can see it is refused.",
+    example: "coforge artifact delete 0f8c…e1",
   },
   "artifact comments": {
     syntax:

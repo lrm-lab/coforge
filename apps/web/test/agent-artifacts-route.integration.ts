@@ -142,6 +142,7 @@ async function put(files: Record<string, string>, agent = agentId) {
 const make = async (title: string, files: Record<string, string>, extra: object = {}) => ({
   operation: "push",
   title,
+  target: `#launch-${handle}`,
   idempotencyKey: key(),
   files: await put(files),
   ...extra,
@@ -160,10 +161,11 @@ test("an Agent in a channel makes an artifact there, reads it, pushes over it an
 
   const read = await post({ operation: "read", artifact });
   expect(read.body.text).toBe("# Launch plan\n\nShip in May.\n\nRisks: none.\n");
-  // The Agent authored it, so it may delete it; the read also says which kind of home it is in.
-  expect(read.body).toMatchObject({ canDelete: true, artifact: { homeKind: "channel" } });
+  expect(read.body).toMatchObject({
+    canDelete: true,
+    artifact: { homeKind: "channel", access: "conversation" },
+  });
   expect(read.body.artifact).not.toHaveProperty("kind");
-  expect(read.body.artifact).toMatchObject({ canWrite: true });
 
   // The read-only list finds the artifact in its channel, newest first.
   const listed = await post({ operation: "list", target: `#launch-${handle}` });
@@ -249,7 +251,7 @@ test("an Agent makes an artifact in its DM with a person", async () => {
   expect(created).toMatchObject({ status: 200, body: { currentVersion: 1 } });
 });
 
-test("an Agent names a DM as message send does, and makes Workspace artifacts", async () => {
+test("an Agent names a DM as message send does", async () => {
   const notes = (target: string) => make("Notes", { "notes.md": "n\n" }, { target });
   expect(await post(await notes(`@ag-a-${handle}~human`))).toMatchObject({ status: 200 });
   // No DM with this Agent exists, and none is opened for an artifact.
@@ -276,10 +278,44 @@ test("an Agent names a DM as message send does, and makes Workspace artifacts", 
   } finally {
     await db.agent.delete({ where: { id: twin.id } });
   }
-  expect(await post(await make("Handbook", { "handbook.md": "# Hi\n" }))).toMatchObject({
-    status: 200,
-    body: { currentVersion: 1 },
+});
+
+test("a new artifact needs a home: a push with no target is refused, naming how to give one", async () => {
+  const { target: _target, ...bare } = await make("Handbook", { "handbook.md": "# Hi\n" });
+  const before = await db.artifact.count({ where: { workspaceId } });
+  const refused = await post(bare);
+  expect(refused).toMatchObject({ status: 400, body: { code: "INVALID_INPUT" } });
+  expect(refused.body.error).toContain("artifact-target-required");
+  expect(JSON.stringify(refused.body)).toContain("--target");
+  expect(await db.artifact.count({ where: { workspaceId } })).toBe(before);
+});
+
+test("a thread target homes the artifact in its channel, and lists its channel's", async () => {
+  const created = await post(
+    await make("Threaded", { "t.md": "t\n" }, { target: `#launch-${handle}:01a199fb` }),
+  );
+  expect(created.status).toBe(200);
+  const row = await db.artifact.findUniqueOrThrow({ where: { id: created.body.id } });
+  const channel = await db.conversation.findFirstOrThrow({
+    where: { workspaceId, channelName: `launch-${handle}` },
   });
+  expect(row.homeKey).toBe(`conversation:${channel.id}`);
+  const listed = await post({ operation: "list", target: `#launch-${handle}:01a199fb` });
+  expect((listed.body as unknown as { id: string }[]).map((entry) => entry.id)).toContain(
+    created.body.id,
+  );
+});
+
+test("a task is refused as a home, naming the conversation it is on", async () => {
+  for (const [target, named] of [
+    [`#launch-${handle}:#7`, `#launch-${handle}`],
+    [`dm:@ag-a-${handle}:#7`, `@ag-a-${handle}`],
+  ] as const) {
+    const refused = await post(await make("Task notes", { "n.md": "n\n" }, { target }));
+    expect(refused).toMatchObject({ status: 400, body: { code: "INVALID_INPUT" } });
+    expect(refused.body.error).toContain("artifact-target-task");
+    expect(JSON.stringify(refused.body)).toContain(named);
+  }
 });
 
 test("a channel the Agent reads but may not write refuses an artifact", async () => {
@@ -310,6 +346,7 @@ test("bytes the Agent never uploaded are asked for before an artifact is made", 
   const sha256 = "d".repeat(64);
   const asked = await post({
     operation: "push",
+    target: `#launch-${handle}`,
     title: "Not yet",
     idempotencyKey: key(),
     files: [{ path: "plan.md", sha256 }],
@@ -318,7 +355,7 @@ test("bytes the Agent never uploaded are asked for before an artifact is made", 
   expect(await db.artifact.count({ where: { workspaceId } })).toBe(before);
 });
 
-test("a channel the Agent cannot read is missing for making; reading reaches every artifact", async () => {
+test("a channel the Agent cannot read is missing for making, and so is its artifact until it is widened", async () => {
   expect(
     await post(await make("Secret", { "secret.md": "s\n" }, { target: `#secret-${handle}` })),
   ).toMatchObject({ status: 404, body: { code: "NOT_FOUND" } });
@@ -330,20 +367,31 @@ test("a channel the Agent cannot read is missing for making; reading reaches eve
       manifest: { files: await put({ "secret.md": "hush\n" }, insiderId) },
     },
   );
-  // Every Workspace member reads every artifact (task #20): the Agent reads it, but the home's
-  // key and its write stay alice's.
-  const read = await post({ operation: "read", artifact: secret.id });
-  expect(read.status).toBe(200);
-  expect(read.body.artifact.homeKey).toBeNull();
-  expect(
-    await post({
+  const push = async () =>
+    post({
       operation: "push",
       artifact: secret.id,
       baseVersion: 1,
       idempotencyKey: key(),
       files: await put({ "secret.md": "changed\n" }),
-    }),
-  ).toMatchObject({ status: 403, body: { code: "ACCESS_DENIED" } });
+    });
+  expect(await post({ operation: "read", artifact: secret.id })).toMatchObject({
+    status: 404,
+    body: { code: "NOT_FOUND" },
+  });
+  expect(await push()).toMatchObject({ status: 404, body: { code: "NOT_FOUND" } });
+  await documents.moveToWorkspace(
+    { workspaceId, actor: { agentId: insiderId } },
+    { artifactId: secret.id },
+  );
+  const read = await post({ operation: "read", artifact: secret.id });
+  expect(read.status).toBe(200);
+  expect(read.body.artifact).toMatchObject({
+    homeKey: "workspace",
+    homeKind: "workspace",
+    access: "workspace",
+  });
+  expect(await push()).toMatchObject({ status: 200, body: { status: "created" } });
 });
 
 test("a request outside the web page's rules is refused", async () => {
@@ -366,7 +414,7 @@ test("a request outside the web page's rules is refused", async () => {
     body: { error: expect.stringContaining("limit is not accepted") },
   });
   expect(
-    await post(await make("Plan", { "plan.md": "p\n" }, { target: `#launch-${handle}:01a199fb` })),
+    await post(await make("Plan", { "plan.md": "p\n" }, { target: `#launch-${handle}:#abc` })),
   ).toMatchObject({ status: 400, body: { error: expect.stringContaining("artifact-target") } });
 });
 
@@ -385,26 +433,4 @@ test("a Workspace without the Artifacts experiment says so, whatever was asked",
   } finally {
     enabled = true;
   }
-});
-
-test("an Agent reads an artifact whose home it cannot read", async () => {
-  // Alice writes a document in a private channel the Agent is not in; every member reads it
-  // (task #20), but the home's identity stays hidden and writes stay the home's.
-  const artifact = await documents.create(
-    { workspaceId, actor: { agentId: insiderId } },
-    {
-      conversationId: secretId,
-      title: "Secret plan",
-      manifest: { files: await put({ "secret.md": "# Secret\n" }, insiderId) },
-      idempotencyKey: key(),
-    },
-  );
-  const read = await post({ operation: "read", artifact: artifact.id });
-  expect(read.status).toBe(200);
-  expect(read.body).toMatchObject({
-    text: "# Secret\n",
-    // Not even the home's kind leaks to a reader the home's rule kept out (task #20).
-    artifact: { canChange: false, canWrite: false, homeKey: null, homeKind: "workspace" },
-  });
-  expect("access" in (read.body.artifact as object)).toBe(false);
 });

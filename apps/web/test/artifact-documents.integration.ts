@@ -252,7 +252,7 @@ test("an idempotent create replays the same artifact, and a different input with
   expect(other.id).not.toBe(first.id);
 });
 
-test("a list by home shows only the home's documents; cards read for every member", async () => {
+test("a list by home shows only the home's documents; cards read for those who can see them", async () => {
   const open = await documents.create(writing(writer), {
     conversationId: channelId,
     title: "Open",
@@ -265,12 +265,14 @@ test("a list by home shows only the home's documents; cards read for every membe
   });
   const listed = await documents.list(reading(bob), { conversationId: channelId });
   expect(listed.map((doc) => doc.id)).toContain(open.id);
-  // Listing a home's documents still needs the home; a card by id is every member's read.
   await expect(documents.list(reading(bob), { conversationId: secretId })).rejects.toMatchObject({
     code: "NOT_FOUND",
   });
-  const cards = await documents.cards(reading(bob), [open.id, closed.id, crypto.randomUUID()]);
-  expect(cards.map((card) => card.id)).toEqual([open.id, closed.id]);
+  const missing = crypto.randomUUID();
+  const bobCards = await documents.cards(reading(bob), [open.id, closed.id, missing]);
+  expect(bobCards.map((card) => card.id)).toEqual([open.id]);
+  const aliceCards = await documents.cards(reading(alice), [open.id, closed.id, missing]);
+  expect(aliceCards.map((card) => card.id)).toEqual([open.id, closed.id]);
 });
 
 test("a push may name only bytes its publisher uploaded or the artifact already uses", async () => {
@@ -279,8 +281,6 @@ test("a push may name only bytes its publisher uploaded or the artifact already 
     title: "Private",
     manifest: await manifest(writer, { "private.md": "mine\n" }),
   });
-  // Bytes the writer uploaded for its own artifact in the private channel; the helper reads the
-  // artifact workspace-wide but never uploaded those bytes itself.
   const hidden = await documents.create(writing(writer), {
     conversationId: secretId,
     title: "Hidden",
@@ -317,7 +317,7 @@ test("a push may name only bytes its publisher uploaded or the artifact already 
   ).toMatchObject({ status: "created" });
 });
 
-test("a push by an Agent that may not write there is answered as if the artifact were not there", async () => {
+test("a push by an Agent that cannot see the artifact is answered as if it were not there", async () => {
   const closed = await documents.create(writing(writer), {
     conversationId: secretId,
     title: "Kept",
@@ -330,7 +330,7 @@ test("a push by an Agent that may not write there is answered as if the artifact
       title: "Taken over",
       idempotencyKey: crypto.randomUUID(),
     }),
-  ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
+  ).rejects.toMatchObject({ code: "NOT_FOUND" });
   expect((await documents.load(reading(alice), { artifactId: closed.id })).artifact.title).toBe(
     "Kept",
   );

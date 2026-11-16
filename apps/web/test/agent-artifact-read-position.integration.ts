@@ -37,6 +37,7 @@ const agents: Record<"reader" | "writer" | "fresh" | "other", string> = {
   fresh: "",
   other: "",
 };
+const homeTarget = `#rp-home-${handle}`;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "agent-read-position-"));
@@ -72,6 +73,16 @@ beforeAll(async () => {
       })
     ).id;
   }
+  const home = await db.conversation.create({
+    data: { workspaceId, channelName: `rp-home-${handle}`, visibility: "public" },
+  });
+  await db.conversationMember.createMany({
+    data: Object.values(agents).map((agentId) => ({
+      conversationId: home.id,
+      workspaceId,
+      agentId,
+    })),
+  });
 });
 
 afterAll(async () => {
@@ -120,10 +131,11 @@ async function document(agentId: string, text: string) {
   return [{ path: "document.md", sha256 }];
 }
 
-/** A Workspace artifact made by the Writer Bot (its version 1). */
+/** An artifact made by the Writer Bot (its version 1). */
 async function make(title: string) {
   const created = await post(agents.writer, {
     operation: "push",
+    target: homeTarget,
     title,
     idempotencyKey: key(),
     files: await document(agents.writer, "one\n"),
@@ -303,6 +315,7 @@ test("a failing position store never fails a committed push, or a read", async (
       agents.writer,
       {
         operation: "push",
+        target: homeTarget,
         title: "Bookkeeping",
         idempotencyKey: key(),
         files: await document(agents.writer, "one\n"),

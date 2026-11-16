@@ -24,7 +24,7 @@ export type AgentArtifactServices = {
   db: PrismaClient;
   documents: Pick<
     ArtifactDocuments,
-    "create" | "list" | "listPage" | "load" | "push" | "missingBytes"
+    "create" | "list" | "listPage" | "load" | "push" | "missingBytes" | "remove" | "moveToWorkspace"
   >;
   enabled: (workspaceId: string) => Promise<boolean>;
 };
@@ -61,6 +61,8 @@ const PUSH_OVER = z.object({
 });
 
 /** A push of files with no artifact yet, which makes one: the files are its first version. */
+const MOVE_TARGET_PUBLIC = "public";
+
 const PUSH_NEW = z.object({
   artifact: z.undefined().optional(),
   target: z.string().optional(),
@@ -81,6 +83,8 @@ const RULES = {
   }),
   read: z.object({ artifact: id, version: version.optional() }),
   push: PUSH_OVER,
+  move: z.object({ artifact: id, to: z.string().max(40) }),
+  delete: z.object({ artifact: id }),
   ...commentInputs,
 } satisfies Record<AgentArtifactRequest["operation"], z.ZodType>;
 
@@ -157,10 +161,12 @@ export async function runAgentArtifactOperation(
     case "push": {
       if (request.artifact === undefined) {
         const input = parsed.data as z.infer<typeof PUSH_NEW>;
-        const conversationId =
-          input.target === undefined
-            ? undefined
-            : await resolveArtifactTarget(services.db, principal, input.target);
+        if (input.target === undefined)
+          throw new AppError("INVALID_INPUT", {
+            errorId: "artifact-target-required",
+            hint: "a new artifact needs a home: pass --target with the conversation you are working in (#channel, or @name for a DM)",
+          });
+        const conversationId = await resolveArtifactTarget(services.db, principal, input.target);
         const files = manifestOf({ files: input.files, entry: input.entry })!;
         const missing = await services.documents.missingBytes(scope, { manifest: files });
         if (missing.length) return { status: "missing" as const, missing };
@@ -198,6 +204,33 @@ export async function runAgentArtifactOperation(
             noteReadPosition(services.db, { artifactId: artifact, agentId, version: number }),
         },
       );
+    }
+    case "move": {
+      const input = parsed.data as z.infer<typeof RULES.move>;
+      if (input.to === MOVE_TARGET_PUBLIC)
+        throw new AppError("ACCESS_DENIED", {
+          errorId: "artifact-move-public",
+          hint: "only a person can turn on link sharing",
+        });
+      if (input.to !== "workspace")
+        throw new AppError("INVALID_INPUT", {
+          errorId: "artifact-request",
+          hint: "to is not accepted: an Agent can only move an artifact to workspace",
+        });
+      return services.documents.moveToWorkspace(
+        { workspaceId, actor: { agentId } },
+        {
+          artifactId: input.artifact,
+        },
+      );
+    }
+    case "delete": {
+      const input = parsed.data as z.infer<typeof RULES.delete>;
+      const artifact = await services.documents.remove(
+        { workspaceId, actor: { agentId } },
+        { artifactId: input.artifact },
+      );
+      return { artifact, deleted: true as const };
     }
     case "comments":
       return listComments(services.db, principal, parsed.data as z.infer<typeof RULES.comments>);
@@ -249,29 +282,40 @@ function withoutOperation(request: AgentArtifactRequest) {
   return fields;
 }
 
-const CHANNEL_TARGET = /^#([a-z0-9][a-z0-9_-]{0,63})$/;
-/** `@name` as `message send` takes it (`dm:@name` too), with `~human` or `~agent` when a person
- * and an Agent share the name. */
-const DM_TARGET = /^(?:dm:)?@([a-z0-9][a-z0-9_-]{0,63})(?:~(human|agent))?$/;
+const CHANNEL_TARGET = /^#([a-z0-9][a-z0-9_-]{0,63})(?::(\S+))?$/;
+const DM_TARGET = /^(?:dm:)?@([a-z0-9][a-z0-9_-]{0,63})(?:~(human|agent))?(?::(\S+))?$/;
+const TASK_NUMBER = /^#[1-9]\d*$/;
 
 /**
- * The conversation an artifact is made in: `#channel`, or `@name` for the Agent's direct
- * conversation with a person or an Agent (`~human` or `~agent` when both have the name). A thread is not a home (an artifact belongs to its
- * channel), and a DM is not opened for an artifact. A conversation that does not exist answers
- * `NOT_FOUND`; whether the Agent may write there is the artifact service's to answer, with the
- * same `NOT_FOUND` for a channel it cannot read.
+ * The conversation an artifact is made or listed in: `#channel`, or `@name` for the Agent's direct
+ * conversation with a person or an Agent (`~human` or `~agent` when both have the name). A thread
+ * (`#channel:<message-id>`) names its conversation. A task is refused, naming its conversation,
+ * and a DM is not opened for an artifact. A conversation that does not exist answers `NOT_FOUND`;
+ * whether the Agent may write there is the artifact service's to answer, with the same
+ * `NOT_FOUND` for a channel it cannot read.
  */
 export async function resolveArtifactTarget(
   db: PrismaClient,
   principal: { workspaceId: string; agentId: string },
   target: string,
 ): Promise<string> {
-  const channel = CHANNEL_TARGET.exec(target)?.[1];
-  const [, peer, peerKind] = DM_TARGET.exec(target) ?? [];
+  const [, channel, channelSuffix] = CHANNEL_TARGET.exec(target) ?? [];
+  const [, peer, peerKind, peerSuffix] = DM_TARGET.exec(target) ?? [];
   if (!channel && !peer)
     throw new AppError("INVALID_INPUT", {
       errorId: "artifact-target",
-      hint: "name #channel or @name (@name~agent for an Agent), without a thread",
+      hint: "name #channel or @name (@name~agent for an Agent), or a thread of one",
+    });
+  const suffix = channelSuffix ?? peerSuffix;
+  if (suffix !== undefined && TASK_NUMBER.test(suffix))
+    throw new AppError("INVALID_INPUT", {
+      errorId: "artifact-target-task",
+      hint: `a task cannot be an artifact's home: name its conversation, ${channel ? `#${channel}` : `@${peer}`}`,
+    });
+  if (suffix?.startsWith("#"))
+    throw new AppError("INVALID_INPUT", {
+      errorId: "artifact-target",
+      hint: "name #channel or @name (@name~agent for an Agent), or a thread of one",
     });
   const { workspaceId, agentId } = principal;
   if (channel) {

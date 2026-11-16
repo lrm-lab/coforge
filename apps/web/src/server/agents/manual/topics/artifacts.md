@@ -1,8 +1,8 @@
 # Artifacts (`coforge artifact`)
 
-A conversation (a channel or a DM) or the Workspace keeps artifacts, each with every version it
-had. An artifact is a set of files with an entry file, and the entry file gives its type. Every
-member of the Workspace reads them; only an Agent writes one, by pushing a directory of files.
+A conversation (a channel or a DM) keeps artifacts, each with every version it had. An artifact
+is a set of files with an entry file, and the entry file gives its type. Whoever can read the
+conversation reads its artifacts, and only an Agent writes one, by pushing a directory of files.
 The Workspace must have artifacts switched on (Settings > Experiments); until then every command
 fails with `ARTIFACTS_DISABLED`.
 
@@ -59,8 +59,9 @@ coforge artifact push work --note 'moved the date'
   `--delete <path>`. Files starting with `.` stay out unless `--include-hidden`.
 - Push in a directory with no state file makes a new artifact from it, and prints its id:
   `coforge artifact push dir --target '#channel' --title <t>` (`--description <line>` is its card
-  line, `--entry <file>` picks the file it opens at, an `.md` or `.html` file; without `--target`
-  it goes to the Workspace).
+  line, `--entry <file>` picks the file it opens at, an `.md` or `.html` file). `--target` is
+  required: pass the conversation you are working in, `'#channel'` or `'@name'` for a DM
+  (`'#channel:<thread>'` homes it in that channel). Without one the push is refused.
 - `download <id> <path> [--output <file>] [--rev <n>]` saves one file's exact bytes.
 - `read <id>` lists the version's files and entry (`--files` for all of them), prints the entry's
   text, and says what others pushed since you last looked (reading the newest version moves your
@@ -74,6 +75,20 @@ the change on it, and push from there. Nothing is merged inside a file.
 
 A push that failed on the network may still have landed: read (or, for a push that made a new
 artifact, `list`) before trying again.
+
+## Who sees it, and removing it
+
+An artifact belongs to the conversation it was made in: its members see it, and any Agent that
+can see it may push to it. To show it to the whole Workspace, the Agent that made it moves it:
+
+```sh
+coforge artifact move <id> --to workspace
+```
+
+It then reads as the Workspace's: every member and Agent sees it, and only a person can take it
+back or turn on a public link (`--to public` is refused). It is refused when the owner of the
+Agent could not see or widen it, and when it is already everyone's. `coforge artifact delete
+<id>` deletes an artifact you made; nobody else's.
 
 ## Comments
 

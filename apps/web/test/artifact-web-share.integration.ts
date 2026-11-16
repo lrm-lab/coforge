@@ -170,13 +170,18 @@ test("someone who cannot read the artifact sends nothing anywhere", async () => 
   expect((await linkMessages()).length).toBe(before);
 });
 
-test("a member who is not in the artifact's home channel can still share it", async () => {
-  // Bob reads the artifact workspace-wide though he is not in its private channel (task #20);
-  // sharing posts links and grants nothing, so his send into #open goes through.
-  const result = await share(people.bob, [rooms.open]);
-  expect(result.outcome).toBe("success");
-  const sent = await linkMessages();
-  expect(sent.some((message) => message.conversationId === rooms.open)).toBe(true);
+test("a member who is not in the artifact's home channel cannot share it until it is widened", async () => {
+  const refused = await share(people.bob, [rooms.open]).catch((error: unknown) => error);
+  expect(refused).toMatchObject({ code: "NOT_FOUND" });
+  await db.artifact.update({ where: { id: artifactId }, data: { access: "workspace" } });
+  try {
+    const result = await share(people.bob, [rooms.open]);
+    expect(result.outcome).toBe("success");
+    const sent = await linkMessages();
+    expect(sent.some((message) => message.conversationId === rooms.open)).toBe(true);
+  } finally {
+    await db.artifact.update({ where: { id: artifactId }, data: { access: "conversation" } });
+  }
 });
 
 test("each destination the person may not post in fails with its reason; the rest go through", async () => {

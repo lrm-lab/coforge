@@ -37,6 +37,7 @@ let alice: string;
 let agentId: string;
 let insiderId: string;
 let secretId: string;
+const homeTarget = `#ab-home-${handle}`;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "agent-artifact-bytes-"));
@@ -81,8 +82,14 @@ beforeAll(async () => {
       data: { workspaceId, channelName: `ab-secret-${handle}`, visibility: "private" },
     })
   ).id;
+  const homeId = (
+    await db.conversation.create({
+      data: { workspaceId, channelName: `ab-home-${handle}`, visibility: "public" },
+    })
+  ).id;
   await db.conversationMember.createMany({
     data: [
+      { conversationId: homeId, workspaceId, agentId },
       { conversationId: secretId, workspaceId, userId: alice },
       { conversationId: secretId, workspaceId, agentId: insiderId },
     ],
@@ -294,6 +301,7 @@ async function made(
     operation: "push",
     idempotencyKey: crypto.randomUUID(),
     title: "Bytes",
+    target: homeTarget,
     ...extra,
     files: Object.entries(files).map(([path, bytes]) => ({ path, sha256: sha256(bytes) })),
     ...(extra.entry ? {} : { entry: Object.keys(files)[0] }),
@@ -372,8 +380,8 @@ test("a download of a missing file, version or artifact is not found, as a read 
   for (const path of ["a\u0000b", "../a.md", "/a.md"])
     expect((await get(id, path)).status).toBe(404);
 
-  // An artifact in a private channel the Agent is not a member of is still readable: every
-  // Workspace member reads every artifact; the private home only keeps the Agent from writing.
+  // An artifact in a private channel the Agent is not a member of is not there for it, until
+  // its author widens it to the Workspace.
   const hush = await blobs.upload({
     workspaceId,
     bytes: text("hush\n"),
@@ -386,6 +394,11 @@ test("a download of a missing file, version or artifact is not found, as a read 
       title: "Secret",
       manifest: { files: [{ path: "hush.md", sha256: hush.sha256 }] },
     },
+  );
+  expect((await get(secret.id, "hush.md")).status).toBe(404);
+  await documents.moveToWorkspace(
+    { workspaceId, actor: { agentId: insiderId } },
+    { artifactId: secret.id },
   );
   const readable = await get(secret.id, "hush.md");
   expect(readable.status).toBe(200);

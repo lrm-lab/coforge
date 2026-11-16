@@ -1,7 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
-  canManageArtifactPublicLink,
+  canManageArtifactSharing,
   requireArtifactRead,
   type ArtifactActor,
 } from "./artifact-access.server";
@@ -14,15 +14,15 @@ type Db = Pick<PrismaClient, "artifact" | "workspaceMembership" | "agent" | "con
 export type CommentedArtifact = {
   id: string;
   homeKey: string;
+  access: string;
   currentVersion: number;
   authorAgentId: string | null;
 };
 
 /**
  * A live artifact the actor may read, or `NOT_FOUND`. Commenting needs read access and nothing
- * more: every member of the Workspace reads every artifact (task #20), so any member may comment
- * on it, with no write access to its home needed. A missing artifact, another Workspace's, a
- * deleted one, a home the Workspace hides and one the actor is no member of are all `NOT_FOUND`.
+ * more. A missing artifact, another Workspace's, a deleted one and one the actor cannot see are
+ * all `NOT_FOUND`.
  */
 export async function requireReadableArtifact(
   db: Db,
@@ -35,6 +35,7 @@ export async function requireReadableArtifact(
     select: {
       id: true,
       homeKey: true,
+      access: true,
       currentVersion: true,
       authorAgentId: true,
     },
@@ -64,14 +65,14 @@ export async function canResolveArtifactComment(
       : thread.root.authorUserId === actor.userId;
   const madeIt = actor.agentId !== undefined && thread.artifact.authorAgentId === actor.agentId;
   if (startedIt || madeIt) return true;
-  // The authoring Agent's owner and the admins: the public-link rule.
+  // The authoring Agent's owner and the admins: the sharing rule.
   if (actor.userId === undefined) return false;
   const { authorAgentId } = thread.artifact;
   const ownerId = authorAgentId
     ? (await db.agent.findFirst({ where: { id: authorAgentId }, select: { ownerId: true } }))
         ?.ownerId
     : undefined;
-  return canManageArtifactPublicLink(db, workspaceId, actor, {
+  return canManageArtifactSharing(db, workspaceId, actor, {
     ...thread.artifact,
     authorAgentOwnerId: ownerId ?? null,
   });

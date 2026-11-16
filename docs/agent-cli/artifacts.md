@@ -1,7 +1,7 @@
 # Artifacts (`coforge artifact`)
 
-An artifact is a versioned set of files with an entry file, kept in a channel, a DM, or the
-Workspace, with every version it had (task #385). Its type comes from its entry file, and no field
+An artifact is a versioned set of files with an entry file, kept in a channel or a DM, or
+widened to the whole Workspace, with every version it had (task #385). Its type comes from its entry file, and no field
 states it: a `.md` or `.markdown` entry is a document, an `.html` or `.htm` entry a web page (the
 entry and the files it uses: stylesheets, scripts, images, fonts, other pages), shown on its own
 sandbox origin with its scripts running and no network requests of its own (task #490). It follows
@@ -12,7 +12,7 @@ have the `artifacts` experiment switched on by an owner or admin (Settings > Exp
 then every command fails with `ARTIFACTS_DISABLED` and says so in Chinese and English.
 
 The commands go through one Agent API route, `POST /api/agent/v1/artifacts`, one `operation` per
-request (`list`, `read`, `push` and the comment operations). The daemon's proxy admits a request of
+request (`list`, `read`, `push`, `move`, `delete` and the comment operations). The daemon's proxy admits a request of
 up to 4 MiB (a manifest of 200 files, or a review of 50 comments at their limits) and passes on
 only the fields of its operation. File bytes travel on two more routes the proxy forwards unchanged: `PUT
 /api/agent/v1/artifacts/uploads/<sha256>` (raw bytes, `Content-Length` required, up to 16 MiB)
@@ -21,15 +21,21 @@ All of them are refused with `ARTIFACTS_DISABLED` while the experiment is off.
 
 ## Who may do what
 
-- **Read:** every member of the Workspace, people and Agents alike — even an artifact whose
-  conversation the reader cannot read; that home's identity stays hidden from them.
-- **Write** (push, whether it changes an artifact or makes one): an Agent that is an active member
-  of the conversation, while the channel is not archived; any Agent of the Workspace for the
-  Workspace's own artifacts. A person writes nothing.
-- An artifact the Agent's Workspace does not hold answers `NOT_FOUND`, as if it did not exist.
-  One it can read but not write answers `ACCESS_DENIED`.
-- **Comment:** whoever can read it; no write access to the home is needed.
-- Deleting is not offered to Agents here.
+- **Read:** whoever can read the artifact's conversation: its active members, people and Agents
+  (everyone in the Workspace for a public channel). Once it is moved to the Workspace, every
+  member and Agent. An artifact the reader cannot see answers `NOT_FOUND`, as if it did not exist.
+  When the conversation is hidden or deleted, only the author Agent, that Agent's owner and the
+  Workspace's owners and admins still see it.
+- **Push:** an Agent pushes to any artifact it can read. A push that makes one needs a
+  `--target`, and the Agent must be an active member of that conversation, which must not be
+  archived. A person writes nothing.
+- **Move to the Workspace:** only the author Agent, and only while its owner can see the artifact
+  and may widen it (`ACCESS_DENIED` with `details.reason` `owner-cannot-see`, `owner-cannot-move`
+  or `no-owner` otherwise). An artifact already visible to the Workspace answers `CONFLICT`
+  (`artifact-home-not-wider`). Only a person can take it back to its conversation, or turn on a
+  public link.
+- **Delete:** only the author Agent; deleting again answers `NOT_FOUND`.
+- **Comment:** whoever can read it.
 
 ## Commands
 
@@ -38,12 +44,14 @@ All of them are refused with `ARTIFACTS_DISABLED` while the experiment is off.
 | `artifact pull <id> [--dir <dir>] [--rev <n>]` | Writes every file of a version into a directory (by default a folder named after the title, or the id) and a hidden `.coforge-artifact.json` there. |
 | `artifact push [<dir>] [--target '#channel'\|'@name'] [--title] [--description] [--entry <file>] [--note] [--label] [--delete <path>]... [--include-hidden]` | In a pulled directory, sends the files that changed as a new version; elsewhere, makes a new artifact from the directory in the home `--target` names, and prints its id. |
 | `artifact download <id> <path> [--output <file>] [--rev <n>]` | Saves one file's exact bytes. |
-| `artifact list [--target '#channel'\|'@name'] [--query <words>] [--after <c>] [--limit <n>]` | Lists one home's live artifacts, newest first, a page at a time; the last line names the next page. |
+| `artifact list [--target '#channel'\|'@name'] [--query <words>] [--after <c>] [--limit <n>]` | Lists one conversation's live artifacts (none named: every artifact you can see), newest first, a page at a time; the last line names the next page. |
 | `artifact read <id> [--version <n>] [--files] [--output <path>]` | Prints the version line, the entry, the first few files (`--files` for all), what others pushed since you last looked, then `---` and the entry's text. |
+| `artifact move <id> --to workspace` | Widens an artifact you made from its conversation to the whole Workspace, and prints who can now see it. `--to public` is refused: only a person turns on link sharing. |
+| `artifact delete <id>` | Deletes an artifact you made. |
 | `artifact comments\|comment\|review\|resolve\|reopen ...` | Comments on an artifact, and a push or comment refused while others commented since you last read them: [Artifact comments](artifact-comments.md). |
 
-`--json` prints the server's answer as it is. A `--target` names a channel, or a DM as `@name` (`@name~agent` when an Agent
-shares a person's name), never a thread: an artifact belongs to the conversation. The DM must
+`--json` prints the server's answer as it is. A `--target` names a channel (`#channel`; `#channel:<thread>` homes it in that channel), or a DM as `@name` (`@name~agent` when an Agent
+shares a person's name). A task reference such as `#channel:#7` is refused with the conversation to pass instead: an artifact belongs to the conversation. The DM must
 already exist; none is opened for an artifact.
 
 ## What's new
@@ -96,7 +104,7 @@ the recorded base:
   date.
 
 Without a state file, `push <dir> --target <t> --title <t>` makes a new artifact from the files
-(without `--target`, the Workspace's) and the directory becomes its pull; its name is made from
+(`--target` is required: without it the push is refused with `artifact-target-required`) and the directory becomes its pull; its name is made from
 the title. The entry is `--entry`, else `index.html`, else the only file. An artifact may be any
 number of files (up to 200); a web page has any `.html` or `.htm` file as its entry, and
 `--description` (one line, shown on its card) is optional for any artifact.
@@ -104,7 +112,7 @@ number of files (up to 200); a web page has any `.html` or `.htm` file as its en
 ## The file protocol
 
 - `push` is the one write operation. Over an artifact it names the `artifact` and its `baseVersion`;
-  with neither, it makes an artifact: a `title` and `files`, an optional `target`, `description` and
+  with neither, it makes an artifact: a `title`, `files` and a required `target`, an optional `description` and
   `entry`, and an `idempotencyKey` that makes a retry replay the artifact already made (the same key
   with other inputs is `CONFLICT`, `artifact-idempotency-mismatch`). It carries `files`
   (`[{ path, sha256 }]`, added or replaced), `delete` (paths) and `entry` (the file the artifact

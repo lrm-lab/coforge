@@ -28,6 +28,7 @@ let workspaceId: string;
 let userId: string;
 let agentId: string;
 let otherId: string;
+let channelId: string;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "artifact-agent-base-"));
@@ -55,6 +56,16 @@ beforeAll(async () => {
     ).id;
   agentId = await newAgent("bot");
   otherId = await newAgent("other");
+  channelId = (
+    await db.conversation.create({
+      data: {
+        workspaceId,
+        channelName: `ab-${handle}`,
+        visibility: "public",
+        members: { create: [{ agentId: otherId }, { agentId }] },
+      },
+    })
+  ).id;
 });
 
 afterAll(async () => {
@@ -247,7 +258,11 @@ test("an artifact made and pushed through the documents keeps what others pushed
   const sha256 = await upload("# Notes\n\nfirst\n\nsecond\n", other);
   const created = await documents.create(
     { workspaceId, actor: other },
-    { title: "Notes", manifest: { files: [{ path: "document.md", sha256 }] } },
+    {
+      conversationId: channelId,
+      title: "Notes",
+      manifest: { files: [{ path: "document.md", sha256 }] },
+    },
   );
   const save = async (baseVersion: number, input: { text?: string; title?: string }) =>
     documents.push(

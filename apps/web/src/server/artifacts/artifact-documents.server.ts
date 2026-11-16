@@ -41,15 +41,15 @@ export class ArtifactDocuments {
     private readonly blobs: Pick<StoredArtifactBlobs, "read" | "inspectMany" | "allowed">,
   ) {}
 
-  /** A new artifact in a conversation, or the Workspace when none is named; named from its title,
-   * with the `manifest`'s files as version 1. An `idempotencyKey` makes the create safe to retry:
+  /** A new artifact in a conversation, named from its title, with the `manifest`'s files as
+   * version 1. An `idempotencyKey` makes the create safe to retry:
    * the same key with the same home, title, description and files returns the one already made,
    * and a different one is a conflict. The manifest's entry file gives its type
    * (`planManifestCreate`). */
   async create(
     scope: WriteScope,
     input: {
-      conversationId?: string;
+      conversationId: string;
       title: string;
       description?: string;
       manifest: FileManifest;
@@ -61,15 +61,13 @@ export class ArtifactDocuments {
     if (!title || title.length > 200)
       throw new AppError("INVALID_INPUT", { errorId: "artifact-title" });
     const description = input.description?.trim() ?? "";
-    const home = input.conversationId
-      ? ({ kind: "conversation", conversationId: input.conversationId } as const)
-      : ({ kind: "workspace" } as const);
+    const home = { kind: "conversation", conversationId: input.conversationId } as const;
     // The create's inputs, hashed, so a retry with the same key but different inputs is caught.
     const requestHash =
       input.idempotencyKey === undefined
         ? undefined
         : createRequestHash({
-            homeKey: input.conversationId ? `conversation:${input.conversationId}` : "workspace",
+            homeKey: `conversation:${input.conversationId}`,
             title,
             description,
             ...plan,
@@ -159,14 +157,9 @@ export class ArtifactDocuments {
       file.sizeBytes <= ARTIFACT_ENTRY_READ_LIMIT &&
       (options?.body !== "markdown" || document);
     const bytes = readable ? await this.blobs.read(scope.workspaceId, file.sha256) : null;
-    // The author and the viewer's role came with the read (no second query); the rule is the
-    // one `delete` enforces — and a reader the home's rule kept out cannot delete at all: a
-    // delete is the home's write (task #20). The authoring Agent's owner is the rule's other
-    // person branch, and its id came with the read too.
     const canDelete =
-      read.artifact.homeRead &&
-      (canDeleteArtifactWithRole(scope.actor, viewer.role, read.artifact) ||
-        (scope.actor.userId !== undefined && authorAgentOwnerId === scope.actor.userId));
+      canDeleteArtifactWithRole(scope.actor, viewer.role, read.artifact) ||
+      (scope.actor.userId !== undefined && authorAgentOwnerId === scope.actor.userId);
     return {
       ...read,
       text: bytes ? new TextDecoder().decode(bytes) : "",
@@ -220,7 +213,21 @@ export class ArtifactDocuments {
     return saved;
   }
 
-  /** The artifacts of a conversation (or the Workspace) the actor may read, newest first. */
+  /** Deletes the artifact for good; only the Agent that made it. */
+  async remove(scope: WriteScope, input: { artifactId: string }) {
+    return this.artifacts.delete({ ...scope, ...input });
+  }
+
+  /** Widens the artifact from its conversation to the whole Workspace, as its author Agent. */
+  moveToWorkspace(scope: WriteScope, input: { artifactId: string }) {
+    return this.artifacts.visibility.moveToWorkspace({
+      workspaceId: scope.workspaceId,
+      artifactId: input.artifactId,
+      agentId: scope.actor.agentId,
+    });
+  }
+
+  /** The artifacts the actor may read, in one conversation's home when it is named, newest first. */
   list(scope: DocumentScope, input: { conversationId?: string }) {
     return this.artifacts.reads.list({ ...reader(scope), ...input });
   }

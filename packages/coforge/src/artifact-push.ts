@@ -173,6 +173,14 @@ async function createFromDirectory(
   transport: ArtifactDirectoryTransport,
 ): Promise<Created> {
   const command = "artifact push";
+  const { target } = draft;
+  if (target === undefined)
+    throw new CliError({
+      code: "TARGET_REQUIRED",
+      message:
+        "A new artifact needs a home: pass --target with the conversation you are working in ('#channel', or '@name' for a DM). Nothing was pushed.",
+      retryable: false,
+    });
   const title = settings.title?.trim();
   if (!title)
     throw invalidArgument(command, "--title is required to make an artifact from a directory");
@@ -193,7 +201,7 @@ async function createFromDirectory(
   const request: CreateRequest = {
     operation: "push",
     title,
-    ...(draft.target === undefined ? {} : { target: draft.target }),
+    target,
     ...(settings.description === undefined ? {} : { description: settings.description.trim() }),
     files: toManifest(files),
     entry,

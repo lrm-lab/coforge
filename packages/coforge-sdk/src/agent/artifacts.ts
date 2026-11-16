@@ -7,11 +7,11 @@ import {
 } from "./artifact-comments";
 
 /**
- * `coforge artifact list|read|push|comments|comment|review|resolve|reopen`, plus `pull` and
- * `download` over the file routes (task #385): an Agent's artifacts, one operation per request on
- * `POST /api/agent/v1/artifacts`. An artifact is a versioned set of files with an entry file, and
- * its type is that file's; an Agent writes only by `push`. The server checks the `artifacts`
- * experiment and the artifact's home (a conversation, or the Workspace) for every operation.
+ * `coforge artifact list|read|push|move|delete|comments|comment|review|resolve|reopen`, plus
+ * `pull` and `download` over the file routes (task #385): an Agent's artifacts, one operation per
+ * request on `POST /api/agent/v1/artifacts`. An artifact is a versioned set of files with an
+ * entry file, and its type is that file's; an Agent changes its files only by `push`. The server
+ * checks the `artifacts` experiment and who can see the artifact for every operation.
  */
 
 /** The largest artifact request the local proxy admits: a manifest of 200 files, or a review of
@@ -25,7 +25,8 @@ export const ARTIFACT_UPLOAD_MAX_BYTES = 16 * 1024 * 1024;
  * uploaded. A push answered `missing` names the sha256s to upload before sending it again. */
 export type AgentArtifactFile = { path: string; sha256: string };
 
-/** One artifact operation. `target` is `#channel` or `dm:@person`; none is the Workspace. */
+/** One artifact operation. `target` is `#channel`, `dm:@person`, or a thread of one
+ * (`#channel:<message-id>`), which names its conversation. */
 export type AgentArtifactRequest =
   | { operation: "list"; target?: string; query?: string; after?: string; limit?: number }
   | { operation: "read"; artifact: string; version?: number }
@@ -45,7 +46,8 @@ export type AgentArtifactRequest =
       entry?: string;
     }
   | {
-      /** A new artifact made from `files` (version 1) in the home `target` names. */
+      /** A new artifact made from `files` (version 1) in the home `target` names; the server
+       * refuses a push that names none. */
       operation: "push";
       artifact?: undefined;
       target?: string;
@@ -82,6 +84,14 @@ export type AgentArtifactRequest =
       version?: number;
       idempotencyKey: string;
     }
+  | {
+      /** Widens who can see the artifact from its conversation to the whole Workspace; `to` is
+       * `workspace`. Only the Agent that made it may. */
+      operation: "move";
+      artifact: string;
+      to: string;
+    }
+  | { operation: "delete"; artifact: string }
   | { operation: "resolve"; artifact: string; comment: string; note?: string }
   | { operation: "reopen"; artifact: string; comment: string };
 
@@ -145,6 +155,14 @@ const OPERATIONS = {
     },
     required: ["idempotencyKey"],
     gatedByComments: true,
+  },
+  move: {
+    fields: { artifact: "string", to: "string" },
+    required: ["artifact", "to"],
+  },
+  delete: {
+    fields: { artifact: "string" },
+    required: ["artifact"],
   },
   comments: {
     fields: {

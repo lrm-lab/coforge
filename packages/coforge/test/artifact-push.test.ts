@@ -221,18 +221,22 @@ test("creating from a directory needs a title and an entry it can name", async (
   await mkdir(dir);
   await writeFile(join(dir, "one.md"), "1");
   await writeFile(join(dir, "two.md"), "2");
-  expect((await failure(run(server, ["push", dir]))).message).toContain("--title");
-  // Two Markdown files and no index.html: the entry has to be named.
-  expect((await failure(run(server, ["push", dir, "--title", "Docs"]))).message).toContain(
+  const to = ["--target", "#launch"];
+  const refused = await failure(run(server, ["push", dir, "--title", "Docs"]));
+  expect(refused.code).toBe("TARGET_REQUIRED");
+  expect(refused.message).toContain("--target");
+  expect(server.requests).toHaveLength(0);
+  expect((await failure(run(server, ["push", dir, ...to]))).message).toContain("--title");
+  expect((await failure(run(server, ["push", dir, "--title", "Docs", ...to]))).message).toContain(
     "--entry",
   );
-  await run(server, ["push", dir, "--title", "Docs", "--entry", "two.md"]);
+  await run(server, ["push", dir, "--title", "Docs", "--entry", "two.md", ...to]);
   expect(server.requests[0]).toMatchObject({ entry: "two.md" });
   // A web page needs no description: it is optional, as for any artifact.
   const page = join(root, "page");
   await mkdir(page);
   await writeFile(join(page, "index.html"), "<p>");
-  await run(server, ["push", page, "--title", "P"]);
+  await run(server, ["push", page, "--title", "P", ...to]);
   expect(server.requests.at(-1)).not.toHaveProperty("description");
   // A directory that is already an artifact's cannot be sent as a new one.
   const { dir: owned } = await pulled({ "a.md": "a" }, "owned");
@@ -240,7 +244,9 @@ test("creating from a directory needs a title and an entry it can name", async (
   // Nothing to send at all.
   const empty = join(root, "empty");
   await mkdir(empty);
-  expect((await failure(run(server, ["push", empty, "--title", "E"]))).code).toBe("INVALID_ARG");
+  expect((await failure(run(server, ["push", empty, "--title", "E", ...to]))).code).toBe(
+    "INVALID_ARG",
+  );
 });
 
 test("a push the server answers with nothing keeps the pulled version and says nothing was sent", async () => {

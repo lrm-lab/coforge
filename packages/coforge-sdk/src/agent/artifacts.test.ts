@@ -25,6 +25,17 @@ test("an artifact request is one known operation with exactly its own fields", (
       title: "Plan",
     }),
   ).toMatchObject({ operation: "push", baseVersion: 2 });
+  expect(decodeAgentArtifactRequest({ operation: "delete", artifact: "a1" })).toEqual({
+    operation: "delete",
+    artifact: "a1",
+  });
+  expect(
+    decodeAgentArtifactRequest({ operation: "move", artifact: "a1", to: "workspace" }),
+  ).toEqual({
+    operation: "move",
+    artifact: "a1",
+    to: "workspace",
+  });
   // A save's internal options, a removed operation, an unknown one, a missing field, a wrong type:
   // refused.
   for (const body of [
@@ -34,7 +45,11 @@ test("an artifact request is one known operation with exactly its own fields", (
     { operation: "history", artifact: "a1" },
     { operation: "revert", artifact: "a1", to: 1, baseVersion: 2, idempotencyKey: "k" },
     { operation: "share", artifactIds: ["a"], targets: ["#launch"], requestId: "r" },
-    { operation: "delete", artifact: "a1" },
+    { operation: "delete" },
+    { operation: "delete", artifact: "a1", force: true },
+    { operation: "move", artifact: "a1" },
+    { operation: "move", to: "workspace" },
+    { operation: "move", artifact: 7, to: "workspace" },
     { operation: "read" },
     { operation: "read", artifact: "a1", version: -1 },
     { operation: "read", artifact: 7 },

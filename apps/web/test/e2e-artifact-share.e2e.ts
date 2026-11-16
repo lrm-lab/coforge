@@ -131,6 +131,7 @@ test("an artifact's Share: who can see it", async () => {
 
     // An artifact of the Workspace itself: the same row; the way back is the Workspace.
     const notes = await bot.create({
+      conversationId: channel.id,
       title: "Workspace notes",
       files: { "notes.md": `Notes (run ${tail}).` },
     });

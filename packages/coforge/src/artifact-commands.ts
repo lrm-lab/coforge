@@ -24,14 +24,18 @@ import {
 } from "#src/artifact-comment-args";
 import { runArtifactComment } from "#src/artifact-comment-commands";
 import {
+  formatArtifactDeleted,
   formatArtifactList,
+  formatArtifactMoved,
   formatArtifactRead,
+  type ArtifactDeletedAnswer,
+  type ArtifactMovedAnswer,
   type ArtifactReadAnswer,
 } from "#src/artifact-format";
 
 /**
- * `coforge artifact list|read|pull|push|download|comments|comment|review|resolve|reopen` (task
- * #385): an Agent's artifacts. An artifact is a versioned set of files; an Agent changes one only
+ * `coforge artifact list|read|pull|push|download|move|delete|comments|comment|review|resolve|reopen`
+ * (task #385): an Agent's artifacts. An artifact is a versioned set of files; an Agent changes one only
  * by `pull` and `push` of a directory (`artifact-directory-commands.ts`), and the server merges a
  * push over an older version with what others pushed since, by file.
  */
@@ -42,7 +46,7 @@ export type ArtifactInvocation =
 
 export type ArtifactRequestInvocation = {
   command: "artifact";
-  request: Extract<AgentArtifactRequest, { operation: "list" | "read" }>;
+  request: Extract<AgentArtifactRequest, { operation: "list" | "read" | "move" | "delete" }>;
   /** `read --files`: list every file of the version, not the first few. */
   allFiles?: boolean;
   /** `read --output`: where the entry file's text goes, instead of stdout. */
@@ -55,14 +59,41 @@ export type ArtifactTransport = ArtifactDirectoryTransport;
 /** Artifacts on one `list` page unless `--limit` says otherwise. */
 const ARTIFACT_LIST_PAGE = 20;
 
-const OPERATIONS = ["list", "read", "push", "pull", "download", ...COMMENT_OPERATIONS] as const;
+const OPERATIONS = [
+  "list",
+  "read",
+  "push",
+  "pull",
+  "download",
+  "move",
+  "delete",
+  ...COMMENT_OPERATIONS,
+] as const;
 type Operation = (typeof OPERATIONS)[number];
+type RequestOperation = "list" | "read" | "move" | "delete";
 
 /** Each request operation's flags. */
-const FLAGS: Record<"list" | "read", FlagSpec> = {
+const FLAGS: Record<RequestOperation, FlagSpec> = {
   list: { text: ["--target", "--query", "--after"], count: ["--limit"], positionals: 0 },
   read: { text: ["--output"], count: ["--version"], bool: ["--files"], positionals: 1 },
+  move: { text: ["--to"], positionals: 1 },
+  delete: { positionals: 1 },
 };
+
+const LINK_SHARING_TARGETS = ["public", "anyone-with-link"];
+
+function moveTarget(command: string, value: string | undefined): string {
+  if (value === undefined) throw invalidArgument(command, "Say where it moves: --to workspace");
+  if (LINK_SHARING_TARGETS.includes(value))
+    throw new CliError({
+      code: "FORBIDDEN",
+      message:
+        "Only a person can turn on link sharing: an Agent cannot move an artifact to anyone with the link. Nothing was changed. A person does it from the artifact's page (Who can see > Anyone with the link).",
+      retryable: false,
+    });
+  if (value !== "workspace") throw invalidArgument(command, `--to takes workspace, not "${value}"`);
+  return value;
+}
 
 export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
   const operation = args[0] as Operation;
@@ -72,7 +103,7 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
     return parseDirectoryArgs(args);
   if (isCommentOperation(operation)) return parseCommentArgs(operation, args.slice(1));
   const command = `artifact ${operation}`;
-  const flags = FLAGS[operation as "list" | "read"];
+  const flags = FLAGS[operation as RequestOperation];
   const {
     positionals: [artifact],
     text,
@@ -83,7 +114,7 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
   if (flags.positionals && !artifact)
     throw invalidArgument(command, "Name the artifact: its id, as push printed it");
   const options = json ? { json: true as const } : {};
-  switch (operation as "list" | "read") {
+  switch (operation as RequestOperation) {
     case "list":
       return {
         command: "artifact",
@@ -107,6 +138,18 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
         },
         ...optional("output", text["--output"]),
         ...(switches.has("--files") ? { allFiles: true } : {}),
+        ...options,
+      };
+    case "move":
+      return {
+        command: "artifact",
+        request: { operation: "move", artifact: artifact!, to: moveTarget(command, text["--to"]) },
+        ...options,
+      };
+    case "delete":
+      return {
+        command: "artifact",
+        request: { operation: "delete", artifact: artifact! },
         ...options,
       };
   }
@@ -149,6 +192,10 @@ export async function runArtifact(
         invocation.allFiles === true,
       );
     }
+    case "move":
+      return json ? result : formatArtifactMoved(result as ArtifactMovedAnswer);
+    case "delete":
+      return json ? result : formatArtifactDeleted(result as ArtifactDeletedAnswer);
   }
 }
 

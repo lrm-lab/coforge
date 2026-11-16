@@ -159,7 +159,6 @@ test("an artifact the Agent cannot read has no comments to write or read", async
   const hidden = await f.make("Hidden", { "plan.md": "x\n" }, { target: `#${f.privateChannel}` });
   const inside = await comment(f.agents.writer, hidden, "Inside.");
   expect(inside.status).toBe(200);
-  // Reads are workspace-wide now (task #20); what an Agent cannot read is a hidden home.
   const channel = await f.db.conversation.findFirstOrThrow({
     where: { workspaceId: f.workspaceId, channelName: f.privateChannel },
     select: { id: true },
@@ -196,14 +195,16 @@ test("an artifact the Agent cannot read has no comments to write or read", async
 });
 
 test("a Workspace-wide artifact is commented by any Agent of the Workspace", async () => {
-  const created = await f.post(f.agents.writer, {
-    operation: "push",
-    idempotencyKey: f.key(),
-    title: "Everyone's",
-    files: await f.manifestOf(f.agents.writer, { "shared.md": "shared\n" }),
-  });
-  expect(created.status).toBe(200);
-  expect((await comment(f.agents.reader, created.body.id, "Seen.")).status).toBe(200);
+  const id = await f.make(
+    "Everyone's",
+    { "plan.md": "shared\n" },
+    {
+      target: `#${f.privateChannel}`,
+    },
+  );
+  expect((await comment(f.agents.reader, id, "Seen.")).status).toBe(404);
+  await f.post(f.agents.writer, { operation: "move", artifact: id, to: "workspace" });
+  expect((await comment(f.agents.reader, id, "Seen.")).status).toBe(200);
 });
 
 test("comments written at once keep their order, each after the one before", async () => {

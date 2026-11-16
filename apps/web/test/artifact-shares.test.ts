@@ -42,7 +42,6 @@ test("artifact share refuses a non-member's artifact before sending", async () =
     artifact: {
       findFirst: async () => ({ id: ARTIFACT, title: "Private", homeKey: "workspace" }),
     },
-    // Every member reads every artifact (task #20); a non-member hears NOT_FOUND.
     workspaceMembership: { findUnique: async () => null },
     agent: { findFirst: async () => null },
   };
@@ -77,8 +76,17 @@ test("a home the Workspace hides is not shared", async () => {
     },
     workspaceMembership: { findUnique: async () => ({ userId: "user-1" }) },
     agent: { findFirst: async () => null },
-    // `hiddenFromWorkspaceConversationIds` asks only for the hidden ones; this one is.
-    conversation: { findMany: async () => [{ id: home }] },
+    conversation: {
+      findMany: async () => [
+        {
+          id: home,
+          channelName: "launch",
+          visibility: "public",
+          hiddenFromWorkspaceAt: new Date(),
+          members: [{ id: "member" }],
+        },
+      ],
+    },
   };
   const shares = new ArtifactShares(db as never, async () => true);
   await expect(

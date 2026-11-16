@@ -139,8 +139,6 @@ async function save(artifactId: string, baseVersion: number, html: string) {
 }
 
 test("a member's next link refuses at once once they leave the Workspace", async () => {
-  // A member reads an artifact whose home they cannot read (task #20); leaving the Workspace
-  // revokes the next link — the sandbox's own check runs on every call.
   const author = await newAgent(`sb-author-${handle}`);
   const reader = (
     await db.user.create({ data: { username: `sb-reader-${handle}`, displayName: "R" } })
@@ -173,6 +171,8 @@ test("a member's next link refuses at once once they leave the Workspace", async
   });
   const link = () =>
     sandbox.link({ workspaceId, userId: reader, artifactId: page.id, embedderOrigin: APP });
+  await expect(link()).rejects.toMatchObject({ code: "NOT_FOUND" });
+  await db.artifact.update({ where: { id: page.id }, data: { access: "workspace" } });
   await link();
   await db.workspaceMembership.delete({
     where: { workspaceId_userId: { workspaceId, userId: reader } },
@@ -317,11 +317,15 @@ test("a ticket's files stop opening 10 minutes after the link, as access ends, a
   }
 });
 
-test("a file stops opening when the page's home is hidden from the Workspace", async () => {
+test("a file stops opening when the page's home is hidden from the Workspace, except for its author's owner", async () => {
   const author = await newAgent(`sb-files-${handle}`);
+  const reader = (
+    await db.user.create({ data: { username: `sb-files-reader-${handle}`, displayName: "R" } })
+  ).id;
+  await db.workspaceMembership.create({ data: { workspaceId, userId: reader, role: "member" } });
   const channel = (
     await db.conversation.create({
-      data: { workspaceId, channelName: `files-${handle}`, visibility: "private" },
+      data: { workspaceId, channelName: `files-${handle}`, visibility: "public" },
     })
   ).id;
   await db.conversationMember.create({
@@ -345,18 +349,26 @@ test("a file stops opening when the page's home is hidden from the Workspace", a
       { path: "a.css", sha256: put("a{}") },
     ],
   });
-  const link = await linkTo(page.id);
-  expect((await sandbox.serve(asset(link.url, "a.css", "style"))).status).toBe(200);
-  // Reads are workspace-wide now (task #20); what ends a page is its home going away. A frame
-  // asks again whether its reader may read (task #25); a subresource of a page already open
-  // serves under its ticket until the ticket's files expire.
+  const readerLink = await sandbox.link({
+    workspaceId,
+    userId: reader,
+    artifactId: page.id,
+    embedderOrigin: APP,
+  });
+  expect((await sandbox.serve(asset(readerLink.url, "a.css", "style"))).status).toBe(200);
   await db.conversation.update({
     where: { id: channel },
     data: { hiddenFromWorkspaceAt: new Date() },
   });
-  expect((await sandbox.serve(asset(link.url, "a.css", "style"))).status).toBe(200);
-  expect((await sandbox.serve(frame(link.url, "home.html"))).status).toBe(404);
+  expect((await sandbox.serve(asset(readerLink.url, "a.css", "style"))).status).toBe(200);
+  expect((await sandbox.serve(frame(readerLink.url, "home.html"))).status).toBe(404);
+  await expect(
+    sandbox.link({ workspaceId, userId: reader, artifactId: page.id, embedderOrigin: APP }),
+  ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  const ownerLink = await linkTo(page.id);
+  expect((await sandbox.serve(frame(ownerLink.url, "home.html"))).status).toBe(200);
   await db.conversation.delete({ where: { id: channel } });
+  await db.user.delete({ where: { id: reader } });
 });
 
 test("fileInVersion's real queries refuse a deleted artifact, another workspace, another version, a missing file, and a disabled experiment", async () => {

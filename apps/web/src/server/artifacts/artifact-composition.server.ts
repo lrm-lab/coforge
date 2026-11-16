@@ -27,6 +27,7 @@ export function productionArtifacts(db: PrismaClient) {
     artifacts,
     blobs,
     documents: new ArtifactDocuments(db, artifacts, blobs),
+    visibility: artifacts.visibility,
     publicLinks: new ArtifactPublicLinks(db),
   };
 }

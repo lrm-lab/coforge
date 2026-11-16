@@ -11,7 +11,7 @@ out" a move, not a split:
   another file here. `test/artifact-boundary.test.ts` enforces it.
 - A conversation is reached only through
   [`../conversations/channel-read-access.server.ts`](../conversations/channel-read-access.server.ts):
-  home access through `actorConversationAccess`, a `#name`/`@name` target
+  home access through `actorConversationHomeReads`, a `#name`/`@name` target
   through `visibleChannelIdByName`/`directConversationIdBetween`. Never the
   conversation tables or their predicates from here.
 - Artifact data lives only in the `artifacts` and `artifact_*` tables. No table
@@ -42,6 +42,13 @@ The artifacts module follows the reference product, Raft; add nothing it does no
   extension (`artifactKindOfPath`: `.html` is a web page, `.md` a document); no request field
   states it, the `kind` column a create still fills is write-only until its drop release, and an
   entry that is neither is refused (`artifact-entry-type`).
+- Who sees an artifact: whoever reads its home conversation (`access` `conversation`), or every
+  Workspace member and Agent once it is `workspace`; a legacy `homeKey` of `workspace` reads as
+  wide. An unseen artifact answers `NOT_FOUND`. A hidden or deleted home leaves it to the author
+  Agent, its owner and the Workspace's owners and admins. The Agent `move` widens it (author
+  only, `artifact-visibility.server.ts`), a person changes the tier back or forth, and each change
+  writes an `artifact_access_events` row. Read and push share one rule; only creating needs
+  membership of an unarchived conversation.
 - Only an Agent writes, and only by `push` (`Artifacts.push`; `ArtifactDocuments.create` makes an
   artifact with its first version in the same transaction). There is no single-text save, no
   history or revert, no Agent share

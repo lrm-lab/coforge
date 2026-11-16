@@ -263,7 +263,6 @@ test("a request for an artifact the Agent cannot read is answered as missing, no
     { target: `#${f.privateChannel}` },
   );
   await f.personComments(hidden, f.alice, { body: "Private." });
-  // Reads are workspace-wide now (task #20); what an Agent cannot read is a hidden home.
   const channel = await f.db.conversation.findFirstOrThrow({
     where: { workspaceId: f.workspaceId, channelName: f.privateChannel },
     select: { id: true },
@@ -284,13 +283,16 @@ test("a request for an artifact the Agent cannot read is answered as missing, no
   }
 });
 
-test("commenting needs the right to read, not to write: a member who cannot write the home comments", async () => {
+test("commenting needs the right to read: an Agent outside the private home comments once it is widened", async () => {
   const shared = await f.make("Tier", { "plan.md": "x\n" }, { target: `#${f.privateChannel}` });
-  // The Reader Bot is not in the private channel: it reads workspace-wide and may comment,
-  // but the home's write rule still keeps it out of pushes (task #20).
-  const widened = await comment(f.agents.reader, shared, "Hello.", { path: "plan.md" });
-  expect(widened.status).toBe(200);
-  expect((await f.pushText(shared, f.agents.reader, "z\n")).status).toBe(403);
+  expect((await comment(f.agents.reader, shared, "Hello.", { path: "plan.md" })).status).toBe(404);
+  expect((await f.pushText(shared, f.agents.reader, "z\n")).status).toBe(404);
+  expect(
+    (await f.post(f.agents.writer, { operation: "move", artifact: shared, to: "workspace" }))
+      .status,
+  ).toBe(200);
+  expect((await comment(f.agents.reader, shared, "Hello.", { path: "plan.md" })).status).toBe(200);
+  expect((await f.pushText(shared, f.agents.reader, "z\n")).status).toBe(200);
 });
 
 test("an unseen read from a cursor beyond the position does not mark what it skipped as read", async () => {

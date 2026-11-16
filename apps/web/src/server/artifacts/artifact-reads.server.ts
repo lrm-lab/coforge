@@ -5,20 +5,24 @@ import { AppError } from "#src/lib/app-error";
 import { escapeLikeTerm, searchTerms } from "#src/lib/search-terms";
 import {
   actorConversationHomeReads,
-  canReadConversationHome,
+  canReadConversationHome as canReadHome,
+  type ActorConversationHomeRead,
 } from "#src/server/conversations/channel-read-access.server";
+import { isWorkspaceAdminRole } from "#src/features/workspaces/workspace-roles";
 import {
-  artifactHomeAccess,
+  artifactAuthorOwnerId,
   artifactHomeConversationId,
-  artifactHomeHidden,
+  artifactHomeView,
+  artifactReadableFromHome,
+  artifactTier,
   artifactsDisabled,
   artifactViewer,
-  canManageArtifactPublicLinkWithRole,
-  inWorkspace,
-  requireArtifactHome,
+  canManageArtifactSharingWithRole,
+  homeStands,
   requireArtifactRead,
+  requireConversationHome,
   type ArtifactActor,
-  type ArtifactHomeAccess,
+  type ArtifactViewer,
 } from "./artifact-access.server";
 
 /** Artifacts one list or one batch of cards shows at most. */
@@ -68,6 +72,7 @@ const CARD_SELECT = {
   title: true,
   entryPath: true,
   homeKey: true,
+  access: true,
   currentVersion: true,
   preview: true,
   authorAgentId: true,
@@ -81,26 +86,27 @@ function card(
     title: string;
     entryPath: string;
     homeKey: string;
+    access: string;
     currentVersion: number;
     preview: string;
     authorAgentId: string | null;
     updatedAt: Date;
   },
   canChange: boolean,
-  homeRead = true,
+  homeKey: string | null = artifactTier(row) === "workspace" ? "workspace" : row.homeKey,
 ) {
   const { authorAgentId, ...shown } = row;
   return {
     ...shown,
-    // A reader the home's rule kept out never learns the home's key (task #20).
-    homeKey: homeRead ? row.homeKey : null,
+    homeKey,
+    access: artifactTier(row),
     canChange,
     author: authorAgentId ? { agentId: authorAgentId } : null,
   };
 }
 
-/** What the `canManageArtifactPublicLink` rule reads off a card row: the authoring Agent's
- * owner, looked up once per batch (`authorAgentId` is a bare column). */
+/** What the sharing rule reads off a card row: the authoring Agent's owner, looked up once per
+ * batch (`authorAgentId` is a bare column). */
 const accessRuleInput = (
   row: { authorAgentId: string | null },
   owners: ReadonlyMap<string, string>,
@@ -132,48 +138,26 @@ export class ArtifactReads {
           description: true,
           entryPath: true,
           homeKey: true,
+          access: true,
           currentVersion: true,
-          // Read with the artifact so `canDelete` needs no second query (task #385).
           authorAgentId: true,
         },
       }),
       artifactViewer(this.db, workspaceId, reader),
     ]);
     if (!artifact) throw new AppError("NOT_FOUND");
-    // The access check already read the home's conversation, so its kind comes free (task #385).
-    const { homeKind, homeRead, write } = await requireArtifactRead(
-      this.db,
-      workspaceId,
-      reader,
-      artifact,
+    const authorAgentOwnerId = await artifactAuthorOwnerId(this.db, artifact.authorAgentId);
+    const view = await requireArtifactRead(this.db, workspaceId, reader, artifact, {
       viewer,
-    );
-    // `authorAgentId` is a bare column, so the owner's id is one more lookup — and only where the
-    // `canManageArtifactPublicLink` rule needs it.
-    const ownerId = artifact.authorAgentId
-      ? (
-          await this.db.agent.findFirst({
-            where: { id: artifact.authorAgentId },
-            select: { ownerId: true },
-          })
-        )?.ownerId
-      : undefined;
+      authorAgentOwnerId,
+    });
     return {
       ...artifact,
-      // A reader the home's rule kept out never learns the home's key: a private conversation's
-      // id is not theirs to know (task #20).
-      homeKey: homeRead ? artifact.homeKey : null,
-      homeRead,
-      // Whether the home's own rule lets this reader write; the workspace-wide read never does.
-      canWrite: write,
-      canChange: canManageArtifactPublicLinkWithRole(reader, viewer.role, {
-        authorAgentOwnerId: ownerId ?? null,
-      }),
-      // The same owner id lets a caller apply the delete rule's owner branch with no lookup.
-      authorAgentOwnerId: ownerId ?? null,
-      // A reader the home's rule kept out learns no home detail at all: not even whether it
-      // was a channel or a DM (task #20). The page needs no kind without a home to return to.
-      homeKind: homeRead ? homeKind : "workspace",
+      homeKey: view.homeKey,
+      access: view.tier,
+      homeKind: view.homeKind,
+      canChange: canManageArtifactSharingWithRole(reader, viewer.role, { authorAgentOwnerId }),
+      authorAgentOwnerId,
       viewer,
     };
   }
@@ -266,8 +250,8 @@ export class ArtifactReads {
     });
   }
 
-  /** The live artifacts of one home the reader may read (a conversation's, or the Workspace's
-   * when none is named), most recently changed first, at most 100. */
+  /** The live artifacts the reader may read, in one conversation's home when it is named,
+   * most recently changed first, at most 100. */
   async list(input: { workspaceId: string; reader: ArtifactActor; conversationId?: string }) {
     return (await this.listPage({ ...input, limit: LIST_LIMIT })).artifacts;
   }
@@ -287,14 +271,25 @@ export class ArtifactReads {
     limit: number;
   }) {
     if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
-    const homeKey = input.conversationId ? `conversation:${input.conversationId}` : "workspace";
     const viewer = await artifactViewer(this.db, input.workspaceId, input.reader);
-    await requireArtifactHome(this.db, input.workspaceId, input.reader, homeKey, "read", viewer);
+    if (!viewer.member) throw new AppError("NOT_FOUND");
+    if (input.conversationId)
+      await requireConversationHome(
+        this.db,
+        input.workspaceId,
+        input.reader,
+        input.conversationId,
+        "read",
+        viewer,
+      );
+    const visible = input.conversationId
+      ? { homeKey: `conversation:${input.conversationId}` }
+      : await this.#visibleToReader(input.workspaceId, input.reader, viewer);
     const after = input.cursor === undefined ? undefined : readCursor(input.cursor);
     const rows = await this.db.artifact.findMany({
       where: {
         workspaceId: input.workspaceId,
-        homeKey,
+        ...visible,
         deletedAt: null,
         AND: [
           // `contains` does not escape LIKE wildcards: `%` and `_` in a word match themselves.
@@ -325,11 +320,7 @@ export class ArtifactReads {
       artifacts: page.map((row) =>
         card(
           row,
-          canManageArtifactPublicLinkWithRole(
-            input.reader,
-            viewer.role,
-            accessRuleInput(row, owners),
-          ),
+          canManageArtifactSharingWithRole(input.reader, viewer.role, accessRuleInput(row, owners)),
         ),
       ),
       ...(rows.length > input.limit && last ? { nextCursor: writeCursor(last) } : {}),
@@ -348,46 +339,38 @@ export class ArtifactReads {
       .filter((id) => UUID.test(id))
       .slice(0, LIST_LIMIT);
     if (ids.length === 0) return [];
-    const rows = await this.db.artifact.findMany({
-      where: { workspaceId: input.workspaceId, id: { in: ids }, deletedAt: null },
-      select: CARD_SELECT,
-    });
-    const homes = new Map<string, Promise<ArtifactHomeAccess>>();
-    // One membership read (`artifactViewer`) serves every home's access check and both rules
-    // below; before, each home asked it again (task #25).
-    const viewer = await artifactViewer(this.db, input.workspaceId, input.reader);
-    const homeAccess = (homeKey: string) => {
-      if (!homes.has(homeKey))
-        homes.set(
-          homeKey,
-          artifactHomeAccess(this.db, input.workspaceId, input.reader, homeKey, viewer),
-        );
-      return homes.get(homeKey)!;
-    };
-    const hidden = new Map<string, Promise<boolean>>();
-    const homeHidden = (homeKey: string) => {
-      if (!hidden.has(homeKey))
-        hidden.set(homeKey, artifactHomeHidden(this.db, input.workspaceId, homeKey));
-      return hidden.get(homeKey)!;
-    };
-    const owners = await this.#authorOwners(rows);
+    const [rows, viewer] = await Promise.all([
+      this.db.artifact.findMany({
+        where: { workspaceId: input.workspaceId, id: { in: ids }, deletedAt: null },
+        select: CARD_SELECT,
+      }),
+      artifactViewer(this.db, input.workspaceId, input.reader),
+    ]);
+    if (!viewer.member) return [];
+    const [owners, homes] = await Promise.all([
+      this.#authorOwners(rows),
+      this.#homeReads(input.workspaceId, input.reader, rows),
+    ]);
     const kept = new Map<string, ReturnType<typeof card>>();
     for (const row of rows) {
-      const home = await homeAccess(row.homeKey);
-      // Every Workspace member reads every artifact (task #20); a home reader shares one check.
-      // Only a workspace-wide read can meet a hidden home; a home reader never can.
-      if (!(home.read || viewer.member) || (!home.read && (await homeHidden(row.homeKey))))
+      const home = homes.get(artifactHomeConversationId(row.homeKey) ?? "");
+      const rule = accessRuleInput(row, owners);
+      if (
+        !artifactReadableFromHome({
+          actor: input.reader,
+          viewer,
+          artifact: row,
+          home,
+          authorAgentOwnerId: rule.authorAgentOwnerId,
+        })
+      )
         continue;
       kept.set(
         row.id,
         card(
           row,
-          canManageArtifactPublicLinkWithRole(
-            input.reader,
-            viewer.role,
-            accessRuleInput(row, owners),
-          ),
-          home.read,
+          canManageArtifactSharingWithRole(input.reader, viewer.role, rule),
+          artifactHomeView(row, home).homeKey,
         ),
       );
     }
@@ -418,22 +401,22 @@ export class ArtifactReads {
         entryPath: true,
         currentVersion: true,
         homeKey: true,
+        access: true,
         deletedAt: true,
         authorAgentId: true,
         workspace: { select: { slug: true } },
       },
     });
-    const homeConversationIds = [
-      ...new Set(
-        rows.flatMap((row) => {
-          const conversationId = artifactHomeConversationId(row.homeKey);
-          return conversationId ? [conversationId] : [];
-        }),
-      ),
-    ];
-    const [member, conversations] = await Promise.all([
-      inWorkspace(this.db, input.workspaceId, input.reader),
-      actorConversationHomeReads(this.db, input.workspaceId, input.reader, homeConversationIds),
+    const viewer = await artifactViewer(this.db, input.workspaceId, input.reader);
+    const [owners, conversations] = await Promise.all([
+      viewer.member &&
+      input.reader.userId !== undefined &&
+      !isWorkspaceAdminRole(viewer.role ?? undefined)
+        ? this.#authorOwners(rows)
+        : new Map<string, string>(),
+      viewer.member
+        ? this.#homeReads(input.workspaceId, input.reader, rows)
+        : new Map<string, ActorConversationHomeRead>(),
     ]);
     const byId = new Map(rows.map((row) => [row.id, row]));
     const cardFor = (id: string): ArtifactMessageCard => {
@@ -447,23 +430,18 @@ export class ArtifactReads {
         };
       const conversationId = artifactHomeConversationId(row.homeKey);
       const conversation = conversationId ? conversations.get(conversationId) : undefined;
-      const homeHidden = conversation?.hidden === true;
-      const homeRead =
-        row.homeKey === "workspace"
-          ? member
-          : conversation !== undefined &&
-            !homeHidden &&
-            canReadConversationHome({
-              channelName: conversation.channelName,
-              visibility: conversation.visibility,
-              member: conversation.member,
-            });
-      // Every member may open it (task #20); anyone else stays forbidden, as `read` answers
-      // them. A home the Workspace hides is gone for everyone, its cards with it.
-      const canOpen = member && !homeHidden;
-      if (!canOpen) return { kind: "artifact", state: "forbidden", artifactId: id, canOpen: false };
+      const readable = artifactReadableFromHome({
+        actor: input.reader,
+        viewer,
+        artifact: row,
+        home: conversation,
+        authorAgentOwnerId: accessRuleInput(row, owners).authorAgentOwnerId,
+      });
+      if (!readable)
+        return { kind: "artifact", state: "forbidden", artifactId: id, canOpen: false };
       if (row.deletedAt !== null)
         return { kind: "artifact", state: "deleted", artifactId: id, canOpen: false };
+      const homed = artifactTier(row) === "conversation" && homeStands(conversation);
       return {
         kind: "artifact",
         state: "open",
@@ -473,10 +451,8 @@ export class ArtifactReads {
         preview: row.preview,
         contentType: artifactKindOfPath(row.entryPath),
         version: row.currentVersion,
-        // A reader the home's rule kept out sees only the author, never the home it came from
-        // (task #20): no private conversation id, no DM context.
         source:
-          homeRead && conversationId
+          homed && conversationId
             ? {
                 conversationId,
                 label: conversation?.channelName ? `#${conversation.channelName}` : "DM",
@@ -490,8 +466,7 @@ export class ArtifactReads {
     return input.messages.map((message) => artifactIdsInBody(message.body, 100).map(cardFor));
   }
 
-  /** The authoring Agents' owners, for the batch's `canManageArtifactPublicLink` answers: one
-   * lookup per batch. */
+  /** The authoring Agents' owners, for the batch's sharing-rule answers: one lookup per batch. */
   async #authorOwners(rows: ReadonlyArray<{ authorAgentId: string | null }>) {
     const ids = [...new Set(rows.flatMap((row) => (row.authorAgentId ? [row.authorAgentId] : [])))];
     if (ids.length === 0) return new Map<string, string>();
@@ -500,5 +475,70 @@ export class ArtifactReads {
       select: { id: true, ownerId: true },
     });
     return new Map(agents.map((agent) => [agent.id, agent.ownerId]));
+  }
+
+  async #homeReads(
+    workspaceId: string,
+    reader: ArtifactActor,
+    rows: ReadonlyArray<{ homeKey: string; access: string }>,
+  ) {
+    const conversationIds = [
+      ...new Set(
+        rows.flatMap((row) => {
+          const conversationId =
+            artifactTier(row) === "workspace" ? undefined : artifactHomeConversationId(row.homeKey);
+          return conversationId ? [conversationId] : [];
+        }),
+      ),
+    ];
+    return actorConversationHomeReads(this.db, workspaceId, reader, conversationIds);
+  }
+
+  /** What a list with no home named asks of the artifacts: widened ones, and those of a home the
+   * reader reads or, when the home is gone, those the reader's standing still reaches. */
+  async #visibleToReader(workspaceId: string, reader: ArtifactActor, viewer: ArtifactViewer) {
+    const homed = await this.db.artifact.findMany({
+      where: {
+        workspaceId,
+        deletedAt: null,
+        access: { not: "workspace" },
+        homeKey: { startsWith: "conversation:" },
+      },
+      distinct: ["homeKey"],
+      select: { homeKey: true },
+    });
+    const conversationIds = new Map(
+      homed.map(({ homeKey }) => [homeKey, artifactHomeConversationId(homeKey)] as const),
+    );
+    const homes = await actorConversationHomeReads(this.db, workspaceId, reader, [
+      ...new Set([...conversationIds.values()].flatMap((id) => id ?? [])),
+    ]);
+    const readable: string[] = [];
+    const gone: string[] = [];
+    for (const [homeKey, conversationId] of conversationIds) {
+      const home = conversationId ? homes.get(conversationId) : undefined;
+      if (home !== undefined && homeStands(home)) {
+        if (canReadHome(home)) readable.push(homeKey);
+      } else gone.push(homeKey);
+    }
+    const reaches = await this.#goneHomeReach(workspaceId, reader, viewer);
+    return {
+      OR: [
+        { access: "workspace" },
+        { homeKey: "workspace" },
+        { homeKey: { in: readable } },
+        ...(reaches ? [{ homeKey: { in: gone }, ...reaches }] : []),
+      ],
+    };
+  }
+
+  async #goneHomeReach(workspaceId: string, reader: ArtifactActor, viewer: ArtifactViewer) {
+    if (reader.agentId !== undefined) return { authorAgentId: reader.agentId };
+    if (isWorkspaceAdminRole(viewer.role ?? undefined)) return {};
+    const owned = await this.db.agent.findMany({
+      where: { workspaceId, ownerId: reader.userId },
+      select: { id: true },
+    });
+    return owned.length === 0 ? undefined : { authorAgentId: { in: owned.map(({ id }) => id) } };
   }
 }

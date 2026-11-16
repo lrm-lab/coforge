@@ -20,7 +20,7 @@ import { shareArtifactInputSchema } from "./artifact-share-input";
 /**
  * The web page's artifacts (task #385, the `artifacts` experiment): read as their text, and
  * shared, sent and deleted; an Agent writes them. Every call is the signed-in person's, checked by the artifact service against the
- * experiment and the document's home (a conversation, or the Workspace).
+ * experiment and who can see the document (its home conversation's members, or the Workspace).
  */
 
 const { id } = artifactInputs;
@@ -76,6 +76,31 @@ export const setArtifactLinkSharing = createServerFn({ method: "POST" })
       artifactId: data.artifactId,
       userId: context.user.id,
       enabled: data.enabled,
+    }),
+  );
+
+/** Who can see an artifact: its home conversation's members, or everyone in the Workspace. */
+export const setArtifactAccess = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ artifactId: id, access: z.enum(["conversation", "workspace"]) }).strict())
+  .handler(({ context, data }) =>
+    productionArtifacts(context.db).visibility.change({
+      workspaceId: context.workspaceId,
+      artifactId: data.artifactId,
+      userId: context.user.id,
+      tier: data.access,
+    }),
+  );
+
+/** How many people and Agents would lose access if the artifact went back to its conversation. */
+export const loadArtifactAccessLoss = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ artifactId: id }).strict())
+  .handler(({ context, data }) =>
+    productionArtifacts(context.db).visibility.loss({
+      workspaceId: context.workspaceId,
+      artifactId: data.artifactId,
+      userId: context.user.id,
     }),
   );
 

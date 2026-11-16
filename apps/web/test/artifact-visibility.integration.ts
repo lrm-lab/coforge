@@ -12,11 +12,9 @@ import {
 } from "#src/server/artifacts/artifacts.server";
 
 /**
- * An artifact's read rule (task #20): every Workspace member — people and Agents alike — reads
- * every artifact, including one whose home they cannot read; `homeRead`/`homeKey` keep that
- * home's identity from them, and a message card's `source` falls back to the author. Writes
- * stay the home's. The public link is the one widening beside it, managed by the author, the
- * authoring Agent's owner, or a Workspace owner or admin — never an Agent.
+ * Who sees an artifact: its home conversation's readers, or everyone once it is widened to the
+ * Workspace. The read, the cards and the message cards agree, and the sharing controls belong to
+ * the author's owner and the Workspace's owners and admins.
  */
 const connectionString = Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL must point to local PostgreSQL");
@@ -50,13 +48,13 @@ let publicChannel: string;
 beforeAll(async () => {
   for (const name of Object.keys(people) as (keyof typeof people)[]) {
     const user = await db.user.create({
-      data: { username: `wr-${name}-${handle}`, displayName: name },
+      data: { username: `vis-${name}-${handle}`, displayName: name },
     });
     people[name] = user.id;
   }
   const workspace = await db.workspace.create({
     data: {
-      slug: `wr-${handle}`,
+      slug: `vis-${handle}`,
       name: "Artifact read",
       members: {
         create: [
@@ -75,7 +73,7 @@ beforeAll(async () => {
     db.agent.create({
       data: {
         workspaceId,
-        name: `wr-${name}-${handle}`,
+        name: `vis-${name}-${handle}`,
         displayName: name,
         ownerId,
         runtimeConfig: {},
@@ -143,64 +141,47 @@ const inConversation = (conversationId: string): ArtifactHome => ({
   conversationId,
 });
 
-test("every member reads every artifact; the home still decides writes and hides itself", async () => {
+test("a conversation artifact is seen by that conversation's readers and its card carries the home", async () => {
   const shared = await create(inConversation(privateChannel), { agentId: agents.helper });
   await push(shared.id, { agentId: agents.helper });
-
-  // Bob is a member who cannot read the private channel: he reads the artifact, but the home's
-  // key, its write verbs and its delete stay his refusals — and the read carries no tier.
-  const widened = await read(shared.id, { userId: people.bob });
-  expect(widened.artifact).toMatchObject({
-    homeKey: null,
-    homeRead: false,
-    canWrite: false,
-    // Not even the home's kind leaks: it reads as the Workspace's own (task #20).
-    homeKind: "workspace",
-    canChange: false,
-  });
-  expect("access" in widened.artifact).toBe(false);
-  await read(shared.id, { agentId: agents.stranger });
-  await expect(read(shared.id, { userId: people.outsider })).rejects.toMatchObject({
-    code: "NOT_FOUND",
-  });
-
-  // Alice, the channel's member, keeps the home: its key, the write, and a canDelete read.
-  const home = await read(shared.id, { userId: people.alice });
-  expect(home.artifact).toMatchObject({
+  const aliceRead = await read(shared.id, { userId: people.alice });
+  expect(aliceRead.artifact).toMatchObject({
     homeKey: `conversation:${privateChannel}`,
-    homeRead: true,
-    canWrite: true,
+    homeKind: "channel",
+    access: "conversation",
     canChange: true,
   });
-
-  // Writes never follow the read: an Agent outside the channel hears ACCESS_DENIED on a push,
-  // as if it knew the artifact was there — which it does — while the outsider hears NOT_FOUND.
-  await expect(push(shared.id, { agentId: agents.stranger }, "sha-doc", 1)).rejects.toMatchObject({
-    code: "ACCESS_DENIED",
+  for (const reader of [
+    { userId: people.bob },
+    { userId: people.admin },
+    { agentId: agents.stranger },
+    { userId: people.outsider },
+  ])
+    await expect(read(shared.id, reader)).rejects.toMatchObject({ code: "NOT_FOUND" });
+  const cards = async (reader: ArtifactActor) =>
+    artifacts.reads.cards({ workspaceId, reader, artifactIds: [shared.id] });
+  expect(await cards({ userId: people.bob })).toEqual([]);
+  expect((await cards({ userId: people.alice }))[0]).toMatchObject({
+    homeKey: `conversation:${privateChannel}`,
+    access: "conversation",
   });
-  await expect(
-    artifacts.delete({ workspaceId, artifactId: shared.id, actor: { userId: people.bob } }),
-  ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
-  const loaded = await documents.load(
-    { workspaceId, actor: { userId: people.bob } },
-    { artifactId: shared.id },
-  );
-  expect(loaded.canDelete).toBe(false);
-  expect(loaded.artifact.homeKey).toBeNull();
-  await expect(
-    artifacts.delete({ workspaceId, artifactId: shared.id, actor: { userId: people.outsider } }),
-  ).rejects.toMatchObject({ code: "NOT_FOUND" });
-
-  // Cards open to the member too; the card hides the home and says no link change.
-  const bobCards = await artifacts.reads.cards({
+  const body = `/w/${workspaceSlug}/artifacts/${shared.id}`;
+  const messageCard = async (reader: ArtifactActor) =>
+    (await artifacts.reads.messageCards({ workspaceId, reader, messages: [{ body }] }))[0]![0];
+  expect(await messageCard({ userId: people.bob })).toMatchObject({
+    state: "forbidden",
+    canOpen: false,
+  });
+  expect(await messageCard({ userId: people.alice })).toMatchObject({
+    state: "open",
+    source: { conversationId: privateChannel },
+  });
+  const listed = await artifacts.reads.list({
     workspaceId,
-    reader: { userId: people.bob },
-    artifactIds: [shared.id],
+    reader: { agentId: agents.helper },
+    conversationId: privateChannel,
   });
-  expect(bobCards[0]).toMatchObject({ homeKey: null, canChange: false });
-  expect("access" in bobCards[0]!).toBe(false);
-  // The home's own list still asks the home's rule: Bob cannot list the private channel's
-  // artifacts even though he can read each one by id.
+  expect(listed.map((row) => row.id)).toContain(shared.id);
   await expect(
     artifacts.reads.list({
       workspaceId,
@@ -208,68 +189,44 @@ test("every member reads every artifact; the home still decides writes and hides
       conversationId: privateChannel,
     }),
   ).rejects.toMatchObject({ code: "NOT_FOUND" });
-  const listed = await artifacts.reads.list({
-    workspaceId,
-    reader: { agentId: agents.helper },
-    conversationId: privateChannel,
-  });
-  expect(listed.map((row) => row.id)).toContain(shared.id);
 });
 
-test("cards and message cards keep the home from a member who cannot read it", async () => {
+test("a widened artifact is every member's, with the Workspace as its source; only owners of it manage sharing", async () => {
   const shared = await create(inConversation(privateChannel), { agentId: agents.helper });
   await push(shared.id, { agentId: agents.helper });
-
-  // Alice owns the authoring Agent and reads the home: her card names it and may manage the
-  // public link; the admin's card says the same; Bob's hides the home and says no.
-  const aliceCards = await artifacts.reads.cards({
-    workspaceId,
-    reader: { userId: people.alice },
-    artifactIds: [shared.id],
+  await db.artifact.update({ where: { id: shared.id }, data: { access: "workspace" } });
+  const bob = await read(shared.id, { userId: people.bob });
+  expect(bob.artifact).toMatchObject({
+    homeKey: "workspace",
+    homeKind: "workspace",
+    access: "workspace",
+    canChange: false,
   });
-  expect(aliceCards[0]).toMatchObject({
-    homeKey: `conversation:${privateChannel}`,
-    canChange: true,
+  expect((await read(shared.id, { userId: people.alice })).artifact.canChange).toBe(true);
+  expect((await read(shared.id, { userId: people.admin })).artifact.canChange).toBe(true);
+  expect((await read(shared.id, { agentId: agents.stranger })).artifact.canChange).toBe(false);
+  await expect(read(shared.id, { userId: people.outsider })).rejects.toMatchObject({
+    code: "NOT_FOUND",
   });
-  const adminCards = await artifacts.reads.cards({
-    workspaceId,
-    reader: { userId: people.admin },
-    artifactIds: [shared.id],
-  });
-  expect(adminCards[0]).toMatchObject({ canChange: true });
-  const bobCards = await artifacts.reads.cards({
+  const [cards] = await artifacts.reads.messageCards({
     workspaceId,
     reader: { userId: people.bob },
-    artifactIds: [shared.id],
+    messages: [{ body: `/w/${workspaceSlug}/artifacts/${shared.id}` }],
   });
-  expect(bobCards[0]).toMatchObject({ homeKey: null, canChange: false });
-  // An Agent never manages the link, whoever owns it.
-  const agentRead = await read(shared.id, { agentId: agents.stranger });
-  expect(agentRead.artifact.canChange).toBe(false);
-
-  // A message card opens for the member, but its source names the author — never the private
-  // conversation it came from; the home reader's card keeps the conversation.
-  const body = `/w/${workspaceSlug}/artifacts/${shared.id}`;
-  const [bobCards2] = await artifacts.reads.messageCards({
-    workspaceId,
-    reader: { userId: people.bob },
-    messages: [{ body }],
-  });
-  expect(bobCards2![0]).toMatchObject({
+  expect(cards![0]).toMatchObject({
     state: "open",
     canOpen: true,
-    source: { agentId: agents.helper, label: "Agent" },
+    source: { agentId: agents.helper },
   });
-  expect(bobCards2![0]!.state === "open" && "conversationId" in bobCards2![0]!.source).toBe(false);
-  const [aliceCards2] = await artifacts.reads.messageCards({
-    workspaceId,
-    reader: { userId: people.alice },
-    messages: [{ body }],
-  });
-  expect(aliceCards2![0]).toMatchObject({
-    state: "open",
-    source: { conversationId: privateChannel },
-  });
+  expect(cards![0]!.state === "open" && "conversationId" in cards![0]!.source).toBe(false);
+  const loaded = await documents.load(
+    { workspaceId, actor: { userId: people.bob } },
+    { artifactId: shared.id },
+  );
+  expect(loaded.canDelete).toBe(false);
+  await expect(
+    artifacts.delete({ workspaceId, artifactId: shared.id, actor: { userId: people.bob } }),
+  ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
 });
 
 test("a public channel's artifact keeps its home source for every member", async () => {
@@ -280,25 +237,26 @@ test("a public channel's artifact keeps its home source for every member", async
     reader: { userId: people.bob },
     messages: [{ body: `/w/${workspaceSlug}/artifacts/${shared.id}` }],
   });
-  // A public channel's readers include every member, so its source is not private.
   expect(bobCards![0]).toMatchObject({
     state: "open",
     source: { conversationId: publicChannel, label: `#open-${handle}` },
   });
 });
 
-test("a home the Workspace hides takes its artifacts with it", async () => {
-  const shared = await create(inConversation(privateChannel), { agentId: agents.helper });
+test("a hidden home leaves its artifact to the author, the author's owner and the admins, and a widened one stays everyone's", async () => {
+  const shared = await create(inConversation(publicChannel), { agentId: agents.helper });
   await push(shared.id, { agentId: agents.helper });
+  const wide = await create(inConversation(publicChannel), { agentId: agents.helper });
+  await push(wide.id, { agentId: agents.helper });
+  await db.artifact.update({ where: { id: wide.id }, data: { access: "workspace" } });
   await db.conversation.update({
-    where: { id: privateChannel },
+    where: { id: publicChannel },
     data: { hiddenFromWorkspaceAt: new Date() },
   });
   try {
-    // Even a member who reads every artifact — the channel's own member included — hears
-    // NOT_FOUND, as if it were not there; the card and the message card agree.
-    for (const reader of [{ userId: people.bob }, { userId: people.alice }])
-      await expect(read(shared.id, reader)).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(read(shared.id, { userId: people.bob })).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
     expect(
       await artifacts.reads.cards({
         workspaceId,
@@ -312,9 +270,17 @@ test("a home the Workspace hides takes its artifacts with it", async () => {
       messages: [{ body: `/w/${workspaceSlug}/artifacts/${shared.id}` }],
     });
     expect(cards![0]).toMatchObject({ state: "forbidden", canOpen: false });
+    for (const reader of [
+      { agentId: agents.helper },
+      { userId: people.alice },
+      { userId: people.admin },
+      { userId: people.owner },
+    ])
+      expect((await read(shared.id, reader)).artifact.id).toBe(shared.id);
+    expect((await read(wide.id, { userId: people.bob })).artifact.id).toBe(wide.id);
   } finally {
     await db.conversation.update({
-      where: { id: privateChannel },
+      where: { id: publicChannel },
       data: { hiddenFromWorkspaceAt: null },
     });
   }

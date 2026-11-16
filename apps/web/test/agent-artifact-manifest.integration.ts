@@ -29,6 +29,7 @@ let workspaceId: string;
 let alice: string;
 let agentId: string;
 let otherId: string;
+const homeTarget = `#mf-home-${handle}`;
 
 beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "agent-artifact-manifest-"));
@@ -68,6 +69,15 @@ beforeAll(async () => {
       },
     })
   ).id;
+  const home = await db.conversation.create({
+    data: { workspaceId, channelName: `mf-home-${handle}`, visibility: "public" },
+  });
+  await db.conversationMember.createMany({
+    data: [
+      { conversationId: home.id, workspaceId, agentId },
+      { conversationId: home.id, workspaceId, agentId: otherId },
+    ],
+  });
 });
 
 afterAll(async () => {
@@ -87,7 +97,7 @@ const services = () => ({
 
 /** A push with no artifact makes one; this names its fields, with a fresh idempotency key. */
 const create = (body: Record<string, unknown>) =>
-  post({ operation: "push", idempotencyKey: crypto.randomUUID(), ...body });
+  post({ operation: "push", idempotencyKey: crypto.randomUUID(), target: homeTarget, ...body });
 
 async function post(body: unknown) {
   const response = await handleAgentArtifactPost(
@@ -129,6 +139,7 @@ const sha = (content: string) => sha256(new TextEncoder().encode(content));
 test("a push with no artifact names bytes it has not uploaded: answered missing, nothing made, then the same request lands", async () => {
   const request = {
     operation: "push",
+    target: homeTarget,
     title: "Funnel report",
     idempotencyKey: key(),
     files: [

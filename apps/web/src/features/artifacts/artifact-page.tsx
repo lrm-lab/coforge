@@ -39,7 +39,10 @@ import {
   artifactHomeConversation,
   refreshArtifact,
 } from "./artifact-queries";
-import { decodeArtifactVersionPublishedEvent } from "./artifact-realtime";
+import {
+  decodeArtifactAccessChangedEvent,
+  decodeArtifactVersionPublishedEvent,
+} from "./artifact-realtime";
 import { artifactPageRoute } from "./artifact-search";
 import { ArtifactWebPage } from "./artifact-web-page";
 
@@ -95,7 +98,8 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
     recoverable: true,
     positioned: true,
     onPublication: ({ data }) => {
-      const event = decodeArtifactVersionPublishedEvent(data);
+      const event =
+        decodeArtifactVersionPublishedEvent(data) ?? decodeArtifactAccessChangedEvent(data);
       if (event?.artifactId !== artifactId) return;
       // Taken in quietly: nothing says who changed it (Frank, 11-05).
       void refreshArtifact(queryClient, artifactId, homeId ?? null);

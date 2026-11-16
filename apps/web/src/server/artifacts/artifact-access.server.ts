@@ -3,45 +3,49 @@ import { AppError } from "#src/lib/app-error";
 import { isWorkspaceAdminRole } from "#src/features/workspaces/workspace-roles";
 import {
   actorConversationAccess,
+  actorConversationHomeReads,
+  canReadConversationHome,
   conversationHiddenFromWorkspace,
+  type ActorConversationHomeRead,
 } from "#src/server/conversations/channel-read-access.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { Experiments } from "#src/server/experiments/experiments.server";
 import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 
-/** A person or an Agent of the Workspace, acting on an artifact. */
 export type ArtifactActor =
   | { userId: string; agentId?: undefined }
   | { agentId: string; userId?: undefined };
 
-/** Who writes an artifact: an Agent. A person views and comments; they never publish a version
- * nor upload the bytes of one. */
 export type ArtifactPublisher = Extract<ArtifactActor, { agentId: string }>;
 
-/** Which kind of home an artifact lives in: a channel, a DM, or the Workspace. The web page
- * builds a document's link from this (a channel and a DM route differently). */
 export type ArtifactHomeKind = "channel" | "dm" | "workspace";
 
-/** What an actor may do with an artifact's home: read it, write (create and save) in it, and
- * which kind of home it is. */
 export type ArtifactHomeAccess = { read: boolean; write: boolean; homeKind: ArtifactHomeKind };
+
+export type ArtifactTier = "conversation" | "workspace";
+
+export type ArtifactAccessRow = {
+  homeKey: string;
+  access: string;
+  authorAgentId: string | null;
+};
+
+export type ArtifactHomeView = {
+  tier: ArtifactTier;
+  homeKey: string | null;
+  homeKind: ArtifactHomeKind;
+};
 
 type Db = Pick<PrismaClient, "workspaceMembership" | "agent" | "conversation">;
 
-/** The conversation id a `conversation:<id>` home key names, or undefined for the Workspace
- * home, any other key, or an id that is not a UUID (which no query may take). */
 export function artifactHomeConversationId(homeKey: string): string | undefined {
   if (!homeKey.startsWith("conversation:")) return undefined;
   const conversationId = homeKey.slice("conversation:".length);
   return UUID.test(conversationId) ? conversationId : undefined;
 }
 
-/** The actor's Workspace standing, read once for every check a request makes: whether it
- * belongs at all, and a person's role (an Agent has none). */
 export type ArtifactViewer = { member: boolean; role: string | null };
 
-/** The actor's membership — a person's role included — or live Agent row, in one query: every
- * check a read makes shares it instead of asking the membership table again (task #25). */
 export async function artifactViewer(
   db: Db,
   workspaceId: string,
@@ -61,65 +65,148 @@ export async function artifactViewer(
   return { member: agent !== null, role: null };
 }
 
-/**
- * An artifact's home is its write rule and its privacy boundary (task #385; reads widened
- * workspace-wide in task #20). A conversation's artifact is written by its active members,
- * people and Agents alike, while it is not archived, and a Workspace role grants nothing
- * there; a Workspace artifact is every member's to write. Only a channel or a DM is a
- * conversation home; a public home is not offered yet.
- */
-export async function artifactHomeAccess(
+export function artifactTier(
+  artifact: Pick<ArtifactAccessRow, "homeKey" | "access">,
+): ArtifactTier {
+  return artifact.access === "workspace" || artifact.homeKey === "workspace"
+    ? "workspace"
+    : "conversation";
+}
+
+export async function conversationHomeAccess(
   db: Db,
   workspaceId: string,
   actor: ArtifactActor,
-  homeKey: string,
+  conversationId: string,
   viewer?: ArtifactViewer,
 ): Promise<ArtifactHomeAccess> {
-  // The home's kind is known from its key alone, except channel vs DM, which the conversation's
-  // `channelName` below settles. A workspace-only reader still hears the kind (task #20); it
-  // never hears the home's id.
-  const homeKind: ArtifactHomeKind = homeKey === "workspace" ? "workspace" : "dm";
-  const none = { read: false, write: false, homeKind };
+  const none = { read: false, write: false, homeKind: "workspace" } as const;
   const member = viewer === undefined ? await inWorkspace(db, workspaceId, actor) : viewer.member;
   if (!member) return none;
-  if (homeKey === "workspace") return { read: true, write: true, homeKind: "workspace" };
-  const conversationId = artifactHomeConversationId(homeKey);
-  if (!conversationId) return none;
-  // The conversation's own read/write rule lives in `server/conversations` (task #542): the
-  // artifacts module asks the port, never the conversation tables.
   const access = await actorConversationAccess(db, workspaceId, actor, conversationId);
   if (!access) return none;
   return { read: access.read, write: access.write, homeKind: access.kind };
 }
 
-/**
- * The actor's read of one artifact (task #20): every Workspace member — people and Agents
- * alike — reads every artifact, including one whose home they cannot read; `homeRead` says
- * whether the home's own rule granted the read, so a member who reaches the artifact only
- * workspace-wide never sees the home's key (a private conversation's id is not theirs to
- * know). Writes never follow the read: they stay the home's.
- */
+export async function requireConversationHome(
+  db: Db,
+  workspaceId: string,
+  actor: ArtifactActor,
+  conversationId: string,
+  need: "read" | "write",
+  viewer?: ArtifactViewer,
+): Promise<ArtifactHomeAccess> {
+  const access = await conversationHomeAccess(db, workspaceId, actor, conversationId, viewer);
+  if (!access.read) throw new AppError("NOT_FOUND");
+  if (need === "write" && !access.write) throw new AppError("ACCESS_DENIED");
+  return access;
+}
+
+export function homeStands(home: ActorConversationHomeRead | undefined) {
+  return home !== undefined && !home.hidden;
+}
+
+export function artifactHomeView(
+  artifact: Pick<ArtifactAccessRow, "homeKey" | "access">,
+  home: ActorConversationHomeRead | undefined,
+): ArtifactHomeView {
+  if (artifactTier(artifact) === "workspace")
+    return { tier: "workspace", homeKey: "workspace", homeKind: "workspace" };
+  if (home === undefined) return { tier: "conversation", homeKey: null, homeKind: "workspace" };
+  return { tier: "conversation", homeKey: artifact.homeKey, homeKind: home.kind };
+}
+
+export function readsArtifactOfGoneHome(
+  actor: ArtifactActor,
+  viewer: ArtifactViewer,
+  artifact: Pick<ArtifactAccessRow, "authorAgentId">,
+  authorAgentOwnerId: string | null,
+): boolean {
+  if (actor.agentId !== undefined) return artifact.authorAgentId === actor.agentId;
+  return isWorkspaceAdminRole(viewer.role ?? undefined) || authorAgentOwnerId === actor.userId;
+}
+
+export function artifactReadableFromHome(input: {
+  actor: ArtifactActor;
+  viewer: ArtifactViewer;
+  artifact: ArtifactAccessRow;
+  home: ActorConversationHomeRead | undefined;
+  authorAgentOwnerId: string | null;
+}): boolean {
+  const { actor, viewer, artifact, home, authorAgentOwnerId } = input;
+  if (!viewer.member) return false;
+  if (artifactTier(artifact) === "workspace") return true;
+  if (home !== undefined && homeStands(home)) return canReadConversationHome(home);
+  return readsArtifactOfGoneHome(actor, viewer, artifact, authorAgentOwnerId);
+}
+
+export async function artifactAuthorOwnerId(
+  db: Pick<PrismaClient, "agent">,
+  authorAgentId: string | null,
+): Promise<string | null> {
+  if (!authorAgentId) return null;
+  const author = await db.agent.findFirst({
+    where: { id: authorAgentId },
+    select: { ownerId: true },
+  });
+  return author?.ownerId ?? null;
+}
+
+export async function artifactReadView(
+  db: Db,
+  workspaceId: string,
+  actor: ArtifactActor,
+  artifact: ArtifactAccessRow,
+  options: { viewer?: ArtifactViewer; authorAgentOwnerId?: string | null } = {},
+): Promise<ArtifactHomeView | null> {
+  const viewer = options.viewer ?? (await artifactViewer(db, workspaceId, actor));
+  if (!viewer.member) return null;
+  const wide = artifactTier(artifact) === "workspace";
+  const conversationId = wide ? undefined : artifactHomeConversationId(artifact.homeKey);
+  const home = conversationId
+    ? (await actorConversationHomeReads(db, workspaceId, actor, [conversationId])).get(
+        conversationId,
+      )
+    : undefined;
+  const ownerMatters =
+    !wide &&
+    !homeStands(home) &&
+    actor.userId !== undefined &&
+    !isWorkspaceAdminRole(viewer.role ?? undefined);
+  const authorAgentOwnerId =
+    options.authorAgentOwnerId !== undefined
+      ? options.authorAgentOwnerId
+      : ownerMatters
+        ? await artifactAuthorOwnerId(db, artifact.authorAgentId)
+        : null;
+  if (!artifactReadableFromHome({ actor, viewer, artifact, home, authorAgentOwnerId })) return null;
+  return artifactHomeView(artifact, home);
+}
+
 export async function requireArtifactRead(
   db: Db,
   workspaceId: string,
   actor: ArtifactActor,
-  artifact: { homeKey: string },
-  viewer?: ArtifactViewer,
-): Promise<ArtifactHomeAccess & { homeRead: boolean }> {
-  const access = await artifactHomeAccess(db, workspaceId, actor, artifact.homeKey, viewer);
-  if (access.read) return { ...access, homeRead: true };
-  const member = viewer === undefined ? await inWorkspace(db, workspaceId, actor) : viewer.member;
-  if (!member) throw new AppError("NOT_FOUND");
-  // A home the Workspace hides is gone for everyone, its artifacts with it.
-  if (await artifactHomeHidden(db, workspaceId, artifact.homeKey)) throw new AppError("NOT_FOUND");
-  return { ...access, read: true, homeRead: false };
+  artifact: ArtifactAccessRow,
+  options: { viewer?: ArtifactViewer; authorAgentOwnerId?: string | null } = {},
+): Promise<ArtifactHomeView> {
+  const view = await artifactReadView(db, workspaceId, actor, artifact, options);
+  if (!view) throw new AppError("NOT_FOUND");
+  return view;
 }
 
-/** Whether the actor may manage an artifact's public link (task #20): a person who authored
- * it, the owner of the Agent that did, or a Workspace owner or admin. An Agent never may. The
- * authoring Agent's `ownerId` comes with the artifact row, so a missing Agent means it was
- * deleted — no special case. */
-export async function canManageArtifactPublicLink(
+export async function artifactHomeHidden(
+  db: Db,
+  workspaceId: string,
+  artifact: Pick<ArtifactAccessRow, "homeKey" | "access">,
+): Promise<boolean> {
+  if (artifactTier(artifact) === "workspace") return false;
+  const conversationId = artifactHomeConversationId(artifact.homeKey);
+  if (!conversationId) return false;
+  return conversationHiddenFromWorkspace(db, workspaceId, conversationId);
+}
+
+export async function canManageArtifactSharing(
   db: Pick<PrismaClient, "workspaceMembership">,
   workspaceId: string,
   actor: ArtifactActor,
@@ -133,12 +220,10 @@ export async function canManageArtifactPublicLink(
         })
       )?.role
     : undefined;
-  return canManageArtifactPublicLinkWithRole(actor, role, artifact);
+  return canManageArtifactSharingWithRole(actor, role, artifact);
 }
 
-/** The `canManageArtifactPublicLink` rule with the actor's Workspace role already in hand, for
- * one role shared by a list of cards. */
-export function canManageArtifactPublicLinkWithRole(
+export function canManageArtifactSharingWithRole(
   actor: ArtifactActor,
   role: string | null | undefined,
   artifact: { authorAgentOwnerId: string | null },
@@ -147,57 +232,6 @@ export function canManageArtifactPublicLinkWithRole(
     actor.userId !== undefined &&
     (artifact.authorAgentOwnerId === actor.userId || isWorkspaceAdminRole(role ?? undefined))
   );
-}
-
-/**
- * The actor's write of one artifact: writes never follow the read, so the home's rule decides
- * (`need` is `read` where the operation only requires reading the home, as a delete does, and
- * `write` where it requires writing it, as a save does). Every member reads, so a member the
- * home keeps out hears `ACCESS_DENIED` — it knows the artifact is there — while anyone who is
- * no member at all hears `NOT_FOUND`, as if it were not.
- */
-export async function requireArtifactWrite(
-  db: Db,
-  workspaceId: string,
-  actor: ArtifactActor,
-  artifact: { homeKey: string },
-  need: "read" | "write",
-): Promise<ArtifactHomeAccess> {
-  const access = await artifactHomeAccess(db, workspaceId, actor, artifact.homeKey);
-  if (need === "write" ? access.write : access.read) return access;
-  if (!(await inWorkspace(db, workspaceId, actor))) throw new AppError("NOT_FOUND");
-  if (await artifactHomeHidden(db, workspaceId, artifact.homeKey)) throw new AppError("NOT_FOUND");
-  throw new AppError("ACCESS_DENIED");
-}
-
-/** Whether the artifact's home is a conversation the Workspace hides: such a home is gone for
- * everyone, so its artifacts answer `NOT_FOUND` even to members who would otherwise read or
- * write them workspace-wide. Looked up only after the home's own rule refused the actor, so the
- * common path pays nothing. */
-export async function artifactHomeHidden(
-  db: Db,
-  workspaceId: string,
-  homeKey: string,
-): Promise<boolean> {
-  const conversationId = artifactHomeConversationId(homeKey);
-  if (!conversationId) return false;
-  return conversationHiddenFromWorkspace(db, workspaceId, conversationId);
-}
-
-/** The actor's access to a home, required: `NOT_FOUND` where it cannot read, as if nothing were
- * there, and `ACCESS_DENIED` where it reads but may not write. */
-export async function requireArtifactHome(
-  db: Db,
-  workspaceId: string,
-  actor: ArtifactActor,
-  homeKey: string,
-  need: "read" | "write",
-  viewer?: ArtifactViewer,
-): Promise<ArtifactHomeAccess> {
-  const access = await artifactHomeAccess(db, workspaceId, actor, homeKey, viewer);
-  if (!access.read) throw new AppError("NOT_FOUND");
-  if (need === "write" && !access.write) throw new AppError("ACCESS_DENIED");
-  return access;
 }
 
 /** Whether the actor belongs to the Workspace: a member person, or one of its live Agents. */
@@ -217,8 +251,6 @@ export async function inWorkspace(db: Db, workspaceId: string, actor: ArtifactAc
   );
 }
 
-/** Whether the actor deletes an artifact it can read: a Workspace owner or admin, the authoring
- * Agent's owner (a person), or the Agent itself. */
 export async function canDeleteArtifact(
   db: Pick<PrismaClient, "workspaceMembership" | "agent">,
   workspaceId: string,
@@ -239,9 +271,6 @@ export async function canDeleteArtifact(
   return author?.ownerId === actor.userId;
 }
 
-/** `canDeleteArtifact` with the actor's role already read (`artifactViewer`), for a read that
- * shares one membership lookup with its access checks. The authoring Agent's owner is not a
- * role: a caller that shows `canDelete` checks it against the read's `authorAgentOwnerId`. */
 export function canDeleteArtifactWithRole(
   actor: ArtifactActor,
   role: string | null,
@@ -253,15 +282,12 @@ export function canDeleteArtifactWithRole(
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** The refusal of every artifact operation in a Workspace that has not switched them on. */
 export const artifactsDisabled = () =>
   new AppError("ACCESS_DENIED", {
     errorId: "artifacts-disabled",
     hint: "this Workspace has not enabled documents (Settings > Experiments, switched on by a Workspace owner or admin)",
   });
 
-/** Whether the Workspace has the `artifacts` experiment on: its flag offers it, and an owner or
- * admin switched it on. */
 export async function artifactsEnabled(db: PrismaClient, workspaceId: string): Promise<boolean> {
   const workspace = await db.workspace.findUnique({
     where: { id: workspaceId },

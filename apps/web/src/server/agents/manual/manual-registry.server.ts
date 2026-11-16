@@ -51,7 +51,7 @@ export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
     slug: "artifacts",
     title: "Artifacts",
     summary:
-      "coforge artifact: when to make a document (a .md entry) or a web page (an .html entry, no network requests), pulling and pushing an artifact as a directory without losing others' changes, and reading, writing and resolving comments on one.",
+      "coforge artifact: when to make a document (a .md entry) or a web page (an .html entry, no network requests), pulling and pushing an artifact as a directory without losing others' changes, moving it to the Workspace, deleting it, and reading, writing and resolving comments on one.",
     body: artifactsBody,
     experiment: "artifacts",
   },
@@ -190,7 +190,7 @@ const MANUAL_COMMAND_LINES: readonly {
   { line: "- attachment — view|comments|upload" },
   { line: "- mention — pending|notify|add|delivery" },
   {
-    line: "- artifact — list|read|pull|push|download (a push of a new directory makes one; an `.html` entry is a web page), comments|comment|review|resolve|reopen",
+    line: "- artifact — list|read|pull|push|download|move|delete (a push of a new directory makes one; an `.html` entry is a web page), comments|comment|review|resolve|reopen",
     experiment: "artifacts",
   },
   { line: "- workspace — info (`--projects` lists the Workspace's projects)" },

@@ -7,7 +7,7 @@ import { artifactKindOfPath } from "#src/features/artifacts/artifact-path-kind";
 import { rememberArtifactSandboxConfig } from "#src/server/artifacts/artifact-sandbox-config.server";
 
 /**
- * Reading an artifact's public link (task #646): whoever reads the artifact sees whether it can
+ * Reading an artifact's public link (task #646): whoever can see the artifact sees whether it can
  * have one and the one it has; anyone else gets what a missing artifact gets.
  */
 const connectionString = Bun.env.DATABASE_URL;
@@ -104,9 +104,13 @@ test("one outside the Workspace gets what a missing artifact gets", async () => 
   expect(denied).toBe(missing);
 });
 
-test("a member who cannot read the home still sees the link state", async () => {
+test("a member outside the home sees the link state only once the artifact is widened", async () => {
   const { id: artifactId } = await artifact("html");
   await links.set({ workspaceId, artifactId, userId: owner, enabled: true });
+  expect(await refusal(links.read({ workspaceId, artifactId, userId: bystander }))).toBe(
+    "NOT_FOUND",
+  );
+  await db.artifact.update({ where: { id: artifactId }, data: { access: "workspace" } });
   expect(await links.read({ workspaceId, artifactId, userId: bystander })).toEqual(
     await links.read({ workspaceId, artifactId, userId: reader }),
   );
@@ -133,7 +137,7 @@ test("no link can be made while the sandbox origin is unset", async () => {
   }
 });
 
-test("a home the Workspace hides takes its link state and link with it", async () => {
+test("a home the Workspace hides takes its link state and link from all but the admins", async () => {
   const { id: artifactId } = await artifact("html");
   await links.set({ workspaceId, artifactId, userId: owner, enabled: true });
   await db.conversation.update({
@@ -141,13 +145,15 @@ test("a home the Workspace hides takes its link state and link with it", async (
     data: { hiddenFromWorkspaceAt: new Date() },
   });
   try {
-    // Even the channel's own members and the Workspace owner hear NOT_FOUND, as if the
-    // artifact were not there (task #20).
-    for (const userId of [owner, reader, bystander])
+    for (const userId of [reader, bystander]) {
       expect(await refusal(links.read({ workspaceId, artifactId, userId }))).toBe("NOT_FOUND");
-    expect(
-      await refusal(links.set({ workspaceId, artifactId, userId: owner, enabled: false })),
-    ).toBe("NOT_FOUND");
+      expect(await refusal(links.set({ workspaceId, artifactId, userId, enabled: false }))).toBe(
+        "NOT_FOUND",
+      );
+    }
+    expect(await links.read({ workspaceId, artifactId, userId: owner })).toMatchObject({
+      available: true,
+    });
   } finally {
     await db.conversation.update({
       where: { id: channelId },

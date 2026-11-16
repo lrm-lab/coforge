@@ -5,12 +5,7 @@ import {
   ARTIFACT_SHARE_NOTE_MAX_LENGTH,
 } from "#src/features/artifacts/artifact-share-input";
 import { AppError, isAppError } from "#src/lib/app-error";
-import { hiddenFromWorkspaceConversationIds } from "#src/server/conversations/channel-read-access.server";
-import {
-  artifactHomeConversationId,
-  artifactsDisabled,
-  inWorkspace,
-} from "./artifact-access.server";
+import { artifactsDisabled, requireArtifactRead } from "./artifact-access.server";
 
 export type ArtifactShareFailureCode = "no_access" | "archived" | "read_only" | "failed";
 export type ArtifactShareDestinationResult =
@@ -91,20 +86,11 @@ export class ArtifactShares {
           id: artifactId,
           deletedAt: null,
         },
-        select: { id: true, homeKey: true },
+        select: { id: true, homeKey: true, access: true, authorAgentId: true },
       }),
     ]);
     if (!workspace || !row) throw new AppError("NOT_FOUND");
-    // Every member reads every artifact (task #20), so one membership check covers them all.
-    if (!(await inWorkspace(this.db, input.workspaceId, input.actor)))
-      throw new AppError("NOT_FOUND");
-    // A home the Workspace hides is gone for everyone; its artifacts are not shared (task #20).
-    const homeId = artifactHomeConversationId(row.homeKey);
-    if (
-      homeId !== undefined &&
-      (await hiddenFromWorkspaceConversationIds(this.db, input.workspaceId, [homeId])).size > 0
-    )
-      throw new AppError("NOT_FOUND");
+    await requireArtifactRead(this.db, input.workspaceId, input.actor, row);
 
     const body = [input.note?.trim(), `/w/${workspace.slug}/artifacts/${artifactId}`]
       .filter(Boolean)

@@ -1,12 +1,13 @@
-/// A versioned page or set of files. Its `homeKey` is the only ACL:
-/// `conversation:<id>`, `workspace`, or `public`.
+/// A versioned page or set of files. Who sees it is its home conversation's readers, or every
+/// Workspace member and Agent when `access` is `workspace`.
 model Artifact {
   id              String            @id @default(uuid(7)) @db.Uuid
   workspaceId     String            @db.Uuid
-  /// conversation:<conversationId> | workspace | public
+  /// The conversation it was made in: conversation:<conversationId>. A legacy `workspace` value
+  /// reads as workspace-wide.
   homeKey         String
-  /// Unused since task #20 widened reads workspace-wide; kept for rollout compatibility and
-  /// dropped by a later migration.
+  /// The visibility tier: `conversation` (the home's readers) or `workspace` (every member and
+  /// Agent). Each change is an `artifact_access_events` row.
   access          String            @default("conversation")
   /// Unique within its home; the web URL uses a separate short id.
   name            String
