@@ -117,7 +117,7 @@ export type ActionCardView =
   | (ActionCardViewBase & {
       kind: "channel:add_member";
       /** `id` is null to a viewer who cannot read the channel (task #302). */
-      channel: { id: string | null; displayName: string };
+      channel: { id: string; displayName: string } | { id: null; displayName: null };
       humans: ActionCardPersonRef[];
       agents: ActionCardPersonRef[];
       result?: { channelId: string; userIds: string[]; agentIds: string[] };

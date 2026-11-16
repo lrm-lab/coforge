@@ -12,6 +12,7 @@ import { cn } from "#src/lib/utils";
 import { AnsweredAtTooltip, type FocusableLink } from "./action-card-answered-at";
 import {
   actionCardHandledVerb,
+  addMemberChannelName,
   unhandledKind,
   type ToolActionCardView,
 } from "./action-card-labels";
@@ -86,7 +87,7 @@ function outcomeOf(view: ToolActionCardView): Outcome | undefined {
         view.result && view.channel.id ? (
           <ChannelPlace id={view.channel.id} name={view.channel.displayName} />
         ) : (
-          view.channel.displayName
+          addMemberChannelName(view.channel)
         );
       return {
         text: people.length ? (

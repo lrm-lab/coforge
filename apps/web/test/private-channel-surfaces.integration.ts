@@ -231,7 +231,7 @@ test.skipIf(!connectionString)(
     const created = async (userId: string) => (await viewsFor(userId)).get(extra.createMessage.id);
     // The owner left the channel: no name, no id, and no adding anyone to it.
     expect(await add(people.owner)).toEqual({
-      channel: { id: null, displayName: "unknown" },
+      channel: { id: null, displayName: null },
       canCommit: false,
     });
     expect(await add(people.insider)).toEqual({

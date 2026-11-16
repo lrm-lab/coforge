@@ -101,7 +101,8 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
   const conversationId = useConversationId();
   const [fillValues, setFillValues] = useState<Record<string, string>>({});
   // Known only to someone in the channel, who alone may commit (task #302).
-  const addMemberChannelId = view.kind === "channel:add_member" ? view.channel.id : null;
+  const addMemberChannel =
+    view.kind === "channel:add_member" && view.channel.id ? view.channel : null;
   // A commit in flight (the card's own button shows it), or the Computers an Agent's dialog lists
   // still loading.
   const [committing, setCommitting] = useState(false);
@@ -243,7 +244,7 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
         );
       }
       case "channel:add_member": {
-        const channelId = addMemberChannelId;
+        const channelId = addMemberChannel?.id;
         if (!channelId) return;
         return commit(
           async () => {
@@ -355,17 +356,17 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
           }}
         />
       )}
-      {dialogOpen && view.kind === "channel:add_member" && addMemberChannelId && (
+      {dialogOpen && view.kind === "channel:add_member" && addMemberChannel && (
         <ChannelAddMembersDialog
-          channelId={addMemberChannelId}
-          channelName={view.channel.displayName}
+          channelId={addMemberChannel.id}
+          channelName={addMemberChannel.displayName}
           open
           onOpenChange={setDialogOpen}
           proposed={{ humans: view.humans, agents: view.agents }}
           commit={{
             submit: (input) =>
               commitAddMember({
-                data: { messageId: view.messageId, channelId: addMemberChannelId, ...input },
+                data: { messageId: view.messageId, channelId: addMemberChannel.id, ...input },
               }),
             onCommitted: () => void refetchOwn(),
           }}

@@ -97,13 +97,19 @@ export function actionCardHandledVerb(view: ToolActionCardView): string {
   }
 }
 
+export function addMemberChannelName(channel: { displayName: string | null }) {
+  return channel.displayName ?? m.action_card_unseen_channel();
+}
+
 /** Why this viewer cannot commit, when `canCommit` is false. */
 export function actionCardDeniedReason(view: ToolActionCardView): string | undefined {
   switch (view.kind) {
     case "agent:create":
       return m.action_card_denied_agent_create();
     case "channel:add_member":
-      return m.action_card_denied_add_member({ channel: view.channel.displayName });
+      return view.channel.id
+        ? m.action_card_denied_add_member({ channel: view.channel.displayName })
+        : m.action_card_denied_add_member_unseen();
     case "app:grant_agent":
       return m.app_card_denied_reason();
     case "app:register":

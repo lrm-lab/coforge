@@ -285,10 +285,9 @@ export async function actionCardViews(
       views.set(card.messageId, {
         ...base,
         kind: "channel:add_member",
-        channel: {
-          id: channelName.has(payload.channelId) ? payload.channelId : null,
-          displayName: channelName.get(payload.channelId) ?? "unknown",
-        },
+        channel: channelName.has(payload.channelId)
+          ? { id: payload.channelId, displayName: channelName.get(payload.channelId)! }
+          : { id: null, displayName: null },
         humans: (payload.humanIds ?? []).map(human),
         agents: (payload.agentIds ?? []).map(agent),
         // Only an active member of a channel they read adds to it: not someone who left it.

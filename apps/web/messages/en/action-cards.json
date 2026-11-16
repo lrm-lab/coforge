@@ -54,6 +54,8 @@
   "action_card_handled_app_recover": "Set owner Agent",
   "action_card_handled_by": "by {name}",
   "action_card_open": "Open",
+  "action_card_unseen_channel": "a channel you can't see",
+  "action_card_denied_add_member_unseen": "You can't add members to a channel you can't see.",
   "action_card_channel_taken": "There's already a channel named #{name}.",
   "action_card_rename": "Rename…",
   "action_card_refused": "This can't be done as the card has it.",

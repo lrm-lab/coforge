@@ -54,6 +54,8 @@
   "action_card_handled_app_recover": "已设为负责 Agent",
   "action_card_handled_by": "由 {name} 处理",
   "action_card_open": "打开",
+  "action_card_unseen_channel": "看不到的群聊",
+  "action_card_denied_add_member_unseen": "看不到这个群聊，不能添加成员。",
   "action_card_channel_taken": "已经有叫 #{name} 的群聊了",
   "action_card_rename": "改个名字…",
   "action_card_refused": "按卡片上的内容做不了。",

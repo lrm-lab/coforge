@@ -12,7 +12,7 @@ import type {
 import { ActionCardAppBody } from "./action-card-app-body";
 import { ChannelPlace } from "./channel-name";
 import { GroupAvatar, type GroupAvatarMember } from "./group-avatar";
-import type { ToolActionCardView } from "./action-card-labels";
+import { addMemberChannelName, type ToolActionCardView } from "./action-card-labels";
 import { ActionCardDesktopTakeoverBody, ActionCardPageFillBody } from "./action-card-handoff";
 
 const listFormats = new Map<string, Intl.ListFormat>();
@@ -143,7 +143,7 @@ export function ActionCardObject({
               {view.channel.id ? (
                 <ChannelPlace id={view.channel.id} name={view.channel.displayName} />
               ) : (
-                view.channel.displayName
+                addMemberChannelName(view.channel)
               )}
             </span>
           }
