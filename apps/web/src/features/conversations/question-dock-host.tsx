@@ -98,6 +98,9 @@ export function useCardDock() {
   return useContext(CardDockContext);
 }
 
+/** The docks open on the page, in the order they opened: a bare Escape closes the last. */
+const openDocks: object[] = [];
+
 /** The pane's answer dock (Frank, 11-12); null outside a conversation pane. */
 export function useQuestionDock() {
   return useContext(QuestionDockContext);
@@ -205,6 +208,31 @@ export function QuestionDockHost({
         );
       });
   });
+  // Escape closes an open dock wherever focus is in this pane, or, when focus is nowhere, the dock
+  // opened last (task #109; a channel's and a thread's can be open at once): the dock's own views
+  // handle it first, but a refresh that swaps the view, or a click on the stream, takes focus off
+  // them, and Escape must not then do nothing. A popover or menu that used the key marked it
+  // handled; nothing else on the page closes on a bare Escape.
+  const isOpen = place !== null;
+  useEffect(() => {
+    if (!isOpen) return;
+    const self = {};
+    openDocks.push(self);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const at = event.target;
+      const nowhere = at === document.body || at === document.documentElement;
+      const inPane = at instanceof Node && paneRef.current?.contains(at);
+      if (!inPane && !(nowhere && openDocks.at(-1) === self)) return;
+      event.preventDefault();
+      close();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      openDocks.splice(openDocks.indexOf(self), 1);
+    };
+  }, [isOpen, close, paneRef]);
   // The card left the pane (an older page dropped, the message deleted) or the dock: so does it.
   useEffect(() => {
     if (place && !current) close();

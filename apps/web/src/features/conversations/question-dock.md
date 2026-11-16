@@ -11,6 +11,9 @@ stream (Frank, 2026-11-12). Rules an agent cannot read off the code:
   dock takes the composer's place; the composer is hidden (`contents sm:hidden`), never unmounted,
   so its draft survives, and closing the dock gives focus back to it. On a phone the dock is a
   bottom sheet over the stream.
+- Escape closes an open desktop dock wherever focus is in its pane, or, when focus is nowhere,
+  the dock opened last (`QuestionDockHost`, task #109): a stream refresh that swaps the dock's view, or a click on the
+  stream, takes focus off the dock, and the key must still work.
 - The dock keeps one height for its whole life, so nothing above it moves as questions, cards and
   the receipt change; only its first open animates.
 - Half-given answers are drafts on this device only (`question-drafts.ts`, localStorage key

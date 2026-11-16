@@ -241,6 +241,9 @@ test("Don't answer asks once, then sends the decline and grays the card", async 
     expect(questionsAfter.height).toBe(questionsBefore.height);
     expect(questionsAfter.color).not.toBe(questionsBefore.color);
     expect(questionsAfter.text).toContain("You didn't answer");
+    // Escape closes the dock even when focus has left it, as a refresh of the stream or a click
+    // elsewhere leaves it (task #109).
+    await evaluate(`(document.activeElement?.blur(), document.activeElement === document.body)`);
     await browser("press", "Escape");
     await waitFor(`document.querySelector('${dock}') === null`);
 

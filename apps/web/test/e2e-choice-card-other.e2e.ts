@@ -124,7 +124,12 @@ test("the asked person answers a choice card in its own last row", async () => {
     );
   };
   const openDock = async (id: string) => {
-    await browser("click", `[data-message-id="${id}"] [data-question-card-answer]`);
+    // A reload paints the conversation's stored copy first and the server's read replaces it
+    // (cache-persistence/AGENTS.md): a card the copy holds as closed gets its Answer only once
+    // that read lands, so wait for the button, not just the card (task #109).
+    const answer = `[data-message-id="${id}"] [data-question-card-answer]`;
+    await browser("wait", "--fn", `document.querySelector('${answer}') !== null`);
+    await browser("click", answer);
     await browser(
       "wait",
       "--fn",
