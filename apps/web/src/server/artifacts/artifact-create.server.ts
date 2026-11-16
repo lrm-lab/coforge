@@ -1,6 +1,7 @@
 import type { Artifact, PrismaClient } from "#src/generated/prisma/client";
 import { artifactKindOfPath } from "#src/features/artifacts/artifact-path-kind";
 import { AppError } from "#src/lib/app-error";
+import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import type { ArtifactPublisher } from "./artifact-access.server";
 import { idempotencyMismatch } from "./artifact-idempotency.server";
 import {
@@ -140,11 +141,9 @@ export async function createVersionedArtifact(
       return { artifact, fresh: true };
     });
   } catch (error) {
-    // Two racing creates with one key: the loser reads the winner's row and replays it.
-    if (
-      isUniqueViolation(error, "artifacts_idempotency_key") &&
-      input.idempotencyKey !== undefined
-    ) {
+    // Two racing creates with one key — or one name — can surface either unique index's
+    // violation; the key's replay decides before the name's conflict does.
+    if (isUniqueViolation(error) && input.idempotencyKey !== undefined) {
       const replay = await createReplay(
         db,
         input.workspaceId,
@@ -174,22 +173,6 @@ export async function createReplay(
   if (!existing) return null;
   if ((existing.requestHash ?? null) !== (requestHash ?? null)) throw idempotencyMismatch();
   return existing;
-}
-
-/** Whether an error is a Postgres unique violation (P2002), optionally for a named constraint
- * (its index map name, which P2002's `meta.target` carries). */
-export function isUniqueViolation(error: unknown, constraint?: string): boolean {
-  if (
-    typeof error !== "object" ||
-    error === null ||
-    !("code" in error) ||
-    (error as { code?: unknown }).code !== "P2002"
-  )
-    return false;
-  if (constraint === undefined) return true;
-  const target = (error as { meta?: { target?: unknown } }).meta?.target;
-  const text = Array.isArray(target) ? target.join(",") : String(target ?? "");
-  return text.includes(constraint);
 }
 
 function invalid(errorId: string): never {
