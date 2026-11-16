@@ -6,7 +6,7 @@ import {
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { errorType } from "#src/server/errors/error-type.server";
-import { artifactHomeConversationId, type ArtifactPublisher } from "./artifact-access.server";
+import { artifactHomeConversationId } from "./artifact-access.server";
 
 /** Where an artifact's events go: one realtime channel at a time. */
 export type ArtifactSignals = {
@@ -32,7 +32,6 @@ export async function announceVersion(
     homeKey: string;
     artifactId: string;
     number: number;
-    publisher: ArtifactPublisher;
   },
 ) {
   if (!signals) return;
@@ -45,7 +44,6 @@ export async function announceVersion(
     workspaceId: input.workspaceId,
     artifactId: input.artifactId,
     number: input.number,
-    publisher: { agentId: input.publisher.agentId },
   };
   try {
     await signals.publish(channel, event);

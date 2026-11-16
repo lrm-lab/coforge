@@ -145,7 +145,6 @@ export class Artifacts {
         homeKey,
         artifactId: saved.artifact.id,
         number: 1,
-        publisher: input.author,
       });
     return saved.artifact;
   }
@@ -366,7 +365,6 @@ export class Artifacts {
         homeKey,
         artifactId: input.artifactId,
         number: saved.number,
-        publisher: input.publisher,
       });
     return saved;
   }
