@@ -10,6 +10,7 @@ import { setContextViewMessageIds } from "./context-view-runtime-wiring";
 import { NoticeActionClocks } from "./notice-action-clocks";
 import { countDistinctMessages } from "./agent-history-read";
 import { composeDeliveryNotice } from "./delivery-notice";
+import { rememberDelivery } from "./delivery-generation-memory";
 import {
   AGENT_MESSAGE_ACK_METHOD,
   SEEN_EXACT_SEQS_LIMIT,
@@ -40,7 +41,6 @@ import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 import { PendingAttentionReads } from "./agent-message-attention-pending";
 import {
   PENDING_WINDOW_LIMIT,
-  REMEMBERED_DELIVERIES,
   attentionRecorded,
   consumedSnapshot,
   byNumber,
@@ -131,7 +131,7 @@ export class AgentMessageAttentionIndex {
       await this.acknowledge(message);
       return;
     }
-    this.#remember(generation, message.deliveryId);
+    rememberDelivery(generation, message.deliveryId);
     if (this.#alreadyRead(message.agentId, message)) {
       this.logDecision(message, "consumed");
       await this.acknowledge(message);
@@ -157,7 +157,7 @@ export class AgentMessageAttentionIndex {
     if (!hasDeliveryScope(message)) throw new Error("invalid agent message scope");
     const generation = this.#generation(message.agentId);
     if (!generation.seenDeliveryIds.has(message.deliveryId)) {
-      this.#remember(generation, message.deliveryId);
+      rememberDelivery(generation, message.deliveryId);
       this.logDecision(message, "notified");
       await this.#notify(message, this.#recordAttention(message));
     } else if (
@@ -245,7 +245,7 @@ export class AgentMessageAttentionIndex {
         announced.push(message);
         continue;
       }
-      this.#remember(generation, message.deliveryId);
+      rememberDelivery(generation, message.deliveryId);
       if (this.#alreadyRead(agentId, message)) {
         this.logDecision(message, "consumed");
         continue;
@@ -294,7 +294,7 @@ export class AgentMessageAttentionIndex {
     this.#attention.set(agentId, byTarget);
     for (const message of recoveredMessages) {
       this.#recordConversation(agentId, message.target, message.conversationId);
-      this.#remember(generation, message.deliveryId, message.messageId);
+      rememberDelivery(generation, message.deliveryId, message.messageId);
       generation.notified.add(message.deliveryId);
       const pendingByTarget = this.#pendingSequences.get(agentId) ?? new Map<string, Set<number>>();
       const pending = pendingByTarget.get(message.target) ?? new Set<number>();
@@ -385,28 +385,6 @@ export class AgentMessageAttentionIndex {
       });
     generation.notificationAttempts.set(message.deliveryId, notification);
     return notification;
-  }
-  #remember(
-    generation: {
-      seenDeliveryIds: Set<string>;
-      seenMessageIds: Set<string>;
-      notified: Set<string>;
-      notificationAttempts: Map<string, Promise<void>>;
-    },
-    deliveryId: string,
-    messageId?: string,
-  ): void {
-    if (generation.seenDeliveryIds.size >= REMEMBERED_DELIVERIES) {
-      const oldest = generation.seenDeliveryIds.values().next().value!;
-      generation.seenDeliveryIds.delete(oldest);
-      generation.notified.delete(oldest);
-      generation.notificationAttempts.delete(oldest);
-    }
-    generation.seenDeliveryIds.add(deliveryId);
-    if (messageId === undefined) return;
-    if (generation.seenMessageIds.size >= REMEMBERED_DELIVERIES)
-      generation.seenMessageIds.delete(generation.seenMessageIds.values().next().value!);
-    generation.seenMessageIds.add(messageId);
   }
   async #acceptNotice(signal: AbortSignal, send: () => Promise<void>): Promise<void> {
     return acceptNotice(signal, send);
