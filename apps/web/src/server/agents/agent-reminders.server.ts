@@ -26,7 +26,15 @@ export type AgentReminderListItem = {
   target: string;
   createdAt: string;
   anchor:
-    | { kind: "direct"; conversationId: string; messageId: string; threadRootId: string | null }
+    | {
+        kind: "direct";
+        conversationId: string;
+        /** The person the Agent talks with there, by name and face (task #126); null when the
+         * conversation has no person left in it. */
+        person: ChannelListMember | null;
+        messageId: string;
+        threadRootId: string | null;
+      }
     | {
         kind: "channel";
         channelId: string;
@@ -96,7 +104,8 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
             ownerAgent: managedAgentWhere(viewer),
             status: "scheduled",
           },
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          // The one that fires next first (task #126).
+          orderBy: [{ fireAt: "asc" }, { id: "asc" }],
           select: {
             id: true,
             title: true,
@@ -129,7 +138,7 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
         },
       });
       const messagesById = new Map(messages.map((message) => [message.id, message]));
-      const reminders = rows.map((row) => {
+      const reminders: AgentReminderListItem[] = rows.map((row) => {
         const message = messagesById.get(row.messageId);
         const conversation = message?.conversation;
         // A reminder anchored in a channel hidden from the Workspace links nowhere until restored,
@@ -160,6 +169,7 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
               ? {
                   kind: "direct" as const,
                   conversationId: conversation.id,
+                  person: null as ChannelListMember | null,
                   messageId: row.messageId,
                   threadRootId: message.threadRootId,
                 }
@@ -175,14 +185,19 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
           anchor,
         };
       });
-      // The anchoring channels' group avatars, in one read for the page.
+      // The anchoring channels' group avatars and the direct conversations' people, in one read for
+      // the page.
+      const placeId = (anchor: AgentReminderListItem["anchor"]) =>
+        anchor?.kind === "channel" ? anchor.channelId : anchor?.conversationId;
       const faces = await channelListMembers(db, viewer.workspaceId, [
-        ...new Set(
-          reminders.flatMap(({ anchor }) => (anchor?.kind === "channel" ? [anchor.channelId] : [])),
-        ),
+        ...new Set(reminders.flatMap(({ anchor }) => placeId(anchor) ?? [])),
       ]);
-      for (const { anchor } of reminders)
+      for (const { anchor } of reminders) {
         if (anchor?.kind === "channel") anchor.members = faces.get(anchor.channelId) ?? [];
+        if (anchor?.kind === "direct")
+          anchor.person =
+            faces.get(anchor.conversationId)?.find((member) => member.kind === "user") ?? null;
+      }
       return { reminders, hasMore: page.hasNextPage };
     },
   };

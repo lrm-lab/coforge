@@ -1,6 +1,7 @@
 import { ChannelPlace } from "#src/features/conversations/channel-name";
 import { useEffect, useState } from "react";
-import { AlarmClock, Clock, Link01 as LinkIcon, Repeat01 as Repeat } from "@untitledui/icons";
+import { AlarmClock, Repeat01 as Repeat } from "@untitledui/icons";
+import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Link } from "@tanstack/react-router";
 import { Button } from "#src/components/base/buttons/button";
 import { RelativeTime } from "#src/components/ui/relative-time";
@@ -68,15 +69,16 @@ export function AgentReminders({
     );
   if (!result)
     return (
-      <div className="mt-6 animate-pulse space-y-3" aria-label={m.agent_reminders_loading()}>
-        <div className="flex items-center justify-between gap-6 rounded-xl border border-secondary bg-primary p-4">
-          <div className="h-4 w-52 max-w-2/3 rounded bg-secondary" />
-          <div className="h-4 w-20 rounded bg-secondary" />
-        </div>
-        <div className="flex items-center justify-between gap-6 rounded-xl border border-secondary bg-primary p-4">
-          <div className="h-4 w-64 max-w-2/3 rounded bg-secondary" />
-          <div className="h-4 w-16 rounded bg-secondary" />
-        </div>
+      <div
+        className="mt-3 animate-pulse divide-y divide-secondary"
+        aria-label={m.agent_reminders_loading()}
+      >
+        {["w-52", "w-64", "w-44"].map((width) => (
+          <div key={width} className="space-y-2 py-3">
+            <div className={`h-4 ${width} max-w-2/3 rounded bg-secondary`} />
+            <div className="h-3 w-32 rounded bg-secondary" />
+          </div>
+        ))}
       </div>
     );
   if (!result.reminders.length)
@@ -89,8 +91,8 @@ export function AgentReminders({
     );
 
   return (
-    <div className="mt-6 space-y-3">
-      <ol className="space-y-3">
+    <div className="mt-3 space-y-3">
+      <ol className="divide-y divide-secondary">
         {result.reminders.map((reminder) => (
           <ReminderRow key={reminder.id} reminder={reminder} timeZone={timeZone} />
         ))}
@@ -127,74 +129,57 @@ function ReminderRow({
   timeZone: string | null;
 }) {
   return (
-    <li className="min-w-0 rounded-xl border border-secondary bg-primary p-4 text-primary">
-      <p className="whitespace-pre-wrap break-words font-medium">{reminder.title}</p>
-      <div className="mt-3 space-y-2 text-xs text-tertiary">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
-          <span className="inline-flex min-w-0 items-center gap-1.5">
-            <Clock className="size-3.5 shrink-0" aria-hidden="true" />
-            <RelativeTime
-              value={reminder.fireAt}
-              timeZone={reminder.timezone ?? timeZone}
-              showExact
-            />
+    <li className="min-w-0 py-3" data-reminder-row="">
+      <p className="line-clamp-2 text-sm font-medium whitespace-pre-wrap wrap-anywhere text-primary">
+        {reminder.title}
+      </p>
+      <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-tertiary">
+        <RelativeTime value={reminder.fireAt} timeZone={reminder.timezone ?? timeZone} showExact />
+        {reminder.repeat && (
+          <span className="inline-flex min-w-0 items-center gap-1">
+            <Repeat className="size-3.5 shrink-0" aria-hidden="true" />
+            {formatRecurrence(reminder.repeat)}
           </span>
-          {reminder.repeat && (
-            <span className="inline-flex min-w-0 items-center gap-1.5">
-              <Repeat className="size-3.5 shrink-0" aria-hidden="true" />
-              {formatRecurrence(reminder.repeat)}
-            </span>
-          )}
-        </div>
-        <div className="flex min-w-0">
-          <Source reminder={reminder} />
-        </div>
+        )}
+        {reminder.anchor && <Place anchor={reminder.anchor} />}
       </div>
     </li>
   );
 }
 
-function Source({ reminder }: { reminder: AgentReminderListItem }) {
-  const thread = reminder.anchor?.threadRootId;
-  const shortThread = thread?.slice(0, 13);
-  const anchor = reminder.anchor;
-  // Its group avatar and name, no `#`; a private channel with its lock (tasks #375, #55).
-  const target =
-    anchor?.kind === "channel" ? (
+/** Where the reminder fires: a channel by its group avatar and name, a direct conversation by the
+ * person's face and name, never a raw target or id (task #126). A place the viewer cannot open
+ * shows nothing. */
+function Place({ anchor }: { anchor: NonNullable<AgentReminderListItem["anchor"]> }) {
+  const label =
+    anchor.kind === "channel" ? (
       <ChannelPlace
         id={anchor.channelId}
         name={anchor.channelName}
         visibility={anchor.visibility}
         members={anchor.members}
       />
-    ) : (
-      reminder.target
-    );
-  const named = anchor?.kind === "channel" ? anchor.channelName : reminder.target;
-  const label =
-    shortThread && !named.includes(shortThread) ? (
-      <>
-        {target} · {shortThread}
-      </>
-    ) : (
-      target
-    );
-  const content = (
-    <>
-      <LinkIcon className="size-3.5 shrink-0" aria-hidden="true" />
-      {label}
-    </>
-  );
-  const className = "inline-flex min-w-0 items-center gap-1.5 break-all";
-  return reminder.anchor ? (
+    ) : anchor.person ? (
+      <span className="inline-flex max-w-full min-w-0 items-center gap-1.5 align-bottom">
+        <ActorAvatar
+          presence={false}
+          size="xs"
+          className="size-5"
+          src={anchor.person.avatarUrl}
+          name={anchor.person.name}
+          alt=""
+        />
+        <span className="min-w-0 truncate">{anchor.person.name}</span>
+      </span>
+    ) : null;
+  if (!label) return null;
+  return (
     <AnchorLink
-      anchor={reminder.anchor}
-      className={`${className} rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand`}
+      anchor={anchor}
+      className="inline-flex max-w-full min-w-0 rounded-sm outline-none hover:text-secondary hover:underline focus-visible:ring-2 focus-visible:ring-brand"
     >
-      {content}
+      {label}
     </AnchorLink>
-  ) : (
-    <span className={className}>{content}</span>
   );
 }
 
@@ -205,10 +190,8 @@ function AnchorLink({
 }: {
   anchor: NonNullable<AgentReminderListItem["anchor"]>;
   children: React.ReactNode;
-  className?: string;
+  className: string;
 }) {
-  className ??=
-    "min-w-0 rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-brand";
   const workspaceSlug = useWorkspaceSlug();
   return anchor.kind === "channel" ? (
     <Link

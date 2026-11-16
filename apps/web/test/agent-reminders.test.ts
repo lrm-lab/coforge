@@ -20,6 +20,7 @@ const item = (id: string) => ({
   anchor: {
     kind: "direct" as const,
     conversationId: "dm-1",
+    person: null,
     messageId: "message-1",
     threadRootId: null,
   },
@@ -82,8 +83,18 @@ test("exposes targets and derives readable message anchors from the canonical co
     target: id === "public-channel" ? "#general" : "@owner",
   });
   const db = withFakePagination({
-    // The anchoring channel's group avatar (task #55): no active members here.
-    $queryRaw: async () => [],
+    // The anchoring channel's group avatar (task #55): no active members here. The direct
+    // conversation's person, named and with a face rather than its target (task #126).
+    $queryRaw: async () => [
+      { conversationId: "owned-conversation", userId: "user-1", agentId: null },
+      { conversationId: "owned-conversation", userId: null, agentId: "agent-1" },
+    ],
+    user: {
+      findMany: async () => [
+        { id: "user-1", username: "frank", displayName: "Frank Li", avatarObjectKey: null },
+      ],
+    },
+    agent: { findMany: async () => [] },
     reminder: {
       findMany: async () => [
         reminder("owned-dm", "message-owned-dm"),
@@ -140,6 +151,7 @@ test("exposes targets and derives readable message anchors from the canonical co
     {
       kind: "direct",
       conversationId: "owned-conversation",
+      person: expect.objectContaining({ kind: "user", id: "user-1", name: "Frank Li" }),
       messageId: "message-owned-dm",
       threadRootId: null,
     },
@@ -212,6 +224,7 @@ test("filters scheduled reminders in the database before cursor pagination", asy
   expect((page.where as { status?: string }).status).toBe("scheduled");
   expect(page.cursor).toEqual({ id: "before-50" });
   expect(page.take).toBe(51);
-  expect(page.orderBy).toEqual([{ createdAt: "desc" }, { id: "desc" }]);
+  // The one that fires next first (task #126).
+  expect(page.orderBy).toEqual([{ fireAt: "asc" }, { id: "asc" }]);
   expect(rows.map((row) => row.id)).toEqual(["future", "recurring", "overdue"]);
 });
