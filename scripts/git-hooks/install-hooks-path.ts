@@ -5,6 +5,9 @@
 // hooks path someone else configured; it prints one line instead.
 //
 // usage: bun scripts/git-hooks/install-hooks-path.ts   (from the repository root)
+import { realpathSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
+
 const HOOKS_PATH = ".githooks";
 
 function git(...args: string[]): { exitCode: number; stdout: string } | undefined {
@@ -36,6 +39,18 @@ function install(): void {
       return { scope, value: value.join("\t") };
     })
     .filter(({ scope }) => scope !== "command");
+  // A local path naming one checkout's own `.githooks` absolutely is ours too, but wrong: every
+  // worktree would run that checkout's hooks and the scripts beside them, not its own (task #121).
+  const pinned = values.filter(
+    ({ scope, value }) => scope === "local" && worktreeHooks().has(canonical(value)),
+  );
+  if (pinned.length > 0) {
+    git("config", "--local", "--replace-all", "core.hooksPath", HOOKS_PATH);
+    console.log(
+      `CoForge git hooks: core.hooksPath was "${pinned[0]!.value}", now ${HOOKS_PATH}, so each worktree runs its own hooks.`,
+    );
+    return;
+  }
   const other = values.find(({ value }) => value !== HOOKS_PATH);
   if (other) {
     console.log(
@@ -45,6 +60,28 @@ function install(): void {
   }
   if (values.some(({ scope }) => scope === "local")) return;
   git("config", "--local", "core.hooksPath", HOOKS_PATH);
+}
+
+/** Each of the repository's worktrees' `.githooks`, symlinks resolved. */
+function worktreeHooks(): Set<string> {
+  const listed = git("worktree", "list", "--porcelain");
+  return new Set(
+    (listed?.exitCode === 0 ? listed.stdout : "")
+      .split("\n")
+      .filter((line) => line.startsWith("worktree "))
+      .map((line) => canonical(join(line.slice("worktree ".length), HOOKS_PATH))),
+  );
+}
+
+/** An absolute path with symlinks resolved (macOS's `/var` is `/private/var`); anything else, or
+ * a path that does not exist, as given. */
+function canonical(path: string): string {
+  if (!isAbsolute(path)) return path;
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
 }
 
 if (import.meta.main) {

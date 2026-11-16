@@ -101,6 +101,22 @@ test("it leaves a different repository-local core.hooksPath alone and says so", 
   expect(localHooksPath()).toBe(".husky/_");
 });
 
+test("a local path naming a checkout's own .githooks absolutely becomes .githooks", () => {
+  git(root, "init", "-q");
+  git(root, "commit", "-q", "--allow-empty", "-m", "first");
+  mkdirSync(join(root, ".githooks"));
+  const linked = join(home, "linked");
+  git(root, "worktree", "add", "-q", linked);
+  // What one machine had: every worktree ran the main checkout's hooks and scripts (task #121).
+  git(root, "config", "core.hooksPath", join(root, ".githooks"));
+
+  const result = install(linked);
+
+  expect(result.exitCode).toBe(0);
+  expect(result.output).toContain(".githooks");
+  expect(localHooksPath()).toBe(".githooks");
+});
+
 test("it leaves a user's global core.hooksPath in charge and says so", () => {
   git(root, "init", "-q");
   writeFileSync(join(home, "gitconfig"), "[core]\n\thooksPath = ~/my-hooks\n");
