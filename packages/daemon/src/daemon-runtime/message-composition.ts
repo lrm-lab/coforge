@@ -184,15 +184,10 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
       );
       const message = announced[0];
       if (!message) return undefined;
-      const memory = Boolean(ports.memoryAgent(agentId));
-      const queued = ports.deliveryGate.pending(agentId);
       return composeDeliveryNotice({
         message,
         announced,
-        queued: memory
-          ? queued.filter((item) => item.conversationId === message.conversationId)
-          : queued,
-        memory,
+        queued: ports.deliveryGate.pending(agentId),
         prefix: ports.sync.noticePrefix(agentId),
         previewedInFull: (target, sequence) =>
           messageAttention.previewSeen.has(agentId, target, sequence),
