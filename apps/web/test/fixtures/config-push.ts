@@ -6,8 +6,6 @@ import {
   type AgentControlState,
 } from "#src/server/agents/agent-control-types.server";
 import type { AgentRecord } from "#src/server/db/repositories/agent.repositories.server";
-
-/** A running Agent record on a Computer, with the given fields overridden. */
 export function running(overrides: Partial<AgentRecord> = {}): AgentRecord {
   return {
     id: "agent-1",
@@ -27,11 +25,7 @@ export function running(overrides: Partial<AgentRecord> = {}): AgentRecord {
     ...overrides,
   };
 }
-
-/** The Agent's latest control operation: a Start that `completed` proves it is running. */
 export type FakeControl = "completed" | "starting" | "failed" | "stopped" | "stale" | "none";
-
-/** The control record `PrismaAgentControlStore.get` would read for `agent` under `control`. */
 export function controlAgentOf(agent: AgentRecord, control: FakeControl): AgentControlAgent {
   const config = agent.runtimeConfig!;
   const state: AgentControlState | null =
@@ -71,21 +65,13 @@ export function controlAgentOf(agent: AgentRecord, control: FakeControl): AgentC
     state,
   };
 }
-
-/**
- * An `AgentConfigApply` over fakes: a Daemon that takes (or does not take) the push, the latest
- * control operation of the Agent `agent()` returns, and whether it is a Workspace Memory Agent.
- */
 export type ConfigApplyOptions = {
   supported?: boolean;
   publishFails?: boolean;
   control?: FakeControl;
-  memoryAgent?: boolean;
-  /** The control state moves between the plan and the write (the fake repository throws). */
   fenceLost?: boolean;
   onPublish?: (sync: AgentConfigSync) => void;
 };
-
 export function configApplyOf(
   agent: () => AgentRecord | undefined,
   options: ConfigApplyOptions = {},
@@ -105,14 +91,6 @@ export function configApplyOf(
         const record = agent();
         return record ? controlAgentOf(record, options.control ?? "completed") : undefined;
       },
-    },
-    {
-      read: async () => ({
-        workspaceId: "workspace-1",
-        provider: "pi",
-        reference: null,
-        ...(options.memoryAgent ? { memoryAgent: true } : {}),
-      }),
     },
   );
   return { apply, intents };

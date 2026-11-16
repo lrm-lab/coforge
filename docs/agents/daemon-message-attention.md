@@ -6,7 +6,6 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   cursors and pending settlement. Cursor fields are one private record per Agent/target;
   business operations coordinate updates and snapshot persistence inside this module.
   Callers use its message operations and queries, never a separate mutable state dependency.
-- `memory-channel-updates.ts` coalesces ordinary Memory Agent channel deliveries per target: five updates or 30 seconds trigger a notice, whose body is read through `message_read`. Personal mentions remain immediate.
 - A create or resume launch opens one startup turn. An `introductionPrompt` (first), real recovery
   input or an explicit `resumePrompt` takes precedence; a fresh session recovers existing memory/tasks,
   a resumed session uses its context before falling back to that recovery, and summary-only recovery reads each listed target once and acts only on

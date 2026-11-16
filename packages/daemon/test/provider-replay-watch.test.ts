@@ -2,10 +2,8 @@ import { expect, test } from "bun:test";
 import { ProviderReplayWatch, carriedStart } from "#src/daemon-runtime/provider-replay-recovery";
 import { FAILED_TURN, REJECTED } from "./fixtures/provider-replay-harness";
 import { captureDaemonLogs } from "./log-capture";
-
-const open = { memoryAgent: false, replacedSessionId: undefined, reportedSessionId: undefined };
+const open = { replacedSessionId: undefined, reportedSessionId: undefined };
 const settled = () => new Promise((resolve) => setImmediate(resolve));
-
 test("a rejected replay that could not be replaced is logged, and the next rejected turn tries again", async () => {
   const { result: attempts, records } = await captureDaemonLogs(async () => {
     const watch = new ProviderReplayWatch("stored-1", open);
@@ -22,20 +20,17 @@ test("a rejected replay that could not be replaced is logged, and the next rejec
     watch.observe(REJECTED, "agent-a", replace(Promise.resolve(true)));
     watch.observe(FAILED_TURN, "agent-a", replace(Promise.resolve(true)));
     await settled();
-    // Replaced once: spent.
     watch.observe(REJECTED, "agent-a", replace(Promise.resolve(true)));
     watch.observe(FAILED_TURN, "agent-a", replace(Promise.resolve(true)));
     await settled();
     return attempts;
   });
-
   expect(attempts).toEqual(["stored-1", "stored-1", "stored-1"]);
   const failure = records.find(
     (record) => record.properties.event === "agent.runtime.replay_rejected_recovery_failed",
   );
   expect(failure).toMatchObject({ level: "error", properties: { agent_id: "agent-a" } });
 });
-
 test("a turn that ended without a rejected replay, and one in flight, start nothing", async () => {
   const watch = new ProviderReplayWatch("stored-1", open);
   const gate = Promise.withResolvers<boolean>();
@@ -53,7 +48,6 @@ test("a turn that ended without a rejected replay, and one in flight, start noth
   expect(started).toBe(1);
   gate.resolve(false);
 });
-
 test("a Start's own recovery, prompts and the unread counts fold into one carried start", () => {
   const carried = carriedStart(
     {

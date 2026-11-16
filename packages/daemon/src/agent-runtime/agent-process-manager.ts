@@ -9,7 +9,6 @@ import {
   type AgentLaunchInput,
   type AgentLaunchPreparationPorts,
 } from "./agent-launch-preparation";
-import type { ConversationSessionStore } from "./memory-conversation-sessions";
 import { resolveGitHookInjectionForLaunch } from "#src/code-agent/git-hooks";
 import { processClockMs } from "#src/platform/process-tree";
 import {
@@ -130,7 +129,6 @@ export class AgentProcessManager {
   constructor(
     createProvider: CodeAgentProviderFactory,
     resolveGitHooks: typeof resolveGitHookInjectionForLaunch = resolveGitHookInjectionForLaunch,
-    private readonly conversationStore?: (agentId: string) => ConversationSessionStore,
     private readonly contextViewRequestLogDirectory?: (agentId: string) => string,
     stopSettings: Partial<AgentStopSettings> = {},
   ) {
@@ -168,7 +166,6 @@ export class AgentProcessManager {
     const ports: AgentLaunchPreparationPorts = {
       createProvider: this.#createProvider,
       resolveGitHooks: this.#resolveGitHooks,
-      ...(this.conversationStore ? { conversationStore: this.conversationStore } : {}),
     };
     const sessionOptions = await prepareAgentLaunch(launch, ports);
     let session: AgentSession;

@@ -1,8 +1,6 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { isMemoryAgentToolProfile } from "../agent/memory-tool-fences";
 import { assertPositiveControlCounter, assertUint } from "./codec";
 import { safeUint64 } from "./agent-observation-codec";
-import { memoryHintMessage, readMemoryHint } from "./memory-hint";
 import { assertValidMessageSender, isValidMessageSender } from "./message-sender";
 import {
   AGENT_START_MESSAGE_TYPE,
@@ -20,14 +18,8 @@ import {
   AgentStartIntentSchema,
   AgentStopIntentSchema,
 } from "#src/internal/gen/coforge/rpc/v1/workspace_pb";
-
-/** The longest resume or introduction prompt a start intent carries, in UTF-16 code units. */
 export const AGENT_START_PROMPT_MAX_LENGTH = 8192;
-
-/** The largest model size a launch carries: far above any model, small enough to stay a number. */
-const MAX_LAUNCH_SIZE = 10_000_000;
-
-/** A model size is never zero — absent is how a launch says "the runtime's model entry decides". */
+const MAX_LAUNCH_SIZE = 10000000;
 function assertLaunchSize(
   name: string,
   value: number | undefined,
@@ -37,12 +29,9 @@ function assertLaunchSize(
   if (!Number.isSafeInteger(value) || value < 1 || value > MAX_LAUNCH_SIZE)
     throw error(`${name} is out of range`);
 }
-
-/** On the way in a launch never fails over a size: one out of range is taken as unstated. */
 function launchSize(value: number | undefined) {
   return value !== undefined && value >= 1 && value <= MAX_LAUNCH_SIZE ? value : undefined;
 }
-
 function assertStartPrompt(
   name: "resume" | "introduction",
   prompt: string | undefined,
@@ -52,7 +41,6 @@ function assertStartPrompt(
   if (!prompt.trim()) throw error(`blank ${name} prompt`);
   if (prompt.length > AGENT_START_PROMPT_MAX_LENGTH) throw error(`${name} prompt is too long`);
 }
-
 function assertResumePrompt(
   prompt: string | undefined,
   hasRecovery: boolean,
@@ -62,7 +50,6 @@ function assertResumePrompt(
   if (prompt !== undefined && hasRecovery)
     throw error("resume prompt cannot carry message recovery");
 }
-
 export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
   assertResumePrompt(
     value.resumePrompt,
@@ -80,17 +67,12 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
   );
   if (value.controlEpoch !== undefined)
     assertPositiveControlCounter(value.controlEpoch, "Agent control epoch");
-  // The server mints and supplies launchId for every managed (controlEpoch-carrying)
-  // start; a start intent with an epoch but no launchId is an internal bug, not a wire concern.
   if (value.controlEpoch !== undefined && !value.launchId?.trim())
     throw new Error("managed Agent start intent requires a launchId");
   if (value.launchId !== undefined && (!value.launchId.trim() || value.launchId.length > 512))
     throw new Error("invalid Agent start launchId");
-  if (value.toolProfile !== undefined && !isMemoryAgentToolProfile(value.toolProfile))
-    throw new Error(`unsupported Agent tool profile: ${value.toolProfile}`);
   if (value.agentConfigRevision !== undefined)
     assertPositiveControlCounter(value.agentConfigRevision, "Agent config revision");
-  // A size the form filled in; the launch's compaction window follows it (task #30).
   const launchError = (reason: string) => new Error(`invalid Agent start ${reason}`);
   assertLaunchSize("context window", value.contextWindow, launchError);
   assertLaunchSize("maximum output", value.maxOutputTokens, launchError);
@@ -117,7 +99,7 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
       assertUint(message.createdAtMs, Number.MAX_SAFE_INTEGER, "Agent recovery creation time");
   }
   for (const count of Object.values(value.unreadSummary ?? {}))
-    assertUint(count, 0xffff_ffff, "Agent unread count");
+    assertUint(count, 4294967295, "Agent unread count");
   const providerConfig = value.providerConfig
     ? parseAgentRuntimeProviderConfig(
         value.providerConfig.kind,
@@ -128,7 +110,6 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
     AgentStartIntentSchema,
     create(AgentStartIntentSchema, {
       ...value,
-      // Absent means "not requested"; never send an explicit `false` for it.
       fastMode: value.fastMode ? true : undefined,
       providerConfig: providerConfig
         ? {
@@ -142,14 +123,12 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
             ...value.wakeMessage,
             sequence: BigInt(value.wakeMessage.sequence),
             createdAtMs: recoveryCreatedAt(value.wakeMessage),
-            memoryHint: memoryHintMessage(value.wakeMessage.memoryHint),
           }
         : undefined,
       resumeMessages: (value.resumeMessages ?? []).map((message) => ({
         ...message,
         sequence: BigInt(message.sequence),
         createdAtMs: recoveryCreatedAt(message),
-        memoryHint: memoryHintMessage(message.memoryHint),
       })),
       unreadSummary: Object.entries(value.unreadSummary ?? {}).map(([target, count]) => ({
         target,
@@ -163,6 +142,8 @@ const recoveryCreatedAt = ({ createdAtMs }: AgentRecoveryMessage) =>
   createdAtMs === undefined ? undefined : BigInt(createdAtMs);
 export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
   const v = fromBinary(AgentStartIntentSchema, bytes);
+  if (v.$unknown?.some((field) => field.no === 21 || field.no === 22))
+    throw new Error("retired Memory Agent launch");
   if (
     v.messageType !== AGENT_START_MESSAGE_TYPE ||
     !v.requestId ||
@@ -172,22 +153,15 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
     !v.provider
   )
     throw new Error("invalid agent start intent");
-  // The provider vocabulary has one owner. A second literal list here went stale when Kiro was
-  // added: every start intent for a Kiro Agent was rejected at this boundary, so it never started.
   requireRuntimeProvider(v.provider, `unsupported runtime provider: ${v.provider}`);
   if (v.controlEpoch !== undefined)
     assertPositiveControlCounter(v.controlEpoch, "Agent control epoch");
-  // A managed start (one carrying controlEpoch) must carry the server-minted
-  // launchId; a decoded intent that fails this is malformed, not merely "unmanaged."
   if (v.controlEpoch !== undefined && !v.launchId?.trim())
     throw new Error("invalid agent start intent: managed start requires a launchId");
   if (v.launchId !== undefined && v.launchId.length > 512)
     throw new Error("invalid agent start intent launchId");
-  if (v.toolProfile !== undefined && !isMemoryAgentToolProfile(v.toolProfile))
-    throw new Error(`unsupported Agent tool profile: ${v.toolProfile}`);
   if (v.agentConfigRevision !== undefined)
     assertPositiveControlCounter(v.agentConfigRevision, "Agent config revision");
-  // A size the form filled in, when this server and daemon both know it (task #30).
   const sizes = {
     contextWindow: launchSize(v.contextWindow),
     maxOutputTokens: launchSize(v.maxOutputTokens),
@@ -239,7 +213,6 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
     latestSenderHandle: message.latestSenderHandle,
     latestSenderDescription: message.latestSenderDescription,
     body: message.body,
-    ...(message.memoryHint ? { memoryHint: readMemoryHint(message.memoryHint) } : {}),
     ...(message.nonMemberMention ? { nonMemberMention: true } : {}),
     ...(message.createdAtMs !== undefined
       ? { createdAtMs: safeUint64(message.createdAtMs, "Agent recovery creation time") }
@@ -266,8 +239,6 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
     ...(v.sessionMode ? { sessionMode: v.sessionMode } : {}),
     ...(v.controlEpoch !== undefined ? { controlEpoch: v.controlEpoch } : {}),
     ...(v.launchId ? { launchId: v.launchId } : {}),
-    ...(v.toolProfile ? { toolProfile: v.toolProfile as AgentStartIntent["toolProfile"] } : {}),
-    ...(v.memoryAgent === true ? { memoryAgent: true } : {}),
     ...(v.resumePrompt !== undefined ? { resumePrompt: v.resumePrompt } : {}),
     ...(v.introductionPrompt !== undefined ? { introductionPrompt: v.introductionPrompt } : {}),
     ...(v.fastMode === true ? { fastMode: true } : {}),
@@ -294,7 +265,6 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
       : {}),
   };
 }
-
 export function encodeAgentStopIntent(value: AgentStopIntent): Uint8Array {
   if ((value.provider === undefined) !== (value.controlEpoch === undefined))
     throw new Error("agent stop provider and control epoch must be paired");
@@ -305,7 +275,6 @@ export function encodeAgentStopIntent(value: AgentStopIntent): Uint8Array {
     create(AgentStopIntentSchema, { ...value, messageType: AGENT_STOP_MESSAGE_TYPE }),
   );
 }
-
 export function decodeAgentStopIntent(bytes: Uint8Array): AgentStopIntent {
   const value = fromBinary(AgentStopIntentSchema, bytes);
   if (
@@ -336,7 +305,6 @@ export function decodeAgentStopIntent(bytes: Uint8Array): AgentStopIntent {
     messageType: value.messageType,
   };
 }
-
 function parseAgentRuntimeProviderConfig(
   kind: string,
   providerId: string | undefined,

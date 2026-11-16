@@ -4,17 +4,12 @@ import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { ModelProviderSettingError, type CodeAgentProvider } from "@lrm/coforge-anvil";
 import { createPiAgentSession } from "@lrm/coforge-anvil/pi";
 import { getLogger } from "@logtape/logtape";
-import { evalMemoryOfferOnly } from "#src/code-agent/agent-instructions";
 import { piRuntimeHost } from "./host";
-
 const logger = getLogger(["coforge", "daemon", "code-agent", "pi"]);
-
-/** CoForge Agent uses the same Pi SDK implementation without a child process. */
 export class CoforgeProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.COFORGE;
   readonly reportsCompaction = true;
   readonly compactionFailure = "sticks_to_session";
-
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
     const runtime = options.runtime;
     if (!runtime) throw new ModelProviderSettingError("CoForge runtime config is required");
@@ -29,10 +24,7 @@ export class CoforgeProvider implements CodeAgentProvider {
       throw new ModelProviderSettingError("CoForge runtime provider API key is required");
     if (providerConfig && providerConfig.providerId !== runtime.modelProvider)
       throw new ModelProviderSettingError("Pi runtime provider does not match the selected model");
-
     const environment = piRuntimeHost.buildSessionEnvironment(options);
-    // In-process tools read the process env. A child Agent process would inherit
-    // these from `environment`; this provider shares the Daemon process.
     if (environment.COFORGE_AGENT_PROXY_URL)
       Bun.env.COFORGE_AGENT_PROXY_URL = environment.COFORGE_AGENT_PROXY_URL;
     if (environment.COFORGE_AGENT_CONTEXT)
@@ -48,17 +40,13 @@ export class CoforgeProvider implements CodeAgentProvider {
         contextViewRequestLogDirectory: options.contextViewRequestLogDirectory,
         modelProvider: runtime.modelProvider,
         model: runtime.model,
-        // What the form filled in, when it did (task #30): the launch's Pi model carries it.
         contextWindow: runtime.contextWindow,
         maxOutputTokens: runtime.maxOutputTokens,
         reasoning: runtime.reasoning,
         apiKey: providerConfig?.apiKey,
         instructions: options.instructions,
         environment,
-        toolProfile: runtime.toolProfile,
         conversation: options.conversation,
-        memoryControlSession: options.memoryControlSession,
-        memoryOfferOnly: evalMemoryOfferOnly(),
       },
       async (...args) => options.onSessionId?.(...args),
       piRuntimeHost,

@@ -229,7 +229,6 @@ class AgentSessionImpl implements AgentSession {
     if (this.#disposed || this.#interrupting || this.#runtime.session.isStreaming) {
       throw new Error("code agent cannot accept a new message");
     }
-    this.#runtime.resetMemoryBudget?.();
     this.#setIdentity("unknown");
     const tracked = this.#prompt(message);
     try {
@@ -259,7 +258,6 @@ class AgentSessionImpl implements AgentSession {
     // Every notice is a new triggering message (inbox delivery, held-notice
     // redelivery, app item); the memory budget is scoped per triggering
     // message, so it must reset here too — not only on sendMessage.
-    this.#runtime.resetMemoryBudget?.();
     // SDK prompt completion waits for the whole run; preflight is the public
     // acceptance boundary used by Pi's RPC implementation as well.
     await new Promise<void>((resolve, reject) => {

@@ -11,7 +11,6 @@ import {
 import { serveArtifactSandbox } from "#src/server/artifacts/artifact-sandbox-http.server";
 import { installServerLifecycle } from "#src/server/runtime/server-lifecycle.server";
 import { assertStartupConfig } from "#src/server/startup-config.server";
-import { ensureWorkspaceMemoryLifecycle } from "#src/server/workspace-memory/lifecycle.server";
 import { startWeeklyReportScheduleTickFromEnv } from "#src/server/records/weekly-report-schedule-tick.server";
 import { startActionCardExpiryTickFromEnv } from "#src/server/conversations/action-card-expiry.server";
 import { startMessageReadRetentionTickFromEnv } from "#src/server/conversations/message-read-retention.server";
@@ -25,7 +24,6 @@ import { startPlatformOperatorSeedingFromEnv } from "#src/server/app-marketplace
 await assertStartupConfig();
 installServerLifecycle();
 // Backend-owned memory sweep: independent of incidental Centrifugo traffic.
-ensureWorkspaceMemoryLifecycle();
 // Optional in-process clock for weekly-report auto-send. No-op unless
 // COFORGE_WEEKLY_REPORT_SCHEDULE_TICK_MS is set; external HTTP cron remains valid.
 startWeeklyReportScheduleTickFromEnv();

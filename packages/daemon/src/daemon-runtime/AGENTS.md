@@ -39,7 +39,7 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   before a turn completes; past that the owner sees an error and only a message or a restart helps.
 - `agent-config-apply.ts` (built by `agent-config-apply-assembly.ts`) applies an `AgentConfigSync` only
   when its Agent is next idle, never by cutting a turn, and always as a restart: env and credentials
-  are read at launch. A Memory Agent is never stopped by it. Details and log outcomes:
+  are read at launch. Details and log outcomes:
   [config apply](../../../../docs/observability/agent-status-and-activity/config-apply.md).
 - `task-idle-nudge.ts` asks the cloud once when a turn leaves an Agent idle, and writes the
   answer as idle input: one ask per Agent at a time, 15 seconds, a 404 pauses asking for an hour

@@ -2,7 +2,6 @@ import { create, toBinary } from "@bufbuild/protobuf";
 import { expect, test } from "bun:test";
 import { AgentStartIntentSchema } from "#src/internal/gen/coforge/rpc/v1/workspace_pb";
 import { AGENT_START_MESSAGE_TYPE, decodeAgentStartIntent, encodeAgentStartIntent } from "./index";
-
 const base = {
   protocolMajor: 1,
   requestId: "request-1",
@@ -13,7 +12,6 @@ const base = {
   model: "gpt-5",
   reasoning: "medium",
 };
-
 test("round-trips launchId on a managed (controlEpoch-carrying) start intent", () => {
   const managed = { ...base, controlEpoch: 3, launchId: "launch-1" };
   expect(decodeAgentStartIntent(encodeAgentStartIntent(managed))).toEqual({
@@ -22,7 +20,6 @@ test("round-trips launchId on a managed (controlEpoch-carrying) start intent", (
     providerConfig: undefined,
   });
 });
-
 test("round-trips an unmanaged start intent without launchId or controlEpoch", () => {
   expect(decodeAgentStartIntent(encodeAgentStartIntent(base))).toEqual({
     ...base,
@@ -30,7 +27,6 @@ test("round-trips an unmanaged start intent without launchId or controlEpoch", (
     providerConfig: undefined,
   });
 });
-
 test("round-trips the Fast mode request, and omits it when not requested", () => {
   const fast = { ...base, fastMode: true };
   expect(decodeAgentStartIntent(encodeAgentStartIntent(fast))).toEqual({
@@ -38,50 +34,17 @@ test("round-trips the Fast mode request, and omits it when not requested", () =>
     modelProvider: "",
     providerConfig: undefined,
   });
-  // Absent, never an explicit `false`: an older daemon reads "no field" as the ordinary tier.
   expect(decodeAgentStartIntent(encodeAgentStartIntent(base))).not.toHaveProperty("fastMode");
   expect(
     decodeAgentStartIntent(encodeAgentStartIntent({ ...base, fastMode: false })),
   ).not.toHaveProperty("fastMode");
 });
-
-test("round-trips the openviking-memory tool profile and rejects unknown profiles", () => {
-  const fenced = { ...base, toolProfile: "openviking-memory" as const };
-  expect(decodeAgentStartIntent(encodeAgentStartIntent(fenced))).toEqual({
-    ...fenced,
-    modelProvider: "",
-    providerConfig: undefined,
-  });
-  expect(() =>
-    encodeAgentStartIntent({ ...base, toolProfile: "all-tools" as "openviking-memory" }),
-  ).toThrow("unsupported Agent tool profile");
-  const encoded = toBinary(
-    AgentStartIntentSchema,
-    create(AgentStartIntentSchema, {
-      ...base,
-      messageType: AGENT_START_MESSAGE_TYPE,
-      toolProfile: "all-tools",
-    }),
-  );
-  expect(() => decodeAgentStartIntent(encoded)).toThrow("unsupported Agent tool profile");
-});
-
-test("rejects Workspace Memory Profile names as tool profiles", () => {
-  expect(() =>
-    encodeAgentStartIntent({ ...base, toolProfile: "openviking" as "openviking-memory" }),
-  ).toThrow("unsupported Agent tool profile");
-  expect(() =>
-    encodeAgentStartIntent({ ...base, toolProfile: "causal-memory" as "openviking-memory" }),
-  ).toThrow("unsupported Agent tool profile");
-});
-
 test("rejects encoding a managed start intent with no launchId", () => {
   expect(() => encodeAgentStartIntent({ ...base, controlEpoch: 1 })).toThrow("launchId");
   expect(() => encodeAgentStartIntent({ ...base, controlEpoch: 1, launchId: "  " })).toThrow(
     "launchId",
   );
 });
-
 test("rejects decoding a managed start intent with no launchId", () => {
   const encoded = toBinary(
     AgentStartIntentSchema,
@@ -93,7 +56,6 @@ test("rejects decoding a managed start intent with no launchId", () => {
   );
   expect(() => decodeAgentStartIntent(encoded)).toThrow("launchId");
 });
-
 test("rejects an oversized launchId on encode and decode", () => {
   const oversized = "x".repeat(513);
   expect(() => encodeAgentStartIntent({ ...base, controlEpoch: 1, launchId: oversized })).toThrow(
@@ -110,7 +72,6 @@ test("rejects an oversized launchId on encode and decode", () => {
   );
   expect(() => decodeAgentStartIntent(encoded)).toThrow("invalid agent start intent launchId");
 });
-
 test("round-trips a resume prompt, which replaces every recovery field", () => {
   const resumed = { ...base, resumePrompt: "Stop editing the schema; only the frontend." };
   expect(decodeAgentStartIntent(encodeAgentStartIntent(resumed))).toEqual({
@@ -122,7 +83,6 @@ test("round-trips a resume prompt, which replaces every recovery field", () => {
     "resume prompt",
   );
 });
-
 test("rejects a blank or oversized resume prompt on encode and decode", () => {
   expect(() => encodeAgentStartIntent({ ...base, resumePrompt: "  " })).toThrow("resume prompt");
   expect(() => encodeAgentStartIntent({ ...base, resumePrompt: "x".repeat(8193) })).toThrow(
@@ -138,7 +98,6 @@ test("rejects a blank or oversized resume prompt on encode and decode", () => {
   );
   expect(() => decodeAgentStartIntent(encoded)).toThrow("resume prompt");
 });
-
 test("rejects decoding a resume prompt that also carries message recovery", () => {
   const recovery = {
     messageId: "message-1",
@@ -164,7 +123,6 @@ test("rejects decoding a resume prompt that also carries message recovery", () =
     expect(() => decodeAgentStartIntent(encoded)).toThrow("resume prompt");
   }
 });
-
 test("a task conversation target round-trips through start recovery", () => {
   const message = {
     messageId: "message-1",
@@ -204,7 +162,6 @@ test("a task conversation target round-trips through start recovery", () => {
       ),
     ).toThrow("invalid agent recovery context");
 });
-
 test("summary recovery carries conversation ids without loading message bodies", () => {
   const intent = {
     ...base,
@@ -214,12 +171,6 @@ test("summary recovery carries conversation ids without loading message bodies",
   expect(decodeAgentStartIntent(encodeAgentStartIntent(intent)).unreadConversationIds).toEqual({
     "#alpha": "group-alpha",
   });
-});
-
-test("round-trips the server-authored Memory identity without changing its tool profile", () => {
-  expect(
-    decodeAgentStartIntent(encodeAgentStartIntent({ ...base, memoryAgent: true })).memoryAgent,
-  ).toBe(true);
 });
 
 test("round-trips an introduction prompt, alongside message recovery and a resume prompt", () => {
@@ -245,7 +196,6 @@ test("round-trips an introduction prompt, alongside message recovery and a resum
     "introductionPrompt",
   );
 });
-
 test("rejects a blank or oversized introduction prompt on encode and decode", () => {
   expect(() => encodeAgentStartIntent({ ...base, introductionPrompt: "  " })).toThrow(
     "introduction prompt",
@@ -265,7 +215,6 @@ test("rejects a blank or oversized introduction prompt on encode and decode", ()
     expect(() => decodeAgentStartIntent(encoded)).toThrow("introduction prompt");
   }
 });
-
 test("recovery messages carry when the server created them, and leave it unset otherwise", () => {
   const message = (id: string, createdAtMs?: number) => ({
     messageId: id,
@@ -281,17 +230,16 @@ test("recovery messages carry when the server created them, and leave it unset o
   });
   const intent = {
     ...base,
-    wakeMessage: message("a", 1_700_000_000_123),
+    wakeMessage: message("a", 1700000000123),
     resumeMessages: [message("b")],
   };
   const decoded = decodeAgentStartIntent(encodeAgentStartIntent(intent));
-  expect(decoded.wakeMessage?.createdAtMs).toBe(1_700_000_000_123);
+  expect(decoded.wakeMessage?.createdAtMs).toBe(1700000000123);
   expect(decoded.resumeMessages?.[0] && "createdAtMs" in decoded.resumeMessages[0]).toBe(false);
   expect(() => encodeAgentStartIntent({ ...base, resumeMessages: [message("c", -1)] })).toThrow(
     "invalid Agent recovery creation time",
   );
 });
-
 test("round-trips the Agent's config revision on a start intent, and leaves it absent otherwise", () => {
   const revised = { ...base, agentConfigRevision: 7 };
   expect(decodeAgentStartIntent(encodeAgentStartIntent(revised))).toEqual({
@@ -299,12 +247,10 @@ test("round-trips the Agent's config revision on a start intent, and leaves it a
     modelProvider: "",
     providerConfig: undefined,
   });
-  // An older server sends no revision; it must not decode as 0.
   expect(decodeAgentStartIntent(encodeAgentStartIntent(base))).not.toHaveProperty(
     "agentConfigRevision",
   );
 });
-
 test("rejects a start intent whose config revision is not a positive integer", () => {
   for (const agentConfigRevision of [0, -1, 1.5, 2 ** 31, Number.NaN])
     expect(() => encodeAgentStartIntent({ ...base, agentConfigRevision })).toThrow(
@@ -320,18 +266,23 @@ test("rejects a start intent whose config revision is not a positive integer", (
   );
   expect(() => decodeAgentStartIntent(encoded)).toThrow("invalid Agent config revision");
 });
-
 test("a launch carries the model sizes the form filled in, and says nothing when it did not", () => {
-  const sized = { ...base, contextWindow: 200_000, maxOutputTokens: 64_000 };
+  const sized = { ...base, contextWindow: 200000, maxOutputTokens: 64000 };
   expect(decodeAgentStartIntent(encodeAgentStartIntent(sized))).toEqual({
     ...sized,
     modelProvider: "",
     providerConfig: undefined,
   });
-  // Absent, not zero: the daemon then follows the runtime's own model entry (task #30).
   expect(decodeAgentStartIntent(encodeAgentStartIntent(base))).not.toHaveProperty("contextWindow");
   expect(() => encodeAgentStartIntent({ ...base, contextWindow: 0 })).toThrow(/out of range/);
-  expect(() => encodeAgentStartIntent({ ...base, maxOutputTokens: 10_000_001 })).toThrow(
+  expect(() => encodeAgentStartIntent({ ...base, maxOutputTokens: 10000001 })).toThrow(
     /out of range/,
   );
+});
+
+test("a retired Memory Agent launch cannot become an ordinary full-tool Agent", () => {
+  const normal = encodeAgentStartIntent(base);
+  const profile = new TextEncoder().encode("openviking-memory");
+  const legacy = new Uint8Array([...normal, 0xaa, 0x01, profile.length, ...profile]);
+  expect(() => decodeAgentStartIntent(legacy)).toThrow("retired Memory Agent");
 });

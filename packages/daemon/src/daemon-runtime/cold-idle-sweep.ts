@@ -7,24 +7,14 @@ import {
   type ColdIdleStop,
   type ColdIdleSweepView,
 } from "#src/agent-runtime/wake-session-recycle";
-
 const logger = getLogger(["coforge", "daemon", "runtime"]);
-
-/** What the daemon itself knows about one live Agent, read at the moment of a sweep. */
 export type AgentIdleFacts = Readonly<{
-  /** A Memory Agent keeps conversation-scoped sessions the primary session does not describe. */
-  memoryAgent: boolean;
-  /** Whether the Agent's last launch is still present and completely set up. */
   launched: boolean;
-  /** The session's `hasLiveTurn`; `undefined` when the provider cannot say. */
   hasLiveTurn: boolean | undefined;
-  /** A busy Activity is showing, or a notice was just written. */
   working: boolean;
   deliveriesQueued: boolean;
   deliveryInFlight: boolean;
   inputsQueued: boolean;
-  /** A tracked @mention of the Agent is not settled: received, told in a turn that has not ended,
-   * or kept for its next launch. */
   trackedMentionOpen: boolean;
   openToolCall: boolean;
   backgroundTasks: number;
@@ -34,9 +24,7 @@ export type AgentIdleFacts = Readonly<{
   runnerHold: boolean;
   migrating: boolean;
 }>;
-
 export type IdleBlocker =
-  | "memory_agent"
   | "not_launched"
   | "launching"
   | "stopping"
@@ -52,10 +40,7 @@ export type IdleBlocker =
   | "tracked_mention"
   | "open_tool_call"
   | "background_tasks";
-
-/** Why an Agent is not fully idle by the daemon's own state; `undefined` when every guard holds. */
 export function idleBlocker(facts: AgentIdleFacts): IdleBlocker | undefined {
-  if (facts.memoryAgent) return "memory_agent";
   if (!facts.launched) return "not_launched";
   if (facts.launching) return "launching";
   if (facts.stopping) return "stopping";
@@ -73,52 +58,33 @@ export function idleBlocker(facts: AgentIdleFacts): IdleBlocker | undefined {
   if (facts.backgroundTasks > 0) return "background_tasks";
   return undefined;
 }
-
-/** A live Agent as `DaemonRuntime` reports it to the sweep. */
 export type ColdIdleAgent = Omit<ColdIdleSweepView, "supported">;
-
 export type ColdIdleSweepPorts = Readonly<{
   agentIds(): string[];
-  /** The Agent as it is right now; `undefined` once it has no live process. */
   agent(agentId: string): ColdIdleAgent | undefined;
   provider(provider: RuntimeProvider): CodeAgentProvider;
-  /** Ends the runtime, keeping the Agent active and wakeable. */
   stop(stop: ColdIdleStop): Promise<void>;
   now?(): number;
 }>;
-
-/** Whether the provider can read a session's own record: no seam, no recycle. */
 export function supportsSessionResume(provider: CodeAgentProvider): boolean {
   return provider.readSessionResumeFacts !== undefined;
 }
-
-/**
- * Every `COFORGE_WAKE_RECYCLE_SWEEP_MS` (10 minutes), stops the runtime of each live Agent that is
- * fully idle, silent past the cold gap, and carrying a large context. The Agent stays active; its
- * next message wakes it, and the wake decides between resuming and a fresh session with a briefing.
- */
 export class ColdIdleSweep {
   readonly #ports: ColdIdleSweepPorts;
   #timer: ReturnType<typeof setInterval> | undefined;
   #running: Promise<void> | undefined;
-
   constructor(ports: ColdIdleSweepPorts) {
     this.#ports = ports;
   }
-
-  /** Idempotent; the timer never keeps the process alive. */
   start(): void {
     if (this.#timer) return;
     this.#timer = setInterval(() => void this.sweep(), resolveWakeRecycleSweepMs());
     this.#timer.unref();
   }
-
   stop(): void {
     clearInterval(this.#timer);
     this.#timer = undefined;
   }
-
-  /** One sweep; a sweep still running is joined, not repeated. Never rejects. */
   sweep(): Promise<void> {
     this.#running ??= this.#sweep()
       .catch((error: unknown) =>
@@ -132,7 +98,6 @@ export class ColdIdleSweep {
       });
     return this.#running;
   }
-
   async #sweep(): Promise<void> {
     const views = this.#views();
     const skipped: Record<string, number> = {};
@@ -146,8 +111,6 @@ export class ColdIdleSweep {
     const judgedEventAtMs = new Map(views.map((view) => [view.agentId, view.lastEventAtMs]));
     let stopped = 0;
     for (const stop of stops) {
-      // The facts were read asynchronously: the Agent must still be the one that was judged, and
-      // the runtime must have reported nothing since.
       const now = this.#ports.agent(stop.agentId);
       if (
         now?.busyReason !== undefined ||
@@ -176,7 +139,6 @@ export class ColdIdleSweep {
         ),
       });
   }
-
   #views(): ColdIdleSweepView[] {
     return this.#ports.agentIds().flatMap((agentId) => {
       const agent = this.#ports.agent(agentId);
@@ -193,7 +155,6 @@ export class ColdIdleSweep {
       ];
     });
   }
-
   async #readFacts(
     view: ColdIdleSweepView,
     sessionId: string,
@@ -202,7 +163,6 @@ export class ColdIdleSweep {
       .provider(view.provider)
       .readSessionResumeFacts?.({ sessionId, ...(view.envVars ? { envVars: view.envVars } : {}) });
   }
-
   #now(): number {
     return this.#ports.now?.() ?? Date.now();
   }

@@ -12,27 +12,9 @@ import {
   type AgentSession,
 } from "@lrm/coforge-anvil";
 import { CoforgeProvider } from "#src/code-agent/pi/provider";
-
 const TEST_AGENT_INSTRUCTIONS = "Test Agent instructions.";
-
-/**
- * An embedded Pi session runs in-process and **the product does not bound it**: `@coforge/age
- * exports exactly one timeout, `PI_MODEL_REFRESH_TIMEOUT_MS` (5s), and that bounds the model
- * refresh, not a session's turn. A healthy embedded-session test here takes 1.2-4.7s on an idle
- * host (measured), so it sits right on top of `bun:test`'s 5s default: on a busy host (this machine
- * runs several agents at once) the same file failed 8 of 17 on unmodified `main`.
- *
- * `docs/agents/testing.md` says a test that really spawns a child process sets its own timeout from
- * the product's own bound, and never to raise the global timeout. The same reasoning applies to
- * in-process work that outlives the default. This is scoped to this file, not the repo-wide
- * default, and set from measurement (~6x the slowest healthy run) because there is no product bound
- * to derive it from. The three argument-only tests at the end of the file finish in milliseconds;
- * a budget costs them nothing. (A per-test third argument is the other spelling of this, but oxfmt
- * then re-wraps every test body, turning a two-line change into a 1400-line diff.)
- */
-const EMBEDDED_SESSION_BUDGET_MS = 30_000;
+const EMBEDDED_SESSION_BUDGET_MS = 30000;
 setDefaultTimeout(EMBEDDED_SESSION_BUDGET_MS);
-
 test("Pi resolves native provider environment auth below stored auth and Agent keys", async () => {
   const root = await mkdtemp(join(tmpdir(), "coforge-pi-env-auth-"));
   const agentDir = join(root, "host-config");
@@ -105,15 +87,11 @@ test("Pi resolves native provider environment auth below stored auth and Agent k
     await rm(root, { recursive: true, force: true });
   }
 });
-
 test("Pi reports a raw error event, not a classified activity, when the provider request fails", async () => {
-  // Request-start Activity is informational; failure classification belongs to the daemon.
   const root = await mkdtemp(join(tmpdir(), "coforge-pi-error-"));
   const agentDir = join(root, "host-config");
   const workspace = join(root, "workspace");
   await mkdir(workspace, { recursive: true });
-  // 400 (a client error), not 5xx: the SDK retries transient server errors, which would
-  // make this test outrun its timeout instead of exercising the failure path quickly.
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -147,7 +125,6 @@ test("Pi reports a raw error event, not a classified activity, when the provider
     await rm(root, { recursive: true, force: true });
   }
 });
-
 test("embedded Pi preserves a terminal failure with an empty provider error message", async () => {
   const root = await mkdtemp(join(tmpdir(), "coforge-pi-empty-error-"));
   let session: AgentSession | undefined;
@@ -201,7 +178,6 @@ export default function (pi) {
     }
   }
 });
-
 test("embedded Pi reports extension cancellation as interrupted and can run again", async () => {
   const root = await mkdtemp(join(tmpdir(), "coforge-pi-extension-abort-"));
   let server: ReturnType<typeof Bun.serve> | undefined;
@@ -268,11 +244,7 @@ test("embedded Pi reports extension cancellation as interrupted and can run agai
     }
   }
 });
-
 test("embedded Pi reports progress for content-free turn/message lifecycle frames", async () => {
-  // Verified against the SDK's own AgentSessionEvent/AssistantMessageEvent types
-  // (turn_start/message_start, and the content-free "start"/"*_start"/"toolcall_delta"
-  // sub-events of message_update); this exercises the same union through a real exchange.
   const root = await mkdtemp(join(tmpdir(), "coforge-pi-progress-"));
   const workspace = join(root, "workspace");
   const agentDir = join(root, "host-pi-agent");
@@ -296,7 +268,6 @@ test("embedded Pi reports progress for content-free turn/message lifecycle frame
       events.filter((event) => event.type === "progress").map((event) => event.source),
     );
     expect(sources.has("pi_turn_lifecycle")).toBe(true);
-    // No raw runtime_progress activity is built by the provider - the daemon core decides.
     expect(
       events.some(
         (event) => event.type === "activity" && event.activity.detailKind === "runtime_progress",
@@ -308,7 +279,6 @@ test("embedded Pi reports progress for content-free turn/message lifecycle frame
     await rm(root, { recursive: true, force: true });
   }
 });
-
 test("CoForge retains its isolated resources and required managed key", async () => {
   const workspace = await mkdtemp(join(tmpdir(), "coforge-builtin-"));
   try {
@@ -330,14 +300,16 @@ test("CoForge retains its isolated resources and required managed key", async ()
     await rm(workspace, { recursive: true, force: true });
   }
 });
-
 test("embedded Pi uses host models and resources while an Agent key overrides host auth in memory", async () => {
   const root = await mkdtemp(join(tmpdir(), "coforge-pi-sdk-"));
   const workspace = join(root, "workspace");
   const agentDir = join(root, "host-pi-agent");
   await mkdir(join(agentDir, "extensions"), { recursive: true });
   await mkdir(workspace);
-  const requests: Array<{ authorization: string | null; body: string }> = [];
+  const requests: Array<{
+    authorization: string | null;
+    body: string;
+  }> = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -434,7 +406,6 @@ test("embedded Pi uses host models and resources while an Agent key overrides ho
     await rm(root, { recursive: true, force: true });
   }
 });
-
 test("concurrent embedded Pi sessions keep distinct in-memory Agent keys", async () => {
   const root = await mkdtemp(join(tmpdir(), "coforge-pi-concurrent-"));
   const agentDir = join(root, "host-pi-agent");
@@ -498,7 +469,6 @@ test("concurrent embedded Pi sessions keep distinct in-memory Agent keys", async
     await rm(root, { recursive: true, force: true });
   }
 });
-
 test("embedded Pi default bash preserves host prefix and composes runtime and host environment", async () => {
   const root = await mkdtemp(join(tmpdir(), "coforge-pi-bash-env-"));
   const workspace = join(root, "workspace");
@@ -555,9 +525,6 @@ test("embedded Pi default bash preserves host prefix and composes runtime and ho
   session.subscribe((event) => events.push(event));
   try {
     await session.sendMessage("inspect the environment");
-    // Pi reports only the raw tool-start event, with the provider's tool
-    // arguments as `input`; the daemon core alone decides what Activity a
-    // "bash" call is.
     expect(events.filter((event) => event.type === "tool-start")).toMatchObject([
       {
         type: "tool-start",
@@ -580,7 +547,6 @@ test("embedded Pi default bash preserves host prefix and composes runtime and ho
     await rm(root, { recursive: true, force: true });
   }
 });
-
 test("embedded Pi keeps a host extension bash override instead of installing default bash", async () => {
   const root = await mkdtemp(join(tmpdir(), "coforge-pi-host-bash-"));
   const workspace = join(root, "workspace");
@@ -633,7 +599,6 @@ export default function (pi) { pi.registerTool({ name: "bash", label: "Host bash
     await rm(root, { recursive: true, force: true });
   }
 });
-
 test("embedded Pi launches despite a duplicate host skill warning", async () => {
   const root = await mkdtemp(join(tmpdir(), "coforge-pi-skill-warning-"));
   const workspace = join(root, "workspace");
@@ -665,7 +630,6 @@ test("embedded Pi launches despite a duplicate host skill warning", async () => 
     await rm(root, { recursive: true, force: true });
   }
 });
-
 for (const phase of ["tool", "preflight"] as const) {
   test(`embedded Pi disposal waits for pending extension ${phase}`, async () => {
     const root = await mkdtemp(join(tmpdir(), "coforge-pi-pending-tool-"));
@@ -755,7 +719,6 @@ export default function (pi) { pi.registerTool({ name: "controlled", label: "Con
     }
   });
 }
-
 test("built-in notifications are accepted before completion and steer the existing session", async () => {
   const agentWorkspaceDirectory = await mkdtemp(join(tmpdir(), "coforge-builtin-notify-"));
   const started = Promise.withResolvers<void>();
@@ -817,7 +780,10 @@ test("built-in notifications are accepted before completion and steer the existi
     await completed.promise;
     expect(requests).toHaveLength(2);
     const providerRequest = JSON.parse(requests[0]!) as {
-      messages?: Array<{ role?: unknown; content?: unknown }>;
+      messages?: Array<{
+        role?: unknown;
+        content?: unknown;
+      }>;
     };
     const instructionMessages = providerRequest.messages?.filter(
       (message) =>
@@ -838,7 +804,6 @@ test("built-in notifications are accepted before completion and steer the existi
     await rm(agentWorkspaceDirectory, { recursive: true, force: true });
   }
 });
-
 test("embedded Pi notifications are accepted before completion and steer the existing session", async () => {
   const root = await mkdtemp(join(tmpdir(), "coforge-pi-notify-"));
   const workspace = join(root, "workspace");
@@ -902,7 +867,10 @@ test("embedded Pi notifications are accepted before completion and steer the exi
     await completed.promise;
     expect(requests).toHaveLength(2);
     const providerRequest = JSON.parse(requests[0]!) as {
-      messages?: Array<{ role?: unknown; content?: unknown }>;
+      messages?: Array<{
+        role?: unknown;
+        content?: unknown;
+      }>;
     };
     const instructions = providerRequest.messages?.filter(
       (message) =>
@@ -924,7 +892,6 @@ test("embedded Pi notifications are accepted before completion and steer the exi
     await rm(root, { recursive: true, force: true });
   }
 });
-
 test("Pi forwards all retrieval reads before and after a notification", async () => {
   const root = await mkdtemp(join(tmpdir(), "coforge-pi-notify-budget-"));
   const workspace = join(root, "workspace");
@@ -1017,29 +984,25 @@ test("Pi forwards all retrieval reads before and after a notification", async ()
       model: "custom",
       reasoning: "",
       providerConfig: { kind: "coforge", providerId: "openai", apiKey: "agent-key" },
-      toolProfile: "openviking-memory",
     },
   });
   try {
     await session.sendMessage("first triggering message");
-    // All four reads reach the proxy within one triggering message.
     expect(proxyRequests).toHaveLength(4);
     expect(modelRequests[1]).not.toContain("read budget exhausted");
-    // notify resolves at prompt preflight, so wait for the turn it started
-    // to settle before asserting on its tool traffic.
     const turnCompleted = Promise.withResolvers<void>();
     session.subscribe((event) => {
       if (event.type === "completed") turnCompleted.resolve();
     });
     await session.notify!("second triggering message");
     await turnCompleted.promise;
-    // New notifications can continue retrieval in the same native session.
     expect(proxyRequests).toHaveLength(5);
-    // The whole conversation replays in every request, so inspect the tool
-    // result for the post-notify read specifically: it must be the proxy's
-    // citation payload, not another client-side budget rejection.
     const replay = JSON.parse(modelRequests[3] ?? "{}") as {
-      messages?: Array<{ role?: string; tool_call_id?: string; content?: unknown }>;
+      messages?: Array<{
+        role?: string;
+        tool_call_id?: string;
+        content?: unknown;
+      }>;
     };
     const postNotifyRead = replay.messages?.find(
       (message) => message.role === "tool" && message.tool_call_id === "find-5",
@@ -1057,12 +1020,15 @@ test("Pi forwards all retrieval reads before and after a notification", async ()
     await rm(root, { recursive: true, force: true });
   }
 });
-
 describe("a Pi launch its model settings cannot satisfy fails with a typed error", () => {
   async function launchPi(runtime: {
     modelProvider?: string;
     model: string;
-    providerConfig?: { kind: "coforge"; providerId: string; apiKey?: string };
+    providerConfig?: {
+      kind: "coforge";
+      providerId: string;
+      apiKey?: string;
+    };
     envVars?: Record<string, string>;
   }) {
     const root = await mkdtemp(join(tmpdir(), "coforge-pi-typed-"));
@@ -1093,19 +1059,16 @@ describe("a Pi launch its model settings cannot satisfy fails with a typed error
       await rm(root, { recursive: true, force: true });
     }
   }
-
   test("a model the catalog does not have is RuntimeModelNotFoundError naming the model", async () => {
     const error = await launchPi({ modelProvider: "openai", model: "missing-model" });
     expect(error).toBeInstanceOf(RuntimeModelNotFoundError);
     expect(error).toMatchObject({ code: "model_not_found", model: "missing-model" });
   });
-
   test("a model provider the catalog does not have is ModelProviderSettingError", async () => {
     const error = await launchPi({ modelProvider: "no-such-provider", model: "any" });
     expect(error).toBeInstanceOf(ModelProviderSettingError);
     expect(error).toMatchObject({ code: "model_provider_not_configured" });
   });
-
   test("an Agent's NODE_EXTRA_CA_CERTS that cannot be read is AgentEnvironmentError naming it", async () => {
     const path = join(tmpdir(), `coforge-missing-ca-${crypto.randomUUID()}.pem`);
     const error = await launchPi({
@@ -1119,7 +1082,6 @@ describe("a Pi launch its model settings cannot satisfy fails with a typed error
       `NODE_EXTRA_CA_CERTS names ${path}, which could not be read`,
     );
   });
-
   test("an Agent key for another provider than the selected model's is ModelProviderSettingError", async () => {
     const error = await launchPi({
       modelProvider: "openai",

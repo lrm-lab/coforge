@@ -1,9 +1,5 @@
 import { expect, test } from "bun:test";
-import {
-  RuntimeLoginRequiredError,
-  RuntimeMemoryUnsupportedError,
-  RuntimeStartFailedError,
-} from "@lrm/coforge-anvil";
+import { RuntimeLoginRequiredError, RuntimeStartFailedError } from "@lrm/coforge-anvil";
 import {
   AgentAuthorizationError,
   isNonRetryableLaunchFailure,
@@ -110,15 +106,6 @@ test("a start whose own words refuse the credential is a sign-in, not a launch t
   expect(isNonRetryableLaunchFailure(crashed)).toBe(false);
 });
 
-test("a typed reason outranks any wording beside it", () => {
-  // A provider that says why in a typed error is never second-guessed by its own text: only a
-  // reason that named no cause is read for a refused credential.
-  const memoryUnsupported = new RuntimeMemoryUnsupportedError(
-    "Unauthorized: this runtime cannot run a Memory Agent",
-  );
-  expect(launchFailureReason(memoryUnsupported)).toBe("runtime_memory_unsupported");
-});
-
 test("only a reason no retry can fix skips the launch retries", () => {
   expect(
     isNonRetryableLaunchFailure(new RuntimeLoginRequiredError("Kiro CLI is not logged in")),
@@ -142,11 +129,6 @@ test("only a reason no retry can fix skips the launch retries", () => {
     new AgentConfigRequestError("server", 503, undefined, "server unavailable"),
   );
   expect(isNonRetryableLaunchFailure(serverError)).toBe(false);
-
-  // A runtime that cannot host a Memory Agent is a person-changes-something failure, not a retry.
-  const memoryUnsupported = new RuntimeMemoryUnsupportedError("Cursor cannot run a Memory Agent");
-  expect(memoryUnsupported.code).toBe("runtime_memory_unsupported");
-  expect(isNonRetryableLaunchFailure(memoryUnsupported)).toBe(true);
 
   // Every other reason keeps the same attempts and backoff.
   expect(isNonRetryableLaunchFailure(new RuntimeStartFailedError("exited 1"))).toBe(false);

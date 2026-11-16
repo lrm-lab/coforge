@@ -48,9 +48,6 @@ export class PrismaAgentDeletionStore implements AgentDeletionStore {
       });
       // Already deleted: leave the original `deletedAt` and the first delete's effects alone.
       if (deleted.count === 0) return { outcome: "already-deleted" as const };
-      await tx.workspaceMemoryAgent.deleteMany({
-        where: { workspaceId: input.workspaceId, agentId: input.agentId },
-      });
       // No longer the one that welcomes new members: the Workspace falls back to the assistant.
       await clearOnboardingAgent(tx, input.workspaceId, input.agentId);
 

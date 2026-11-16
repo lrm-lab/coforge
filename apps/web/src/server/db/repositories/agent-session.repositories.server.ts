@@ -9,7 +9,6 @@ import {
 } from "#src/server/agents/agent-sessions.server";
 import { parseAgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 import { getComputerRestartStore } from "#src/server/computers/computer-restart-store.server";
-
 const referenceSchema = z.object({
   provider: z.string(),
   computerId: z.string(),
@@ -18,8 +17,6 @@ const referenceSchema = z.object({
   daemonInstanceId: z.string(),
   launchId: z.string().optional(),
 });
-/** An Agent's persisted `runtimeSession` launch fence, or null when it has none or it does not
- * parse. */
 export function parseRuntimeSessionReference(value: unknown) {
   const parsed = referenceSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
@@ -31,18 +28,16 @@ const controlScopeSchema = z.object({
   phase: z.string(),
   launchId: z.string().optional(),
 });
-
 function fence(reference: RuntimeSessionReference) {
   const { sessionId: _sessionId, state: _state, ...stored } = reference;
   return referenceSchema.parse(stored);
 }
-
 export class PrismaAgentSessionRepository implements AgentSessionRepository {
   constructor(private readonly db: PrismaClient) {}
   async read(agentId: string) {
     const agent = await this.db.agent.findUnique({
       where: { id: agentId },
-      include: { currentSession: true, workspaceMemoryAgent: { select: { agentId: true } } },
+      include: { currentSession: true },
     });
     if (!agent) return undefined;
     const stored =
@@ -58,7 +53,6 @@ export class PrismaAgentSessionRepository implements AgentSessionRepository {
       workspaceId: agent.workspaceId,
       computerId: agent.computerId ?? undefined,
       provider: parseAgentRuntimeConfig(agent.runtimeConfig).runtime,
-      ...(agent.workspaceMemoryAgent ? { memoryAgent: true } : {}),
       reference:
         stored === null
           ? null
@@ -78,7 +72,6 @@ export class PrismaAgentSessionRepository implements AgentSessionRepository {
     scope: AgentSessionWriteScope,
   ) {
     return this.db.$transaction(async (tx) => {
-      // Serialize with control/snapshot writers before reading the related row.
       await tx.$queryRaw`SELECT id FROM agents WHERE id = ${agentId}::uuid FOR UPDATE`;
       const current = await tx.agent.findUnique({
         where: { id: agentId },
@@ -111,7 +104,6 @@ export class PrismaAgentSessionRepository implements AgentSessionRepository {
           current.currentSession?.state !== previousState)
       )
         return false;
-
       const locked = await tx.agent.updateMany({
         where: {
           id: agentId,
@@ -135,7 +127,6 @@ export class PrismaAgentSessionRepository implements AgentSessionRepository {
         data: { currentSessionId: current.currentSessionId ?? null },
       });
       if (locked.count !== 1) return false;
-
       let currentSessionId = current.currentSessionId;
       const compatible =
         current.currentSession?.provider === next.provider &&
@@ -178,7 +169,6 @@ export class PrismaAgentSessionRepository implements AgentSessionRepository {
     });
   }
 }
-
 export function createAgentSessions(db: PrismaClient, mentions: AcceptedSessionMentions) {
   return new AgentSessions(
     new PrismaAgentSessionRepository(db),

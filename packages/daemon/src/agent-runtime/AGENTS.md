@@ -180,13 +180,12 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   and makes the briefing the launch's first input. A briefing that cannot be built still starts a
   fresh session. No resume when the launch carries a `resumePrompt` or `create`s its session.
 - `startup-memory-block.ts` builds the block from two files, each cut to its own share and never
-  through a symlink: `MEMORY.md` within `STARTUP_MEMORY_BUDGET_TOKENS` (3,000) and
+  through a symlink: saved knowledge and `MEMORY.md` share `STARTUP_MEMORY_BUDGET_TOKENS` (3,000) and
   `notes/active-context.md` within `STARTUP_ACTIVE_CONTEXT_BUDGET_TOKENS` (1,000). A share is not
   lent to the other file, a file with nothing to show contributes no section, and the same block
   covers every fresh session, not only a recycle.
 - `session-memory-briefing.ts` is the one assembly: a fresh session's block rides in its starter
   when nothing else is queued, and is its own short reference turn ahead of a real delivery. Every
-  fresh launch — first start, a session the provider lost, an explicit create — and every fresh
-  Memory Agent conversation gets it; a resume never does.
+  fresh launch — first start, a session the provider lost, an explicit create — gets it; a resume never does.
 - A finished compaction queues no turn. `session-memory-recovery.ts` includes a bounded recovery
   with the next real session input; never start a turn only to reload memory.

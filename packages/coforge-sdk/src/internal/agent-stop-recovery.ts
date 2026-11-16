@@ -34,7 +34,6 @@ export const STOP_REASON_RECOVERY: Readonly<Record<string, StopRecovery>> = {
   model_not_found: RETRY,
   model_provider_not_configured: RETRY,
   agent_environment_invalid: RETRY,
-  runtime_memory_unsupported: RETRY,
   runtime_spawn_failed: RETRY,
   // The wakes outlived their deadline: nothing starts it again until a person does (task #33).
   startup_deadline_exceeded: RETRY,

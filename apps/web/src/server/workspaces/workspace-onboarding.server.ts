@@ -20,7 +20,6 @@ export function onboardingAgentWhere(workspaceId: string): Prisma.AgentWhereInpu
     ...ACTIVE_AGENT_WHERE,
     systemKind: null,
     visibility: AGENT_VISIBILITY.PUBLIC,
-    workspaceMemoryAgent: null,
     weeklyReportAssistant: null,
     weeklyReportCollectorBinding: null,
   };

@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package coforge.rpc.v1;
 
-import "coforge/rpc/v1/memory_hint.proto";
-
 message WorkspaceListRequest {
   uint32 protocol_major = 1;
   string request_id = 2;
@@ -186,9 +184,8 @@ message AgentStartIntent {
   // A recognized runtime tool fence. Absent retains the ordinary Agent tool
   // profile. Field 21: 20 was taken by resume_prompt on main before this
   // field landed.
-  optional string tool_profile = 21;
-  // Server-authored Workspace Memory identity; independent of the chosen tool profile.
-  optional bool memory_agent = 22;
+  reserved 21, 22;
+  reserved "tool_profile", "memory_agent";
   // Text the Agent's first turn opens with, in place of message recovery: the
   // guidance a user gives when resuming Agents they stopped.
   // Never carried together with wake_message, resume_messages or unread_summary.
@@ -253,7 +250,8 @@ message AgentRecoveryMessage {
   string body = 9;
   // True when the Agent is not in the channel and was notified of this one message.
   optional bool non_member_mention = 10;
-  MemoryHintDelivery memory_hint = 11;
+  reserved 11;
+  reserved "memory_hint";
   // When the server created the message, in epoch milliseconds; unset from a server that predates it.
   optional uint64 created_at_ms = 12;
 }
@@ -331,7 +329,8 @@ message AgentMessageDelivery {
   // Present on a tracked @mention delivery: the daemon answers it with an ACK that echoes this
   // envelope once the mention is drained into that launch's session, or with a terminal error.
   MentionDeliveryEnvelope mention_delivery = 18;
-  MemoryHintDelivery memory_hint = 19;
+  reserved 19;
+  reserved "memory_hint";
   // When the server created the message, in epoch milliseconds. Unset from a server that predates
   // it. Not when the daemon received it: a message replayed after a reconnect differs.
   optional uint64 created_at_ms = 20;

@@ -36,7 +36,6 @@ import { extendRequestTimeout } from "#src/server/http/request-timeout.server";
 import {
   centrifugoWorkspaceDeletionSignals,
   WorkspaceDeletion,
-  workspaceMemoryRemoval,
 } from "#src/server/workspaces/deletion.server";
 import { WorkspaceMembers } from "#src/server/workspaces/members.server";
 import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
@@ -234,7 +233,6 @@ export const deleteWorkspace = createServerFn({ method: "POST" })
       new WorkspaceDeletion(db, {
         files: new WorkspaceFileCleanup({ files: getFileStorage, images: getPublicImageStorage }),
         signals: centrifugoWorkspaceDeletionSignals(createCentrifugoServerApi),
-        memory: workspaceMemoryRemoval(db),
       }),
       { workspaceId, userId: user.id, confirmSlug: data.confirmSlug },
     );

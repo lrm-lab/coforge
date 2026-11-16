@@ -50,7 +50,6 @@ test(
       () => ({ provider: "pi", createAgentSession: async () => wedgedSession() }),
       undefined,
       undefined,
-      undefined,
       { deadlineMs: DEADLINE_MS },
     );
     try {

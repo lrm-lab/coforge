@@ -15,12 +15,7 @@ import {
   FileDaemonCredentialStore,
   type CodeAgentProviderFactory,
 } from "@lrm/coforge-daemon";
-import {
-  decodeAgentStartIntent,
-  encodeAgentStartIntent,
-  RUNTIME_PROVIDER,
-} from "@lrm/coforge-sdk/internal";
-import { type MemoryAgentToolProfile } from "@lrm/coforge-sdk/agent";
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { EVAL_DISABLE_HOST_PI_INJECTION } from "../../../packages/agent/src/runner.ts";
 import { AgentControl } from "../../../apps/web/src/server/agents/agent-control.server";
 import { getAgentControlSignal } from "../../../apps/web/src/server/agents/agent-control-signal.server";
@@ -216,9 +211,9 @@ export async function startEvalDaemon(input: {
       issueAgentContext: (agentId, context) => runtimeApi().issueAgentContext(agentId, context),
       agentTask: (context, request, agentApiKey) =>
         runtimeApi().agentTask(context, request, agentApiKey),
-      agentOpenviking: (context, request, agentApiKey) =>
-        runtimeApi().agentRequests.agentOpenviking(context, request, agentApiKey),
-      memoryFence: (agentId) => runtimeApi().memoryFence(agentId),
+      agentMemory: (context, request, key) => runtimeApi().agentMemory(context, request, key),
+      agentTeamMemory: (context, request, key) =>
+        runtimeApi().agentRequests.agentTeamMemory(context, request, key),
     },
   });
   // runtime.stop() only revokes the proxy's tokens; the proxy's server ends with proxy.close().
@@ -287,36 +282,8 @@ export async function startEvalDaemon(input: {
 
 /** Product Start: server publishes AgentStart over Centrifugo. Message delivery cannot wake an
  * Agent that was never started (`restartConfig` is empty → "Agent is inactive"). */
-/** The shared :8788 parser rejects every toolProfile except `{kind:"memory-explorer"}`.
- * Keep the fence off the stored runtimeConfig and attach it only to the Start the eval publishes. */
-function centrifugoApiWithFence(fence: MemoryAgentToolProfile | undefined) {
-  const api = createCentrifugoServerApi();
-  const publish = async (channel: string, data: Uint8Array) => {
-    if (!fence) return api.publish(channel, data);
-    try {
-      const intent = decodeAgentStartIntent(data);
-      return api.publish(channel, encodeAgentStartIntent({ ...intent, toolProfile: fence }));
-    } catch {
-      return api.publish(channel, data);
-    }
-  };
-  return {
-    publishJson: api.publishJson.bind(api),
-    publish,
-    // Batched publications still pass the fence one by one.
-    publishBatch: (publications: readonly { channel: string; data: Uint8Array }[]) =>
-      Promise.allSettled(
-        publications.map((publication) => publish(publication.channel, publication.data)),
-      ),
-  };
-}
-
-export async function startAgent(
-  workspace: EvalHostWorkspace,
-  agentId: string,
-  fence?: MemoryAgentToolProfile,
-): Promise<void> {
-  const centrifugo = centrifugoApiWithFence(fence);
+export async function startAgent(workspace: EvalHostWorkspace, agentId: string): Promise<void> {
+  const centrifugo = createCentrifugoServerApi();
   const conversations = new PrismaDirectConversationRepository(workspace.db);
   const mentions = new MentionDeliveryReports(
     new PrismaMentionDeliveryRepository(workspace.db),

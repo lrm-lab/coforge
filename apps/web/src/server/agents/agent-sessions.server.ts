@@ -1,5 +1,4 @@
 import type { AgentSessionReport, AgentStartIntent } from "@lrm/coforge-sdk/internal";
-
 export type RuntimeSessionReference = {
   provider: string;
   computerId: string;
@@ -13,15 +12,15 @@ export type RuntimeSessionReference = {
 export type AgentSessionWriteScope = Pick<
   AgentStartIntent,
   "workspaceId" | "requestId" | "controlEpoch"
-> & { launchId?: string };
-
+> & {
+  launchId?: string;
+};
 export interface AgentSessionRepository {
   read(agentId: string): Promise<
     | {
         workspaceId: string;
         computerId?: string;
         provider: string;
-        memoryAgent?: boolean;
         reference: RuntimeSessionReference | null;
       }
     | undefined
@@ -33,10 +32,6 @@ export interface AgentSessionRepository {
     scope: AgentSessionWriteScope,
   ): Promise<boolean>;
 }
-
-/** The reference comparison `verify()` refused, named so `snapshot_rejected` can log which one
- * diverged. Only the name: values never leave the database, and the message stays the one stable
- * reason the daemon already receives. */
 export type AgentSessionVerifyField =
   | "agent"
   | "workspaceId"
@@ -50,35 +45,30 @@ export type AgentSessionVerifyField =
   | "launchId"
   | "sessionId"
   | "currentDaemon";
-
 export type AgentSessionVerifyCategory = "superseded" | "session_mismatch";
-
 export function sessionVerifyCategory(field: AgentSessionVerifyField): AgentSessionVerifyCategory {
   return field === "sessionId" ? "session_mismatch" : "superseded";
 }
-
-/** `verify()`'s rejection: the field name is diagnostics, the message is the wire reason. */
 export class AgentSessionVerifyError extends Error {
   readonly category: AgentSessionVerifyCategory;
-
   constructor(readonly field: AgentSessionVerifyField) {
     super("Agent session report is stale or unauthorized");
     this.name = "AgentSessionVerifyError";
     this.category = sessionVerifyCategory(field);
   }
 }
-
-/** The tracked mentions an Agent's newly accepted launch and session issue again
- * (`MentionDeliveryReports`); `includeIssued` sends those already issued for it too. It never
- * throws. */
 export type AcceptedSessionMentions = {
   resendForCurrentSession(
-    scope: { workspaceId: string; computerId: string; agentId: string },
-    options?: { includeIssued?: boolean },
+    scope: {
+      workspaceId: string;
+      computerId: string;
+      agentId: string;
+    },
+    options?: {
+      includeIssued?: boolean;
+    },
   ): Promise<void>;
 };
-
-/** Cloud owns selection; CAS fencing prevents a retired launch from changing it. */
 export class AgentSessions {
   constructor(
     private readonly repository: AgentSessionRepository,
@@ -86,10 +76,8 @@ export class AgentSessions {
       workspaceId: string,
       computerId: string,
     ) => Promise<string | undefined>,
-    /** Required, so an accepted session can never leave its Agent's pending mentions behind. */
     private readonly mentions: AcceptedSessionMentions,
   ) {}
-
   async prepare(intent: AgentStartIntent): Promise<AgentStartIntent> {
     const agent = await this.repository.read(intent.agentId);
     if (
@@ -99,16 +87,12 @@ export class AgentSessions {
       agent.provider !== intent.provider
     )
       throw new Error("Agent session start scope is not authorized");
-    const { memoryAgent: _requestedMemoryIdentity, ...unscopedIntent } = intent;
-    intent = { ...unscopedIntent, ...(agent.memoryAgent ? { memoryAgent: true } : {}) };
     const daemonInstanceId = await this.currentDaemon(intent.workspaceId, intent.computerId);
     if (!daemonInstanceId) throw new Error("Workspace daemon identity is unavailable");
     const old = agent.reference;
     const compatible = old?.provider === intent.provider && old.computerId === intent.computerId;
     const controlled = intent.controlEpoch !== undefined;
     const sameRequest = compatible && old.startRequestId === intent.requestId;
-    // Repeated delivery is the same launch even before its first turn. Empty
-    // history selects fresh only for a NEW operation, never for a delayed wake.
     if (compatible && (!controlled || sameRequest) && old.daemonInstanceId === daemonInstanceId) {
       if (!sameRequest && intent.sessionId && intent.sessionId !== old.sessionId)
         throw new Error("Stop the Agent before selecting a different session");
@@ -145,14 +129,6 @@ export class AgentSessions {
       sessionMode,
       startRequestId: intent.requestId,
       daemonInstanceId,
-      // The server already knows this operation's launchId (it minted it before
-      // publish) whenever the intent is managed, so record it here, ahead of the Daemon's own
-      // report — this is what lets a rebind's later Session report (same launchId the intent
-      // carried) satisfy `verify()`'s exact-match fence directly, instead of relying only on
-      // `previousLaunchId`'s hand-over fallback, which would otherwise start this new request
-      // with no known launchId at all (a real loosening: the fence would accept any launchId
-      // until the first report). An unmanaged intent (no `launchId`) still falls back to
-      // whatever the previous reference already recorded for the very same request.
       ...(intent.launchId
         ? { launchId: intent.launchId }
         : compatible &&
@@ -170,7 +146,6 @@ export class AgentSessions {
       ...(sessionId ? { sessionId } : {}),
     };
   }
-
   async verify(report: AgentSessionReport): Promise<RuntimeSessionReference> {
     const agent = await this.repository.read(report.agentId);
     const old = agent?.reference;
@@ -198,16 +173,12 @@ export class AgentSessions {
       old.sessionId !== report.replacedSessionId
     )
       reject("sessionId");
-    // Last: it awaits, so every cheaper comparison above decides first.
     if (
       (await this.currentDaemon(report.workspaceId, report.computerId)) !== report.daemonInstanceId
     )
       reject("currentDaemon");
     return old;
   }
-
-  /** Records the report's launch and session as the Agent's current ones, then issues its pending
-   * tracked mentions for them. */
   async accept(report: AgentSessionReport): Promise<void> {
     const old = await this.verify(report);
     const { state: _observedState, ...reference } = old;
@@ -232,7 +203,6 @@ export class AgentSessions {
       agentId: report.agentId,
     });
   }
-
   async retire(agentId: string, workspaceId: string, computerId: string): Promise<void> {
     const agent = await this.repository.read(agentId);
     if (!agent || agent.workspaceId !== workspaceId || agent.computerId !== computerId)

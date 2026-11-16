@@ -96,7 +96,6 @@ Directories with their own `AGENTS.md` add rules for that directory only.
 | `src/platform/`                             | OS primitives: process trees, launchd jobs, Job Objects, locks, log files, OS release, best-effort Linux OOM score adjustment                                                  |
 | `src/local-rpc.ts`                          | Computer↔Daemon local socket server, framing, validation, and dispatch                                                                                                         |
 | `src/agent-proxy*.ts`                       | Local Agent capability boundary: approved HTTPS forwarding, route groups, runtimes, and the domain errors it answers                                                           |
-| `src/openviking-read-proxy.ts`              | Daemon-local OpenViking read proxy: admits Agent `ov_*` reads and forwards the frozen command envelope to the injected web URL                                                 |
 
 Host notes for `src/code-agent/<provider>/`: each injects environment, client identity, process, version, auth and usage capabilities into Anvil's native sessions. Kiro's `usage-host.ts` is read-only: only usage JSON crosses into the adapter. Antigravity's `acp-host.ts` strips SSH markers. Droid spawns a wide PTY for `/limits`. Devin runs the `thought_level` effort sweep. `pi/` holds the built-in provider, catalog and metadata and shares the native SDK Session through Anvil.
 

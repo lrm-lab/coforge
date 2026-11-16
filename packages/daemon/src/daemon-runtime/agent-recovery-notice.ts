@@ -15,7 +15,6 @@ export function recoveryWakeupText(input: {
   agentId: string;
   announced: readonly AgentRecoveryMessage[];
   summaryOnly: readonly (readonly [string, number])[];
-  hasToolProfile: boolean;
 }): string {
   const rows = [
     ...renderNoticeRows(
@@ -31,7 +30,5 @@ export function recoveryWakeupText(input: {
       ([target, count]) => `${target} ${count} new message${count === 1 ? "" : "s"}`,
     ),
   ];
-  return input.announced.length
-    ? inboxNoticeText(rows)
-    : agentStartupCatchupInput(rows, input.hasToolProfile);
+  return input.announced.length ? inboxNoticeText(rows) : agentStartupCatchupInput(rows);
 }

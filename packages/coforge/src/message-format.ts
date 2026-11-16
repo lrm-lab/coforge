@@ -134,7 +134,7 @@ export function coordinationLine(message: AgentMessageRecord): string {
 function messageLine(message: AgentMessageRecord, body: string): string {
   const notice = message.nonMemberMention ? `\n${NON_MEMBER_MENTION_NOTICE}` : "";
   const at = commentAnchorAt(message);
-  return `${coordinationLine(message)}[target=${message.target} msg=${shortId(message.id)} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}]${at} ${messageSender(message)}: ${fenceMessageBody(body)}${attachmentSuffix(message)}${taskSuffix(message)}${memoryHintSuffix(message)}${forwardedSuffix(message)}${notice}`;
+  return `${coordinationLine(message)}[target=${message.target} msg=${shortId(message.id)} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}]${at} ${messageSender(message)}: ${fenceMessageBody(body)}${attachmentSuffix(message)}${taskSuffix(message)}${forwardedSuffix(message)}${notice}`;
 }
 
 export const NON_MEMBER_MENTION_NOTICE =
@@ -425,12 +425,6 @@ export function formatUndeliveredMentions(
     );
   }
   return lines.join("\n");
-}
-
-export function memoryHintSuffix(message: AgentMessageRecord): string {
-  return message.memoryHint
-    ? `\n[Memory Hint hint_id=${message.memoryHint.hint_id} tool=${message.memoryHint.tool}]`
-    : "";
 }
 
 /** What `message react` prints: which message the emoji landed on. */

@@ -1,6 +1,5 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import agentPackage from "./package.json";
-
 export const provider = RUNTIME_PROVIDER.COFORGE;
 export { RUNTIME_PROVIDER };
 export { API_KEY_ENV_BY_PROVIDER, SessionEnvironmentError } from "#src/runtime-provider";
@@ -45,7 +44,6 @@ export {
   prepareCloudComputerAgentSkills,
   prepareCloudComputerSessionSkillPaths,
 } from "#src/cloud-computer-skills";
-export { isMemoryAgentRuntime } from "#src/contract";
 export type {
   AgentActivity,
   AgentActivityLevel,
@@ -66,5 +64,4 @@ export type {
   UsageSnapshot,
   UsageWindow,
 } from "#src/contract";
-export { createMemoryDispositionTool } from "#src/memory-disposition-tool";
 export { piContextHasMedia, piRequestBody, PiRequestLogWriter } from "#src/pi-request-log";

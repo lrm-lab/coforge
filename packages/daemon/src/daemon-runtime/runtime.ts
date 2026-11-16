@@ -432,7 +432,6 @@ export class DaemonRuntime {
   readonly #workspaceQueries = new AgentWorkspaceQueries(
     (agentId) => this.#agentProcessManager.runtime(agentId)?.config.provider,
   );
-
   constructor(
     connection: DaemonConfig,
     createProvider: CodeAgentProviderFactory,
@@ -529,7 +528,6 @@ export class DaemonRuntime {
         this.#activity(agentId, detailKind, level, detail, extra),
       sync: this.#sync,
       contexts: this.#contexts,
-      memoryAgent: (agentId) => this.memoryFence(agentId),
       reconcileIdleTurn: this.#turn.reconcileIdleTurn,
       startAgent: (agentId, config, sessionId) =>
         this.#startAgent(agentId, config, undefined, { sessionId }),
@@ -893,16 +891,13 @@ export class DaemonRuntime {
       contextView: this.#contextViewService,
     });
   }
-
   get agentProcessManager(): AgentProcessManager {
     return this.#agentProcessManager;
   }
-
   #assertRunning(): void {
     if (this.#stopping || !this.#startup.started)
       throw new AgentPreflightError(NOT_RUNNING, "DAEMON_NOT_RUNNING");
   }
-
   #assertAgentNotStopping(agentId: string): void {
     if (this.#stopState.stopping(agentId) || this.#agentProcessManager.isStopping(agentId))
       throw new Error(`Agent runtime is stopping: ${agentId}`);
@@ -915,11 +910,9 @@ export class DaemonRuntime {
       throw new AgentPreflightError("Agent API key is missing", "AGENT_API_KEY_MISSING");
     return agentId;
   };
-
   authorizedAgent(context: string, agentApiKey: string | undefined): string {
     return this.#authorizedAgent(context, agentApiKey);
   }
-
   async scanUsage(provider: RuntimeProvider): Promise<UsageScanResponse> {
     return scanUsage(
       {
@@ -948,7 +941,6 @@ export class DaemonRuntime {
       idempotencyKey,
     );
   }
-
   start(connection: DaemonConfig): Promise<void> {
     if (
       connection.workspaceId !== this.#connection.workspaceId ||
@@ -959,7 +951,6 @@ export class DaemonRuntime {
     if (this.#stopping) return Promise.reject(new DaemonConnectionStoppedError());
     return this.#startup.start(connection);
   }
-
   #replaceTransport = async (): Promise<unknown> => {
     const runtime = this;
     return replaceTransport({
@@ -973,7 +964,6 @@ export class DaemonRuntime {
       connection: this.#connection,
     });
   };
-
   #deleteWorkspace = (
     connection: DaemonConfig,
     request: Pick<AgentWorkspaceDeleteRequest, "agentId">,
@@ -985,7 +975,6 @@ export class DaemonRuntime {
       (agentId) => this.stopAgent(agentId),
       (agentId) => this.#forgetLocalAgent(agentId),
     );
-
   startAgent(
     agentId: string,
     config: AgentRuntimeConfig,
@@ -994,7 +983,10 @@ export class DaemonRuntime {
     recovery?: AgentRecoveryContext,
     previousLaunchId?: string,
     sessionMode?: SessionMode,
-    control?: { controlEpoch?: number; launchId: string },
+    control?: {
+      controlEpoch?: number;
+      launchId: string;
+    },
     replacedSessionId?: string,
   ): Promise<AgentRuntime> {
     return this.#startAgent(agentId, config, recovery, {
@@ -1006,7 +998,6 @@ export class DaemonRuntime {
       replacedSessionId,
     });
   }
-
   #startAgent = (
     agentId: string,
     config: AgentRuntimeConfig,
@@ -1060,7 +1051,6 @@ export class DaemonRuntime {
       mentionDeliveries: this.#mentionDeliveries,
     };
   }
-
   #appInboxSyncPorts() {
     return {
       transport: () => this.#transport,
@@ -1073,7 +1063,6 @@ export class DaemonRuntime {
       signal: this.#shutdown.stopSignal,
     };
   }
-
   #agentApiRemindersPorts() {
     return {
       assertRunning: () => this.#assertRunning(),
@@ -1086,16 +1075,13 @@ export class DaemonRuntime {
       inboxCoordinator: this.#inboxCoordinator,
     };
   }
-
   #env = () => runtimeEnvelope(this.#connection);
 
   async #abandonLaunch(agentId: string, error: unknown): Promise<unknown> {
     return abandonLaunch(this.#startupFailurePorts(), agentId, error);
   }
-
   #scheduleStartupFailure = (agentId: string, launch: ActivityLaunch): void =>
     scheduleStartupFailure(this.#startupFailurePorts(), agentId, launch);
-
   #startupFailurePorts() {
     return {
       stopping: this.#stopping,
@@ -1138,23 +1124,18 @@ export class DaemonRuntime {
     currentLaunch: (id) => this.#currentActivityLaunches.get(id),
     observation: this.#observationPorts,
   }));
-
   #failCollectorRunningSlots = (agentId: string, failureReason: string) =>
     failCollectorRunningSlots(this.#transport, this.agentApiKeys, agentId, failureReason);
-
   #currentObservedUsage = (provider: RuntimeProvider) =>
     currentObservedUsage(this.#observedUsage, provider);
-
   #assertOwnIntent = (intent: {
     protocolMajor: number;
     workspaceId: string;
     computerId?: string;
   }) => assertOwnIntent(intent, this.#connection.workspaceId, this.#connection.computerId);
-
   async handleAgentStart(intent: AgentStartIntent): Promise<AgentRuntime> {
     return handleAgentStart(this.#controlIntentPorts(), intent);
   }
-
   #controlIntentPorts(): AgentControlIntentPorts {
     return controlIntentPorts({
       assertOwnIntent: this.#assertOwnIntent,
@@ -1170,11 +1151,9 @@ export class DaemonRuntime {
       stopAgent: (agentId) => this.stopAgent(agentId),
     });
   }
-
   async handleAgentWorkspaceReset(request: AgentWorkspaceResetRequest): Promise<void> {
     return handleAgentWorkspaceReset(this.#controlIntentPorts(), request);
   }
-
   async handleAgentStop(intent: AgentStopIntent): Promise<void> {
     return handleAgentStop(this.#controlIntentPorts(), intent);
   }
@@ -1183,7 +1162,6 @@ export class DaemonRuntime {
     this.#assertOwnIntent(sync);
     await this.#configApply.accept(sync);
   }
-
   async handleAgentTurnInterrupt(intent: AgentTurnInterruptIntent): Promise<void> {
     return handleAgentTurnInterrupt(
       {
@@ -1206,7 +1184,6 @@ export class DaemonRuntime {
   async handleAgentActivityProbe(probe: AgentActivityProbe): Promise<void> {
     return this.#agentOperations.handleActivityProbe(probe);
   }
-
   async handleAgentMessage(message: AgentMessageDelivery): Promise<void> {
     return handleAgentMessage(this.#messageDeliveryPorts(), message);
   }
@@ -1216,7 +1193,6 @@ export class DaemonRuntime {
     this.#reported.remember(report);
     await reportContextViewAvailability(this, report);
   }
-
   get service(): AgentContextViewService {
     return this.#contextViewService;
   }
@@ -1241,7 +1217,6 @@ export class DaemonRuntime {
   reported(agentId: string) {
     return this.#reported.last(agentId);
   }
-
   #wakeAgent = (
     agentId: string,
     restart: WakeRestart,
@@ -1257,7 +1232,6 @@ export class DaemonRuntime {
   handleAgentInboxPurge(purge: AgentInboxPurge): void {
     return this.#agentOperations.handleInboxPurge(purge);
   }
-
   stopAgent(agentId: string): Promise<void> {
     this.#configApply.stopped(agentId);
     return this.#agentOperations.stopAgent(agentId);
@@ -1272,10 +1246,8 @@ export class DaemonRuntime {
       this.#fastModeWarned,
     );
   };
-
   #readyRunningAgentIds = (): string[] =>
     readyRunningAgentIds(this.#agentProcessManager, this.#agentLaunches, this.#stopState);
-
   #activity = (
     agentId: string,
     detailKind: AgentActivity["detailKind"],
@@ -1284,7 +1256,6 @@ export class DaemonRuntime {
     extra: Partial<ActivityDraft> = {},
   ): ActivityDraft =>
     activityDraft(this.#connection.workspaceId, agentId, detailKind, level, detail, extra);
-
   #turnPorts = () => ({
     messageAttention: this.#messageAttention,
     activityPublisher: this.#activityPublisher,
@@ -1320,7 +1291,6 @@ export class DaemonRuntime {
   get #revokeAgentApiKey() {
     return revokeAgentApiKey.bind(undefined, this.#transport, this.agentApiKeys);
   }
-
   async agentMessage(
     context: string,
     request: LocalAgentMessageRequest,
@@ -1328,7 +1298,6 @@ export class DaemonRuntime {
   ): Promise<AgentMessageResponse> {
     return this.#agentOperations.agentMessage(context, request, agentApiKey);
   }
-
   get version() {
     return this.#localQueries.version.bind(this.#localQueries);
   }
@@ -1345,29 +1314,17 @@ export class DaemonRuntime {
   get computerUpdateNotice() {
     return this.#localQueries.computerUpdateNotice.bind(this.#localQueries);
   }
-
-  memoryFence(agentId: string): string | undefined {
-    return (
-      this.#agentProcessManager.runtime(agentId)?.config.toolProfile ??
-      this.#agentProcessManager.restartConfig(agentId)?.config.toolProfile
-    );
-  }
-
   async agentTask(context: string, command: TaskCommand, agentApiKey: string): Promise<TaskResult> {
     return agentTask(this.#agentApiRemindersPorts(), context, command, agentApiKey);
   }
-
   async mintAppItem(agentId: string, input: MintAppItem) {
     return mintAppItem(this.#agentApiRemindersPorts(), agentId, input);
   }
-
   async reminder(context: string, request: LocalReminderRequest, agentApiKey: string) {
     return reminder(this.#agentApiRemindersPorts(), context, request, agentApiKey);
   }
-
   #acceptReminderDue = (job: ReminderJob, late: boolean): Promise<boolean> =>
     acceptReminderDue(this.#agentApiRemindersPorts(), job, late);
-
   #resyncAppConfigs(): void {
     resyncAppConfigs(this.#appInboxSyncPorts());
   }
@@ -1375,18 +1332,15 @@ export class DaemonRuntime {
   async inbox(context: string, request: LocalInboxRequest): Promise<InboxResponse> {
     return inbox(this.#appInboxSyncPorts(), context, request);
   }
-
   async drainAppInboxNotices(agentId: string): Promise<void> {
     return drainAppInboxNotices(this.#appInboxSyncPorts(), agentId);
   }
-
   issueAgentContext(agentId: string, context: string = crypto.randomUUID()): string {
     this.#assertRunning();
     this.#agentContexts.set(agentId, context);
     this.#reminderSnapshots.request(agentId, "agent_context");
     return context;
   }
-
   #runnerHoldCell() {
     const runtime = this;
     return {
@@ -1413,7 +1367,6 @@ export class DaemonRuntime {
       this.#mentionDeliveries,
     );
   }
-
   get runnerHeld(): boolean {
     return this.#runnerHold !== undefined;
   }
@@ -1425,7 +1378,6 @@ export class DaemonRuntime {
   cloudConnectFailure(): string | undefined {
     return this.#transport.connectFailure?.();
   }
-
   stop(): Promise<void> {
     if (this.#stopPromise) return this.#stopPromise;
     const shutdownReason = shutdownReasonForHold(
@@ -1442,6 +1394,5 @@ export class DaemonRuntime {
     return this.#stopPromise;
   }
 }
-
 export type { CodeAgentProviderFactory, AgentRuntime, AgentRuntimeConfig, CodeAgentProvider };
 export type { BusyAgentReport };

@@ -5,21 +5,14 @@ import type {
   AgentStartIntent,
 } from "@lrm/coforge-sdk/internal";
 import type { RestartRuntimeFields } from "#src/agent-runtime/agent-process-manager";
-
 export type AgentInputCompletion = {
   resolve: () => void;
   reject: (error: unknown) => void;
 };
-
 export type AgentRecoveryContext = Pick<
   AgentStartIntent,
   "wakeMessage" | "resumeMessages" | "unreadSummary" | "unreadConversationIds"
 >;
-
-/** Whether a recovery context has anything concrete to deliver. `recoveryOf(intent)` always
- * returns an object, even for a launch with no wake message, resume messages, or unread summary,
- * so callers cannot tell "nothing to recover" from "recovery was requested" by presence alone —
- * this is the same check `#recoverAttention` uses to skip an empty context. */
 export function recoveryHasContent(context: AgentRecoveryContext | undefined): boolean {
   return Boolean(
     context &&
@@ -28,27 +21,38 @@ export function recoveryHasContent(context: AgentRecoveryContext | undefined): b
       Object.keys(context.unreadSummary ?? {}).length),
   );
 }
-
 export type AgentInput =
   | {
       kind: "recovery";
       context: AgentRecoveryContext;
       completion: AgentInputCompletion;
-      /** Called once the recovery pass ran to its end: the completion also settles for a refused
-       * notice the launch tolerates, which told the Agent nothing. */
       told?: () => void;
     }
-  | { kind: "delivery"; message: AgentMessageDelivery; completion: AgentInputCompletion }
-  /** The tracked mentions kept for this launch, told in one notice when the item is reached. */
-  | { kind: "carried"; completion: AgentInputCompletion }
-  | { kind: "startup"; text: string; completion: AgentInputCompletion }
-  | { kind: "prompt"; text: string; introduction?: true; completion: AgentInputCompletion }
-  /** A MEMORY.md block ahead of a fresh session's or a compacted context's next real input: a
-   * turn of its own, and context rather than a request. */
-  | { kind: "memory"; text: string; completion: AgentInputCompletion };
-
-/** Whether any queued input has something to say, so the startup starter has nothing to add:
- * the input drain skips the starter when this holds for the inputs behind it. */
+  | {
+      kind: "delivery";
+      message: AgentMessageDelivery;
+      completion: AgentInputCompletion;
+    }
+  | {
+      kind: "carried";
+      completion: AgentInputCompletion;
+    }
+  | {
+      kind: "startup";
+      text: string;
+      completion: AgentInputCompletion;
+    }
+  | {
+      kind: "prompt";
+      text: string;
+      introduction?: true;
+      completion: AgentInputCompletion;
+    }
+  | {
+      kind: "memory";
+      text: string;
+      completion: AgentInputCompletion;
+    };
 export function queueHasInputContent(items: readonly AgentInput[]): boolean {
   return items.some(
     (item) =>
@@ -59,18 +63,12 @@ export function queueHasInputContent(items: readonly AgentInput[]): boolean {
       (item.kind === "recovery" && recoveryHasContent(item.context)),
   );
 }
-
 export type AgentInputQueue = {
   items: AgentInput[];
   drain?: Promise<void>;
   closed: boolean;
-  /** Set on a retired queue: it belongs to a runtime that ended, so what its loop is still on
-   * fails into the next launch's custody and never touches the launch that replaced it. */
   keep?: (message: AgentMessageDelivery) => void;
 };
-
-/** The runtime fields a Start and a config push both carry, with an absent field left out and
- * an absent `fastMode` meaning the ordinary service tier. A new runtime field is added here. */
 export function runtimeFieldsOf(
   intent: Pick<AgentStartIntent | AgentConfigSync, keyof RestartRuntimeFields>,
 ): RestartRuntimeFields {
@@ -81,21 +79,15 @@ export function runtimeFieldsOf(
     ...(intent.modelProvider !== undefined ? { modelProvider: intent.modelProvider } : {}),
     ...(intent.providerConfig !== undefined ? { providerConfig: intent.providerConfig } : {}),
     ...(intent.fastMode ? { fastMode: true } : {}),
-    // What a person filled in on the form; absent leaves the runtime's own model entry in charge.
     ...(intent.contextWindow !== undefined ? { contextWindow: intent.contextWindow } : {}),
     ...(intent.maxOutputTokens !== undefined ? { maxOutputTokens: intent.maxOutputTokens } : {}),
   };
 }
-
-/** The daemon's launch config from the versioned start intent. */
 export function runtimeConfigOf(intent: AgentStartIntent): AgentRuntimeConfig {
   return {
     ...runtimeFieldsOf(intent),
-    toolProfile: intent.toolProfile,
-    ...(intent.memoryAgent ? { memoryAgent: true } : {}),
   };
 }
-
 export function recoveryOf(intent: AgentStartIntent): AgentRecoveryContext {
   return {
     wakeMessage: intent.wakeMessage,

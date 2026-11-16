@@ -134,8 +134,6 @@ export { threadParentTarget, threadRootTarget } from "./message-thread-target";
 /** A reaction emoji: trimmed, one to sixteen characters, no whitespace. */
 export const isValidReactionEmoji = (value: string): boolean =>
   value.trim() === value && value.length >= 1 && value.length <= 16 && !/\s/.test(value);
-export const MEMORY_OFFER_REQUIRED_MESSAGE =
-  "An explicit @memory question must be answered with memory_offer";
 export const AGENT_MESSAGE_VALIDATION_MESSAGES = [
   // Older servers still answer this bare text; keep it allowlisted for them.
   "message anchor must be eight hexadecimal characters or a full UUID",
@@ -148,7 +146,6 @@ export const AGENT_MESSAGE_VALIDATION_MESSAGES = [
   "reaction emoji must be one to sixteen characters without whitespace",
   "mute requires a channel target",
   "unfollow requires a channel thread target",
-  MEMORY_OFFER_REQUIRED_MESSAGE,
   "search `before` must be an ISO time, such as 2026-09-01T00:00:00Z",
   "search `after` must be an ISO time, such as 2026-09-01T00:00:00Z",
 ] as const;

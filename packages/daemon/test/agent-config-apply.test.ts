@@ -406,36 +406,6 @@ test("a launch already in flight when the sync arrived is still restarted", asyn
   expect(f.stops).toEqual([AGENT]);
 });
 
-test("a Memory Agent is never stopped: its restart config is updated, the revision held, nothing pending", async () => {
-  const f = fixture({ live: { busyReason: "memory_agent" } });
-  const { records } = await captureDaemonLogs(async () => {
-    await f.apply.accept(push(2));
-    await f.apply.settle(AGENT);
-  });
-  expect(f.stops).toEqual([]);
-  expect(f.armed()).toEqual([]);
-  expect(f.replaced.map((fields) => fields.model)).toEqual(["model-2"]);
-  expect(f.apply.appliedRevisions().get(AGENT)).toBe(2);
-  expect(eventsOf(records)).toEqual(["memory_agent"]);
-});
-
-test("a launch that turns out to be a Memory Agent drops its pending apply", async () => {
-  const f = fixture({ live: false, launching: true });
-  await f.apply.accept(push(2));
-  f.state.launching = false;
-  f.state.live = {
-    agentId: AGENT,
-    provider: "claude-code",
-    busyReason: "memory_agent",
-    sessionId: "session-1",
-    lastEventAtMs: 0,
-  } as never;
-  await f.apply.settle(AGENT);
-  expect(f.stops).toEqual([]);
-  expect(f.armed()).toEqual([]);
-  expect(f.replaced.at(-1)?.model).toBe("model-2");
-});
-
 test.each([
   ["a lower revision", 1],
   ["no revision", undefined],

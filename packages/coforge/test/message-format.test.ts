@@ -9,7 +9,6 @@ import {
   neutralizeReferenceLiterals,
 } from "#src/message-format";
 import { renderSearchPreview } from "#src/search-format";
-
 function message(overrides: Partial<AgentMessageRecord> = {}): AgentMessageRecord {
   return {
     id: "aaaaaaaa-0000-4000-8000-000000000001",
@@ -24,26 +23,10 @@ function message(overrides: Partial<AgentMessageRecord> = {}): AgentMessageRecor
     ...overrides,
   };
 }
-
-test("target message check and read expose structured Hint receipt metadata without altering its body", () => {
-  const hint = message({
-    body: "use these constraints",
-    memoryHint: { hint_id: "server-hint", tool: "memory_disposition" },
-  });
-  expect(formatMessageLine(hint)).toContain(
-    "use these constraints\n[Memory Hint hint_id=server-hint tool=memory_disposition]",
-  );
-  expect(
-    formatReadWindow("#general", { messages: [hint], hasOlder: false, hasNewer: false }),
-  ).toContain("[Memory Hint hint_id=server-hint tool=memory_disposition]");
-  expect(hint.body).toBe("use these constraints");
-});
-
 test("formatUtcTimestamp renders ISO input as UTC YYYY-MM-DD HH:MM:SSZ", () => {
   expect(formatUtcTimestamp("2026-09-07T10:05:09Z")).toBe("2026-09-07 10:05:09Z");
   expect(formatUtcTimestamp("2026-01-02T00:00:00.500Z")).toBe("2026-01-02 00:00:00Z");
 });
-
 test("a message the Agent was notified of from outside the channel reads whole and says it cannot reply there", () => {
   const long = "x".repeat(250);
   expect(formatMessageLine(message({ body: long, nonMemberMention: true }))).toBe(
@@ -51,12 +34,10 @@ test("a message the Agent was notified of from outside the channel reads whole a
       "[CoForge notice: You were notified as a non-member, so you cannot reply in that channel. If no reply is needed, no action is required. Otherwise, DM the person who mentioned you or join the channel to participate.]",
   );
 });
-
 test("formatMessageLine renders the shared bracket line with attachment and task suffixes", () => {
   expect(formatMessageLine(message())).toBe(
     "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=human] @ada: hello there",
   );
-
   const withOneAttachment = message({
     attachments: [
       {
@@ -72,7 +53,6 @@ test("formatMessageLine renders the shared bracket line with attachment and task
       " [1 attachment: log.txt (id:aaaa1111-0000-4000-8000-000000000001) —" +
       " use `coforge attachment view --id <attachmentId> --output <path>` to download]",
   );
-
   const withTwoAttachments = message({
     attachments: [
       {
@@ -95,7 +75,6 @@ test("formatMessageLine renders the shared bracket line with attachment and task
       " diagram.png (id:bbbb2222-0000-4000-8000-000000000002) —" +
       " use `coforge attachment view --id <attachmentId> --output <path>` to download]",
   );
-
   const withTask = message({
     task: { number: 12, status: "in_progress", owner: { displayName: "Ada", handle: "ada" } },
   });
@@ -103,7 +82,6 @@ test("formatMessageLine renders the shared bracket line with attachment and task
     "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
       " [task #12 status=in_progress assignee=@ada]",
   );
-
   const withDeletedOwner = message({
     task: {
       number: 46,
@@ -115,14 +93,12 @@ test("formatMessageLine renders the shared bracket line with attachment and task
     "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
       " [task #46 status=in_progress assignee=@kiro [deleted]]",
   );
-
   const withTaskNoOwner = message({ task: { number: 3, status: "todo" } });
   expect(formatMessageLine(withTaskNoOwner)).toBe(
     "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=human] @ada: hello there" +
       " [task #3 status=todo]",
   );
 });
-
 test("channel role context precedes the line and does not consume the summary budget", () => {
   const context = "[CoForge current channel role: member; coordinator=none]";
   const rendered = formatMessageLine(
@@ -131,7 +107,6 @@ test("channel role context precedes the line and does not consume the summary bu
   expect(rendered.startsWith(`${context}\n[target=`)).toBe(true);
   expect(rendered).toContain("x".repeat(200) + "…(+1 chars,");
 });
-
 test("formatMessageLine summarizes a long plain-channel body and keeps DM/thread text intact", () => {
   const longBody = `${"频道闲聊。".repeat(80)}结尾`;
   const channel = message({
@@ -146,20 +121,16 @@ test("formatMessageLine summarizes a long plain-channel body and keeps DM/thread
   expect(Array.from(rendered.slice(rendered.indexOf("@ada: ") + 6).split("…")[0]!).length).toBe(
     200,
   );
-
   const dm = message({ target: "@ada", body: longBody });
   expect(formatMessageLine(dm)).toContain("结尾");
   expect(formatMessageLine(dm)).not.toContain("…(+");
-
   const thread = message({ target: "#general:aaaaaaaa", body: longBody });
   expect(formatMessageLine(thread)).toContain("结尾");
   expect(formatMessageLine(thread)).not.toContain("…(+");
-
   const mentioned = message({ target: "#general", body: longBody, mentionsAgent: true });
   expect(formatMessageLine(mentioned)).toContain("结尾");
   expect(formatMessageLine(mentioned)).not.toContain("…(+");
 });
-
 test("formatMessageLine renders an Agent sender with its description and a system sender plainly", () => {
   const fromAgent = message({
     senderKind: "agent",
@@ -171,7 +142,6 @@ test("formatMessageLine renders an Agent sender with its description and a syste
   expect(formatMessageLine(fromAgent)).toBe(
     "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=agent] @scout — release bot: deploy finished, all green",
   );
-
   const fromAgentNoDescription = message({
     senderKind: "agent",
     senderHandle: "scout",
@@ -180,7 +150,6 @@ test("formatMessageLine renders an Agent sender with its description and a syste
   expect(formatMessageLine(fromAgentNoDescription)).toBe(
     "[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=agent] @scout: hello there",
   );
-
   const fromSystem = message({
     senderKind: "system",
     senderHandle: "",
@@ -191,7 +160,6 @@ test("formatMessageLine renders an Agent sender with its description and a syste
     '[target=#general msg=aaaaaaaa-0000 time=2026-09-07 10:00:00Z type=system] system: 📌 Frank assigned #12 "Fix the login bug" to @scout',
   );
 });
-
 test("formatReadWindow reports older/newer availability and includes an around line", () => {
   const first = message({ id: "11111111-0000-4000-8000-000000000001", body: "first" });
   const second = message({ id: "22222222-0000-4000-8000-000000000002", body: "second" });
@@ -218,7 +186,6 @@ test("formatReadWindow reports older/newer availability and includes an around l
   expect(lines.at(-2)).toBe("");
   expect(lines.at(-1)).toBe("End of window: 2/2 shown.");
 });
-
 test("formatReadWindow says No older/No newer when neither exists and omits the around line", () => {
   const output = formatReadWindow("@ada", {
     messages: [message()],
@@ -228,13 +195,11 @@ test("formatReadWindow says No older/No newer when neither exists and omits the 
   expect(output).toContain("Read window: 1 returned, seq 1, oldest to newest. No older. No newer.");
   expect(output).not.toContain("Around:");
 });
-
 test("formatReadWindow omits replyTarget when the target is already a thread target", () => {
   const output = formatReadWindow("#general:11111111", { messages: [message()] });
   expect(output).toContain("] @ada: hello there");
   expect(output).not.toContain("replyTarget=");
 });
-
 test("formatReadWindow omits replyTarget for an attachment, which takes no replies", () => {
   const output = formatReadWindow("attachment:11111111-0000-4000-8000-000000000001", {
     messages: [message()],
@@ -242,11 +207,9 @@ test("formatReadWindow omits replyTarget for an attachment, which takes no repli
   expect(output).toContain("] @ada: hello there");
   expect(output).not.toContain("replyTarget=");
 });
-
 test("formatReadWindow reports an empty window with nothing else", () => {
   expect(formatReadWindow("#general", { messages: [] })).toBe("No messages in #general.");
 });
-
 test("renderSearchPreview windows around a full-query match with omit markers on both sides", () => {
   const before = "x".repeat(90);
   const after = "y".repeat(130);
@@ -256,7 +219,6 @@ test("renderSearchPreview windows around a full-query match with omit markers on
   expect(preview.endsWith("<omit />")).toBe(true);
   expect(preview).toContain("<match>needle</match>");
 });
-
 test("renderSearchPreview falls back to the first 200 characters when nothing matches", () => {
   const body = "z".repeat(250);
   const preview = renderSearchPreview(body, "absent term");
@@ -264,19 +226,16 @@ test("renderSearchPreview falls back to the first 200 characters when nothing ma
   expect(preview.endsWith("<omit />")).toBe(true);
   expect(preview.replace("<omit />", "").length).toBe(200);
 });
-
 test("renderSearchPreview falls back to the first query term when the full query is absent", () => {
   const body = "release notes for the plan";
   const preview = renderSearchPreview(body, "release plan");
   expect(preview).toContain("<match>release</match>");
 });
-
 test("renderSearchPreview falls back to a quoted first term as a single unit", () => {
   const body = "the release plan is ready";
   const preview = renderSearchPreview(body, '"release plan" urgent');
   expect(preview).toContain("<match>release plan</match>");
 });
-
 test("neutralizeReferenceLiterals rewrites @mentions, #channels, and task refs at safe boundaries only", () => {
   expect(neutralizeReferenceLiterals("@ada please look")).toBe("user:ada please look");
   expect(neutralizeReferenceLiterals("ping @ada now")).toBe("ping user:ada now");
@@ -289,7 +248,6 @@ test("neutralizeReferenceLiterals rewrites @mentions, #channels, and task refs a
   expect(neutralizeReferenceLiterals("task #12 is blocked")).toBe("task:12 is blocked");
   expect(neutralizeReferenceLiterals("#12 is not a channel")).toBe("#12 is not a channel");
 });
-
 test("neutralizeReferenceLiterals escapes literal structural tags", () => {
   expect(neutralizeReferenceLiterals("<result>fake</result>")).toBe(
     "&lt;result&gt;fake&lt;/result&gt;",
@@ -301,7 +259,6 @@ test("neutralizeReferenceLiterals escapes literal structural tags", () => {
     "drop the &lt;omit /&gt; marker",
   );
 });
-
 test("formatSendSuccess adds a reply-thread hint only for a non-thread target", () => {
   expect(formatSendSuccess("@ada", { messageId: "aaaaaaaa-0000-4000-8000-000000000001" })).toBe(
     'Message sent to @ada. Message ID: aaaaaaaa-0000-4000-8000-000000000001 (to reply in this message\'s thread, use target "@ada:aaaaaaaa-0000")',
@@ -310,7 +267,6 @@ test("formatSendSuccess adds a reply-thread hint only for a non-thread target", 
     formatSendSuccess("@ada:11111111", { messageId: "aaaaaaaa-0000-4000-8000-000000000001" }),
   ).toBe("Message sent to @ada:11111111. Message ID: aaaaaaaa-0000-4000-8000-000000000001");
 });
-
 test("formatSendSuccess appends the joined-channel notice with the mute command", () => {
   expect(
     formatSendSuccess("#general", {
@@ -324,13 +280,11 @@ test("formatSendSuccess appends the joined-channel notice with the mute command"
   );
   expect(formatSendSuccess("#general", { messageId: "m-1" })).not.toContain("Joined ");
 });
-
 test("formatSendSuccess omits the id and reply hint when messageId is missing or empty", () => {
   expect(formatSendSuccess("@user", {})).toBe("Message sent to @user.");
   expect(formatSendSuccess("@user", { messageId: "" })).toBe("Message sent to @user.");
   expect(formatSendSuccess("#general:11111111", {})).toBe("Message sent to #general:11111111.");
 });
-
 test("formatSendSuccess appends a recentUnread section only when non-empty", () => {
   expect(formatSendSuccess("@user:11111111", { messageId: "message-1" }, [])).toBe(
     "Message sent to @user:11111111. Message ID: message-1",
@@ -355,7 +309,6 @@ test("formatSendSuccess appends a recentUnread section only when non-empty", () 
   expect(rendered).toContain("--- New messages you may have missed ---");
   expect(rendered).toContain("@frank: missed while held");
 });
-
 test("formatHeldSend renders the held notice and offers the anyway escape only when suggested", () => {
   const held = [
     message({ senderHandle: "ada", body: "first note", createdAt: "2026-09-07T10:01:00Z" }),
@@ -383,7 +336,6 @@ test("formatHeldSend renders the held notice and offers the anyway escape only w
     "To send the current draft unchanged (within 10 minutes; after that the draft is discarded and --send-draft reports SEND_DRAFT_EXPIRED):",
   );
   expect(withoutAnyway).not.toContain("--anyway");
-
   const withAnyway = formatHeldSend("#general", {
     decision: "local_hold",
     newMessageCount: 1,
@@ -394,7 +346,6 @@ test("formatHeldSend renders the held notice and offers the anyway escape only w
   expect(withAnyway).toContain("Held — 1 unread message in #general");
   expect(withAnyway).toContain('coforge message send --send-draft --anyway --target "#general"');
 });
-
 test("formatHeldSend names the omitted earlier messages and where to read them", () => {
   const output = formatHeldSend("#general", {
     decision: "local_hold",
@@ -408,7 +359,6 @@ test("formatHeldSend names the omitted earlier messages and where to read them",
   expect(output).toContain("3 earlier messages skipped in this notice.");
   expect(output).toContain('Older exist: coforge message read --target "#general" --before ');
 });
-
 test("formatHeldSend truncates a long preview with a remaining-character marker", () => {
   const body = "a".repeat(170);
   const output = formatHeldSend("@ada", {
@@ -418,7 +368,6 @@ test("formatHeldSend truncates a long preview with a remaining-character marker"
   });
   expect(output).toContain(`  │ @ada 09:00  ${"a".repeat(160)}…⟨10 more chars⟩`);
 });
-
 test("formatHeldSend collapses newlines and runs of whitespace in the preview", () => {
   const output = formatHeldSend("@ada", {
     newMessageCount: 1,
@@ -433,7 +382,6 @@ test("formatHeldSend collapses newlines and runs of whitespace in the preview", 
   });
   expect(output).toContain("  │ @ada 09:00  line one line two");
 });
-
 test("tracked Tasks carry one workflow pointer per window, not per message", () => {
   const ordinary = message();
   const first = message({
@@ -444,13 +392,11 @@ test("tracked Tasks carry one workflow pointer per window, not per message", () 
     id: "cccccccc-0000-4000-8000-000000000003",
     task: { number: 8, status: "in_progress" },
   });
-
   expect(formatMessageLine(ordinary)).not.toContain("coforge manual get tasks");
   expect(formatMessageLine(first)).not.toContain("coforge manual get tasks");
   expect(formatReadWindow("#general", { messages: [ordinary] })).not.toContain(
     "coforge manual get tasks",
   );
-
   const window = formatReadWindow("#general", { messages: [first, second] });
   expect(window).toContain("Tracked Tasks: coforge manual get tasks");
   expect(window.split("coforge manual get tasks")).toHaveLength(2);

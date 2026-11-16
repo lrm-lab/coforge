@@ -5,18 +5,14 @@ import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/interna
 import { ModelProviderSettingError, type CodeAgentProvider } from "#src/contract";
 import type { PiProviderOptions, PiRuntimeHost } from "./host";
 import { createPiAgentSession } from "./session";
-
 export class PiProvider implements CodeAgentProvider {
   readonly provider: RuntimeProvider = RUNTIME_PROVIDER.PI;
   readonly reportsCompaction = true;
   readonly compactionFailure = "sticks_to_session";
-
   readonly #host: PiRuntimeHost;
-
   constructor(options: PiProviderOptions) {
     this.#host = options.host;
   }
-
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
     const runtime = options.runtime;
     const credential =
@@ -37,7 +33,6 @@ export class PiProvider implements CodeAgentProvider {
         contextViewRequestLogDirectory: options.contextViewRequestLogDirectory,
         modelProvider: runtime?.modelProvider,
         model: runtime?.model,
-        // What the form filled in, when it did (task #30): the launch's Pi model carries it.
         contextWindow: runtime?.contextWindow,
         maxOutputTokens: runtime?.maxOutputTokens,
         reasoning: runtime?.reasoning,
@@ -45,9 +40,7 @@ export class PiProvider implements CodeAgentProvider {
         instructions: options.instructions,
         environment,
         sessionKind: "pi",
-        toolProfile: runtime?.toolProfile,
         conversation: options.conversation,
-        memoryControlSession: options.memoryControlSession,
       },
       async (...args) => options.onSessionId?.(...args),
       this.#host,

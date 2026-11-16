@@ -4,13 +4,12 @@ import { createAgentMessageHttpClient } from "#src/connection/agent-http-clients
 import { adaptAgentSearchResponse } from "#src/connection/agent-message-adapters";
 import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
 import { AgentMessageOperations } from "#src/daemon-runtime/agent-message-operations";
-
-const proxies: Array<{ close(): void }> = [];
-
+const proxies: Array<{
+  close(): void;
+}> = [];
 afterEach(() => {
   for (const proxy of proxies.splice(0)) proxy.close();
 });
-
 const hit = {
   id: "message-1",
   sequence: 1,
@@ -22,7 +21,6 @@ const hit = {
   createdAt: "2026-09-16T00:00:00.000Z",
   attachments: [],
 };
-
 test("the proxy forwards a search cursor and refuses an empty or non-string one", async () => {
   const calls: Array<Record<string, unknown>> = [];
   const proxy = startAgentProxy({
@@ -57,7 +55,6 @@ test("the proxy forwards a search cursor and refuses an empty or non-string one"
   expect((await search({ offset: 2 })).status).toBe(200);
   expect(calls).toHaveLength(2);
 });
-
 test("the search HTTP request carries the cursor and sort", async () => {
   let captured: URL | undefined;
   const client = createAgentMessageHttpClient(async (input) => {
@@ -82,7 +79,6 @@ test("the search HTTP request carries the cursor and sort", async () => {
   expect(captured?.searchParams.get("cursor")).toBe("cursor-1");
   expect(captured?.searchParams.get("sort")).toBe("recent");
 });
-
 test("the search route's paging fields reach the transport shape", () => {
   expect(
     adaptAgentSearchResponse({
@@ -106,7 +102,6 @@ test("the search route's paging fields reach the transport shape", () => {
     searchedThrough: "2026-08-01T00:00:00.000Z",
   });
 });
-
 test("the runtime forwards a search cursor and returns the server's paging fields", async () => {
   const requests: unknown[] = [];
   const operations = new AgentMessageOperations({
@@ -125,7 +120,6 @@ test("the runtime forwards a search cursor and returns the server's paging field
       },
       async () => {},
     ),
-    isMemoryAgent: () => false,
     inbox: () => {
       throw new Error("not a send");
     },

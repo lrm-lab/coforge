@@ -4,7 +4,6 @@ import {
   type AgentRuntimeConfig,
   type AgentRuntimeEvent,
 } from "@lrm/coforge-anvil";
-import { isMemoryAgentRuntime } from "@coforge/agent";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import { classifyRuntimeError } from "#src/agent-runtime/runtime-error-classification";
 import { credentialInvalidReason } from "#src/agent-runtime/credential-invalid";
@@ -32,12 +31,6 @@ import { noteTurnFinished } from "./turn-boundaries";
 import { fastModeUnavailableDetail } from "./fast-mode-activity";
 import type { ActivityLaunch } from "./activity-launch";
 import type { Publish, RuntimeEventObservationPorts } from "./runtime-event-observation-ports";
-
-/**
- * One provider runtime event, observed against a live launch: what Activity it becomes, what it
- * does to delivery gating, phase bookkeeping, usage reporting, and turn-end settlement. A late
- * event from a replaced launch mutates nothing — the caller's launch check decided that first.
- */
 export function observeRuntimeEvent(
   ports: RuntimeEventObservationPorts,
   agentId: string,
@@ -48,7 +41,6 @@ export function observeRuntimeEvent(
   event: AgentRuntimeEvent,
 ): void {
   ports.deliveryGate.consumption.observeRuntimeEvent(agentId, launch.launchId, launch, event);
-  // The launch's first provider event, whatever it carries: the end of the launch's cold path.
   launch.timing?.phase("first_activity");
   const publish: Publish = (id, source, activity) =>
     ports.activityPublisher.publish(id, source, {
@@ -60,9 +52,6 @@ export function observeRuntimeEvent(
           }
         : {}),
     });
-  // Runtime work marks busy unless the provider knows it has no live turn.
-  // "completed" supplies the turn outcome below; native-state reconciliation
-  // repairs observation and delivery gating without inventing that outcome.
   if (
     event.type !== "session" &&
     event.type !== "usage" &&
@@ -72,10 +61,6 @@ export function observeRuntimeEvent(
     ports.deliveryGate.busy(agentId);
   if (endsStalledTurn(event, runtime.session.hasLiveTurn))
     launch.stalled?.finish(agentId, `event:${event.type}`);
-  // Work under way is enough on its own: a session that has not accepted the turn yet reports no
-  // live turn and no busy Activity, and waiting for either is what left a running command
-  // unwatched for fifteen minutes (task #41). The turn's own bookkeeping is not work: it neither
-  // arms a clock nor moves one (task #41, s144).
   else if (
     !isTurnNeutralEvent(event) &&
     (showsTurnWork(event) || ports.isWorking(agentId) || runtime.session.hasLiveTurn === true)
@@ -99,19 +84,12 @@ export function observeRuntimeEvent(
       event.windowTokens,
       event.occurredAt,
     );
-    // A compaction that ended before this reading landed is waiting for it: Claude Code reports
-    // its reading at the turn's end, after the boundary that ended the compaction (task #16).
     if (recorded) ports.phaseBookkeeping.contextUsageObserved(agentId);
     return;
   }
   if (event.type === AGENT_RUNTIME_EVENT_TYPE.SERVICE_TIER) {
-    // Only a launch that actually asked for Fast mode has anything to report about it: a
-    // runtime volunteering a tier for an ordinary launch is not news, and the Web has no
-    // switch on for it.
     if (config.fastMode !== true) return;
     ports.usageReport.serviceTier(agentId, launch, config.provider, event.state);
-    // One warning per launch, on the first reading that says Fast is not actually on. A later
-    // reading cannot retract it; a following launch reports its own.
     if (event.state !== AGENT_SERVICE_TIER_OBSERVED.ON && !ports.fastModeWarned.has(agentId)) {
       ports.fastModeWarned.add(agentId);
       publish(
@@ -128,12 +106,7 @@ export function observeRuntimeEvent(
     return;
   }
   if (event.type === "activity" || event.type === "tool-start") {
-    // Providers report only WHAT happened (tool-start: name + raw input); the
-    // daemon core alone decides what Activity that is, via the same
-    // `toolActivity` allowlist every provider used to call for itself.
     const activity = event.type === "activity" ? event.activity : toolStartActivity(event);
-    // Resumed output or a new tool call means a still-open compaction is done; report
-    // that first.
     if (
       event.type === "tool-start" ||
       activity.detailKind === AGENT_ACTIVITY_DETAIL_KIND.MODEL_RESPONSE_STARTED ||
@@ -145,10 +118,6 @@ export function observeRuntimeEvent(
     const carriesEntries =
       activity.detailKind !== AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_RECONNECTING &&
       activity.entries?.some((entry) => entry.kind !== "tool_start");
-    // A trajectory entry carrying a subagent scope (Claude parent_tool_use_id)
-    // reports as subagent_activity regardless of its original detail kind, so
-    // the display shows one unified "Subagent working…" signal.
-    // An error stays classified as an error so it remains visible as one.
     const subagentScoped =
       activity.level !== "error" && activity.entries?.some((entry) => entry.subagent !== undefined);
     publish(agentId, launch, {
@@ -172,8 +141,6 @@ export function observeRuntimeEvent(
     return;
   }
   if (event.type === "tool-end") {
-    // Every call's end reports its outcome, a call the Web hides (send_message) included, as
-    // in the reference client: hiding a row is a display decision.
     const toolOutcome = launch.toolCalls?.finish(event);
     publish(
       agentId,
@@ -211,11 +178,7 @@ export function observeRuntimeEvent(
     return;
   }
   if (event.type === "subagent-progress") {
-    // Counted whether or not its row is shown: a background task outlives its turn.
     launch.backgroundTasks?.observe(event);
-    // Raft's wake-after-subagents: a task that ends while the turn is quiet leaves a result
-    // the session never saw; when the last one ends, the daemon writes the wake notice. A
-    // live turn consumes results itself, so only a strictly quiet session counts.
     if (runtime.session.wakesAfterSubagents === true) {
       const quiet = runtime.session.hasLiveTurn === false;
       if (quiet && event.taskStatus && event.taskId) {
@@ -231,13 +194,8 @@ export function observeRuntimeEvent(
       )
         ports.wakeFinishedSubagents?.(agentId);
     }
-    // Shown only while this launch is busy: in a turn, or after one that is waiting for its
-    // background tasks (`#showQuietTurn`). Anything later would wake an idle Agent. A
-    // repeat of the row just shown (one per subagent tool call) adds nothing.
     const last = ports.activityPublisher.lastBusy(agentId);
     if (last?.launch !== launch) return;
-    // Raft's taskKind split: a background command or other non-agent task still counts toward
-    // the quiet-turn wait, but earns no subagent row — only delegated agents are shown.
     if (event.taskKind === "command" || event.taskKind === "other") {
       if (event.taskStatus) ports.reconcileIdleTurn(agentId, launch);
       return;
@@ -252,8 +210,6 @@ export function observeRuntimeEvent(
         launch,
         ports.activityDraft(agentId, AGENT_ACTIVITY_DETAIL_KIND.SUBAGENT_ACTIVITY, "info", detail),
       );
-    // After the turn, an ended task shortens the wait, and the last one ends it Idle. Runs
-    // even when the row repeated the one before, so a wait never outlives its tasks.
     if (event.taskStatus) ports.reconcileIdleTurn(agentId, launch);
     return;
   }
@@ -266,26 +222,11 @@ export function observeRuntimeEvent(
       );
     return;
   }
-  // Single conversion for every provider (agent-runtime/runtime-error-activity.ts): formatting,
-  // the 512-char cap, redaction, the `Error: …` entry, and runtimeError classification all live
-  // there, not in the provider. Remembered on the launch so a process exit that follows without
-  // an intervening `completed` can report `runtime_crashed` instead of a plain `idle` exit.
   if (event.type === "error") {
-    // A runtime that is being stopped on purpose — a configuration push taking effect on an idle
-    // Agent, an immediate restart, a person's Stop — reports its own teardown as an error. That is
-    // the stop, not a failure: it must not classify, hold deliveries for a retry, or put an error
-    // in the Activity, and it must not become the `crashDetail` a later exit would report (#35).
     if (launch.stopping) return;
     launch.crashDetail = event;
     ports.phaseBookkeeping.compactionError(agentId, launch, event.message);
-    // Classified once here: the Activity's fallback class/reason and this failure's retry
-    // decision are the same reading of the same failure.
     const classification = classifyRuntimeError(event);
-    // A failure only a person can fix (re-auth, a model the plan does not include) or an
-    // exhausted billing balance is a known-invalid credential: the process is kept and the
-    // Agent's deliveries are held, as the reference Computer does. A sticky model-config failure
-    // or a quota with no known reset ends the process and takes the Agent offline, whenever in
-    // the launch it is observed.
     const credentialInvalid = credentialInvalidReason(classification);
     if (credentialInvalid || classification.takesAgentOffline) {
       const built = ports.offlineResidency.buildActivity(
@@ -312,15 +253,12 @@ export function observeRuntimeEvent(
         });
       return;
     }
-    // Retry policy reads that classification, never free-form provider hints.
     const { built, fence } = ports.runtimeErrorHold.noteRuntimeFailure(
       agentId,
       launch,
       event,
       classification,
     );
-    // A tripped fingerprint fence is terminal residency like an action-required failure
-    // (reference `applyRuntimeErrorFingerprintFence`): end the process and report inactive.
     if (fence) {
       ports.offlineResidency.takeOffline(
         agentId,
@@ -357,12 +295,6 @@ export function observeRuntimeEvent(
     return;
   }
   if (event.type === "notice-undelivered") {
-    // A steer-mode provider accepted this notice but later learned it never reached
-    // the model (Kiro's own steering buffer discarded it, or the steer call itself was never
-    // accepted). Hold the exact text for redelivery once this Agent is next idle — no ACK
-    // bookkeeping here; whatever originally accepted this text already settled its own ACK (or
-    // never had one, for an App Inbox notice). The tracked mentions it carried were not told:
-    // that redelivery settles them, not this turn's end.
     ports.deliveryGate.holdFallbackNotice(agentId, {
       text: event.text,
       ...(event.conversation ? { conversation: event.conversation } : {}),
@@ -373,38 +305,20 @@ export function observeRuntimeEvent(
     return;
   }
   if (event.type !== "completed") return;
-  // The turn's boundary, paired with `agent.turn.started`: how long an accepted notice waited is
-  // measurable from the log alone, and a turn that never reports its end stands out.
   noteTurnFinished(agentId, event.status, event.conversation?.conversationId);
-  // Raft's `lastTurnEndInterrupted`: an interrupted turn's quiet subagent endings earn no wake.
   launch.lastTurnInterrupted = event.status === "interrupted";
-  // Capture provider error text before clearing crashDetail for Activity wording.
   const collectorFailReason =
     event.status === "failed"
       ? (launch.crashDetail?.message ?? "Agent runtime failed.").slice(0, 2000)
       : undefined;
   ports.runtimeErrorHold.noteTurnEnd(agentId);
-  // Tracked mentions told during this turn end with it, decided before the release below can
-  // write the next notice.
-  if (!isMemoryAgentRuntime(config) || event.conversation)
-    ports.mentionDeliveries.settleTurnEnd(agentId, event.conversation?.conversationId);
-  // Release whatever a queue_until_idle provider held while this turn ran, as one
-  // coalesced notice for the next turn — never blocking this turn-end Activity on it.
+  ports.mentionDeliveries.settleTurnEnd(agentId, event.conversation?.conversationId);
   ports.releaseTurnEndHolds(agentId);
-  // A turn ending means a still-open compaction is done; report that before the turn's own
-  // idle/failed/interrupted Activity.
   ports.phaseBookkeeping.inferCompactionFinished(agentId, launch, event.conversation, {
     inferredFrom: "turn end",
   });
   ports.phaseBookkeeping.closeSilently("review", agentId);
-  // Last, so a compaction line held for a reading this turn never delivered is written now.
   ports.phaseBookkeeping.turnEnded(agentId);
-  // A turn outcome (of any status) resolves any error observed mid-turn; a crash wording only
-  // applies to a process exit with no such outcome in between. A failed turn that already
-  // showed its own runtime_error Activity this turn (`crashDetail` set by the `error` event
-  // above) keeps that as the one visible reason instead of layering this generic failure
-  // notice on top of it — every provider's `error`-then-`completed(failed)` pair reports
-  // exactly once.
   const alreadyExplained = event.status === "failed" && launch.crashDetail !== undefined;
   launch.crashDetail = undefined;
   if (controlled)

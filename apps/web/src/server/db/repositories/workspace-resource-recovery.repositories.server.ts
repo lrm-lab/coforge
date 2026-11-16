@@ -2,8 +2,6 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 
 type ResourceState = {
   role: string;
-  memoryAgentId: string | null;
-  hasMemoryProfile: boolean;
   weeklyAgentId: string | null;
   weeklyComputerId: string | null;
   platformComputerId: string | null;
@@ -15,14 +13,11 @@ export async function workspaceResourceState(
   input: { workspaceId: string; userId: string; platformAgentId: string },
 ) {
   const rows = await db.$queryRaw<ResourceState[]>`
-    SELECT member.role, memory.agent_id AS "memoryAgentId",
-           (memory_profile.workspace_id IS NOT NULL) AS "hasMemoryProfile",
+    SELECT member.role,
            weekly."agentId" AS "weeklyAgentId",
            weekly_agent."computerId" AS "weeklyComputerId",
            default_computer.id AS "platformComputerId"
     FROM workspace_memberships member
-    LEFT JOIN workspace_memory_agents memory ON memory.workspace_id = member."workspaceId"
-    LEFT JOIN workspace_memory_profiles memory_profile ON memory_profile.workspace_id = member."workspaceId"
     LEFT JOIN weekly_report_assistants weekly
       ON weekly."workspaceId" = member."workspaceId" AND weekly."userId" = member."userId"
     LEFT JOIN agents weekly_agent ON weekly_agent.id = weekly."agentId"

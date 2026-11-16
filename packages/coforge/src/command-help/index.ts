@@ -13,7 +13,7 @@ import { artifactCommandsHidden } from "../workspace-features";
 const COMMANDS: Readonly<Record<string, HelpEntry>> = {
   memory: {
     syntax:
-      "coforge memory search --query <text> [--offset <n>] | get|history --key <key> | save --key <key> --title <text> --content <text> --source <evidence> [--revision <hash>] [--kind fact|decision|preference|experience] [--applicability <scope>] | archive --key <key> --revision <hash>",
+      "coforge memory [search|get|history|prepare|create|update|merge|archive|restore|delete] --scope team (see coforge manual get memory) | local: search --query <text> [--offset <n>] | get|history --key <key> | save --key <key> --title <text> --content <text> --source <evidence> [--revision <hash>] [--kind fact|decision|preference|experience] [--applicability <scope>] | archive --key <key> --revision <hash>",
     example: "coforge memory search --query 'preview domain'",
   },
   ...taskHelp,

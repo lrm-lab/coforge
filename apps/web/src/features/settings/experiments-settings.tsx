@@ -2,7 +2,6 @@ import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-
 import { Button } from "#src/components/base/buttons/button";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { SettingsCard, SettingsField, SettingsPage } from "#src/components/settings-layout";
@@ -14,12 +13,13 @@ import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { AI_WORKBENCH_QUERY_KEY } from "./ai-workbench";
 import { getExperiments, setExperiment } from "./experiments.functions";
-
 type Experiment = Awaited<ReturnType<typeof getExperiments>>["experiments"][number];
-
 const EXPERIMENT_TEXT: Record<
   Experiment["key"],
-  { name: () => string; description: () => string }
+  {
+    name: () => string;
+    description: () => string;
+  }
 > = {
   taskConversations: {
     name: () => m.experiments_task_conversations(),
@@ -37,17 +37,8 @@ const EXPERIMENT_TEXT: Record<
     name: () => m.experiments_ai_workbench(),
     description: () => m.experiments_ai_workbench_description(),
   },
-  memoryAgent: {
-    name: () => m.experiments_memory_agent(),
-    description: () => m.experiments_memory_agent_description(),
-  },
 };
-
-/** The Workspace's cache is cleared on a Workspace switch, so the key needs no Workspace id. */
 const EXPERIMENTS_QUERY_KEY = ["settings-experiments"];
-
-/** Why a switch did not save: a Computer that must be upgraded first is named, anything else is
- * the plain failure. */
 function saveErrorText(error: unknown) {
   if (isAppError(error) && error.errorId === "computers-need-upgrade" && error.details)
     return m.experiments_computers_need_upgrade({
@@ -56,13 +47,7 @@ function saveErrorText(error: unknown) {
     });
   return m.experiments_save_error();
 }
-
 type ExperimentsData = Awaited<ReturnType<typeof getExperiments>>;
-
-/**
- * The experiments this Workspace offers, read for every member. A switch
- * made elsewhere arrives as `workspace.features.changed.v1` and the list is read again.
- */
 export function useWorkspaceExperiments() {
   const load = useServerFn(getExperiments);
   const workspaceId = useCurrentWorkspaceId();
@@ -79,11 +64,6 @@ export function useWorkspaceExperiments() {
   });
   return useQuery({ queryKey: EXPERIMENTS_QUERY_KEY, queryFn: () => load() });
 }
-
-/**
- * Settings → Experiments, for every member: the Workspace's switches, which only an owner or admin
- * can change.
- */
 export function ExperimentsSettings({
   experiments,
 }: {
@@ -92,12 +72,10 @@ export function ExperimentsSettings({
   const save = useServerFn(setExperiment);
   const queryClient = useQueryClient();
   const router = useRouter();
-  // The experiments switched since the page loaded: one that needs a reload offers it until then.
   const [changed, setChanged] = useState<ReadonlySet<Experiment["key"]>>(new Set());
   const toggle = useMutation({
     mutationFn: (change: { key: Experiment["key"]; enabled: boolean }) => save({ data: change }),
     onSuccess: (saved) => {
-      // The sidebar entry and the Workbench page follow the Workspace's switch at once.
       if (saved.key === "aiWorkbench") {
         queryClient.setQueryData(AI_WORKBENCH_QUERY_KEY, saved.enabled);
         void router.invalidate();
@@ -112,10 +90,8 @@ export function ExperimentsSettings({
           },
       );
     },
-    // A save can fail because the Workspace stopped offering the experiment: re-read the list.
     onError: () => queryClient.invalidateQueries({ queryKey: EXPERIMENTS_QUERY_KEY }),
   });
-
   const content = experiments.isPending ? (
     <p className="text-sm text-tertiary">{m.experiments_loading()}</p>
   ) : !experiments.data ? (
@@ -166,6 +142,5 @@ export function ExperimentsSettings({
       </SettingsCard>
     )
   );
-
   return <SettingsPage>{content}</SettingsPage>;
 }

@@ -12,7 +12,6 @@ import {
 } from "#src/server/conversations/channel-changes.server";
 import { forgetChannelPeopleWith } from "#src/server/conversations/channel-people-invalidation.server";
 import { AgentActivityRepository } from "#src/server/db/repositories/agent-activity.repositories.server";
-import { PrismaWorkspaceMemoryCatalog } from "#src/server/db/repositories/workspace-memory-catalog.repositories.server";
 import { PrismaWebPushSubscriptionStore } from "#src/server/notifications/prisma-web-push-subscriptions.server";
 import {
   AgentRemindersQuery,
@@ -146,24 +145,6 @@ afterAll(async () => {
   if (extra) await db.computer.delete({ where: { id: extra.computer.id } });
   await fixture.dispose();
 });
-
-test.skipIf(!connectionString)(
-  "Workspace memory learns from public channels only, on a retry too",
-  async () => {
-    const { db, ws, open, closed, vault } = fixture;
-    const catalog = new PrismaWorkspaceMemoryCatalog(db);
-    const window = await catalog.loadAdmissionWindow(ws, null);
-    expect(window.conversations.map((conversation) => conversation.id)).toEqual([open.id]);
-    expect(window.messages.every((message) => message.conversationId === open.id)).toBe(true);
-    expect(window.messages.length).toBeGreaterThan(0);
-    const retried = await catalog.loadMessagesByIds(ws, [
-      open.message.id,
-      closed.message.id,
-      vault.message.id,
-    ]);
-    expect(retried.map((message) => message.id)).toEqual([open.message.id]);
-  },
-);
 
 test.skipIf(!connectionString)(
   "forwarding to a private channel outside it answers as a channel that is not there",

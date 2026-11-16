@@ -28,7 +28,6 @@ export function planRecovery(input: {
   seenMessageIds: ReadonlySet<string>;
   alreadyRead(agentId: string, message: AgentRecoveryMessage): boolean;
   decide(message: AgentRecoveryMessage, outcome: AttentionDecisionOutcome): void;
-  hasToolProfile: boolean;
 }): RecoveryPlan | undefined {
   const { agentId, messages, unreadSummary, decide } = input;
   const byTarget = new Map(input.currentAttention);
@@ -75,7 +74,6 @@ export function planRecovery(input: {
     agentId,
     announced: recoveredMessages,
     summaryOnly,
-    hasToolProfile: input.hasToolProfile,
   });
   return { byTarget, recoveredMessages, announced, notice };
 }

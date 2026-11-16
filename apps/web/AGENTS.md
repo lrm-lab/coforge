@@ -94,8 +94,7 @@ Each line names a directory under `src/` (unless noted) and its single responsib
 
 ## Workspace memory modules
 
-Dependencies point downward. Routes and background entrypoints assemble these modules; they do not own profile transitions or OpenViking HTTP details. The write path (peer, two-phase commit, crash redrive, offer echo stripping) is [OpenViking channel memory](../../docs/memory/openviking.md).
-
-- `workspace-memory/` — profile (`off | openviking`), generation fencing, Admitted PublicChannel Segment detection, one-sink dispatch, the Memory Agent route, Memory Offers, citation policy, and the cleanup a Workspace deletion runs (`cleanup.server.ts`, and `cleanup-remotes.server.ts` for the remotes it calls). It does not import OpenViking HTTP paths.
-- `openviking/` — typed account/user/ACL provisioning, the deny-by-default route catalog, `OpenVikingPolicyGateway`, the private runtime client, and Memory Agent read shaping. It does not own profile transitions.
-- `db/repositories/workspace-memory-*.server.ts` and `openviking-binding.repositories.server.ts` — Prisma adapters. Credential plaintext does not belong in ordinary business tables.
+`server/team-memory/` owns Agent-selected workspace knowledge and review rules. The Prisma
+repository enforces current Agent/owner membership, versions, request deduplication and atomic
+merges in PostgreSQL. Routes assemble the repository and domain service; no model or extraction
+agent runs at the storage boundary. See [memory](../../docs/memory/team-memory.md).

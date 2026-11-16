@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
 import { AgentMessageOperations } from "#src/daemon-runtime/agent-message-operations";
-
 const message = {
   id: "message-1",
   sequence: 1,
@@ -13,7 +12,6 @@ const message = {
   createdAt: "2026-09-16T00:00:00.000Z",
   attachments: [],
 };
-
 function operations(messages: (typeof message)[], appItemsPending: () => Promise<number>) {
   return new AgentMessageOperations({
     connection: { workspaceId: "workspace", computerId: "computer" },
@@ -31,7 +29,6 @@ function operations(messages: (typeof message)[], appItemsPending: () => Promise
       },
       async () => {},
     ),
-    isMemoryAgent: () => false,
     inbox: () => {
       throw new Error("not a send");
     },
@@ -48,7 +45,6 @@ function operations(messages: (typeof message)[], appItemsPending: () => Promise
     reportFreshnessHold: () => {},
   });
 }
-
 const check = (ops: AgentMessageOperations) =>
   ops.handle(
     "agent-a",
@@ -56,11 +52,9 @@ const check = (ops: AgentMessageOperations) =>
     undefined,
     "key",
   );
-
 test("a check that found no message reports the App Inbox items waiting", async () => {
   expect(await check(operations([], async () => 3))).toMatchObject({ appItemsPending: 3 });
 });
-
 test("a check that found messages does not read the App Inbox", async () => {
   let reads = 0;
   const response = await check(

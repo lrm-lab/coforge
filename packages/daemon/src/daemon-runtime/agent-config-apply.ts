@@ -83,10 +83,7 @@ export class AgentConfigApply {
     }
     // A wake before the stop must already launch with the new fields.
     this.#replaceRestartRuntime(sync);
-    if (live?.busyReason === "memory_agent") {
-      this.#keepMemoryAgent(sync);
-      return Promise.resolve();
-    }
+
     this.#pending.set(agentId, {
       sync,
       acceptedLaunch: this.#ports.launchOf(agentId),
@@ -137,12 +134,7 @@ export class AgentConfigApply {
       this.#applyWithoutRuntime(pending);
       return Promise.resolve();
     }
-    if (live?.busyReason === "memory_agent") {
-      // The launch the sync waited for turned out to be a Memory Agent.
-      this.#replaceRestartRuntime(pending);
-      this.#keepMemoryAgent(pending);
-      return Promise.resolve();
-    }
+
     const launch = this.#ports.launchOf(agentId);
     if (launch !== undefined && launch !== entry.acceptedLaunch && !entry.launchedOldFields) {
       // A launch that began after the sync, and not from a Start's older fields, read the
@@ -177,12 +169,6 @@ export class AgentConfigApply {
   #replaceRestartRuntime(sync: AgentConfigSync): void {
     if (this.#ports.restartProvider(sync.agentId) === sync.provider)
       this.#ports.replaceRestartRuntime(sync.agentId, runtimeFieldsOf(sync));
-  }
-
-  /** A Memory Agent is never stopped for a configuration: its next launch reads it. */
-  #keepMemoryAgent(sync: AgentConfigSync): void {
-    this.#clear(sync.agentId);
-    log("memory_agent", sync);
   }
 
   /** A provider change is a Stop then a Start, never a push: a push for another provider than the
@@ -268,7 +254,6 @@ function log(
     | "idle_stop"
     | "no_restart_config"
     | "provider_mismatch"
-    | "memory_agent"
     | "cancelled"
     | "stop_failed",
   sync: AgentConfigSync,

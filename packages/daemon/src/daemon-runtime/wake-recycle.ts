@@ -16,50 +16,31 @@ import {
   type AgentInput,
   type AgentInputQueue,
 } from "./runtime-launch-intent";
-
 const logger = getLogger(["coforge", "daemon", "runtime"]);
-
-/** Closes a standalone briefing turn, which has no starter text of its own to say what to do. */
 const BRIEFING_NOTE =
   "That is context carried over from your previous session, which was retired after sitting idle. Treat it as reference only and do not reply to it; your next input follows.";
-
 export type WakeRecycleRequest = Readonly<{
   agentId: string;
   provider: RuntimeProvider;
-  /** The Agent's own runtime variables, which override the daemon's environment. */
   envVars?: Readonly<Record<string, string>>;
-  /** The session this launch would resume. */
   sessionId: string | undefined;
   sessionMode: "create" | "resume" | undefined;
   hasResumePrompt: boolean;
-  /** A Memory Agent's conversation sessions are not the primary session's to retire. */
-  memoryAgent: boolean;
   agentWorkspaceDirectory: string;
 }>;
-
-/** A launch that starts a fresh session in place of resuming the one it was asked to. */
-export type RecycledWake = Readonly<{ activityText: string }>;
-
+export type RecycledWake = Readonly<{
+  activityText: string;
+}>;
 export type WakeRecyclePorts = Readonly<{
   provider(provider: RuntimeProvider): CodeAgentProvider;
   inputQueue(agentId: string): AgentInputQueue | undefined;
-  /** Deliveries kept for this Agent's next launch, which the launch presents after its first input. */
   hasQueuedDeliveries(agentId: string): boolean;
 }>;
-
-/**
- * At a launch that would resume a prior session, decides between resuming it and a fresh session
- * whose first input is a briefing (MEMORY.md plus what the provider can carry over). When it
- * decides to recycle it also puts the briefing at the front of the Agent's launch input.
- */
 export class WakeRecycle {
   readonly #ports: WakeRecyclePorts;
-
   constructor(ports: WakeRecyclePorts) {
     this.#ports = ports;
   }
-
-  /** `undefined` means resume as usual. Never rejects: whatever cannot be read resumes. */
   async plan(request: WakeRecycleRequest): Promise<RecycledWake | undefined> {
     try {
       return await this.#plan(request);
@@ -72,11 +53,9 @@ export class WakeRecycle {
       return undefined;
     }
   }
-
   async #plan(request: WakeRecycleRequest): Promise<RecycledWake | undefined> {
     const { agentId, sessionId } = request;
-    // A `create` launch pins a session id it is given; there is nothing to resume.
-    if (!sessionId || request.sessionMode === "create" || request.memoryAgent) return undefined;
+    if (!sessionId || request.sessionMode === "create") return undefined;
     const provider = this.#ports.provider(request.provider);
     const config = resolveWakeRecycleConfig(
       request.envVars,
@@ -114,7 +93,6 @@ export class WakeRecycle {
     }
     const [memoryBlock, providerBriefing] = await Promise.all([
       startupMemoryBlock(request.agentWorkspaceDirectory),
-      // A briefing that cannot be built leaves a bare fresh session, never a failed wake.
       provider
         .readRecycleBriefing?.({
           sessionId,
@@ -154,29 +132,30 @@ export class WakeRecycle {
     };
   }
 }
-
-/**
- * Makes the launch's first input the briefing: a turn of its own ahead of everything else, as an
- * introduction is. A starter the launch queued stays where it is, rewritten for a fresh session;
- * when nothing else has content, the briefing's turn ends with that starter's instructions, since
- * the drain skips the starter once a turn is live.
- */
 function startFreshSession(
   queue: AgentInputQueue | undefined,
   briefing: string,
-  context: Readonly<{ memoryComplete: boolean; deliveriesQueued: boolean }>,
+  context: Readonly<{
+    memoryComplete: boolean;
+    deliveriesQueued: boolean;
+  }>,
 ): void {
   if (!queue || queue.closed) return;
   const starter = queue.items.find(
-    (item): item is Extract<AgentInput, { kind: "startup" }> => item.kind === "startup",
+    (
+      item,
+    ): item is Extract<
+      AgentInput,
+      {
+        kind: "startup";
+      }
+    > => item.kind === "startup",
   );
   if (starter)
     starter.text = agentStartupInput(false, context.memoryComplete && briefing.length > 0);
   if (!briefing) return;
-  // The drain's own rule: the starter runs only when no other input has anything to say.
   const alone = !context.deliveriesQueued && !queueHasInputContent(queue.items);
   const turn = Promise.withResolvers<void>();
-  // A queue that closes rejects its items; nobody waits on this turn.
   turn.promise.catch(() => {});
   queue.items.unshift({
     kind: "prompt",

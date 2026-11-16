@@ -43,10 +43,9 @@ The architecture invariants every change must respect are in
 | [docs/pi-chat/README.md](docs/pi-chat/README.md) | Independent cloud Pi conversations, signed host access, native history, deployment and acceptance |
 | [docs/database-schema/](docs/database-schema/README.md) | Database schema and conversation/delivery model |
 | [Attachment comment maintenance](docs/database-schema/attachment-comment-migration.md) | Read-only preflight, private local-copy rehearsal, journal recovery and integration checks |
-| [docs/memory/](docs/memory/) | OpenViking channel memory: the write path from closed public channels into typed sessions |
+| [docs/memory/](docs/memory/) | Local Agent memory and native workspace team knowledge, review, revisions and retirement |
 | [docs/architecture/](docs/architecture/) | Task-scoped Agent sessions: one Agent identity, a disposable execution session per delegated Task |
 | [docs/records/](docs/records/) | Weekly report behaviour specs: present mode, reading and editing |
-| [docs/memory-disposition.md](docs/memory-disposition.md) | Target-only Memory Hint receipts, configuration, and validation |
 | [docs/reliable-message-delivery.md](docs/reliable-message-delivery.md) | Message delivery guarantees |
 | [docs/realtime-events.md](docs/realtime-events.md) | Realtime events: who publishes each `*.v1` event and who receives it |
 | [docs/workspace-deletion.md](docs/workspace-deletion.md) | What deleting a Workspace removes, and when |
@@ -112,7 +111,6 @@ The architecture invariants every change must respect are in
 | [docs/operations/cloud-swarm/](docs/operations/cloud-swarm/README.md) | Attach one Swarm cluster when standing up a CoForge deployment |
 | [docs/operations/staging/](docs/operations/staging/README.md) | Staging environment runbook |
 | [docs/operations/production/](docs/operations/production/README.md) | Production environment runbook |
-| [docs/operations/openviking-prototype/](docs/operations/openviking-prototype/README.md) | Non-production OpenViking prototype runtime: gates, enable/disable, data lifecycle, known issues, smoke |
 | [infra/caddy/README.md](infra/caddy/README.md) | Caddy image with the Alibaba Cloud DNS provider |
 | [docs/operations/usercontent-certificate/](docs/operations/usercontent-certificate/README.md) | User-content wildcard certificate: DNS-01 issuer, RAM users, secrets, rotation |
 | [infra/production/README.md](infra/production/README.md) | Production Compose environment (points to its runbook) |

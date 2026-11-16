@@ -1,3 +1,4 @@
+import type { TeamMemoryCommand } from "@lrm/coforge-sdk/agent";
 import type {
   ChannelCommand,
   LocalAgentMessageRequest,
@@ -66,11 +67,7 @@ import type {
   AgentArtifactDownloadRequest,
   AgentArtifactUploadRequest,
 } from "#src/connection/agent-forwarded-routes";
-import type { OpenVikingAgentProxyCommand } from "./openviking-read-proxy";
 import type { LocalMemoryCommand, LocalMemoryResult } from "@lrm/coforge-sdk/agent";
-
-/** The runtime handlers a local Agent proxy dispatches to; every member but `agentMessage` is
- * optional so a daemon build can light routes up incrementally (a missing handler is a 404). */
 export type AgentProxyRuntime = {
   agentMemory?(
     context: string,
@@ -138,21 +135,19 @@ export type AgentProxyRuntime = {
     request: AgentManualSearchRequest,
     agentApiKey: string,
   ): Promise<AgentManualSearchResponse>;
-  /** `coforge version`'s local-only query: answered entirely by the live Daemon, never
-   * forwarded to Web/backend. */
   version?(
     context: string,
     request: Record<string, never>,
     agentApiKey: string,
   ): Promise<AgentVersionResponse>;
-
-  /** The Computer-update notice a CLI appends to its output, local only like `version`: the
-   * daemon's own deduped line for a newer release, or null. */
   computerUpdateNotice?(
     context: string,
     request: Record<string, never>,
     agentApiKey: string,
-  ): Promise<{ ok: true; notice: string | null }>;
+  ): Promise<{
+    ok: true;
+    notice: string | null;
+  }>;
   userInfo?(
     context: string,
     request: AgentUserInfoRequest,
@@ -178,18 +173,17 @@ export type AgentProxyRuntime = {
     request: AgentAppConfigUpdateRequest,
     agentApiKey: string,
   ): Promise<AgentAppConfigResponse>;
-  /** `coforge app list|token`: forwarded as it is, the cloud's response answered as it came. */
   agentApp?(context: string, request: AgentAppRequest, agentApiKey: string): Promise<Response>;
-  /** `coforge artifact` document and comment operations: forwarded as it is, the cloud's response
-   * answered as it came (task #385). */
+  agentTeamMemory?(
+    context: string,
+    request: TeamMemoryCommand,
+    agentApiKey: string,
+  ): Promise<Response>;
   agentArtifact?(
     context: string,
     request: AgentArtifactRequest,
     agentApiKey: string,
   ): Promise<Response>;
-  /** An artifact file's bytes, uploaded by sha256 (`missing` from a push) or downloaded by path
-   * (`coforge artifact pull|download`): forwarded as they are, the cloud's response answered as
-   * it came. */
   agentArtifactUpload?(
     context: string,
     request: AgentArtifactUploadRequest,
@@ -200,8 +194,6 @@ export type AgentProxyRuntime = {
     request: AgentArtifactDownloadRequest,
     agentApiKey: string,
   ): Promise<Response>;
-  /** `coforge task view|read|reply|follow|unfollow|list --following`: forwarded as it is, the
-   * cloud's response answered as it came. */
   agentTaskConversation?(
     context: string,
     request: AgentTaskConversationRequest,
@@ -217,14 +209,11 @@ export type AgentProxyRuntime = {
     request: Record<string, never>,
     agentApiKey: string,
   ): Promise<AgentThreadListResponse>;
-  /** `coforge label list`: the Workspace's labels. */
   labelList?(
     context: string,
     request: Record<string, never>,
     agentApiKey: string,
   ): Promise<AgentLabelListResponse>;
-  /** `coforge label create|rename|update|delete|restore` (task #508): forwarded as it is, the
-   * cloud's response answered as it came. */
   agentLabel?(
     context: string,
     request: AgentLabelWriteRequest,
@@ -275,13 +264,5 @@ export type AgentProxyRuntime = {
     request: WeeklyReportMemoryCommand,
     agentApiKey: string,
   ): Promise<WeeklyReportMemoryResult>;
-  agentMemoryDisposition?(context: string, request: unknown, agentApiKey: string): Promise<unknown>;
-  agentOpenviking?(
-    context: string,
-    request: OpenVikingAgentProxyCommand,
-    agentApiKey: string,
-  ): Promise<unknown>;
-  /** Workspace-launch fence for the token-bound Agent. Absent or a non-OV fence fail-closes. */
-  memoryFence?(agentId: string): string | undefined;
   issueAgentContext?: (agentId: string, context?: string) => string;
 };
