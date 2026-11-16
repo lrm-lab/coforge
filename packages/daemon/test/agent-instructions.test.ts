@@ -211,9 +211,8 @@ test("the standing guidance says what to work on next, in the queue the CLI now 
   expect(instructions).toContain(
     "A person's instruction — a DM, an @handle, a person in a task — comes before anything queued",
   );
-  expect(instructions).toContain(
-    "is `urgent`; otherwise say in its thread where it sits and carry on",
-  );
+  expect(instructions).toContain("is `urgent`. Questions and reviews are answered as they arrive");
+  expect(instructions).not.toContain("otherwise say in its thread where it sits and carry on");
   // Every level means what the person who set it meant, and there is no fifth level to hide in.
   for (const level of ["urgent", "high", "medium", "low"])
     expect(instructions).toContain(`\`${level}\``);
