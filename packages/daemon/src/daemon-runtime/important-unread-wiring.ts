@@ -26,9 +26,11 @@ export type ImportantUnreadWiringPorts = Readonly<{
 }>;
 
 /**
- * The nudge's own words. It names where the unread messages are and how many, and never says they
- * are new: the daemon cannot know the server's read cursor, and a retry may follow a `check` that
- * already advanced it — the same reason the delivery notice avoids "unread" (task #14).
+ * The nudge's own words, used only when nothing can be composed from the batch. It names where the
+ * messages are and how many, and says "waiting", not "unread": the daemon does not know the
+ * server's read cursor, and a retry may follow a `check` that already advanced it (task #14). The
+ * choice was raft's — keep the wording neutral rather than loosen the rule about cursor-dependent
+ * words.
  */
 export function importantUnreadNoticeText(
   notice: ImportantUnreadNotice,
@@ -45,7 +47,7 @@ export function importantUnreadNoticeText(
   )
     .map((row) => `${row.target} (${row.count})`)
     .join(", ");
-  return `Still not read: ${rows}. Run \`coforge inbox check\` to see them.`;
+  return `Still waiting: ${rows}. Run \`coforge inbox check\` to see them.`;
 }
 
 /** Binds the loop to the daemon: a notice goes into the running session, and a batch nobody read
