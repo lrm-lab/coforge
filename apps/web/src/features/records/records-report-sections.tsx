@@ -6,7 +6,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { RecordsCatalog } from "./records-layout";
 import { sidebarPreview } from "./records-sidebar";
-import { CollapsibleSection, RecordLink, SidebarMore, WeekBadge } from "./records-sidebar-parts";
+import { CollapsibleSection, RecordLink, SidebarMore } from "./records-sidebar-parts";
 
 /** The weekly reports the reader starred (rendered only when there is one), a few at first; `showAll` lists every one. */
 export function RecordsFavoritesSection({
@@ -61,6 +61,7 @@ export function RecordsFavoritesSection({
 /** The reader's own weekly reports (rendered only when there is one), each marked sent or unread. */
 export function RecordsMyReportsSection({
   items,
+  me,
   unread,
   selectedRecordId,
   open,
@@ -68,6 +69,9 @@ export function RecordsMyReportsSection({
   onSelect,
 }: {
   items: RecordsCatalog["myReports"];
+  /** The reader, whose face marks each of their reports as an author's face marks a favorite
+   * (jing, task #106); the week is in the title. */
+  me: { displayName: string; avatarUrl: string | null };
   /** One of the reader's reports is unread, filtered out or not. */
   unread: boolean;
   selectedRecordId?: string;
@@ -99,7 +103,13 @@ export function RecordsMyReportsSection({
                 onSelect={onSelect}
                 className={cn(item.unread && "font-semibold")}
               >
-                <WeekBadge week={item.week} className="size-6" />
+                <ActorAvatar
+                  presence={false}
+                  size="sm"
+                  name={me.displayName}
+                  alt={me.displayName}
+                  src={me.avatarUrl ?? undefined}
+                />
                 <span className="min-w-0 flex-1 truncate">{item.title}</span>
                 {sent ? (
                   <span className="ml-auto shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-tertiary">
