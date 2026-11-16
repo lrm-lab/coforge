@@ -12,9 +12,8 @@ import { loadArtifactsOn } from "./artifacts-on.functions";
 
 /** A document as a list row and a card show it (`listArtifacts`, `loadArtifactCards`). */
 export type ArtifactCard = Awaited<ReturnType<typeof listArtifacts>>[number];
-export type ArtifactDocument = Awaited<ReturnType<typeof loadArtifactDocument>>;
 /** Who wrote an artifact: the Agent that did, or nobody (the field is absent). */
-export type ArtifactActorRef = { agentId: string } | null;
+type ArtifactActorRef = { agentId: string } | null;
 
 /** Every documents query, to refresh after a delete, a change of access or a published version. */
 export const ARTIFACTS_KEY = ["artifacts"] as const;
