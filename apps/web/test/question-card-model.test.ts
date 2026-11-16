@@ -10,7 +10,7 @@ import {
   submission,
   type ChoiceView,
   type QuestionsView,
-} from "#src/features/conversations/question-dock-model";
+} from "#src/features/conversations/question-card-model";
 
 const base = {
   messageId: "m1",

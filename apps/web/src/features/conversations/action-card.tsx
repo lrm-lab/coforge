@@ -21,7 +21,7 @@ import { CreateChannelDialog } from "./create-channel-dialog";
 import { ChannelAddMembersDialog } from "./channel-add-members-dialog";
 import { HandledActionCard, SettledActionCard } from "./action-card-handled";
 import type { ToolActionCardView } from "./action-card-labels";
-import { isAskingView } from "./question-dock-model";
+import { isAskingView } from "./question-card-model";
 import { useConversationId } from "./conversation-id";
 import { useSettleInPlace } from "./settle-in-place";
 import { updateLoadedMessage } from "./conversation-queries";

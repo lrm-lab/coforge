@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { dockKey, type DockKeyState } from "#src/features/conversations/question-dock-keys";
-import type { DockQuestion } from "#src/features/conversations/question-dock-model";
+import { dockKey, type DockKeyState } from "#src/features/conversations/question-card-keys";
+import type { DockQuestion } from "#src/features/conversations/question-card-model";
 
 const one: DockQuestion = {
   id: "one",

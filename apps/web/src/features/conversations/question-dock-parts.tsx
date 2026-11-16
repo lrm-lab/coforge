@@ -10,14 +10,14 @@ import { isApplePlatform } from "#src/lib/platform";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
-import type { DockMessage } from "./question-dock-host";
+import type { DockMessage } from "./question-card-host";
 import {
   answered,
   answerText,
   type DockQuestion,
   type Draft,
   type Drafts,
-} from "./question-dock-model";
+} from "./question-card-model";
 
 /** A key as the dock's hints and rows show it. */
 export function Key({ children, className }: { children: ReactNode; className?: string }) {

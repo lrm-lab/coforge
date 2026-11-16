@@ -5,7 +5,7 @@ import { messageSlots } from "#src/lib/message-slots";
 import { m } from "#src/paraglide/messages";
 import type { ActionCardActor } from "#src/server/conversations/action-card-view.server";
 import { cardActor } from "./action-card-actor";
-import type { AskingView } from "./question-dock-model";
+import type { AskingView } from "./question-card-model";
 
 /** The asked person by face and name, as every line that names someone shows them (task #521;
  * Frank, 11-12: a card waiting on someone shows whom). */

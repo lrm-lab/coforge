@@ -7,14 +7,14 @@ import { useTimeZone } from "#src/lib/time-zone-context";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
-import { useCardDock, useQuestionDrafts } from "./question-dock-host";
+import { useCardDock, useQuestionDrafts } from "./question-card-host";
 import {
   answerText,
   dockQuestions,
   givenAnswers,
   isMine,
   type AskingView,
-} from "./question-dock-model";
+} from "./question-card-model";
 import { cardStatus } from "./question-card-status";
 import { useSettleInPlace } from "./settle-in-place";
 

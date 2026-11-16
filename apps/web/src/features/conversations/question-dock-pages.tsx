@@ -3,7 +3,7 @@ import { CHOICE_OTHER_TEXT_MAX_LENGTH } from "@lrm/coforge-sdk/agent";
 
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import type { DockQuestion, Draft, Drafts } from "./question-dock-model";
+import type { DockQuestion, Draft, Drafts } from "./question-card-model";
 import { AnswerLine, DOCK_ROW, Key, Mark } from "./question-dock-parts";
 
 /**

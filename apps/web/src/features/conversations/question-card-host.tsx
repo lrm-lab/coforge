@@ -24,7 +24,7 @@ import {
   commitQuestionsActionCard,
   loadActionCardStates,
 } from "./action-cards.functions";
-import { firstPick } from "./question-dock-keys";
+import { firstPick } from "./question-card-keys";
 import {
   dockQuestions,
   fitDrafts,
@@ -34,7 +34,7 @@ import {
   submission,
   type AskingView,
   type Drafts,
-} from "./question-dock-model";
+} from "./question-card-model";
 import {
   dropQuestionDrafts,
   readQuestionDrafts,

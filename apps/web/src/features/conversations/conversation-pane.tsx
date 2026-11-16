@@ -36,7 +36,7 @@ import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
 import { ConversationStreamPlaceholder } from "./conversation-stream-placeholder";
 import { ThreadRepliesMarker } from "./thread-replies-marker";
 import { ThreadRootMessage } from "./thread-root-message";
-import { QuestionDockHost } from "./question-dock-host";
+import { QuestionDockHost } from "./question-card-host";
 
 export function ConversationPane({
   conversation,

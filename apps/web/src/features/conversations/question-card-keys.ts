@@ -1,4 +1,4 @@
-import { answered, type DockQuestion, type Drafts } from "./question-dock-model";
+import { answered, type DockQuestion, type Drafts } from "./question-card-model";
 
 /** Where the dock stands when a key comes: the question (or the review after the last), the row
  * the arrow keys stand on, and whether that highlight is shown yet. */

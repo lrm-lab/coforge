@@ -10,7 +10,7 @@
  */
 
 import { browserLocalStorage } from "#src/features/browser-local-storage";
-import type { Draft, Drafts } from "./question-dock-model";
+import type { Draft, Drafts } from "./question-card-model";
 
 const KEY_PREFIX = "coforge.question-draft:";
 

@@ -3,7 +3,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { Popconfirm } from "#src/components/ui/popconfirm";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { useQuestionDock, type DockCard } from "./question-dock-host";
+import { useQuestionDock, type DockCard } from "./question-card-host";
 
 /**
  * "Not answering" (Frank, 11-12): it tells the Agent and cannot be taken back, so it asks once,

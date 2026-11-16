@@ -20,7 +20,7 @@ stream (Frank, 2026-11-12). Rules an agent cannot read off the code:
 - Half-given answers are drafts on this device only (`question-drafts.ts`, localStorage key
   `coforge.question-draft:<messageId>`), dropped once the card stops waiting and pruned past the
   longest a card can wait. Syncing them across devices is a later change.
-- Keys go through the pure reducer in `question-dock-keys.ts`; the highlight shows only once keys
+- Keys go through the pure reducer in `question-card-keys.ts`; the highlight shows only once keys
   are used, so nothing looks picked that was not.
 - "Don't answer" always asks first (`Popconfirm`): a decline is final and wakes the Agent that
   asked. There is no undo window. The Activity inbox's waiting row declines the same way.

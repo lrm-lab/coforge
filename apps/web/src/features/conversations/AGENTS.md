@@ -1,6 +1,6 @@
 # Conversations UI
 
-These rules apply to `src/features/conversations/`. Forwarding a message (the Forward action, its dialog, the forwarded card) is in [message-forward.md](message-forward.md); the Drafts page, in [drafts.md](drafts.md); question cards and the dock that answers them, in [question-dock.md](question-dock.md).
+These rules apply to `src/features/conversations/`. Forwarding a message (the Forward action, its dialog, the forwarded card) is in [message-forward.md](message-forward.md); the Drafts page, in [drafts.md](drafts.md); question cards and the dock that answers them, in [question-card.md](question-card.md).
 
 - This feature does not own Agent state. Read Agent status and Activity through the `features/agents/` hooks, and open, close, or switch the right-hand Agent or person profile panel through `features/agents/profile-panel/open-agent-profile.ts` instead of writing `profile`/`agentTab` search params. The channel settings sheet embeds the
   profile with its own state instead (see the members page below).

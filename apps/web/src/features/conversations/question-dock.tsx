@@ -5,10 +5,10 @@ import { Dialog, ModalOverlay } from "#src/components/ui/modal";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { useQuestionDock } from "./question-dock-host";
+import { useQuestionDock } from "./question-card-host";
 import { DockAnswer } from "./question-dock-answer";
 import { DockReceipt } from "./question-dock-receipt";
-import { isMine } from "./question-dock-model";
+import { isMine } from "./question-card-model";
 
 /**
  * The pane's dock where its cards are answered (Frank, 11-12), while one is open: on a desktop in

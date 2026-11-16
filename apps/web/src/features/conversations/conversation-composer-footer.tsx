@@ -10,7 +10,7 @@ import { useSelectionIn } from "./message-selection";
 import { MessageSelectionBar } from "./message-selection-bar";
 import { useRecentConversationHandles } from "./use-recent-conversation-handles";
 import { QuestionDockPanel } from "./question-dock";
-import { useCardDock } from "./question-dock-host";
+import { useCardDock } from "./question-card-host";
 
 type ComposerProps = ComponentProps<typeof MessageComposer>;
 

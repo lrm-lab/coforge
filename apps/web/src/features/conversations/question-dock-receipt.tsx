@@ -7,8 +7,8 @@ import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { useQuestionDock, type DockCard } from "./question-dock-host";
-import { dockQuestions, givenAnswers } from "./question-dock-model";
+import { useQuestionDock, type DockCard } from "./question-card-host";
+import { dockQuestions, givenAnswers } from "./question-card-model";
 import { AnswerLine, DOCK_ROW, DockTop } from "./question-dock-parts";
 
 /**
