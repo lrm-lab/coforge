@@ -1,5 +1,4 @@
-import { Experiments } from "#src/server/experiments/experiments.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
+import { platformMemoryEnabled } from "#src/server/platform-memory/activation.server";
 import { createFileRoute } from "@tanstack/react-router";
 import { taskConversationsEnabled } from "#src/server/tasks/task-conversations-gate.server";
 import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
@@ -224,10 +223,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           taskConversationsEnabled(db, { workspaceId: agent.workspaceId }),
           artifactsEnabled(db, agent.workspaceId),
           isFeatureEnabled("agentContextView", { workspaceId: agent.workspaceId }),
-          new Experiments(new PrismaExperimentsRepository(db), isFeatureEnabled).enabled(
-            "platformMemory",
-            { workspaceId: agent.workspaceId },
-          ),
+          platformMemoryEnabled(db, { workspaceId: agent.workspaceId, ownerId: agent.ownerId }),
         ]);
         const identity = buildAgentLaunchIdentity({
           systemKind: agent.systemKind,

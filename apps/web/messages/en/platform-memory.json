@@ -1,7 +1,7 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "settings_memory": "Memory",
-  "memory_experiment_description": "Personal Agent and team memory. Existing local memory stays unchanged. Restart Agents after enabling.",
+  "memory_experiment_description": "Personal Agent and shared team memory, on by default. Each person can opt out for all their Agents in Account settings. Existing local files are kept. Restart Agents after changing this switch.",
   "memory_loading": "Loading memory…",
   "memory_disabled": "Platform memory is off for this workspace. Existing Agent memory continues to work.",
   "memory_unavailable": "The memory engine is unavailable or is not configured for this workspace. No memory has been changed. Ask an administrator to check the connection.",
@@ -31,5 +31,8 @@
   "memory_conflict": "This memory changed or was deleted. Refresh and read the current version before saving again.",
   "memory_saved": "Memory updated.",
   "memory_cleanup_pending": "Memory is saved or excluded from recall. Some old stored files are still awaiting cleanup.",
-  "memory_workspace_entry": "Platform memory"
+  "memory_workspace_entry": "Platform memory",
+  "memory_preference_label": "Let my Agents use platform memory",
+  "memory_preference_description": "Applies to all your Agents across workspaces. The workspace must also allow memory. Turning this off blocks new Agent requests and keeps saved memories available for manual management. Restart Agents to update their instructions and loaded context.",
+  "memory_preference_saved": "Saved. Restart Agents to update their instructions and clear previously loaded memory."
 }

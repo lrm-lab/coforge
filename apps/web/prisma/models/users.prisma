@@ -90,6 +90,7 @@ model UserPreference {
   userId                      String   @id @db.Uuid
   user                        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   timeZone                    String?
+  platformMemoryEnabled       Boolean?
   browserNotificationsEnabled Boolean?
   /// Retired open-mode preference; retained for compatibility and ignored by the application.
   conversationOpenMode        String?

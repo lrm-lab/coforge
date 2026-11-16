@@ -5,9 +5,7 @@ import {
   type MemoryHead,
   type MemoryStore,
 } from "#src/server/platform-memory/contract";
-import { Experiments } from "#src/server/experiments/experiments.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
-import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
+import { platformMemoryEnabled } from "#src/server/platform-memory/activation.server";
 import { paginated } from "#src/server/db/pagination.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 
@@ -63,10 +61,10 @@ export class PrismaPlatformMemoryStore implements MemoryStore {
             })
           ).map((a) => a.id);
     if (agentIds.length >= 100) throw new MemoryError("unavailable");
-    const enabled = await new Experiments(
-      new PrismaExperimentsRepository(this.db),
-      isFeatureEnabled,
-    ).enabled("platformMemory", { workspaceId: actor.workspaceId });
+    const enabled = await platformMemoryEnabled(this.db, {
+      workspaceId: actor.workspaceId,
+      ...(actor.kind === "agent" ? { ownerId: userId } : {}),
+    });
     return {
       enabled,
       admin: actor.kind === "user" && ["owner", "admin"].includes(membership.role),

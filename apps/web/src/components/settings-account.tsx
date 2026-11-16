@@ -1,3 +1,4 @@
+import { MemoryPreferenceSettings } from "#src/features/platform-memory/memory-preference-settings";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { useEffect, useState } from "react";
 import { useHydrated } from "@tanstack/react-router";
@@ -230,6 +231,7 @@ export function AccountSettings({
           )}
         </div>
       </section>
+      <MemoryPreferenceSettings userId={profile.id} />
     </div>
   );
 }

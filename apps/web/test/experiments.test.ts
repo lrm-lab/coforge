@@ -20,7 +20,7 @@ function setup(flags: readonly string[]) {
 }
 
 test("the registry names each experiment's flag, default and whether a change needs a reload", () => {
-  expect(EXPERIMENTS.platformMemory).toEqual({ flag: null, defaultEnabled: false, reload: true });
+  expect(EXPERIMENTS.platformMemory).toEqual({ flag: null, defaultEnabled: true, reload: true });
   expect(EXPERIMENTS.taskConversations).toEqual({
     flag: null,
     defaultEnabled: false,
@@ -46,7 +46,7 @@ test("an experiment without a flag is offered to every Workspace, on until its c
   expect(stored.get("w1")).toEqual({ drafts: false });
   expect(await experiments.enabled("drafts", workspace)).toBeFalse();
   expect(await experiments.list(workspace)).toEqual([
-    { key: "platformMemory", enabled: false, reload: true },
+    { key: "platformMemory", enabled: true, reload: true },
     { key: "taskConversations", enabled: false, reload: false },
     { key: "drafts", enabled: false, reload: false },
     { key: "artifacts", enabled: false, reload: false },
@@ -86,7 +86,7 @@ test("an unflagged experiment is never looked up by flag", async () => {
 test("every Workspace offers every experiment; an unset one defaults to the registry default", async () => {
   const { experiments } = setup([]);
   expect(await experiments.list(workspace)).toEqual([
-    { key: "platformMemory", enabled: false, reload: true },
+    { key: "platformMemory", enabled: true, reload: true },
     { key: "taskConversations", enabled: false, reload: false },
     { key: "drafts", enabled: true, reload: false },
     { key: "artifacts", enabled: false, reload: false },
@@ -133,7 +133,7 @@ test("stored keys the registry no longer knows are ignored", async () => {
     async () => false,
   );
   expect(await experiments.list(workspace)).toEqual([
-    { key: "platformMemory", enabled: false, reload: true },
+    { key: "platformMemory", enabled: true, reload: true },
     { key: "taskConversations", enabled: false, reload: false },
     { key: "drafts", enabled: true, reload: false },
     { key: "artifacts", enabled: false, reload: false },
