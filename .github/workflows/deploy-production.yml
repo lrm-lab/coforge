@@ -167,31 +167,10 @@ jobs:
           if [ -z "$COFORGE_CLOUD_CLUSTER_TOKEN" ]; then
             echo "COFORGE_CLOUD_CLUSTER_TOKEN is empty; cloud computers stay disabled" >&2
           fi
-          umask 077
-          tar_dir="$(mktemp -d)"
-          payload="$(mktemp)"
-          trap 'rm -rf -- "$tar_dir" "$payload"' EXIT
-          printf '%s' "$COFORGE_CLOUD_CLUSTER_TOKEN" > "$tar_dir/coforge_cloud_cluster_token"
-          printf '%s' "$COFORGE_CLOUD_SERVICE_PASSWORD" > "$tar_dir/coforge_cloud_service_password"
-          tar -czf "$payload" -C "$tar_dir" .
-          ssh -i "$SSH_DIR/key" \
-            -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
-            -o BatchMode=yes \
-            -o ServerAliveInterval=15 \
-            -o ServerAliveCountMax=8 \
-            "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
-            "set -eu; \
-             secrets_dir='$REMOTE_ROOT/infra/production/secrets'; \
-             mkdir -p \"\$secrets_dir\"; \
-             chmod 700 \"\$secrets_dir\"; \
-             incoming=\$(mktemp -d \"\${secrets_dir}.incoming.XXXXXX\"); \
-             trap 'rm -rf -- \"\$incoming\"' EXIT; \
-             tar -xzf - -C \"\$incoming\"; \
-             for name in coforge_cloud_cluster_token coforge_cloud_service_password; do \
-               chmod 600 \"\$incoming/\$name\"; \
-               mv -f \"\$incoming/\$name\" \"\$secrets_dir/\$name\"; \
-             done" \
-            < "$payload"
+          bash scripts/deploy/ship-secrets.sh \
+            --environment production \
+            --secrets-dir "$REMOTE_ROOT/infra/production/secrets" \
+            --optional "COFORGE_CLOUD_CLUSTER_TOKEN COFORGE_CLOUD_SERVICE_PASSWORD"
 
       - name: Deploy image and check health
         run: |

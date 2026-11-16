@@ -106,7 +106,7 @@ describe("staging user file persistence", () => {
       new URL("../../.github/workflows/deploy-staging.yml", import.meta.url),
     ).text();
     expect(workflow).toContain("secrets.COFORGE_FILE_DELIVERY_KEY");
-    expect(workflow).toContain("coforge_file_delivery_key");
+    expect(workflow).toContain(" COFORGE_FILE_DELIVERY_KEY ");
     expect(workflow).not.toMatch(/echo "\$COFORGE_FILE_DELIVERY_KEY"/);
   });
 
@@ -166,7 +166,7 @@ describe("staging user file persistence", () => {
       new URL("../../.github/workflows/deploy-staging.yml", import.meta.url),
     ).text();
     expect(workflow).toContain("secrets.COFORGE_CLOUD_CLUSTER_TOKEN");
-    expect(workflow).toContain("coforge_cloud_cluster_token");
+    expect(workflow).toContain(" COFORGE_CLOUD_CLUSTER_TOKEN");
     expect(workflow).not.toMatch(/echo "\$COFORGE_CLOUD_CLUSTER_TOKEN"/);
   });
 

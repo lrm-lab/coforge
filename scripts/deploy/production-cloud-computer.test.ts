@@ -33,7 +33,7 @@ describe("production cloud computer deploy wiring", () => {
     expect(workflow).toContain("Sync cloud-computer secrets");
     expect(workflow).toContain("secrets.COFORGE_CLOUD_CLUSTER_TOKEN");
     expect(workflow).toContain("secrets.COFORGE_CLOUD_SERVICE_PASSWORD");
-    expect(workflow).toContain("coforge_cloud_cluster_token");
+    expect(workflow).toContain('--optional "COFORGE_CLOUD_CLUSTER_TOKEN ');
     expect(workflow).not.toMatch(/echo "\$COFORGE_CLOUD_CLUSTER_TOKEN"/);
   });
 });

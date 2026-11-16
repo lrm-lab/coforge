@@ -199,50 +199,11 @@ jobs:
           COFORGE_PLATFORM_OPERATORS: ${{ vars.COFORGE_PLATFORM_OPERATORS }}
           COFORGE_CLOUD_IMAGE_UPDATES_PAUSED: ${{ vars.COFORGE_CLOUD_IMAGE_UPDATES_PAUSED }}
         run: |
-          for name in AUTHING_APP_ID AUTHING_APP_SECRET COFORGE_SESSION_SECRET COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY OTEL_EXPORTER_OTLP_TRACES_ENDPOINT COFORGE_WEB_PUSH_PUBLIC_KEY COFORGE_WEB_PUSH_PRIVATE_KEY COFORGE_FILE_DELIVERY_KEY COFORGE_CLOUD_CLUSTER_TOKEN; do
-            value="${!name}"
-            if [ -z "$value" ]; then
-              echo "$name is missing from the staging GitHub Environment" >&2
-              exit 1
-            fi
-          done
-          umask 077
-          tar_dir="$(mktemp -d)"
-          payload="$(mktemp)"
-          trap 'rm -rf -- "$tar_dir" "$payload"' EXIT
-          printf '%s' "$AUTHING_APP_ID" > "$tar_dir/authing_app_id"
-          printf '%s' "$AUTHING_APP_SECRET" > "$tar_dir/authing_app_secret"
-          printf '%s' "$COFORGE_SESSION_SECRET" > "$tar_dir/coforge_session_secret"
-          printf '%s' "$COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY" > "$tar_dir/coforge_agent_credential_encryption_key"
-          printf '%s' "$OTEL_EXPORTER_OTLP_TRACES_ENDPOINT" > "$tar_dir/otel_traces_endpoint"
-          printf '%s' "$COFORGE_WEB_PUSH_PUBLIC_KEY" > "$tar_dir/coforge_web_push_public_key"
-          printf '%s' "$COFORGE_WEB_PUSH_PRIVATE_KEY" > "$tar_dir/coforge_web_push_private_key"
-          printf '%s' "$COFORGE_FILE_DELIVERY_KEY" > "$tar_dir/coforge_file_delivery_key"
-          printf '%s' "$COFORGE_CLOUD_CLUSTER_TOKEN" > "$tar_dir/coforge_cloud_cluster_token"
-          for name in COFORGE_GITHUB_APP_SLUG COFORGE_COMMIT_COAUTHOR COFORGE_GITHUB_CLIENT_SECRET COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY COFORGE_GITHUB_WEBHOOK_SECRET COFORGE_RETAINED_CLOUD_IMAGE_IDS COFORGE_CLOUD_IMAGE_UPDATES_PAUSED COFORGE_PLATFORM_OPERATORS COFORGE_AUTHING_WEBHOOK_SECRET; do
-            printf '%s' "${!name}" > "$tar_dir/${name,,}"
-          done
-          tar -czf "$payload" -C "$tar_dir" .
-          ssh -i "$SSH_DIR/key" \
-            -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
-            -o BatchMode=yes \
-            -o ServerAliveInterval=15 \
-            -o ServerAliveCountMax=8 \
-            "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
-            "set -eu; \
-             secrets_dir='$REMOTE_ROOT/infra/staging/secrets'; \
-             mkdir -p \"\$(dirname \"\$secrets_dir\")\"; \
-             incoming=\$(mktemp -d \"\${secrets_dir}.incoming.XXXXXX\"); \
-             trap 'rm -rf -- \"\$incoming\"' EXIT; \
-             tar -xzf - -C \"\$incoming\"; \
-             chmod 600 \"\$incoming/authing_app_id\" \"\$incoming/authing_app_secret\" \"\$incoming/coforge_session_secret\" \"\$incoming/coforge_agent_credential_encryption_key\" \"\$incoming/otel_traces_endpoint\" \"\$incoming/coforge_web_push_public_key\" \"\$incoming/coforge_web_push_private_key\" \"\$incoming/coforge_file_delivery_key\" \"\$incoming/coforge_cloud_cluster_token\"; \
-             mkdir -p \"\$secrets_dir\"; \
-             chmod 700 \"\$secrets_dir\"; \
-             for name in authing_app_id authing_app_secret coforge_session_secret coforge_agent_credential_encryption_key otel_traces_endpoint coforge_web_push_public_key coforge_web_push_private_key coforge_file_delivery_key coforge_cloud_cluster_token coforge_github_app_slug coforge_commit_coauthor coforge_github_client_secret coforge_github_credential_encryption_key coforge_github_webhook_secret coforge_retained_cloud_image_ids coforge_cloud_image_updates_paused coforge_platform_operators coforge_authing_webhook_secret; do \
-               chmod 600 \"\$incoming/\$name\"; \
-               mv -f \"\$incoming/\$name\" \"\$secrets_dir/\$name\"; \
-             done" \
-            < "$payload"
+          bash scripts/deploy/ship-secrets.sh \
+            --environment staging \
+            --secrets-dir "$REMOTE_ROOT/infra/staging/secrets" \
+            --required "AUTHING_APP_ID AUTHING_APP_SECRET COFORGE_SESSION_SECRET COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=otel_traces_endpoint COFORGE_WEB_PUSH_PUBLIC_KEY COFORGE_WEB_PUSH_PRIVATE_KEY COFORGE_FILE_DELIVERY_KEY COFORGE_CLOUD_CLUSTER_TOKEN" \
+            --optional "COFORGE_GITHUB_APP_SLUG COFORGE_COMMIT_COAUTHOR COFORGE_GITHUB_CLIENT_SECRET COFORGE_GITHUB_CREDENTIAL_ENCRYPTION_KEY COFORGE_GITHUB_WEBHOOK_SECRET COFORGE_RETAINED_CLOUD_IMAGE_IDS COFORGE_CLOUD_IMAGE_UPDATES_PAUSED COFORGE_PLATFORM_OPERATORS COFORGE_AUTHING_WEBHOOK_SECRET"
 
       - name: Deploy image and check health
         env:
