@@ -107,6 +107,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
     tier: current?.artifact.access ?? "conversation",
     link,
     homeName,
+    narrowable: current?.artifact.access !== "workspace" || homeId !== undefined,
   });
 
   useRealtimeSubscription({

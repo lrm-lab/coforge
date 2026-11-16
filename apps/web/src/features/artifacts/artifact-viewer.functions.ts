@@ -4,6 +4,7 @@ import { z } from "zod";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { artifactInputs } from "./artifact-inputs";
+import { ARTIFACT_TITLE_MAX } from "./artifact-title-limit";
 
 const { id } = artifactInputs;
 
@@ -14,7 +15,7 @@ const placeOf = (
 
 export const renameArtifact = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(z.object({ artifactId: id, title: z.string().max(400) }).strict())
+  .validator(z.object({ artifactId: id, title: z.string().max(ARTIFACT_TITLE_MAX) }).strict())
   .handler(({ context, data }) =>
     productionArtifacts(context.db).renames.rename({
       ...placeOf(context, data),

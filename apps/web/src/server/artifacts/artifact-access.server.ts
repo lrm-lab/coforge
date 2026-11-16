@@ -111,8 +111,16 @@ export function artifactHomeView(
   artifact: Pick<ArtifactAccessRow, "homeKey" | "access">,
   home: ActorConversationHomeRead | undefined,
 ): ArtifactHomeView {
-  if (artifactTier(artifact) === "workspace")
-    return { tier: "workspace", homeKey: "workspace", homeKind: "workspace" };
+  if (artifactTier(artifact) === "workspace") {
+    const named =
+      home !== undefined &&
+      homeStands(home) &&
+      canReadConversationHome(home) &&
+      artifactHomeConversationId(artifact.homeKey) !== undefined;
+    return named
+      ? { tier: "workspace", homeKey: artifact.homeKey, homeKind: home.kind }
+      : { tier: "workspace", homeKey: "workspace", homeKind: "workspace" };
+  }
   if (home === undefined) return { tier: "conversation", homeKey: null, homeKind: "workspace" };
   return { tier: "conversation", homeKey: artifact.homeKey, homeKind: home.kind };
 }
@@ -188,7 +196,7 @@ export async function artifactReadView(
   const viewer = options.viewer ?? (await artifactViewer(db, workspaceId, actor));
   if (!viewer.member) return null;
   const wide = artifactTier(artifact) === "workspace";
-  const conversationId = wide ? undefined : artifactHomeConversationId(artifact.homeKey);
+  const conversationId = artifactHomeConversationId(artifact.homeKey);
   const home = conversationId
     ? (await actorConversationHomeReads(db, workspaceId, actor, [conversationId])).get(
         conversationId,

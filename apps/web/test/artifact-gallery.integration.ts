@@ -136,7 +136,7 @@ test("a page is stable and a cursor continues it, in both sorts", async () => {
   });
 });
 
-test("related to me: my Agents' artifacts, those I commented on, follow or am mentioned in", async () => {
+test("related to me: my Agents' artifacts, those I commented on or follow, not those that only mention me", async () => {
   expect(await titles(f.alice, { related: true })).toEqual([
     "Alpha plan",
     "Beta notes",
@@ -162,11 +162,7 @@ test("related to me: my Agents' artifacts, those I commented on, follow or am me
     body: `not @${mentioned.username}x at all`,
     idempotencyKey: f.key(),
   });
-  expect(await titles(f.bob, { related: true })).toEqual([
-    "Alpha plan",
-    "Beta notes",
-    "Delta report",
-  ]);
+  expect(await titles(f.bob, { related: true })).toEqual(["Alpha plan", "Beta notes"]);
 });
 
 test("badges: updates since the last open, new comments by others, mentions", async () => {
@@ -207,6 +203,27 @@ test("marks come only for the artifacts the person may read", async () => {
   });
   expect(marks.map((mark) => mark.id).sort()).toEqual([ids.alpha!, ids.beta!].sort());
   expect(marks.find((mark) => mark.id === ids.beta)).toMatchObject({ link: true });
+});
+
+test("marks cost the same queries for one artifact or many", async () => {
+  const counted: string[] = [];
+  const countingDb = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: Bun.env.DATABASE_URL! }),
+    log: [{ emit: "event", level: "query" }],
+  });
+  countingDb.$on("query", (event) => counted.push(event.query));
+  const counting = new ArtifactGallery(countingDb, async () => true, f.artifacts.reads);
+  const queriesFor = async (artifactIds: string[]) => {
+    counted.length = 0;
+    await counting.marks({ workspaceId: f.workspaceId, userId: f.bob, artifactIds });
+    return counted.length;
+  };
+  try {
+    const one = await queriesFor([ids.alpha!]);
+    expect(await queriesFor([ids.alpha!, ids.beta!, ids.delta!])).toBe(one);
+  } finally {
+    await countingDb.$disconnect();
+  }
 });
 
 test("a gallery page costs a fixed number of queries however many artifacts the Workspace holds", async () => {

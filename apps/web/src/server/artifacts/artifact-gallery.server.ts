@@ -192,9 +192,6 @@ export class ArtifactGallery {
   }
 
   #relatedSql(workspaceId: string, userId: string): Prisma.Sql {
-    const escapedHandle = Prisma.raw(
-      String.raw`regexp_replace(u."username", '([^[:alnum:]_])', '\\\1', 'g')`,
-    );
     return Prisma.sql`(
       a."authorAgentId" IN (
         SELECT "id" FROM "agents" WHERE "workspaceId" = ${workspaceId}::uuid
@@ -203,16 +200,32 @@ export class ArtifactGallery {
         WHERE c."artifactId" = a."id" AND c."deletedAt" IS NULL
           AND c."authorUserId" = ${userId}::uuid)
       OR EXISTS (SELECT 1 FROM "artifact_follows" f
-        WHERE f."artifactId" = a."id" AND f."userId" = ${userId}::uuid AND f."following")
-      OR EXISTS (SELECT 1 FROM "artifact_comments" c
-        JOIN "users" u ON u."id" = ${userId}::uuid
-        WHERE c."artifactId" = a."id" AND c."deletedAt" IS NULL
-          AND c."body" ~* ('(^|[^[:alnum:]_-])@' || ${escapedHandle} || '($|[^[:alnum:]_-])')))`;
+        WHERE f."artifactId" = a."id" AND f."userId" = ${userId}::uuid AND f."following"))`;
+  }
+
+  async #unseenComments(userId: string, ids: readonly string[], username: string | undefined) {
+    const mentionPattern = containsPattern(`@${username ?? ""}`);
+    const rows = await this.db.$queryRaw<
+      { artifactId: string; newComments: number; candidates: string[] }[]
+    >`
+      SELECT c."artifactId", COUNT(*)::int AS "newComments",
+        COALESCE(ARRAY_AGG(c."body") FILTER (WHERE c."body" ILIKE ${mentionPattern}), '{}')
+          AS "candidates"
+      FROM "artifact_comments" c
+      JOIN "artifact_viewer_positions" p
+        ON p."artifactId" = c."artifactId" AND p."userId" = ${userId}::uuid
+      WHERE c."artifactId" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
+        AND c."deletedAt" IS NULL
+        AND (c."authorUserId" IS NULL OR c."authorUserId" <> ${userId}::uuid)
+        AND c."createdAt" > p."openedAt"
+      GROUP BY c."artifactId"`;
+    return new Map(rows.map((row) => [row.artifactId, row]));
   }
 
   private async cards(userId: string, ids: readonly string[]) {
     if (ids.length === 0) return [];
-    const [rows, positions, links, counts, comments, user] = await Promise.all([
+    const userRow = this.db.user.findUnique({ where: { id: userId }, select: { username: true } });
+    const [rows, positions, links, counts, unseenByArtifact, user] = await Promise.all([
       this.db.artifact.findMany({ where: { id: { in: [...ids] } }, select: CARD_SELECT }),
       this.db.artifactViewerPosition.findMany({
         where: { userId, artifactId: { in: [...ids] } },
@@ -226,15 +239,8 @@ export class ArtifactGallery {
         where: { artifactId: { in: [...ids] }, deletedAt: null },
         _count: { _all: true },
       }),
-      this.db.artifactComment.findMany({
-        where: {
-          artifactId: { in: [...ids] },
-          deletedAt: null,
-          OR: [{ authorUserId: null }, { authorUserId: { not: userId } }],
-        },
-        select: { artifactId: true, createdAt: true, body: true },
-      }),
-      this.db.user.findUnique({ where: { id: userId }, select: { username: true } }),
+      userRow.then((found) => this.#unseenComments(userId, ids, found?.username)),
+      userRow,
     ]);
     const byId = new Map(rows.map((row) => [row.id, row]));
     const position = new Map(positions.map((row) => [row.artifactId, row]));
@@ -245,11 +251,7 @@ export class ArtifactGallery {
       if (!row) return [];
       const { authorAgentId, ...shown } = row;
       const place = position.get(id);
-      const baseline = place ? (place.commentSeenAt ?? place.openedAt).getTime() : undefined;
-      const unseen =
-        baseline === undefined
-          ? []
-          : comments.filter((c) => c.artifactId === id && c.createdAt.getTime() > baseline);
+      const unseen = unseenByArtifact.get(id);
       const tier = artifactTier(row);
       return [
         {
@@ -261,8 +263,10 @@ export class ArtifactGallery {
           openedAt: place?.openedAt ?? null,
           commentCount: total.get(id) ?? 0,
           hasUpdates: place !== undefined && place.seenVersion < row.currentVersion,
-          newComments: unseen.length,
-          mentionsYou: user !== null && unseen.some((c) => mentions(c.body, user.username)),
+          newComments: unseen?.newComments ?? 0,
+          mentionsYou:
+            user !== null &&
+            (unseen?.candidates ?? []).some((body) => mentions(body, user.username)),
         },
       ];
     });

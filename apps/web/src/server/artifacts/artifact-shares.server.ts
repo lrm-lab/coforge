@@ -5,7 +5,10 @@ import {
   ARTIFACT_SHARE_NOTE_MAX_LENGTH,
 } from "#src/features/artifacts/artifact-share-input";
 import { AppError, isAppError } from "#src/lib/app-error";
-import { membersWithoutOtherConversationRead } from "#src/server/conversations/channel-read-access.server";
+import {
+  assertUserMayPost,
+  membersWithoutOtherConversationRead,
+} from "#src/server/conversations/channel-read-access.server";
 import {
   artifactHomeConversationId,
   artifactTier,
@@ -51,15 +54,7 @@ type ArtifactShareSender = (input: {
 
 export class ArtifactShares {
   constructor(
-    private readonly db: Pick<
-      PrismaClient,
-      | "artifact"
-      | "artifactPublicLink"
-      | "workspace"
-      | "workspaceMembership"
-      | "agent"
-      | "conversation"
-    >,
+    private readonly db: PrismaClient,
     private readonly enabled: (workspaceId: string) => Promise<boolean>,
   ) {}
 
@@ -102,7 +97,7 @@ export class ArtifactShares {
     if (!workspace || !row) throw new AppError("NOT_FOUND");
     await requireArtifactRead(this.db, input.workspaceId, input.actor, row);
     if (input.unseen !== "send") {
-      const held = await this.recipientsWhoCannotSee(input.workspaceId, row, targets);
+      const held = await this.recipientsWhoCannotSee(input.workspaceId, input.actor, row, targets);
       if (held.length > 0) return { outcome: "held", results: [], held };
     }
 
@@ -140,6 +135,7 @@ export class ArtifactShares {
 
   private async recipientsWhoCannotSee(
     workspaceId: string,
+    actor: { userId: string },
     artifact: { id: string; homeKey: string; access: string },
     targets: readonly string[],
   ): Promise<ArtifactShareHold[]> {
@@ -150,6 +146,8 @@ export class ArtifactShares {
       select: { id: true },
     });
     if (link) return [];
+    for (const target of targets)
+      await assertUserMayPost(this.db, workspaceId, actor.userId, target);
     const counts = await Promise.all(
       targets.map(async (target) => ({
         target,

@@ -111,7 +111,9 @@ The refusal's `details` are flat: `commentCount`, `unread`, `versionCount`, `ski
 `skippedVersions`, `unseen` (a JSON string of `{ comments, excerpts, versions }`: up to 5 comments in
 full, then up to 5 excerpts, and the newest versions) and, for a review, `index`. What the refusal
 shows in full counts as seen, so the same request sent again succeeds unless `unread > 0`, when
-`comments` must be read first. A request whose idempotency key already landed replays instead of
+`comments` must be read first. What it does not show (`skippedComments`, `skippedVersions`) is only
+counted, and the retry still succeeds: that is the reference product's behaviour, so an Agent that
+needs those reads them with `read --rev` and `comments`. A request whose idempotency key already landed replays instead of
 being refused. The gate never answers for an artifact the Agent cannot read.
 
 The check is part of the write: it runs in its transaction after the replay check, under the

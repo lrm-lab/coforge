@@ -163,15 +163,18 @@ The rules are in `docs/agent-cli/artifact-follows.md`. Their modules:
 
 - `artifact-gallery.server.ts` pages the Artifacts gallery (readable artifacts only, sorted in
   memory over narrow id rows, cursor `[key, id]`) and marks a card's updates, new comments and
-  mentions; "related" means authored by my Agents, commented, followed or mentioned.
+  mentions; "related" means authored by my Agents, commented or followed (a person's mention comes
+  with people commenting on the Web). New comments count in SQL from the opened time; only the
+  unseen bodies are read, for the mention badge. A conversation's cards take one marks request.
 - `artifact-viewer-positions.server.ts` keeps `artifact_viewer_positions` (opened time, highest
-  version seen, comment seen position; no foreign key on a user) and the "viewing now" roster,
+  version seen; no foreign key on a user) and the "viewing now" roster,
   whose live part is `artifact-viewing.server.ts` (Redis sorted set, short TTL; a Memory twin in
   tests). A person's `artifact_follows` row is `artifact-person-follows.server.ts`.
 - `artifact-rename.server.ts` renames under a row lock, also the current version's title, and
   tells Agent followers through `ArtifactNotices` (best effort). `artifact-version-history.server.ts`
   lists versions with what each changed.
-- `artifact-download.server.ts` serves one file or a streamed zip, refused over
+- `artifact-download.server.ts` serves one file or a stored (uncompressed) zip whose blobs are all
+  checked before the 200 (a missing one is `NOT_FOUND`) and then streamed one at a time, limited per person a minute (`artifactZip`), refused over
   `ARTIFACT_ZIP_LIMIT_BYTES` (`artifact-zip-too-large`), and the capped text/image preview of a
   file. `artifact-visible.server.ts` is `visibleToReader`.
 - A share to a `conversation`-tier artifact with no live public link is held, sending nothing,

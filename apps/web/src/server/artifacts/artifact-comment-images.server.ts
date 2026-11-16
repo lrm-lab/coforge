@@ -23,6 +23,8 @@ export type PreparedImage = {
   height: number;
 };
 
+const PIXELS_HINT = "a comment image is at most 40 megapixels";
+
 const refuse = (errorId: string, hint: string): never => {
   throw new AppError("INVALID_INPUT", { errorId, hint });
 };
@@ -62,7 +64,7 @@ function check(sha256: string, bytes: Uint8Array) {
   if ((size.type ? IMAGE_SIZE_TYPE[size.type] : undefined) !== contentType || !width || !height)
     return refuse("artifact-image-type", "the image could not be read");
   if (width * height > ARTIFACT_COMMENT_IMAGE_MAX_PIXELS)
-    refuse("artifact-image-pixels", "a comment image is at most 40 megapixels");
+    refuse("artifact-image-pixels", PIXELS_HINT);
   return contentType;
 }
 
@@ -81,13 +83,19 @@ async function stripped(bytes: Uint8Array, contentType: string) {
       animated: true,
       limitInputPixels: ARTIFACT_COMMENT_IMAGE_MAX_PIXELS,
     });
+    const header = await input.metadata();
+    const pixels =
+      (header.width ?? 0) * (header.pageHeight ?? header.height ?? 0) * (header.pages ?? 1);
+    if (pixels > ARTIFACT_COMMENT_IMAGE_MAX_PIXELS) refuse("artifact-image-pixels", PIXELS_HINT);
     const out = await reencode(input.rotate(), contentType).toBuffer();
     const meta = await sharp(out).metadata();
     const width = meta.width;
     const height = meta.pageHeight ?? meta.height;
     if (!width || !height) throw new Error("no size");
     return { out: new Uint8Array(out) as Uint8Array<ArrayBuffer>, width, height };
-  } catch {
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    if (/pixel limit/i.test(String(error))) return refuse("artifact-image-pixels", PIXELS_HINT);
     return refuse("artifact-image-type", "the image could not be decoded");
   }
 }

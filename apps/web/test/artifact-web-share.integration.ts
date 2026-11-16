@@ -302,6 +302,21 @@ test("recipients who cannot read the artifact hold the send, counted per destina
   expect(everyone.outcome).toBe("success");
 });
 
+test("a hold counts nothing for a destination the sender may not post in: the whole call fails as the send would", async () => {
+  for (const target of [rooms.unjoined, rooms.bobCarol, rooms.archived, crypto.randomUUID()]) {
+    const refused = await share(people.alice, [rooms.open, target], "hold").catch(
+      (error: unknown) => error,
+    );
+    expect(isAppError(refused) && refused.code).toBe(
+      target === rooms.archived
+        ? "CONFLICT"
+        : target === rooms.unjoined
+          ? "ACCESS_DENIED"
+          : "NOT_FOUND",
+    );
+  }
+});
+
 test("widening the artifact or turning on its link ends the hold; sending anyway skips it", async () => {
   await db.artifact.update({ where: { id: artifactId }, data: { access: "workspace" } });
   try {

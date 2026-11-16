@@ -53,7 +53,10 @@ export function productionArtifacts(db: PrismaClient) {
     versionHistory: new ArtifactVersionHistory(db, artifacts.reads),
     viewerPositions: new ArtifactViewerPositions(db, artifacts.reads, productionArtifactViewing()),
     download: (input: Parameters<typeof artifactDownload>[1]) =>
-      artifactDownload({ reads: artifacts.reads, blobs }, input),
+      artifactDownload(
+        { reads: artifacts.reads, blobs, zipLimit: getAppRateLimits().artifactZip },
+        input,
+      ),
     filePreview: (input: Parameters<typeof artifactFilePreview>[1]) =>
       artifactFilePreview({ reads: artifacts.reads, blobs }, input),
   };

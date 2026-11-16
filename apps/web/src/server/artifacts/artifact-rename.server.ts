@@ -1,14 +1,13 @@
 import { randomUUID } from "node:crypto";
 
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { ARTIFACT_TITLE_MAX } from "#src/features/artifacts/artifact-title-limit";
 import { AppError } from "#src/lib/app-error";
 import { errorType } from "#src/server/errors/error-type.server";
 import { actorNames } from "./artifact-actor-names.server";
 import type { ArtifactNoticePort } from "./artifact-notice-port.server";
 import { ArtifactNotices } from "./artifact-notices.server";
 import type { ArtifactReads } from "./artifact-reads.server";
-
-const TITLE_MAX = 200;
 
 export class ArtifactRenames {
   constructor(
@@ -19,7 +18,7 @@ export class ArtifactRenames {
 
   async rename(input: { workspaceId: string; artifactId: string; userId: string; title: string }) {
     const title = input.title.trim();
-    if (!title || title.length > TITLE_MAX)
+    if (!title || title.length > ARTIFACT_TITLE_MAX)
       throw new AppError("INVALID_INPUT", { errorId: "artifact-title" });
     const read = await this.reads.artifact(input.workspaceId, input.artifactId, {
       userId: input.userId,

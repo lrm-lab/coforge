@@ -102,7 +102,27 @@
   "av_vis_link_off_body": "The public link will stop working.",
   "av_vis_link_off_confirm": "Turn off link sharing",
   "av_vis_narrow_title": "Limit to {home}?",
-  "av_vis_narrow_body": "{people} people and {agents} Agents will lose access.",
+  "av_vis_narrow_body": "{people} and {agents} will lose access.",
+  "av_vis_narrow_people": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} person",
+        "countPlural=other": "{count} people"
+      }
+    }
+  ],
+  "av_vis_narrow_agents": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} Agent",
+        "countPlural=other": "{count} Agents"
+      }
+    }
+  ],
   "av_vis_narrow_confirm": "Limit access",
   "av_vis_failed": "Couldn't change who can see it. Try again.",
   "av_viewing_count": "{count} viewing",

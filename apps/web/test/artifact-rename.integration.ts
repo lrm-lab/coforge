@@ -52,7 +52,7 @@ test("a plain reader is refused; a Workspace admin may rename", async () => {
 test("an empty, an over-long or an unchanged title changes nothing", async () => {
   const artifact = await f.make("Steady");
   await expect(rename(artifact, f.alice, "   ")).rejects.toMatchObject({ code: "INVALID_INPUT" });
-  await expect(rename(artifact, f.alice, "x".repeat(201))).rejects.toMatchObject({
+  await expect(rename(artifact, f.alice, "x".repeat(301))).rejects.toMatchObject({
     code: "INVALID_INPUT",
   });
   expect(await rename(artifact, f.alice, "Steady")).toMatchObject({ changed: false });

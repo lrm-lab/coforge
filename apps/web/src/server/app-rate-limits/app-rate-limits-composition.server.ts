@@ -18,6 +18,7 @@ export const PUBLIC_ARTIFACT_LIMIT_PER_MINUTE = 120;
  * IP: a page may be up to 200 files, and a reader opens several. */
 export const PUBLIC_ARTIFACT_FILE_LIMIT_PER_MINUTE = 2000;
 export const ARTIFACT_AGENT_WRITE_LIMIT_PER_MINUTE = 60;
+export const ARTIFACT_ZIP_LIMIT_PER_MINUTE = 10;
 
 export type AppRateLimits = {
   token: AppRateLimit;
@@ -25,6 +26,7 @@ export type AppRateLimits = {
   publicArtifact: AppRateLimit;
   publicArtifactFile: AppRateLimit;
   artifactWrite: AppRateLimit;
+  artifactZip: AppRateLimit;
 };
 
 let limits: AppRateLimits | undefined;
@@ -76,6 +78,12 @@ function createAppRateLimits(redisUrl: string | undefined): AppRateLimits {
       windowMs: WINDOW_MS,
       outageLog,
     }),
+    artifactZip: new RedisAppRateLimit(redis, {
+      keyPrefix: "coforge:ratelimit:artifact-zip:v1",
+      limit: ARTIFACT_ZIP_LIMIT_PER_MINUTE,
+      windowMs: WINDOW_MS,
+      outageLog,
+    }),
   };
 }
 
@@ -96,5 +104,6 @@ function unconfiguredLimits(outageLog: RateLimitOutageLog): AppRateLimits {
     publicArtifact: limit,
     publicArtifactFile: limit,
     artifactWrite: limit,
+    artifactZip: limit,
   };
 }

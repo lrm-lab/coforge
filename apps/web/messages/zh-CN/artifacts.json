@@ -102,7 +102,25 @@
   "av_vis_link_off_body": "公开链接将无法再打开。",
   "av_vis_link_off_confirm": "关闭链接分享",
   "av_vis_narrow_title": "仅限 {home}？",
-  "av_vis_narrow_body": "{people} 人和 {agents} 个 Agent 将失去访问权限。",
+  "av_vis_narrow_body": "{people} 和 {agents} 将失去访问权限。",
+  "av_vis_narrow_people": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "{count} 人"
+      }
+    }
+  ],
+  "av_vis_narrow_agents": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "{count} 个 Agent"
+      }
+    }
+  ],
   "av_vis_narrow_confirm": "限制访问",
   "av_vis_failed": "无法更改谁能看，请重试。",
   "av_viewing_count": "{count} 人在看",

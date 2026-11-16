@@ -35,11 +35,13 @@ export function useArtifactVisibility({
   tier,
   link,
   homeName,
+  narrowable,
 }: {
   artifactId: string;
   tier: "conversation" | "workspace";
   link: ArtifactLinkSharing;
   homeName: string;
+  narrowable: boolean;
 }) {
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState<Confirmation | null>(null);
@@ -77,7 +79,10 @@ export function useArtifactVisibility({
   const description = confirming
     ? confirming.narrowing
       ? loss.data
-        ? m.av_vis_narrow_body({ people: loss.data.people, agents: loss.data.agents })
+        ? m.av_vis_narrow_body({
+            people: m.av_vis_narrow_people({ count: loss.data.people }),
+            agents: m.av_vis_narrow_agents({ count: loss.data.agents }),
+          })
         : ""
       : confirming.choice === "link"
         ? m.av_vis_link_on_body()
@@ -119,19 +124,23 @@ export function useArtifactVisibility({
     />
   );
 
-  return { current, label, request, dialog };
+  return { current, label, request, dialog, narrowable };
 }
 
 export function VisibilityMenu({
   visibility,
   linkAvailable,
 }: {
-  visibility: Pick<ReturnType<typeof useArtifactVisibility>, "current" | "label" | "request">;
+  visibility: Pick<
+    ReturnType<typeof useArtifactVisibility>,
+    "current" | "label" | "request" | "narrowable"
+  >;
   linkAvailable: boolean;
 }) {
-  const choices: VisibilityChoice[] = linkAvailable
-    ? ["conversation", "workspace", "link"]
-    : ["conversation", "workspace"];
+  const choices = (["conversation", "workspace", "link"] as const).filter(
+    (choice) =>
+      (choice !== "link" || linkAvailable) && (choice !== "conversation" || visibility.narrowable),
+  );
   return (
     <Dropdown.Menu
       aria-label={m.av_who_can_see()}

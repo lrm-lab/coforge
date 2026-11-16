@@ -41,7 +41,12 @@ export async function postComment(
   const artifact = await requireReadableArtifact(db, workspaceId, { agentId }, input.artifact);
   const { artifact: _artifact, idempotencyKey, ...draft } = input;
   const requestHash = payloadHash({ operation: "comment", ...draft });
-  const images = await prepareImages(blobs, principal, draft.images ?? []);
+  const earlier = await db.artifactComment.findFirst({
+    where: { artifactId: artifact.id, authorAgentId: agentId, idempotencyKey },
+    select: { requestHash: true },
+  });
+  if (earlier && earlier.requestHash !== requestHash) throw idempotencyMismatch();
+  const images = earlier ? [] : await prepareImages(blobs, principal, draft.images ?? []);
   const row = await recordingRefusal(db, { artifactId: artifact.id, agentId }, () =>
     withCommentLock(db, artifact.id, async (tx) => {
       const replay = await tx.artifactComment.findFirst({
@@ -93,9 +98,15 @@ export async function postReview(
   const artifact = await requireReadableArtifact(db, workspaceId, { agentId }, input.artifact);
   const { artifact: _artifact, idempotencyKey, ...content } = input;
   const requestHash = payloadHash({ operation: "review", ...content });
+  const earlier = await db.artifactCommentReview.findFirst({
+    where: { artifactId: artifact.id, authorAgentId: agentId, idempotencyKey },
+    select: { requestHash: true },
+  });
+  if (earlier && earlier.requestHash !== requestHash) throw idempotencyMismatch();
   const images: PreparedImage[][] = [];
-  for (const comment of input.comments)
-    images.push(await prepareImages(blobs, principal, comment.images ?? []));
+  if (!earlier)
+    for (const comment of input.comments)
+      images.push(await prepareImages(blobs, principal, comment.images ?? []));
   const written = await recordingRefusal(db, { artifactId: artifact.id, agentId }, () =>
     withCommentLock(db, artifact.id, async (tx) => {
       const replay = await tx.artifactCommentReview.findFirst({

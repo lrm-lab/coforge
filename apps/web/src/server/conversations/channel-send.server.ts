@@ -9,10 +9,8 @@ import {
 } from "#src/server/centrifugo/server-api.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import type { MessageNotifier } from "#src/server/notifications/web-push-composition.server";
-import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
 import { AgentDeliveryPublisher } from "./agent-delivery.server";
 import { AgentMessageValidationError } from "./agent-message-validation-error.server";
-import { memberChannel } from "./channel-access.server";
 import { channelAgentRecipients } from "./channel-agent-recipients.server";
 import { enrollThreadReplyFollowers } from "./channel-threads.server";
 import { lockConversation } from "./conversation-lock.server";
@@ -37,6 +35,7 @@ import { agentMessageSender } from "./sender-display.server";
 import { taskReferenceView } from "./task-reference-view.server";
 import type { SentMessageHook } from "./sent-message-hook.server";
 import { unresolvedMentionHandles } from "./unresolved-mentions.server";
+import { requireUserMayPostInChannel } from "./user-post-access.server";
 
 export type ChannelSendPorts = {
   db: PrismaClient;
@@ -71,12 +70,12 @@ export async function sendChannel(
   // This key is also the daemon delivery's request_id. A missing one is omitted on the wire
   // and the daemon drops the frame, so the Agent never sees the message.
   if (!idempotencyKey?.trim()) throw new AppError("INVALID_INPUT");
-  const channel = await memberChannel(ctx.db, workspaceId, userId, channelId);
-  if (channel.archivedAt) throw new AppError("CONFLICT");
-  const member = await ctx.db.conversationMember.findFirst({
-    where: { conversationId: channelId, userId, ...ACTIVE_MEMBER_WHERE },
-  });
-  if (!member) throw new AppError("ACCESS_DENIED");
+  const { channel, member } = await requireUserMayPostInChannel(
+    ctx.db,
+    workspaceId,
+    userId,
+    channelId,
+  );
   const body = input.body.trim();
   // Postgres `message.body` is unbounded text. The browser composer stays at 8_000
   // (`sendConversationMessageInputSchema`); this path also accepts an eval prompt or an

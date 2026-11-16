@@ -43,6 +43,78 @@ test("every file downloads as a zip named for the artifact, paths kept", async (
   expect(new TextDecoder().decode(entries["plan.md"])).toBe("# Plan\n");
 });
 
+test("a zip whose bytes have vanished is not found before any byte is sent", async () => {
+  const artifact = await f.make("Vanished", { "plan.md": "# Plan\n", "a.txt": "a" });
+  const lost = (
+    await f.artifacts.reads.read({
+      workspaceId: f.workspaceId,
+      artifactId: artifact,
+      reader: { userId: f.bob },
+    })
+  ).files[0]!.sha256;
+  const blobs = {
+    read: f.blobs.read.bind(f.blobs),
+    inspectMany: async (workspaceId: string, sha256s: readonly string[]) =>
+      f.blobs.inspectMany(
+        workspaceId,
+        sha256s.filter((sha256) => sha256 !== lost),
+      ),
+  };
+  await expect(
+    artifactDownload(
+      { reads: f.artifacts.reads, blobs },
+      { workspaceId: f.workspaceId, artifactId: artifact, userId: f.bob },
+    ),
+  ).rejects.toMatchObject({ code: "NOT_FOUND" });
+});
+
+test("a zip checks its blobs without reading them and streams each one in turn", async () => {
+  const artifact = await f.make("Lazy", { "plan.md": "a", "b.txt": "b", "c.txt": "c" });
+  let reads = 0;
+  const blobs = {
+    inspectMany: f.blobs.inspectMany.bind(f.blobs),
+    read: async (workspaceId: string, sha256: string) => {
+      reads++;
+      return f.blobs.read(workspaceId, sha256);
+    },
+  };
+  const response = await artifactDownload(
+    { reads: f.artifacts.reads, blobs },
+    { workspaceId: f.workspaceId, artifactId: artifact, userId: f.bob },
+  );
+  const entries = unzipSync(new Uint8Array(await response.arrayBuffer()));
+  expect(Object.keys(entries).sort()).toEqual(["b.txt", "c.txt", "plan.md"]);
+  expect(reads).toBe(3);
+});
+
+test("zip entries are stored, not compressed", async () => {
+  const artifact = await f.make("Stored", { "plan.md": "z".repeat(10_000) });
+  const bytes = new Uint8Array(await (await download(artifact, f.bob)).arrayBuffer());
+  expect(bytes.length).toBeGreaterThan(10_000);
+});
+
+test("a person's zip downloads are limited, single files are not", async () => {
+  const artifact = await f.make("Limited", { "plan.md": "# Plan\n" });
+  let admitted = 0;
+  const zipLimit = {
+    admit: async () =>
+      ++admitted <= 2
+        ? { allowed: true as const }
+        : { allowed: false as const, retryAfterSeconds: 7 },
+  };
+  const limited = (path?: string) =>
+    artifactDownload(
+      { reads: f.artifacts.reads, blobs: f.blobs, zipLimit },
+      { workspaceId: f.workspaceId, artifactId: artifact, userId: f.bob, path },
+    );
+  expect((await limited()).status).toBe(200);
+  expect((await limited()).status).toBe(200);
+  const refused = await limited();
+  expect(refused.status).toBe(429);
+  expect(refused.headers.get("retry-after")).toBe("7");
+  expect((await limited("plan.md")).status).toBe(200);
+});
+
 test("a version too large to zip is refused with a pointer to one-by-one downloads", async () => {
   const artifact = await f.make("Large", { "plan.md": "0123456789" });
   await expect(download(artifact, f.bob, { limit: 5 })).rejects.toMatchObject({

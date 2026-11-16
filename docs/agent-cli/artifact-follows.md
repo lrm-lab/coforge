@@ -20,6 +20,7 @@ that the Agent can read the artifact (`NOT_FOUND` otherwise).
   notes, renames and changed files; mentions, and a resolve of a thread the Agent started, still
   reach it.
 - Resolve and reopen do not follow.
+- A title-only push makes no version, so a retried one finds the title already changed and tells no one again; the rename notice is best-effort.
 
 ## Who is told, and why
 

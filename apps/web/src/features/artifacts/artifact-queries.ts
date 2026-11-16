@@ -2,7 +2,7 @@ import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query"
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { useWorkspaceDirectory } from "#src/features/conversations/workspace-directory-query";
-import { loadArtifactMarks } from "./artifact-gallery.functions";
+import { loadArtifactMarksBatched } from "./artifact-marks-batch";
 import {
   loadArtifactFilePreview,
   loadArtifactFollowing,
@@ -80,8 +80,7 @@ export const artifactFollowingQuery = (artifactId: string) =>
 export const artifactMarksQuery = (artifactId: string) =>
   queryOptions({
     queryKey: [...ARTIFACTS_KEY, "marks", artifactId],
-    queryFn: async () =>
-      (await loadArtifactMarks({ data: { artifactIds: [artifactId] } })).at(0) ?? null,
+    queryFn: () => loadArtifactMarksBatched(artifactId),
     staleTime: 30_000,
   });
 

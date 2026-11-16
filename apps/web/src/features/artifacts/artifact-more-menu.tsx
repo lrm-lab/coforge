@@ -53,7 +53,10 @@ export function ArtifactMoreMenu({
   canDelete: boolean;
   canFind: boolean;
   following: boolean;
-  visibility: Pick<ReturnType<typeof useArtifactVisibility>, "current" | "label" | "request">;
+  visibility: Pick<
+    ReturnType<typeof useArtifactVisibility>,
+    "current" | "label" | "request" | "narrowable"
+  >;
   linkAvailable: boolean;
   onChooseVersion: (version: number) => void;
   onAction: (action: MoreAction) => void;

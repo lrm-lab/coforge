@@ -11,6 +11,12 @@ type ViewingRedis = {
   send(command: string, args: string[]): Promise<unknown>;
 };
 
+const HEARTBEAT = `
+redis.call("ZADD", KEYS[1], ARGV[1], ARGV[2])
+redis.call("PEXPIRE", KEYS[1], ARGV[3])
+redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", ARGV[4])
+return 1`;
+
 const key = (artifactId: string) => `coforge:artifact-viewing:v1:${artifactId}`;
 
 export class RedisArtifactViewing implements ArtifactViewing {
@@ -21,8 +27,15 @@ export class RedisArtifactViewing implements ArtifactViewing {
 
   async mark(artifactId: string, userId: string) {
     const at = this.clock();
-    await this.redis.send("ZADD", [key(artifactId), String(at + VIEWING_TTL_MS), userId]);
-    await this.redis.send("PEXPIRE", [key(artifactId), String(VIEWING_TTL_MS * 2)]);
+    await this.redis.send("EVAL", [
+      HEARTBEAT,
+      "1",
+      key(artifactId),
+      String(at + VIEWING_TTL_MS),
+      userId,
+      String(VIEWING_TTL_MS * 2),
+      String(at),
+    ]);
   }
 
   async now(artifactId: string) {

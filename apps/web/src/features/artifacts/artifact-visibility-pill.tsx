@@ -16,7 +16,10 @@ export function VisibilityPill({
   canChange,
   linkAvailable,
 }: {
-  visibility: Pick<ReturnType<typeof useArtifactVisibility>, "current" | "label" | "request">;
+  visibility: Pick<
+    ReturnType<typeof useArtifactVisibility>,
+    "current" | "label" | "request" | "narrowable"
+  >;
   canChange: boolean;
   linkAvailable: boolean;
 }) {

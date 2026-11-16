@@ -1,12 +1,9 @@
+import { ARTIFACT_TITLE_MAX } from "#src/features/artifacts/artifact-title-limit";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError, isAppError } from "#src/lib/app-error";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
 import type { ArtifactDocuments } from "./artifact-documents.server";
-import {
-  ARTIFACT_TEXT_LIMIT,
-  ARTIFACT_TITLE_MAX,
-  artifactPathValid,
-} from "./artifact-files.server";
+import { ARTIFACT_TEXT_LIMIT, artifactPathValid } from "./artifact-files.server";
 
 export type ArtifactAttachment = {
   id: string;

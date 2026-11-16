@@ -262,6 +262,15 @@ test("a widened artifact reads as the Workspace's: every member and Agent reads 
       access: "workspace",
     });
   }
+  for (const reader of [
+    { userId: people.alice },
+    { agentId: agents.helper },
+  ] satisfies ArtifactActor[])
+    expect((await read(artifact.id, reader)).artifact).toMatchObject({
+      homeKey: `conversation:${privateChannel}`,
+      homeKind: "channel",
+      access: "workspace",
+    });
   expect((await push(artifact.id, stranger)).status).toBe("created");
   for (const reader of [{ userId: people.outsider }, { agentId: agents.foreign }])
     await expect(read(artifact.id, reader)).rejects.toMatchObject({ code: "NOT_FOUND" });

@@ -1,14 +1,16 @@
-import { Zip, ZipDeflate } from "fflate";
+import { Zip, ZipPassThrough } from "fflate";
 import { artifactKindOfPath } from "#src/features/artifacts/artifact-path-kind";
 import { ARTIFACT_ZIP_LIMIT_BYTES } from "#src/features/artifacts/artifact-zip-limit";
 import { AppError } from "#src/lib/app-error";
+import type { AppRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
 import { artifactContentType } from "./artifact-content-types.server";
 import type { ArtifactReads } from "./artifact-reads.server";
 
 type Sources = {
   reads: Pick<ArtifactReads, "read">;
-  blobs: Pick<StoredArtifactBlobs, "read">;
+  blobs: Pick<StoredArtifactBlobs, "read" | "inspectMany">;
+  zipLimit?: AppRateLimit;
 };
 
 type Request = {
@@ -51,6 +53,17 @@ export async function artifactDownload(sources: Sources, input: Request): Promis
   const total = read.files.reduce((sum, file) => sum + file.sizeBytes, 0);
   if (total > (input.limit ?? ARTIFACT_ZIP_LIMIT_BYTES))
     throw new AppError("INVALID_INPUT", { errorId: "artifact-zip-too-large" });
+  const decision = await sources.zipLimit?.admit(input.userId);
+  if (decision && !decision.allowed)
+    return new Response("too many downloads", {
+      status: 429,
+      headers: { "Retry-After": String(decision.retryAfterSeconds), "Cache-Control": "no-store" },
+    });
+  const stored = await sources.blobs.inspectMany(
+    input.workspaceId,
+    read.files.map((file) => file.sha256),
+  );
+  if (read.files.some((file) => !stored.has(file.sha256))) throw new AppError("NOT_FOUND");
   const title = read.artifact.title || read.artifact.name;
   return new Response(zipStream(sources.blobs, input.workspaceId, read.files), {
     headers: headers("application/zip", `${title}.zip`),
@@ -70,23 +83,23 @@ function zipStream(
       if (final) controller.close();
     }
   });
+  let next = 0;
   return new ReadableStream<Uint8Array>({
     start(started) {
       controller = started;
-      void (async () => {
-        try {
-          for (const file of files) {
-            const bytes = await blobs.read(workspaceId, file.sha256);
-            if (!bytes) throw new AppError("NOT_FOUND");
-            const entry = new ZipDeflate(file.path);
-            zip.add(entry);
-            entry.push(bytes, true);
-          }
-          zip.end();
-        } catch (error) {
-          controller.error(error);
-        }
-      })();
+    },
+    async pull() {
+      try {
+        const file = files[next++];
+        if (!file) return zip.end();
+        const bytes = await blobs.read(workspaceId, file.sha256);
+        if (!bytes) throw new AppError("NOT_FOUND");
+        const entry = new ZipPassThrough(file.path);
+        zip.add(entry);
+        entry.push(bytes, true);
+      } catch (error) {
+        controller.error(error);
+      }
     },
   });
 }

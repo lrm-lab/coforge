@@ -34,6 +34,5 @@ export interface ArtifactBlobStore {
 export const ARTIFACT_TEXT_LIMIT = ARTIFACT_UPLOAD_MAX_BYTES;
 export const ARTIFACT_BINARY_LIMIT = 15 * 1024 * 1024;
 export const ARTIFACT_FILE_LIMIT = 200;
-export const ARTIFACT_TITLE_MAX = 300;
 export const ARTIFACT_HTML_ENTRY = "index.html";
 export const ARTIFACT_ENTRY_READ_LIMIT = 2 * 1024 * 1024;

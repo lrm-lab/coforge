@@ -31,5 +31,9 @@ export async function pageAccess(
   const level = pageLevelOf(artifact, input.userId);
   if (!levelReaches(level, need))
     throw new AppError("ACCESS_DENIED", { errorId: "artifact-page-level" });
-  return { level, homeKey: artifact.homeKey, authorAgentOwnerId: artifact.authorAgentOwnerId };
+  return {
+    level,
+    homeKey: artifact.access === "workspace" ? "workspace" : artifact.homeKey,
+    authorAgentOwnerId: artifact.authorAgentOwnerId,
+  };
 }

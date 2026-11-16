@@ -284,6 +284,8 @@ export async function actorsWithoutConversationRead(
   return { people, agents };
 }
 
+export { assertUserMayPost } from "./user-post-access.server";
+
 export async function membersWithoutOtherConversationRead(
   db: Pick<PrismaClient, "conversation">,
   workspaceId: string,

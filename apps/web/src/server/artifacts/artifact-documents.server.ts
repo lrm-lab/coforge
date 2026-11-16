@@ -10,7 +10,8 @@ import {
 } from "./artifact-access.server";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
 import { artifactOpenableKind } from "#src/features/artifacts/artifact-path-kind";
-import { ARTIFACT_ENTRY_READ_LIMIT, ARTIFACT_TITLE_MAX } from "./artifact-files.server";
+import { ARTIFACT_TITLE_MAX } from "#src/features/artifacts/artifact-title-limit";
+import { ARTIFACT_ENTRY_READ_LIMIT } from "./artifact-files.server";
 import { planManifestCreate, type FileManifest } from "./artifact-manifest.server";
 import type { Artifacts } from "./artifacts.server";
 
