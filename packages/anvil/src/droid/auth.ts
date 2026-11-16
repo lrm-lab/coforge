@@ -1,5 +1,5 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { acpBounded, acpProcess } from "#src/acp/connection";
+import { AcpTimeoutError, acpBounded, acpProcess } from "#src/acp/connection";
 import type { ProcessTreeSpawner } from "#src/process-tree";
 import { withDeadline } from "#src/deadline";
 import {
@@ -177,10 +177,7 @@ export class DroidRuntimeAuthAdapter implements RuntimeAuthAdapter {
     } catch (error) {
       return {
         status: "failed",
-        reason:
-          error instanceof Error && /timed out/i.test(error.message)
-            ? "timed_out"
-            : "process_failed",
+        reason: error instanceof AcpTimeoutError ? "timed_out" : "process_failed",
         detail: error instanceof Error ? error.message.slice(0, 200) : undefined,
       };
     } finally {

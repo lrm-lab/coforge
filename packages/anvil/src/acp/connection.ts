@@ -211,7 +211,7 @@ export class AcpConnection {
 
   /** One ACP operation on this runtime's own deadline, named as this runtime names it. */
   bounded<T>(work: Promise<T>, timeoutMs: number): Promise<T> {
-    return withDeadline(work, timeoutMs, () => new Error(this.options.messages.timedOut));
+    return withDeadline(work, timeoutMs, () => new AcpTimeoutError(this.options.messages.timedOut));
   }
 
   #close(): void {
@@ -223,9 +223,18 @@ export class AcpConnection {
   }
 }
 
+/** An ACP operation that ran out of its deadline. Its own type so a caller can tell a timeout from
+ * any other failure without matching the message, which is prose somebody may reword. */
+export class AcpTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AcpTimeoutError";
+  }
+}
+
 /** One ACP operation on `message`'s deadline, for work that outlives a single connection. */
 export function acpBounded<T>(work: Promise<T>, timeoutMs: number, message: string): Promise<T> {
-  return withDeadline(work, timeoutMs, () => new Error(message));
+  return withDeadline(work, timeoutMs, () => new AcpTimeoutError(message));
 }
 
 function selectReady(option: SessionConfigOption, category: string): boolean {

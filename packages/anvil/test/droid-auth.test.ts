@@ -231,6 +231,19 @@ test("signing out clears the stored login through the server's own logout", asyn
   }
 });
 
+test("a sign-out the CLI never answers times out instead of failing the process", async () => {
+  // The deadline, not the wording, is what classifies this: the reason comes from `AcpTimeoutError`
+  // being thrown, so replacing that check with any other predicate fails here.
+  const f = await fixture({ DROID_AUTH_FIXTURE_HANG_ON_LOGOUT: "1" });
+  try {
+    await f.setState("logged_in");
+    const result = await f.adapter.logout({ workingDirectory: f.directory, timeoutMs: 300 });
+    expect(result).toMatchObject({ status: "failed", reason: "timed_out" });
+  } finally {
+    await f.cleanup();
+  }
+});
+
 test("an environment API key cannot be signed out", async () => {
   const f = await fixture();
   try {

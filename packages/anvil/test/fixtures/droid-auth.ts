@@ -113,6 +113,8 @@ if (args.includes("exec")) {
           },
         });
       } else if (request.method === "logout") {
+        // A CLI that never answers: the request runs out its deadline instead of failing fast.
+        if (process.env.DROID_AUTH_FIXTURE_HANG_ON_LOGOUT === "1") continue;
         writeState("logged_out");
         write({ jsonrpc: "2.0", id: request.id, result: {} });
       } else {

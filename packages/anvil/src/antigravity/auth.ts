@@ -3,7 +3,7 @@ import {
   RUNTIME_AUTH_INFO_ANTIGRAVITY_BROWSER_LOGIN,
   RUNTIME_PROVIDER,
 } from "@lrm/coforge-sdk/internal";
-import { acpBounded, acpProcess } from "#src/acp/connection";
+import { AcpTimeoutError, acpBounded, acpProcess } from "#src/acp/connection";
 import type { ProcessTreeSpawner } from "#src/process-tree";
 import {
   type RuntimeAuthAdapter,
@@ -133,7 +133,7 @@ export class AntigravityRuntimeAuthAdapter implements RuntimeAuthAdapter {
       // Either abort path — the daemon's signal or an explicit `cancel` — ends as cancelled,
       // including the process-closed error a disposed transport surfaces.
       if (controller.signal.aborted || interaction.signal?.aborted) return { status: "cancelled" };
-      if (error instanceof Error && /timed out/i.test(error.message))
+      if (error instanceof AcpTimeoutError)
         return {
           status: "failed",
           reason: "timed_out",
@@ -174,10 +174,7 @@ export class AntigravityRuntimeAuthAdapter implements RuntimeAuthAdapter {
     } catch (error) {
       return {
         status: "failed",
-        reason:
-          error instanceof Error && /timed out/i.test(error.message)
-            ? "timed_out"
-            : "process_failed",
+        reason: error instanceof AcpTimeoutError ? "timed_out" : "process_failed",
         detail: error instanceof Error ? error.message : String(error),
       };
     } finally {
