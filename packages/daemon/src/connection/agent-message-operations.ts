@@ -17,9 +17,10 @@ import { messageEndpoint, serverEndpoint } from "./daemon-endpoints";
 
 /** What an Agent's message operation needs from the connection that carries it. */
 export type AgentMessagePorts = {
-  /** Refuses the operation while the connection is not up: each one needs the server. */
+  /** Refuses the operation when the server's HTTPS origin is not configured. These operations are
+   * HTTPS calls with the Agent's own key; the daemon's WebSocket state is not one of their
+   * dependencies, so a message keeps working through a reconnect. */
   assertConnected(): void;
-  connected: boolean;
   serverHttpUrl: string;
   /** Credentials for one Agent-scoped HTTP call: the Agent's own key plus the daemon key. */
   keys(agentApiKey: string): { agentApiKey: string; daemonApiKey: string };
@@ -160,8 +161,7 @@ export async function agentReminder(
   request: AgentReminderOperationRequest,
   agentApiKey: string,
 ) {
-  if (!ports.connected || !ports.serverHttpUrl)
-    throw new Error("daemon connection is not connected");
+  if (!ports.serverHttpUrl) throw new Error("daemon connection HTTP endpoint is not configured");
   if (!ports.client.requestReminder) throw new Error("Agent reminder HTTP client is unavailable");
   const response = await ports.client.requestReminder({
     url: serverEndpoint(ports.serverHttpUrl, "Agent reminder", agentApiRoutes.cloud.reminders.path),
