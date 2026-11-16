@@ -12,8 +12,8 @@ describe("pre-edit hook", () => {
     for (const path of ["apps/web/.oxfmtrc.json", "crates/installer/deny.toml", "crates/installer/about.toml"])
       expect(decide(path).kind).toBe("ask");
   });
-  test("no longer asks for a config file that does not exist", () => {
-    expect(decide(".prettierignore").kind).toBe("allow");
+  test("asks before the SDK's format ignore list", () => {
+    expect(decide("packages/coforge-sdk/.prettierignore").kind).toBe("ask");
   });
   test("denies hand edits to generated files", () => {
     expect(decide("apps/web/src/routeTree.gen.ts").kind).toBe("deny");

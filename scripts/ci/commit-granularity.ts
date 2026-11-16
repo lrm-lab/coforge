@@ -1,7 +1,7 @@
 // Commit granularity (task #595): one commit does one thing. Four rules over each
 // non-merge commit in a range:
 //
-//   commit-title   the first line is a Conventional Commit title (`feat(scope): …`); `Revert "…"`,
+//   commit-title   the first line is a Conventional Commit title (`feat(scope): …`); `Revert "…"`, `Reapply "…"`,
 //                  `fixup!`, `squash!` and `amend!` commits pass;
 //   revert-effect  the message carries a `Revert-effect:` trailer saying what reverting
 //                  this commit would break (`none` is fine for docs and tests);
@@ -30,14 +30,14 @@ export const COMMIT_MIX_FIX =
   "This commit moves code into a new file and changes behavior in one step. Split it: one commit that only moves the code (same lines, new home), one that changes behavior. If they must stay together, add `Granularity-exempt: <reason>`.";
 
 export const COMMIT_TITLE_FIX =
-  'Start the message with a Conventional Commit title: `<type>(<optional scope>)!: <description>`, where type is feat, fix, docs, test, refactor, chore, perf, ci, build, style or revert. `Merge`, `Revert "…"`, `fixup!`, `squash!` and `amend!` titles pass.';
+  'Start the message with a Conventional Commit title: `<type>(<optional scope>)!: <description>`, where type is feat, fix, docs, test, refactor, chore, perf, ci, build, style or revert. `Merge`, `Revert "…"`, `Reapply "…"`, `fixup!`, `squash!` and `amend!` titles pass.';
 
 const MIN_MOVED_LINES = 30;
 const MIX_RATIO = 0.4;
 const MIN_LINE = 20;
 
 const TITLE =
-  /^(?:(?:feat|fix|docs|test|refactor|chore|perf|ci|build|style|revert)(?:\([^()\s][^()]*\))?!?: \S|Merge |Revert "|(?:fixup|squash|amend)! )/;
+  /^(?:(?:feat|fix|docs|test|refactor|chore|perf|ci|build|style|revert)(?:\([^()\s][^()]*\))?!?: \S|Merge |Revert "|Reapply "|(?:fixup|squash|amend)! )/;
 const REVERT_TRAILER = /^Revert-effect:[ \t]*\S/m;
 const EXEMPT_TRAILER = /^Granularity-exempt:[ \t]*(\S.*)$/m;
 

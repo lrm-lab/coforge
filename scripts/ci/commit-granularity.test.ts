@@ -40,6 +40,7 @@ describe("commit title", () => {
       "refactor(web)!: drop the old seam",
       "revert: undo the change",
       'Revert "feat: add a thing"',
+      'Reapply "feat: add a thing"',
       "Merge branch 'main' into x",
       "fixup! feat: add a thing",
       "squash! fix: a",

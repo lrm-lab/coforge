@@ -53,7 +53,8 @@ function runsFormatter(words: string[]): boolean {
   if (head === undefined) return false;
   if (isFormatter(head)) return true;
   // `sh -c "oxfmt ."`
-  const script = SHELLS.has(head.replace(/^.*\//, "")) ? words[words.indexOf("-c") + 1] : undefined;
+  const flag = words.indexOf("-c", i + 1);
+  const script = SHELLS.has(head.replace(/^.*\//, "")) && flag !== -1 ? words[flag + 1] : undefined;
   return script !== undefined && commands(script).some(runsFormatter);
 }
 

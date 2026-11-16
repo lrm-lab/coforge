@@ -33,6 +33,9 @@ describe("pre-bash hook", () => {
       "echo oxfmt && ls",
       "cat .oxfmtrc.json",
       "bun test scripts/ci",
+      "bash script.sh",
+      "zsh",
+      "git status && sh",
     ])
       expect({ command, kind: decide(command).kind }).toEqual({ command, kind: "allow" });
   });
