@@ -94,7 +94,12 @@ const upload = async (text: string) =>
     .sha256;
 
 const current = (artifactId: string, version?: number) =>
-  artifacts.read({ workspaceId, artifactId, reader: { userId }, ...(version && { version }) });
+  artifacts.reads.read({
+    workspaceId,
+    artifactId,
+    reader: { userId },
+    ...(version && { version }),
+  });
 
 const doc = (...paragraphs: string[]) => `${paragraphs.join("\n\n")}\n`;
 

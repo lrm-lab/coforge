@@ -139,7 +139,7 @@ export class ArtifactDocuments {
     input: { artifactId: string; version?: number },
     options?: { body?: "entry" | "markdown" },
   ) {
-    const read = await this.artifacts.read({ ...reader(scope), ...input });
+    const read = await this.artifacts.reads.read({ ...reader(scope), ...input });
     const entryPath = read.version?.entryPath ?? read.artifact.entryPath;
     const file = read.files.find((entry) => entry.path === entryPath);
     const document = artifactKindOfPath(entryPath) === "markdown";

@@ -129,7 +129,7 @@ async function artifact(title = "Plan") {
 const filesAt = async (artifactId: string, version?: number) =>
   Object.fromEntries(
     await Promise.all(
-      (await artifacts.read({ workspaceId, artifactId, reader, version })).files.map(
+      (await artifacts.reads.read({ workspaceId, artifactId, reader, version })).files.map(
         async (file) => [
           file.path,
           new TextDecoder().decode((await blobs.read(workspaceId, file.sha256))!),
@@ -175,7 +175,7 @@ test("a file both sides changed refuses the whole save and names it", async () =
   // Nothing of the save landed, not even the file nobody else touched.
   expect(await filesAt(id)).not.toHaveProperty("e.txt");
   expect(
-    (await artifacts.read({ workspaceId, artifactId: id, reader })).artifact.currentVersion,
+    (await artifacts.reads.read({ workspaceId, artifactId: id, reader })).artifact.currentVersion,
   ).toBe(2);
 });
 
