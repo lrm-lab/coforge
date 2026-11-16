@@ -34,7 +34,7 @@ import { usageScanFailure, usageScanReading, usageScanResult } from "./usage-sca
 import { logUsageScan } from "./usage-scan-log";
 import { RUNTIME_PROVIDER_USES_EXTERNAL_CLI } from "@lrm/coforge-sdk/internal";
 
-/** How long a usage read may take before the scan reports it as failed. */
+/** Per-provider reading deadline supplied by a runtime usage scan. */
 export const USAGE_SCAN_READ_TIMEOUT_MS = 10_000;
 
 /** What one turn interrupt needs from the runtime that owns the launch. */

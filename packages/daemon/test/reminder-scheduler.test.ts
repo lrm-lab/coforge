@@ -88,6 +88,77 @@ test("replacement snapshot cancels the old timer and exact revision ack is idemp
   expect(await scheduler.acknowledge("agent-a", job.reminderId, 3)).toBe(true);
 });
 
+test("a local acknowledgement is sent to the cloud without changing its local result", async () => {
+  const store = new MemoryStore();
+  const clock = new Clock();
+  const sent: Array<{ operation: string; version: number; idempotencyKey: string }> = [];
+  const scheduler = new ReminderScheduler(
+    { workspaceId: "workspace-a", computerId: "computer-a" },
+    store,
+    async (request) => ({ ...request, result: "accepted", fired: true, catchup: false }),
+    async () => true,
+    clock,
+    Math.random,
+    undefined,
+    (request) => {
+      sent.push(request);
+    },
+  );
+  await scheduler.apply(snapshot([job]));
+  await clock.advance(1000);
+  await scheduler.awaitIdle();
+  expect(await scheduler.acknowledge("agent-a", job.reminderId, job.version)).toBe(true);
+  await scheduler.awaitIdle();
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toMatchObject({ operation: "ack", version: job.version });
+  expect(sent[0]?.idempotencyKey).toBeTruthy();
+  expect(store.receipts[0]).toMatchObject({
+    consumed: true,
+    terminal: true,
+  });
+});
+
+test("restore backfills a consumed receipt exactly once", async () => {
+  const clock = new Clock();
+  const store = new MemoryStore();
+  store.receipts = [
+    {
+      workspaceId: "workspace-a",
+      computerId: "computer-a",
+      agentId: "agent-a",
+      reminderId: job.reminderId,
+      version: job.version,
+      job,
+      requestId: "old-ack",
+      firedAtClient: job.fireAt,
+      attempt: 2,
+      deadline: clock.time,
+      nextAt: clock.time,
+      serverResult: "accepted",
+      serverFired: true,
+      wakeAccepted: true,
+      consumed: true,
+      terminal: true,
+    },
+  ];
+  const sent: string[] = [];
+  const scheduler = new ReminderScheduler(
+    { workspaceId: "workspace-a", computerId: "computer-a" },
+    store,
+    async (request) => ({ ...request, result: "accepted", fired: true, catchup: false }),
+    async () => true,
+    clock,
+    Math.random,
+    undefined,
+    async ({ idempotencyKey }) => {
+      sent.push(idempotencyKey);
+    },
+  );
+  await scheduler.apply(snapshot([]));
+  await scheduler.awaitIdle();
+  expect(sent).toHaveLength(1);
+});
+
 test("an empty authoritative snapshot restores a committed occurrence payload", async () => {
   const clock = new Clock();
   const store = new MemoryStore();

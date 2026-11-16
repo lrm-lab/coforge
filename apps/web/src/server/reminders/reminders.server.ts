@@ -88,6 +88,15 @@ export interface ReminderRepository {
     now: Date,
     eventType: "updated" | "snoozed" | "canceled",
   ): Promise<StoredReminder>;
+  acknowledge(
+    scope: Scope,
+    requestId: string,
+    fingerprint: string,
+    id: string,
+    revision: number,
+    eventType: "acknowledged" | "dismissed",
+    now: Date,
+  ): Promise<StoredReminder>;
   events(
     scope: Scope,
     id: string,
@@ -353,6 +362,20 @@ export class Reminders {
         );
         reminders = [changed];
         await this.bestEffort(cancelSync(request, request.idempotencyKey, changed));
+      } else if (request.operation === "ack" || request.operation === "dismiss") {
+        const current = await this.repository.get(scope, request.reminderId!);
+        if (!current) throw new ReminderRefusal("NOT_FOUND", "reminder not found");
+        reminders = [
+          await this.repository.acknowledge(
+            scope,
+            request.idempotencyKey,
+            fingerprint,
+            current.reminderId,
+            request.revision!,
+            request.operation === "ack" ? "acknowledged" : "dismissed",
+            this.now(),
+          ),
+        ];
       } else {
         const zone = request.timezone;
         if (zone && !validTimezone(zone))

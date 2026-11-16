@@ -4,6 +4,10 @@ export { defaultClock, type ReminderClock } from "./reminder-clock";
 
 import { ReminderJobMirror } from "./reminder-job-mirror";
 import {
+  reminderAcknowledgementRequest,
+  type ReminderAcknowledgementSyncRequest,
+} from "./reminder-acknowledgement-sync";
+import {
   logExhausted,
   logFireFailed,
   logWakeFailed,
@@ -27,11 +31,11 @@ import { ReminderTimers } from "./reminder-timers";
 import { UnsyncedReminderChanges } from "./reminder-unsynced-changes";
 import { ReminderWork } from "./reminder-work";
 import { assertCorrelated, assertSyncScope } from "./reminder-wire-checks";
-import type {
-  ReminderFireRequest,
-  ReminderFireResponse,
-  ReminderJob,
-  ReminderSync,
+import {
+  type ReminderFireRequest,
+  type ReminderFireResponse,
+  type ReminderJob,
+  type ReminderSync,
 } from "@lrm/coforge-sdk/internal";
 
 const logger = getLogger(["coforge", "daemon", "reminder"]);
@@ -62,6 +66,7 @@ export class ReminderScheduler {
     private readonly random: () => number = Math.random,
     /** Asks for the Agent's snapshot on every unsynchronised upsert; the requester coalesces. */
     private readonly requestSnapshot?: (agentId: string) => void,
+    private readonly acknowledgeCloud?: (request: ReminderAcknowledgementSyncRequest) => void,
   ) {
     this.#ledger = new ReminderReceiptLedger(store, clock);
     this.#scheduleTimers = new ReminderTimers(clock, () => this.#running);
@@ -103,7 +108,12 @@ export class ReminderScheduler {
    * a store that cannot be read, falls back to this daemon's own copy of the receipt; only a
    * revision neither knows as delivered answers false. A failed write still fails.
    */
-  acknowledge(agentId: string, reminderId: string, version: number): Promise<boolean> {
+  acknowledge(
+    agentId: string,
+    reminderId: string,
+    version: number,
+    operation: "ack" | "dismiss" = "ack",
+  ): Promise<boolean> {
     return this.#work.serial(agentId, async () => {
       const key = this.#receiptKey(agentId, reminderId, version);
       let receipts: ReminderReceipt[] | undefined;
@@ -132,6 +142,7 @@ export class ReminderScheduler {
       }
       this.#ledger.remember(key, receipt);
       this.#cancelReceipt(agentId, reminderId, version);
+      this.#sendAcknowledgement(receipt, operation);
       return true;
     });
   }
@@ -182,6 +193,7 @@ export class ReminderScheduler {
       if (this.#ledger.known(key)?.retryExhausted) continue;
       this.#ledger.remember(key, receipt);
       if (!receipt.consumed && !receipt.terminal) this.#armReceipt(receipt, receipt.nextAt);
+      else if (receipt.consumed && receipt.terminal) this.#sendAcknowledgement(receipt, "ack");
     }
   }
 
@@ -491,6 +503,10 @@ export class ReminderScheduler {
   }
   #cancelReceipt(agentId: string, reminderId: string, version: number) {
     this.#receiptTimers.cancel(this.#receiptKey(agentId, reminderId, version));
+  }
+  #sendAcknowledgement(receipt: ReminderReceipt, operation: "ack" | "dismiss"): void {
+    if (!this.acknowledgeCloud) return;
+    this.acknowledgeCloud(reminderAcknowledgementRequest(receipt, operation));
   }
   #scheduleKey(agentId: string, reminderId: string) {
     return `${agentId}:${reminderId}`;

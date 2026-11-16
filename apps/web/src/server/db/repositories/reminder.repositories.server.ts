@@ -17,11 +17,12 @@ import {
   type ReminderRepository,
   type StoredReminder,
 } from "#src/server/reminders/reminders.server";
+import { acknowledgeReminder } from "./reminder-acknowledgement.repository.server";
 
 type Scope = { workspaceId: string; computerId: string; agentId: string; userId: string };
 type ReminderRow = Prisma.ReminderGetPayload<Record<string, never>>;
 
-const summary = (row: ReminderRow): StoredReminder => ({
+export const summary = (row: ReminderRow): StoredReminder => ({
   reminderId: row.id,
   ownerAgentId: row.ownerAgentId,
   computerId: row.computerId,
@@ -62,7 +63,7 @@ type ReceiptClient = Pick<Prisma.TransactionClient, "reminderOperationReceipt">;
  * A receipt left by different input — another Workspace, another fingerprint or, when `reminderId`
  * is given, another reminder — is a CONFLICT rather than a replay.
  */
-async function replayedOperation(
+export async function replayedOperation(
   client: ReceiptClient,
   scope: Scope,
   requestId: string,
@@ -86,7 +87,7 @@ async function replayedOperation(
 }
 
 /** Records `result` as the answer to `requestId`, so a retry replays it instead of running again. */
-async function recordOperation(
+export async function recordOperation(
   tx: ReceiptClient,
   scope: Scope,
   requestId: string,
@@ -352,6 +353,27 @@ export class PrismaReminderRepository implements ReminderRepository {
         return result;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
+    );
+  }
+
+  async acknowledge(
+    scope: Scope,
+    requestId: string,
+    fingerprint: string,
+    id: string,
+    revision: number,
+    eventType: "acknowledged" | "dismissed",
+    now: Date,
+  ) {
+    return acknowledgeReminder(
+      this.db,
+      scope,
+      requestId,
+      fingerprint,
+      id,
+      revision,
+      eventType,
+      now,
     );
   }
 

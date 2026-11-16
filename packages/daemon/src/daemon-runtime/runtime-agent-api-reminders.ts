@@ -98,6 +98,7 @@ export async function reminder(
       agentId,
       request.reminderId!,
       request.revision!,
+      request.operation,
     );
     const removed = await ports.inboxCoordinator.removeAppItem(
       agentId,

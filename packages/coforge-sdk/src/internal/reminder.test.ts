@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 import { create, toBinary } from "@bufbuild/protobuf";
-import { DEFAULT_REMINDER_TIMEZONE, parseReminderRecurrence } from "#src/internal/reminder";
+import {
+  DEFAULT_REMINDER_TIMEZONE,
+  parseReminderRecurrence,
+  reminderAcknowledgementIdempotencyKey,
+} from "#src/internal/reminder";
 import { AgentReminderOperationRequestSchema } from "#src/internal/gen/coforge/rpc/v1/reminder_pb";
 import {
   REMINDER_SYNC_MESSAGE_TYPE,
@@ -121,6 +125,28 @@ test("round-trips and validates cloud reminder operations", () => {
   ).toThrow();
   expect(isReminderMessageAnchor(reminderId)).toBe(true);
   expect(isReminderMessageAnchor("deadbeef")).toBe(true);
+});
+
+test("round-trips acknowledgement operations with their delivered revision", () => {
+  const ack = {
+    ...operationScope,
+    operation: "ack" as const,
+    reminderId,
+    revision: 3,
+  };
+  const dismiss = { ...ack, operation: "dismiss" as const };
+  expect(decodeAgentReminderOperationRequest(encodeAgentReminderOperationRequest(ack))).toEqual(
+    ack,
+  );
+  expect(decodeAgentReminderOperationRequest(encodeAgentReminderOperationRequest(dismiss))).toEqual(
+    dismiss,
+  );
+  expect(reminderAcknowledgementIdempotencyKey("ack", reminderId, 3)).toBe(
+    reminderAcknowledgementIdempotencyKey("ack", reminderId, 3),
+  );
+  expect(reminderAcknowledgementIdempotencyKey("ack", reminderId, 3)).not.toBe(
+    reminderAcknowledgementIdempotencyKey("dismiss", reminderId, 3),
+  );
 });
 
 test("accepts established targets, bounded recurrence, and explicit instants", () => {

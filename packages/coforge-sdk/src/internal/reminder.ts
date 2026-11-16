@@ -5,6 +5,8 @@ import { isScopeId } from "./scope-id";
 import { boundedPayload } from "./codec";
 import { MESSAGE_ANCHOR_SOURCE, RFC_UUID_PATTERN } from "./uuid";
 import { fromWireRequestId, toWireRequestId } from "./idempotency-key-wire";
+import { fromVersionedProto, toVersionedProto } from "./reminder-versioned-wire";
+export { reminderAcknowledgementIdempotencyKey } from "./reminder-acknowledgement";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
   AgentReminderOperationRequestSchema,
@@ -27,7 +29,16 @@ export const REMINDER_PROTOCOL_MAJOR = 1 as const;
 export { DEFAULT_REMINDER_TIMEZONE, parseReminderRecurrence } from "./reminder-grammar";
 export type { ReminderRecurrence } from "./reminder-grammar";
 
-const OPERATIONS = ["schedule", "list", "update", "snooze", "cancel", "log"] as const;
+const OPERATIONS = [
+  "schedule",
+  "list",
+  "update",
+  "snooze",
+  "cancel",
+  "log",
+  "ack",
+  "dismiss",
+] as const;
 const REMINDER_STATUSES = ["scheduled", "fired", "canceled"] as const;
 const MAX_BYTES = 65_536;
 /** The messageId short forms reminder schedules accept: the same rule the CLI prints. */
@@ -70,6 +81,8 @@ export type ReminderOperationFields = {
    */
   status?: string;
   all?: boolean;
+  /** `ack`/`dismiss` only: the exact delivered reminder revision. */
+  revision?: number;
 };
 export type AgentReminderOperationRequest = ReminderOperationScope &
   ReminderOperationFields & { operation: ReminderOperation };
@@ -209,6 +222,7 @@ function fields<T extends ReminderOperationFields>(value: T, canonicalTarget = f
   )
     throw new Error("invalid reminder title");
   positive(value.delaySeconds, "reminder delay");
+  positive(value.revision, "reminder revision");
   instant(value.fireAt, "reminder fire time");
   if (value.repeat !== undefined && value.repeat !== "none") {
     if (!RECURRENCE.test(value.repeat)) throw new Error("invalid reminder recurrence");
@@ -237,6 +251,8 @@ function operation<T extends AgentReminderOperationRequest>(value: T): T {
     snooze: ["reminderId", "delaySeconds", "fireAt"],
     cancel: ["reminderId"],
     log: ["reminderId"],
+    ack: ["reminderId", "revision"],
+    dismiss: ["reminderId", "revision"],
   };
   const names = [
     "reminderId",
@@ -249,6 +265,7 @@ function operation<T extends AgentReminderOperationRequest>(value: T): T {
     "timezone",
     "status",
     "all",
+    "revision",
   ] as const;
   if (names.some((name) => present(name) && !allowed[value.operation].includes(name)))
     throw new Error(`unexpected field for reminder ${value.operation}`);
@@ -266,6 +283,11 @@ function operation<T extends AgentReminderOperationRequest>(value: T): T {
     throw new Error("invalid schedule reminder request");
   if (["cancel", "log"].includes(value.operation) && !value.reminderId)
     throw new Error("reminder ID required");
+  if (
+    ["ack", "dismiss"].includes(value.operation) &&
+    (!value.reminderId || value.revision === undefined)
+  )
+    throw new Error("reminder revision required");
   if (value.operation === "snooze" && (!value.reminderId || timed !== 1))
     throw new Error("invalid snooze reminder request");
   if (
@@ -283,21 +305,6 @@ const optional = <T extends Record<string, unknown>>(value: T) =>
   Object.fromEntries(
     Object.entries(value).filter(([key, v]) => key !== "$typeName" && v !== undefined),
   );
-
-/**
- * The protobuf boundary of the versioned HTTP-path shapes (operation request and response): besides
- * the `request_id` mapping every HTTP-path shape shares (`idempotency-key-wire.ts`), their schemas
- * carry `protocol_major`, which the TypeScript shape does not — it is set here on encode and
- * checked here on decode. The local request has no `protocol_major` and uses the shared pair alone.
- */
-function toVersionedProto<T extends { idempotencyKey: string }>(value: T) {
-  return { ...toWireRequestId(value), protocolMajor: REMINDER_PROTOCOL_MAJOR };
-}
-function fromVersionedProto<T>(message: Record<string, unknown>): T {
-  const { protocolMajor, ...wire } = optional(message);
-  if (protocolMajor !== REMINDER_PROTOCOL_MAJOR) throw new Error("invalid reminder scope");
-  return fromWireRequestId(wire as { requestId: string }) as T;
-}
 
 /**
  * The request as it arrives over **JSON** — the same rules the codec applies (`operationScope`,
