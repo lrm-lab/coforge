@@ -28,6 +28,7 @@ const config: AgentRuntimeConfig = {
 /** The runtime with a provider whose session records every input it is handed. */
 async function harness(reportsSessionId?: string) {
   const inputs: string[] = [];
+  const memoryRequests: unknown[] = [];
   let settle: () => void = () => {};
   const answered = new Promise<void>((resolve) => (settle = resolve));
   let listener: (event: AgentRuntimeEvent) => void = () => undefined;
@@ -69,7 +70,14 @@ async function harness(reportsSessionId?: string) {
         async ready() {},
         async stop() {},
         async requestAgentLaunchConfig() {
-          return { agentApiKey: `sk_agent_${"a".repeat(43)}` };
+          return {
+            agentApiKey: `sk_agent_${"a".repeat(43)}`,
+            identity: { features: { platformMemory: true } },
+          };
+        },
+        async agentMemory(command: unknown) {
+          memoryRequests.push(command);
+          return { enabled: true, available: true, entries: [] };
         },
         async revokeAgentApiKey() {},
         async reportAgentSession() {},
@@ -83,6 +91,7 @@ async function harness(reportsSessionId?: string) {
   return {
     runtime,
     inputs,
+    memoryRequests,
     answered,
     emit: (event: AgentRuntimeEvent) => listener(event),
     stop: () => runtime.stop(),
@@ -249,3 +258,31 @@ test("a server reset (stop, then a create start) reaches the new first input wit
     await subject.stop();
   }
 });
+
+for (const body of ["hi", "按上次的发布约定继续"]) {
+  test(`a fresh session leaves semantic retrieval to the Agent for: ${body}`, async () => {
+    const subject = await harness();
+    try {
+      await subject.runtime.startAgent("agent-a", config, undefined, undefined, {
+        resumeMessages: [
+          {
+            messageId: "message-fixture",
+            deliveryId: "delivery-fixture",
+            conversationId: "conversation-fixture",
+            sequence: 1,
+            target: "#fixture",
+            latestSenderKind: "human",
+            latestSenderHandle: "case-user",
+            latestSenderDescription: "Case user",
+            body,
+          },
+        ],
+      });
+      await subject.answered;
+      expect(subject.memoryRequests).toEqual([]);
+      expect(subject.inputs[0]).toContain("<memory-index");
+    } finally {
+      await subject.stop();
+    }
+  });
+}

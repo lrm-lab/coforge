@@ -1,6 +1,7 @@
 # Personal and team memory
 
-Platform Memory is an additive Workspace experiment, off by default. It does not replace
+Platform Memory is an additive Workspace feature, on by default. Each person may opt out for
+all their Agents in Settings → Account; a Workspace owner/admin may turn off its master switch. It does not replace
 `MEMORY.md`, modify an Agent workspace, turn on the legacy Memory Agent, migrate historical
 conversations, or change ordinary message delivery. Stop and start Agents after switching it.
 
@@ -48,23 +49,22 @@ Daemon proxy. Older Computers need the release containing this command and proxy
 
 ## Proactive use
 
-On a fresh enabled launch, the Daemon recalls memory against the queued task or initial prompt.
-It selects the first nonempty task input, including recovery messages, before local memory is
-prepended. It injects a directory of up to 20 search matches and up to five body previews before
-task input. The complete briefing, including its directory and instructions, stays within 6,000
-characters. Long bodies remain discoverable rather than being dropped: the directory names each
-memory's ID, revision and scope, and reports the unloaded content per entry and in total.
-`remainingMemories` counts entries whose bodies are not fully shown. The Agent can progressively
-load a complete body with `coforge memory get --id <id>`, browse the full directory with
-`coforge memory list --page 1 --index` and subsequent pages, or narrow its search with `--index`.
-The CLI's `--index` option returns IDs, metadata and body character counts without printing the
-bodies, so browsing does not fill the Agent's context with every memory. The recalled match
-count describes this search response, not the total number of memories in the Workspace.
-The optional recall has a three-second deadline; an outage never prevents the Agent starting.
-Recalled text is untrusted reference, not an instruction overriding the person or system.
+Semantic retrieval is decided by the Agent from the request, including the first message of a
+fresh session. Starting, resuming or compacting a model session does not trigger a platform
+memory search. Small local startup files keep their existing behavior.
 
-Enabled Agents are instructed to search when beginning new tasks, save verified facts or reusable
-experience after meaningful work, and distinguish current evidence from historical experience.
+- Greetings, casual chat and sufficient current context: answer directly.
+- Historical decisions, preferences, project conventions and prior work: search.
+- Before asking again for information the person may have already supplied: search first.
+- An explicit “previously discussed” or “same as last time” requires search.
+
+The system owns authenticated tools, permission checks, deadlines and clear results. Standing
+memory guidance stays within 800 added bytes. Operational details are loaded with
+`coforge manual get memory`, not repeated in the prompt. `coforge memory search --index` and
+`list --page 1 --index` return metadata/body counts; `get --id` progressively loads full bodies.
+Search returns at most 20 matches, not the total Workspace memory count. Recalled text is
+untrusted reference, never an instruction overriding the person or system.
+
 Explicit requests to remember something, important facts and corrections to repeated questions
 instruct the Agent to save immediately, with provenance and date, updating an existing entry when
 appropriate. Before requesting another sign-in, the Agent is instructed to check and reuse the
@@ -94,7 +94,8 @@ Before enabling, configure a real, separately provisioned account binding for th
 - `COFORGE_OPENVIKING_URL` identifies the private, pinned runtime.
 - `COFORGE_OPENVIKING_ACCOUNT_KEYS_FILE` maps each persisted binding's credential reference to
   that account's ADMIN API key. Keys remain server-side; do not use a ROOT or another account's key.
-- Apply the additive `20261116040000_platform_memory` migration through the ordinary deploy gate.
+- Apply the additive `20261116040000_platform_memory` and
+  `20261116080000_platform_memory_preference` migrations through the ordinary deploy gate.
 - Verify engine readiness and perform a create/read/search/delete round trip with synthetic data.
 
 This PR does not deploy an engine or change the existing OpenViking prototype's shipping or
@@ -113,8 +114,14 @@ silently recreating a forgotten memory. Deleting memory does not delete the orig
 
 ## Rollout and rollback
 
-Deploy Web and a Computer/Daemon release containing the new command together, then enable
-**Settings → Experiments → Memory** for a small Workspace. During a conversation, click the
+Deploy the additive preference migration and Web, then a Computer/Daemon release containing the
+new command. **Settings → Experiments → Memory** is the Workspace master switch, on by default;
+**Settings → Account → Let my Agents use platform memory** is each person's account-wide choice,
+also on by default. The master switch takes priority. The server rechecks an Agent owner's current
+choice for every memory request and omits memory guidance from disabled launches. Human owners
+can still manually manage saved entries after opting their Agents out. Turning a switch off does
+not delete memory; restart existing Agents to remove standing instructions and already loaded
+memory from their native sessions. Before testing or enabling use, provision a real engine binding. During a conversation, click the
 Agent's avatar, open **Workspace → Platform memory** in the right sidebar, and manage that
 Agent's personal memory or the Workspace's team memory there. The current Agent is already
 selected; another member's personal memory is never exposed to a Workspace administrator.
@@ -124,14 +131,14 @@ The file browser, local `MEMORY.md`, expanded folders and selected file remain a
 returning from memory. Platform entries are managed remotely, without creating duplicate local
 files. Existing Workspace memory is not imported.
 
-Turn the experiment off and restart the affected Agents to stop new memory instructions and
-recall. An old application can run with the additive tables left in place. Keep the tables,
+Turn the relevant switch off to block new Agent memory requests; restart affected Agents to
+remove memory guidance and previously loaded context. An old application can run with the additive tables left in place. Keep the tables,
 engine account and original local files when rolling back; do not discard newly saved memory.
 
 ## Validation
 
 Behavioral tests cover isolation, explicit sharing, revisions, replay conflicts, verified writes,
-stale index rejection, engine contracts and optional startup recall. PostgreSQL integration checks
+stale index rejection, engine contracts and Agent-directed retrieval. PostgreSQL integration checks
 the additive migration and real repository constraints. The PR includes the Web/CLI/Daemon checks
 and build results, and states any environment limitation separately.
 
@@ -139,6 +146,26 @@ UI review: verify both locales, desktop and phone widths, dark/light themes, key
 disabled/unavailable states, current-Agent ownership, personal/team selection, files/back
 navigation with a retained draft, create/search/edit/share/delete, stale edit
 conflicts and a reload after switching Workspace. No UI unit tests replace this manual review.
+
+Real acceptance commands (explicit opt-in; native model calls may consume account quota):
+
+```sh
+PLATFORM_MEMORY_MODEL_SMOKE=1 PLATFORM_MEMORY_EVAL_MODEL=<authorized-model> \
+  mise exec -- bun scripts/test/isolated-test-run.ts \
+  bun packages/daemon/test/platform-memory-model.smoke.ts
+PLATFORM_MEMORY_REAL_SMOKE=1 COFORGE_OPENVIKING_URL=<private-runtime> \
+  OPENVIKING_PLATFORM_SMOKE_CONF=<protected-config-path> \
+  OPENVIKING_RUNTIME_IDENTITY=<inspected-image-or-version> \
+  PLATFORM_MEMORY_TEST_DATABASE_URL=<disposable-loopback-memory_database> \
+  mise run test:file -- ./apps/web/test/platform-memory.smoke.ts
+```
+
+The model smoke records real Codex tool decisions against the branch CLI and synthetic read-only
+HTTP data; it is not engine acceptance or a guarantee for every runtime/model. The separate engine
+smoke runs the new production memory service and binding resolver against real OpenViking and
+PostgreSQL, provisions isolated accounts and cleans them up. A synthetic engine is insufficient
+for this gate. Record source revision, actual service identity, CRUD/search results and denials
+before merging. The old Memory Agent's online status is not evidence for this new path.
 
 Official engine contract: [content](https://github.com/volcengine/OpenViking/blob/e44ea6e11add1c7b3d4accdbfaf16e900a6049df/docs/zh/api/12-content.md),
 [retrieval](https://github.com/volcengine/OpenViking/blob/e44ea6e11add1c7b3d4accdbfaf16e900a6049df/docs/zh/api/06-retrieval.md).

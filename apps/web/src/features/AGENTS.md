@@ -30,7 +30,7 @@ The module map of `src/features/`, split out of [`apps/web/AGENTS.md`](../../AGE
 - `features/records/` — Workspace Records (see the last section).
 - `features/settings/` — preference pages and device-local preferences, and what the request says
   about the browser for the server render (phone or desktop).
-- `features/platform-memory/` — opt-in Agent workspace memory, Workspace menu team memory, and server functions.
+- `features/platform-memory/` — Agent workspace memory, Workspace menu team memory, account-wide opt-out and server functions.
 - `features/search/` — Workspace search, a dialog over the current page (`SearchDialogHost` in the Workspace layout; Cmd/Ctrl+K, the sidebar's search field and the rail's search icon, the phone Chat list's search field, "Search this channel"): filters, matching channels, Agents and Computers, message results, and the browser-local search history and frequently used places. `/w/<slug>/search` is only an old address that opens the dialog.
 - `features/tasks/` — Task board, list, overview, and message task actions.
 - `features/usage-limits/` — provider usage-limit events: the `usage.limit.changed.v1` wire type and decoder, and the owner/admin-only server functions (list, seen, dismiss) its provider calls.

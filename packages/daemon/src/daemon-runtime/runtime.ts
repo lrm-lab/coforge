@@ -730,7 +730,7 @@ export class DaemonRuntime {
       launchFailureActivity: (agentId, provider, error) =>
         this.#launchFailureActivity(agentId, provider, error),
       appInbox: this.#inboxCoordinator,
-      ...sessionMemoryPorts(this.#memoryHooks, () => this.#transport),
+      ...sessionMemoryPorts(this.#memoryHooks),
       relaunchResumed: (agentId, restart, request) => {
         void this.#wakeAgent(agentId, restart, request).catch(() => {});
       },

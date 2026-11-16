@@ -1,5 +1,3 @@
-import { attachPlatformMemoryBriefing } from "#src/agent-runtime/platform-memory-briefing";
-import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { AgentSession } from "@coforge/agent";
 import type { AgentInputDrain } from "./agent-input-drain";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
@@ -35,29 +33,6 @@ export function attachFreshSessionMemory(
   );
 }
 
-/** Both kinds of fresh-session context use the same queue and remain independent of runtime. */
-export function sessionMemoryPorts(
-  memory: () => SessionMemoryHooks,
-  transport: () => Pick<DaemonConnectionClient, "agentMemory">,
-) {
-  return {
-    attachSessionMemory: async (
-      agentId: string,
-      config?: { agentApiKey: string; identity?: { features?: { platformMemory?: boolean } } },
-    ) => {
-      const hooks = memory();
-      const client = transport();
-      // Capture the task before local memory can be prepended to its prompt. Recall and local
-      // file reads can then run together; neither needs the other's injected reference text.
-      const recall =
-        config?.identity?.features?.platformMemory && client.agentMemory
-          ? attachPlatformMemoryBriefing(hooks.inputDrain.get(agentId), (command) =>
-              client.agentMemory!(command, config.agentApiKey),
-            )
-          : undefined;
-      const attached = await attachFreshSessionMemory(hooks, agentId);
-      await recall;
-      return attached !== undefined;
-    },
-  };
+export function sessionMemoryPorts(memory: () => SessionMemoryHooks) {
+  return { attachSessionMemory: attachFreshSessionMemoryPort(memory) };
 }

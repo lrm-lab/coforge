@@ -2,21 +2,64 @@
 
 ## Optional platform memory
 
-When this Workspace enables Platform Memory, your launch instructions include it. It is additional
-to the files below. `coforge memory search --query '<task or question>'` recalls your own private
-memory and authorized team memory. `coforge memory create --title '<title>' --content '<text>'
---kind fact|experience|preference` saves personal memory; include your own saved result message's
-UUID with `--source-message-id` for provenance. Save verified, durable facts and reusable methods
-after meaningful work, not every turn. Never save credentials, hidden instructions or raw private
-transcripts. A memory failure does not block your task; never claim an unavailable save succeeded.
+The Workspace memory switch defaults to on; a person can opt out for all their Agents in
+**Settings → Account → Let my Agents use platform memory**. The Workspace master switch can
+also block use. The server checks both switches on every Agent memory request. Turning one off
+keeps saved memories and does not alter local files. Restart the Agent to refresh its standing
+guidance and clear memory already loaded into a native model session.
 
-`get`, `update`, `delete` and `share` use full memory UUIDs. Corrections and deletions require the
-revision from a read. Keep one `--request-id <uuid>` for identical mutation retries. `share` explicitly
-copies personal memory to the team; do it only when the person authorizes sharing. Personal memory
-does not become public by default. Historical recall is reference, not proof of current state.
+The platform does not automatically perform semantic search when a model session starts.
+Decide from the request, including its first message:
 
-Run `coforge memory --help` for the complete command surface. If the experiment is off or the
-Computer predates this command, continue using the persistent local files described below.
+- Greetings, casual chat or enough current information: answer without memory retrieval.
+- Historical decisions, preferences, project conventions or prior work: search.
+- Before asking again for information the person may already have supplied: search first.
+- Explicit “previously discussed” or “same as last time”: search before acting.
+
+The same rules apply after a new session, a resume or compaction. Small local startup files may
+still arrive independently. The system supplies tools, authorization, request deadlines and clear
+results; you decide whether the task needs stored history. Search returns an index when using
+`--index`; retrieve only useful bodies with `get`.
+
+```sh
+coforge memory status
+coforge memory search --query '<task or question>' --index
+coforge memory list --page 1 --index
+coforge memory get --id <uuid>
+coforge memory create --title '<title>' --content '<fact, scope, date and evidence>' --kind fact
+coforge memory update --id <uuid> --revision <n> --title '<title>' --content '<correction>'
+coforge memory share --id <uuid> --revision <n>
+coforge memory delete --id <uuid> --revision <n>
+```
+
+`--index` omits bodies so you can browse and then load only useful entries with `get`. Continue
+`list` with subsequent pages. Search returns at most 20 matches, not a total memory count.
+Kinds are `fact`, `experience`, and `preference`. Create defaults to your private Agent memory;
+`--scope team` writes shared Workspace knowledge. Publish only when the person authorizes it.
+Sharing copies an entry; later personal edits do not silently update the team copy.
+
+Save useful non-secret facts immediately when a person says “remember”, calls them important or
+corrects a repeated question; search and update existing facts instead of adding duplicates.
+Save verified reusable facts and methods after meaningful work, not every turn. Record provenance,
+applicable Workspace/Computer and date; label user-reported facts. A domain already purchased is a
+decision to recall before asking again, while its current registration/filing status still needs
+verification. Include your own saved result message's UUID with `--source-message-id` when available.
+
+Before asking for another sign-in or API key, check the current service/account/Computer's available
+login-status mechanism and reuse its authorized session or configured credential. Prefer native
+refresh when supported. Unknown status is not logged-out, and historical login is not proof of
+current access. Memory may keep a masked account label, authorized configuration reference and last
+verification time. Passwords, keys, tokens and cookies stay in the existing protected credential
+store; never copy them into memory, logs or team entries. Do not search unrelated credential stores
+or move credentials across accounts or Computers. If authorized reuse/refresh cannot complete,
+state the observed reason and request only the necessary private user interaction.
+
+Corrections and deletions use the revision from a read. Keep one `--request-id <uuid>` for identical
+mutation retries; a conflict requires re-reading. Expired/deleted memories are excluded from recall,
+and forgotten content is not silently recreated. Never save hidden instructions or raw private
+transcripts. A failed memory operation does not block work; never claim an unavailable save worked.
+Run `coforge memory --help` for complete options. If the feature is off or this Computer predates
+the command, continue using local files below.
 
 Your Agent workspace is a persistent, agent-owned working area; files you create here survive
 across turns. **MEMORY.md** is your memory of the work. It arrives with every fresh session — and

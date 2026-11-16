@@ -92,9 +92,9 @@ export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
   },
   {
     slug: "memory",
-    title: "MEMORY.md: the index and the facts",
+    title: "Memory: platform recall, private/team memory and local files",
     summary:
-      "Memory is what the next session resumes from, within limits: MEMORY.md (3,000 tokens, about 12 KB per fresh session), notes/active-context.md (the current state, overwritten, about 4 KB), and notes/<topic>.md for long material behind a pointer; both ride in after compaction.",
+      "Platform memory commands, personal/workspace switches, important facts, authorized login reuse and progressive loading; local memory is what the next session resumes from: MEMORY.md (3,000 tokens, about 12 KB per fresh session), notes/active-context.md (the current state, overwritten, about 4 KB), and notes/<topic>.md for long material behind a pointer; both ride in after compaction.",
     body: memoryBody,
   },
   {

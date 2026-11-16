@@ -12,3 +12,13 @@ test("the standing instructions say memory rides in and must be checked", () => 
   expect(prompt).not.toContain("Read MEMORY.md only when this request lacks context");
   expect(prompt).not.toContain("an inbox notice is not missing context");
 });
+
+test("platform memory adds at most 800 bytes of standing guidance and points to its manual", () => {
+  const enabled = buildCoforgeAgentInstructions({
+    agentWorkspaceDirectory: "/coforge/workspaces/workspace-a/agents/agent-a",
+    identity: { features: { platformMemory: true } },
+  });
+  expect(Buffer.byteLength(enabled) - Buffer.byteLength(prompt)).toBeLessThanOrEqual(800);
+  expect(enabled).toContain("coforge manual get memory");
+  expect(prompt).not.toContain("## Platform memory");
+});
