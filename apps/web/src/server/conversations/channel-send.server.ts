@@ -35,7 +35,7 @@ import { agentMessageSender } from "./sender-display.server";
 import { taskReferenceView } from "./task-reference-view.server";
 import type { SentMessageHook } from "./sent-message-hook.server";
 import { unresolvedMentionHandles } from "./unresolved-mentions.server";
-import { requireUserMayPostInChannel } from "./user-post-access.server";
+import { requireUserMayPostInChannel } from "./channel-post-access.server";
 
 export type ChannelSendPorts = {
   db: PrismaClient;

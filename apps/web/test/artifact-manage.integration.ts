@@ -214,7 +214,7 @@ test("only the author Agent deletes its artifact, and deleting again finds nothi
   expect((await post(agents.bot, { operation: "read", artifact: id })).status).toBe(404);
 });
 
-test("a person changes the tier when they own the author or administer the Workspace", async () => {
+test("a person changes the tier when they own the author or administer the Workspace, and narrows only to a home they can read", async () => {
   const id = await make(agents.bot, room);
   const change = (userId: string, tier: "conversation" | "workspace") =>
     artifacts.visibility.change({ workspaceId, artifactId: id, userId, tier });
@@ -228,10 +228,25 @@ test("a person changes the tier when they own the author or administer the Works
   await expect(change(people.bob, "conversation")).rejects.toMatchObject({
     code: "ACCESS_DENIED",
   });
-  expect(await change(people.admin, "conversation")).toMatchObject({
-    from: "workspace",
-    to: "conversation",
+  await expect(change(people.admin, "conversation")).rejects.toMatchObject({
+    code: "ACCESS_DENIED",
   });
+  await expect(
+    artifacts.visibility.loss({ workspaceId, artifactId: id, userId: people.admin }),
+  ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
+  await db.conversationMember.create({
+    data: { conversationId: room, workspaceId, userId: people.admin },
+  });
+  try {
+    expect(await change(people.admin, "conversation")).toMatchObject({
+      from: "workspace",
+      to: "conversation",
+    });
+  } finally {
+    await db.conversationMember.deleteMany({
+      where: { conversationId: room, userId: people.admin },
+    });
+  }
   await expect(change(people.owner, "workspace")).rejects.toMatchObject({ code: "NOT_FOUND" });
   expect(await change(people.alice, "conversation")).toMatchObject({
     from: "conversation",

@@ -3,6 +3,7 @@ import { AppError } from "#src/lib/app-error";
 import {
   actorConversationHomeReads,
   actorsWithoutConversationRead,
+  canReadConversationHome,
 } from "#src/server/conversations/channel-read-access.server";
 import {
   artifactAuthorOwnerId,
@@ -190,6 +191,11 @@ async function requireNarrowableHome(
     conversationId,
   );
   if (!homeStands(home)) throw homeGone();
+  if (!home || !canReadConversationHome(home))
+    throw new AppError("ACCESS_DENIED", {
+      errorId: "artifact-home-unreadable",
+      hint: "only someone who can read its conversation can limit it to that conversation",
+    });
   return conversationId;
 }
 
