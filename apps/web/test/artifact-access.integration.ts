@@ -15,8 +15,9 @@ import {
  * Who may read, write and delete an artifact (task #385): its home is its only access rule. A
  * conversation's artifact is read by whoever reads the conversation, a Workspace artifact by every
  * member; only an Agent writes one, and only where it is an active member of the conversation (or
- * anywhere in the Workspace). Deleting is a Workspace owner's or admin's; an Agent deletes only
- * its own. Nothing works while the Workspace has not switched the `artifacts` experiment on.
+ * anywhere in the Workspace). Deleting is a Workspace owner's or admin's or the authoring
+ * Agent's owner's; an Agent deletes only its own. Nothing works while the Workspace has not
+ * switched the `artifacts` experiment on.
  */
 const connectionString = Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL must point to local PostgreSQL");
@@ -265,7 +266,7 @@ test("a public home is not offered yet, and a conversation must be a channel or 
   });
 });
 
-test("deleting is an owner's or admin's; an Agent deletes only its own", async () => {
+test("deleting is an owner's or admin's or the authoring Agent's owner's; an Agent deletes only its own", async () => {
   const del = (artifactId: string, actor: ArtifactActor) =>
     artifacts.delete({ workspaceId, artifactId, actor });
   const byHelper = await create({ kind: "workspace" }, helper);
@@ -278,6 +279,14 @@ test("deleting is an owner's or admin's; an Agent deletes only its own", async (
   await expect(read(byHelper.id, { userId: people.alice })).rejects.toMatchObject({
     code: "NOT_FOUND",
   });
+
+  // The authoring Agent's owner deletes its artifact too, though a plain member (task #25);
+  // a member who owns no part of it still may not.
+  const owned = await create({ kind: "workspace" }, helper);
+  await expect(del(owned.id, { userId: people.bob })).rejects.toMatchObject({
+    code: "ACCESS_DENIED",
+  });
+  await del(owned.id, { userId: people.alice });
 
   const byStranger = await create({ kind: "workspace" }, stranger);
   await del(byStranger.id, stranger);

@@ -217,10 +217,10 @@ export async function inWorkspace(db: Db, workspaceId: string, actor: ArtifactAc
   );
 }
 
-/** Whether the actor deletes an artifact it can read: a Workspace owner or admin (a person); an
- * Agent only its own. */
+/** Whether the actor deletes an artifact it can read: a Workspace owner or admin, the authoring
+ * Agent's owner (a person), or the Agent itself. */
 export async function canDeleteArtifact(
-  db: Pick<PrismaClient, "workspaceMembership">,
+  db: Pick<PrismaClient, "workspaceMembership" | "agent">,
   workspaceId: string,
   actor: ArtifactActor,
   artifact: { authorAgentId: string | null },
@@ -230,11 +230,18 @@ export async function canDeleteArtifact(
     where: { workspaceId_userId: { workspaceId, userId: actor.userId } },
     select: { role: true },
   });
-  return canDeleteArtifactWithRole(actor, membership?.role ?? null, artifact);
+  if (isWorkspaceAdminRole(membership?.role)) return true;
+  if (!artifact.authorAgentId) return false;
+  const author = await db.agent.findFirst({
+    where: { id: artifact.authorAgentId, workspaceId },
+    select: { ownerId: true },
+  });
+  return author?.ownerId === actor.userId;
 }
 
 /** `canDeleteArtifact` with the actor's role already read (`artifactViewer`), for a read that
- * shares one membership lookup with its access checks. */
+ * shares one membership lookup with its access checks. The authoring Agent's owner is not a
+ * role: a caller that shows `canDelete` checks it against the read's `authorAgentOwnerId`. */
 export function canDeleteArtifactWithRole(
   actor: ArtifactActor,
   role: string | null,

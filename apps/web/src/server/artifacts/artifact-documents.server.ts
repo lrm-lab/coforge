@@ -147,7 +147,7 @@ export class ArtifactDocuments {
     input: { artifactId: string; version?: number },
     options?: { body?: "entry" | "markdown" },
   ) {
-    const { viewer, ...read } = await this.artifacts.reads.read({
+    const { viewer, authorAgentOwnerId, ...read } = await this.artifacts.reads.read({
       ...reader(scope),
       ...input,
     });
@@ -161,9 +161,12 @@ export class ArtifactDocuments {
     const bytes = readable ? await this.blobs.read(scope.workspaceId, file.sha256) : null;
     // The author and the viewer's role came with the read (no second query); the rule is the
     // one `delete` enforces — and a reader the home's rule kept out cannot delete at all: a
-    // delete is the home's write (task #20).
+    // delete is the home's write (task #20). The authoring Agent's owner is the rule's other
+    // person branch, and its id came with the read too.
     const canDelete =
-      read.artifact.homeRead && canDeleteArtifactWithRole(scope.actor, viewer.role, read.artifact);
+      read.artifact.homeRead &&
+      (canDeleteArtifactWithRole(scope.actor, viewer.role, read.artifact) ||
+        (scope.actor.userId !== undefined && authorAgentOwnerId === scope.actor.userId));
     return {
       ...read,
       text: bytes ? new TextDecoder().decode(bytes) : "",
