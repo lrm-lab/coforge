@@ -174,7 +174,6 @@ import type { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-
 import { logComputerUpdateNoticeFailure } from "./agent-failure-logs";
 import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registration-notice";
 
-/** Per-provider reading deadline supplied by a runtime usage scan. */
 export { USAGE_SCAN_READ_TIMEOUT_MS } from "./runtime-agent-flows";
 
 /** A daemon-owned resident runtime for one supervised Workspace. */
@@ -558,6 +557,7 @@ export class DaemonRuntime {
       connection,
       stateDirectory,
       transport: () => this.#transport,
+      agentApiKeys: this.agentApiKeys,
       envelope: this.#env,
       cleanerInbox: {
         upsert: async (agentId, item) =>

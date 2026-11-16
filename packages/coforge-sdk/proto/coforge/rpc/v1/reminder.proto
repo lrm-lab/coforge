@@ -21,6 +21,8 @@ message AgentReminderOperationRequest {
   // status and all defaults to scheduled,fired; all requests every status, including canceled.
   optional string status = 15;
   optional bool all = 16;
+  // ack/dismiss only: the exact delivered reminder revision.
+  optional uint32 revision = 17;
 }
 
 message ReminderSummaryRecord {

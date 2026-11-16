@@ -12,6 +12,8 @@ import { AgentMigrationBucketClient } from "#src/connection/agent-migration-buck
 import { AgentMigrationRunner as MigrationRunner } from "#src/agent-migration/migration-runner";
 import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-store";
 import { ReminderScheduler as Reminders } from "#src/agent-reminder/reminder-scheduler";
+import { ReminderAcknowledgementSync } from "#src/agent-reminder/reminder-acknowledgement-sync";
+import { sendReminderAcknowledgement } from "./runtime-reminder-acknowledgement";
 import { SystemCleaner as Cleaner } from "#src/system-cleaner/system-cleaner";
 import { agentsDirectory, agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import {
@@ -29,6 +31,7 @@ export type RuntimeServicesPorts = {
   stateDirectory: string;
   /** The Workspace's current transport, read at send time; it is replaced on each start. */
   transport(): DaemonConnectionClient;
+  agentApiKeys: ReadonlyMap<string, string>;
   /** The Workspace envelope the App config snapshot request carries. */
   envelope(): ReturnType<typeof runtimeEnvelope>;
   /** The cleaner's inbox writes, as the inbox coordinator owns them. */
@@ -71,6 +74,15 @@ export type RuntimeServices = {
  */
 export function composeRuntimeServices(ports: RuntimeServicesPorts): RuntimeServices {
   const { connection, stateDirectory, transport } = ports;
+  const acknowledgementSync = new ReminderAcknowledgementSync((request) =>
+    sendReminderAcknowledgement(
+      request,
+      ports.agentApiKeys,
+      transport(),
+      connection.workspaceId,
+      connection.computerId,
+    ),
+  );
   const reminders = new Reminders(
     { workspaceId: connection.workspaceId, computerId: connection.computerId },
     new FileReminderReceiptStore(stateDirectory, connection.workspaceId, connection.computerId),
@@ -85,6 +97,7 @@ export function composeRuntimeServices(ports: RuntimeServicesPorts): RuntimeServ
     undefined,
     undefined,
     (agentId) => ports.requestReminderSnapshot(agentId),
+    (request) => acknowledgementSync.enqueue(request),
   );
   const systemCleaner = new Cleaner({
     ...ports.systemCleaner,

@@ -3,6 +3,7 @@ import {
   decodeLocalReminderRequest,
   encodeAgentReminderOperationResponse,
   encodeLocalReminderRequest,
+  reminderAcknowledgementIdempotencyKey,
   type AgentReminderOperationResponse,
   type LocalReminderRequest,
 } from "@lrm/coforge-sdk/internal";
@@ -19,7 +20,12 @@ export async function reminderRequest(
   if (!context || !/^sfp_[A-Za-z0-9_-]{43}$/.test(context))
     throw new Error("coforge agent context is invalid");
   if (!proxyUrl) throw new Error("coforge agent proxy is not configured");
-  const idempotencyKey = crypto.randomUUID();
+  const idempotencyKey =
+    (fields.operation === "ack" || fields.operation === "dismiss") &&
+    fields.reminderId &&
+    fields.revision !== undefined
+      ? reminderAcknowledgementIdempotencyKey(fields.operation, fields.reminderId, fields.revision)
+      : crypto.randomUUID();
   const validated = decodeLocalReminderRequest(
     encodeLocalReminderRequest({ ...fields, idempotencyKey, context } as LocalReminderRequest),
   );
