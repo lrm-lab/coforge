@@ -5,10 +5,8 @@ import {
   ARTIFACT_SHARE_NOTE_MAX_LENGTH,
 } from "#src/features/artifacts/artifact-share-input";
 import { AppError, isAppError } from "#src/lib/app-error";
-import {
-  assertUserMayPost,
-  membersWithoutOtherConversationRead,
-} from "#src/server/conversations/channel-read-access.server";
+import { membersWithoutOtherConversationRead } from "#src/server/conversations/channel-read-access.server";
+import { assertUserMayPost } from "#src/server/conversations/user-post-access.server";
 import {
   artifactHomeConversationId,
   artifactTier,

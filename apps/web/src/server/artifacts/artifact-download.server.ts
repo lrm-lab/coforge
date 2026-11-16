@@ -55,10 +55,17 @@ export async function artifactDownload(sources: Sources, input: Request): Promis
     throw new AppError("INVALID_INPUT", { errorId: "artifact-zip-too-large" });
   const decision = await sources.zipLimit?.admit(input.userId);
   if (decision && !decision.allowed)
-    return new Response("too many downloads", {
-      status: 429,
-      headers: { "Retry-After": String(decision.retryAfterSeconds), "Cache-Control": "no-store" },
-    });
+    return Response.json(
+      {
+        code: "RATE_LIMITED",
+        retryable: true,
+        details: { retryAfterSeconds: decision.retryAfterSeconds },
+      },
+      {
+        status: 429,
+        headers: { "Retry-After": String(decision.retryAfterSeconds), "Cache-Control": "no-store" },
+      },
+    );
   const stored = await sources.blobs.inspectMany(
     input.workspaceId,
     read.files.map((file) => file.sha256),
