@@ -34,14 +34,16 @@ test("compaction alone starts no turn; memory rides once with the next real inpu
     dispose: async () => {},
   };
   const session = withMemoryRecovery(original, root);
+  expect(session).toBe(original);
   for (const listener of listeners) listener({ type: "compaction-finished" });
   expect(inputs).toEqual([]);
   await session.notify!("Which domain should preview use?");
   expect(inputs).toHaveLength(1);
   expect(inputs[0]).toContain("coforgeusercontent.com");
   expect(inputs[0]).toEndWith("Which domain should preview use?");
-  await session.notify!("Thanks");
+  const thanks = session.notify!("Thanks");
   expect(inputs[1]).toBe("Thanks");
+  await thanks;
   await session.dispose();
   expect(listeners.size).toBe(0);
 });
