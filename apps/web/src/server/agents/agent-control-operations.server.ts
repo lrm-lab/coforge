@@ -131,9 +131,20 @@ export class AgentControlOperations {
 
 export function advanceControlEpochForComputerMove(
   value: unknown,
+  agentId: string,
   computerId: string,
 ): AgentControlState | undefined {
   const parsed = agentControlStateSchema.safeParse(value);
-  if (!parsed.success) return undefined;
+  if (!parsed.success) {
+    if (value !== null && value !== undefined)
+      console.warn(
+        JSON.stringify({
+          event: "agent_control:move_state_invalid",
+          agent_id: agentId,
+          outcome: "skipped",
+        }),
+      );
+    return undefined;
+  }
   return { ...parsed.data, computerId, epoch: parsed.data.epoch + 1 };
 }
