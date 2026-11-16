@@ -1,6 +1,7 @@
 import type { InitializeResponse } from "@agentclientprotocol/sdk";
 import { RequestError } from "@agentclientprotocol/sdk";
 import { getLogger } from "@logtape/logtape";
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { RuntimeLoginRequiredError } from "#src/contract";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
 import { acpBounded, acpProcess } from "#src/acp/connection";
@@ -33,7 +34,7 @@ function antigravitySignInRequired(): RuntimeLoginRequiredError {
   });
 }
 
-const logger = getLogger(["coforge", "anvil", "antigravity"]);
+const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.ANTIGRAVITY]);
 
 type AntigravityMode = {
   id: string;
