@@ -12,6 +12,14 @@ import {
 import { runtimeAuthAccount } from "#src/runtime-auth-status";
 import { DROID_ACP_PROFILE } from "./acp-session";
 
+/** The status probe ran out of its budget: the CLI is slow, not refusing the selector. */
+class DroidDoctorTimeout extends Error {
+  constructor() {
+    super("droid doctor timed out");
+    this.name = "DroidDoctorTimeout";
+  }
+}
+
 /** A status read runs `droid doctor --checks auth` (`--auth` on an older build), which loads the
  * credential store. */
 export const DROID_AUTH_PROBE_TIMEOUT_MS = 20_000;
@@ -190,6 +198,10 @@ export class DroidRuntimeAuthAdapter implements RuntimeAuthAdapter {
       try {
         return await this.#doctorWith(selector, cwd, timeoutMs);
       } catch (error) {
+        // A timeout says the CLI is slow, not that it refused the spelling: trying the older one
+        // would wait out the budget a second time, so a status read could take twice as long as
+        // the caller allowed. Only a fast failure moves on to the next spelling.
+        if (error instanceof DroidDoctorTimeout) throw error;
         firstError ??= error;
       }
     }
@@ -206,7 +218,7 @@ export class DroidRuntimeAuthAdapter implements RuntimeAuthAdapter {
       const text = await withDeadline(
         Promise.all([new Response(child.output).text(), child.exited]).then(([output]) => output),
         timeoutMs,
-        () => new Error("droid doctor timed out"),
+        () => new DroidDoctorTimeout(),
       );
       // The report is one JSON object; a wrapper's own progress line (if any) is not part of it.
       const start = text.indexOf("{");

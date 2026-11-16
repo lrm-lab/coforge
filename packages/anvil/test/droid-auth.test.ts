@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -114,6 +114,23 @@ const interaction = (signal?: AbortSignal) => {
     },
   };
 };
+
+test("a status read that times out is not retried with the older spelling", async () => {
+  // A slow CLI is not a CLI that refused the flag: retrying would wait out the caller's budget a
+  // second time, so the read fails as unknown after one attempt instead of taking twice as long.
+  const f = await fixture({ DROID_AUTH_FIXTURE_HANG_ON_CHECKS: "1" });
+  try {
+    await f.setState("logged_in");
+    expect(
+      await f.adapter.readStatus({ workingDirectory: f.directory, timeoutMs: 700 }),
+    ).toMatchObject({ provider: "droid", state: "unknown" });
+    const calls = await readFile(join(f.directory, "doctor-calls.log"), "utf8");
+    expect(calls.trim().split("\n")).toHaveLength(1);
+    expect(calls).toContain("--checks");
+  } finally {
+    await f.cleanup();
+  }
+});
 
 test("a droid that renamed the auth selector still reports the signed-in account", async () => {
   // Some Computers run the build that refuses `--checks` and answers `--auth`; reading the old
