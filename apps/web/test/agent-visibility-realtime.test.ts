@@ -1,7 +1,8 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 
 import {
   createAgentDirectoryChangedPublisher,
+  publishAgentDirectoryChanged,
   createAgentVisibilityChangedPublisher,
 } from "#src/server/agents/agent-visibility-realtime.server";
 import { agentStatusChannel } from "#src/features/agents/agent-status-channel";
@@ -53,4 +54,55 @@ test("publishes an id-only directory change for roster writes", async () => {
       data: { type: "agent.changed.v1", agentId: "agent-1", kind: "created" },
     },
   ]);
+});
+
+test("a failed directory publish is logged, not thrown, because the write already committed", async () => {
+  const warn = spyOn(console, "warn").mockImplementation(() => undefined);
+  try {
+    const publish = createAgentDirectoryChangedPublisher({
+      publishJson: async () => {
+        throw new Error("Centrifugo unavailable");
+      },
+    });
+
+    await expect(publish("workspace-1", "agent-1", "created")).resolves.toBeUndefined();
+
+    expect(warn.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
+      {
+        event: "agent_directory:publish_failed",
+        workspace_id: "workspace-1",
+        agent_id: "agent-1",
+        kind: "created",
+        error_type: "Error",
+      },
+    ]);
+  } finally {
+    warn.mockRestore();
+  }
+});
+
+test("the production directory publish also resolves when no Centrifugo client can be built", async () => {
+  const saved = {
+    url: process.env.COFORGE_CENTRIFUGO_API_URL,
+    key: process.env.COFORGE_CENTRIFUGO_API_KEY,
+  };
+  const warn = spyOn(console, "warn").mockImplementation(() => undefined);
+  try {
+    delete process.env.COFORGE_CENTRIFUGO_API_URL;
+    delete process.env.COFORGE_CENTRIFUGO_API_KEY;
+
+    await expect(
+      publishAgentDirectoryChanged("workspace-1", "agent-1", "updated"),
+    ).resolves.toBeUndefined();
+
+    expect(warn.mock.calls.map(([line]) => JSON.parse(String(line)).event)).toEqual([
+      "agent_directory:publish_failed",
+    ]);
+  } finally {
+    warn.mockRestore();
+    if (saved.url === undefined) delete process.env.COFORGE_CENTRIFUGO_API_URL;
+    else process.env.COFORGE_CENTRIFUGO_API_URL = saved.url;
+    if (saved.key === undefined) delete process.env.COFORGE_CENTRIFUGO_API_KEY;
+    else process.env.COFORGE_CENTRIFUGO_API_KEY = saved.key;
+  }
 });

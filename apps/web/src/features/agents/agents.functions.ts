@@ -123,11 +123,7 @@ export const createAgent = createServerFn({ method: "POST" })
         data.computerId,
       );
     const created = await manageAgents(db).create({ userId: user.id, workspaceId, role }, data);
-    try {
-      await publishAgentDirectoryChanged(workspaceId, created.agent.id, "created");
-    } catch {
-      // The Agent is already committed; a missed directory signal is repaired by reconnect/focus.
-    }
+    await publishAgentDirectoryChanged(workspaceId, created.agent.id, "created");
     if (data.actionCardMessageId)
       await actionCards.completeAgentCreate(
         workspaceId,
@@ -159,11 +155,7 @@ export const updateAgent = createServerFn({ method: "POST" })
       // Its username (`name`) is fixed at creation and is never part of an update.
       assistant ? { ...data, displayName: undefined } : data,
     );
-    try {
-      await publishAgentDirectoryChanged(workspaceId, updated.agent.id, "updated");
-    } catch {
-      // The Agent is already committed; a missed directory signal is repaired by reconnect/focus.
-    }
+    await publishAgentDirectoryChanged(workspaceId, updated.agent.id, "updated");
     return updated;
   });
 
@@ -179,11 +171,7 @@ export const updateAgentRole = createServerFn({ method: "POST" })
       agentId: data.agentId,
       role: data.role,
     });
-    try {
-      await publishAgentDirectoryChanged(workspaceId, result.agentId, "updated");
-    } catch {
-      // The role write is already committed; a missed directory signal is repaired by reconnect/focus.
-    }
+    await publishAgentDirectoryChanged(workspaceId, result.agentId, "updated");
     return result;
   });
 
@@ -229,11 +217,7 @@ export const setAgentMascot = createServerFn({ method: "POST" })
   .validator(setAgentMascotInput)
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const result = await new AgentMascots(db).set(workspaceId, user.id, data.agentId, data.mascot);
-    try {
-      await publishAgentDirectoryChanged(workspaceId, data.agentId, "updated");
-    } catch {
-      // The mascot write is already committed; a missed directory signal is repaired by reconnect/focus.
-    }
+    await publishAgentDirectoryChanged(workspaceId, data.agentId, "updated");
     return result;
   });
 
@@ -308,11 +292,7 @@ export const deleteAgent = createServerFn({ method: "POST" })
     if (result.outcome === "protected")
       throw new AppError("CONFLICT", { errorId: "agent-delete-protected" });
     if (result.outcome === "deleted") {
-      try {
-        await publishAgentDirectoryChanged(workspaceId, data.agentId, "deleted");
-      } catch {
-        // The Agent is already committed; a missed directory signal is repaired by reconnect/focus.
-      }
+      await publishAgentDirectoryChanged(workspaceId, data.agentId, "deleted");
     }
     return result;
   });

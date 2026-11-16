@@ -4,6 +4,7 @@ import {
   type CentrifugoServerApi,
 } from "#src/server/centrifugo/server-api.server";
 import { agentStatusChannel } from "#src/features/agents/agent-status-channel";
+import { errorType } from "#src/server/errors/error-type.server";
 
 export type AgentDirectoryChange = "created" | "updated" | "deleted";
 
@@ -11,20 +12,34 @@ export type AgentDirectoryChange = "created" | "updated" | "deleted";
 export function createAgentDirectoryChangedPublisher(
   api: Pick<CentrifugoServerApi, "publishJson">,
 ): (workspaceId: string, agentId: string, change: AgentDirectoryChange) => Promise<void> {
-  return (workspaceId, agentId, change) =>
-    api.publishJson(agentStatusChannel(workspaceId), {
-      type: REALTIME_EVENTS.agentChanged,
-      agentId,
-      kind: change,
-    });
+  return async (workspaceId, agentId, change) => {
+    try {
+      await api.publishJson(agentStatusChannel(workspaceId), {
+        type: REALTIME_EVENTS.agentChanged,
+        agentId,
+        kind: change,
+      });
+    } catch (error) {
+      console.warn(
+        JSON.stringify({
+          event: "agent_directory:publish_failed",
+          workspace_id: workspaceId,
+          agent_id: agentId,
+          kind: change,
+          error_type: errorType(error),
+        }),
+      );
+    }
+  };
 }
 
 export const publishAgentDirectoryChanged: (
   workspaceId: string,
   agentId: string,
   change: AgentDirectoryChange,
-) => Promise<void> = (workspaceId, agentId, change) =>
-  createAgentDirectoryChangedPublisher(createCentrifugoServerApi())(workspaceId, agentId, change);
+) => Promise<void> = createAgentDirectoryChangedPublisher({
+  publishJson: (channel, data) => createCentrifugoServerApi().publishJson(channel, data),
+});
 
 /**
  * The `agent:visibility_changed` publisher. After a visibility change commits, every

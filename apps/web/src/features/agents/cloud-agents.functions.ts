@@ -53,11 +53,7 @@ export const createCloudAgent = createServerFn({ method: "POST" })
         }),
     }).execute({ userId: user.id, workspaceId, role }, data);
     if (result.status !== "preparing") {
-      try {
-        await publishAgentDirectoryChanged(workspaceId, result.agentId, "created");
-      } catch {
-        // Focus/reconnect repairs a missed directory signal after the committed create.
-      }
+      await publishAgentDirectoryChanged(workspaceId, result.agentId, "created");
     }
     return result;
   });

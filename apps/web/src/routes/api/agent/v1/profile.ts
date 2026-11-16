@@ -24,12 +24,7 @@ export const Route = createFileRoute("/api/agent/v1/profile")({
         const body = await readAgentJsonBody(request);
         const outcome = await resolveAgentProfileUpdate(db, principal, body ?? {});
         if (outcome.status === 200) {
-          try {
-            await publishAgentDirectoryChanged(principal.workspaceId, principal.agentId, "updated");
-          } catch {
-            // The profile write is already committed; a missed directory signal is repaired by
-            // the next status-channel resubscribe or window-focus refresh.
-          }
+          await publishAgentDirectoryChanged(principal.workspaceId, principal.agentId, "updated");
         }
         return Response.json(outcome.body, { status: outcome.status });
       },
