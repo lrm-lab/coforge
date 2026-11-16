@@ -1,6 +1,6 @@
 import type { LogRecord } from "@logtape/logtape";
 import type { ReminderJob, ReminderSync } from "@lrm/coforge-sdk/internal";
-import type { ReminderReceipt, ReminderReceiptStore } from "#src/agent-reminder/reminder-scheduler";
+import type { ReminderReceipt, ReminderReceiptStore } from "#src/agent-reminder/reminder-receipt";
 import type { ReminderClock } from "#src/agent-reminder/reminder-scheduler";
 
 export class MemoryStore implements ReminderReceiptStore {

@@ -2,7 +2,8 @@ import { afterEach, expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ReminderScheduler, type ReminderReceipt } from "#src/agent-reminder/reminder-scheduler";
+import type { ReminderReceipt } from "#src/agent-reminder/reminder-receipt";
+import { ReminderScheduler } from "#src/agent-reminder/reminder-scheduler";
 import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-store";
 
 const directories: string[] = [];

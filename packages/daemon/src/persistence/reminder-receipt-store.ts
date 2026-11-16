@@ -4,7 +4,7 @@ import {
   RETRY_EXHAUSTED_CODE,
   type ReminderReceipt,
   type ReminderReceiptStore,
-} from "#src/agent-reminder/reminder-scheduler";
+} from "#src/agent-reminder/reminder-receipt";
 import { isSafePathScope } from "./path-scope";
 import { writePrivateJsonRecord } from "./private-json-record";
 

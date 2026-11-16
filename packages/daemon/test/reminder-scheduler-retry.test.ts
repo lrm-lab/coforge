@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { ReminderFireRequest } from "@lrm/coforge-sdk/internal";
-import type { ReminderReceipt, ReminderReceiptStore } from "#src/agent-reminder/reminder-scheduler";
+import type { ReminderReceipt, ReminderReceiptStore } from "#src/agent-reminder/reminder-receipt";
 import { ReminderScheduler } from "#src/agent-reminder/reminder-scheduler";
 import { captureDaemonLogs } from "./log-capture";
 import { Clock, exhaustedLogs, job, MemoryStore, snapshot } from "./reminder-scheduler-fixtures";

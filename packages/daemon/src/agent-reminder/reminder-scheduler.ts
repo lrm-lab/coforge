@@ -2,8 +2,22 @@ import { getLogger } from "@logtape/logtape";
 import { defaultClock, type ReminderClock } from "./reminder-clock";
 export { defaultClock, type ReminderClock } from "./reminder-clock";
 
-/** Consumed receipts stay this long past their retry deadline as a re-fire fence, then go. */
-const RECEIPT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+import { ReminderJobMirror } from "./reminder-job-mirror";
+import {
+  logExhausted,
+  logFireFailed,
+  logWakeFailed,
+  receiptKey,
+  RETRY_EXHAUSTED_CODE,
+  type ReminderReceipt,
+  type ReminderReceiptStore,
+  type ReminderRetryStage,
+} from "./reminder-receipt";
+import { ReminderReceiptLedger } from "./reminder-receipt-ledger";
+import { MAX_ATTEMPTS, RETRY_BUDGET_MS, retryBackoff } from "./reminder-retry-policy";
+import { ReminderTimers } from "./reminder-timers";
+import { ReminderWork } from "./reminder-work";
+import { assertCorrelated, assertSyncScope } from "./reminder-wire-checks";
 import type {
   ReminderFireRequest,
   ReminderFireResponse,
@@ -12,69 +26,17 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 
 const logger = getLogger(["coforge", "daemon", "reminder"]);
-const MAX_TIMER_MS = 24 * 60 * 60_000;
-const RETRY_BUDGET_MS = 15 * 60_000;
-const MAX_ATTEMPTS = 8;
 /** How far past its due time a wake has to reach the Agent before the reminder is called late. */
 const LATE_AFTER_MS = 60_000;
-export const RETRY_EXHAUSTED_CODE = "REMINDER_DELIVERY_RETRY_EXHAUSTED";
-
-/** The durable step whose retries ran out: the fire request to the cloud, or waking the Agent. */
-export type ReminderRetryStage = "fire" | "wake";
-
-/**
- * Why a receipt stopped retrying without delivering. Its presence is what tells a failed occurrence
- * apart from one that ended because the Agent accepted the wake or the cloud declined the fire.
- */
-export type ReminderRetryExhausted = {
-  code: typeof RETRY_EXHAUSTED_CODE;
-  stage: ReminderRetryStage;
-  attempts: number;
-  /** The receipt's retry deadline, epoch milliseconds. */
-  deadline: number;
-  /** When the scheduler gave up, epoch milliseconds. */
-  exhaustedAt: number;
-};
-
-export type ReminderReceipt = {
-  workspaceId: string;
-  computerId: string;
-  agentId: string;
-  reminderId: string;
-  version: number;
-  job: ReminderJob;
-  requestId: string;
-  firedAtClient: string;
-  attempt: number;
-  deadline: number;
-  nextAt: number;
-  serverResult?: ReminderFireResponse["result"];
-  serverFired?: boolean;
-  serverCatchup?: boolean;
-  wakeAccepted: boolean;
-  consumed: boolean;
-  terminal: boolean;
-  retryExhausted?: ReminderRetryExhausted;
-};
-
-export interface ReminderReceiptStore {
-  read(agentId: string): Promise<ReminderReceipt[]>;
-  write(agentId: string, receipts: readonly ReminderReceipt[]): Promise<void>;
-}
 
 /** Authenticated authoritative reminder mirror and durable fire state machine. */
 export class ReminderScheduler {
-  readonly #jobs = new Map<string, Map<string, ReminderJob>>();
-  readonly #scheduleTimers = new Map<string, unknown>();
-  readonly #receiptTimers = new Map<string, unknown>();
-  readonly #queues = new Map<string, Promise<unknown>>();
-  readonly #receipts = new Map<string, ReminderReceipt>();
+  readonly #mirror = new ReminderJobMirror();
+  readonly #ledger: ReminderReceiptLedger;
+  readonly #scheduleTimers: ReminderTimers;
+  readonly #receiptTimers: ReminderTimers;
   readonly #inFlight = new Set<string>();
-  readonly #effects = new Set<Promise<void>>();
-  readonly #authorized = new Set<string>();
-  readonly #versions = new Map<string, number>();
-  readonly #tombstones = new Set<string>();
-  readonly #changedAfterSnapshot = new Set<string>();
+  readonly #work = new ReminderWork();
   readonly #persistenceFailures = new Map<string, number>();
   /** The most recent fire or wake failure per receipt, reported when its retries run out. */
   readonly #lastFailures = new Map<string, unknown>();
@@ -83,56 +45,31 @@ export class ReminderScheduler {
 
   constructor(
     private readonly scope: { workspaceId: string; computerId: string },
-    private readonly store: ReminderReceiptStore,
+    store: ReminderReceiptStore,
     private readonly fire: (request: ReminderFireRequest) => Promise<ReminderFireResponse>,
     private readonly wake: (job: ReminderJob, occurrence: { late: boolean }) => Promise<boolean>,
     private readonly clock: ReminderClock = defaultClock,
-  ) {}
+  ) {
+    this.#ledger = new ReminderReceiptLedger(store, clock);
+    this.#scheduleTimers = new ReminderTimers(clock, () => this.#running);
+    this.#receiptTimers = new ReminderTimers(clock, () => this.#running);
+  }
 
   apply(sync: ReminderSync): Promise<void> {
-    return this.#serial(sync.agentId, async () => {
+    return this.#work.serial(sync.agentId, async () => {
       if (!this.#running) throw new Error("reminder scheduler is stopped");
-      this.#assertScope(sync);
+      assertSyncScope(this.scope, sync);
       if (sync.operation === "snapshot") {
-        this.#authorized.add(sync.agentId);
-        this.#clearScheduleTimers(sync.agentId);
-        const previous = this.#jobs.get(sync.agentId) ?? new Map();
-        const jobs = new Map<string, ReminderJob>();
-        for (const job of sync.jobs) {
-          const key = this.#versionKey(sync.agentId, job.reminderId);
-          const fence = this.#versions.get(key) ?? -1;
-          if (job.version >= fence && !(job.version === fence && this.#tombstones.has(key))) {
-            this.#versions.set(key, job.version);
-            this.#changedAfterSnapshot.delete(key);
-            jobs.set(job.reminderId, job);
-          }
-        }
-        for (const old of previous.values()) {
-          const key = this.#versionKey(sync.agentId, old.reminderId);
-          if (this.#changedAfterSnapshot.has(key) && !jobs.has(old.reminderId))
-            jobs.set(old.reminderId, old);
-        }
-        this.#jobs.set(sync.agentId, jobs);
+        this.#scheduleTimers.cancelWithPrefix(`${sync.agentId}:`);
+        this.#mirror.replaceWithSnapshot(sync);
         this.#armSchedules(sync.agentId);
         await this.#restore(sync.agentId);
         return;
       }
-      if (!this.#authorized.has(sync.agentId)) return;
-      const jobs = this.#jobs.get(sync.agentId) ?? new Map();
-      const reminderId = sync.operation === "upsert" ? sync.jobs[0]!.reminderId : sync.reminderId!;
-      const version = sync.operation === "upsert" ? sync.jobs[0]!.version : sync.version!;
-      const key = this.#versionKey(sync.agentId, reminderId);
-      const fence = this.#versions.get(key) ?? -1;
-      if (version < fence || (version === fence && this.#tombstones.has(key))) return;
-      this.#versions.set(key, version);
-      this.#changedAfterSnapshot.add(key);
-      if (sync.operation === "cancel") this.#tombstones.add(key);
-      else this.#tombstones.delete(key);
-      this.#cancelSchedule(sync.agentId, reminderId);
-      if (sync.operation === "upsert") jobs.set(reminderId, sync.jobs[0]!);
-      else jobs.delete(reminderId);
-      this.#jobs.set(sync.agentId, jobs);
-      if (sync.operation === "upsert") this.#armSchedule(sync.jobs[0]!);
+      const change = this.#mirror.applyChange(sync);
+      if (!change) return;
+      this.#cancelSchedule(sync.agentId, change.reminderId);
+      if (change.job) this.#armSchedule(change.job);
     });
   }
 
@@ -142,11 +79,11 @@ export class ReminderScheduler {
    * revision neither knows as delivered answers false. A failed write still fails.
    */
   acknowledge(agentId: string, reminderId: string, version: number): Promise<boolean> {
-    return this.#serial(agentId, async () => {
+    return this.#work.serial(agentId, async () => {
       const key = this.#receiptKey(agentId, reminderId, version);
       let receipts: ReminderReceipt[] | undefined;
       try {
-        receipts = await this.store.read(agentId);
+        receipts = await this.#ledger.read(agentId);
       } catch (error) {
         logger.warn("Reminder receipts could not be read for an acknowledgement", {
           error,
@@ -158,47 +95,38 @@ export class ReminderScheduler {
         });
       }
       const stored = receipts?.find((r) => r.reminderId === reminderId && r.version === version);
-      const known = this.#receipts.get(key);
+      const known = this.#ledger.known(key);
       const receipt = stored ?? (known && structuredClone(known));
       if (!receipt || receipt.serverResult !== "accepted" || !receipt.serverFired) return false;
       receipt.consumed = true;
       receipt.terminal = true;
       if (receipts) {
         if (!stored) receipts.push(receipt);
-        await this.store.write(agentId, this.#retained(receipts));
+        await this.#ledger.write(agentId, receipts);
       }
-      this.#receipts.set(key, receipt);
+      this.#ledger.remember(key, receipt);
       this.#cancelReceipt(agentId, reminderId, version);
       return true;
     });
   }
 
-  /** Waits until all currently-started transitions and external effects have settled. */
-  async awaitIdle(): Promise<void> {
-    for (;;) {
-      const work = [...this.#queues.values(), ...this.#effects];
-      if (work.length === 0) return;
-      await Promise.all(work.map((item) => item.catch(() => {})));
-      if ([...this.#queues.values(), ...this.#effects].every((item) => work.includes(item))) return;
-    }
+  awaitIdle(): Promise<void> {
+    return this.#work.awaitIdle();
   }
 
   stop(): void {
     this.#running = false;
     this.#generation++;
-    for (const timer of [...this.#scheduleTimers.values(), ...this.#receiptTimers.values()])
-      this.clock.cancel(timer);
-    this.#scheduleTimers.clear();
-    this.#receiptTimers.clear();
+    this.#scheduleTimers.cancelAll();
+    this.#receiptTimers.cancelAll();
     this.#lastFailures.clear();
-    this.#jobs.clear();
-    this.#authorized.clear();
+    this.#mirror.clear();
   }
 
   async #restore(agentId: string): Promise<void> {
     let receipts: ReminderReceipt[];
     try {
-      receipts = await this.store.read(agentId);
+      receipts = await this.#ledger.read(agentId);
     } catch (error) {
       logger.error("Reminder receipt restore failed", {
         error,
@@ -222,57 +150,38 @@ export class ReminderScheduler {
         continue;
       }
       const key = this.#receiptKey(agentId, receipt.reminderId, receipt.version);
-      this.#receipts.set(key, receipt);
+      this.#ledger.remember(key, receipt);
       if (!receipt.consumed && !receipt.terminal) this.#armReceipt(receipt, receipt.nextAt);
     }
   }
 
   #armSchedules(agentId: string): void {
-    for (const job of this.#jobs.get(agentId)?.values() ?? []) this.#armSchedule(job);
+    for (const job of this.#mirror.forAgent(agentId)) this.#armSchedule(job);
   }
 
   #armSchedule(job: ReminderJob): void {
     if (!this.#running) return;
     const key = this.#scheduleKey(job.ownerAgentId, job.reminderId);
     const due = Date.parse(job.fireAt);
-    this.#armTimer(this.#scheduleTimers, key, due, () => {
-      const current = this.#jobs.get(job.ownerAgentId)?.get(job.reminderId);
+    this.#scheduleTimers.arm(key, due, () => {
+      const current = this.#mirror.get(job.ownerAgentId, job.reminderId);
       if (current?.version !== job.version) return;
       if (this.clock.now() < due) return this.#armSchedule(current);
-      this.#track(this.#serial(job.ownerAgentId, () => this.#prepareDue(job)));
+      this.#work.track(this.#work.serial(job.ownerAgentId, () => this.#prepareDue(job)));
     });
-  }
-
-  /**
-   * Arms the timer for `key` in `timers`, replacing any earlier one. It runs `onDue` once at `at` —
-   * or after `MAX_TIMER_MS` if that is sooner, so a far deadline re-checks itself — unless a later
-   * arm for the same key replaced it or the scheduler stopped in between.
-   */
-  #armTimer(timers: Map<string, unknown>, key: string, at: number, onDue: () => void): void {
-    const timer = this.clock.schedule(
-      () => {
-        if (timers.get(key) !== timer) return;
-        timers.delete(key);
-        if (!this.#running) return;
-        onDue();
-      },
-      Math.min(Math.max(0, at - this.clock.now()), MAX_TIMER_MS),
-    );
-    this.#cancelTimer(timers, key);
-    timers.set(key, timer);
   }
 
   async #prepareDue(job: ReminderJob): Promise<void> {
     if (
       !this.#running ||
-      this.#jobs.get(job.ownerAgentId)?.get(job.reminderId)?.version !== job.version
+      this.#mirror.get(job.ownerAgentId, job.reminderId)?.version !== job.version
     )
       return;
     const key = this.#receiptKey(job.ownerAgentId, job.reminderId, job.version);
-    let receipt = this.#receipts.get(key);
+    let receipt = this.#ledger.known(key);
     if (!receipt) {
       try {
-        receipt = (await this.store.read(job.ownerAgentId)).find(
+        receipt = (await this.#ledger.read(job.ownerAgentId)).find(
           (r) => r.reminderId === job.reminderId && r.version === job.version,
         );
       } catch (error) {
@@ -302,7 +211,7 @@ export class ReminderScheduler {
         terminal: false,
       };
     }
-    this.#receipts.set(key, receipt);
+    this.#ledger.remember(key, receipt);
     await this.#persistOrRetry(receipt, true);
   }
 
@@ -313,8 +222,8 @@ export class ReminderScheduler {
   ): Promise<boolean> {
     const key = this.#receiptKey(receipt.agentId, receipt.reminderId, receipt.version);
     try {
-      const current = await this.#saveMerged(receipt);
-      this.#receipts.set(key, current);
+      const current = await this.#ledger.saveMerged(receipt);
+      this.#ledger.remember(key, current);
       this.#persistenceFailures.delete(key);
       if (proceed === true && !current.consumed && !current.terminal) this.#startEffect(current);
       else if (proceed === "retry" && !current.consumed && !current.terminal) this.#retry(current);
@@ -331,10 +240,10 @@ export class ReminderScheduler {
       if (!this.#running) return false;
       if (failures >= MAX_ATTEMPTS || this.clock.now() >= receipt.deadline) {
         // The store is what keeps failing, so this outcome can only be logged, not recorded.
-        this.#logExhausted(receipt, "persistence", error, failures);
+        logExhausted(receipt, "persistence", error, failures);
         return false;
       }
-      receipt.nextAt = Math.min(receipt.deadline, this.clock.now() + this.#backoff(failures));
+      receipt.nextAt = Math.min(receipt.deadline, this.clock.now() + retryBackoff(failures));
       this.#armReceipt(receipt, receipt.nextAt, false, afterFailure);
       return false;
     }
@@ -352,15 +261,16 @@ export class ReminderScheduler {
     this.#inFlight.add(key);
     const generation = this.#generation;
     let readyToWake = false;
-    this.#track(
-      this.#serial(receipt.agentId, async () => {
-        const current = this.#receipts.get(key);
-        return current ? this.#persistOrRetry(current, false, true) : false;
-      })
+    this.#work.track(
+      this.#work
+        .serial(receipt.agentId, async () => {
+          const current = this.#ledger.known(key);
+          return current ? this.#persistOrRetry(current, false, true) : false;
+        })
         .then(async (persisted) => {
           if (!persisted) return;
           if (!this.#running || generation !== this.#generation) return;
-          const current = this.#receipts.get(key);
+          const current = this.#ledger.known(key);
           if (!current || current.consumed || current.terminal) return;
           if (current.serverResult === "accepted" && current.serverFired)
             await this.#runWake(key, current, generation);
@@ -368,7 +278,7 @@ export class ReminderScheduler {
         })
         .finally(() => {
           this.#inFlight.delete(key);
-          const current = this.#receipts.get(key);
+          const current = this.#ledger.known(key);
           if (
             readyToWake &&
             this.#running &&
@@ -395,29 +305,15 @@ export class ReminderScheduler {
         version: receipt.version,
         firedAtClient: receipt.firedAtClient,
       });
-      this.#correlate(receipt, candidate);
+      assertCorrelated(receipt, candidate);
       response = candidate;
     } catch (error) {
       this.#lastFailures.set(key, error);
-      // Which reminder failed matters when several are scheduled: without the id and the
-      // attempt, the log line cannot be told apart across retries (2026-09-23 morning: the
-      // server answered every fire with RPC 104 "method not found" and the log named neither).
-      logger.error("Reminder fire failed", {
-        error,
-        event: "reminder.fire_failed",
-        outcome: "failed",
-        agent_id: receipt.agentId,
-        reminder_id: receipt.reminderId,
-        // `reminder_version`, not `version`: the structured line already carries the build's
-        // `version` (docs/observability/structured-logging.md reserves it), and the two must stay tellable apart.
-        reminder_version: receipt.version,
-        attempt: receipt.attempt,
-        retry_deadline: new Date(receipt.deadline).toISOString(),
-      });
+      logFireFailed(receipt, error);
     }
-    return this.#serial(receipt.agentId, async () => {
+    return this.#work.serial(receipt.agentId, async () => {
       if (!this.#running || generation !== this.#generation) return false;
-      const current = await this.#fresh(key, receipt.agentId);
+      const current = await this.#ledger.fresh(key, receipt.agentId);
       if (!current || current.consumed || current.terminal) return false;
       if (!response) {
         this.#retry(current);
@@ -431,7 +327,7 @@ export class ReminderScheduler {
       else if (response.result === "premature") {
         const retryAt = this.clock.now() + (response.retryAfterMs ?? 0);
         if (retryAt > current.deadline) {
-          if (await this.#deleteReceipt(current)) this.#armServerRetry(current.job, retryAt);
+          if (await this.#ledger.deleteReceipt(current)) this.#armServerRetry(current.job, retryAt);
         } else {
           current.nextAt = retryAt;
           await this.#persistOrRetry(current, false);
@@ -454,19 +350,11 @@ export class ReminderScheduler {
       accepted = await this.wake(receipt.job, { late });
     } catch (error) {
       this.#lastFailures.set(key, error);
-      logger.error("Reminder wake failed", {
-        error,
-        event: "reminder.wake_failed",
-        outcome: "failed",
-        agent_id: receipt.agentId,
-        reminder_id: receipt.reminderId,
-        reminder_version: receipt.version,
-        attempt: receipt.attempt,
-      });
+      logWakeFailed(receipt, error);
     }
-    await this.#serial(receipt.agentId, async () => {
+    await this.#work.serial(receipt.agentId, async () => {
       if (!this.#running || generation !== this.#generation) return;
-      const current = await this.#fresh(key, receipt.agentId);
+      const current = await this.#ledger.fresh(key, receipt.agentId);
       if (!current || current.consumed || current.terminal) return;
       current.wakeAccepted = accepted;
       if (accepted) current.terminal = true;
@@ -479,7 +367,7 @@ export class ReminderScheduler {
       this.#exhaust(receipt);
       return;
     }
-    receipt.nextAt = Math.min(receipt.deadline, this.clock.now() + this.#backoff(receipt.attempt));
+    receipt.nextAt = Math.min(receipt.deadline, this.clock.now() + retryBackoff(receipt.attempt));
     this.#armReceipt(receipt, receipt.nextAt);
   }
 
@@ -498,33 +386,11 @@ export class ReminderScheduler {
       deadline: receipt.deadline,
       exhaustedAt: this.clock.now(),
     };
-    this.#logExhausted(receipt, stage, this.#lastFailures.get(key));
+    logExhausted(receipt, stage, this.#lastFailures.get(key));
     this.#lastFailures.delete(key);
-    this.#track(this.#serial(receipt.agentId, () => this.#persistOrRetry(receipt, false)));
-  }
-
-  #logExhausted(
-    receipt: ReminderReceipt,
-    stage: ReminderRetryStage | "persistence",
-    lastFailure: unknown,
-    persistenceFailures?: number,
-  ): void {
-    const code = (lastFailure as { code?: unknown } | undefined)?.code;
-    logger.error("Reminder delivery retries exhausted", {
-      event: "reminder.retry_exhausted",
-      outcome: "failed",
-      code: RETRY_EXHAUSTED_CODE,
-      agent_id: receipt.agentId,
-      reminder_id: receipt.reminderId,
-      // `reminder_version`, not `version`, for the same reason as `reminder.fire_failed`.
-      reminder_version: receipt.version,
-      stage,
-      attempts: receipt.attempt,
-      persistence_failures: persistenceFailures,
-      retry_deadline: new Date(receipt.deadline).toISOString(),
-      error_code: typeof code === "string" || typeof code === "number" ? String(code) : undefined,
-      error_name: lastFailure instanceof Error ? lastFailure.name : undefined,
-    });
+    this.#work.track(
+      this.#work.serial(receipt.agentId, () => this.#persistOrRetry(receipt, false)),
+    );
   }
 
   #armReceipt(
@@ -537,14 +403,14 @@ export class ReminderScheduler {
     const key = this.#receiptKey(receipt.agentId, receipt.reminderId, receipt.version);
     const nextAt = Math.min(receipt.deadline, at);
     receipt.nextAt = nextAt;
-    this.#armTimer(this.#receiptTimers, key, nextAt, () => {
+    this.#receiptTimers.arm(key, nextAt, () => {
       if (this.clock.now() < receipt.nextAt)
         return this.#armReceipt(receipt, receipt.nextAt, proceed, afterPersistence);
-      this.#track(
-        this.#serial(receipt.agentId, async () => {
+      this.#work.track(
+        this.#work.serial(receipt.agentId, async () => {
           const current = proceed
-            ? await this.#fresh(key, receipt.agentId)
-            : this.#receipts.get(key);
+            ? await this.#ledger.fresh(key, receipt.agentId)
+            : this.#ledger.known(key);
           if (!current || current.consumed || current.terminal) return;
           if (proceed) this.#startEffect(current);
           else await this.#persistOrRetry(current, afterPersistence);
@@ -553,140 +419,27 @@ export class ReminderScheduler {
     });
   }
 
-  async #fresh(key: string, agentId: string): Promise<ReminderReceipt | undefined> {
-    try {
-      const disk = (await this.store.read(agentId)).find(
-        (r) => this.#receiptKey(agentId, r.reminderId, r.version) === key,
-      );
-      if (disk) this.#receipts.set(key, disk);
-    } catch (error) {
-      logger.error("Reminder receipt read failed", { error, agent_id: agentId });
-    }
-    return this.#receipts.get(key);
-  }
-
-  async #saveMerged(receipt: ReminderReceipt): Promise<ReminderReceipt> {
-    const receipts = await this.store.read(receipt.agentId);
-    const index = receipts.findIndex(
-      (r) => r.reminderId === receipt.reminderId && r.version === receipt.version,
-    );
-    const existing = index < 0 ? undefined : receipts[index];
-    const merged = structuredClone(receipt);
-    if (existing?.consumed) {
-      merged.consumed = true;
-      merged.terminal = true;
-      // The Agent acknowledged it, so it was delivered, whatever this copy's retries concluded.
-      delete merged.retryExhausted;
-    }
-    if (index < 0) receipts.push(merged);
-    else receipts[index] = merged;
-    await this.store.write(receipt.agentId, this.#retained(receipts));
-    return merged;
-  }
-
-  /** Drops consumed receipts whose re-fire fence has expired so the file stays bounded. */
-  #retained(receipts: readonly ReminderReceipt[]): ReminderReceipt[] {
-    const cutoff = this.clock.now() - RECEIPT_RETENTION_MS;
-    return receipts.filter((item) => !(item.consumed && item.terminal && item.deadline < cutoff));
-  }
-
-  async #deleteReceipt(receipt: ReminderReceipt): Promise<boolean> {
-    const key = this.#receiptKey(receipt.agentId, receipt.reminderId, receipt.version);
-    try {
-      const receipts = (await this.store.read(receipt.agentId)).filter(
-        (item) => item.reminderId !== receipt.reminderId || item.version !== receipt.version,
-      );
-      await this.store.write(receipt.agentId, receipts);
-      this.#receipts.delete(key);
-      return true;
-    } catch (error) {
-      logger.error("Premature reminder receipt deletion failed", {
-        error,
-        agent_id: receipt.agentId,
-      });
-      return false;
-    }
-  }
-
   #armServerRetry(job: ReminderJob, retryAt: number): void {
     // Reached after a receipt delete that may have been under way when `stop()` cleared the timers.
     if (!this.#running) return;
     const key = this.#scheduleKey(job.ownerAgentId, job.reminderId);
-    this.#armTimer(this.#scheduleTimers, key, retryAt, () => {
-      const current = this.#jobs.get(job.ownerAgentId)?.get(job.reminderId);
+    this.#scheduleTimers.arm(key, retryAt, () => {
+      const current = this.#mirror.get(job.ownerAgentId, job.reminderId);
       if (current?.version !== job.version) return;
-      this.#track(this.#serial(job.ownerAgentId, () => this.#prepareDue(current)));
+      this.#work.track(this.#work.serial(job.ownerAgentId, () => this.#prepareDue(current)));
     });
   }
 
-  #backoff(attempt: number) {
-    return Math.min(60_000, 1000 * 2 ** Math.max(0, attempt - 1));
-  }
-  #correlate(receipt: ReminderReceipt, response: ReminderFireResponse): void {
-    for (const field of [
-      "requestId",
-      "workspaceId",
-      "computerId",
-      "agentId",
-      "reminderId",
-    ] as const)
-      if (response[field] !== receipt[field])
-        throw new Error("uncorrelated reminder fire response");
-    if (response.protocolMajor !== 1 || response.version !== receipt.version)
-      throw new Error("uncorrelated reminder fire response");
-  }
-  #assertScope(sync: ReminderSync): void {
-    if (
-      sync.protocolMajor !== 1 ||
-      sync.workspaceId !== this.scope.workspaceId ||
-      sync.computerId !== this.scope.computerId ||
-      sync.jobs.some((j) => j.ownerAgentId !== sync.agentId)
-    )
-      throw new Error("reminder sync targets another daemon");
-  }
-  #clearScheduleTimers(agentId: string): void {
-    for (const [key, timer] of this.#scheduleTimers)
-      if (key.startsWith(`${agentId}:`)) {
-        this.clock.cancel(timer);
-        this.#scheduleTimers.delete(key);
-      }
-  }
   #cancelSchedule(agentId: string, reminderId: string) {
-    this.#cancelTimer(this.#scheduleTimers, this.#scheduleKey(agentId, reminderId));
+    this.#scheduleTimers.cancel(this.#scheduleKey(agentId, reminderId));
   }
   #cancelReceipt(agentId: string, reminderId: string, version: number) {
-    this.#cancelTimer(this.#receiptTimers, this.#receiptKey(agentId, reminderId, version));
-  }
-  #cancelTimer(map: Map<string, unknown>, key: string): void {
-    if (map.has(key)) this.clock.cancel(map.get(key));
-    map.delete(key);
+    this.#receiptTimers.cancel(this.#receiptKey(agentId, reminderId, version));
   }
   #scheduleKey(agentId: string, reminderId: string) {
     return `${agentId}:${reminderId}`;
   }
   #receiptKey(agentId: string, reminderId: string, version: number) {
-    return `${agentId}:${reminderId}:${version}`;
-  }
-  #versionKey(agentId: string, reminderId: string) {
-    return `${agentId}:${reminderId}`;
-  }
-  #serial<T>(agentId: string, operation: () => Promise<T>): Promise<T> {
-    const next = (this.#queues.get(agentId) ?? Promise.resolve()).then(operation, operation);
-    const settled = next.catch(() => {});
-    this.#queues.set(agentId, settled);
-    void settled.finally(() => {
-      if (this.#queues.get(agentId) === settled) this.#queues.delete(agentId);
-    });
-    return next;
-  }
-  #track(effect: Promise<unknown>): void {
-    const tracked = effect.then(
-      () => {},
-      (error) => {
-        logger.error("Reminder async operation failed", { error });
-      },
-    );
-    this.#effects.add(tracked);
-    void tracked.finally(() => this.#effects.delete(tracked));
+    return receiptKey(agentId, reminderId, version);
   }
 }
