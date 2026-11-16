@@ -1,4 +1,5 @@
 import { parseVersionArgs } from "#src/version-commands";
+import { parseMemoryArgs, type MemoryInvocation } from "./memory-commands";
 import { invalidArgument, unknownCommandError } from "#src/command-help/index";
 import { parseChannelManagementArgs, type ChannelManagementInvocation } from "#src/channel-args";
 import {
@@ -91,6 +92,7 @@ export function parseArgs(
   | WhoamiInvocation
   | VersionInvocation
   | ContextInvocation
+  | MemoryInvocation
   | UserInfoInvocation
   | AttachmentCommentsInvocation
   | ProfileShowInvocation
@@ -101,6 +103,7 @@ export function parseArgs(
   | MentionInvocation {
   if (args[0] === "whoami") return parseWhoamiArgs(args.slice(1));
   if (args[0] === "version") return parseVersionArgs(args.slice(1));
+  if (args[0] === "memory") return parseMemoryArgs(args.slice(1));
   if (args[0] === "context" && (args[1] === "search" || args[1] === "read"))
     return parseContextArgs(args.slice(1));
   if (args[0] === "manual" && (args[1] === "get" || args[1] === "search"))

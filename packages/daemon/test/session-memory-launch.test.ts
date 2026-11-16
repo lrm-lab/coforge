@@ -30,7 +30,7 @@ async function harness(reportsSessionId?: string) {
   const inputs: string[] = [];
   let settle: () => void = () => {};
   const answered = new Promise<void>((resolve) => (settle = resolve));
-  let listener: (event: AgentRuntimeEvent) => void = () => undefined;
+  const listeners = new Set<(event: AgentRuntimeEvent) => void>();
   const session = {
     async sendMessage(text: string) {
       inputs.push(text);
@@ -41,8 +41,10 @@ async function harness(reportsSessionId?: string) {
       settle();
     },
     subscribe(next: (event: AgentRuntimeEvent) => void) {
-      listener = next;
-      return () => undefined;
+      listeners.add(next);
+      return () => {
+        listeners.delete(next);
+      };
     },
     async interrupt() {},
     onExit() {
@@ -84,7 +86,9 @@ async function harness(reportsSessionId?: string) {
     runtime,
     inputs,
     answered,
-    emit: (event: AgentRuntimeEvent) => listener(event),
+    emit: (event: AgentRuntimeEvent) => {
+      for (const listener of listeners) listener(event);
+    },
     stop: () => runtime.stop(),
   };
 }
@@ -138,7 +142,7 @@ test("an explicit create never resumes, and opens with the block", async () => {
   }
 });
 
-test("a finished compaction queues nothing: memory arrives with the next fresh session (task #548)", async () => {
+test("a finished compaction queues no standalone input; the next real input carries memory", async () => {
   const subject = await harness();
   try {
     await subject.runtime.startAgent("agent-a", config);
@@ -147,6 +151,10 @@ test("a finished compaction queues nothing: memory arrives with the next fresh s
     subject.emit({ type: "compaction-finished" });
     for (let i = 0; i < 20; i++) await Bun.sleep(10);
     expect(subject.inputs).toHaveLength(1);
+    await subject.runtime.runtime("agent-a")!.session.notify!("Continue the task");
+    expect(subject.inputs).toHaveLength(2);
+    expect(subject.inputs[1]).toContain("<memory-index>");
+    expect(subject.inputs[1]).toEndWith("Continue the task");
   } finally {
     await subject.stop();
   }

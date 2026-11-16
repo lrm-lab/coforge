@@ -11,6 +11,11 @@ import { artifactCommandsHidden } from "../workspace-features";
  * wins, so `message read --help` finds its own entry and `message --help` the family's.
  */
 const COMMANDS: Readonly<Record<string, HelpEntry>> = {
+  memory: {
+    syntax:
+      "coforge memory search --query <text> [--offset <n>] | get|history --key <key> | save --key <key> --title <text> --content <text> --source <evidence> [--revision <hash>] [--kind fact|decision|preference|experience] [--applicability <scope>] | archive --key <key> --revision <hash>",
+    example: "coforge memory search --query 'preview domain'",
+  },
   ...taskHelp,
   ...artifactHelp,
   ...appHelp,

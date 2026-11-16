@@ -188,5 +188,5 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   when nothing else is queued, and is its own short reference turn ahead of a real delivery. Every
   fresh launch — first start, a session the provider lost, an explicit create — and every fresh
   Memory Agent conversation gets it; a resume never does.
-- A finished compaction queues nothing: the read ledger starts a new context, and the
-  files arrive with the next fresh session.
+- A finished compaction queues no turn. `session-memory-recovery.ts` includes a bounded recovery
+  with the next real session input; never start a turn only to reload memory.

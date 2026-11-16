@@ -3,6 +3,7 @@ import { lstat, open } from "node:fs/promises";
 import { join } from "node:path";
 import { AGENT_ACTIVE_CONTEXT_FILE, AGENT_MEMORY_FILE } from "./agent-workspace-path";
 import { CHARS_PER_TOKEN, estimateTokens } from "@lrm/coforge-anvil";
+import { LocalMemory } from "#src/local-memory/local-memory";
 
 /** Refuses a symlink at the final component, and never blocks on a swapped-in FIFO. */
 const OPEN_FLAGS =
@@ -95,18 +96,26 @@ function sectionElement(
  */
 export async function buildStartupMemoryBlock(options: {
   agentWorkspaceDirectory: string;
+  budgetTokens?: number;
 }): Promise<StartupMemoryBlock | undefined> {
+  const total =
+    options.budgetTokens ?? STARTUP_MEMORY_BUDGET_TOKENS + STARTUP_ACTIVE_CONTEXT_BUDGET_TOKENS;
+  const activeBudget = Math.floor(total / 4);
+  const facts = await new LocalMemory(options.agentWorkspaceDirectory)
+    .brief(Math.floor((total * CHARS_PER_TOKEN) / 5))
+    .catch(() => "");
+  const memoryBudget = Math.max(
+    0,
+    total - activeBudget - Math.ceil(Buffer.byteLength(facts) / CHARS_PER_TOKEN),
+  );
   const [memory, activeContext] = await Promise.all([
-    readSection(
-      join(options.agentWorkspaceDirectory, AGENT_MEMORY_FILE),
-      STARTUP_MEMORY_BUDGET_TOKENS,
-    ),
-    readSection(
-      join(options.agentWorkspaceDirectory, AGENT_ACTIVE_CONTEXT_FILE),
-      STARTUP_ACTIVE_CONTEXT_BUDGET_TOKENS,
-    ),
+    readSection(join(options.agentWorkspaceDirectory, AGENT_MEMORY_FILE), memoryBudget),
+    readSection(join(options.agentWorkspaceDirectory, AGENT_ACTIVE_CONTEXT_FILE), activeBudget),
   ]);
   const sections = [
+    ...(facts
+      ? [`<saved-facts reference="historical; verify current state">\n${facts}\n</saved-facts>`]
+      : []),
     sectionElement("memory", AGENT_MEMORY_FILE, memory),
     sectionElement("active-context", AGENT_ACTIVE_CONTEXT_FILE, activeContext),
   ].filter((section) => section !== undefined);

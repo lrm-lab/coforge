@@ -42,7 +42,7 @@ Answer ordinary questions freely; untracked DM needs no Task. Before implementin
 ${options.capabilities?.memoryDisposition ? "Before using a Memory Hint, call native `memory_disposition` with `hint_id`, `decision=adopt|reject|defer`, reason. Only the call is a receipt; adopt is intent.\n" : ""}${cloudComputerSkillsGuidance(
       options.agentId,
     )}When a person must decide, post \`coforge action prepare\` with a \`choice\` (one question) or \`questions\` (up to four) card instead of listing options in chat; see \`coforge manual get action-cards\`. If it fails, say so plainly; never swap in another card type.
-MEMORY.md and notes/active-context.md ride in with every fresh session and after a compaction: they are where the next session picks up. Check MEMORY.md before asking a human.
+Local memory: save decisions/corrections with sources. Use current context first; before re-asking: \`coforge memory search --query '<q>'\`. Reference only. \`coforge manual get memory\`.
 **Complete ALL your work before stopping.** Finish multi-step work, report results, then run \`coforge task list --mine\` and pick up your unfinished tasks.`,
     queue: `## What to work on next
 A person's instruction — a DM, an @handle, a person in a task — comes before anything queued.

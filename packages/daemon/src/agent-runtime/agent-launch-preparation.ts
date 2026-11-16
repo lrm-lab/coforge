@@ -13,6 +13,7 @@ import { installAssignedSkills, type AssignedSkillPack } from "#src/code-agent/a
 import { agentEnvironment, usableAgentEnvironment } from "#src/code-agent/environment";
 import { resolveGitHookInjectionForLaunch } from "#src/code-agent/git-hooks";
 import { seedAgentMemory } from "./agent-memory-seed";
+import { withMemoryRecovery } from "./session-memory-recovery";
 import {
   MemoryConversationSessions,
   type ConversationSessionStore,
@@ -131,7 +132,6 @@ export async function prepareAgentLaunch(
   return options;
 }
 
-/** Asks the provider for the session those options describe, wrapping it for Memory Agents. */
 export async function createAgentSession(
   input: AgentLaunchInput,
   options: AgentSessionOptions,
@@ -146,5 +146,7 @@ export async function createAgentSession(
       create: (options) => provider.createAgentSession(options),
       store: ports.conversationStore?.(input.agentId),
     });
-  return session;
+  return isMemoryAgentRuntime(input.config)
+    ? session
+    : withMemoryRecovery(session, input.agentWorkspaceDirectory);
 }
