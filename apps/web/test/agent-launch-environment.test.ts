@@ -40,7 +40,9 @@ afterEach(() => {
     else Bun.env[name] = value;
   }
 });
+let memoryChoice: boolean | null = null;
 const db = {
+  userPreference: { findUnique: async () => ({ platformMemoryEnabled: memoryChoice }) },
   agent: {
     findFirst: async (query: unknown) => {
       lookups++;
@@ -200,7 +202,12 @@ test("authorized launch HTTP response contains decrypted explicit env only, no-s
       computerVersion: "0.1.0-dev.40",
       computerHostname: "workstation-7",
     },
-    features: { taskConversations: false, artifacts: false, agentContextView: false },
+    features: {
+      taskConversations: false,
+      artifacts: false,
+      agentContextView: false,
+      platformMemory: true,
+    },
   });
   expect(JSON.stringify(payload)).not.toContain(runtimeConfig.environment!.ciphertext);
   const queried = lookups;
@@ -307,4 +314,23 @@ test("the launch identity names the apps installed in the Agent's Workspace, and
   }
   const payload = await ((await request("valid")) as Response).json();
   expect(payload.identity).not.toHaveProperty("apps");
+});
+
+test("launch identity follows the owner's current memory choice without rejecting the launch", async () => {
+  runtimeConfig = { ...runtimeConfig, environment: undefined };
+  allowed = true;
+  runtimeAllowed = true;
+  launchRefusal = undefined;
+  try {
+    memoryChoice = false;
+    const disabled = (await request("valid")) as Response;
+    expect(disabled.status).toBe(200);
+    expect((await disabled.json()).identity.features).not.toHaveProperty("platformMemory");
+    memoryChoice = true;
+    const enabled = (await request("valid")) as Response;
+    expect(enabled.status).toBe(200);
+    expect((await enabled.json()).identity.features.platformMemory).toBe(true);
+  } finally {
+    memoryChoice = null;
+  }
 });
