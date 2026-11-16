@@ -53,8 +53,9 @@ Semantic retrieval is decided by the Agent from the request, including the first
 fresh session. Starting, resuming or compacting a model session does not trigger a platform
 memory search. Small local startup files keep their existing behavior.
 
-- Greetings, casual chat and sufficient current context: answer directly.
-- Historical decisions, preferences, project conventions and prior work: search.
+- Greetings, casual chat and sufficient current context: answer directly without memory calls
+  or routine-Q&A saving, except an explicit request to recall a previous decision.
+- Missing facts about historical decisions, preferences, project conventions and prior work: search.
 - Before asking again for information the person may have already supplied: search first.
 - An explicit “previously discussed” or “same as last time” requires search.
 

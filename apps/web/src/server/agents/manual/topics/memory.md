@@ -11,8 +11,11 @@ guidance and clear memory already loaded into a native model session.
 The platform does not automatically perform semantic search when a model session starts.
 Decide from the request, including its first message:
 
-- Greetings, casual chat or enough current information: answer without memory retrieval.
-- Historical decisions, preferences, project conventions or prior work: search.
+- Greetings, casual chat or enough current information: answer without memory calls or
+  unnecessary saving. This takes priority over the topic-based rule below, except an explicit
+  request to recall the previous decision.
+- Needed facts about historical decisions, preferences, project conventions or prior work
+  are missing from current context: search.
 - Before asking again for information the person may already have supplied: search first.
 - Explicit “previously discussed” or “same as last time”: search before acting.
 
@@ -40,7 +43,7 @@ Sharing copies an entry; later personal edits do not silently update the team co
 
 Save useful non-secret facts immediately when a person says “remember”, calls them important or
 corrects a repeated question; search and update existing facts instead of adding duplicates.
-Save verified reusable facts and methods after meaningful work, not every turn. Record provenance,
+Save verified reusable facts and methods after meaningful work, not every turn or routine Q&A. Record provenance,
 applicable Workspace/Computer and date; label user-reported facts. A domain already purchased is a
 decision to recall before asking again, while its current registration/filing status still needs
 verification. Include your own saved result message's UUID with `--source-message-id` when available.
