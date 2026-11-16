@@ -14,9 +14,6 @@ import {
 import { actionCardIcon } from "./action-card-icons";
 import { ActionCardObject } from "./action-card-object";
 
-/** Why the last request failed. A cancel that failed leaves the card's own button as it was; a
- * commit that only the dialog can fix (`fix: "edit"`, a name taken since) makes the dialog the
- * primary button. */
 export type ActionCardFailure = {
   message: string;
   retry: boolean;
@@ -24,15 +21,8 @@ export type ActionCardFailure = {
   from: "commit" | "cancel";
 };
 
-/** One touch target on a phone, as the choice card's rows are. */
 const TARGET = "max-sm:min-h-11";
 
-/**
- * A card waiting on someone: the verb, what it would make, then one primary button that does it.
- * The draft is committed as shown; Edit opens the dialog for the kinds that have one, and Dismiss
- * is for whoever may cancel. Someone who cannot act sees the same preview and whom it waits on,
- * with no buttons (task #449).
- */
 export function PendingActionCard({
   frameRef,
   view,
@@ -54,17 +44,14 @@ export function PendingActionCard({
   failure: ActionCardFailure | null;
   committing: boolean;
   cancelling: boolean;
-  /** The draft cannot be committed yet (a field still empty, the Projects still loading). */
   commitDisabled: boolean;
   onCommit: () => void;
   onEdit: () => void;
-  /** Set while the card's cloud desktop can be opened. */
   onOpenDesktop?: () => void;
   onCancel: () => void;
 }) {
   const deniedReason = actionCardDeniedReason(view);
   const busy = committing || cancelling;
-  // The failed commit is sent again as it is; a failed cancel leaves the primary button alone.
   const retrying = failure?.retry === true && failure.from === "commit";
   const fixInDialog = failure?.fix === "edit";
   const commitLabel = fixInDialog
@@ -124,7 +111,6 @@ export function PendingActionCard({
               )}
             </>
           ) : (
-            // Whom it waits on, beside Dismiss for whoever may still cancel it.
             deniedReason && (
               <p className="flex min-w-0 flex-1 items-center gap-1.5 text-xs text-tertiary">
                 <Clock aria-hidden="true" className="size-3.5 shrink-0" />

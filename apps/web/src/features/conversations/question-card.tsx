@@ -18,15 +18,6 @@ import {
 import { cardStatus } from "./question-card-status";
 import { useSettleInPlace } from "./settle-in-place";
 
-/**
- * An Agent's question card in the stream (Frank, 11-12): a summary, each question on a line with
- * its answer beside it, answered in the pane's dock, which a row or Answer opens at that question; anyone else's card opens there to look through.
- *
- * The card shows where it stands rather than saying it (Frank, 11-12): an answer stands beside
- * its question, given in dark and still a draft in gray, and a card nobody will answer goes gray
- * whole. Its last line holds the next step (`cardStatus`). The card open in the dock is drawn
- * raised.
- */
 export function QuestionCard({ card }: { card: AskingView }) {
   const dock = useCardDock();
   const view = dock?.viewOf(card) ?? card;
@@ -55,8 +46,6 @@ export function QuestionCard({ card }: { card: AskingView }) {
       ref={box}
       style={heldHeight ? { minHeight: heldHeight } : undefined}
       data-question-card={view.state}
-      // A tap on the card is the card's: its rows open the dock, and its gaps do nothing rather
-      // than open the message's actions.
       data-no-row-tap
       className={cn(
         "mt-1 flex max-w-md flex-col rounded-xl border bg-primary p-1 transition-[border-color,box-shadow] duration-150 max-sm:max-w-none",
@@ -99,9 +88,6 @@ export function QuestionCard({ card }: { card: AskingView }) {
           </AriaButton>
         );
       })}
-      {/* One line after the questions, where the card's next step stands: the viewer's Answer
-          (kept, unseen, while the card is in the dock, so opening it moves nothing), or whom it
-          waits on, who answered, or why it went gray. */}
       {(answerable || status) && (
         <div className="flex h-9 items-center gap-2 pr-1 pl-3 text-xs text-tertiary">
           <span className="min-w-0 flex-1 truncate">

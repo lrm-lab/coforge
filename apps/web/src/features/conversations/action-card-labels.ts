@@ -1,17 +1,12 @@
 import { m } from "#src/paraglide/messages";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 
-/** A card answered by picking (`choice`, `questions`) has its own component; every other kind is a
- * tool card with a title, a commit button and a handled line, drawn by the shared components. */
 export type ToolActionCardView = Exclude<ActionCardView, { kind: "choice" | "questions" }>;
 
-/** For the `default` of a switch over every tool kind: a new kind left out fails to compile,
- * instead of showing as another kind's card (task #515: questions showed as Add Members). */
 export function unhandledKind(view: never): never {
   throw new Error(`unhandled action card kind ${(view as { kind: string }).kind}`);
 }
 
-/** Title shown in the card header. */
 export function actionCardTitle(view: ToolActionCardView): string {
   switch (view.kind) {
     case "page:fill":
@@ -35,7 +30,6 @@ export function actionCardTitle(view: ToolActionCardView): string {
   }
 }
 
-/** Primary commit button label while pending, or its progressive form while `working`. */
 export function actionCardCommitLabel(view: ToolActionCardView, working: boolean): string {
   switch (view.kind) {
     case "page:fill":
@@ -59,20 +53,15 @@ export function actionCardCommitLabel(view: ToolActionCardView, working: boolean
   }
 }
 
-/** The cancel button's label, or its progressive form while `working`. An app's request for
- * access is denied, not dismissed. */
 export function actionCardCancelLabel(view: ToolActionCardView, working: boolean): string {
   if (view.kind === "app:grant_agent") return working ? m.app_card_denying() : m.agent_apps_deny();
   return working ? m.action_card_cancelling() : m.action_card_dismiss();
 }
 
-/** The kinds with a dialog to change the draft before committing it. */
 export function actionCardEditable(view: ToolActionCardView): boolean {
   return view.kind === "channel:create" || view.kind === "channel:add_member";
 }
 
-/** What the handled line says was done, in gray before its result. A card closed without being
- * done names the action itself, so its title stands in for the past tense. */
 export function actionCardHandledVerb(view: ToolActionCardView): string {
   if (view.state === "cancelled" || view.state === "expired") return actionCardTitle(view);
   switch (view.kind) {
@@ -101,7 +90,6 @@ export function addMemberChannelName(channel: { displayName: string | null }) {
   return channel.displayName ?? m.action_card_unseen_channel();
 }
 
-/** Why this viewer cannot commit, when `canCommit` is false. */
 export function actionCardDeniedReason(view: ToolActionCardView): string | undefined {
   switch (view.kind) {
     case "agent:create":

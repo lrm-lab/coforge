@@ -38,15 +38,8 @@ import { getCloudDesktopOrigin } from "#src/features/computers/cloud-desktop-ori
 import { cloudDesktopUrl, openCloudDesktopWindow } from "#src/features/computers/cloud-desktop-url";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 
-/** Renders an Agent-prepared action card below its message body.
- * Owns its own commit/cancel dialogs and a self-refresh after acting; the conversation view also
- * refreshes every currently pending card on realtime signals and window focus (see
- * `conversation-queries.ts`). */
-/** Codes for a draft the server refuses as it is, which no Retry of it can change. */
 const REFUSALS = ["INVALID_INPUT", "NOT_FOUND", "ACCESS_DENIED", "AGENT_NOT_VISIBLE"] as const;
 
-/** Every kind this page knows how to draw; a record over the union, so a kind added to the server
- * view and left out here fails to compile. */
 const KNOWN_KINDS: Record<ActionCardView["kind"], true> = {
   "channel:create": true,
   "channel:add_member": true,
@@ -60,10 +53,6 @@ const KNOWN_KINDS: Record<ActionCardView["kind"], true> = {
   questions: true,
 };
 
-/**
- * A card of a kind this page does not know (one a newer server sends to an older page): said so,
- * in gray, with nothing to press, never drawn as another kind's card (task #515).
- */
 export function ActionCard({ card }: { card: ActionCardView }) {
   if (!Object.hasOwn(KNOWN_KINDS, card.kind))
     return (
@@ -74,7 +63,6 @@ export function ActionCard({ card }: { card: ActionCardView }) {
         {m.action_card_unknown()}
       </p>
     );
-  // An Agent's questions are a summary here, answered in the pane's dock.
   if (card.kind === "choice" || card.kind === "questions") return <QuestionCard card={card} />;
   return <KnownActionCard card={card} />;
 }
@@ -100,11 +88,8 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
   const queryClient = useQueryClient();
   const conversationId = useConversationId();
   const [fillValues, setFillValues] = useState<Record<string, string>>({});
-  // Known only to someone in the channel, who alone may commit (task #302).
   const addMemberChannel =
     view.kind === "channel:add_member" && view.channel.id ? view.channel : null;
-  // A commit in flight (the card's own button shows it), or the Computers an Agent's dialog lists
-  // still loading.
   const [committing, setCommitting] = useState(false);
   const [openingDialog, setOpeningDialog] = useState(false);
   const create = useServerFn(createAgent);
@@ -150,8 +135,6 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
       }));
   }
 
-  /** Runs a commit and shows the card as the server now has it. A failure says why, and the primary
-   * button offers to send it again, unless `explain` knows that sending it again would not help. */
   async function commit(
     send: () => Promise<unknown>,
     explain?: (
@@ -164,10 +147,7 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
       await send();
     } catch (cause) {
       const known = explain?.(cause);
-      // A conflict may be someone else's commit of this card: read it again, and a done card shows
-      // as done instead of offering to send it again.
       if (isAppErrorCode(cause, "CONFLICT")) await refetch().catch(() => {});
-      // The server refused the draft itself: sent again unchanged, it is refused the same way.
       const refused = isAppErrorCode(cause, ...REFUSALS);
       setFailure({
         message: known?.message ?? (refused ? m.action_card_refused() : m.action_card_error()),
@@ -178,8 +158,6 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
       setCommitting(false);
       return;
     }
-    // Committed: a read that fails here leaves the card to the conversation's own refresh, and
-    // offers no Retry of a commit that went through.
     await refetchOwn().catch(() => {});
     setCommitting(false);
   }
@@ -188,7 +166,6 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
     setCancelling(true);
     setFailure(null);
     try {
-      // An app approval card is cancelled by denying the Agent's request.
       await (view.kind === "app:grant_agent" ? denyAppGrant : cancel)({
         data: { messageId: view.messageId },
       });
@@ -200,8 +177,6 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
     }
   }
 
-  /** An Agent's runtime form is the dialog's, and it lists the Computers, which are read first.
-   * Nothing is created yet, so the button waits without saying so. */
   async function openAgentDialog() {
     setOpeningDialog(true);
     setFailure(null);
@@ -215,8 +190,6 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
     }
   }
 
-  /** The primary button: commit the draft as the card shows it. Only a kind whose draft lacks
-   * something (an Agent's runtime form) opens its dialog instead. */
   async function commitDraft() {
     switch (view.kind) {
       case "channel:create": {
@@ -232,8 +205,6 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
             });
           },
           (cause) =>
-            // A channel of that name exists by now: sending it again fails the same way, so the
-            // button renames it.
             isAppErrorCode(cause, "CONFLICT")
               ? {
                   message: m.action_card_channel_taken({ name: view.name }),
@@ -272,8 +243,7 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
           () => approveAppGrant({ data: { messageId: view.messageId, scopes } }),
           (cause) =>
             isAppErrorCode(cause, "CONFLICT") && cause.errorId === APP_GRANT_REQUEST_CHANGED
-              ? // The request asks for other scopes than the card showed: show the card again.
-                { message: m.app_card_request_changed(), retry: false }
+              ? { message: m.app_card_request_changed(), retry: false }
               : undefined,
         );
       }

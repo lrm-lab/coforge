@@ -27,13 +27,10 @@ function listFormat() {
   return format;
 }
 
-/** The people a card names, as the names read in a sentence. */
 export function namesOf(people: ActionCardRef[]) {
   return listFormat().format(people.map((person) => person.displayName));
 }
 
-/** The same sentence with each name drawn with its face (task #521): the language's own joiners
- * stay as `Intl.ListFormat` writes them, and each name's slot takes the person in order. */
 export function NamesWithFaces({
   people,
 }: {
@@ -51,8 +48,6 @@ export function NamesWithFaces({
     );
 }
 
-/** A few faces and, as text, everyone they are. More than the faces shown still read in the names. */
-/** A person's or an Agent's sticker in a group avatar. */
 function faceOf(person: ActionCardPersonRef) {
   return { id: person.id, name: person.displayName, avatarUrl: person.avatarUrl };
 }
@@ -77,11 +72,6 @@ function Faces({ people, label }: { people: ActionCardPersonRef[]; label?: React
   );
 }
 
-/**
- * What the card would make, as an inset block: the thing itself, so the person decides on what they
- * see and not on a description of it (task #449). The Agent's note (`draftHint`) is shown only where
- * the card has no description of its own; it stays in the message's text for a screen reader.
- */
 export function ActionCardObject({
   view,
   fillValues,
@@ -101,8 +91,6 @@ export function ActionCardObject({
     body = (
       <>
         <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 font-semibold text-primary">
-          {/* The group avatar the channel will have, from the people it starts with, before its
-              name, no `#` (Frank, 11-11, task #55). */}
           {newChannelFaces.length > 0 && (
             <GroupAvatar members={newChannelFaces} className="avatar-group-xs" />
           )}
@@ -136,8 +124,6 @@ export function ActionCardObject({
         <Faces
           people={[...view.humans, ...view.agents]}
           label={
-            // The channel by its group avatar and name, no `#` (task #55); one the viewer cannot
-            // read goes by its name alone.
             <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-sm font-semibold text-primary">
               {namesOf([...view.humans, ...view.agents])} →
               {view.channel.id ? (
