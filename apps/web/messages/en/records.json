@@ -313,5 +313,7 @@
   "records_report_save_not_found": "This report no longer exists, or is no longer yours.",
   "records_report_save_access_denied": "You no longer have access to this report.",
   "records_report_save_invalid": "The server could not accept this content.",
-  "records_report_save_keep_text": "Your text is still in the editor. Copy it before you leave."
+  "records_report_save_keep_text": "Your text is still in the editor. Copy it before you leave.",
+  "records_weekly_none": "No weekly reports yet.",
+  "records_weekly_no_match": "No weekly reports match “{query}”."
 }

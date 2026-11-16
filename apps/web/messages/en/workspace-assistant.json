@@ -16,7 +16,7 @@
   "pi_chat_no_computer_hint": "Open Computers to start your cloud computer, then return here.",
   "pi_chat_unconfigured": "AI Workbench is not available yet",
   "pi_chat_unconfigured_hint": "The workspace administrator needs to configure the cloud chat connection.",
-  "pi_chat_connection_error": "Could not confirm the request. Check the connection and cloud computer. Retry sending the same message to recover without running it twice.",
+  "pi_chat_connection_error": "Not sure your message got through. Check your connection and that the cloud computer is on, then send it again — it won't run twice.",
   "pi_chat_retry": "Retry",
   "pi_chat_running": "Working…",
   "pi_chat_no_sessions": "Your conversations will appear here.",
@@ -106,5 +106,7 @@
   "pi_chat_files_open": "Open file",
   "workspace_assistant_computer_required": "Your assistant needs a Computer to run on, and you have none connected to this workspace. Add one, then send again.",
   "pi_chat_off": "AI Workbench is off",
-  "pi_chat_off_settings": "Turn it on in Settings"
+  "pi_chat_off_settings": "Turn it on in Settings",
+  "pi_chat_load_error": "Couldn't load your chats. Make sure the cloud computer is on, then try again.",
+  "pi_chat_action_error": "That didn't work. Try again."
 }
