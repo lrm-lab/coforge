@@ -1,4 +1,3 @@
-import { MemorySettings } from "#src/features/platform-memory/memory-panel";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { useEffect, useId, useState } from "react";
 import { ChevronLeft, Share01 } from "@untitledui/icons";
@@ -212,8 +211,6 @@ export function SettingsContent(props: SettingsContentProps) {
               <ServerConnectionSettings />
             ) : section === "integrations" ? (
               <GitHubSettings callbackFailure={props.githubCallbackFailure} />
-            ) : section === "memory" ? (
-              <MemorySettings key={props.members.actorUserId} />
             ) : section === "experiments" ? (
               <ExperimentsSettings experiments={experiments} />
             ) : (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   ChevronRight,
@@ -93,7 +93,9 @@ export function AgentWorkspaceTab({
   agentId,
   onListDir,
   onReadFile,
+  beforeEntries,
 }: {
+  beforeEntries?: ReactNode;
   agentId: string;
   onListDir: (dirPath: string, includeHidden: boolean) => Promise<AgentWorkspaceFilesLoadResult>;
   onReadFile: (path: string) => Promise<AgentWorkspaceFileLoadResult>;
@@ -282,6 +284,7 @@ export function AgentWorkspaceTab({
               </div>
             )}
             <div className="min-h-0 flex-1 overflow-y-auto">
+              {beforeEntries}
               <TreeRoot
                 state={rootState}
                 cache={cacheRef.current}

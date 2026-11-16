@@ -104,8 +104,15 @@ silently recreating a forgotten memory. Deleting memory does not delete the orig
 ## Rollout and rollback
 
 Deploy Web and a Computer/Daemon release containing the new command together, then enable
-**Settings → Experiments → Memory** for a small Workspace. **Settings → Memory** manages team
-memory and the viewer's own Agents' personal memory. Existing Workspace memory is not imported.
+**Settings → Experiments → Memory** for a small Workspace. During a conversation, click the
+Agent's avatar, open **Workspace → Platform memory** in the right sidebar, and manage that
+Agent's personal memory or the Workspace's team memory there. The current Agent is already
+selected; another member's personal memory is never exposed to a Workspace administrator.
+Members without their own Agent can open **Workspace menu → Team memory**, including ordinary
+members. Personal memory is managed only beside its Agent, never in Settings.
+The file browser, local `MEMORY.md`, expanded folders and selected file remain available when
+returning from memory. Platform entries are managed remotely, without creating duplicate local
+files. Existing Workspace memory is not imported.
 
 Turn the experiment off and restart the affected Agents to stop new memory instructions and
 recall. An old application can run with the additive tables left in place. Keep the tables,
@@ -119,7 +126,8 @@ the additive migration and real repository constraints. The PR includes the Web/
 and build results, and states any environment limitation separately.
 
 UI review: verify both locales, desktop and phone widths, dark/light themes, keyboard selection,
-disabled/unavailable states, personal/team selection, create/search/edit/share/delete, stale edit
+disabled/unavailable states, current-Agent ownership, personal/team selection, files/back
+navigation with a retained draft, create/search/edit/share/delete, stale edit
 conflicts and a reload after switching Workspace. No UI unit tests replace this manual review.
 
 Official engine contract: [content](https://github.com/volcengine/OpenViking/blob/e44ea6e11add1c7b3d4accdbfaf16e900a6049df/docs/zh/api/12-content.md),

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { TeamMemoryMenuItem } from "#src/features/platform-memory/team-memory-menu-item";
 import { Building07 as Building, Check, ChevronDown, Plus } from "@untitledui/icons";
 import {
   Button as AriaButton,
@@ -115,6 +116,7 @@ export function WorkspaceSwitcher({
                 </AriaMenuItem>
               ))}
             </Dropdown.Section>
+            <TeamMemoryMenuItem />
             {onCreate && (
               <>
                 {workspaces.length > 0 && <Dropdown.Separator />}

@@ -5,11 +5,8 @@ import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { Select } from "#src/components/base/select/select";
-import { SettingsPage } from "#src/components/settings-layout";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
-import { useWorkspaceExperiments } from "#src/features/settings/experiments-settings";
-import { setExperiment } from "#src/features/settings/experiments.functions";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import type {
@@ -18,21 +15,27 @@ import type {
   PlatformMemoryCommand,
   PlatformMemoryEntry,
 } from "@lrm/coforge-sdk/agent";
-import { managePlatformMemory, platformMemoryAgents } from "./platform-memory.functions";
+import { managePlatformMemory } from "./platform-memory.functions";
 
-export function MemorySettings() {
+type MemoryPanelProps = {
+  agentId?: string;
+  canReadPersonal: boolean;
+  active?: boolean;
+};
+export function MemoryPanel(props: MemoryPanelProps) {
   const workspaceId = useCurrentWorkspaceId();
-  return <MemorySettingsPanel key={workspaceId} />;
+  return (
+    <MemoryPanelContent
+      key={`${workspaceId}:${props.agentId}:${props.canReadPersonal}`}
+      {...props}
+    />
+  );
 }
-function MemorySettingsPanel() {
+function MemoryPanelContent({ agentId, canReadPersonal, active = true }: MemoryPanelProps) {
   const call = useServerFn(managePlatformMemory);
-  const loadAgents = useServerFn(platformMemoryAgents);
-  const set = useServerFn(setExperiment);
   const workspaceId = useCurrentWorkspaceId();
   const cache = useQueryClient();
-  const experiments = useWorkspaceExperiments();
-  const [scope, setScope] = useState<MemoryScope>("team");
-  const [agentId, setAgentId] = useState("");
+  const [scope, setScope] = useState<MemoryScope>(canReadPersonal ? "agent" : "team");
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -47,14 +50,16 @@ function MemorySettingsPanel() {
   const key = ["platform-memory", workspaceId];
   const status = useQuery({
     queryKey: [...key, "status"],
+    enabled: active,
     queryFn: () => call({ data: { operation: "status" } }),
   });
-  const agents = useQuery({ queryKey: [...key, "agents"], queryFn: () => loadAgents() });
-  const selectedAgent = agentId || agents.data?.[0]?.id;
   const entries = useQuery({
-    queryKey: [...key, scope, selectedAgent, search, page],
+    queryKey: [...key, scope, scope === "agent" ? agentId : undefined, search, page],
     enabled: Boolean(
-      status.data?.enabled && status.data.available && (scope === "team" || selectedAgent),
+      active &&
+      status.data?.enabled &&
+      status.data.available &&
+      (scope === "team" || (canReadPersonal && agentId)),
     ),
     queryFn: () =>
       call({
@@ -63,13 +68,13 @@ function MemorySettingsPanel() {
               operation: "search",
               query: search,
               scope,
-              ...(scope === "agent" ? { agentId: selectedAgent } : {}),
+              ...(scope === "agent" ? { agentId } : {}),
             }
           : {
               operation: "list",
               scope,
               page,
-              ...(scope === "agent" ? { agentId: selectedAgent } : {}),
+              ...(scope === "agent" ? { agentId } : {}),
             },
       }),
   });
@@ -102,9 +107,8 @@ function MemorySettingsPanel() {
     { id: "preference", label: m.memory_preference() },
   ];
   return (
-    <SettingsPage>
-      <div className="flex max-w-3xl flex-col gap-6">
-        <p className="text-sm text-tertiary">{m.memory_description()}</p>
+    <>
+      <div className="flex min-w-0 flex-col gap-4 px-5 py-4">
         {status.isPending ? (
           <p role="status">{m.memory_loading()}</p>
         ) : status.isError ? (
@@ -112,29 +116,7 @@ function MemorySettingsPanel() {
             {m.memory_error()}
           </p>
         ) : !status.data.enabled ? (
-          <div className="flex flex-col items-start gap-3">
-            <p className="text-sm text-secondary">{m.memory_disabled()}</p>
-            {experiments.data?.canManage ? (
-              <Button
-                isDisabled={pending}
-                onClick={async () => {
-                  setPending(true);
-                  setError("");
-                  try {
-                    await set({ data: { key: "platformMemory", enabled: true } });
-                    await cache.invalidateQueries({ queryKey: key });
-                    await cache.invalidateQueries({ queryKey: ["settings-experiments"] });
-                  } catch {
-                    setError(m.memory_error());
-                  } finally {
-                    setPending(false);
-                  }
-                }}
-              >
-                {m.memory_enable()}
-              </Button>
-            ) : null}
-          </div>
+          <p className="text-sm text-secondary">{m.memory_disabled()}</p>
         ) : !status.data.available ? (
           <div className="flex flex-col items-start gap-3">
             <p role="status" className="text-sm text-secondary">
@@ -146,45 +128,29 @@ function MemorySettingsPanel() {
           </div>
         ) : (
           <>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                color={scope === "team" ? "primary" : "secondary"}
-                onClick={() => {
-                  setScope("team");
-                  setEditing(null);
-                  setPage(1);
-                }}
-              >
-                {m.memory_team()}
-              </Button>
-              <Button
-                color={scope === "agent" ? "primary" : "secondary"}
-                onClick={() => {
-                  setScope("agent");
-                  setEditing(null);
-                  setPage(1);
-                }}
-              >
-                {m.memory_personal()}
-              </Button>
-            </div>
-            {scope === "agent" ? (
-              agents.data?.length ? (
-                <Select
-                  label={m.memory_agent()}
-                  selectedKey={selectedAgent}
-                  onSelectionChange={(key) => {
-                    setAgentId(String(key));
+            {canReadPersonal ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  color={scope === "agent" ? "primary" : "secondary"}
+                  onClick={() => {
+                    setScope("agent");
                     setEditing(null);
                     setPage(1);
                   }}
-                  items={agents.data.map((a) => ({ id: a.id, label: a.displayName || a.name }))}
                 >
-                  {(item) => <Select.Item id={item.id}>{item.label}</Select.Item>}
-                </Select>
-              ) : (
-                <p className="text-sm text-secondary">{m.memory_no_agents()}</p>
-              )
+                  {m.memory_personal()}
+                </Button>
+                <Button
+                  color={scope === "team" ? "primary" : "secondary"}
+                  onClick={() => {
+                    setScope("team");
+                    setEditing(null);
+                    setPage(1);
+                  }}
+                >
+                  {m.memory_team()}
+                </Button>
+              </div>
             ) : null}
             <form
               className="flex items-end gap-2"
@@ -215,7 +181,7 @@ function MemorySettingsPanel() {
                       ? {
                           operation: "create",
                           scope,
-                          ...(scope === "agent" ? { agentId: selectedAgent } : {}),
+                          ...(scope === "agent" ? { agentId } : {}),
                           ...payload,
                         }
                       : {
@@ -263,7 +229,7 @@ function MemorySettingsPanel() {
             ) : (
               <Button
                 className="self-start"
-                isDisabled={scope === "agent" && !selectedAgent}
+                isDisabled={scope === "agent" && !agentId}
                 onClick={() => edit("new")}
               >
                 {m.memory_add()}
@@ -393,6 +359,6 @@ function MemorySettingsPanel() {
             throw new Error("delete refused");
         }}
       />
-    </SettingsPage>
+    </>
   );
 }

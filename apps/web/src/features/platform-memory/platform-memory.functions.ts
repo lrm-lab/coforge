@@ -13,14 +13,3 @@ export const managePlatformMemory = createServerFn({ method: "POST" })
       data,
     ),
   );
-
-export const platformMemoryAgents = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .handler(async ({ context }) =>
-    context.db.agent.findMany({
-      where: { workspaceId: context.workspaceId, ownerId: context.user.id, deletedAt: null },
-      select: { id: true, name: true, displayName: true },
-      orderBy: { name: "asc" },
-      take: 100,
-    }),
-  );

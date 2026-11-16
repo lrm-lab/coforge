@@ -2,16 +2,12 @@
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "settings_memory": "Memory",
   "memory_experiment_description": "Personal Agent and team memory. Existing local memory stays unchanged. Restart Agents after enabling.",
-  "memory_description": "Manage shared team knowledge and the private memories of Agents you own. Personal memories are shared only when you publish them.",
   "memory_loading": "Loading memory…",
   "memory_disabled": "Platform memory is off for this workspace. Existing Agent memory continues to work.",
-  "memory_enable": "Enable memory",
   "memory_unavailable": "The memory engine is unavailable or is not configured for this workspace. No memory has been changed. Ask an administrator to check the connection.",
   "memory_retry": "Retry",
   "memory_team": "Team memory",
-  "memory_personal": "Agent personal memory",
-  "memory_agent": "Agent",
-  "memory_no_agents": "You do not own an Agent in this workspace.",
+  "memory_personal": "Agent memory",
   "memory_search": "Search memory",
   "memory_title": "Title",
   "memory_kind": "Type",
@@ -34,5 +30,6 @@
   "memory_error": "The memory operation could not be completed. Your unsaved changes are kept; check access and engine availability, then retry.",
   "memory_conflict": "This memory changed or was deleted. Refresh and read the current version before saving again.",
   "memory_saved": "Memory updated.",
-  "memory_cleanup_pending": "Memory is saved or excluded from recall. Some old stored files are still awaiting cleanup."
+  "memory_cleanup_pending": "Memory is saved or excluded from recall. Some old stored files are still awaiting cleanup.",
+  "memory_workspace_entry": "Platform memory"
 }

@@ -2,16 +2,12 @@
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "settings_memory": "记忆",
   "memory_experiment_description": "Agent 个人记忆与团队记忆。保留现有本地记忆，开启后请重新启动 Agent。",
-  "memory_description": "管理团队共享知识和你所拥有 Agent 的个人记忆。个人记忆仅在你发布后才与团队共享。",
   "memory_loading": "正在读取记忆…",
   "memory_disabled": "此工作区尚未开启平台记忆，现有 Agent 记忆继续可用。",
-  "memory_enable": "开启记忆",
   "memory_unavailable": "记忆引擎不可用或尚未为此工作区配置。记忆未发生更改，请管理员检查连接。",
   "memory_retry": "重试",
   "memory_team": "团队记忆",
-  "memory_personal": "Agent 个人记忆",
-  "memory_agent": "Agent",
-  "memory_no_agents": "你在此工作区尚未拥有 Agent。",
+  "memory_personal": "Agent 记忆",
   "memory_search": "检索记忆",
   "memory_title": "标题",
   "memory_kind": "类型",
@@ -34,5 +30,6 @@
   "memory_error": "记忆操作未能完成。未保存的修改仍保留，请检查权限与引擎连接后重试。",
   "memory_conflict": "此记忆已被修改或删除，请刷新并读取当前版本后再保存。",
   "memory_saved": "记忆已更新。",
-  "memory_cleanup_pending": "当前记忆已保存或已从检索中移除，部分旧文件仍待清理。"
+  "memory_cleanup_pending": "当前记忆已保存或已从检索中移除，部分旧文件仍待清理。",
+  "memory_workspace_entry": "平台记忆"
 }

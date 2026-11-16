@@ -53,7 +53,7 @@ import {
   profileRuntimeSelection,
   profileUpdateInput,
 } from "./agent-profile-runtime";
-import { AgentWorkspaceTab } from "./agent-workspace-tab";
+import { AgentWorkspaceWithMemory } from "./agent-workspace-with-memory";
 import { AgentActivityTab } from "./agent-activity-tab";
 import { AgentAppsTab } from "./agent-apps-tab";
 import { AgentChatTab } from "./agent-chat-tab";
@@ -334,8 +334,9 @@ export function AgentProfilePanel({
         ) : tab === "apps" ? (
           <AgentAppsTab agentId={agentId} timeZone={timeZone} />
         ) : tab === "workspace" ? (
-          <AgentWorkspaceTab
+          <AgentWorkspaceWithMemory
             agentId={agentId}
+            owned={owned}
             onListDir={onListWorkspaceDir}
             onReadFile={onReadWorkspaceFile}
           />

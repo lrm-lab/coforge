@@ -131,6 +131,10 @@ These rules apply to `src/features/agents/`.
   the server answers no one else and the browser does not ask;
   Start, Stop and Restart are any member's; Full reset is owner/admin only
   (`AgentControl.execute`).
+- Platform memory is managed in the Agent profile’s Workspace tab beside its local files,
+  bound to the current Agent. The experiment stays in Settings; memory management does not.
+  Only the Agent’s creator gets its personal-memory view; Workspace administrators see team
+  memory without gaining another member’s private memories.
 - Workspace directory reads belong to
   `features/workspaces/workspaces.functions.ts` and
   `server/workspaces/members.server.ts`; owner-only Agent operations stay
