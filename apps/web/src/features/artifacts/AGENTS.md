@@ -10,7 +10,7 @@ These rules apply to `src/features/artifacts/`. They extend
   [`../../server/artifacts/AGENTS.md`](../../server/artifacts/AGENTS.md)),
   never its internal files.
 - People view and comment on artifacts; they never create, edit or save one. Do not add an editor,
-  a draft or a save path here: an Agent writes an artifact through the Agent API.
+  an artifact draft or a save path here: an Agent writes an artifact through the Agent API.
 - The page bridge (`artifact-page-bridge.ts`) treats everything a page sends as untrusted: it
   answers only its own frame at the exact artifact origin, enforces rate limits, the decline mute
   and the user activation itself (never the runtime, which the page controls), and posts only to
@@ -103,3 +103,18 @@ These rules apply to `src/features/artifacts/`. They extend
   page's load; marks past the 500 cap are never placed and read as neutral; an element that is gone
   is "changed". `revealThread` for an `element` or `text` anchor on a framed entry focuses the mark
   and leaves the page open; a `lines` anchor opens the source view.
+- Comment drafts are private and server-held (`use-comment-drafts.ts` is the one store;
+  `use-submit-drafts.ts` owns send; both run under the store's one `exclusive` lock and busy state,
+  so a send blocks draft edits and the reverse). The provider `artifact-drafts-provider.tsx` splits a
+  state context (`useCommentDrafts`) from a stable actions context (`useCommentDraftActions`). The
+  composer saves a draft; once one exists, saving is its primary action, and its save and send
+  buttons sit in the composer box beside the image button. The review pill
+  (`artifact-review-pill.tsx`) is the one floating tool bar: pick (HTML), undo and redo (a 60-step
+  reducer, `artifact-draft-history.ts`, replaying server operations; drafts with images are not
+  recorded; a step the server refuses for good is dropped with its toast, a transient failure keeps
+  it; a restored draft keeps its creation time), discard all, send N. Mod+Z, Shift+Mod+Z and Mod+Y
+  act only outside text fields and modal dialogs, ignore handled events, and prevent the default
+  only when they act. Draft markers are dashed
+  and uncounted (`data-draft-marker`; the frame's marks carry `draft: true`); a click opens the draft.
+  A refused send opens the pending panel with the failing draft outlined. `?review=<id>` filters the
+  panel to one review through the existing review read.

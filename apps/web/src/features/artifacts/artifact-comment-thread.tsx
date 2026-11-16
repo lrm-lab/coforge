@@ -290,7 +290,7 @@ function CommentRow({
   );
 }
 
-function CommentEditor({
+export function CommentEditor({
   initial,
   onCancel,
   onSave,

@@ -20,6 +20,7 @@ import type { ArtifactMessageCard } from "./artifact-reads.server";
 import { ArtifactShares } from "./artifact-shares.server";
 import { artifactDownload, artifactFilePreview } from "./artifact-download.server";
 import { ArtifactGallery } from "./artifact-gallery.server";
+import { ArtifactCommentDrafts } from "./artifact-comment-drafts.server";
 import { ArtifactPersonComments } from "./artifact-person-comments.server";
 import { commentImageUploadResponse } from "./artifact-comment-image-upload.server";
 import { ArtifactPersonFollows } from "./artifact-person-follows.server";
@@ -48,9 +49,18 @@ export function productionArtifacts(db: PrismaClient) {
     productionArtifactSignals(),
     getAppRateLimits().artifactPersonComment,
   );
+  const drafts = new ArtifactCommentDrafts(
+    db,
+    blobs,
+    (workspaceId) => artifactsEnabled(db, workspaceId),
+    productionArtifactNotices(db),
+    productionArtifactSignals(),
+    getAppRateLimits().artifactPersonComment,
+  );
   return {
     artifacts,
     blobs,
+    drafts,
     documents: new ArtifactDocuments(db, artifacts, blobs),
     visibility: artifacts.visibility,
     publicLinks: new ArtifactPublicLinks(db),

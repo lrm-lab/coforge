@@ -196,6 +196,7 @@ import { Route as ApiAgentV1AppsOwnedClientKeyUnpublishRequestRouteImport } from
 import { Route as ApiAgentV1ArtifactsArtifactFilesPathRouteImport } from './routes/api/agent/v1/artifacts_.$artifact.files.$path'
 import { Route as ApiReleaseCatalogV1AppsAppReleasesVersionRouteImport } from './routes/api/release-catalog/v1/apps/$app/releases/$version'
 import { Route as ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesImageIdRouteImport } from './routes/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images.$imageId'
+import { Route as ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentDraftsDraftIdImagesPositionRouteImport } from './routes/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-drafts.$draftId.images.$position'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -1238,6 +1239,14 @@ const ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesImageIdRoute =
         ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRoute,
     } as any,
   )
+const ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentDraftsDraftIdImagesPositionRoute =
+  ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentDraftsDraftIdImagesPositionRouteImport.update(
+    {
+      id: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-drafts/$draftId/images/$position',
+      path: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-drafts/$draftId/images/$position',
+      getParentRoute: () => rootRouteImport,
+    } as any,
+  )
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -1425,6 +1434,7 @@ export interface FileRoutesByFullPath {
   '/api/release-catalog/v1/apps/$app/releases/$version': typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
   '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images/$imageId': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesImageIdRoute
   '/api/agent/v1/apps/owned/$clientKey/': typeof ApiAgentV1AppsOwnedClientKeyIndexRoute
+  '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-drafts/$draftId/images/$position': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentDraftsDraftIdImagesPositionRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -1610,6 +1620,7 @@ export interface FileRoutesByTo {
   '/api/release-catalog/v1/apps/$app/releases/$version': typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
   '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images/$imageId': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesImageIdRoute
   '/api/agent/v1/apps/owned/$clientKey': typeof ApiAgentV1AppsOwnedClientKeyIndexRoute
+  '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-drafts/$draftId/images/$position': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentDraftsDraftIdImagesPositionRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -1800,6 +1811,7 @@ export interface FileRoutesById {
   '/api/release-catalog/v1/apps/$app/releases/$version': typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
   '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images/$imageId': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesImageIdRoute
   '/api/agent/v1/apps/owned/$clientKey/': typeof ApiAgentV1AppsOwnedClientKeyIndexRoute
+  '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-drafts/$draftId/images/$position': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentDraftsDraftIdImagesPositionRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -1989,6 +2001,7 @@ export interface FileRouteTypes {
     | '/api/release-catalog/v1/apps/$app/releases/$version'
     | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images/$imageId'
     | '/api/agent/v1/apps/owned/$clientKey/'
+    | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-drafts/$draftId/images/$position'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -2174,6 +2187,7 @@ export interface FileRouteTypes {
     | '/api/release-catalog/v1/apps/$app/releases/$version'
     | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images/$imageId'
     | '/api/agent/v1/apps/owned/$clientKey'
+    | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-drafts/$draftId/images/$position'
   id:
     | '__root__'
     | '/'
@@ -2363,6 +2377,7 @@ export interface FileRouteTypes {
     | '/api/release-catalog/v1/apps/$app/releases/$version'
     | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images/$imageId'
     | '/api/agent/v1/apps/owned/$clientKey/'
+    | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-drafts/$draftId/images/$position'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -2505,6 +2520,7 @@ export interface RootRouteChildren {
   ApiAgentV1ArtifactsArtifactFilesPathRoute: typeof ApiAgentV1ArtifactsArtifactFilesPathRoute
   ApiReleaseCatalogV1AppsAppReleasesVersionRoute: typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
   ApiAgentV1AppsOwnedClientKeyIndexRoute: typeof ApiAgentV1AppsOwnedClientKeyIndexRoute
+  ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentDraftsDraftIdImagesPositionRoute: typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentDraftsDraftIdImagesPositionRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -3818,6 +3834,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesImageIdRouteImport
       parentRoute: typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRoute
     }
+    '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-drafts/$draftId/images/$position': {
+      id: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-drafts/$draftId/images/$position'
+      path: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-drafts/$draftId/images/$position'
+      fullPath: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-drafts/$draftId/images/$position'
+      preLoaderRoute: typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentDraftsDraftIdImagesPositionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -4243,6 +4266,8 @@ const rootRouteChildren: RootRouteChildren = {
     ApiReleaseCatalogV1AppsAppReleasesVersionRoute,
   ApiAgentV1AppsOwnedClientKeyIndexRoute:
     ApiAgentV1AppsOwnedClientKeyIndexRoute,
+  ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentDraftsDraftIdImagesPositionRoute:
+    ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentDraftsDraftIdImagesPositionRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

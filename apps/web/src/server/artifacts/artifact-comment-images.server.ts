@@ -152,6 +152,16 @@ export async function prepareImages(
   return prepared;
 }
 
+export async function useImageBlobs(
+  tx: CommentTx,
+  blobs: Pick<ArtifactBlobStore, "use">,
+  workspaceId: string,
+  images: readonly PreparedImage[],
+): Promise<void> {
+  const gone = await blobs.use(tx, workspaceId, [...new Set(images.map((i) => i.sha256))]);
+  if (gone.length) refuse("artifact-image-not-found", "an uploaded image is gone: upload it again");
+}
+
 export async function attachImages(
   tx: CommentTx,
   blobs: Pick<ArtifactBlobStore, "use">,
@@ -171,8 +181,7 @@ export async function attachImages(
     })),
   );
   if (data.length === 0) return;
-  const gone = await blobs.use(tx, input.workspaceId, [...new Set(data.map((row) => row.sha256))]);
-  if (gone.length) refuse("artifact-image-not-found", "an uploaded image is gone: upload it again");
+  await useImageBlobs(tx, blobs, input.workspaceId, data);
   await tx.artifactCommentImage.createMany({ data });
 }
 

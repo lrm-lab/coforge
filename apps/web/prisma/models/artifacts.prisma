@@ -50,6 +50,7 @@ model Artifact {
   commentReviews  ArtifactCommentReview[]
   commentPositions ArtifactCommentPosition[]
   commentImages   ArtifactCommentImage[]
+  commentDrafts   ArtifactCommentDraft[]
   follows         ArtifactFollow[]
   pageDocuments   ArtifactPageDocument[]
   pageAssets      ArtifactPageAsset[]
@@ -302,6 +303,35 @@ model ArtifactCommentReview {
   @@unique([artifactId, authorAgentId, idempotencyKey])
   @@unique([artifactId, authorUserId, idempotencyKey])
   @@map("artifact_comment_reviews")
+}
+
+/// A person's private, unsent comment: what a comment carries (`version` it was written on, `path`
+/// and `anchor`, a `replyTo` comment, `body`, `images` as a JSON array of the prepared image
+/// metadata) plus `expiresAt`, which every change moves forward. Only its author reads it; sending
+/// writes the author's drafts as one review and deletes them. `userId` and `replyTo` have no
+/// foreign key: this module adds none to a table outside it, and a reply target that is gone is
+/// found at send. A draft's images keep their blobs referenced. Goes with the artifact.
+model ArtifactCommentDraft {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  artifactId String   @db.Uuid
+  userId     String   @db.Uuid
+  version    Int
+  path       String?
+  anchor     Json?
+  replyTo    String?  @db.Uuid
+  body       String
+  images     Json     @default("[]")
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  artifact   Artifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  /// A person's drafts on an artifact, oldest first.
+  @@index([artifactId, userId, createdAt, id])
+  /// The expiry sweep.
+  @@index([expiresAt])
+  /// The blob reference check: which drafts name a blob among their images.
+  @@index([images(ops: JsonbPathOps)], type: Gin)
+  @@map("artifact_comment_drafts")
 }
 
 /// Whether a person or an Agent follows an artifact: told of others' comments, reviews, resolves,

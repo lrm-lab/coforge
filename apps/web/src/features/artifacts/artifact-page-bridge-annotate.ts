@@ -41,7 +41,13 @@ export function createAnnotationChannel(
       method: "coforge/annotate/marks",
       params: {
         revision,
-        marks: marks.map(({ id, anchor, count, label }) => ({ id, anchor, count, label })),
+        marks: marks.map(({ id, anchor, count, label, draft }) => ({
+          id,
+          anchor,
+          count,
+          label,
+          ...(draft ? { draft } : {}),
+        })),
       },
     });
   const sendDraft = () => send({ method: "coforge/annotate/draft", params: { anchor: draft } });

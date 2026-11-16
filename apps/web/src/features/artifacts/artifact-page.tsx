@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { z } from "zod";
@@ -19,6 +19,10 @@ import { ArtifactDeleteConfirm } from "./artifact-delete-confirm";
 import { ArtifactFileView } from "./artifact-file-view";
 import { ArtifactCommentButton } from "./artifact-comment-button";
 import { ArtifactCommentPanel } from "./artifact-comment-panel";
+import { ArtifactDraftsProvider } from "./artifact-drafts-provider";
+import { ArtifactReviewPill } from "./artifact-review-pill";
+import { ReviewToolsContext, type FramePicker } from "./artifact-review-tools";
+import { useReviewFilter } from "./use-review-filter";
 import {
   ArtifactCommentingContext,
   CommentPlacesContext,
@@ -70,9 +74,18 @@ import { useConversationName } from "./use-conversation-name";
 import { useArtifactActions } from "./use-artifact-actions";
 import { useArtifactVisibility } from "./use-artifact-visibility";
 
-type ArtifactPlace = { pane?: ArtifactPaneControls };
+type ArtifactPlace = {
+  pane?: ArtifactPaneControls;
+  reviewId?: string | undefined;
+  onClearReview?: (() => void) | undefined;
+};
 
-export function ArtifactPage({ artifactId, pane }: { artifactId: string } & ArtifactPlace) {
+export function ArtifactPage({
+  artifactId,
+  pane,
+  reviewId,
+  onClearReview,
+}: { artifactId: string } & ArtifactPlace) {
   if (!z.uuid().safeParse(artifactId).success)
     return pane ? (
       <PaneFrame full={pane.full}>
@@ -81,10 +94,23 @@ export function ArtifactPage({ artifactId, pane }: { artifactId: string } & Arti
     ) : (
       <ArtifactUnavailable gone />
     );
-  return <ArtifactPageFor key={artifactId} artifactId={artifactId} pane={pane} />;
+  return (
+    <ArtifactPageFor
+      key={artifactId}
+      artifactId={artifactId}
+      pane={pane}
+      reviewId={reviewId}
+      onClearReview={onClearReview}
+    />
+  );
 }
 
-function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & ArtifactPlace) {
+function ArtifactPageFor({
+  artifactId,
+  pane,
+  reviewId,
+  onClearReview,
+}: { artifactId: string } & ArtifactPlace) {
   const queryClient = useQueryClient();
   const toast = useAppToast();
   const router = useRouter();
@@ -100,6 +126,11 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
   const [openPath, setOpenPath] = useState<string | null>(null);
   const commentMode = useCommentMode(setPanel);
   const [places, setPlaces] = useState<PublishedPlaces>(null);
+  const [picker, setPicker] = useState<FramePicker | null>(null);
+  const review = useReviewFilter(artifactId, reviewId, () => onClearReview?.());
+  useEffect(() => {
+    if (reviewId !== undefined) setPanel("comments");
+  }, [reviewId]);
   const latest = read.data?.artifact.currentVersion ?? 0;
   const older = pinned !== null && pinned !== latest;
   const pinnedRead = useQuery({
@@ -206,6 +237,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
         setPanel("comments");
         postFocus(commentId);
       },
+      openPanel: () => setPanel("comments"),
       publishPlaces,
     }),
     [
@@ -277,149 +309,155 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
   }
   const body = (
     <ArtifactCommentingContext.Provider value={commenting}>
-      <CommentThreadsContext.Provider value={groups.anchored}>
-        <CommentRequestsContext.Provider value={requests}>
-          <CommentPlacesContext.Provider value={places}>
-            <ArtifactPageHeader
-              artifactId={artifactId}
-              entryPath={entryPath}
-              title={title}
-              shownVersion={current ? shownVersion : undefined}
-              home={home}
-              homeName={homeName}
-              pane={pane}
-              onChooseVersion={choose}
-              onFind={webPage && !openPath ? () => setFinding(true) : undefined}
-              onCopyLink={current && (() => void copy(pageHref(), m.doc_link_copied()))}
-              comments={
-                current && (
-                  <ArtifactCommentButton
-                    total={current.commentCount}
-                    active={commentMode.mode}
-                    onToggle={commentMode.toggle}
-                    onShowAll={commentMode.showAll}
-                  />
-                )
-              }
-              pills={
-                current && (
-                  <>
-                    <VisibilityPill visibility={visibility} />
-                    {home && (
-                      <ArtifactHomeChip
-                        home={home}
-                        homeName={homeName}
-                        scope={visibility.current}
+      <ArtifactDraftsProvider enabled={current !== undefined}>
+        <ReviewToolsContext.Provider value={setPicker}>
+          <CommentThreadsContext.Provider value={groups.anchored}>
+            <CommentRequestsContext.Provider value={requests}>
+              <CommentPlacesContext.Provider value={places}>
+                <ArtifactPageHeader
+                  artifactId={artifactId}
+                  entryPath={entryPath}
+                  title={title}
+                  shownVersion={current ? shownVersion : undefined}
+                  home={home}
+                  homeName={homeName}
+                  pane={pane}
+                  onChooseVersion={choose}
+                  onFind={webPage && !openPath ? () => setFinding(true) : undefined}
+                  onCopyLink={current && (() => void copy(pageHref(), m.doc_link_copied()))}
+                  comments={
+                    current && (
+                      <ArtifactCommentButton
+                        total={current.commentCount}
+                        active={commentMode.mode}
+                        onToggle={commentMode.toggle}
+                        onShowAll={commentMode.showAll}
+                      />
+                    )
+                  }
+                  pills={
+                    current && (
+                      <>
+                        <VisibilityPill visibility={visibility} />
+                        {home && (
+                          <ArtifactHomeChip
+                            home={home}
+                            homeName={homeName}
+                            scope={visibility.current}
+                          />
+                        )}
+                        <ArtifactPresenceChip artifactId={artifactId} ready={opened} />
+                      </>
+                    )
+                  }
+                  menu={
+                    current && (
+                      <ArtifactMoreMenu
+                        artifactId={artifactId}
+                        shownVersion={shownVersion}
+                        phone={phone}
+                        fileCount={files.length}
+                        canDelete={current.canDelete}
+                        canFind={webPage}
+                        following={following}
+                        visibility={visibility}
+                        onChooseVersion={choose}
+                        onAction={onMoreAction}
+                      />
+                    )
+                  }
+                />
+                <div className="relative flex min-h-0 flex-1">
+                  <div className="relative flex min-w-0 flex-1 flex-col">
+                    {incoming !== null && incoming > latest && (
+                      <ArtifactUpdateBanner
+                        artifactId={artifactId}
+                        incoming={incoming}
+                        onView={viewLatest}
                       />
                     )}
-                    <ArtifactPresenceChip artifactId={artifactId} ready={opened} />
-                  </>
-                )
-              }
-              menu={
-                current && (
-                  <ArtifactMoreMenu
+                    {older && (
+                      <ViewingVersionNotice
+                        version={pinned}
+                        failed={pinnedRead.isError}
+                        onBack={() => setPinned(null)}
+                      />
+                    )}
+                    {!current ? (
+                      <LoadingBody />
+                    ) : openPath ? (
+                      <ArtifactFileView
+                        artifactId={artifactId}
+                        version={shownVersion}
+                        path={openPath}
+                        onBack={() => setOpenPath(null)}
+                      />
+                    ) : webPage ? (
+                      <ArtifactWebPage
+                        key={shownVersion}
+                        artifactId={artifactId}
+                        version={shownVersion}
+                        title={title}
+                        entryPath={current.artifact.entryPath}
+                        finding={finding}
+                        onFindingChange={setFinding}
+                      />
+                    ) : (
+                      <ArtifactMarkdown path={current.artifact.entryPath} text={current.text} />
+                    )}
+                    {current && <ArtifactReviewPill picker={picker} />}
+                  </div>
+                  {panel === "comments" && current && (
+                    <ArtifactCommentPanel
+                      artifactId={artifactId}
+                      shownVersion={shownVersion}
+                      openPath={openPath}
+                      list={list}
+                      groups={groups}
+                      review={review}
+                      onClose={commentMode.closePanel}
+                    />
+                  )}
+                  {panel === "files" && current && (
+                    <ArtifactFilesPanel
+                      artifactId={artifactId}
+                      version={shownVersion}
+                      entryPath={current.artifact.entryPath}
+                      files={files}
+                      openPath={openPath}
+                      onOpen={setOpenPath}
+                      onClose={() => setPanel(null)}
+                    />
+                  )}
+                </div>
+                {visibility.dialog}
+                {dialogs}
+                {sendingTo && (
+                  <ArtifactSendDialog
                     artifactId={artifactId}
-                    shownVersion={shownVersion}
-                    phone={phone}
-                    fileCount={files.length}
-                    canDelete={current.canDelete}
-                    canFind={webPage}
-                    following={following}
-                    visibility={visibility}
-                    onChooseVersion={choose}
-                    onAction={onMoreAction}
-                  />
-                )
-              }
-            />
-            <div className="relative flex min-h-0 flex-1">
-              <div className="flex min-w-0 flex-1 flex-col">
-                {incoming !== null && incoming > latest && (
-                  <ArtifactUpdateBanner
-                    artifactId={artifactId}
-                    incoming={incoming}
-                    onView={viewLatest}
-                  />
-                )}
-                {older && (
-                  <ViewingVersionNotice
-                    version={pinned}
-                    failed={pinnedRead.isError}
-                    onBack={() => setPinned(null)}
-                  />
-                )}
-                {!current ? (
-                  <LoadingBody />
-                ) : openPath ? (
-                  <ArtifactFileView
-                    artifactId={artifactId}
-                    version={shownVersion}
-                    path={openPath}
-                    onBack={() => setOpenPath(null)}
-                  />
-                ) : webPage ? (
-                  <ArtifactWebPage
-                    key={shownVersion}
-                    artifactId={artifactId}
-                    version={shownVersion}
                     title={title}
-                    entryPath={current.artifact.entryPath}
-                    finding={finding}
-                    onFindingChange={setFinding}
+                    canChange={canChange}
+                    tier={current?.artifact.access ?? "conversation"}
+                    linkAvailable={link.available}
+                    link={link.url !== null}
+                    onClose={() => setSendingTo(false)}
                   />
-                ) : (
-                  <ArtifactMarkdown path={current.artifact.entryPath} text={current.text} />
                 )}
-              </div>
-              {panel === "comments" && current && (
-                <ArtifactCommentPanel
-                  artifactId={artifactId}
-                  shownVersion={shownVersion}
-                  openPath={openPath}
-                  list={list}
-                  groups={groups}
-                  onClose={commentMode.closePanel}
+                <ArtifactDeleteConfirm
+                  open={deleting}
+                  onClose={() => setDeleting(false)}
+                  title={title}
+                  onDelete={async () => {
+                    await deleteArtifact({ data: { artifactId } });
+                    void refreshArtifact(queryClient, artifactId, homeId ?? null);
+                    backHome();
+                  }}
                 />
-              )}
-              {panel === "files" && current && (
-                <ArtifactFilesPanel
-                  artifactId={artifactId}
-                  version={shownVersion}
-                  entryPath={current.artifact.entryPath}
-                  files={files}
-                  openPath={openPath}
-                  onOpen={setOpenPath}
-                  onClose={() => setPanel(null)}
-                />
-              )}
-            </div>
-            {visibility.dialog}
-            {dialogs}
-            {sendingTo && (
-              <ArtifactSendDialog
-                artifactId={artifactId}
-                title={title}
-                canChange={canChange}
-                tier={current?.artifact.access ?? "conversation"}
-                linkAvailable={link.available}
-                link={link.url !== null}
-                onClose={() => setSendingTo(false)}
-              />
-            )}
-            <ArtifactDeleteConfirm
-              open={deleting}
-              onClose={() => setDeleting(false)}
-              title={title}
-              onDelete={async () => {
-                await deleteArtifact({ data: { artifactId } });
-                void refreshArtifact(queryClient, artifactId, homeId ?? null);
-                backHome();
-              }}
-            />
-          </CommentPlacesContext.Provider>
-        </CommentRequestsContext.Provider>
-      </CommentThreadsContext.Provider>
+              </CommentPlacesContext.Provider>
+            </CommentRequestsContext.Provider>
+          </CommentThreadsContext.Provider>
+        </ReviewToolsContext.Provider>
+      </ArtifactDraftsProvider>
     </ArtifactCommentingContext.Provider>
   );
   return pane ? (

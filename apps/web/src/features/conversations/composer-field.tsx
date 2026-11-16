@@ -52,6 +52,7 @@ export function ComposerField({
   sendLabel,
   mentionGroups,
   alwaysStacked = false,
+  actions,
 }: {
   completion: ReturnType<typeof useReferenceCompletion>;
   value: string;
@@ -73,6 +74,7 @@ export function ComposerField({
   sendLabel?: string;
   mentionGroups?: "membership" | "kind";
   alwaysStacked?: boolean;
+  actions?: (className: string) => ReactNode;
 }) {
   const id = useId();
   const isComposingRef = useRef(false);
@@ -176,18 +178,22 @@ export function ComposerField({
         </span>
         {below}
         {leading?.(cx("col-start-1", barRow, stacked && "mt-1"))}
-        <ComposerSendButton
-          asTask={asTask}
-          taskMode={taskMode}
-          isDisabled={sendDisabled}
-          label={sendLabel}
-          onChoose={(wantTask) => {
-            if (onTaskMode) onTaskMode(wantTask);
-            else onSubmit(wantTask);
-            requestAnimationFrame(() => focusDraftEnd(completion.textareaRef.current));
-          }}
-          className={cx("col-start-3", barRow, stacked && "mt-1")}
-        />
+        {actions ? (
+          actions(cx("col-start-3", barRow, stacked && "mt-1"))
+        ) : (
+          <ComposerSendButton
+            asTask={asTask}
+            taskMode={taskMode}
+            isDisabled={sendDisabled}
+            label={sendLabel}
+            onChoose={(wantTask) => {
+              if (onTaskMode) onTaskMode(wantTask);
+              else onSubmit(wantTask);
+              requestAnimationFrame(() => focusDraftEnd(completion.textareaRef.current));
+            }}
+            className={cx("col-start-3", barRow, stacked && "mt-1")}
+          />
+        )}
       </div>
       {completion.open && completion.trigger && (
         <ReferenceSuggestionList

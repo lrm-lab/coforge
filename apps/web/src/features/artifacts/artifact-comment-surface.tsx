@@ -20,6 +20,7 @@ import {
   useCommentRequests,
   useCommentThreads,
 } from "./artifact-commenting";
+import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
 import { DraftAffordance } from "./artifact-draft-affordance";
 import { linesAdapter, type LineIndex } from "./artifact-line-ranges";
 import { textAdapter, type TextIndex } from "./artifact-text-ranges";
@@ -70,6 +71,8 @@ function Surface<Index>({
     useArtifactCommenting();
   const { reveal, consumeReveal } = useCommentRequests();
   const anchored = useCommentThreads();
+  const { drafts } = useCommentDrafts();
+  const { openDraft } = useCommentDraftActions();
   const reducedMotion = usePrefersReducedMotion();
   const frame = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -85,6 +88,10 @@ function Surface<Index>({
     () => anchored.filter((thread) => thread.root.path === path && !("deleted" in thread.root)),
     [anchored, path],
   );
+  const unsent = useMemo(
+    () => drafts.filter((draft) => draft.path === path && draft.anchor !== null),
+    [drafts, path],
+  );
   const places = useMemo<ReadonlyMap<string, AnchorPlace>>(() => {
     const index = active ? get() : null;
     if (!index) return EMPTY_PLACES;
@@ -92,8 +99,9 @@ function Surface<Index>({
     for (const { root } of threads)
       if (!("deleted" in root) && root.anchor)
         found.set(root.id, adapter.locate(index, root.anchor));
+    for (const draft of unsent) found.set(draft.id, adapter.locate(index, draft.anchor!));
     return found;
-  }, [active, get, revision, threads, version, adapter]);
+  }, [active, get, revision, threads, unsent, version, adapter]);
 
   useEffect(() => {
     publishPlaces(path, places);
@@ -153,15 +161,23 @@ function Surface<Index>({
   const markers = useMemo<readonly CommentMarker[]>(() => {
     if (!commenting || layout.markerLeft === null) return [];
     const frameTop = frame.current?.getBoundingClientRect().top ?? 0;
-    return stackMarkers(
-      threads.flatMap((thread) => {
-        const place = places.get(thread.root.id);
-        return place?.status === "found"
-          ? [{ thread, top: place.location.range.getBoundingClientRect().top - frameTop }]
-          : [];
+    const topOf = (id: string) => {
+      const place = places.get(id);
+      return place?.status === "found"
+        ? place.location.range.getBoundingClientRect().top - frameTop
+        : null;
+    };
+    return stackMarkers([
+      ...threads.flatMap((thread) => {
+        const top = topOf(thread.root.id);
+        return top === null ? [] : [{ kind: "thread" as const, thread, top }];
       }),
-    );
-  }, [commenting, layout, threads, places]);
+      ...unsent.flatMap((draft) => {
+        const top = topOf(draft.id);
+        return top === null ? [] : [{ kind: "draft" as const, draft, top }];
+      }),
+    ]);
+  }, [commenting, layout, threads, unsent, places]);
 
   return (
     <div className="min-h-0 flex-1 overflow-auto">
@@ -178,6 +194,7 @@ function Surface<Index>({
               revealThread({ path, anchor: root.anchor });
               openThread(root.id);
             }}
+            onOpenDraft={openDraft}
           />
         )}
         {commenting && <DraftAffordance draft={draft} path={path} />}

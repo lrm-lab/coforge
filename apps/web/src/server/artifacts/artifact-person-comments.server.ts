@@ -17,7 +17,7 @@ import {
 } from "./artifact-comment-images.server";
 import { mentionCandidates } from "./artifact-comment-mentions.server";
 import { personPrincipal } from "./artifact-comment-principal.server";
-import { commentsById, listThreads } from "./artifact-comment-thread-reads.server";
+import { commentsById, listThreads, reviewComments } from "./artifact-comment-thread-reads.server";
 import { reopenComment, resolveComment, resolvedNotice } from "./artifact-comment-threads.server";
 import { postComment } from "./artifact-comments.server";
 import { deleteOwnComment, editOwnComment, withCommentLock } from "./artifact-comment-write.server";
@@ -27,7 +27,7 @@ import {
   ArtifactNotices,
   NOBODY_TOLD,
   commentAudience,
-  type MentionCheck,
+  requireMentionable,
 } from "./artifact-notices.server";
 import { announceArtifactComments, type ArtifactSignals } from "./artifact-signals.server";
 import { ArtifactStorageFull, type StoredArtifactBlobs } from "./artifact-blobs.server";
@@ -56,6 +56,11 @@ export class ArtifactPersonComments {
   async byId(input: Place & { ids: readonly string[] }) {
     const artifact = await this.readable(input);
     return commentsById(this.db, { ...input, artifact });
+  }
+
+  async review(input: Place & { reviewId: string }) {
+    const artifact = await this.readable(input);
+    return reviewComments(this.db, { ...input, artifact });
   }
 
   async candidates(input: Place) {
@@ -90,7 +95,7 @@ export class ArtifactPersonComments {
       { workspaceId: input.workspaceId, artifact },
       commentAudience(input.comment.body, COMMENT_HANDLES_RESOLVED_MAX),
     );
-    this.requireMentionable(audience.mentions);
+    requireMentionable(audience.mentions);
     const written = await postComment(
       this.db,
       this.blobs,
@@ -129,7 +134,7 @@ export class ArtifactPersonComments {
       { workspaceId: input.workspaceId, artifact },
       commentAudience(input.body, COMMENT_HANDLES_RESOLVED_MAX),
     );
-    this.requireMentionable(mentions);
+    requireMentionable(mentions);
     await withCommentLock(this.db, artifact.id, (tx) =>
       editOwnComment(tx, { ...input, artifactId: artifact.id }),
     );
@@ -224,20 +229,6 @@ export class ArtifactPersonComments {
   private async admit(userId: string) {
     const decision = await this.limit?.admit(userId);
     if (decision && !decision.allowed) throw artifactRateLimited(decision.retryAfterSeconds);
-  }
-
-  private requireMentionable(check: MentionCheck) {
-    if (check.count > COMMENT_MENTIONS_MAX)
-      throw new AppError("INVALID_INPUT", {
-        errorId: "artifact-too-many-mentions",
-        hint: `a comment mentions at most ${COMMENT_MENTIONS_MAX} people and Agents`,
-      });
-    if (check.cannotSee.length > 0)
-      throw new AppError("INVALID_INPUT", {
-        errorId: "artifact-mention-cannot-see",
-        hint: `${check.cannotSee.join(", ")} cannot see this artifact`,
-        details: { names: check.cannotSee.join(",") },
-      });
   }
 
   private notices() {

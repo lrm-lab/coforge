@@ -228,6 +228,11 @@ const NO_OTHER_REFERENCE = Prisma.sql`
     JOIN "artifacts" a ON a."id" = i."artifactId"
     WHERE i."sha256" = b."sha256" AND a."workspaceId" = b."workspaceId")
   AND NOT EXISTS (
+    SELECT 1 FROM "artifact_comment_drafts" d
+    JOIN "artifacts" a ON a."id" = d."artifactId"
+    WHERE d."images" @> jsonb_build_array(jsonb_build_object('sha256', b."sha256"))
+      AND a."workspaceId" = b."workspaceId")
+  AND NOT EXISTS (
     SELECT 1 FROM "artifact_page_assets" p
     JOIN "artifacts" a ON a."id" = p."artifactId"
     WHERE p."sha256" = b."sha256" AND a."workspaceId" = b."workspaceId")`;

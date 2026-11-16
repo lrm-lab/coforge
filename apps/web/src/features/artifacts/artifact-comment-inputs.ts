@@ -28,8 +28,10 @@ const commentImages = z
   .array(z.string().regex(ARTIFACT_SHA256_PATTERN))
   .max(ARTIFACT_COMMENT_IMAGES_MAX);
 
-const hasTextOrImage = (comment: { body: string; images?: readonly string[] | undefined }) =>
-  comment.body !== "" || (comment.images?.length ?? 0) > 0;
+export const hasTextOrImage = (comment: {
+  body: string;
+  images?: readonly unknown[] | undefined;
+}) => comment.body !== "" || (comment.images?.length ?? 0) > 0;
 
 const anchorText = (min: number, max: number) => z.string().min(min).max(max).refine(noNul);
 
@@ -77,7 +79,7 @@ export const commentAnchor = z
       context.addIssue({ code: "custom", message: "anchor data is over 4 KiB", path: ["data"] });
   });
 
-const commentFields = {
+export const commentFields = {
   body: commentText,
   path: filePath.optional(),
   anchor: commentAnchor.optional(),
@@ -87,7 +89,7 @@ const commentFields = {
 
 const commentDraft = z.object({ ...commentFields, idempotencyKey: artifactInputs.id });
 
-const emptyComment = { message: "the comment is empty", path: ["body"] };
+export const emptyComment = { message: "the comment is empty", path: ["body"] };
 
 export const commentDraftInput = commentDraft.refine(hasTextOrImage, emptyComment);
 

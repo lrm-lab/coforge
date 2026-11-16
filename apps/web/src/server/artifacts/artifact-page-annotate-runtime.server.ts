@@ -90,9 +90,11 @@ function drawMarks() {
     var badge = document.createElement("button");
     badge.type = "button";
     badge.setAttribute("data-id", mark.id);
-    badge.textContent = String(Math.min(mark.count, 999));
+    badge.textContent = mark.draft ? "" : String(Math.min(mark.count, 999));
     badge.setAttribute("aria-label", mark.label);
-    badge.style.cssText = "position:absolute;pointer-events:auto;cursor:pointer;margin:0;padding:0;width:24px;height:24px;border-radius:12px;border:2px solid #fff;background:" + ACCENT + ";color:#fff;font:600 11px/20px system-ui,sans-serif;text-align:center;left:" + left + "px;top:" + top + "px";
+    if (mark.draft) badge.setAttribute("data-draft", "");
+    var look = mark.draft ? "border:2px dashed " + ACCENT + ";background:#fff" : "border:2px solid #fff;background:" + ACCENT;
+    badge.style.cssText = "position:absolute;pointer-events:auto;cursor:pointer;margin:0;padding:0;width:24px;height:24px;border-radius:12px;" + look + ";color:#fff;font:600 11px/20px system-ui,sans-serif;text-align:center;left:" + left + "px;top:" + top + "px";
     badge.style.boxShadow = mark.id === flashId ? BADGE_FLASH_SHADOW : BADGE_SHADOW;
     badges.set(mark.id, badge);
     parent.appendChild(badge);
@@ -158,7 +160,7 @@ function setMarks(params) {
   var marks = [];
   var given = params && Array.isArray(params.marks) ? params.marks.slice(0, 500) : [];
   given.forEach(function (mark) {
-    if (mark && typeof mark.id === "string" && mark.anchor && typeof mark.label === "string" && Number.isInteger(mark.count)) marks.push({ id: mark.id, anchor: mark.anchor, count: mark.count, label: mark.label.slice(0, 300) });
+    if (mark && typeof mark.id === "string" && mark.anchor && typeof mark.label === "string" && Number.isInteger(mark.count)) marks.push({ id: mark.id, anchor: mark.anchor, count: mark.count, label: mark.label.slice(0, 300), draft: mark.draft === true });
   });
   annotate.marks = marks;
   annotate.revision = params && Number.isInteger(params.revision) ? params.revision : 0;

@@ -29,6 +29,10 @@ import { useDebouncedValue } from "#src/lib/use-debounced-value";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { postArtifactComment, previewArtifactCommentAudience } from "./artifact-comments.functions";
+import { ComposerActions } from "./artifact-comment-composer-actions";
+import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
+import { useArtifactCommenting } from "./artifact-commenting";
+import { draftFailure } from "./use-comment-drafts";
 import { COMMENT_MENTIONS_MAX, type CommentAnchor } from "./artifact-comment-inputs";
 import { uploadCommentImage } from "./artifact-comment-images";
 import { artifactMentionCandidatesQuery, syncOwnComments } from "./artifact-comment-queries";
@@ -104,6 +108,10 @@ export function ArtifactCommentComposer({
   const queryClient = useQueryClient();
   const workspaceSlug = useWorkspaceSlug();
   const { offered } = useMentionables(artifactId);
+  const drafts = useCommentDrafts();
+  const { create: createDraft } = useCommentDraftActions();
+  const { version: shownVersion } = useArtifactCommenting();
+  const [saving, setSaving] = useState(false);
   const [body, setBody] = useState("");
   const [pins, setPins] = useState<readonly MentionPin[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -160,7 +168,10 @@ export function ArtifactCommentComposer({
     attachment.state === "ready" && attachment.sha256 ? [attachment.sha256] : [],
   );
   const empty = body.trim() === "" && ready.length === 0;
-  const cannotSend = empty || uploading || sending || tooLong || mentionError !== null;
+  const invalid = empty || uploading || tooLong || mentionError !== null;
+  const cannotSend = invalid || sending || drafts.busy;
+  const cannotSave = invalid || saving || sending || drafts.busy || drafts.atLimit;
+  const hasDrafts = drafts.drafts.length > 0;
 
   function addFiles(files: readonly File[]) {
     const images = files.filter((file) => INLINE_IMAGE_TYPES.has(file.type));
@@ -202,6 +213,34 @@ export function ArtifactCommentComposer({
     addFiles,
   );
 
+  function clear() {
+    for (const attachment of attachments) URL.revokeObjectURL(attachment.previewUrl);
+    setBody("");
+    setPins([]);
+    setAttachments([]);
+  }
+
+  async function saveDraft() {
+    if (cannotSave) return;
+    setSaving(true);
+    setFailure(null);
+    try {
+      await createDraft({
+        version: target.kind === "reply" ? shownVersion : target.version,
+        body: wire.body,
+        ...placement(target),
+        ...(ready.length ? { images: ready } : {}),
+      });
+      clear();
+      onPosted();
+    } catch (error) {
+      setFailure(draftFailure(error));
+    } finally {
+      setSaving(false);
+      completion.textareaRef.current?.focus();
+    }
+  }
+
   async function submit() {
     if (cannotSend) return;
     setSending(true);
@@ -223,10 +262,7 @@ export function ArtifactCommentComposer({
           comment: { ...comment, idempotencyKey: attempt.current.key },
         },
       });
-      for (const attachment of attachments) URL.revokeObjectURL(attachment.previewUrl);
-      setBody("");
-      setPins([]);
-      setAttachments([]);
+      clear();
       onPosted();
       await syncOwnComments(queryClient, artifactId, "posted", [id]);
     } catch (error) {
@@ -246,7 +282,7 @@ export function ArtifactCommentComposer({
       : null;
   const error = tooLong
     ? m.av_cm_err_too_long({ count: COMMENT_BODY_MAX })
-    : (mentionError ?? failure);
+    : (mentionError ?? failure ?? (drafts.atLimit ? m.av_dr_limit({ count: drafts.limit }) : null));
 
   return (
     <form
@@ -282,7 +318,7 @@ export function ArtifactCommentComposer({
           placeholder={
             target.kind === "reply" ? m.av_cm_reply_placeholder() : m.av_cm_placeholder()
           }
-          onSubmit={() => void submit()}
+          onSubmit={() => void (hasDrafts ? saveDraft() : submit())}
           sendDisabled={cannotSend}
           isReadOnly={sending}
           mentionGroups="kind"
@@ -298,6 +334,17 @@ export function ArtifactCommentComposer({
               tooltip={m.av_cm_add_image()}
               isDisabled={attachments.length >= ARTIFACT_COMMENT_IMAGES_MAX}
               onClick={() => fileInput.current?.click()}
+            />
+          )}
+          actions={(className) => (
+            <ComposerActions
+              className={className}
+              hasDrafts={hasDrafts}
+              canSend={!cannotSend}
+              canSave={!cannotSave}
+              sending={sending}
+              saving={saving}
+              onSave={() => void saveDraft()}
             />
           )}
           below={

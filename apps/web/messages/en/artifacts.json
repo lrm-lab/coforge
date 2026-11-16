@@ -309,5 +309,109 @@
         "countPlural=other": "{count} comments"
       }
     }
-  ]
+  ],
+  "av_dr_save": "Save draft",
+  "av_dr_send": "Send",
+  "av_dr_group": "Your drafts",
+  "av_dr_tag": "Draft",
+  "av_dr_marker": "Your draft",
+  "av_dr_mark_label": "Draft comment on “{quote}”",
+  "av_dr_mark_unnamed": "Draft comment",
+  "av_dr_replying_to": "Reply to {name}",
+  "av_dr_replying_earlier": "Reply to an earlier comment",
+  "av_dr_expires_today": "Clears today",
+  "av_dr_expires": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Clears in {count} day",
+        "countPlural=other": "Clears in {count} days"
+      }
+    }
+  ],
+  "av_dr_tools": "Review tools",
+  "av_dr_undo": "Undo",
+  "av_dr_redo": "Redo",
+  "av_dr_discard": "Discard all",
+  "av_dr_send_n": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Send {count}",
+        "countPlural=other": "Send {count}"
+      }
+    }
+  ],
+  "av_dr_discard_title": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Discard {count} draft?",
+        "countPlural=other": "Discard {count} drafts?"
+      }
+    }
+  ],
+  "av_dr_discard_body": "This can't be undone.",
+  "av_dr_discard_confirm": "Discard drafts",
+  "av_dr_discard_failed": "Couldn't discard your drafts.",
+  "av_dr_delete_title": "Delete this draft?",
+  "av_dr_delete_body": "Its images are deleted with it, and that can't be undone.",
+  "av_dr_delete_confirm": "Delete draft",
+  "av_dr_delete_failed": "Couldn't delete the draft.",
+  "av_dr_deleted": "Draft deleted",
+  "av_dr_deleted_undo": "Undo",
+  "av_dr_save_failed": "Couldn't save the draft. Try again.",
+  "av_dr_limit": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "You already have {count} draft here. Send it first.",
+        "countPlural=other": "You already have {count} drafts here. Send them first."
+      }
+    }
+  ],
+  "av_dr_undo_failed": "Couldn't undo that step.",
+  "av_dr_redo_failed": "Couldn't redo that step.",
+  "av_dr_pending_title": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} to send",
+        "countPlural=other": "{count} to send"
+      }
+    }
+  ],
+  "av_dr_pending_refused": "Nothing was sent. Fix or delete the outlined draft, then send again.",
+  "av_dr_pending_changed": "Your drafts changed since you last looked. Check the list, then send again.",
+  "av_dr_send_failed": "Couldn't send. Your drafts are all still here, so try again.",
+  "av_dr_load_failed": "Couldn't load your drafts.",
+  "av_dr_back": "Back",
+  "av_dr_sent": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "Sent {count} comment as a review",
+        "countPlural=other": "Sent {count} comments as one review"
+      }
+    }
+  ],
+  "av_dr_why_mention": "{names} can't see this artifact. Remove the mention or delete the draft.",
+  "av_dr_why_too_many": "This draft mentions too many people. Keep it to {count}.",
+  "av_dr_why_file": "The file this draft is about is no longer in the artifact. Delete the draft.",
+  "av_dr_why_version": "The version this draft was written on is gone. Delete the draft.",
+  "av_dr_why_reply": "The comment this draft replies to was deleted. Delete the draft.",
+  "av_dr_why_invalid": "This draft can't be sent right now. Edit or delete it.",
+  "av_dr_filter": "Filter",
+  "av_dr_filter_all": "All comments",
+  "av_dr_filter_review": "{name}'s review",
+  "av_dr_filter_clear": "Show all comments",
+  "av_dr_review_failed": "Couldn't load this review's comments.",
+  "av_dr_review_missing": "This review isn't part of this artifact.",
+  "av_dr_review_summary": "Review summary"
 }

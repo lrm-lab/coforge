@@ -22,7 +22,13 @@ export type FrameRect = {
 
 export type PageAnnotationMode = { picking: boolean; selecting: boolean; showMarks: boolean };
 
-export type PageMark = { id: string; anchor: CommentAnchor; count: number; label: string };
+export type PageMark = {
+  id: string;
+  anchor: CommentAnchor;
+  count: number;
+  label: string;
+  draft?: true;
+};
 
 export type PickFailure = "unanchorable";
 

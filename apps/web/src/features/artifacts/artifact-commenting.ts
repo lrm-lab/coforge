@@ -17,6 +17,7 @@ export type ArtifactCommenting = {
   panelOpen: boolean;
   revealThread(target: CommentTarget): void;
   openThread(commentId: string): void;
+  openPanel(): void;
   publishPlaces(path: string, places: ThreadPlaces | null): void;
 };
 

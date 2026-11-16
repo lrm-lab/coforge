@@ -7,7 +7,7 @@ import { COMMENT_SELECT, type CommentRow } from "./artifact-comment-view.server"
 
 export type CommentTx = Prisma.TransactionClient;
 
-const WRITE_TIMEOUT_MS = 15_000;
+export const WRITE_TIMEOUT_MS = 15_000;
 
 export const lockComments = (tx: CommentTx, artifactId: string) =>
   tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`artifact-comments:${artifactId}`}, 0))`;

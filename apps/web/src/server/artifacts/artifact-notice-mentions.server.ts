@@ -5,15 +5,16 @@ import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 export type MentionedAgent = { id: string; name: string };
 export type MentionedPerson = { id: string; username: string };
 
+export const mentionHandles = (text: string, max = Number.POSITIVE_INFINITY) =>
+  readMessageReferences(text).candidates.handles.slice(0, max);
+
 export async function mentionedIn(
   db: Pick<PrismaClient, "agent" | "workspaceMembership">,
   workspaceId: string,
   texts: readonly string[],
-  handlesMax = Number.POSITIVE_INFINITY,
+  handlesPerText = Number.POSITIVE_INFINITY,
 ): Promise<{ agents: MentionedAgent[]; people: MentionedPerson[] }> {
-  const handles = [
-    ...new Set(texts.flatMap((text) => readMessageReferences(text).candidates.handles)),
-  ].slice(0, handlesMax);
+  const handles = [...new Set(texts.flatMap((text) => mentionHandles(text, handlesPerText)))];
   if (handles.length === 0) return { agents: [], people: [] };
   const [agents, memberships] = await Promise.all([
     db.agent.findMany({

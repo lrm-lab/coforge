@@ -64,3 +64,32 @@ Comments on artifacts are written for Agents (the Agent API's `comments`, `comme
   the person sees the anchor's label or quote in the composer before sending and nothing is posted
   without the person sending. A person's anchor quote is text the page chose, and an Agent later
   reads it with the comment: treat it as page content, not as the person's words.
+
+## Drafts and review send
+
+- A person's drafts (`artifact_comment_drafts`) are private to the author: no other person, no Agent
+  and no API reads them. `ArtifactCommentDrafts` (`artifact-comment-drafts.server.ts`, composed as
+  `drafts`) lists, creates, edits (body only), deletes and discards; a create may carry the
+  creation time of a draft being restored, which keeps its place in creation order (clamped to not
+  after now and not before the 30-day window; expiry restarts from now); at most `COMMENT_DRAFTS_MAX`
+  per person per artifact (checked under the `artifact-drafts:<artifactId>:<userId>` advisory lock,
+  always taken after the comment lock). A draft expires 30 days after its last change and is swept
+  hourly by `artifact-comment-draft-sweep.server.ts` (`FOR UPDATE SKIP LOCKED`), before the blob sweep.
+  A person who loses access to the artifact cannot read their drafts; they stay stored until they
+  expire and are readable again if access returns.
+- The HTML page's runtime is sent the anchors (never the bodies or images) of the viewer's own
+  drafts as marks, like the anchors of sent threads, so the page can draw them.
+- Draft images are stored in the draft's `images` column; `NO_OTHER_REFERENCE` counts them, so a blob
+  a draft holds is never swept; a GIN index on `images` serves that check. Draft rows are locked
+  (`lockedDrafts`, one `SELECT ... FOR UPDATE`) while a send, an edit or a delete reads them.
+- Send (`artifact-comment-drafts-submit.server.ts`) takes the client's draft ids and a client key.
+  A set that differs from the person's current drafts is `artifact-drafts-changed`. Every draft is
+  validated (mentions, file in its version, version, reply target) in one pass; the first failure
+  in creation order, mention checks included, returns `{status: "rejected", draftId, reason}` and
+  writes nothing. The mention audience is resolved once for the union of the drafts' handles and
+  attributed to each draft in memory; the one mention rule is `requireMentionable`, which a direct
+  post throws from and the send maps to a refusal. Otherwise the drafts
+  become comments in creation order in one transaction under one review (`version` is the highest
+  draft version), the drafts are deleted, and Agents are notified once per review. A retry with the
+  same key and ids returns the same review; the same key with other ids is a conflict.
+- A reply draft stores no path; the comment takes its parent's at send.

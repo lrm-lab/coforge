@@ -1,3 +1,4 @@
+import { REVIEW_COMMENTS_MAX } from "@lrm/coforge-sdk/agent";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import type { CommentAnchor } from "#src/features/artifacts/artifact-comment-inputs";
 import { AppError } from "#src/lib/app-error";
@@ -8,13 +9,24 @@ import {
   formatCursor,
   parseCursor,
 } from "./artifact-comment-unseen.server";
-import { COMMENT_SELECT, commentViewPairs, type CommentRow } from "./artifact-comment-view.server";
+import {
+  COMMENT_SELECT,
+  REVIEW_SELECT,
+  commentViewPairs,
+  reviewViews,
+  type CommentRow,
+} from "./artifact-comment-view.server";
 
 export const THREADS_PAGE_SIZE = 20;
 
 type Db = Pick<
   PrismaClient,
-  "artifactComment" | "artifactCommentImage" | "workspaceMembership" | "agent" | "user"
+  | "artifactComment"
+  | "artifactCommentImage"
+  | "artifactCommentReview"
+  | "workspaceMembership"
+  | "agent"
+  | "user"
 >;
 
 export type PersonAnchor = Omit<CommentAnchor, "data"> & { data: Record<string, string | number> };
@@ -117,4 +129,23 @@ export async function listThreads(db: Db, input: ViewerPlace & { before?: string
     comments: await personViews(db, input, shown),
     ...(roots.length > page.length && last ? { before: formatCursor(cursorOf(last)) } : {}),
   };
+}
+
+export async function reviewComments(db: Db, input: ViewerPlace & { reviewId: string }) {
+  const found = await db.artifactCommentReview.findFirst({
+    where: { id: input.reviewId, artifactId: input.artifact.id },
+    select: REVIEW_SELECT,
+  });
+  if (!found) return { review: null, comments: [] };
+  const rows = await db.artifactComment.findMany({
+    where: { artifactId: input.artifact.id, reviewId: found.id },
+    orderBy: [...COMMENT_ORDER],
+    take: REVIEW_COMMENTS_MAX,
+    select: COMMENT_SELECT,
+  });
+  const [{ review }, comments] = await Promise.all([
+    reviewViews(db, input.workspaceId, found, []),
+    personViews(db, input, rows),
+  ]);
+  return { review, comments };
 }

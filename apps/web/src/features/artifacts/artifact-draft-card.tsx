@@ -1,0 +1,196 @@
+import { useEffect, useRef, useState } from "react";
+import { Edit03, Trash01 } from "@untitledui/icons";
+
+import { Badge } from "#src/components/base/badges/badges";
+import { Button } from "#src/components/base/buttons/button";
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
+import { MessageBody } from "#src/features/conversations/message-body";
+import type { ChipMention } from "#src/features/conversations/message-reference-chips";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { formatList } from "#src/lib/format-list";
+import { cn } from "#src/lib/utils";
+import { m } from "#src/paraglide/messages";
+import { CommentAnchorLine } from "./artifact-comment-anchor";
+import { COMMENT_MENTIONS_MAX } from "./artifact-comment-inputs";
+import { CommentEditor } from "./artifact-comment-thread";
+import {
+  useCommentDraftActions,
+  useCommentDrafts,
+  type DraftRefusal,
+} from "./artifact-comment-drafts-context";
+import {
+  commentDraftImageUrl,
+  expiryWarningDays,
+  hasImages,
+  type CommentDraftView,
+} from "./artifact-comment-drafts-queries";
+
+export type DraftParent = { name: string; excerpt: string } | null;
+
+export function refusalText({ reason, names }: Pick<DraftRefusal, "reason" | "names">) {
+  switch (reason) {
+    case "mention-cannot-see":
+      return m.av_dr_why_mention({ names: formatList(names.map((name) => `@${name}`)) });
+    case "too-many-mentions":
+      return m.av_dr_why_too_many({ count: COMMENT_MENTIONS_MAX });
+    case "file-gone":
+      return m.av_dr_why_file();
+    case "version-gone":
+      return m.av_dr_why_version();
+    case "reply-gone":
+      return m.av_dr_why_reply();
+    case "invalid":
+      return m.av_dr_why_invalid();
+  }
+}
+
+export function DraftCard({
+  draft,
+  artifactId,
+  parent,
+  refusal,
+  plainMentions,
+}: {
+  draft: CommentDraftView;
+  artifactId: string;
+  parent: DraftParent;
+  refusal: DraftRefusal | null;
+  plainMentions: Map<string, ChipMention> | undefined;
+}) {
+  const drafts = useCommentDrafts();
+  const actions = useCommentDraftActions();
+  const workspaceSlug = useWorkspaceSlug();
+  const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const card = useRef<HTMLLIElement>(null);
+  const { focus } = drafts;
+  const { consumeFocus } = actions;
+  useEffect(() => {
+    if (focus !== draft.id) return;
+    consumeFocus();
+    card.current?.scrollIntoView({ block: "nearest" });
+    setEditing(true);
+  }, [focus, draft.id, consumeFocus]);
+  const flagged = refusal !== null;
+  useEffect(() => {
+    if (flagged) card.current?.scrollIntoView({ block: "nearest" });
+  }, [flagged]);
+  const daysLeft = expiryWarningDays(draft.expiresAt);
+  const quiet = drafts.busy;
+  return (
+    <li
+      ref={card}
+      data-draft-id={draft.id}
+      aria-invalid={flagged || undefined}
+      className={cn(
+        "flex flex-col gap-1.5 rounded-lg border bg-primary px-3 py-2.5",
+        flagged ? "border-error" : "border-dashed border-primary",
+      )}
+    >
+      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+        <Badge size="sm" color="gray" type="modern">
+          {m.av_dr_tag()}
+        </Badge>
+        <span className="text-xs text-quaternary tabular-nums">
+          {m.av_cm_version({ version: draft.version })}
+        </span>
+      </div>
+      {draft.replyTo !== null ? (
+        <p className="text-xs text-tertiary [overflow-wrap:anywhere]">
+          <span className="font-medium text-secondary">
+            {parent ? m.av_dr_replying_to({ name: parent.name }) : m.av_dr_replying_earlier()}
+          </span>
+          {parent?.excerpt && (
+            <span className="line-clamp-2 block italic">
+              {m.av_cm_anchor_quote({ quote: parent.excerpt })}
+            </span>
+          )}
+        </p>
+      ) : draft.path === null ? (
+        <p className="text-xs font-medium text-secondary">{m.av_cm_group_whole()}</p>
+      ) : (
+        <CommentAnchorLine commentId={draft.id} path={draft.path} anchor={draft.anchor} />
+      )}
+      {editing ? (
+        <CommentEditor
+          initial={draft.body}
+          onCancel={() => setEditing(false)}
+          onSave={async (body) => {
+            await actions.edit(draft, body);
+            setEditing(false);
+          }}
+        />
+      ) : (
+        <>
+          {draft.body && (
+            <div className="message-text min-w-0 text-sm text-primary [overflow-wrap:anywhere]">
+              <MessageBody body={draft.body} plainMentions={plainMentions} />
+            </div>
+          )}
+          {hasImages(draft) && (
+            <ul className="flex flex-wrap gap-2">
+              {draft.images.map((image) => (
+                <li key={image.position}>
+                  <img
+                    src={commentDraftImageUrl(workspaceSlug, artifactId, draft.id, image.position)}
+                    alt={m.av_cm_image_alt()}
+                    width={image.width}
+                    height={image.height}
+                    loading="lazy"
+                    className="max-h-40 w-auto max-w-full rounded-md border border-secondary object-contain"
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+      {refusal && (
+        <p role="alert" className="text-xs text-error-primary">
+          {refusalText(refusal)}
+        </p>
+      )}
+      {daysLeft !== null && (
+        <p className="text-xs text-warning-primary">
+          {daysLeft === 0 ? m.av_dr_expires_today() : m.av_dr_expires({ count: daysLeft })}
+        </p>
+      )}
+      {!editing && (
+        <div className="flex justify-end gap-1">
+          <Button
+            size="sm"
+            color="tertiary"
+            iconLeading={Edit03}
+            isDisabled={quiet}
+            data-draft-edit=""
+            onPress={() => setEditing(true)}
+          >
+            {m.av_cm_edit()}
+          </Button>
+          <Button
+            size="sm"
+            color="tertiary-destructive"
+            iconLeading={Trash01}
+            isDisabled={quiet}
+            data-draft-delete=""
+            onPress={() => (hasImages(draft) ? setConfirming(true) : void actions.remove(draft))}
+          >
+            {m.av_cm_delete()}
+          </Button>
+        </div>
+      )}
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={m.av_dr_delete_title()}
+        description={m.av_dr_delete_body()}
+        confirmLabel={m.av_dr_delete_confirm()}
+        errorMessage={m.av_dr_delete_failed()}
+        onConfirm={async () => {
+          await actions.remove(draft);
+          setConfirming(false);
+        }}
+      />
+    </li>
+  );
+}

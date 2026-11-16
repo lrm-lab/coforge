@@ -307,5 +307,109 @@
         "countPlural=other": "{count} 条评论"
       }
     }
-  ]
+  ],
+  "av_dr_save": "存为草稿",
+  "av_dr_send": "发送",
+  "av_dr_group": "我的草稿",
+  "av_dr_tag": "草稿",
+  "av_dr_marker": "你的草稿",
+  "av_dr_mark_label": "“{quote}”上的草稿",
+  "av_dr_mark_unnamed": "草稿",
+  "av_dr_replying_to": "回复 {name}",
+  "av_dr_replying_earlier": "回复更早的一条评论",
+  "av_dr_expires_today": "今天清除",
+  "av_dr_expires": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} 天后清除",
+        "countPlural=other": "{count} 天后清除"
+      }
+    }
+  ],
+  "av_dr_tools": "评审工具",
+  "av_dr_undo": "撤销",
+  "av_dr_redo": "重做",
+  "av_dr_discard": "全部放弃",
+  "av_dr_send_n": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "发送 {count} 条",
+        "countPlural=other": "发送 {count} 条"
+      }
+    }
+  ],
+  "av_dr_discard_title": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "要放弃这 {count} 条草稿吗？",
+        "countPlural=other": "要放弃这 {count} 条草稿吗？"
+      }
+    }
+  ],
+  "av_dr_discard_body": "放弃后无法恢复。",
+  "av_dr_discard_confirm": "放弃草稿",
+  "av_dr_discard_failed": "没能放弃草稿。",
+  "av_dr_delete_title": "删除这条草稿？",
+  "av_dr_delete_body": "草稿里的图片会一并删除，且无法恢复。",
+  "av_dr_delete_confirm": "删除草稿",
+  "av_dr_delete_failed": "没能删除草稿。",
+  "av_dr_deleted": "草稿已删除",
+  "av_dr_deleted_undo": "撤销",
+  "av_dr_save_failed": "没能保存草稿，请再试一次。",
+  "av_dr_limit": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "每份文档最多存 {count} 条草稿。发出或删掉一些再存。",
+        "countPlural=other": "每份文档最多存 {count} 条草稿。发出或删掉一些再存。"
+      }
+    }
+  ],
+  "av_dr_undo_failed": "没能撤销这一步。",
+  "av_dr_redo_failed": "没能重做这一步。",
+  "av_dr_pending_title": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} 条待发送",
+        "countPlural=other": "{count} 条待发送"
+      }
+    }
+  ],
+  "av_dr_pending_refused": "这次没有发出任何评论。处理好标红的草稿后再发送。",
+  "av_dr_pending_changed": "发送期间草稿有改动，这次没有发出。看一下最新的草稿再发送。",
+  "av_dr_send_failed": "发送失败，草稿都保留着，可以再试。",
+  "av_dr_load_failed": "草稿加载失败。",
+  "av_dr_back": "返回",
+  "av_dr_sent": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "已作为评审发出 {count} 条评论",
+        "countPlural=other": "已作为一次评审发出 {count} 条评论"
+      }
+    }
+  ],
+  "av_dr_why_mention": "{names} 没有这份文档的权限。移除这个 @ 或删除草稿。",
+  "av_dr_why_too_many": "@ 超过了 {count} 个的上限，请减少一些。",
+  "av_dr_why_file": "这个文件已从文档中移除，草稿发不出去了，请删除它。",
+  "av_dr_why_version": "草稿所在的版本已被删除，请删除这条草稿。",
+  "av_dr_why_reply": "要回复的评论已被删除，请删除这条草稿。",
+  "av_dr_why_invalid": "这条草稿暂时发不出去，修改或删除后再试。",
+  "av_dr_filter": "筛选",
+  "av_dr_filter_all": "全部评论",
+  "av_dr_filter_review": "{name} 的评审",
+  "av_dr_filter_clear": "显示全部评论",
+  "av_dr_review_failed": "这次评审的评论加载失败。",
+  "av_dr_review_missing": "这份文档里找不到这次评审。",
+  "av_dr_review_summary": "评审摘要"
 }

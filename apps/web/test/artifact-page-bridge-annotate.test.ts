@@ -183,6 +183,25 @@ describe("the annotation channel", () => {
     expect(events.at(-1)).toEqual({ kind: "activated", id: "c1" });
   });
 
+  test("a mark of an unsent draft carries its flag to the frame, and others carry none", () => {
+    const { bridge, sent } = setup();
+    bridge.annotations.setMarks([
+      {
+        id: "d1",
+        anchor: { type: "text", data: { quote: "beta" } },
+        count: 0,
+        label: "D",
+        draft: true,
+      },
+      { id: "c1", anchor: { type: "text", data: { quote: "alpha" } }, count: 1, label: "C" },
+    ]);
+    const [{ params }] = sent("coforge/annotate/marks") as [
+      { params: { marks: Record<string, unknown>[] } },
+    ];
+    expect(params.marks[0]).toMatchObject({ id: "d1", count: 0, draft: true });
+    expect(params.marks[1]).not.toHaveProperty("draft");
+  });
+
   test("at most 500 marks are sent", () => {
     const { bridge, sent } = setup();
     bridge.annotations.setMarks(

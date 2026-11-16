@@ -3,18 +3,13 @@ import { errorType } from "#src/server/errors/error-type.server";
 import { getFileStorage } from "#src/server/files/file-storage.server";
 import { onServerShutdown } from "#src/server/runtime/server-lifecycle.server";
 import { StoredArtifactBlobs } from "./artifact-blobs.server";
+import { sweepExpiredDrafts } from "./artifact-comment-draft-sweep.server";
 
-/** How often unused artifact blobs are looked for; one waits at most this long past its day. */
 export const ARTIFACT_BLOB_SWEEP_MS = 60 * 60 * 1000;
 
 let started = false;
 let sweeping = false;
 
-/**
- * Every hour, removes the artifact blobs no version has named for a day (task #385). Every web
- * instance runs it: rows a save or another instance holds are skipped, so two never remove the
- * same blob. A failed run is logged and the next one tries again.
- */
 export function ensureArtifactBlobSweep(): void {
   if (started) return;
   started = true;
@@ -27,10 +22,11 @@ async function sweep() {
   if (sweeping) return;
   sweeping = true;
   try {
-    const removed = await new StoredArtifactBlobs(
-      requireDatabaseClient(),
-      getFileStorage,
-    ).removeUnreferenced();
+    const db = requireDatabaseClient();
+    const blobs = new StoredArtifactBlobs(db, getFileStorage);
+    const drafts = await sweepExpiredDrafts(db, blobs);
+    if (drafts) console.info(JSON.stringify({ event: "artifact_drafts:swept", removed: drafts }));
+    const removed = await blobs.removeUnreferenced();
     if (removed) console.info(JSON.stringify({ event: "artifact_blobs:swept", removed }));
   } catch (error) {
     console.warn(

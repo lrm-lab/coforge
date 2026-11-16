@@ -19,6 +19,11 @@ import { CommentThreadView, type CommentContext } from "./artifact-comment-threa
 import { useArtifactCommenting, useCommentPlaces, useCommentRequests } from "./artifact-commenting";
 import { orderAnchored, type CommentGroups, type CommentThread } from "./artifact-comment-threads";
 import { useFlash } from "./use-flash";
+import { useCommentDrafts } from "./artifact-comment-drafts-context";
+import { DraftGroup } from "./artifact-draft-group";
+import { ArtifactPendingReview } from "./artifact-pending-review";
+import { ReviewChip, ReviewComments, ReviewFilterMenu } from "./artifact-review-view";
+import type { ReviewFilter } from "./use-review-filter";
 
 export function ArtifactCommentPanel({
   artifactId,
@@ -26,6 +31,7 @@ export function ArtifactCommentPanel({
   openPath,
   list,
   groups,
+  review,
   onClose,
 }: {
   artifactId: string;
@@ -33,12 +39,14 @@ export function ArtifactCommentPanel({
   openPath: string | null;
   list: ReturnType<typeof useArtifactComments>;
   groups: CommentGroups;
+  review: ReviewFilter;
   onClose: () => void;
 }) {
   const { entryPath, filePaths } = useArtifactCommenting();
   const { focus, consumeFocus } = useCommentRequests();
   const places = useCommentPlaces();
   const { query, comments } = list;
+  const drafts = useCommentDrafts();
   const known = useKnownMentionables(artifactId);
   const plainMentions = useMemo(() => plainMentionsByHandle(known), [known]);
   const [replyTo, setReplyTo] = useState<CommentReplyTarget | null>(null);
@@ -51,7 +59,11 @@ export function ArtifactCommentPanel({
     [groups.anchored, entryPath, filePaths, places],
   );
   const context: CommentContext = { artifactId, plainMentions, flashId, onReply: setReplyTo };
-  const empty = groups.whole.length === 0 && anchored.length === 0 && groups.resolved.length === 0;
+  const empty =
+    groups.whole.length === 0 &&
+    anchored.length === 0 &&
+    groups.resolved.length === 0 &&
+    drafts.drafts.length === 0;
   useEffect(() => {
     if (focus === null) return;
     const thread = listElement.current?.querySelector(
@@ -74,12 +86,27 @@ export function ArtifactCommentPanel({
         }
       : { kind: "panel", version: shownVersion };
 
+  if (drafts.pending.open)
+    return (
+      <ArtifactSidePanel
+        label={m.av_dr_pending_title({ count: drafts.drafts.length })}
+        onClose={onClose}
+      >
+        <ArtifactPendingReview
+          artifactId={artifactId}
+          comments={comments}
+          plainMentions={plainMentions}
+          onClose={onClose}
+        />
+      </ArtifactSidePanel>
+    );
   return (
     <ArtifactSidePanel label={m.av_cm_title()} onClose={onClose}>
       <header className="flex shrink-0 items-center gap-2 border-b border-secondary py-2 pr-2 pl-4">
         <h2 className="min-w-0 flex-1 truncate text-md font-semibold text-primary">
           {m.av_cm_title()}
         </h2>
+        <ReviewFilterMenu filter={review} />
         <ButtonUtility
           icon={XClose}
           size="xs"
@@ -93,7 +120,12 @@ export function ArtifactCommentPanel({
         className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
         aria-live="polite"
       >
-        {query.isPending ? (
+        {review.active ? (
+          <>
+            <ReviewChip filter={review} />
+            <ReviewComments filter={review} context={context} plainMentions={plainMentions} />
+          </>
+        ) : query.isPending ? (
           <div aria-busy="true" className="space-y-3">
             <Skeleton className="h-16 w-full" />
             <Skeleton className="h-16 w-full" />
@@ -129,6 +161,7 @@ export function ArtifactCommentPanel({
             {empty && !query.hasNextPage && (
               <p className="text-sm text-tertiary">{m.av_cm_empty()}</p>
             )}
+            <DraftGroup artifactId={artifactId} comments={comments} plainMentions={plainMentions} />
             {groups.whole.length > 0 && (
               <ThreadGroup title={m.av_cm_group_whole()} threads={groups.whole} context={context} />
             )}

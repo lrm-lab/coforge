@@ -1,4 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { COMMENT_MENTIONS_MAX } from "#src/features/artifacts/artifact-comment-inputs";
+import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { errorType } from "#src/server/errors/error-type.server";
 import {
@@ -46,6 +48,33 @@ type Audience = {
 
 export type MentionCheck = { count: number; cannotSee: string[] };
 
+export type MentionEntry = { handle: string; canSee: boolean };
+
+export function mentionCheckOf(
+  entries: readonly MentionEntry[],
+  handles?: ReadonlySet<string>,
+): MentionCheck {
+  const named = handles ? entries.filter((entry) => handles.has(entry.handle)) : entries;
+  return {
+    count: named.length,
+    cannotSee: named.filter((entry) => !entry.canSee).map((entry) => entry.handle),
+  };
+}
+
+export function requireMentionable(check: MentionCheck) {
+  if (check.count > COMMENT_MENTIONS_MAX)
+    throw new AppError("INVALID_INPUT", {
+      errorId: "artifact-too-many-mentions",
+      hint: `a comment mentions at most ${COMMENT_MENTIONS_MAX} people and Agents`,
+    });
+  if (check.cannotSee.length > 0)
+    throw new AppError("INVALID_INPUT", {
+      errorId: "artifact-mention-cannot-see",
+      hint: `${check.cannotSee.join(", ")} cannot see this artifact`,
+      details: { names: check.cannotSee.join(",") },
+    });
+}
+
 export type Recipients = Awaited<ReturnType<ArtifactNotices["recipients"]>>;
 
 export class ArtifactNotices {
@@ -72,7 +101,12 @@ export class ArtifactNotices {
     );
   }
 
-  review(input: Context & { reviewId: string } & Pick<ReviewEvent, "review" | "comments">) {
+  review(
+    input: (Context | PersonContext) & { reviewId: string } & Pick<
+        ReviewEvent,
+        "review" | "comments"
+      >,
+  ) {
     return this.guarded(() =>
       this.tell(input, {
         key: input.reviewId,
@@ -169,7 +203,7 @@ export class ArtifactNotices {
   private async audience(input: Reach, plan: AudiencePlan): Promise<Audience> {
     const { artifact } = input;
     const [mentions, followers] = await Promise.all([
-      mentionedIn(this.db, input.workspaceId, plan.texts, plan.handlesMax),
+      mentionedIn(this.db, input.workspaceId, plan.texts, plan.handlesPerText),
       plan.followers === undefined ? [] : followerIds(this.db, artifact.id),
     ]);
     const agents = new Map<string, NoticeReason>();
@@ -211,16 +245,14 @@ export class ArtifactNotices {
       ),
       ...people.map((name) => ({ name, reason: "not-agent" as const })),
     ];
-    const mentions: MentionCheck = {
-      count: mentioned.agents.length + mentioned.people.length,
-      cannotSee: [
-        ...mentioned.agents.filter(({ id }) => !readers.has(id)).map(({ name }) => name),
-        ...mentioned.people
-          .filter(({ id }) => !peopleReading.has(id))
-          .map(({ username }) => username),
-      ],
-    };
-    return { told, notTold, mentions };
+    const entries: MentionEntry[] = [
+      ...mentioned.agents.map(({ id, name }) => ({ handle: name, canSee: readers.has(id) })),
+      ...mentioned.people.map(({ id, username }) => ({
+        handle: username,
+        canSee: peopleReading.has(id),
+      })),
+    ];
+    return { told, notTold, mentions: mentionCheckOf(entries), entries };
   }
 
   private async tell(
@@ -260,10 +292,10 @@ export class ArtifactNotices {
   }
 }
 
-export const commentAudience = (body: string, handlesMax?: number): AudiencePlan => ({
+export const commentAudience = (body: string, handlesPerText?: number): AudiencePlan => ({
   texts: [body],
   followers: "subscribed",
-  ...(handlesMax === undefined ? {} : { handlesMax }),
+  ...(handlesPerText === undefined ? {} : { handlesPerText }),
 });
 
 type CommentEvent = Extract<NoticeEvent, { kind: "comment" }>;
@@ -287,7 +319,7 @@ type AudiencePlan = {
   texts: readonly string[];
   own?: readonly (readonly [string, NoticeReason])[];
   followers?: NoticeReason | undefined;
-  handlesMax?: number;
+  handlesPerText?: number;
 };
 
 type Plan = AudiencePlan & {
