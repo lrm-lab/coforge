@@ -22,3 +22,34 @@ Comments on artifacts are written for Agents (the Agent API's `comments`, `comme
 - The comment position is `artifact_comment_positions`, not the version position
   (`artifact_read_positions`): it moves only in `comments` with no filter; a version read, a push
   or `read` never moves it.
+
+## People's comments
+
+- `artifact-person-comments.server.ts` (`ArtifactPersonComments`) is the Web seam: list, candidates,
+  will-notify preview, post, edit, delete, resolve, reopen and the image upload and read. It takes a
+  `CommentPrincipal` (`artifact-comment-principal.server.ts`, tagged `person` or `agent`); the
+  write, thread and image modules serve both through it. `unseenGate(principal)` supplies the
+  unseen-changes gate and the refusal recorder, which do nothing for a person: a person is never
+  gated. `commentColumns` is the one place author, resolver and blob-grant keys come from.
+- `artifact-comment-thread-reads.server.ts` pages threads by root (20 a page, cursor `createdAt|id`,
+  the count only on the first page), with their replies, and reads comments by id;
+  `artifact-comment-mentions.server.ts` lists who can be mentioned. A body's mentions are checked
+  by `ArtifactNotices.recipients` (at most `COMMENT_MENTIONS_MAX`; a person's comment naming
+  someone who cannot see the artifact is refused, an Agent's names are only reported
+  `notNotified`).
+- The will-notify preview, the mention check and the real notice share one
+  `ArtifactNotices.recipients` call, made once per request; never compute an audience twice. The
+  preview takes a body of at most `COMMENT_BODY_MAX` and resolves at most
+  `COMMENT_HANDLES_RESOLVED_MAX` handles.
+- A person's posts, image uploads and previews are limited per person
+  (`artifactPersonComment`, `AppRateLimit`); a refusal is `artifact-rate-limited` with
+  `retryAfterSeconds`.
+- Only the author edits (text only, no new notices) or deletes. A deletion blanks the row (body,
+  anchor to SQL null, the path unless replies keep the thread) and removes its images; their blobs
+  are released (`StoredArtifactBlobs.release`) to the sweep unless another comment, file or page
+  asset still names them. A root with replies stays as a placeholder and cannot be resolved; one
+  without disappears.
+- A comment write announces `artifact.comments.changed.v1` (what happened and the comment ids)
+  through `announceArtifactComments`; clients fetch just those comments. Person image bytes are
+  cleaned once, at upload (`storeCleanImage`), and only the clean bytes are stored; posting reads
+  their size and dimensions and stores nothing. An Agent's image is cleaned and stored at post.

@@ -173,8 +173,9 @@ model ArtifactBlob {
   /// version names is removed a day after it (`StoredArtifactBlobs.removeUnreferenced`). A save
   /// sets it in its transaction, which is also what keeps the sweep off the blob meanwhile.
   lastUsedAt  DateTime  @default(now())
-  /// Whether a saved version has named these bytes. Versions are immutable and stay while their
-  /// artifact does, so a named blob never becomes unused: the sweep reads only the others
+  /// Whether a version, a comment image or a page asset names these bytes. Versions never let go;
+  /// a deleted comment releases its images under the blob's row lock, so a concurrent use is seen
+  /// (`StoredArtifactBlobs.release`). The sweep reads only the unnamed ones
   /// (`artifact_blobs_unused_idx`, a partial index in the migration).
   referenced  Boolean   @default(false)
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

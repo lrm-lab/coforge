@@ -3,16 +3,19 @@ import type { CommentInput, ReviewInput } from "#src/features/artifacts/artifact
 import { followByWriting } from "./artifact-follows.server";
 import { postComment, postReview } from "./artifact-comments.server";
 import type { CommentImageBlobs } from "./artifact-comment-images.server";
-import { resolveComment } from "./artifact-comment-threads.server";
+import { reopenComment, resolveComment, resolvedNotice } from "./artifact-comment-threads.server";
 import { errorType } from "#src/server/errors/error-type.server";
 import { ArtifactNotices, NOBODY_TOLD, type NoticedArtifact } from "./artifact-notices.server";
 import type { ArtifactNoticePort } from "./artifact-notice-port.server";
+import { announceArtifactComments, type ArtifactSignals } from "./artifact-signals.server";
+import { agentPrincipal } from "./artifact-comment-principal.server";
 
 type Principal = { workspaceId: string; agentId: string };
 type Writes = {
   db: PrismaClient;
   blobs: CommentImageBlobs;
   notices?: ArtifactNoticePort | undefined;
+  signals?: ArtifactSignals | undefined;
 };
 
 const noticesOf = (writes: Writes) =>
@@ -38,7 +41,16 @@ function followed(writes: Writes, principal: Principal, artifactId: string) {
 }
 
 export async function commentOnArtifact(writes: Writes, principal: Principal, input: CommentInput) {
-  const { artifact, comment } = await postComment(writes.db, writes.blobs, principal, input);
+  const { artifact, comment } = await postComment(
+    writes.db,
+    writes.blobs,
+    agentPrincipal(principal),
+    input,
+  );
+  await announceArtifactComments(writes.signals, principal.workspaceId, artifact, {
+    change: "posted",
+    commentIds: [comment.id],
+  });
   const follow = await followed(writes, principal, artifact.id);
   const told = !("deleted" in comment)
     ? ((await noticesOf(writes)?.comment({
@@ -63,6 +75,10 @@ export async function reviewArtifact(writes: Writes, principal: Principal, input
     principal,
     input,
   );
+  await announceArtifactComments(writes.signals, principal.workspaceId, artifact, {
+    change: "posted",
+    commentIds: comments.map(({ id }) => id),
+  });
   const follow = await followed(writes, principal, artifact.id);
   const told =
     (await noticesOf(writes)?.review({
@@ -83,23 +99,39 @@ export async function resolveArtifactThread(
   principal: Principal,
   input: { artifact: string; comment: string; note?: string | undefined },
 ) {
-  const resolved = await resolveComment(writes.db, principal, input);
-  const { artifact, thread, startedByAgentId, resolvedByAgentId, closingNote, ...answer } =
-    resolved;
-  const told =
-    thread.resolvedAt && resolvedByAgentId === principal.agentId
-      ? ((await noticesOf(writes)?.resolve({
-          workspaceId: principal.workspaceId,
-          artifact,
-          writerId: principal.agentId,
-          threadId: thread.id,
-          threadPath: thread.path,
-          resolvedAt: thread.resolvedAt,
-          threadAuthorAgentId: startedByAgentId,
-          note: closingNote,
-        })) ?? NOBODY_TOLD)
-      : NOBODY_TOLD;
+  const resolved = await resolveComment(writes.db, agentPrincipal(principal), input);
+  const {
+    artifact,
+    thread,
+    startedByAgentId: _startedBy,
+    resolvedByAgentId,
+    closingNote: _closingNote,
+    ...answer
+  } = resolved;
+  if (answer.changed)
+    await announceArtifactComments(writes.signals, principal.workspaceId, artifact, {
+      change: "resolved",
+      commentIds: [thread.id],
+    });
+  const notice =
+    resolvedByAgentId === principal.agentId &&
+    resolvedNotice(principal.workspaceId, resolved, { writerId: principal.agentId });
+  const told = notice ? ((await noticesOf(writes)?.resolve(notice)) ?? NOBODY_TOLD) : NOBODY_TOLD;
   return { ...answer, ...told };
+}
+
+export async function reopenArtifactThread(
+  writes: Writes,
+  principal: Principal,
+  input: { artifact: string; comment: string },
+) {
+  const { artifact, ...answer } = await reopenComment(writes.db, agentPrincipal(principal), input);
+  if (answer.changed)
+    await announceArtifactComments(writes.signals, principal.workspaceId, artifact, {
+      change: "reopened",
+      commentIds: [answer.comment.id],
+    });
+  return answer;
 }
 
 export async function followedByPush(

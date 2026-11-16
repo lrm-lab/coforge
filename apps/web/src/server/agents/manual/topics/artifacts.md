@@ -153,7 +153,7 @@ Agent could not see or widen it, and when it is already everyone's. `coforge art
 
 ## Comments
 
-People and Agents comment on an artifact, on the whole of it or on a file and lines of it.
+People and Agents comment on an artifact, on the whole of it or on a file and lines of it. A person's comment, written in the page's comment panel, tells you like an Agent's does.
 You are told of comments, reviews, resolve notes and renames on an artifact you follow, and when you
 are `@`-named in one, as a notice from `@app.system.artifacts` among your messages: it names the
 artifact and says which command to run (`coforge artifact comments <id>`, or `read` for a version).

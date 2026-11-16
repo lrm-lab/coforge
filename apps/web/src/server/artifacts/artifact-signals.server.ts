@@ -1,5 +1,6 @@
 import type {
   ArtifactAccessChangedEvent,
+  ArtifactCommentsChangedEvent,
   ArtifactDataChangedEvent,
   ArtifactVersionPublishedEvent,
 } from "#src/features/artifacts/artifact-realtime";
@@ -10,19 +11,22 @@ import {
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { errorType } from "#src/server/errors/error-type.server";
-import { artifactHomeConversationId, type ArtifactTier } from "./artifact-access.server";
+import {
+  artifactHomeConversationId,
+  artifactTier,
+  type ArtifactTier,
+} from "./artifact-access.server";
 
-/** Where an artifact's events go: one realtime channel at a time. */
 export type ArtifactSignalEvent =
   | ArtifactVersionPublishedEvent
   | ArtifactAccessChangedEvent
-  | ArtifactDataChangedEvent;
+  | ArtifactDataChangedEvent
+  | ArtifactCommentsChangedEvent;
 
 export type ArtifactSignals = {
   publish(channel: string, event: ArtifactSignalEvent): Promise<void>;
 };
 
-/** The signals over Centrifugo; the API is built only when one is sent. */
 export function centrifugoArtifactSignals(
   centrifugo: () => Pick<CentrifugoServerApi, "publishJson">,
 ): ArtifactSignals {
@@ -113,5 +117,30 @@ export async function announceDataChange(
       collection: input.collection,
     },
     "artifacts:data_signal_failed",
+  );
+}
+
+export async function announceArtifactComments(
+  signals: ArtifactSignals | undefined,
+  workspaceId: string,
+  artifact: { id: string; homeKey: string; access: string },
+  change: { change: ArtifactCommentsChangedEvent["change"]; commentIds: readonly string[] },
+) {
+  if (!signals) return;
+  await publishBestEffort(
+    signals,
+    channelsOf({
+      workspaceId,
+      homeKey: artifact.homeKey,
+      wide: artifactTier(artifact) === "workspace",
+    }),
+    {
+      type: REALTIME_EVENTS.artifactCommentsChanged,
+      workspaceId,
+      artifactId: artifact.id,
+      change: change.change,
+      commentIds: [...change.commentIds],
+    },
+    "artifacts:comments_signal_failed",
   );
 }

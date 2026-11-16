@@ -38,6 +38,7 @@ export function ArtifactPageHeader({
   onChooseVersion,
   onFind,
   onCopyLink,
+  comments,
   menu,
   pane,
 }: {
@@ -51,6 +52,7 @@ export function ArtifactPageHeader({
   onChooseVersion: (version: number) => void;
   onFind?: () => void;
   onCopyLink?: () => void;
+  comments?: ReactNode;
   menu?: ReactNode;
   pane?: ArtifactPaneControls;
 }) {
@@ -99,6 +101,7 @@ export function ArtifactPageHeader({
       </div>
       <span className="flex-1 max-sm:order-1" />
       <div className="flex shrink-0 items-center gap-1 max-sm:order-2">
+        {comments}
         {onFind && (
           <ButtonUtility
             icon={SearchLg}

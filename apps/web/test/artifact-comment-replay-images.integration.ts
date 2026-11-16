@@ -29,12 +29,17 @@ test("a replayed comment prepares no image again", async () => {
   } as unknown as CommentImageBlobs;
   const artifact = await f.make("Replay images");
   const send = () =>
-    postComment(f.db, blobs, { workspaceId: f.workspaceId, agentId: f.agents.writer }, {
-      artifact,
-      body: "see",
-      images: [sha256],
-      idempotencyKey: "replay-key-1",
-    } as never);
+    postComment(
+      f.db,
+      blobs,
+      { kind: "agent", workspaceId: f.workspaceId, agentId: f.agents.writer },
+      {
+        artifact,
+        body: "see",
+        images: [sha256],
+        idempotencyKey: "replay-key-1",
+      } as never,
+    );
   const first = await send();
   const second = await send();
   expect(second.comment.id).toBe(first.comment.id);

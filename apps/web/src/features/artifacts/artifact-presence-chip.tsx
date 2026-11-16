@@ -107,11 +107,17 @@ export function ArtifactPresenceChip({
         <Dialog aria-label={m.av_presence_label()} className="p-2 outline-hidden">
           <ul className="flex flex-col">
             {data.viewingNow.map((person) => (
-              <PresenceRow key={person.userId} name={nameOf(person)} detail={m.av_presence_now()} />
+              <PresenceRow
+                key={person.userId}
+                person={person}
+                name={nameOf(person)}
+                detail={m.av_presence_now()}
+              />
             ))}
             {data.others.map((person) => (
               <PresenceRow
                 key={person.userId}
+                person={person}
                 name={nameOf(person)}
                 detail={
                   <>
@@ -134,10 +140,19 @@ export function ArtifactPresenceChip({
   );
 }
 
-function PresenceRow({ name, detail }: { name: string; detail: ReactNode }) {
+function PresenceRow({
+  person,
+  name,
+  detail,
+}: {
+  person: { userId: string; name: string };
+  name: string;
+  detail: ReactNode;
+}) {
   return (
-    <li className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm">
-      <span className="min-w-0 truncate font-medium text-secondary">{name}</span>
+    <li className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm">
+      <ActorAvatar presence={false} userId={person.userId} name={person.name} size="xs" />
+      <span className="min-w-0 flex-1 truncate font-medium text-secondary">{name}</span>
       <span className="shrink-0 text-xs text-tertiary">{detail}</span>
     </li>
   );

@@ -6,6 +6,7 @@ import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { artifactDownloadUrl } from "./artifact-download-url";
+import { ArtifactSidePanel } from "./artifact-side-panel";
 
 type PanelFile = { path: string; sizeBytes: number };
 
@@ -36,10 +37,7 @@ export function ArtifactFilesPanel({
   const total = files.reduce((sum, file) => sum + file.sizeBytes, 0);
   const current = openPath ?? entryPath;
   return (
-    <aside
-      aria-label={m.av_menu_files()}
-      className="flex w-[340px] shrink-0 flex-col border-l border-secondary bg-primary max-md:fixed max-md:inset-0 max-md:z-40 max-md:w-auto"
-    >
+    <ArtifactSidePanel label={m.av_menu_files()} onClose={onClose}>
       <div className="flex items-start gap-2 border-b border-secondary px-4 py-3">
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold text-primary">{m.av_menu_files()}</h2>
@@ -90,6 +88,6 @@ export function ArtifactFilesPanel({
           </li>
         ))}
       </ul>
-    </aside>
+    </ArtifactSidePanel>
   );
 }

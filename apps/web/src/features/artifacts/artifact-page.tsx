@@ -22,6 +22,9 @@ import { m } from "#src/paraglide/messages";
 import { deleteArtifact } from "./artifacts.functions";
 import { ArtifactDeleteConfirm } from "./artifact-delete-confirm";
 import { ArtifactFileView } from "./artifact-file-view";
+import { ArtifactCommentButton } from "./artifact-comment-button";
+import { ArtifactCommentPanel } from "./artifact-comment-panel";
+import { syncCommentsChange } from "./artifact-comment-queries";
 import { ArtifactFilesPanel } from "./artifact-files-panel";
 import { ArtifactMarkdown } from "./artifact-markdown";
 import { ArtifactMoreMenu } from "./artifact-more-menu";
@@ -45,6 +48,7 @@ import {
 } from "./artifact-queries";
 import {
   decodeArtifactAccessChangedEvent,
+  decodeArtifactCommentsChangedEvent,
   decodeArtifactDataChangedEvent,
   decodeArtifactVersionPublishedEvent,
 } from "./artifact-realtime";
@@ -82,7 +86,8 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
   const [deleting, setDeleting] = useState(false);
   const [sendingTo, setSendingTo] = useState(false);
   const [finding, setFinding] = useState(false);
-  const [filesOpen, setFilesOpen] = useState(false);
+  const [panel, setPanel] = useState<"files" | "comments" | null>(null);
+  const [commentFocus, setCommentFocus] = useState(0);
   const [openPath, setOpenPath] = useState<string | null>(null);
   const latest = read.data?.artifact.currentVersion ?? 0;
   const older = pinned !== null && pinned !== latest;
@@ -123,6 +128,12 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
     recoverable: true,
     positioned: true,
     onPublication: ({ data }) => {
+      const commentsChange = decodeArtifactCommentsChangedEvent(data);
+      if (commentsChange) {
+        if (commentsChange.artifactId === artifactId)
+          void syncCommentsChange(queryClient, commentsChange);
+        return;
+      }
       const dataChange = decodeArtifactDataChangedEvent(data);
       if (dataChange) {
         if (dataChange.artifactId === artifactId) artifactDataEvents.emit(dataChange);
@@ -141,6 +152,12 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
 
   const opened = useRecordOpen(artifactId, latest);
   useKeepViewing(artifactId, latest > 0);
+
+  const toggleComments = () => {
+    setPanel((open) => (open === "comments" ? null : "comments"));
+    setCommentFocus((count) => count + 1);
+  };
+  const showComments = () => setPanel("comments");
 
   const entryPath = current?.artifact.entryPath;
   const webPage = entryPath !== undefined && isWebPageEntry(entryPath);
@@ -179,7 +196,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
       find: () => setFinding(true),
       "copy-link": () => void copy(pageHref(), m.doc_link_copied()),
       send: () => setSendingTo(true),
-      files: () => setFilesOpen(true),
+      files: () => setPanel("files"),
       delete: () => setDeleting(true),
     },
   });
@@ -209,6 +226,16 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
         onChooseVersion={choose}
         onFind={webPage && !openPath ? () => setFinding(true) : undefined}
         onCopyLink={current && (() => void copy(pageHref(), m.doc_link_copied()))}
+        comments={
+          current && (
+            <ArtifactCommentButton
+              total={current.commentCount}
+              active={panel === "comments"}
+              onToggle={toggleComments}
+              onShowAll={showComments}
+            />
+          )
+        }
         pills={
           current && (
             <>
@@ -272,7 +299,16 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
             <ArtifactMarkdown text={current.text} />
           )}
         </div>
-        {filesOpen && current && (
+        {panel === "comments" && current && (
+          <ArtifactCommentPanel
+            artifactId={artifactId}
+            shownVersion={shownVersion}
+            openPath={openPath}
+            focusRequest={commentFocus}
+            onClose={() => setPanel(null)}
+          />
+        )}
+        {panel === "files" && current && (
           <ArtifactFilesPanel
             artifactId={artifactId}
             version={shownVersion}
@@ -280,7 +316,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
             files={files}
             openPath={openPath}
             onOpen={setOpenPath}
-            onClose={() => setFilesOpen(false)}
+            onClose={() => setPanel(null)}
           />
         )}
       </div>

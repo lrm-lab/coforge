@@ -138,6 +138,10 @@ export class ArtifactDocuments {
     };
   }
 
+  commentCount(artifactId: string) {
+    return this.db.artifactComment.count({ where: { artifactId, deletedAt: null } });
+  }
+
   async push(
     scope: WriteScope,
     input: {

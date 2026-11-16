@@ -197,11 +197,14 @@ export async function actorConversationHomeReads(
   );
 }
 
-export async function agentsConversationHomeReads(
+type SeatColumn = "agentId" | "userId";
+
+async function seatedConversationHomeReads(
   db: Pick<PrismaClient, "conversation">,
   workspaceId: string,
   conversationId: string,
-  agentIds: readonly string[],
+  column: SeatColumn,
+  actorIds: readonly string[],
 ): Promise<Map<string, ActorConversationHomeRead> | undefined> {
   const conversation = await db.conversation.findFirst({
     where: {
@@ -214,26 +217,40 @@ export async function agentsConversationHomeReads(
       visibility: true,
       hiddenFromWorkspaceAt: true,
       members: {
-        where: { agentId: { in: [...agentIds] }, ...ACTIVE_MEMBER_WHERE },
-        select: { agentId: true },
+        where: { [column]: { in: [...actorIds] }, ...ACTIVE_MEMBER_WHERE },
+        select: { agentId: true, userId: true },
       },
     },
   });
   if (!conversation) return undefined;
-  const seated = new Set(conversation.members.map((member) => member.agentId));
+  const seated = new Set(conversation.members.map((member) => member[column]));
   return new Map(
-    agentIds.map((agentId) => [
-      agentId,
+    actorIds.map((actorId) => [
+      actorId,
       {
         channelName: conversation.channelName,
         visibility: conversation.visibility,
-        member: seated.has(agentId),
+        member: seated.has(actorId),
         hidden: conversation.hiddenFromWorkspaceAt !== null,
         kind: conversation.channelName === null ? ("dm" as const) : ("channel" as const),
       },
     ]),
   );
 }
+
+export const agentsConversationHomeReads = (
+  db: Pick<PrismaClient, "conversation">,
+  workspaceId: string,
+  conversationId: string,
+  agentIds: readonly string[],
+) => seatedConversationHomeReads(db, workspaceId, conversationId, "agentId", agentIds);
+
+export const peopleConversationHomeReads = (
+  db: Pick<PrismaClient, "conversation">,
+  workspaceId: string,
+  conversationId: string,
+  userIds: readonly string[],
+) => seatedConversationHomeReads(db, workspaceId, conversationId, "userId", userIds);
 
 export function actorConversationHomeSql(alias: string, workspaceId: string, actor: ChannelActor) {
   const conversation = Prisma.raw(alias);

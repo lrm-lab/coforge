@@ -1,0 +1,380 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Image01, XClose } from "@untitledui/icons";
+import { ARTIFACT_COMMENT_IMAGES_MAX, COMMENT_BODY_MAX } from "@lrm/coforge-sdk/agent";
+import { readMessageReferences } from "@lrm/coforge-sdk/internal/message-references";
+
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { ComposerField } from "#src/features/conversations/composer-field";
+import {
+  COMPOSER_BOX_CLASS,
+  COMPOSER_FOCUS_CLASS,
+} from "#src/features/conversations/composer-frame";
+import type { Mentionable } from "#src/features/conversations/mention-text";
+import {
+  addMentionPin,
+  mentionPinFor,
+  pinsInText,
+  rewriteMentionPins,
+  type MentionPin,
+} from "#src/features/conversations/mention-pins";
+import { INLINE_IMAGE_TYPES } from "#src/features/conversations/paste-image";
+import { useComposerPaste } from "#src/features/conversations/use-composer-paste";
+import { useReferenceCompletion } from "#src/features/conversations/use-reference-completion";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { isAppError } from "#src/lib/app-error";
+import { ARTIFACT_RATE_LIMITED_ERROR_ID } from "./artifact-rate-limited";
+import { formatList } from "#src/lib/format-list";
+import { useDebouncedValue } from "#src/lib/use-debounced-value";
+import { cn } from "#src/lib/utils";
+import { m } from "#src/paraglide/messages";
+import { postArtifactComment, previewArtifactCommentAudience } from "./artifact-comments.functions";
+import { COMMENT_MENTIONS_MAX } from "./artifact-comment-inputs";
+import { uploadCommentImage } from "./artifact-comment-images";
+import { artifactMentionCandidatesQuery, syncOwnComments } from "./artifact-comment-queries";
+import { ARTIFACTS_KEY } from "./artifact-queries";
+
+export type CommentReplyTarget = { id: string; name: string };
+
+type Attachment = {
+  key: string;
+  previewUrl: string;
+  state: "uploading" | "ready" | "failed";
+  sha256?: string;
+};
+
+const AUDIENCE_DELAY_MS = 350;
+
+function useMentionables(artifactId: string) {
+  const { data } = useQuery(artifactMentionCandidatesQuery(artifactId));
+  return useMemo(() => {
+    if (!data) return { offered: undefined, known: undefined };
+    const toMentionable =
+      (kind: Mentionable["kind"]) =>
+      (candidate: { id: string; handle: string; name: string }): Mentionable => ({
+        kind,
+        id: candidate.id,
+        handle: candidate.handle,
+        label: candidate.name,
+        description: "",
+        mentionScore: 0,
+      });
+    const people = data.people.map(toMentionable("user"));
+    const agents = data.agents.map(toMentionable("agent"));
+    return {
+      offered: {
+        people: people.filter((person) => person.id !== data.viewerId),
+        agents,
+      },
+      known: [...people, ...agents],
+    };
+  }, [data]);
+}
+
+export function useKnownMentionables(artifactId: string) {
+  return useMentionables(artifactId).known;
+}
+
+export function ArtifactCommentComposer({
+  artifactId,
+  version,
+  path,
+  replyTo,
+  focusRequest,
+  onClearPath,
+  onCancelReply,
+}: {
+  artifactId: string;
+  version: number;
+  path: string | null;
+  replyTo: CommentReplyTarget | null;
+  focusRequest: number;
+  onClearPath: () => void;
+  onCancelReply: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const workspaceSlug = useWorkspaceSlug();
+  const { offered } = useMentionables(artifactId);
+  const [body, setBody] = useState("");
+  const [pins, setPins] = useState<readonly MentionPin[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [sending, setSending] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const attempt = useRef({ signature: "", key: "" });
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const changeBody = (value: string) => {
+    setBody(value);
+    setPins((current) => pinsInText(value, current));
+  };
+  const completion = useReferenceCompletion({
+    mentionables: offered?.people,
+    mentionOutsiders: offered?.agents,
+    value: body,
+    onChange: changeBody,
+    onPickMention: (mention) =>
+      setPins((current) => addMentionPin(current, mentionPinFor(mention))),
+  });
+  useEffect(() => {
+    if (focusRequest > 0) completion.textareaRef.current?.focus();
+  }, [focusRequest, completion.textareaRef]);
+  useEffect(() => {
+    if (replyTo) completion.textareaRef.current?.focus();
+  }, [replyTo, completion.textareaRef]);
+
+  const wire = useMemo(() => rewriteMentionPins(body, pins), [body, pins]);
+  const tooLong = wire.body.length > COMMENT_BODY_MAX;
+  const mentions = useMemo(
+    () => [...new Set(readMessageReferences(wire.body).candidates.handles)].sort().join(","),
+    [wire.body],
+  );
+  const settledMentions = useDebouncedValue(mentions, AUDIENCE_DELAY_MS);
+  const audience = useQuery({
+    queryKey: [...ARTIFACTS_KEY, "audience", artifactId, settledMentions],
+    queryFn: () => previewArtifactCommentAudience({ data: { artifactId, body: wire.body } }),
+    enabled: !tooLong,
+    placeholderData: keepPreviousData,
+    staleTime: 5_000,
+  });
+
+  const uploading = attachments.some((attachment) => attachment.state === "uploading");
+  const blocked = audience.data && settledMentions === mentions ? audience.data : undefined;
+  const mentionError = blocked?.tooMany
+    ? m.av_cm_err_too_many_mentions({ count: COMMENT_MENTIONS_MAX })
+    : blocked && blocked.cannotSee.length > 0
+      ? m.av_cm_err_cannot_see({
+          names: formatList(blocked.cannotSee.map((handle) => `@${handle}`)),
+        })
+      : null;
+  const ready = attachments.flatMap((attachment) =>
+    attachment.state === "ready" && attachment.sha256 ? [attachment.sha256] : [],
+  );
+  const empty = body.trim() === "" && ready.length === 0;
+  const cannotSend = empty || uploading || sending || tooLong || mentionError !== null;
+
+  function addFiles(files: readonly File[]) {
+    const images = files.filter((file) => INLINE_IMAGE_TYPES.has(file.type));
+    const room = ARTIFACT_COMMENT_IMAGES_MAX - attachments.length;
+    if (images.length === 0) return;
+    if (images.length > room)
+      setFailure(m.av_cm_images_max({ count: ARTIFACT_COMMENT_IMAGES_MAX }));
+    else setFailure(null);
+    for (const file of images.slice(0, Math.max(0, room))) {
+      const key = crypto.randomUUID();
+      const previewUrl = URL.createObjectURL(file);
+      setAttachments((current) => [...current, { key, previewUrl, state: "uploading" }]);
+      uploadCommentImage(workspaceSlug, artifactId, file)
+        .then((sha256) =>
+          setAttachments((current) =>
+            current.map((entry) =>
+              entry.key === key ? { ...entry, state: "ready", sha256 } : entry,
+            ),
+          ),
+        )
+        .catch(() => {
+          setAttachments((current) => current.filter((entry) => entry.key !== key));
+          URL.revokeObjectURL(previewUrl);
+          setFailure(m.av_cm_image_failed());
+        });
+    }
+  }
+
+  function removeAttachment(key: string) {
+    setAttachments((current) => {
+      const gone = current.find((entry) => entry.key === key);
+      if (gone) URL.revokeObjectURL(gone.previewUrl);
+      return current.filter((entry) => entry.key !== key);
+    });
+  }
+
+  const paste = useComposerPaste(
+    Math.max(0, ARTIFACT_COMMENT_IMAGES_MAX - attachments.length),
+    addFiles,
+  );
+
+  async function submit() {
+    if (cannotSend) return;
+    setSending(true);
+    setFailure(null);
+    const comment = {
+      body: wire.body,
+      ...(replyTo ? { replyTo: replyTo.id } : path ? { path } : {}),
+      ...(ready.length ? { images: ready } : {}),
+    };
+    const signature = JSON.stringify([comment, replyTo ? null : version]);
+    if (attempt.current.signature !== signature)
+      attempt.current = { signature, key: crypto.randomUUID() };
+    try {
+      const { id } = await postArtifactComment({
+        data: {
+          artifactId,
+          ...(replyTo ? {} : { version }),
+          comment: { ...comment, idempotencyKey: attempt.current.key },
+        },
+      });
+      for (const attachment of attachments) URL.revokeObjectURL(attachment.previewUrl);
+      setBody("");
+      setPins([]);
+      setAttachments([]);
+      onCancelReply();
+      await syncOwnComments(queryClient, artifactId, "posted", [id]);
+    } catch (error) {
+      setFailure(sendFailure(error));
+    } finally {
+      setSending(false);
+      completion.textareaRef.current?.focus();
+    }
+  }
+
+  const names = audience.data?.notified ?? [];
+  const notifyLine =
+    audience.data && !empty
+      ? names.length
+        ? m.av_cm_will_notify({ names: formatList(names) })
+        : m.av_cm_wont_notify()
+      : null;
+  const error = tooLong
+    ? m.av_cm_err_too_long({ count: COMMENT_BODY_MAX })
+    : (mentionError ?? failure);
+
+  return (
+    <form
+      className="shrink-0 space-y-1.5 border-t border-secondary px-3 pt-2 pb-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
+    >
+      {replyTo ? (
+        <ComposerChip
+          label={m.av_cm_replying_to({ name: replyTo.name })}
+          onRemove={onCancelReply}
+          removeLabel={m.av_cm_cancel_reply()}
+        />
+      ) : (
+        path && (
+          <ComposerChip
+            label={m.av_cm_on_file({ path })}
+            onRemove={onClearPath}
+            removeLabel={m.av_cm_clear_target()}
+          />
+        )
+      )}
+      <div className={cn(COMPOSER_BOX_CLASS, COMPOSER_FOCUS_CLASS)}>
+        <ComposerField
+          completion={completion}
+          value={body}
+          onValueChange={changeBody}
+          label={m.av_cm_field_label()}
+          placeholder={replyTo ? m.av_cm_reply_placeholder() : m.av_cm_placeholder()}
+          onSubmit={() => void submit()}
+          sendDisabled={cannotSend}
+          isReadOnly={sending}
+          mentionGroups="kind"
+          alwaysStacked
+          attachmentCount={attachments.length}
+          onPaste={paste}
+          leading={(className) => (
+            <ButtonUtility
+              icon={Image01}
+              size="sm"
+              color="tertiary"
+              className={className}
+              tooltip={m.av_cm_add_image()}
+              isDisabled={attachments.length >= ARTIFACT_COMMENT_IMAGES_MAX}
+              onClick={() => fileInput.current?.click()}
+            />
+          )}
+          below={
+            attachments.length > 0 && (
+              <ul className="col-span-full row-start-2 flex flex-wrap gap-2 px-2 pt-1">
+                {attachments.map((attachment) => (
+                  <li key={attachment.key} className="relative">
+                    <img
+                      src={attachment.previewUrl}
+                      alt={m.av_cm_image_alt()}
+                      className={cn(
+                        "size-14 rounded-md border border-secondary object-cover",
+                        attachment.state === "uploading" && "opacity-50",
+                      )}
+                    />
+                    <ButtonUtility
+                      icon={XClose}
+                      size="xs"
+                      color="secondary"
+                      className="absolute -top-1.5 -right-1.5 rounded-full"
+                      tooltip={m.av_cm_remove_image()}
+                      onClick={() => removeAttachment(attachment.key)}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )
+          }
+        />
+      </div>
+      <input
+        ref={fileInput}
+        type="file"
+        accept={[...INLINE_IMAGE_TYPES].join(",")}
+        multiple
+        hidden
+        data-testid="artifact-comment-image-input"
+        onChange={(event) => {
+          addFiles([...(event.target.files ?? [])]);
+          event.target.value = "";
+        }}
+      />
+      {error ? (
+        <p role="alert" className="text-xs text-error-primary">
+          {error}
+        </p>
+      ) : (
+        notifyLine && <p className="text-xs text-tertiary">{notifyLine}</p>
+      )}
+    </form>
+  );
+}
+
+function ComposerChip({
+  label,
+  removeLabel,
+  onRemove,
+}: {
+  label: string;
+  removeLabel: string;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="flex min-w-0">
+      <span className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-md bg-quaternary py-0.5 pr-0.5 pl-2 text-xs font-medium text-secondary">
+        <span className="min-w-0 truncate">{label}</span>
+        <ButtonUtility
+          icon={XClose}
+          size="xs"
+          color="tertiary"
+          className="shrink-0"
+          tooltip={removeLabel}
+          onClick={onRemove}
+        />
+      </span>
+    </div>
+  );
+}
+
+function sendFailure(error: unknown): string {
+  if (isAppError(error)) {
+    if (error.errorId === "artifact-too-many-mentions")
+      return m.av_cm_err_too_many_mentions({ count: COMMENT_MENTIONS_MAX });
+    if (error.errorId === "artifact-mention-cannot-see") {
+      const names = String(error.details?.names ?? "")
+        .split(",")
+        .filter(Boolean)
+        .map((handle) => `@${handle}`);
+      if (names.length) return m.av_cm_err_cannot_see({ names: formatList(names) });
+    }
+    if (error.errorId === ARTIFACT_RATE_LIMITED_ERROR_ID)
+      return m.av_cm_err_rate_limited({ seconds: Number(error.details?.retryAfterSeconds ?? 60) });
+  }
+  return m.av_cm_err_send();
+}

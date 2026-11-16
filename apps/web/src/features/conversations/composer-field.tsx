@@ -20,29 +20,17 @@ import { ComposerSendButton } from "./composer-send-button";
 import { ReferenceSuggestionList } from "./reference-suggestions";
 import type { useReferenceCompletion } from "./use-reference-completion";
 
-/** What sets the width of a line of draft text: shared by the textarea and its hidden one-line
- * copy, which measures whether the draft fits the one-line text column. */
 const DRAFT_LINE_CLASS = "pr-3 text-md";
 
-/** On one line beside `+`, the text starts as far from its glyph as the glyph is from the frame
- * (the button's own 8px padding and the 4px column gap already sit between them); anywhere else
- * it is inset like the frame's other content. */
 const BESIDE_LEADING_CLASS = "pl-1";
 const INSET_CLASS = "pl-3";
 
-/** Puts the caret at the end of the draft, without scrolling the page to it. */
 export function focusDraftEnd(textarea: HTMLTextAreaElement | null) {
   if (!textarea) return;
   textarea.focus({ preventScroll: true });
   textarea.setSelectionRange(textarea.value.length, textarea.value.length);
 }
 
-/**
- * The draft field shared by every composer (a conversation, a thread, a file's comments): the text,
- * its `@`/`#` completion, Enter to send (never while an IME composes or a candidate is being
- * picked), the send button, and the layout that keeps one line while the draft fits and stacks
- * once it does not. The owner keeps the draft, what sending does, and anything around the field.
- */
 export function ComposerField({
   completion,
   value,
@@ -62,47 +50,34 @@ export function ComposerField({
   below,
   onPaste,
   sendLabel,
+  mentionGroups,
+  alwaysStacked = false,
 }: {
-  /** The owner's `useReferenceCompletion`, whose `onChange` is `onValueChange` too. */
   completion: ReturnType<typeof useReferenceCompletion>;
   value: string;
   onValueChange: (value: string) => void;
-  /** The field's accessible name. */
   label: string;
   placeholder: string;
-  /** Send the draft: as a Task when `asTask` is true, by the owner's default when it is absent. */
   onSubmit: (asTask?: boolean) => void;
-  /** Choose the send mode without sending (the send menu, Cmd/Ctrl+Shift+Enter): an owner whose
-   * Task send needs a choice first (its priority, task #12) arms the mode and lets the next
-   * submit go out. Without it the choice sends at once, as `onSubmit` does. */
   onTaskMode?: (asTask: boolean) => void;
   sendDisabled: boolean;
   isDisabled?: boolean;
-  /** Typing is held, focus kept (a send in flight that must not lose the dialog's Escape). */
   isReadOnly?: boolean;
   maxLength?: number;
-  /** Whether a send may go "As task" (the send menu, Cmd/Ctrl+Shift+Enter). */
   taskMode?: boolean;
   asTask?: boolean;
-  /** Attachments under the text stack the field like a newline does. */
   attachmentCount?: number;
-  /** The button before the text (the attachment `+`), given the grid placement it takes. */
   leading?: (className: string) => ReactNode;
-  /** Shown under the text, across the field, while stacked (the attachments). */
   below?: ReactNode;
   onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
-  /** The send button's name and tooltip, when it does more than send (`ComposerSendButton`). */
   sendLabel?: string;
+  mentionGroups?: "membership" | "kind";
+  alwaysStacked?: boolean;
 }) {
   const id = useId();
-  // IME composition tracking for Enter-to-send: see composer-behavior.ts.
   const isComposingRef = useRef(false);
   const lastCompositionEndAtRef = useRef<number | null>(null);
-  // Whether the draft would wrap in the one-line text column, read from a hidden copy of it that
-  // always sits in that column (see `forcesStackedLayout`). Once a newline or an attachment
-  // stacks the composer anyway, the copy stays empty rather than laying out the draft twice.
-  const stacksAnyway = forcesStackedLayout(value, attachmentCount);
-  // The placeholder must fit too, or the composer stays stacked and typing never moves the box.
+  const stacksAnyway = alwaysStacked || forcesStackedLayout(value, attachmentCount);
   const lineMirrorText = stacksAnyway ? "" : `${value}\n${placeholder}`;
   const lineMirrorRef = useRef<HTMLSpanElement>(null);
   const [overflowsLine, setOverflowsLine] = useState(false);
@@ -110,17 +85,13 @@ export function ComposerField({
     const mirror = lineMirrorRef.current;
     if (mirror) setOverflowsLine(mirror.scrollWidth > mirror.clientWidth);
   }, []);
-  // Before paint, so a restored long draft never shows a frame on one line.
   useLayoutEffect(measureLine, [lineMirrorText, measureLine]);
   useResizeObserver({ ref: lineMirrorRef, onResize: measureLine });
   const stacked = stacksAnyway || overflowsLine;
-  // Stacked, `+` and send sit on the bottom bar (row 3, under the attachments).
   const barRow = stacked ? "row-start-3" : "row-start-1";
   const oneLineInset = leading ? BESIDE_LEADING_CLASS : INSET_CLASS;
 
   function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    // The open completion owns navigation and confirmation keys; Enter must not send while a
-    // candidate is being picked. During IME composition the keys belong to the IME.
     if (completion.handleKeyDown(event, isComposingRef.current)) return;
     const composition = { lastCompositionEndAt: lastCompositionEndAtRef.current, now: Date.now() };
     const key = {
@@ -184,7 +155,6 @@ export function ComposerField({
             completion.open ? completion.optionId(completion.activeIndex) : undefined
           }
           placeholder={placeholder}
-          // Fits what it shows, placeholder included (as Raft's); scrolls only past max height.
           className={cx(
             "row-start-1 max-h-40 min-h-8 w-full resize-none bg-transparent py-1 text-field-text outline-none [field-sizing:content] placeholder:text-field-placeholder disabled:opacity-50",
             DRAFT_LINE_CLASS,
@@ -214,7 +184,6 @@ export function ComposerField({
           onChoose={(wantTask) => {
             if (onTaskMode) onTaskMode(wantTask);
             else onSubmit(wantTask);
-            // The closing menu hands focus back to its trigger; take it back after.
             requestAnimationFrame(() => focusDraftEnd(completion.textareaRef.current));
           }}
           className={cx("col-start-3", barRow, stacked && "mt-1")}
@@ -229,6 +198,7 @@ export function ComposerField({
           optionId={completion.optionId}
           onChoose={completion.choose}
           onHighlight={completion.setActiveIndex}
+          groupBy={mentionGroups}
         />
       )}
     </>

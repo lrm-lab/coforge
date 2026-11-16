@@ -42,13 +42,15 @@ export const loadArtifactCards = createServerFn({ method: "GET" })
 export const loadArtifactDocument = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ artifactId: id, version: artifactInputs.version.optional() }).strict())
-  .handler(({ context, data }) =>
-    productionArtifacts(context.db).documents.load(
+  .handler(async ({ context, data }) => {
+    const { documents } = productionArtifacts(context.db);
+    const document = await documents.load(
       scopeOf(context),
       { artifactId: data.artifactId, version: data.version },
       { body: "markdown" },
-    ),
-  );
+    );
+    return { ...document, commentCount: await documents.commentCount(data.artifactId) };
+  });
 
 export const loadArtifactLinkSharing = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])

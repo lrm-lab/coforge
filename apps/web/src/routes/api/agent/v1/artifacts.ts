@@ -14,6 +14,7 @@ import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
 import {
   productionArtifactAttachments,
   productionArtifactNotices,
+  productionArtifactSignals,
   productionArtifacts,
 } from "#src/server/artifacts/artifact-composition.server";
 import { getAppRateLimits } from "#src/server/app-rate-limits/app-rate-limits-composition.server";
@@ -45,6 +46,7 @@ export const Route = createFileRoute("/api/agent/v1/artifacts")({
           blobs,
           enabled: (workspaceId) => artifactsEnabled(db, workspaceId),
           notices: productionArtifactNotices(db),
+          signals: productionArtifactSignals(),
           attachments: productionArtifactAttachments(db),
           writeLimit: getAppRateLimits().artifactWrite,
         });

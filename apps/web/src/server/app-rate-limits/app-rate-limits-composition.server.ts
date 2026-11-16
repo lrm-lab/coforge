@@ -19,6 +19,8 @@ export const PUBLIC_ARTIFACT_LIMIT_PER_MINUTE = 120;
 export const PUBLIC_ARTIFACT_FILE_LIMIT_PER_MINUTE = 2000;
 export const ARTIFACT_AGENT_WRITE_LIMIT_PER_MINUTE = 60;
 export const ARTIFACT_ZIP_LIMIT_PER_MINUTE = 10;
+/** Comment posts, comment image uploads and will-notify previews a minute per person. */
+export const ARTIFACT_PERSON_COMMENT_LIMIT_PER_MINUTE = 120;
 
 export type AppRateLimits = {
   token: AppRateLimit;
@@ -27,6 +29,7 @@ export type AppRateLimits = {
   publicArtifactFile: AppRateLimit;
   artifactWrite: AppRateLimit;
   artifactZip: AppRateLimit;
+  artifactPersonComment: AppRateLimit;
 };
 
 let limits: AppRateLimits | undefined;
@@ -84,6 +87,12 @@ function createAppRateLimits(redisUrl: string | undefined): AppRateLimits {
       windowMs: WINDOW_MS,
       outageLog,
     }),
+    artifactPersonComment: new RedisAppRateLimit(redis, {
+      keyPrefix: "coforge:ratelimit:artifact-person-comment:v1",
+      limit: ARTIFACT_PERSON_COMMENT_LIMIT_PER_MINUTE,
+      windowMs: WINDOW_MS,
+      outageLog,
+    }),
   };
 }
 
@@ -105,5 +114,6 @@ function unconfiguredLimits(outageLog: RateLimitOutageLog): AppRateLimits {
     publicArtifactFile: limit,
     artifactWrite: limit,
     artifactZip: limit,
+    artifactPersonComment: limit,
   };
 }

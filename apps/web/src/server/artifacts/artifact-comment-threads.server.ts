@@ -4,11 +4,9 @@ import {
   canResolveArtifactComment,
   requireReadableArtifact,
 } from "./artifact-comment-access.server";
-import {
-  commentScope,
-  recordingRefusal,
-  requireNoUnseenChanges,
-} from "./artifact-comment-gate.server";
+import { commentScope } from "./artifact-comment-gate.server";
+import { commentColumns } from "./artifact-actor-columns.server";
+import { actorOf, unseenGate, type CommentPrincipal } from "./artifact-comment-principal.server";
 import { COMMENT_SELECT, commentViews } from "./artifact-comment-view.server";
 import {
   CLEARED_RESOLUTION,
@@ -20,16 +18,16 @@ import {
   type CommentTx,
 } from "./artifact-comment-write.server";
 
-type Principal = { workspaceId: string; agentId: string };
-
 async function threadRoot(
   tx: CommentTx,
-  principal: Principal,
+  principal: CommentPrincipal,
   artifact: { id: string; authorAgentId: string | null },
   commentId: string,
 ) {
+  const { workspaceId } = principal;
+  const actor = actorOf(principal);
   const root = await tx.artifactComment.findFirst({
-    where: { id: commentId, artifactId: artifact.id },
+    where: { id: commentId, artifactId: artifact.id, deletedAt: null },
     select: { ...COMMENT_SELECT },
   });
   if (!root)
@@ -42,12 +40,7 @@ async function threadRoot(
       errorId: "artifact-comment-reply",
       hint: `${commentId} is a reply: a thread is resolved or reopened by its first comment, ${root.rootId}`,
     });
-  const allowed = await canResolveArtifactComment(
-    tx,
-    principal.workspaceId,
-    { agentId: principal.agentId },
-    { artifact, root },
-  );
+  const allowed = await canResolveArtifactComment(tx, workspaceId, actor, { artifact, root });
   if (!allowed)
     throw new AppError("ACCESS_DENIED", {
       errorId: "artifact-comment-thread",
@@ -58,12 +51,15 @@ async function threadRoot(
 
 export async function resolveComment(
   db: PrismaClient,
-  principal: Principal,
+  principal: CommentPrincipal,
   input: { artifact: string; comment: string; note?: string | undefined },
 ) {
-  const { workspaceId, agentId } = principal;
-  const artifact = await requireReadableArtifact(db, workspaceId, { agentId }, input.artifact);
-  const done = await recordingRefusal(db, { artifactId: artifact.id, agentId }, () =>
+  const { workspaceId } = principal;
+  const actor = actorOf(principal);
+  const columns = commentColumns(actor);
+  const gate = unseenGate(principal);
+  const artifact = await requireReadableArtifact(db, workspaceId, actor, input.artifact);
+  const done = await gate.recording(db, artifact.id, () =>
     withCommentLock(db, artifact.id, async (tx) => {
       const root = await threadRoot(tx, principal, artifact, input.comment);
       if (root.resolvedAt) {
@@ -71,7 +67,7 @@ export async function resolveComment(
           where: {
             artifactId: artifact.id,
             rootId: root.id,
-            authorAgentId: agentId,
+            ...columns.author,
             createdAt: root.resolvedAt,
           },
           select: { body: true },
@@ -84,10 +80,8 @@ export async function resolveComment(
           closingNote: closing?.body,
         };
       }
-      await requireNoUnseenChanges(tx, {
-        workspaceId,
+      await gate.require(tx, {
         artifactId: artifact.id,
-        agentId,
         action: "resolve",
         scopes: [commentScope({ path: root.path, rootId: root.id })],
       });
@@ -95,7 +89,7 @@ export async function resolveComment(
       const [note] = input.note
         ? await insertComments(tx, {
             artifactId: artifact.id,
-            agentId,
+            author: actor,
             prepared: [
               {
                 body: input.note,
@@ -110,7 +104,7 @@ export async function resolveComment(
         : [];
       const row = await tx.artifactComment.update({
         where: { id: root.id },
-        data: { resolvedAt: stamp, resolvedByAgentId: agentId, resolvedByUserId: null },
+        data: { resolvedAt: stamp, ...columns.resolver },
         select: COMMENT_SELECT,
       });
       return { row, changed: true, note, startedBy: root.authorAgentId, closingNote: input.note };
@@ -135,11 +129,16 @@ export async function resolveComment(
 
 export async function reopenComment(
   db: PrismaClient,
-  principal: Principal,
+  principal: CommentPrincipal,
   input: { artifact: string; comment: string },
 ) {
-  const { workspaceId, agentId } = principal;
-  const artifact = await requireReadableArtifact(db, workspaceId, { agentId }, input.artifact);
+  const { workspaceId } = principal;
+  const artifact = await requireReadableArtifact(
+    db,
+    workspaceId,
+    actorOf(principal),
+    input.artifact,
+  );
   const done = await withCommentLock(db, artifact.id, async (tx) => {
     const root = await threadRoot(tx, principal, artifact, input.comment);
     if (!root.resolvedAt) return { row: root, changed: false };
@@ -147,5 +146,26 @@ export async function reopenComment(
     return { row: { ...root, ...CLEARED_RESOLUTION }, changed: true };
   });
   const [comment] = await commentViews(db, workspaceId, [done.row]);
-  return { comment: comment!, changed: done.changed };
+  return { artifact, comment: comment!, changed: done.changed };
+}
+
+type Resolved = Awaited<ReturnType<typeof resolveComment>>;
+
+export function resolvedNotice(
+  workspaceId: string,
+  resolved: Resolved,
+  writer: { writerId: string } | { writerName: string },
+) {
+  const { artifact, thread } = resolved;
+  if (!thread.resolvedAt) return null;
+  return {
+    workspaceId,
+    artifact,
+    ...writer,
+    threadId: thread.id,
+    threadPath: thread.path,
+    resolvedAt: thread.resolvedAt,
+    threadAuthorAgentId: resolved.startedByAgentId,
+    note: resolved.closingNote,
+  };
 }

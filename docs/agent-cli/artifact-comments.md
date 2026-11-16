@@ -145,3 +145,11 @@ judges them and names the field. A write refused for unseen changes prints what 
 Agent was shown; no row means none), all going with the artifact. The version position stays in
 `artifact_read_positions`. Author columns have no foreign key, as the module's others. A retry's
 request hash is the SHA-256 of the request's key-sorted JSON.
+
+## People's comments on the Web
+
+People comment from the artifact page's comment panel, with the same threads, anchors, images (four
+at most) and `@` mentions. A person's comment notifies Agents exactly as an Agent's does, and the
+composer says before sending whom it will tell. A person's comment naming someone who cannot see
+the artifact is refused; an Agent's mention of one is only reported as not told. Only the author
+edits or deletes a comment; a deleted comment with replies leaves a placeholder.

@@ -1,5 +1,6 @@
 import { ARTIFACT_UPLOAD_MAX_BYTES } from "@lrm/coforge-sdk/agent";
 import type { Prisma } from "#src/generated/prisma/client";
+import type { ArtifactActor } from "./artifact-access.server";
 
 export { artifactPathValid } from "@lrm/coforge-sdk/agent";
 
@@ -25,7 +26,7 @@ export interface ArtifactBlobStore {
   allowed(
     workspaceId: string,
     artifactId: string | undefined,
-    actor: { agentId: string },
+    actor: ArtifactActor,
     sha256s: readonly string[],
   ): Promise<Set<string>>;
   read(workspaceId: string, sha256: string): Promise<Uint8Array | null>;

@@ -38,3 +38,10 @@ These rules apply to `src/features/artifacts/`. They extend
   excerpt: render it with `MarkdownPreview`, clamped by its caller.
 - `ConversationShareDialog` arranges its target and composer panes through a `ShareLayout`; the
   artifact send dialog supplies the two-pane one.
+- The comments panel (`artifact-comment-panel.tsx`) and the files panel are one `panel` state and
+  share `ArtifactSidePanel`; a comment is written on the version being viewed and, with a file
+  open, on that file unless dismissed. On `artifact.comments.changed.v1` the cache fetches only the
+  named comments (`syncCommentsChange`); the author's own mutation syncs itself and its event is
+  skipped. The count comes from the document read. The composer reuses `ComposerField` with
+  `mentionGroups="kind"` and the message composer's paste hook; its audience preview is keyed on the
+  set of mentions, and its idempotency key changes with the request's content.

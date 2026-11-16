@@ -14,15 +14,17 @@ import {
   type ArtifactAttachmentPort,
 } from "./agent-artifact-save.server";
 import { readCommentImage } from "./artifact-comment-images.server";
+import { agentPrincipal } from "./artifact-comment-principal.server";
 import { resolveArtifactReference } from "./artifact-reference.server";
 import { listComments, readUnseenComments } from "./artifact-comment-reads.server";
-import { reopenComment } from "./artifact-comment-threads.server";
 import { followArtifact, unfollowArtifact } from "./artifact-follows.server";
 import type { ArtifactNoticePort } from "./artifact-notice-port.server";
+import type { ArtifactSignals } from "./artifact-signals.server";
 import {
   commentOnArtifact,
   followedByCreate,
   followedByPush,
+  reopenArtifactThread,
   reviewArtifact,
   resolveArtifactThread,
 } from "./agent-artifact-writes.server";
@@ -50,6 +52,7 @@ export type AgentArtifactServices = {
   blobs: Pick<StoredArtifactBlobs, "allowed" | "use" | "read" | "upload">;
   enabled: (workspaceId: string) => Promise<boolean>;
   notices?: ArtifactNoticePort | undefined;
+  signals?: ArtifactSignals | undefined;
   attachments?: ArtifactAttachmentPort | undefined;
   writeLimit?: AppRateLimit | undefined;
 };
@@ -164,7 +167,12 @@ export async function runAgentArtifactOperation(
     });
   }
   const scope = { workspaceId, actor: { agentId } };
-  const writes = { db: services.db, blobs: services.blobs, notices: services.notices };
+  const writes = {
+    db: services.db,
+    blobs: services.blobs,
+    notices: services.notices,
+    signals: services.signals,
+  };
   switch (request.operation) {
     case "list": {
       const { target, after, ...page } = parsed.data as z.infer<typeof RULES.list>;
@@ -293,7 +301,7 @@ export async function runAgentArtifactOperation(
     case "resolve":
       return resolveArtifactThread(writes, principal, parsed.data as z.infer<typeof RULES.resolve>);
     case "reopen":
-      return reopenComment(services.db, principal, parsed.data as z.infer<typeof RULES.reopen>);
+      return reopenArtifactThread(writes, principal, parsed.data as z.infer<typeof RULES.reopen>);
     case "save": {
       const saved = await saveAttachmentAsArtifact(
         services,
@@ -308,7 +316,7 @@ export async function runAgentArtifactOperation(
       return readCommentImage(
         services.db,
         services.blobs,
-        principal,
+        agentPrincipal(principal),
         parsed.data as z.infer<typeof RULES.image>,
       );
     case "follow":

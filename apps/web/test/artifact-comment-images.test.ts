@@ -5,7 +5,11 @@ import {
   type CommentImageBlobs,
 } from "#src/server/artifacts/artifact-comment-images.server";
 
-const principal = { workspaceId: crypto.randomUUID(), agentId: crypto.randomUUID() };
+const principal = {
+  kind: "agent" as const,
+  workspaceId: crypto.randomUUID(),
+  agentId: crypto.randomUUID(),
+};
 
 const blobsHolding = (bytes: Uint8Array): CommentImageBlobs =>
   ({

@@ -5,6 +5,7 @@ import {
   actorConversationAccess,
   actorConversationHomeReads,
   agentsConversationHomeReads,
+  peopleConversationHomeReads,
   canReadConversationHome,
   conversationHiddenFromWorkspace,
   type ActorConversationHomeRead,
@@ -176,6 +177,39 @@ export async function agentsReadingArtifact(
   );
 }
 
+export async function peopleReadingArtifact(
+  db: Pick<PrismaClient, "conversation" | "workspaceMembership" | "agent">,
+  workspaceId: string,
+  artifact: ArtifactAccessRow,
+  userIds: readonly string[],
+): Promise<Set<string>> {
+  if (userIds.length === 0) return new Set();
+  const conversationId = artifactHomeConversationId(artifact.homeKey);
+  const [memberships, authorAgentOwnerId, homes] = await Promise.all([
+    db.workspaceMembership.findMany({
+      where: { workspaceId, userId: { in: [...userIds] } },
+      select: { userId: true, role: true },
+    }),
+    artifactAuthorOwnerId(db, artifact.authorAgentId),
+    artifactTier(artifact) === "workspace" || !conversationId
+      ? undefined
+      : peopleConversationHomeReads(db, workspaceId, conversationId, userIds),
+  ]);
+  return new Set(
+    memberships
+      .filter(({ userId, role }) =>
+        artifactReadableFromHome({
+          actor: { userId },
+          viewer: { member: true, role },
+          artifact,
+          home: homes?.get(userId),
+          authorAgentOwnerId,
+        }),
+      )
+      .map(({ userId }) => userId),
+  );
+}
+
 export async function artifactAuthorOwnerId(
   db: Pick<PrismaClient, "agent">,
   authorAgentId: string | null,
@@ -270,7 +304,6 @@ export function canManageArtifactSharingWithRole(
   );
 }
 
-/** Whether the actor belongs to the Workspace: a member person, or one of its live Agents. */
 export async function inWorkspace(db: Db, workspaceId: string, actor: ArtifactActor) {
   if (actor.userId)
     return (

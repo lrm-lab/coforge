@@ -144,14 +144,22 @@ function commentViewOf(
   };
 }
 
+export async function commentViewPairs(
+  db: ViewDb,
+  workspaceId: string,
+  rows: readonly CommentRow[],
+): Promise<{ row: CommentRow; view: ArtifactCommentView | DeletedCommentView }[]> {
+  if (rows.length === 0) return [];
+  const [names, images] = await Promise.all([namesOf(db, workspaceId, rows), imagesOf(db, rows)]);
+  return rows.map((row) => ({ row, view: commentViewOf(names, images, row) }));
+}
+
 export async function commentViews(
   db: ViewDb,
   workspaceId: string,
   rows: readonly CommentRow[],
 ): Promise<(ArtifactCommentView | DeletedCommentView)[]> {
-  if (rows.length === 0) return [];
-  const [names, images] = await Promise.all([namesOf(db, workspaceId, rows), imagesOf(db, rows)]);
-  return rows.map((row) => commentViewOf(names, images, row));
+  return (await commentViewPairs(db, workspaceId, rows)).map(({ view }) => view);
 }
 
 export async function commentView(db: ViewDb, workspaceId: string, row: CommentRow) {

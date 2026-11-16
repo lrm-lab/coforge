@@ -180,6 +180,7 @@ import { Route as ApiAgentV1MessagesMessageIdResolveRouteImport } from './routes
 import { Route as ApiAgentV1ThreadsThreadUnfollowRouteImport } from './routes/api/agent/v1/threads_.$thread.unfollow'
 import { Route as ApiWorkspacesWorkspaceIdAppsAppKeyLogoRouteImport } from './routes/api/workspaces/$workspaceId/apps/$appKey/logo'
 import { Route as ApiWorkspacesWorkspaceIdUsersUserIdAvatarRouteImport } from './routes/api/workspaces/$workspaceId/users/$userId/avatar'
+import { Route as ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteImport } from './routes/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images'
 import { Route as ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRouteImport } from './routes/api/workspaces/$workspaceSlug/artifacts/$artifactId/download'
 import { Route as ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRouteImport } from './routes/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
 import { Route as ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRouteImport } from './routes/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation'
@@ -194,6 +195,7 @@ import { Route as ApiAgentV1AppsOwnedClientKeyTransferOwnerRouteImport } from '.
 import { Route as ApiAgentV1AppsOwnedClientKeyUnpublishRequestRouteImport } from './routes/api/agent/v1/apps/owned/$clientKey/unpublish-request'
 import { Route as ApiAgentV1ArtifactsArtifactFilesPathRouteImport } from './routes/api/agent/v1/artifacts_.$artifact.files.$path'
 import { Route as ApiReleaseCatalogV1AppsAppReleasesVersionRouteImport } from './routes/api/release-catalog/v1/apps/$app/releases/$version'
+import { Route as ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesImageIdRouteImport } from './routes/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images.$imageId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -1135,6 +1137,12 @@ const ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute =
     path: '/api/workspaces/$workspaceId/users/$userId/avatar',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRoute =
+  ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteImport.update({
+    id: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images',
+    path: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute =
   ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRouteImport.update({
     id: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download',
@@ -1221,6 +1229,15 @@ const ApiReleaseCatalogV1AppsAppReleasesVersionRoute =
     path: '/api/release-catalog/v1/apps/$app/releases/$version',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesImageIdRoute =
+  ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesImageIdRouteImport.update(
+    {
+      id: '/$imageId',
+      path: '/$imageId',
+      getParentRoute: () =>
+        ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRoute,
+    } as any,
+  )
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -1391,6 +1408,7 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/threads/$thread/unfollow': typeof ApiAgentV1ThreadsThreadUnfollowRoute
   '/api/workspaces/$workspaceId/apps/$appKey/logo': typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   '/api/workspaces/$workspaceId/users/$userId/avatar': typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
+  '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteWithChildren
   '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute
@@ -1405,6 +1423,7 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/apps/owned/$clientKey/unpublish-request': typeof ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute
   '/api/agent/v1/artifacts/$artifact/files/$path': typeof ApiAgentV1ArtifactsArtifactFilesPathRoute
   '/api/release-catalog/v1/apps/$app/releases/$version': typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
+  '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images/$imageId': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesImageIdRoute
   '/api/agent/v1/apps/owned/$clientKey/': typeof ApiAgentV1AppsOwnedClientKeyIndexRoute
 }
 export interface FileRoutesByTo {
@@ -1574,6 +1593,7 @@ export interface FileRoutesByTo {
   '/api/agent/v1/threads/$thread/unfollow': typeof ApiAgentV1ThreadsThreadUnfollowRoute
   '/api/workspaces/$workspaceId/apps/$appKey/logo': typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   '/api/workspaces/$workspaceId/users/$userId/avatar': typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
+  '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteWithChildren
   '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute
@@ -1588,6 +1608,7 @@ export interface FileRoutesByTo {
   '/api/agent/v1/apps/owned/$clientKey/unpublish-request': typeof ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute
   '/api/agent/v1/artifacts/$artifact/files/$path': typeof ApiAgentV1ArtifactsArtifactFilesPathRoute
   '/api/release-catalog/v1/apps/$app/releases/$version': typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
+  '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images/$imageId': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesImageIdRoute
   '/api/agent/v1/apps/owned/$clientKey': typeof ApiAgentV1AppsOwnedClientKeyIndexRoute
 }
 export interface FileRoutesById {
@@ -1762,6 +1783,7 @@ export interface FileRoutesById {
   '/api/agent/v1/threads_/$thread/unfollow': typeof ApiAgentV1ThreadsThreadUnfollowRoute
   '/api/workspaces/$workspaceId/apps/$appKey/logo': typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   '/api/workspaces/$workspaceId/users/$userId/avatar': typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
+  '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteWithChildren
   '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute
@@ -1776,6 +1798,7 @@ export interface FileRoutesById {
   '/api/agent/v1/apps/owned/$clientKey/unpublish-request': typeof ApiAgentV1AppsOwnedClientKeyUnpublishRequestRoute
   '/api/agent/v1/artifacts_/$artifact/files/$path': typeof ApiAgentV1ArtifactsArtifactFilesPathRoute
   '/api/release-catalog/v1/apps/$app/releases/$version': typeof ApiReleaseCatalogV1AppsAppReleasesVersionRoute
+  '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images/$imageId': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesImageIdRoute
   '/api/agent/v1/apps/owned/$clientKey/': typeof ApiAgentV1AppsOwnedClientKeyIndexRoute
 }
 export interface FileRouteTypes {
@@ -1949,6 +1972,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/threads/$thread/unfollow'
     | '/api/workspaces/$workspaceId/apps/$appKey/logo'
     | '/api/workspaces/$workspaceId/users/$userId/avatar'
+    | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images'
     | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation'
@@ -1963,6 +1987,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/apps/owned/$clientKey/unpublish-request'
     | '/api/agent/v1/artifacts/$artifact/files/$path'
     | '/api/release-catalog/v1/apps/$app/releases/$version'
+    | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images/$imageId'
     | '/api/agent/v1/apps/owned/$clientKey/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -2132,6 +2157,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/threads/$thread/unfollow'
     | '/api/workspaces/$workspaceId/apps/$appKey/logo'
     | '/api/workspaces/$workspaceId/users/$userId/avatar'
+    | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images'
     | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation'
@@ -2146,6 +2172,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/apps/owned/$clientKey/unpublish-request'
     | '/api/agent/v1/artifacts/$artifact/files/$path'
     | '/api/release-catalog/v1/apps/$app/releases/$version'
+    | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images/$imageId'
     | '/api/agent/v1/apps/owned/$clientKey'
   id:
     | '__root__'
@@ -2319,6 +2346,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/threads_/$thread/unfollow'
     | '/api/workspaces/$workspaceId/apps/$appKey/logo'
     | '/api/workspaces/$workspaceId/users/$userId/avatar'
+    | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images'
     | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation'
@@ -2333,6 +2361,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/apps/owned/$clientKey/unpublish-request'
     | '/api/agent/v1/artifacts_/$artifact/files/$path'
     | '/api/release-catalog/v1/apps/$app/releases/$version'
+    | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images/$imageId'
     | '/api/agent/v1/apps/owned/$clientKey/'
   fileRoutesById: FileRoutesById
 }
@@ -2462,6 +2491,7 @@ export interface RootRouteChildren {
   ApiAgentV1ThreadsThreadUnfollowRoute: typeof ApiAgentV1ThreadsThreadUnfollowRoute
   ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute: typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute: typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
+  ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRoute: typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteWithChildren
   ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute: typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute: typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute: typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute
@@ -3676,6 +3706,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images': {
+      id: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images'
+      path: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images'
+      fullPath: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images'
+      preLoaderRoute: typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download': {
       id: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download'
       path: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download'
@@ -3773,6 +3810,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/release-catalog/v1/apps/$app/releases/$version'
       preLoaderRoute: typeof ApiReleaseCatalogV1AppsAppReleasesVersionRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images/$imageId': {
+      id: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images/$imageId'
+      path: '/$imageId'
+      fullPath: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images/$imageId'
+      preLoaderRoute: typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesImageIdRouteImport
+      parentRoute: typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRoute
     }
   }
 }
@@ -4008,6 +4052,21 @@ const ApiAgentV1ChannelsChannelRouteWithChildren =
     ApiAgentV1ChannelsChannelRouteChildren,
   )
 
+interface ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteChildren {
+  ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesImageIdRoute: typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesImageIdRoute
+}
+
+const ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteChildren: ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteChildren =
+  {
+    ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesImageIdRoute:
+      ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesImageIdRoute,
+  }
+
+const ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteWithChildren =
+  ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRoute._addFileChildren(
+    ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HealthRoute: HealthRoute,
@@ -4158,6 +4217,8 @@ const rootRouteChildren: RootRouteChildren = {
     ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute,
   ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute:
     ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute,
+  ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRoute:
+    ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteWithChildren,
   ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute:
     ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute,
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute:
@@ -4186,3 +4247,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

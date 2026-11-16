@@ -12,32 +12,6 @@ import { mentionKey, mentionKeysShowingHandle, type Mentionable } from "./mentio
 import type { ChannelSuggestion, ReferenceTrigger } from "./reference-completion";
 import type { ReferenceSuggestion } from "./use-reference-completion";
 
-/**
- * The reference-completion popup above the composer textarea: a listbox of the conversation's
- * mentionable members (`@`) or the Workspace's channels (`#`), filtered to the in-progress query.
- * Every row is one line so more candidates fit above the composer. A member row reads avatar,
- * display name, a Human/Agent badge and the profile description. An Agent's `@handle`, its public
- * name, is pinned to the right edge; a person's is not shown (choosing them writes their name),
- * except where two people in the list read identically (`mentionKeysShowingHandle`). In a channel
- * the `@` list has two groups, the members and then the Workspace's people and public Agents
- * outside the channel, titled only when both are shown; an outsider's name reads dimmed, since
- * mentioning them notifies no one by itself. A channel row reads its group avatar, the
- * name and the description, with an "Archived" badge on the right; an archived channel's row is
- * dimmed.
- * An Agent's avatar carries the same online/working/thinking/error/offline dot the sidebar and
- * conversation header use, so you can see whether an Agent is around before mentioning it; the
- * snapshot comes from the app shell's one subscription through `useLiveAgents`. A person's
- * avatar stays plain here (people's presence is drawn on the Members page).
- * Pointer selection keeps the textarea focused with `pointerdown` (prevented) and commits on
- * `pointerup`. Committing on pointerup — rather than pointerdown or the synthesized click —
- * is what makes taps work everywhere: canceling pointerdown suppresses the compatibility
- * mouse events touch input relies on, so on mobile Safari no click ever arrives; and
- * committing on pointerdown unmounts the option early enough that the synthesized click can
- * retarget to the message row beneath the popup. `pointerup` fires for mouse, touch and pen
- * while the option is still mounted. The `click` handler stays as a fallback (assistive tech
- * may activate without pointer events); `choose` early-returns once the query is gone, so a
- * second activation is a no-op. Keyboard interaction lives in `useReferenceCompletion`.
- */
 export function ReferenceSuggestionList({
   id,
   trigger,
@@ -46,6 +20,7 @@ export function ReferenceSuggestionList({
   optionId,
   onChoose,
   onHighlight,
+  groupBy = "membership",
 }: {
   id: string;
   trigger: ReferenceTrigger;
@@ -54,6 +29,7 @@ export function ReferenceSuggestionList({
   optionId: (index: number) => string;
   onChoose: (item: ReferenceSuggestion) => void;
   onHighlight: (index: number) => void;
+  groupBy?: "membership" | "kind";
 }) {
   const activeOptionRef = useRef<HTMLLIElement>(null);
   const liveAgents = useLiveAgents();
@@ -62,11 +38,8 @@ export function ReferenceSuggestionList({
     [liveAgents],
   );
 
-  // Keep the highlighted row visible while arrowing past the popup's own scroll window.
   useEffect(() => {
     const option = activeOptionRef.current;
-    // The first row of a titled group brings its title along: the title first, then the row, so
-    // a group taller than the list never pushes the row itself out of view.
     const group = option?.closest<HTMLElement>("[role=group]");
     if (group?.querySelector("[role=option]") === option)
       group?.firstElementChild?.scrollIntoView({ block: "nearest" });
@@ -86,7 +59,6 @@ export function ReferenceSuggestionList({
         role="option"
         aria-selected={active}
         onPointerDown={(event) => {
-          // Keep the textarea focused; the choice itself commits on pointerup below.
           event.preventDefault();
           event.stopPropagation();
         }}
@@ -104,7 +76,6 @@ export function ReferenceSuggestionList({
         className={cx(
           "flex min-h-9 cursor-pointer select-none items-center gap-2 px-3 py-1.5 pointer-coarse:min-h-11",
           active && "bg-secondary",
-          // Someone outside the channel reads dimmed: mentioning them notifies no one by itself.
           item.kind === "mention" && item.mention.outsider && "*:opacity-60",
         )}
       >
@@ -120,16 +91,29 @@ export function ReferenceSuggestionList({
       </li>
     );
   };
-  // Members first, then the Workspace's people and Agents outside the channel; the two groups
-  // are named only when both are shown.
   const rows = items.map((item, index) => ({ item, index }));
-  const outside = rows.filter(({ item }) => item.kind === "mention" && item.mention.outsider);
-  const inside = rows.filter(({ item }) => !(item.kind === "mention" && item.mention.outsider));
+  const isMention = (item: ReferenceSuggestion, kind: Mentionable["kind"]) =>
+    item.kind === "mention" && item.mention.kind === kind;
+  const split =
+    groupBy === "kind"
+      ? {
+          first: rows.filter(({ item }) => isMention(item, "user")),
+          second: rows.filter(({ item }) => isMention(item, "agent")),
+          labels: [m.av_cm_mention_people(), m.av_cm_mention_agents()] as const,
+        }
+      : {
+          first: rows.filter(({ item }) => !(item.kind === "mention" && item.mention.outsider)),
+          second: rows.filter(({ item }) => item.kind === "mention" && item.mention.outsider),
+          labels: [
+            m.conversation_mention_group_in_channel(),
+            m.conversation_mention_group_not_in_channel(),
+          ] as const,
+        };
   const groups =
-    outside.length && inside.length
+    split.first.length && split.second.length
       ? [
-          { key: "inside", label: m.conversation_mention_group_in_channel(), rows: inside },
-          { key: "outside", label: m.conversation_mention_group_not_in_channel(), rows: outside },
+          { key: "inside", label: split.labels[0], rows: split.first },
+          { key: "outside", label: split.labels[1], rows: split.second },
         ]
       : [{ key: "all", label: undefined, rows }];
 
@@ -173,9 +157,6 @@ export function ReferenceSuggestionList({
   );
 }
 
-/** A member row: avatar (an Agent's with its live status dot), name, kind, description, and the
- * handle where `showHandle` says so. Someone outside the channel reads with a dimmed name, the way
- * an archived channel does. */
 function MentionRow({
   mention,
   display,
@@ -196,7 +177,6 @@ function MentionRow({
           size="xs"
         />
       ) : (
-        // Picking whom to mention: a person with their online dot, as the Agent beside (task #510).
         <ActorAvatar
           presence
           userId={mention.id}
@@ -231,8 +211,6 @@ function MentionRow({
   );
 }
 
-/** A channel row: its group avatar (a channel no one is in yet reads its `#` or lock), name,
- * description, and an "Archived" badge on an archived channel. */
 function ChannelRow({ channel }: { channel: ChannelSuggestion }) {
   const Glyph = channelGlyph(channel);
   return (

@@ -1,9 +1,3 @@
-/**
- * Every versioned browser realtime event name, in one place. Publishers in
- * `src/server/` and the client's subscription schemas use these constants; the
- * catalog test compares this list with `docs/realtime-events.md`, so adding an
- * event forces both the server and the table to change with it.
- */
 export const REALTIME_EVENTS = {
   memberChanged: "member.changed.v1",
   channelUpdated: "channel.updated.v1",
@@ -21,6 +15,7 @@ export const REALTIME_EVENTS = {
   artifactVersionPublished: "artifact.version.published.v1",
   artifactAccessChanged: "artifact.access.changed.v1",
   artifactDataChanged: "artifact.data.changed.v1",
+  artifactCommentsChanged: "artifact.comments.changed.v1",
   conversationActivity: "conversation.activity.v1",
   conversationRead: "conversation.read.v1",
   messageAvailable: "message.available.v1",

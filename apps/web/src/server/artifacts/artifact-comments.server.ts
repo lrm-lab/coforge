@@ -1,12 +1,19 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type { CommentInput, ReviewInput } from "#src/features/artifacts/artifact-comment-inputs";
 import { payloadHash } from "#src/server/canonical-hash.server";
-import { requireReadableArtifact } from "./artifact-comment-access.server";
 import {
   commentScope,
   recordingRefusal,
   requireNoUnseenChanges,
 } from "./artifact-comment-gate.server";
+import { requireReadableArtifact, type CommentedArtifact } from "./artifact-comment-access.server";
+import { commentColumns } from "./artifact-actor-columns.server";
+import {
+  actorOf,
+  agentPrincipal,
+  unseenGate,
+  type CommentPrincipal,
+} from "./artifact-comment-principal.server";
 import {
   attachImages,
   prepareImages,
@@ -34,23 +41,28 @@ type Principal = { workspaceId: string; agentId: string };
 export async function postComment(
   db: PrismaClient,
   blobs: CommentImageBlobs,
-  principal: Principal,
+  principal: CommentPrincipal,
   input: CommentInput,
+  readable?: CommentedArtifact,
 ) {
-  const { workspaceId, agentId } = principal;
-  const artifact = await requireReadableArtifact(db, workspaceId, { agentId }, input.artifact);
+  const { workspaceId } = principal;
+  const artifact =
+    readable ??
+    (await requireReadableArtifact(db, workspaceId, actorOf(principal), input.artifact));
   const { artifact: _artifact, idempotencyKey, ...draft } = input;
   const requestHash = payloadHash({ operation: "comment", ...draft });
+  const { author } = commentColumns(actorOf(principal));
+  const gate = unseenGate(principal);
   const earlier = await db.artifactComment.findFirst({
-    where: { artifactId: artifact.id, authorAgentId: agentId, idempotencyKey },
+    where: { artifactId: artifact.id, ...author, idempotencyKey },
     select: { requestHash: true },
   });
   if (earlier && earlier.requestHash !== requestHash) throw idempotencyMismatch();
   const images = earlier ? [] : await prepareImages(blobs, principal, draft.images ?? []);
-  const row = await recordingRefusal(db, { artifactId: artifact.id, agentId }, () =>
+  const row = await gate.recording(db, artifact.id, () =>
     withCommentLock(db, artifact.id, async (tx) => {
       const replay = await tx.artifactComment.findFirst({
-        where: { artifactId: artifact.id, authorAgentId: agentId, idempotencyKey },
+        where: { artifactId: artifact.id, ...author, idempotencyKey },
         select: { ...COMMENT_SELECT, requestHash: true },
       });
       if (replay) {
@@ -60,16 +72,14 @@ export async function postComment(
       const [prepared] = await prepareComments(tx, artifact.id, [draft], {
         version: input.version,
       });
-      await requireNoUnseenChanges(tx, {
-        workspaceId,
+      await gate.require(tx, {
         artifactId: artifact.id,
-        agentId,
         action: "comment",
         scopes: [commentScope(prepared!)],
       });
       const [inserted] = await insertComments(tx, {
         artifactId: artifact.id,
-        agentId,
+        author: actorOf(principal),
         prepared: [prepared!],
         stamp: await nextStamp(tx, artifact.id),
         idempotencyKey,
@@ -106,7 +116,7 @@ export async function postReview(
   const images: PreparedImage[][] = [];
   if (!earlier)
     for (const comment of input.comments)
-      images.push(await prepareImages(blobs, principal, comment.images ?? []));
+      images.push(await prepareImages(blobs, agentPrincipal(principal), comment.images ?? []));
   const written = await recordingRefusal(db, { artifactId: artifact.id, agentId }, () =>
     withCommentLock(db, artifact.id, async (tx) => {
       const replay = await tx.artifactCommentReview.findFirst({
@@ -149,7 +159,7 @@ export async function postReview(
       });
       const rows = await insertComments(tx, {
         artifactId: artifact.id,
-        agentId,
+        author: { agentId },
         prepared,
         stamp,
         reviewId: review.id,

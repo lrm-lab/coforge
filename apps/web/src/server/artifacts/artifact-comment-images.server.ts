@@ -10,6 +10,7 @@ import { requireReadableArtifact } from "./artifact-comment-access.server";
 import type { ArtifactBlobStore } from "./artifact-files.server";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
 import type { CommentRow } from "./artifact-comment-view.server";
+import { actorOf, type CommentPrincipal } from "./artifact-comment-principal.server";
 import type { CommentTx } from "./artifact-comment-write.server";
 
 export type CommentImageBlobs = Pick<ArtifactBlobStore, "allowed" | "use" | "read"> &
@@ -65,7 +66,7 @@ function check(sha256: string, bytes: Uint8Array) {
     return refuse("artifact-image-type", "the image could not be read");
   if (width * height > ARTIFACT_COMMENT_IMAGE_MAX_PIXELS)
     refuse("artifact-image-pixels", PIXELS_HINT);
-  return contentType;
+  return { contentType, width, height };
 }
 
 const reencode = (image: Sharp, contentType: string) =>
@@ -100,36 +101,53 @@ async function stripped(bytes: Uint8Array, contentType: string) {
   }
 }
 
+const notYours = (sha256: string) =>
+  refuse(
+    "artifact-image-not-found",
+    `${sha256} is not one of your uploads: upload the image first`,
+  );
+
+export async function storeCleanImage(
+  blobs: Pick<CommentImageBlobs, "upload">,
+  principal: CommentPrincipal,
+  bytes: Uint8Array,
+  unreferencedQuotaBytes?: number,
+): Promise<PreparedImage> {
+  const { workspaceId } = principal;
+  const { contentType } = check("upload", bytes);
+  const clean = await stripped(bytes, contentType);
+  const stored = await blobs.upload({
+    workspaceId,
+    bytes: clean.out,
+    actor: actorOf(principal),
+    ...(unreferencedQuotaBytes === undefined ? {} : { unreferencedQuotaBytes }),
+  });
+  return {
+    sha256: stored.sha256,
+    contentType,
+    sizeBytes: clean.out.length,
+    width: clean.width,
+    height: clean.height,
+  };
+}
+
 export async function prepareImages(
   blobs: CommentImageBlobs,
-  principal: { workspaceId: string; agentId: string },
+  principal: CommentPrincipal,
   shas: readonly string[],
 ): Promise<PreparedImage[]> {
   if (shas.length === 0) return [];
-  const { workspaceId, agentId } = principal;
-  const granted = await blobs.allowed(workspaceId, undefined, { agentId }, shas);
+  const { workspaceId } = principal;
+  const granted = await blobs.allowed(workspaceId, undefined, actorOf(principal), shas);
   const prepared: PreparedImage[] = [];
   for (const sha256 of shas) {
     const bytes = granted.has(sha256) ? await blobs.read(workspaceId, sha256) : null;
-    if (!bytes)
-      refuse(
-        "artifact-image-not-found",
-        `${sha256} is not one of your uploads: upload the image first`,
-      );
-    const contentType = check(sha256, bytes!);
-    const clean = await stripped(bytes!, contentType);
-    const stored = await blobs.upload({
-      workspaceId,
-      bytes: clean.out,
-      actor: { agentId },
-    });
-    prepared.push({
-      sha256: stored.sha256,
-      contentType,
-      sizeBytes: clean.out.length,
-      width: clean.width,
-      height: clean.height,
-    });
+    if (!bytes) return notYours(sha256);
+    prepared.push(
+      principal.kind === "person"
+        ? { sha256, sizeBytes: bytes.length, ...check(sha256, bytes) }
+        : await storeCleanImage(blobs, principal, bytes),
+    );
   }
   return prepared;
 }
@@ -158,14 +176,19 @@ export async function attachImages(
   await tx.artifactCommentImage.createMany({ data });
 }
 
-export async function readCommentImage(
+export async function readCommentImageBytes(
   db: PrismaClient,
   blobs: Pick<ArtifactBlobStore, "read">,
-  principal: { workspaceId: string; agentId: string },
+  principal: CommentPrincipal,
   input: { artifact: string; image: string },
 ) {
-  const { workspaceId, agentId } = principal;
-  const artifact = await requireReadableArtifact(db, workspaceId, { agentId }, input.artifact);
+  const { workspaceId } = principal;
+  const artifact = await requireReadableArtifact(
+    db,
+    workspaceId,
+    actorOf(principal),
+    input.artifact,
+  );
   const image = await db.artifactCommentImage.findFirst({
     where: { id: input.image, artifactId: artifact.id, comment: { deletedAt: null } },
     select: {
@@ -184,5 +207,15 @@ export async function readCommentImage(
       hint: "this artifact has no such comment image: `coforge artifact comments` lists them",
     });
   const { sha256: _sha256, ...shown } = image;
+  return { ...shown, bytes };
+}
+
+export async function readCommentImage(
+  db: PrismaClient,
+  blobs: Pick<ArtifactBlobStore, "read">,
+  principal: CommentPrincipal,
+  input: { artifact: string; image: string },
+) {
+  const { bytes, ...shown } = await readCommentImageBytes(db, blobs, principal, input);
   return { ...shown, data: Buffer.from(bytes).toString("base64") };
 }

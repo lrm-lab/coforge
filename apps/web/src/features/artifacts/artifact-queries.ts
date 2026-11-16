@@ -113,7 +113,9 @@ export function refreshArtifact(
       if (id !== artifactId) return false;
       return kind === "document"
         ? document
-        : ["card", "versions", "marks", "viewers"].includes(String(kind));
+        : ["card", "versions", "marks", "viewers", "comments", "mentionable"].includes(
+            String(kind),
+          );
     },
   });
 }

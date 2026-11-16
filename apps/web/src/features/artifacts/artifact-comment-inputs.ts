@@ -14,6 +14,10 @@ import { artifactInputs } from "./artifact-inputs";
 
 export const COMMENT_PAGE_SIZE = 50;
 
+export const COMMENT_MENTIONS_MAX = 10;
+
+export const COMMENT_HANDLES_RESOLVED_MAX = 50;
+
 const noNul = (value: string) => !value.includes("\u0000");
 
 export const commentBody = z.string().trim().min(1).max(COMMENT_BODY_MAX).refine(noNul);
@@ -81,6 +85,12 @@ const commentFields = {
   images: commentImages.optional(),
 };
 
+const commentDraft = z.object({ ...commentFields, idempotencyKey: artifactInputs.id });
+
+const emptyComment = { message: "the comment is empty", path: ["body"] };
+
+export const commentDraftInput = commentDraft.refine(hasTextOrImage, emptyComment);
+
 export const commentInputs = {
   comments: z.object({
     artifact: artifactInputs.id,
@@ -89,25 +99,15 @@ export const commentInputs = {
     review: artifactInputs.id.optional(),
     after: z.string().max(200).optional(),
   }),
-  comment: z
-    .object({
-      artifact: artifactInputs.id,
-      ...commentFields,
-      version: artifactInputs.version.optional(),
-      idempotencyKey: artifactInputs.id,
-    })
-    .refine(hasTextOrImage, { message: "the comment is empty", path: ["body"] }),
+  comment: commentDraft
+    .extend({ artifact: artifactInputs.id, version: artifactInputs.version.optional() })
+    .refine(hasTextOrImage, emptyComment),
   review: z
     .object({
       artifact: artifactInputs.id,
       body: commentBody.optional(),
       comments: z
-        .array(
-          z
-            .object(commentFields)
-            .strict()
-            .refine(hasTextOrImage, { message: "the comment is empty", path: ["body"] }),
-        )
+        .array(z.object(commentFields).strict().refine(hasTextOrImage, emptyComment))
         .min(1)
         .max(REVIEW_COMMENTS_MAX),
       version: artifactInputs.version.optional(),
