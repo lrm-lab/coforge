@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import {
-  ARTIFACT_SHARE_MAX_ARTIFACTS,
   ARTIFACT_SHARE_MAX_TARGETS,
   ARTIFACT_SHARE_NOTE_MAX_LENGTH,
 } from "#src/features/artifacts/artifact-share-input";
@@ -63,66 +62,53 @@ export class ArtifactShares {
   async share(input: {
     workspaceId: string;
     actor: { userId: string };
-    artifactIds: readonly string[];
+    artifactId: string;
     targets: readonly string[];
     note?: string;
     requestId: string;
     send: ArtifactShareSender;
   }): Promise<ArtifactShareResult> {
     if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
-    if (
-      input.artifactIds.length > ARTIFACT_SHARE_MAX_ARTIFACTS ||
-      input.targets.length > ARTIFACT_SHARE_MAX_TARGETS
-    )
-      throw new AppError("INVALID_INPUT", { errorId: "artifact-share-request" });
-    const artifactIds = [...new Set(input.artifactIds.map((id) => id.toLowerCase()))];
     const targets = [...new Set(input.targets)];
-    if (!artifactIds.length || !targets.length || !input.requestId.trim())
+    if (!targets.length || !input.requestId.trim())
       throw new AppError("INVALID_INPUT", {
         errorId: "artifact-share-request",
       });
     if ((input.note?.length ?? 0) > ARTIFACT_SHARE_NOTE_MAX_LENGTH)
       throw new AppError("INVALID_INPUT", { errorId: "artifact-share-note" });
+    if (targets.length > ARTIFACT_SHARE_MAX_TARGETS)
+      throw new AppError("INVALID_INPUT", { errorId: "artifact-share-request" });
 
-    const [workspace, rows] = await Promise.all([
+    const artifactId = input.artifactId.toLowerCase();
+    const [workspace, row] = await Promise.all([
       this.db.workspace.findUnique({
         where: { id: input.workspaceId },
         select: { slug: true },
       }),
-      this.db.artifact.findMany({
+      this.db.artifact.findFirst({
         where: {
           workspaceId: input.workspaceId,
-          id: { in: artifactIds },
+          id: artifactId,
           deletedAt: null,
         },
         select: { id: true, homeKey: true },
       }),
     ]);
-    if (!workspace) throw new AppError("NOT_FOUND");
-    if (rows.length !== artifactIds.length) throw new AppError("NOT_FOUND");
+    if (!workspace || !row) throw new AppError("NOT_FOUND");
     // Every member reads every artifact (task #20), so one membership check covers them all.
     if (!(await inWorkspace(this.db, input.workspaceId, input.actor)))
       throw new AppError("NOT_FOUND");
     // A home the Workspace hides is gone for everyone; its artifacts are not shared (task #20).
-    const homeIds = [
-      ...new Set(
-        rows.flatMap((row) => {
-          const conversationId = artifactHomeConversationId(row.homeKey);
-          return conversationId ? [conversationId] : [];
-        }),
-      ),
-    ];
-    const hidden = await hiddenFromWorkspaceConversationIds(this.db, input.workspaceId, homeIds);
+    const homeId = artifactHomeConversationId(row.homeKey);
     if (
-      rows.some((row) => {
-        const conversationId = artifactHomeConversationId(row.homeKey);
-        return conversationId !== undefined && hidden.has(conversationId);
-      })
+      homeId !== undefined &&
+      (await hiddenFromWorkspaceConversationIds(this.db, input.workspaceId, [homeId])).size > 0
     )
       throw new AppError("NOT_FOUND");
 
-    const links = artifactIds.map((id) => `/w/${workspace.slug}/artifacts/${id}`);
-    const body = [input.note?.trim(), links.join("\n")].filter(Boolean).join("\n\n");
+    const body = [input.note?.trim(), `/w/${workspace.slug}/artifacts/${artifactId}`]
+      .filter(Boolean)
+      .join("\n\n");
     const results: ArtifactShareDestinationResult[] = [];
     for (const target of targets) {
       try {

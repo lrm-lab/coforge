@@ -128,7 +128,7 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
     productionArtifactShares(db, async () => true).share({
       workspaceId,
       actor: { userId: noor.id },
-      artifactIds: [artifactId],
+      artifactId,
       targets: [target.id],
       requestId: crypto.randomUUID(),
       send: ({ target: conversationId, idempotencyKey, body }) =>
