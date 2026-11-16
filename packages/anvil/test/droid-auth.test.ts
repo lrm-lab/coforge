@@ -115,6 +115,22 @@ const interaction = (signal?: AbortSignal) => {
   };
 };
 
+test("a droid that renamed the auth selector still reports the signed-in account", async () => {
+  // Some Computers run the build that refuses `--checks` and answers `--auth`; reading the old
+  // spelling only left the Agent looking signed out with no account to show.
+  const f = await fixture({ DROID_AUTH_FIXTURE_LEGACY: "1" });
+  try {
+    await f.setState("logged_in");
+    expect(await f.adapter.readStatus({ workingDirectory: f.directory })).toMatchObject({
+      provider: "droid",
+      state: "logged_in",
+      account: { maskedLabel: "pro****@example.com", methodLabel: "Factory account" },
+    });
+  } finally {
+    await f.cleanup();
+  }
+});
+
 test("status reads the credential store: a stored session, an API key, and signed out", async () => {
   const f = await fixture();
   try {

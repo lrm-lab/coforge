@@ -23,6 +23,7 @@ Read [Droid ACP behavior](../../../../docs/agents/droid-acp.md) when changing Dr
   unavailable rather than showing a wrong number; a sign-in screen is reauth. See `usage.ts`.
 - Sign-in has no non-interactive command: the auth adapter runs the interactive TUI in a PTY,
   reads the device flow's sentence (`https://auth.factory.ai/device` plus a `XXXX-XXXX` code),
-  and confirms completion by re-reading `droid doctor --json --checks auth`. A
+  and confirms completion by re-reading `droid doctor --json --checks auth` (an older
+  build answers only `--auth`, so both spellings are tried). A
   `FACTORY_API_KEY` in the launch environment overrides stored credentials and cannot be
   signed out (`still_logged_in`). See `auth.ts`.
