@@ -8,12 +8,14 @@ import { isAppErrorCode } from "#src/lib/app-error";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { createAgentReminderService } from "#src/server/agents/agent-api-http.server";
 import { ReminderRefusal } from "#src/server/reminders/reminders.server";
+import { externalAgentReminderAnswer } from "#src/server/agents/external-agent-reminders.server";
 
 export type AgentReminderPrincipal = {
   workspaceId: string;
   agentId: string;
   computerId: string;
   userId: string;
+  external?: true;
 };
 
 type AgentReminderService = (
@@ -69,11 +71,13 @@ export async function handleAgentReminderPost(
   if (
     command.agentId !== principal.agentId ||
     command.workspaceId !== principal.workspaceId ||
-    command.computerId !== principal.computerId
+    (!principal.external && command.computerId !== principal.computerId)
   )
     return Response.json({ error: "reminder scope denied" }, { status: 403 });
   try {
-    const result = await service(command, principal.userId);
+    const external = principal.external ? externalAgentReminderAnswer(command) : undefined;
+    if (external instanceof Response) return external;
+    const result = external ?? (await service(command, principal.userId));
     return Response.json(result);
   } catch (error) {
     const refusal = refusalResponse(error);

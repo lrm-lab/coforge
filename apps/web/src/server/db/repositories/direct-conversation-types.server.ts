@@ -154,8 +154,8 @@ export type DirectConversationRepository = {
       workspaceId: string;
       agentId: string;
       computerId?: string;
-      /** The Agent is an app's bot: it has no Computer, and its app reads its inbox. */
-      appBot?: boolean;
+      /** The Agent is an app's bot or an external Agent: it has no daemon and reads its own inbox. */
+      inboxPolled?: boolean;
       target?: string;
       deliveryTarget?: string;
       /** Always present, possibly empty; order matches send order. */

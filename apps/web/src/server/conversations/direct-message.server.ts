@@ -298,8 +298,8 @@ export class SendDirectMessage {
       !isPrintableSenderHandle(message.latestSenderHandle)
     )
       throw new Error("message sender must be a public @username");
-    // An app's bot has no Computer and no daemon: the message waits for its app's inbox poll.
-    if (message.appBot) return;
+    // An app's bot or an external Agent has no daemon: the message waits for its inbox poll.
+    if (message.inboxPolled) return;
     if (!message.computerId) {
       console.error("Agent delivery deferred: Agent has no assigned Computer", {
         conversationId,

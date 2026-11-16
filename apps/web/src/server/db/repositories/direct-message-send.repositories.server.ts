@@ -6,7 +6,7 @@ import {
   THREAD_ROOT_SCOPE,
   type DirectConversationPorts,
 } from "./agent-targets.repositories.server";
-import { isAppBot } from "#src/features/agents/agent-system-kind";
+import { isInboxPolled } from "#src/features/agents/agent-system-kind";
 import { AppError } from "#src/lib/app-error";
 import { allocateSequence } from "./sequence-allocation.server";
 import { canDirectMessageAgent } from "#src/server/agents/agent-visibility.server";
@@ -50,6 +50,7 @@ export async function sendMessage(
                 ownerId: true,
                 visibility: true,
                 systemKind: true,
+                hosting: true,
               },
             },
           },
@@ -172,7 +173,7 @@ export async function sendMessage(
     workspaceId: conversation.workspaceId,
     agentId: agents[0].agentId,
     computerId: agents[0].agent?.computerId ?? undefined,
-    appBot: isAppBot(agents[0].agent),
+    inboxPolled: isInboxPolled(agents[0].agent),
     target: `@${agents[0].agent?.name ?? "unknown"}`,
     latestSenderKind: senderIdentity.kind,
     latestSenderHandle: senderIdentity.handle,

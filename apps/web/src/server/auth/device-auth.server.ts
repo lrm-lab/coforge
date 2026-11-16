@@ -6,6 +6,17 @@ import {
   USER_CODE_LENGTH,
 } from "#src/features/device-auth/device-code-format";
 import { signComputerAccessToken } from "./computer-access-token.server";
+import {
+  EXTERNAL_DEVICE_CLIENT_ID,
+  externalGrantDetails,
+  redeemExternalAgentGrant,
+  type ExternalAgentDeviceDeps,
+  type ExternalAgentDeviceDirectory,
+  type ExternalAgentGrant,
+  type ExternalAgentRedeemed,
+  type ExternalApprovalRefusal,
+  type ExternalGrantDetails,
+} from "./device-auth-external-agent.server";
 
 /**
  * RFC 8628 device authorization grant - the real one. The E2E double in
@@ -29,6 +40,10 @@ export type DeviceAuthorizationRecord = {
   status: string;
   expiresAt: Date;
   lastPolledAt: Date | null;
+  clientId?: string;
+  grant?: unknown;
+  approvedAgentId?: string | null;
+  approvedWorkspaceId?: string | null;
 };
 
 /** The persistence this module needs, kept narrow so the state machine is testable without a
@@ -38,6 +53,8 @@ export interface DeviceAuthorizationStore {
     deviceCodeHash: string;
     userCodeHash: string;
     expiresAt: Date;
+    clientId?: string;
+    grant?: ExternalAgentGrant;
   }): Promise<DeviceAuthorizationRecord>;
   findByDeviceCodeHash(hash: string): Promise<DeviceAuthorizationRecord | null>;
   findByUserCodeHash(hash: string): Promise<DeviceAuthorizationRecord | null>;
@@ -45,7 +62,12 @@ export interface DeviceAuthorizationStore {
   /** Each conditional write answers whether it actually transitioned the row, so a caller that
    * lost a race learns it instead of assuming its write landed. `approve`/`deny` also refuse a
    * grant that has expired by `at`. */
-  approve(id: string, userId: string, at: Date): Promise<boolean>;
+  approve(
+    id: string,
+    userId: string,
+    at: Date,
+    approval?: { agentId: string; workspaceId: string },
+  ): Promise<boolean>;
   deny(id: string, at: Date): Promise<boolean>;
   consume(id: string): Promise<boolean>;
 }
@@ -78,6 +100,8 @@ export async function authorizeDevice(input: {
   store: DeviceAuthorizationStore;
   origin: string;
   now?: () => number;
+  clientId?: string;
+  grant?: ExternalAgentGrant;
 }): Promise<AuthorizeResult> {
   const now = input.now?.() ?? Date.now();
   const deviceCode = randomBytes(32).toString("base64url");
@@ -86,6 +110,8 @@ export async function authorizeDevice(input: {
     deviceCodeHash: digest(deviceCode),
     userCodeHash: digest(userCode),
     expiresAt: new Date(now + DEVICE_CODE_TTL_SECONDS * 1000),
+    ...(input.clientId ? { clientId: input.clientId } : {}),
+    ...(input.grant ? { grant: input.grant } : {}),
   });
   // Only the bare page: the person types the code shown on the Computer. A link with the code
   // already in it would let someone send theirs and have it approved by whoever opens it, so none
@@ -101,6 +127,7 @@ export async function authorizeDevice(input: {
 
 export type PollOutcome =
   | { status: "authorized"; accessToken: string; expiresInSeconds: number }
+  | Extract<ExternalAgentRedeemed, { status: "authorized_external_agent" }>
   | {
       status: "error";
       error:
@@ -109,6 +136,7 @@ export type PollOutcome =
         | "expired_token"
         | "access_denied"
         | "invalid_grant";
+      coforgeCode?: string;
     };
 
 /**
@@ -121,12 +149,17 @@ export async function pollDeviceToken(input: {
   deviceCode: string;
   now?: () => number;
   environment?: Record<string, string | undefined>;
+  clientId?: string;
+  external?: ExternalAgentDeviceDeps;
 }): Promise<PollOutcome> {
   const now = input.now?.() ?? Date.now();
   const record = await input.store.findByDeviceCodeHash(digest(input.deviceCode));
   // An unknown device code and a consumed one are the same answer on purpose: a caller replaying
   // a code it already exchanged learns nothing about whether it once existed.
   if (!record || record.status === "consumed") return { status: "error", error: "invalid_grant" };
+  const clientId = input.clientId ?? DEVICE_CLIENT_ID;
+  if ((record.clientId ?? DEVICE_CLIENT_ID) !== clientId)
+    return { status: "error", error: "invalid_grant" };
   if (record.expiresAt.getTime() <= now) return { status: "error", error: "expired_token" };
   if (record.status === "denied") return { status: "error", error: "access_denied" };
 
@@ -146,6 +179,10 @@ export async function pollDeviceToken(input: {
   // the row may be handed a token. The loser sees the same answer a replayed code gets.
   const consumed = await input.store.consume(record.id);
   if (!consumed) return { status: "error", error: "invalid_grant" };
+  if (clientId === EXTERNAL_DEVICE_CLIENT_ID) {
+    if (!input.external) return { status: "error", error: "invalid_grant" };
+    return redeemExternalAgentGrant(input.external, record);
+  }
   const { token, expiresInSeconds } = await signComputerAccessToken(
     record.userId,
     input.environment,
@@ -154,8 +191,11 @@ export async function pollDeviceToken(input: {
 }
 
 export type UserCodeLookup =
-  | { found: true; id: string; expiresAt: Date }
-  | { found: false; reason: "unknown" | "expired" | "settled" };
+  | { found: true; id: string; expiresAt: Date; external?: ExternalGrantDetails }
+  | {
+      found: false;
+      reason: "unknown" | "expired" | "settled" | ExternalApprovalRefusal;
+    };
 
 /** Resolves a typed code for the approval page, without disclosing more than whether it is
  * actionable. */
@@ -163,6 +203,7 @@ export async function lookupUserCode(input: {
   store: DeviceAuthorizationStore;
   userCode: string;
   now?: () => number;
+  directory?: Pick<ExternalAgentDeviceDirectory, "identity">;
 }): Promise<UserCodeLookup> {
   const now = input.now?.() ?? Date.now();
   const normalized = normalizeUserCode(input.userCode);
@@ -171,6 +212,11 @@ export async function lookupUserCode(input: {
   if (!record) return { found: false, reason: "unknown" };
   if (record.expiresAt.getTime() <= now) return { found: false, reason: "expired" };
   if (record.status !== "pending") return { found: false, reason: "settled" };
+  if (record.clientId === EXTERNAL_DEVICE_CLIENT_ID) {
+    const external = input.directory && (await externalGrantDetails(input.directory, record.grant));
+    if (!external) return { found: false, reason: "unknown" };
+    return { found: true, id: record.id, expiresAt: record.expiresAt, external };
+  }
   return { found: true, id: record.id, expiresAt: record.expiresAt };
 }
 
@@ -179,11 +225,20 @@ export async function approveUserCode(input: {
   userCode: string;
   userId: string;
   now?: () => number;
+  directory?: ExternalAgentDeviceDirectory;
 }): Promise<UserCodeLookup> {
   const lookup = await lookupUserCode(input);
   if (!lookup.found) return lookup;
   const at = new Date(input.now?.() ?? Date.now());
-  const approved = await input.store.approve(lookup.id, input.userId, at);
+  const target = lookup.external && {
+    agentId: lookup.external.agentId,
+    workspaceId: lookup.external.workspaceId,
+  };
+  if (target) {
+    const refusal = await input.directory!.approvalRefusal({ userId: input.userId, ...target });
+    if (refusal) return { found: false, reason: refusal };
+  }
+  const approved = await input.store.approve(lookup.id, input.userId, at, target);
   // The grant expired or settled between the lookup and the write; report what it is now.
   if (!approved) return lookupUserCode(input);
   return lookup;
@@ -193,6 +248,7 @@ export async function denyUserCode(input: {
   store: DeviceAuthorizationStore;
   userCode: string;
   now?: () => number;
+  directory?: Pick<ExternalAgentDeviceDirectory, "identity">;
 }): Promise<UserCodeLookup> {
   const lookup = await lookupUserCode(input);
   if (!lookup.found) return lookup;

@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import { z } from "zod";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
+import { handleExternalAgentControl } from "#src/server/agents/external-agent-control.server";
 import { userAgentControl } from "#src/server/agents/user-agent-control.server";
 import { AppError } from "#src/lib/app-error";
 
@@ -18,6 +19,7 @@ export const executeAgentControl = createServerFn({ method: "POST" })
   .validator(executeInput)
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     declareNoStore();
+    if (await handleExternalAgentControl(db, { ...data, userId: user.id, workspaceId })) return;
     const result = await userAgentControl(db).execute({ ...data, userId: user.id, workspaceId });
     // The Daemon's reason crosses to the page, so a failed Start says why (task #682).
     if (result.phase === "failed")

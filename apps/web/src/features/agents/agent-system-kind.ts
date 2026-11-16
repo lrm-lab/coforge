@@ -6,6 +6,12 @@ export const WORKSPACE_ASSISTANT_KIND = "workspace-assistant";
  * create/edit inputs. */
 export const APP_BOT_KIND = "app-bot";
 
+export function isInboxPolled(
+  agent: { systemKind?: string | null; hosting?: string | null } | null | undefined,
+): boolean {
+  return isAppBot(agent) || agent?.hosting === "external";
+}
+
 /** Whether an Agent is an app's bot: the one test every surface that treats a bot differently (no
  * Computer, no launch, not in a roster, not in `#general`) goes through. */
 export function isAppBot(agent: { systemKind?: string | null } | null | undefined): boolean {

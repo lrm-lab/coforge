@@ -22,6 +22,9 @@ model Agent {
   createdAt                 DateTime                   @default(now())
   ownerId                   String                     @db.Uuid
   computerId                String?                    @db.Uuid
+  /// Where the Agent runs: "managed" on a CoForge Computer, "external" on any machine that
+  /// calls the Agent API with its own key (`ExternalAgentCredential`). Guarded by a CHECK.
+  hosting                   String                     @default("managed")
   runtimeConfig             Json
   /// The per-Agent order of runtime config changes (runtime selection, environment, runtime
   /// credential): every such write raises it by one. A Daemon uses it to drop an out-of-date
@@ -61,6 +64,7 @@ model Agent {
   pendingMentionActions     PendingMentionAction[]
   deliveries                AgentMessageDelivery[]
   apiKeys                   AgentApiKey[]
+  externalCredentials       ExternalAgentCredential[]
   activity                  AgentActivity[]
   manualEvents              AgentManualEvent[]
   reminders                 Reminder[]
@@ -93,6 +97,30 @@ model Agent {
   @@index([workspaceId, createdAt])
   @@index([computerId])
   @@map("agents")
+}
+
+/// One key of an external Agent, minted for one machine by a device-code approval. Unlike
+/// `AgentApiKey` there is no Computer and an Agent holds one live key per machine.
+model ExternalAgentCredential {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  agentId          String    @db.Uuid
+  workspaceId      String    @db.Uuid
+  approvedByUserId String?   @db.Uuid
+  keyHash          String    @unique
+  machineName      String
+  hostname         String
+  os               String
+  clientName       String
+  createdAt        DateTime  @default(now())
+  lastUsedAt       DateTime?
+  revokedAt        DateTime?
+  /// logout | revoked (one key, by a manager) | revoke_all | agent_deleted | agent_stopped
+  revokedReason    String?
+  agent            Agent     @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  approvedBy       User?     @relation("ExternalAgentCredentialApprover", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([agentId])
+  @@map("external_agent_credentials")
 }
 
 /// One Agent App's settings for one Agent (`system.cleaner`, ...), validated per App by the SDK's

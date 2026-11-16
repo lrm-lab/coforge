@@ -10,13 +10,21 @@ const recordShape = {
   status: true,
   expiresAt: true,
   lastPolledAt: true,
+  clientId: true,
+  grant: true,
+  approvedAgentId: true,
+  approvedWorkspaceId: true,
 } as const;
 
 export class PrismaDeviceAuthorizationStore implements DeviceAuthorizationStore {
   constructor(private readonly db: PrismaClient) {}
 
-  create(input: { deviceCodeHash: string; userCodeHash: string; expiresAt: Date }) {
-    return this.db.deviceAuthorization.create({ data: input, select: recordShape });
+  create(input: Parameters<DeviceAuthorizationStore["create"]>[0]) {
+    const { grant, ...rest } = input;
+    return this.db.deviceAuthorization.create({
+      data: { ...rest, ...(grant ? { grant } : {}) },
+      select: recordShape,
+    });
   }
 
   findByDeviceCodeHash(hash: string): Promise<DeviceAuthorizationRecord | null> {
@@ -37,13 +45,25 @@ export class PrismaDeviceAuthorizationStore implements DeviceAuthorizationStore 
     await this.db.deviceAuthorization.update({ where: { id }, data: { lastPolledAt: at } });
   }
 
-  async approve(id: string, userId: string, at: Date): Promise<boolean> {
+  async approve(
+    id: string,
+    userId: string,
+    at: Date,
+    approval?: { agentId: string; workspaceId: string },
+  ): Promise<boolean> {
     // Conditional on the row still being pending and unexpired, so two browser tabs racing on
     // the same code cannot rebind an already-approved grant to a second user, and a grant that
     // expired between the lookup and this write is not approved after the fact.
     const { count } = await this.db.deviceAuthorization.updateMany({
       where: { id, status: "pending", expiresAt: { gt: at } },
-      data: { status: "approved", userId, approvedAt: at },
+      data: {
+        status: "approved",
+        userId,
+        approvedAt: at,
+        ...(approval
+          ? { approvedAgentId: approval.agentId, approvedWorkspaceId: approval.workspaceId }
+          : {}),
+      },
     });
     return count === 1;
   }

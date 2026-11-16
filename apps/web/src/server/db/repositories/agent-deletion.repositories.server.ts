@@ -5,6 +5,8 @@ import { ACTIVE_CHANNEL_MEMBER_WHERE } from "#src/server/conversations/active-me
 import { clearOnboardingAgent } from "#src/server/workspaces/workspace-onboarding.server";
 import { recordMembershipNotice } from "#src/server/conversations/channel-membership-notice.server";
 import { settlePendingNotLaunched } from "#src/server/db/repositories/mention-delivery.repositories.server";
+import { auditExternalCredential } from "#src/server/agents/external-agent-credentials.server";
+import { revokeExternalCredentialsOf } from "#src/server/db/repositories/external-agent-credential.repositories.server";
 import type {
   AgentDeletionOutcome,
   AgentDeletionStore,
@@ -101,6 +103,19 @@ export class PrismaAgentDeletionStore implements AgentDeletionStore {
         where: { agentId: input.agentId, workspaceId: input.workspaceId, revokedAt: null },
         data: { revokedAt: input.deletedAt },
       });
+      const externalRevoked = await revokeExternalCredentialsOf(
+        tx,
+        input.agentId,
+        "agent_deleted",
+        input.deletedAt,
+      );
+      if (externalRevoked.count > 0)
+        auditExternalCredential("credentials_revoked", {
+          agentId: input.agentId,
+          workspaceId: input.workspaceId,
+          reason: "agent_deleted",
+          count: externalRevoked.count,
+        });
       return {
         outcome: "deleted" as const,
         membershipsLeft: membershipsLeft.count,
