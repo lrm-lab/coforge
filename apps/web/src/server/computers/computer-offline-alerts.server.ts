@@ -197,6 +197,7 @@ export interface ComputerOfflineAlertNotice {
   workspaceSlug: string;
   username: string;
   offlineAtMs: number;
+  offlineForMs: number;
 }
 
 /** One assistant DM to the Computer's owner, through their own Workspace assistant — the same
@@ -230,12 +231,15 @@ export async function notifyComputerOfflineAlert(
     await createWebPushNotifications(db),
   );
   const url = `/w/${input.workspaceSlug}/computer/${input.computerId}`;
+  const offlineMinutes = Math.round(input.offlineForMs / 60_000);
+  const offlineFor =
+    offlineMinutes < 120 ? `${offlineMinutes} 分钟` : `${Math.round(offlineMinutes / 60)} 小时`;
   await messages.executeFromAgent({
     workspaceId: input.workspaceId,
     agentId: assistant.agentId,
     target: `@${input.username}~human`,
     idempotencyKey,
-    body: `「${input.computerName}」已离线 ${COMPUTER_OFFLINE_ALERT_AFTER_MS / 60_000} 分钟，上面的 Agent 都停了。\n\n[查看这台 Computer](${url})`,
+    body: `「${input.computerName}」已离线 ${offlineFor}，上面的 Agent 都停了。\n\n[查看这台 Computer](${url})`,
   });
 }
 
@@ -411,6 +415,7 @@ export class ComputerOfflineAlertSweep {
         workspaceSlug: target.workspaceSlug,
         username: target.username,
         offlineAtMs,
+        offlineForMs: nowMs - offlineAtMs,
       });
       // The notice is out; while the Computer stays down nothing else is owed, so the episode
       // keys go too (a flap that already restarted it keeps its own marker and index entry).
