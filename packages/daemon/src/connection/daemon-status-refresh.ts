@@ -14,6 +14,10 @@ export const COMPUTER_STATUS_REFRESH_MS = 30_000;
 export type DaemonStatusRefreshDeps = {
   client(): CentrifugeWorkspaceClient | undefined;
   connected(): boolean;
+  /** Rebuilds a connection that has no client at all. The refresh is the only thing that keeps
+   * running once a connection loses its own, so without this it would wait forever on a client
+   * that nothing puts back (2026-11-16: three days of a daemon that never reconnected). */
+  reconnect(): void;
   statuses(): Iterable<AgentStatus>;
   queueStatus(client: CentrifugeWorkspaceClient, status: AgentStatus): void;
   inboundQuiet: InboundQuietness;
@@ -34,7 +38,8 @@ export class DaemonStatusRefresh {
     if (!this.#agentTimer) {
       this.#agentTimer = setInterval(() => {
         const client = this.deps.client();
-        if (!this.deps.connected() || !client) return;
+        if (!client) return this.deps.reconnect();
+        if (!this.deps.connected()) return;
         for (const status of this.deps.statuses()) {
           if (status.status !== "active") continue;
           this.deps.queueStatus(client, { ...status, requestId: crypto.randomUUID() });
@@ -46,7 +51,8 @@ export class DaemonStatusRefresh {
     if (this.#computerTimer) return;
     const refresh = () => {
       const client = this.deps.client();
-      if (!this.deps.connected() || !client) return;
+      if (!client) return this.deps.reconnect();
+      if (!this.deps.connected()) return;
       this.deps.inboundQuiet.check(client, config);
       void client
         .rpc(DAEMON_CONNECTION_STATUS_METHOD, encodeDaemonConnectionStatus(config))

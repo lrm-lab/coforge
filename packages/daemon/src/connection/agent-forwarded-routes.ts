@@ -11,6 +11,8 @@ import { agentHeaders, agentHttpFetch } from "./agent-http-wire";
 
 /** What the connection supplies to one Agent request it forwards as it is. */
 export type ForwardPorts = {
+  /** Refuses the request when the server's HTTPS origin is not configured: every call here is an
+   * HTTPS call, so the daemon's WebSocket state is not one of its dependencies. */
   assertConnected(): void;
   endpoint(what: string, path: string): string;
   keys(agentApiKey: string): { agentApiKey: string; daemonApiKey: string };

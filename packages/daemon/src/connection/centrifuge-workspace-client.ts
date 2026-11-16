@@ -14,6 +14,10 @@ export interface CentrifugeWorkspaceClient {
   disconnect(): void;
   rpc(method: string, data: Uint8Array): Promise<unknown>;
   publish?(channel: string, data: Uint8Array): Promise<unknown>;
+  /** The client's own connection state where the transport publishes one (`"connected"` while the
+   * socket is up, `"disconnected"` once it gave up). Absent on transports that report it only
+   * through events; the daemon connection treats it as the authority whenever it is there. */
+  readonly state?: string;
 }
 
 export type CentrifugeWorkspaceClientFactory = (

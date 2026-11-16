@@ -39,16 +39,11 @@ import { DaemonQueries } from "./daemon-queries";
 import { routeRuntimeAuthPublication } from "./runtime-auth-publication";
 import { DaemonConnectionAgentHttp, type AgentHttpDeps } from "./daemon-connection-agent-http";
 import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
-import type {
-  AgentAppRequest,
-  AgentTaskConversationRequest,
-  AgentLabelWriteRequest,
-  AgentSendReconciliationResponse,
-} from "@lrm/coforge-sdk/agent";
+import type { AgentSendReconciliationResponse } from "@lrm/coforge-sdk/agent";
 import { DaemonConnectionRefusedError } from "./daemon-connection-refused-error";
 import { DaemonConnectionStoppedError } from "./daemon-connection-stopped-error";
 import { ReadyPublicationHold } from "./ready-publication-hold";
-import { InboundQuietness } from "./connection-liveness";
+import { InboundQuietness, LostClientRebuild } from "./connection-liveness";
 import { reportDaemonOnline } from "./connection-status-payload";
 import {
   sendDaemonReady,
@@ -166,20 +161,6 @@ import {
   type AgentMessagePorts,
 } from "./agent-message-operations";
 import {
-  agentApp,
-  agentArtifact,
-  type AgentArtifactCall,
-  agentLabel,
-  agentAttachment,
-  agentAttachmentUpload,
-  agentAttachmentUploadSessionCancel,
-  agentAttachmentUploadSessionComplete,
-  agentAttachmentUploadSessionCreate,
-  agentAttachmentUploadSessionGet,
-  agentTaskConversation,
-  type ForwardPorts,
-} from "./agent-forwarded-routes";
-import {
   createAgentTaskIdleNudgeHttpClient,
   type AgentTaskIdleNudgeHttpClient,
 } from "./agent-task-idle-nudge-client";
@@ -217,31 +198,38 @@ const logger = getLogger(["coforge", "daemon", "connection"]);
 
 /** The Daemon's single connection for its configured Workspace. */
 export class DaemonConnection extends DaemonConnectionAgentHttp implements DaemonConnectionClient {
-  /** What the forwarded Agent HTTPS requests read from this connection: the server's origin, the
-   * daemon's key, the request gate and the route clients. Built per request, so every value is the
-   * one the current `start` configured. */
-  protected get agentHttp(): AgentHttpDeps {
-    return {
-      serverHttpUrl: this.#serverHttpUrl,
-      token: this.#token,
-      assertConnected: () => this.#assertConnected(),
-      requireClient: (label: string, client: unknown) => this.#requireAgentClient(label, client),
-      keys: (agentApiKey: string) => this.#agentKeys(agentApiKey),
-      clients: {
-        message: this.agentMessageHttpClient,
-        task: this.agentTaskHttpClient,
-        channel: this.agentChannelHttpClient,
-        actionPrepare: this.agentActionPrepareHttpClient,
-        weeklyReport: this.agentWeeklyReportHttpClient,
-        taskIdleNudge: this.agentTaskIdleNudgeHttpClient,
-      },
-    };
+  /** The client, and the one fact that makes it usable, in a single record: the connection cannot
+   * be up with no client, because "up" is read from this record. Held separately, the two drifted
+   * apart once — the object stayed "connected" with no client, so every HTTP path kept working
+   * while every RPC answered "not connected" for three days (2026-11-16). */
+  #link: { readonly client: CentrifugeWorkspaceClient; open: boolean } | undefined;
+
+  /** The client this connection owns right now, if any. */
+  get #client(): CentrifugeWorkspaceClient | undefined {
+    return this.#link?.client;
   }
-  #client: CentrifugeWorkspaceClient | undefined;
-  #connected = false;
+
+  /** Up means a client exists and reports open — nothing else, and there is no second field that
+   * could say otherwise. The client's own `state` is the authority where the transport publishes
+   * one; on a transport that reports through events alone, the last of those is. */
+  get #connected(): boolean {
+    const link = this.#link;
+    if (!link) return false;
+    return link.client.state === undefined ? link.open : link.client.state === "connected";
+  }
+
   #hasConnected = false;
   #token = "";
   #serverHttpUrl = "";
+  /** The config `start` was last given. Kept so the status refresh can rebuild a connection that
+   * lost its client: nothing else is left running to retry it. */
+  #startConfig: DaemonConnectionConfig | undefined;
+  readonly #rebuild = new LostClientRebuild(
+    () => (this.#startConfig ? { token: this.#token, config: this.#startConfig } : undefined),
+    (token, config) => this.start(token, config),
+    (error) => error instanceof DaemonConnectionStoppedError,
+    diagnosticErrorCode,
+  );
   readonly #runtimeAuthIntent = new ListenerSlot<(intent: RuntimeAuthIntent) => void>();
   readonly #agentStart = new ListenerSlot<(intent: AgentStartIntent) => void>();
   readonly #agentStop = new ListenerSlot<(intent: AgentStopIntent) => void>();
@@ -259,6 +247,26 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
 
   protected get daemonQueries() {
     return this.#queries;
+  }
+
+  /** What the forwarded Agent requests read: this connection's origin, keys and route clients,
+   * built on the first request once the fields it reads exist. */
+  #agentHttpDeps: AgentHttpDeps | undefined;
+  protected get agentHttp(): AgentHttpDeps {
+    return (this.#agentHttpDeps ??= {
+      serverHttpUrl: () => this.#serverHttpUrl,
+      token: () => this.#token,
+      assertServerHttp: () => this.#assertServerHttp(),
+      keys: (agentApiKey) => this.#agentKeys(agentApiKey),
+      clients: {
+        message: this.agentMessageHttpClient,
+        task: this.agentTaskHttpClient,
+        channel: this.agentChannelHttpClient,
+        actionPrepare: this.agentActionPrepareHttpClient,
+        weeklyReport: this.agentWeeklyReportHttpClient,
+        taskIdleNudge: this.agentTaskIdleNudgeHttpClient,
+      },
+    });
   }
   readonly #providerPublications = new DaemonProviderPublications((method, bytes) =>
     this.#rpc(method, bytes),
@@ -324,6 +332,7 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   readonly #statusRefresh = new DaemonStatusRefresh({
     client: () => this.#client,
     connected: () => this.#connected,
+    reconnect: () => this.#rebuild.attempt(),
     statuses: () => this.#latestStatuses.values(),
     queueStatus: (client, status) => this.#queueAgentStatus(client, status),
     inboundQuiet: this.#inboundQuiet,
@@ -357,12 +366,16 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   async start(_token: string, config: DaemonConnectionConfig): Promise<void> {
     this.#token = _token;
     this.#serverHttpUrl = config.serverHttpUrl ?? "";
+    this.#startConfig = config;
+    // Only a connection that is genuinely up can skip this, and being up means it owns a client.
+    // A connection that lost its client has to build one here — returning early on a stale flag
+    // is what left this daemon with no client and no way back for three days (2026-11-16).
     if (this.#connected) return;
     const client = this.clientFactory(
       this.endpoint,
       daemonConnectHeaders(_token, config.workerInstanceId),
     );
-    this.#client = client;
+    this.#link = { client, open: false };
     const daemonChannel = `daemon:${config.workspaceId}:${config.computerId}`;
     const scope = { workspace_id: config.workspaceId, computer_id: config.computerId };
     client.on("publication", ({ channel, data }) => {
@@ -375,8 +388,9 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     // centrifuge-js emits `disconnected` only once it has stopped reconnecting; while it retries
     // it reports `connecting` instead.
     client.on("disconnected", (context) => {
-      if (client !== this.#client) return;
-      this.#connected = false;
+      const link = this.#link;
+      if (link?.client !== client) return;
+      link.open = false;
       this.#cancelReadyRecovery();
       const refusal = context ? daemonConnectRejectionReason(context) : undefined;
       if (!refusal) {
@@ -400,14 +414,15 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     await new Promise<void>((resolve, reject) => {
       this.#failPendingStart = reject;
       client.on("connected", () => {
-        if (client !== this.#client) return;
+        const link = this.#link;
+        if (link?.client !== client) return;
         this.#failPendingStart = undefined;
         // A connection that proved stable ended its outage even if it came back without an error
         // in between: whatever fails on this new connection begins a new one.
         this.#endOutageIfStable(this.#nowMs());
         this.#connectFailure = undefined;
         const reconnect = this.#hasConnected;
-        this.#connected = true;
+        link.open = true;
         this.#hasConnected = true;
         this.#inboundQuiet.markInbound();
         logger.info("Daemon cloud connection established", {
@@ -455,7 +470,11 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
         this.#failPendingStart = undefined;
         this.#cancelReadyRecovery();
         this.#cancelResume();
-        this.#client = undefined;
+        // Drop the whole record, and only when it still holds the client this attempt owns: a late
+        // rejection must not discard a newer live client. The connection's up-ness lives in that
+        // record, so this cannot leave it "connected" with no client behind — the state only the
+        // RPC paths noticed, while message sends kept working (2026-11-16).
+        if (this.#link?.client === client) this.#link = undefined;
         client.disconnect();
         throw error;
       })
@@ -760,14 +779,17 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     return this.timing.now ? this.timing.now() : Date.now();
   }
 
-  /** Refuses an Agent request while this connection is not up: each one needs the server. */
-  #assertConnected(): void {
-    if (!this.#connected) throw new Error("daemon connection is not connected");
+  /** Refuses an Agent request this connection has nowhere to send. Every path that asks checks the
+   * server's HTTPS origin alone: these calls go to the cloud with the Agent's own key, and the
+   * socket's state says nothing about whether the server answers (2026-11-16). */
+  #assertServerHttp(): void {
+    if (!this.#serverHttpUrl) throw new Error("daemon connection HTTP endpoint is not configured");
   }
 
   #requireClient(): CentrifugeWorkspaceClient {
-    if (!this.#connected || !this.#client) throw new Error("daemon connection is not connected");
-    return this.#client;
+    const client = this.#connected ? this.#link?.client : undefined;
+    if (!client) throw new Error("daemon connection is not connected");
+    return client;
   }
 
   /** Sends one RPC over the connected client and returns its raw reply. */
@@ -825,8 +847,7 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
 
   #agentMessagePorts(): AgentMessagePorts {
     return {
-      assertConnected: () => this.#assertConnected(),
-      connected: this.#connected,
+      assertConnected: () => this.#assertServerHttp(),
       serverHttpUrl: this.#serverHttpUrl,
       keys: (agentApiKey) => this.#agentKeys(agentApiKey),
       client: this.agentMessageHttpClient,
@@ -837,7 +858,7 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     request: WorkspaceInfoRequest,
     agentApiKey: string,
   ): Promise<WorkspaceInfoResponse> {
-    if (!this.#connected || !this.#serverHttpUrl)
+    if (!this.#serverHttpUrl)
       throw new Error("Agent workspace_info HTTP endpoint is not configured");
     if (!this.agentMessageHttpClient.requestWorkspaceInfo)
       throw new Error("Agent workspace_info HTTP client is unavailable");
@@ -850,13 +871,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       ...this.#agentKeys(agentApiKey),
       request,
     });
-  }
-
-  /** A forwarded Agent request needs a connected daemon and the HTTP client for its route. */
-  #requireAgentClient(label: string, client: unknown): void {
-    if (!this.#connected || !this.#serverHttpUrl)
-      throw new Error(`${label} endpoint is not configured`);
-    if (!client) throw new Error(`${label} HTTP client is unavailable`);
   }
 
   async agentReminder(request: AgentReminderOperationRequest, agentApiKey: string) {
@@ -879,57 +893,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       encodeAppConfigSnapshotRequest(request),
     );
     return decodeAppConfigSync(rpcData(reply));
-  }
-
-  #forwardPorts(): ForwardPorts {
-    return {
-      assertConnected: () => this.#assertConnected(),
-      endpoint: (what, path) => serverEndpoint(this.#serverHttpUrl, what, path),
-      keys: (agentApiKey) => this.#agentKeys(agentApiKey),
-    };
-  }
-
-  agentAttachment(attachmentId: string, agentApiKey: string): Promise<Response> {
-    return agentAttachment(this.#forwardPorts(), attachmentId, agentApiKey);
-  }
-
-  agentAttachmentUpload(request: Request, agentApiKey: string): Promise<Response> {
-    return agentAttachmentUpload(this.#forwardPorts(), request, agentApiKey);
-  }
-
-  agentAttachmentUploadSessionCreate(body: unknown, agentApiKey: string): Promise<Response> {
-    return agentAttachmentUploadSessionCreate(this.#forwardPorts(), body, agentApiKey);
-  }
-
-  agentAttachmentUploadSessionComplete(uploadId: string, agentApiKey: string): Promise<Response> {
-    return agentAttachmentUploadSessionComplete(this.#forwardPorts(), uploadId, agentApiKey);
-  }
-
-  agentAttachmentUploadSessionCancel(uploadId: string, agentApiKey: string): Promise<Response> {
-    return agentAttachmentUploadSessionCancel(this.#forwardPorts(), uploadId, agentApiKey);
-  }
-
-  agentAttachmentUploadSessionGet(uploadId: string, agentApiKey: string): Promise<Response> {
-    return agentAttachmentUploadSessionGet(this.#forwardPorts(), uploadId, agentApiKey);
-  }
-
-  agentArtifact(request: AgentArtifactCall, agentApiKey: string): Promise<Response> {
-    return agentArtifact(this.#forwardPorts(), request, agentApiKey);
-  }
-
-  agentLabel(request: AgentLabelWriteRequest, agentApiKey: string): Promise<Response> {
-    return agentLabel(this.#forwardPorts(), request, agentApiKey);
-  }
-
-  agentApp(request: AgentAppRequest, agentApiKey: string): Promise<Response> {
-    return agentApp(this.#forwardPorts(), request, agentApiKey);
-  }
-
-  agentTaskConversation(
-    request: AgentTaskConversationRequest,
-    agentApiKey: string,
-  ): Promise<Response> {
-    return agentTaskConversation(this.#forwardPorts(), request, agentApiKey);
   }
 
   #handleAgentPublication(data: Uint8Array, config: DaemonConnectionConfig): void {
@@ -1369,8 +1332,10 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     this.#readyFailingSinceMs = undefined;
     this.#statusRefresh.stop();
     await this.#statusRpcQueue;
-    this.#client = undefined;
-    this.#connected = false;
+    this.#link = undefined;
+    // Nothing to rebuild from: a stopped connection must not come back on its own.
+    this.#startConfig = undefined;
+    this.#rebuild.reset();
     this.#hasConnected = false;
     for (const slot of [
       this.#agentStart,

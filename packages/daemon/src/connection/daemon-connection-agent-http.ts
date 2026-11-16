@@ -1,21 +1,26 @@
-// The Agent HTTPS requests this daemon forwards — reads, writes, route forwarding — each one a call
-// to the cloud carrying the Agent's own key. Split out of `daemon-connection.ts`, which may not grow.
-
+// The Agent HTTPS requests this daemon forwards: each one is a call to the cloud carrying the
+// Agent's own key, and each is gated on the server's HTTP origin alone — never on the WebSocket,
+// which is why a message keeps working through a reconnect (2026-11-16). Split out of
+// `daemon-connection.ts` when the size ratchet stopped that file growing; the connection holds the
+// credentials and the client gate behind the accessor below.
 import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
 import type {
   AgentActionPrepareRequest,
   AgentActionPrepareResponse,
   AgentAppConfigGetRequest,
   AgentAppConfigUpdateRequest,
+  AgentAppRequest,
   AgentAttachmentCommentsRequest,
   AgentInboxListResponse,
   AgentInboxRequest,
   AgentLabelListResponse,
+  AgentLabelWriteRequest,
   AgentMentionDeliveryRequest,
   AgentMentionExecuteRequest,
   AgentMentionPendingRequest,
   AgentProfileShowRequest,
   AgentProfileUpdateRequest,
+  AgentTaskConversationRequest,
   AgentThreadListResponse,
   AgentUserInfoRequest,
   AgentManualGetRequest,
@@ -23,13 +28,10 @@ import type {
   GitHubCommitTrailersRequest,
   GitHubCredentialRequest,
 } from "@lrm/coforge-sdk/agent";
-import { type TaskRequest, type TaskResponse } from "@lrm/coforge-sdk/internal";
+import type { TaskRequest, TaskResponse } from "@lrm/coforge-sdk/internal";
 import type { AgentLaunchConfig } from "./daemon-connection-client";
-import {
-  forwardOpenVikingControl,
-  forwardOpenVikingRead,
-  type OpenVikingAgentProxyCommand,
-} from "../openviking-read-proxy";
+import type { OpenVikingAgentProxyCommand } from "../openviking-read-proxy";
+import { forwardOpenVikingControl, forwardOpenVikingRead } from "../openviking-read-proxy";
 import { serverEndpoint } from "./daemon-endpoints";
 import { DaemonConnectionWorkspaceBindings } from "./daemon-connection-workspace-bindings";
 import {
@@ -50,6 +52,20 @@ import {
   threadList,
   userInfo,
 } from "./agent-envelope-requests";
+import {
+  agentApp,
+  agentArtifact,
+  type AgentArtifactCall,
+  agentLabel,
+  agentAttachment,
+  agentAttachmentUpload,
+  agentAttachmentUploadSessionCancel,
+  agentAttachmentUploadSessionComplete,
+  agentAttachmentUploadSessionCreate,
+  agentAttachmentUploadSessionGet,
+  agentTaskConversation,
+  type ForwardPorts,
+} from "./agent-forwarded-routes";
 import {
   weeklyReport,
   weeklyReportCollect,
@@ -80,14 +96,16 @@ import type {
   AgentWeeklyReportHttpClient,
   AgentChannelRequest,
 } from "./agent-http-clients";
-import { type WeeklyReportRequest, type WeeklyReportResponse } from "@lrm/coforge-sdk/internal";
+import type { WeeklyReportRequest, WeeklyReportResponse } from "@lrm/coforge-sdk/internal";
 
 /** What the forwarded Agent HTTPS requests need from the connection that owns them. */
 export type AgentHttpDeps = {
-  serverHttpUrl: string;
-  token: string;
-  assertConnected(): void;
-  requireClient(label: string, client: unknown): void;
+  /** The server's HTTPS origin; empty when nothing configured one. */
+  serverHttpUrl(): string;
+  /** The daemon's own API key, sent beside the Agent's. */
+  token(): string;
+  /** Refuses a request when no origin is configured. */
+  assertServerHttp(): void;
   keys(agentApiKey: string): { agentApiKey: string; daemonApiKey: string };
   clients: {
     readonly message: AgentMessageHttpClient;
@@ -144,6 +162,13 @@ export abstract class DaemonConnectionAgentHttp extends DaemonConnectionWorkspac
     return appConfigUpdate(this.agentPorts(this.agentHttp.clients.message), request, agentApiKey);
   }
 
+  /** A forwarded Agent request needs the server's HTTPS origin and the HTTP client for its route;
+   * the WebSocket is not one of its dependencies. */
+  private requireAgentClient(label: string, client: unknown): void {
+    if (!this.agentHttp.serverHttpUrl()) throw new Error(`${label} endpoint is not configured`);
+    if (!client) throw new Error(`${label} HTTP client is unavailable`);
+  }
+
   inboxList(request: AgentInboxRequest, agentApiKey: string): Promise<AgentInboxListResponse> {
     return inboxList(this.agentPorts(this.agentHttp.clients.message), request, agentApiKey);
   }
@@ -176,17 +201,16 @@ export abstract class DaemonConnectionAgentHttp extends DaemonConnectionWorkspac
   async mentionDelivery(request: AgentMentionDeliveryRequest, agentApiKey: string) {
     return mentionDelivery(this.agentPorts(this.agentHttp.clients.message), request, agentApiKey);
   }
-
   async agentMemoryDisposition(request: unknown, agentApiKey: string): Promise<unknown> {
-    this.agentHttp.assertConnected();
+    this.agentHttp.assertServerHttp();
     return sendAgentJson(fetch, {
       url: serverEndpoint(
-        this.agentHttp.serverHttpUrl,
+        this.agentHttp.serverHttpUrl(),
         "Agent Memory disposition",
         agentApiRoutes.cloud.memoryDisposition.path,
       ),
       agentApiKey,
-      daemonApiKey: this.agentHttp.token,
+      daemonApiKey: this.agentHttp.token(),
       method: "POST",
       body: request,
       what: "Memory disposition",
@@ -198,9 +222,9 @@ export abstract class DaemonConnectionAgentHttp extends DaemonConnectionWorkspac
     request: OpenVikingAgentProxyCommand,
     agentApiKey: string,
   ): Promise<unknown> {
-    this.agentHttp.assertConnected();
+    this.agentHttp.assertServerHttp();
     const url = serverEndpoint(
-      this.agentHttp.serverHttpUrl,
+      this.agentHttp.serverHttpUrl(),
       "Agent OpenViking HTTP",
       agentApiRoutes.cloud.openviking.path,
     );
@@ -209,22 +233,22 @@ export abstract class DaemonConnectionAgentHttp extends DaemonConnectionWorkspac
         url,
         command: request,
         agentApiKey,
-        daemonApiKey: this.agentHttp.token,
+        daemonApiKey: this.agentHttp.token(),
       });
     }
     return forwardOpenVikingRead({
       url,
       command: request,
       agentApiKey,
-      daemonApiKey: this.agentHttp.token,
+      daemonApiKey: this.agentHttp.token(),
     });
   }
 
   async agentTask(request: TaskRequest, agentApiKey: string): Promise<TaskResponse> {
-    this.agentHttp.assertConnected();
+    this.agentHttp.assertServerHttp();
     return this.agentHttp.clients.task.execute({
       url: serverEndpoint(
-        this.agentHttp.serverHttpUrl,
+        this.agentHttp.serverHttpUrl(),
         "Agent Task HTTP",
         agentApiRoutes.cloud.tasks.path,
       ),
@@ -237,11 +261,11 @@ export abstract class DaemonConnectionAgentHttp extends DaemonConnectionWorkspac
     request: AgentChannelRequest,
     agentApiKey: string,
   ): Promise<Record<string, unknown>> {
-    this.agentHttp.assertConnected();
+    this.agentHttp.assertServerHttp();
     const endpoint = channelEndpointFor(request.operation, request.target);
     return this.agentHttp.clients.channel.execute({
       method: endpoint.method,
-      url: serverEndpoint(this.agentHttp.serverHttpUrl, "Agent channel", endpoint.path),
+      url: serverEndpoint(this.agentHttp.serverHttpUrl(), "Agent channel", endpoint.path),
       ...this.agentHttp.keys(agentApiKey),
       request,
     });
@@ -251,10 +275,10 @@ export abstract class DaemonConnectionAgentHttp extends DaemonConnectionWorkspac
     request: AgentActionPrepareRequest,
     agentApiKey: string,
   ): Promise<AgentActionPrepareResponse> {
-    this.agentHttp.assertConnected();
+    this.agentHttp.assertServerHttp();
     return this.agentHttp.clients.actionPrepare.execute({
       url: serverEndpoint(
-        this.agentHttp.serverHttpUrl,
+        this.agentHttp.serverHttpUrl(),
         "Agent action-prepare HTTP",
         agentApiRoutes.cloud.actionPrepare.path,
       ),
@@ -265,13 +289,13 @@ export abstract class DaemonConnectionAgentHttp extends DaemonConnectionWorkspac
 
   /** The endpoint, keys, liveness and client gate one Agent HTTP client needs. */
   protected agentPorts<T>(client: T) {
-    const http = this.agentHttp;
     return {
-      assertConnected: () => http.assertConnected(),
+      assertConnected: () => this.agentHttp.assertServerHttp(),
       requireClient: (label: string, routeClient: unknown) =>
-        http.requireClient(label, routeClient),
-      endpoint: (what: string, path: string) => serverEndpoint(http.serverHttpUrl, what, path),
-      keys: (agentApiKey: string) => http.keys(agentApiKey),
+        this.requireAgentClient(label, routeClient),
+      endpoint: (what: string, path: string) =>
+        serverEndpoint(this.agentHttp.serverHttpUrl(), what, path),
+      keys: (agentApiKey: string) => this.agentHttp.keys(agentApiKey),
       client,
     };
   }
@@ -328,10 +352,61 @@ export abstract class DaemonConnectionAgentHttp extends DaemonConnectionWorkspac
     );
   }
 
+  protected forwardPorts(): ForwardPorts {
+    return {
+      assertConnected: () => this.agentHttp.assertServerHttp(),
+      endpoint: (what, path) => serverEndpoint(this.agentHttp.serverHttpUrl(), what, path),
+      keys: (agentApiKey) => this.agentHttp.keys(agentApiKey),
+    };
+  }
+
+  agentAttachment(attachmentId: string, agentApiKey: string): Promise<Response> {
+    return agentAttachment(this.forwardPorts(), attachmentId, agentApiKey);
+  }
+
+  agentAttachmentUpload(request: Request, agentApiKey: string): Promise<Response> {
+    return agentAttachmentUpload(this.forwardPorts(), request, agentApiKey);
+  }
+
+  agentAttachmentUploadSessionCreate(body: unknown, agentApiKey: string): Promise<Response> {
+    return agentAttachmentUploadSessionCreate(this.forwardPorts(), body, agentApiKey);
+  }
+
+  agentAttachmentUploadSessionComplete(uploadId: string, agentApiKey: string): Promise<Response> {
+    return agentAttachmentUploadSessionComplete(this.forwardPorts(), uploadId, agentApiKey);
+  }
+
+  agentAttachmentUploadSessionCancel(uploadId: string, agentApiKey: string): Promise<Response> {
+    return agentAttachmentUploadSessionCancel(this.forwardPorts(), uploadId, agentApiKey);
+  }
+
+  agentAttachmentUploadSessionGet(uploadId: string, agentApiKey: string): Promise<Response> {
+    return agentAttachmentUploadSessionGet(this.forwardPorts(), uploadId, agentApiKey);
+  }
+
+  agentArtifact(request: AgentArtifactCall, agentApiKey: string): Promise<Response> {
+    return agentArtifact(this.forwardPorts(), request, agentApiKey);
+  }
+
+  agentLabel(request: AgentLabelWriteRequest, agentApiKey: string): Promise<Response> {
+    return agentLabel(this.forwardPorts(), request, agentApiKey);
+  }
+
+  agentApp(request: AgentAppRequest, agentApiKey: string): Promise<Response> {
+    return agentApp(this.forwardPorts(), request, agentApiKey);
+  }
+
+  agentTaskConversation(
+    request: AgentTaskConversationRequest,
+    agentApiKey: string,
+  ): Promise<Response> {
+    return agentTaskConversation(this.forwardPorts(), request, agentApiKey);
+  }
+
   private agentApiKeyEndpoint(): AgentApiKeyEndpoint {
     return {
-      url: (what) => serverEndpoint(this.agentHttp.serverHttpUrl, what, "/api/agent-api-keys"),
-      token: () => this.agentHttp.token,
+      url: (what) => serverEndpoint(this.agentHttp.serverHttpUrl(), what, "/api/agent-api-keys"),
+      token: () => this.agentHttp.token(),
     };
   }
 

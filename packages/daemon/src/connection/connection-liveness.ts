@@ -33,6 +33,56 @@ import { getLogger } from "@logtape/logtape";
 
 const livenessLogger = getLogger(["coforge", "daemon", "connection"]);
 
+/** Rebuilds a connection that has lost its client altogether. Every other recovery path - the
+ * give-up resume timer, `InboundQuietness.check` - needs a client to nudge, so a connection whose
+ * client is gone had none of them left; the status refresh is the one thing still running, and this
+ * is what it calls. The forced `start` after a refused connect is what the incident of 2026-11-16
+ * needed and nobody called. */
+export class LostClientRebuild {
+  #running = false;
+
+  constructor(
+    private readonly lastConfig: () =>
+      | { token: string; config: DaemonConnectionConfig }
+      | undefined,
+    private readonly start: (token: string, config: DaemonConnectionConfig) => Promise<void>,
+    private readonly wasStopped: (error: unknown) => boolean,
+    private readonly errorType: (error: unknown) => string,
+  ) {}
+
+  /** One rebuild at a time: a start still in flight needs no help, and a stop wins. */
+  attempt(): void {
+    const last = this.lastConfig();
+    if (this.#running || !last) return;
+    this.#running = true;
+    const scope = { workspace_id: last.config.workspaceId, computer_id: last.config.computerId };
+    livenessLogger.warning("Daemon connection has no client; rebuilding it", {
+      event: "daemon_connection:rebuild",
+      ...scope,
+      outcome: "reconnecting",
+    });
+    void this.start(last.token, last.config)
+      .catch((error: unknown) => {
+        // A stop during the rebuild ends the start it owns; that is not a failed recovery.
+        if (this.wasStopped(error)) return;
+        livenessLogger.warning("Daemon connection rebuild failed; the next refresh tries again", {
+          event: "daemon_connection:rebuild_failed",
+          ...scope,
+          error_type: this.errorType(error),
+          outcome: "failed",
+        });
+      })
+      .finally(() => {
+        this.#running = false;
+      });
+  }
+
+  /** A stop cancels a rebuild in flight; the next `start` is a fresh connection. */
+  reset(): void {
+    this.#running = false;
+  }
+}
+
 /**
  * Whether the connection still looks fed. A socket that stays open is not evidence anything
  * reaches this Daemon: the incident this answers kept its socket and its subscription while every
