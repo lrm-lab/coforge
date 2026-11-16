@@ -192,7 +192,7 @@
   "records_side_chat_user": "Member",
   "records_side_chat_new": "New chat",
   "records_side_chat_history": "Chat history",
-  "records_side_chat_untitled": "Untitled",
+  "records_side_chat_untitled": "Side chat",
   "records_side_chat_no_history": "No previous chats",
   "records_side_chat_assistant_running": "Assistant is working…",
   "records_side_chat_placeholder_busy": "Wait until the assistant finishes",
