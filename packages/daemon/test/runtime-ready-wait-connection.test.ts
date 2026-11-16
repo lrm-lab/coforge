@@ -9,6 +9,7 @@ import {
   encodeReminderSync,
   type AgentStopIntent,
   type DaemonRuntimeReadyRequest,
+  type ReminderSync,
 } from "@lrm/coforge-sdk/internal";
 import { captureDaemonLogs } from "./log-capture";
 import { Clock, job, MemoryStore, snapshot } from "./reminder-scheduler-fixtures";
