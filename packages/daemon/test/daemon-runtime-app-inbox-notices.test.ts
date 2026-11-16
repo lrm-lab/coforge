@@ -109,4 +109,80 @@ describe("DaemonRuntime App Inbox notices", () => {
       await rm(stateDirectory, { recursive: true, force: true });
     }
   });
+
+  test("a completed fenced Stop blocks a due reminder from waking the Agent", async () => {
+    const stateDirectory = join(tempRoot, `coforge-inbox-stopped-${crypto.randomUUID()}`);
+    const credentials = new InMemoryDaemonCredentialStore();
+    await credentials.save(connection.workspaceId, connection.computerId, "token-a");
+    let sessions = 0;
+    const runtime = new DaemonRuntime(
+      connection,
+      () => ({
+        provider: "pi",
+        createAgentSession: async () => {
+          sessions++;
+          return sessionSpy();
+        },
+      }),
+      credentials,
+      {
+        create: () => ({
+          async start() {},
+          async ready() {},
+          async stop() {},
+          async requestAgentApiKey() {
+            return `sk_agent_${"a".repeat(43)}`;
+          },
+          async revokeAgentApiKey() {},
+          async sendAgentDeliveryAck() {},
+          async agentMessage() {
+            throw new Error("must not read cloud");
+          },
+        }),
+      },
+      undefined,
+      emptyCodeAgentDiscovery,
+      stateDirectory,
+    );
+    try {
+      await runtime.start(connection);
+      await runtime.handleAgentStart({
+        protocolMajor: 1,
+        requestId: "start-1",
+        workspaceId: connection.workspaceId,
+        computerId: connection.computerId,
+        agentId: "agent-a",
+        provider: "pi",
+        model: "default",
+        reasoning: "balanced",
+        controlEpoch: 1,
+        launchId: "launch-1",
+      });
+      await runtime.handleAgentStop({
+        protocolMajor: 1,
+        requestId: "stop-1",
+        workspaceId: connection.workspaceId,
+        computerId: connection.computerId,
+        agentId: "agent-a",
+        provider: "pi",
+        controlEpoch: 2,
+      });
+      await runtime.mintAppItem("agent-a", {
+        appId: "system.reminder",
+        notificationClass: "due",
+        sourceRef: {
+          kind: "reminder",
+          id: "123e4567-e89b-42d3-a456-426614174000",
+          revision: "1",
+        },
+        title: "Due",
+        summary: "Reminder due",
+      });
+      await Bun.sleep(10);
+      expect(sessions).toBe(1);
+    } finally {
+      await runtime.stop();
+      await rm(stateDirectory, { recursive: true, force: true });
+    }
+  });
 });

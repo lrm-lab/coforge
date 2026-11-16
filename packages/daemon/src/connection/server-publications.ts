@@ -2,12 +2,17 @@ import {
   decodeAgentConfigSync,
   decodeAgentServerFeatures,
   decodeAppConfigSync,
+  decodeAgentStaleRuntimeStop,
   type AgentConfigSync,
   type AgentServerFeatures,
   type AppConfigSync,
+  type AgentStaleRuntimeStop,
+  type AgentStopIntent,
 } from "@lrm/coforge-sdk/internal";
 import { ListenerSlot } from "./listener-slot";
 import { ReadyPublicationHold } from "./ready-publication-hold";
+
+export type AgentStopPublication = AgentStopIntent | AgentStaleRuntimeStop;
 
 /** Binary server publications that share ready buffering but do not target one Agent. */
 export class ServerPublications {
@@ -37,7 +42,17 @@ export class ServerPublications {
     data: Uint8Array,
     scope: { workspaceId: string; computerId: string },
     ready: ReadyPublicationHold,
+    staleStop?: ListenerSlot<(intent: AgentStopPublication) => void>,
   ): boolean {
+    try {
+      const stop = decodeAgentStaleRuntimeStop(data);
+      if (stop.workspaceId !== scope.workspaceId || stop.computerId !== scope.computerId)
+        return false;
+      if (staleStop) ready.deliver(staleStop, stop, "stale-runtime-stop");
+      return true;
+    } catch {
+      // Try the next publication kind.
+    }
     try {
       const config = decodeAgentConfigSync(data);
       if (config.workspaceId !== scope.workspaceId || config.computerId !== scope.computerId)

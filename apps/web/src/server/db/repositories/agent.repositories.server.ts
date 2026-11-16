@@ -292,6 +292,30 @@ export async function moveAgentToComputer(
     data: { computerId: input.toComputerId },
   });
   if (count !== 1) return false;
+  const moved = await tx.agent.findUnique({
+    where: { id: input.agentId },
+    select: { controlState: true },
+  });
+  const controlState = moved?.controlState;
+  if (controlState && typeof controlState === "object" && !Array.isArray(controlState)) {
+    const epoch = (controlState as { epoch?: unknown }).epoch;
+    if (
+      typeof epoch === "number" &&
+      Number.isSafeInteger(epoch) &&
+      epoch > 0 &&
+      epoch < 2 ** 31 - 1
+    )
+      await tx.agent.update({
+        where: { id: input.agentId },
+        data: {
+          controlState: {
+            ...(controlState as Prisma.JsonObject),
+            computerId: input.toComputerId,
+            epoch: epoch + 1,
+          },
+        },
+      });
+  }
   // The Agent's keys belong to the Computer that minted them; a move retires them all at once
   // rather than leaving the old Computer's overlap key valid until the next mint.
   await tx.agentApiKey.updateMany({

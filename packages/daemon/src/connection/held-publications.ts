@@ -25,7 +25,11 @@ export class HeldPublications<Item> {
   /** Holds an Agent's latest intent of one kind (its start, stop, config push or activity probe),
    * replacing the earlier one; it takes the newer arrival's place. A start and a stop are kept
    * apart, so a restart (stop, then start) survives. */
-  latestFor(agentId: string, kind: "start" | "stop" | "config" | "probe", item: Item): void {
+  latestFor(
+    agentId: string,
+    kind: "start" | "stop" | "stale-runtime-stop" | "config" | "probe",
+    item: Item,
+  ): void {
     this.#replace(agentId, kind, item);
   }
 

@@ -268,3 +268,15 @@ test("an Agent that is being stopped is not cold-started", async () => {
     await h.runtime.stop();
   }
 });
+
+test("a Stop that completed keeps later deliveries from waking the old daemon", async () => {
+  const h = await harness({ resume: "stored-1" });
+  try {
+    await h.runtime.stopAgent("agent-a");
+    await h.deliver(1).catch(() => {});
+    await Bun.sleep(0);
+    expect(h.sessions).toHaveLength(1);
+  } finally {
+    await h.runtime.stop();
+  }
+});

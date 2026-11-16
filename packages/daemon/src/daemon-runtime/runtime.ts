@@ -18,6 +18,7 @@ import {
   launchEventObserver,
   handleAgentStart,
   handleAgentStop,
+  handleAgentStopIntent,
   controlIntentPorts,
   handleAgentTurnInterrupt,
   handleAgentWorkspaceReset,
@@ -744,7 +745,7 @@ export class DaemonRuntime {
       isStopping: () => this.#stopping,
       publications: {
         startAgent: (intent) => this.handleAgentStart(intent),
-        stopAgent: (intent) => this.handleAgentStop(intent),
+        stopAgent: (intent) => handleAgentStopIntent(this.#controlIntentPorts(), intent),
         applyAgentConfigSync: (sync) => this.handleAgentConfig(sync),
         interruptAgent: (intent) => this.handleAgentTurnInterrupt(intent),
         probeAgent: (probe) => this.handleAgentActivityProbe(probe),
@@ -883,7 +884,6 @@ export class DaemonRuntime {
       throw new Error(`Agent runtime is stopping: ${agentId}`);
   }
 
-  /** Resolves the Agent behind a local context and checks its API key; the transport is checked by the caller. */
   #authorizedAgent = (context: string, agentApiKey: string | undefined): string => {
     this.#assertRunning();
     const agentId = agentIdForContext(this.#agentContexts, context);
@@ -989,8 +989,10 @@ export class DaemonRuntime {
     config: AgentRuntimeConfig,
     recovery: AgentRecoveryContext | undefined,
     request: LaunchRequest,
-  ): Promise<AgentRuntime> =>
-    startAgent(
+  ): Promise<AgentRuntime> => {
+    if (this.#agentControl.isStopped(agentId))
+      return Promise.reject(new Error("Agent is stopped; a server Start is required"));
+    return startAgent(
       {
         assertRunning: () => this.#assertRunning(),
         assertAgentNotStopping: (id) => this.#assertAgentNotStopping(id),
@@ -1015,6 +1017,7 @@ export class DaemonRuntime {
       recovery,
       request,
     );
+  };
 
   #messageDeliveryPorts() {
     return {
@@ -1063,7 +1066,6 @@ export class DaemonRuntime {
 
   #env = () => runtimeEnvelope(this.#connection);
 
-  /** Tears down a launch whose recovery notice was rejected; returns the error to surface. */
   async #abandonLaunch(agentId: string, error: unknown): Promise<unknown> {
     return abandonLaunch(this.#startupFailurePorts(), agentId, error);
   }

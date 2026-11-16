@@ -57,6 +57,13 @@ export const AGENT_START_METHOD = RPC_METHODS.agentStart;
 export const AGENT_START_MESSAGE_TYPE = "coforge.rpc.v1.AgentStartIntent" as const;
 export const AGENT_STOP_METHOD = RPC_METHODS.agentStop;
 export const AGENT_STOP_MESSAGE_TYPE = "coforge.rpc.v1.AgentStopIntent" as const;
+export {
+  AGENT_STALE_RUNTIME_STOP_MESSAGE_TYPE,
+  AGENT_STALE_RUNTIME_STOP_METHOD,
+  decodeAgentStaleRuntimeStop,
+  encodeAgentStaleRuntimeStop,
+  type AgentStaleRuntimeStop,
+} from "./agent-stale-runtime-stop";
 export const AGENT_ACTIVITY_PROBE_METHOD = RPC_METHODS.agentActivityProbe;
 export const AGENT_ACTIVITY_PROBE_MESSAGE_TYPE = "coforge.rpc.v1.AgentActivityProbe" as const;
 export const AGENT_INBOX_PURGE_METHOD = RPC_METHODS.agentInboxPurge;
