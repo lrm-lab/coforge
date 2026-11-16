@@ -1,4 +1,4 @@
-import { MemorySettings } from "#src/features/platform-memory/memory-settings";
+import { MemorySettings } from "#src/features/platform-memory/memory-panel";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { useEffect, useId, useState } from "react";
 import { ChevronLeft, Share01 } from "@untitledui/icons";
