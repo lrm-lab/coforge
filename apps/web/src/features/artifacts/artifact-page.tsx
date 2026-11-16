@@ -81,7 +81,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
   const homeKey = current?.artifact.homeKey;
   const homeId = homeKey ? artifactHomeConversation(homeKey) : undefined;
   const home: ArtifactHome | undefined = current && {
-    kind: current.homeKind,
+    kind: current.artifact.homeKind,
     conversationId: homeId ?? null,
   };
   const link = useArtifactLinkSharing(artifactId, current !== undefined);

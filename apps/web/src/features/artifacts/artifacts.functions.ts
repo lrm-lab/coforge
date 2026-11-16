@@ -51,7 +51,8 @@ export const loadArtifactDocument = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ artifactId: id }).strict())
   .handler(({ context, data }) =>
-    productionArtifacts(context.db).documents.load(scopeOf(context), data),
+    // The viewer reads a body only for a document's entry; a web page's is the sandbox's.
+    productionArtifacts(context.db).documents.load(scopeOf(context), data, { body: "markdown" }),
   );
 
 /** Whether an artifact can have a public link, and the one it has (task #646). */

@@ -161,7 +161,7 @@ test("an Agent in a channel makes an artifact there, reads it, pushes over it an
   const read = await post({ operation: "read", artifact });
   expect(read.body.text).toBe("# Launch plan\n\nShip in May.\n\nRisks: none.\n");
   // The Agent authored it, so it may delete it; the read also says which kind of home it is in.
-  expect(read.body).toMatchObject({ canDelete: true, homeKind: "channel" });
+  expect(read.body).toMatchObject({ canDelete: true, artifact: { homeKind: "channel" } });
   expect(read.body.artifact).not.toHaveProperty("kind");
   expect(read.body.artifact).toMatchObject({ canWrite: true });
 
