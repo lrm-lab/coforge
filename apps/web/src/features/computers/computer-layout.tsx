@@ -95,6 +95,13 @@ export function ComputerLayout({
             const selected = computer.id === selectedComputerId;
             const creatorName = computer.creator ? humanLabel(computer.creator) : "";
             const refusal = activeRefusal(computer);
+            // The row's second line: why it is refused, else the hostname when the label is not
+            // it, else the operating system, when reported. Nothing known leaves no empty line.
+            const detail = refusal
+              ? null
+              : computer.name && computer.name !== computerLabel(computer)
+                ? computer.name
+                : operatingSystemLabel(computer);
             return (
               <li key={computer.id}>
                 <div className="flex min-w-0 items-center">
@@ -124,27 +131,27 @@ export function ComputerLayout({
                       <span className="truncate text-sm font-semibold">
                         {computerLabel(computer)}
                       </span>
-                      <span className="flex min-w-0 items-baseline gap-1.5">
-                        {refusal ? (
-                          <span className="truncate text-xs text-error-primary">
-                            {refusalLabel(refusal.reason)}
-                          </span>
-                        ) : computer.name && computer.name !== computerLabel(computer) ? (
-                          <span className="truncate text-xs text-tertiary">{computer.name}</span>
-                        ) : (
-                          <span className="truncate text-xs text-tertiary">
-                            {operatingSystemLabel(computer)}
-                          </span>
-                        )}
-                        {/* The same version the detail panel states, like that panel's own
-                            row. The hostname or OS gives up its width first: the release is short and
-                            is what this row was asked to carry. */}
-                        {computer.computerVersion && (
-                          <span className="shrink-0 text-xs text-tertiary">
-                            {computer.computerVersion}
-                          </span>
-                        )}
-                      </span>
+                      {(refusal || detail || computer.computerVersion) && (
+                        <span className="flex min-w-0 items-baseline gap-1.5">
+                          {refusal ? (
+                            <span className="truncate text-xs text-error-primary">
+                              {refusalLabel(refusal.reason)}
+                            </span>
+                          ) : (
+                            detail && (
+                              <span className="truncate text-xs text-tertiary">{detail}</span>
+                            )
+                          )}
+                          {/* The same version the detail panel states, like that panel's own
+                              row. The hostname or OS gives up its width first: the release is short and
+                              is what this row was asked to carry. */}
+                          {computer.computerVersion && (
+                            <span className="shrink-0 text-xs text-tertiary">
+                              {computer.computerVersion}
+                            </span>
+                          )}
+                        </span>
+                      )}
                     </span>
                     {computer.creator && (
                       <Tooltip
