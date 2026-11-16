@@ -1,7 +1,7 @@
 import { AGENT_ACTIVITY_DETAIL_KIND, type AgentActivity } from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
-import { composeDeliveryNotice } from "./delivery-notice";
+import { unreadNoticeComposer } from "./important-unread-compose";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import type { AgentContexts } from "./agent-contexts";
@@ -152,6 +152,9 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
         },
       },
       noticePrefix: (agentId) => ports.sync.noticePrefix(agentId),
+      // Task #14: a reliable delivery has one writer, the unread loop. The index hands the batch
+      // over instead of writing its own notice, and the loop keeps it until the Agent reads it.
+      unread: (announced) => importantUnread.observeDeliveries(announced),
     },
   );
   ports.contexts.onNewContext((agentId) => messageAttention.clearPreviewSeen(agentId));
@@ -178,22 +181,14 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
     unread: (agentId) => messageAttention.unreadDeliveries(agentId),
     // Every attempt asks for the notice again: the batch's own messages plus whatever waits in the
     // queue now, so a retry counts what arrived meanwhile instead of repeating a stale snapshot.
-    compose: (agentId, _notice, deliveries) => {
-      const announced = deliveries.filter(
-        (delivery): delivery is AgentMessageDelivery & { target: string } =>
-          delivery.messageId !== undefined && delivery.target !== undefined,
-      );
-      const message = announced[0];
-      if (!message) return undefined;
-      return composeDeliveryNotice({
-        message,
-        announced,
-        queued: ports.deliveryGate.pending(agentId),
-        prefix: ports.sync.noticePrefix(agentId),
-        previewedInFull: (target, sequence) =>
-          messageAttention.previewSeen.has(agentId, target, sequence),
-      }).notice;
-    },
+    compose: unreadNoticeComposer({
+      queued: (agentId) => ports.deliveryGate.pending(agentId),
+      prefix: (agentId) => ports.sync.noticePrefix(agentId),
+      previewedInFull: (agentId, target, sequence) =>
+        messageAttention.previewSeen.has(agentId, target, sequence),
+    }),
+    // An accepted attempt showed the model these bodies; a later attempt does not repeat them.
+    shown: (agentId, shown) => messageAttention.previewSeen.record(agentId, shown),
     report: (agentId, notice) => {
       const launch = ports.currentActivityLaunch(agentId);
       if (!launch) return;

@@ -2,6 +2,7 @@ import { ImportantUnreadNotices, type ImportantUnreadNotice } from "./important-
 import {
   ImportantUnreadReminder,
   type ImportantUnreadBatchDelivery,
+  type ImportantUnreadComposedNotice,
   type ImportantUnreadRecord,
 } from "./important-unread-reminder";
 
@@ -11,7 +12,11 @@ import {
 export type ImportantUnreadWiringPorts = Readonly<{
   store: ImportantUnreadRecord;
   /** The Agent's running session, when it has one. */
-  session(agentId: string): { notify?(text: string): Promise<void> } | undefined;
+  session(
+    agentId: string,
+  ):
+    | { notify?(text: string): Promise<void>; waitForContextViewCapture?(): Promise<void> }
+    | undefined;
   /** What the Agent has not read, as the attention index counts it. */
   unread(agentId: string): readonly { target: string; count: number }[];
   /** One error Activity for a batch whose retries ran out. */
@@ -22,7 +27,12 @@ export type ImportantUnreadWiringPorts = Readonly<{
     agentId: string,
     notice: ImportantUnreadNotice,
     deliveries: readonly ImportantUnreadBatchDelivery[],
-  ): string | undefined;
+  ): ImportantUnreadComposedNotice | undefined;
+  /** The messages whose whole text an accepted attempt put in front of the model, so the next one
+   * does not repeat them. */
+  shown?(agentId: string, shown: readonly { target: string; sequence: number }[]): void;
+  /** The clock the retry schedule is measured on. */
+  now?(): number;
 }>;
 
 /**
@@ -55,23 +65,32 @@ export function importantUnreadNoticeText(
  * its retry rather than believing the Agent was told. */
 export function composeImportantUnreadReminder(ports: ImportantUnreadWiringPorts) {
   const notices = new ImportantUnreadNotices();
-  return new ImportantUnreadReminder(notices, ports.store, {
-    write: (agentId, notice, batch) => {
-      const session = ports.session(agentId);
-      if (!session?.notify) return false;
-      // A retry repeats the batch's own words; only a record taken over after a restart, whose
-      // words did not survive, falls back to the standing text.
-      const text = batch ?? importantUnreadNoticeText(notice, ports.unread(agentId));
-      // The session queues the text into the Agent's input; a rejection this call cannot see is
-      // the delivery layer's to report, so it is not treated as a refusal here.
-      void session.notify(text).catch(() => undefined);
-      return true;
+  return new ImportantUnreadReminder(
+    notices,
+    ports.store,
+    {
+      write: (agentId, notice, attempt) => {
+        const session = ports.session(agentId);
+        if (!session?.notify) return false;
+        // A retry says what this attempt composed; only a record taken over after a restart, whose
+        // words did not survive, falls back to the standing text.
+        const text = attempt?.text ?? importantUnreadNoticeText(notice, ports.unread(agentId));
+        // The session queues the text into the Agent's input, and the promise is this attempt's
+        // verdict: it rejects when the session refused the notice, so the retry stays and the
+        // delivery that asked for the attempt hears the refusal.
+        return Promise.resolve(session.notify(text)).then(async () => {
+          await session.waitForContextViewCapture?.();
+          if (attempt?.shown?.length) ports.shown?.(agentId, attempt.shown);
+        });
+      },
+      report: (agentId, notice) => ports.report(agentId, notice),
+      session: (agentId) => ports.session(agentId),
+      ...(ports.compose
+        ? {
+            compose: (agentId, notice, deliveries) => ports.compose!(agentId, notice, deliveries),
+          }
+        : {}),
     },
-    report: (agentId, notice) => ports.report(agentId, notice),
-    ...(ports.compose
-      ? {
-          compose: (agentId, notice, deliveries) => ports.compose!(agentId, notice, deliveries),
-        }
-      : {}),
-  });
+    ports.now,
+  );
 }
