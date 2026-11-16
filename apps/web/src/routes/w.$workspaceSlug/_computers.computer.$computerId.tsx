@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef } from "react";
 
 import { ComputerDetail } from "#src/features/computers/computer-detail";
 import { CloudDesktopOriginProvider } from "#src/features/computers/cloud-desktop-origin";
-import { createAgent } from "#src/features/agents/agents.functions";
+import { useCreateAgent } from "#src/features/agents/use-create-agent";
 import { executeAgentControl } from "#src/features/agents/agent-control.functions";
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
 import { getComputerRuntimeCatalog } from "#src/features/computers/computers.functions";
@@ -93,7 +93,7 @@ function ComputerDetailPage() {
   const unlinkComputer = useServerFn(removeComputer);
   const deleteComputerFn = useServerFn(deleteComputer);
   const formatDisk = useServerFn(formatCloudComputer);
-  const create = useServerFn(createAgent);
+  const create = useCreateAgent();
   const executeControl = useServerFn(executeAgentControl);
   const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
   const rescanRuntimes = useRuntimeCatalogRefreshRequest();
@@ -203,7 +203,7 @@ function ComputerDetailPage() {
         onCreateAgent={
           computer.canManageAgents
             ? (data) =>
-                create({ data }).then(async (result) => {
+                create(data).then(async (result) => {
                   await router.invalidate({ sync: true });
                   return result;
                 })

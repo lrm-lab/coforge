@@ -7,7 +7,7 @@ import { Plus, SearchLg } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
-import { createAgent } from "#src/features/agents/agents.functions";
+import { useCreateAgent } from "#src/features/agents/use-create-agent";
 import {
   getComputerRuntimeCatalog,
   listComputers,
@@ -318,7 +318,7 @@ function CreateAgentEntry({
 }) {
   const loadComputers = useServerFn(listComputers);
   const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
-  const create = useServerFn(createAgent);
+  const create = useCreateAgent();
   const [computers, setComputers] = useState<Awaited<ReturnType<typeof listComputers>>>();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -391,7 +391,7 @@ function CreateAgentEntry({
           joinsChannelName={channelName}
           visibilityLocked
           onCreate={async (input) => {
-            const created = await create({ data: input });
+            const created = await create(input);
             onCreated(
               { id: created.agent.id, name: created.agent.displayName || created.agent.name },
               created.startPublished,

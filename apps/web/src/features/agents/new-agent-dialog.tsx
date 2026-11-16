@@ -20,9 +20,9 @@ import {
   AgentCreateModal,
 } from "./agent-create-frame";
 import { LocalAgentForm } from "./agent-create-dialog";
-import { createAgent } from "./agents.functions";
+import { useCreateAgent } from "./use-create-agent";
 import { CloudAgentForm } from "./cloud-agent-form";
-import { useCurrentWorkspaceId, useRefreshAgentDirectory } from "./workspace-agents-realtime";
+import { useCurrentWorkspaceId } from "./workspace-agents-realtime";
 
 /**
  * "New agent" from the + menu and the Members page: a two-way switch under the title says where
@@ -153,8 +153,7 @@ function NewLocalAgent({
   const workspaceId = useCurrentWorkspaceId();
   const loadComputers = useServerFn(listComputers);
   const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
-  const create = useServerFn(createAgent);
-  const refreshDirectory = useRefreshAgentDirectory();
+  const create = useCreateAgent();
   const refreshSidebar = useRefreshSidebar({ throwOnError: false });
   const openDirect = useOpenDirectConversation();
   const closeList = useCloseConversationList();
@@ -197,8 +196,7 @@ function NewLocalAgent({
       onLoadRuntimeCatalog={(computerId) => loadRuntimeCatalog({ data: { computerId } })}
       submitLabel={m.agent_create_submit_chat()}
       onCreate={async (input) => {
-        const created = await create({ data: input });
-        await refreshDirectory();
+        const created = await create(input);
         // The Agent exists now: a conversation that fails to open leaves it in the sidebar.
         if (
           await openDirect({ agentId: created.agent.id }, { replace: conversationReplacesPage })

@@ -29,7 +29,7 @@ import { QuestionCard } from "./question-card";
 import { PendingActionCard, type ActionCardFailure } from "./action-card-pending";
 import { channelMembersQueryKey } from "./conversation-query-keys";
 import { AgentCreateDialog } from "#src/features/agents/agent-create-dialog";
-import { createAgent } from "#src/features/agents/agents.functions";
+import { useCreateAgent } from "#src/features/agents/use-create-agent";
 import {
   getComputerRuntimeCatalog,
   listComputers,
@@ -92,7 +92,7 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
     view.kind === "channel:add_member" && view.channel.id ? view.channel : null;
   const [committing, setCommitting] = useState(false);
   const [openingDialog, setOpeningDialog] = useState(false);
-  const create = useServerFn(createAgent);
+  const create = useCreateAgent();
   const loadComputers = useServerFn(listComputers);
   const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
   const [computers, setComputers] = useState<Awaited<ReturnType<typeof listComputers>>>();
@@ -355,7 +355,7 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
           }}
           computerLocked={Boolean(view.requiredComputer)}
           actionCardMessageId={view.messageId}
-          onCreate={(input) => create({ data: input })}
+          onCreate={create}
           onCreated={() => void refetchOwn()}
         />
       )}

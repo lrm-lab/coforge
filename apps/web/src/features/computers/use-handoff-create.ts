@@ -4,8 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { agentCreateErrorMessage } from "#src/features/agents/agent-form";
 import type { CreateAgentInput } from "#src/features/agents/agent.schemas";
-import { createAgent } from "#src/features/agents/agents.functions";
-import { useRefreshAgentDirectory } from "#src/features/agents/workspace-agents-realtime";
+import { useCreateAgent } from "#src/features/agents/use-create-agent";
 import { useCloseConversationList } from "#src/features/conversations/conversation-navigation";
 import {
   openDirectConversation,
@@ -32,10 +31,9 @@ type CreatedHandoff = {
  * `briefingFailed` says the Agent exists and the briefing is not delivered yet.
  */
 export function useHandoffCreate({ onDone }: { onDone: () => void }) {
-  const create = useServerFn(createAgent);
+  const create = useCreateAgent();
   const open = useServerFn(openDirectConversation);
   const send = useServerFn(sendDirectConversationMessage);
-  const refreshDirectory = useRefreshAgentDirectory();
   const refreshSidebar = useRefreshSidebar({ throwOnError: false });
   const closeList = useCloseConversationList();
   const navigate = useNavigate();
@@ -84,7 +82,7 @@ export function useHandoffCreate({ onDone }: { onDone: () => void }) {
       let handoff = created;
       if (!handoff) {
         try {
-          const { agent } = await create({ data: input });
+          const { agent } = await create(input);
           handoff = {
             agentId: agent.id,
             name: input.name,
@@ -96,8 +94,6 @@ export function useHandoffCreate({ onDone }: { onDone: () => void }) {
           return;
         }
         setCreated(handoff);
-        // The Agent exists now; a directory read that fails is repaired by the next signal.
-        await refreshDirectory().catch(() => {});
       }
       await deliver(handoff);
     });
