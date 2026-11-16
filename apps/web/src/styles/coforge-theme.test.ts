@@ -18,6 +18,10 @@ const FLAT_ON_PURPOSE = new Map([
   ["--color-avatar-6", "avatar placeholder tones carry their own contrast with white initials"],
   ["--color-avatar-outline", "a sticker's edge matches the mascot artwork's, white in both themes"],
   ["--color-nav-fg-current", "it points at --color-sidebar-fg, which carries its own dark value"],
+  [
+    "--color-field-border-typing",
+    "the designer's typing border is the same lavender in both themes",
+  ],
 ]);
 
 // Comments are stripped first: the file's own prose quotes `.dark-mode { ... }` when it explains
