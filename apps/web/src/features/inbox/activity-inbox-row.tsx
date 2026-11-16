@@ -82,8 +82,8 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   // Gives way to the Done check wherever the check shows (hover, focus, the open row); a touch
   // screen has no check, so the time stays.
   const timeClass = cn(
-    "ml-auto shrink-0 pl-2 text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-0",
-    current && "[@media(hover:hover)]:opacity-0",
+    "ml-auto shrink-0 pl-2 text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 not-any-pointer-coarse:group-focus-within:opacity-0",
+    current && "not-any-pointer-coarse:opacity-0",
   );
   const time = clock ? (
     <ClockTime value={item.latest.createdAt} plain seconds={false} className={timeClass} />
@@ -275,7 +275,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
         tabIndex={tabStop ? 0 : -1}
         onClick={() => actions.done(item)}
         className={cn(
-          "absolute top-1/2 right-[calc(var(--page-gutter)-0.25rem)] -translate-y-1/2 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:hidden",
+          "absolute top-1/2 right-[calc(var(--page-gutter)-0.25rem)] -translate-y-1/2 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 any-pointer-coarse:hidden",
           current ? "opacity-100" : "opacity-0",
         )}
       />

@@ -89,7 +89,7 @@ export function WaitingChoiceRow({
               value={card.createdAt}
               plain
               // Gives way to the decline button wherever it shows (hover, focus).
-              className="ml-auto shrink-0 pl-2 text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-0"
+              className="ml-auto shrink-0 pl-2 text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 not-any-pointer-coarse:group-focus-within:opacity-0"
             />
           </span>
           <span className="truncate text-sm text-tertiary">
@@ -121,7 +121,7 @@ export function WaitingChoiceRow({
           size="sm"
           color="link-gray"
           aria-label={m.action_card_ignore_row({ prompt: card.prompt })}
-          className="absolute top-1/2 right-[calc(var(--page-gutter)-0.25rem)] -translate-y-1/2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 aria-expanded:opacity-100 [@media(hover:none)]:hidden"
+          className="absolute top-1/2 right-[calc(var(--page-gutter)-0.25rem)] -translate-y-1/2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 aria-expanded:opacity-100 any-pointer-coarse:hidden"
         >
           {m.question_card_decline()}
         </Button>
