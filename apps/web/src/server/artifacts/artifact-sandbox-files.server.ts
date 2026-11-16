@@ -47,6 +47,7 @@ export function pageFileResponse(input: {
   frameAncestor: string;
   hostOrigin: string | null;
   filePrefix: string;
+  assetPrefix?: string;
   fileCache: string;
 }): Response | null {
   const { bytes } = input;
@@ -60,6 +61,7 @@ export function pageFileResponse(input: {
         pageOrigin: input.pageOrigin,
         frameAncestor: input.frameAncestor,
         filePrefix: input.filePrefix,
+        assetPrefix: input.assetPrefix,
       })
     : sandboxFileHeaders(
         artifactContentType(input.path, "other"),

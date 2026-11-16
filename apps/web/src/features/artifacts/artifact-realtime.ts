@@ -48,3 +48,26 @@ export function decodeArtifactAccessChangedEvent(
   const parsed = artifactAccessChangedEvent.safeParse(data);
   return parsed.success ? parsed.data : undefined;
 }
+
+export type ArtifactDataChangedEvent = {
+  type: "artifact.data.changed.v1";
+  workspaceId: string;
+  artifactId: string;
+  collection: string;
+};
+
+const artifactDataChangedEvent = z.object({
+  type: z.literal(REALTIME_EVENTS.artifactDataChanged),
+  workspaceId: z.string().min(1),
+  artifactId: z.string().min(1),
+  collection: z.string().min(1),
+});
+
+export function decodeArtifactDataChangedEvent(
+  value: unknown,
+): ArtifactDataChangedEvent | undefined {
+  const data = publicationDataOrUndefined(value);
+  if (publicationType(data) !== REALTIME_EVENTS.artifactDataChanged) return undefined;
+  const parsed = artifactDataChangedEvent.safeParse(data);
+  return parsed.success ? parsed.data : undefined;
+}

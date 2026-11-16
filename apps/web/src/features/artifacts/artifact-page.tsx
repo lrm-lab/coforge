@@ -41,9 +41,11 @@ import {
 } from "./artifact-queries";
 import {
   decodeArtifactAccessChangedEvent,
+  decodeArtifactDataChangedEvent,
   decodeArtifactVersionPublishedEvent,
 } from "./artifact-realtime";
 import { artifactPageRoute } from "./artifact-search";
+import { artifactDataEvents } from "./artifact-page-data-events";
 import { ArtifactWebPage } from "./artifact-web-page";
 
 /** Where an artifact shows: on its own page, or beside its conversation's chat (Frank, 11-05),
@@ -99,6 +101,11 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
     recoverable: true,
     positioned: true,
     onPublication: ({ data }) => {
+      const dataChange = decodeArtifactDataChangedEvent(data);
+      if (dataChange) {
+        if (dataChange.artifactId === artifactId) artifactDataEvents.emit(dataChange);
+        return;
+      }
       const event =
         decodeArtifactVersionPublishedEvent(data) ?? decodeArtifactAccessChangedEvent(data);
       if (event?.artifactId !== artifactId) return;

@@ -51,6 +51,8 @@ model Artifact {
   commentPositions ArtifactCommentPosition[]
   commentImages   ArtifactCommentImage[]
   follows         ArtifactFollow[]
+  pageDocuments   ArtifactPageDocument[]
+  pageAssets      ArtifactPageAsset[]
 
   @@index([workspaceId, homeKey])
   /// The live name is unique per home (`deletedAt IS NULL`), so a soft delete releases it at once.

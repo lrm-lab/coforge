@@ -1,0 +1,41 @@
+/// One document of a web page's shared data store, which every viewer of the artifact reads and
+/// writes through the page runtime (`db`): a JSON object under a (collection, docId) pair.
+/// `version` counts its writes, so a writer can refuse to overwrite a change it has not seen;
+/// `sizeBytes` is the stored JSON's length, summed against the artifact's cap. The writer is
+/// exactly one of `userId` and `agentId` (`artifact_page_documents_actor_check`), with no foreign
+/// key: this module adds none to a table outside it. Goes with the artifact.
+model ArtifactPageDocument {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  artifactId String   @db.Uuid
+  collection String
+  docId      String
+  data       Json
+  version    Int      @default(1)
+  sizeBytes  Int
+  userId     String?  @db.Uuid
+  agentId    String?  @db.Uuid
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  artifact   Artifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@unique([artifactId, collection, docId])
+  @@map("artifact_page_documents")
+}
+
+/// A file a web page added to its own library at run time (`assets`), separate from the
+/// artifact's versioned files: its bytes are an artifact blob, kept by this row (`sha256`), and
+/// `contentType` is what the server sniffed from them. Goes with the artifact.
+model ArtifactPageAsset {
+  id               String   @id @default(uuid(7)) @db.Uuid
+  artifactId       String   @db.Uuid
+  name             String
+  sha256           String
+  sizeBytes        Int
+  contentType      String
+  uploadedByUserId String?  @db.Uuid
+  createdAt        DateTime @default(now())
+  artifact         Artifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@unique([artifactId, name])
+  @@map("artifact_page_assets")
+}

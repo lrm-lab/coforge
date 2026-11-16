@@ -27,5 +27,6 @@ export const loadArtifactSandboxLink = createServerFn({ method: "GET" })
       version: link.version,
       expiresAt: link.expiresAt.toISOString(),
       viewer: link.viewer,
+      level: link.level,
     };
   });

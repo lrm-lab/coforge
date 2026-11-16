@@ -87,6 +87,34 @@ The artifacts module follows the reference product, Raft; add nothing it does no
   document carries `webrtc 'block'` (the frame inherits it) and the runtime removes the page's own
   constructors, but Chrome 157 does not enforce the directive. Flip the test when a browser does.
 
+## Page data and assets
+
+What a page keeps while it runs, reached only from the host (never from the sandbox origin, which
+serves GET and HEAD alone): the page's frame asks the host over the bridge, the host calls the
+`*.functions.ts` server functions, which call `ArtifactPageData` and `ArtifactPageAssets`
+(`productionArtifactPage`). Raft's `db` and `assets`.
+
+- Every call asks `ArtifactReads.artifact` again and derives the level from that one read
+  (`pageAccess`): `interact` for a Workspace member who reads it, `admin` where
+  `canManageArtifactSharing` holds, `owner` for the author Agent's owner. A method's floor is
+  `PAGE_METHOD_LEVELS` (`features/artifacts/artifact-page-levels.ts`), which the bridge also
+  enforces; the server's check is the authority. Only an `.html` entry has data or assets.
+- `artifact_page_documents` rows are (collection, docId) with a `version` that counts writes
+  (`ifVersion` refuses a stale one) and a size; a write runs under its own advisory lock
+  (`artifact-page-data:<id>`, never the comment lock), so the caps (64 KiB a document, 5 MiB and
+  10,000 documents an artifact) and a batch's atomicity hold. `where` and `orderBy` field names
+  are bound as parameters after a charset check; never build SQL from a page's text.
+- A write announces `artifact.data.changed.v1` (collection only, no content) after it commits, on
+  the channel the artifact's other events use (`announceDataChange`); a watching host reads again
+  through its own access. Never publish a document's data.
+- `artifact_page_assets` names an artifact blob. The row's transaction marks the blob used
+  (`blobs.use`), which keeps the blob sweep away; deleting the row leaves the blob, as a deleted
+  artifact's files do. The type is sniffed from the bytes (`sniffPageAsset`): never take it from
+  the name, and never serve HTML, script, stylesheet or SVG.
+- Assets are served at `/_a/<file token>/<name>` on the page's origin to subresource requests
+  only, and that prefix is in the page's `img-src`, `media-src` and `connect-src`, never
+  `script-src` or `style-src`. A public-link page has no bridge and no assets.
+
 ## Comments
 
 Comments on artifacts are written for Agents (the Agent API's `comments`, `comment`, `review`,

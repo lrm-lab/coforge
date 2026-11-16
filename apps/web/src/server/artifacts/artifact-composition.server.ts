@@ -7,6 +7,8 @@ import { centrifugoArtifactSignals } from "./artifact-signals.server";
 import { Artifacts } from "./artifacts.server";
 import { readSessionSecret } from "#src/server/auth/config.server";
 import { actorNames } from "./artifact-actor-names.server";
+import { ArtifactPageAssets } from "./artifact-page-assets.server";
+import { ArtifactPageData } from "./artifact-page-data.server";
 import { ArtifactSandbox } from "./artifact-sandbox.server";
 import { productionTicketNonces } from "./artifact-sandbox-nonces.server";
 import { artifactSandboxOrigin } from "./artifact-sandbox-config.server";
@@ -70,6 +72,18 @@ export function productionArtifactAttachments(db: PrismaClient): ArtifactAttachm
   };
 }
 
+export function productionArtifactPage(db: PrismaClient) {
+  const { artifacts, blobs } = productionArtifacts(db);
+  return {
+    data: new ArtifactPageData(
+      db,
+      artifacts.reads,
+      centrifugoArtifactSignals(() => createCentrifugoServerApi()),
+    ),
+    assets: new ArtifactPageAssets(db, artifacts.reads, blobs),
+  };
+}
+
 export function productionArtifactNotices(db: PrismaClient): ArtifactNoticePort {
   const events = createSystemAgentEvents(db);
   return {
@@ -96,6 +110,7 @@ export function productionArtifactSandbox(db: PrismaClient) {
   const { artifacts, blobs } = productionArtifacts(db);
   return new ArtifactSandbox({
     reads: artifacts.reads,
+    pageAssets: new ArtifactPageAssets(db, artifacts.reads, blobs),
     readBlob: (workspaceId, sha256) => blobs.read(workspaceId, sha256),
     origin: artifactSandboxOrigin(),
     nonces: productionTicketNonces(),

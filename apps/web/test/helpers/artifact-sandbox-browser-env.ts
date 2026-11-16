@@ -15,6 +15,7 @@ export type SandboxBrowserEnv = Awaited<ReturnType<typeof startSandboxBrowserEnv
 export async function startSandboxBrowserEnv(
   names: readonly string[],
   sitesOf: (context: SiteContext) => Promise<Record<string, Site>> | Record<string, Site>,
+  options: { assetFiles?: Record<string, string> } = {},
 ) {
   const chrome = chromePath();
   if (!chrome) throw new Error("Chrome is required (COFORGE_E2E_CHROME)");
@@ -97,6 +98,16 @@ export async function startSandboxBrowserEnv(
         siteRow(SITES, input.artifactId, input.path),
     },
     readBlob: async (_workspaceId, sha256) => siteBytes(SITES, sha256),
+    pageAssets:
+      options.assetFiles &&
+      ({
+        lookupByFileToken: async (artifactId: string, name: string) => {
+          const path = options.assetFiles![name];
+          return path && siteRow(SITES, artifactId, path)
+            ? { sha256: `${artifactId}/${path}`, contentType: "text/plain; charset=utf-8" }
+            : null;
+        },
+      } as never),
     origin: `http://localhost:${sandboxServer.port}`,
     nonces: new MemoryTicketNonces(),
     secret: async () => "x".repeat(40),
@@ -133,9 +144,10 @@ export async function startSandboxBrowserEnv(
           embedderOrigin,
         })
       ).url,
-    inApp: (link: string, name = "probe") =>
+    inApp: (link: string, name = "probe", second?: string) =>
       `${appOrigin}/?${new URLSearchParams({
         src: link,
+        ...(second ? { src2: second } : {}),
         origin: new URL(link).origin,
         artifact: ID[name] ?? name,
       })}`,
@@ -157,8 +169,11 @@ function framing(src: string): Response {
 
 function hostPage(params: URLSearchParams, hostScript: string): Response {
   const src = params.get("src") ?? "";
+  const frameTag = (id: string, name: string) =>
+    `<iframe id="${id}" name="${name}" style="border:0;width:100%;height:${params.has("src2") ? 300 : 600}px" sandbox="allow-scripts allow-same-origin" allow="clipboard-read 'none'; clipboard-write 'none'" referrerpolicy="no-referrer" data-src="${src}"></iframe>`;
+  const second = params.has("src2") ? frameTag("f2", "second") : "";
   return new Response(
-    `<!doctype html><html><body style="margin:0"><iframe id="f" style="border:0;width:100%;height:600px" sandbox="allow-scripts allow-same-origin" allow="clipboard-read 'none'; clipboard-write 'none'" referrerpolicy="no-referrer" data-src="${src}"></iframe><script>${hostScript.replaceAll("</script", "<\\/script")}</script></body></html>`,
+    `<!doctype html><html><body style="margin:0">${frameTag("f", "first")}${second}<script>${hostScript.replaceAll("</script", "<\\/script")}</script></body></html>`,
     { headers: { "Content-Type": "text/html; charset=utf-8" } },
   );
 }

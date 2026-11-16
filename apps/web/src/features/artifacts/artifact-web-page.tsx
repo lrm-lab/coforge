@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Browser } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
-import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { useAppToast } from "#src/components/ui/toast";
 import { isAppError } from "#src/lib/app-error";
@@ -11,6 +10,7 @@ import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
 import { loadArtifactSandboxLink } from "./artifact-sandbox.functions";
 import { ARTIFACTS_KEY } from "./artifact-queries";
+import { PageConfirmDialog } from "./artifact-page-confirm";
 import { PageErrorBanner, PageExpiredCard, PageFindBar } from "./artifact-page-notices";
 import { useArtifactPageBridge } from "./use-artifact-page-bridge";
 
@@ -104,10 +104,11 @@ function PageFrame({
     () => ({ id: artifactId, title, version, entryPath }),
     [artifactId, title, version, entryPath],
   );
-  const { bridge, linkRequest, error, dismissError, blocked, found } = useArtifactPageBridge({
+  const { bridge, confirmation, error, dismissError, blocked, found } = useArtifactPageBridge({
     frame,
     origin,
     viewer: link.viewer,
+    level: link.level,
     artifact,
   });
   const askAgent = async () => {
@@ -147,21 +148,7 @@ function PageFrame({
         )}
         {blocked && <PageExpiredCard onReload={onReload} />}
       </div>
-      <ConfirmDialog
-        open={linkRequest !== null}
-        onOpenChange={(open) => !open && linkRequest?.settle(false)}
-        tone="default"
-        title={m.doc_page_link_title()}
-        description={m.doc_page_link_body({ title })}
-        detail={
-          <span className="mt-2 block rounded-lg bg-secondary px-3 py-2 text-sm break-all text-primary">
-            {linkRequest?.url}
-          </span>
-        }
-        confirmLabel={m.doc_page_link_open()}
-        errorMessage={m.doc_page_link_failed()}
-        onConfirm={async () => linkRequest?.settle(true)}
-      />
+      <PageConfirmDialog confirmation={confirmation} title={title} />
     </>
   );
 }

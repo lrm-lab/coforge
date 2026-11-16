@@ -126,15 +126,66 @@ function connect() {
   }
   return handshake;
 }
-function call(namespace, method, args) {
-  return request("coforge/call", { namespace: namespace, method: method, args: args });
+function call(namespace, method, args, confirmed) {
+  return request("coforge/call", { namespace: namespace, method: method, args: args }, confirmed ? 120000 : 15000);
+}
+var watchers = new Map();
+var nextWatch = 1;
+function assetBase() {
+  var own = /^\\/_f\\/([^/]+)\\//.exec(location.pathname);
+  return own ? location.origin + "/_a/" + own[1] + "/" : null;
+}
+function assetView(item) {
+  var base = assetBase();
+  return { name: item.name, sizeBytes: item.sizeBytes, contentType: item.contentType, url: base ? base + encodeURIComponent(item.name) : null };
+}
+function writeOptions(options) {
+  return options && options.ifVersion !== undefined ? options.ifVersion : undefined;
 }
 var namespaces = {
   user: function () { return { get: function () { return call("user", "get"); } }; },
   artifact: function () { return { get: function () { return call("artifact", "get"); } }; },
   clipboard: function () { return { copy: function (text) { return call("clipboard", "copy", { text: String(text) }); } }; },
   links: function () { return { open: function (url) { return request("ui/open-link", { url: String(url) }); } }; },
-  comments: function () { return { open: function (options) { return call("comments", "open", options || {}); } }; }
+  comments: function () { return { open: function (options) { return call("comments", "open", options || {}); } }; },
+  db: function () {
+    return {
+      get: function (collection, id) { return call("db", "get", { collection: String(collection), id: String(id) }); },
+      query: function (collection, query) { return call("db", "query", { collection: String(collection), query: query }); },
+      set: function (collection, id, data, options) { return call("db", "set", { collection: String(collection), id: String(id), data: data, ifVersion: writeOptions(options) }, true); },
+      update: function (collection, id, data, options) { return call("db", "update", { collection: String(collection), id: String(id), data: data, ifVersion: writeOptions(options) }, true); },
+      delete: function (collection, id, options) { return call("db", "delete", { collection: String(collection), id: String(id), ifVersion: writeOptions(options) }, true); },
+      batch: function (ops) { return call("db", "batch", { ops: ops }, true); },
+      watch: function (collection, queryOrCallback, maybeCallback) {
+        var callback = typeof queryOrCallback === "function" ? queryOrCallback : maybeCallback;
+        var query = typeof queryOrCallback === "function" ? undefined : queryOrCallback;
+        if (typeof callback !== "function") return Promise.reject(new TypeError("watch needs a callback"));
+        var id = "w" + nextWatch++;
+        watchers.set(id, callback);
+        return call("db", "watch", { id: id, collection: String(collection), query: query }).then(function () {
+          return function stop() {
+            watchers.delete(id);
+            call("db", "unwatch", { id: id }).catch(function () {});
+          };
+        }, function (error) {
+          watchers.delete(id);
+          throw error;
+        });
+      }
+    };
+  },
+  assets: function () {
+    return {
+      list: function () { return call("assets", "list").then(function (items) { return items.map(assetView); }); },
+      url: function (name) {
+        var base = assetBase();
+        if (!base) throw new Error("This page has no asset library here");
+        return base + encodeURIComponent(String(name));
+      },
+      upload: function (file, name) { return call("assets", "upload", { file: file, name: name }, true).then(assetView); },
+      delete: function (name) { return call("assets", "delete", { name: String(name) }, true); }
+    };
+  }
 };
 var apis = {};
 function use(namespace) {
@@ -161,6 +212,16 @@ if (framed) {
       applyTheme(message.params && message.params.theme);
     } else if (message.method === "coforge/find") {
       find(message.params);
+    } else if (message.method === "coforge/watch" && message.params) {
+      var watcher = watchers.get(message.params.id);
+      if (watcher) {
+        try {
+          if (message.params.error) watcher(null, new Error(String(message.params.error)));
+          else watcher(message.params.result, null);
+        } catch (error) {
+          setTimeout(function () { throw error; });
+        }
+      }
     }
   });
   var errors = 0;

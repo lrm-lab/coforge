@@ -7,8 +7,10 @@ export function sandboxPageHeaders(input: {
   pageOrigin: string;
   frameAncestor: string;
   filePrefix: string;
+  assetPrefix?: string;
 }): Headers {
   const own = input.filePrefix;
+  const loaded = input.assetPrefix ? `${own} ${input.assetPrefix}` : own;
   return new Headers({
     "Content-Type": "text/html; charset=utf-8",
     "Content-Security-Policy": withPublicCdns([
@@ -16,10 +18,10 @@ export function sandboxPageHeaders(input: {
       "default-src 'none'",
       `script-src 'unsafe-inline' 'unsafe-eval' blob: ${input.pageOrigin}${PAGE_RUNTIME_PATH} ${own}`,
       `style-src 'unsafe-inline' ${own}`,
-      `img-src data: blob: ${own}`,
+      `img-src data: blob: ${loaded}`,
       `font-src data: ${own}`,
-      `media-src data: blob: ${own}`,
-      `connect-src ${own}`,
+      `media-src data: blob: ${loaded}`,
+      `connect-src ${loaded}`,
       `worker-src blob: ${own}`,
       "child-src blob:",
       "frame-src 'none'",
@@ -44,6 +46,18 @@ export function sandboxFileHeaders(
     "Content-Security-Policy": "sandbox; default-src 'none'",
     ...COMMON,
     "Cache-Control": cacheControl,
+  });
+}
+
+export function sandboxAssetResponse(
+  method: string,
+  contentType: string,
+  bytes: Uint8Array,
+): Response {
+  const headers = sandboxFileHeaders(contentType, bytes.byteLength, "private, no-cache");
+  return new Response(method === "HEAD" ? null : new Blob([bytes as Uint8Array<ArrayBuffer>]), {
+    status: 200,
+    headers,
   });
 }
 

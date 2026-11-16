@@ -1,3 +1,34 @@
+import {
+  BridgeRefusal,
+  INVALID_PARAMS,
+  METHOD_NOT_FOUND,
+  REFUSED,
+  isRecord,
+  type BridgeKit,
+  type CallTable,
+  type ConfirmGate,
+  type PageAssetsPort,
+  type PageConfirm,
+  type PageDataPort,
+  type Params,
+} from "./artifact-page-bridge-core";
+import { createAssetCalls } from "./artifact-page-bridge-assets";
+import { createDataCalls } from "./artifact-page-bridge-data";
+import {
+  PAGE_METHOD_LEVELS,
+  levelReaches,
+  offeredNamespaces,
+  type PageLevel,
+} from "./artifact-page-levels";
+
+export { PageHostError } from "./artifact-page-bridge-core";
+export type {
+  PageAssetsPort,
+  PageConfirm,
+  PageDataCall,
+  PageDataPort,
+} from "./artifact-page-bridge-core";
+
 export type PageTheme = "light" | "dark";
 
 export type PageViewer = { displayName: string; kind: "person" };
@@ -9,10 +40,13 @@ export type PageFrameStatus = { state: "blocked"; reason: string; status: number
 export type PageBridgeHost = {
   viewer: PageViewer;
   artifact: PageArtifact;
+  level: PageLevel;
+  data: PageDataPort;
+  assets: PageAssetsPort;
   theme(): PageTheme;
   userActive(): boolean;
   copyText(text: string): Promise<boolean>;
-  confirmOpenLink(url: string): Promise<boolean>;
+  confirm(request: PageConfirm): Promise<boolean>;
   openLink(url: string): void;
   openComposer(options: { body?: string }): boolean;
   reportError(message: string): void;
@@ -28,31 +62,14 @@ export type PageBridgeFrame = {
 
 export const BRIDGE_PROTOCOL_VERSION = "2026-01-26";
 export const BRIDGE_RATE_LIMIT_PER_MINUTE = 30;
+export const BRIDGE_DATA_RATE_LIMIT_PER_MINUTE = 600;
 export const BRIDGE_DECLINES_BEFORE_MUTE = 3;
 export const BRIDGE_ERROR_REPORTS = 5;
-export const BRIDGE_NAMESPACES = ["user", "artifact", "clipboard", "links", "comments"] as const;
-
-const METHOD_NOT_FOUND = -32601;
-const INVALID_PARAMS = -32602;
-const REFUSED = -32000;
-
-type Params = Record<string, unknown>;
-
-class BridgeRefusal extends Error {
-  constructor(
-    readonly code: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
-const isRecord = (value: unknown): value is Params =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
   const hits = new Map<string, number[]>();
-  let declines = 0;
+  const declines = new Map<ConfirmGate, number>();
+  const consents = new Set<ConfirmGate>();
   let errorReports = 0;
 
   const send = (message: object) =>
@@ -61,27 +78,50 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
   const admit = (key: string) => {
     const now = host.now();
     const recent = (hits.get(key) ?? []).filter((at) => now - at < 60_000);
-    if (recent.length >= BRIDGE_RATE_LIMIT_PER_MINUTE) {
+    const limit = key.startsWith("db.")
+      ? BRIDGE_DATA_RATE_LIMIT_PER_MINUTE
+      : BRIDGE_RATE_LIMIT_PER_MINUTE;
+    if (recent.length >= limit) {
       hits.set(key, recent);
       throw new BridgeRefusal(REFUSED, "Too many requests");
     }
     hits.set(key, [...recent, now]);
   };
 
-  const openLink = async (params: Params) => {
-    admit("ui/open-link");
-    if (declines >= BRIDGE_DECLINES_BEFORE_MUTE) throw new BridgeRefusal(REFUSED, "Muted");
-    const url = httpUrl(params.url);
-    if (!url) throw new BridgeRefusal(INVALID_PARAMS, "Only http and https links open");
-    if (!(await host.confirmOpenLink(url))) {
-      declines += 1;
+  const confirm: BridgeKit["confirm"] = async (gate, request, remember = false) => {
+    if (remember && consents.has(gate)) return;
+    if ((declines.get(gate) ?? 0) >= BRIDGE_DECLINES_BEFORE_MUTE)
+      throw new BridgeRefusal(REFUSED, "Muted");
+    if (!(await host.confirm(request))) {
+      declines.set(gate, (declines.get(gate) ?? 0) + 1);
       throw new BridgeRefusal(REFUSED, "Declined");
     }
+    if (remember) consents.add(gate);
+  };
+
+  const openLink = async (params: Params) => {
+    admit("ui/open-link");
+    if ((declines.get("links") ?? 0) >= BRIDGE_DECLINES_BEFORE_MUTE)
+      throw new BridgeRefusal(REFUSED, "Muted");
+    const url = httpUrl(params.url);
+    if (!url) throw new BridgeRefusal(INVALID_PARAMS, "Only http and https links open");
+    await confirm("links", { kind: "link", url });
     host.openLink(url);
     return {};
   };
 
-  const calls: Record<string, (args: Params) => Promise<unknown> | unknown> = {
+  const kit: BridgeKit = {
+    level: host.level,
+    data: host.data,
+    assets: host.assets,
+    send,
+    confirm,
+  };
+  const dataCalls = createDataCalls(kit);
+
+  const calls: CallTable = {
+    ...dataCalls.calls,
+    ...createAssetCalls(kit),
     "user.get": () => host.viewer,
     "artifact.get": () => host.artifact,
     "clipboard.copy": async (args) => {
@@ -100,6 +140,8 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
     const key = `${String(params.namespace)}.${String(params.method)}`;
     const handler = Object.hasOwn(calls, key) ? calls[key] : undefined;
     if (!handler) throw new BridgeRefusal(METHOD_NOT_FOUND, `${key} isn't offered here`);
+    if (!levelReaches(host.level, PAGE_METHOD_LEVELS[key] ?? "owner"))
+      throw new BridgeRefusal(REFUSED, "Not allowed");
     admit(key);
     return handler(isRecord(params.args) ? params.args : {});
   };
@@ -112,7 +154,7 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
           hostInfo: { name: "coforge", version: "1" },
           hostCapabilities: { openLinks: {} },
           hostContext: { theme: host.theme() },
-          experimental: { "coforge/runtime": { namespaces: [...BRIDGE_NAMESPACES] } },
+          experimental: { "coforge/runtime": { namespaces: offeredNamespaces(host.level) } },
         };
       case "ui/open-link":
         return openLink(params);
@@ -172,6 +214,9 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
               : { code: REFUSED, message: "Failed" },
         });
       }
+    },
+    dispose() {
+      dataCalls.dispose();
     },
     notifyTheme() {
       send({ method: "ui/notifications/host-context-changed", params: { theme: host.theme() } });

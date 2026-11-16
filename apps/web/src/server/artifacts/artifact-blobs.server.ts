@@ -97,6 +97,10 @@ export class StoredArtifactBlobs implements ArtifactBlobStore {
     return blob;
   }
 
+  put(workspaceId: string, bytes: Uint8Array<ArrayBuffer>) {
+    return this.#store({ workspaceId, bytes });
+  }
+
   /** Of `sha256s`, the ones `actor` may name in a save of `artifactId`: granted to it, or used by
    * one of that artifact's versions already; without an artifact, only the grants count. */
   async allowed(

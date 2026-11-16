@@ -1,5 +1,6 @@
 import type {
   ArtifactAccessChangedEvent,
+  ArtifactDataChangedEvent,
   ArtifactVersionPublishedEvent,
 } from "#src/features/artifacts/artifact-realtime";
 import {
@@ -12,11 +13,13 @@ import { errorType } from "#src/server/errors/error-type.server";
 import { artifactHomeConversationId, type ArtifactTier } from "./artifact-access.server";
 
 /** Where an artifact's events go: one realtime channel at a time. */
+export type ArtifactSignalEvent =
+  | ArtifactVersionPublishedEvent
+  | ArtifactAccessChangedEvent
+  | ArtifactDataChangedEvent;
+
 export type ArtifactSignals = {
-  publish(
-    channel: string,
-    event: ArtifactVersionPublishedEvent | ArtifactAccessChangedEvent,
-  ): Promise<void>;
+  publish(channel: string, event: ArtifactSignalEvent): Promise<void>;
 };
 
 /** The signals over Centrifugo; the API is built only when one is sent. */
@@ -37,7 +40,7 @@ function channelsOf(input: { workspaceId: string; homeKey: string; wide: boolean
 async function publishBestEffort(
   signals: ArtifactSignals,
   channels: readonly string[],
-  event: ArtifactVersionPublishedEvent | ArtifactAccessChangedEvent,
+  event: ArtifactSignalEvent,
   failure: string,
 ) {
   for (const channel of channels) {
@@ -92,5 +95,23 @@ export async function announceAccessChange(
       artifactId: input.artifactId,
     },
     "artifacts:access_signal_failed",
+  );
+}
+
+export async function announceDataChange(
+  signals: ArtifactSignals | undefined,
+  input: { workspaceId: string; homeKey: string | null; artifactId: string; collection: string },
+) {
+  if (!signals || input.homeKey === null) return;
+  await publishBestEffort(
+    signals,
+    channelsOf({ workspaceId: input.workspaceId, homeKey: input.homeKey, wide: false }),
+    {
+      type: REALTIME_EVENTS.artifactDataChanged,
+      workspaceId: input.workspaceId,
+      artifactId: input.artifactId,
+      collection: input.collection,
+    },
+    "artifacts:data_signal_failed",
   );
 }

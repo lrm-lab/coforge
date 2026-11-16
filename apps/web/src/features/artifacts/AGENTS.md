@@ -16,3 +16,6 @@ These rules apply to `src/features/artifacts/`. They extend
   and the user activation itself (never the runtime, which the page controls), and posts only to
   that origin, never `*`. A new capability is a method of the bridge, offered in its handshake and
   documented in the Manual topic `apps/web/src/server/agents/manual/topics/artifacts.md`.
+  Its per-method level floors are in `artifact-page-levels.ts`; each confirm-gated capability
+  (`links`, `data`, `assets`) has its own decline count, and only the `data` consent is kept for
+  the frame.

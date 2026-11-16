@@ -6,6 +6,9 @@ import {
 } from "#src/server/app-rate-limits/app-rate-limit.server";
 import { clientAddress } from "#src/server/http/public-origin.server";
 import type { ArtifactReads } from "./artifact-reads.server";
+import { pageLevelOf } from "./artifact-page-access.server";
+import { pageAssetName, type ArtifactPageAssets } from "./artifact-page-assets.server";
+import type { PageLevel } from "#src/features/artifacts/artifact-page-levels";
 import { PAGE_RUNTIME_PATH } from "./artifact-page-runtime.server";
 import { publicMarkdownResponse } from "./artifact-public-markdown.server";
 import { artifactPageOrigin, sandboxTarget } from "./artifact-sandbox-config.server";
@@ -21,6 +24,7 @@ import {
 import type { TicketNonces } from "./artifact-sandbox-nonces.server";
 import { decodeSandboxFilePath, sandboxFileUrlPath } from "./artifact-sandbox-path.server";
 import {
+  sandboxAssetResponse,
   sandboxBlockedPage,
   sandboxRedirect,
   sandboxRefusal,
@@ -39,6 +43,7 @@ export const SANDBOX_OPEN_PATH = "/_coforge/open";
 type SandboxDependencies = {
   reads: Pick<ArtifactReads, "read" | "file" | "fileInVersion">;
   readBlob(workspaceId: string, sha256: string): Promise<Uint8Array | null>;
+  pageAssets?: Pick<ArtifactPageAssets, "lookupByFileToken">;
   origin: string | null;
   nonces: TicketNonces;
   secret(): Promise<string>;
@@ -76,6 +81,7 @@ export class ArtifactSandbox {
     version: number;
     expiresAt: Date;
     viewer: { displayName: string; kind: "person" };
+    level: PageLevel;
   }> {
     const origin = this.deps.origin;
     if (!origin)
@@ -115,6 +121,7 @@ export class ArtifactSandbox {
         displayName: (await this.deps.viewerName?.(input.workspaceId, input.userId)) ?? "",
         kind: "person",
       },
+      level: page.level,
     };
   }
 
@@ -135,6 +142,8 @@ export class ArtifactSandbox {
     if (pathname === SANDBOX_OPEN_PATH) return this.open(request, host);
     const file = /^\/_f\/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\/(.+)$/.exec(pathname);
     if (file) return this.serveFile(request, host, file[1]!, file[2]!);
+    const asset = /^\/_a\/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\/([^/]+)$/.exec(pathname);
+    if (asset) return this.serveAsset(request, host, asset[1]!, asset[2]!);
     const publicPage = /^\/p\/([A-Za-z0-9_-]{43})(?:\/page\/(.+))?$/.exec(pathname);
     if (publicPage) return this.servePublic(request, host, publicPage[1]!, publicPage[2]);
     return sandboxRefusal(404, "Not found.");
@@ -222,9 +231,30 @@ export class ArtifactSandbox {
         frameAncestor: token.o,
         hostOrigin: token.o,
         filePrefix: `${host.pageOrigin}/_f/${tokenValue}/`,
+        assetPrefix: this.deps.pageAssets ? `${host.pageOrigin}/_a/${tokenValue}/` : undefined,
         fileCache: SIGNED_FILE_CACHE,
       }) ?? sandboxRefusal(404, "Not found.")
     );
+  }
+
+  private async serveAsset(
+    request: Request,
+    host: ArtifactHost,
+    tokenValue: string,
+    raw: string,
+  ): Promise<Response> {
+    const name = decodedAssetName(raw);
+    if (!name || !this.deps.pageAssets || fileRequestUse(request.headers) !== "subresource")
+      return sandboxRefusal(404, "Not found.");
+    const token = readSandboxFileToken(tokenValue, await this.deps.secret());
+    if (!token || token.s !== host.pageOrigin || token.a !== host.artifactId || !isOrigin(token.o))
+      return sandboxRefusal(404, "Not found.");
+    if (sandboxGrantExpired(token, this.deps.now()))
+      return sandboxRefusal(403, "This link has expired. Open the page again from CoForge.");
+    const asset = await this.deps.pageAssets.lookupByFileToken(token.a, name);
+    const bytes = asset ? await this.deps.readBlob(token.w, asset.sha256) : null;
+    if (!asset || !bytes) return sandboxRefusal(404, "Not found.");
+    return sandboxAssetResponse(request.method, asset.contentType, bytes);
   }
 
   private async servePublic(
@@ -284,8 +314,8 @@ export class ArtifactSandbox {
     artifactId: string;
     userId: string;
     version?: number;
-  }): Promise<{ version: number; entryPath: string } | null> {
-    const { version, files } = await this.deps.reads.read({
+  }): Promise<{ version: number; entryPath: string; level: PageLevel } | null> {
+    const { version, files, artifact, authorAgentOwnerId } = await this.deps.reads.read({
       workspaceId: input.workspaceId,
       artifactId: input.artifactId,
       reader: { userId: input.userId },
@@ -294,7 +324,11 @@ export class ArtifactSandbox {
     if (!version || !isPageFile(version.entryPath)) return null;
     const entry = files.find((file) => file.path === version.entryPath);
     if (!entry || entry.sizeBytes > ARTIFACT_HTML_LIMIT) return null;
-    return { version: version.number, entryPath: version.entryPath };
+    return {
+      version: version.number,
+      entryPath: version.entryPath,
+      level: pageLevelOf({ canChange: artifact.canChange, authorAgentOwnerId }, input.userId),
+    };
   }
 }
 
@@ -306,6 +340,14 @@ const publicUseAllowed = (path: string, use: FileRequestUse) =>
 function refusable(error: unknown): null {
   if (!(error instanceof AppError)) throw error;
   return null;
+}
+
+function decodedAssetName(raw: string): string | null {
+  try {
+    return pageAssetName(decodeURIComponent(raw));
+  } catch {
+    return null;
+  }
 }
 
 function isOrigin(value: string): boolean {

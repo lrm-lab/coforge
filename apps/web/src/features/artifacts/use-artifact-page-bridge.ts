@@ -6,12 +6,14 @@ import { m } from "#src/paraglide/messages";
 import {
   createPageBridge,
   type PageArtifact,
+  type PageConfirm,
   type PageTheme,
   type PageViewer,
 } from "./artifact-page-bridge";
 import { artifactComposerRequests } from "./artifact-page-composer";
-
-export type LinkRequest = { url: string; settle: (allowed: boolean) => void };
+import type { PageConfirmation } from "./artifact-page-confirm";
+import type { PageLevel } from "./artifact-page-levels";
+import { pageAssetsPort, pageDataPort } from "./artifact-page-ports";
 
 const currentTheme = (): PageTheme =>
   document.documentElement.classList.contains("dark-mode") ? "dark" : "light";
@@ -20,15 +22,16 @@ export function useArtifactPageBridge(input: {
   frame: RefObject<HTMLIFrameElement | null>;
   origin: string;
   viewer: PageViewer;
+  level: PageLevel;
   artifact: PageArtifact;
 }) {
-  const { frame, origin, viewer, artifact } = input;
+  const { frame, origin, viewer, level, artifact } = input;
   const toast = useAppToast();
-  const [linkRequest, setLinkRequest] = useState<LinkRequest | null>(null);
+  const [confirmation, setConfirmation] = useState<PageConfirmation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false);
   const [found, setFound] = useState({ total: 0, active: 0 });
-  const pendingLink = useRef<LinkRequest | null>(null);
+  const pending = useRef<PageConfirmation | null>(null);
 
   const bridge = useMemo(
     () =>
@@ -36,6 +39,9 @@ export function useArtifactPageBridge(input: {
         {
           viewer,
           artifact,
+          level,
+          data: pageDataPort(artifact.id),
+          assets: pageAssetsPort(artifact.id),
           theme: currentTheme,
           userActive: () => navigator.userActivation?.isActive ?? false,
           copyText: async (text) => {
@@ -44,22 +50,22 @@ export function useArtifactPageBridge(input: {
             else toast.error(m.conversation_copy_failed());
             return copied;
           },
-          confirmOpenLink: (url) =>
+          confirm: (request: PageConfirm) =>
             new Promise<boolean>((resolve) => {
-              pendingLink.current?.settle(false);
+              pending.current?.settle(false);
               let settled = false;
-              const request: LinkRequest = {
-                url,
+              const next: PageConfirmation = {
+                request,
                 settle: (allowed) => {
                   if (settled) return;
                   settled = true;
-                  if (pendingLink.current === request) pendingLink.current = null;
-                  setLinkRequest(null);
+                  if (pending.current === next) pending.current = null;
+                  setConfirmation(null);
                   resolve(allowed);
                 },
               };
-              pendingLink.current = request;
-              setLinkRequest(request);
+              pending.current = next;
+              setConfirmation(next);
             }),
           openLink: (url) => void window.open(url, "_blank", "noopener,noreferrer"),
           openComposer: (request) => {
@@ -74,13 +80,16 @@ export function useArtifactPageBridge(input: {
         },
         { origin, window: () => frame.current?.contentWindow ?? null },
       ),
-    [origin, viewer, artifact, frame, toast],
+    [origin, viewer, level, artifact, frame, toast],
   );
 
   useEffect(() => {
     const listener = (event: MessageEvent) => void bridge.handle(event);
     window.addEventListener("message", listener);
-    return () => window.removeEventListener("message", listener);
+    return () => {
+      window.removeEventListener("message", listener);
+      bridge.dispose();
+    };
   }, [bridge]);
 
   useEffect(() => {
@@ -89,11 +98,11 @@ export function useArtifactPageBridge(input: {
     return () => observer.disconnect();
   }, [bridge]);
 
-  useEffect(() => () => pendingLink.current?.settle(false), []);
+  useEffect(() => () => pending.current?.settle(false), []);
 
   return {
     bridge,
-    linkRequest,
+    confirmation,
     error,
     dismissError: () => setError(null),
     blocked,

@@ -187,7 +187,7 @@ addEventListener("coforge:theme", (e) => post({ theme: e.detail.theme, attribute
     frozen: Object.isFrozen(user),
     user: await user.get(),
     artifact: await artifact.get(),
-    missing: await coforge.use("db"),
+    missing: await coforge.use("fs"),
     coldCopy: await settle(clipboard.copy("cold")),
     theme: document.documentElement.getAttribute("data-theme"),
   });
