@@ -192,6 +192,9 @@ snapshot "$OUT/steps/s1-after"
 R=$(newest_result)
 record S1 "active.json current 0.1.0-e2e.1" "$(json_eval "$ROOT/active.json" "d['current']")" "$([[ "$(json_eval "$ROOT/active.json" "d['current']")" == 0.1.0-e2e.1 ]] && echo 0 || echo 1)" "steps/s1-after/active.json"
 record S1 "shim ~/.local/bin/coforge-computer points into the active install" "$(readlink "$HOME/.local/bin/coforge-computer" 2>/dev/null || echo missing)" "$([[ "$(readlink "$HOME/.local/bin/coforge-computer" 2>/dev/null)" == "$ROOT/active/coforge-computer" ]] && echo 0 || echo 1)" "steps/s1-after/state.txt"
+record S1 "shim ~/.local/bin/coforge points into the active install" "$(readlink "$HOME/.local/bin/coforge" 2>/dev/null || echo missing)" "$([[ "$(readlink "$HOME/.local/bin/coforge" 2>/dev/null)" == "$ROOT/active/coforge" ]] && echo 0 || echo 1)" "steps/s1-after/state.txt"
+step s1-coforge-help coforge --help
+record S1 "coforge --help runs after install" "exit $STEP_RC" "$([[ $STEP_RC == 0 ]] && echo 0 || echo 1)" "steps/s1-coforge-help"
 record S1 "receipt succeeded for 0.1.0-e2e.1" "$(json_eval "${R:-/dev/null}" "d.get('status')")/$(json_eval "${R:-/dev/null}" "d.get('version')")" "$([[ "$(json_eval "${R:-/dev/null}" "d.get('status')")" == succeeded ]] && echo 0 || echo 1)" "steps/s1-after/receipts"
 
 # ---------------------------------------------------------------------------------------------

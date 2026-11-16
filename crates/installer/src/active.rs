@@ -36,6 +36,10 @@ pub const ACTIVE_FILE: &str = "active.json";
 /// on Windows.
 const ACTIVE_LINK: &str = "active";
 
+/// The Agent CLI wrapper exposed beside `coforge-computer` on POSIX targets.
+#[cfg(unix)]
+const AGENT_CLI_SHIM: &str = "coforge";
+
 /// The PATH shim's file name on Windows, where a symlink needs privileges the user may lack.
 const WINDOWS_SHIM_FILE: &str = "coforge-computer.cmd";
 
@@ -232,7 +236,44 @@ fn switch_posix_links(
         &active.join(current::EXECUTABLE),
         &binary_directory.join(current::EXECUTABLE),
     )?;
+    let cli_source = active.join(AGENT_CLI_SHIM);
+    if cli_source.exists() {
+        let cli_link = binary_directory.join(AGENT_CLI_SHIM);
+        if let Some(warning) = link_cli_shim(&cli_source, &cli_link)? {
+            eprintln!("{warning}");
+        }
+    }
     Ok(activation)
+}
+
+#[cfg(unix)]
+pub(crate) fn link_cli_shim(cli_source: &Path, cli_link: &Path) -> io::Result<Option<String>> {
+    match fs::symlink_metadata(cli_link) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            replace_symlink(cli_source, cli_link)?;
+            Ok(None)
+        }
+        Err(error) => Err(error),
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            if fs::read_link(cli_link).ok().as_deref() == Some(cli_source) {
+                replace_symlink(cli_source, cli_link)?;
+                Ok(None)
+            } else {
+                Ok(Some(foreign_cli_warning(cli_link, cli_source)))
+            }
+        }
+        Ok(_) => Ok(Some(foreign_cli_warning(cli_link, cli_source))),
+    }
+}
+
+#[cfg(unix)]
+fn foreign_cli_warning(cli_link: &Path, cli_source: &Path) -> String {
+    format!(
+        "warning: {} already exists and is not managed by CoForge; leaving it unchanged. Remove or rename it and run `coforge-computer repair`, or link {} -> {}.",
+        cli_link.display(),
+        cli_link.display(),
+        cli_source.display()
+    )
 }
 
 #[cfg(not(unix))]
@@ -255,12 +296,30 @@ fn posix_is_activated(
     version_directory: &Path,
 ) -> bool {
     let active = install_root.join(ACTIVE_LINK);
+    let cli_target = active.join(AGENT_CLI_SHIM);
+    let cli_link = binary_directory.join(AGENT_CLI_SHIM);
+    let cli_ok = if !cli_target.exists() {
+        true
+    } else {
+        match fs::symlink_metadata(&cli_link) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+            Err(_) => false,
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                let target = fs::read_link(&cli_link).ok();
+                // Our symlink must point at active/coforge; a symlink pointing elsewhere is foreign.
+                target.as_deref() == Some(cli_target.as_path())
+                    || target.is_some_and(|p| p != cli_target)
+            }
+            Ok(_) => true,
+        }
+    };
     points_at_current(&active)
         && current::in_sync(version_directory, &current::directory(install_root))
         && fs::read_link(binary_directory.join(current::EXECUTABLE))
             .ok()
             .as_deref()
             == Some(active.join(current::EXECUTABLE).as_path())
+        && cli_ok
 }
 
 #[cfg(not(unix))]
@@ -335,3 +394,5 @@ fn create_junction(_: &Path, _: &Path) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests;
+#[cfg(all(test, unix))]
+mod cli_shim_tests;
