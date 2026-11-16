@@ -353,7 +353,9 @@ export function RecordsLayout({
                       }}
                     />
                   )}
-                  {weeklyEmpty && <p className="px-2 text-sm text-tertiary">{weeklyEmpty}</p>}
+                  {weeklyEmpty && (
+                    <p className="px-2 text-sm wrap-anywhere text-tertiary">{weeklyEmpty}</p>
+                  )}
                 </div>
               ) : (
                 <CollapsibleSection
