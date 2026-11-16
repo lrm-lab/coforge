@@ -1,31 +1,15 @@
 import { ProgressBar } from "react-aria-components";
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FormEvent,
-  type KeyboardEvent,
-} from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import {
-  Microphone02 as Microphone,
-  Paperclip,
-  RefreshCcw01 as Refresh,
-  Send01 as Send,
-} from "@untitledui/icons";
+import { RefreshCcw01 as Refresh } from "@untitledui/icons";
 import { Spinner } from "#src/components/ui/spinner";
 
 import { Button } from "#src/components/base/buttons/button";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { TextArea } from "#src/components/base/textarea/textarea";
 import { m } from "#src/paraglide/messages";
 import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cx } from "#src/utils/cx";
-import { shouldSendOnEnter } from "#src/features/conversations/composer-behavior";
 import { useConversationRealtime } from "#src/features/conversations/conversation-realtime-client";
 import type { WeeklyReportAssistantSuggestion } from "#src/server/records/weekly-report-assistant-suggestion.server";
 import type {
@@ -33,8 +17,6 @@ import type {
   ReportBodyRestoreView,
   ReportContent,
 } from "./records-content";
-import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
-import { SendCountdownBadge } from "./record-side-panel-cards";
 import { commentThreadStates, sideTimeline } from "./record-side-timeline-model";
 import { RecordSideTimeline, type CommentRow } from "./record-side-timeline";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
@@ -85,6 +67,7 @@ import {
 import type { TemplateMemberOption } from "./weekly-template-members";
 import { useRecordRefresh } from "./use-record-refresh";
 import { RecordSideChatHeader } from "./record-side-chat-header";
+import { RecordSideChatComposer } from "./record-side-chat-composer";
 import { useRecordSideChatSessions, type ChatSessionRow } from "./use-record-side-chat-sessions";
 
 export type { RecordSideSurface };
@@ -179,8 +162,6 @@ export function RecordSidePanel({
   > | null>(null);
   const [setupDismissed, setSetupDismissed] = useState(false);
   const [draft, setDraft] = useState("");
-  const isComposingRef = useRef(false);
-  const lastCompositionEndAtRef = useRef<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(session.error);
   const [dismissedSuggestionIds, setDismissedSuggestionIds] = useState<string[]>(
@@ -440,23 +421,6 @@ export function RecordSidePanel({
     } finally {
       setBusy(false);
     }
-  }
-
-  function onComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    const send = shouldSendOnEnter(
-      {
-        key: event.key,
-        shiftKey: event.shiftKey,
-        ctrlKey: event.ctrlKey,
-        metaKey: event.metaKey,
-        isComposing: event.nativeEvent.isComposing || isComposingRef.current,
-      },
-      { lastCompositionEndAt: lastCompositionEndAtRef.current, now: Date.now() },
-      { newlineModifier: "ctrl" },
-    );
-    if (!send) return;
-    event.preventDefault();
-    void onSubmit(event as unknown as FormEvent);
   }
 
   async function onSubmit(event: FormEvent) {
@@ -856,62 +820,16 @@ export function RecordSidePanel({
           </div>
         ) : null}
 
-        <form onSubmit={(event) => void onSubmit(event)} className="border-t border-secondary p-3">
-          <div className="flex items-end gap-2 rounded-lg border border-secondary bg-primary p-1.5">
-            <ButtonUtility
-              type="button"
-              size="sm"
-              color="tertiary"
-              icon={Paperclip}
-              aria-label={m.records_side_chat_attach()}
-              isDisabled
-            />
-            <TextArea
-              aria-label={m.records_side_chat_placeholder()}
-              value={draft}
-              onChange={(value) => {
-                session.draft = value;
-                setDraft(value);
-              }}
-              onTextAreaKeyDown={onComposerKeyDown}
-              onTextAreaCompositionStart={() => {
-                isComposingRef.current = true;
-              }}
-              onTextAreaCompositionEnd={() => {
-                isComposingRef.current = false;
-                lastCompositionEndAtRef.current = Date.now();
-              }}
-              placeholder={
-                sendLocked
-                  ? m.records_side_chat_placeholder_busy()
-                  : m.records_side_chat_placeholder()
-              }
-              rows={1}
-              textAreaClassName="resize-none border-0 bg-transparent p-1 shadow-none ring-0 focus:ring-0"
-              className="min-w-0 flex-1"
-            />
-            <div className="flex shrink-0 items-center gap-1">
-              <SendCountdownBadge until={countdownUntil} />
-              <ButtonUtility
-                type="button"
-                size="sm"
-                color="tertiary"
-                icon={Microphone}
-                aria-label={m.records_side_chat_voice()}
-                isDisabled
-              />
-              <ButtonUtility
-                type="submit"
-                size="sm"
-                color="secondary"
-                icon={Send}
-                className={RECORDS_PRIMARY_BUTTON_CLASSNAME}
-                aria-label={m.records_side_chat_send()}
-                isDisabled={sendLocked || !draft.trim()}
-              />
-            </div>
-          </div>
-        </form>
+        <RecordSideChatComposer
+          draft={draft}
+          onDraftChange={(value) => {
+            session.draft = value;
+            setDraft(value);
+          }}
+          onSubmit={(event) => void onSubmit(event)}
+          sendLocked={sendLocked}
+          countdownUntil={countdownUntil}
+        />
       </div>
 
       <WeeklyTemplateDetailDialog
