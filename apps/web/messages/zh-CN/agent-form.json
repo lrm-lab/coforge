@@ -45,10 +45,8 @@
   "agent_form_runtime_unavailable_model_missing": "这个模型不在 Computer 的目录里。",
   "agent_form_runtime_unavailable_fast_mode": "这个运行时不支持快速模式。",
   "agent_form_context_window": "上下文窗口",
-  "agent_form_context_window_help": "这个 Agent 的上下文能容纳的 token 数。留空则使用模型自带的数值。",
-  "agent_form_context_window_model": "模型上报 {tokens} tokens。",
+  "agent_form_context_window_help": "留空则用模型自己的值。",
   "agent_form_max_output": "最大输出",
-  "agent_form_max_output_help": "单次回复的最长 token 数。留空则使用模型自带的限制。",
-  "agent_form_max_output_model": "模型上报 {tokens} tokens。",
+  "agent_form_max_output_help": "留空则用模型自己的上限。",
   "agent_form_model_size_error": "请输入整数 token 数。"
 }

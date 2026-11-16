@@ -45,10 +45,8 @@
   "agent_form_runtime_unavailable_model_missing": "That model is not in the Computer’s catalog.",
   "agent_form_runtime_unavailable_fast_mode": "Fast mode is not available on that runtime.",
   "agent_form_context_window": "Context window",
-  "agent_form_context_window_help": "Tokens this Agent's context may hold. Leave empty to use the model's own size.",
-  "agent_form_context_window_model": "The model reports {tokens} tokens.",
+  "agent_form_context_window_help": "Leave empty to use the model's own value.",
   "agent_form_max_output": "Maximum output",
-  "agent_form_max_output_help": "Longest reply, in tokens. Leave empty to use the model's own limit.",
-  "agent_form_max_output_model": "The model reports {tokens} tokens.",
+  "agent_form_max_output_help": "Leave empty to use the model's own limit.",
   "agent_form_model_size_error": "Enter a whole number of tokens."
 }
