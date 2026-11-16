@@ -34,7 +34,7 @@ if ! printf '%s' "$image" | grep -Eq '@sha256:[0-9a-f]{64}$'; then
 	exit 1
 fi
 
-if ! docker image inspect "$image" >/dev/null 2>&1 && ! docker pull --quiet "$image" >/dev/null; then
+if ! docker image inspect "$image" >/dev/null 2>&1 && ! docker pull --quiet --platform linux/amd64 "$image" >/dev/null; then
 	printf 'check-caddy-config: the pinned Caddy image %s could not be pulled; refresh the digest in %s\n' \
 		"$image" "$compose_file" >&2
 	exit 1
@@ -63,7 +63,7 @@ cp -R "$(dirname "$caddyfile")/." "$check_dir"
 chmod -R a+rX "$check_dir"
 check_dir="$(cd "$check_dir" && pwd -P)"
 
-if ! docker run --rm \
+if ! docker run --rm --platform linux/amd64 \
 	-e "COFORGE_DESKTOP_UPSTREAM=$upstream" \
 	-e "COFORGE_DESKTOP_PROXY_SECRET=caddy-config-check" \
 	-e "ALIDNS_ACCESS_KEY_ID=validate-only" \
