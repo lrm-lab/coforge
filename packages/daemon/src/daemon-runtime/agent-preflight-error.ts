@@ -2,6 +2,8 @@ import type { AgentProxyFailureDetails } from "@lrm/coforge-sdk/internal";
 import { AGENT_MESSAGE_DRAFT_TTL_MS } from "#src/persistence/agent-message-draft-store";
 import type { AgentSendVerdict } from "./agent-send-verdict";
 
+export const NOT_RUNNING = "daemon runtime is not running";
+
 /**
  * A local precondition that failed before `DaemonRuntime` ever issued a request to the Web/backend
  * server: an invalid Agent local context, a runtime that is not started or connected, a missing

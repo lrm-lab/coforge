@@ -120,7 +120,6 @@ import { runtimeMachineStatus } from "./machine-status-reporter";
 import { agentActivityDrafts } from "./agent-activity-drafts";
 import { sendAgentStatus, type AgentStatusReportPorts } from "./agent-status-report";
 import { agentIdForContext, contextFor } from "./agent-context";
-import { buildLaunchFailureActivity } from "./agent-failure-presentation";
 import { RuntimeRelease, wakeRequest, type WakeRestart } from "./runtime-release";
 import { beginWakeLaunch } from "./wake-launch";
 import { AgentFeatureSync } from "./agent-feature-sync";
@@ -156,7 +155,8 @@ import { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store
 import type { MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
 import type { SystemCleaner, SystemCleanerOptions } from "#src/system-cleaner/system-cleaner";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
-import { AgentPreflightError } from "./agent-preflight-error";
+import { AgentPreflightError, NOT_RUNNING } from "./agent-preflight-error";
+import { launchFailureActivity } from "./runtime-launch-failure-activity";
 import { shutdownReasonForHold, type RunnerHold } from "./shutdown-reason";
 import { CodeAgentInventorySync, type CodeAgentDiscovery } from "./code-agent-inventory-sync";
 import { RuntimeAuthReporter } from "./runtime-auth-reporter";
@@ -176,8 +176,6 @@ import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registrati
 
 /** Per-provider reading deadline supplied by a runtime usage scan. */
 export { USAGE_SCAN_READ_TIMEOUT_MS } from "./runtime-agent-flows";
-
-const NOT_RUNNING = "daemon runtime is not running";
 
 /** A daemon-owned resident runtime for one supervised Workspace. */
 export class DaemonRuntime {
@@ -728,7 +726,7 @@ export class DaemonRuntime {
       revokeAgentApiKey: (agentId, apiKey, scope) =>
         this.#revokeAgentApiKey(agentId, apiKey, scope),
       launchFailureActivity: (agentId, provider, error) =>
-        this.#launchFailureActivity(agentId, provider, error),
+        launchFailureActivity(agentId, provider, error, this.#drafts),
       appInbox: this.#inboxCoordinator,
       attachSessionMemory: attachFreshSessionMemoryPort(this.#memoryHooks),
       relaunchResumed: (agentId, restart, request) => {
@@ -997,7 +995,7 @@ export class DaemonRuntime {
         assertRunning: () => this.#assertRunning(),
         assertAgentNotStopping: (id) => this.#assertAgentNotStopping(id),
         migrations: this.#migrations,
-        requestAppConfigSnapshot: (id) => this.#requestAppConfigSnapshot(id),
+        requestAppConfigSnapshot: (id) => requestAppConfigSnapshot(this.#appInboxSyncPorts(), id),
         requestReminderSnapshot: (id) => this.#reminderSnapshots.request(id, "agent_start"),
         inputDrain: this.#inputDrain,
         introducedAgents: this.#introducedAgents,
@@ -1305,10 +1303,6 @@ export class DaemonRuntime {
       (agentId) => this.#launchCoordinator.dropOwedRecovery(agentId),
     );
 
-  /** The error Activity for a launch that did not start; `agent-failure-presentation` builds it. */
-  #launchFailureActivity = (agentId: string, provider: RuntimeProvider, error: unknown) =>
-    buildLaunchFailureActivity(agentId, provider, error, this.#drafts);
-
   get #revokeAgentApiKey() {
     return revokeAgentApiKey.bind(undefined, this.#transport, this.agentApiKeys);
   }
@@ -1356,10 +1350,6 @@ export class DaemonRuntime {
 
   #resyncAppConfigs(): void {
     resyncAppConfigs(this.#appInboxSyncPorts());
-  }
-
-  #requestAppConfigSnapshot(agentId: string): void {
-    requestAppConfigSnapshot(this.#appInboxSyncPorts(), agentId);
   }
 
   async inbox(context: string, request: LocalInboxRequest): Promise<InboxResponse> {
