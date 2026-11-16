@@ -19,6 +19,14 @@ import { finishedAgentUsername } from "./agent-username";
 import { AgentUsernameField } from "./agent-username-field";
 import { useRefreshAgentDirectory } from "./workspace-agents-realtime";
 
+export function externalAgentInstallCommand(): string {
+  const origin =
+    typeof window !== "undefined" && window.location.origin
+      ? window.location.origin
+      : "https://coforge.example";
+  return `curl -fsSL ${origin}/computer/install.sh | sh`;
+}
+
 export function externalAgentLoginCommand(workspaceSlug: string, agentName: string): string {
   const origin =
     typeof window !== "undefined" && window.location.origin
@@ -34,39 +42,66 @@ export function ExternalAgentCommandBox({
   workspaceSlug: string;
   agentName: string;
 }) {
-  const [copied, setCopied] = useState(false);
-  const command = externalAgentLoginCommand(workspaceSlug, agentName);
+  const [copiedKey, setCopiedKey] = useState<"install" | "login" | null>(null);
+  const installCommand = externalAgentInstallCommand();
+  const loginCommand = externalAgentLoginCommand(workspaceSlug, agentName);
 
   useEffect(() => {
-    if (!copied) return;
-    const timer = window.setTimeout(() => setCopied(false), 2000);
+    if (!copiedKey) return;
+    const timer = window.setTimeout(() => setCopiedKey(null), 2000);
     return () => window.clearTimeout(timer);
-  }, [copied]);
+  }, [copiedKey]);
 
-  async function copyCommand() {
+  async function copy(key: "install" | "login", text: string) {
     try {
-      await navigator.clipboard.writeText(command);
-      setCopied(true);
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
     } catch {
       // Clipboard may be blocked; the command remains selectable.
     }
   }
 
   return (
-    <div className="rounded-lg border border-secondary bg-secondary_subtle p-3">
-      <pre className="overflow-x-auto font-mono text-xs leading-relaxed break-all whitespace-pre-wrap text-primary select-all">
-        {command}
-      </pre>
-      <div className="mt-2.5 flex justify-end">
-        <Button
-          type="button"
-          size="sm"
-          color="secondary"
-          iconLeading={copied ? Check : Copy01}
-          onPress={() => void copyCommand()}
-        >
-          {copied ? m.external_agent_connect_copied() : m.external_agent_connect_copy()}
-        </Button>
+    <div className="space-y-3">
+      <div className="rounded-lg border border-secondary bg-secondary_subtle p-3">
+        <p className="text-xs font-medium text-primary">{m.external_agent_install_label()}</p>
+        <p className="mt-0.5 text-xs text-tertiary">{m.external_agent_install_note()}</p>
+        <pre className="mt-2 overflow-x-auto font-mono text-xs leading-relaxed break-all whitespace-pre-wrap text-primary select-all">
+          {installCommand}
+        </pre>
+        <div className="mt-2 flex justify-end">
+          <Button
+            type="button"
+            size="sm"
+            color="secondary"
+            iconLeading={copiedKey === "install" ? Check : Copy01}
+            onPress={() => void copy("install", installCommand)}
+          >
+            {copiedKey === "install"
+              ? m.external_agent_connect_copied()
+              : m.external_agent_connect_copy()}
+          </Button>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-secondary bg-secondary_subtle p-3">
+        <p className="text-xs font-medium text-primary">{m.external_agent_login_label()}</p>
+        <pre className="mt-2 overflow-x-auto font-mono text-xs leading-relaxed break-all whitespace-pre-wrap text-primary select-all">
+          {loginCommand}
+        </pre>
+        <div className="mt-2 flex justify-end">
+          <Button
+            type="button"
+            size="sm"
+            color="secondary"
+            iconLeading={copiedKey === "login" ? Check : Copy01}
+            onPress={() => void copy("login", loginCommand)}
+          >
+            {copiedKey === "login"
+              ? m.external_agent_connect_copied()
+              : m.external_agent_connect_copy()}
+          </Button>
+        </div>
       </div>
     </div>
   );

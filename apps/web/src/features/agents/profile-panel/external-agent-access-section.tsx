@@ -78,7 +78,7 @@ export function ExternalAgentAccessSection({
                 key={credential.id}
                 className="flex items-start justify-between gap-3 rounded-lg border border-secondary bg-secondary_subtle px-3 py-2.5"
               >
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-primary">{label}</p>
                   <p className="mt-0.5 truncate text-xs text-tertiary">
                     {[credential.os, credential.clientName].filter(Boolean).join(" · ") || "—"}
@@ -99,6 +99,7 @@ export function ExternalAgentAccessSection({
                     type="button"
                     size="sm"
                     color="secondary"
+                    className="shrink-0"
                     isDisabled={busyId !== null}
                     isLoading={busyId === credential.id}
                     onPress={() => void handleRevokeOne(credential.id)}

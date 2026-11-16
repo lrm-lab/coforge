@@ -232,7 +232,7 @@ function ExternalGrantSummary({ grant }: { grant: ExternalGrantDetails }) {
   ];
   return (
     <div className="rounded-xl border border-secondary bg-secondary_subtle p-4 text-sm">
-      <p className="font-medium text-primary">
+      <p className="font-medium break-words text-primary">
         {m.device_verify_external_target({
           agent: grant.agent.name,
           workspace: grant.workspace.name || grant.workspace.slug,
