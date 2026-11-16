@@ -8,6 +8,18 @@ primitives and the lint-exemption policy.
   behavior.
 - `base/` holds official MIT Untitled UI source installed with its CLI.
   Preserve upstream APIs and interaction logic; adapt feature callers instead.
+- Look Untitled UI up through the project's `untitledui` MCP server (`.mcp.json`,
+  `.codex/config.toml`): `search_components` or `list_components` before writing a
+  `ui/` primitive, `search_icons` for an icon's exact import name. It serves free
+  components only; when it says not to build a PRO component from scratch, follow
+  `ui/README.md` instead.
+- An official component's props are its installed source. For usage examples, read
+  its docs page as Markdown by appending `.md` to the URL
+  (`https://www.untitledui.com/react/components/select.md`); the props table is
+  not in it. Upstream's
+  agent guide, `https://www.untitledui.com/react/AGENT.md`, lists the semantic
+  color utilities; its advice to edit `base/`, add variants or import through
+  `@/` does not apply here.
 - `ui/` holds compatibility adaptations and product-specific primitives, not
   unmodified official components.
 - CoForge color tokens remain authoritative. The `.untitled-ui` class scopes
