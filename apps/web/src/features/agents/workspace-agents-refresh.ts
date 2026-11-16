@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { QueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { AGENT_MODELS_KEY } from "./agent-models";
+import { MEMBER_DIRECTORY_KEY } from "./member-directory-queries";
 import type { ExtraAgent } from "./extra-agent";
 import type { LiveAgent } from "./workspace-agents-realtime";
 
@@ -80,7 +81,8 @@ export function createAgentDirectoryInvalidator(
   };
 }
 
-export function useAgentDirectoryInvalidator(queryClient: QueryClient) {
+export function useAgentDirectoryInvalidator() {
+  const queryClient = useQueryClient();
   const directoryInvalidator = useMemo(
     () =>
       createAgentDirectoryInvalidator(() => {
@@ -90,6 +92,10 @@ export function useAgentDirectoryInvalidator(queryClient: QueryClient) {
         });
         // The message headers' model and description lines.
         void queryClient.invalidateQueries({ queryKey: AGENT_MODELS_KEY, refetchType: "active" });
+        void queryClient.invalidateQueries({
+          queryKey: MEMBER_DIRECTORY_KEY,
+          refetchType: "active",
+        });
       }),
     [queryClient],
   );

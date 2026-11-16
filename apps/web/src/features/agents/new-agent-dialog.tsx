@@ -33,9 +33,11 @@ import { useCurrentWorkspaceId, useRefreshAgentDirectory } from "./workspace-age
 export function NewAgentDialog({
   open,
   onOpenChange,
+  conversationReplacesPage = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  conversationReplacesPage?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   return (
@@ -44,6 +46,7 @@ export function NewAgentDialog({
         open={open}
         busy={busy}
         onClose={() => onOpenChange(false)}
+        conversationReplacesPage={conversationReplacesPage}
         onBusyChange={setBusy}
       />
     </AgentCreateModal>
@@ -63,12 +66,14 @@ function NewAgentForms({
   open,
   busy,
   onClose,
+  conversationReplacesPage,
   onBusyChange,
 }: {
   open: boolean;
   /** A conversation is opening: the dialog stays, and so does the kind. */
   busy: boolean;
   onClose: () => void;
+  conversationReplacesPage: boolean;
   onBusyChange: (busy: boolean) => void;
 }) {
   const [kind, setKind] = useState<AgentKind>("cloud");
@@ -115,11 +120,16 @@ function NewAgentForms({
         </RadioGroup>
       </AgentCreateIntro>
       {kind === "local" ? (
-        <NewLocalAgent onClose={onClose} onBusyChange={onBusyChange} />
+        <NewLocalAgent
+          onClose={onClose}
+          conversationReplacesPage={conversationReplacesPage}
+          onBusyChange={onBusyChange}
+        />
       ) : (
         <CloudAgentForm
           open={open}
           onClose={onClose}
+          conversationReplacesPage={conversationReplacesPage}
           onBusyChange={onBusyChange}
           onSubmittingChange={setSubmitting}
           autoFocus={!switched}
@@ -133,9 +143,11 @@ function NewAgentForms({
  * may have come online since), and a create that opens the new Agent's direct conversation. */
 function NewLocalAgent({
   onClose,
+  conversationReplacesPage,
   onBusyChange,
 }: {
   onClose: () => void;
+  conversationReplacesPage: boolean;
   onBusyChange: (busy: boolean) => void;
 }) {
   const workspaceId = useCurrentWorkspaceId();
@@ -188,9 +200,12 @@ function NewLocalAgent({
         const created = await create({ data: input });
         await refreshDirectory();
         // The Agent exists now: a conversation that fails to open leaves it in the sidebar.
-        if (await openDirect({ agentId: created.agent.id })) {
+        if (
+          await openDirect({ agentId: created.agent.id }, { replace: conversationReplacesPage })
+        ) {
           await refreshSidebar(["dms"]);
           closeList();
+          if (conversationReplacesPage) return;
         }
         onClose();
       }}

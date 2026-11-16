@@ -19,6 +19,7 @@ import { AgentUsernameField } from "./agent-username-field";
 export function CloudAgentForm({
   open,
   onClose,
+  conversationReplacesPage,
   onBusyChange,
   onSubmittingChange,
   autoFocus,
@@ -27,6 +28,7 @@ export function CloudAgentForm({
    * close animation, so a closed dialog never opens a conversation. */
   open: boolean;
   onClose: () => void;
+  conversationReplacesPage: boolean;
   onBusyChange: (busy: boolean) => void;
   onSubmittingChange: (submitting: boolean) => void;
   /** Whether the name takes the focus: as the dialog opens, not when the kind switch shows it. */
@@ -115,7 +117,9 @@ export function CloudAgentForm({
             setOpening(true);
             let opened;
             try {
-              if (await openDirect({ agentId: result.agentId })) {
+              if (
+                await openDirect({ agentId: result.agentId }, { replace: conversationReplacesPage })
+              ) {
                 await refreshSidebar(["dms"]);
                 opened = true;
               }
@@ -127,7 +131,7 @@ export function CloudAgentForm({
             }
             if (opened) {
               closeList();
-              close();
+              if (!conversationReplacesPage) close();
             }
             return;
           }

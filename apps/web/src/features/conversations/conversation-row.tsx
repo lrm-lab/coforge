@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Link as AriaLink } from "react-aria-components";
 import { BellOff01 } from "@untitledui/icons";
@@ -106,12 +106,17 @@ export function ConversationRow({
   const router = useRouter();
   const workspaceSlug = useWorkspaceSlug();
   const [hover] = useState(createRowHover);
+  const link = useRef<HTMLAnchorElement>(null);
+  useEffect(() => {
+    if (current) link.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
+  }, [current]);
   const route = conversationRoute(target, workspaceSlug);
   return (
     // The row is a React Aria link so the conversation menu's `MenuTrigger trigger="contextMenu"`
     // can use it as its trigger; `render` hands the element to TanStack's `Link`, which owns
     // navigation (React Aria's documented client-side routing pattern, react-aria.adobe.com/Link).
     <AriaLink
+      ref={link}
       href={router.buildLocation(route).href}
       // `href` is always set, so React Aria renders an `<a>`; the check narrows the props type.
       render={(props) => ("href" in props ? <Link {...props} {...route} /> : <span {...props} />)}

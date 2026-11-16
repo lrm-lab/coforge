@@ -27,6 +27,7 @@ export function MemberDialogs({
       <NewAgentDialog
         open={allowed && dialog === "create-agent"}
         onOpenChange={(next) => onDialogChange(next ? "create-agent" : undefined)}
+        conversationReplacesPage
       />
     </>
   );

@@ -152,7 +152,7 @@ export function WorkspaceAgentsProvider({
       }),
     [loadExtras, watched],
   );
-  const directoryInvalidator = useAgentDirectoryInvalidator(queryClient);
+  const directoryInvalidator = useAgentDirectoryInvalidator();
 
   // The Agents visible to this viewer beyond their own `listAgents` roster (another member's
   // public Agents, and, for an owner/admin or a private Agent's creator, private ones): each is a

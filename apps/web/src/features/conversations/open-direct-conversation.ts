@@ -18,12 +18,13 @@ export function useOpenDirectConversation(onError?: () => void) {
   const workspaceSlug = useWorkspaceSlug();
   const toast = useAppToast();
   return useCallback(
-    async (peer: { agentId: string } | { userId: string }) => {
+    async (peer: { agentId: string } | { userId: string }, options?: { replace?: boolean }) => {
       try {
         const { conversationId } = await open({ data: peer });
         await navigate({
           to: "/w/$workspaceSlug/dm/$dmId",
           params: { workspaceSlug, dmId: conversationId },
+          replace: options?.replace,
         });
         return true;
       } catch {

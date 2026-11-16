@@ -26,6 +26,8 @@ These rules apply to `src/features/agents/`.
   reads its own Agent with `select` and never receives the map. The query is read again on focus
   and reconnect, when an unknown Agent newer than the list appears, after a runtime or profile
   save, and on a visibility or directory change.
+- The Members directory (`MEMBER_DIRECTORY_KEY`) is re-read on the realtime directory change
+  (`useAgentDirectoryInvalidator`); a create path does not invalidate it itself.
 - `agent-status-realtime.ts` consumes backend display snapshots and status events, accepting newer revisions with no reducer; at display expiry it refreshes and retries, keeping the last snapshot — an unavailable initial one is unknown, not offline.
   `agent-control-realtime.ts` decodes `agent.control.v1` into the per-Agent control-phase store `agent-runtime-controls.ts` reads for pending labels and disabled controls while an operation runs; a phase-only event never erases a same-request error, and pending entries lapse after `AGENT_CONTROL_PENDING_TTL_MS`.
 - Activity lives in the TanStack Query cache (`agent-activity-queries.ts`).
