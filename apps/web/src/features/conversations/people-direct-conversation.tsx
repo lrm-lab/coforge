@@ -5,6 +5,7 @@ import { getRouteApi } from "@tanstack/react-router";
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
 import { useMemberOnline } from "#src/features/workspaces/member-presence";
 import { m } from "#src/paraglide/messages";
+import { ConversationFocusButton } from "./conversation-focus-button";
 import { conversationHeaderTabs, type HeaderTabs } from "./conversation-header-tabs";
 import { ConversationListButton } from "./conversation-list-button";
 import { DirectSettingsButton } from "./direct-settings-panel";
@@ -68,7 +69,8 @@ export function PeopleDirectConversationHeader({
       actions={
         // The -mr-1.5 cancels the button's p-1.5 so its glyph lands on the pane gutter, as in the
         // channel header.
-        <div className="-mr-1.5 flex shrink-0 items-center">
+        <div className="-mr-1.5 flex shrink-0 items-center gap-3">
+          <ConversationFocusButton />
           <DirectSettingsButton
             conversationId={conversation.conversationId}
             name={peer.displayName}

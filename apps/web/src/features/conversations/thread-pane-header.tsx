@@ -12,6 +12,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { m } from "#src/paraglide/messages";
+import { ConversationFocusButton } from "./conversation-focus-button";
 
 /** The viewer's follow state for a thread, where following is offered. */
 export type ThreadFollow = { followed: boolean; onChange: (followed: boolean) => void };
@@ -77,6 +78,7 @@ export function ThreadPaneHeader({
       </h2>
       <div className="-mr-1.5 flex shrink-0 items-center gap-1">
         {action}
+        <ConversationFocusButton panel="thread" />
         {(onViewInConversation || follow) && (
           <Dropdown.Root>
             <ButtonUtility

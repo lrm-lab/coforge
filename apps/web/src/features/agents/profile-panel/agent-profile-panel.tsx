@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -99,10 +99,13 @@ export function AgentProfilePanel({
 }) {
   const timeZone = appRoute.useLoaderData().timeZone;
   const router = useRouter();
+  const root = useRef<HTMLDivElement>(null);
   useHotkey(
     "Escape",
     () => {
-      if (!document.querySelector("[role=dialog], [role=alertdialog], [role=listbox], [role=menu]"))
+      // A panel hidden behind the chat's full screen keeps its keys.
+      if (root.current?.offsetParent === null) return;
+      if (document.querySelector("[role=dialog], [role=alertdialog], [role=listbox], [role=menu]"))
         onClose();
     },
     { ignoreInputs: true, preventDefault: false },
@@ -258,7 +261,7 @@ export function AgentProfilePanel({
   const diagnosticFacts = profile && profileDiagnosticFacts(profile);
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col">
+    <div ref={root} className="flex h-full min-h-0 min-w-0 flex-col">
       <AgentProfileHeader
         canMessage={Boolean(profile?.canMessage)}
         deleted={deleted}

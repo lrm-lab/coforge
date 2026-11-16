@@ -49,6 +49,7 @@ import { useDirectChannelAction, type DirectChannelAction } from "./channel-dire
 import { ActionsSection } from "./channel-settings-actions";
 import { StopChannelAgentsDialog } from "./stop-channel-agents-dialog";
 import { InfoForm, useInfoForm } from "./channel-settings-info";
+import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
 
 /**
  * The channel header's details-and-settings slideout: identity, the Members strip, the Info form
@@ -116,11 +117,9 @@ export function ChannelSettingsPanel({
     const own = document.querySelector(
       `[role="dialog"][aria-label="${m.channel_settings_open()}"]`,
     );
-    const above = [
-      ...document.querySelectorAll(
-        '[role="dialog"], [role="alertdialog"], [role="listbox"], [role="menu"]',
-      ),
-    ].filter((element) => element !== own);
+    const above = [...document.querySelectorAll(OPEN_OVERLAY_SELECTOR)].filter(
+      (element) => element !== own,
+    );
     if (above.length > 0) return;
     event.preventDefault();
     event.stopPropagation();

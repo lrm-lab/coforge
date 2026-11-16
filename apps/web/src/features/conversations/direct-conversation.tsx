@@ -13,6 +13,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { TabbedHeader } from "#src/components/layout/tabbed-header";
 import { DirectSettingsButton } from "./direct-settings-panel";
+import { ConversationFocusButton } from "./conversation-focus-button";
 import { conversationHeaderTabs, type HeaderTabs } from "./conversation-header-tabs";
 import { ConversationListButton } from "./conversation-list-button";
 import { DirectThreadedConversation } from "./direct-threaded-conversation";
@@ -133,7 +134,8 @@ export function DirectConversationHeader({
       actions={
         // The -mr-1.5 cancels the button's p-1.5 so its glyph lands on the pane gutter, as in the
         // channel header.
-        <div className="-mr-1.5 flex shrink-0 items-center">
+        <div className="-mr-1.5 flex shrink-0 items-center gap-3">
+          <ConversationFocusButton />
           <DirectSettingsButton
             conversationId={conversation.conversationId}
             name={conversation.agent.displayName}

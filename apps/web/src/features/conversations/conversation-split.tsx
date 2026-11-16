@@ -6,6 +6,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { ConversationSlot } from "#src/features/agents/profile-panel/profile-panel-slot";
 
+import type { FocusedPanel } from "./conversation-focus-model";
 import { CONVERSATION_LIST_COLUMN } from "./conversation-list-width";
 import { localLayoutStorage } from "./local-layout-storage";
 
@@ -22,12 +23,18 @@ export function ConversationSplit({
   side,
   visibleSlot,
   threadAlone,
+  focused,
 }: {
   main: ReactNode;
-  side: ReactNode;
+  /** The pane beside the conversation, told whether the conversation stands beside it (not covered
+   * by it, not in full screen), which the thread's title depends on. */
+  side: (beside: boolean) => ReactNode;
   visibleSlot: ConversationSlot | undefined;
   /** A thread shown without its conversation (Activity). */
   threadAlone: boolean;
+  /** The pane in full screen (task #75): the other and the separator hide. The panes stay mounted,
+   * and the library keeps its sizes, so leaving restores the split. */
+  focused?: FocusedPanel;
 }) {
   // The thread/profile pane's share of the width is the user's to set; remembered across visits,
   // and kept separate per slot (`react-resizable-panels` derives its storage key from `panelIds`,
@@ -93,11 +100,22 @@ export function ConversationSplit({
         className="flex min-h-0 min-w-0 flex-1 flex-col"
       >
         {!threadAlone && (
-          <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", visibleSlot && "hidden")}>
+          <div
+            className={cn(
+              "flex min-h-0 min-w-0 flex-1 flex-col",
+              visibleSlot && focused !== "chat" && "hidden",
+            )}
+          >
             {main}
           </div>
         )}
-        {side && <div className="flex min-h-0 min-w-0 flex-1 flex-col">{side}</div>}
+        {visibleSlot && (
+          <div
+            className={cn("flex min-h-0 min-w-0 flex-1 flex-col", focused === "chat" && "hidden")}
+          >
+            {side(false)}
+          </div>
+        )}
       </div>
     );
   }
@@ -119,26 +137,30 @@ export function ConversationSplit({
         <Panel
           id="main"
           minSize={`${MAIN_PANE_MIN_REM}rem`}
+          hidden={focused === "thread"}
           className="flex min-h-0 min-w-0 flex-col"
         >
           {main}
         </Panel>
         {visibleSlot && (
           <>
-            <Separator
-              aria-label={
-                visibleSlot === "thread" ? m.conversation_thread() : m.agent_profile_resize()
-              }
-              className="hidden w-px shrink-0 bg-border-secondary transition-colors hover:bg-brand-solid data-[separator=active]:bg-brand-solid md:block"
-            />
+            {!focused && (
+              <Separator
+                aria-label={
+                  visibleSlot === "thread" ? m.conversation_thread() : m.agent_profile_resize()
+                }
+                className="hidden w-px shrink-0 bg-border-secondary transition-colors hover:bg-brand-solid data-[separator=active]:bg-brand-solid md:block"
+              />
+            )}
             <Panel
               id={visibleSlot}
               defaultSize="35"
               minSize={`${SIDE_PANE_MIN_REM}rem`}
               maxSize="60"
+              hidden={focused === "chat"}
               className="flex min-h-0 min-w-0 flex-col"
             >
-              {side}
+              {side(focused !== "thread")}
             </Panel>
           </>
         )}

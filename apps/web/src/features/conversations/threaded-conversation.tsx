@@ -29,6 +29,7 @@ import { TaskEarlierDiscussion } from "./task-earlier-discussion";
 import { NO_THREADS } from "./thread-summary-model";
 import { useThreadTailSequence } from "./thread-queries";
 import { ThreadRootState, type ThreadRootLoad } from "./thread-root-state";
+import { useConversationFocus } from "./conversation-focus";
 import { ConversationSplit } from "./conversation-split";
 import { ConversationIdProvider } from "./conversation-id";
 import { ThreadStoreProvider, useConversationThreadStore } from "./thread-store";
@@ -242,8 +243,11 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
     profileOpen,
   });
   const threadPaneVisible = (rootId: string) => visibleSlot === "thread" && selected === rootId;
-  // The thread in view is marked read: the task popup's when it is open, else the side pane's.
-  const threadInView = openTaskRoot?.id ?? (detailVisible ? selected : undefined);
+  const focus = useConversationFocus();
+  // The thread in view is marked read: the task popup's when it is open, else the side pane's,
+  // unless the chat's full screen hides it.
+  const threadInView =
+    openTaskRoot?.id ?? (detailVisible && focus?.focused !== "chat" ? selected : undefined);
   const threadInViewSequence = useThreadTailSequence(conversation.conversationId, threadInView);
   const { visited, windowRead, threadRootFailure, loadThreadRoot } = useConversationSync({
     conversation,
@@ -328,7 +332,9 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       />
     </ThreadStoreProvider>
   );
-  const conversationSidePane = visibleSlot && (
+  // Beside the chat, whose header names the conversation, the thread's title leaves that out;
+  // covering it, or in full screen, it keeps it.
+  const conversationSidePane = (beside: boolean) => (
     <>
       {visibleSlot === "profile" && profileAgentId && (
         <AgentProfilePanel
@@ -362,7 +368,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
             <ThreadPane
               {...threadPaneProps(root)}
               onClose={threadClose}
-              threadContext={threadContext}
+              threadContext={beside ? undefined : threadContext}
               onViewInConversation={() => viewInConversation(rootId)}
               threadFollow={threadFollow?.(rootId)}
               emptyState={{
@@ -386,7 +392,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         >
           <ThreadRootState
             load={selectedRootLoad}
-            context={threadContext}
+            context={beside ? undefined : threadContext}
             onClose={threadClose}
             onRetry={() => void loadThreadRoot(selected)}
           />
@@ -401,6 +407,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         side={conversationSidePane}
         visibleSlot={visibleSlot}
         threadAlone={threadAlone}
+        focused={focus?.focused}
       />
       {taskLayer}
     </>
