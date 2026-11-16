@@ -9,6 +9,7 @@ import { getLogger } from "@logtape/logtape";
 import { setContextViewMessageIds } from "./context-view-runtime-wiring";
 import { NoticeActionClocks } from "./notice-action-clocks";
 import { countDistinctMessages } from "./agent-history-read";
+import { composeDeliveryNotice } from "./delivery-notice";
 import {
   AGENT_MESSAGE_ACK_METHOD,
   SEEN_EXACT_SEQS_LIMIT,
@@ -18,7 +19,6 @@ import {
 import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 import { attentionFlags, hasDeliveryScope, latestCreatedAtField } from "./message-attention-fields";
-import { isTrackedMention } from "./mention-delivery-tracker";
 import { printableSender } from "./agent-notice-sender";
 import {
   acceptNotice,
@@ -26,9 +26,7 @@ import {
   noticeGeneration,
   type NoticeGeneration,
 } from "./agent-wakeup-unavailable-error";
-import { inboxNoticeText } from "./inbox-notice-text";
-import { inboxPreviewLimit } from "./inbox-preview";
-import { buildNoticeRows, PreviewSeen, renderNoticeRows } from "./inbox-preview-rows";
+import { PreviewSeen } from "./inbox-preview-rows";
 import { LatestThreadReadIndex } from "./latest-thread-read-index";
 import {
   logAttentionDecision,
@@ -324,18 +322,14 @@ export class AgentMessageAttentionIndex {
     this.hold.busy(message.agentId);
     void attention;
     const queued = this.hold.queued?.(message.agentId) ?? [];
-    const view = buildNoticeRows({
+    const { view, rows, totalCount, notice, trackedIds } = composeDeliveryNotice({
+      message,
       announced,
       queued,
-      agentId: message.agentId,
-      previewLimit: inboxPreviewLimit(),
+      prefix: this.hold.noticePrefix?.(message.agentId) ?? "",
       previewedInFull: (target, sequence) =>
         this.#previewSeen.has(message.agentId, target, sequence),
     });
-    const rows = renderNoticeRows(view.rows);
-    const totalCount = countDistinctMessages([...announced, ...queued]);
-    const notice = (this.hold.noticePrefix?.(message.agentId) ?? "") + inboxNoticeText(rows);
-    const trackedIds = announced.filter(isTrackedMention).map((delivery) => delivery.deliveryId);
     const notification = Promise.resolve()
       .then(() => {
         if (this.#generations.get(message.agentId) !== generation)
