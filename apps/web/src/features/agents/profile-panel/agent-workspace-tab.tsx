@@ -13,6 +13,7 @@ import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
 import { cn } from "#src/lib/utils";
 import { FilePane, loadProjectFileView, type FileState } from "./agent-workspace-file-pane";
+import { sameEntries, sameFileRead } from "./agent-workspace-same";
 import { TreeRoot, type DirState } from "./agent-workspace-tree";
 
 /** The container width, in CSS px, at and above which the tree and the open file split
@@ -27,6 +28,10 @@ export type AgentWorkspaceFilesLoadResult =
 export type AgentWorkspaceFileLoadResult =
   | { status: "ready"; result: AgentWorkspaceFileReadResult }
   | { status: "offline" | "timeout" | "unavailable" };
+
+/** `focus` and `visibilitychange` both fire when the reader returns; events this close are one
+ * return. */
+const SAME_RETURN_MS = 1000;
 
 function hiddenStorageKey(agentId: string) {
   return `coforge:agent-workspace-hidden:${agentId}`;
@@ -105,24 +110,29 @@ export function AgentWorkspaceTab({
       const seq = (dirSeq.current[dirPath] ?? 0) + 1;
       dirSeq.current[dirPath] = seq;
       // A quiet reload (the reader coming back to the window) keeps what is listed on screen
-      // while it reads, and keeps it too if the read fails: only a list that changed redraws.
-      const keep = quiet && cacheRef.current[dirPath]?.status === "ready";
-      if (!keep) setDirState(dirPath, { status: "loading" });
+      // while it reads, but shows what the read finds: a folder that is gone, or a computer that
+      // went offline, replaces the list. A list that did not change keeps its object, so only a
+      // changed listing redraws.
+      if (!(quiet && cacheRef.current[dirPath]?.status === "ready"))
+        setDirState(dirPath, { status: "loading" });
       try {
         const response = await onListDir(dirPath, hidden);
         if (dirSeq.current[dirPath] !== seq) return;
         if (response.status !== "ready") {
-          if (!keep) setDirState(dirPath, { status: response.status });
+          setDirState(dirPath, { status: response.status });
           return;
         }
         if (response.result.status !== "ok") {
-          if (!keep) setDirState(dirPath, { status: response.result.status });
+          setDirState(dirPath, { status: response.result.status });
           return;
         }
         if (dirPath === "") setRootPath(response.result.rootPath);
-        setDirState(dirPath, { status: "ready", entries: sortedEntries(response.result.entries) });
+        const entries = sortedEntries(response.result.entries);
+        const shown = cacheRef.current[dirPath];
+        if (shown?.status === "ready" && sameEntries(shown.entries, entries)) return;
+        setDirState(dirPath, { status: "ready", entries });
       } catch {
-        if (dirSeq.current[dirPath] === seq && !keep) setDirState(dirPath, { status: "error" });
+        if (dirSeq.current[dirPath] === seq) setDirState(dirPath, { status: "error" });
       }
     },
     [onListDir, setDirState],
@@ -131,8 +141,11 @@ export function AgentWorkspaceTab({
   const loadFile = useCallback(
     async (path: string, quiet = false) => {
       const seq = ++fileSeq.current;
-      const keep = quiet && fileStateRef.current?.status === "ready";
-      if (!keep) setFileState({ status: "loading", path });
+      const shown = fileStateRef.current;
+      // As for a folder: a quiet reload skips the loading blank but shows what it finds (a file
+      // deleted meanwhile is "missing"), and an unchanged file keeps its object.
+      if (!(quiet && shown?.status === "ready" && shown.path === path))
+        setFileState({ status: "loading", path });
       // Fetch the viewer's code alongside the file rather than after it arrives. A failed load
       // is reported when the viewer renders, so this early request drops its own error.
       void loadProjectFileView().catch(() => undefined);
@@ -140,16 +153,23 @@ export function AgentWorkspaceTab({
         const response = await onReadFile(path);
         if (fileSeq.current !== seq) return;
         if (response.status !== "ready") {
-          if (!keep) setFileState({ status: response.status, path });
+          setFileState({ status: response.status, path });
           return;
         }
-        if (response.result.status === "ok") {
-          setFileState({ status: "ready", path, result: response.result });
-        } else if (!keep) {
+        if (response.result.status !== "ok") {
           setFileState({ status: response.result.status, path });
+          return;
         }
+        const current = fileStateRef.current;
+        if (
+          current?.status === "ready" &&
+          current.path === path &&
+          sameFileRead(current.result, response.result)
+        )
+          return;
+        setFileState({ status: "ready", path, result: response.result });
       } catch {
-        if (fileSeq.current === seq && !keep) setFileState({ status: "error", path });
+        if (fileSeq.current === seq) setFileState({ status: "error", path });
       }
     },
     [onReadFile],
@@ -177,12 +197,19 @@ export function AgentWorkspaceTab({
   }
 
   // The Agent keeps writing while the reader is elsewhere, so coming back to the window reads
-  // again (there is no push for file changes). The menu keeps a Refresh for staying put.
+  // again (there is no push for file changes). The menu keeps a Refresh for staying put. Returning
+  // to a tab fires both `visibilitychange` and `focus`; `focus` alone covers switching windows
+  // without hiding the page, so both stay and the second event of one return is dropped.
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
   useEffect(() => {
+    let last = Number.NEGATIVE_INFINITY;
     const onReturn = () => {
-      if (document.visibilityState === "visible") refreshRef.current();
+      if (document.visibilityState !== "visible") return;
+      const now = performance.now();
+      if (now - SAME_RETURN_MS < last) return;
+      last = now;
+      refreshRef.current();
     };
     window.addEventListener("focus", onReturn);
     document.addEventListener("visibilitychange", onReturn);

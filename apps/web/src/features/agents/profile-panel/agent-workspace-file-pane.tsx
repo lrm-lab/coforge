@@ -60,14 +60,17 @@ export function FilePane({
     // as source. Everything else — text, and any read without an image payload — stays with it.
     const imageSource = workspaceImageSource(state.result);
     return (
-      <CatchBoundary getResetKey={() => state.path} errorComponent={FilePreviewError}>
+      <CatchBoundary
+        getResetKey={() => state.path}
+        errorComponent={() => <FilePreviewError name={name} leading={leading} />}
+      >
         {imageSource ? (
           <>
             {bar}
             <WorkspaceImagePreview name={name} url={imageSource} />
           </>
         ) : (
-          <Suspense fallback={<ProjectFileViewSkeleton name={name} />}>
+          <Suspense fallback={<ProjectFileViewSkeleton name={name} leading={leading} />}>
             <ProjectFileView
               key={state.path}
               path={state.path}
@@ -102,6 +105,7 @@ function FileStateMessage({
     return <EmptyFileState text={m.agent_workspace_timeout()} onRetry={onRetry} />;
   if (status === "binary") return <EmptyFileState text={m.agent_workspace_binary()} />;
   if (status === "too_large") return <EmptyFileState text={m.agent_workspace_too_large()} />;
+  if (status === "missing") return <EmptyFileState text={m.agent_workspace_file_missing()} />;
   return <EmptyFileState text={m.agent_workspace_file_error()} onRetry={onRetry} />;
 }
 
@@ -124,14 +128,19 @@ function WorkspaceImagePreview({ name, url }: { name: string; url: string }) {
   );
 }
 
-function FilePreviewError() {
+/** The viewer failed to render. It draws its own bar, so a failure leaves none: this one keeps the
+ * way back on a narrow panel, where the tree is hidden while a file is open. */
+export function FilePreviewError({ name, leading }: { name: string; leading?: ReactNode }) {
   return (
-    <EmptyFileState
-      text={m.agent_workspace_preview_error()}
-      alert
-      onRetry={() => window.location.reload()}
-      retryLabel={m.agent_workspace_reload()}
-    />
+    <>
+      {leading ? <FileBar leading={leading} name={name} /> : null}
+      <EmptyFileState
+        text={m.agent_workspace_preview_error()}
+        alert
+        onRetry={() => window.location.reload()}
+        retryLabel={m.agent_workspace_reload()}
+      />
+    </>
   );
 }
 
