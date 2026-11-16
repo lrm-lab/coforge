@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LocalMemory } from "#src/local-memory/local-memory";
+import { buildStartupMemoryBlock } from "#src/agent-runtime/startup-memory-block";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -122,4 +123,27 @@ test("traversal and symlinked notes cannot read or write another workspace", asy
     (await memory.execute({ operation: "search", query: "private-neighbour" })).entries,
   ).toHaveLength(0);
   await expect(memory.execute({ operation: "get", key: "../../secret" })).rejects.toThrow();
+});
+
+test("an unrelated unreadable summary candidate does not hide healthy saved decisions", async () => {
+  const { root, memory } = await subject();
+  await memory.execute(purchased);
+  await writeFile(join(root, "notes/knowledge/bad.md"), "x".repeat(512 * 1024 + 1));
+  expect((await buildStartupMemoryBlock({ agentWorkspaceDirectory: root }))?.text).toContain(
+    "coforgeusercontent.com",
+  );
+});
+
+test("decision priority applies beyond the first 128 alphabetical files", async () => {
+  const { memory } = await subject();
+  for (let index = 0; index < 128; index++)
+    await memory.execute({
+      ...purchased,
+      key: `fact-${String(index).padStart(3, "0")}`,
+      kind: "fact",
+      title: "Routine fact",
+      content: `Routine ${index}`,
+    });
+  await memory.execute(purchased);
+  expect(await memory.brief(3_200)).toContain("coforgeusercontent.com");
 });

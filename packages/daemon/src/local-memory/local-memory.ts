@@ -27,11 +27,16 @@ export class LocalMemory {
     if (command.operation === "history") {
       const files = await historyFiles(this.root, command.key);
       const entries: LocalMemoryEntry[] = [];
-      for (const name of files.slice(-100)) {
-        const path = `notes/history/${command.key}/${name}`;
-        const text = await readMemoryFile(this.root, path);
-        const entry = text && decodeMemoryRecord(text, path);
-        if (entry) entries.push(entry);
+      const selected = files.slice(-100);
+      for (let index = 0; index < selected.length; index += 8) {
+        const batch = await Promise.all(
+          selected.slice(index, index + 8).map(async (name) => {
+            const path = `notes/history/${command.key}/${name}`;
+            const text = await readMemoryFile(this.root, path);
+            return text ? decodeMemoryRecord(text, path) : undefined;
+          }),
+        );
+        entries.push(...batch.filter((entry): entry is LocalMemoryEntry => entry !== undefined));
       }
       return {
         entries: entries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
@@ -149,11 +154,11 @@ export class LocalMemory {
   async brief(maxBytes: number): Promise<string> {
     const { paths } = await listMemoryFiles(this.root);
     const entries: LocalMemoryEntry[] = [];
-    const selected = paths.filter((item) => item.startsWith("notes/knowledge/")).slice(0, 128);
+    const selected = paths.filter((item) => item.startsWith("notes/knowledge/"));
     for (let index = 0; index < selected.length; index += 8) {
       const batch = await Promise.all(
         selected.slice(index, index + 8).map(async (path) => {
-          const text = await this.#index.read(path);
+          const text = await readMemoryFile(this.root, path, 8_192).catch(() => undefined);
           return text ? decodeMemoryRecord(text, path) : undefined;
         }),
       );

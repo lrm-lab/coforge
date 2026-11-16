@@ -23,7 +23,11 @@ export async function safeMemoryDirectory(
   return path;
 }
 
-export async function readMemoryFile(root: string, relative: string): Promise<string | undefined> {
+export async function readMemoryFile(
+  root: string,
+  relative: string,
+  previewBytes = MEMORY_FILE_BYTES,
+): Promise<string | undefined> {
   try {
     await safeMemoryDirectory(root, dirname(relative));
     if (!(await lstat(join(root, relative))).isFile()) throw new Error("memory_unsafe_path");
@@ -37,14 +41,14 @@ export async function readMemoryFile(root: string, relative: string): Promise<st
       const stat = await handle.stat();
       if (!stat.isFile()) throw new Error("memory_unsafe_path");
       if (stat.size > MEMORY_FILE_BYTES) throw new Error("memory_file_too_large");
-      const bytes = new Uint8Array(stat.size);
+      const bytes = new Uint8Array(Math.min(stat.size, previewBytes));
       let read = 0;
       while (read < bytes.length) {
         const next = await handle.read(bytes, read, bytes.length - read, read);
         if (next.bytesRead === 0) break;
         read += next.bytesRead;
       }
-      return new TextDecoder().decode(bytes.subarray(0, read));
+      return new TextDecoder().decode(bytes.subarray(0, read)).replace(/\uFFFD$/, "");
     } finally {
       await handle.close();
     }
