@@ -44,6 +44,8 @@ import {
   setPublicConversationPinned,
 } from "./channels.functions";
 import { ChannelActionConfirmDialog, type ConfirmedAction } from "./channel-action-confirm-dialog";
+import { isPrivateChannel } from "./channel-visibility";
+import { useDirectChannelAction, type DirectChannelAction } from "./channel-direct-actions";
 import { ActionsSection } from "./channel-settings-actions";
 import { StopChannelAgentsDialog } from "./stop-channel-agents-dialog";
 import { InfoForm, useInfoForm } from "./channel-settings-info";
@@ -85,6 +87,25 @@ export function ChannelSettingsPanel({
   const [confirming, setConfirming] = useState<ConfirmedAction | null>(null);
   const [stoppingAgents, setStoppingAgents] = useState(false);
   const info = useInfoForm(conversation, onChanged);
+  const finishAction = async () => {
+    setConfirming(null);
+    onOpenChange(false);
+    // After hiding #general or deleting the channel the page's refetch answers NOT_FOUND, which
+    // leaves for Chat.
+    await onChanged();
+  };
+  const runDirect = useDirectChannelAction({
+    channelId,
+    channelName: conversation.name,
+    onDone: finishAction,
+  });
+  // What Undo can put back runs at once; leaving a private channel (no way back in), deleting it
+  // and making it public still ask (task #coforge-designer-team:#7).
+  const onAction = (kind: ConfirmedAction | DirectChannelAction) => {
+    if (kind === "delete" || kind === "make-public") return setConfirming(kind);
+    if (kind === "leave" && isPrivateChannel(conversation)) return setConfirming(kind);
+    void runDirect(kind);
+  };
   // What to do once the panel has closed, held while unsaved edits are being confirmed.
   const afterClose = useRef<(() => void) | undefined>(undefined);
   // Escape closes the panel even when a live update stranded focus outside the dialog — the
@@ -258,7 +279,7 @@ export function ChannelSettingsPanel({
                       conversation.canDelete) && (
                       <ActionsSection
                         conversation={conversation}
-                        onConfirm={setConfirming}
+                        onConfirm={onAction}
                         onStopAgents={() => setStoppingAgents(true)}
                         onChanged={onChanged}
                       />
@@ -302,13 +323,7 @@ export function ChannelSettingsPanel({
         channelId={channelId}
         channelName={conversation.name}
         onClose={() => setConfirming(null)}
-        onDone={async () => {
-          setConfirming(null);
-          onOpenChange(false);
-          // After hiding #general or deleting the channel the page's refetch answers NOT_FOUND,
-          // which leaves for Chat.
-          await onChanged();
-        }}
+        onDone={finishAction}
       />
     </>
   );

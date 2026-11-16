@@ -16,6 +16,7 @@ import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { m } from "#src/paraglide/messages";
 import type { ChannelConversationView } from "./channel-conversation";
 import type { ConfirmedAction } from "./channel-action-confirm-dialog";
+import type { DirectChannelAction } from "./channel-direct-actions";
 import { isPrivateChannel } from "./channel-visibility";
 import { setPublicChannelArchived } from "./channel-lifecycle.functions";
 import { PanelSection } from "./settings-panel-parts";
@@ -29,7 +30,8 @@ export function ActionsSection({
   onChanged,
 }: {
   conversation: ChannelConversationView;
-  onConfirm: (kind: ConfirmedAction) => void;
+  /** A settings action: it runs at once with Undo, or asks first (`channel-settings-panel`). */
+  onConfirm: (kind: ConfirmedAction | DirectChannelAction) => void;
   onStopAgents: () => void;
   onChanged: () => Promise<void>;
 }) {

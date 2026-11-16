@@ -68,7 +68,6 @@ test("the channel settings panel edits info, preferences, archive and membership
     `[...document.querySelectorAll(${JSON.stringify(selector)})].find((element) => element.textContent.trim() === ${JSON.stringify(text)})`;
   const clickText = (selector: string, text: string) =>
     browser("eval", `${byText(selector, text)}.click()`);
-  const confirmButton = '[role="dialog"]:not([aria-label="Channel details and settings"]) button';
   async function openPanel() {
     // A click that lands before the page hydrates opens nothing; try again until the panel opens.
     for (let attempt = 0; ; attempt += 1) {
@@ -215,12 +214,13 @@ test("the channel settings panel edits info, preferences, archive and membership
     expect(preferred.pins.length).toBe(1);
     expect(preferred.channelMuted).toBe(true);
 
-    // Archive: confirm, the panel closes and an archived notice replaces the composer.
+    // Archive: it runs at once (Undo is in its toast, task #7), the panel closes and an archived
+    // notice replaces the composer.
     await clickText("button", "Archive channel");
-    // The confirm names the action too; take it from the confirm dialog, not the panel behind.
-    await waitFor(`${byText(confirmButton, "Archive channel")} !== undefined`);
-    await clickText(confirmButton, "Archive channel");
     await waitFor(`document.body.textContent.includes("This channel is archived.")`);
+    await waitFor(
+      `[...document.querySelectorAll("[data-sonner-toast]")].some((t) => t.textContent.includes("Archived #"))`,
+    );
     expect(await evaluate<boolean>(`document.querySelector("main textarea") === null`)).toBe(true);
     expect(
       (await db.conversation.findUniqueOrThrow({ where: { id: channelId } })).archivedAt,
@@ -246,16 +246,24 @@ test("the channel settings panel edits info, preferences, archive and membership
       (await db.conversation.findUniqueOrThrow({ where: { id: channelId } })).archivedAt,
     ).toBeNull();
 
-    // Leave: confirm, the channel turns read-only with a Join button; rejoining restores it.
+    // Leave a public channel: it runs at once, the channel turns read-only with a Join button, and
+    // the toast's Undo joins again (task #7).
     await openPanel();
     await clickText("button", "Leave channel");
-    await waitFor(`${byText(confirmButton, "Leave channel")} !== undefined`);
-    await clickText(confirmButton, "Leave channel");
     await waitFor(`${byText("button", "Join channel")} !== undefined`);
     expect((await viewerRow()).leftAt).not.toBeNull();
-    await clickText("button", "Join channel");
-    // The button reads "Joining…" while the join is in flight; the composer returns only once the
-    // page has reloaded the viewer as a member.
+    const leftToast = `[...document.querySelectorAll("[data-sonner-toast]")].find((t) => t.textContent.includes("Left #"))`;
+    await waitFor(`${leftToast} !== undefined`);
+    await evaluate(
+      `([...${leftToast}.querySelectorAll("button")].find((b) => b.textContent.trim() === "Undo").setAttribute("data-e2e-undo", ""), true)`,
+    );
+    await browser(
+      "wait",
+      "--fn",
+      `document.getAnimations().every((a) => a.playState !== "running")`,
+    );
+    await browser("click", "[data-e2e-undo]");
+    // The composer returns once the page has read the viewer as a member again.
     await waitFor(`document.querySelector("main textarea") !== null`);
     expect((await viewerRow()).leftAt).toBeNull();
 

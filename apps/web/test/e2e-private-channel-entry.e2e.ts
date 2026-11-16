@@ -10,7 +10,7 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
 /**
  * A private channel's entry in a real browser (task #302): the Workspace owner starts a channel
  * with Make private on, and it opens with a lock where a public one shows `#`; its settings turn it
- * public and back, each confirmed by title and button alone, and the page follows.
+ * public (confirmed by title and button alone) and back (at once, with Undo), and the page follows.
  *
  * Opt-in like the other browser E2Es: real local Web (`COFORGE_DEV_SKIP_AUTH=1`, a seeded
  * database), `agent-browser` and local PostgreSQL. Everything it writes lives in a Workspace of its
@@ -145,15 +145,11 @@ test("a channel started private shows its lock, and its settings switch it publi
     );
     expect((await stored()).visibility).toBe("public");
 
-    // 3. And private again.
+    // 3. And private again: at once, with Undo in its toast (task #7).
     await browser("click", settingsButton);
-    await confirmSwitch(
-      "Change to private channel",
-      `Change #${name} to a private channel?`,
-      "Change to private",
-      "5-confirm-private.png",
-    );
+    await click(named("button", "Change to private channel"));
     await waitFor(lockedTitle);
+    await browser("screenshot", join(artifacts, "5-private-toast.png"));
     expect((await stored()).visibility).toBe("private");
 
     // 4. On a phone: the list, the channel and its settings, each with the lock.
