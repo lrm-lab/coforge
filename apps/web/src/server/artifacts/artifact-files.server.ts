@@ -2,7 +2,6 @@ import { ARTIFACT_UPLOAD_MAX_BYTES } from "@lrm/coforge-sdk/agent";
 import type { Prisma } from "#src/generated/prisma/client";
 
 export { artifactPathValid } from "@lrm/coforge-sdk/agent";
-export { artifactKindOfPath } from "#src/features/artifacts/artifact-path-kind";
 
 /** One file a push adds or replaces: bytes already uploaded under `sha256`. Its size and kind
  * come from the blob, never from the client. */

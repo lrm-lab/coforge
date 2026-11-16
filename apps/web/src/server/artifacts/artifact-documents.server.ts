@@ -9,7 +9,8 @@ import {
   type ArtifactPublisher,
 } from "./artifact-access.server";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
-import { ARTIFACT_ENTRY_READ_LIMIT, artifactKindOfPath } from "./artifact-files.server";
+import { artifactOpenableKind } from "#src/features/artifacts/artifact-path-kind";
+import { ARTIFACT_ENTRY_READ_LIMIT } from "./artifact-files.server";
 import { planManifestCreate, type FileManifest } from "./artifact-manifest.server";
 import type { Artifacts } from "./artifacts.server";
 
@@ -142,7 +143,7 @@ export class ArtifactDocuments {
     const read = await this.artifacts.reads.read({ ...reader(scope), ...input });
     const entryPath = read.version?.entryPath ?? read.artifact.entryPath;
     const file = read.files.find((entry) => entry.path === entryPath);
-    const document = artifactKindOfPath(entryPath) === "markdown";
+    const document = artifactOpenableKind(entryPath) === "markdown";
     const readable =
       file?.kind === "text" &&
       file.sizeBytes <= ARTIFACT_ENTRY_READ_LIMIT &&
@@ -277,7 +278,7 @@ async function refreshPreview(
     select: { currentVersion: true, entryPath: true, description: true },
   });
   if (!artifact || artifact.currentVersion <= 0) return;
-  const kind = artifactKindOfPath(artifact.entryPath);
+  const kind = artifactOpenableKind(artifact.entryPath);
   // A web page's card line is its description (task #490): its source reads as nothing.
   if (kind === "html") {
     await db.artifact.updateMany({

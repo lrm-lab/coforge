@@ -1,6 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { artifactHomeHidden, artifactsEnabled } from "./artifact-access.server";
-import { artifactKindOfPath } from "./artifact-files.server";
+import { artifactOpenableKind } from "#src/features/artifacts/artifact-path-kind";
 
 type PublicPage = {
   workspaceId: string;
@@ -42,8 +42,7 @@ export function publicPageLookup(
     });
     const artifact = link?.artifact;
     if (!artifact || artifact.deletedAt || artifact.currentVersion <= 0) return null;
-    const entryKind = artifactKindOfPath(artifact.entryPath);
-    const kind = entryKind === "html" || entryKind === "markdown" ? entryKind : null;
+    const kind = artifactOpenableKind(artifact.entryPath);
     if (!kind) return null;
     const [on, version, homeHidden] = await Promise.all([
       enabled(artifact.workspaceId),
