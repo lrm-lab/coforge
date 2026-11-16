@@ -14,7 +14,7 @@ import {
   type TaskDetailRelations,
   type VisibleTaskName,
 } from "./task-relation-edits";
-import type { TaskDraft } from "./create-task-dialog";
+import type { TaskDraft } from "./task-draft";
 import { executeTask } from "./tasks.functions";
 import { useTaskConversationsOn } from "./use-task-conversations-on";
 import { useConversationTaskWrites } from "./use-conversation-tasks";

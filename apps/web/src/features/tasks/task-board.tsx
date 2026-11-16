@@ -17,7 +17,8 @@ import {
   canFileNewTask,
   newTaskChoices,
 } from "./board-new-task-dialog";
-import { CreateTaskDialog, type TaskDraft } from "./create-task-dialog";
+import { CreateTaskDialog } from "./create-task-dialog";
+import type { TaskDraft } from "./task-draft";
 import { isFinishedStatus, type FinishedStatus } from "./finished-tasks";
 import { TASK_TITLE_CLASS, TaskCard } from "./task-card";
 import { TaskDetailMenu, taskMenuButton } from "./task-detail-dialog";
