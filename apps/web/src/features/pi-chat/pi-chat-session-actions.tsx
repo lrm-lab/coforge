@@ -8,6 +8,7 @@ import { Input } from "#src/components/base/input/input";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { m } from "#src/paraglide/messages";
+import { piChatFailureMessage } from "./pi-chat-failure";
 import { useExecutePiChat } from "./use-execute-pi-chat";
 import {
   DialogAction,
@@ -106,7 +107,7 @@ export function PiChatSessionActions({
               />
               {error && (
                 <p role="alert" className="text-sm text-error-primary">
-                  {m.pi_chat_action_error()}
+                  {piChatFailureMessage("action")}
                 </p>
               )}
               <DialogActions>
@@ -131,7 +132,7 @@ export function PiChatSessionActions({
         title={running ? m.pi_chat_stop_delete() : m.pi_chat_delete()}
         description={running ? m.pi_chat_stop_delete_confirm() : m.pi_chat_delete_confirm()}
         confirmLabel={running ? m.pi_chat_stop_delete() : m.pi_chat_delete_action()}
-        errorMessage={m.pi_chat_action_error()}
+        errorMessage={piChatFailureMessage("action")}
         onConfirm={async () => {
           if (running && !controls)
             await execute({

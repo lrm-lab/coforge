@@ -1,3 +1,5 @@
+import { m } from "#src/paraglide/messages";
+
 /** First-screen sidebar lists in weekly Records (T1/M1). */
 export const RECORDS_SIDEBAR_PREVIEW_LIMIT = 3;
 
@@ -118,4 +120,28 @@ export function memberWeeksPreview<W>(
   const selected = weeks.find(isSelected);
   if (selected === undefined || shown.visible.includes(selected)) return shown;
   return { visible: [...shown.visible, selected], hiddenCount: shown.hiddenCount - 1 };
+}
+
+/** The member weeks group has something to show: a week, older weeks to load, or a load state. */
+export function memberWeeksListed(members: {
+  weeks: readonly unknown[];
+  hasMore: boolean;
+  loadingMore: boolean;
+  loadFailed: boolean;
+}) {
+  return members.weeks.length > 0 || members.hasMore || members.loadingMore || members.loadFailed;
+}
+
+/**
+ * The sentence the weekly tab shows in place of its groups when none has anything to list (a group
+ * with nothing in it is left out, not shown as an empty heading); `undefined` while one does.
+ */
+export function weeklyEmptyNote(input: {
+  favorites: number;
+  myReports: number;
+  membersListed: boolean;
+  query: string;
+}): string | undefined {
+  if (input.favorites > 0 || input.myReports > 0 || input.membersListed) return undefined;
+  return input.query ? m.records_weekly_no_match({ query: input.query }) : m.records_weekly_none();
 }

@@ -5,6 +5,7 @@ import type { PiChatCommand, PiChatSession, PiChatResult } from "@lrm/coforge-sd
 import { Button } from "#src/components/base/buttons/button";
 import { PageHeader } from "#src/components/layout/page-header";
 import { m } from "#src/paraglide/messages";
+import { piChatFailureMessage, type PiChatFailure } from "./pi-chat-failure";
 import { useExecutePiChat } from "./use-execute-pi-chat";
 import { PiChatTranscript } from "./pi-chat-transcript";
 import { PiChatComposer } from "./pi-chat-composer";
@@ -50,9 +51,7 @@ export function PiChatConversation({
   const execute = useExecutePiChat();
   const files = usePiChatFiles();
   const queryClient = useQueryClient();
-  // What failed: a command (it may have reached the cloud computer, so the message says a resend is
-  // safe) or a read of the history (nothing was sent; reading again is enough).
-  const [error, setError] = useState<"send" | "load" | null>(null);
+  const [error, setError] = useState<PiChatFailure | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [pendingSend, setPendingSend] = useState<PiChatPendingMessage>();
   const latestDraft = useRef(draft);
@@ -287,7 +286,8 @@ export function PiChatConversation({
           role="alert"
           className="flex flex-wrap items-center gap-2 border-b border-secondary p-3 text-sm text-error-primary"
         >
-          <p>{error === "send" ? m.pi_chat_connection_error() : m.pi_chat_load_error()}</p>
+          {/* The history query failing on its own is a read. */}
+          <p>{piChatFailureMessage(error ?? "load")}</p>
           <Button
             color="secondary"
             size="sm"
