@@ -1,11 +1,13 @@
 import { getLogger } from "@logtape/logtape";
 import type {
+  AgentControlResult,
   AgentControlScope,
   AgentStartIntent,
   AgentWorkspaceResetRequest,
   SessionIdentity,
 } from "@lrm/coforge-sdk/internal";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
+import { LAUNCH_FAILURE_REASON } from "./launch-failure";
 import type { AgentRuntimeState } from "./agent-runtime-state";
 import type { AgentSessions } from "./agent-session";
 import type { AgentControlContext, AgentControlRuntime } from "./agent-control-runtime";
@@ -213,6 +215,28 @@ export class AgentControl {
         await this.#context.runtime.result(record.startResult).catch(() => {});
         return;
       }
+      // A Start whose launch already settled failed still owes the server that result: the
+      // report may never have landed, and fencing every republished Start on the terminal
+      // record would leave the server's operation pending forever (task #18). Replay the
+      // recorded result — synthesizing it when an older record lacks one — under the
+      // operation's own scope so the server settles this same Start, not a new one.
+      if (record?.scope.epoch === scope.epoch && record.phase === "failed") {
+        const settled: AgentControlResult = record.lastResult ?? {
+          ...record.scope,
+          phase: "failed",
+          ...(record.launchId ? { launchId: record.launchId } : {}),
+          sequence: record.sequence + 1,
+          errorCode: LAUNCH_FAILURE_REASON.RUNTIME_SPAWN_FAILED,
+        };
+        if (settled.requestId !== scope.requestId) throw new Error("control_request_mismatch");
+        if (!record.lastResult) {
+          record.sequence += 1;
+          record.lastResult = settled;
+          await this.#context.state.store.write(intent.agentId, record);
+        }
+        await this.#context.runtime.result(settled).catch(() => {});
+        return;
+      }
       // A newer operation supersedes our own pending launch retry. The record still says
       // "starting" because that retry has not given up yet, but the retry is a daemon-side timer,
       // never a concurrent launch — so refusing the fresher operation would block a user's
@@ -226,11 +250,7 @@ export class AgentControl {
         this.#launches.hasRetry(scope.agentId);
       if (supersededRetry) {
         this.#launches.supersede(scope.agentId);
-      } else if (
-        record &&
-        (["stopping", "clearing", "starting"].includes(record.phase) ||
-          (record.phase === "failed" && record.scope.epoch === scope.epoch))
-      )
+      } else if (record && ["stopping", "clearing", "starting"].includes(record.phase))
         throw new Error("previous_control_not_completed");
       if (!intent.launchId) {
         // The server mints and supplies launchId for every managed start; the SDK
