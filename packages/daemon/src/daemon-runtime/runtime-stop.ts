@@ -83,6 +83,9 @@ export class RuntimeStop {
   #promise: Promise<void> | undefined;
   /** The migration runs `run` aborted; the settle wait below bounds them. */
   #migrationsClosed: Promise<void> | undefined;
+  readonly #stopping = new AbortController();
+  /** Aborted when `run` begins: nothing a reminder retry is doing outlives the stop. */
+  readonly stopSignal = this.#stopping.signal;
 
   constructor(private readonly ports: RuntimeStopPorts) {}
 
@@ -94,6 +97,7 @@ export class RuntimeStop {
   run(shutdownReason: DaemonShutdownReason): Promise<void> {
     if (this.#promise) return this.#promise;
     const { ports } = this;
+    this.#stopping.abort();
     // Close every local capability synchronously before any shutdown await.
     const piChatClosed = ports.startup.close();
     ports.coldIdleSweep.stop();
