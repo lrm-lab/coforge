@@ -12,7 +12,7 @@ import {
  * it has a live session to hand input to. */
 export type SessionMemoryHooks = Readonly<{
   connection: Readonly<{ workspaceRoot: string; workspaceId: string }>;
-  inputDrain: AgentInputDrain;
+  inputDrain: Pick<AgentInputDrain, "get">;
   session(agentId: string): AgentSession | undefined;
 }>;
 
@@ -38,7 +38,7 @@ export function attachFreshSessionMemory(
 /** Both kinds of fresh-session context use the same queue and remain independent of runtime. */
 export function sessionMemoryPorts(
   memory: () => SessionMemoryHooks,
-  transport: () => DaemonConnectionClient,
+  transport: () => Pick<DaemonConnectionClient, "agentMemory">,
 ) {
   return {
     attachSessionMemory: async (
@@ -46,12 +46,17 @@ export function sessionMemoryPorts(
       config?: { agentApiKey: string; identity?: { features?: { platformMemory?: boolean } } },
     ) => {
       const hooks = memory();
-      const attached = await attachFreshSessionMemory(hooks, agentId);
       const client = transport();
-      if (config?.identity?.features?.platformMemory && client.agentMemory)
-        await attachPlatformMemoryBriefing(hooks.inputDrain.get(agentId), (command) =>
-          client.agentMemory!(command, config.agentApiKey),
-        );
+      // Capture the task before local memory can be prepended to its prompt. Recall and local
+      // file reads can then run together; neither needs the other's injected reference text.
+      const recall =
+        config?.identity?.features?.platformMemory && client.agentMemory
+          ? attachPlatformMemoryBriefing(hooks.inputDrain.get(agentId), (command) =>
+              client.agentMemory!(command, config.agentApiKey),
+            )
+          : undefined;
+      const attached = await attachFreshSessionMemory(hooks, agentId);
+      await recall;
       return attached !== undefined;
     },
   };

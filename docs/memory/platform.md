@@ -24,6 +24,8 @@ All supported shell-capable runtimes use the same bundled CLI:
 coforge memory status
 coforge memory create --title 'Release rule' --content 'Run tests before publishing' --kind fact
 coforge memory search --query 'What must happen before a release?'
+coforge memory list --page 1 --index
+coforge memory search --query 'release' --index
 coforge memory get --id <uuid>
 coforge memory update --id <uuid> --revision 1 --title 'Release rule' --content 'Run tests and build'
 coforge memory share --id <uuid> --revision 2
@@ -47,7 +49,17 @@ Daemon proxy. Older Computers need the release containing this command and proxy
 ## Proactive use
 
 On a fresh enabled launch, the Daemon recalls memory against the queued task or initial prompt.
-It injects up to five records within a 6,000-character reference budget, before task input.
+It selects the first nonempty task input, including recovery messages, before local memory is
+prepended. It injects a directory of up to 20 search matches and up to five body previews before
+task input. The complete briefing, including its directory and instructions, stays within 6,000
+characters. Long bodies remain discoverable rather than being dropped: the directory names each
+memory's ID, revision and scope, and reports the unloaded content per entry and in total.
+`remainingMemories` counts entries whose bodies are not fully shown. The Agent can progressively
+load a complete body with `coforge memory get --id <id>`, browse the full directory with
+`coforge memory list --page 1 --index` and subsequent pages, or narrow its search with `--index`.
+The CLI's `--index` option returns IDs, metadata and body character counts without printing the
+bodies, so browsing does not fill the Agent's context with every memory. The recalled match
+count describes this search response, not the total number of memories in the Workspace.
 The optional recall has a three-second deadline; an outage never prevents the Agent starting.
 Recalled text is untrusted reference, not an instruction overriding the person or system.
 

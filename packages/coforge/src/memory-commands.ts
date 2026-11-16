@@ -5,17 +5,22 @@ import {
 } from "@lrm/coforge-sdk/agent";
 
 export const MEMORY_COMMAND_HELP = `coforge memory status
-coforge memory list [--scope agent|team] [--page 1]
-coforge memory search --query <question> [--scope agent|team]
+coforge memory list [--scope agent|team] [--page 1] [--index]
+coforge memory search --query <question> [--scope agent|team] [--index]
 coforge memory get --id <uuid>
 coforge memory create --title <title> --content <text> [--kind fact|experience|preference] [--scope agent|team]
 coforge memory update --id <uuid> --revision <number> --title <title> --content <text> [--kind fact|experience|preference]
 coforge memory delete|share --id <uuid> --revision <number>
 Writes accept --request-id <uuid> for identical retries and --source-message-id <uuid> for provenance.
+--index omits memory bodies and shows their character counts; use get --id <uuid> to read one in full.
 Agent memory is private. Use share only when explicitly publishing it to the team.`;
 
-export function parseMemoryArgs(args: readonly string[]): { request: PlatformMemoryCommand } {
+export function parseMemoryArgs(args: readonly string[]): {
+  request: PlatformMemoryCommand;
+  index?: true;
+} {
   const operation = args[0];
+  let index = false;
   const flags = new Map<string, string>();
   const allowed = new Set([
     "scope",
@@ -33,6 +38,10 @@ export function parseMemoryArgs(args: readonly string[]): { request: PlatformMem
   for (let i = 1; i < args.length; i++) {
     const flag = args[i]!;
     if (flag === "--json") continue;
+    if (flag === "--index" && (operation === "list" || operation === "search")) {
+      index = true;
+      continue;
+    }
     const key = flag.slice(2);
     if (!flag.startsWith("--") || !allowed.has(key) || flags.has(key) || args[i + 1] === undefined)
       throw new Error(MEMORY_COMMAND_HELP);
@@ -47,7 +56,7 @@ export function parseMemoryArgs(args: readonly string[]): { request: PlatformMem
   if (operation === "create" || operation === "update") row.kind ??= "fact";
   if (["create", "update", "delete", "share"].includes(operation ?? ""))
     row.requestId ??= crypto.randomUUID();
-  return { request: decodePlatformMemoryCommand(row) };
+  return { request: decodePlatformMemoryCommand(row), ...(index ? { index: true } : {}) };
 }
 
 export async function runMemoryCommand(
@@ -56,5 +65,19 @@ export async function runMemoryCommand(
 ): Promise<string> {
   if (args.includes("--help")) return MEMORY_COMMAND_HELP;
   if (!call) throw new Error("Memory transport is unavailable; upgrade this Computer");
-  return JSON.stringify(await call(parseMemoryArgs(args).request), null, 2);
+  const { request, index } = parseMemoryArgs(args);
+  const result = await call(request);
+  return JSON.stringify(
+    index
+      ? {
+          ...result,
+          entries: result.entries.map(({ content, ...entry }) => ({
+            ...entry,
+            contentChars: content.length,
+          })),
+        }
+      : result,
+    null,
+    2,
+  );
 }
