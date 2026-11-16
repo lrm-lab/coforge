@@ -6,10 +6,8 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import type { AgentConversationScope } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
-import { setContextViewMessageIds } from "./context-view-runtime-wiring";
 import { NoticeActionClocks } from "./notice-action-clocks";
-import { countDistinctMessages } from "./agent-history-read";
-import { composeDeliveryNotice } from "./delivery-notice";
+import { writeDeliveryNotice } from "./delivery-notice-writer";
 import { rememberDelivery } from "./delivery-generation-memory";
 import {
   AGENT_MESSAGE_ACK_METHOD,
@@ -23,7 +21,6 @@ import { attentionFlags, hasDeliveryScope, latestCreatedAtField } from "./messag
 import { printableSender } from "./agent-notice-sender";
 import {
   acceptNotice,
-  AgentWakeupUnavailableError,
   noticeGeneration,
   type NoticeGeneration,
 } from "./agent-wakeup-unavailable-error";
@@ -49,7 +46,6 @@ import {
   isAscending,
   isCardEvent,
   markFlushed,
-  markNotified,
   sameThreadRoot,
   type ConsumedAgent,
   type ConsumedTarget,
@@ -310,81 +306,21 @@ export class AgentMessageAttentionIndex {
     attention?: MessageAttention,
     announced: readonly AgentMessageDelivery[] = [message],
   ): Promise<void> {
-    const generation = this.#generation(message.agentId);
-    const session = this.#runtimes.session(message.agentId);
-    if (!session?.notify)
-      throw new AgentWakeupUnavailableError("Agent session cannot receive a wakeup notice");
-    if (!message.target) return Promise.reject(new Error("delivery target is missing"));
-    setContextViewMessageIds(
-      session,
-      announced.map((item) => item.messageId),
-    );
-    this.hold.busy(message.agentId);
-    void attention;
-    const queued = this.hold.queued?.(message.agentId) ?? [];
-    const { view, rows, totalCount, notice, trackedIds } = composeDeliveryNotice({
+    return writeDeliveryNotice.call(
+      {
+        session: (agentId) => this.session(agentId),
+        generation: (agentId) => this.#generation(agentId),
+        isCurrentGeneration: (agentId, generation) => this.isCurrentGeneration(agentId, generation),
+        hold: this.hold,
+        previewSeen: this.previewSeen,
+        noticeActionClocks: this.noticeActionClocks,
+        messageReceived: (agentId, conversation) => this.messageReceived(agentId, conversation),
+        acceptNotice: (signal, send) => this.#acceptNotice(signal, send),
+      },
       message,
+      attention,
       announced,
-      queued,
-      prefix: this.hold.noticePrefix?.(message.agentId) ?? "",
-      previewedInFull: (target, sequence) =>
-        this.previewSeen.has(message.agentId, target, sequence),
-    });
-    const notification = Promise.resolve()
-      .then(() => {
-        if (this.#generations.get(message.agentId) !== generation)
-          throw new AgentWakeupUnavailableError("Agent notice was cancelled");
-        return this.#acceptNotice(generation.cancellation.signal, () =>
-          (trackedIds.length
-            ? session.notify!(notice, {
-                ...(trackedIds.length ? { deliveryIds: trackedIds } : {}),
-              })
-            : session.notify!(notice)
-          ).then(async () => {
-            await session.waitForContextViewCapture?.();
-          }),
-        );
-      })
-      .then(() => {
-        if (this.#generations.get(message.agentId) === generation) {
-          markNotified(generation, [message]);
-          this.previewSeen.record(message.agentId, view.whole);
-          this.noticeActionClocks.noteNoticeAccepted(message.agentId);
-          this.messageReceived(message.agentId);
-        }
-        logger.info("Agent accepted inbox notice", {
-          event: "agent.inbox_notice.accepted",
-          request_id: message.requestId,
-          workspace_id: message.workspaceId,
-          agent_id: message.agentId,
-          target_count: rows.length,
-          pending_count: countDistinctMessages(announced),
-          total_pending_count: totalCount,
-          outcome: "ok",
-        });
-      })
-      .catch((error: unknown) => {
-        logger.error("Agent rejected inbox notice", {
-          event: "agent.inbox_notice.rejected",
-          request_id: message.requestId,
-          workspace_id: message.workspaceId,
-          agent_id: message.agentId,
-          target_count: rows.length,
-          pending_count: countDistinctMessages(announced),
-          total_pending_count: totalCount,
-          error_code: diagnosticErrorName(error),
-          outcome: "failed",
-        });
-        throw error;
-      })
-      .finally(() => {
-        if (this.#runtimes.session(message.agentId) === session)
-          this.hold.noticeSettled?.(message.agentId);
-        if (this.#generations.get(message.agentId) === generation)
-          generation.notificationAttempts.delete(message.deliveryId);
-      });
-    generation.notificationAttempts.set(message.deliveryId, notification);
-    return notification;
+    );
   }
   async #acceptNotice(signal: AbortSignal, send: () => Promise<void>): Promise<void> {
     return acceptNotice(signal, send);
