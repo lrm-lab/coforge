@@ -10,6 +10,7 @@ import { getLogger } from "@logtape/logtape";
 import { setContextViewMessageIds } from "./context-view-runtime-wiring";
 import { NoticeActionClocks } from "./notice-action-clocks";
 import { countDistinctMessages } from "./agent-history-read";
+import { composeDeliveryNotice } from "./delivery-notice";
 import {
   AGENT_MESSAGE_ACK_METHOD,
   SEEN_EXACT_SEQS_LIMIT,
@@ -28,9 +29,7 @@ import {
   noticeGeneration,
   type NoticeGeneration,
 } from "./agent-wakeup-unavailable-error";
-import { inboxNoticeText } from "./inbox-notice-text";
-import { inboxPreviewLimit } from "./inbox-preview";
-import { buildNoticeRows, PreviewSeen, renderNoticeRows } from "./inbox-preview-rows";
+import { PreviewSeen } from "./inbox-preview-rows";
 import { MemoryChannelUpdates, type MemoryChannelUpdateSchedule } from "./memory-channel-updates";
 import { groupMemoryRecovery } from "./memory-recovery-groups";
 import { LatestThreadReadIndex } from "./latest-thread-read-index";
@@ -493,30 +492,19 @@ export class AgentMessageAttentionIndex {
     // "not busy yet" state.
     this.hold.busy(message.agentId);
     void attention;
-    // Every number here is a fact the daemon owns right now (the messages it announces plus those
-    // queued for this Agent), never a total accumulated across earlier notices. The wording must
-    // not say messages are unread: the daemon does not know the server's read cursor, and a
-    // notice can race a `check` or `read` that already advanced it.
+    const memory = this.#isMemory(message.agentId);
     const queued = (this.hold.queued?.(message.agentId) ?? []).filter(
-      (delivery) =>
-        !this.#isMemory(message.agentId) || delivery.conversationId === message.conversationId,
+      (delivery) => !memory || delivery.conversationId === message.conversationId,
     );
-    const view = buildNoticeRows({
+    const { view, rows, totalCount, notice, trackedIds, conversation } = composeDeliveryNotice({
+      message: message as AgentMessageDelivery & { target: string },
       announced,
       queued,
-      agentId: message.agentId,
-      previewLimit: inboxPreviewLimit(),
+      memory,
+      prefix: this.hold.noticePrefix?.(message.agentId) ?? "",
       previewedInFull: (target, sequence) =>
         this.#previewSeen.has(message.agentId, target, sequence),
     });
-    const rows = renderNoticeRows(view.rows);
-    const totalCount = countDistinctMessages([...announced, ...queued]);
-    const notice = (this.hold.noticePrefix?.(message.agentId) ?? "") + inboxNoticeText(rows);
-    // The session names these back if the notice never reaches the model (`notice-undelivered`).
-    const trackedIds = announced.filter(isTrackedMention).map((delivery) => delivery.deliveryId);
-    const conversation = this.#isMemory(message.agentId)
-      ? { conversationId: message.conversationId, target: message.target }
-      : undefined;
     const notification = Promise.resolve()
       .then(() => {
         if (this.#generations.get(message.agentId) !== generation)
