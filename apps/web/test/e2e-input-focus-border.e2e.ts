@@ -7,11 +7,10 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { pageHydrated } from "./helpers/browser-e2e";
 
 /**
- * Browser E2E (task #227): a focused text field draws its border one step up from the resting
- * one, `--color-border-input-focus` — the keyboard's focus ring says more. Checked on a shared
- * Input (the Records search). The chat composer, which draws its own frame, takes the designer's
- * typing state instead (task #104): a 2px `--color-field-border-typing` border, drawn as the
- * 1px border plus a 1px inset ring.
+ * Browser E2E (task #227): a focused text field takes the designer's typing state (task #104,
+ * every field since task #112): a 2px `--color-field-border-typing` border. Checked on a shared
+ * Input (the Records search), whose box is a 2px inset ring, and on the chat composer, which draws
+ * its own frame: the 1px border plus a 1px inset ring.
  *
  * Opt-in like the other browser E2Es: real local Web (`COFORGE_DEV_SKIP_AUTH=1`) + `agent-browser`
  * against the dev database. Screenshots are written under `.amp/e2e/input-focus-border/`.
@@ -85,10 +84,10 @@ test("a focused text field's border is the theme's input-focus colour", async ()
       await setTheme(theme);
       await waitFor(`${pageHydrated} && document.querySelector('input[type="search"]') !== null`);
       // The token is theme-scoped, so it is read on the themed page, not before it loads.
-      const color = await evaluate<string>(tokenColor("--color-border-input-focus"));
+      const color = await evaluate<string>(tokenColor("--color-field-border-typing"));
       await browser("focus", 'input[type="search"]');
       await waitFor(`${inputRing}.includes(${JSON.stringify(color)})`);
-      expect(await evaluate<string>(inputRing)).toContain(color);
+      expect(await evaluate<string>(inputRing)).toContain(`${color} 0px 0px 0px 2px inset`);
       await browser("screenshot", join(artifacts, `input-${theme}.png`));
 
       await browser("open", `${origin}${workspacePath}/channel/${channel.id}`);
