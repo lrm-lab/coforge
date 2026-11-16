@@ -1,14 +1,5 @@
-/**
- * The public hosts a web page may load code, styles, fonts and images from, so it can use a
- * library or a web font without shipping it. They are named in its CSP and nowhere else: the
- * page still reaches nothing over the network (`connect-src 'none'`), and a CDN-served script
- * runs in the page's own opaque origin like the page's inline ones.
- *
- * - Package CDNs (npm and GitHub mirrors, a CSS framework's and a charting library's own host):
- *   scripts, styles, and the fonts and images those packages bring.
- * - The font service's two hosts: its stylesheet (`fonts.googleapis.com`, styles only) and the
- *   font files that stylesheet names (`fonts.gstatic.com`, fonts only).
- */
+/** The public hosts a web page may load code, styles, fonts and images from, and fetch from; its
+ * CSP names them and no other host. */
 export const SANDBOX_PUBLIC_CDNS = [
   "https://cdnjs.cloudflare.com",
   "https://cdn.jsdelivr.net",
@@ -29,6 +20,7 @@ export function withPublicCdns(directives: readonly string[]): string[] {
     "style-src": [...SANDBOX_PUBLIC_CDNS, FONT_STYLES],
     "font-src": [...SANDBOX_PUBLIC_CDNS, FONT_FILES],
     "img-src": SANDBOX_PUBLIC_CDNS,
+    "connect-src": SANDBOX_PUBLIC_CDNS,
   };
   return directives.map((directive) => {
     const added = extra[directive.slice(0, directive.indexOf(" "))];

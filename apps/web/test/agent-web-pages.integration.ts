@@ -8,6 +8,8 @@ import { Artifacts } from "#src/server/artifacts/artifacts.server";
 import { StoredArtifactBlobs } from "#src/server/artifacts/artifact-blobs.server";
 import { ArtifactDocuments } from "#src/server/artifacts/artifact-documents.server";
 import { ArtifactSandbox } from "#src/server/artifacts/artifact-sandbox.server";
+import { MemoryTicketNonces } from "#src/server/artifacts/artifact-sandbox-nonces.server";
+import { openPage } from "./helpers/artifact-sandbox-open";
 import { LocalFileStorage } from "#src/server/files/file-storage.server";
 import { handleAgentArtifactPost } from "#src/routes/api/agent/v1/artifacts";
 
@@ -191,7 +193,8 @@ test("an Agent makes a web page, reads its source, and pushes it whole", async (
   const sandbox = new ArtifactSandbox({
     reads: artifacts.reads,
     readBlob: (w, sha256) => blobs.read(w, sha256),
-    origin: "http://127.0.0.1:5199",
+    origin: "http://localhost:5199",
+    nonces: new MemoryTicketNonces(),
     secret: async () => "x".repeat(40),
     now: () => new Date(),
   });
@@ -199,20 +202,17 @@ test("an Agent makes a web page, reads its source, and pushes it whole", async (
     workspaceId,
     userId: alice,
     artifactId: artifact,
-    embedderOrigin: "http://localhost:5173",
+    embedderOrigin: "http://127.0.0.1:5173",
   });
-  const served = await sandbox.serve(
-    new Request(`${link.url}/page/index.html`, {
-      headers: { "Sec-Fetch-Dest": "iframe", "Sec-Fetch-Site": "same-origin" },
-    }),
-  );
-  expect(await served.text()).toEndWith("<h1>Mine</h1>");
+  const { response } = await openPage(sandbox, link.url);
+  expect(await response.text()).toEndWith("<h1>Mine</h1>");
 });
 
 test("a web page needs no description, and its type is its entry file's, not a stated kind", async () => {
   const bare = await post({
     operation: "push",
     title: "Bare",
+    target: `#growth-${handle}`,
     files: await page(PAGE_1),
     idempotencyKey: key(),
   });
@@ -222,6 +222,7 @@ test("a web page needs no description, and its type is its entry file's, not a s
     operation: "push",
     kind: "html",
     title: "Stated",
+    target: `#growth-${handle}`,
     files: await page(PAGE_1),
     idempotencyKey: key(),
   });

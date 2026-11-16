@@ -1,294 +1,194 @@
-import { afterAll, beforeAll, expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { ArtifactSandbox } from "#src/server/artifacts/artifact-sandbox.server";
-import { NAVIGATED_NOTICE } from "#src/server/artifacts/artifact-sandbox-response.server";
+import { LINK_USED_NOTICE } from "#src/server/artifacts/artifact-sandbox-response.server";
+import { COLLECT, startSandboxBrowserEnv } from "./helpers/artifact-sandbox-browser-env";
+import { openPage } from "./helpers/artifact-sandbox-open";
 import {
+  frameWebRtcPage,
   hintsPage,
   multiFileSite,
   navigatorPage,
   onePage,
   otherLinkSite,
   probePage,
-  siteBytes,
-  siteRow,
-  type Site,
+  storagePage,
 } from "./helpers/artifact-sandbox-site";
-import { chromePath, launchHeadlessChrome, until } from "./helpers/headless-chrome";
+import { until } from "./helpers/headless-chrome";
 
 /**
- * A web-page artifact in a real browser (task #490): its scripts run, its own files (style,
- * script, module and its import, image, font) load from under its link, and a link to another
- * file opens in the frame; and no request it tries goes out — no fetch, XHR, beacon, WebSocket,
- * WebRTC, image, script, stylesheet, form, popup, nor moving the top page — framed in the app or
- * opened in a tab. It reads no cookie and no storage, and no other origin can frame it.
- * Everything it tries is aimed at an "outside" server that counts what reaches it. The public
- * hosts its CSP names are pinned as text only (this test never reaches them); a page cannot load
- * a file of another link, whose prefix its CSP does not name.
+ * A web-page artifact in a real browser, on an origin of its own (`a-<uuid>.localhost`): its
+ * scripts run, its own files (style, script, module and its import, image, font, a fetch) load
+ * from under its file token, and a link to another file opens in the frame; its origin's storage
+ * works and no other artifact shares it; and no request it tries goes out — no fetch, XHR, beacon,
+ * WebSocket, WebRTC, image, script, stylesheet, form, popup, nor moving the top page or its own
+ * frame — framed in the app or opened in a tab. A ticket opens once. Everything the page tries is aimed at an "outside" server that counts what reaches it.
+ * The public hosts its CSP names are pinned as text only (this test never reaches them).
  *
- * What the browser sends for a page's requests from its opaque frame (`Sec-Fetch-*`, `Origin`) is
- * recorded at the sandbox server and written, with what the page saw, to
- * `.amp/e2e/artifact-sandbox-files/summary.json` (and a screenshot), the record of the run.
+ * What the browser sends for a page's requests (`Sec-Fetch-*`) is recorded at the sandbox server
+ * and written, with what the page saw, to `.amp/e2e/artifact-sandbox-files/summary.json` (and a
+ * screenshot), the record of the run.
  *
- * Nor can it navigate its own frame away, which no header of its own forbids: the wrapper's
- * `frame-src` stops the navigation, and the wrapper puts a notice in the frame's place.
+ * The two ways out left open, resource hints and a WebRTC constructor taken from a frame the page
+ * makes, are pinned by the last tests, so a browser change either way shows.
  *
- * The one way out left open, resource hints (a DNS lookup and a TCP connection, no request), is
- * pinned by the last test, so a browser change either way shows.
- *
- * Needs only Chrome (`COFORGE_E2E_CHROME`, else the macOS Google Chrome install): the sandbox is
- * the real `ArtifactSandbox` over a fake read of one page, the app and the outside are tiny local
- * servers, each on its own origin. Opt-in like every `.e2e.ts`:
+ * Needs only Chrome (`COFORGE_E2E_CHROME`, else the macOS Google Chrome install; it resolves
+ * `*.localhost` to loopback): the sandbox is the real `ArtifactSandbox` over a fake read of a few
+ * pages, the app and the outside are tiny local servers, each on its own origin. Opt-in like every
+ * `.e2e.ts`:
  *   bun test ./test/artifact-sandbox-browser.e2e.ts
  */
-const chrome = chromePath();
-if (!chrome) throw new Error("Chrome is required (COFORGE_E2E_CHROME)");
 
-const hits: string[] = [];
-const outside = Bun.serve({
-  port: 0,
-  hostname: "127.0.0.1",
-  fetch(request) {
-    const url = new URL(request.url);
-    if (url.pathname === "/favicon.ico") return new Response(null, { status: 404 });
-    if (url.pathname === "/embed") return framing(url.searchParams.get("src")!);
-    hits.push(url.pathname);
-    return new Response("ok", { headers: { "Access-Control-Allow-Origin": "*" } });
-  },
-});
-const OUT = `http://127.0.0.1:${outside.port}`;
-// A bare TCP listener: what a resource hint opens is a connection, not an HTTP request.
-let tcpConnections = 0;
-const tcp = Bun.listen({
-  hostname: "127.0.0.1",
-  port: 0,
-  socket: {
-    open: (socket) => {
-      tcpConnections += 1;
-      socket.end();
-    },
-    data: () => {},
-  },
-});
-const TCP = `http://127.0.0.1:${tcp.port}`;
-// A STUN server the page might reach over WebRTC, which CSP's fetch directives do not govern.
-const stun = await Bun.udpSocket({
-  hostname: "127.0.0.1",
-  socket: { data: () => void hits.push("/stun") },
-});
-
-const SITES: Record<string, Site> = {
-  probe: onePage(probePage(OUT, stun.port)),
-  navigator: onePage(navigatorPage(OUT)),
-  hints: onePage(hintsPage(TCP)),
-  multi: await multiFileSite(),
-};
-const bytesOf = (sha256: string) => siteBytes(SITES, sha256);
-const rowOf = (artifactId: string, path: string) => siteRow(SITES, artifactId, path);
-
-/** What the sandbox server was asked for a file of a page, and how (`Sec-Fetch-*`, `Origin`). */
-type Seen = {
-  ticket: string;
-  file: string;
-  dest: string | null;
-  site: string | null;
-  mode: string | null;
-  origin: string | null;
-};
-const seen: Seen[] = [];
-
-/** Runs first in each tab's top document: collects what frames post to it. */
-const COLLECT = `window.__messages = []; addEventListener("message", (e) => window.__messages.push(e.data));`;
-
-let sandboxServer: ReturnType<typeof Bun.serve>;
-let app: ReturnType<typeof Bun.serve>;
-let sandbox: ArtifactSandbox;
-let browser: Awaited<ReturnType<typeof launchHeadlessChrome>>;
-
-beforeAll(async () => {
-  // The app on `localhost`, the sandbox and the outside on `127.0.0.1` at ports of their own:
-  // three origins, and the app and the sandbox on different hosts, as `link` requires.
-  sandboxServer = Bun.serve({
-    port: 0,
-    hostname: "127.0.0.1",
-    fetch: (request) => {
-      const match = /^\/a\/([^/]+)\/page\/(.+)$/.exec(new URL(request.url).pathname);
-      const header = (name: string) => request.headers.get(name);
-      if (match)
-        seen.push({
-          ticket: match[1]!,
-          file: decodeURIComponent(match[2]!),
-          dest: header("sec-fetch-dest"),
-          site: header("sec-fetch-site"),
-          mode: header("sec-fetch-mode"),
-          origin: header("origin"),
-        });
-      return sandbox.serve(request);
-    },
-  });
-  sandbox = new ArtifactSandbox({
-    reads: {
-      read: async (input: { artifactId: string }) => {
-        const site = SITES[input.artifactId]!;
-        return {
-          artifact: {},
-          version: { number: 1, entryPath: site.entry },
-          files: Object.keys(site.files).map((path) => rowOf(input.artifactId, path)),
-        } as never;
-      },
-      file: async (input: { artifactId: string; path: string }) =>
-        rowOf(input.artifactId, input.path),
-      fileInVersion: async (input: { artifactId: string; path: string }) =>
-        rowOf(input.artifactId, input.path),
-    },
-    readBlob: async (_workspaceId, sha256) => bytesOf(sha256),
-    origin: `http://127.0.0.1:${sandboxServer.port}`,
-    secret: async () => "x".repeat(40),
-    now: () => new Date(),
-  });
-  app = Bun.serve({
-    port: 0,
-    hostname: "localhost",
-    fetch: (request) => framing(new URL(request.url).searchParams.get("src")!),
-  });
-  browser = await launchHeadlessChrome(chrome);
-});
-
-afterAll(async () => {
-  await browser?.close();
-  for (const server of [outside, sandboxServer, app]) server?.stop(true);
-  tcp.stop(true);
-  stun.close();
-});
-
-const appOrigin = () => `http://localhost:${app.port}`;
-const linkFor = async (page: string, embedderOrigin = appOrigin()) =>
-  (await sandbox.link({ workspaceId: "w", userId: "u", artifactId: page, embedderOrigin })).url;
-const inApp = (link: string) => `${appOrigin()}/?src=${encodeURIComponent(link)}`;
+const NAMES = ["probe", "navigator", "hints", "multi", "frameRtc", "storageA", "storageB", "cross"];
+const env = await startSandboxBrowserEnv(NAMES, async ({ out, tcp, stunPort, id }) => ({
+  [id.probe!]: onePage(probePage(out, stunPort)),
+  [id.navigator!]: onePage(navigatorPage(out)),
+  [id.hints!]: onePage(hintsPage(tcp)),
+  [id.multi!]: await multiFileSite(),
+  [id.frameRtc!]: onePage(frameWebRtcPage(stunPort)),
+  [id.storageA!]: onePage(storagePage("A")),
+  [id.storageB!]: onePage(storagePage("B")),
+}));
+const { hits, seen, ID, SITES, sandbox, browser, linkFor, inApp } = env;
+afterAll(() => env.stop());
 
 type Probe = Record<string, string | boolean>;
+type Tab = Awaited<ReturnType<typeof browser.open>>;
 
 async function probeIn(url: string): Promise<Probe> {
   hits.length = 0;
   const tab = await browser.open(url, { everyDocument: COLLECT });
   try {
-    await until(async () => (await tab.evaluate<number>("window.__messages?.length ?? 0")) > 0);
-    // Give anything that did leave time to arrive.
+    const fromPage = `(window.__messages ?? []).filter((m) => m && m.jsonrpc === undefined)`;
+    await until(async () => (await tab.evaluate<number>(`${fromPage}.length`)) > 0);
     await Bun.sleep(1000);
-    return (await tab.evaluate<Probe[]>("window.__messages"))[0]!;
+    return (await tab.evaluate<Probe[]>(fromPage))[0]!;
   } finally {
     await tab.close();
   }
 }
 
-test("framed in the app, the page's scripts run and nothing reaches outside", async () => {
-  const probe = await probeIn(inApp(await linkFor("probe")));
-  expect(probe).toMatchObject({ ran: true, origin: "null", storage: "threw", webrtc: "threw" });
-  expect(probe.cookie === "" || probe.cookie === "threw").toBe(true);
+test("framed in the app, the page's scripts run on its own origin and nothing reaches outside", async () => {
+  const link = await linkFor("probe");
+  const probe = await probeIn(inApp(link));
+  expect(probe).toMatchObject({
+    ran: true,
+    origin: `http://a-${ID.probe}.localhost:${env.sandboxPort}`,
+    storage: "allowed",
+    webrtc: "threw",
+  });
   expect(hits).toEqual([]);
 });
 
-test("opened in a tab of its own, the same holds: the page is still framed", async () => {
+test("opened in a tab of its own, the same holds", async () => {
   const probe = await probeIn(await linkFor("probe"));
-  expect(probe).toMatchObject({ ran: true, origin: "null", storage: "threw", webrtc: "threw" });
+  expect(probe).toMatchObject({ ran: true, storage: "allowed", webrtc: "threw" });
   expect(hits).toEqual([]);
+});
+
+test("storage works on the page's origin, survives a new ticket, and two artifacts do not share it", async () => {
+  const messageOf = async (name: string) => {
+    const tab = await browser.open(await linkFor(name), { everyDocument: COLLECT });
+    try {
+      await until(async () => (await tab.evaluate<number>("window.__messages.length")) > 0);
+      return (await tab.evaluate<Record<string, unknown>[]>("window.__messages"))[0]!;
+    } finally {
+      await tab.close();
+    }
+  };
+  expect((await messageOf("storageA")).before).toBeNull();
+  expect((await messageOf("storageB")).before).toBeNull();
+  expect((await messageOf("storageA")).before).toBe("A");
+  expect((await messageOf("storageB")).before).toBe("B");
 });
 
 test("another origin cannot frame a link made for the app", async () => {
   hits.length = 0;
   const link = await linkFor("probe");
-  const tab = await browser.open(`${OUT}/embed?src=${encodeURIComponent(link)}`, {
+  const tab = await browser.open(`${env.out}/embed?src=${encodeURIComponent(link)}`, {
     everyDocument: COLLECT,
   });
   await Bun.sleep(1500);
-  // A refused frame shows the browser's error page instead: the probe never ran to post.
   expect(await tab.evaluate<number>("window.__messages.length")).toBe(0);
   expect(hits).toEqual([]);
   await tab.close();
 });
 
-test("a page file is no document of its own, and no other origin may frame it", async () => {
-  const page = `${await linkFor("probe")}/page/index.html`;
-  // Opened as a top-level document: refused, nothing runs.
-  hits.length = 0;
-  const top = await browser.open(page, { everyDocument: COLLECT });
-  await Bun.sleep(1000);
-  expect(await top.evaluate<string>("document.body.innerText")).toContain("Not found");
-  expect(await top.evaluate<number>("window.__messages.length")).toBe(0);
-  await top.close();
-  // Framed by a cross-site origin that is not the app (so the file is asked for as a frame, and
-  // only `frame-ancestors`, naming the sandbox origin and the app, stops it).
-  const third = Bun.serve({
-    port: 0,
-    hostname: "localhost",
-    fetch: (request) => framing(new URL(request.url).searchParams.get("src")!),
-  });
-  try {
-    const embedded = await browser.open(
-      `http://localhost:${third.port}/?src=${encodeURIComponent(page)}`,
-      { everyDocument: COLLECT },
-    );
-    await Bun.sleep(1500);
-    expect(await embedded.evaluate<number>("window.__messages.length")).toBe(0);
-    await embedded.close();
-  } finally {
-    third.stop(true);
-  }
-  expect(hits).toEqual([]);
-});
-
-/**
- * The accepted residual: a link followed inside the frame reaches a page file cross-site, as the
- * app framing one directly does, so the app's own code can frame one without the wrapper. The
- * page stays opaque and sandboxed with nothing reaching outside; it lacks only the wrapper's
- * `frame-src` guard on where it may send its frame.
- */
-test("the app framing a page file directly leaves it opaque, with nothing reaching outside", async () => {
-  const probe = await probeIn(inApp(`${await linkFor("probe")}/page/index.html`));
-  expect(probe).toMatchObject({ ran: true, origin: "null", storage: "threw", webrtc: "threw" });
-  expect(probe.cookie === "" || probe.cookie === "threw").toBe(true);
-  expect(hits).toEqual([]);
-});
-
-test("a page cannot navigate its own frame away either: the wrapper shows a notice", async () => {
-  // In a tab the wrapper is the top document, so its notice can be read.
-  hits.length = 0;
-  const tab = await browser.open(await linkFor("navigator"));
+test("a ticket opens once: the second use is a page saying so, and the host is told", async () => {
+  const link = await linkFor("probe");
+  const first = await browser.open(link, { everyDocument: COLLECT });
+  await until(async () => (await first.evaluate<number>("window.__messages.length")) > 0);
+  await first.close();
+  const tab = await browser.open(link);
   await until(async () =>
-    (await tab.evaluate<string>("document.body.innerText")).includes(NAVIGATED_NOTICE),
+    (await tab.evaluate<string>("document.body.innerText")).includes(LINK_USED_NOTICE),
   );
-  expect(hits).toEqual([]);
   await tab.close();
-  // In the app the wrapper is another origin's frame; that nothing left is what shows.
-  const framed = await browser.open(inApp(await linkFor("navigator")));
-  await Bun.sleep(1500);
-  expect(hits).toEqual([]);
-  expect(await framed.evaluate<string>("location.href")).toStartWith(appOrigin());
+  const framed = await browser.open(inApp(link));
+  await until(async () => (await framed.evaluate<unknown>("window.__blocked")) !== undefined);
+  expect(await framed.evaluate<unknown>("window.__blocked")).toEqual({
+    state: "blocked",
+    reason: "used",
+    status: 401,
+  });
   await framed.close();
+});
+
+test("a page cannot navigate its own frame away: it stays where it was and nothing reaches outside", async () => {
+  hits.length = 0;
+  const alive = async (url: string) => {
+    const tab = await browser.open(url, { everyDocument: COLLECT });
+    try {
+      await until(
+        async () =>
+          (await tab.evaluate<Record<string, unknown>[]>("window.__messages")).some(
+            (m) => m.page === "navigator",
+          ),
+        10000,
+      );
+    } finally {
+      await tab.close();
+    }
+  };
+  await alive(await linkFor("navigator"));
+  await alive(inApp(await linkFor("navigator"), "navigator"));
+  expect(hits).toEqual([]);
 }, 20000);
 
-/**
- * The known gap, pinned so a change shows: a resource hint (`<link rel="preconnect">`, written in
- * the page or added by its script) makes Chrome resolve the host and open a TCP connection, which
- * no CSP directive or header stops. No HTTP request goes out, but the host learns the reader's
- * address and when the page was opened, and a page can spell data into a host name it resolves.
- * Accepted for now (task #490); when this test starts failing, the browser closed the gap.
- */
-test("known gap: a resource hint still opens a connection", async () => {
+test("the known gap: a resource hint still opens a connection", async () => {
   hits.length = 0;
-  tcpConnections = 0;
-  const tab = await browser.open(inApp(await linkFor("hints")));
-  await until(async () => tcpConnections > 0);
-  // Only a connection: nothing reached the HTTP outside.
+  env.tcpState.connections = 0;
+  const tab = await browser.open(inApp(await linkFor("hints"), "hints"));
+  await until(async () => env.tcpState.connections > 0);
   expect(hits).toEqual([]);
   await tab.close();
+});
+
+/**
+ * The known gap, pinned so a change shows: a same-origin frame the page makes (`about:blank`, which
+ * `frame-src` does not govern) has its own global, with a WebRTC constructor the runtime never
+ * removed. The page's CSP carries `webrtc 'block'` and the about:blank frame inherits it, but
+ * Chrome 157.0.8103.51 does not enforce the directive, so a STUN or TURN request, whose server
+ * name and credentials the page chooses, leaves for any host. When this test starts failing, the
+ * browser started enforcing it (or the runtime closed the gap): flip it to expect no STUN.
+ */
+test("the known gap: a page that makes a frame takes a clean WebRTC constructor from it", async () => {
+  hits.length = 0;
+  const probe = (await probeIn(inApp(await linkFor("frameRtc"), "frameRtc"))) as Record<
+    string,
+    unknown
+  >;
+  expect(probe.page).toBe("frame-webrtc");
+  expect(probe.peer).toBe("function");
+  expect(hits).toContain("/stun");
+  summary.frameWebRtc = { peer: probe.peer, reachedStun: hits.includes("/stun") };
 });
 
 const outputs = join(import.meta.dir, "../../../.amp/e2e/artifact-sandbox-files");
 const summary: Record<string, unknown> = {};
 
 type Message = Record<string, any>;
-const messageOf = async (tab: Awaited<ReturnType<typeof browser.open>>, page: string) => {
+const messageOf = async (tab: Tab, page: string) => {
   await until(
     async () => await tab.evaluate<boolean>(`window.__messages.some((m) => m.page === "${page}")`),
     10000,
@@ -296,13 +196,12 @@ const messageOf = async (tab: Awaited<ReturnType<typeof browser.open>>, page: st
   return (await tab.evaluate<Message[]>("window.__messages")).find((m) => m.page === page)!;
 };
 
-test("a page of several files: its own style, script, module, image and font load, and a link opens the next file in the frame", async () => {
+test("a page of several files: its own style, script, module, image, font and fetch load, and a link opens the next file in the frame", async () => {
   hits.length = 0;
   seen.length = 0;
-  const link = await linkFor("multi");
-  const ticket = link.slice(link.lastIndexOf("/") + 1);
-  // Framed in the app, as the pane shows it.
-  const framed = await browser.open(inApp(link), { everyDocument: COLLECT });
+  const framed = await browser.open(inApp(await linkFor("multi"), "multi"), {
+    everyDocument: COLLECT,
+  });
   const inFrame = await messageOf(framed, "index");
   await framed.close();
   expect(inFrame).toMatchObject({
@@ -311,18 +210,12 @@ test("a page of several files: its own style, script, module, image and font loa
     imageWidth: 1,
     font: "loaded",
     module: 42,
+    fetched: 200,
   });
 
-  // In a tab of its own, where the wrapper is the top document: click the link to the next file.
-  const tab = await browser.open(link, { everyDocument: COLLECT });
+  const tab = await browser.open(await linkFor("multi"), { everyDocument: COLLECT });
   const index = await messageOf(tab, "index");
-  expect(index).toMatchObject({
-    appRan: true,
-    color: "rgb(1, 2, 3)",
-    imageWidth: 1,
-    font: "loaded",
-    module: 42,
-  });
+  expect(index).toMatchObject({ appRan: true, color: "rgb(1, 2, 3)", module: 42 });
   for (const type of ["mouseMoved", "mousePressed", "mouseReleased"])
     await tab.command("Input.dispatchMouseEvent", {
       type,
@@ -333,62 +226,26 @@ test("a page of several files: its own style, script, module, image and font loa
     });
   const second = await messageOf(tab, "second");
   expect(second.color).toBe("rgb(1, 2, 3)");
-  // Still the page's own frame: no notice, no new document.
-  expect(await tab.evaluate<boolean>('document.querySelectorAll("iframe").length === 1')).toBe(
-    true,
-  );
-  expect(await tab.evaluate<string>("document.body.innerText")).not.toContain(NAVIGATED_NOTICE);
   await mkdir(outputs, { recursive: true });
   const shot = await tab.command<{ data: string }>("Page.captureScreenshot", { format: "png" });
   await Bun.write(join(outputs, "second-page.png"), Buffer.from(shot.data, "base64"));
   await tab.close();
   expect(hits).toEqual([]);
 
-  // What the browser sent, from the wrapper's frame and from the page's opaque origin.
-  const mine = seen.filter((request) => request.ticket === ticket);
-  const first = (file: string) => mine.find((request) => request.file === file)!;
-  expect(first("index.html")).toMatchObject({
-    dest: "iframe",
-    site: "same-origin",
-    mode: "navigate",
-  });
-  expect(first("second.html")).toMatchObject({
-    dest: "iframe",
-    site: "cross-site",
-    mode: "navigate",
-  });
-  expect(first("style.css")).toMatchObject({ dest: "style", site: "cross-site", mode: "no-cors" });
-  expect(first("app.js")).toMatchObject({ dest: "script", site: "cross-site", mode: "no-cors" });
-  expect(first("img/dot.png")).toMatchObject({
-    dest: "image",
-    site: "cross-site",
-    mode: "no-cors",
-  });
-  // CORS from an opaque origin: `Origin: null`, answered for exactly that.
-  expect(first("mod.js")).toMatchObject({
-    dest: "script",
-    site: "cross-site",
-    mode: "cors",
-    origin: "null",
-  });
-  expect(first("dep.js")).toMatchObject({ dest: "script", mode: "cors", origin: "null" });
-  expect(first("fonts/x.woff2")).toMatchObject({
-    dest: "font",
-    site: "cross-site",
-    mode: "cors",
-    origin: "null",
-  });
-  summary.seen = mine.map(({ ticket: _ticket, ...request }) => request);
+  const first = (file: string) => seen.find((request) => request.file === file)!;
+  expect(first("index.html")).toMatchObject({ dest: "iframe", mode: "navigate" });
+  expect(first("second.html")).toMatchObject({ dest: "document", site: "same-origin" });
+  expect(first("style.css")).toMatchObject({ dest: "style", site: "same-origin" });
+  expect(first("app.js")).toMatchObject({ dest: "script", site: "same-origin" });
+  expect(first("img/dot.png")).toMatchObject({ dest: "image", site: "same-origin" });
+  expect(first("mod.js")).toMatchObject({ dest: "script", site: "same-origin" });
+  expect(first("fonts/x.woff2")).toMatchObject({ dest: "font", site: "same-origin" });
+  summary.seen = seen;
   summary.pageSaw = { index: { ...index, link: undefined }, second };
 });
 
-test("the page's CSP names its own prefix and the public hosts, and still no connection", async () => {
-  const link = await linkFor("multi");
-  const response = await sandbox.serve(
-    new Request(`${link}/page/index.html`, {
-      headers: { "Sec-Fetch-Dest": "iframe", "Sec-Fetch-Site": "same-origin" },
-    }),
-  );
+test("the page's CSP names its own prefix, the public hosts and the sandbox, and no wildcard", async () => {
+  const { filesUrl, response } = await openPage(sandbox, await linkFor("multi"));
   const csp = response.headers.get("content-security-policy")!;
   for (const host of [
     "https://cdnjs.cloudflare.com",
@@ -402,14 +259,15 @@ test("the page's CSP names its own prefix and the public hosts, and still no con
     "https://fonts.gstatic.com",
   ])
     expect(csp).toContain(host);
-  expect(csp).toContain("connect-src 'none'");
-  expect(csp).toContain(`${link}/page/`);
+  expect(csp).toContain(`connect-src ${filesUrl}`);
+  expect(csp).toContain("sandbox allow-scripts allow-same-origin");
+  expect(csp).not.toContain("*");
   summary.csp = csp;
 });
 
-test("a page cannot load a file from another link's prefix", async () => {
-  const other = await linkFor("multi");
-  SITES.cross = otherLinkSite(`${other}/page/`);
+test("a page cannot load a file from another artifact's origin", async () => {
+  const { filesUrl: other } = await openPage(sandbox, await linkFor("multi"));
+  SITES[ID.cross] = otherLinkSite(other);
   seen.length = 0;
   hits.length = 0;
   const tab = await browser.open(await linkFor("cross"), { everyDocument: COLLECT });
@@ -417,12 +275,10 @@ test("a page cannot load a file from another link's prefix", async () => {
   await tab.close();
   expect(result.own).toBe(1);
   expect(result.other).toBe(0);
-  expect(result.violations.some((v: string) => v.includes(`${other}/page/`))).toBe(true);
-  // The browser never asked: nothing under the other link's ticket reached the sandbox.
-  const otherTicket = other.slice(other.lastIndexOf("/") + 1);
-  expect(seen.filter((request) => request.ticket === otherTicket)).toEqual([]);
+  expect(result.violations.some((v: string) => v.includes(other))).toBe(true);
+  expect(seen.filter((request) => request.file === "style.css")).toEqual([]);
   expect(hits).toEqual([]);
-  summary.crossLink = { own: result.own, other: result.other, violations: result.violations };
+  summary.crossArtifact = { own: result.own, other: result.other, violations: result.violations };
 });
 
 test("the run's record is written", async () => {
@@ -430,11 +286,3 @@ test("the run's record is written", async () => {
   await Bun.write(join(outputs, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
   expect(await Bun.file(join(outputs, "summary.json")).exists()).toBe(true);
 });
-
-/** A page framing `src` the way the app's pane does: our wrapper is its own origin's page. */
-function framing(src: string): Response {
-  return new Response(
-    `<!doctype html><html><body><iframe id="f" sandbox="allow-scripts allow-same-origin" src="${src}"></iframe></body></html>`,
-    { headers: { "Content-Type": "text/html; charset=utf-8" } },
-  );
-}

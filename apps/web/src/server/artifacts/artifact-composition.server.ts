@@ -6,7 +6,9 @@ import { ArtifactDocuments } from "./artifact-documents.server";
 import { centrifugoArtifactSignals } from "./artifact-signals.server";
 import { Artifacts } from "./artifacts.server";
 import { readSessionSecret } from "#src/server/auth/config.server";
+import { actorNames } from "./artifact-actor-names.server";
 import { ArtifactSandbox } from "./artifact-sandbox.server";
+import { productionTicketNonces } from "./artifact-sandbox-nonces.server";
 import { artifactSandboxOrigin } from "./artifact-sandbox-config.server";
 import { ArtifactPublicLinks } from "./artifact-public-links.server";
 import { publicPageLookup } from "./artifact-public-page.server";
@@ -56,14 +58,17 @@ export function productionArtifactShares(
   return new ArtifactShares(db, enabled);
 }
 
-/** Web pages on the sandbox origin (task #490): the same reads and bytes, signed with the
- * session secret, served from the configured origin. */
+/** Web pages on their artifacts' origins: the same reads and bytes, signed with the session
+ * secret, tickets spent in Redis. */
 export function productionArtifactSandbox(db: PrismaClient) {
   const { artifacts, blobs } = productionArtifacts(db);
   return new ArtifactSandbox({
     reads: artifacts.reads,
     readBlob: (workspaceId, sha256) => blobs.read(workspaceId, sha256),
     origin: artifactSandboxOrigin(),
+    nonces: productionTicketNonces(),
+    viewerName: async (workspaceId, userId) =>
+      (await actorNames(db, workspaceId, { userIds: [userId], agentIds: [] })).get(userId) ?? "",
     publicRateLimit: getAppRateLimits().publicArtifact,
     publicFileRateLimit: getAppRateLimits().publicArtifactFile,
     secret: () => readSessionSecret(process.env),

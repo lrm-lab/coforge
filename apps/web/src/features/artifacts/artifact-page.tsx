@@ -78,6 +78,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
   const [deleting, setDeleting] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [sendingTo, setSendingTo] = useState(false);
+  const [finding, setFinding] = useState(false);
   const current = read.data;
   const latest = current?.artifact.currentVersion ?? 0;
 
@@ -167,6 +168,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
                 )
             : undefined
         }
+        onFind={webPage ? () => setFinding(true) : undefined}
         onDelete={() => setDeleting(true)}
         pane={pane}
       />
@@ -175,7 +177,15 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
           {!current ? (
             <LoadingBody />
           ) : webPage ? (
-            <ArtifactWebPage key={latest} artifactId={artifactId} version={latest} title={title} />
+            <ArtifactWebPage
+              key={latest}
+              artifactId={artifactId}
+              version={latest}
+              title={title}
+              entryPath={current.artifact.entryPath}
+              finding={finding}
+              onFindingChange={setFinding}
+            />
           ) : (
             <ArtifactMarkdown text={current.text} />
           )}

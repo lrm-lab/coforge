@@ -1,38 +1,48 @@
 import { AppError } from "#src/lib/app-error";
+import { artifactKindOfPath } from "#src/features/artifacts/artifact-path-kind";
 import {
   NO_RATE_LIMIT,
   type AppRateLimit,
 } from "#src/server/app-rate-limits/app-rate-limit.server";
 import { clientAddress } from "#src/server/http/public-origin.server";
 import type { ArtifactReads } from "./artifact-reads.server";
+import { PAGE_RUNTIME_PATH } from "./artifact-page-runtime.server";
+import { publicMarkdownResponse } from "./artifact-public-markdown.server";
+import { artifactPageOrigin, sandboxTarget } from "./artifact-sandbox-config.server";
 import {
   ARTIFACT_HTML_LIMIT,
   fileRequestUse,
   isPageFile,
   pageFileResponse,
   PUBLIC_FILE_CACHE,
-  requiredUse,
   SIGNED_FILE_CACHE,
+  type FileRequestUse,
 } from "./artifact-sandbox-files.server";
+import type { TicketNonces } from "./artifact-sandbox-nonces.server";
 import { decodeSandboxFilePath, sandboxFileUrlPath } from "./artifact-sandbox-path.server";
-import { sandboxRefusal, sandboxWrapper } from "./artifact-sandbox-response.server";
 import {
+  sandboxBlockedPage,
+  sandboxRedirect,
+  sandboxRefusal,
+  sandboxRuntimeResponse,
+} from "./artifact-sandbox-response.server";
+import {
+  readSandboxFileToken,
   readSandboxTicket,
-  sandboxWrapperOpen,
+  sandboxGrantExpired,
+  signSandboxFileToken,
   signSandboxTicket,
 } from "./artifact-sandbox-ticket.server";
-import { publicMarkdownResponse } from "./artifact-public-markdown.server";
+
+export const SANDBOX_OPEN_PATH = "/_coforge/open";
 
 type SandboxDependencies = {
   reads: Pick<ArtifactReads, "read" | "file" | "fileInVersion">;
-  /** One blob's bytes, or null when it is gone. */
   readBlob(workspaceId: string, sha256: string): Promise<Uint8Array | null>;
-  /** The sandbox origin, or null when web pages are off. */
   origin: string | null;
+  nonces: TicketNonces;
   secret(): Promise<string>;
   now(): Date;
-  /** What a public link shows now: its artifact's current version's entry path, and the sha256 of
-   * the file at `path` (the entry's, when none is asked for). Null when there is none. */
   publicPage?(
     token: string,
     path?: string,
@@ -44,22 +54,14 @@ type SandboxDependencies = {
     entryPath: string;
     sha256: string;
   } | null>;
-  /** Spent by a public page's wrapper and frames, per client address. */
+  viewerName?: (workspaceId: string, userId: string) => Promise<string>;
   publicRateLimit?: AppRateLimit;
-  /** Spent by each other file of a public page, per client address: far higher, so a page of many
-   * files loads. Falls back to `publicRateLimit`. */
   publicFileRateLimit?: AppRateLimit;
   publicClientAddress?: (request: Request) => string | undefined;
 };
 
-/**
- * Web-page artifacts on their own origin (task #490). `link` is the application's half: it checks
- * the reader may read the page, then returns a short-lived signed link on the sandbox origin.
- * `serve` is the sandbox's half: it answers only such a link, checks the reader's access once
- * more (it may have changed since the link was made), and returns our wrapper framing the page,
- * the page with headers that let its own scripts run and nothing load or leave
- * (`artifact-sandbox-response.server.ts`).
- */
+type ArtifactHost = { origin: string; artifactId: string; pageOrigin: string };
+
 export class ArtifactSandbox {
   constructor(private readonly deps: SandboxDependencies) {}
 
@@ -68,17 +70,22 @@ export class ArtifactSandbox {
     userId: string;
     artifactId: string;
     version?: number;
-    /** The application origin the page is opened from, which alone may frame it. */
     embedderOrigin: string;
-  }): Promise<{ url: string; version: number; expiresAt: Date }> {
+  }): Promise<{
+    url: string;
+    version: number;
+    expiresAt: Date;
+    viewer: { displayName: string; kind: "person" };
+  }> {
     const origin = this.deps.origin;
     if (!origin)
       throw new AppError("TEMPORARILY_UNAVAILABLE", {
         errorId: "artifact-sandbox-off",
         hint: "this deployment has no sandbox origin for web pages (COFORGE_ARTIFACT_SANDBOX_ORIGIN)",
       });
-    // A sandbox on the application's own host would be no sandbox: refuse rather than serve.
-    if (new URL(origin).hostname === new URL(input.embedderOrigin).hostname)
+    const sandboxHost = new URL(origin).hostname;
+    const embedderHost = new URL(input.embedderOrigin).hostname;
+    if (embedderHost === sandboxHost || embedderHost.endsWith(`.${sandboxHost}`))
       throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "artifact-sandbox-off" });
     const page = await this.page({
       workspaceId: input.workspaceId,
@@ -87,6 +94,7 @@ export class ArtifactSandbox {
       version: input.version,
     });
     if (!page) throw new AppError("NOT_FOUND");
+    const pageOrigin = artifactPageOrigin(origin, input.artifactId);
     const { ticket, expiresAt } = signSandboxTicket(
       {
         w: input.workspaceId,
@@ -94,113 +102,142 @@ export class ArtifactSandbox {
         v: page.version,
         u: input.userId,
         o: new URL(input.embedderOrigin).origin,
+        s: pageOrigin,
       },
       await this.deps.secret(),
       this.deps.now(),
     );
-    return { url: `${origin}/a/${ticket}`, version: page.version, expiresAt };
+    return {
+      url: `${pageOrigin}${SANDBOX_OPEN_PATH}?ticket=${ticket}`,
+      version: page.version,
+      expiresAt,
+      viewer: {
+        displayName: (await this.deps.viewerName?.(input.workspaceId, input.userId)) ?? "",
+        kind: "person",
+      },
+    };
   }
 
-  /**
-   * The sandbox origin's every answer. A valid link (`/a/<ticket>`) is the wrapper; every file of
-   * the link's version is under it (`/a/<ticket>/page/<path>`): a page file only as a frame (the
-   * wrapper's, or a link followed inside it), any other file only as a subresource of a page
-   * (`fileRequestUse`), so none is ever a document of its own; anything else is a refusal. The
-   * wrapper and each page file ask again whether the reader may still read (access may have
-   * changed since the link was made); a subresource of a page already open serves under the
-   * ticket alone until the ticket's files expire (task #25). A page file is also asked for,
-   * cross-site, by a link followed inside the page's opaque frame, so the app framing one
-   * directly is not told apart (an accepted residual: only app code can do it, and the page stays
-   * sandboxed, just without the wrapper's `frame-src` guard). The wrapper opens for five minutes
-   * after the link was made, its files for thirty.
-   */
   async serve(request: Request): Promise<Response> {
-    if (request.method !== "GET" && request.method !== "HEAD")
-      return sandboxRefusal(405, "Method not allowed.");
-    const pathname = new URL(request.url).pathname;
-    const publicMatch = /^\/p\/([A-Za-z0-9_-]{43})(?:\/page\/(.+))?$/.exec(pathname);
-    if (publicMatch) return this.servePublic(request, publicMatch[1]!, publicMatch[2]);
-    const match = /^\/a\/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)(?:\/page\/(.+))?$/.exec(pathname);
-    if (!match || !this.deps.origin) return sandboxRefusal(404, "Not found.");
-    const file = match[2] === undefined ? undefined : requestedFile(request, match[2]);
-    if (file === null) return sandboxRefusal(404, "Not found.");
-    const ticket = readSandboxTicket(match[1]!, await this.deps.secret(), this.deps.now());
-    if (
-      ticket === "expired" ||
-      (ticket && file === undefined && !sandboxWrapperOpen(ticket, this.deps.now()))
-    )
-      return sandboxRefusal(403, "This link has expired. Open the page again from CoForge.");
-    if (!ticket || !isOrigin(ticket.o)) return sandboxRefusal(404, "Not found.");
-    const reader = { userId: ticket.u };
-    const origins = { sandboxOrigin: this.deps.origin, appOrigin: ticket.o };
-    // Gone, or no longer readable by this reader: the same answer for both. Anything else (the
-    // database down) is not a refusal and reaches the caller's 502.
-    const refusable = (error: unknown) => {
-      if (!(error instanceof AppError)) throw error;
-      return null;
+    const method = request.method;
+    if (method !== "GET" && method !== "HEAD") return sandboxRefusal(405, "Method not allowed.");
+    const origin = this.deps.origin;
+    if (!origin) return sandboxRefusal(404, "Not found.");
+    const target = sandboxTarget(request, origin);
+    if (target.kind !== "artifact") return sandboxRefusal(404, "Not found.");
+    const host: ArtifactHost = {
+      origin,
+      artifactId: target.artifactId,
+      pageOrigin: artifactPageOrigin(origin, target.artifactId),
     };
-    if (file === undefined) {
-      const page = await this.page({
-        workspaceId: ticket.w,
-        artifactId: ticket.a,
-        userId: ticket.u,
-        version: ticket.v,
-      }).catch(refusable);
-      if (!page) return sandboxRefusal(404, "Not found.");
-      return sandboxWrapper({
+    const pathname = new URL(request.url).pathname;
+    if (pathname === PAGE_RUNTIME_PATH) return sandboxRuntimeResponse(method);
+    if (pathname === SANDBOX_OPEN_PATH) return this.open(request, host);
+    const file = /^\/_f\/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\/(.+)$/.exec(pathname);
+    if (file) return this.serveFile(request, host, file[1]!, file[2]!);
+    const publicPage = /^\/p\/([A-Za-z0-9_-]{43})(?:\/page\/(.+))?$/.exec(pathname);
+    if (publicPage) return this.servePublic(request, host, publicPage[1]!, publicPage[2]);
+    return sandboxRefusal(404, "Not found.");
+  }
+
+  private async open(request: Request, host: ArtifactHost): Promise<Response> {
+    if (request.method !== "GET") return sandboxRefusal(405, "Method not allowed.");
+    const secret = await this.deps.secret();
+    const ticket = readSandboxTicket(new URL(request.url).searchParams.get("ticket") ?? "", secret);
+    if (
+      !ticket ||
+      ticket.s !== host.pageOrigin ||
+      ticket.a !== host.artifactId ||
+      !isOrigin(ticket.o)
+    )
+      return sandboxRefusal(404, "Not found.");
+    const now = this.deps.now();
+    if (sandboxGrantExpired(ticket, now))
+      return sandboxBlockedPage({
         method: request.method,
-        pagePath: `/a/${match[1]}/page/${sandboxFileUrlPath(page.entryPath)}`,
-        ...origins,
+        block: { reason: "expired", status: 403 },
+        hostOrigin: ticket.o,
       });
-    }
-    // A page file is a document the frame shows, so its load asks again whether the reader may
-    // still read it. Any other file is a subresource of a page already open: the ticket is its
-    // authorization, so it asks only that the artifact is live and the version has it (task #25).
-    const row = isPageFile(file)
+    const remaining = ticket.exp - Math.floor(now.getTime() / 1000);
+    if (!(await this.deps.nonces.claim(ticket.n, remaining)))
+      return sandboxBlockedPage({
+        method: request.method,
+        block: { reason: "used", status: 401 },
+        hostOrigin: ticket.o,
+      });
+    const page = await this.page({
+      workspaceId: ticket.w,
+      artifactId: ticket.a,
+      userId: ticket.u,
+      version: ticket.v,
+    }).catch(refusable);
+    if (!page) return sandboxRefusal(404, "Not found.");
+    const token = signSandboxFileToken(
+      { w: ticket.w, a: ticket.a, v: ticket.v, u: ticket.u, o: ticket.o, s: ticket.s },
+      secret,
+      now,
+    );
+    return sandboxRedirect(`/_f/${token}/${sandboxFileUrlPath(page.entryPath)}`);
+  }
+
+  private async serveFile(
+    request: Request,
+    host: ArtifactHost,
+    tokenValue: string,
+    raw: string,
+  ): Promise<Response> {
+    const path = decodeSandboxFilePath(raw);
+    const use = fileRequestUse(request.headers);
+    if (!path || !use || !useAllowed(path, use)) return sandboxRefusal(404, "Not found.");
+    const token = readSandboxFileToken(tokenValue, await this.deps.secret());
+    if (!token || token.s !== host.pageOrigin || token.a !== host.artifactId || !isOrigin(token.o))
+      return sandboxRefusal(404, "Not found.");
+    if (sandboxGrantExpired(token, this.deps.now()))
+      return sandboxRefusal(403, "This link has expired. Open the page again from CoForge.");
+    const row = isPageFile(path)
       ? await this.deps.reads
           .file({
-            workspaceId: ticket.w,
-            artifactId: ticket.a,
-            reader,
-            version: ticket.v,
-            path: file,
+            workspaceId: token.w,
+            artifactId: token.a,
+            reader: { userId: token.u },
+            version: token.v,
+            path,
           })
           .catch(refusable)
       : await this.deps.reads.fileInVersion({
-          workspaceId: ticket.w,
-          artifactId: ticket.a,
-          version: ticket.v,
-          path: file,
+          workspaceId: token.w,
+          artifactId: token.a,
+          version: token.v,
+          path,
         });
-    if (!row || (isPageFile(file) && row.sizeBytes > ARTIFACT_HTML_LIMIT))
+    if (!row || (isPageFile(path) && row.sizeBytes > ARTIFACT_HTML_LIMIT))
       return sandboxRefusal(404, "Not found.");
     return (
       pageFileResponse({
         method: request.method,
-        path: file,
-        bytes: await this.deps.readBlob(ticket.w, row.sha256),
-        origins,
-        filePrefix: `${this.deps.origin}/a/${match[1]}/page/`,
+        path,
+        bytes: await this.deps.readBlob(token.w, row.sha256),
+        use,
+        pageOrigin: host.pageOrigin,
+        frameAncestor: token.o,
+        hostOrigin: token.o,
+        filePrefix: `${host.pageOrigin}/_f/${tokenValue}/`,
         fileCache: SIGNED_FILE_CACHE,
       }) ?? sandboxRefusal(404, "Not found.")
     );
   }
 
-  private async servePublic(request: Request, token: string, raw?: string): Promise<Response> {
+  private async servePublic(
+    request: Request,
+    host: ArtifactHost,
+    token: string,
+    raw?: string,
+  ): Promise<Response> {
     if (!this.deps.publicPage) return sandboxRefusal(404, "Not found.");
-    // A public link is the wrapper (no path) or one file of its artifact's current version, a frame
-    // or a subresource by the same rules as a signed link's; a Markdown page has only its entry,
-    // always a frame. Nothing is looked up for a path that names no file or a request no browser
-    // makes of one.
     const path = raw === undefined ? undefined : decodeSandboxFilePath(raw);
     const use = path === undefined ? null : fileRequestUse(request.headers);
-    if (
-      path === null ||
-      (path !== undefined && (!use || (use === "subresource" && requiredUse(path) === "frame")))
-    )
+    if (path === null || (path !== undefined && (!use || !publicUseAllowed(path, use))))
       return sandboxRefusal(404, "Not found.");
-    // A page load (the wrapper, a frame) spends the page limit; each of its other files only the
-    // far higher one of their own, so a page of many files loads.
     const limit =
       use === "subresource"
         ? (this.deps.publicFileRateLimit ?? this.deps.publicRateLimit)
@@ -213,20 +250,11 @@ export class ArtifactSandbox {
       response.headers.set("Retry-After", String(admitted.retryAfterSeconds));
       return response;
     }
-    const origin = this.deps.origin!;
-    const origins = { sandboxOrigin: origin, appOrigin: "'none'" };
     const page = await this.deps.publicPage(token, path);
-    if (!page) return sandboxRefusal(404, "Not found.");
+    if (!page || page.artifactId !== host.artifactId) return sandboxRefusal(404, "Not found.");
     if (path === undefined)
-      return sandboxWrapper({
-        method: request.method,
-        pagePath: `/p/${token}/page/${sandboxFileUrlPath(page.entryPath)}`,
-        ...origins,
-      });
-    if (
-      use !== requiredUse(path, page.kind) ||
-      (page.kind === "markdown" && path !== page.entryPath)
-    )
+      return sandboxRedirect(`/p/${token}/page/${sandboxFileUrlPath(page.entryPath)}`);
+    if (page.kind === "markdown" && (path !== page.entryPath || use !== "frame"))
       return sandboxRefusal(404, "Not found.");
     const bytes = await this.deps.readBlob(page.workspaceId, page.sha256);
     return (
@@ -236,22 +264,21 @@ export class ArtifactSandbox {
             title: page.title,
             bytes,
             limit: ARTIFACT_HTML_LIMIT,
-            sandboxOrigin: origin,
           })
         : pageFileResponse({
             method: request.method,
             path,
             bytes,
-            origins,
-            filePrefix: `${origin}/p/${token}/page/`,
+            use: use!,
+            pageOrigin: host.pageOrigin,
+            frameAncestor: "'none'",
+            hostOrigin: null,
+            filePrefix: `${host.pageOrigin}/p/${token}/page/`,
             fileCache: PUBLIC_FILE_CACHE,
           })) ?? sandboxRefusal(404, "Not found.")
     );
   }
 
-  /** The web page the reader may read at `version` (the current one by default): its version and
-   * its entry file's path. Null when it is not a web page, has no version yet, or its entry is
-   * not an html file within the limit. Throws as `ArtifactReads.read` does where it cannot read. */
   private async page(input: {
     workspaceId: string;
     artifactId: string;
@@ -271,16 +298,16 @@ export class ArtifactSandbox {
   }
 }
 
-/** The artifact path a link's file URL asks for, when the browser says it is a frame or a
- * subresource of the right kind for it; null when it names no file or is not asked that way. */
-function requestedFile(request: Request, raw: string): string | null {
-  const path = decodeSandboxFilePath(raw);
-  if (!path) return null;
-  const use = fileRequestUse(request.headers);
-  return use === requiredUse(path) ? path : null;
+const useAllowed = (path: string, use: FileRequestUse) => use === "subresource" || isPageFile(path);
+
+const publicUseAllowed = (path: string, use: FileRequestUse) =>
+  useAllowed(path, use) || artifactKindOfPath(path) === "markdown";
+
+function refusable(error: unknown): null {
+  if (!(error instanceof AppError)) throw error;
+  return null;
 }
 
-/** An http(s) origin and nothing else, so it goes into `frame-ancestors` as it is. */
 function isOrigin(value: string): boolean {
   try {
     const url = new URL(value);

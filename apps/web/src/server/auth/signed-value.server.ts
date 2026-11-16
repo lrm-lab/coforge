@@ -13,7 +13,8 @@ type SignedPurpose =
   | "authorization-query"
   | "sign-in-requested"
   | "github-sign-in"
-  | "artifact-sandbox";
+  | "artifact-sandbox-ticket"
+  | "artifact-sandbox-files";
 
 /** `payload` as JSON, base64url, then `.` and its HMAC-SHA256 under `secret` for `purpose`. */
 export function signValue(purpose: SignedPurpose, payload: object, secret: string): string {

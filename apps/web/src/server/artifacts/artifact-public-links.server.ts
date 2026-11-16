@@ -1,7 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { artifactOpenableKind } from "#src/features/artifacts/artifact-path-kind";
-import { artifactSandboxOrigin } from "./artifact-sandbox-config.server";
+import { artifactPageOrigin, artifactSandboxOrigin } from "./artifact-sandbox-config.server";
 import {
   artifactAuthorOwnerId,
   artifactsDisabled,
@@ -52,7 +52,8 @@ export class ArtifactPublicLinks {
     const live = artifact.publicLinks.at(0);
     return {
       available: origin !== null && linkable(artifact.entryPath),
-      url: origin && live ? `${origin}/p/${live.token}` : null,
+      url:
+        origin && live ? `${artifactPageOrigin(origin, input.artifactId)}/p/${live.token}` : null,
     };
   }
 
@@ -94,12 +95,19 @@ export class ArtifactPublicLinks {
           });
         return { enabled: false as const };
       }
-      if (live) return { enabled: true as const, url: `${origin}/p/${live.token}` };
+      if (live)
+        return {
+          enabled: true as const,
+          url: `${artifactPageOrigin(origin, input.artifactId)}/p/${live.token}`,
+        };
       const created = await tx.artifactPublicLink.create({
         data: { artifactId: artifact.id, token: mintToken(), createdByUserId: input.userId },
         select: { token: true },
       });
-      return { enabled: true as const, url: `${origin}/p/${created.token}` };
+      return {
+        enabled: true as const,
+        url: `${artifactPageOrigin(origin, input.artifactId)}/p/${created.token}`,
+      };
     });
   }
 }

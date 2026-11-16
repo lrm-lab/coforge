@@ -21,6 +21,14 @@ from `main`; a merge to `main` does not deploy
 gh workflow run deploy-staging.yml --repo lrm-lab/coforge --ref main
 ```
 
+## Web-page artifacts' origins
+
+Staging serves each web-page artifact from `a-<artifact uuid>.staging.coforgeusercontent.com`
+(`COFORGE_ARTIFACT_SANDBOX_ORIGIN` is `https://staging.coforgeusercontent.com`); the bare host
+answers not found. DNS needs a wildcard record for `*.staging.coforgeusercontent.com`, and its
+certificate needs a DNS-01 issuer, as described in the
+[production runbook](../production/README.md#web-page-artifacts-origins).
+
 ## Contents
 
 - [One-time operator bootstrap](operator-bootstrap.md): One-time host bootstrap: deployment user, secrets, RAM role, CDN signing key, DNS, and the first deploy.

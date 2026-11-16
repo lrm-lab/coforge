@@ -43,7 +43,8 @@ import {
  * definition file is a boot failure. App webhooks too: an unset `COFORGE_APP_WEBHOOK_KEY` leaves them
  * off; a set key shorter than 32 characters is a boot failure. The web-page sandbox too: an unset
  * `COFORGE_ARTIFACT_SANDBOX_ORIGIN` leaves web pages off; a set origin that is not https (or
- * loopback http), has a path, or is the application's own origin is a boot failure.
+ * `localhost` http), has a path, or is the application's own origin or a parent of it is a boot
+ * failure.
  */
 export async function assertStartupConfig(env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const config = await readStartupConfig(env);

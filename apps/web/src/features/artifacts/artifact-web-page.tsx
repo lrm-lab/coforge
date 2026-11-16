@@ -1,42 +1,47 @@
+import { useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Browser } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { Skeleton } from "#src/components/ui/skeleton";
+import { useAppToast } from "#src/components/ui/toast";
 import { isAppError } from "#src/lib/app-error";
+import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
 import { loadArtifactSandboxLink } from "./artifact-sandbox.functions";
 import { ARTIFACTS_KEY } from "./artifact-queries";
+import { PageErrorBanner, PageExpiredCard, PageFindBar } from "./artifact-page-notices";
+import { useArtifactPageBridge } from "./use-artifact-page-bridge";
 
-/** The page's link at a version: asked anew each time the page shows, as it is short-lived. */
 const sandboxLinkQuery = (artifactId: string, version: number) => ({
   queryKey: [...ARTIFACTS_KEY, "sandbox", artifactId, version],
   queryFn: () => loadArtifactSandboxLink({ data: { artifactId, version } }),
   staleTime: 0,
   gcTime: 0,
-  // A new link reloads the frame, and the page would lose what its reader did in it: asked for
-  // only as it shows.
   refetchOnWindowFocus: false,
   refetchOnReconnect: false,
 });
 
-/**
- * A web page on its artifact's page (task #490, #514): the page itself, framed from the sandbox
- * origin, filling everything under the header (Frank, 11-05: no Source view, no note over it).
- * A person reads it; an Agent changes it, so there is nothing to edit here.
- */
+type PageLink = Awaited<ReturnType<typeof loadArtifactSandboxLink>>;
+
 export function ArtifactWebPage({
   artifactId,
   version,
   title,
+  entryPath,
+  finding,
+  onFindingChange,
 }: {
   artifactId: string;
   version: number;
   title: string;
+  entryPath: string;
+  finding: boolean;
+  onFindingChange: (finding: boolean) => void;
 }) {
   const link = useQuery(sandboxLinkQuery(artifactId, version));
   if (link.isError) {
-    // A deployment without a sandbox origin cannot show web pages at all; anything else may pass.
     const off = isAppError(link.error) && link.error.errorId === "artifact-sandbox-off";
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
@@ -59,14 +64,104 @@ export function ArtifactWebPage({
   }
   if (!link.data) return <Skeleton className="m-4 flex-1 rounded-xl md:mx-6" />;
   return (
-    // The sandbox's wrapper keeps its own origin (`allow-same-origin`, on the sandbox origin, not
-    // ours): it frames the page itself, opaque, as `sandboxWrapper` says.
-    <iframe
-      aria-label={title}
-      src={link.data.url}
-      sandbox="allow-scripts allow-same-origin"
-      referrerPolicy="no-referrer"
-      className="min-h-[24rem] w-full flex-1 bg-white"
+    <PageFrame
+      key={link.data.url}
+      link={link.data}
+      artifactId={artifactId}
+      version={version}
+      title={title}
+      entryPath={entryPath}
+      finding={finding}
+      onFindingChange={onFindingChange}
+      onReload={() => void link.refetch()}
     />
+  );
+}
+
+function PageFrame({
+  link,
+  artifactId,
+  version,
+  title,
+  entryPath,
+  finding,
+  onFindingChange,
+  onReload,
+}: {
+  link: PageLink;
+  artifactId: string;
+  version: number;
+  title: string;
+  entryPath: string;
+  finding: boolean;
+  onFindingChange: (finding: boolean) => void;
+  onReload: () => void;
+}) {
+  const toast = useAppToast();
+  const frame = useRef<HTMLIFrameElement>(null);
+  const origin = useMemo(() => new URL(link.url).origin, [link.url]);
+  const artifact = useMemo(
+    () => ({ id: artifactId, title, version, entryPath }),
+    [artifactId, title, version, entryPath],
+  );
+  const { bridge, linkRequest, error, dismissError, blocked, found } = useArtifactPageBridge({
+    frame,
+    origin,
+    viewer: link.viewer,
+    artifact,
+  });
+  const askAgent = async () => {
+    const report = m.doc_page_error_report({
+      version,
+      width: frame.current?.clientWidth ?? window.innerWidth,
+      message: error ?? "",
+    });
+    if (await copyText(report)) toast.success(m.doc_page_error_copied());
+    else toast.error(m.conversation_copy_failed());
+    dismissError();
+  };
+  return (
+    <>
+      {error !== null && (
+        <PageErrorBanner onAskAgent={() => void askAgent()} onClose={dismissError} />
+      )}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <iframe
+          ref={frame}
+          aria-label={title}
+          src={link.url}
+          sandbox="allow-scripts allow-same-origin"
+          allow="clipboard-read 'none'; clipboard-write 'none'"
+          referrerPolicy="no-referrer"
+          className="min-h-[24rem] w-full flex-1 bg-white"
+        />
+        {finding && (
+          <PageFindBar
+            found={found}
+            onFind={(query, step) => bridge.find({ query, step })}
+            onClose={() => {
+              bridge.find({ query: "", step: 0 });
+              onFindingChange(false);
+            }}
+          />
+        )}
+        {blocked && <PageExpiredCard onReload={onReload} />}
+      </div>
+      <ConfirmDialog
+        open={linkRequest !== null}
+        onOpenChange={(open) => !open && linkRequest?.settle(false)}
+        tone="default"
+        title={m.doc_page_link_title()}
+        description={m.doc_page_link_body({ title })}
+        detail={
+          <span className="mt-2 block rounded-lg bg-secondary px-3 py-2 text-sm break-all text-primary">
+            {linkRequest?.url}
+          </span>
+        }
+        confirmLabel={m.doc_page_link_open()}
+        errorMessage={m.doc_page_link_failed()}
+        onConfirm={async () => linkRequest?.settle(true)}
+      />
+    </>
   );
 }

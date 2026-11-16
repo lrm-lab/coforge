@@ -145,6 +145,17 @@ are refreshed the same way ([wildcard certificate](../usercontent-certificate/RE
 | Secret | `ALIDNS_ACCESS_KEY_ID`, `ALIDNS_ACCESS_KEY_SECRET` | AccessKey of RAM user `coforge-production-usercontent-dns`; deploy writes `secrets/alidns_access_key_id` and `secrets/alidns_access_key_secret` |
 | Secret | `COFORGE_CLOUD_SERVICE_PASSWORD` | Settings → 云电脑服务 unlock password; deploy writes `secrets/coforge_cloud_service_password` |
 
+## Web-page artifacts' origins
+
+A web-page artifact is served only from its own origin, `a-<artifact uuid>.coforgeusercontent.com`
+(`COFORGE_ARTIFACT_SANDBOX_ORIGIN` is the bare `https://coforgeusercontent.com`); the bare host
+answers not found. The Caddyfile serves `*.coforgeusercontent.com` beside the apex, so DNS needs a
+wildcard record for it. A wildcard certificate can only be issued with a DNS-01 challenge: the
+Caddy image must be built with the DNS provider module that manages the zone, and the wildcard
+site needs a `tls { dns <provider> ... }` block with that provider's credentials, supplied from
+the secrets directory and never committed. Until that issuer is in place the wildcard site has no
+certificate and pages do not load.
+
 ## Cloud computers
 
 Swarm manager for production is the lab host `10.110.158.147` (Compose

@@ -40,7 +40,9 @@ addEventListener("load", async () => {
   await document.fonts.load("16px Own").catch(() => {});
   const face = [...document.fonts].find((f) => f.family.replaceAll('"', "") === "Own");
   const box = document.getElementById("go").getBoundingClientRect();
+  const fetched = await fetch("dep.js").then((r) => r.status).catch(() => "blocked");
   top.postMessage({
+    fetched,
     page: "index",
     appRan: window.appRan,
     color: getComputedStyle(document.getElementById("p")).color,
@@ -104,7 +106,7 @@ export function siteRow(sites: Record<string, Site>, artifactId: string, path: s
     : null;
 }
 
-/** Every way out the page tries, then what it could read, posted to the top page. `out` is the
+/** Every way out the page tries, then what it could use, posted to the top page. `out` is the
  * "outside" server's URL every attempt aims at; `stunPort` a STUN server's port for WebRTC. */
 export const probePage = (
   out: string,
@@ -129,16 +131,74 @@ attempt("webrtc", () => {
   pc.createOffer().then((offer) => pc.setLocalDescription(offer)).catch(() => {});
 });
 try { result.cookie = document.cookie; } catch (e) { result.cookie = "threw"; }
-try { localStorage.setItem("k", "v"); result.storage = "allowed"; } catch (e) { result.storage = "threw"; }
+try { localStorage.setItem("k", "v"); result.storage = localStorage.getItem("k") === "v" ? "allowed" : "empty"; } catch (e) { result.storage = "threw"; }
 result.origin = String(self.origin);
 top.postMessage(result, "*");
 </script></body></html>`;
 
-/** A page that sends its own frame to `out/self`. */
+/** A page that sends its own frame to `out/self`, and says whether it is still there after. */
 export const navigatorPage = (out: string): string =>
-  `<!doctype html><p>moving</p><script>setTimeout(() => { location.href = ${JSON.stringify(
-    `${out}/self`,
-  )}; }, 100);</script>`;
+  `<!doctype html><p>moving</p><script>
+setTimeout(() => { location.href = ${JSON.stringify(`${out}/self`)}; }, 100);
+setTimeout(() => top.postMessage({ page: "navigator", alive: true, href: location.href }, "*"), 1500);
+</script>`;
+
+/** A page that takes a clean WebRTC constructor from a frame it makes itself. */
+export const frameWebRtcPage = (stunPort: number): string =>
+  `<!doctype html><p>frames</p><script>
+const result = { page: "frame-webrtc" };
+try {
+  const frame = document.createElement("iframe");
+  document.body.append(frame);
+  const Peer = frame.contentWindow.RTCPeerConnection;
+  result.peer = typeof Peer;
+  if (Peer) {
+    const pc = new Peer({ iceServers: [{ urls: "stun:127.0.0.1:${stunPort}" }] });
+    pc.createDataChannel("x");
+    pc.createOffer().then((offer) => pc.setLocalDescription(offer)).catch(() => {});
+  }
+} catch (e) { result.peer = "threw"; }
+setTimeout(() => top.postMessage(result, "*"), 500);
+</script>`;
+
+/** A page that writes, reads and reports what its origin's storage holds, and answers the bridge. */
+export const storagePage = (name: string): string =>
+  `<!doctype html><p>storage</p><script>
+const before = localStorage.getItem("who");
+localStorage.setItem("who", ${JSON.stringify(name)});
+top.postMessage({ page: "storage", before, origin: location.origin }, "*");
+</script>`;
+
+export const bridgePage =
+  (): string => `<!doctype html><html><head><title>bridge</title></head><body>
+<p>Hello there, hello again</p><button id="copy">copy</button><button id="link">link</button><button id="comment">comment</button>
+<script>
+const post = (data) => top.postMessage({ page: "bridge", ...data }, "*");
+const settle = (promise) => promise.then((value) => ({ ok: value }), (error) => ({ error: error.message }));
+addEventListener("coforge:theme", (e) => post({ theme: e.detail.theme, attribute: document.documentElement.getAttribute("data-theme") }));
+(async () => {
+  const user = await coforge.use("user");
+  const artifact = await coforge.use("artifact");
+  const clipboard = await coforge.use("clipboard");
+  const links = await coforge.use("links");
+  const comments = await coforge.use("comments");
+  post({
+    ready: true,
+    frozen: Object.isFrozen(user),
+    user: await user.get(),
+    artifact: await artifact.get(),
+    missing: await coforge.use("db"),
+    coldCopy: await settle(clipboard.copy("cold")),
+    theme: document.documentElement.getAttribute("data-theme"),
+  });
+  document.getElementById("copy").onclick = async () => post({ copy: await settle(clipboard.copy("copied text")) });
+  document.getElementById("link").onclick = async () => post({ link: await settle(links.open("https://example.com/path")) });
+  document.getElementById("comment").onclick = async () => post({ comment: await settle(comments.open({ body: "Approve" })) });
+  const rect = (id) => { const r = document.getElementById(id).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; };
+  post({ buttons: { copy: rect("copy"), link: rect("link"), comment: rect("comment") } });
+  setTimeout(() => { throw new Error("boom"); }, 300);
+})();
+</script></body></html>`;
 
 /** Resource hints (`tcp`), written and added by script: the one way out that stays open. */
 export const hintsPage = (

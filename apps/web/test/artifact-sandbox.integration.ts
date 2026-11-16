@@ -7,6 +7,8 @@ import {
   type ArtifactBlobStore,
 } from "#src/server/artifacts/artifacts.server";
 import { ArtifactSandbox } from "#src/server/artifacts/artifact-sandbox.server";
+import { MemoryTicketNonces } from "#src/server/artifacts/artifact-sandbox-nonces.server";
+import { FRAME, fileRequest, openLink, openPage } from "./helpers/artifact-sandbox-open";
 
 /**
  * Web pages on the sandbox origin over real artifacts (task #490): the link opens the version it
@@ -18,18 +20,11 @@ const connectionString = Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL must point to local PostgreSQL");
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 const handle = crypto.randomUUID().slice(0, 8);
-const SANDBOX = "http://127.0.0.1:5199";
-const APP = "http://localhost:5173";
-/** The wrapper frames the entry at `<link>/page/<path>`; this is the frame's request. */
-const frame = (url: string, path = "index.html") =>
-  new Request(`${url}/page/${path}`, {
-    headers: { "Sec-Fetch-Dest": "iframe", "Sec-Fetch-Site": "same-origin" },
-  });
-/** A page's own request for one of its files, from its opaque origin. */
-const asset = (url: string, path: string, dest: string) =>
-  new Request(`${url}/page/${path}`, {
-    headers: { "Sec-Fetch-Dest": dest, "Sec-Fetch-Site": "cross-site" },
-  });
+const SANDBOX = "http://localhost:5199";
+const APP = "http://127.0.0.1:5173";
+const frame = (filesUrl: string, path = "index.html") =>
+  new Request(`${filesUrl}${path}`, { headers: FRAME });
+const asset = fileRequest;
 
 const bytes = new Map<string, Uint8Array>();
 const store: ArtifactBlobStore = {
@@ -51,6 +46,7 @@ const sandbox = new ArtifactSandbox({
   reads: artifacts.reads,
   readBlob: (workspaceId, sha256) => store.read(workspaceId, sha256),
   origin: SANDBOX,
+  nonces: new MemoryTicketNonces(() => Date.now() + clockOffsetMs),
   secret: async () => "x".repeat(40),
   now: () => new Date(Date.now() + clockOffsetMs),
 });
@@ -200,8 +196,7 @@ test("a link opens its own version, and stops once its reader cannot read the pa
   expect(first.version).toBe(1);
 
   await save(page.id, 1, "<p>two</p>");
-  // The old link still opens version 1; a new one opens version 2.
-  expect(await (await sandbox.serve(frame(first.url))).text()).toEndWith("<p>one</p>");
+  expect(await (await openPage(sandbox, first.url)).response.text()).toEndWith("<p>one</p>");
   const second = await sandbox.link({
     workspaceId,
     userId,
@@ -209,59 +204,60 @@ test("a link opens its own version, and stops once its reader cannot read the pa
     embedderOrigin: APP,
   });
   expect(second.version).toBe(2);
-  const served = await sandbox.serve(frame(second.url));
-  expect(await served.text()).toEndWith("<p>two</p>");
-  // The page under the wrapper and the app; the wrapper under the app the link was made for.
-  expect(served.headers.get("content-security-policy")).toEndWith(
-    `frame-ancestors ${SANDBOX} ${APP}`,
+  const opened = await openPage(sandbox, second.url);
+  expect(await opened.response.text()).toEndWith("<p>two</p>");
+  expect(opened.response.headers.get("content-security-policy")).toEndWith(
+    `frame-ancestors ${APP}`,
   );
-  expect(
-    (await sandbox.serve(new Request(second.url))).headers.get("content-security-policy"),
-  ).toEndWith(`frame-ancestors ${APP}`);
 
-  // Out of the Workspace: the links it already holds open nothing, and no new one is given.
+  const third = await sandbox.link({
+    workspaceId,
+    userId,
+    artifactId: page.id,
+    embedderOrigin: APP,
+  });
   await db.workspaceMembership.delete({
     where: { workspaceId_userId: { workspaceId, userId } },
   });
-  expect((await sandbox.serve(frame(second.url))).status).toBe(404);
+  expect((await openLink(sandbox, third.url)).status).toBe(404);
+  expect((await sandbox.serve(frame(opened.filesUrl))).status).toBe(404);
   await expect(
     sandbox.link({ workspaceId, userId, artifactId: page.id, embedderOrigin: APP }),
   ).rejects.toMatchObject({ code: "NOT_FOUND" });
   await db.workspaceMembership.create({ data: { workspaceId, userId, role: "member" } });
 });
 
-test("a page of several files: the wrapper frames its entry, and every file is served under the link", async () => {
+test("a page of several files: the entry document, and every file served under the file token", async () => {
   const page = await multiPage("multi");
   const link = await linkTo(page.id);
-  const wrapper = await (await sandbox.serve(new Request(link.url))).text();
-  expect(wrapper).toContain(`src="${new URL(link.url).pathname}/page/home.html"`);
-
-  const entry = await sandbox.serve(frame(link.url, "home.html"));
+  const { filesUrl, response: entry } = await openPage(sandbox, link.url);
   expect(entry.status).toBe(200);
   expect(await entry.text()).toContain("css/site.css");
   expect(entry.headers.get("content-security-policy")).toContain(
-    `script-src 'unsafe-inline' ${SANDBOX}/a/${link.url.slice(`${SANDBOX}/a/`.length)}/page/`,
+    `script-src 'unsafe-inline' 'unsafe-eval' blob: ${new URL(filesUrl).origin}/_coforge/runtime.js ${filesUrl}`,
   );
-  expect((await sandbox.serve(frame(link.url, "second.html"))).status).toBe(200);
+  expect((await sandbox.serve(frame(filesUrl, "second.html"))).status).toBe(200);
 
-  const css = await sandbox.serve(asset(link.url, "css/site.css", "style"));
+  const css = await sandbox.serve(asset(filesUrl, "css/site.css", "style"));
   expect(css.headers.get("content-type")).toBe("text/css; charset=utf-8");
   expect(await css.text()).toBe("p{color:red}");
-  const js = await sandbox.serve(asset(link.url, "app.js", "script"));
+  const js = await sandbox.serve(asset(filesUrl, "app.js", "script"));
   expect(js.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
-  const png = await sandbox.serve(asset(link.url, "img/dot.png", "image"));
+  const png = await sandbox.serve(asset(filesUrl, "img/dot.png", "image"));
   expect(png.headers.get("content-type")).toBe("image/png");
   expect(new Uint8Array(await png.arrayBuffer())).toEqual(PNG);
   expect(png.headers.get("content-security-policy")).toBe("sandbox; default-src 'none'");
 
-  // No such file; and never as a document of its own.
-  expect((await sandbox.serve(asset(link.url, "nope.css", "style"))).status).toBe(404);
-  const top = { "Sec-Fetch-Dest": "document", "Sec-Fetch-Site": "none" };
-  for (const path of ["home.html", "css/site.css", "img/dot.png"])
+  expect((await sandbox.serve(asset(filesUrl, "nope.css", "style"))).status).toBe(404);
+  for (const path of ["css/site.css", "img/dot.png"])
     expect(
-      (await sandbox.serve(new Request(`${link.url}/page/${path}`, { headers: top }))).status,
+      (
+        await sandbox.serve(
+          new Request(`${filesUrl}${path}`, { headers: { "Sec-Fetch-Dest": "document" } }),
+        )
+      ).status,
     ).toBe(404);
-  expect((await sandbox.serve(new Request(`${link.url}/page/css/site.css`))).status).toBe(404);
+  expect((await sandbox.serve(new Request(`${filesUrl}css/site.css`))).status).toBe(404);
 });
 
 test("a ticket reaches only its own artifact's version", async () => {
@@ -275,7 +271,7 @@ test("a ticket reaches only its own artifact's version", async () => {
     "only-two.css": "b{}",
     "same.css": "/* two */",
   });
-  const first = await linkTo(one.id);
+  const first = await openPage(sandbox, (await linkTo(one.id)).url);
   // Version 2 of `one` adds a file and changes another; the old link opens version 1 only.
   await artifacts.push({
     workspaceId,
@@ -289,29 +285,38 @@ test("a ticket reaches only its own artifact's version", async () => {
     ],
   });
   const text = async (response: Response) => (response.status === 200 ? response.text() : null);
-  expect(await text(await sandbox.serve(asset(first.url, "same.css", "style")))).toBe("/* one */");
-  expect((await sandbox.serve(asset(first.url, "added-later.css", "style"))).status).toBe(404);
+  expect(await text(await sandbox.serve(asset(first.filesUrl, "same.css", "style")))).toBe(
+    "/* one */",
+  );
+  expect((await sandbox.serve(asset(first.filesUrl, "added-later.css", "style"))).status).toBe(404);
   // Another artifact's file is not there, nor is its same-named file this artifact's.
-  expect((await sandbox.serve(asset(first.url, "only-two.css", "style"))).status).toBe(404);
-  const latest = await linkTo(one.id);
-  expect(await text(await sandbox.serve(asset(latest.url, "same.css", "style")))).toBe(
+  expect((await sandbox.serve(asset(first.filesUrl, "only-two.css", "style"))).status).toBe(404);
+  const latest = await openPage(sandbox, (await linkTo(one.id)).url);
+  expect(await text(await sandbox.serve(asset(latest.filesUrl, "same.css", "style")))).toBe(
     "/* one, again */",
   );
   expect(
-    await text(await sandbox.serve(asset((await linkTo(two.id)).url, "same.css", "style"))),
+    await text(
+      await sandbox.serve(
+        asset((await openPage(sandbox, (await linkTo(two.id)).url)).filesUrl, "same.css", "style"),
+      ),
+    ),
   ).toBe("/* two */");
 });
 
-test("a ticket's files stop opening 10 minutes after the link, as access ends, and for no one else", async () => {
+test("a ticket stops opening after two minutes, its files ten minutes after it was used, and a ticket opens once", async () => {
   const page = await multiPage("expiry");
   const link = await linkTo(page.id);
+  const { filesUrl } = await openPage(sandbox, link.url);
+  expect((await openLink(sandbox, link.url)).status).toBe(401);
   clockOffsetMs = 9 * 60 * 1000;
   try {
-    expect((await sandbox.serve(asset(link.url, "app.js", "script"))).status).toBe(200);
-    // The wrapper is open for five minutes only.
-    expect((await sandbox.serve(new Request(link.url))).status).toBe(403);
-    clockOffsetMs = 10 * 60 * 1000 + 1000;
-    expect((await sandbox.serve(asset(link.url, "app.js", "script"))).status).toBe(403);
+    expect((await sandbox.serve(asset(filesUrl, "app.js", "script"))).status).toBe(200);
+    expect((await openLink(sandbox, (await linkTo(page.id)).url)).status).toBe(302);
+    const stale = await linkTo(page.id);
+    clockOffsetMs = 12 * 60 * 1000;
+    expect((await openLink(sandbox, stale.url)).status).toBe(403);
+    expect((await sandbox.serve(asset(filesUrl, "app.js", "script"))).status).toBe(403);
   } finally {
     clockOffsetMs = 0;
   }
@@ -349,24 +354,29 @@ test("a file stops opening when the page's home is hidden from the Workspace, ex
       { path: "a.css", sha256: put("a{}") },
     ],
   });
-  const readerLink = await sandbox.link({
-    workspaceId,
-    userId: reader,
-    artifactId: page.id,
-    embedderOrigin: APP,
-  });
-  expect((await sandbox.serve(asset(readerLink.url, "a.css", "style"))).status).toBe(200);
+  const readerPage = await openPage(
+    sandbox,
+    (
+      await sandbox.link({
+        workspaceId,
+        userId: reader,
+        artifactId: page.id,
+        embedderOrigin: APP,
+      })
+    ).url,
+  );
+  expect((await sandbox.serve(asset(readerPage.filesUrl, "a.css", "style"))).status).toBe(200);
   await db.conversation.update({
     where: { id: channel },
     data: { hiddenFromWorkspaceAt: new Date() },
   });
-  expect((await sandbox.serve(asset(readerLink.url, "a.css", "style"))).status).toBe(200);
-  expect((await sandbox.serve(frame(readerLink.url, "home.html"))).status).toBe(404);
+  expect((await sandbox.serve(asset(readerPage.filesUrl, "a.css", "style"))).status).toBe(200);
+  expect((await sandbox.serve(frame(readerPage.filesUrl, "home.html"))).status).toBe(404);
   await expect(
     sandbox.link({ workspaceId, userId: reader, artifactId: page.id, embedderOrigin: APP }),
   ).rejects.toMatchObject({ code: "NOT_FOUND" });
-  const ownerLink = await linkTo(page.id);
-  expect((await sandbox.serve(frame(ownerLink.url, "home.html"))).status).toBe(200);
+  const ownerPage = await openPage(sandbox, (await linkTo(page.id)).url);
+  expect((await sandbox.serve(frame(ownerPage.filesUrl, "home.html"))).status).toBe(200);
   await db.conversation.delete({ where: { id: channel } });
   await db.user.delete({ where: { id: reader } });
 });

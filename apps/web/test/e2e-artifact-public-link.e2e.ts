@@ -100,10 +100,10 @@ test("an artifact's Share: a public link on and off", async () => {
     await until(`${linkText} != null`);
     if (shot) await shots(`${shot}-on`);
     const url = await evaluate<string>(linkText);
-    const open = await fetch(url);
-    expect(open.status).toBe(200);
+    const open = await fetch(url, { redirect: "manual" });
+    expect(open.status).toBe(302);
     expect(open.headers.get("set-cookie")).toBeNull();
-    expect(await open.text()).toContain("/page");
+    expect(open.headers.get("location")).toContain("/page/");
     // The dialog keeps its one row — every member reads it — with no level to pick (task #20).
     expect(
       await evaluate<boolean>(
@@ -112,7 +112,7 @@ test("an artifact's Share: a public link on and off", async () => {
     ).toBe(true);
     if (shot) {
       await browser("open", url);
-      await browser("wait", "1500"); // Its frame is on another origin: no reads across it.
+      await browser("wait", "1500");
       await browser("screenshot", join(artifacts, `${shot}-public-page.png`));
     }
     // Read back after a reload: the page knows the link, and Share shows it.
@@ -120,7 +120,7 @@ test("an artifact's Share: a public link on and off", async () => {
     await until(`${linkText} === ${JSON.stringify(url)}`);
     await press(switchLabel);
     await until(`${linkText} == null && !${toggle}.disabled`);
-    expect((await fetch(url)).status).toBe(404);
+    expect((await fetch(url, { redirect: "manual" })).status).toBe(404);
     return url;
   };
   try {

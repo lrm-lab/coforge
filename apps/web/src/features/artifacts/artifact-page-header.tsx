@@ -7,6 +7,7 @@ import {
   Link01,
   Maximize01,
   Minimize01,
+  SearchLg,
   Trash01,
   XClose,
 } from "@untitledui/icons";
@@ -49,6 +50,7 @@ export function ArtifactPageHeader({
   onShare,
   onCopyLink,
   onOpenInTab,
+  onFind,
   onDelete,
   pane,
 }: {
@@ -65,6 +67,8 @@ export function ArtifactPageHeader({
   onShare?: () => void;
   onCopyLink?: () => void;
   onOpenInTab?: () => void;
+  /** Opens the find bar of a web page. */
+  onFind?: () => void;
   onDelete?: () => void;
   pane?: ArtifactPaneControls;
 }) {
@@ -105,6 +109,15 @@ export function ArtifactPageHeader({
         </>
       )}
       <span className="flex-1" />
+      {onFind && (
+        <ButtonUtility
+          icon={SearchLg}
+          size="sm"
+          color="tertiary"
+          tooltip={m.doc_page_find()}
+          onClick={onFind}
+        />
+      )}
       {onShare &&
         (pane ? (
           // Beside the chat the title needs the room: Share keeps its icon and its tooltip.

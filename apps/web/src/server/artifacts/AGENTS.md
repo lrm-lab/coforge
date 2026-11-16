@@ -61,6 +61,32 @@ The artifacts module follows the reference product, Raft; add nothing it does no
   `ARTIFACT_ENTRY_READ_LIMIT` (2 MiB) is refused (`artifact-entry-too-large`): a larger entry
   could only render blank.
 
+## Web pages and their origins
+
+- A page of artifact `<uuid>` is served only from `a-<uuid>.<sandbox host>`, matched by host name
+  alone (`artifact-sandbox-config.server.ts`). Every name under the sandbox host belongs to the
+  sandbox and anything but an artifact's origin is refused, so the application's host must never
+  be the sandbox host or under it (a boot rule). Locally the sandbox is `http://localhost:<port>`
+  and the application runs on `127.0.0.1`.
+- Opening is two signed values (`artifact-sandbox-ticket.server.ts`): a ticket, single use (its
+  nonce is spent through `TicketNonces`: Redis `SET NX EX`, an in-process map only without Redis;
+  an unspendable nonce refuses the ticket, never opens it), then a file token in the path
+  (`/_f/<token>/<path>`) good for 10 minutes. A path, not a cookie: the page is a third-party frame
+  and a browser may refuse it cookies. Both name the origin they are for and are refused on any
+  other. A used or expired ticket answers a small page that posts a `coforge/notifications/frame-status`
+  message to the ticket's embedder origin only.
+- The page's CSP and headers live in `artifact-sandbox-response.server.ts`; hosts a page may load
+  from live only in `artifact-sandbox-cdns.server.ts`. A nonce or hash in `script-src` would turn
+  `'unsafe-inline'` off, so the runtime (`artifact-page-runtime.server.ts`) is a script file of the
+  page's own origin, injected first.
+- A page reader's access is checked on the ticket and on each page document; a subresource serves
+  under its file token until the token expires. Do not widen who can read in this module; call
+  `ArtifactReads` as it is.
+- Known gaps, pinned in `test/artifact-sandbox-browser.e2e.ts`: resource hints still reach out, and
+  so does a WebRTC constructor taken from an `about:blank` frame the page makes: every HTML
+  document carries `webrtc 'block'` (the frame inherits it) and the runtime removes the page's own
+  constructors, but Chrome 157 does not enforce the directive. Flip the test when a browser does.
+
 ## Comments
 
 Comments on artifacts are written for Agents (the Agent API's `comments`, `comment`, `review`,

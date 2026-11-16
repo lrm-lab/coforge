@@ -7,11 +7,9 @@ import { artifactInputs } from "./artifact-inputs";
 import { productionArtifactSandbox } from "#src/server/artifacts/artifact-composition.server";
 import { publicOrigin } from "#src/server/http/public-origin.server";
 
-/**
- * The link a web-page artifact opens with (task #490): a short-lived signed URL on the sandbox
- * origin, for the signed-in person, at a version (the current one by default). The pane frames
- * it and "Open in new tab" opens it; it asks again each time it shows a page.
- */
+/** The single-use link a web-page artifact opens with: a short-lived signed URL on the artifact's
+ * own origin, for the signed-in person, at a version (the current one by default), with the person
+ * as the page may ask who they are. Asked again each time a page shows. */
 export const loadArtifactSandboxLink = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(
@@ -27,5 +25,10 @@ export const loadArtifactSandboxLink = createServerFn({ method: "GET" })
       version: data.version,
       embedderOrigin: publicOrigin(getRequest()),
     });
-    return { url: link.url, version: link.version, expiresAt: link.expiresAt.toISOString() };
+    return {
+      url: link.url,
+      version: link.version,
+      expiresAt: link.expiresAt.toISOString(),
+      viewer: link.viewer,
+    };
   });

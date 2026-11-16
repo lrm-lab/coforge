@@ -94,9 +94,10 @@ research.coforge.cn {
 }
 
 # Web-page artifacts' sandbox (task #544): the web app tells sandbox requests
-# apart by Host alone, so this site needs only the app's proxy — no realtime or
-# desktop routes. The dedicated domain's filing cleared (task #coforge-backend:#9),
-# so staging serves on staging.coforgeusercontent.com; the interim coforge.cn
+# apart by Host alone, so these sites need only the app's proxy — no realtime or
+# desktop routes. A page of artifact <uuid> is served only from
+# a-<uuid>.staging.coforgeusercontent.com (the wildcard site below); the bare host answers not
+# found. The dedicated domain's filing cleared (task #coforge-backend:#9); the interim coforge.cn
 # subdomain only redirects already-shared links to the same path on it.
 (usercontent) {
 	log {

@@ -5,21 +5,23 @@ import {
   sandboxFileUrlPath,
 } from "#src/server/artifacts/artifact-sandbox-path.server";
 import { ArtifactSandbox } from "#src/server/artifacts/artifact-sandbox.server";
-import {
-  SANDBOX_FILE_TTL_SECONDS,
-  SANDBOX_TICKET_TTL_SECONDS,
-} from "#src/server/artifacts/artifact-sandbox-ticket.server";
+import { MemoryTicketNonces } from "#src/server/artifacts/artifact-sandbox-nonces.server";
+import { SANDBOX_FILE_TTL_SECONDS } from "#src/server/artifacts/artifact-sandbox-ticket.server";
+import { FRAME, openPage, subresource } from "./helpers/artifact-sandbox-open";
 
 /**
- * A web page of several files on the sandbox origin: every file of the linked version is served
- * under the link's own prefix (`/a/<ticket>/page/<path>`), an `.html` file only as a frame, any
- * other file only as a subresource, and the ticket's reach in time and in files. The browser's
- * side is `artifact-sandbox-browser.e2e.ts`; real reads are `artifact-sandbox.integration.ts`.
+ * A web page of several files on its artifact's origin: every file of the opened version is served
+ * under the file token's prefix (`/_f/<token>/<path>`), an `.html` file as a document only for a
+ * frame or a tab, any other file only as a subresource, and the token's reach in time and in
+ * files. The browser's side is `artifact-sandbox-browser.e2e.ts`; real reads are
+ * `artifact-sandbox.integration.ts`.
  */
 
 const SECRET = "s".repeat(40);
 const SANDBOX = "https://sandbox.example";
 const APP = "https://app.example";
+const A = "11111111-1111-4111-8111-111111111111";
+const B = "22222222-2222-4222-8222-222222222222";
 const NOW = new Date("2026-11-04T08:00:00Z");
 const text = (value: string) => new TextEncoder().encode(value);
 
@@ -67,7 +69,6 @@ describe("a file path in the sandbox's URL", () => {
 
 type Version = { entryPath: string; files: Record<string, string> };
 
-/** A sandbox over a fake read of one multi-file page, at a fixed time. */
 function sandbox(version: Version = site(), options: { readable?: () => boolean } = {}) {
   const lookups: string[] = [];
   const check = () => {
@@ -93,7 +94,6 @@ function sandbox(version: Version = site(), options: { readable?: () => boolean 
       lookups.push(input.path);
       return input.path in version.files ? row(input.path) : null;
     },
-    // A subresource's lookup asks no reader (task #25): the ticket is its authorization.
     fileInVersion: async (input: { path: string }) => {
       lookups.push(input.path);
       return input.path in version.files
@@ -109,6 +109,7 @@ function sandbox(version: Version = site(), options: { readable?: () => boolean 
       return path in version.files ? text(version.files[path]!) : null;
     },
     origin: SANDBOX,
+    nonces: new MemoryTicketNonces(() => now.getTime()),
     secret: async () => SECRET,
     now: () => now,
   });
@@ -135,31 +136,26 @@ function site(): Version {
   };
 }
 
-const linkInput = { workspaceId: "w1", userId: "u1", artifactId: "a1", embedderOrigin: APP };
-const ticketOf = (url: string) => url.slice(`${SANDBOX}/a/`.length);
+const linkInput = { workspaceId: "w1", userId: "u1", artifactId: A, embedderOrigin: APP };
 
 async function opened(version?: Version, options?: Parameters<typeof sandbox>[1]) {
   const box = sandbox(version, options);
   const { url } = await box.service.link(linkInput);
-  return { ...box, url };
+  const { filesUrl } = await openPage(box.service, url);
+  return { ...box, url, filesUrl };
 }
 
-const frame = (url: string, path: string, site = "same-origin") =>
-  new Request(`${url}/page/${sandboxFileUrlPath(path)}`, {
-    headers: { "Sec-Fetch-Dest": "iframe", "Sec-Fetch-Site": site },
-  });
-const sub = (url: string, path: string, dest: string, site = "cross-site") =>
-  new Request(`${url}/page/${sandboxFileUrlPath(path)}`, {
-    headers: { "Sec-Fetch-Dest": dest, "Sec-Fetch-Site": site },
-  });
+const frame = (filesUrl: string, path: string) =>
+  new Request(`${filesUrl}${sandboxFileUrlPath(path)}`, { headers: FRAME });
+const sub = (filesUrl: string, path: string, dest: string) =>
+  new Request(`${filesUrl}${sandboxFileUrlPath(path)}`, { headers: subresource(dest) });
 
-describe("a multi-file page's wrapper", () => {
-  test("frames the entry file, each path segment percent-encoded", async () => {
-    const { service, url } = await opened();
-    const body = await (await service.serve(new Request(url))).text();
-    expect(body).toContain(
-      `<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" src="${new URL(url).pathname}/page/home%20page.html">`,
-    );
+describe("opening a multi-file page", () => {
+  test("lands on the entry file, each path segment percent-encoded", async () => {
+    const box = sandbox();
+    const { url } = await box.service.link(linkInput);
+    const redirect = await box.service.serve(new Request(url, { headers: FRAME }));
+    expect(redirect.headers.get("location")).toEndWith("/home%20page.html");
   });
 
   test("a link is not given for a version with no web page entry within the limit", async () => {
@@ -169,52 +165,53 @@ describe("a multi-file page's wrapper", () => {
 });
 
 describe("the page's own file prefix in its CSP", () => {
-  test("an html file gets its ticket's file prefix, and still sandbox, no connection, no form", async () => {
-    const { service, url } = await opened();
-    const response = await service.serve(frame(url, "home page.html"));
+  test("an html document names its token's prefix for what it may load and fetch, and nothing wider", async () => {
+    const { service, filesUrl } = await opened();
+    const response = await service.serve(frame(filesUrl, "home page.html"));
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("css/site.css");
     const csp = Object.fromEntries(
       (response.headers.get("content-security-policy") ?? "").split("; ").map((directive) => {
         const [name, ...sources] = directive.split(" ");
-        return [name!, sources.join(" ")];
+        return [name!, sources];
       }),
     );
-    const prefix = `${SANDBOX}/a/${ticketOf(url)}/page/`;
-    for (const name of ["script-src", "style-src", "img-src", "font-src", "media-src"])
-      expect(csp[name]!.split(" "), name).toContain(prefix);
-    expect(csp["script-src"]).toContain("'unsafe-inline'");
-    expect(csp["style-src"]).toContain("'unsafe-inline'");
-    expect(csp["sandbox"]).toBe("allow-scripts");
-    expect(csp["default-src"]).toBe("'none'");
-    expect(csp["connect-src"]).toBe("'none'");
-    expect(csp["form-action"]).toBe("'none'");
-    expect(csp["base-uri"]).toBe("'none'");
-    expect(csp["webrtc"]).toBe("'block'");
-    expect(csp["frame-ancestors"]).toBe(`${SANDBOX} ${APP}`);
-    // The frame stays closed, and no directive but those five carries the prefix.
-    expect(csp["frame-src"]).toBeUndefined();
-    expect(response.headers.get("content-security-policy")).not.toContain("allow-same-origin");
+    const withPrefix = [
+      "script-src",
+      "style-src",
+      "img-src",
+      "font-src",
+      "media-src",
+      "connect-src",
+      "worker-src",
+    ];
+    for (const name of withPrefix) expect(csp[name], name).toContain(filesUrl);
     for (const [name, sources] of Object.entries(csp))
-      if (!["script-src", "style-src", "img-src", "font-src", "media-src"].includes(name))
-        expect(sources, name).not.toContain(prefix);
+      if (!withPrefix.includes(name)) expect(sources, name).not.toContain(filesUrl);
+    expect(csp["sandbox"]).toEqual(["allow-scripts", "allow-same-origin"]);
+    expect(csp["frame-ancestors"]).toEqual([APP]);
+    expect(csp["frame-src"]).toEqual(["'none'"]);
+    expect(JSON.stringify(csp)).not.toContain("*");
   });
 
-  test("another ticket's prefix is not in it", async () => {
+  test("another artifact's prefix is not in it", async () => {
     const one = await opened();
-    const other = sandbox();
-    const second = await other.service.link({ ...linkInput, artifactId: "a2" });
-    const csp = (await one.service.serve(frame(one.url, "other.html"))).headers.get(
+    const otherBox = sandbox();
+    const other = await openPage(
+      otherBox.service,
+      (await otherBox.service.link({ ...linkInput, artifactId: B })).url,
+    );
+    const csp = (await one.service.serve(frame(one.filesUrl, "other.html"))).headers.get(
       "content-security-policy",
     )!;
-    expect(csp).toContain(`${SANDBOX}/a/${ticketOf(one.url)}/page/`);
-    expect(csp).not.toContain(ticketOf(second.url));
+    expect(csp).toContain(one.filesUrl);
+    expect(csp).not.toContain(new URL(other.filesUrl).host);
   });
 });
 
 describe("a file that is not html", () => {
   test("is served with a type from its extension, nosniff, and a CSP that lets it do nothing", async () => {
-    const { service, url } = await opened();
+    const { service, filesUrl } = await opened();
     const cases: [string, string, string][] = [
       ["css/site.css", "style", "text/css; charset=utf-8"],
       ["app.js", "script", "text/javascript; charset=utf-8"],
@@ -223,7 +220,7 @@ describe("a file that is not html", () => {
       ["data.unknownext", "video", "application/octet-stream"],
     ];
     for (const [path, dest, type] of cases) {
-      const response = await service.serve(sub(url, path, dest));
+      const response = await service.serve(sub(filesUrl, path, dest));
       expect(response.status, path).toBe(200);
       expect(response.headers.get("content-type"), path).toBe(type);
       expect(await response.text()).toBe(site().files[path]!);
@@ -231,38 +228,17 @@ describe("a file that is not html", () => {
         String(text(site().files[path]!).byteLength),
       );
       expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-      // A signed link pins one version, so its files do not change under it.
       expect(response.headers.get("cache-control")).toBe("private, max-age=600, immutable");
       expect(response.headers.get("referrer-policy")).toBe("no-referrer");
       expect(response.headers.get("x-robots-tag")).toBe("noindex, nofollow");
       expect(response.headers.get("content-security-policy")).toBe("sandbox; default-src 'none'");
-      // No WebRTC script in front of a file that is not a page.
-      expect(response.headers.get("content-type")).not.toContain("html");
     }
   });
 
-  test("answers a module script's and a font's CORS request from the page's opaque origin", async () => {
-    const { service, url } = await opened();
-    const response = await service.serve(
-      new Request(`${url}/page/app.js`, {
-        headers: {
-          "Sec-Fetch-Dest": "script",
-          "Sec-Fetch-Site": "cross-site",
-          "Sec-Fetch-Mode": "cors",
-          Origin: "null",
-        },
-      }),
-    );
-    expect(response.headers.get("access-control-allow-origin")).toBe("null");
-  });
-
   test("HEAD has the headers and no body", async () => {
-    const { service, url } = await opened();
+    const { service, filesUrl } = await opened();
     const head = await service.serve(
-      new Request(`${url}/page/app.js`, {
-        method: "HEAD",
-        headers: { "Sec-Fetch-Dest": "script", "Sec-Fetch-Site": "cross-site" },
-      }),
+      new Request(`${filesUrl}app.js`, { method: "HEAD", headers: subresource("script") }),
     );
     expect(head.status).toBe(200);
     expect(head.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
@@ -270,131 +246,113 @@ describe("a file that is not html", () => {
   });
 
   test("is only a subresource: never a document, a frame, or a request with no fetch metadata", async () => {
-    const { service, url } = await opened();
+    const { service, filesUrl } = await opened();
     const refused: Record<string, string>[] = [
       {},
       { "Sec-Fetch-Dest": "document", "Sec-Fetch-Site": "none" },
       { "Sec-Fetch-Dest": "document", "Sec-Fetch-Site": "same-origin" },
       { "Sec-Fetch-Dest": "iframe", "Sec-Fetch-Site": "same-origin" },
       { "Sec-Fetch-Dest": "frame", "Sec-Fetch-Site": "same-origin" },
-      { "Sec-Fetch-Dest": "embed", "Sec-Fetch-Site": "cross-site" },
-      { "Sec-Fetch-Dest": "object", "Sec-Fetch-Site": "cross-site" },
-      { "Sec-Fetch-Dest": "worker", "Sec-Fetch-Site": "cross-site" },
-      // A fetch or XHR (`connect-src` stops a page making one; the sandbox does not serve one).
-      { "Sec-Fetch-Dest": "empty", "Sec-Fetch-Site": "cross-site" },
-      { "Sec-Fetch-Dest": "empty", "Sec-Fetch-Site": "same-origin" },
-      { "Sec-Fetch-Site": "cross-site" },
+      { "Sec-Fetch-Dest": "embed", "Sec-Fetch-Site": "same-origin" },
+      { "Sec-Fetch-Dest": "object", "Sec-Fetch-Site": "same-origin" },
+      { "Sec-Fetch-Site": "same-origin" },
     ];
     for (const headers of refused)
       expect(
-        (await service.serve(new Request(`${url}/page/css/site.css`, { headers }))).status,
+        (await service.serve(new Request(`${filesUrl}css/site.css`, { headers }))).status,
       ).toBe(404);
-    for (const dest of ["script", "style", "image", "font", "audio", "video", "track"])
-      for (const site of ["same-origin", "cross-site"])
-        expect((await service.serve(sub(url, "css/site.css", dest, site))).status, dest).toBe(200);
+    const allowed = [
+      "script",
+      "style",
+      "image",
+      "font",
+      "audio",
+      "video",
+      "track",
+      "empty",
+      "worker",
+    ];
+    for (const dest of allowed)
+      expect((await service.serve(sub(filesUrl, "css/site.css", dest))).status, dest).toBe(200);
   });
 });
 
 describe("an html file", () => {
-  test("is only a frame document: the wrapper's, or a navigation of a frame (never a document)", async () => {
-    const { service, url } = await opened();
-    // The wrapper's frame, and a link followed inside it (the browser sends an opaque-origin
-    // document's navigation as cross-site).
-    expect((await service.serve(frame(url, "other.html"))).status).toBe(200);
-    expect((await service.serve(frame(url, "other.html", "cross-site"))).status).toBe(200);
-    expect((await service.serve(frame(url, "other.html"))).headers.get("content-type")).toBe(
-      "text/html; charset=utf-8",
-    );
+  test("is a document for a frame or a tab; for a fetch it is the bytes, with no page headers", async () => {
+    const { service, filesUrl } = await opened();
+    const document = await service.serve(frame(filesUrl, "other.html"));
+    expect(document.status).toBe(200);
+    expect(document.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(document.headers.get("content-security-policy")).toContain("frame-ancestors");
+    expect(await document.text()).toContain("runtime.js");
+    const fetched = await service.serve(sub(filesUrl, "other.html", "empty"));
+    expect(fetched.status).toBe(200);
+    expect(await fetched.text()).toBe("<!doctype html><p>other</p>");
     const refused: Record<string, string>[] = [
       {},
-      { "Sec-Fetch-Dest": "document", "Sec-Fetch-Site": "same-origin" },
-      { "Sec-Fetch-Dest": "document", "Sec-Fetch-Site": "none" },
-      { "Sec-Fetch-Dest": "script", "Sec-Fetch-Site": "same-origin" },
-      { "Sec-Fetch-Dest": "iframe", "Sec-Fetch-Site": "same-site" },
-      { "Sec-Fetch-Dest": "iframe", "Sec-Fetch-Site": "none" },
-      { "Sec-Fetch-Dest": "iframe" },
+      { "Sec-Fetch-Dest": "embed" },
+      { "Sec-Fetch-Dest": "object" },
     ];
     for (const headers of refused)
-      expect((await service.serve(new Request(`${url}/page/other.html`, { headers }))).status).toBe(
+      expect((await service.serve(new Request(`${filesUrl}other.html`, { headers }))).status).toBe(
         404,
       );
+    const tab = await service.serve(
+      new Request(`${filesUrl}other.html`, { headers: { "Sec-Fetch-Dest": "document" } }),
+    );
+    expect(tab.status).toBe(200);
   });
 
   test("is never cached: each load asks again whether its reader may still read it", async () => {
-    const { service, url } = await opened();
-    const served = await service.serve(frame(url, "other.html"));
+    const { service, filesUrl } = await opened();
+    const served = await service.serve(frame(filesUrl, "other.html"));
     expect(served.headers.get("cache-control")).toBe("no-store");
-    expect((await service.serve(new Request(url))).headers.get("cache-control")).toBe("no-store");
   });
 
-  test("gets WebRTC removed first, whatever its name", async () => {
-    const { service, url } = await opened();
+  test("gets the runtime first, whatever its name", async () => {
+    const { service, filesUrl } = await opened();
     for (const path of ["home page.html", "other.html"]) {
-      const served = await (await service.serve(frame(url, path))).text();
-      expect(served).toStartWith("<!doctype html><script>");
-      expect(served).toContain("RTCPeerConnection");
+      const served = await (await service.serve(frame(filesUrl, path))).text();
+      expect(served).toStartWith('<!doctype html><script src="/_coforge/runtime.js"');
     }
   });
 });
 
-describe("what a ticket reaches", () => {
+describe("what a file token reaches", () => {
   test("a missing file is a 404, and so is a path that cannot name one, with no lookup", async () => {
-    const { service, url, lookups } = await opened();
-    expect((await service.serve(sub(url, "nope.css", "style"))).status).toBe(404);
+    const { service, filesUrl, lookups } = await opened();
+    lookups.length = 0;
+    expect((await service.serve(sub(filesUrl, "nope.css", "style"))).status).toBe(404);
     expect(lookups).toEqual(["nope.css"]);
     lookups.length = 0;
-    const base = `${url}/page/`;
     for (const tail of ["..%2f..%2fx.css", "%2e%2e/x.css", "a%5Cb.css", "%ZZ", "a//b.css", ""])
       expect(
-        (
-          await service.serve(
-            new Request(base + tail, {
-              headers: { "Sec-Fetch-Dest": "style", "Sec-Fetch-Site": "cross-site" },
-            }),
-          )
-        ).status,
+        (await service.serve(new Request(filesUrl + tail, { headers: subresource("style") })))
+          .status,
         tail,
       ).toBe(404);
     expect(lookups).toEqual([]);
   });
 
-  test("the old frame path, with no file named, opens nothing", async () => {
-    const { service, url } = await opened();
-    const headers = { "Sec-Fetch-Dest": "iframe", "Sec-Fetch-Site": "same-origin" };
-    expect((await service.serve(new Request(`${url}/page`, { headers }))).status).toBe(404);
-    expect((await service.serve(new Request(`${url}/page/`, { headers }))).status).toBe(404);
-  });
-
-  test("a page stops opening once its reader loses access; a subresource serves under its ticket", async () => {
+  test("a page stops opening once its reader loses access; a subresource serves under its token", async () => {
     let readable = true;
-    const { service, url } = await opened(undefined, { readable: () => readable });
-    expect((await service.serve(sub(url, "app.js", "script"))).status).toBe(200);
+    const { service, filesUrl } = await opened(undefined, { readable: () => readable });
+    expect((await service.serve(sub(filesUrl, "app.js", "script"))).status).toBe(200);
     readable = false;
-    // A subresource of a page already open is the ticket's to serve until it expires (task #25);
-    // a frame is a document load and asks again whether its reader may still read.
-    expect((await service.serve(sub(url, "app.js", "script"))).status).toBe(200);
-    expect((await service.serve(frame(url, "other.html"))).status).toBe(404);
+    expect((await service.serve(sub(filesUrl, "app.js", "script"))).status).toBe(200);
+    expect((await service.serve(frame(filesUrl, "other.html"))).status).toBe(404);
   });
 
-  test("a file opens for 10 minutes after the link was made; the wrapper for 5", async () => {
+  test("a file opens for 10 minutes after the page was opened", async () => {
     expect(SANDBOX_FILE_TTL_SECONDS).toBe(10 * 60);
-    expect(SANDBOX_TICKET_TTL_SECONDS).toBe(5 * 60);
-    const { service, url, at } = await opened();
-    at(SANDBOX_TICKET_TTL_SECONDS * 1000);
-    expect((await service.serve(new Request(url))).status).toBe(403);
+    const { service, filesUrl, at } = await opened();
     at(9 * 60 * 1000);
-    expect((await service.serve(sub(url, "img/a.png", "image"))).status).toBe(200);
-    expect((await service.serve(frame(url, "other.html", "cross-site"))).status).toBe(200);
+    expect((await service.serve(sub(filesUrl, "img/a.png", "image"))).status).toBe(200);
+    expect((await service.serve(frame(filesUrl, "other.html"))).status).toBe(200);
     at(10 * 60 * 1000);
-    const late = await service.serve(sub(url, "img/a.png", "image"));
+    const late = await service.serve(sub(filesUrl, "img/a.png", "image"));
     expect(late.status).toBe(403);
     expect(await late.text()).toContain("expired");
-    expect((await service.serve(frame(url, "other.html", "cross-site"))).status).toBe(403);
-  });
-
-  test("a link's own expiry is the wrapper's: five minutes", async () => {
-    const box = sandbox();
-    const link = await box.service.link(linkInput);
-    expect(link.expiresAt.getTime()).toBe(NOW.getTime() + SANDBOX_TICKET_TTL_SECONDS * 1000);
+    expect((await service.serve(frame(filesUrl, "other.html"))).status).toBe(403);
   });
 });

@@ -26,11 +26,15 @@ change one they ask an Agent. When in doubt, make a document: anything that is m
   fonts from fonts.googleapis.com (styles) and fonts.gstatic.com (font files); images and fonts
   from the same CDNs. Some readers cannot reach those hosts, so a page that must always work
   ships its libraries and fonts as its own files.
-- Scripts run (tabs, toggles, sorting, drawing a chart on a `<canvas>`), but the page cannot make
-  network requests: no `fetch`, XHR or WebSocket, no WebRTC, no form submission, no navigating
-  away or pop-ups, no cookies or storage. Put the data in the page or in a file of its own and
-  load it with a `<script>` or an `<img>`, not `fetch`.
-- A page's link works for 30 minutes; reload the page to get a fresh one.
+- Scripts run (tabs, toggles, sorting, drawing a chart on a `<canvas>`), including inline scripts,
+  `eval` and workers from `blob:`. Each artifact's pages run on an origin of their own, so
+  `localStorage`, `sessionStorage` and IndexedDB work and belong to that artifact alone.
+- A page can `fetch` its own files (a JSON file pushed beside it) and the public hosts above, and
+  nothing else: no other network requests, no WebSocket, no WebRTC, no form submission, no
+  navigating away, no pop-ups, no nested frames or plugins, no cookies of ours, no camera,
+  microphone, location or clipboard access.
+- A page's link opens once and its files work for 10 minutes; the reader's browser asks for a fresh
+  link each time it shows the page.
 - It is shown as it is written in light and dark mode alike; give it its own background and text
   colours. `prefers-color-scheme` in your CSS is fine.
 - `--description` is one line saying what it is, shown on its card in the conversation; give one.
@@ -40,6 +44,31 @@ mkdir funnel && cp index.html funnel/
 coforge artifact push funnel --title 'Signup funnel, week 44' \
   --description 'Signups and activation by day, with a toggle per channel' --target '#growth'
 ```
+
+## What a page can call
+
+When CoForge shows the page, `window.coforge.use(name)` resolves to a frozen object for one
+capability, or to `null` when the host does not answer within about 3 seconds (the page opened in
+a tab of its own, or not by CoForge) or does not offer it. Check for `null` and keep working.
+
+```js
+const user = await window.coforge.use("user");
+const who = user && (await user.get()); // { displayName, kind: "person" }
+```
+
+- `user.get()` returns the viewer's display name and kind.
+- `artifact.get()` returns `{ id, title, version, entryPath }`.
+- `clipboard.copy(text)` copies text; call it from a click, a call outside one is refused. CoForge
+  writes the clipboard and tells the reader.
+- `links.open(url)` asks to open an `http` or `https` address in a new tab. CoForge shows the
+  address and the reader decides; a page whose requests are declined three times is muted.
+- `comments.open({ body })` asks CoForge to open the comment box, with `body` filled in when
+  given. A button for a decision can prefill its answer this way.
+
+Every call can fail: it rejects when refused, declined or sent too often (30 a minute per
+method). The page's own errors are reported to the reader with a button that asks you to fix them.
+CoForge sets `data-theme="light"` or `"dark"` on `<html>` and fires a `coforge:theme` event on
+`window` when the theme changes.
 
 ## Working on files
 

@@ -18,7 +18,7 @@ import {
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
- * An artifact's own page (task #514), which people only view: a web page's preview from the sandbox origin, with no versions shown
+ * An artifact's own page (task #514), which people only view: a web page's preview from its artifact's own origin, with no versions shown
  * (Frank, 11-05), Open in new tab on the sandbox's link (and a link that cannot be had, said so),
  * a new version an Agent saves while the page shows taken in quietly (Share is
  * `e2e-artifact-share`); one page for an artifact that is not there and one that is not the
@@ -140,7 +140,7 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
       `${pageHydrated} && document.querySelector("main iframe") != null`,
     );
     const frame = await evaluate<string>(`document.querySelector("main iframe").src`);
-    expect(new URL(frame).origin).toBe(new URL(sandboxOrigin).origin);
+    expect(new URL(frame).host).toBe(`a-${web.id}.${new URL(sandboxOrigin).host}`);
     expect(
       await evaluate<string>(`document.querySelector("main").getAttribute("aria-labelledby")`),
     ).toBeTruthy();
@@ -186,11 +186,12 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await browser("wait", "--fn", `${openItem} != null`);
     await click(openItem);
     let tabs = "";
-    for (let i = 0; i < 50 && !tabs.includes(new URL(sandboxOrigin).host); i++) {
+    const pageHost = `a-${web.id}.${new URL(sandboxOrigin).host}`;
+    for (let i = 0; i < 50 && !tabs.includes(pageHost); i++) {
       await new Promise((r) => setTimeout(r, 100));
       tabs = await browser("tab", "list");
     }
-    expect(tabs).toContain(new URL(sandboxOrigin).host);
+    expect(tabs).toContain(pageHost);
     // Back to the app's tab: the first one, whose id is the session's first (`t1`).
     const appTab = /\b(t\d+)\b[^\n]*127\.0\.0\.1/.exec(tabs)?.[1];
     expect(appTab).toBeDefined();

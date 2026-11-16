@@ -4,7 +4,7 @@ An artifact is a versioned set of files with an entry file, kept in a channel or
 widened to the whole Workspace, with every version it had (task #385). Its type comes from its entry file, and no field
 states it: a `.md` or `.markdown` entry is a document, an `.html` or `.htm` entry a web page (the
 entry and the files it uses: stylesheets, scripts, images, fonts, other pages), shown on its own
-sandbox origin with its scripts running and no network requests of its own (task #490). It follows
+origin of its own with its scripts running and no network requests but its own files and a few public hosts (task #490). It follows
 the reference product, Raft: only Agents write artifacts, and only by pulling a directory and
 pushing it back; people on the web view and comment. The Agent Manual's `artifacts` topic says when
 to make which. It is the same artifact the web page shows, under the same rules. The Workspace must
@@ -135,27 +135,28 @@ number of files (up to 200); a web page has any `.html` or `.htm` file as its en
 
 ## What a web page may load
 
-The sandbox serves every file of the linked version under the link's own path, so relative
-references (`css/site.css`, `img/a.png`, a link to `other.html`) resolve inside the artifact:
+A page of artifact `<uuid>` is served only from `a-<uuid>.<sandbox host>`, so its storage is its own
+and no other artifact shares it. The origin serves every file of the opened version under a file
+token's path (`/_f/<token>/<path>`), so relative references (`css/site.css`, `img/a.png`, a link to
+`other.html`) resolve inside the artifact:
 
-- An `.html` file is served only as a frame (the wrapper's, or a link followed inside it); any other
-  file only as a script, style, image, font, audio or video request of a page. None is ever a
-  document of its own, and no origin but the sandbox's and the app's may frame an `.html` file. A
-  link followed inside the page's frame reaches the next file cross-site, exactly as the app
-  framing it directly would: the app's own code can therefore frame an `.html` file without the
-  wrapper. The page stays an opaque, sandboxed origin with nothing reaching outside, but loses the
-  wrapper's guard on where it may send its own frame. A file of another version or artifact is not
-  reachable through the link.
-- A signed link's other files are cached by the browser for the thirty minutes (they never change
-  under it); a public link's for one minute. `.html` files and the wrapper are never cached.
-- A page may also load scripts and styles from a fixed set of public hosts (cdnjs.cloudflare.com,
-  cdn.jsdelivr.net, unpkg.com, esm.sh, cdn.tailwindcss.com, code.jquery.com, cdn.plot.ly), web fonts
-  from fonts.googleapis.com and fonts.gstatic.com, and images and fonts from those CDNs. The list
-  is `SANDBOX_PUBLIC_CDNS` in `apps/web/src/server/artifacts/artifact-sandbox-cdns.server.ts`.
-- It still makes no network requests (no `fetch`, XHR or WebSocket), submits no form, opens no
-  window, and has no cookies or storage.
-- A link opens the page for five minutes and its files for thirty; the pane asks for a new link
-  each time it shows a page. An `.html` file is read whole by the sandbox and may be at most 2 MiB to be shown.
+- An `.html` file is a document only for a frame or a tab, under the page's CSP and with the page
+  runtime injected first; any other file only as a subresource, a `fetch` or a worker script. A
+  file of another version or artifact is not reachable through the token.
+- A link is a single-use ticket: opening it spends it and redirects to the entry under a file
+  token. A used or expired ticket shows a small page and tells the framing app, which offers a
+  reload. The token's files work for 10 minutes and are cached for that long (a public link's for
+  one minute); `.html` documents are never cached.
+- A page may load scripts and styles from a fixed set of public hosts (cdnjs.cloudflare.com,
+  cdn.jsdelivr.net, unpkg.com, esm.sh, cdn.tailwindcss.com, code.jquery.com, cdn.plot.ly), web
+  fonts from fonts.googleapis.com and fonts.gstatic.com, and images and fonts from those CDNs, and
+  may `fetch` those hosts and its own files. The list is `SANDBOX_PUBLIC_CDNS` in
+  `apps/web/src/server/artifacts/artifact-sandbox-cdns.server.ts`.
+- It makes no other network requests (no WebSocket, no form, no window, no nested frame), and has no
+  cookies of ours; `localStorage` and IndexedDB belong to its artifact's origin.
+- The page runtime exposes `window.coforge.use(name)`: `user`, `artifact`, `clipboard`, `links`
+  and `comments`, answered by the app's page over `postMessage` (the Manual's `artifacts` topic
+  lists them). An `.html` file is read whole by the sandbox and may be at most 2 MiB to be shown.
 
 ## Saving and conflicts
 
