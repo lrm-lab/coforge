@@ -211,7 +211,17 @@ export class RuntimePublicationSubscriptions {
       }),
     );
     subscribe(
-      transport.onReminderSync?.((sync) => void this.ports.applyReminderSync(sync).catch(() => {})),
+      transport.onReminderSync?.(
+        (sync) =>
+          void this.ports.applyReminderSync(sync).catch((error: unknown) => {
+            logger.warn("Reminder sync was not applied", {
+              event: "reminder.sync_apply_failed",
+              agent_id: sync.agentId,
+              operation: sync.operation,
+              error_type: diagnosticErrorName(error),
+            });
+          }),
+      ),
     );
     subscribe(transport.onAppConfigSync?.((sync) => this.ports.applyAppConfigSync(sync)));
     subscribe(
