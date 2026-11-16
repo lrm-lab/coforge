@@ -79,10 +79,10 @@ test("a stale worker cannot overwrite a newer worker's capability state", async 
   const { redis } = fakeRedis();
   const lease = new RedisComputerCapabilityLease(
     redis,
-    "local-session-handoff:v1",
-    "local-session-handoff-capability",
+    "legacy-capability:v1",
+    "legacy-capability",
   );
-  await lease.record("w", "computer", ["local-session-handoff:v1"], identity("new", 2));
+  await lease.record("w", "computer", ["legacy-capability:v1"], identity("new", 2));
   await lease.record("w", "computer", [], identity("old", 1));
   expect(await lease.supports("w", "computer")).toBeTrue();
 });
@@ -112,10 +112,10 @@ test("an old heartbeat refresh cannot restore a value replaced by a newer ready"
   };
   const lease = new RedisComputerCapabilityLease(
     redis,
-    "local-session-handoff:v1",
-    "local-session-handoff-capability",
+    "legacy-capability:v1",
+    "legacy-capability",
   );
-  await lease.record("w", "computer", ["local-session-handoff:v1"], identity("old", 1));
+  await lease.record("w", "computer", ["legacy-capability:v1"], identity("old", 1));
   const refreshing = lease.refresh("w", "computer", identity("old", 1));
   await refreshStarted.promise;
   await lease.record("w", "computer", [], identity("new", 2));
@@ -134,10 +134,10 @@ test("a stale worker heartbeat cannot renew a newer worker's supported capabilit
   };
   const lease = new RedisComputerCapabilityLease(
     redis,
-    "local-session-handoff:v1",
-    "local-session-handoff-capability",
+    "legacy-capability:v1",
+    "legacy-capability",
   );
-  await lease.record("w", "computer", ["local-session-handoff:v1"], identity("new", 2));
+  await lease.record("w", "computer", ["legacy-capability:v1"], identity("new", 2));
   await lease.refresh("w", "computer", identity("old", 1));
   expect(expires).toBe(0);
   await lease.refresh("w", "computer", identity("new", 2));

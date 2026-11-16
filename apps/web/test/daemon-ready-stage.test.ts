@@ -234,7 +234,7 @@ test("overlapping ready calls cannot let the older worker write capabilities las
   });
   await oldRecordStarted.promise;
   expect(
-    await method(payload("new", 2, ["local-session-handoff:v1"]), {
+    await method(payload("new", 2, ["legacy-capability:v1"]), {
       principal: principal(),
       client: "client-new",
     }),
@@ -244,7 +244,7 @@ test("overlapping ready calls cannot let the older worker write capabilities las
   expect(capability).toEqual({
     workerInstanceId: "new",
     startedAt: 2,
-    values: ["local-session-handoff:v1"],
+    values: ["legacy-capability:v1"],
   });
 });
 
