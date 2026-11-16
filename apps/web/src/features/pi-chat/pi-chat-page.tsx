@@ -13,6 +13,7 @@ import { markAiWorkbenchOff, useAiWorkbenchEnabled } from "#src/features/setting
 import { isAppErrorCode } from "#src/lib/app-error";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { piChatFailureMessage } from "./pi-chat-failure";
 import { getPiChatComputers } from "./pi-chat.functions";
 import { useExecutePiChat } from "./use-execute-pi-chat";
 import { PiChatFilesContext } from "./pi-chat-files-context";
@@ -163,7 +164,7 @@ function PiChatContent(props: Props) {
             )}
             {sessions.isError && (
               <div role="alert" className="space-y-2 p-3 text-sm text-error-primary">
-                <p>{m.pi_chat_load_error()}</p>
+                <p>{piChatFailureMessage("load")}</p>
                 <Button
                   size="sm"
                   color="secondary"

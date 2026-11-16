@@ -41,7 +41,13 @@ import { RecordsMemberWeeksSection } from "./records-member-weeks-section";
 import { RecordsFavoritesSection, RecordsMyReportsSection } from "./records-report-sections";
 import { useRecordsMemberWeeks } from "./use-records-member-weeks";
 import { CollapsibleSection, RecordLink } from "./records-sidebar-parts";
-import { matchesQuery, recordsTabSearch, type RecordsTab } from "./records-sidebar";
+import {
+  matchesQuery,
+  memberWeeksListed,
+  recordsTabSearch,
+  weeklyEmptyNote,
+  type RecordsTab,
+} from "./records-sidebar";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { useRecordRefresh } from "./use-record-refresh";
 
@@ -176,17 +182,16 @@ export function RecordsLayout({
     [catalog.myReports, query],
   );
   const myReportsUnread = catalog.myReports.some((item) => item.unread);
+  // A group with nothing in it is left out; with every group empty, one sentence says so.
+  const membersListed = memberWeeksListed(memberWeeks);
+  const weeklyEmpty = weeklyEmptyNote({
+    favorites: filteredFavorites.length,
+    myReports: filteredMyReports.length,
+    membersListed,
+    query,
+  });
   // A report older than the catalog's page is listed once its week is read: its section opens
   // then, as `sectionDefaults` opens it at once for one listed already, unless another is open.
-  // A group with nothing in it is left out rather than shown as an empty heading; with every
-  // group empty, one sentence says so.
-  const membersListed =
-    memberWeeks.weeks.length > 0 ||
-    memberWeeks.hasMore ||
-    memberWeeks.loadingMore ||
-    memberWeeks.loadFailed;
-  const weeklyListed =
-    filteredFavorites.length > 0 || filteredMyReports.length > 0 || membersListed;
   const wasListed = useRef(memberWeeks.selectionListed);
   useEffect(() => {
     const listedNow = memberWeeks.selectionListed && !wasListed.current;
@@ -348,11 +353,7 @@ export function RecordsLayout({
                       }}
                     />
                   )}
-                  {!weeklyListed && (
-                    <p className="px-2 text-sm text-tertiary">
-                      {query ? m.records_weekly_no_match({ query }) : m.records_weekly_none()}
-                    </p>
-                  )}
+                  {weeklyEmpty && <p className="px-2 text-sm text-tertiary">{weeklyEmpty}</p>}
                 </div>
               ) : (
                 <CollapsibleSection
