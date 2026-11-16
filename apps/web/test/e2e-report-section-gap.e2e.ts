@@ -1,8 +1,6 @@
 import { expect, test } from "bun:test";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "#src/generated/prisma/client";
-import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import { seedWeeklyReport } from "./helpers/weekly-report-fixture";
 
 /**
  * The room under an empty weekly report section (task #106) is drawn, not written: clicking
@@ -13,26 +11,10 @@ const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const TEMPLATE = "## Work Summary\n\n## Next Steps";
 
 test("clicking into an empty section and leaving saves nothing; typing there saves", async () => {
-  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id, role: "owner" },
-    orderBy: { createdAt: "asc" },
-    include: { workspace: { select: { slug: true } } },
-  });
-  // A year no real cycle uses, so the unique (workspace, year, week) never collides.
-  const year = 2900 + (process.pid % 90);
-  const cycle = await db.weeklyReportCycle.create({
-    data: { workspaceId, year, week: 7, title: "E2E week", createdById: DEV_BROWSER_USER.id },
-  });
-  const report = await db.weeklyReport.create({
-    data: {
-      workspaceId,
-      cycleId: cycle.id,
-      authorId: DEV_BROWSER_USER.id,
-      kind: "member",
-      title: "Section gap report",
-      content: { markdown: TEMPLATE },
-    },
+  const { db, report, path, remove } = await seedWeeklyReport(databaseUrl, {
+    week: 7,
+    title: "Section gap report",
+    content: { markdown: TEMPLATE },
   });
   const { browser, evaluate } = browserSession(browserPath, `report-gap-${process.pid}`);
   // Leaving the editor saves the report as it stands (into its page form, `tabs`): the text is
@@ -57,7 +39,7 @@ test("clicking into an empty section and leaving saves nothing; typing there sav
     })()`);
   try {
     await browser("set", "viewport", "1440", "900");
-    await browser("open", `${origin}/en/w/${workspace.slug}/records/${report.id}`);
+    await browser("open", `${origin}${path}`);
     await browser("wait", "--fn", `${pageHydrated} && ${gaps} === 2`);
 
     await pressGap(0);
@@ -82,8 +64,6 @@ test("clicking into an empty section and leaving saves nothing; typing there sav
     expect(await saved()).toEqual(["## Work Summary\n\nShipped the gap\n\n## Next Steps"]);
   } finally {
     await browser("close").catch(() => undefined);
-    await db.weeklyReport.deleteMany({ where: { id: report.id } }).catch(() => undefined);
-    await db.weeklyReportCycle.deleteMany({ where: { id: cycle.id } }).catch(() => undefined);
-    await db.$disconnect();
+    await remove();
   }
 }, 120_000);

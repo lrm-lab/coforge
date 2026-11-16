@@ -1,10 +1,10 @@
 import { useEffect, useEffectEvent, useState, type MouseEvent } from "react";
+import { useHotkeys } from "@tanstack/react-hotkeys";
 import { ChevronLeft, ChevronRight, Download01, XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { Empty, EmptyTitle } from "#src/components/ui/empty";
-import { useShortcuts } from "#src/hooks/use-shortcuts";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { takesComments } from "./attachment-preview-kind";
@@ -131,10 +131,10 @@ function LightboxContent({
   };
   // Left and right step through the images, except in a text field (the comment being written),
   // where they move the caret.
-  useShortcuts(
+  useHotkeys(
     [
-      { hotkey: "ArrowLeft", take: () => (step(-1), true) },
-      { hotkey: "ArrowRight", take: () => (step(1), true) },
+      { hotkey: "ArrowLeft", callback: () => step(-1) },
+      { hotkey: "ArrowRight", callback: () => step(1) },
     ],
     { enabled: paged },
   );

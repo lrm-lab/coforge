@@ -1,10 +1,8 @@
 import { expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "#src/generated/prisma/client";
-import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
+import { seedWeeklyReport } from "./helpers/weekly-report-fixture";
 
 /**
  * A weekly report whose save fails says so, and offers to try again only where trying again can
@@ -19,42 +17,24 @@ const GONE = "This report no longer exists, or is no longer yours.";
 const KEEP_TEXT = "Your text is still in the editor. Copy it before you leave.";
 
 async function seed(kind: "member" | "template", week: number) {
-  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-  const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
-    where: { userId: DEV_BROWSER_USER.id, role: "owner" },
-    orderBy: { createdAt: "asc" },
-    include: { workspace: { select: { slug: true } } },
-  });
-  // A year no real cycle uses, so the unique (workspace, year, week) never collides.
-  const year = 2900 + (process.pid % 90);
-  const cycle = await db.weeklyReportCycle.create({
-    data: { workspaceId, year, week, title: "E2E week", createdById: DEV_BROWSER_USER.id },
-  });
-  const data = {
-    workspaceId,
-    cycleId: cycle.id,
-    authorId: DEV_BROWSER_USER.id,
+  const seeded = await seedWeeklyReport(databaseUrl, {
+    week,
     kind,
     title: kind === "member" ? "Autosave report" : "Format report",
     content: { body: "What shipped this week." },
-  };
-  const report = await db.weeklyReport.create({ data });
+  });
   const { browser, evaluate } = browserSession(
     browserPath,
     `report-save-${kind}-${process.pid}-${week}`,
   );
   return {
-    db,
+    ...seeded,
     browser,
     evaluate,
-    data,
-    report,
-    page: `${origin}/en/w/${workspace.slug}/records/${report.id}`,
+    page: `${origin}${seeded.path}`,
     async cleanup() {
       await browser("close").catch(() => undefined);
-      await db.weeklyReport.deleteMany({ where: { id: report.id } }).catch(() => undefined);
-      await db.weeklyReportCycle.deleteMany({ where: { id: cycle.id } }).catch(() => undefined);
-      await db.$disconnect();
+      await seeded.remove();
     },
   };
 }
