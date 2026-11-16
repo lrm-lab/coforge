@@ -186,7 +186,7 @@ export function ComposerField({
           placeholder={placeholder}
           // Fits what it shows, placeholder included (as Raft's); scrolls only past max height.
           className={cx(
-            "row-start-1 max-h-40 min-h-8 w-full resize-none bg-transparent py-1 outline-none [field-sizing:content] placeholder:text-placeholder disabled:opacity-50",
+            "row-start-1 max-h-40 min-h-8 w-full resize-none bg-transparent py-1 text-field-text outline-none [field-sizing:content] placeholder:text-field-placeholder disabled:opacity-50",
             DRAFT_LINE_CLASS,
             stacked ? cx("col-span-full", INSET_CLASS) : cx("col-start-2", oneLineInset),
           )}

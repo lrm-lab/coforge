@@ -9,7 +9,9 @@ import { pageHydrated } from "./helpers/browser-e2e";
 /**
  * Browser E2E (task #227): a focused text field draws its border one step up from the resting
  * one, `--color-border-input-focus` — the keyboard's focus ring says more. Checked on a shared
- * Input (the Records search) and on the chat composer, which draws its own frame.
+ * Input (the Records search). The chat composer, which draws its own frame, takes the designer's
+ * typing state instead (task #104): a 2px `--color-field-border-typing` border, drawn as the
+ * 1px border plus a 1px inset ring.
  *
  * Opt-in like the other browser E2Es: real local Web (`COFORGE_DEV_SKIP_AUTH=1`) + `agent-browser`
  * against the dev database. Screenshots are written under `.amp/e2e/input-focus-border/`.
@@ -24,11 +26,11 @@ if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/input-focus-border");
 
-/** The colour `--color-border-input-focus` resolves to, read off a probe so the check follows the
- * token rather than pinning its value (the coforge-ui pass made it neutral, not violet). */
-const focusTokenColor = `(() => {
+/** The colour a token resolves to on the themed page, read off a probe so the check follows the
+ * token rather than pinning its value. */
+const tokenColor = (token: string) => `(() => {
   const probe = document.createElement("i");
-  probe.style.color = "var(--color-border-input-focus)";
+  probe.style.color = "var(${token})";
   document.body.append(probe);
   const color = getComputedStyle(probe).color;
   probe.remove();
@@ -58,7 +60,7 @@ test("a focused text field's border is the theme's input-focus colour", async ()
   /** The colour the focused field's border is drawn in: the shared Input's ring (an inset box
    * shadow), or the composer's border. */
   const inputRing = `getComputedStyle(document.querySelector('input[type="search"]').closest(".group\\\\/input")).boxShadow`;
-  const composerBorder = `getComputedStyle(document.querySelector("main form textarea").closest("form")).borderColor`;
+  const composerFrame = `getComputedStyle(document.querySelector("main form textarea").closest("form"))`;
   const setTheme = async (theme: "light" | "dark") => {
     await browser("eval", `localStorage.setItem("coforge-theme", "${theme}")`);
     await browser("reload");
@@ -83,7 +85,7 @@ test("a focused text field's border is the theme's input-focus colour", async ()
       await setTheme(theme);
       await waitFor(`${pageHydrated} && document.querySelector('input[type="search"]') !== null`);
       // The token is theme-scoped, so it is read on the themed page, not before it loads.
-      const color = await evaluate<string>(focusTokenColor);
+      const color = await evaluate<string>(tokenColor("--color-border-input-focus"));
       await browser("focus", 'input[type="search"]');
       await waitFor(`${inputRing}.includes(${JSON.stringify(color)})`);
       expect(await evaluate<string>(inputRing)).toContain(color);
@@ -93,9 +95,13 @@ test("a focused text field's border is the theme's input-focus colour", async ()
       await waitFor(
         `${pageHydrated} && document.querySelector("main form textarea:not([disabled])") !== null`,
       );
+      const typing = await evaluate<string>(tokenColor("--color-field-border-typing"));
       await browser("focus", "main form textarea");
-      await waitFor(`${composerBorder} === ${JSON.stringify(color)}`);
-      expect(await evaluate<string>(composerBorder)).toBe(color);
+      await waitFor(`${composerFrame}.borderColor === ${JSON.stringify(typing)}`);
+      expect(await evaluate<string>(`${composerFrame}.borderColor`)).toBe(typing);
+      expect(await evaluate<string>(`${composerFrame}.boxShadow`)).toContain(
+        `${typing} 0px 0px 0px 1px inset`,
+      );
       await browser("screenshot", join(artifacts, `composer-${theme}.png`));
     }
   } finally {

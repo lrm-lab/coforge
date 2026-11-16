@@ -362,7 +362,7 @@ export function MessageComposer({
       className={`${COMPOSER_FOCUS_CLASS} ${COMPOSER_FRAME_CLASS}`}
     >
       {drop.dragging && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-primary bg-secondary text-sm font-medium text-secondary">
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-primary bg-secondary text-sm font-medium text-secondary">
           <UploadCloud02 aria-hidden="true" className="size-5 text-fg-quaternary" />
           {m.conversation_drop_to_upload()}
         </div>
