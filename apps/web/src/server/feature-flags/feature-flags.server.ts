@@ -25,6 +25,8 @@ export const FEATURE_FLAGS = {
     "Applications phase 2: notifying the apps installed in a Workspace of what happens in it",
   "task-ref-tokens":
     "Store `#channel:#N` and `dm:@peer:#N` in message bodies (written by the server, read by every client)",
+  "computer-offline-alerts":
+    "Computers: alert a Computer's owner by assistant DM after it stays offline 15 minutes",
   "computer-release-channels":
     "Computers phase 1: honor the release channel reported by upgraded Computers; keep off until the upgraded cohort is verified",
   agentContextView:

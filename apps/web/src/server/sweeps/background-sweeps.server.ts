@@ -4,8 +4,15 @@ import { ensureAttachmentOrphanSweep } from "#src/server/attachments/attachment-
 import { ensureDeletedTaskSweep } from "#src/server/tasks/deleted-task-sweep.server";
 import { ensureComputerAttachSweep } from "#src/server/computers/computer-attach-sweep.server";
 import { appNotificationPresence } from "#src/server/app-notifications/app-notification-presence.server";
-import { setPresenceObserver } from "#src/server/app-notifications/presence-observer";
+import {
+  fanOutPresenceObservers,
+  setPresenceObserver,
+} from "#src/server/app-notifications/presence-observer";
 import { ensurePresenceSweep } from "#src/server/app-notifications/presence-sweep.server";
+import {
+  computerOfflineAlerts,
+  ensureComputerOfflineAlertSweep,
+} from "#src/server/computers/computer-offline-alerts.server";
 import { ensureAgentMuteHintSweep } from "#src/server/conversations/agent-mute-hint-sweep.server";
 import { ensureDeferredMobilePushSweep } from "#src/server/notifications/deferred-mobile-push-sweep.server";
 import { ensureUsageLimitSweep } from "#src/server/usage-limits/usage-limit-sweep.server";
@@ -17,9 +24,13 @@ import { ensureUsageLimitSweep } from "#src/server/usage-limits/usage-limit-swee
  * until its feature is in use.
  */
 export function registerBackgroundSweeps(): void {
-  setPresenceObserver(appNotificationPresence);
+  // One observer for every presence consumer: app notifications and Computer offline alerts each
+  // gate themselves, and either flag alone puts the status caches on their tracked path.
+  const presence = fanOutPresenceObservers(appNotificationPresence, computerOfflineAlerts());
+  setPresenceObserver(presence);
   ensureAgentActivitySweep();
-  ensurePresenceSweep();
+  ensurePresenceSweep(presence, () => presence.enabled());
+  ensureComputerOfflineAlertSweep();
   ensureAgentMuteHintSweep();
   ensureDeferredMobilePushSweep();
   ensureArtifactBlobSweep();

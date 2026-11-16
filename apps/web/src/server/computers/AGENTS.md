@@ -2,10 +2,9 @@
 
 These rules apply to `src/server/computers/`.
 
-- `computer-list-visibility.server.ts` is the list/search filter for Workspace
-  members: another person's account default cloud Computer is omitted; extras
-  and local Computers stay. Host jobs, daemons, and Agent placement that read
-  links directly are unchanged.
+- `computer-list-visibility.server.ts` is the list/search filter for Workspace members:
+  another person's account default cloud Computer is omitted; extras and local Computers
+  stay. Host jobs, daemons, and Agent placement that read links directly are unchanged.
 - `computer-metadata.server.ts` persists last-observed OS and executable
   metadata. The Daemon `ready` message supplies observations only, never
   creator identity.
@@ -19,10 +18,9 @@ These rules apply to `src/server/computers/`.
   idempotency, and persistence.
 - `roster.server.ts` lists the signed-in User's owned local Computers for
   explicit setup adoption; it never returns another User's rows.
-- `desktop-proxy-auth.server.ts` answers Caddy before it forwards
-  `/desktop/<computer id>/...`. The signed-in user must own that cloud
-  computer. A missing session, any other computer, or a path that is not a
-  desktop is refused. The route is `/api/internal/desktop-authorize`.
+- `desktop-proxy-auth.server.ts` answers Caddy before it forwards `/desktop/<computer id>/...`:
+  the signed-in user must own that cloud computer; a missing session, any other computer, or
+  a non-desktop path is refused. The route is `/api/internal/desktop-authorize`.
 - A flow that removes a Computer from a Workspace calls
   `DaemonCredentialRevocations.recordForComputer(tx, {workspaceId, computerId})`
   inside its transaction, before anything revokes or cascades those daemon
@@ -84,9 +82,6 @@ These rules apply to `src/server/computers/`.
   (`model-refresh-result-method.server.ts`, before the result is stored, so a closed page cannot
   leave it set and a page that reads the result never sees it), or when a failed start sent nothing.
   No daemon state is involved.
-- `computer-workspace-files.server.ts` is the owner scope for that inventory's
-  scan and for workspace delete: the owned-Computer lookup, the Agent
-  assignment rule, and the Workspace Files query both server functions use.
 - `runtime-auth.server.ts` signs a Code Agent runtime in or out on a Computer through the daemon.
   Only the Computer's owner and an owner or admin of a Workspace it is connected to may
   (`runtime-auth-authorization.server.ts`). `runtime-auth-store.server.ts` allows one login per
@@ -187,6 +182,11 @@ These rules apply to `src/server/computers/`.
   the page reads failed, and leaves the stored object behind. The page's deadline
   (`features/computers/computer-file-upload-poll.ts`) must stay past the server's store and pull
   limits (`COMPUTER_FILE_UPLOAD_TIMING`).
+- `computer-offline-alerts.server.ts` owns the `computer-offline-alerts` flag's two halves: a
+  presence observer marking one Redis offline episode per Computer and a minute sweep that
+  DMs the owner through their Workspace assistant. A marker can outlive its episode while the
+  flag is off, so the sweep re-checks live status keys and ends it silently when one says
+  `online`; sent and dead-end episodes consume their keys. Both gate on the flag.
 - `computer-runtime-auth.server.ts` stores structurally validated status reports without a
   provider whitelist, so a newer daemon's report survives an older Web. Provider identifiers
   are 1–64 ASCII identifier characters, at most 32 unique entries, normalized JSON at most
