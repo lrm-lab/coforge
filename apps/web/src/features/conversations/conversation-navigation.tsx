@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { BadgeWithIcon } from "#src/components/base/badges/badges";
 import { PageHeader } from "#src/components/layout/page-header";
-import { useReportChatListOpen } from "#src/components/layout/phone-shell";
+import { ChatListShownContext, useReportChatListOpen } from "#src/components/layout/phone-shell";
 import { TabHomeHeader } from "#src/components/layout/tab-home-header";
 import { Spinner } from "#src/components/ui/spinner";
 import { ConnectionStatusPill } from "#src/features/realtime/connection-status-pill";
@@ -47,6 +47,10 @@ export function useConversationDetailVisible() {
   return useContext(ConversationListContext)?.detailVisible ?? true;
 }
 
+export function useConversationListVisible() {
+  return useContext(ConversationListContext)?.listVisible ?? true;
+}
+
 /** Hides the mobile conversation list so the chosen conversation's pane shows. */
 export function useCloseConversationList(): () => void {
   const navigation = useContext(ConversationListContext);
@@ -64,6 +68,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   const channelNames = useSuspenseQuery(channelNamesQuery(workspaceId ?? "")).data;
   const workspaceSlug = useWorkspaceSlug();
   const desktop = useBreakpoint("lg");
+  const shellShowsList = useContext(ChatListShownContext);
   const router = useRouter();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [browsing, setBrowsing] = useState(false);
@@ -183,14 +188,16 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   const detailVisible = desktop || !showList;
   // The phone's tab bar shows with the list, whichever address the list is over.
   useReportChatListOpen(showList);
+  const listVisible = desktop || shellShowsList;
   const listControls = useMemo(
     () => ({
       showList: () => setBrowsing(true),
       closeList: () => setBrowsing(false),
       detailVisible,
+      listVisible,
       listBesideFrom: "lg" as const,
     }),
-    [detailVisible],
+    [detailVisible, listVisible],
   );
   return (
     <ConversationListContext value={listControls}>

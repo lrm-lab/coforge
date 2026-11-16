@@ -20,6 +20,7 @@ import { SidebarRail } from "#src/components/layout/sidebar/sidebar-rail";
 import { SidebarExpanded } from "#src/components/layout/sidebar/sidebar-expanded";
 import {
   ChatListOpenContext,
+  ChatListShownContext,
   PhoneShellContext,
   type PhoneShell,
 } from "#src/components/layout/phone-shell";
@@ -352,7 +353,9 @@ export function AppShell({
             draws a card per panel, 8px apart. */}
               <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:p-2 lg:pl-0">
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary lg:overflow-hidden lg:rounded-xl lg:has-[[data-panel-cards]]:overflow-visible lg:has-[[data-panel-cards]]:rounded-none lg:has-[[data-panel-cards]]:bg-transparent">
-                  {children}
+                  <ChatListShownContext value={phone && chatListOpen}>
+                    {children}
+                  </ChatListShownContext>
                 </div>
               </div>
             </div>

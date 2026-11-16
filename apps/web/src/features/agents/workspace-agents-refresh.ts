@@ -102,3 +102,11 @@ export function useAgentDirectoryInvalidator() {
   useEffect(() => () => directoryInvalidator.cancel(), [directoryInvalidator]);
   return directoryInvalidator;
 }
+
+export function useRefreshAfterAgentWrite(refreshDirectory: () => Promise<void>) {
+  const queryClient = useQueryClient();
+  return useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: MEMBER_DIRECTORY_KEY });
+    return refreshDirectory();
+  }, [refreshDirectory, queryClient]);
+}

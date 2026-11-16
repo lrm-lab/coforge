@@ -24,6 +24,7 @@ export const ConversationListContext = createContext<{
    * opens the conversation even when the URL does not change (the row that is already current). */
   closeList: () => void;
   detailVisible: boolean;
+  listVisible: boolean;
   /** The back button's name, when the list is not Chat's conversations. */
   backLabel?: string;
   listBesideFrom: ListBesideFrom;
@@ -49,6 +50,7 @@ export function MountedListControls({
       showList: onClose,
       closeList: () => {},
       detailVisible: true,
+      listVisible: true,
       backLabel,
       listBesideFrom,
     }),

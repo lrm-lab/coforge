@@ -28,6 +28,8 @@ export const PhoneShellContext = createContext<PhoneShell | null>(null);
  * the setter never changes, so reporting re-renders none of the tab pages. */
 export const ChatListOpenContext = createContext<((open: boolean) => void) | null>(null);
 
+export const ChatListShownContext = createContext(false);
+
 /** The shell's phone context; the tab pages render only inside `AppShell`. */
 export function usePhoneShell(): PhoneShell {
   const shell = useContext(PhoneShellContext);

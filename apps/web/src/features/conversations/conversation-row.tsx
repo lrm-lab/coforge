@@ -7,7 +7,7 @@ import { UnreadBadge } from "#src/components/ui/unread-marker";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
 import { MentionBadge } from "./mention-badge";
-import { useCloseConversationList } from "./conversation-navigation";
+import { useCloseConversationList, useConversationListVisible } from "./conversation-navigation";
 import { conversationRoute, type ConversationTarget } from "./last-conversation";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { createRowHover, RowHoverContext } from "./row-hover";
@@ -106,10 +106,12 @@ export function ConversationRow({
   const router = useRouter();
   const workspaceSlug = useWorkspaceSlug();
   const [hover] = useState(createRowHover);
+  const listVisible = useConversationListVisible();
   const link = useRef<HTMLAnchorElement>(null);
   useEffect(() => {
-    if (current) link.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
-  }, [current]);
+    if (current && listVisible)
+      link.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
+  }, [current, listVisible]);
   const route = conversationRoute(target, workspaceSlug);
   return (
     // The row is a React Aria link so the conversation menu's `MenuTrigger trigger="contextMenu"`

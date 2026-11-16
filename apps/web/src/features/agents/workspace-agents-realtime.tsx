@@ -38,6 +38,7 @@ import type { ExtraAgent } from "./extra-agent";
 import { loadExtraAgents } from "./extra-agents.functions";
 import {
   useAgentDirectoryInvalidator,
+  useRefreshAfterAgentWrite,
   extraAgentsQueryKey,
   extraLiveAgent,
   refreshedAgents,
@@ -269,6 +270,7 @@ export function WorkspaceAgentsProvider({
     );
   }, [visibleAgents, workspaceId, queryClient]);
 
+  const refreshAfterWrite = useRefreshAfterAgentWrite(refreshDirectory);
   const liveAgents = useSyncedStore(visibleAgents);
   const statusOnlyStore = useSyncedStore(statusOnlyDisplays);
 
@@ -276,7 +278,7 @@ export function WorkspaceAgentsProvider({
     <LiveAgentStoreContext value={liveAgents}>
       <StatusOnlyDisplaysContext value={statusOnlyStore}>
         <WorkspaceIdContext value={workspaceId}>
-          <RefreshAgentDirectoryContext value={refreshDirectory}>
+          <RefreshAgentDirectoryContext value={refreshAfterWrite}>
             <DisplayWatcherContext value={watched.watch}>
               <ReplyIntentStoreProvider value={replyIntents}>{children}</ReplyIntentStoreProvider>
             </DisplayWatcherContext>
@@ -287,7 +289,8 @@ export function WorkspaceAgentsProvider({
   );
 }
 
-/** Re-reads the owning Agent store after a write, preserving its snapshot if the read fails. */
+/** Re-reads the owning Agent store after a write, preserving its snapshot if the read fails, and
+ * marks the Members directory stale. */
 export function useRefreshAgentDirectory() {
   const refresh = useContext(RefreshAgentDirectoryContext);
   if (!refresh) throw new Error("Agent directory refresh requires WorkspaceAgentsProvider");
