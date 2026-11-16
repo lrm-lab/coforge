@@ -27,7 +27,7 @@ These rules apply to `src/features/agents/`.
   and reconnect, when an unknown Agent newer than the list appears, after a runtime or profile
   save, and on a visibility or directory change.
 - Create a local Agent through `useCreateAgent()`, never `useServerFn(createAgent)`; the cloud
-  form calls `useRefreshAgentDirectory()` after its own polled create. That re-read also marks
+  form calls `useRefreshAgentDirectory()` after its own create. That re-read also marks
   the Members directory (`MEMBER_DIRECTORY_KEY`) stale, so no create depends on the realtime
   directory event (also handled, by `useAgentDirectoryInvalidator`). A failed re-read never turns
   a committed create into a reported failure.
@@ -122,7 +122,7 @@ These rules apply to `src/features/agents/`.
   (`WorkspaceMembers.person` reports which apply); one's own profile is edited
   in Settings → Account.
 - Computer prerequisites appear only after the user requests Agent creation.
-  Runtime management stays in the profile panel. `new-agent-dialog.tsx` (the + menu and Members) opens on `cloud-agent-form.tsx`, which asks for a username and an optional display name as the local form does, waits for cloud readiness and opens the created private Agent's DM; a link swaps in the local form, which also ends in the DM; it re-reads the Agent roster, picker directory, and DM list after their writes instead of relying on realtime signals. Creation permissions remain server-owned.
+  Runtime management stays in the profile panel. `new-agent-dialog.tsx` (the + menu and Members) offers Cloud only while the viewer's default cloud Computer is in this Workspace (`useCloudAgentComputer`, the server's own readiness rule) and opens on it; otherwise it is the local form alone, no switch. While that Computer is starting or offline the cloud form says so in place, links an offline one to its page, keeps Create disabled and re-reads the state (every 2 s while starting, 10 s while offline) until ready; a create the server answers `unavailable` re-reads it at once. Either form ends in the new Agent's DM; it re-reads the Agent roster, picker directory, and DM list after their writes instead of relying on realtime signals. Creation permissions remain server-owned.
 - Who sees what on an Agent: Message (profile header, Members
   card, DM picker, search) follows the server's `canMessage` (any member a
   public Agent, only its creator a private one); the Activity, Chat, Reminders and Workspace tabs

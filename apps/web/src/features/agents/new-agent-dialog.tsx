@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Radio, RadioGroup } from "react-aria-components";
+import { Heading, Radio, RadioGroup } from "react-aria-components";
 
 import {
   getComputerRuntimeCatalog,
@@ -22,14 +22,9 @@ import {
 import { LocalAgentForm } from "./agent-create-dialog";
 import { useCreateAgent } from "./use-create-agent";
 import { CloudAgentForm } from "./cloud-agent-form";
+import { useCloudAgentComputer } from "./cloud-agent-computer";
 import { useCurrentWorkspaceId } from "./workspace-agents-realtime";
 
-/**
- * "New agent" from the + menu and the Members page: a two-way switch under the title says where
- * the Agent runs, in the cloud (the default) or on a connected Computer; the picture above shows
- * the chosen one and its fields follow below.
- * Either way it ends in the new Agent's direct conversation.
- */
 export function NewAgentDialog({
   open,
   onOpenChange,
@@ -60,8 +55,6 @@ const KINDS = [
 
 type AgentKind = (typeof KINDS)[number]["id"];
 
-/** Mounted with the dialog's content, so every opening starts on the cloud form. The head sits
- * outside the forms, so switching kinds keeps the switch (and the focus on it) in place. */
 function NewAgentForms({
   open,
   busy,
@@ -76,11 +69,20 @@ function NewAgentForms({
   conversationReplacesPage: boolean;
   onBusyChange: (busy: boolean) => void;
 }) {
-  const [kind, setKind] = useState<AgentKind>("cloud");
-  // Once the switch has been used, the focus stays on it.
-  const [switched, setSwitched] = useState(false);
-  // A cloud create still preparing may be closed, but not switched away from.
+  const cloud = useCloudAgentComputer();
+  const [chosen, setChosen] = useState<AgentKind>();
   const [submitting, setSubmitting] = useState(false);
+  if (cloud.isPending)
+    return (
+      <Loading className="py-12">
+        <Heading slot="title" className="sr-only">
+          {m.header_new_agent()}
+        </Heading>
+      </Loading>
+    );
+  const cloudComputer = cloud.data?.state === "none" ? undefined : cloud.data;
+  const showCloud = cloudComputer !== undefined && chosen !== "local";
+  const kind: AgentKind = showCloud ? "cloud" : "local";
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <AgentCreateIntro
@@ -88,38 +90,37 @@ function NewAgentForms({
         title={m.header_new_agent()}
         onClose={busy ? undefined : onClose}
       >
-        <RadioGroup
-          aria-label={m.agent_create_kind_label()}
-          orientation="horizontal"
-          value={kind}
-          onChange={(next) => {
-            setKind(next as AgentKind);
-            setSwitched(true);
-          }}
-          isDisabled={busy || submitting}
-          className="mt-4 grid w-full grid-cols-2 gap-0.5 rounded-lg bg-secondary p-0.5"
-        >
-          {KINDS.map((option) => (
-            <Radio
-              key={option.id}
-              value={option.id}
-              className={({ isSelected, isFocusVisible, isDisabled }) =>
-                cx(
-                  "flex h-8 cursor-pointer items-center justify-center rounded-md text-sm font-medium transition duration-100 ease-linear",
-                  isSelected
-                    ? "bg-primary text-primary shadow-xs ring-1 ring-primary"
-                    : "text-tertiary hover:text-secondary",
-                  isFocusVisible && "outline-2 outline-offset-2 outline-focus-ring",
-                  isDisabled && "cursor-not-allowed",
-                )
-              }
-            >
-              {option.label()}
-            </Radio>
-          ))}
-        </RadioGroup>
+        {cloudComputer && (
+          <RadioGroup
+            aria-label={m.agent_create_kind_label()}
+            orientation="horizontal"
+            value={kind}
+            onChange={(next) => setChosen(next as AgentKind)}
+            isDisabled={busy || submitting}
+            className="mt-4 grid w-full grid-cols-2 gap-0.5 rounded-lg bg-secondary p-0.5"
+          >
+            {KINDS.map((option) => (
+              <Radio
+                key={option.id}
+                value={option.id}
+                className={({ isSelected, isFocusVisible, isDisabled }) =>
+                  cx(
+                    "flex h-8 cursor-pointer items-center justify-center rounded-md text-sm font-medium transition duration-100 ease-linear",
+                    isSelected
+                      ? "bg-primary text-primary shadow-xs ring-1 ring-primary"
+                      : "text-tertiary hover:text-secondary",
+                    isFocusVisible && "outline-2 outline-offset-2 outline-focus-ring",
+                    isDisabled && "cursor-not-allowed",
+                  )
+                }
+              >
+                {option.label()}
+              </Radio>
+            ))}
+          </RadioGroup>
+        )}
       </AgentCreateIntro>
-      {kind === "local" ? (
+      {!showCloud || !cloudComputer ? (
         <NewLocalAgent
           onClose={onClose}
           conversationReplacesPage={conversationReplacesPage}
@@ -127,20 +128,19 @@ function NewAgentForms({
         />
       ) : (
         <CloudAgentForm
+          computer={cloudComputer}
           open={open}
           onClose={onClose}
           conversationReplacesPage={conversationReplacesPage}
           onBusyChange={onBusyChange}
           onSubmittingChange={setSubmitting}
-          autoFocus={!switched}
+          autoFocus={chosen === undefined}
         />
       )}
     </div>
   );
 }
 
-/** The local form with what it needs: the Workspace's Computers, read each time it is shown (one
- * may have come online since), and a create that opens the new Agent's direct conversation. */
 function NewLocalAgent({
   onClose,
   conversationReplacesPage,
@@ -164,7 +164,6 @@ function NewLocalAgent({
     gcTime: 0,
   });
 
-  // A failed re-read keeps the Computers already shown; only a first read that fails stops here.
   if (!computers.data)
     return (
       <AgentCreateForm
@@ -182,10 +181,7 @@ function NewLocalAgent({
             {m.channel_members_computers_error()}
           </p>
         ) : (
-          <div role="status" className="flex justify-center px-6 pt-5 text-tertiary">
-            <Spinner />
-            <span className="sr-only">{m.agent_env_loading()}</span>
-          </div>
+          <Loading className="pt-5" />
         )}
       </AgentCreateForm>
     );
@@ -197,7 +193,6 @@ function NewLocalAgent({
       submitLabel={m.agent_create_submit_chat()}
       onCreate={async (input) => {
         const created = await create(input);
-        // The Agent exists now: a conversation that fails to open leaves it in the sidebar.
         if (
           await openDirect({ agentId: created.agent.id }, { replace: conversationReplacesPage })
         ) {
@@ -211,5 +206,15 @@ function NewLocalAgent({
       headless
       onBusyChange={onBusyChange}
     />
+  );
+}
+
+function Loading({ className, children }: { className: string; children?: ReactNode }) {
+  return (
+    <div role="status" className={cx("flex justify-center px-6 text-tertiary", className)}>
+      {children}
+      <Spinner />
+      <span className="sr-only">{m.agent_env_loading()}</span>
+    </div>
   );
 }

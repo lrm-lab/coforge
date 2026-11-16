@@ -1,22 +1,27 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
+import { Button } from "#src/components/base/buttons/button";
+import { Spinner } from "#src/components/ui/spinner";
+import { StatusDot } from "#src/components/ui/status-dot";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
+import { localizeHref } from "#src/paraglide/runtime";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
 import { useCloseConversationList } from "#src/features/conversations/conversation-navigation";
 import { useRefreshSidebar } from "#src/features/conversations/sidebar-lists";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { useCurrentWorkspaceId, useRefreshAgentDirectory } from "./workspace-agents-realtime";
 import { agentCreateErrorMessage } from "./agent-form";
 import { createCloudAgent } from "./cloud-agents.functions";
+import { cloudAgentComputerKey, type PlacedCloudAgentComputer } from "./cloud-agent-computer";
 import { AgentCreateFooter, AgentCreateForm } from "./agent-create-frame";
 import { finishedAgentUsername } from "./agent-username";
 import { AgentUsernameField } from "./agent-username-field";
 
-/** The new-Agent dialog's cloud form, under its kind cards: a name, then the Agent is made on the
- * Workspace's cloud Computer and its direct conversation opens. `onBusyChange` keeps the dialog up
- * while the conversation opens; `onSubmittingChange` holds the kind cards while a create runs. */
 export function CloudAgentForm({
+  computer,
   open,
   onClose,
   conversationReplacesPage,
@@ -24,14 +29,12 @@ export function CloudAgentForm({
   onSubmittingChange,
   autoFocus,
 }: {
-  /** False from the moment the dialog closes: a create still waiting stops then, not after the
-   * close animation, so a closed dialog never opens a conversation. */
+  computer: PlacedCloudAgentComputer;
   open: boolean;
   onClose: () => void;
   conversationReplacesPage: boolean;
   onBusyChange: (busy: boolean) => void;
   onSubmittingChange: (submitting: boolean) => void;
-  /** Whether the name takes the focus: as the dialog opens, not when the kind switch shows it. */
   autoFocus: boolean;
 }) {
   const create = useServerFn(createCloudAgent);
@@ -76,70 +79,53 @@ export function CloudAgentForm({
     }
     await guard(async () => {
       setError("");
-      // One request id for the form's life: after a timeout, a lost response or a failed DM
-      // navigation the server returns the Agent this request already made, even under a name
-      // edited since; after a refusal (a taken name) nothing was made, and the new name is used.
-      const request = { name, requestId };
       const active = new AbortController();
       controller.current = active;
       try {
-        const deadline = Date.now() + 120_000;
-        while (!active.signal.aborted) {
-          const result = await create({ data: request, signal: active.signal });
-          if (active.signal.aborted) return;
-          if (result.status !== "preparing") {
-            try {
-              // Creation committed even if its realtime directory signal was lost.
-              await Promise.all([
-                refreshDirectory(),
-                queryClient.invalidateQueries(
-                  { queryKey: ["direct-message-directory", workspaceId] },
-                  { throwOnError: true },
-                ),
-              ]);
-            } catch {
-              if (active.signal.aborted) return;
-              setError(
-                result.status === "start-deferred"
-                  ? m.cloud_agent_create_start_deferred()
-                  : m.cloud_agent_create_refresh_error(),
-              );
-              return;
-            }
-            if (active.signal.aborted) return;
+        const result = await create({ data: { name, requestId }, signal: active.signal });
+        if (active.signal.aborted) return;
+        if (result.status === "unavailable") {
+          void queryClient.invalidateQueries({ queryKey: cloudAgentComputerKey(workspaceId) });
+          return;
+        }
+        const refreshed = await Promise.all([
+          refreshDirectory(),
+          queryClient.invalidateQueries(
+            { queryKey: ["direct-message-directory", workspaceId] },
+            { throwOnError: true },
+          ),
+        ]).then(
+          () => true,
+          () => false,
+        );
+        if (active.signal.aborted) return;
+        if (result.status === "start-deferred") {
+          setError(m.cloud_agent_create_start_deferred());
+          return;
+        }
+        if (!refreshed) {
+          setError(m.cloud_agent_create_refresh_error());
+          return;
+        }
+        openingDirect.current = true;
+        setOpening(true);
+        let opened;
+        try {
+          if (
+            await openDirect({ agentId: result.agentId }, { replace: conversationReplacesPage })
+          ) {
+            await refreshSidebar(["dms"]);
+            opened = true;
           }
-          if (result.status === "start-deferred") {
-            setError(m.cloud_agent_create_start_deferred());
-            return;
-          }
-          if (result.status === "created") {
-            openingDirect.current = true;
-            setOpening(true);
-            let opened;
-            try {
-              if (
-                await openDirect({ agentId: result.agentId }, { replace: conversationReplacesPage })
-              ) {
-                await refreshSidebar(["dms"]);
-                opened = true;
-              }
-            } catch {
-              setError(m.cloud_agent_create_refresh_error());
-            } finally {
-              openingDirect.current = false;
-              setOpening(false);
-            }
-            if (opened) {
-              closeList();
-              if (!conversationReplacesPage) close();
-            }
-            return;
-          }
-          if (Date.now() >= deadline) {
-            setError(m.cloud_agent_create_timeout());
-            return;
-          }
-          await new Promise<void>((resolve) => setTimeout(resolve, 2000));
+        } catch {
+          setError(m.cloud_agent_create_refresh_error());
+        } finally {
+          openingDirect.current = false;
+          setOpening(false);
+        }
+        if (opened) {
+          closeList();
+          if (!conversationReplacesPage) close();
         }
       } catch (cause) {
         if (active.signal.aborted) return;
@@ -148,6 +134,7 @@ export function CloudAgentForm({
     });
   }
 
+  const ready = computer.state === "ready";
   return (
     <AgentCreateForm
       onSubmit={submit}
@@ -157,20 +144,14 @@ export function CloudAgentForm({
           cancelDisabled={opening}
           submitLabel={m.agent_create_submit_chat()}
           submitting={submitting}
+          submitDisabled={!ready}
         />
       }
     >
       <div className="flex flex-col gap-3 px-6 pt-5 pb-2">
+        {!ready && <CloudComputerStatus computer={computer} onLeave={close} />}
         <AgentUsernameField autoFocus={autoFocus} isReadOnly={submitting} />
-        {/* The server makes every cloud Agent private (task #526): say so before it is made. */}
-        {!submitting && (
-          <p className="text-sm text-tertiary">{m.cloud_agent_create_private_note()}</p>
-        )}
-        {submitting && (
-          <p role="status" className="text-sm text-tertiary">
-            {m.cloud_agent_create_preparing()}
-          </p>
-        )}
+        {ready && <p className="text-sm text-tertiary">{m.cloud_agent_create_private_note()}</p>}
         {error && (
           <p role="alert" className="text-sm text-error-primary">
             {error}
@@ -178,5 +159,41 @@ export function CloudAgentForm({
         )}
       </div>
     </AgentCreateForm>
+  );
+}
+
+function CloudComputerStatus({
+  computer,
+  onLeave,
+}: {
+  computer: PlacedCloudAgentComputer;
+  onLeave: () => void;
+}) {
+  const workspaceSlug = useWorkspaceSlug();
+  const starting = computer.state === "starting";
+  return (
+    <div
+      role="status"
+      className="flex items-center gap-2.5 rounded-lg bg-secondary px-3.5 py-3 text-sm text-secondary"
+    >
+      {starting ? (
+        <Spinner className="size-3.5 shrink-0 text-tertiary" />
+      ) : (
+        <StatusDot tone="offline" className="size-2" />
+      )}
+      <p className="min-w-0 flex-1">
+        {starting ? m.cloud_agent_create_starting() : m.cloud_agent_create_offline()}
+      </p>
+      {!starting && (
+        <Button
+          href={localizeHref(workspacePath(workspaceSlug, `/computer/${computer.computerId}`))}
+          color="link-color"
+          size="sm"
+          onClick={onLeave}
+        >
+          {m.cloud_agent_create_view_computer()}
+        </Button>
+      )}
+    </div>
   );
 }

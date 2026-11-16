@@ -93,7 +93,6 @@ async function createFromMembers(
     await waitFor(`document.querySelector('[role="dialog"] input[name="name"]') !== null`);
     expect(await evaluate<string>(`location.search`)).toContain("setup=create-agent");
 
-    await clickText("label", "Local Computer");
     await waitFor(
       `[...document.querySelectorAll("button")].some((el) => el.textContent.trim() === "Claude Code" || el.textContent.trim() === "CoForge")`,
     );

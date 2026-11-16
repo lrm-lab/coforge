@@ -26,6 +26,12 @@ export class PrismaWorkspaceMembers implements WorkspaceAccess {
   }
 }
 
+const PLACED_CONTAINER = {
+  operation: "create",
+  containerId: { not: null },
+  reportedAt: { not: null },
+} as const;
+
 export class PrismaCloudFleet implements CloudFleet {
   constructor(private readonly db: PrismaClient) {}
 
@@ -41,7 +47,7 @@ export class PrismaCloudFleet implements CloudFleet {
         displayName: true,
         deletedAt: true,
         hostJobs: {
-          where: { operation: "create", containerId: { not: null }, reportedAt: { not: null } },
+          where: PLACED_CONTAINER,
           select: { id: true },
           take: 1,
         },
@@ -62,6 +68,41 @@ export class PrismaCloudFleet implements CloudFleet {
         },
       ];
     });
+  }
+
+  async defaultPlacement(ownerId: string, workspaceId: string) {
+    const computer = await this.db.computer.findFirst({
+      where: {
+        ownerId,
+        kind: "cloud",
+        cloudSlot: "default",
+        deletedAt: null,
+        workspaces: { some: { workspaceId } },
+      },
+      select: { id: true, computerVersion: true },
+    });
+    if (!computer) return undefined;
+    const [placed, latest] = await Promise.all([
+      this.db.hostJob.findFirst({
+        where: { computerId: computer.id, ...PLACED_CONTAINER },
+        select: { id: true },
+      }),
+      this.db.hostJob.findFirst({
+        where: {
+          computerId: computer.id,
+          OR: [{ operation: { not: "attach" } }, { workspaceId }],
+        },
+        orderBy: { reportedAt: { sort: "desc", nulls: "first" } },
+        select: { reportedAt: true },
+      }),
+    ]);
+    return {
+      computerId: computer.id,
+      containerReady: placed !== null,
+      workPending: latest !== null && latest.reportedAt === null,
+      everConnected: computer.computerVersion !== null,
+      lastReportedAt: latest?.reportedAt ?? null,
+    };
   }
 
   async insert(computer: CloudComputer): Promise<void> {
@@ -117,8 +158,6 @@ export class PrismaCloudFleet implements CloudFleet {
 
   async link(computerId: string, workspaceId: string, _slug: string): Promise<void> {
     await this.db.workspaceComputer.create({ data: { workspaceId, computerId } });
-    // Seed Code Agent inventory from another Workspace on this Computer so the new Workspace's
-    // auto-started assistant can launch before its own Daemon inventory report lands.
     await new PrismaComputerRuntimeRepository(this.db)
       .inheritFromSibling(workspaceId, computerId)
       .catch(() => {});

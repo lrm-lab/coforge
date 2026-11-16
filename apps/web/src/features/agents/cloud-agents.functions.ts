@@ -1,9 +1,9 @@
-import { computerCanRunAgent } from "#src/server/agents/computer-runtime-availability.server";
 import { createServerFn } from "@tanstack/react-start";
 import { createCloudAgentInputSchema } from "./agent.schemas";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { AppError } from "#src/lib/app-error";
 import { CreateCloudAgent } from "#src/server/agents/create-cloud-agent.server";
+import { readCloudAgentComputer } from "#src/server/agents/cloud-agent-computer.server";
 import { manageAgents } from "#src/server/agents/manage-agents-production.server";
 import { agentStartIntent } from "#src/server/agents/manage-agents.server";
 import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.server";
@@ -11,8 +11,13 @@ import { userAgentRuntimeControl } from "#src/server/agents/user-agent-control.s
 import { publishAgentDirectoryChanged } from "#src/server/agents/agent-visibility-realtime.server";
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
 import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
-import { productionCloudComputers } from "#src/server/hosts/host-production.server";
 import { workspaceMemberRole } from "#src/server/workspaces/workspace-membership.server";
+
+export const getCloudAgentComputer = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .handler(({ context: { user, db, workspaceId } }) =>
+    readCloudAgentComputer(db, { userId: user.id, workspaceId }),
+  );
 
 export const createCloudAgent = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
@@ -25,14 +30,7 @@ export const createCloudAgent = createServerFn({ method: "POST" })
           where: { workspaceId_createRequestId: { workspaceId, createRequestId } },
           select: { id: true, ownerId: true, deletedAt: true, stoppedAt: true },
         }),
-      ensureComputer: ({ userId, workspaceId }) =>
-        productionCloudComputers(db).ensureDefault({
-          userId,
-          workspaceId,
-          now: new Date(),
-        }),
-      canRun: (principal, computerId, selection) =>
-        computerCanRunAgent(db, principal, computerId, selection),
+      cloudComputer: (principal) => readCloudAgentComputer(db, principal),
       create: (principal, input) => manageAgents(db).create(principal, input),
       start: (principal, agentId) =>
         getAgentRuntimeLock().run(agentId, async () => {
@@ -44,7 +42,6 @@ export const createCloudAgent = createServerFn({ method: "POST" })
             agent.ownerId !== principal.userId
           )
             throw new AppError("ACCESS_DENIED");
-          // A creation retry must not supersede a newer user Stop/Restart/Reset.
           if (agent.stoppedAt || (agent.state && agent.state.action !== "start")) return;
           await userAgentRuntimeControl(db, agents).start(
             agentStartIntent(agent),
@@ -52,7 +49,7 @@ export const createCloudAgent = createServerFn({ method: "POST" })
           );
         }),
     }).execute({ userId: user.id, workspaceId, role }, data);
-    if (result.status !== "preparing") {
+    if (result.status !== "unavailable") {
       await publishAgentDirectoryChanged(workspaceId, result.agentId, "created");
     }
     return result;

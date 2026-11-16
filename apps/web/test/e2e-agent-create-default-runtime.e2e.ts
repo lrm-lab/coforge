@@ -68,7 +68,6 @@ test("a new Agent starts on a runtime its Computer can run", async () => {
       );
       await browser("click", 'button[aria-label="New"]');
       await browser("find", "role", "menuitem", "click", "--name", "New Agent", "--exact");
-      await browser("find", "role", "radio", "click", "--name", "Local Computer", "--exact");
       await browser(
         "wait",
         "--fn",

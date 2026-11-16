@@ -1,7 +1,8 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
-  "cloud_agent_create_preparing": "正在准备云电脑并启动助手…",
-  "cloud_agent_create_timeout": "云电脑仍在准备中，请重试以继续创建。",
+  "cloud_agent_create_starting": "云电脑启动中，就绪后即可创建",
+  "cloud_agent_create_offline": "云电脑已离线",
+  "cloud_agent_create_view_computer": "查看电脑",
   "cloud_agent_create_start_deferred": "助手已创建，但暂时无法启动。请重试，将继续启动同一个助手。",
   "cloud_agent_create_refresh_error": "助手已创建，但列表暂时未能更新。请重试，将打开同一个助手。",
   "agent_create_submit_chat": "创建并聊天",

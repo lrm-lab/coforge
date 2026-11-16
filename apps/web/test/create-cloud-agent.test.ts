@@ -5,14 +5,12 @@ import { CreateCloudAgent } from "#src/server/agents/create-cloud-agent.server";
 function fixture() {
   const created: { name: string; createRequestId?: string }[] = [];
   let existing: { id: string; ownerId: string; deletedAt: Date | null } | null = null;
-  /** Usernames other Agents of the Workspace hold. */
   const taken = new Set<string>();
   const state = {
-    ready: true,
+    cloud: "ready" as "ready" | "starting" | "offline" | "none",
     startPublished: true,
     startFailures: 0,
     stoppedAt: null as Date | null,
-    runtimeAvailable: true,
   };
   const calls: string[] = [];
   const starts: string[] = [];
@@ -21,13 +19,13 @@ function fixture() {
       existing && created.at(-1)?.createRequestId === requestId
         ? { ...existing, stoppedAt: state.stoppedAt }
         : null,
-    ensureComputer: async () => {
-      calls.push("ensure");
-      return { computerId: "cloud", containerReady: state.ready };
+    cloudComputer: async () => {
+      calls.push("cloud");
+      return state.cloud === "none"
+        ? { state: "none" }
+        : { state: state.cloud, computerId: "cloud" };
     },
-    canRun: async () => state.runtimeAvailable,
     create: async (_principal, input) => {
-      // The unique (workspaceId, createRequestId) and (workspaceId, name) writes.
       if (existing || taken.has(input.name))
         throw new AppError("CONFLICT", { errorId: "agent-name-taken" });
       created.push(input);
@@ -71,24 +69,25 @@ describe("one-step cloud Agent creation", () => {
     ]);
   });
 
-  test("waits for cloud provisioning without creating an unconfigured Agent", async () => {
+  for (const cloud of ["starting", "offline", "none"] as const) {
+    test(`creates nothing while the cloud computer is ${cloud}`, async () => {
+      const f = fixture();
+      f.state.cloud = cloud;
+      expect(await f.useCase.execute(principal, input)).toEqual({ status: "unavailable" });
+      expect(f.created).toEqual([]);
+    });
+  }
+
+  test("a retry of a committed creation returns its Agent even after the computer went offline", async () => {
     const f = fixture();
-    f.state.ready = false;
-    expect(await f.useCase.execute(principal, input)).toEqual({ status: "preparing" });
-    expect(f.created).toEqual([]);
-    f.state.ready = true;
+    await f.useCase.execute(principal, input);
+    f.state.cloud = "offline";
     expect(await f.useCase.execute(principal, input)).toEqual({
       status: "created",
       agentId: "agent",
     });
-  });
-
-  test("retries a committed creation without creating or provisioning twice", async () => {
-    const f = fixture();
-    await f.useCase.execute(principal, input);
-    await f.useCase.execute(principal, input);
     expect(f.created).toHaveLength(1);
-    expect(f.calls).toEqual(["ensure"]);
+    expect(f.calls).toEqual(["cloud"]);
   });
 
   test("retains a created Agent and retries a failed Start", async () => {
@@ -135,7 +134,7 @@ describe("one-step cloud Agent creation", () => {
     expect(f.starts).toEqual([]);
   });
 
-  test("refuses unauthorized creation before provisioning a computer", async () => {
+  test("refuses unauthorized creation before reading the computer", async () => {
     const f = fixture();
     await expect(f.useCase.execute({ ...principal, role: "member" }, input)).rejects.toMatchObject({
       code: "ACCESS_DENIED",
@@ -175,17 +174,5 @@ describe("one-step cloud Agent creation", () => {
       errorId: "agent-name-taken",
     });
     expect(f.created).toEqual([]);
-  });
-
-  test("waits for the Computer to offer Pi before creating the default-configured Agent", async () => {
-    const f = fixture();
-    f.state.runtimeAvailable = false;
-    expect(await f.useCase.execute(principal, input)).toEqual({ status: "preparing" });
-    expect(f.created).toEqual([]);
-    f.state.runtimeAvailable = true;
-    expect(await f.useCase.execute(principal, input)).toEqual({
-      status: "created",
-      agentId: "agent",
-    });
   });
 });

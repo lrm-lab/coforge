@@ -32,7 +32,6 @@ test("a new Agent's DM stays in the sidebar without a reload", async () => {
     await browser("wait", "--fn", `${pageHydrated} && ${newButton} !== null`);
     await browser("click", 'button[aria-label="New"]');
     await browser("find", "role", "menuitem", "click", "--name", "New Agent", "--exact");
-    await browser("find", "role", "radio", "click", "--name", "Local Computer", "--exact");
     // The local form shows once the Workspace's Computers are read.
     await browser(
       "wait",
