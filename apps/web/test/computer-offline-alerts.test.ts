@@ -252,6 +252,9 @@ describe("ComputerOfflineAlertSweep", () => {
     expect(resolved).toHaveLength(1);
     expect(notified).toHaveLength(1);
     expect((notified[0] as { offlineAtMs: number }).offlineAtMs).toBe(OFFLINE_AT);
+    expect((notified[0] as { offlineForMs: number }).offlineForMs).toBe(
+      COMPUTER_OFFLINE_ALERT_AFTER_MS,
+    );
     expect(strings.has(episodeKey)).toBe(false);
     expect(strings.has(claimKey)).toBe(false);
     expect(sets.get(indexKey)?.has(COMPUTER_ID) ?? false).toBe(false);
