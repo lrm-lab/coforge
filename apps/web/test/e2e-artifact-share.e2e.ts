@@ -144,13 +144,18 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
     await shoot("2-widened");
 
     // Narrowing says who loses access, and changes nothing until confirmed.
-    await chrome.chooseFromMore("This conversation");
+    await chrome.chooseFromMore(`#e2e-share-${tail}`);
     await chrome.until(
-      `/\\d+ people and \\d+ Agents will lose access/.test(document.body.textContent)`,
+      `/(\\d+ (person|people)) and (\\d+ Agents?) will lose access/.test(document.body.textContent)`,
     );
-    const loss = /(\d+) people and (\d+) Agents will lose access/.exec(await chrome.dialogText());
+    const loss = /(\d+) (person|people) and (\d+) (Agent|Agents) will lose access\./.exec(
+      await chrome.dialogText(),
+    );
+    expect(loss).not.toBeNull();
     expect(Number(loss?.[1])).toBeGreaterThanOrEqual(1);
-    expect(await chrome.dialogText()).toContain("Limit to This conversation?");
+    expect(loss?.[2]).toBe(loss?.[1] === "1" ? "person" : "people");
+    expect(loss?.[4]).toBe(loss?.[3] === "1" ? "Agent" : "Agents");
+    expect(await chrome.dialogText()).toContain(`Limit to #e2e-share-${tail}?`);
     await shoot("3-narrowing");
     expect((await db.artifact.findUniqueOrThrow({ where: { id: plan.id } })).access).toBe(
       "workspace",
@@ -191,6 +196,14 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
     );
     await chrome.untilPillScope("Everyone in the Workspace");
     await shoot("4-workspace-read");
+    await chrome.press(`document.querySelector('main header button[aria-label^="Who can see:"]')`);
+    await chrome.until(`document.querySelector('[role="menuitemradio"]') != null`);
+    expect(
+      await evaluate<string[]>(
+        `[...document.querySelectorAll('[role="menuitemradio"]')].map((i) => i.textContent.trim())`,
+      ),
+    ).toEqual(["Everyone in the Workspace", "Anyone with the link"]);
+    await chrome.closeMenus();
 
     // A member only, of an artifact they did not make: the pill says who can see it and changes
     // nothing, and the ⋯ menu offers no Who can see and no Rename.
