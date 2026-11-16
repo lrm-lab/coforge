@@ -143,23 +143,49 @@ beforeAll(async () => {
 }, 120000);
 
 afterAll(async () => {
-  const cleanup: { accountId: string; status: number }[] = [];
-  for (const accountId of accounts) {
-    const response = await admin("DELETE", `/api/v1/admin/accounts/${accountId}`).catch(
-      () => undefined,
-    );
-    const status = response?.status ?? 0;
-    cleanup.push({ accountId, status });
-    await response?.body?.cancel();
+  const cleanup = {
+    accounts: [] as { accountId: string; status: number }[],
+    workspaceMetadata: false,
+    userMetadata: false,
+    disconnected: false,
+    secretRemoved: false,
+  };
+  try {
+    for (const accountId of accounts) {
+      const response = await admin("DELETE", `/api/v1/admin/accounts/${accountId}`).catch(
+        () => undefined,
+      );
+      cleanup.accounts.push({ accountId, status: response?.status ?? 0 });
+      await response?.body?.cancel().catch(() => {});
+    }
+    try {
+      await db.workspace.deleteMany({ where: { id: { in: workspaces } } });
+      cleanup.workspaceMetadata = true;
+    } catch {}
+    try {
+      await db.user.deleteMany({ where: { id: { in: users } } });
+      cleanup.userMetadata = true;
+    } catch {}
+  } finally {
+    try {
+      await db.$disconnect();
+      cleanup.disconnected = true;
+    } catch {}
+    if (originalKeyPath === undefined) delete Bun.env.COFORGE_OPENVIKING_ACCOUNT_KEYS_FILE;
+    else Bun.env.COFORGE_OPENVIKING_ACCOUNT_KEYS_FILE = originalKeyPath;
+    try {
+      await rm(keyPath, { force: true });
+      cleanup.secretRemoved = true;
+    } catch {}
+    await Bun.write(output + ".cleanup.json", JSON.stringify(cleanup, null, 2));
   }
-  await db.workspace.deleteMany({ where: { id: { in: workspaces } } });
-  await db.user.deleteMany({ where: { id: { in: users } } });
-  await db.$disconnect();
-  if (originalKeyPath === undefined) delete Bun.env.COFORGE_OPENVIKING_ACCOUNT_KEYS_FILE;
-  else Bun.env.COFORGE_OPENVIKING_ACCOUNT_KEYS_FILE = originalKeyPath;
-  await rm(keyPath, { force: true });
-  await Bun.write(output + ".cleanup.json", JSON.stringify(cleanup, null, 2));
-  expect(cleanup.every(({ status }) => [200, 202, 204, 404].includes(status))).toBe(true);
+  expect(cleanup).toMatchObject({
+    workspaceMetadata: true,
+    userMetadata: true,
+    disconnected: true,
+    secretRemoved: true,
+  });
+  expect(cleanup.accounts.every(({ status }) => [200, 202, 204, 404].includes(status))).toBe(true);
 }, 120000);
 
 test("new platform memory CRUD, semantic retrieval, sharing and live authorization against real OpenViking", async () => {
