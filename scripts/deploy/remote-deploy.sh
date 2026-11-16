@@ -11,8 +11,9 @@
 # healthy and restored together when a later candidate fails. Runtime Authing and session values stay
 # out of the deploy .env file and container environment.
 #
-# The functions that read the host secret files live in deploy-secrets.sh, which this
-# script sources from its own directory. Both files ship to the host together, and the
+# The functions that read the host secret files live in deploy-secrets.sh, the release snapshot
+# functions in deploy-release-snapshot.sh and the bounded failure diagnostics in
+# deploy-diagnostics.sh. This script sources them from its own directory. They ship to the host together, and the
 # deploy workflows run the host copy: ssh HOST "bash ~/coforge-staging/scripts/deploy/remote-deploy.sh ARGS"
 #
 # Usage:
@@ -27,6 +28,10 @@ set -euo pipefail
 
 # shellcheck source=deploy-secrets.sh
 source "$(dirname "${BASH_SOURCE[0]}")/deploy-secrets.sh"
+# shellcheck source=deploy-release-snapshot.sh
+source "$(dirname "${BASH_SOURCE[0]}")/deploy-release-snapshot.sh"
+# shellcheck source=deploy-diagnostics.sh
+source "$(dirname "${BASH_SOURCE[0]}")/deploy-diagnostics.sh"
 
 usage() {
 	printf 'usage: %s --image IMAGE --compose-file FILE --secrets-dir DIR --state-file FILE --web-health-url URL --public-health-url URL [--project NAME] [--timeout SECONDS] [--public-health-timeout SECONDS]\n' "$0" >&2
@@ -167,46 +172,6 @@ if [ -n "$current_image" ] && [ "$current_image" = "$image" ]; then
 	exit 0
 fi
 
-# Records the just-verified-healthy Compose file, Caddyfile, and Centrifugo
-# configuration so a later failed candidate can restore this exact release,
-# not only its image. Writes to a temporary directory first and swaps it into
-# place, so a snapshot in progress never leaves a partial one on disk.
-snapshot_release() {
-	local source_dir tmp_dir file source dest
-	source_dir="$(dirname "$compose_file")"
-	tmp_dir="$(mktemp -d "${release_snapshot_dir}.XXXXXX")"
-	chmod 700 "$tmp_dir"
-	for file in "${release_snapshot_files[@]}"; do
-		source="$source_dir/$file"
-		[ -f "$source" ] || continue
-		dest="$tmp_dir/$file"
-		mkdir -p "$(dirname "$dest")"
-		cp -pf "$source" "$dest"
-	done
-	rm -rf "${release_snapshot_dir}.previous"
-	if [ -d "$release_snapshot_dir" ]; then
-		mv "$release_snapshot_dir" "${release_snapshot_dir}.previous"
-	fi
-	mv "$tmp_dir" "$release_snapshot_dir"
-	rm -rf "${release_snapshot_dir}.previous"
-	chmod 700 "$release_snapshot_dir"
-}
-
-# Restores the last healthy release's Compose file, Caddyfile, and Centrifugo
-# configuration into their live paths ahead of a rollback. Only files that
-# were actually snapshotted are restored.
-restore_release_snapshot() {
-	local source_dir file source dest
-	source_dir="$(dirname "$compose_file")"
-	for file in "${release_snapshot_files[@]}"; do
-		source="$release_snapshot_dir/$file"
-		[ -f "$source" ] || continue
-		dest="$source_dir/$file"
-		mkdir -p "$(dirname "$dest")"
-		cp -pf "$source" "$dest"
-	done
-}
-
 compose_all_healthy() {
 	local service container services
 	services="$(compose config --services)" || return 1
@@ -290,128 +255,6 @@ rollback() {
 	compose down --remove-orphans >/dev/null 2>&1 || true
 	printf 'removed the failed bootstrap candidate; empty state restored\n' >&2
 	return 1
-}
-
-# Read only bounded candidate evidence before rollback destroys the container.
-# Never print raw logs, inspect JSON, health output, URLs, or error messages:
-# any can contain credentials or user data not known to this deployment script.
-# Each Docker call has a 5s deadline plus a 1s forced-kill grace period.
-# Unavailable diagnostics cannot block rollback.
-candidate_diagnostics() {
-	local container state logs status
-	printf 'candidate diagnostics (allowlisted metadata and startup signatures only)\n' >&2
-	container="$(timeout --kill-after=1s 5s docker ps --filter "label=com.docker.compose.project=$project" \
-		--filter label=com.docker.compose.service=web --all --format '{{.ID}}' 2>/dev/null | head -n 1)" || true
-	if [[ "$container" =~ ^[0-9a-f]{6,64}$ ]]; then
-		state="$(timeout --kill-after=1s 5s docker inspect --format '{{.State.Status}} {{.State.ExitCode}} {{.RestartCount}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container" 2>/dev/null)" || true
-		if [[ "$state" =~ ^(created|running|paused|restarting|removing|exited|dead)\ [0-9]+\ [0-9]+\ (none|starting|healthy|unhealthy)$ ]]; then
-			printf 'candidate state/exit/restarts/health: %s\n' "$state" >&2
-		fi
-		logs="$(timeout --kill-after=1s 5s docker logs --tail 80 --since 5m "$container" 2>&1 | head -c 16384)" || true
-		if [[ "$logs" == *'createSsrRpc is not a function'* ]]; then
-			printf 'startup_signature=createSsrRpc\n' >&2
-		elif [[ "$logs" == *'Cannot find module'* || "$logs" == *'ModuleNotFound'* ]]; then
-			printf 'startup_signature=missing_module\n' >&2
-		elif [[ "$logs" == *'SyntaxError'* || "$logs" == *'ReferenceError'* || "$logs" == *'TypeError'* ]]; then
-			printf 'startup_signature=javascript_initialization_error\n' >&2
-		else
-			printf 'startup_signature=unclassified_or_unavailable\n' >&2
-		fi
-	fi
-	status="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 "$web_health_url" 2>/dev/null)" || true
-	if [[ "$status" =~ ^[0-9]{3}$ ]]; then
-		printf 'candidate loopback health HTTP status: %s\n' "$status" >&2
-	fi
-	if [[ "$container" =~ ^[0-9a-f]{6,64}$ ]]; then
-		release_feed_diagnostics "$container" || true
-	fi
-	proxy_diagnostics || true
-	return 0
-}
-
-# Probe the candidate's ordinary user, environment and Bun fetch, without
-# changing the running Web cache or network. The request gets the Web's 3s
-# budget; the Docker call gets 5s plus 1s forced-kill grace. Only fixed codes
-# leave the container, never a URL, body, or arbitrary error.
-release_feed_diagnostics() {
-	local result
-	result="$(timeout --kill-after=1s 5s docker exec "$1" bun -e '
-const feed = Bun.env.COFORGE_RELEASE_FEED_URL?.trim().replace(/\/$/, "");
-let result = "unconfigured";
-if (feed) {
-  result = "unsupported_feed";
-  if (["https://releases-staging.coforge.cn", "https://releases.coforge.cn"].includes(feed)) {
-    try {
-      const response = await fetch(feed + "/latest", { signal: AbortSignal.timeout(3000) });
-      result = "http_error";
-      if (response.ok) {
-        result = "invalid_version";
-        const reader = response.body?.getReader();
-        if (reader) {
-          let text = "", size = 0;
-          const decoder = new TextDecoder();
-          try {
-            while (true) {
-              const chunk = await reader.read();
-              if (chunk.done) break;
-              size += chunk.value.byteLength;
-              if (size > 128) break;
-              text += decoder.decode(chunk.value, { stream: true });
-            }
-            text += decoder.decode();
-            // Match the Web reader: SDK internal/release-version.ts isValidReleaseVersion.
-            const version = text.trim();
-            if (size <= 128 && /^[A-Za-z0-9.+-]{1,100}$/.test(version)
-                && version !== "." && !version.includes("..") && !version.startsWith("-")) result = "available";
-          } finally { await reader.cancel().catch(() => {}); }
-        }
-      } else { await response.body?.cancel(); }
-    } catch (error) {
-      const code = error?.code;
-      result = error?.name === "TimeoutError" || code === "ETIMEDOUT" ? "timeout"
-        : ["ENOTFOUND", "EAI_AGAIN", "EAI_FAIL", "DNS_LOOKUP_FAILED"].includes(code) ? "dns_error"
-        : typeof code === "string" && /^(CERT_|ERR_TLS_|SSL_|UNABLE_TO_VERIFY_LEAF_SIGNATURE|DEPTH_ZERO_SELF_SIGNED_CERT)/.test(code) ? "tls_error"
-        : "network_error";
-    }
-  }
-}
-console.log(result);
-' 2>/dev/null | head -c 64)" || true
-	case "$result" in
-	available | unconfigured | unsupported_feed | http_error | invalid_version | timeout | dns_error | tls_error | network_error) ;;
-	*) result=unavailable ;;
-	esac
-	printf 'candidate release feed: %s\n' "$result" >&2
-}
-
-# The reverse proxy owns the public entry, so its certificate state is the
-# difference between "the application is up but 443 cannot complete a TLS
-# handshake" and "the application itself is broken". Classify it the way the
-# web container's startup signature is classified: read a bounded slice of the
-# proxy's log, print only a fixed vocabulary code, never the log itself.
-proxy_diagnostics() {
-	local container logs state
-	container="$(timeout --kill-after=1s 5s docker ps --filter "label=com.docker.compose.project=$project" \
-		--filter label=com.docker.compose.service=caddy --all --format '{{.ID}}' 2>/dev/null | head -n 1)" || true
-	[[ "$container" =~ ^[0-9a-f]{6,64}$ ]] || return 0
-	state="$(timeout --kill-after=1s 5s docker inspect --format '{{.State.Status}} {{.State.ExitCode}} {{.RestartCount}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container" 2>/dev/null)" || true
-	if [[ "$state" =~ ^(created|running|paused|restarting|removing|exited|dead)\ [0-9]+\ [0-9]+\ (none|starting|healthy|unhealthy)$ ]]; then
-		printf 'proxy state/exit/restarts/health: %s\n' "$state" >&2
-	fi
-	logs="$(timeout --kill-after=1s 5s docker logs --tail 120 --since 10m "$container" 2>&1 | head -c 16384)" || true
-	case "$logs" in
-	*'certificate obtained successfully'*) printf 'proxy_signature=certificate_obtained\n' >&2 ;;
-	*'connection refused'* | *'i/o timeout'* | *'no route to host'*)
-		printf 'proxy_signature=acme_challenge_unreachable\n' >&2
-		;;
-	*'rate limit'* | *'too many certificates'*) printf 'proxy_signature=acme_rate_limited\n' >&2 ;;
-	*'permission denied'* | *'read-only file system'*)
-		printf 'proxy_signature=certificate_storage_denied\n' >&2
-		;;
-	*'could not get certificate'* | *'acme'* | *'obtain'*) printf 'proxy_signature=acme_failed\n' >&2 ;;
-	*) printf 'proxy_signature=unclassified_or_unavailable\n' >&2 ;;
-	esac
-	return 0
 }
 
 # One failure path for every failed check: roll back to the last healthy

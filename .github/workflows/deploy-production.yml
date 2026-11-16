@@ -144,6 +144,8 @@ jobs:
             infra/production/caddy/Caddyfile \
             infra/production/centrifugo/config.yaml \
             scripts/deploy/deploy-secrets.sh \
+            scripts/deploy/deploy-release-snapshot.sh \
+            scripts/deploy/deploy-diagnostics.sh \
             scripts/deploy/catalog-snapshot.sh \
             scripts/deploy/remote-deploy.sh
           ssh -i "$SSH_DIR/key" \
