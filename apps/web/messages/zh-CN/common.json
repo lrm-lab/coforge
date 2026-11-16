@@ -102,6 +102,7 @@
   "error_reference": "错误编号：{errorId}",
   "navigation_me": "我",
   "navigation_collapse_sidebar": "收起侧栏",
+  "navigation_resize_sidebar": "调整侧栏宽度",
   "navigation_expand_sidebar": "展开侧栏",
   "navigation_activity": "动态",
   "welcome_title": "输入你的昵称",

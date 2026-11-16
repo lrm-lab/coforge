@@ -1,9 +1,14 @@
 import type { FC, ReactNode } from "react";
 import type { NavItemType } from "#src/components/application/app-navigation/config";
+import { ConversationListResizeHandle } from "#src/features/conversations/conversation-list-resize-handle";
+import { SIDEBAR_COLUMN } from "#src/features/conversations/conversation-list-width";
 import { cx } from "#src/utils/cx";
 
-/** 220px at the default text size; rem so the sidebar grows with the browser's font size. */
-export const SIDEBAR_EXPANDED_WIDTH = "13.75rem";
+/** The expanded sidebar's width: the width dragged on its edge (`SIDEBAR_COLUMN`), else 13.75rem,
+ * 220px at the default text size. Written out whole for Tailwind; it repeats
+ * `SIDEBAR_COLUMN.property`. Never under 13.75rem, whatever the text size, though the dragged width
+ * is kept in pixels. */
+const SIDEBAR_WIDTH_CLASS = "w-(--sidebar-width,13.75rem) min-w-55";
 
 type ExpandedItemType = NavItemType & { icon: FC<{ className?: string }>; current?: boolean };
 
@@ -71,8 +76,9 @@ function SidebarExpandedPanel({ activeUrl, items, header, search, footer }: Side
  * never depends on the stored preference. */
 export const SidebarExpanded = (props: SidebarExpandedProps) => (
   <div className="hidden shrink-0 lg:flex lg:[.sidebar-collapsed_&]:hidden">
-    <div style={{ width: SIDEBAR_EXPANDED_WIDTH }} className="h-full">
+    <div className={cx("relative h-full", SIDEBAR_WIDTH_CLASS)}>
       <SidebarExpandedPanel {...props} />
+      <ConversationListResizeHandle column={SIDEBAR_COLUMN} />
     </div>
   </div>
 );

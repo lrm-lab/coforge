@@ -4,6 +4,7 @@ import {
   CONVERSATION_LIST_BOOT,
   CONVERSATION_LIST_COLUMN as CHAT,
   LIST_COLUMN as LIST,
+  SIDEBAR_COLUMN,
   clampListWidth,
   dragListWidth,
   keyListWidth,
@@ -110,5 +111,13 @@ describe("list column width", () => {
     expect(keyListWidth(LIST, key("ArrowRight"), 380)).toBe(396);
     expect(keyListWidth(LIST, key("ArrowLeft"), 290)).toBe(288);
     expect(keyListWidth(LIST, key("ArrowRight"), 640)).toBe(640);
+  });
+
+  test("the sidebar never goes narrower than its default and its kept width is restored at boot", () => {
+    expect(SIDEBAR_COLUMN.min).toBe(SIDEBAR_COLUMN.defaultWidth);
+    expect(dragListWidth(SIDEBAR_COLUMN, 220, 220, 100)).toBe(220);
+    expect(dragListWidth(SIDEBAR_COLUMN, 220, 220, 600)).toBe(320);
+    expect(CONVERSATION_LIST_BOOT).toContain(SIDEBAR_COLUMN.property);
+  });
   });
 });

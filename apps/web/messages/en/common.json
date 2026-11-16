@@ -102,6 +102,7 @@
   "error_reference": "Error reference: {errorId}",
   "navigation_me": "Me",
   "navigation_collapse_sidebar": "Collapse sidebar",
+  "navigation_resize_sidebar": "Resize sidebar",
   "navigation_expand_sidebar": "Expand sidebar",
   "navigation_activity": "Activity",
   "welcome_title": "Enter your display name",
