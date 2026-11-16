@@ -4,6 +4,7 @@ import { isWorkspaceAdminRole } from "#src/features/workspaces/workspace-roles";
 import {
   actorConversationAccess,
   actorConversationHomeReads,
+  agentsConversationHomeReads,
   canReadConversationHome,
   conversationHiddenFromWorkspace,
   type ActorConversationHomeRead,
@@ -138,6 +139,31 @@ export function artifactReadableFromHome(input: {
   if (artifactTier(artifact) === "workspace") return true;
   if (home !== undefined && homeStands(home)) return canReadConversationHome(home);
   return readsArtifactOfGoneHome(actor, viewer, artifact, authorAgentOwnerId);
+}
+
+export async function agentsReadingArtifact(
+  db: Pick<PrismaClient, "conversation">,
+  workspaceId: string,
+  artifact: ArtifactAccessRow,
+  workspaceAgentIds: readonly string[],
+): Promise<Set<string>> {
+  if (artifactTier(artifact) === "workspace" || workspaceAgentIds.length === 0)
+    return new Set(workspaceAgentIds);
+  const conversationId = artifactHomeConversationId(artifact.homeKey);
+  const homes = conversationId
+    ? await agentsConversationHomeReads(db, workspaceId, conversationId, workspaceAgentIds)
+    : undefined;
+  return new Set(
+    workspaceAgentIds.filter((agentId) =>
+      artifactReadableFromHome({
+        actor: { agentId },
+        viewer: { member: true, role: null },
+        artifact,
+        home: homes?.get(agentId),
+        authorAgentOwnerId: null,
+      }),
+    ),
+  );
 }
 
 export async function artifactAuthorOwnerId(

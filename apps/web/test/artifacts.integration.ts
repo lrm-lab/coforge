@@ -19,6 +19,7 @@ const handle = crypto.randomUUID().slice(0, 8);
 let workspaceId: string;
 let userId: string;
 let agentId: string;
+let home: { kind: "conversation"; conversationId: string };
 
 const blobs = new Map<string, ArtifactBlobInfo>();
 const goneBlobs = new Set<string>();
@@ -67,6 +68,14 @@ beforeAll(async () => {
   ).id;
 });
 
+beforeAll(async () => {
+  const { id } = await db.conversation.create({
+    data: { workspaceId, channelName: `home-${handle}`, visibility: "public" },
+  });
+  await db.conversationMember.create({ data: { conversationId: id, workspaceId, agentId } });
+  home = { kind: "conversation", conversationId: id };
+});
+
 afterAll(async () => {
   await db.workspace.delete({ where: { id: workspaceId } }).catch(() => undefined);
   await db.user.delete({ where: { id: userId } }).catch(() => undefined);
@@ -76,7 +85,7 @@ afterAll(async () => {
 const create = (name: string, entryPath = "index.md") =>
   artifacts.create({
     workspaceId,
-    home: { kind: "workspace" },
+    home,
     name: `${name}-${handle}`,
     entryPath,
     author: { agentId },
@@ -304,7 +313,7 @@ test("an entry file over 2 MiB is refused: the page could never show it whole", 
   await expect(
     artifacts.create({
       workspaceId,
-      home: { kind: "workspace" },
+      home,
       name: `big-entry-v1-${handle}`,
       entryPath: "index.md",
       author: { agentId },
@@ -456,7 +465,7 @@ test("two creates with one idempotency key and inputs share the one artifact the
   blob("sha-shared-create");
   const input = {
     workspaceId,
-    home: { kind: "workspace" },
+    home,
     name: `shared-${handle}`,
     entryPath: "index.md",
     author: { agentId },
@@ -479,7 +488,7 @@ test("a create whose bytes vanish inside the transaction leaves no artifact row"
     await expect(
       artifacts.create({
         workspaceId,
-        home: { kind: "workspace" },
+        home,
         name: `vanish-${handle}`,
         entryPath: "index.md",
         author: { agentId },

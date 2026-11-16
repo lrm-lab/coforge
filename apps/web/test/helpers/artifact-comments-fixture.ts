@@ -99,14 +99,14 @@ export async function commentsFixture(prefix: string) {
     },
   };
 
-  async function post(agentId: string, body: unknown) {
+  async function post(agentId: string, body: unknown, overrides: { db?: PrismaClient } = {}) {
     const response = await handleAgentArtifactPost(
       new Request("http://local/api/agent/v1/artifacts", {
         method: "POST",
         body: JSON.stringify(body),
       }),
       { workspaceId, agentId },
-      { db, documents, enabled: async () => true, notices },
+      { db, documents, enabled: async () => true, notices, ...overrides },
     );
     return { status: response.status, body: (await response.json()) as Record<string, any> };
   }

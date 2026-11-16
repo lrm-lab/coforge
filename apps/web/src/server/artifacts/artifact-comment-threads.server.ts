@@ -69,7 +69,24 @@ export async function resolveComment(
   const artifact = await requireReadableArtifact(db, workspaceId, { agentId }, input.artifact);
   const done = await withCommentLock(db, artifact.id, async (tx) => {
     const root = await threadRoot(tx, principal, artifact, input.comment);
-    if (root.resolvedAt) return { row: root, changed: false, note: undefined, startedBy: null };
+    if (root.resolvedAt) {
+      const closing = await tx.artifactComment.findFirst({
+        where: {
+          artifactId: artifact.id,
+          rootId: root.id,
+          authorAgentId: agentId,
+          createdAt: root.resolvedAt,
+        },
+        select: { body: true },
+      });
+      return {
+        row: root,
+        changed: false,
+        note: undefined,
+        startedBy: root.authorAgentId,
+        closingNote: closing?.body,
+      };
+    }
     const stamp = await nextStamp(tx, artifact.id);
     const [note] = input.note
       ? await insertComments(tx, {
@@ -92,7 +109,7 @@ export async function resolveComment(
       data: { resolvedAt: stamp, resolvedByAgentId: agentId, resolvedByUserId: null },
       select: COMMENT_SELECT,
     });
-    return { row, changed: true, note, startedBy: root.authorAgentId };
+    return { row, changed: true, note, startedBy: root.authorAgentId, closingNote: input.note };
   });
   const [comment, note] = await commentViews(
     db,
@@ -103,6 +120,8 @@ export async function resolveComment(
     artifact,
     thread: { id: done.row.id, path: done.row.path, resolvedAt: done.row.resolvedAt },
     startedByAgentId: done.startedBy,
+    resolvedByAgentId: done.row.resolvedByAgentId,
+    closingNote: done.closingNote,
     comment: comment!,
     changed: done.changed,
     ...(note ? { note } : {}),

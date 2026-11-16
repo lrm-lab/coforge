@@ -3,30 +3,6 @@ import {
   type DeliveryUrlRule,
 } from "#src/server/files/delivery-base-url.server";
 
-/**
- * Where web-page artifacts are served from: an origin per artifact, never the application's. A
- * page of artifact `<uuid>` lives only at `a-<uuid>.<sandbox host>` (scheme and port of the
- * configured origin), so the page runs where none of our cookies, storage or pages are, and where
- * no other artifact's storage is. The bare sandbox host serves nothing but a not-found page.
- *
- * Env:
- * - `COFORGE_ARTIFACT_SANDBOX_ORIGIN` — e.g. `https://coforgeusercontent.com` in production, a
- *   test domain on staging. `https:` with no path, query or hash; plain `http:` only on
- *   `localhost` (a local stack: Chrome resolves `*.localhost` to loopback, so
- *   `http://a-<uuid>.localhost:<port>` needs no DNS). An IP literal cannot carry a label, so it is
- *   refused. Unset leaves web pages off: a link to one is refused, and nothing is served.
- *
- * Every name under the sandbox host belongs to the sandbox: it is matched by suffix, so the
- * application's host must be neither the sandbox host nor under it. A subdomain of the
- * application is allowed as the sandbox (task #544 served `usercontent.coforge.cn`): every cookie
- * the application sets is host-only, so none reaches a subdomain. `test/artifact-sandbox.test.ts`
- * fails if a cookie ever gains a `Domain` attribute. The application's host is read from the
- * settings that name it (`COFORGE_OIDC_ISSUER`, `COFORGE_GITHUB_CALLBACK_URL`); with none set,
- * boot goes on with a warning. Locally, run the app on `127.0.0.1` beside a sandbox on `localhost`.
- *
- * Read and checked at boot (`startup-config.server.ts`): a set value that breaks these rules
- * stops the deployment instead of failing the first page someone opens.
- */
 export type ArtifactSandboxConfig = { origin: string } | null;
 
 export class ArtifactSandboxConfigError extends Error {
@@ -81,7 +57,6 @@ function applicationHostnames(env: NodeJS.ProcessEnv): string[] {
   });
 }
 
-/** A plain-`http:` origin on `localhost` (a local stack), or null for anything else. */
 function loopbackHttpOrigin(raw: string): string | null {
   let url: URL;
   try {
@@ -108,9 +83,6 @@ export function artifactSandboxOrigin(): string | null {
 
 const ARTIFACT_LABEL = /^a-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
-/** Whether `request` was addressed to the sandbox host or any name under it. Behind the proxy the
- * request URL carries the client's `Host` (`public-origin.server.ts`) and the proxy's scheme, and
- * a client may spell the port out (`Host: sandbox.example:443`), so the host name alone decides. */
 export function isSandboxRequest(request: Request, origin: string | null): boolean {
   if (!origin) return false;
   const host = hostnameOf(new URL(request.url));
@@ -118,8 +90,6 @@ export function isSandboxRequest(request: Request, origin: string | null): boole
   return host === sandbox || host.endsWith(`.${sandbox}`);
 }
 
-/** Which name of the sandbox a request was addressed to: the bare host, one artifact's origin
- * (`a-<uuid>` directly under it), or any other name under it. */
 export type SandboxTarget =
   | { kind: "bare" }
   | { kind: "artifact"; artifactId: string }
@@ -134,8 +104,6 @@ export function sandboxTarget(request: Request, origin: string): SandboxTarget {
   return artifactId ? { kind: "artifact", artifactId } : { kind: "other" };
 }
 
-/** The origin of one artifact's pages: `a-<uuid>` under the sandbox host, the sandbox's scheme and
- * port. */
 export function artifactPageOrigin(sandboxOrigin: string, artifactId: string): string {
   const url = new URL(sandboxOrigin);
   url.hostname = `a-${artifactId.toLowerCase()}.${url.hostname}`;

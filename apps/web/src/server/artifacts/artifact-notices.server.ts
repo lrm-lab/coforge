@@ -1,8 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { isAppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { errorType } from "#src/server/errors/error-type.server";
-import { requireArtifactRead, type ArtifactAccessRow } from "./artifact-access.server";
+import { agentsReadingArtifact, type ArtifactAccessRow } from "./artifact-access.server";
 import { followerIds } from "./artifact-follows.server";
 import { lastChangers, versionChanges } from "./artifact-file-authors.server";
 import {
@@ -22,31 +21,17 @@ export type NoticeReport = { notified: Told[]; notNotified: NotTold[] };
 
 export const NOBODY_TOLD: NoticeReport = { notified: [], notNotified: [] };
 
-type Db = Pick<
-  PrismaClient,
-  | "agent"
-  | "artifactFollow"
-  | "artifactFile"
-  | "artifactVersion"
-  | "workspaceMembership"
-  | "workspace"
-  | "conversation"
-  | "$queryRaw"
->;
+const DELIVERIES_AT_ONCE = 4;
 
-export async function agentCanRead(
-  db: Db,
-  workspaceId: string,
-  agentId: string,
-  artifact: ArtifactAccessRow,
-): Promise<boolean> {
-  try {
-    await requireArtifactRead(db, workspaceId, { agentId }, artifact);
-    return true;
-  } catch (error) {
-    if (isAppError(error)) return false;
-    throw error;
-  }
+async function inBatches<T, R>(
+  items: readonly T[],
+  size: number,
+  run: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = [];
+  for (let start = 0; start < items.length; start += size)
+    results.push(...(await Promise.all(items.slice(start, start + size).map(run))));
+  return results;
 }
 
 type Audience = { agents: Map<string, NoticeReason>; people: string[] };
@@ -55,7 +40,7 @@ export class ArtifactNotices {
   constructor(
     private readonly db: PrismaClient,
     private readonly port: ArtifactNoticePort,
-    private readonly canRead: typeof agentCanRead = agentCanRead,
+    private readonly readers: typeof agentsReadingArtifact = agentsReadingArtifact,
   ) {}
 
   comment(input: Context & { comment: CommentEvent["comment"] }) {
@@ -177,27 +162,30 @@ export class ArtifactNotices {
       where: { id: { in: [...agents.keys()] }, workspaceId, ...ACTIVE_AGENT_WHERE },
       select: { id: true, name: true },
     });
-    const outcomes = await Promise.all(
-      named.map(async ({ id, name }): Promise<[Told | undefined, NotTold | undefined]> => {
-        const reason = agents.get(id)!;
-        if (!(await this.canRead(this.db, workspaceId, id, artifact)))
-          return [undefined, { name, reason: "cannot-see" }];
-        try {
-          await this.port.deliver({
-            workspaceId,
-            agentId: id,
-            key: `${artifact.id}:${plan.key}`,
-            content: noticeContent(artifact, reason, plan.event(writer.name, id)),
-          });
-          return [{ name, reason }, undefined];
-        } catch (error) {
-          console.warn(
-            JSON.stringify({ event: "artifacts:notice_failed", error_type: errorType(error) }),
-          );
-          return [undefined, { name, reason: "delivery-failed" }];
-        }
-      }),
+    const readers = await this.readers(
+      this.db,
+      workspaceId,
+      artifact,
+      named.map(({ id }) => id),
     );
+    const outcomes = await inBatches(named, DELIVERIES_AT_ONCE, async ({ id, name }) => {
+      const reason = agents.get(id)!;
+      if (!readers.has(id)) return [undefined, { name, reason: "cannot-see" }] as const;
+      try {
+        await this.port.deliver({
+          workspaceId,
+          agentId: id,
+          key: `${artifact.id}:${plan.key}`,
+          content: noticeContent(artifact, reason, plan.event(writer.name, id)),
+        });
+        return [{ name, reason }, undefined] as const;
+      } catch (error) {
+        console.warn(
+          JSON.stringify({ event: "artifacts:notice_failed", error_type: errorType(error) }),
+        );
+        return [undefined, { name, reason: "delivery-failed" }] as const;
+      }
+    });
     return {
       notified: outcomes.flatMap(([told]) => (told ? [told] : [])),
       notNotified: [

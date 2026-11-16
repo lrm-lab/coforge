@@ -1,5 +1,3 @@
-/** The public hosts a web page may load code, styles, fonts and images from, and fetch from; its
- * CSP names them and no other host. */
 export const SANDBOX_PUBLIC_CDNS = [
   "https://cdnjs.cloudflare.com",
   "https://cdn.jsdelivr.net",

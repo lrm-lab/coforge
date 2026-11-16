@@ -16,7 +16,6 @@ import {
   requireConversationHome,
   artifactTier,
   artifactsDisabled,
-  inWorkspace,
   artifactsEnabled,
   canDeleteArtifact,
   type ArtifactActor,
@@ -39,10 +38,7 @@ import { ArtifactVisibility } from "./artifact-visibility.server";
 import { writeVersion } from "./artifact-version-write.server";
 
 /** Where an artifact lives; its home is its only access rule. */
-export type ArtifactHome =
-  | { kind: "conversation"; conversationId: string }
-  | { kind: "workspace" }
-  | { kind: "public" };
+export type ArtifactHome = { kind: "conversation"; conversationId: string } | { kind: "public" };
 
 export type { ArtifactActor, ArtifactPublisher };
 export * from "./artifact-files.server";
@@ -70,7 +66,6 @@ export class Artifacts {
   private readonly enabled: (workspaceId: string) => Promise<boolean>;
   /** Reading artifacts: a version, a list and cards (`ArtifactReads`). */
   readonly reads: ArtifactReads;
-  /** Who can see an artifact: a person's change, its loss count, and an Agent's move. */
   readonly visibility: ArtifactVisibility;
   private readonly signals?: ArtifactSignals;
 
@@ -140,16 +135,13 @@ export class Artifacts {
     // Anyone with the link is a home a later step adds, with its own switch and refusals.
     if (input.home.kind === "public") invalid("artifact-home");
     const homeKey = artifactHomeKey(input.home);
-    if (input.home.kind === "conversation")
-      await requireConversationHome(
-        this.db,
-        input.workspaceId,
-        input.author,
-        input.home.conversationId,
-        "write",
-      );
-    else if (!(await inWorkspace(this.db, input.workspaceId, input.author)))
-      throw new AppError("NOT_FOUND");
+    await requireConversationHome(
+      this.db,
+      input.workspaceId,
+      input.author,
+      input.home.conversationId,
+      "write",
+    );
     const { home: _home, ...rest } = input;
     const saved = await createVersionedArtifact(this.db, this.blobs, { ...rest, homeKey });
     if (saved.fresh && input.version !== undefined) {
@@ -157,7 +149,7 @@ export class Artifacts {
       await announceVersion(this.signals, {
         workspaceId: input.workspaceId,
         homeKey,
-        wide: input.home.kind !== "conversation",
+        wide: false,
         artifactId: saved.artifact.id,
         number: 1,
       });

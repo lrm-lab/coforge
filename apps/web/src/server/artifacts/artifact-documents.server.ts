@@ -41,11 +41,6 @@ export class ArtifactDocuments {
     private readonly blobs: Pick<StoredArtifactBlobs, "read" | "inspectMany" | "allowed">,
   ) {}
 
-  /** A new artifact in a conversation, named from its title, with the `manifest`'s files as
-   * version 1. An `idempotencyKey` makes the create safe to retry:
-   * the same key with the same home, title, description and files returns the one already made,
-   * and a different one is a conflict. The manifest's entry file gives its type
-   * (`planManifestCreate`). */
   async create(
     scope: WriteScope,
     input: {
@@ -213,12 +208,10 @@ export class ArtifactDocuments {
     return saved;
   }
 
-  /** Deletes the artifact for good; only the Agent that made it. */
   async remove(scope: WriteScope, input: { artifactId: string }) {
     return this.artifacts.delete({ ...scope, ...input });
   }
 
-  /** Widens the artifact from its conversation to the whole Workspace, as its author Agent. */
   moveToWorkspace(scope: WriteScope, input: { artifactId: string }) {
     return this.artifacts.visibility.moveToWorkspace({
       workspaceId: scope.workspaceId,
@@ -227,7 +220,6 @@ export class ArtifactDocuments {
     });
   }
 
-  /** The artifacts the actor may read, in one conversation's home when it is named, newest first. */
   list(scope: DocumentScope, input: { conversationId?: string }) {
     return this.artifacts.reads.list({ ...reader(scope), ...input });
   }

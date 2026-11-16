@@ -10,6 +10,7 @@ import {
   StoredArtifactBlobs,
 } from "#src/server/artifacts/artifact-blobs.server";
 import { LocalFileStorage } from "#src/server/files/file-storage.server";
+import { legacyWorkspaceArtifact } from "./helpers/legacy-workspace-artifact";
 
 /**
  * Where an artifact's bytes live (task #385): one object per Workspace and sha256, in the same
@@ -120,9 +121,8 @@ test("an upload larger than a file may be is refused before anything is stored",
 });
 
 test("a blob no version names goes a day after its upload; one any version names stays", async () => {
-  const artifact = await artifacts.create({
+  const artifact = await legacyWorkspaceArtifact(db, {
     workspaceId,
-    home: { kind: "workspace" },
     name: `kept-${handle}`,
     entryPath: "document.md",
     author: { agentId },
@@ -209,9 +209,8 @@ test("a sweep while a save naming the blob is open leaves the blob to that save"
 });
 
 test("a save naming a blob that was removed meanwhile is told to upload it again", async () => {
-  const artifact = await artifacts.create({
+  const artifact = await legacyWorkspaceArtifact(db, {
     workspaceId,
-    home: { kind: "workspace" },
     name: `late-${handle}`,
     entryPath: "document.md",
     author: { agentId },

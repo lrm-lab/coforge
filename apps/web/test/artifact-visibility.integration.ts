@@ -1,6 +1,11 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
+import {
+  conversationRealtimeChannel,
+  workspaceConversationChannel,
+} from "#src/features/conversations/conversation-realtime";
+import { legacyWorkspaceArtifact } from "./helpers/legacy-workspace-artifact";
 import { ArtifactDocuments } from "#src/server/artifacts/artifact-documents.server";
 import {
   Artifacts,
@@ -283,5 +288,137 @@ test("a hidden home leaves its artifact to the author, the author's owner and th
       where: { id: publicChannel },
       data: { hiddenFromWorkspaceAt: null },
     });
+  }
+});
+
+test("widening tells the home's pages and the Workspace's, narrowing only the home's", async () => {
+  const published: string[] = [];
+  const signalled = new Artifacts(db, store, {
+    enabled: async () => true,
+    signals: { publish: async (channel) => void published.push(channel) },
+  });
+  const shared = await create(inConversation(privateChannel), { agentId: agents.helper });
+  const home = conversationRealtimeChannel(privateChannel);
+  const everyone = workspaceConversationChannel(workspaceId);
+
+  await signalled.visibility.moveToWorkspace({
+    workspaceId,
+    artifactId: shared.id,
+    agentId: agents.helper,
+  });
+  expect(published).toEqual([home, everyone]);
+
+  published.length = 0;
+  await signalled.visibility.change({
+    workspaceId,
+    artifactId: shared.id,
+    userId: people.alice,
+    tier: "conversation",
+  });
+  expect(published).toEqual([home]);
+
+  published.length = 0;
+  await signalled.visibility.change({
+    workspaceId,
+    artifactId: shared.id,
+    userId: people.alice,
+    tier: "workspace",
+  });
+  expect(published).toEqual([home, everyone]);
+});
+
+test("a list with no home shows exactly what a read of each artifact allows, in one pass of the database", async () => {
+  const counted: string[] = [];
+  const countingDb = new PrismaClient({
+    adapter: new PrismaPg({ connectionString }),
+    log: [{ emit: "event", level: "query" }],
+  });
+  countingDb.$on("query", (event) => counted.push(event.query));
+  const listing = new Artifacts(countingDb, store, { enabled: async () => true });
+  try {
+    const helper = { agentId: agents.helper };
+    const seat = async (
+      conversationId: string,
+      members: ({ userId: string } | { agentId: string })[],
+    ) =>
+      db.conversationMember.createMany({
+        data: members.map((member) => ({ conversationId, workspaceId, ...member })),
+      });
+    const dm = (
+      await db.conversation.create({
+        data: { workspaceId, directKey: `user:${people.alice}|user:${people.bob}-${handle}` },
+      })
+    ).id;
+    await seat(dm, [{ userId: people.alice }, { userId: people.bob }, helper]);
+    const hiddenChannel = (
+      await db.conversation.create({
+        data: {
+          workspaceId,
+          channelName: `hidden-${handle}`,
+          visibility: "public",
+        },
+      })
+    ).id;
+    await seat(hiddenChannel, [helper]);
+    const goneChannel = (
+      await db.conversation.create({
+        data: { workspaceId, channelName: `gone-${handle}`, visibility: "public" },
+      })
+    ).id;
+    await seat(goneChannel, [helper]);
+    const made = [
+      await create(inConversation(privateChannel), helper),
+      await create(inConversation(publicChannel), helper),
+      await create(inConversation(dm), helper),
+      await create(inConversation(hiddenChannel), helper),
+      await create(inConversation(goneChannel), helper),
+      await legacyWorkspaceArtifact(db, {
+        workspaceId,
+        name: `legacy-${handle}`,
+        entryPath: "document.md",
+        author: helper,
+      }),
+    ];
+    const wide = await create(inConversation(privateChannel), helper);
+    await db.artifact.update({ where: { id: wide.id }, data: { access: "workspace" } });
+    made.push(wide);
+    await db.conversation.update({
+      where: { id: hiddenChannel },
+      data: { hiddenFromWorkspaceAt: new Date() },
+    });
+    await db.conversationMember.deleteMany({ where: { conversationId: goneChannel } });
+    await db.conversation.delete({ where: { id: goneChannel } });
+
+    const readers: ArtifactActor[] = [
+      { userId: people.owner },
+      { userId: people.admin },
+      { userId: people.alice },
+      { userId: people.bob },
+      { agentId: agents.helper },
+      { agentId: agents.stranger },
+    ];
+    const mine = new Set(made.map((artifact) => artifact.id));
+    for (const reader of readers) {
+      counted.length = 0;
+      const listed = (await listing.reads.list({ workspaceId, reader })).map((row) => row.id);
+      const queriesOfList = counted.length;
+      const allowed = (
+        await Promise.all(
+          made.map(async ({ id }) =>
+            (await read(id, reader).then(
+              () => true,
+              () => false,
+            ))
+              ? [id]
+              : [],
+          ),
+        )
+      ).flat();
+      expect(listed.filter((id) => mine.has(id)).sort()).toEqual(allowed.sort());
+      expect(queriesOfList).toBe(4);
+    }
+    expect(counted.some((query) => /FROM "public"\."conversations"/.test(query))).toBe(false);
+  } finally {
+    await countingDb.$disconnect();
   }
 });

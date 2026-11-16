@@ -58,8 +58,6 @@ export function productionArtifactShares(
   return new ArtifactShares(db, enabled);
 }
 
-/** Web pages on their artifacts' origins: the same reads and bytes, signed with the session
- * secret, tickets spent in Redis. */
 export function productionArtifactSandbox(db: PrismaClient) {
   const { artifacts, blobs } = productionArtifacts(db);
   return new ArtifactSandbox({

@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { appEventConversation } from "#src/server/app-agent-events/app-event-target.server";
-import { agentCanRead, ArtifactNotices } from "#src/server/artifacts/artifact-notices.server";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "#src/generated/prisma/client";
+import { agentsReadingArtifact } from "#src/server/artifacts/artifact-access.server";
+import { ArtifactNotices } from "#src/server/artifacts/artifact-notices.server";
 import { commentsFixture, type CommentsFixture } from "./helpers/artifact-comments-fixture";
+import { noticeActions } from "./helpers/artifact-notice-actions";
 
 /**
  * What an Agent is told of the artifacts it follows or is named in: who hears of a comment, a
@@ -18,18 +22,7 @@ beforeAll(async () => {
 });
 afterAll(() => f.cleanup());
 
-const comment = (agentId: string, artifact: string, body: string, extra: object = {}) =>
-  f.post(agentId, { operation: "comment", artifact, body, idempotencyKey: f.key(), ...extra });
-const catchUp = (agentId: string, artifact: string) =>
-  f.post(agentId, { operation: "comments", artifact });
-const follow = (agentId: string, artifact: string) =>
-  f.post(agentId, { operation: "follow", artifact });
-const unfollow = (agentId: string, artifact: string) =>
-  f.post(agentId, { operation: "unfollow", artifact });
-const told = async (agentId: string, artifact: string) =>
-  (await f.noticesOf(agentId)).filter((notice) =>
-    notice.externalEventId.startsWith(`${artifact}:`),
-  );
+const { comment, catchUp, follow, unfollow, told } = noticeActions(() => f);
 
 test("a comment tells the followers who did not write it, once, and not the others", async () => {
   const artifact = await f.make("Plan to discuss");
@@ -91,18 +84,6 @@ test("an Agent that unfollowed hears of mentions only", async () => {
   expect(await told(f.agents.writer, artifact)).toHaveLength(1);
 });
 
-test("a replayed comment tells nobody again", async () => {
-  const artifact = await f.make("Replayed");
-  const body = { operation: "comment", artifact, body: "Once.", idempotencyKey: f.key() };
-  const first = await f.post(f.agents.reader, body);
-  expect(first.body.notified).toHaveLength(1);
-  const replay = await f.post(f.agents.reader, body);
-  expect(replay.status).toBe(200);
-  expect(replay.body.id).toBe(first.body.id);
-  expect(replay.body.notified).toEqual([]);
-  expect(await told(f.agents.writer, artifact)).toHaveLength(1);
-});
-
 test("a review tells each Agent once, a mention first", async () => {
   const artifact = await f.make("Reviewed");
   await follow(f.agents.other, artifact);
@@ -129,8 +110,9 @@ test("a review tells each Agent once, a mention first", async () => {
   expect(notice!.body).toContain("3 comments on 1 file");
 
   const replay = await f.post(f.agents.reader, review);
-  expect(replay.body.notified).toEqual([]);
+  expect(replay.body.notified).toEqual(answer.body.notified);
   expect(await told(f.agents.other, artifact)).toHaveLength(1);
+  expect(await told(f.agents.writer, artifact)).toHaveLength(1);
 });
 
 test("a review with no mention tells followers once for the whole review", async () => {
@@ -164,7 +146,7 @@ test("a resolve tells the thread's author, and followers only when it carries a 
     note: "ignored",
   });
   expect(again.body.changed).toBe(false);
-  expect(again.body.notified).toEqual([]);
+  expect(again.body.notified).toEqual([{ name: names.reader, reason: "your_comment_resolved" }]);
   expect(await told(f.agents.reader, artifact)).toHaveLength(1);
   expect(await told(f.agents.other, artifact)).toHaveLength(1);
 
@@ -272,8 +254,12 @@ test("an Agent that cannot read the artifact is not told and is named", async ()
   const notices = new ArtifactNotices(
     f.db,
     f.notices,
-    async (db, workspaceId, agentId, target) =>
-      agentId !== f.agents.other && agentCanRead(db, workspaceId, agentId, target),
+    async (db, workspaceId, target, agentIds) =>
+      new Set(
+        [...(await agentsReadingArtifact(db, workspaceId, target, agentIds))].filter(
+          (agentId) => agentId !== f.agents.other,
+        ),
+      ),
   );
   const report = await notices.comment({
     workspaceId: f.workspaceId,
@@ -340,4 +326,57 @@ test("an Agent reads its notices at @app.system.artifacts, and sends nothing the
       send: true,
     }),
   ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
+});
+
+test("telling a write reads the home once, however many Agents follow", async () => {
+  const counted: string[] = [];
+  const countingDb = new PrismaClient({
+    adapter: new PrismaPg({ connectionString: Bun.env.DATABASE_URL! }),
+    log: [{ emit: "event", level: "query" }],
+  });
+  countingDb.$on("query", (event) => counted.push(event.query));
+  try {
+    const artifact = await f.make("Many followers");
+    const row = await f.db.artifact.findUniqueOrThrow({ where: { id: artifact } });
+    const tellOnce = async () => {
+      counted.length = 0;
+      await new ArtifactNotices(countingDb, f.notices).comment({
+        workspaceId: f.workspaceId,
+        artifact: row,
+        writerId: f.agents.reader,
+        comment: { id: f.key(), path: null, version: 1, body: "Anyone?" },
+      });
+      return [...counted];
+    };
+    const homeReads = (queries: string[]) =>
+      queries.filter((query) => /FROM "public"\."conversations"/.test(query)).length;
+    await follow(f.agents.other, artifact);
+    const few = await tellOnce();
+    const channel = await f.db.conversation.findFirstOrThrow({
+      where: { workspaceId: f.workspaceId, channelName: f.docsChannel },
+    });
+    for (let index = 0; index < 6; index += 1) {
+      const agent = await f.db.agent.create({
+        data: {
+          workspaceId: f.workspaceId,
+          name: `fan-${index}-${f.key().slice(0, 8)}`,
+          displayName: `Fan ${index}`,
+          ownerId: f.alice,
+          runtimeConfig: {},
+        },
+      });
+      await f.db.conversationMember.create({
+        data: { conversationId: channel.id, workspaceId: f.workspaceId, agentId: agent.id },
+      });
+      await f.db.artifactFollow.create({
+        data: { artifactId: artifact, agentId: agent.id, following: true },
+      });
+    }
+    const many = await tellOnce();
+    expect(homeReads(few)).toBe(1);
+    expect(homeReads(many)).toBe(1);
+    expect(many.length).toBe(few.length);
+  } finally {
+    await countingDb.$disconnect();
+  }
 });

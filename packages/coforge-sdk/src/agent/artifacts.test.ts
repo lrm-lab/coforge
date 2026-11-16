@@ -255,23 +255,24 @@ test("a comment request with a stray, missing or mistyped field is refused", () 
     expect(decodeAgentArtifactRequest(body)).toBeNull();
 });
 
-test("each operation says whether it reads, is held up by unseen comments, or writes a comment", () => {
+test("each operation says whether a repeat is safe (a read or a follow, never move or delete), is held up by unseen comments, or writes a comment", () => {
   const traits = (operation: AgentArtifactRequest["operation"]) =>
     artifactOperationTraits(operation);
   for (const operation of ["list", "read", "comments"] as const)
     expect(traits(operation)).toEqual({
-      readOnly: true,
+      repeatable: true,
       gatedByComments: false,
       commentWrite: false,
     });
   for (const operation of ["push", "comment", "review"] as const)
     expect(traits(operation).gatedByComments).toBe(true);
   for (const operation of ["comment", "review", "resolve", "reopen"] as const)
-    expect(traits(operation)).toMatchObject({ readOnly: false, commentWrite: true });
-  expect(traits("push")).toMatchObject({ readOnly: false, commentWrite: false });
+    expect(traits(operation)).toMatchObject({ repeatable: false, commentWrite: true });
+  for (const operation of ["push", "move", "delete"] as const)
+    expect(traits(operation)).toMatchObject({ repeatable: false, commentWrite: false });
   for (const operation of ["follow", "unfollow"] as const)
     expect(traits(operation)).toEqual({
-      readOnly: true,
+      repeatable: true,
       gatedByComments: false,
       commentWrite: false,
     });

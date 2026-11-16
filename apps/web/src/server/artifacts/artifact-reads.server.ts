@@ -1,11 +1,11 @@
-import type { PrismaClient } from "#src/generated/prisma/client";
+import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { artifactIdsInBody } from "#src/features/artifacts/artifact-link";
 import { artifactKindOfPath } from "#src/features/artifacts/artifact-path-kind";
 import { AppError } from "#src/lib/app-error";
-import { escapeLikeTerm, searchTerms } from "#src/lib/search-terms";
+import { containsPattern, searchTerms } from "#src/lib/search-terms";
 import {
   actorConversationHomeReads,
-  canReadConversationHome as canReadHome,
+  actorConversationHomeSql,
   type ActorConversationHomeRead,
 } from "#src/server/conversations/channel-read-access.server";
 import { isWorkspaceAdminRole } from "#src/features/workspaces/workspace-roles";
@@ -28,6 +28,9 @@ import {
 /** Artifacts one list or one batch of cards shows at most. */
 const LIST_LIMIT = 100;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const epochTimestamp = (at: Date) =>
+  Prisma.sql`(TIMESTAMP 'epoch' + ${at.getTime()}::bigint * INTERVAL '1 millisecond')`;
 
 /** A list cursor: the last artifact of a page, as its change time and id. Opaque to clients. */
 const writeCursor = (row: { updatedAt: Date; id: string }) =>
@@ -105,8 +108,6 @@ function card(
   };
 }
 
-/** What the sharing rule reads off a card row: the authoring Agent's owner, looked up once per
- * batch (`authorAgentId` is a bare column). */
 const accessRuleInput = (
   row: { authorAgentId: string | null },
   owners: ReadonlyMap<string, string>,
@@ -250,8 +251,6 @@ export class ArtifactReads {
     });
   }
 
-  /** The live artifacts the reader may read, in one conversation's home when it is named,
-   * most recently changed first, at most 100. */
   async list(input: { workspaceId: string; reader: ArtifactActor; conversationId?: string }) {
     return (await this.listPage({ ...input, limit: LIST_LIMIT })).artifacts;
   }
@@ -282,38 +281,14 @@ export class ArtifactReads {
         "read",
         viewer,
       );
-    const visible = input.conversationId
-      ? { homeKey: `conversation:${input.conversationId}` }
-      : await this.#visibleToReader(input.workspaceId, input.reader, viewer);
     const after = input.cursor === undefined ? undefined : readCursor(input.cursor);
-    const rows = await this.db.artifact.findMany({
-      where: {
-        workspaceId: input.workspaceId,
-        ...visible,
-        deletedAt: null,
-        AND: [
-          // `contains` does not escape LIKE wildcards: `%` and `_` in a word match themselves.
-          ...searchTerms(input.query ?? "").map((word) => ({
-            title: { contains: escapeLikeTerm(word), mode: "insensitive" as const },
-          })),
-          ...(after
-            ? [
-                {
-                  OR: [
-                    { updatedAt: { lt: after.at } },
-                    { updatedAt: after.at, id: { lt: after.id } },
-                  ],
-                },
-              ]
-            : []),
-        ],
-      },
-      // `id` only orders artifacts changed in the same millisecond, so a cursor never skips one.
-      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
-      take: input.limit + 1,
+    const ids = await this.#listedIds(input, viewer, after);
+    const found = await this.db.artifact.findMany({
+      where: { workspaceId: input.workspaceId, id: { in: ids.slice(0, input.limit) } },
       select: CARD_SELECT,
     });
-    const page = rows.slice(0, input.limit);
+    const foundById = new Map(found.map((row) => [row.id, row]));
+    const page = ids.slice(0, input.limit).flatMap((id) => foundById.get(id) ?? []);
     const owners = await this.#authorOwners(page);
     const last = page.at(-1);
     return {
@@ -323,7 +298,7 @@ export class ArtifactReads {
           canManageArtifactSharingWithRole(input.reader, viewer.role, accessRuleInput(row, owners)),
         ),
       ),
-      ...(rows.length > input.limit && last ? { nextCursor: writeCursor(last) } : {}),
+      ...(ids.length > input.limit && last ? { nextCursor: writeCursor(last) } : {}),
     };
   }
 
@@ -466,7 +441,6 @@ export class ArtifactReads {
     return input.messages.map((message) => artifactIdsInBody(message.body, 100).map(cardFor));
   }
 
-  /** The authoring Agents' owners, for the batch's sharing-rule answers: one lookup per batch. */
   async #authorOwners(rows: ReadonlyArray<{ authorAgentId: string | null }>) {
     const ids = [...new Set(rows.flatMap((row) => (row.authorAgentId ? [row.authorAgentId] : [])))];
     if (ids.length === 0) return new Map<string, string>();
@@ -494,51 +468,54 @@ export class ArtifactReads {
     return actorConversationHomeReads(this.db, workspaceId, reader, conversationIds);
   }
 
-  /** What a list with no home named asks of the artifacts: widened ones, and those of a home the
-   * reader reads or, when the home is gone, those the reader's standing still reaches. */
-  async #visibleToReader(workspaceId: string, reader: ArtifactActor, viewer: ArtifactViewer) {
-    const homed = await this.db.artifact.findMany({
-      where: {
-        workspaceId,
-        deletedAt: null,
-        access: { not: "workspace" },
-        homeKey: { startsWith: "conversation:" },
-      },
-      distinct: ["homeKey"],
-      select: { homeKey: true },
-    });
-    const conversationIds = new Map(
-      homed.map(({ homeKey }) => [homeKey, artifactHomeConversationId(homeKey)] as const),
+  async #listedIds(
+    input: {
+      workspaceId: string;
+      reader: ArtifactActor;
+      conversationId?: string;
+      query?: string;
+      limit: number;
+    },
+    viewer: ArtifactViewer,
+    after: { at: Date; id: string } | undefined,
+  ): Promise<string[]> {
+    const { workspaceId, reader } = input;
+    const home = actorConversationHomeSql("home", workspaceId, reader);
+    const homeKeyOfConversation = Prisma.sql`'conversation:' || home."id"::text`;
+    const goneReach = await this.#goneHomeReach(workspaceId, reader, viewer);
+    const visible = input.conversationId
+      ? Prisma.sql`a."homeKey" = ${`conversation:${input.conversationId}`}`
+      : Prisma.sql`(a."access" = 'workspace' OR a."homeKey" = 'workspace'
+          OR EXISTS (
+            SELECT 1 FROM "conversations" home
+            WHERE a."homeKey" = ${homeKeyOfConversation} AND ${home.reads})
+          OR (${goneReach} AND a."homeKey" LIKE 'conversation:%' AND NOT EXISTS (
+            SELECT 1 FROM "conversations" home
+            WHERE a."homeKey" = ${homeKeyOfConversation} AND ${home.stands})))`;
+    const titled = searchTerms(input.query ?? "").map(
+      (word) => Prisma.sql`a."title" ILIKE ${containsPattern(word)}`,
     );
-    const homes = await actorConversationHomeReads(this.db, workspaceId, reader, [
-      ...new Set([...conversationIds.values()].flatMap((id) => id ?? [])),
-    ]);
-    const readable: string[] = [];
-    const gone: string[] = [];
-    for (const [homeKey, conversationId] of conversationIds) {
-      const home = conversationId ? homes.get(conversationId) : undefined;
-      if (home !== undefined && homeStands(home)) {
-        if (canReadHome(home)) readable.push(homeKey);
-      } else gone.push(homeKey);
-    }
-    const reaches = await this.#goneHomeReach(workspaceId, reader, viewer);
-    return {
-      OR: [
-        { access: "workspace" },
-        { homeKey: "workspace" },
-        { homeKey: { in: readable } },
-        ...(reaches ? [{ homeKey: { in: gone }, ...reaches }] : []),
-      ],
-    };
+    const afterCursor = after
+      ? [
+          Prisma.sql`(a."updatedAt" < ${epochTimestamp(after.at)}
+            OR (a."updatedAt" = ${epochTimestamp(after.at)} AND a."id" < ${after.id}::uuid))`,
+        ]
+      : [];
+    const rows = await this.db.$queryRaw<{ id: string }[]>`
+      SELECT a."id" FROM "artifacts" a
+      WHERE a."workspaceId" = ${workspaceId}::uuid AND a."deletedAt" IS NULL
+        AND ${Prisma.join([visible, ...titled, ...afterCursor], " AND ")}
+      ORDER BY a."updatedAt" DESC, a."id" DESC
+      LIMIT ${input.limit + 1}`;
+    return rows.map((row) => row.id);
   }
 
   async #goneHomeReach(workspaceId: string, reader: ArtifactActor, viewer: ArtifactViewer) {
-    if (reader.agentId !== undefined) return { authorAgentId: reader.agentId };
-    if (isWorkspaceAdminRole(viewer.role ?? undefined)) return {};
-    const owned = await this.db.agent.findMany({
-      where: { workspaceId, ownerId: reader.userId },
-      select: { id: true },
-    });
-    return owned.length === 0 ? undefined : { authorAgentId: { in: owned.map(({ id }) => id) } };
+    if (reader.agentId !== undefined)
+      return Prisma.sql`a."authorAgentId" = ${reader.agentId}::uuid`;
+    if (isWorkspaceAdminRole(viewer.role ?? undefined)) return Prisma.sql`TRUE`;
+    return Prisma.sql`a."authorAgentId" IN (
+      SELECT "id" FROM "agents"
+      WHERE "workspaceId" = ${workspaceId}::uuid AND "ownerId" = ${reader.userId}::uuid)`;
   }
 }

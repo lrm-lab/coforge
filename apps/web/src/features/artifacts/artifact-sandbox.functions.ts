@@ -7,9 +7,6 @@ import { artifactInputs } from "./artifact-inputs";
 import { productionArtifactSandbox } from "#src/server/artifacts/artifact-composition.server";
 import { publicOrigin } from "#src/server/http/public-origin.server";
 
-/** The single-use link a web-page artifact opens with: a short-lived signed URL on the artifact's
- * own origin, for the signed-in person, at a version (the current one by default), with the person
- * as the page may ask who they are. Asked again each time a page shows. */
 export const loadArtifactSandboxLink = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(

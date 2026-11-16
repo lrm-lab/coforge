@@ -6,14 +6,6 @@ import {
   type AgentReviewComment,
 } from "./artifact-comments";
 
-/**
- * `coforge artifact list|read|push|move|delete|comments|comment|review|resolve|reopen|follow|unfollow`,
- * plus `pull` and `download` over the file routes (task #385): an Agent's artifacts, one operation per
- * request on `POST /api/agent/v1/artifacts`. An artifact is a versioned set of files with an
- * entry file, and its type is that file's; an Agent changes its files only by `push`. The server
- * checks the `artifacts` experiment and who can see the artifact for every operation.
- */
-
 /** The largest artifact request the local proxy admits: a manifest of 200 files, or a review of
  * 50 comments at their size limits, JSON-escaped. */
 export const ARTIFACT_REQUEST_MAX_BYTES = 4 * 1024 * 1024;
@@ -25,8 +17,6 @@ export const ARTIFACT_UPLOAD_MAX_BYTES = 16 * 1024 * 1024;
  * uploaded. A push answered `missing` names the sha256s to upload before sending it again. */
 export type AgentArtifactFile = { path: string; sha256: string };
 
-/** One artifact operation. `target` is `#channel`, `dm:@person`, or a thread of one
- * (`#channel:<message-id>`), which names its conversation. */
 export type AgentArtifactRequest =
   | { operation: "list"; target?: string; query?: string; after?: string; limit?: number }
   | { operation: "read"; artifact: string; version?: number }
@@ -46,8 +36,6 @@ export type AgentArtifactRequest =
       entry?: string;
     }
   | {
-      /** A new artifact made from `files` (version 1) in the home `target` names; the server
-       * refuses a push that names none. */
       operation: "push";
       artifact?: undefined;
       target?: string;
@@ -85,8 +73,6 @@ export type AgentArtifactRequest =
       idempotencyKey: string;
     }
   | {
-      /** Widens who can see the artifact from its conversation to the whole Workspace; `to` is
-       * `workspace`. Only the Agent that made it may. */
       operation: "move";
       artifact: string;
       to: string;
@@ -122,8 +108,7 @@ const FIELD_CHECKS: Record<FieldKind, (value: unknown) => boolean> = {
 type OperationShape = {
   fields: Record<string, FieldKind>;
   required: readonly string[];
-  /** A failure on the way is safe to run again: it changes nothing, or sets a state a repeat leaves as it is. */
-  readOnly?: true;
+  repeatable?: true;
   /** Held up while others commented on what it touches since the Agent last read comments. */
   gatedByComments?: true;
   /** Writes a comment or the state of a thread. */
@@ -134,12 +119,12 @@ const OPERATIONS = {
   list: {
     fields: { target: "string", query: "string", after: "string", limit: "number" },
     required: [],
-    readOnly: true,
+    repeatable: true,
   },
   read: {
     fields: { artifact: "string", version: "number" },
     required: ["artifact"],
-    readOnly: true,
+    repeatable: true,
   },
   push: {
     fields: {
@@ -175,7 +160,7 @@ const OPERATIONS = {
       all: "boolean",
     },
     required: ["artifact"],
-    readOnly: true,
+    repeatable: true,
   },
   comment: {
     fields: {
@@ -213,16 +198,16 @@ const OPERATIONS = {
     required: ["artifact", "comment"],
     commentWrite: true,
   },
-  follow: { fields: { artifact: "string" }, required: ["artifact"], readOnly: true },
-  unfollow: { fields: { artifact: "string" }, required: ["artifact"], readOnly: true },
+  follow: { fields: { artifact: "string" }, required: ["artifact"], repeatable: true },
+  unfollow: { fields: { artifact: "string" }, required: ["artifact"], repeatable: true },
 } as const satisfies Record<AgentArtifactRequest["operation"], OperationShape>;
 
-/** What an operation does, for a client that reports its failures: whether it only reads, whether
+/** What an operation does, for a client that reports its failures: whether running it again is safe, whether
  * unseen comments hold it up, and whether it writes a comment or the state of a thread. */
 export function artifactOperationTraits(operation: AgentArtifactRequest["operation"]) {
   const shape: OperationShape = OPERATIONS[operation];
   return {
-    readOnly: shape.readOnly === true,
+    repeatable: shape.repeatable === true,
     gatedByComments: shape.gatedByComments === true,
     commentWrite: shape.commentWrite === true,
   };

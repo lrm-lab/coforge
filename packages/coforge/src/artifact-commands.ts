@@ -34,12 +34,6 @@ import {
 } from "#src/artifact-format";
 import { formatFollow, type FollowAnswer } from "#src/artifact-follow-format";
 
-/**
- * `coforge artifact list|read|pull|push|download|move|delete|comments|comment|review|resolve|reopen|follow|unfollow`
- * (task #385): an Agent's artifacts. An artifact is a versioned set of files; an Agent changes one only
- * by `pull` and `push` of a directory (`artifact-directory-commands.ts`), and the server merges a
- * push over an older version with what others pushed since, by file.
- */
 export type ArtifactInvocation =
   | ArtifactRequestInvocation
   | ArtifactDirectoryInvocation
@@ -228,16 +222,13 @@ export async function artifactRequest(
 ): Promise<unknown> {
   requireProxySetup("artifact", context, proxyUrl);
   const route = agentApiRoutes.proxy.artifacts;
-  // Anything but a read changes something, and none of it is replayed when run again: one that
-  // failed on the way may still have landed.
   const traits = artifactOperationTraits(request.operation);
-  const writes = !traits.readOnly;
+  const writes = !traits.repeatable;
   const artifact = artifactOf(request);
   const call: ArtifactCall = {
     label: `artifact ${request.operation}`,
     writes,
     ...(writes ? { mayHaveLanded: mayHaveLanded(request) } : {}),
-    // Others commented on what this changes or answers since the Agent last read comments.
     ...(artifact !== undefined && traits.gatedByComments
       ? { unseenComments: `Read them first: coforge artifact comments ${artifact}` }
       : {}),

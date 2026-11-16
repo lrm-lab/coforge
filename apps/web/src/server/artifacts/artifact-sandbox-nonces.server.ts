@@ -1,10 +1,5 @@
 import { openRedisClient } from "#src/server/redis-client.server";
 
-/**
- * Where a ticket's nonce is spent. `claim` is atomic: of any number of concurrent claims of one
- * nonce, exactly one gets true. A claim that cannot be made throws, and the ticket is then
- * refused: a single-use link never fails open.
- */
 export type TicketNonces = {
   claim(nonce: string, ttlSeconds: number): Promise<boolean>;
 };
@@ -13,8 +8,6 @@ type NonceRedis = {
   send(command: "SET", args: string[]): Promise<unknown>;
 };
 
-/** Redis `SET key 1 EX ttl NX`, the store of a deployment with Redis (the one-shot state the web
- * server already keeps there, rebuildable and short-lived). */
 export class RedisTicketNonces implements TicketNonces {
   constructor(private readonly redis: NonceRedis) {}
 
@@ -30,7 +23,6 @@ export class RedisTicketNonces implements TicketNonces {
   }
 }
 
-/** The store of a process with no Redis (a local stack, tests): exact for one process only. */
 export class MemoryTicketNonces implements TicketNonces {
   private readonly spent = new Map<string, number>();
 

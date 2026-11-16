@@ -15,12 +15,6 @@ import {
   productionArtifacts,
 } from "#src/server/artifacts/artifact-composition.server";
 
-/**
- * `coforge artifact list|read|push|comments|comment|review|resolve|reopen|follow|unfollow` (task #385): one
- * operation per request, as JSON. A body that is not one known operation with exactly its own
- * fields is `INVALID_INPUT`, so a save's internal options can never be sent; every refusal is the
- * Agent API's (`code`, and the `errorId` in `error`).
- */
 export async function handleAgentArtifactPost(
   request: Request,
   principal: { workspaceId: string; agentId: string },

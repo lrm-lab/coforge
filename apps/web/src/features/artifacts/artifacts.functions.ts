@@ -17,12 +17,6 @@ import { bestEffortMessageNotifier } from "#src/server/notifications/web-push-co
 import { artifactInputs } from "./artifact-inputs";
 import { shareArtifactInputSchema } from "./artifact-share-input";
 
-/**
- * The web page's artifacts (task #385, the `artifacts` experiment): read as their text, and
- * shared, sent and deleted; an Agent writes them. Every call is the signed-in person's, checked by the artifact service against the
- * experiment and who can see the document (its home conversation's members, or the Workspace).
- */
-
 const { id } = artifactInputs;
 
 const scopeOf = (context: { workspaceId: string; user: { id: string } }) => ({
@@ -79,7 +73,6 @@ export const setArtifactLinkSharing = createServerFn({ method: "POST" })
     }),
   );
 
-/** Who can see an artifact: its home conversation's members, or everyone in the Workspace. */
 export const setArtifactAccess = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ artifactId: id, access: z.enum(["conversation", "workspace"]) }).strict())
@@ -92,7 +85,6 @@ export const setArtifactAccess = createServerFn({ method: "POST" })
     }),
   );
 
-/** How many people and Agents would lose access if the artifact went back to its conversation. */
 export const loadArtifactAccessLoss = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(z.object({ artifactId: id }).strict())

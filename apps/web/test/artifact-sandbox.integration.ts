@@ -9,6 +9,7 @@ import {
 import { ArtifactSandbox } from "#src/server/artifacts/artifact-sandbox.server";
 import { MemoryTicketNonces } from "#src/server/artifacts/artifact-sandbox-nonces.server";
 import { FRAME, fileRequest, openLink, openPage } from "./helpers/artifact-sandbox-open";
+import { legacyWorkspaceArtifact } from "./helpers/legacy-workspace-artifact";
 
 /**
  * Web pages on the sandbox origin over real artifacts (task #490): the link opens the version it
@@ -96,9 +97,8 @@ const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2
 
 /** A new web page of several files, version 1, entry `home.html`. */
 async function multiPage(name: string, files?: Record<string, string | Uint8Array>) {
-  const page = await artifacts.create({
+  const page = await legacyWorkspaceArtifact(db, {
     workspaceId,
-    home: { kind: "workspace" },
     name: `${name}-${handle}`,
     entryPath: "home.html",
     author: { agentId },
@@ -179,9 +179,8 @@ test("a member's next link refuses at once once they leave the Workspace", async
 });
 
 test("a link opens its own version, and stops once its reader cannot read the page", async () => {
-  const page = await artifacts.create({
+  const page = await legacyWorkspaceArtifact(db, {
     workspaceId,
-    home: { kind: "workspace" },
     name: `page-${handle}`,
     entryPath: "index.html",
     author: { agentId },

@@ -5,6 +5,7 @@ import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import {
   ACTIVE_MEMBER_WHERE,
   DIRECT_CONVERSATION_WHERE,
+  directConversationSql,
   VISIBLE_CONVERSATION_WHERE,
 } from "./active-member.server";
 import { taskDiscussionAccess, taskDiscussionBoardSelect } from "./task-discussion-access.server";
@@ -179,8 +180,6 @@ export async function actorConversationAccess(
   };
 }
 
-/** Whether the Workspace hides this conversation from everyone (`hiddenFromWorkspaceAt`).
- * `false` for a missing conversation or a DM, which is never hidden. */
 export async function conversationHiddenFromWorkspace(
   db: Pick<PrismaClient, "conversation">,
   workspaceId: string,
@@ -193,10 +192,6 @@ export async function conversationHiddenFromWorkspace(
   return conversation?.hiddenFromWorkspaceAt != null;
 }
 
-/** What `actor` may read of each listed channel or DM home, batched for artifact reads: per
- * conversation id, the fields `canReadConversationHome` reads, whether the actor is an active
- * member, whether the Workspace hides it, and which kind it is. Unlike `actorConversationAccess`
- * this keeps hidden conversations, flagged `hidden`; a missing id is absent from the map. */
 export type ActorConversationHomeRead = {
   channelName: string | null;
   visibility: string;
@@ -243,12 +238,63 @@ export async function actorConversationHomeReads(
   );
 }
 
-/**
- * How many people and Agents of the Workspace cannot read one channel or DM: the Workspace's
- * members and live Agents without an active seat in it, none for a public channel everyone
- * reads. `undefined` for a conversation the Workspace cannot see or that is neither a channel nor
- * a DM.
- */
+export async function agentsConversationHomeReads(
+  db: Pick<PrismaClient, "conversation">,
+  workspaceId: string,
+  conversationId: string,
+  agentIds: readonly string[],
+): Promise<Map<string, ActorConversationHomeRead> | undefined> {
+  const conversation = await db.conversation.findFirst({
+    where: {
+      id: conversationId,
+      workspaceId,
+      OR: [{ channelName: { not: null } }, DIRECT_CONVERSATION_WHERE],
+    },
+    select: {
+      channelName: true,
+      visibility: true,
+      hiddenFromWorkspaceAt: true,
+      members: {
+        where: { agentId: { in: [...agentIds] }, ...ACTIVE_MEMBER_WHERE },
+        select: { agentId: true },
+      },
+    },
+  });
+  if (!conversation) return undefined;
+  const seated = new Set(conversation.members.map((member) => member.agentId));
+  return new Map(
+    agentIds.map((agentId) => [
+      agentId,
+      {
+        channelName: conversation.channelName,
+        visibility: conversation.visibility,
+        member: seated.has(agentId),
+        hidden: conversation.hiddenFromWorkspaceAt !== null,
+        kind: conversation.channelName === null ? ("dm" as const) : ("channel" as const),
+      },
+    ]),
+  );
+}
+
+export function actorConversationHomeSql(alias: string, workspaceId: string, actor: ChannelActor) {
+  const conversation = Prisma.raw(alias);
+  const seatColumn = Prisma.raw("userId" in actor ? '"userId"' : '"agentId"');
+  const actorId = "userId" in actor ? actor.userId : actor.agentId;
+  const stands = Prisma.sql`(${conversation}."workspaceId" = ${workspaceId}::uuid
+    AND (${conversation}."channelName" IS NOT NULL OR ${directConversationSql(alias)})
+    AND ${conversation}."hiddenFromWorkspaceAt" IS NULL)`;
+  const seated = Prisma.sql`EXISTS (
+    SELECT 1 FROM "conversation_members" seat
+    WHERE seat."conversationId" = ${conversation}."id"
+      AND seat.${seatColumn} = ${actorId}::uuid
+      AND seat."leftAt" IS NULL)`;
+  const reads = Prisma.sql`(${stands} AND (
+    (${conversation}."channelName" IS NULL AND ${seated})
+    OR (${conversation}."channelName" IS NOT NULL
+      AND (${conversation}."visibility" = ${CHANNEL_VISIBILITY.PUBLIC} OR ${seated}))))`;
+  return { stands, reads };
+}
+
 export async function actorsWithoutConversationRead(
   db: Pick<PrismaClient, "conversation" | "workspaceMembership" | "agent">,
   workspaceId: string,

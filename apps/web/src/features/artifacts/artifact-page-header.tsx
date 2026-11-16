@@ -67,7 +67,6 @@ export function ArtifactPageHeader({
   onShare?: () => void;
   onCopyLink?: () => void;
   onOpenInTab?: () => void;
-  /** Opens the find bar of a web page. */
   onFind?: () => void;
   onDelete?: () => void;
   pane?: ArtifactPaneControls;

@@ -87,6 +87,7 @@ export class ArtifactVisibility {
         workspaceId: input.workspaceId,
         homeKey: changed.artifact.homeKey,
         artifactId: changed.artifact.id,
+        tier: input.tier,
       });
     return { artifact: summaryOf(changed.artifact), from: changed.from, to: input.tier };
   }
@@ -131,6 +132,7 @@ export class ArtifactVisibility {
       workspaceId: input.workspaceId,
       homeKey: moved.homeKey,
       artifactId: moved.id,
+      tier: "workspace",
     });
     return { artifact: summaryOf(moved), from: "conversation", to: "workspace" } as const;
   }

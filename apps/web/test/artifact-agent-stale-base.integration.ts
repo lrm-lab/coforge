@@ -8,6 +8,7 @@ import { Artifacts } from "#src/server/artifacts/artifacts.server";
 import { StoredArtifactBlobs } from "#src/server/artifacts/artifact-blobs.server";
 import { ArtifactDocuments } from "#src/server/artifacts/artifact-documents.server";
 import { LocalFileStorage } from "#src/server/files/file-storage.server";
+import { legacyWorkspaceArtifact } from "./helpers/legacy-workspace-artifact";
 
 /**
  * A push over a version others moved past: what the others changed and the push did not touch is
@@ -125,9 +126,8 @@ let made = 0;
 
 /** An artifact whose version 1 holds `a.md` (the entry), `b.txt` and `c.txt`. */
 async function artifact(title = "Plan") {
-  const created = await artifacts.create({
+  const created = await legacyWorkspaceArtifact(db, {
     workspaceId,
-    home: { kind: "workspace" },
     name: `base-${(made += 1)}-${handle}`,
     title,
     entryPath: "a.md",
@@ -237,9 +237,8 @@ test("a setting both sides changed to different values refuses the save and name
 });
 
 test("a push never merges inside a file", async () => {
-  const created = await artifacts.create({
+  const created = await legacyWorkspaceArtifact(db, {
     workspaceId,
-    home: { kind: "workspace" },
     name: `base-lines-${handle}`,
     entryPath: "document.md",
     author: other,

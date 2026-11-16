@@ -1,18 +1,5 @@
 import { readSignedValue, signValue } from "#src/server/auth/signed-value.server";
 
-/**
- * What opens a web-page artifact. Two signed values, each with its own purpose, so neither reads
- * as the other, a session, or any other signed value (`signed-value.server.ts`):
- *
- * - The ticket opens one page once, on one origin. The application checks that the reader may
- *   read the page, then signs what it allowed: this artifact, at this version, for this reader,
- *   framed by this application origin, served from this exact page origin, until a short expiry,
- *   with a nonce that is spent when the ticket is used (`artifact-sandbox-nonces.server.ts`).
- * - The file token is what the ticket becomes once spent: the prefix of the page's own files
- *   (`/_f/<token>/<path>`). It names the same artifact, version, reader and origins, and is good
- *   for `SANDBOX_FILE_TTL_SECONDS`. It is a path, not a cookie, because the page is framed by
- *   another site and a browser may refuse that frame its cookies.
- */
 export type SandboxGrant = {
   /** Workspace */
   w: string;
@@ -24,28 +11,19 @@ export type SandboxGrant = {
   u: string;
   /** The application origin that may frame the page (`frame-ancestors`). */
   o: string;
-  /** The page origin that may use this value: `a-<uuid>` under the sandbox host. */
   s: string;
-  /** When it was made, seconds since the epoch. */
   iat: number;
-  /** When it stops opening, seconds since the epoch. */
   exp: number;
 };
 
 export type SandboxTicket = SandboxGrant & {
-  /** Spent once, whatever else holds. */
   n: string;
 };
 
 export type SandboxFileToken = SandboxGrant;
 
-/** How long a ticket opens its page: long enough to load the frame, short enough that a link
- * copied out of the page is dead. The app asks for a new one each time it shows a page. */
 export const SANDBOX_TICKET_TTL_SECONDS = 2 * 60;
 
-/** How long the files under a ticket keep opening, counted from when the ticket was spent: long
- * enough for a lazy image or a click to another page of the artifact soon after it loaded, short
- * enough that a copied file URL stops working while the reader is still looking. */
 export const SANDBOX_FILE_TTL_SECONDS = 10 * 60;
 
 type GrantInput = Omit<SandboxGrant, "iat" | "exp">;
@@ -72,8 +50,6 @@ export function signSandboxFileToken(input: GrantInput, secret: string, now: Dat
   return signValue("artifact-sandbox-files", claims, secret);
 }
 
-/** The ticket's claims when it is one we signed, expired or not (a used or expired link still
- * says who may frame it); null when it is not one we signed, or not the shape we sign. */
 export function readSandboxTicket(value: string, secret: string): SandboxTicket | null {
   const payload = readSignedValue<Partial<SandboxTicket>>("artifact-sandbox-ticket", value, secret);
   if (!payload || !isGrant(payload)) return null;

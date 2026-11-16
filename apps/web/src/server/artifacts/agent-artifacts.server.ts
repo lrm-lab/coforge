@@ -314,14 +314,6 @@ const CHANNEL_TARGET = /^#([a-z0-9][a-z0-9_-]{0,63})(?::(\S+))?$/;
 const DM_TARGET = /^(?:dm:)?@([a-z0-9][a-z0-9_-]{0,63})(?:~(human|agent))?(?::(\S+))?$/;
 const TASK_NUMBER = /^#[1-9]\d*$/;
 
-/**
- * The conversation an artifact is made or listed in: `#channel`, or `@name` for the Agent's direct
- * conversation with a person or an Agent (`~human` or `~agent` when both have the name). A thread
- * (`#channel:<message-id>`) names its conversation. A task is refused, naming its conversation,
- * and a DM is not opened for an artifact. A conversation that does not exist answers `NOT_FOUND`;
- * whether the Agent may write there is the artifact service's to answer, with the same
- * `NOT_FOUND` for a channel it cannot read.
- */
 export async function resolveArtifactTarget(
   db: PrismaClient,
   principal: { workspaceId: string; agentId: string },

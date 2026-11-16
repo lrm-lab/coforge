@@ -45,14 +45,12 @@ type ArtifactUnseen = {
   versions: UnseenVersion[];
 };
 
-/** The server's answer to `move`. */
 export type ArtifactMovedAnswer = {
   artifact: { id: string; title: string };
   from: string;
   to: string;
 };
 
-/** The server's answer to `delete`. */
 export type ArtifactDeletedAnswer = {
   artifact: { id: string; title: string };
   deleted: true;

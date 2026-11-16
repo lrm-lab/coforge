@@ -1,6 +1,5 @@
 import type { HelpEntry } from "./entry";
 
-/** The `artifact` family's help (task #385): artifacts kept in a channel or a DM. */
 export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
   artifact: {
     syntax:

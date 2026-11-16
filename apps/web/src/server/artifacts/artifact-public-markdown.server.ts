@@ -39,8 +39,6 @@ export function publicMarkdownPage(title: string, text: string): Uint8Array<Arra
   );
 }
 
-/** A public Markdown page as the sandbox answers it: the rendered text, with no script and no
- * loading. Null when the text is over `limit` or its bytes are gone. */
 export function publicMarkdownResponse(input: {
   method: string;
   title: string;

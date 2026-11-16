@@ -10,6 +10,7 @@ import {
   type ArtifactBlobStore,
   type ArtifactHome,
 } from "#src/server/artifacts/artifacts.server";
+import { legacyWorkspaceArtifact } from "./helpers/legacy-workspace-artifact";
 
 /**
  * Who may read, push to and delete an artifact: whoever reads its home conversation, or every
@@ -163,6 +164,13 @@ const push = (
   });
 const read = (artifactId: string, reader: ArtifactActor) =>
   artifacts.reads.read({ workspaceId, artifactId, reader });
+const createLegacy = (author: ArtifactPublisher) =>
+  legacyWorkspaceArtifact(db, {
+    workspaceId,
+    name: `doc-${(made += 1)}-${handle}`,
+    entryPath: "document.md",
+    author,
+  });
 const inConversation = (conversationId: string): ArtifactHome => ({
   kind: "conversation",
   conversationId,
@@ -185,7 +193,7 @@ test("with the experiment off, nothing is created, saved or read", async () => {
   switchedOn = false;
   try {
     const off = { code: "ACCESS_DENIED", errorId: "artifacts-disabled" };
-    await expect(create({ kind: "workspace" }, helper)).rejects.toMatchObject(off);
+    await expect(create(inConversation(publicChannel), helper)).rejects.toMatchObject(off);
     await expect(push(artifact.id, helper)).rejects.toMatchObject(off);
     await expect(read(artifact.id, { userId: people.alice })).rejects.toMatchObject(off);
   } finally {
@@ -260,7 +268,7 @@ test("a widened artifact reads as the Workspace's: every member and Agent reads 
 });
 
 test("an artifact of the legacy Workspace home reads workspace-wide", async () => {
-  const artifact = await create({ kind: "workspace" }, stranger);
+  const artifact = await createLegacy(stranger);
   expect((await push(artifact.id, helper)).status).toBe("created");
   expect((await push(artifact.id, stranger, "sha-doc-2", 1)).status).toBe("created");
   expect((await read(artifact.id, { userId: people.bob })).artifact).toMatchObject({
@@ -269,9 +277,6 @@ test("an artifact of the legacy Workspace home reads workspace-wide", async () =
   });
   for (const reader of [{ userId: people.outsider }, { agentId: agents.foreign }])
     await expect(read(artifact.id, reader)).rejects.toMatchObject({ code: "NOT_FOUND" });
-  await expect(create({ kind: "workspace" }, { agentId: agents.foreign })).rejects.toMatchObject({
-    code: "NOT_FOUND",
-  });
 });
 
 test("a public home is not offered yet, and a conversation must be a channel or a DM here", async () => {
@@ -287,7 +292,7 @@ test("a public home is not offered yet, and a conversation must be a channel or 
 test("deleting is an owner's or admin's or the authoring Agent's owner's; an Agent deletes only its own", async () => {
   const del = (artifactId: string, actor: ArtifactActor) =>
     artifacts.delete({ workspaceId, artifactId, actor });
-  const byHelper = await create({ kind: "workspace" }, helper);
+  const byHelper = await createLegacy(helper);
   // A member who is neither the Workspace's owner nor admin, and another Agent, may not.
   await expect(del(byHelper.id, { userId: people.bob })).rejects.toMatchObject({
     code: "ACCESS_DENIED",
@@ -300,13 +305,13 @@ test("deleting is an owner's or admin's or the authoring Agent's owner's; an Age
 
   // The authoring Agent's owner deletes its artifact too, though a plain member (task #25);
   // a member who owns no part of it still may not.
-  const owned = await create({ kind: "workspace" }, helper);
+  const owned = await createLegacy(helper);
   await expect(del(owned.id, { userId: people.bob })).rejects.toMatchObject({
     code: "ACCESS_DENIED",
   });
   await del(owned.id, { userId: people.alice });
 
-  const byStranger = await create({ kind: "workspace" }, stranger);
+  const byStranger = await createLegacy(stranger);
   await del(byStranger.id, stranger);
   const row = await db.artifact.findUniqueOrThrow({
     where: { id: byStranger.id },
@@ -404,7 +409,7 @@ test("leaving a private channel ends the read; an archived channel is read only;
 test("a list with no home names every artifact the reader can see, and a list of a home that home's", async () => {
   const closed = await create(inConversation(privateChannel), helper);
   const open = await create(inConversation(publicChannel), helper);
-  const legacy = await create({ kind: "workspace" }, helper);
+  const legacy = await createLegacy(helper);
   const wide = await create(inConversation(privateChannel), helper);
   await artifacts.visibility.moveToWorkspace({
     workspaceId,
@@ -430,14 +435,14 @@ test("a list with no home names every artifact the reader can see, and a list of
 });
 
 test("with the experiment off, a bad request and a delete hear only that it is off", async () => {
-  const artifact = await create({ kind: "workspace" }, helper);
+  const artifact = await createLegacy(helper);
   switchedOn = false;
   try {
     const off = { code: "ACCESS_DENIED", errorId: "artifacts-disabled" };
     await expect(
       artifacts.create({
         workspaceId,
-        home: { kind: "workspace" },
+        home: inConversation(publicChannel),
         name: "Not A Valid Name",
         entryPath: "document.md",
         author: helper,

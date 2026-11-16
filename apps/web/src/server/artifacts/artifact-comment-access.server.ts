@@ -21,11 +21,6 @@ export type CommentedArtifact = {
   authorAgentId: string | null;
 };
 
-/**
- * A live artifact the actor may read, or `NOT_FOUND`. Commenting needs read access and nothing
- * more. A missing artifact, another Workspace's, a deleted one and one the actor cannot see are
- * all `NOT_FOUND`.
- */
 export async function requireReadableArtifact(
   db: Db,
   workspaceId: string,
@@ -69,7 +64,6 @@ export async function canResolveArtifactComment(
       : thread.root.authorUserId === actor.userId;
   const madeIt = actor.agentId !== undefined && thread.artifact.authorAgentId === actor.agentId;
   if (startedIt || madeIt) return true;
-  // The authoring Agent's owner and the admins: the sharing rule.
   if (actor.userId === undefined) return false;
   const { authorAgentId } = thread.artifact;
   const ownerId = authorAgentId

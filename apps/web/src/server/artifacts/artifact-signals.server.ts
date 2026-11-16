@@ -9,7 +9,7 @@ import {
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { errorType } from "#src/server/errors/error-type.server";
-import { artifactHomeConversationId } from "./artifact-access.server";
+import { artifactHomeConversationId, type ArtifactTier } from "./artifact-access.server";
 
 /** Where an artifact's events go: one realtime channel at a time. */
 export type ArtifactSignals = {
@@ -49,11 +49,6 @@ async function publishBestEffort(
   }
 }
 
-/**
- * Tells the pages of the artifact's home conversation that a version was saved, and the
- * Workspace's too while everyone reads it. Best effort, after the commit: a page that misses it
- * reads the version on its next read.
- */
 export async function announceVersion(
   signals: ArtifactSignals | undefined,
   input: {
@@ -78,18 +73,19 @@ export async function announceVersion(
   );
 }
 
-/**
- * Tells the pages of the home conversation and of the Workspace that who can see the artifact
- * changed, so each reads it again. Best effort, after the commit.
- */
 export async function announceAccessChange(
   signals: ArtifactSignals | undefined,
-  input: { workspaceId: string; homeKey: string; artifactId: string },
+  input: {
+    workspaceId: string;
+    homeKey: string;
+    artifactId: string;
+    tier: ArtifactTier;
+  },
 ) {
   if (!signals) return;
   await publishBestEffort(
     signals,
-    channelsOf({ ...input, wide: true }),
+    channelsOf({ ...input, wide: input.tier === "workspace" }),
     {
       type: REALTIME_EVENTS.artifactAccessChanged,
       workspaceId: input.workspaceId,

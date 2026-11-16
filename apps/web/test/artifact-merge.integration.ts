@@ -7,6 +7,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { Artifacts } from "#src/server/artifacts/artifacts.server";
 import { StoredArtifactBlobs } from "#src/server/artifacts/artifact-blobs.server";
 import { LocalFileStorage } from "#src/server/files/file-storage.server";
+import { legacyWorkspaceArtifact } from "./helpers/legacy-workspace-artifact";
 
 /**
  * Saving over an older version (task #385): what others changed since the save's base is kept.
@@ -59,9 +60,8 @@ afterAll(async () => {
 
 let made = 0;
 async function document(text: string, settings: { title?: string; description?: string } = {}) {
-  const artifact = await artifacts.create({
+  const artifact = await legacyWorkspaceArtifact(db, {
     workspaceId,
-    home: { kind: "workspace" },
     name: `doc-${(made += 1)}-${handle}`,
     entryPath: "document.md",
     author: { agentId },
@@ -196,9 +196,8 @@ test("files others changed and this push does not touch are kept", async () => {
 });
 
 test("a push begun before the first version is refused on any setting that differs", async () => {
-  const artifact = await artifacts.create({
+  const artifact = await legacyWorkspaceArtifact(db, {
     workspaceId,
-    home: { kind: "workspace" },
     name: `first-${handle}`,
     entryPath: "document.md",
     author: { agentId },
