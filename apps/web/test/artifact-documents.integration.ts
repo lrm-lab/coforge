@@ -254,6 +254,18 @@ test("a text too large for a document is refused before the document is made", a
   expect(await db.artifact.count({ where: { workspaceId } })).toBe(before);
 });
 
+test("a create whose first version's bytes are missing leaves no artifact behind", async () => {
+  const before = await db.artifact.count({ where: { workspaceId } });
+  await expect(
+    documents.create(scope(alice), {
+      conversationId: channelId,
+      title: "Lost bytes",
+      manifest: { files: [{ path: "index.md", sha256: "a".repeat(64) }] },
+    }),
+  ).rejects.toMatchObject({ code: "TEMPORARILY_UNAVAILABLE", errorId: "artifact-bytes-missing" });
+  expect(await db.artifact.count({ where: { workspaceId } })).toBe(before);
+});
+
 test("going back keeps the card's preview from the version gone back to", async () => {
   const doc = await documents.create(scope(alice), {
     conversationId: channelId,

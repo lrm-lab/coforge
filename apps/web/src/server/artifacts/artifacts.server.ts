@@ -27,7 +27,7 @@ import {
   type ArtifactSettings,
 } from "./artifact-merge.server";
 import { refuseMovedBase, refuseOverlap } from "./artifact-agent-base.server";
-import { createArtifact } from "./artifact-create.server";
+import { createVersionedArtifact } from "./artifact-create.server";
 import { ArtifactReads } from "./artifact-reads.server";
 import { revertArtifact, type ArtifactRevert } from "./artifact-revert.server";
 import { requireNoUnseenCommentsOnPush } from "./artifact-comment-gate.server";
@@ -114,6 +114,11 @@ export class Artifacts {
     return artifact;
   }
 
+  /** A new artifact; given `version`, its version 1 commits in the same transaction
+   * (task #25): the row, its files and its idempotent replay land together or not at all, and
+   * version 1 never meets the comment gate — no comment can exist on an artifact not yet
+   * made. `version.idempotencyKey` is the version's own key (`<create key>:v1` for a keyed
+   * create). */
   async create(input: {
     workspaceId: string;
     home: ArtifactHome;
@@ -128,15 +133,27 @@ export class Artifacts {
      * conflict (task #385). */
     idempotencyKey?: string;
     requestHash?: string;
+    /** Version 1's files and its own idempotency key; a create may also make the bare row a
+     * caller fills with a later push. */
+    version?: { files: readonly ArtifactFileInput[]; idempotencyKey: string };
   }) {
     // The experiment first: a Workspace without it hears only that, whatever it sent.
     if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     // Anyone with the link is a home a later step adds, with its own switch and refusals.
     if (input.home.kind === "public") invalid("artifact-home");
-    await this.requireHome(input.workspaceId, input.author, artifactHomeKey(input.home), "write");
-    // The insert, name/kind validation and idempotent replay live in artifact-create.server.ts.
-    const { home, ...rest } = input;
-    return createArtifact(this.db, { ...rest, homeKey: artifactHomeKey(home) });
+    const homeKey = artifactHomeKey(input.home);
+    await this.requireHome(input.workspaceId, input.author, homeKey, "write");
+    const { home: _home, ...rest } = input;
+    const saved = await createVersionedArtifact(this.db, this.blobs, { ...rest, homeKey });
+    if (saved.fresh && input.version !== undefined)
+      await announceVersion(this.signals, {
+        workspaceId: input.workspaceId,
+        homeKey,
+        artifactId: saved.artifact.id,
+        number: 1,
+        publisher: input.author,
+      });
+    return saved.artifact;
   }
 
   async push(input: {
