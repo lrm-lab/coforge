@@ -1,0 +1,18 @@
+{
+  "baseUrl": "https://braimaster.lenovo.com/llm/v1",
+  "api": "openai-completions",
+  "compat": {
+    "supportsDeveloperRole": false,
+    "supportsReasoningEffort": false
+  },
+  "models": [
+    {
+      "id": "muse-spark",
+      "name": "muse-spark-nvfp4",
+      "reasoning": false,
+      "input": ["text"],
+      "contextWindow": 128000,
+      "maxTokens": 8192
+    }
+  ]
+}

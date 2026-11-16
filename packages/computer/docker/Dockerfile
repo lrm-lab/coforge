@@ -1,4 +1,5 @@
-# Local image for one cloud Computer.
+# Local / fixture image for one cloud Computer (not staging or production Swarm).
+# Swarm images are built from infra/cloud-computer-image/.
 # Build context is a directory that already contains the coforge-computer binary.
 FROM debian:bookworm-slim
 ARG COMPUTER_VERSION=

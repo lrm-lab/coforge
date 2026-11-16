@@ -107,6 +107,8 @@ The architecture invariants every change must respect are in
 | [docs/agent-manifest/](docs/agent-manifest/README.md) | `coforge-agent-manifest.v1`: the public JSON document an app publishes to tell Agents what it can do, its limits, and examples |
 | [packages/coforge-sdk/README.md](packages/coforge-sdk/README.md) | Shared contracts and transports |
 | [infra/README.md](infra/README.md) | Local Docker Compose services |
+| [infra/cloud-computer-image/](infra/cloud-computer-image/README.md) | Staging/production Swarm cloud Computer image build |
+| [infra/cloud-computer-image/AGENTS.md](infra/cloud-computer-image/AGENTS.md) | Rules for the Swarm cloud Computer image tree |
 | [docs/operations/cloud-swarm/](docs/operations/cloud-swarm/README.md) | Attach one Swarm cluster when standing up a CoForge deployment |
 | [docs/operations/staging/](docs/operations/staging/README.md) | Staging environment runbook |
 | [docs/operations/production/](docs/operations/production/README.md) | Production environment runbook |

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=终端
+Name[zh_CN]=终端
+Comment=终端
+Exec=/usr/local/bin/coforge-terminal
+Icon=/usr/share/icons/Adwaita/48x48/legacy/utilities-terminal.png
+Terminal=false
+Categories=System;TerminalEmulator;
+StartupNotify=false

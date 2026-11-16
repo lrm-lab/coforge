@@ -1,0 +1,150 @@
+#!/usr/bin/env python3
+"""Stand-in for systemctl --user inside a cloud Computer container."""
+import os
+import shlex
+import sys
+from pathlib import Path
+
+STATE = Path("/root/.coforge/systemctl-shim")
+UNIT_DIR = Path("/root/.config/systemd/user")
+
+
+def args():
+    return [item for item in sys.argv[1:] if item != "--user"]
+
+
+def unescape(value: str) -> str:
+    return (
+        value.replace("\\x20", " ")
+        .replace('\\"', '"')
+        .replace("%%", "%")
+        .replace("\\\\", "\\")
+    )
+
+
+def unit_path(name: str) -> Path:
+    return UNIT_DIR / name
+
+
+def record(name: str) -> Path:
+    return STATE / name
+
+
+def read_unit(name: str):
+    path = unit_path(name)
+    if not path.is_file():
+        return None
+    env = {}
+    command = None
+    for raw in path.read_text().splitlines():
+        if raw.startswith("Environment="):
+            item = raw[len("Environment=") :].strip()
+            if item.startswith('"') and item.endswith('"'):
+                item = item[1:-1]
+            key, _, value = item.partition("=")
+            env[unescape(key)] = unescape(value)
+        elif raw.startswith("ExecStart="):
+            command = unescape(raw[len("ExecStart=") :])
+    return env, command
+
+
+def show(name: str) -> int:
+    parsed = read_unit(name)
+    pid_file = record(name).with_suffix(".pid")
+    pid = 0
+    if pid_file.is_file():
+        try:
+            pid = int(pid_file.read_text().strip())
+        except ValueError:
+            pid = 0
+        if pid > 0:
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                pid = 0
+    if parsed is None and pid == 0:
+        print("LoadState=not-found")
+        return 0
+    invocation = ""
+    active = pid > 0
+    if active:
+        inv = record(name).with_suffix(".invocation")
+        invocation = inv.read_text().strip() if inv.is_file() else "0" * 32
+    print(f"LoadState={'loaded' if parsed or active else 'not-found'}")
+    print(f"ActiveState={'active' if active else 'inactive'}")
+    print(f"MainPID={pid}")
+    print(f"InvocationID={invocation}")
+    return 0
+
+
+def start(name: str) -> int:
+    parsed = read_unit(name)
+    if parsed is None:
+        print(f"unit not found: {name}", file=sys.stderr)
+        return 1
+    env_updates, command = parsed
+    if not command:
+        print(f"unit has no ExecStart: {name}", file=sys.stderr)
+        return 1
+    STATE.mkdir(parents=True, exist_ok=True)
+    pid_file = record(name).with_suffix(".pid")
+    if pid_file.is_file():
+        try:
+            existing = int(pid_file.read_text().strip())
+            os.kill(existing, 0)
+            return 0
+        except (OSError, ValueError):
+            pass
+    child_env = os.environ.copy()
+    child_env.update(env_updates)
+    log = record(name).with_suffix(".log").open("ab")
+    pid = os.fork()
+    if pid == 0:
+        os.setsid()
+        os.dup2(log.fileno(), 1)
+        os.dup2(log.fileno(), 2)
+        os.execvpe("/bin/bash", ["bash", "-lc", command], child_env)
+        os._exit(127)
+    invocation = os.urandom(16).hex()
+    pid_file.write_text(str(pid))
+    record(name).with_suffix(".invocation").write_text(invocation)
+    return 0
+
+
+def stop(name: str) -> int:
+    pid_file = record(name).with_suffix(".pid")
+    if pid_file.is_file():
+        try:
+            os.kill(int(pid_file.read_text().strip()), 15)
+        except (OSError, ValueError):
+            pass
+        pid_file.unlink(missing_ok=True)
+    return 0
+
+
+def main() -> int:
+    verb = args()
+    if not verb:
+        return 1
+    command = verb[0]
+    if command in {"daemon-reload", "enable", "reset-failed"}:
+        return 0
+    if len(verb) < 2:
+        print(f"missing unit for {command}", file=sys.stderr)
+        return 1
+    name = verb[1]
+    if command == "show":
+        return show(name)
+    if command == "start":
+        return start(name)
+    if command == "stop":
+        return stop(name)
+    if command == "restart":
+        stop(name)
+        return start(name)
+    print(f"unsupported systemctl command: {command}", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

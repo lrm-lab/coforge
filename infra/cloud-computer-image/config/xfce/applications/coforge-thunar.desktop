@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=文件
+Name[zh_CN]=文件
+Comment=Thunar
+Exec=/usr/local/bin/coforge-thunar %U
+Icon=org.xfce.thunar
+Terminal=false
+Categories=System;FileManager;
+StartupNotify=true

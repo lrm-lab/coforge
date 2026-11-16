@@ -13,4 +13,7 @@ Part of [the documentation index](../../README.md). The Computer's `host/` runti
   `docker service update --image --force` on that service and does not remove
   either volume. Heartbeats report node and `coforge-<id>` task image ids so Web
   can offer a replace when layers differ; the runtime version is display-only.
-  `docker/Dockerfile` is the local image; its entrypoint is `coforge-computer foreground`. The proxied desktop page keeps `window.opener`; clearing it makes that window name unreachable.
+  `packages/computer/docker/Dockerfile` is the local/fixture image; staging and
+  production Swarm images live in `infra/cloud-computer-image/` (entrypoint
+  still ends at `coforge-computer foreground`). The proxied desktop page keeps
+  `window.opener`; clearing it makes that window name unreachable.

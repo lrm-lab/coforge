@@ -28,9 +28,13 @@ gh workflow run release-staging.yml --repo lrm-lab/coforge --ref main \
 
 ## 电脑镜像
 
-镜像在单独的仓库 `git@github.com:exp-repair/create_docker_image_for_pi.git` 里构建。
+镜像在本仓库 `infra/cloud-computer-image/` 构建（不再使用外仓
+`create_docker_image_for_pi`）。
 
 ```sh
+cd infra/cloud-computer-image
+cp config/coforge.env.example config/coforge.env   # COFORGE_ENV=staging
+cp config/pi.env.example config/pi.env             # 填入 LENOVO_DEEPSEEK_V4_FLASH_API_KEY
 ./scripts/build-swarm.sh
 ```
 

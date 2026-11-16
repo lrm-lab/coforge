@@ -1,0 +1,10 @@
+{
+  "ProxySettings": {
+    "ProxyMode": "fixed_servers",
+    "ProxyServer": "__LENOVO_PROXY_SERVER__",
+    "ProxyBypassList": "localhost;127.0.0.1;::1;10.0.0.0/8;172.16.0.0/12;192.168.0.0/16;*.coforge.cn;*.svc;*.cluster.local"
+  },
+  "AuthServerAllowlist": "*.lenovo.com,*.lenovo.com.cn",
+  "AuthNegotiateDelegateAllowlist": "*.lenovo.com,*.lenovo.com.cn",
+  "HomepageLocation": "https://home.lenovo.com/home"
+}

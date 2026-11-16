@@ -1,0 +1,18 @@
+#!/bin/sh
+# TigerVNC session. Started only after a client connects.
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-root}"
+mkdir -p "${XDG_RUNTIME_DIR}"
+chmod 700 "${XDG_RUNTIME_DIR}"
+config_home="${XDG_CONFIG_HOME:-${HOME}/.config}"
+mkdir -p "${config_home}/gtk-3.0"
+cp /etc/xdg/gtk-3.0/gtk.css "${config_home}/gtk-3.0/gtk.css"
+nohup /usr/local/bin/coforge-maximize-chromium >/dev/null 2>&1 &
+exec dbus-run-session -- sh -c '
+  startxfce4 &
+  pid=$!
+  sleep 1
+  /usr/local/bin/coforge-dock-ui &
+  wait "$pid"
+'
