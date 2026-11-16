@@ -113,6 +113,8 @@ The architecture invariants every change must respect are in
 | [docs/operations/staging/](docs/operations/staging/README.md) | Staging environment runbook |
 | [docs/operations/production/](docs/operations/production/README.md) | Production environment runbook |
 | [docs/operations/openviking-prototype/](docs/operations/openviking-prototype/README.md) | Non-production OpenViking prototype runtime: gates, enable/disable, data lifecycle, known issues, smoke |
+| [infra/caddy/README.md](infra/caddy/README.md) | Caddy image with the Alibaba Cloud DNS provider |
+| [docs/operations/usercontent-certificate/](docs/operations/usercontent-certificate/README.md) | User-content wildcard certificate: DNS-01 issuer, RAM users, secrets, rotation |
 | [infra/production/README.md](infra/production/README.md) | Production Compose environment (points to its runbook) |
 
 Project skills live in `.agents/skills`; `skills-lock.json` pins the upstream ones.
