@@ -250,7 +250,7 @@ function ComposerAgentsPill({
         onAnimationEnd={(event) => {
           if (leaving && event.target === event.currentTarget) onLeft();
         }}
-        className="replying-line mb-2 inline-flex max-w-full"
+        className="replying-line inline-flex max-w-full"
       >
         {listsAgents ? (
           <AriaDialogTrigger>
