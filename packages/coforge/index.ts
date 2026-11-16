@@ -1,3 +1,4 @@
+import { parseVersionArgs, formatVersionInfo } from "#src/version-commands";
 import { cliUsage } from "./src/usage";
 import { commandHelp, invalidArgument, unknownCommandError } from "./src/command-help";
 import { runMessageResolve } from "./src/message-resolve";
@@ -560,17 +561,6 @@ function validateManualIntentReasonArgs(intent: string | undefined, reason: stri
   });
 }
 
-const VERSION_USAGE = "Usage: coforge version [--json]";
-
-function parseVersionArgs(args: readonly string[]): VersionInvocation {
-  let json = false;
-  for (const arg of args) {
-    if (arg === "--json") json = true;
-    else throw new Error(VERSION_USAGE);
-  }
-  return { command: "version", ...(json ? { json: true } : {}) };
-}
-
 function parseManualArgs(args: readonly string[]): ManualInvocation {
   const sub = args[0];
   let value: string | undefined;
@@ -1006,17 +996,6 @@ export async function run(args: readonly string[], transport: MessageTransport):
     around: readOptions?.around,
     unread: readOptions?.unread,
   });
-}
-
-type VersionInfo = { cli: string; daemon?: string; computer?: string };
-
-/** `coforge version`'s text output: `CLI:`/`Daemon:`/`Computer:` lines, in that order, each
- * omitted only when unknown. `CLI` is always known; `Daemon`/`Computer` come from the live query. */
-function formatVersionInfo(info: VersionInfo): string {
-  const lines = [`CLI: ${info.cli}`];
-  if (info.daemon) lines.push(`Daemon: ${info.daemon}`);
-  if (info.computer) lines.push(`Computer: ${info.computer}`);
-  return lines.join("\n");
 }
 
 function isMessageCommand(value: string | undefined): value is MessageCommand {
