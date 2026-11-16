@@ -205,13 +205,18 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
         <UnreadStoreContext value={unread.store}>
           <main
             data-panel-cards
-            className="flex h-full min-w-0 flex-col bg-primary lg:flex-row lg:gap-2 lg:bg-transparent"
+            // The area `ConversationSplit` measures against the list's width.
+            data-chat-cards
+            className="group/chat flex h-full min-w-0 flex-col bg-primary lg:flex-row lg:gap-2 lg:bg-transparent"
           >
             <section
               className={cx(
                 "relative min-h-0 flex-1 flex-col lg:flex lg:flex-none lg:overflow-hidden lg:rounded-xl lg:bg-primary",
                 LIST_COLUMN_CLASS,
                 showList ? "flex" : "hidden",
+                // No room for the list beside the chat and an open thread or profile:
+                // `ConversationSplit` asks it to give way; closing the pane brings it back.
+                "lg:group-has-[[data-crowd-list]]/chat:hidden",
               )}
             >
               {desktop ? (

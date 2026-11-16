@@ -6,12 +6,15 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { ConversationSlot } from "#src/features/agents/profile-panel/profile-panel-slot";
 
+import { CONVERSATION_LIST_COLUMN } from "./conversation-list-width";
 import { localLayoutStorage } from "./local-layout-storage";
 
 /** The narrowest the conversation and the thread/profile pane may be dragged; together, the
  * narrowest area that shows them side by side. */
 const MAIN_PANE_MIN_REM = 24;
 const SIDE_PANE_MIN_REM = 22;
+/** The list column's width before one is set (`LIST_COLUMN_CLASS`'s fallback). */
+const LIST_COLUMN_DEFAULT_REM = 18;
 
 /** The conversation beside its thread or profile pane, resizable while there is room for both. */
 export function ConversationSplit({
@@ -43,11 +46,27 @@ export function ConversationSplit({
   // covers the conversation, as on a phone, instead of squeezing either into a strip.
   const splitRef = useRef<HTMLDivElement>(null);
   const [splitFits, setSplitFits] = useState(true);
+  // Whether the Chat list must give way to an open pane (`data-crowd-list`; `splitLayout`).
+  const [listCrowds, setListCrowds] = useState(false);
   const measureSplit = useCallback(() => {
     const element = splitRef.current;
     if (!element) return;
     const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
-    setSplitFits(element.clientWidth >= (MAIN_PANE_MIN_REM + SIDE_PANE_MIN_REM) * rem);
+    const cards = element.closest<HTMLElement>("[data-chat-cards]");
+    const listBeside = cards !== null && getComputedStyle(cards).flexDirection === "row";
+    const layout = splitLayout({
+      rem,
+      pane: element.clientWidth,
+      beside: listBeside
+        ? {
+            area: cards.clientWidth,
+            list: listColumnWidth(rem),
+            gap: Number.parseFloat(getComputedStyle(cards).columnGap) || 0,
+          }
+        : undefined,
+    });
+    setSplitFits(layout.splitFits);
+    setListCrowds(layout.listCrowds);
   }, []);
   const splitShown = wideViewport && splitFits;
   // Each layout renders its own measured wrapper, so observe again whenever the layout switches.
@@ -58,6 +77,8 @@ export function ConversationSplit({
     measureSplit();
     const observer = new ResizeObserver(measureSplit);
     observer.observe(element);
+    const cards = element.closest("[data-chat-cards]");
+    if (cards) observer.observe(cards);
     return () => observer.disconnect();
   }, [measureSplit, splitShown]);
   if (!splitShown || threadAlone) {
@@ -66,7 +87,11 @@ export function ConversationSplit({
     // shown alone fills the pane at every width without the conversation, which mounts afresh at
     // its jump message once it is shown.
     return (
-      <div ref={splitRef} className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div
+        ref={splitRef}
+        data-crowd-list={visibleSlot && !threadAlone && listCrowds ? "" : undefined}
+        className="flex min-h-0 min-w-0 flex-1 flex-col"
+      >
         {!threadAlone && (
           <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", visibleSlot && "hidden")}>
             {main}
@@ -77,8 +102,13 @@ export function ConversationSplit({
     );
   }
   return (
-    // Measured, so the split knows when its panes stop fitting side by side.
-    <div ref={splitRef} className="flex min-h-0 min-w-0 flex-1">
+    // Measured, so the split knows when its panes stop fitting side by side. `data-crowd-list` (here
+    // and above) asks the conversation list to give way while a pane is open beside the chat.
+    <div
+      ref={splitRef}
+      data-crowd-list={visibleSlot && listCrowds ? "" : undefined}
+      className="flex min-h-0 min-w-0 flex-1"
+    >
       <Group
         id="conversation"
         orientation="horizontal"
@@ -115,4 +145,36 @@ export function ConversationSplit({
       </Group>
     </div>
   );
+}
+
+/**
+ * Whether the conversation and its open pane fit side by side, and whether the Chat list beside
+ * them (`beside`, on a desktop) must give way for it. Judged from the whole Chat area less the
+ * list's set width, never from the pane's own width, which grows when the list hides: that would
+ * bring the list back, and round again. Where even the whole area is too narrow (a large text
+ * size), the list still gives way, so the open pane covers the conversation as on a phone.
+ */
+export function splitLayout({
+  rem,
+  pane,
+  beside,
+}: {
+  rem: number;
+  pane: number;
+  beside?: { area: number; list: number; gap: number };
+}): { splitFits: boolean; listCrowds: boolean } {
+  const needed = (MAIN_PANE_MIN_REM + SIDE_PANE_MIN_REM) * rem;
+  if (!beside) return { splitFits: pane >= needed, listCrowds: false };
+  const besideList = beside.area - beside.list - beside.gap;
+  const listCrowds = besideList < needed;
+  return { splitFits: (listCrowds ? beside.area : besideList) >= needed, listCrowds };
+}
+
+/** The Chat list's width as set (`CONVERSATION_LIST_COLUMN`), whether or not it is showing. */
+function listColumnWidth(rem: number) {
+  const set = getComputedStyle(document.documentElement).getPropertyValue(
+    CONVERSATION_LIST_COLUMN.property,
+  );
+  const width = Number.parseFloat(set);
+  return Number.isFinite(width) && width > 0 ? width : LIST_COLUMN_DEFAULT_REM * rem;
 }
