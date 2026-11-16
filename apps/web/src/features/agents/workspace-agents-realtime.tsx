@@ -32,12 +32,12 @@ import {
   workspaceActivityQuery,
   type RecentActivityByAgent,
 } from "./agent-activity-queries";
-import { AGENT_MODELS_KEY, agentModelsQueryKey } from "./agent-models";
+import { agentModelsQueryKey } from "./agent-models";
 import type { AgentMascot } from "./agent-mascot";
 import type { ExtraAgent } from "./extra-agent";
 import { loadExtraAgents } from "./extra-agents.functions";
 import {
-  createAgentDirectoryInvalidator,
+  useAgentDirectoryInvalidator,
   extraAgentsQueryKey,
   extraLiveAgent,
   refreshedAgents,
@@ -152,19 +152,7 @@ export function WorkspaceAgentsProvider({
       }),
     [loadExtras, watched],
   );
-  const directoryInvalidator = useMemo(
-    () =>
-      createAgentDirectoryInvalidator(() => {
-        void queryClient.invalidateQueries({
-          queryKey: ["conversation", "mentionables"],
-          refetchType: "active",
-        });
-        // The message headers' model and description lines.
-        void queryClient.invalidateQueries({ queryKey: AGENT_MODELS_KEY, refetchType: "active" });
-      }),
-    [queryClient],
-  );
-  useEffect(() => () => directoryInvalidator.cancel(), [directoryInvalidator]);
+  const directoryInvalidator = useAgentDirectoryInvalidator(queryClient);
 
   // The Agents visible to this viewer beyond their own `listAgents` roster (another member's
   // public Agents, and, for an owner/admin or a private Agent's creator, private ones): each is a

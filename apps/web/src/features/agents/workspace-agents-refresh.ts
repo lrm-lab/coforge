@@ -1,4 +1,6 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { QueryClient } from "@tanstack/react-query";
+import { AGENT_MODELS_KEY } from "./agent-models";
 import type { ExtraAgent } from "./extra-agent";
 import type { LiveAgent } from "./workspace-agents-realtime";
 
@@ -76,4 +78,21 @@ export function createAgentDirectoryInvalidator(
       timer = undefined;
     },
   };
+}
+
+export function useAgentDirectoryInvalidator(queryClient: QueryClient) {
+  const directoryInvalidator = useMemo(
+    () =>
+      createAgentDirectoryInvalidator(() => {
+        void queryClient.invalidateQueries({
+          queryKey: ["conversation", "mentionables"],
+          refetchType: "active",
+        });
+        // The message headers' model and description lines.
+        void queryClient.invalidateQueries({ queryKey: AGENT_MODELS_KEY, refetchType: "active" });
+      }),
+    [queryClient],
+  );
+  useEffect(() => () => directoryInvalidator.cancel(), [directoryInvalidator]);
+  return directoryInvalidator;
 }
