@@ -44,6 +44,7 @@ export function QuestionCard({ card, asker }: { card: AskingView; asker: string 
         kbd={kbd}
         setKbd={setKbd}
         onHandled={() => setHandledHere(true)}
+        focusAfter={() => cards?.waitingKeysTarget(view.messageId) ?? box.current}
       />
     );
   else {
@@ -118,8 +119,9 @@ export function QuestionCard({ card, asker }: { card: AskingView; asker: string 
       data-question-at={pending && several ? tab : undefined}
       data-question-keys={pending && kbd ? "" : undefined}
       data-no-row-tap
+      tabIndex={-1}
       className={cn(
-        "mt-1 flex max-w-md flex-col rounded-xl border border-secondary bg-primary p-1 max-sm:max-w-none",
+        "mt-1 flex max-w-md flex-col rounded-xl border border-secondary bg-primary p-1 outline-none max-sm:max-w-none",
         pending && "focus-within:border-primary",
       )}
     >

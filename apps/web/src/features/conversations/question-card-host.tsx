@@ -45,6 +45,7 @@ type QuestionCards = {
   submit: (view: AskingView, drafts: Drafts) => Promise<void>;
   decline: (view: AskingView) => Promise<void>;
   focusWaiting: (by: 1 | -1, fromId?: string) => boolean;
+  waitingKeysTarget: (afterId: string) => HTMLElement | null | undefined;
 };
 
 const QuestionCardsContext = createContext<QuestionCards | null>(null);
@@ -85,15 +86,25 @@ export function QuestionCardsHost({
     [fresh],
   );
 
-  const focusWaiting = useLatestCallback((by: 1 | -1, fromId?: string) => {
-    const waiting = messages.flatMap((message) => {
+  const waitingIds = () =>
+    messages.flatMap((message) => {
       const base = message.actionCard;
       if (!isAskingView(base)) return [];
       const view = viewOf(base);
       return view.state === "pending" && view.canCommit ? [message.id] : [];
     });
+  const waitingKeysTarget = useLatestCallback((afterId: string) => {
+    const waiting = waitingIds().filter((id) => id !== afterId);
+    const ids = messages.map((message) => message.id);
+    const below = ids.slice(ids.indexOf(afterId) + 1);
+    const id = below.find((each) => waiting.includes(each)) ?? waiting[0];
+    return id ? cardKeysTarget(paneRef.current, id) : null;
+  });
+  const focusWaiting = useLatestCallback((by: 1 | -1, fromId?: string) => {
+    const waiting = waitingIds();
     if (!waiting.length) return false;
     const at = fromId ? waiting.indexOf(fromId) : -1;
+    if (at >= 0 && waiting.length === 1) return false;
     const id =
       at < 0
         ? waiting[by > 0 ? 0 : waiting.length - 1]!
@@ -158,8 +169,8 @@ export function QuestionCardsHost({
   );
 
   const value = useMemo(
-    () => ({ viewOf, submit, decline, focusWaiting }),
-    [viewOf, submit, decline, focusWaiting],
+    () => ({ viewOf, submit, decline, focusWaiting, waitingKeysTarget }),
+    [viewOf, submit, decline, focusWaiting, waitingKeysTarget],
   );
   return <QuestionCardsContext value={value}>{children}</QuestionCardsContext>;
 }

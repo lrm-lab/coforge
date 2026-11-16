@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -34,6 +35,7 @@ export function QuestionAsk({
   kbd,
   setKbd,
   onHandled,
+  focusAfter,
 }: {
   view: AskingView;
   tab: number;
@@ -44,6 +46,7 @@ export function QuestionAsk({
   status: ReactNode;
   due?: string;
   onHandled: () => void;
+  focusAfter: () => HTMLElement | null | undefined;
 }) {
   const cards = useQuestionCards();
   const [drafts, setDraft] = useQuestionDrafts(view);
@@ -56,7 +59,7 @@ export function QuestionAsk({
   const [error, setError] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
   const pageRef = useRef<HTMLDivElement>(null);
-  const tallest = useRef(0);
+  const tallest = useRef({ width: 0, height: 0 });
   const otherRef = useRef<HTMLInputElement | null>(null);
   const turnTimer = useRef<number | undefined>(undefined);
   const size = useDialogControlSize();
@@ -68,15 +71,17 @@ export function QuestionAsk({
   const anyAnswered = questions.some((each) => answered(drafts[each.id]));
   const keyState = { questions, drafts, tab, hi, kbd, readOnly };
   const otherRow = question.other ? question.options.length : -1;
-  const listId = `${view.messageId}-q${tab}`;
+  const listId = `${useId()}-q${tab}`;
 
   useLayoutEffect(() => {
     const page = pageRef.current;
     if (!page) return;
     page.style.minHeight = "";
     if (!several || coarse) return;
-    tallest.current = Math.max(tallest.current, page.offsetHeight);
-    page.style.minHeight = `${tallest.current}px`;
+    const width = page.offsetWidth;
+    if (width !== tallest.current.width) tallest.current = { width, height: 0 };
+    tallest.current.height = Math.max(tallest.current.height, page.offsetHeight);
+    page.style.minHeight = `${tallest.current.height}px`;
   }, [tab, several, coarse]);
   useLayoutEffect(() => {
     if (!kbd) return;
@@ -107,9 +112,11 @@ export function QuestionAsk({
     if (sending) return;
     setSending(true);
     setError("");
+    const keys = rootRef.current?.contains(document.activeElement);
+    onHandled();
     try {
       await cards!.submit(view, { ...drafts, ...patch });
-      onHandled();
+      if (keys) requestAnimationFrame(() => focusAfter()?.focus({ preventScroll: true }));
     } catch {
       setError(m.question_card_send_failed());
     } finally {
@@ -146,15 +153,18 @@ export function QuestionAsk({
     }, TURN_AFTER_PICK_MS);
   }
 
-  function leave() {
-    const pane = rootRef.current?.closest("[data-conversation-pane]");
-    focusDraftEnd(pane?.querySelector<HTMLTextAreaElement>("[data-composer]") ?? null);
+  function composer() {
+    const field = rootRef.current
+      ?.closest("[data-conversation-pane]")
+      ?.querySelector<HTMLTextAreaElement>("textarea[data-composer]");
+    return field?.getClientRects().length ? field : null;
   }
 
   function act(action: CardKeyAction) {
     switch (action.do) {
       case "leave":
-        return leave();
+        if (coarse) return rootRef.current?.querySelector<HTMLElement>(":focus")?.blur();
+        return focusDraftEnd(composer());
       case "switch":
         return cards?.focusWaiting(action.by, view.messageId);
       case "showKeys":
@@ -188,6 +198,7 @@ export function QuestionAsk({
       onControl: Boolean(target.closest("button, a")),
     });
     if (action.do === "pass" || isImeComposing(event)) return;
+    if (action.do === "leave" && !coarse && !composer()) return;
     event.preventDefault();
     event.stopPropagation();
     act(action);
@@ -252,10 +263,10 @@ export function QuestionAsk({
               asker={asker}
               questions={questions.length}
               placement="top end"
-              fallbackFocus={() => rootRef.current?.closest<HTMLElement>("[data-question-card]")}
+              fallbackFocus={focusAfter}
               onDecline={async () => {
-                await cards!.decline(view);
                 onHandled();
+                await cards!.decline(view);
               }}
             >
               <Button data-question-decline="" size={size} color="link-gray" className="px-2">
