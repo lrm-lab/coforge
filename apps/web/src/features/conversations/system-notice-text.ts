@@ -176,6 +176,21 @@ function noticeText(notice: SystemNotice, locale?: Locale, names: Names = TEXT_N
         },
         { locale },
       )}`;
+    case "task.priority_changed":
+      return addressed(
+        `🏷️ ${m.system_notice_task_priority_changed(
+          {
+            actor: shown(notice.params.actor),
+            task: reference(notice.params.task, locale),
+            from: notice.params.from,
+            to: notice.params.to,
+          },
+          { locale },
+        )}`,
+        notice.params.owner,
+        locale,
+        names,
+      );
     case "task.unassigned":
       return m.system_notice_task_unassigned(
         {

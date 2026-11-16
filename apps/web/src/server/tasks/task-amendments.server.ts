@@ -3,15 +3,21 @@ import {
   taskStatusAwaitsReceipt,
   taskStatusMoveAllowed,
   taskStatusNeedsOwner,
+  taskPriorityRank,
   type TaskCommand,
   type TaskHistoryChange,
   type TaskResult,
 } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
-import { noticeActor, noticeText } from "./task-notices.server";
+import { assigneeMention, noticeActor, noticeText } from "./task-notices.server";
 import { historyEventView } from "./task-history.server";
-import { storedTaskStatus, readTaskText, taskMentions } from "./task-view.server";
+import {
+  storedTaskPriority,
+  storedTaskStatus,
+  readTaskText,
+  taskMentions,
+} from "./task-view.server";
 import { relatedTasks, taskViewOf, taskViewsOf } from "./task-relations.server";
 import {
   applyRelationPlan,
@@ -37,6 +43,7 @@ import { signalTaskChange, announceTasks, announceNeighbours } from "./task-publ
 import { requireManager, isTaskManager } from "./task-assignees.server";
 import { rememberTaskProject, resolveTaskProject } from "./task-projects.server";
 import { assertCanSetPriority } from "./task-priority.server";
+import { indexedRequestId } from "./task-request-ids.server";
 import { LABELS_PER_TASK_MAX, labelsChange, labelView, resolveTaskLabels } from "./labels.server";
 
 export async function updateTaskStatus(
@@ -74,6 +81,7 @@ export async function updateTaskStatus(
       throw new AppError("CONFLICT");
   }
   const updated = await withNotices(ports, conversation, async (tx, notices) => {
+    const previousPriority = storedTaskPriority(task.priority);
     // Under the conversation lock, so a blocker finishing at the same time is seen either way.
     const { task: updated } = await commitTaskChange(
       tx,
@@ -99,6 +107,38 @@ export async function updateTaskStatus(
           },
         },
       }));
+    if (priority !== undefined) {
+      const owner = updated.owner?.leftAt ? null : updated.owner;
+      const shouldWake =
+        updated.owner?.agentId &&
+        updated.owner.id !== member.id &&
+        (taskPriorityRank(priority) < taskPriorityRank(previousPriority) || priority === "urgent");
+      await notices.toOwner({
+        id: await indexedRequestId(`${updated.id}:priority:${updated.revision}`, 1),
+        task: updated,
+        owner,
+        deliverTo: shouldWake ? (updated.owner?.agentId ?? null) : null,
+        content: (quoted, _related) => ({
+          body: noticeText.priorityChanged(
+            noticeActor(member).displayName,
+            quoted,
+            previousPriority,
+            priority,
+            owner ? assigneeMention(owner) : null,
+          ),
+          system: {
+            kind: "task.priority_changed",
+            params: {
+              actor: noticeActor(member),
+              task: quoted,
+              from: previousPriority,
+              to: priority,
+              owner: owner ? noticeActor(owner) : null,
+            },
+          },
+        }),
+      });
+    }
     await noticeStatusFollowUps(tx, notices, member, task, updated);
     return updated;
   });
