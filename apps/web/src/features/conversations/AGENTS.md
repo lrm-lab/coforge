@@ -35,6 +35,9 @@ These rules apply to `src/features/conversations/`. Forwarding a message (the Fo
 - A window holds top-level messages, each thread as a summary (`threads`); a thread's replies
   are read when its pane opens (`thread-queries.ts`), and what arrives later goes through
   `thread-cache.ts`. Index, around-window and thread reads share one Server Function seam.
+  What arrives is written into the window once no read of it is under way (`windowReadSettled`):
+  a read, loading an older or newer page too, lands the pages it started from over anything
+  written meanwhile.
 - A message a server function returns holds JSON-compatible values only (a time
   is an ISO string, as `mapBrowserMessage` gives it): TanStack Query's structural
   sharing then keeps each unchanged message's object across a re-read (focus,

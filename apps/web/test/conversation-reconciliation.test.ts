@@ -197,7 +197,7 @@ test("an open is caught up only once a read has landed, after what it read was m
   const reconciler = createConversationReconciler(
     { afterSequence: 5 },
     () => (++reads === 1 ? timeout() : Promise.resolve(arrived)),
-    () => heard.push(reconciler.caughtUp()),
+    () => void heard.push(reconciler.caughtUp()),
     fast,
   );
   reconciler.subscribe(() => heard.push(reconciler.caughtUp()));
@@ -212,6 +212,25 @@ test("an open is caught up only once a read has landed, after what it read was m
   // Heard once: a later read merges as caught up, and no one is told again.
   await reconciler.reconcile();
   expect(heard).toEqual([false, false, true, true]);
+});
+
+test("a read is done only once what it read is merged (task #110)", async () => {
+  let merged = () => {};
+  const merging = new Promise<void>((resolve) => (merged = resolve));
+  const reconciler = createConversationReconciler(
+    { afterSequence: 5 },
+    async () => arrived,
+    () => merging,
+  );
+  let settled = false;
+  const read = reconciler.reconcile().then(() => (settled = true));
+
+  // The merge waits for a read of the window under way: the open is not caught up meanwhile.
+  await wait(5);
+  expect({ caughtUp: reconciler.caughtUp(), settled }).toEqual({ caughtUp: false, settled: false });
+  merged();
+  await read;
+  expect(reconciler.caughtUp()).toBe(true);
 });
 
 test("failed catch-ups are counted and heard until one lands", async () => {

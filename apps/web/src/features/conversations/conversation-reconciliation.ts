@@ -23,7 +23,8 @@ export const RECONCILE_RETRY = { firstMs: 1_000, maxMs: 30_000 };
 export function createConversationReconciler<T extends ConversationMessage>(
   start: ConversationUpdatesCursor,
   loadPage: (cursor: ConversationUpdatesCursor, signal: AbortSignal) => Promise<T[]>,
-  mergePage: (messages: T[]) => void,
+  /** Folds a page into the window; a promise it returns, the read waits for. */
+  mergePage: (messages: T[]) => unknown,
   {
     retry = RECONCILE_RETRY,
     canRetry = () => typeof document === "undefined" || document.visibilityState === "visible",
@@ -51,7 +52,7 @@ export function createConversationReconciler<T extends ConversationMessage>(
         cursor = {
           afterSequence: Math.max(cursor.afterSequence, ...page.map((m) => m.sequence)),
         };
-        mergePage(page);
+        await mergePage(page);
       }
     } while (page.length === 100);
   };

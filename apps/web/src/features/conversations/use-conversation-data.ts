@@ -112,7 +112,7 @@ export function useChannelConversation(channelId: string) {
             ...(asTask && taskPriority && { taskPriority }),
           },
         });
-        page.mergeUpdates([message]);
+        await page.mergeUpdates([message]);
         if (threadRootId) page.setThreadFollowed(threadRootId, true);
         void page.reconciliation.reconcile();
         return message;
@@ -200,7 +200,7 @@ export function useDirectConversation(conversationId: string) {
             ...(asTask && taskPriority && { taskPriority }),
           },
         });
-        page.mergeUpdates([message]);
+        await page.mergeUpdates([message]);
         void page.reconciliation.reconcile();
         return message;
       },

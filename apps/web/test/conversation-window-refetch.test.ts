@@ -3,6 +3,7 @@ import { InfiniteQueryObserver, QueryClient, type InfiniteData } from "@tanstack
 
 import { mergeMessages } from "#src/features/conversations/conversation-messages";
 import { conversationPages } from "#src/features/conversations/conversation-window-query";
+import { windowReadSettled } from "#src/features/conversations/conversation-window-reads";
 import {
   aroundWindowCursor,
   CONVERSATION_WINDOW_MAX_PAGES,
@@ -227,4 +228,50 @@ test("a refetch of a window read around an old message re-reads that window (tas
     around.map((row) => row.sequence),
   ]);
   expect(newestPage(opened.window()).hasNewer).toBe(true);
+});
+
+/** A server whose older pages answer only once `release` is called, as on a slow network. */
+function slowOlderPages(count: number) {
+  const server = fakeServer(count);
+  const read = server.loadPage;
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  server.loadPage = async (request) => {
+    if (request.beforeSequence !== undefined) await held;
+    return read(request);
+  };
+  return { server, release };
+}
+
+test("an older page lands the pages it started from over a write made while it loaded", async () => {
+  const { server, release } = slowOlderPages(200);
+  const opened = openWindow(server);
+  await opened.client.fetchInfiniteQuery(opened.query);
+  const older = opened.observer.fetchPreviousPage();
+
+  receive(opened, server, 2);
+  expect(newestPage(opened.window()).messages.at(-1)!.sequence).toBe(202);
+  release();
+  await older;
+
+  // Why the catch-up waits (task #110): the page it folded in is gone, and its cursor is past it.
+  expect(opened.window().pages).toHaveLength(2);
+  expect(newestPage(opened.window()).messages.at(-1)!.sequence).toBe(200);
+});
+
+test("what arrives while an older page loads is written once it has landed (task #110)", async () => {
+  const { server, release } = slowOlderPages(200);
+  const opened = openWindow(server);
+  await opened.client.fetchInfiniteQuery(opened.query);
+  const older = opened.observer.fetchPreviousPage();
+
+  // As `mergeUpdates` writes: once no read of the window is under way.
+  const merged = windowReadSettled(opened.client, QUERY_KEY).then(() => receive(opened, server, 2));
+  await Promise.resolve();
+  expect(newestPage(opened.window()).messages.at(-1)!.sequence).toBe(200);
+  release();
+  await Promise.all([older, merged]);
+
+  expect(opened.window().pages).toHaveLength(2);
+  expect(newestPage(opened.window()).messages.at(-1)!.sequence).toBe(202);
 });

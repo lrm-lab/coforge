@@ -14,7 +14,8 @@ export function onNetworkRead<D>(
   return queryClient.getQueryCache().subscribe((event) => {
     if (event.type !== "updated" || event.query.queryHash !== queryHash) return;
     if (event.action.type !== "success" || event.action.manual) return;
-    // Loading older or newer pages keeps the pages already held as they were: not a read of them.
+    // Loading older or newer pages keeps the pages held as they were when it started: not a read
+    // of them.
     if (event.query.state.fetchMeta?.fetchMore) return;
     listener(event.action.data as D);
   });
@@ -24,7 +25,9 @@ export function onNetworkRead<D>(
  * Waits until the window `queryKey` has no read of its own in flight. A read lands its answer over
  * whatever was written meanwhile, and a refetch walks the cursors it started from: a window
  * replaced with the one around a message while it ran (opening on a message in a stale window,
- * task #358) went back to the stale pages, without the message.
+ * task #358) went back to the stale pages, without the message. Loading an older or newer page
+ * does the same: it answers with the pages it started from and the new one, so a message folded
+ * into the window while it ran is gone (task #110).
  */
 export async function windowReadSettled(queryClient: QueryClient, queryKey: readonly unknown[]) {
   for (;;) {

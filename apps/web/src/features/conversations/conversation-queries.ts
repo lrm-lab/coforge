@@ -207,9 +207,13 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
 
   /** Fold freshly received messages into the loaded conversation: top-level ones into the latest
    * window, unless pinned to an older one; replies into their threads. Roots go first, so a reply
-   * that arrives with its own root finds the root loaded. */
-  const mergeUpdates = (updates: M[]) => {
+   * that arrives with its own root finds the root loaded. Written once no read of the window is
+   * under way (`windowReadSettled`): one lands the pages it started from over what was written
+   * meanwhile, and the catch-up, past those messages already, would never read them again (task
+   * #110). */
+  const mergeUpdates = async (updates: M[]) => {
     onArrived?.(conversationId, updates);
+    await windowReadSettled(queryClient, query.queryKey);
     const roots = updates.filter((message) => !message.threadRootId);
     if (roots.length)
       setPages((pages) => {
