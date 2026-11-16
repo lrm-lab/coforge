@@ -37,9 +37,6 @@
   /* The current left-navigation item's fill (task #222), its own token so `bg-tertiary`, which it
      used, stays put everywhere else. Re-pointed under `.dark-mode` below. */
   --color-nav-bg-current: #efeff7;
-  /* A text field's focus border (task #227): one step up from its resting border, since every
-     click lands here. The keyboard's focus ring says more. Re-pointed under `.dark-mode` below. */
-  --color-border-input-focus: var(--color-fg-quaternary);
 
   /* A text field's states from the design spec (task #104, jing 11-13, typing state revised
      11-16): the resting border, the typing border (2px: the 1px border plus a 1px inset ring, so
@@ -188,7 +185,6 @@
     --color-sidebar-item-active: var(--color-sidebar-accent);
     /* Dark mode keeps the grey it had until the requester picks one. */
     --color-nav-bg-current: var(--color-bg-tertiary);
-    --color-border-input-focus: var(--color-fg-quaternary);
     /* The spec's field states on a dark page: white text and the same typing violet (both the
        spec's); the resting border and placeholder are ours, the spec has none for dark. */
     --color-field-border: var(--color-border-primary);
