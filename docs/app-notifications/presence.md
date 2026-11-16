@@ -56,11 +56,15 @@ them loses that expiry event. A Computer that goes offline does not make its Age
 
 ## Cost while the feature is off
 
-While `appNotificationsPossible()` is false (the flag file does not define `app-notifications`;
-production's default) both puts are the commands they always were: no extra Redis write, no Workspace
+While neither `appNotificationsPossible()` nor `computerOfflineAlertsPossible()` holds (the flag
+file defines neither `app-notifications` nor `computer-offline-alerts`; production's default) both
+puts are the commands they always were: no extra Redis write, no Workspace
 lookup, no queue send, and a sweep tick returns before any Redis call (its connection is opened at
 the first tick that runs); the Agent put script is byte-for-byte the one it always was (a test pins
-it). The cost is per process, not per Workspace: while the flag is defined anywhere, every put in
+it). Either flag alone puts the caches on their tracked path: `computer-offline-alerts` shares the
+same transitions for its own episode markers (`server/computers/computer-offline-alerts.server.ts`)
+without needing app notifications. The cost is per process, not per Workspace: while a flag is
+defined anywhere, every put in
 every Workspace takes the tracked path and the sorted set holds the fleet's active Agents and online
 Computers, and the Workspace's slug is read (cached for a minute) before the per-Workspace flag is
 evaluated. The status caches report to the observer the composition root sets

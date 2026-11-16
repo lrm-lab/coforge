@@ -170,10 +170,13 @@ let stopRegistered = false;
 
 /**
  * Idempotent per process; called by the Centrifugo RPC composition next to the Agent activity
- * sweep. Inert while `appNotificationsPossible()` is false (a tick returns before any Redis
- * call), so a deployment without app notifications pays for a timer and nothing else.
+ * sweep. Inert while its `possible()` is false (a tick returns before any Redis call), so a
+ * deployment nothing can notify pays for a timer and nothing else.
  */
-export function ensurePresenceSweep(): PresenceSweep {
+export function ensurePresenceSweep(
+  observer: PresenceObserver = appNotificationPresence,
+  possible: () => boolean = appNotificationsPossible,
+): PresenceSweep {
   if (!singleton) {
     // Opened at the first tick that runs, so a deployment that never turns the feature on opens no
     // connection, and one that turns it on with a flag file reload gets it then.
@@ -182,8 +185,8 @@ export function ensurePresenceSweep(): PresenceSweep {
     singleton = new PresenceSweep({
       redis: { eval: (script, keys, ...args) => redis().eval(script, keys, ...args) },
       lock: { acquire: (instanceId) => new RedisPresenceSweepLock(redis()).acquire(instanceId) },
-      observer: appNotificationPresence,
-      possible: appNotificationsPossible,
+      observer,
+      possible,
     });
   }
   if (!stopRegistered) {

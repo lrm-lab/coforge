@@ -89,6 +89,17 @@ To roll back, disable or remove the flag. New protocol fields, local channel fil
 remain harmless; subsequent upgrades immediately use the legacy path. Re-enable the same flag after
 the cohort is healthy without reinstalling or changing the Computer data.
 
+### Computer offline alerts
+
+`computer-offline-alerts` is dark by default. While it is defined, the Computer status cache takes
+its tracked path (one EVAL per 30-second refresh per Workspace binding instead of a SET — the same
+path `app-notifications` already uses), offline episodes are marked in Redis, and a sweep DMs the
+Computer's owner through their Workspace assistant once it has been offline 15 minutes. Enable it
+for everyone once the web deploy carrying it is live; disabling it stops new episode markers and
+alerts. A marker written before a disable can outlive its episode because no reports reach the
+observer while the flag is off, so before alerting the sweep re-checks the Computer's live status
+keys: one still saying `online` ends the episode without a message.
+
 ### Agent context view rollout
 
 `agentContextView` is the switch for `coforge context search` and `coforge context read` — an

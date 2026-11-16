@@ -37,6 +37,21 @@ const noObserver: PresenceObserver = {
   computerPresence: () => {},
 };
 
+/** Several observers behind one: enabled while any member is, and every report goes to all of
+ * them (each gates itself). The composition root's way to serve app notifications and Computer
+ * offline alerts from the same status-cache reports. */
+export function fanOutPresenceObservers(...observers: PresenceObserver[]): PresenceObserver {
+  return {
+    enabled: () => observers.some((observer) => observer.enabled()),
+    agentStatus: (change) => {
+      for (const observer of observers) observer.agentStatus(change);
+    },
+    computerPresence: (change) => {
+      for (const observer of observers) observer.computerPresence(change);
+    },
+  };
+}
+
 let current: PresenceObserver = noObserver;
 
 /** The observer the status caches report to. Set once by the composition root
