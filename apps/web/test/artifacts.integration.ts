@@ -4,6 +4,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import {
   Artifacts,
   ARTIFACT_BINARY_LIMIT,
+  ARTIFACT_ENTRY_READ_LIMIT,
   ARTIFACT_FILE_LIMIT,
   ARTIFACT_TEXT_LIMIT,
   type ArtifactBlobInfo,
@@ -228,6 +229,7 @@ test("size and kind come from the blob, not the request", async () => {
   blob("sha-big-text", "text", ARTIFACT_TEXT_LIMIT + 1);
   blob("sha-big-image", "image", ARTIFACT_BINARY_LIMIT + 1);
   blob("sha-ok-image", "image", ARTIFACT_BINARY_LIMIT);
+  blob("sha-ok-text");
   const artifact = await create("sizes");
   await expect(
     artifacts.push({
@@ -255,23 +257,58 @@ test("size and kind come from the blob, not the request", async () => {
     baseVersion: 0,
     publisher: { agentId },
     idempotencyKey: "size-3",
-    files: [file("index.md", "sha-ok-image")],
+    files: [file("index.md", "sha-ok-text"), file("photo.png", "sha-ok-image")],
   });
   expect(ok.status).toBe("created");
   const read = await artifacts.read({ workspaceId, reader: { userId }, artifactId: artifact.id });
-  expect(read.files[0]).toMatchObject({ kind: "image", sizeBytes: ARTIFACT_BINARY_LIMIT });
+  expect(read.files.find((entry) => entry.path === "photo.png")).toMatchObject({
+    kind: "image",
+    sizeBytes: ARTIFACT_BINARY_LIMIT,
+  });
 });
 
-test("an entry file has no limit of its own: a text over 2 MiB is stored as any file is", async () => {
-  blob("sha-big-entry", "text", 3 * 1024 * 1024);
+test("an entry file over 2 MiB is refused: the page could never show it whole", async () => {
+  blob("sha-big-entry", "text", ARTIFACT_ENTRY_READ_LIMIT + 1);
+  blob("sha-small-entry");
   const artifact = await create("big-entry");
+  // As a push's entry…
+  await expect(
+    artifacts.push({
+      workspaceId,
+      artifactId: artifact.id,
+      baseVersion: 0,
+      publisher: { agentId },
+      idempotencyKey: "big-entry-1",
+      files: [file("index.md", "sha-big-entry")],
+    }),
+  ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId: "artifact-entry-too-large" });
+  // …and as a create's version 1, which leaves no artifact row behind.
+  await expect(
+    artifacts.create({
+      workspaceId,
+      home: { kind: "workspace" },
+      name: `big-entry-v1-${handle}`,
+      entryPath: "index.md",
+      author: { agentId },
+      version: {
+        files: [file("index.md", "sha-big-entry")],
+        idempotencyKey: "big-entry-v1",
+      },
+    }),
+  ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId: "artifact-entry-too-large" });
+  expect(
+    await db.artifact.findFirst({
+      where: { workspaceId, name: `big-entry-v1-${handle}` },
+    }),
+  ).toBeNull();
+  // The same bytes as a non-entry file are stored as any file is.
   const pushed = await artifacts.push({
     workspaceId,
     artifactId: artifact.id,
     baseVersion: 0,
     publisher: { agentId },
-    idempotencyKey: "big-entry-1",
-    files: [file("index.md", "sha-big-entry")],
+    idempotencyKey: "big-entry-2",
+    files: [file("index.md", "sha-small-entry"), file("data.md", "sha-big-entry")],
   });
   expect(pushed.status).toBe("created");
 });

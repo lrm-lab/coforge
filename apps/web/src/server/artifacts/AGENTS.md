@@ -48,9 +48,10 @@ The artifacts module follows the reference product, Raft; add nothing it does no
   authors or publishes: `Artifact.authorAgentId` and `ArtifactVersion.publisherAgentId` are the
   only writer columns. People read, comment, share and delete.
 - A push over an older base merges by path only (`refuseOverlap`): a file or setting both sides
-  changed refuses the push with `artifact-base-moved`. Nothing merges inside a file, and no entry
-  file has a size limit of its own (`ARTIFACT_ENTRY_READ_LIMIT` bounds only what the server reads
-  whole to show).
+  changed refuses the push with `artifact-base-moved`. Nothing merges inside a file. The entry
+  file is what the page shows whole, so a push or create whose entry exceeds
+  `ARTIFACT_ENTRY_READ_LIMIT` (2 MiB) is refused (`artifact-entry-too-large`): a larger entry
+  could only render blank.
 
 ## Comments
 

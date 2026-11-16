@@ -4,6 +4,7 @@ import type { ArtifactPublisher } from "./artifact-access.server";
 import { idempotencyMismatch } from "./artifact-idempotency.server";
 import {
   ARTIFACT_BINARY_LIMIT,
+  ARTIFACT_ENTRY_READ_LIMIT,
   ARTIFACT_TEXT_LIMIT,
   type ArtifactBlobStore,
   type ArtifactFileInput,
@@ -86,6 +87,13 @@ export async function createVersionedArtifact(
     const limit = blob.kind === "text" ? ARTIFACT_TEXT_LIMIT : ARTIFACT_BINARY_LIMIT;
     if (blob.sizeBytes > limit) invalid("artifact-file-too-large");
   }
+  // The entry is what the page shows whole: over the read limit it would render blank.
+  const entryFile = files.find((file) => file.path === input.entryPath);
+  if (
+    entryFile !== undefined &&
+    stored.get(entryFile.sha256)!.sizeBytes > ARTIFACT_ENTRY_READ_LIMIT
+  )
+    invalid("artifact-entry-too-large");
   try {
     return await db.$transaction(async (tx) => {
       if (input.idempotencyKey !== undefined) {

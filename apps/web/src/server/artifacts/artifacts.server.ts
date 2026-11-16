@@ -2,6 +2,7 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import {
   ARTIFACT_BINARY_LIMIT,
+  ARTIFACT_ENTRY_READ_LIMIT,
   ARTIFACT_FILE_LIMIT,
   ARTIFACT_TEXT_LIMIT,
   artifactPathValid,
@@ -314,6 +315,10 @@ export class Artifacts {
       const { entryPath } = settings.result;
       if (result.size && !result.has(entryPath)) invalid("artifact-entry-missing");
       if (entryPath !== locked.entryPath) requireOpenableEntry(entryPath);
+      // The entry is what the page shows whole: over the read limit it would render blank.
+      const entry = result.get(entryPath);
+      if (entry !== undefined && entry.sizeBytes > ARTIFACT_ENTRY_READ_LIMIT)
+        invalid("artifact-entry-too-large");
 
       const merged = [...othersChanged].sort();
       const settingsChanged = ARTIFACT_SETTINGS.some(
