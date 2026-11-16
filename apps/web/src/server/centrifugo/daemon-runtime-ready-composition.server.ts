@@ -9,8 +9,7 @@ import { recordComputerObservation } from "#src/server/computers/computer-metada
 import { readLatestComputerVersion } from "#src/server/computers/latest-computer-version.server";
 import { resolveReleaseFeedUrl } from "#src/server/install/install-script.server";
 import { agentMigrationOrchestrator } from "#src/server/agent-migrations/agent-migration-composition.server";
-import { daemonControlChannel } from "./server-api.server";
-import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { pushReminderSnapshots } from "#src/server/reminders/reminder-push.server";
 import type { Reminders } from "#src/server/reminders/reminders.server";
 import type { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
 import type { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
@@ -67,30 +66,8 @@ export function daemonRuntimeReadyPorts(input: {
         ),
     },
     reminderRecovery: {
-      snapshotAssigned: async (workspaceId, computerId) => {
-        const agents = await db.agent.findMany({
-          where: { workspaceId, computerId, ...ACTIVE_AGENT_WHERE },
-          select: { id: true, ownerId: true },
-        });
-        const publications = await Promise.all(
-          agents.map(async (agent) => ({
-            channel: daemonControlChannel(workspaceId, computerId),
-            data: await reminders.snapshot({
-              protocolMajor: 1,
-              requestId: crypto.randomUUID(),
-              workspaceId,
-              computerId,
-              agentId: agent.id,
-              userId: agent.ownerId,
-            }),
-          })),
-        );
-        const results = await centrifugo.publishBatch(publications);
-        const failed = results.find(
-          (result): result is PromiseRejectedResult => result.status === "rejected",
-        );
-        if (failed) throw failed.reason;
-      },
+      snapshotAssigned: (workspaceId, computerId) =>
+        pushReminderSnapshots({ db, centrifugo, reminders }, { workspaceId, computerId }),
     },
     migrationRecovery: {
       recover: (workspaceId, computerId) =>
