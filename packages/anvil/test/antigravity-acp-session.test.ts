@@ -9,7 +9,7 @@ import { fixturePerTurnHost } from "./fixtures/runtime-host";
 
 const TEST_ACP_TIMEOUT_MS = 10_000;
 
-async function fixture() {
+async function fixture(modes?: readonly Record<string, string>[]) {
   const cwd = await mkdtemp(join(tmpdir(), "anvil-agy-acp-"));
   const log = join(cwd, "rpc.jsonl");
   const provider = new AntigravityAcpProvider({
@@ -18,7 +18,10 @@ async function fixture() {
     host: {
       clientInfo: { name: "agy-acp-fixture", version: "1" },
       processTreeSpawner: fixturePerTurnHost.processTreeSpawner,
-      buildEnvironment: () => ({ AGY_ACP_FIXTURE_LOG: log }),
+      buildEnvironment: () => ({
+        AGY_ACP_FIXTURE_LOG: log,
+        ...(modes ? { AGY_ACP_FIXTURE_MODES: JSON.stringify(modes) } : {}),
+      }),
       versionReader: async () => "1.5.0",
       catalogCommandRunner: async () => ({ output: "{}", exitCode: 0 }),
       readUsageEnvironment: () => ({}),
@@ -72,6 +75,48 @@ test("a launch injects instructions, replays yolo, applies model and effort", as
         params: expect.objectContaining({ configId: "thinking_level", value: "high" }),
       }),
     );
+    await session.dispose();
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("a 1.5.9-style mode list selects auto instead of yolo", async () => {
+  const f = await fixture([
+    { id: "default", name: "Default", description: "Ask before edits." },
+    { id: "auto", name: "Auto", description: "Approve edits and safe commands." },
+  ]);
+  try {
+    const session = await f.provider.createAgentSession(options(f.cwd) as never);
+    const mode = (await f.requests()).find((r) => r.method === "session/set_mode");
+    expect(mode?.params).toMatchObject({ modeId: "auto" });
+    await session.dispose();
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("a mode list without an automatic equivalent opens without set_mode", async () => {
+  const f = await fixture([
+    { id: "default", name: "Default", description: "Ask before edits." },
+    { id: "plan", name: "Plan", description: "Plan carefully." },
+  ]);
+  try {
+    const session = await f.provider.createAgentSession(options(f.cwd) as never);
+    expect((await f.requests()).some((r) => r.method === "session/set_mode")).toBe(false);
+    await session.dispose();
+  } finally {
+    await f.cleanup();
+  }
+});
+
+test("does not infer a mode from its description", async () => {
+  const f = await fixture([
+    { id: "automatic", name: "Auto", description: "Approve automatically." },
+  ]);
+  try {
+    const session = await f.provider.createAgentSession(options(f.cwd) as never);
+    expect((await f.requests()).some((r) => r.method === "session/set_mode")).toBe(false);
     await session.dispose();
   } finally {
     await f.cleanup();

@@ -7,7 +7,12 @@ Part of [the documentation index](../../README.md). The Antigravity adapter runs
   session-marker rules below apply to every `agy` process the Daemon starts.
 - Standing instructions ride the `session/new`/`session/load` envelope as
   `_meta.antigravity.systemPrompt.append`; `disabledTools` in the same envelope is the optional
-  host tool filter. `session/set_mode` `yolo` and the model (`model`) and effort
+  host tool filter. The adapter selects the automatic permission mode from the session's advertised
+  `modes.availableModes` on every open: it prefers the exact `yolo` ID and then the exact `auto` ID
+  (agy 1.5.9 advertises `auto`; its description still says that irreversible actions may ask).
+  ACP permission requests are answered by the shared session handler, which selects `allow_once`
+  while the Agent is live. If neither ID is advertised, it skips `session/set_mode` and logs the agy
+  version and available mode IDs instead of sending a stale mode ID. The model (`model`) and effort
   (`thinking_level`) `session/set_config_option` calls replay on every open — a resumed session
   starts at the default mode. Every open request is deadline-bounded.
 - Resume is `session/load`; `-32002` means the stored session is gone and is replaced with a
