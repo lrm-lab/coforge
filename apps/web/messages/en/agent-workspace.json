@@ -17,6 +17,7 @@
   "agent_workspace_binary": "Binary file — cannot display",
   "agent_workspace_too_large": "File too large to display",
   "agent_workspace_file_error": "This file could not be loaded. Try refreshing.",
+  "agent_workspace_file_missing": "This file is no longer here. The Agent may have moved or deleted it.",
   "agent_workspace_preview_error": "Failed to load file preview. Please refresh and try again.",
   "agent_workspace_reload": "Reload page",
   "agent_workspace_back": "Back",

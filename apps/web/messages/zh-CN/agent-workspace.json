@@ -17,6 +17,7 @@
   "agent_workspace_binary": "二进制文件，无法预览",
   "agent_workspace_too_large": "文件过大，无法预览",
   "agent_workspace_file_error": "无法加载此文件，请刷新重试。",
+  "agent_workspace_file_missing": "这个文件已经不在了，可能被 Agent 移走或删除了。",
   "agent_workspace_preview_error": "文件预览加载失败，请刷新重试。",
   "agent_workspace_reload": "刷新页面",
   "agent_workspace_back": "返回",
