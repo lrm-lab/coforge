@@ -13,6 +13,9 @@ const log = Bun.env.AGY_ACP_FIXTURE_LOG;
 const configOptions = Bun.env.AGY_ACP_FIXTURE_CONFIG_OPTIONS
   ? JSON.parse(Bun.env.AGY_ACP_FIXTURE_CONFIG_OPTIONS)
   : [];
+const modes = Bun.env.AGY_ACP_FIXTURE_MODES
+  ? JSON.parse(Bun.env.AGY_ACP_FIXTURE_MODES)
+  : [{ id: "yolo", name: "YOLO", description: "Approve everything without asking." }];
 const sessionId = "agy-acp-fixture-session";
 // The real server keeps credentials on disk — the fixture's state file is their stand-in, so a
 // `logout` in one process is visible to the next status read's fresh `agy acp`.
@@ -154,7 +157,7 @@ for await (const line of console) {
         break;
       }
       currentSessionId = request.params.sessionId ?? sessionId;
-      reply({ sessionId: currentSessionId, configOptions });
+      reply({ sessionId: currentSessionId, configOptions, modes: { availableModes: modes } });
       break;
     case "session/set_mode":
     case "session/set_config_option":

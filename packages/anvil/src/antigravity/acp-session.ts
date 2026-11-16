@@ -1,5 +1,6 @@
 import type { InitializeResponse } from "@agentclientprotocol/sdk";
 import { RequestError } from "@agentclientprotocol/sdk";
+import { getLogger } from "@logtape/logtape";
 import { RuntimeLoginRequiredError } from "#src/contract";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
 import { acpBounded, acpProcess } from "#src/acp/connection";
@@ -29,6 +30,55 @@ const ANTIGRAVITY_NOT_SIGNED_IN =
 function antigravitySignInRequired(): RuntimeLoginRequiredError {
   return new RuntimeLoginRequiredError(ANTIGRAVITY_NOT_SIGNED_IN, {
     detailHint: ANTIGRAVITY_NOT_SIGNED_IN,
+  });
+}
+
+const logger = getLogger(["coforge", "anvil", "antigravity"]);
+
+type AntigravityMode = {
+  id: string;
+  name?: string;
+  description?: string;
+};
+
+function antigravityAvailableModes(value: unknown): AntigravityMode[] {
+  const record = asRecord(value);
+  const modes = asRecord(record?.modes);
+  const available = Array.isArray(modes?.availableModes)
+    ? modes.availableModes
+    : Array.isArray(record?.availableModes)
+      ? record.availableModes
+      : [];
+  return available.flatMap((entry) => {
+    const mode = asRecord(entry);
+    const id = nonEmptyString(mode?.id);
+    return id
+      ? [
+          {
+            id,
+            ...(typeof mode?.name === "string" ? { name: mode.name } : {}),
+            ...(typeof mode?.description === "string" ? { description: mode.description } : {}),
+          },
+        ]
+      : [];
+  });
+}
+
+/** Selects the mode that replaces the old `yolo` permission mode across agy ACP releases. */
+export function selectAntigravityAutomaticMode(value: unknown): AntigravityMode | undefined {
+  const available = antigravityAvailableModes(value);
+  return (
+    available.find((mode) => mode.id === "yolo") ?? available.find((mode) => mode.id === "auto")
+  );
+}
+
+function logAutomaticModeUnavailable(initialized: InitializeResponse, state: unknown): void {
+  const initializedRecord = asRecord(initialized);
+  const available = antigravityAvailableModes(state);
+  logger.warning("Antigravity ACP has no automatic permission mode; continuing without set_mode", {
+    event: "antigravity_acp:automatic_mode_unavailable",
+    agy_version: nonEmptyString(asRecord(initializedRecord?.agentInfo)?.version),
+    available_modes: available.map((mode) => mode.id),
   });
 }
 
@@ -123,15 +173,16 @@ function antigravitySessionProfile(
       });
       return transport;
     },
-    openSession: async (transport, sessionId, _initialized) => {
+    openSession: async (transport, sessionId, initialized) => {
       const agent = transport.connection.agent;
       const cwd = options.agentWorkspaceDirectory;
       const resuming = sessionId !== undefined;
       let opened: string | undefined;
       let replaced: string | undefined;
+      let state: unknown;
       if (resuming) {
         try {
-          await acpBounded(
+          state = await acpBounded(
             agent.request("session/load", {
               sessionId,
               cwd,
@@ -150,7 +201,6 @@ function antigravitySessionProfile(
         }
       }
       if (!opened) {
-        let state;
         try {
           state = await acpBounded(
             agent.request("session/new", { cwd, mcpServers: [], _meta: meta }),
@@ -167,13 +217,17 @@ function antigravitySessionProfile(
         opened = nonEmptyString(asRecord(state)?.sessionId);
         if (!opened) throw new Error("agy acp did not create a session");
       }
-      // A resumed session returns to the default mode, so `yolo` and the selected model/effort
-      // replay on every open.
-      await acpBounded(
-        agent.request("session/set_mode", { sessionId: opened, modeId: "yolo" }),
-        timeoutMs,
-        "agy acp session/set_mode timed out",
-      );
+      // A resumed session returns to the default mode, so the automatic mode and the selected
+      // model/effort replay on every open. agy 1.5.9 renamed `yolo` to `auto`; select from the
+      // server's advertised modes so older and newer ACP servers both work.
+      const automaticMode = selectAntigravityAutomaticMode(state);
+      if (automaticMode)
+        await acpBounded(
+          agent.request("session/set_mode", { sessionId: opened, modeId: automaticMode.id }),
+          timeoutMs,
+          "agy acp session/set_mode timed out",
+        );
+      else logAutomaticModeUnavailable(initialized, state);
       const model = options.runtime?.model;
       if (model && model !== "default")
         await acpBounded(
