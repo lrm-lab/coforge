@@ -6,7 +6,9 @@ the code:
 
 - One question shows at a time (`question-card-ask.tsx`). A card of several pages through them
   with the footer's pager and Skip, Next or, on the last, Send; a one-pick option turns to the next
-  question by itself. On a card of one question, a one-pick option is the answer: picking it sends.
+  question by itself. On a card of one question, a one-pick option is the answer: picking it sends,
+  so its rows are large, outlined and spaced apart against a mis-tap (Frank, 11-16).
+- Enter sends what is ticked; it takes the highlighted row only when nothing is ticked yet.
 - Paging, a card only grows: a shorter question leaves room under it rather than pulling the footer
   up under the pointer that pressed Next.
 - A card answered or declined while on screen keeps its height until the stream mounts it again

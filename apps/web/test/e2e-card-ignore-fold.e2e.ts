@@ -176,8 +176,12 @@ test("Don't answer asks once, then sends the decline and grays the card", async 
         text: el.textContent,
       };
     })()`);
+  /** True once the element stands where it stood at the last check: the stream has settled. */
+  const still = (selector: string) =>
+    `(() => { const box = document.querySelector('${selector}')?.getBoundingClientRect(); const at = box && box.top + "," + box.left; const same = !!box && window.__still === at; window.__still = at; return same; })()`;
   /** Asks to decline, backs out two ways (Escape, Keep answering), asks again and confirms. */
   const declineOnce = async (id: string, title: string, shot: string) => {
+    await waitFor(still(decline(id)));
     await browser("click", decline(id));
     await waitFor(`${dialogWith(title)} !== undefined`);
     expect(await evaluate<string>(`${dialogWith(title)}.textContent`)).toContain(
@@ -225,6 +229,12 @@ test("Don't answer asks once, then sends the decline and grays the card", async 
     await browser("set", "viewport", "1280", "800");
     await open(choice.id);
     await evaluate(`(${card(choice.id)}.scrollIntoView({ block: "start" }), true)`);
+    // A reader's own scroll, which a programmatic one is not: it ends following the latest, so the
+    // stream does not return to the bottom when the card settles.
+    await browser("mouse", "move", "900", "300");
+    await browser("mouse", "wheel", "-40");
+    await waitFor(still(decline(choice.id)));
+    await waitFor(still(decline(choice.id)));
 
     // A choice card on a desktop: every waiting card has its own "Don't answer", the composer is
     // still there, and nothing else takes its place.

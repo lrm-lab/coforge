@@ -84,21 +84,10 @@ export function QuestionCard({ card, asker }: { card: AskingView; asker: string 
     } else
       body = (
         <>
-          {!several && (
-            <p
-              data-question-prompt=""
-              className={cn(
-                "px-3 pt-2 pb-1.5 text-sm font-semibold wrap-anywhere",
-                answered ? "text-primary" : "text-tertiary",
-              )}
-            >
-              {questions[0]!.prompt}
-            </p>
-          )}
           {answered ? (
-            <AnswerSummary questions={questions} answers={answers} showPrompt={several} />
+            <AnswerSummary questions={questions} answers={answers} />
           ) : (
-            several && <UnansweredQuestions questions={questions} />
+            <UnansweredQuestions questions={questions} />
           )}
           {statusLine && (
             <div className="flex min-h-10 items-center px-3 py-2 text-xs text-quaternary">

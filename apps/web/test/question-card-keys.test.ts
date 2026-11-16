@@ -82,6 +82,13 @@ describe("a question card's keys (Frank, 11-16: the dock's keys, in the card)", 
     expect(cardKey(state({ tab: 1 }), key("Enter"))).toEqual({ do: "stay" });
   });
 
+  test("Enter sends what is ticked, not a row the highlight has since moved to", () => {
+    const single = { questions: [one], drafts: { one: { selection: ["a"], text: "" } } };
+    expect(cardKey(state({ ...single, hi: 1 }), key("Enter"))).toEqual({ do: "submit" });
+    const first = { drafts: { one: { selection: ["a"], text: "" } } };
+    expect(cardKey(state({ ...first, hi: 1 }), key("Enter"))).toEqual(NEXT);
+  });
+
   test("Enter never takes a row the person cannot see highlighted", () => {
     expect(cardKey(state({ kbd: false }), key("Enter"))).toEqual({ do: "showKeys" });
     const drafts = { one: { selection: ["a"], text: "" } };

@@ -58,6 +58,7 @@ export function QuestionAsk({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLElement | null>(null);
   const pageRef = useRef<HTMLDivElement>(null);
   const tallest = useRef({ width: 0, height: 0 });
   const otherRef = useRef<HTMLInputElement | null>(null);
@@ -94,7 +95,10 @@ export function QuestionAsk({
       ?.scrollIntoView({ block: "nearest" });
   }, [tab, hi, kbd, otherRow]);
 
-  useEffect(() => () => window.clearTimeout(turnTimer.current), []);
+  useEffect(() => {
+    cardRef.current = rootRef.current?.closest<HTMLElement>("[data-question-card]") ?? null;
+    return () => window.clearTimeout(turnTimer.current);
+  }, []);
 
   function list() {
     return rootRef.current?.querySelector<HTMLElement>("[data-question-options]");
@@ -263,7 +267,7 @@ export function QuestionAsk({
               asker={asker}
               questions={questions.length}
               placement="top end"
-              fallbackFocus={focusAfter}
+              fallbackFocus={() => cardRef.current}
               onDecline={async () => {
                 onHandled();
                 await cards!.decline(view);

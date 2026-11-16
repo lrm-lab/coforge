@@ -23,7 +23,7 @@ import { devBrowserWorkspace } from "./helpers/browser-e2e";
  * (a long recommended one wraps in the row's width, nothing ticked, a tap picks nothing) and its
  * pager turns; the viewer's own card is answered by touch inside itself (an option, which turns to
  * the next question, a tick on the many-pick one, Send) and ends as a summary of its answers.
- * Every option row is at least 44 px tall, a tap on the card never opens the message's action
+ * Every option row is at least 48 px tall, a tap on the card never opens the message's action
  * sheet, and neither the page nor the card scrolls sideways, at 390 and at the narrowest phone,
  * 320.
  *
@@ -169,7 +169,7 @@ test("a questions card on a phone: looked through or answered in the stream, not
   const noSheet = () =>
     page.evaluate<boolean>(`document.querySelector("[data-message-actions-popover]") === null`);
   /** The page and the card of `id` stay inside the phone's width, every option row of the current
-   * question is at least 44 px tall, the long recommended option wraps in its row (all of it on
+   * question is at least 48 px tall, the long recommended option wraps in its row (all of it on
    * screen, its tag after it), and the header names the channel without a `#`. */
   const expectCardFits = async (id: string, width: string) => {
     const fit = await page.evaluate<{
@@ -198,7 +198,7 @@ test("a questions card on a phone: looked through or answered in the stream, not
     expect(fit.pageFits, width).toBe(true);
     expect(fit.cardInside, width).toBe(true);
     expect(fit.sideways, width).toBe(false);
-    expect(fit.shortest, width).toBeGreaterThanOrEqual(44);
+    expect(fit.shortest, width).toBeGreaterThanOrEqual(48);
     expect(fit.wrapped, width).toBe(true);
     expect(fit.tag, width).toBe(true);
     expect(fit.header.startsWith("#"), width).toBe(false);
@@ -265,11 +265,16 @@ test("a questions card on a phone: looked through or answered in the stream, not
     await wait(
       `${card(mine.id)}.querySelector('[data-question-option="c0"]').getAttribute("aria-selected") === "true" && ${card(mine.id)}.querySelector('[data-question-option="c1"]').getAttribute("aria-selected") === "true"`,
     );
+    // Rows a thumb cannot miss: 48px tall, 6px apart.
+    const rowBoxes = `[...${card(mine.id)}.querySelectorAll("[data-question-option]")].map((option) => option.getBoundingClientRect())`;
+    expect(
+      await page.evaluate<number>(`Math.min(...${rowBoxes}.map((box) => box.height))`),
+    ).toBeGreaterThanOrEqual(48);
     expect(
       await page.evaluate<number>(
-        `Math.min(...[...${card(mine.id)}.querySelectorAll("[data-question-option]")].map((option) => option.getBoundingClientRect().height))`,
+        `(() => { const boxes = ${rowBoxes}; return boxes.length < 2 ? 0 : Math.min(...boxes.slice(1).map((box, index) => box.top - boxes[index].bottom)); })()`,
       ),
-    ).toBeGreaterThanOrEqual(44);
+    ).toBeGreaterThanOrEqual(5.5);
     await shot(page, "answering-many");
     await tap(scoped(mine.id, "button[data-question-send]"));
     await wait(`${card(mine.id)}?.dataset.questionCard === "executed"`);

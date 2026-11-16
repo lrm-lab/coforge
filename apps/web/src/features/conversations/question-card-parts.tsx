@@ -44,6 +44,7 @@ export function Mark({ on, many, dim }: { on: boolean; many: boolean; dim?: bool
 }
 
 export const OPTION_ROW =
-  "flex w-full items-start gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm min-h-8 max-sm:min-h-11 max-sm:py-2.5";
+  "flex w-full items-start gap-2.5 rounded-lg border border-transparent px-2.5 py-2 text-left text-sm min-h-10 max-sm:min-h-12 max-sm:py-3";
 
-export const OPTION_ROW_LIVE = "cursor-pointer pointer-fine:hover:bg-secondary active:bg-secondary";
+export const OPTION_ROW_LIVE =
+  "cursor-pointer border-secondary pointer-fine:hover:bg-secondary active:bg-secondary";

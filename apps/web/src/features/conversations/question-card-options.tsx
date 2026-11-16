@@ -46,7 +46,7 @@ export function QuestionOptions({
       aria-multiselectable={many || undefined}
       aria-readonly={!live || undefined}
       aria-activedescendant={live && kbd && hi >= 0 ? `${id}-${hi}` : undefined}
-      className="flex flex-col px-1 outline-none"
+      className="flex flex-col gap-1.5 px-1 outline-none"
     >
       {question.options.map((option, row) => {
         const on = Boolean(draft?.selection.includes(option.id));
@@ -65,7 +65,7 @@ export function QuestionOptions({
             onClick={() => live && onPick?.(row)}
             className={cn("group/row", OPTION_ROW, live && OPTION_ROW_LIVE, lit(row))}
           >
-            <Mark on={on} many={many} dim={mode === "off"} />
+            <Mark on={on} many={many} dim={muted} />
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span
                 className={cn(
@@ -86,8 +86,15 @@ export function QuestionOptions({
                   </span>
                 )}
               </span>
-              {option.description && listed && (
-                <span className="text-xs wrap-anywhere text-tertiary">{option.description}</span>
+              {option.description && (
+                <span
+                  className={cn(
+                    "text-xs wrap-anywhere",
+                    listed ? "text-tertiary" : "text-quaternary",
+                  )}
+                >
+                  {option.description}
+                </span>
               )}
             </span>
             {live && row < 9 && (
@@ -114,7 +121,7 @@ export function QuestionOptions({
             data-hi={kbd && hi === otherRow ? "" : undefined}
             onMouseMove={() => hi !== otherRow && onHover?.(otherRow)}
             onClick={(event) => event.currentTarget.querySelector("input")?.focus()}
-            className={cn(OPTION_ROW, "cursor-text", lit(otherRow))}
+            className={cn(OPTION_ROW, "cursor-text border-secondary", lit(otherRow))}
           >
             <Mark on={Boolean(ownWords)} many={many} />
             <input
@@ -144,7 +151,7 @@ export function QuestionOptions({
             data-chosen={mode === "answered" && ownWords ? "" : undefined}
             className={OPTION_ROW}
           >
-            <Mark on={Boolean(ownWords)} many={many} dim={mode === "off"} />
+            <Mark on={Boolean(ownWords)} many={many} dim={muted} />
             <span
               className={cn(
                 "min-w-0 flex-1 wrap-anywhere",

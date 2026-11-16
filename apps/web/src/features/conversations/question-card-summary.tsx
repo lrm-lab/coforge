@@ -4,14 +4,12 @@ import { answerText, type CardQuestion, type Drafts } from "./question-card-mode
 export function AnswerSummary({
   questions,
   answers,
-  showPrompt = true,
 }: {
   questions: CardQuestion[];
   answers: Drafts;
-  showPrompt?: boolean;
 }) {
   return (
-    <div data-question-summary="" className="flex flex-col gap-2.5 px-3 pt-1 pb-1">
+    <div data-question-summary="" className="flex flex-col gap-2.5 px-3 pt-2 pb-1">
       {questions.map((question) => {
         const words = answerText(question, answers[question.id]);
         return (
@@ -20,7 +18,9 @@ export function AnswerSummary({
             data-question-answer={question.id}
             className="flex flex-col text-sm"
           >
-            {showPrompt && <p className="text-xs wrap-anywhere text-tertiary">{question.prompt}</p>}
+            <p data-question-prompt="" className="text-xs wrap-anywhere text-tertiary">
+              {question.prompt}
+            </p>
             <p
               className={
                 words.length ? "font-medium wrap-anywhere text-primary" : "text-quaternary"
@@ -37,7 +37,7 @@ export function AnswerSummary({
 
 export function UnansweredQuestions({ questions }: { questions: CardQuestion[] }) {
   return (
-    <div className="flex flex-col gap-1.5 px-3 pt-1 pb-1">
+    <div className="flex flex-col gap-1.5 px-3 pt-2 pb-1">
       {questions.map((question) => (
         <p
           key={question.id}

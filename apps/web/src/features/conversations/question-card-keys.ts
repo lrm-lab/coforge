@@ -74,7 +74,8 @@ export function turnTo(
 
 /** What a key does in a question card (Frank, 11-12, kept when the dock went on 11-16): ↑↓ move
  * the highlight (the first only shows it), ←→ turn the question, a digit picks its row, Space
- * ticks the highlighted one, Enter takes it and goes on (sending from the last question), Esc
+ * ticks the highlighted one, Enter goes on with what is ticked (sending from the last question)
+ * and takes the highlighted row only when nothing is, Esc
  * goes back to the composer, Alt+↑↓ goes to another waiting card. */
 export function cardKey(state: CardKeyState, input: CardKeyInput): CardKeyAction {
   const { key } = input;
@@ -102,8 +103,9 @@ export function cardKey(state: CardKeyState, input: CardKeyInput): CardKeyAction
     return { do: "pick", row: digit - 1 };
   if (key === " ") return { do: "pick", row: state.hi };
   if (key !== "Enter") return { do: "pass" };
-  if (!state.kbd && !answered(state.drafts[question.id])) return { do: "showKeys" };
+  if (answered(state.drafts[question.id])) return goOn(state);
+  if (!state.kbd) return { do: "showKeys" };
   if (question.select === "one" && state.hi < question.options.length)
-    return state.kbd ? { do: "confirm", row: state.hi } : goOn(state);
+    return { do: "confirm", row: state.hi };
   return goOn(state);
 }
