@@ -9,6 +9,7 @@ import {
   type ImportantUnreadNotice,
 } from "#src/daemon-runtime/important-unread-notice";
 import { ImportantUnreadReminder } from "#src/daemon-runtime/important-unread-reminder";
+import { inboxPreviewLimit } from "#src/daemon-runtime/inbox-preview";
 
 // The loop decides when to speak; this binds it to the daemon so what it says is a nudge that
 // names where the messages are, and a session that is gone is a refusal (so the retry stays), not
@@ -69,7 +70,7 @@ test("a notice names where the unread messages are, and how many", () => {
       { target: "@coforge-raft", count: 1 },
     ]),
   ).toBe(
-    "Still not read: #coforge-backend (2), @coforge-raft (1). Run `coforge inbox check` to see them.",
+    "Still waiting: #coforge-backend (2), @coforge-raft (1). Run `coforge inbox check` to see them.",
   );
 });
 
@@ -142,5 +143,27 @@ test("a record taken over after a restart has no words of its own, so the standi
   reminder.restore();
   reminder.flushDue();
   expect(written).toHaveLength(1);
-  expect(written[0]!.text).toContain("Still not read");
+  expect(written[0]!.text).toContain("Still waiting");
+});
+
+test("only the deliveries a notice shows are kept, so a busy conversation cannot grow the batch", () => {
+  // The count of everything unread lives in the state; the loop holds only what it can display,
+  // or an Agent mentioned a thousand times would keep a thousand messages in memory.
+  const seen: number[] = [];
+  const reminder = new ImportantUnreadReminder(
+    new ImportantUnreadNotices(),
+    { save: () => undefined, clear: () => undefined, list: () => [] },
+    {
+      compose: (_agentId, _notice, deliveries) => {
+        seen.push(deliveries.length);
+        return "notice";
+      },
+      write: () => true,
+      report: () => undefined,
+    },
+  );
+  const limit = inboxPreviewLimit();
+  for (let sequence = 1; sequence <= limit + 3; sequence += 1)
+    reminder.observeDeliveries([mention(sequence)]);
+  expect(Math.max(...seen)).toBe(limit);
 });

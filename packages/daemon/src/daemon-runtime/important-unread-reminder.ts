@@ -1,3 +1,4 @@
+import { inboxPreviewLimit } from "./inbox-preview";
 import type { ImportantUnreadNoticeStore } from "#src/persistence/important-unread-notice-store";
 import {
   type ImportantUnreadDelivery,
@@ -37,8 +38,9 @@ export class ImportantUnreadReminder {
   /** Batches already reported as exhausted, so a sweep does not repeat the error. */
   readonly #reported = new Set<string>();
   /** The deliveries each batch announced, kept only in memory: they are how a later attempt still
-   * knows which messages it is about. A record taken over after a restart has none, and composes
-   * from the queue alone. */
+   * knows which messages it is about. Only the ones a notice actually shows are kept — the count of
+   * the rest is in the state — so a conversation that never stops cannot grow this without bound.
+   * A record taken over after a restart has none, and composes from the queue alone. */
   readonly #batches = new Map<string, ImportantUnreadDelivery[]>();
 
   constructor(
@@ -58,6 +60,8 @@ export class ImportantUnreadReminder {
       // than starting another, which is what makes a retry count three instead of one.
       const batch = this.#batches.get(notice.agentId) ?? [];
       batch.push(delivery);
+      const shown = inboxPreviewLimit();
+      if (batch.length > shown) batch.splice(0, batch.length - shown);
       this.#batches.set(notice.agentId, batch);
       this.store.save(notice);
       this.#writeIfDue(notice.agentId);
