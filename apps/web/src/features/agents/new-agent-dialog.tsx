@@ -22,6 +22,7 @@ import {
 import { LocalAgentForm } from "./agent-create-dialog";
 import { useCreateAgent } from "./use-create-agent";
 import { CloudAgentForm } from "./cloud-agent-form";
+import { ExternalAgentForm } from "./external-agent-form";
 import { useCloudAgentComputer } from "./cloud-agent-computer";
 import { useCurrentWorkspaceId } from "./workspace-agents-realtime";
 
@@ -51,6 +52,7 @@ export function NewAgentDialog({
 const KINDS = [
   { id: "cloud", label: m.agent_create_kind_cloud },
   { id: "local", label: m.agent_create_kind_local },
+  { id: "external", label: m.agent_create_kind_external },
 ] as const;
 
 type AgentKind = (typeof KINDS)[number]["id"];
@@ -81,8 +83,10 @@ function NewAgentForms({
       </Loading>
     );
   const cloudComputer = cloud.data?.state === "none" ? undefined : cloud.data;
-  const showCloud = cloudComputer !== undefined && chosen !== "local";
-  const kind: AgentKind = showCloud ? "cloud" : "local";
+  const availableKinds = cloudComputer ? KINDS : KINDS.filter((option) => option.id !== "cloud");
+  const defaultKind: AgentKind = cloudComputer ? "cloud" : "local";
+  const kind: AgentKind =
+    chosen && availableKinds.some((option) => option.id === chosen) ? chosen : defaultKind;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <AgentCreateIntro
@@ -90,43 +94,46 @@ function NewAgentForms({
         title={m.header_new_agent()}
         onClose={busy ? undefined : onClose}
       >
-        {cloudComputer && (
-          <RadioGroup
-            aria-label={m.agent_create_kind_label()}
-            orientation="horizontal"
-            value={kind}
-            onChange={(next) => setChosen(next as AgentKind)}
-            isDisabled={busy || submitting}
-            className="mt-4 grid w-full grid-cols-2 gap-0.5 rounded-lg bg-secondary p-0.5"
-          >
-            {KINDS.map((option) => (
-              <Radio
-                key={option.id}
-                value={option.id}
-                className={({ isSelected, isFocusVisible, isDisabled }) =>
-                  cx(
-                    "flex h-8 cursor-pointer items-center justify-center rounded-md text-sm font-medium transition duration-100 ease-linear",
-                    isSelected
-                      ? "bg-primary text-primary shadow-xs ring-1 ring-primary"
-                      : "text-tertiary hover:text-secondary",
-                    isFocusVisible && "outline-2 outline-offset-2 outline-focus-ring",
-                    isDisabled && "cursor-not-allowed",
-                  )
-                }
-              >
-                {option.label()}
-              </Radio>
-            ))}
-          </RadioGroup>
-        )}
+        <RadioGroup
+          aria-label={m.agent_create_kind_label()}
+          orientation="horizontal"
+          value={kind}
+          onChange={(next) => setChosen(next as AgentKind)}
+          isDisabled={busy || submitting}
+          className={cx(
+            "mt-4 grid w-full gap-0.5 rounded-lg bg-secondary p-0.5",
+            availableKinds.length === 3 ? "grid-cols-3" : "grid-cols-2",
+          )}
+        >
+          {availableKinds.map((option) => (
+            <Radio
+              key={option.id}
+              value={option.id}
+              className={({ isSelected, isFocusVisible, isDisabled }) =>
+                cx(
+                  "flex h-8 cursor-pointer items-center justify-center rounded-md text-sm font-medium transition duration-100 ease-linear",
+                  isSelected
+                    ? "bg-primary text-primary shadow-xs ring-1 ring-primary"
+                    : "text-tertiary hover:text-secondary",
+                  isFocusVisible && "outline-2 outline-offset-2 outline-focus-ring",
+                  isDisabled && "cursor-not-allowed",
+                )
+              }
+            >
+              {option.label()}
+            </Radio>
+          ))}
+        </RadioGroup>
       </AgentCreateIntro>
-      {!showCloud || !cloudComputer ? (
-        <NewLocalAgent
+      {kind === "external" ? (
+        <ExternalAgentForm
           onClose={onClose}
           conversationReplacesPage={conversationReplacesPage}
           onBusyChange={onBusyChange}
+          onSubmittingChange={setSubmitting}
+          autoFocus={chosen !== undefined}
         />
-      ) : (
+      ) : kind === "cloud" && cloudComputer ? (
         <CloudAgentForm
           computer={cloudComputer}
           open={open}
@@ -135,6 +142,12 @@ function NewAgentForms({
           onBusyChange={onBusyChange}
           onSubmittingChange={setSubmitting}
           autoFocus={chosen === undefined}
+        />
+      ) : (
+        <NewLocalAgent
+          onClose={onClose}
+          conversationReplacesPage={conversationReplacesPage}
+          onBusyChange={onBusyChange}
         />
       )}
     </div>

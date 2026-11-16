@@ -32,6 +32,7 @@ export class PrismaAgentDetailSource implements AgentDetailSource {
         role: true,
         visibility: true,
         systemKind: true,
+        hosting: true,
         createdAt: true,
         computerId: true,
         computer: {

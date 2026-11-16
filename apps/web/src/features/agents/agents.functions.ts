@@ -14,6 +14,7 @@ import {
   saveAgentRuntimeCredentialInputSchema,
   saveAgentEnvironmentInputSchema,
   updateAgentInputSchema,
+  updateExternalAgentProfileInputSchema,
   updateAgentRoleInputSchema,
 } from "./agent.schemas";
 import { publishAgentDirectoryChanged } from "#src/server/agents/agent-visibility-realtime.server";
@@ -167,6 +168,32 @@ export const updateAgent = createServerFn({ method: "POST" })
       assistant ? { ...data, displayName: undefined } : data,
     );
     await publishAgentDirectoryChanged(workspaceId, updated.agent.id, "updated");
+    return updated;
+  });
+
+export const updateExternalAgentProfile = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(updateExternalAgentProfileInputSchema)
+  .handler(async ({ data, context: { user, db, workspaceId } }) => {
+    const { externalAgentManagerAccess } =
+      await import("#src/server/agents/external-agent-access.server");
+    const access = await externalAgentManagerAccess(db, {
+      workspaceId,
+      agentId: data.agentId,
+      userId: user.id,
+    });
+    if (!access.ok || access.agent.deletedAt || access.agent.hosting !== "external")
+      throw new AppError(access.ok ? "NOT_FOUND" : "ACCESS_DENIED");
+    const displayName = data.displayName?.trim();
+    const updated = await db.agent.update({
+      where: { id: data.agentId },
+      data: {
+        ...(displayName ? { displayName } : {}),
+        ...(data.description !== undefined ? { description: data.description } : {}),
+      },
+      select: { id: true, displayName: true, description: true },
+    });
+    await publishAgentDirectoryChanged(workspaceId, updated.id, "updated");
     return updated;
   });
 

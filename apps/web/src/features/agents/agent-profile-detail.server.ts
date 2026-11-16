@@ -11,6 +11,7 @@ import {
   readableRuntimeConfig,
 } from "#src/server/agents/agent-runtime-config.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
+import { PrismaExternalAgentCredentialRepository } from "#src/server/db/repositories/external-agent-credential.repositories.server";
 import { userRuntimeUsage } from "#src/server/computers/runtime-usage-composition.server";
 import { isAdminLike, type WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 import { agentAvatarUrl, agentMascot } from "#src/features/agents/agent-mascot";
@@ -74,7 +75,7 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
   // unavailability degrades to "unknown" (`undefined`), never a false "offline".
   const runtimeConfig = readableRuntimeConfig(result.runtimeConfig);
   const { computer } = result;
-  const [computerOnline, usage] = await Promise.all([
+  const [computerOnline, usage, externalCredentials, workspace] = await Promise.all([
     computer
       ? getComputerStatusCache()
           .get({ workspaceId, computerId: computer.id })
@@ -87,6 +88,14 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
           { userId: user.id, workspaceId },
           { computerId: computer.id, provider: runtimeConfig.runtime },
         )
+      : undefined,
+    result.hosting === "external" && (ownedByCurrentUser || canManageAgentRole)
+      ? new PrismaExternalAgentCredentialRepository(db)
+          .list(agentId)
+          .then((rows) => rows.filter((row) => !row.revokedAt))
+      : undefined,
+    result.hosting === "external"
+      ? db.workspace.findUnique({ where: { id: workspaceId }, select: { slug: true } })
       : undefined,
   ]);
   return {
@@ -120,6 +129,8 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
     canChangeVisibility,
     runtimeUsageVisible: usage?.offered ?? false,
     runtimeVersion: usage?.runtime?.version,
+    externalCredentials: externalCredentials ?? [],
+    workspaceSlug: workspace?.slug ?? null,
     // Always the same shape (`online` present, possibly `undefined`) whether or not a Computer is
     // assigned, so callers never have to narrow a union between "has computer without online" and
     // "has computer with online".

@@ -26,4 +26,5 @@ export const LocalAgentIllustration = picture(local);
 export const AGENT_ILLUSTRATIONS = {
   cloud: CloudAgentIllustration,
   local: LocalAgentIllustration,
+  external: LocalAgentIllustration,
 } as const;

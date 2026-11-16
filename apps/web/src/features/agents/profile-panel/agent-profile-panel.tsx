@@ -27,6 +27,7 @@ import {
 } from "#src/features/agents/agent-form";
 import {
   updateAgent,
+  updateExternalAgentProfile,
   setAgentMascot,
   updateAgentRole,
   saveAgentEnvironment,
@@ -182,6 +183,7 @@ export function AgentProfilePanel({
 
   const notifyRuntimeSaved = useAgentRuntimeSaveNotice(agentId, controls, !deleted);
   const update = useServerFn(updateAgent);
+  const updateExternal = useServerFn(updateExternalAgentProfile);
   const pickMascot = useServerFn(setAgentMascot);
   const updateRole = useServerFn(updateAgentRole);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -346,13 +348,18 @@ export function AgentProfilePanel({
             contextUsage={display?.contextUsage ?? null}
             fastMode={display?.fastMode ?? null}
             onSaveDisplayName={async (value) => {
-              await update({ data: baseUpdateInput({ displayName: value }) });
+              if (profile.hosting === "external")
+                await updateExternal({ data: { agentId, displayName: value } });
+              else await update({ data: baseUpdateInput({ displayName: value }) });
               await invalidate();
             }}
             onSaveDescription={async (value) => {
-              await update({ data: baseUpdateInput({ description: value }) });
+              if (profile.hosting === "external")
+                await updateExternal({ data: { agentId, description: value } });
+              else await update({ data: baseUpdateInput({ description: value }) });
               await invalidate();
             }}
+            onRefreshExternal={invalidate}
             onMascotChange={
               owned
                 ? async (mascot) => {

@@ -1,13 +1,6 @@
 import { useState, type ComponentProps, type ReactNode } from "react";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
-import {
-  Camera01,
-  Edit01,
-  Play,
-  RefreshCcw01 as RotateCcw,
-  Stop,
-  Archive,
-} from "@untitledui/icons";
+import { Camera01, Edit01 } from "@untitledui/icons";
 import { RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN } from "@lrm/coforge-sdk/internal";
 import { AgentAvatarDialog } from "#src/features/agents/agent-avatar-dialog";
 import type { AgentMascot } from "#src/features/agents/agent-mascot";
@@ -33,6 +26,8 @@ import { InlineEditField, SECTION_CAPTION_CLASS } from "./inline-edit-field";
 import { AgentFastModeFact, type AgentFastModeReading } from "./agent-fast-mode-fact";
 import { FactRow } from "./agent-fact-row";
 import { AppBotProfile } from "./app-bot-profile";
+import { AgentProfileActionsSection } from "./agent-profile-actions-section";
+import { ExternalAgentAccessSection } from "./external-agent-access-section";
 import { RoleField, VisibilityField } from "./agent-profile-info-fields";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { useAgentModelName } from "#src/features/agents/use-agent-model-name";
@@ -92,6 +87,7 @@ function AgentProfileTabBody({
   onStartRuntimeEdit,
   onLoadSkills,
   onStartDelete,
+  onRefreshExternal,
   migration,
   archive,
   contextUsage,
@@ -133,13 +129,16 @@ function AgentProfileTabBody({
   /** Opens the container's `AgentDeleteDialog`. Present only when the viewer holds
    * the `deleteAgents` capability and this Agent is a delete target at all. */
   onStartDelete?: () => void;
+  onRefreshExternal?: () => Promise<void> | void;
 }) {
+  const isExternal = profile.hosting === "external";
   const runtimeConfig = profile.runtimeConfig;
   const modelLabel = useAgentModelName(profile.id, runtimeConfig?.model ?? "");
   // An unreadable stored config is repaired by re-selecting the runtime, so the edit opens
   // for it too (task #517).
   const canEditRuntime =
     canManage &&
+    !isExternal &&
     Boolean(onStartRuntimeEdit) &&
     (Boolean(runtimeConfig) || profile.runtimeConfigInvalid === true);
   const runtimeLabel = runtimeConfig ? runtimeProviderLabel(runtimeConfig.runtime) : "";
@@ -239,44 +238,50 @@ function AgentProfileTabBody({
             visibility={profile.visibility}
             onRequest={profile.canChangeVisibility ? onRequestVisibilityChange : undefined}
           />
-          <FactRow label={m.agent_profile_computer()} className="items-start">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="flex items-center gap-1.5">
-                  {ComputerIcon && (
-                    <ComputerIcon className="size-4 shrink-0 text-tertiary" aria-hidden="true" />
-                  )}
-                  <span className="truncate">
-                    {profile.computer?.label || m.agent_profile_computer_unassigned()}
-                  </span>
-                </p>
-                {profile.computer && (
-                  <p className="mt-1 flex items-center gap-1.5 text-xs font-normal text-tertiary">
-                    <StatusDot
-                      tone={profile.computer.online ? "online" : "offline"}
-                      className="size-1.5"
-                    />
-                    {profile.computer.online
-                      ? m.agent_profile_computer_connected()
-                      : m.agent_profile_computer_offline()}
-                    {profile.computer.computerVersion && (
-                      <span>· {profile.computer.computerVersion}</span>
+          {isExternal ? (
+            <FactRow label={m.agent_create_kind_label()}>
+              <FactBadge>{m.external_agent_badge()}</FactBadge>
+            </FactRow>
+          ) : (
+            <FactRow label={m.agent_profile_computer()} className="items-start">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-1.5">
+                    {ComputerIcon && (
+                      <ComputerIcon className="size-4 shrink-0 text-tertiary" aria-hidden="true" />
                     )}
+                    <span className="truncate">
+                      {profile.computer?.label || m.agent_profile_computer_unassigned()}
+                    </span>
                   </p>
+                  {profile.computer && (
+                    <p className="mt-1 flex items-center gap-1.5 text-xs font-normal text-tertiary">
+                      <StatusDot
+                        tone={profile.computer.online ? "online" : "offline"}
+                        className="size-1.5"
+                      />
+                      {profile.computer.online
+                        ? m.agent_profile_computer_connected()
+                        : m.agent_profile_computer_offline()}
+                      {profile.computer.computerVersion && (
+                        <span>· {profile.computer.computerVersion}</span>
+                      )}
+                    </p>
+                  )}
+                </div>
+                {profile.computer && (
+                  <AgentDesktopButton
+                    computerId={profile.computer.id}
+                    agentId={profile.id}
+                    title={profile.displayName}
+                    kind={profile.computer.kind}
+                    online={profile.computer.online === true}
+                    owned={profile.computer.ownedByViewer === true}
+                  />
                 )}
               </div>
-              {profile.computer && (
-                <AgentDesktopButton
-                  computerId={profile.computer.id}
-                  agentId={profile.id}
-                  title={profile.displayName}
-                  kind={profile.computer.kind}
-                  online={profile.computer.online === true}
-                  owned={profile.computer.ownedByViewer === true}
-                />
-              )}
-            </div>
-          </FactRow>
+            </FactRow>
+          )}
           <FactRow label={m.agent_profile_created()}>
             <RelativeTime value={profile.createdAt} timeZone={timeZone} />
           </FactRow>
@@ -294,86 +299,98 @@ function AgentProfileTabBody({
         </div>
       </section>
 
-      <section className="border-b border-secondary px-6 py-5">
-        <div className="flex items-center gap-1.5">
-          <p className={SECTION_CAPTION_CLASS}>{m.agent_profile_section_runtime()}</p>
-          {canEditRuntime && (
-            <ButtonUtility
-              aria-label={m.agent_profile_edit_runtime_config()}
-              tooltip={m.agent_profile_edit_runtime_config()}
-              icon={Edit01}
-              size="xs"
-              color="tertiary"
-              onClick={onStartRuntimeEdit}
-            />
-          )}
-          {canManage && runtimeCredentialDialog}
-        </div>
-        {profile.runtimeConfigInvalid === true && (
-          <p className="mt-3 text-sm text-destructive-primary">
-            {m.agent_profile_runtime_invalid()}
-          </p>
-        )}
-        <div className="mt-3 flex flex-col gap-3">
-          {runtimeConfig && (
-            <>
-              <FactRow label={m.agent_runtime_field()}>
-                {/* The pill names the runtime only; its card holds the usage, for who may manage the
-              runtime, and the Agent's context. A runtime with neither has no peek: RuntimeUsage
-              would hand back the bare trigger content, not a button. */}
-                <FactBadge>
-                  {usageComputer ? (
-                    <RuntimeUsage
-                      computerId={usageComputer.id}
-                      runtime={{
-                        provider: runtimeConfig!.runtime,
-                        displayName: runtimeLabel,
-                        version: profile.runtimeVersion,
-                      }}
-                      computerOnline={usageComputer.online}
-                      timeZone={timeZone}
-                      showUsage={profile.runtimeUsageVisible}
-                      trigger={(health) => (
-                        <>
-                          {runtimeIcon}
-                          {runtimeLabel}
-                          {/* Trailing, like the Computer page's runtime chips. */}
-                          <UsageHealthDot health={health} />
-                        </>
-                      )}
-                      triggerClassName={RUNTIME_PILL_TRIGGER_CLASS}
-                      footerLabel={context ? m.agent_context_title() : undefined}
-                      footer={
-                        context ? (
-                          <AgentContextSection usage={context} timeZone={timeZone} />
-                        ) : undefined
-                      }
-                    />
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5">
-                      {runtimeIcon}
-                      {runtimeLabel}
-                    </span>
-                  )}
-                </FactBadge>
-              </FactRow>
-              <FactRow label={m.agent_form_model()}>
-                <span className={runtimeConfig!.model ? "break-words" : ""}>
-                  {runtimeConfig!.model ? modelLabel : m.agent_form_provider_default()}
-                </span>
-              </FactRow>
-              <FactRow label={m.agent_form_reasoning()}>
-                {runtimeConfig!.reasoning || m.agent_form_provider_default()}
-              </FactRow>
-              <AgentFastModeFact
-                runtime={runtimeConfig!.runtime}
-                requested={profile.runtimeConfig!.fastMode === true}
-                reading={fastMode}
+      {isExternal ? (
+        <ExternalAgentAccessSection
+          agentId={profile.id}
+          agentName={profile.name}
+          workspaceSlug={profile.workspaceSlug}
+          credentials={profile.externalCredentials}
+          canManage={canManage}
+          timeZone={timeZone}
+          onChanged={onRefreshExternal}
+        />
+      ) : (
+        <section className="border-b border-secondary px-6 py-5">
+          <div className="flex items-center gap-1.5">
+            <p className={SECTION_CAPTION_CLASS}>{m.agent_profile_section_runtime()}</p>
+            {canEditRuntime && (
+              <ButtonUtility
+                aria-label={m.agent_profile_edit_runtime_config()}
+                tooltip={m.agent_profile_edit_runtime_config()}
+                icon={Edit01}
+                size="xs"
+                color="tertiary"
+                onClick={onStartRuntimeEdit}
               />
-            </>
+            )}
+            {canManage && runtimeCredentialDialog}
+          </div>
+          {profile.runtimeConfigInvalid === true && (
+            <p className="mt-3 text-sm text-destructive-primary">
+              {m.agent_profile_runtime_invalid()}
+            </p>
           )}
-        </div>
-      </section>
+          <div className="mt-3 flex flex-col gap-3">
+            {runtimeConfig && (
+              <>
+                <FactRow label={m.agent_runtime_field()}>
+                  {/* The pill names the runtime only; its card holds the usage, for who may manage the
+                runtime, and the Agent's context. A runtime with neither has no peek: RuntimeUsage
+                would hand back the bare trigger content, not a button. */}
+                  <FactBadge>
+                    {usageComputer ? (
+                      <RuntimeUsage
+                        computerId={usageComputer.id}
+                        runtime={{
+                          provider: runtimeConfig!.runtime,
+                          displayName: runtimeLabel,
+                          version: profile.runtimeVersion,
+                        }}
+                        computerOnline={usageComputer.online}
+                        timeZone={timeZone}
+                        showUsage={profile.runtimeUsageVisible}
+                        trigger={(health) => (
+                          <>
+                            {runtimeIcon}
+                            {runtimeLabel}
+                            {/* Trailing, like the Computer page's runtime chips. */}
+                            <UsageHealthDot health={health} />
+                          </>
+                        )}
+                        triggerClassName={RUNTIME_PILL_TRIGGER_CLASS}
+                        footerLabel={context ? m.agent_context_title() : undefined}
+                        footer={
+                          context ? (
+                            <AgentContextSection usage={context} timeZone={timeZone} />
+                          ) : undefined
+                        }
+                      />
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5">
+                        {runtimeIcon}
+                        {runtimeLabel}
+                      </span>
+                    )}
+                  </FactBadge>
+                </FactRow>
+                <FactRow label={m.agent_form_model()}>
+                  <span className={runtimeConfig!.model ? "break-words" : ""}>
+                    {runtimeConfig!.model ? modelLabel : m.agent_form_provider_default()}
+                  </span>
+                </FactRow>
+                <FactRow label={m.agent_form_reasoning()}>
+                  {runtimeConfig!.reasoning || m.agent_form_provider_default()}
+                </FactRow>
+                <AgentFastModeFact
+                  runtime={runtimeConfig!.runtime}
+                  requested={profile.runtimeConfig!.fastMode === true}
+                  reading={fastMode}
+                />
+              </>
+            )}
+          </div>
+        </section>
+      )}
 
       {archive}
 
@@ -387,51 +404,12 @@ function AgentProfileTabBody({
       )}
 
       {canManage && (
-        <section className="px-6 py-5">
-          <p className={SECTION_CAPTION_CLASS}>{m.agent_profile_section_actions()}</p>
-          <div className="mt-3 flex flex-col gap-2">
-            {/* Moving comes first, as in the reference Computer: it is the action that changes
-                where the Agent lives, and its progress belongs at the top while it runs. */}
-            {migration}
-            <Button
-              color="secondary"
-              className="w-full justify-center"
-              iconLeading={controls.isOnline ? Stop : Play}
-              isDisabled={controls.startStopBusy}
-              onPress={controls.isOnline ? controls.submitStop : () => controls.submitStart()}
-            >
-              {controls.isOnline ? m.agent_profile_action_stop() : m.agent_profile_action_start()}
-            </Button>
-            {(controls.controlPendingLabel ?? controls.startNote) && (
-              <p className="text-sm text-tertiary" role="status">
-                {controls.controlPendingLabel ?? controls.startNote}
-              </p>
-            )}
-            <Button
-              color="secondary"
-              className="w-full justify-center"
-              iconLeading={RotateCcw}
-              isDisabled={controls.controlInFlight}
-              onPress={() => controls.openRestart("restart")}
-            >
-              {m.agent_control_restart_reset_tooltip()}
-            </Button>
-            {onStartDelete && (
-              /* A danger entry button is still a button (`docs/design/color-status-typography.md` §11 危险操作), so it
-               * gets the bordered red rather than bare red text. The one solid red belongs to the
-               * confirm in `AgentDeleteDialog`; `mt-1` keeps a small break between the reversible
-               * actions above and this one. */
-              <Button
-                color="secondary-destructive"
-                className="mt-1 w-full justify-center"
-                iconLeading={Archive}
-                onPress={onStartDelete}
-              >
-                {m.agent_profile_action_delete()}
-              </Button>
-            )}
-          </div>
-        </section>
+        <AgentProfileActionsSection
+          isExternal={isExternal}
+          controls={controls}
+          migration={migration}
+          onStartDelete={onStartDelete}
+        />
       )}
     </div>
   );
