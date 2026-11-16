@@ -3,6 +3,8 @@ import { describe, expect, test } from "bun:test";
 import { createDockerContainers, parseDesktopInspect } from "#src/host/docker-containers";
 import {
   adaptDesktopHtml,
+  DESKTOP_PROXY_SECRET_HEADER,
+  desktopProxySecretAllows,
   parseDesktopRoute,
   startDesktopProxy,
   withDesktopTitle,
@@ -131,6 +133,25 @@ describe("desktop route", () => {
   });
 });
 
+describe("desktop proxy secret", () => {
+  test("allows every caller when no secret is configured", () => {
+    expect(desktopProxySecretAllows(new Request("http://x/desktop/a/"), undefined)).toBe(true);
+    expect(desktopProxySecretAllows(new Request("http://x/desktop/a/"), "")).toBe(true);
+  });
+
+  test("requires an exact header match when a secret is set", () => {
+    const withSecret = new Request("http://x/desktop/a/", {
+      headers: { [DESKTOP_PROXY_SECRET_HEADER]: "gate-token" },
+    });
+    const wrong = new Request("http://x/desktop/a/", {
+      headers: { [DESKTOP_PROXY_SECRET_HEADER]: "other" },
+    });
+    expect(desktopProxySecretAllows(withSecret, "gate-token")).toBe(true);
+    expect(desktopProxySecretAllows(wrong, "gate-token")).toBe(false);
+    expect(desktopProxySecretAllows(new Request("http://x/desktop/a/"), "gate-token")).toBe(false);
+  });
+});
+
 describe("desktop proxy", () => {
   test("forwards a page and its assets to the computer", async () => {
     const seen: string[] = [];
@@ -245,6 +266,44 @@ describe("desktop proxy", () => {
       expect(page.status).toBe(200);
       expect(await page.text()).toBe("<title>A&amp;B</title>");
       expect(seen).toEqual(["/screen/agent-1/desktop.html"]);
+    } finally {
+      proxy.stop();
+      upstream.stop(true);
+    }
+  });
+
+  test("rejects desktop, fill and inspect without the proxy secret", async () => {
+    const upstream = Bun.serve({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch() {
+        return new Response("ok", { status: 200 });
+      },
+    });
+    const upstreamPort = upstream.port;
+    if (upstreamPort === undefined) throw new Error("upstream did not bind");
+    const proxy = startDesktopProxy({
+      hostname: "127.0.0.1",
+      port: 0,
+      proxySecret: "gate-token",
+      resolve: async () => ({ host: "127.0.0.1", port: upstreamPort, token: "desk-token" }),
+    });
+    try {
+      for (const path of [
+        "/desktop/computer-1/",
+        "/desktop/computer-1/agent-1/fill",
+        "/desktop/computer-1/agent-1/inspect",
+      ]) {
+        const denied = await fetch(`http://127.0.0.1:${proxy.port}${path}`, {
+          method: path.endsWith("fill") ? "POST" : "GET",
+          body: path.endsWith("fill") ? "{}" : undefined,
+        });
+        expect(denied.status).toBe(403);
+      }
+      const allowed = await fetch(`http://127.0.0.1:${proxy.port}/desktop/computer-1/`, {
+        headers: { [DESKTOP_PROXY_SECRET_HEADER]: "gate-token" },
+      });
+      expect(allowed.status).toBe(200);
     } finally {
       proxy.stop();
       upstream.stop(true);

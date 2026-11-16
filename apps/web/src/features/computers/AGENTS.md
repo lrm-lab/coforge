@@ -55,9 +55,9 @@ These rules apply to `src/features/computers/`.
   deployment variable is set, and opening it again brings that window forward.
   The same owner's Computer tab opens that Agent's
   own screen at `/desktop/<computer id>/<agent id>/`, in that Agent's window.
-  That origin is the Swarm
-  host proxy in front of the image, opened directly by the browser. The address
-  carries no token. Without the variable the button is absent. Formatting a cloud computer removes its service and disk,
+  That origin is the deployment site; Caddy confirms the signed-in owner before
+  proxying to the Swarm host. The address carries no token. Without the variable
+  the button is absent. Formatting a cloud computer removes its service and disk,
   then places the same computer again. The owner must type its name; the server
   checks that name. Agents, messages, and workspace links stay.
 - An upgrade's status is polled and settled only by `ComputerUpgradeWatcher`, mounted in the

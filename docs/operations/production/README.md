@@ -145,8 +145,8 @@ on the host.
 
 ## Cloud computers
 
-Swarm manager for production is the lab host `10.110.158.147` (Compose desktop
-upstream / `COFORGE_CLOUD_DESKTOP_ORIGIN`). Enablement steps:
+Swarm manager for production is the lab host `10.110.158.147` (Compose
+`COFORGE_DESKTOP_UPSTREAM`; browser desktop origin is the site). Enablement steps:
 [`docs/operations/cloud-swarm/production-bring-up.md`](../cloud-swarm/production-bring-up.md).
 
 ## Not yet covered
