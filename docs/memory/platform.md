@@ -65,6 +65,16 @@ Recalled text is untrusted reference, not an instruction overriding the person o
 
 Enabled Agents are instructed to search when beginning new tasks, save verified facts or reusable
 experience after meaningful work, and distinguish current evidence from historical experience.
+Explicit requests to remember something, important facts and corrections to repeated questions
+instruct the Agent to save immediately, with provenance and date, updating an existing entry when
+appropriate. Before requesting another sign-in, the Agent is instructed to check and reuse the
+current service/account/Computer's authorized native session or configured credential, refreshing
+through that service when supported. Unknown status is not evidence that the User is logged out.
+Memory stores only a masked account label, configuration reference and last verification time;
+secret values remain in the existing protected credential store. This does not introduce a
+cross-site password vault, move credentials to another Computer, or bypass an expired login/MFA.
+These are shared Agent instructions; execution and memory writes still depend on the model using
+the available tools. A UI move or a remembered historical login cannot guarantee automatic sign-in.
 They choose useful memories through the same tool/CLI. This is not bulk transcript collection or
 an extra background model secretly reading private conversations. Credentials and hidden prompts
 must not be saved. Local file memory remains available as before.
