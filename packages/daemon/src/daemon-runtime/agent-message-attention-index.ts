@@ -95,7 +95,7 @@ export class AgentMessageAttentionIndex {
       agentId: string,
       conversation?: AgentConversationScope,
     ) => void = () => {},
-    private readonly hold: {
+    readonly hold: {
       shouldHold(agentId: string): boolean;
       enqueue(agentId: string, message: AgentMessageDelivery): void;
       busy(agentId: string): void;
@@ -395,6 +395,12 @@ export class AgentMessageAttentionIndex {
     const generation = noticeGeneration();
     this.#generations.set(agentId, generation);
     return generation;
+  }
+  session(agentId: string) {
+    return this.#runtimes.session(agentId);
+  }
+  isCurrentGeneration(agentId: string, generation: NoticeGeneration): boolean {
+    return this.#generations.get(agentId) === generation;
   }
   check(agentId: string): MessageAttention[] {
     return [...(this.#attention.get(agentId)?.values() ?? [])];
