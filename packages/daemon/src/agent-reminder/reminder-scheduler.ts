@@ -177,6 +177,9 @@ export class ReminderScheduler {
         continue;
       }
       const key = this.#receiptKey(agentId, receipt.reminderId, receipt.version);
+      // An exhausted receipt carries on from memory: its own retry is what saves it. While that write
+      // backs off the disk copy is the older one, and adopting it would run the occurrence again.
+      if (this.#ledger.known(key)?.retryExhausted) continue;
       this.#ledger.remember(key, receipt);
       if (!receipt.consumed && !receipt.terminal) this.#armReceipt(receipt, receipt.nextAt);
     }
@@ -239,6 +242,8 @@ export class ReminderScheduler {
       };
     }
     this.#ledger.remember(key, receipt);
+    // A pending reconciliation keeps its own timer. Once that deadline has passed (including after
+    // a restart with no timer in memory), this schedule is the one chance to reconcile it.
     if (receipt.retryExhausted && this.clock.now() < receipt.nextAt) {
       this.#armReceipt(receipt);
       return;

@@ -46,7 +46,9 @@ export class ReminderReceiptLedger {
       const disk = (await this.read(agentId)).find(
         (r) => receiptKey(agentId, r.reminderId, r.version) === key,
       );
-      if (disk) this.#receipts.set(key, disk);
+      // An exhausted receipt is done reading the file: while its own write backs off the durable
+      // copy is the older one, and adopting it would restart the occurrence as an unexhausted one.
+      if (disk && !this.#receipts.get(key)?.retryExhausted) this.#receipts.set(key, disk);
     } catch (error) {
       logger.error("Reminder receipt read failed", { error, agent_id: agentId });
     }
