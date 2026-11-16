@@ -6,7 +6,7 @@ import { refusalNextAction } from "./refusal-guidance";
 
 /** `idempotent`: asking again changes nothing (a read), so an upstream 5xx or a transport failure
  * is worth retrying. Off by default: most proxied operations have effects. */
-type ProxyFailureOptions = { idempotent?: boolean };
+type ProxyFailureOptions = { idempotent?: boolean; external?: boolean };
 
 /**
  * Classifies a non-ok proxy response (or a network failure reaching the proxy) into a `CliError`.
@@ -20,10 +20,10 @@ export function proxyHttpFailure(
   status: number,
   body: { json?: AgentProxyErrorBody },
   target: string | undefined,
-  { idempotent = false }: ProxyFailureOptions = {},
+  { idempotent = false, external = false }: ProxyFailureOptions = {},
 ): CliError {
-  const external = externalRefusalOf(status, body.json);
-  if (external) return external;
+  const externalRefusal = external ? externalRefusalOf(status, body.json) : undefined;
+  if (externalRefusal) return externalRefusal;
   const isSend = operation === "send";
   const proxy = body.json?.proxy;
   const isLocalPrecondition = proxy?.failure_class === "local_precondition";

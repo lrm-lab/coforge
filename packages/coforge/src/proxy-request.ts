@@ -1,5 +1,5 @@
 import { externalRefusalOf } from "./external/refusal";
-import { isAgentCredential } from "./agent-credential";
+import { isAgentCredential, isExternalCredential } from "./agent-credential";
 /** The proxied requests every local client operation shares: the preflight a request runs before
  * it is issued, and the routes that answer a domain error as `{ ok: false, errorCode, error }`. */
 
@@ -61,6 +61,7 @@ export async function envelopeRequest<T>(
   for (const [key, value] of Object.entries(request.query ?? {}))
     endpoint.searchParams.set(key, value);
   const hasBody = request.body !== undefined;
+  const isExternal = isExternalCredential(context);
   let response: Response;
   try {
     response = await fetch(endpoint, {
@@ -70,6 +71,7 @@ export async function envelopeRequest<T>(
         ...(hasBody ? { "content-type": "application/json" } : {}),
       },
       ...(hasBody ? { body: JSON.stringify(request.body) } : {}),
+      ...(isExternal ? { redirect: "error" as const } : {}),
       signal: AbortSignal.timeout(10_000),
     });
   } catch {
@@ -81,7 +83,7 @@ export async function envelopeRequest<T>(
   }
   const rawBody: unknown = await response.json().catch(() => undefined);
   if (!response.ok) {
-    const external = externalRefusalOf(response.status, rawBody);
+    const external = isExternal ? externalRefusalOf(response.status, rawBody) : undefined;
     if (external) throw external;
     const errorBody = decodeError(rawBody);
     throw new CliError({

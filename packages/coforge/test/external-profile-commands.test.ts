@@ -91,14 +91,30 @@ test("logout revokes the key, deletes the credential and the cursor", async () =
   expect(await home.store.readCursor("p")).toBeUndefined();
 });
 
-test("logout of a key the server already rejects still deletes it", async () => {
-  await home.store.writeProfile("p", profile());
-  const output = await runAgentLogout(
-    [],
-    "p",
-    deps(() => json({ code: "invalid_credential" }, 401)),
-  );
-  expect(output).toContain("already revoked");
+test("logout of a key the server already rejects (401/403/404) still deletes it", async () => {
+  for (const status of [401, 403, 404]) {
+    await home.store.writeProfile("p", profile());
+    const output = await runAgentLogout(
+      [],
+      "p",
+      deps(() => json({ code: "invalid_credential" }, status)),
+    );
+    expect(output).toContain("already revoked");
+    expect(await home.store.readProfile("p")).toBeUndefined();
+  }
+});
+
+test("logout removes a corrupt credential.json without talking to the server", async () => {
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const dir = join(home.home, "profiles", "p");
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, "credential.json"), "{broken", "utf8");
+  const d = deps(() => {
+    throw new Error("should not call server");
+  });
+  const output = await runAgentLogout([], "p", d);
+  expect(output).toContain("corrupt local credential removed");
   expect(await home.store.readProfile("p")).toBeUndefined();
 });
 
