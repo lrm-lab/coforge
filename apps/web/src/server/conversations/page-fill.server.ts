@@ -11,7 +11,8 @@ export type PageFillField = {
 
 /**
  * The desktop address that types into one Agent's browser. The origin is the
- * deployment's desktop proxy, which already checks the caller owns the computer.
+ * deployment site (`COFORGE_CLOUD_DESKTOP_ORIGIN`); Caddy forward_auth checks
+ * ownership before the Swarm proxy accepts the request.
  */
 export function pageFillUrl(
   origin: string,

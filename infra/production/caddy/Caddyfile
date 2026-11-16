@@ -57,6 +57,9 @@ coforge.cn {
 			header_up X-Desktop-Path {http.request.uri.path}
 		}
 		reverse_proxy {$COFORGE_DESKTOP_UPSTREAM} {
+			# Same value as the Swarm host's cluster token. The host refuses
+			# /desktop without it, so a bare :6090 client cannot open a screen.
+			header_up X-Coforge-Desktop-Proxy-Secret {$COFORGE_DESKTOP_PROXY_SECRET}
 			flush_interval -1
 		}
 	}

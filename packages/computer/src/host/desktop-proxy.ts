@@ -1,9 +1,28 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { adaptDesktopHtml, withDesktopTitle } from "./desktop-page";
 
 export { adaptDesktopHtml, withDesktopTitle };
 
+/** Caddy sets this when reverse-proxying after forward_auth; browsers never send it. */
+export const DESKTOP_PROXY_SECRET_HEADER = "x-coforge-desktop-proxy-secret";
+
 export type DesktopEndpoint = { host: string; port: number; token: string };
+
+/**
+ * When `expectedSecret` is set, only callers that present the same value may
+ * use `/desktop/...` (including `/fill` and `/inspect`). Empty expected means
+ * local/dev without a gate.
+ */
+export function desktopProxySecretAllows(
+  request: Request,
+  expectedSecret: string | undefined,
+): boolean {
+  const expected = expectedSecret?.trim() ?? "";
+  if (expected.length === 0) return true;
+  const presented = request.headers.get(DESKTOP_PROXY_SECRET_HEADER) ?? "";
+  if (presented.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(presented), Buffer.from(expected));
+}
 
 type SocketData = {
   upstream?: WebSocket;
@@ -72,6 +91,8 @@ export function startDesktopProxy(input: {
   port: number;
   resolve: (computerId: string) => Promise<DesktopEndpoint | undefined>;
   handleRequest?: (request: Request) => Promise<Response | undefined>;
+  /** Shared with Caddy; when set, bare clients cannot open a desktop or fill. */
+  proxySecret?: string;
 }): { port: number; stop: () => void } {
   const server = Bun.serve<SocketData>({
     hostname: input.hostname,
@@ -82,6 +103,9 @@ export function startDesktopProxy(input: {
       const url = new URL(request.url);
       const route = parseDesktopRoute(url.pathname);
       if (!route) return new Response("not found", { status: 404 });
+      if (!desktopProxySecretAllows(request, input.proxySecret)) {
+        return new Response("forbidden", { status: 403 });
+      }
       let target: DesktopEndpoint | undefined;
       try {
         target = await input.resolve(route.computerId);

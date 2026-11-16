@@ -38,6 +38,10 @@ services:
       # computer manager (this lab host). Caddy reaches it after the web app
       # allows the signed-in computer owner. Not a public listener.
       COFORGE_DESKTOP_UPSTREAM: 10.110.158.147:6090
+      # Shared with the Swarm host (`COFORGE_CLUSTER_TOKEN`). Caddy sets it on
+      # the upstream request after forward_auth; the host rejects callers that
+      # omit it. Same plaintext as COFORGE_CLOUD_CLUSTER_TOKEN on this host.
+      COFORGE_DESKTOP_PROXY_SECRET: ${COFORGE_CLOUD_CLUSTER_TOKEN:-}
     ports:
       - "80:80"
       - "443:443"
@@ -109,10 +113,9 @@ services:
       # Web-page artifacts' sandbox origin (task #544): the dedicated domain; Caddy routes it
       # to web like the app and 301s the interim coforge.cn subdomain.
       COFORGE_ARTIFACT_SANDBOX_ORIGIN: https://coforgeusercontent.com
-      # Browser address of this deployment's Swarm desktop proxy. The browser
-      # opens it directly. Production ECS cannot always reach that proxy, so this
-      # is not the site origin. The Open desktop button is absent when empty.
-      COFORGE_CLOUD_DESKTOP_ORIGIN: http://10.110.158.147:6090
+      # Site origin so Open desktop and page-fill go through Caddy forward_auth
+      # (owner only). The Swarm :6090 proxy is not a browser entry point.
+      COFORGE_CLOUD_DESKTOP_ORIGIN: https://coforge.cn
       # Shared secret for the one Swarm this deployment controls. The Web process
       # stores only its hash. Plaintext arrives from the host secret file via
       # remote-deploy.sh; an empty value refuses cloud computers.

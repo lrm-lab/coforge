@@ -26,7 +26,7 @@ openssl rand -hex 16   # → coforge_cloud_service_password（示例长度；可
 
 ## 部署 Web（带上云电脑变量）
 
-确认 `infra/production/docker-compose.yml` 已含 `COFORGE_CLOUD_CLUSTER_TOKEN`、桌面 origin、以及 Caddy 的 `COFORGE_DESKTOP_UPSTREAM`（指向 `10.110.158.147:6090`）。把上述 secret 文件写好后，走现有 **Deploy Web (production)** 流程，把 Compose/Caddy 资产推到 ECS。空令牌时云电脑保持关闭，部署仍可成功。
+确认 `infra/production/docker-compose.yml` 已含 `COFORGE_CLOUD_CLUSTER_TOKEN`、站点桌面 origin（`https://coforge.cn`）、Caddy 的 `COFORGE_DESKTOP_UPSTREAM`（指向 `10.110.158.147:6090`），以及 Caddy 的 `COFORGE_DESKTOP_PROXY_SECRET`（与集群令牌相同）。把上述 secret 文件写好后，走现有 **Deploy Web (production)** 流程，把 Compose/Caddy 资产推到 ECS。空令牌时云电脑保持关闭，部署仍可成功。
 
 ## Computer 与电脑镜像
 
@@ -81,4 +81,4 @@ ExecStart=/home/<用户>/.coforge-host/coforge-computer host --server-url https:
 - 「云电脑服务」页心跳绿灯（90s）
 - 创建工作区后 `docker service ls` 出现 `coforge-<电脑编号>`，镜像 `coforge-computer:production`，副本 `1/1`
 - 容器日志有 `Daemon cloud connection established`
-- 电脑页 Cloud 在线；桌面可走 `http://10.110.158.147:6090` 或 `https://coforge.cn/desktop/...`（经 Caddy）
+- 电脑页 Cloud 在线；桌面只走 `https://coforge.cn/desktop/...`（Caddy `forward_auth` + 主机代理密钥）。直连 `http://10.110.158.147:6090` 应被拒绝

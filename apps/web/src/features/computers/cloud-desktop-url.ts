@@ -1,13 +1,14 @@
 /**
  * Browser address of one cloud Computer's desktop.
  *
- * `desktopOrigin` is the deployment's Swarm host proxy
- * (`COFORGE_CLOUD_DESKTOP_ORIGIN`), not the web page the user is on. The image
- * serves that page at `/desktop.html` and connects to a relative `websockify`.
- * The host proxy publishes the computer at `/desktop/<computer id>/` and one
- * Agent's screen at `/desktop/<computer id>/<agent id>/`. It adds the
- * container token on its own request, so this address has none. An Agent's
- * name, when present, is the `title` query and becomes the window title.
+ * `desktopOrigin` is the deployment site origin
+ * (`COFORGE_CLOUD_DESKTOP_ORIGIN`), so the browser stays on the HTTPS site and
+ * Caddy checks the signed-in owner before proxying. The image serves that page
+ * at `/desktop.html` and connects to a relative `websockify`. The host proxy
+ * publishes the computer at `/desktop/<computer id>/` and one Agent's screen at
+ * `/desktop/<computer id>/<agent id>/`. It adds the container token on its own
+ * request, so this address has none. An Agent's name, when present, is the
+ * `title` query and becomes the window title.
  */
 export function cloudDesktopUrl(
   desktopOrigin: string,
