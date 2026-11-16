@@ -9,21 +9,12 @@ import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { CHANNEL_VISIBILITY } from "./channel-visibility";
 import { leavePublicChannel } from "./channels.functions";
-import {
-  deletePublicChannel,
-  setGeneralChannelHidden,
-  setPublicChannelArchived,
-  setPublicChannelVisibility,
-} from "./channel-lifecycle.functions";
+import { deletePublicChannel, setPublicChannelVisibility } from "./channel-lifecycle.functions";
 
-/** The channel actions that ask for confirmation first. */
-export type ConfirmedAction =
-  | "archive"
-  | "leave"
-  | "hide-general"
-  | "delete"
-  | "make-private"
-  | "make-public";
+/** The channel actions that still ask first: what Undo cannot put back (task #7). Leaving asks only
+ * for a private channel, which its leaver cannot join again; the rest run at once
+ * (`channel-direct-actions`). */
+export type ConfirmedAction = "leave" | "delete" | "make-public";
 
 /** What making a channel private and making it public both say while and after they run. */
 const VISIBILITY_COPY = {
@@ -47,28 +38,12 @@ const CONFIRM_COPY: Record<
     permanent?: boolean;
   }
 > = {
-  archive: {
-    title: () => m.channel_settings_archive(),
-    body: (name) => m.channel_settings_archive_confirm({ name }),
-    confirm: m.channel_settings_archive_action,
-    pending: m.channel_settings_archiving,
-    error: m.channel_settings_archive_error,
-    denied: m.channel_settings_access_denied,
-  },
   leave: {
     title: () => m.channel_settings_leave(),
     body: (name) => m.channel_settings_leave_confirm({ name }),
     confirm: m.channel_settings_leave_action,
     pending: m.channel_settings_leaving,
     error: m.channel_settings_leave_error,
-  },
-  "hide-general": {
-    title: () => m.channel_settings_hide_general(),
-    body: () => m.channel_settings_hide_general_confirm(),
-    confirm: m.channel_settings_hide_general,
-    pending: m.channel_settings_hiding_general,
-    error: m.channel_settings_hide_general_error,
-    denied: m.channel_settings_hide_general_denied,
   },
   delete: {
     title: () => m.channel_settings_delete(),
@@ -79,12 +54,6 @@ const CONFIRM_COPY: Record<
     denied: m.channel_settings_delete_denied,
     permanent: true,
   },
-  "make-private": {
-    title: (name) => m.channel_settings_make_private_title({ name }),
-    body: (name) => m.channel_settings_make_private_confirm({ name }),
-    confirm: m.channel_settings_make_private_action,
-    ...VISIBILITY_COPY,
-  },
   "make-public": {
     title: (name) => m.channel_settings_make_public_title({ name }),
     body: (name) => m.channel_settings_make_public_confirm({ name }),
@@ -93,8 +62,8 @@ const CONFIRM_COPY: Record<
   },
 };
 
-/** Confirms archiving, leaving or deleting the channel, making it private or public, or hiding
- * #general; the write runs here so its error stays inline. */
+/** Confirms leaving a private channel, deleting a channel or making it public; the write runs here
+ * so its error stays inline. */
 export function ChannelActionConfirmDialog({
   kind,
   channelId,
@@ -108,25 +77,19 @@ export function ChannelActionConfirmDialog({
   onClose: () => void;
   onDone: () => Promise<void>;
 }) {
-  const setArchived = useServerFn(setPublicChannelArchived);
   const leave = useServerFn(leavePublicChannel);
-  const setGeneralHidden = useServerFn(setGeneralChannelHidden);
   const deleteChannel = useServerFn(deletePublicChannel);
   const setVisibility = useServerFn(setPublicChannelVisibility);
   const writes: Record<ConfirmedAction, () => Promise<unknown>> = {
-    archive: () => setArchived({ data: { channelId, archived: true } }),
     leave: () => leave({ data: { channelId } }),
-    "hide-general": () => setGeneralHidden({ data: { hidden: true } }),
     delete: () => deleteChannel({ data: { channelId } }),
-    "make-private": () =>
-      setVisibility({ data: { channelId, visibility: CHANNEL_VISIBILITY.PRIVATE } }),
     "make-public": () =>
       setVisibility({ data: { channelId, visibility: CHANNEL_VISIBILITY.PUBLIC } }),
   };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   // Keeps the last action's copy while the dialog animates closed.
-  const lastKind = useRef<ConfirmedAction>("archive");
+  const lastKind = useRef<ConfirmedAction>("leave");
   if (kind) lastKind.current = kind;
   const copy = CONFIRM_COPY[lastKind.current];
 

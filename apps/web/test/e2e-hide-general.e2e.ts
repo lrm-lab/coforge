@@ -7,7 +7,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 
 /**
  * Hiding #general in a real browser, as a Workspace owner. The channel settings panel's Actions
- * offer "Hide #general"; after its confirmation the viewer lands back in Chat and #general has
+ * offer "Hide #general"; it runs at once (Undo in its toast, task #7), the viewer lands back in Chat and #general has
  * left the sidebar, and opening it by URL lands back in Chat too. The System channels section of
  * Settings → Members shows "Hide #general channel" ticked; unticking it and saving brings #general
  * back.
@@ -97,14 +97,12 @@ test("an owner hides #general from its panel and restores it from Settings → M
       if (attempt === 5) throw new Error("the channel settings panel never opened");
     }
     await clickText("button", "Hide #general");
-    await waitFor(`document.body.textContent.includes("including you")`);
-    await browser("screenshot", join(artifacts, "confirm.png"));
-    // The dialog's own confirm button carries the same label as the action.
-    await browser(
-      "eval",
-      `[...document.querySelectorAll('[role="dialog"] button')].filter((b) => b.textContent.trim() === "Hide #general").at(-1).click()`,
-    );
     await waitFor(`location.pathname !== "${workspacePath}/channel/${general.id}"`);
+    // The toast says where it comes back from once Undo is gone.
+    await waitFor(
+      `[...document.querySelectorAll("[data-sonner-toast]")].some((t) => t.textContent.includes("System channels"))`,
+    );
+    await browser("screenshot", join(artifacts, "hidden-toast.png"));
     await waitFor(`!${sidebarHasGeneral}`);
     expect(
       (await db.conversation.findUniqueOrThrow({ where: { id: general.id } }))
