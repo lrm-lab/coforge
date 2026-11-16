@@ -13,7 +13,13 @@ import {
   pageHydrated,
 } from "./helpers/browser-e2e";
 import { clickActivityLink, inPane, rowItems, waitFor } from "./helpers/activity-inbox-e2e";
-import { dividerBetween, postLive, row, seedChannel } from "./helpers/open-unread-e2e";
+import {
+  dividerBetween,
+  firstPictureSeen,
+  postLive,
+  row,
+  seedChannel,
+} from "./helpers/open-unread-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 import { serverFunctionIds, serverFunctionOf } from "./helpers/server-function-ids";
 
@@ -185,10 +191,16 @@ test("a channel opened from Activity round after round shows each round's divide
       // the burst's first message is already there, under the divider.
       await browser(
         "eval",
-        `(() => { window.__firstPicture = undefined; const observer = new MutationObserver(() => { if (!${inPane(before)}) return; window.__firstPicture = ${dividerBetween(before, burst[0]!)}; observer.disconnect(); }); observer.observe(document.body, { childList: true, subtree: true }); return true; })()`,
+        `(() => { window.__firstPicture = undefined; const observer = new MutationObserver(() => { if (!${inPane(before)}) return; window.__firstPicture = ${dividerBetween(before, burst[0]!)}; window.__firstPictureSeen = ${firstPictureSeen(channel.channelId)}; observer.disconnect(); }); observer.observe(document.body, { childList: true, subtree: true }); return true; })()`,
       );
       await browser("find", "text", `E2E open-rounds r${round} b3`, "click");
       await browser("wait", "--fn", `window.__firstPicture !== undefined`);
+      // What the first picture held, printed every round so a CI failure says which round and why
+      // (task #102): the target the row opened, the pane's last messages, what follows the divider.
+      console.log(
+        `round ${round}: first picture ${await evaluate<boolean>(`window.__firstPicture`)}, expected the divider after ${before.slice(-6)} and before ${burst[0]!.slice(-6)}`,
+        await evaluate<string>(`JSON.stringify(window.__firstPictureSeen)`),
+      );
       expect(await evaluate<boolean>(`window.__firstPicture`)).toBe(true);
       // Every message of the burst is in the window, and the pane reads through it.
       await waitFor(

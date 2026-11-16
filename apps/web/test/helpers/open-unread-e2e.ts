@@ -19,6 +19,22 @@ export function dividerBetween(before: string, after: string) {
   })()`;
 }
 
+/** What the pane shows at a moment, for a failure to explain itself: the URL's search (an Activity
+ * row's target carries `unread`), the pane's last six messages (id tails), the message right after
+ * the divider, and the status of the open read of `conversationId`. */
+export function firstPictureSeen(conversationId: string) {
+  return `(() => {
+    const tail = (id) => (id ?? "").replace("message-", "").slice(-6);
+    const pane = document.querySelector("main") ?? document.body;
+    const ids = [...pane.querySelectorAll('[id^="message-"]')].map((row) => tail(row.id)).slice(-6);
+    const divider = document.querySelector('[role="separator"][aria-label="New messages"]');
+    let after = divider;
+    while (after && !(after.id ?? "").startsWith("message-")) after = after.nextElementSibling ?? after.parentElement?.nextElementSibling ?? null;
+    const read = window.__TSR_ROUTER__?.options.context.queryClient.getQueryState(["conversation-open", ${JSON.stringify(conversationId)}, ""]);
+    return { search: location.search, ids, divider: Boolean(divider), afterDivider: after ? tail(after.id) : null, read: read?.status ?? "none", fetching: read?.fetchStatus ?? "none" };
+  })()`;
+}
+
 /** The page's open read of where the viewer's unread starts (`conversationOpenQuery`, task
  * #378), as TanStack holds it: undefined until it is asked. */
 export function openReadState(conversationId: string) {
