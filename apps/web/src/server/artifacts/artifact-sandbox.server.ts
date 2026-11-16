@@ -24,7 +24,7 @@ import {
 import { publicMarkdownResponse } from "./artifact-public-markdown.server";
 
 type SandboxDependencies = {
-  reads: Pick<ArtifactReads, "read" | "file">;
+  reads: Pick<ArtifactReads, "read" | "file" | "fileInVersion">;
   /** One blob's bytes, or null when it is gone. */
   readBlob(workspaceId: string, sha256: string): Promise<Uint8Array | null>;
   /** The sandbox origin, or null when web pages are off. */
@@ -105,10 +105,14 @@ export class ArtifactSandbox {
    * The sandbox origin's every answer. A valid link (`/a/<ticket>`) is the wrapper; every file of
    * the link's version is under it (`/a/<ticket>/page/<path>`): a page file only as a frame (the
    * wrapper's, or a link followed inside it), any other file only as a subresource of a page
-   * (`fileRequestUse`), so none is ever a document of its own; anything else is a refusal. A page
-   * file is also asked for, cross-site, by a link followed inside the page's opaque frame, so the
-   * app framing one directly is not told apart (an accepted residual: only app code can do it, and
-   * the page stays sandboxed, just without the wrapper's `frame-src` guard). The wrapper opens for five minutes after the link was made, its files for thirty.
+   * (`fileRequestUse`), so none is ever a document of its own; anything else is a refusal. The
+   * wrapper and each page file ask again whether the reader may still read (access may have
+   * changed since the link was made); a subresource of a page already open serves under the
+   * ticket alone until the ticket's files expire (task #25). A page file is also asked for,
+   * cross-site, by a link followed inside the page's opaque frame, so the app framing one
+   * directly is not told apart (an accepted residual: only app code can do it, and the page stays
+   * sandboxed, just without the wrapper's `frame-src` guard). The wrapper opens for five minutes
+   * after the link was made, its files for thirty.
    */
   async serve(request: Request): Promise<Response> {
     if (request.method !== "GET" && request.method !== "HEAD")
@@ -149,15 +153,25 @@ export class ArtifactSandbox {
         ...origins,
       });
     }
-    const row = await this.deps.reads
-      .file({
-        workspaceId: ticket.w,
-        artifactId: ticket.a,
-        reader,
-        version: ticket.v,
-        path: file,
-      })
-      .catch(refusable);
+    // A page file is a document the frame shows, so its load asks again whether the reader may
+    // still read it. Any other file is a subresource of a page already open: the ticket is its
+    // authorization, so it asks only that the artifact is live and the version has it (task #25).
+    const row = isPageFile(file)
+      ? await this.deps.reads
+          .file({
+            workspaceId: ticket.w,
+            artifactId: ticket.a,
+            reader,
+            version: ticket.v,
+            path: file,
+          })
+          .catch(refusable)
+      : await this.deps.reads.fileInVersion({
+          workspaceId: ticket.w,
+          artifactId: ticket.a,
+          version: ticket.v,
+          path: file,
+        });
     if (!row || (isPageFile(file) && row.sizeBytes > ARTIFACT_HTML_LIMIT))
       return sandboxRefusal(404, "Not found.");
     return (

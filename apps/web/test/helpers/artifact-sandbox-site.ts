@@ -103,3 +103,46 @@ export function siteRow(sites: Record<string, Site>, artifactId: string, path: s
     ? { path, sha256: `${artifactId}/${path}`, sizeBytes: bytes.byteLength, kind: "text" }
     : null;
 }
+
+/** Every way out the page tries, then what it could read, posted to the top page. `out` is the
+ * "outside" server's URL every attempt aims at; `stunPort` a STUN server's port for WebRTC. */
+export const probePage = (
+  out: string,
+  stunPort: number,
+): string => `<!doctype html><html><head><title>probe</title></head><body><p>probe</p><script>
+const OUT = ${JSON.stringify(out)};
+const result = { ran: true };
+const attempt = (name, run) => { try { run(); result[name] = "tried"; } catch (e) { result[name] = "threw"; } };
+attempt("fetch", () => fetch(OUT + "/fetch").catch(() => {}));
+attempt("xhr", () => { const x = new XMLHttpRequest(); x.open("GET", OUT + "/xhr"); x.send(); });
+attempt("beacon", () => navigator.sendBeacon(OUT + "/beacon", "x"));
+attempt("websocket", () => new WebSocket(OUT.replace("http", "ws") + "/ws"));
+attempt("image", () => { new Image().src = OUT + "/image"; });
+attempt("script", () => { const s = document.createElement("script"); s.src = OUT + "/script.js"; document.head.append(s); });
+attempt("style", () => { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = OUT + "/style.css"; document.head.append(l); });
+attempt("form", () => { const f = document.createElement("form"); f.method = "post"; f.action = OUT + "/form"; document.body.append(f); f.submit(); });
+attempt("popup", () => window.open(OUT + "/popup"));
+attempt("top", () => { top.location.href = OUT + "/top"; });
+attempt("webrtc", () => {
+  const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:127.0.0.1:" + ${stunPort} }] });
+  pc.createDataChannel("x");
+  pc.createOffer().then((offer) => pc.setLocalDescription(offer)).catch(() => {});
+});
+try { result.cookie = document.cookie; } catch (e) { result.cookie = "threw"; }
+try { localStorage.setItem("k", "v"); result.storage = "allowed"; } catch (e) { result.storage = "threw"; }
+result.origin = String(self.origin);
+top.postMessage(result, "*");
+</script></body></html>`;
+
+/** A page that sends its own frame to `out/self`. */
+export const navigatorPage = (out: string): string =>
+  `<!doctype html><p>moving</p><script>setTimeout(() => { location.href = ${JSON.stringify(
+    `${out}/self`,
+  )}; }, 100);</script>`;
+
+/** Resource hints (`tcp`), written and added by script: the one way out that stays open. */
+export const hintsPage = (
+  tcp: string,
+): string => `<!doctype html><link rel="preconnect" href="${tcp}"><link rel="dns-prefetch" href="${tcp}"><script>
+for (const rel of ["preconnect", "dns-prefetch"]) { const l = document.createElement("link"); l.rel = rel; l.href = ${JSON.stringify(tcp)}; document.head.append(l); }
+</script><p>hints</p>`;

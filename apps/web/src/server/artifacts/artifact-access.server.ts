@@ -36,6 +36,31 @@ export function artifactHomeConversationId(homeKey: string): string | undefined 
   return UUID.test(conversationId) ? conversationId : undefined;
 }
 
+/** The actor's Workspace standing, read once for every check a request makes: whether it
+ * belongs at all, and a person's role (an Agent has none). */
+export type ArtifactViewer = { member: boolean; role: string | null };
+
+/** The actor's membership — a person's role included — or live Agent row, in one query: every
+ * check a read makes shares it instead of asking the membership table again (task #25). */
+export async function artifactViewer(
+  db: Db,
+  workspaceId: string,
+  actor: ArtifactActor,
+): Promise<ArtifactViewer> {
+  if (actor.userId) {
+    const membership = await db.workspaceMembership.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: actor.userId } },
+      select: { role: true },
+    });
+    return { member: membership !== null, role: membership?.role ?? null };
+  }
+  const agent = await db.agent.findFirst({
+    where: { id: actor.agentId, workspaceId, deletedAt: null },
+    select: { id: true },
+  });
+  return { member: agent !== null, role: null };
+}
+
 /**
  * An artifact's home is its write rule and its privacy boundary (task #385; reads widened
  * workspace-wide in task #20). A conversation's artifact is written by its active members,
@@ -48,13 +73,15 @@ export async function artifactHomeAccess(
   workspaceId: string,
   actor: ArtifactActor,
   homeKey: string,
+  viewer?: ArtifactViewer,
 ): Promise<ArtifactHomeAccess> {
   // The home's kind is known from its key alone, except channel vs DM, which the conversation's
   // `channelName` below settles. A workspace-only reader still hears the kind (task #20); it
   // never hears the home's id.
   const homeKind: ArtifactHomeKind = homeKey === "workspace" ? "workspace" : "dm";
   const none = { read: false, write: false, homeKind };
-  if (!(await inWorkspace(db, workspaceId, actor))) return none;
+  const member = viewer === undefined ? await inWorkspace(db, workspaceId, actor) : viewer.member;
+  if (!member) return none;
   if (homeKey === "workspace") return { read: true, write: true, homeKind: "workspace" };
   const conversationId = artifactHomeConversationId(homeKey);
   if (!conversationId) return none;
@@ -77,10 +104,12 @@ export async function requireArtifactRead(
   workspaceId: string,
   actor: ArtifactActor,
   artifact: { homeKey: string },
+  viewer?: ArtifactViewer,
 ): Promise<ArtifactHomeAccess & { homeRead: boolean }> {
-  const access = await artifactHomeAccess(db, workspaceId, actor, artifact.homeKey);
+  const access = await artifactHomeAccess(db, workspaceId, actor, artifact.homeKey, viewer);
   if (access.read) return { ...access, homeRead: true };
-  if (!(await inWorkspace(db, workspaceId, actor))) throw new AppError("NOT_FOUND");
+  const member = viewer === undefined ? await inWorkspace(db, workspaceId, actor) : viewer.member;
+  if (!member) throw new AppError("NOT_FOUND");
   // A home the Workspace hides is gone for everyone, its artifacts with it.
   if (await artifactHomeHidden(db, workspaceId, artifact.homeKey)) throw new AppError("NOT_FOUND");
   return { ...access, read: true, homeRead: false };
@@ -163,8 +192,9 @@ export async function requireArtifactHome(
   actor: ArtifactActor,
   homeKey: string,
   need: "read" | "write",
+  viewer?: ArtifactViewer,
 ): Promise<ArtifactHomeAccess> {
-  const access = await artifactHomeAccess(db, workspaceId, actor, homeKey);
+  const access = await artifactHomeAccess(db, workspaceId, actor, homeKey, viewer);
   if (!access.read) throw new AppError("NOT_FOUND");
   if (need === "write" && !access.write) throw new AppError("ACCESS_DENIED");
   return access;
@@ -200,7 +230,18 @@ export async function canDeleteArtifact(
     where: { workspaceId_userId: { workspaceId, userId: actor.userId } },
     select: { role: true },
   });
-  return isWorkspaceAdminRole(membership?.role);
+  return canDeleteArtifactWithRole(actor, membership?.role ?? null, artifact);
+}
+
+/** `canDeleteArtifact` with the actor's role already read (`artifactViewer`), for a read that
+ * shares one membership lookup with its access checks. */
+export function canDeleteArtifactWithRole(
+  actor: ArtifactActor,
+  role: string | null,
+  artifact: { authorAgentId: string | null },
+): boolean {
+  if (actor.userId === undefined) return artifact.authorAgentId === actor.agentId;
+  return isWorkspaceAdminRole(role ?? undefined);
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

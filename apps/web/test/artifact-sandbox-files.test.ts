@@ -93,6 +93,13 @@ function sandbox(version: Version = site(), options: { readable?: () => boolean 
       lookups.push(input.path);
       return input.path in version.files ? row(input.path) : null;
     },
+    // A subresource's lookup asks no reader (task #25): the ticket is its authorization.
+    fileInVersion: async (input: { path: string }) => {
+      lookups.push(input.path);
+      return input.path in version.files
+        ? { sha256: `sha:${input.path}`, sizeBytes: text(version.files[input.path]!).byteLength }
+        : null;
+    },
   };
   let now = NOW;
   const service = new ArtifactSandbox({
@@ -358,12 +365,14 @@ describe("what a ticket reaches", () => {
     expect((await service.serve(new Request(`${url}/page/`, { headers }))).status).toBe(404);
   });
 
-  test("a file stops opening once its reader loses access", async () => {
+  test("a page stops opening once its reader loses access; a subresource serves under its ticket", async () => {
     let readable = true;
     const { service, url } = await opened(undefined, { readable: () => readable });
     expect((await service.serve(sub(url, "app.js", "script"))).status).toBe(200);
     readable = false;
-    expect((await service.serve(sub(url, "app.js", "script"))).status).toBe(404);
+    // A subresource of a page already open is the ticket's to serve until it expires (task #25);
+    // a frame is a document load and asks again whether its reader may still read.
+    expect((await service.serve(sub(url, "app.js", "script"))).status).toBe(200);
     expect((await service.serve(frame(url, "other.html"))).status).toBe(404);
   });
 

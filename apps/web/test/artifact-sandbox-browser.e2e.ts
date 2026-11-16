@@ -4,9 +4,12 @@ import { join } from "node:path";
 import { ArtifactSandbox } from "#src/server/artifacts/artifact-sandbox.server";
 import { NAVIGATED_NOTICE } from "#src/server/artifacts/artifact-sandbox-response.server";
 import {
+  hintsPage,
   multiFileSite,
+  navigatorPage,
   onePage,
   otherLinkSite,
+  probePage,
   siteBytes,
   siteRow,
   type Site,
@@ -74,46 +77,10 @@ const stun = await Bun.udpSocket({
   socket: { data: () => void hits.push("/stun") },
 });
 
-/** Every way out the page tries, then what it could read, posted to the top page. */
-const PROBE = `<!doctype html><html><head><title>probe</title></head><body><p>probe</p><script>
-const OUT = ${JSON.stringify(OUT)};
-const result = { ran: true };
-const attempt = (name, run) => { try { run(); result[name] = "tried"; } catch (e) { result[name] = "threw"; } };
-attempt("fetch", () => fetch(OUT + "/fetch").catch(() => {}));
-attempt("xhr", () => { const x = new XMLHttpRequest(); x.open("GET", OUT + "/xhr"); x.send(); });
-attempt("beacon", () => navigator.sendBeacon(OUT + "/beacon", "x"));
-attempt("websocket", () => new WebSocket(OUT.replace("http", "ws") + "/ws"));
-attempt("image", () => { new Image().src = OUT + "/image"; });
-attempt("script", () => { const s = document.createElement("script"); s.src = OUT + "/script.js"; document.head.append(s); });
-attempt("style", () => { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = OUT + "/style.css"; document.head.append(l); });
-attempt("form", () => { const f = document.createElement("form"); f.method = "post"; f.action = OUT + "/form"; document.body.append(f); f.submit(); });
-attempt("popup", () => window.open(OUT + "/popup"));
-attempt("top", () => { top.location.href = OUT + "/top"; });
-attempt("webrtc", () => {
-  const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:127.0.0.1:" + ${stun.port} }] });
-  pc.createDataChannel("x");
-  pc.createOffer().then((offer) => pc.setLocalDescription(offer)).catch(() => {});
-});
-try { result.cookie = document.cookie; } catch (e) { result.cookie = "threw"; }
-try { localStorage.setItem("k", "v"); result.storage = "allowed"; } catch (e) { result.storage = "threw"; }
-result.origin = String(self.origin);
-top.postMessage(result, "*");
-</script></body></html>`;
-
-/** A page that sends its own frame elsewhere. */
-const NAVIGATOR = `<!doctype html><p>moving</p><script>setTimeout(() => { location.href = ${JSON.stringify(
-  `${OUT}/self`,
-)}; }, 100);</script>`;
-
-/** Resource hints, written and added by script: the one way out that stays open (below). */
-const HINTS = `<!doctype html><link rel="preconnect" href="${TCP}"><link rel="dns-prefetch" href="${TCP}"><script>
-for (const rel of ["preconnect", "dns-prefetch"]) { const l = document.createElement("link"); l.rel = rel; l.href = ${JSON.stringify(TCP)}; document.head.append(l); }
-</script><p>hints</p>`;
-
 const SITES: Record<string, Site> = {
-  probe: onePage(PROBE),
-  navigator: onePage(NAVIGATOR),
-  hints: onePage(HINTS),
+  probe: onePage(probePage(OUT, stun.port)),
+  navigator: onePage(navigatorPage(OUT)),
+  hints: onePage(hintsPage(TCP)),
   multi: await multiFileSite(),
 };
 const bytesOf = (sha256: string) => siteBytes(SITES, sha256);
@@ -170,6 +137,8 @@ beforeAll(async () => {
         } as never;
       },
       file: async (input: { artifactId: string; path: string }) =>
+        rowOf(input.artifactId, input.path),
+      fileInVersion: async (input: { artifactId: string; path: string }) =>
         rowOf(input.artifactId, input.path),
     },
     readBlob: async (_workspaceId, sha256) => bytesOf(sha256),

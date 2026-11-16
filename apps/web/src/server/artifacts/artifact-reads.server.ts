@@ -12,7 +12,7 @@ import {
   artifactHomeConversationId,
   artifactHomeHidden,
   artifactsDisabled,
-  canManageArtifactPublicLink,
+  artifactViewer,
   canManageArtifactPublicLinkWithRole,
   inWorkspace,
   requireArtifactHome,
@@ -118,23 +118,27 @@ export class ArtifactReads {
     private readonly enabled: (workspaceId: string) => Promise<boolean>,
   ) {}
 
-  /** A live artifact the reader may read, with what a read shows of it. */
+  /** A live artifact the reader may read, with what a read shows of it, and the viewer's
+   * Workspace standing (`artifactViewer`) every check of the read shared. */
   async artifact(workspaceId: string, artifactId: string, reader: ArtifactActor) {
     if (!(await this.enabled(workspaceId))) throw artifactsDisabled();
-    const artifact = await this.db.artifact.findFirst({
-      where: { id: artifactId, workspaceId, deletedAt: null },
-      select: {
-        id: true,
-        name: true,
-        title: true,
-        description: true,
-        entryPath: true,
-        homeKey: true,
-        currentVersion: true,
-        // Read with the artifact so `canDelete` needs no second query (task #385).
-        authorAgentId: true,
-      },
-    });
+    const [artifact, viewer] = await Promise.all([
+      this.db.artifact.findFirst({
+        where: { id: artifactId, workspaceId, deletedAt: null },
+        select: {
+          id: true,
+          name: true,
+          title: true,
+          description: true,
+          entryPath: true,
+          homeKey: true,
+          currentVersion: true,
+          // Read with the artifact so `canDelete` needs no second query (task #385).
+          authorAgentId: true,
+        },
+      }),
+      artifactViewer(this.db, workspaceId, reader),
+    ]);
     if (!artifact) throw new AppError("NOT_FOUND");
     // The access check already read the home's conversation, so its kind comes free (task #385).
     const { homeKind, homeRead, write } = await requireArtifactRead(
@@ -142,6 +146,7 @@ export class ArtifactReads {
       workspaceId,
       reader,
       artifact,
+      viewer,
     );
     // `authorAgentId` is a bare column, so the owner's id is one more lookup — and only where the
     // `canManageArtifactPublicLink` rule needs it.
@@ -161,25 +166,32 @@ export class ArtifactReads {
       homeRead,
       // Whether the home's own rule lets this reader write; the workspace-wide read never does.
       canWrite: write,
-      canChange: await canManageArtifactPublicLink(this.db, workspaceId, reader, {
+      canChange: canManageArtifactPublicLinkWithRole(reader, viewer.role, {
         authorAgentOwnerId: ownerId ?? null,
       }),
       // A reader the home's rule kept out learns no home detail at all: not even whether it
       // was a channel or a DM (task #20). The page needs no kind without a home to return to.
       homeKind: homeRead ? homeKind : "workspace",
+      viewer,
     };
   }
 
-  /** The artifact and one version (its current one by default) with that version's files. */
+  /** The artifact and one version (its current one by default) with that version's files, and
+   * the viewer standing the read resolved (`artifactViewer`), so a caller's own rule — a
+   * delete's — needs no second membership read. */
   async read(input: {
     workspaceId: string;
     artifactId: string;
     reader: ArtifactActor;
     version?: number;
   }) {
-    const artifact = await this.artifact(input.workspaceId, input.artifactId, input.reader);
+    const { viewer, ...artifact } = await this.artifact(
+      input.workspaceId,
+      input.artifactId,
+      input.reader,
+    );
     const number = input.version ?? artifact.currentVersion;
-    if (number <= 0) return { artifact, version: null, files: [] };
+    if (number <= 0) return { artifact, version: null, files: [], viewer };
     const version = await this.db.artifactVersion.findUnique({
       where: { artifactId_number: { artifactId: artifact.id, number } },
       select: {
@@ -200,7 +212,7 @@ export class ArtifactReads {
       select: { path: true, sha256: true, sizeBytes: true, kind: true },
       orderBy: { path: "asc" },
     });
-    return { artifact, version, files };
+    return { artifact, version, files, viewer };
   }
 
   /** One file of a version (the current one by default), or null when the version has no file at
@@ -228,6 +240,29 @@ export class ArtifactReads {
     return version.files[0] ?? null;
   }
 
+  /** One file of a pinned version with no reader: the sandbox's subresources come under a
+   * signed ticket that already proved its reader may read the artifact, so this asks only that
+   * the artifact is live in the workspace and the version has the file — never who asks and
+   * never the experiment again (task #25). */
+  async fileInVersion(input: {
+    workspaceId: string;
+    artifactId: string;
+    version: number;
+    path: string;
+  }) {
+    return this.db.artifactFile.findFirst({
+      where: {
+        artifactId: input.artifactId,
+        path: input.path,
+        version: {
+          number: input.version,
+          artifact: { workspaceId: input.workspaceId, deletedAt: null },
+        },
+      },
+      select: { sha256: true, sizeBytes: true },
+    });
+  }
+
   /** The live artifacts of one home the reader may read (a conversation's, or the Workspace's
    * when none is named), most recently changed first, at most 100. */
   async list(input: { workspaceId: string; reader: ArtifactActor; conversationId?: string }) {
@@ -250,7 +285,8 @@ export class ArtifactReads {
   }) {
     if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     const homeKey = input.conversationId ? `conversation:${input.conversationId}` : "workspace";
-    await requireArtifactHome(this.db, input.workspaceId, input.reader, homeKey, "read");
+    const viewer = await artifactViewer(this.db, input.workspaceId, input.reader);
+    await requireArtifactHome(this.db, input.workspaceId, input.reader, homeKey, "read", viewer);
     const after = input.cursor === undefined ? undefined : readCursor(input.cursor);
     const rows = await this.db.artifact.findMany({
       where: {
@@ -280,16 +316,17 @@ export class ArtifactReads {
       select: CARD_SELECT,
     });
     const page = rows.slice(0, input.limit);
-    const [role, owners] = await Promise.all([
-      this.#actorRole(input.workspaceId, input.reader),
-      this.#authorOwners(page),
-    ]);
+    const owners = await this.#authorOwners(page);
     const last = page.at(-1);
     return {
       artifacts: page.map((row) =>
         card(
           row,
-          canManageArtifactPublicLinkWithRole(input.reader, role, accessRuleInput(row, owners)),
+          canManageArtifactPublicLinkWithRole(
+            input.reader,
+            viewer.role,
+            accessRuleInput(row, owners),
+          ),
         ),
       ),
       ...(rows.length > input.limit && last ? { nextCursor: writeCursor(last) } : {}),
@@ -313,9 +350,15 @@ export class ArtifactReads {
       select: CARD_SELECT,
     });
     const homes = new Map<string, Promise<ArtifactHomeAccess>>();
+    // One membership read (`artifactViewer`) serves every home's access check and both rules
+    // below; before, each home asked it again (task #25).
+    const viewer = await artifactViewer(this.db, input.workspaceId, input.reader);
     const homeAccess = (homeKey: string) => {
       if (!homes.has(homeKey))
-        homes.set(homeKey, artifactHomeAccess(this.db, input.workspaceId, input.reader, homeKey));
+        homes.set(
+          homeKey,
+          artifactHomeAccess(this.db, input.workspaceId, input.reader, homeKey, viewer),
+        );
       return homes.get(homeKey)!;
     };
     const hidden = new Map<string, Promise<boolean>>();
@@ -324,22 +367,23 @@ export class ArtifactReads {
         hidden.set(homeKey, artifactHomeHidden(this.db, input.workspaceId, homeKey));
       return hidden.get(homeKey)!;
     };
-    const member = await inWorkspace(this.db, input.workspaceId, input.reader);
-    const [role, owners] = await Promise.all([
-      this.#actorRole(input.workspaceId, input.reader),
-      this.#authorOwners(rows),
-    ]);
+    const owners = await this.#authorOwners(rows);
     const kept = new Map<string, ReturnType<typeof card>>();
     for (const row of rows) {
       const home = await homeAccess(row.homeKey);
       // Every Workspace member reads every artifact (task #20); a home reader shares one check.
       // Only a workspace-wide read can meet a hidden home; a home reader never can.
-      if (!(home.read || member) || (!home.read && (await homeHidden(row.homeKey)))) continue;
+      if (!(home.read || viewer.member) || (!home.read && (await homeHidden(row.homeKey))))
+        continue;
       kept.set(
         row.id,
         card(
           row,
-          canManageArtifactPublicLinkWithRole(input.reader, role, accessRuleInput(row, owners)),
+          canManageArtifactPublicLinkWithRole(
+            input.reader,
+            viewer.role,
+            accessRuleInput(row, owners),
+          ),
           home.read,
         ),
       );
@@ -453,17 +497,5 @@ export class ArtifactReads {
       select: { id: true, ownerId: true },
     });
     return new Map(agents.map((agent) => [agent.id, agent.ownerId]));
-  }
-
-  /** The actor's Workspace role once for a batch of cards; `null` when the actor is an Agent. */
-  async #actorRole(workspaceId: string, actor: ArtifactActor) {
-    return actor.userId
-      ? (
-          await this.db.workspaceMembership.findUnique({
-            where: { workspaceId_userId: { workspaceId, userId: actor.userId } },
-            select: { role: true },
-          })
-        )?.role
-      : null;
   }
 }

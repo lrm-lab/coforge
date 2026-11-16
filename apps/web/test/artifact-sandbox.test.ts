@@ -187,6 +187,11 @@ function sandbox(
       const row = entry(page, input.version ?? page.number ?? 2);
       return input.path === row.path ? row : null;
     },
+    // A subresource's lookup asks no reader (task #25): the ticket is its authorization.
+    fileInVersion: async (input: { path: string }) => {
+      const row = entry(page, page.number ?? 2);
+      return input.path === row.path ? { sha256: row.sha256, sizeBytes: row.sizeBytes } : null;
+    },
   };
   let now = NOW;
   const service = new ArtifactSandbox({
