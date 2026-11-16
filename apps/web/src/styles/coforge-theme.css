@@ -44,14 +44,16 @@
   /* A text field's states from the design spec (task #104, jing 11-13, typing state revised
      11-16): the resting border, the typing border (2px: the 1px border plus a 1px inset ring, so
      nothing inside moves), the text, the placeholder and the disabled fill. The 1px drop shadow is
-     `shadow-xs`. Used by the composer and the sidebar search entry first; the other fields, and
-     the spec's error states, follow once the designer has approved those. Re-pointed under
-     `.dark-mode` below. */
+     `shadow-xs`. The composer and the sidebar search entry use them directly; every other field
+     through `FIELD_STATES` (task #112). Re-pointed under `.dark-mode` below. */
   --color-field-border: #e0e5f1;
   --color-field-border-typing: #c7b9f3;
   --color-field-text: #101319;
   --color-field-placeholder: #cbcfdb;
   --color-field-bg-disabled: #f4f6fa;
+  /* A field holding a wrong value: 1px, 2px while typed in (task #112). The same red on a dark
+     page until the designer picks one. */
+  --color-field-border-error: #f15341;
 
   /* Left-navigation label and icon: the tertiary text grey at rest (#777d8d was 4:1 on the
      sidebar and read as disabled), the sidebar's ink on the current item. Re-pointed under

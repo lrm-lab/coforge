@@ -2,6 +2,8 @@ import type { Dispatch, SetStateAction } from "react";
 
 import { m } from "#src/paraglide/messages";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
+import { FIELD_STATES } from "#src/components/base/input/field-states";
+import { cx } from "#src/utils/cx";
 
 /** Page-fill fields the owner types into; values never go into chat. */
 export function ActionCardPageFillBody({
@@ -33,7 +35,12 @@ export function ActionCardPageFillBody({
                 onChange={(event) =>
                   setFillValues((current) => ({ ...current, [field.id]: event.target.value }))
                 }
-                className="w-full rounded-md border border-secondary bg-primary px-2.5 py-1.5 text-sm text-primary outline-none"
+                className={cx(
+                  "w-full px-2.5 py-1.5 text-sm outline-none",
+                  FIELD_STATES.frame,
+                  FIELD_STATES.frameTyping,
+                  FIELD_STATES.text,
+                )}
               />
             </label>
           ))}

@@ -33,6 +33,7 @@ import {
   type ReadingEdge,
   type ReadingWheelGesture,
 } from "./weekly-report-reading-turn";
+import { FIELD_STATES } from "#src/components/base/input/field-states";
 
 export function ReportTabsEditor({
   content,
@@ -337,8 +338,10 @@ export function ReportTabsEditor({
           onBlur={commitEditingTab}
           onKeyDown={handleEditKeyDown}
           className={cn(
-            "h-8 w-28 min-w-0 bg-transparent px-0.5 text-sm font-semibold text-primary outline-none",
-            editableTabs ? "rounded-lg border border-brand px-2" : "mb-2 border-b-2 border-brand",
+            "h-8 w-28 min-w-0 px-0.5 text-sm font-semibold outline-none",
+            editableTabs
+              ? cn(FIELD_STATES.frame, FIELD_STATES.frameTyping, FIELD_STATES.text, "px-2")
+              : "mb-2 border-b-2 border-brand bg-transparent text-primary",
           )}
         />
       ) : (

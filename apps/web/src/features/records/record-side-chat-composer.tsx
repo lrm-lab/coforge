@@ -1,9 +1,11 @@
 import { useRef, type FormEvent, type KeyboardEvent } from "react";
 import { Microphone02 as Microphone, Paperclip, Send01 as Send } from "@untitledui/icons";
+import { FIELD_STATES } from "#src/components/base/input/field-states";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { shouldSendOnEnter } from "#src/features/conversations/composer-behavior";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 import { SendCountdownBadge } from "./record-side-panel-cards";
 
@@ -47,7 +49,9 @@ export function RecordSideChatComposer({
 
   return (
     <form onSubmit={onSubmit} className="border-t border-secondary p-3">
-      <div className="flex items-end gap-2 rounded-lg border border-secondary bg-primary p-1.5">
+      <div
+        className={cx("flex items-end gap-2 p-1.5", FIELD_STATES.frame, FIELD_STATES.frameTyping)}
+      >
         <ButtonUtility
           type="button"
           size="sm"

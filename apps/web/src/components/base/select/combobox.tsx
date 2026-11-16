@@ -3,6 +3,7 @@ import { isValidElement, useCallback, useContext, useRef, useState } from "react
 import { SearchLg } from "@untitledui/icons";
 import type { ComboBoxProps as AriaComboBoxProps, GroupProps as AriaGroupProps, ListBoxProps as AriaListBoxProps } from "react-aria-components";
 import { ComboBox as AriaComboBox, Group as AriaGroup, Input as AriaInput, ListBox as AriaListBox, ComboBoxStateContext } from "react-aria-components";
+import { FIELD_STATES } from "#src/components/base/input/field-states";
 import { HintText } from "#src/components/base/input/hint-text";
 import { Label } from "#src/components/base/input/label";
 import { Popover } from "#src/components/base/select/popover";
@@ -47,9 +48,10 @@ const ComboBoxValue = ({ size, shortcut, placeholder, shortcutClassName, icon: I
             {...otherProps}
             className={({ isFocusWithin, isDisabled }) =>
                 cx(
-                    "relative flex w-full items-center gap-2 rounded-lg bg-primary shadow-xs ring-1 ring-primary outline-hidden transition-shadow duration-100 ease-linear ring-inset",
-                    isDisabled && "cursor-not-allowed opacity-50",
-                    isFocusWithin && "ring-2 ring-border-input-focus",
+                    "relative flex w-full items-center gap-2 outline-hidden",
+                    FIELD_STATES.box,
+                    isDisabled && FIELD_STATES.disabled,
+                    isFocusWithin && !isDisabled && FIELD_STATES.typing,
 
                     // Icon styles
                     "*:data-icon:shrink-0 *:data-icon:text-fg-quaternary",
@@ -69,7 +71,7 @@ const ComboBoxValue = ({ size, shortcut, placeholder, shortcutClassName, icon: I
             <div className="relative flex w-full items-center">
                 {inputValue && (
                     <span className={cx("absolute top-1/2 z-0 inline-flex w-full -translate-y-1/2 truncate", sizes[size].textContainer)} aria-hidden="true">
-                        <p className={cx("font-medium text-primary", sizes[size].text)}>{first}</p>
+                        <p className={cx("font-medium text-field-text", sizes[size].text)}>{first}</p>
                         {last && <p className={cx("-ml-0.75 text-tertiary", sizes[size].text)}>{last}</p>}
                     </span>
                 )}
@@ -77,7 +79,7 @@ const ComboBoxValue = ({ size, shortcut, placeholder, shortcutClassName, icon: I
                 <AriaInput
                     placeholder={placeholder}
                     className={cx(
-                        "z-10 w-full appearance-none bg-transparent text-transparent caret-alpha-black/90 placeholder:text-placeholder focus:outline-hidden disabled:cursor-not-allowed",
+                        "z-10 w-full appearance-none bg-transparent text-transparent caret-alpha-black/90 placeholder:text-field-placeholder focus:outline-hidden disabled:cursor-not-allowed",
                         sizes[size].text,
                     )}
                 />

@@ -1,4 +1,5 @@
 import * as React from "react";
+import { FIELD_STATES } from "#src/components/base/input/field-states";
 import { cn } from "#src/lib/utils";
 import { OTPInput, OTPInputContext } from "input-otp";
 
@@ -49,8 +50,10 @@ function InputOTPSlot({
       data-active={isActive}
       aria-invalid={props["aria-invalid"]}
       className={cn(
-        "relative flex size-9 items-center justify-center rounded-lg bg-primary text-sm font-medium text-tertiary shadow-xs ring-1 ring-secondary transition-[box-shadow,background-color] ring-inset aria-invalid:text-error-primary aria-invalid:ring-error data-[active=true]:ring-2 data-[active=true]:ring-border-input-focus data-[active=true]:outline-2 data-[active=true]:outline-offset-2 data-[active=true]:outline-border-input-focus",
-        char && "text-primary ring-2 ring-brand",
+        "relative flex size-9 items-center justify-center text-sm font-medium text-field-text aria-invalid:text-error-primary",
+        FIELD_STATES.box,
+        isActive && FIELD_STATES.typing,
+        props["aria-invalid"] && (isActive ? FIELD_STATES.invalidTyping : FIELD_STATES.invalid),
         className,
       )}
       {...props}
