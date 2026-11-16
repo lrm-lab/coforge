@@ -18,7 +18,6 @@ import {
   SearchLg as Search,
 } from "@untitledui/icons";
 
-import { UnreadDot } from "#src/components/ui/unread-marker";
 import { PageHeader } from "#src/components/layout/page-header";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
@@ -39,9 +38,10 @@ import {
 import { FormatChipSlot } from "./records-format-chip";
 import { RecordsToolsFooter } from "./records-tools-footer";
 import { RecordsMemberWeeksSection } from "./records-member-weeks-section";
+import { RecordsFavoritesSection, RecordsMyReportsSection } from "./records-report-sections";
 import { useRecordsMemberWeeks } from "./use-records-member-weeks";
-import { CollapsibleSection, RecordLink, SidebarMore, WeekBadge } from "./records-sidebar-parts";
-import { matchesQuery, recordsTabSearch, sidebarPreview, type RecordsTab } from "./records-sidebar";
+import { CollapsibleSection, RecordLink } from "./records-sidebar-parts";
+import { matchesQuery, recordsTabSearch, type RecordsTab } from "./records-sidebar";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { useRecordRefresh } from "./use-record-refresh";
 
@@ -171,10 +171,6 @@ export function RecordsLayout({
     () => catalog.favorites.filter((item) => matchesQuery(item.title, query)),
     [catalog.favorites, query],
   );
-  const previewFavorites = useMemo(
-    () => sidebarPreview(filteredFavorites, Boolean(query) || favoritesExpanded),
-    [filteredFavorites, query, favoritesExpanded],
-  );
   const filteredMyReports = useMemo(
     () => catalog.myReports.filter((item) => matchesQuery(item.title, query)),
     [catalog.myReports, query],
@@ -278,98 +274,36 @@ export function RecordsLayout({
                     ))}
                   </div>
 
-                  <CollapsibleSection
-                    title={m.records_section_favorites()}
+                  <RecordsFavoritesSection
+                    items={filteredFavorites}
+                    showAll={Boolean(query) || favoritesExpanded}
+                    onShowAll={() => setFavoritesExpanded(true)}
+                    selectedRecordId={selectedRecordId}
                     open={favoritesOpen}
                     onOpenChange={(open) => {
                       if (open) enterSection("favorites");
                       else setFavoritesOpen(false);
                     }}
-                  >
-                    {filteredFavorites.length === 0 ? null : (
-                      <ul className="space-y-0.5">
-                        {previewFavorites.visible.map((item) => (
-                          <li key={item.id}>
-                            <RecordLink
-                              recordId={item.id}
-                              selected={item.id === selectedRecordId}
-                              onSelect={() => {
-                                enterSection("favorites");
-                                setShowMobileList(false);
-                              }}
-                            >
-                              <ActorAvatar
-                                presence={false}
-                                size="sm"
-                                name={item.author.displayName}
-                                alt={item.author.displayName}
-                                src={item.author.avatarUrl}
-                              />
-                              <span className="truncate">{item.title}</span>
-                            </RecordLink>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <SidebarMore
-                      hiddenCount={previewFavorites.hiddenCount}
-                      onExpand={() => setFavoritesExpanded(true)}
-                    />
-                  </CollapsibleSection>
+                    onSelect={() => {
+                      enterSection("favorites");
+                      setShowMobileList(false);
+                    }}
+                  />
 
-                  <CollapsibleSection
-                    title={m.records_section_mine()}
+                  <RecordsMyReportsSection
+                    items={filteredMyReports}
+                    unread={myReportsUnread}
+                    selectedRecordId={selectedRecordId}
                     open={myReportsOpen}
                     onOpenChange={(open) => {
                       if (open) enterSection("myReports");
                       else setMyReportsOpen(false);
                     }}
-                    marker={
-                      myReportsUnread ? (
-                        <span role="img" aria-label={m.records_report_unread_badge()}>
-                          <UnreadDot />
-                        </span>
-                      ) : null
-                    }
-                  >
-                    {filteredMyReports.length === 0 ? null : (
-                      <ul className="space-y-0.5">
-                        {filteredMyReports.map((item) => {
-                          const unread = item.unread;
-                          const sent = item.status === "submitted";
-                          return (
-                            <li key={item.id}>
-                              <RecordLink
-                                recordId={item.id}
-                                selected={item.id === selectedRecordId}
-                                onSelect={() => {
-                                  enterSection("myReports");
-                                  setShowMobileList(false);
-                                }}
-                                className={cn(unread && "font-semibold")}
-                              >
-                                <WeekBadge week={item.week} className="size-6" />
-                                <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                                {sent ? (
-                                  <span className="ml-auto shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-tertiary">
-                                    {m.records_report_sent_badge()}
-                                  </span>
-                                ) : unread ? (
-                                  <span
-                                    role="img"
-                                    aria-label={m.records_report_unread_badge()}
-                                    className="ml-auto"
-                                  >
-                                    <UnreadDot />
-                                  </span>
-                                ) : null}
-                              </RecordLink>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </CollapsibleSection>
+                    onSelect={() => {
+                      enterSection("myReports");
+                      setShowMobileList(false);
+                    }}
+                  />
 
                   <RecordsMemberWeeksSection
                     weeks={memberWeeks.weeks}
