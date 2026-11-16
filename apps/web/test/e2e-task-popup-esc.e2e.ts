@@ -77,7 +77,10 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
       `${dialog}?.querySelector("h2")?.textContent.includes(${JSON.stringify(title)}) === true`;
     const settled = () =>
       browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
+    /** Clicks where `selector` is once nothing moves: the click goes to the point the element
+     * was measured at, so a popup still sliding in can take it somewhere else (task #127). */
     const press = async (selector: string) => {
+      await settled();
       expect(
         await evaluate<boolean>(
           `(() => { const el = ${selector}; if (!el) return false; el.setAttribute("data-e2e-press", ""); return true; })()`,
