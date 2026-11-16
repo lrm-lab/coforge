@@ -5,7 +5,11 @@ import { nameToSlug } from "#src/lib/slug";
 import { errorType } from "#src/server/errors/error-type.server";
 import { canDeleteArtifact, type ArtifactActor } from "./artifact-access.server";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
-import { ARTIFACT_DOCUMENT_LIMIT, ARTIFACT_HTML_ENTRY } from "./artifact-files.server";
+import {
+  ARTIFACT_DOCUMENT_LIMIT,
+  ARTIFACT_HTML_ENTRY,
+  type ArtifactFileInput,
+} from "./artifact-files.server";
 import { manifestKind, planManifestCreate, type FileManifest } from "./artifact-manifest.server";
 import type { ArtifactRevert } from "./artifact-revert.server";
 import type { Artifacts } from "./artifacts.server";
@@ -85,7 +89,7 @@ export class ArtifactDocuments {
         });
     }
     // Checked before anything is made, so a refused text leaves no empty document behind.
-    if (input.text !== undefined) documentBytes(input.text);
+    const bytes = input.text === undefined ? undefined : documentBytes(input.text);
     const home = input.conversationId
       ? ({ kind: "conversation", conversationId: input.conversationId } as const)
       : ({ kind: "workspace" } as const);
@@ -103,6 +107,19 @@ export class ArtifactDocuments {
             ...(plan ? { manifest: plan } : {}),
           });
     const base = nameToSlug(title, 56) || PAGE_KINDS[kind].fallbackName;
+    const entryPath = plan?.entryPath ?? PAGE_KINDS[kind].entryPath;
+    // Version 1's files, resolved before the row is made: a manifest's, or the text's bytes
+    // stored once under their sha256. A create with neither stays a bare row a later save fills.
+    let versionFiles: readonly ArtifactFileInput[] | undefined;
+    if (plan) versionFiles = plan.files;
+    else if (bytes !== undefined) {
+      const blob = await this.blobs.upload({
+        workspaceId: scope.workspaceId,
+        bytes,
+        actor: scope.actor,
+      });
+      versionFiles = [{ path: entryPath, sha256: blob.sha256 }];
+    }
     for (let attempt = 1; ; attempt += 1) {
       const name =
         attempt === 1
@@ -118,29 +135,26 @@ export class ArtifactDocuments {
           title,
           ...(description ? { description } : {}),
           kind,
-          entryPath: plan?.entryPath ?? PAGE_KINDS[kind].entryPath,
+          entryPath,
           author: scope.actor,
           ...(input.idempotencyKey !== undefined
             ? { idempotencyKey: input.idempotencyKey, requestHash }
             : {}),
+          ...(versionFiles !== undefined
+            ? {
+                version: {
+                  files: versionFiles,
+                  // On a replayed create this version replays too (same key on the same
+                  // artifact), so a retry adds no second version; a fresh create gets its 1.
+                  idempotencyKey:
+                    input.idempotencyKey === undefined
+                      ? crypto.randomUUID()
+                      : `${input.idempotencyKey}:v1`,
+                },
+              }
+            : {}),
         });
-        if (input.text !== undefined || plan) {
-          const first = await this.save(scope, {
-            artifactId: created.id,
-            baseVersion: 0,
-            ...(plan ? { manifest: { files: plan.files } } : { text: input.text }),
-            // On a replayed create this save replays too (same key on the same artifact), so a
-            // retry adds no second version; a fresh create gets its version 1.
-            idempotencyKey:
-              input.idempotencyKey === undefined
-                ? crypto.randomUUID()
-                : `${input.idempotencyKey}:v1`,
-          });
-          // Bytes that vanished since `missingBytes` looked: the same request, sent again after
-          // uploading them, replays this create (with its key) and saves them.
-          if (first.status === "missing")
-            throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "artifact-bytes-missing" });
-        }
+        if (versionFiles !== undefined) await this.#refreshPreview(scope, created.id);
         return (
           await this.artifacts.reads.cards({ ...reader(scope), artifactIds: [created.id] })
         )[0]!;
