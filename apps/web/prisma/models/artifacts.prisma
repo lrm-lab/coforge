@@ -14,9 +14,16 @@ model Artifact {
   description     String            @default("")
   /// A Markdown entry's first two lines with text, plain, for its card and list; kept from its
   /// current version (`artifactPreview`). An html entry's is its description's. The type of an
-  /// artifact is its entry file's (`entryPath`); no column holds it.
+  /// artifact is its entry file's (`entryPath`); nothing reads a stored kind.
   preview         String            @default("")
+  /// The entry file's kind at create, written for rows created while the column lived; nothing
+  /// reads it. Unused since the type became the entry file's; kept for rollout compatibility and
+  /// dropped by a later migration.
+  kind            String
   entryPath       String
+  /// Unused since only Agents author artifacts; kept for rollout compatibility and dropped by a
+  /// later migration.
+  authorUserId    String?           @db.Uuid
   authorAgentId   String?           @db.Uuid
   /// The client's key for an idempotent create, and a hash of that create's inputs (task #385):
   /// the same key with the same inputs replays this row; the same key with different inputs is a
@@ -76,6 +83,9 @@ model ArtifactVersion {
   id               String         @id @default(uuid(7)) @db.Uuid
   artifactId       String         @db.Uuid
   number           Int
+  /// Unused since only Agents publish versions; kept for rollout compatibility and dropped by a
+  /// later migration.
+  publisherUserId  String?        @db.Uuid
   publisherAgentId String?        @db.Uuid
   note             String         @default("")
   label            String         @default("")
@@ -88,6 +98,9 @@ model ArtifactVersion {
   /// What this version took from others' saves since its base: `{ files: paths, settings: names }`;
   /// null when it took nothing.
   merged           Json?
+  /// Unused since a version is never a revert; kept for rollout compatibility and dropped by a
+  /// later migration.
+  revertedFrom     Int?
   idempotencyKey   String
   createdAt        DateTime       @default(now())
   artifact         Artifact       @relation(fields: [artifactId], references: [id], onDelete: Cascade)

@@ -39,8 +39,9 @@ modules, and the sandbox implementation.
 The artifacts module follows the reference product, Raft; add nothing it does not have.
 
 - An artifact is a versioned set of files with an entry file. Its type comes from the entry file's
-  extension (`artifactKindOfPath`: `.html` is a web page, `.md` a document); no column or request
-  field states it, and an entry that is neither is refused (`artifact-entry-type`).
+  extension (`artifactKindOfPath`: `.html` is a web page, `.md` a document); no request field
+  states it, the `kind` column a create still fills is write-only until its drop release, and an
+  entry that is neither is refused (`artifact-entry-type`).
 - Only an Agent writes, and only by `push` (`Artifacts.push`; `ArtifactDocuments.create` makes an
   artifact with its first version in the same transaction). There is no single-text save, no
   history or revert, no Agent share
