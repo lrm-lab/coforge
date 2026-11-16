@@ -51,7 +51,15 @@ type ArtifactShareSender = (input: {
 
 export class ArtifactShares {
   constructor(
-    private readonly db: PrismaClient,
+    private readonly db: Pick<
+      PrismaClient,
+      | "artifact"
+      | "artifactPublicLink"
+      | "workspace"
+      | "workspaceMembership"
+      | "agent"
+      | "conversation"
+    >,
     private readonly enabled: (workspaceId: string) => Promise<boolean>,
   ) {}
 
@@ -149,12 +157,14 @@ export class ArtifactShares {
       select: { id: true },
     });
     if (link) return [];
-    for (const target of targets) await mayPost(target);
     const counts = await Promise.all(
-      targets.map(async (target) => ({
-        target,
-        ...(await membersWithoutOtherConversationRead(this.db, workspaceId, target, home)),
-      })),
+      targets.map(async (target) => {
+        await mayPost(target);
+        return {
+          target,
+          ...(await membersWithoutOtherConversationRead(this.db, workspaceId, target, home)),
+        };
+      }),
     );
     return counts.flatMap(({ target, people, agents }) =>
       people === undefined || agents === undefined || people + agents === 0

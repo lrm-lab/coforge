@@ -1,4 +1,4 @@
-import type { PrismaClient } from "#src/generated/prisma/client";
+import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { artifactOpenableKind } from "#src/features/artifacts/artifact-path-kind";
 import { artifactPageOrigin, artifactSandboxOrigin } from "./artifact-sandbox-config.server";
@@ -20,6 +20,17 @@ function mintToken(): string {
 
 /** The types a public link serves: an artifact whose entry file is a web page or Markdown. */
 const linkable = (entryPath: string) => artifactOpenableKind(entryPath) !== null;
+
+export async function revokeArtifactPublicLinks(
+  tx: Prisma.TransactionClient,
+  artifactId: string,
+  userId: string,
+) {
+  await tx.artifactPublicLink.updateMany({
+    where: { artifactId, revokedAt: null },
+    data: { revokedAt: new Date(), revokedByUserId: userId },
+  });
+}
 
 export class ArtifactPublicLinks {
   constructor(
@@ -88,11 +99,7 @@ export class ArtifactPublicLinks {
         select: { token: true },
       });
       if (!input.enabled) {
-        if (live)
-          await tx.artifactPublicLink.updateMany({
-            where: { artifactId: artifact.id, revokedAt: null },
-            data: { revokedAt: new Date(), revokedByUserId: input.userId },
-          });
+        if (live) await revokeArtifactPublicLinks(tx, artifact.id, input.userId);
         return { enabled: false as const };
       }
       if (live)

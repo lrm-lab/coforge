@@ -203,29 +203,28 @@ export class ArtifactGallery {
         WHERE f."artifactId" = a."id" AND f."userId" = ${userId}::uuid AND f."following"))`;
   }
 
-  async #unseenComments(userId: string, ids: readonly string[], username: string | undefined) {
-    const mentionPattern = containsPattern(`@${username ?? ""}`);
+  async #unseenComments(userId: string, ids: readonly string[]) {
     const rows = await this.db.$queryRaw<
-      { artifactId: string; newComments: number; candidates: string[] }[]
+      { artifactId: string; newComments: number; candidates: string[]; username: string }[]
     >`
-      SELECT c."artifactId", COUNT(*)::int AS "newComments",
-        COALESCE(ARRAY_AGG(c."body") FILTER (WHERE c."body" ILIKE ${mentionPattern}), '{}')
-          AS "candidates"
+      SELECT c."artifactId", COUNT(*)::int AS "newComments", u."username",
+        COALESCE(ARRAY_AGG(c."body") FILTER (WHERE c."body" ILIKE '%@' || u."username" || '%'),
+          '{}') AS "candidates"
       FROM "artifact_comments" c
+      JOIN "users" u ON u."id" = ${userId}::uuid
       JOIN "artifact_viewer_positions" p
         ON p."artifactId" = c."artifactId" AND p."userId" = ${userId}::uuid
       WHERE c."artifactId" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
         AND c."deletedAt" IS NULL
         AND (c."authorUserId" IS NULL OR c."authorUserId" <> ${userId}::uuid)
         AND c."createdAt" > p."openedAt"
-      GROUP BY c."artifactId"`;
+      GROUP BY c."artifactId", u."username"`;
     return new Map(rows.map((row) => [row.artifactId, row]));
   }
 
   private async cards(userId: string, ids: readonly string[]) {
     if (ids.length === 0) return [];
-    const userRow = this.db.user.findUnique({ where: { id: userId }, select: { username: true } });
-    const [rows, positions, links, counts, unseenByArtifact, user] = await Promise.all([
+    const [rows, positions, links, counts, unseenByArtifact] = await Promise.all([
       this.db.artifact.findMany({ where: { id: { in: [...ids] } }, select: CARD_SELECT }),
       this.db.artifactViewerPosition.findMany({
         where: { userId, artifactId: { in: [...ids] } },
@@ -239,8 +238,7 @@ export class ArtifactGallery {
         where: { artifactId: { in: [...ids] }, deletedAt: null },
         _count: { _all: true },
       }),
-      userRow.then((found) => this.#unseenComments(userId, ids, found?.username)),
-      userRow,
+      this.#unseenComments(userId, ids),
     ]);
     const byId = new Map(rows.map((row) => [row.id, row]));
     const position = new Map(positions.map((row) => [row.artifactId, row]));
@@ -265,8 +263,8 @@ export class ArtifactGallery {
           hasUpdates: place !== undefined && place.seenVersion < row.currentVersion,
           newComments: unseen?.newComments ?? 0,
           mentionsYou:
-            user !== null &&
-            (unseen?.candidates ?? []).some((body) => mentions(body, user.username)),
+            unseen !== undefined &&
+            unseen.candidates.some((body) => mentions(body, unseen.username)),
         },
       ];
     });

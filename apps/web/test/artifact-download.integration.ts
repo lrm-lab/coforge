@@ -6,6 +6,8 @@ import {
 } from "#src/server/artifacts/artifact-download.server";
 import { commentsFixture, type CommentsFixture } from "./helpers/artifact-comments-fixture";
 
+const unlimited = { admit: async () => ({ allowed: true as const }) };
+
 let f: CommentsFixture;
 beforeAll(async () => {
   f = await commentsFixture("dl");
@@ -18,7 +20,7 @@ const download = (
   extra: { path?: string; limit?: number } = {},
 ) =>
   artifactDownload(
-    { reads: f.artifacts.reads, blobs: f.blobs },
+    { reads: f.artifacts.reads, blobs: f.blobs, zipLimit: unlimited },
     { workspaceId: f.workspaceId, artifactId, userId, ...extra },
   );
 
@@ -62,7 +64,7 @@ test("a zip whose bytes have vanished is not found before any byte is sent", asy
   };
   await expect(
     artifactDownload(
-      { reads: f.artifacts.reads, blobs },
+      { reads: f.artifacts.reads, blobs, zipLimit: unlimited },
       { workspaceId: f.workspaceId, artifactId: artifact, userId: f.bob },
     ),
   ).rejects.toMatchObject({ code: "NOT_FOUND" });
@@ -79,7 +81,7 @@ test("a zip checks its blobs without reading them and streams each one in turn",
     },
   };
   const response = await artifactDownload(
-    { reads: f.artifacts.reads, blobs },
+    { reads: f.artifacts.reads, blobs, zipLimit: unlimited },
     { workspaceId: f.workspaceId, artifactId: artifact, userId: f.bob },
   );
   const entries = unzipSync(new Uint8Array(await response.arrayBuffer()));

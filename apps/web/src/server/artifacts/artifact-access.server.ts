@@ -35,6 +35,7 @@ export type ArtifactHomeView = {
   tier: ArtifactTier;
   homeKey: string | null;
   homeKind: ArtifactHomeKind;
+  narrowable: boolean;
 };
 
 type Db = Pick<PrismaClient, "workspaceMembership" | "agent" | "conversation">;
@@ -118,11 +119,12 @@ export function artifactHomeView(
       canReadConversationHome(home) &&
       artifactHomeConversationId(artifact.homeKey) !== undefined;
     return named
-      ? { tier: "workspace", homeKey: artifact.homeKey, homeKind: home.kind }
-      : { tier: "workspace", homeKey: "workspace", homeKind: "workspace" };
+      ? { tier: "workspace", homeKey: artifact.homeKey, homeKind: home.kind, narrowable: true }
+      : { tier: "workspace", homeKey: "workspace", homeKind: "workspace", narrowable: false };
   }
-  if (home === undefined) return { tier: "conversation", homeKey: null, homeKind: "workspace" };
-  return { tier: "conversation", homeKey: artifact.homeKey, homeKind: home.kind };
+  if (home === undefined)
+    return { tier: "conversation", homeKey: null, homeKind: "workspace", narrowable: true };
+  return { tier: "conversation", homeKey: artifact.homeKey, homeKind: home.kind, narrowable: true };
 }
 
 export function readsArtifactOfGoneHome(

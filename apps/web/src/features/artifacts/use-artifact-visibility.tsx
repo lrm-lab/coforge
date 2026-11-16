@@ -38,13 +38,11 @@ export function useArtifactVisibility({
   tier,
   link,
   homeName,
-  narrowable,
 }: {
   artifactId: string;
   tier: "conversation" | "workspace";
   link: ArtifactLinkSharing;
   homeName: string | undefined;
-  narrowable: boolean;
 }) {
   const queryClient = useQueryClient();
   const workspaceName = useWorkspaceName();
@@ -58,7 +56,15 @@ export function useArtifactVisibility({
     retry: false,
   });
   const refusal = loss.isFetching ? undefined : narrowRefusalMessage(loss.error);
-  const checkFailed = !loss.isFetching && loss.isError && refusal === undefined;
+  const lossState: "checking" | "failed" | "refused" | "ready" = loss.isFetching
+    ? "checking"
+    : refusal !== undefined
+      ? "refused"
+      : loss.isError
+        ? "failed"
+        : loss.data
+          ? "ready"
+          : "checking";
 
   const apply = async ({ choice, narrowing, linkOff }: Confirmation) => {
     if (linkOff && !narrowing) await link.apply(false);
@@ -68,7 +74,7 @@ export function useArtifactVisibility({
         data: {
           artifactId,
           access: choice,
-          ...(narrowing && loss.data ? { expectedLost: loss.data.people + loss.data.agents } : {}),
+          ...(narrowing && loss.data ? { expectedLost: loss.data.total } : {}),
         },
       });
     await queryClient.invalidateQueries({ queryKey: ARTIFACTS_KEY });
@@ -87,17 +93,20 @@ export function useArtifactVisibility({
     link: m.av_vis_link(),
   } satisfies Record<VisibilityChoice, string>;
 
+  const narrowDescription = {
+    checking: m.av_vis_narrow_checking(),
+    failed: m.av_vis_narrow_check_failed(),
+    refused: refusal ?? "",
+    ready: loss.data
+      ? m.av_vis_narrow_body({
+          people: m.av_vis_narrow_people({ count: loss.data.people }),
+          agents: m.av_vis_narrow_agents({ count: loss.data.agents }),
+        })
+      : "",
+  }[lossState];
   const description = confirming
     ? confirming.narrowing
-      ? (refusal ??
-        (checkFailed
-          ? m.av_vis_narrow_check_failed()
-          : loss.data && !loss.isFetching
-            ? m.av_vis_narrow_body({
-                people: m.av_vis_narrow_people({ count: loss.data.people }),
-                agents: m.av_vis_narrow_agents({ count: loss.data.agents }),
-              })
-            : m.av_vis_narrow_checking()))
+      ? narrowDescription
       : confirming.choice === "link"
         ? m.av_vis_link_on_body()
         : m.av_vis_link_off_body()
@@ -129,7 +138,7 @@ export function useArtifactVisibility({
       detail={
         confirming?.narrowing ? (
           <>
-            {checkFailed && (
+            {lossState === "failed" && (
               <Button
                 className="mt-2"
                 color="secondary"
@@ -147,7 +156,7 @@ export function useArtifactVisibility({
           </>
         ) : undefined
       }
-      confirmDisabled={confirming?.narrowing === true && (!loss.data || loss.isFetching)}
+      confirmDisabled={confirming?.narrowing === true && lossState !== "ready"}
       confirmLabel={confirmLabel}
       errorMessage={(cause) =>
         lossChanged(cause)
@@ -167,22 +176,20 @@ export function useArtifactVisibility({
     />
   );
 
-  return { current, label, request, dialog, narrowable };
+  return { current, label, request, dialog };
 }
 
 export function VisibilityMenu({
   visibility,
   linkAvailable,
+  narrowable,
 }: {
-  visibility: Pick<
-    ReturnType<typeof useArtifactVisibility>,
-    "current" | "label" | "request" | "narrowable"
-  >;
+  visibility: Pick<ReturnType<typeof useArtifactVisibility>, "current" | "label" | "request">;
   linkAvailable: boolean;
+  narrowable: boolean;
 }) {
   const choices = (["conversation", "workspace", "link"] as const).filter(
-    (choice) =>
-      (choice !== "link" || linkAvailable) && (choice !== "conversation" || visibility.narrowable),
+    (choice) => (choice !== "link" || linkAvailable) && (choice !== "conversation" || narrowable),
   );
   return (
     <Dropdown.Menu

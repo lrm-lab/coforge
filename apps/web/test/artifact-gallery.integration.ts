@@ -250,7 +250,7 @@ test("a gallery page costs a fixed number of queries however many artifacts the 
     for (let index = 0; index < 5; index++) await f.make(`Extra ${index}`);
     const after = [await queriesOf({}), await queriesOf({ related: true, query: "a" })];
     expect(after).toEqual(before);
-    expect(before).toEqual([8, 8]);
+    expect(before).toEqual([7, 7]);
   } finally {
     await countingDb.$disconnect();
   }

@@ -260,8 +260,11 @@ test("a widened artifact reads as the Workspace's: every member and Agent reads 
       homeKey: "workspace",
       homeKind: "workspace",
       access: "workspace",
+      narrowable: false,
     });
   }
+  expect((await read(artifact.id, { userId: people.alice })).artifact.narrowable).toBe(true);
+  expect((await read(artifact.id, { agentId: agents.helper })).artifact.narrowable).toBe(false);
   for (const reader of [
     { userId: people.alice },
     { agentId: agents.helper },

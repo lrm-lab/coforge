@@ -107,7 +107,6 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
     tier: current?.artifact.access ?? "conversation",
     link,
     homeName,
-    narrowable: current?.artifact.access !== "workspace" || Boolean(homeId),
   });
 
   useRealtimeSubscription({
@@ -223,6 +222,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
             <>
               <VisibilityPill
                 visibility={visibility}
+                narrowable={current.artifact.narrowable}
                 canChange={canChange}
                 linkAvailable={link.available}
               />
@@ -242,6 +242,7 @@ function ArtifactPageFor({ artifactId, pane }: { artifactId: string } & Artifact
               canFind={webPage}
               following={following}
               visibility={visibility}
+              narrowable={current.artifact.narrowable}
               linkAvailable={link.available}
               onChooseVersion={choose}
               onAction={onMoreAction}

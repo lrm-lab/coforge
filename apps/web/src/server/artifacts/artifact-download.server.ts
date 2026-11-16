@@ -5,12 +5,13 @@ import { AppError } from "#src/lib/app-error";
 import type { AppRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
 import { artifactContentType } from "./artifact-content-types.server";
+import { artifactRateLimitedResponse } from "./artifact-rate-limited-response.server";
 import type { ArtifactReads } from "./artifact-reads.server";
 
 type Sources = {
   reads: Pick<ArtifactReads, "read">;
   blobs: Pick<StoredArtifactBlobs, "read" | "inspectMany">;
-  zipLimit?: AppRateLimit;
+  zipLimit: AppRateLimit;
 };
 
 type Request = {
@@ -53,19 +54,9 @@ export async function artifactDownload(sources: Sources, input: Request): Promis
   const total = read.files.reduce((sum, file) => sum + file.sizeBytes, 0);
   if (total > (input.limit ?? ARTIFACT_ZIP_LIMIT_BYTES))
     throw new AppError("INVALID_INPUT", { errorId: "artifact-zip-too-large" });
-  const decision = await sources.zipLimit?.admit(input.userId);
-  if (decision && !decision.allowed)
-    return Response.json(
-      {
-        code: "RATE_LIMITED",
-        retryable: true,
-        details: { retryAfterSeconds: decision.retryAfterSeconds },
-      },
-      {
-        status: 429,
-        headers: { "Retry-After": String(decision.retryAfterSeconds), "Cache-Control": "no-store" },
-      },
-    );
+  const decision = await sources.zipLimit.admit(input.userId);
+  if (!decision.allowed)
+    return artifactRateLimitedResponse({ retryAfterSeconds: decision.retryAfterSeconds });
   const stored = await sources.blobs.inspectMany(
     input.workspaceId,
     read.files.map((file) => file.sha256),
@@ -115,7 +106,7 @@ const PREVIEW_TEXT_LIMIT_BYTES = 1024 * 1024;
 const PREVIEW_IMAGE_LIMIT_BYTES = 5 * 1024 * 1024;
 
 export async function artifactFilePreview(
-  sources: Sources,
+  sources: Omit<Sources, "zipLimit">,
   input: Omit<Request, "limit"> & { path: string },
 ) {
   const read = await sources.reads.read({

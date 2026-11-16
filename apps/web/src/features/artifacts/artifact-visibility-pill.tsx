@@ -13,13 +13,12 @@ const pillClass =
 
 export function VisibilityPill({
   visibility,
+  narrowable,
   canChange,
   linkAvailable,
 }: {
-  visibility: Pick<
-    ReturnType<typeof useArtifactVisibility>,
-    "current" | "label" | "request" | "narrowable"
-  >;
+  visibility: Pick<ReturnType<typeof useArtifactVisibility>, "current" | "label" | "request">;
+  narrowable: boolean;
   canChange: boolean;
   linkAvailable: boolean;
 }) {
@@ -46,7 +45,11 @@ export function VisibilityPill({
         {inner}
       </AriaButton>
       <Dropdown.Popover placement="bottom start">
-        <VisibilityMenu visibility={visibility} linkAvailable={linkAvailable} />
+        <VisibilityMenu
+          visibility={visibility}
+          linkAvailable={linkAvailable}
+          narrowable={narrowable}
+        />
       </Dropdown.Popover>
     </Dropdown.Root>
   );

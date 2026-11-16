@@ -139,12 +139,16 @@ export class ArtifactReads {
       viewer,
       authorAgentOwnerId,
     });
+    const canChange = canManageArtifactSharingWithRole(reader, viewer.role, {
+      authorAgentOwnerId,
+    });
     return {
       ...artifact,
       homeKey: view.homeKey,
       access: view.tier,
       homeKind: view.homeKind,
-      canChange: canManageArtifactSharingWithRole(reader, viewer.role, { authorAgentOwnerId }),
+      canChange,
+      narrowable: canChange && view.narrowable,
       authorAgentOwnerId,
       viewer,
     };

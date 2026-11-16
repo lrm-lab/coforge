@@ -228,14 +228,15 @@ test("a person changes the tier when they own the author or administer the Works
   await expect(change(people.bob, "conversation")).rejects.toMatchObject({
     code: "ACCESS_DENIED",
   });
-  await expect(change(people.admin, "conversation")).rejects.toMatchObject({
-    code: "NOT_FOUND",
-    errorId: "artifact-home-unseen",
-    hint: "You can no longer see that conversation, so it can't go back.",
-  });
-  await expect(
-    artifacts.visibility.loss({ workspaceId, artifactId: id, userId: people.admin }),
-  ).rejects.toMatchObject({ code: "NOT_FOUND", errorId: "artifact-home-unseen" });
+  await refusesNarrowing(
+    id,
+    {
+      code: "NOT_FOUND",
+      errorId: "artifact-home-unseen",
+      hint: "You can no longer see that conversation, so it can't go back.",
+    },
+    people.admin,
+  );
   await db.conversationMember.create({
     data: { conversationId: room, workspaceId, userId: people.admin },
   });
@@ -276,6 +277,7 @@ test("narrowing needs a home that still stands, and the loss counts who would st
   });
   expect(loss.people).toBeGreaterThanOrEqual(2);
   expect(loss.agents).toBeGreaterThanOrEqual(2);
+  expect(loss.total).toBe(loss.people + loss.agents);
   await expect(
     artifacts.visibility.loss({ workspaceId, artifactId: id, userId: people.bob }),
   ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
@@ -284,22 +286,25 @@ test("narrowing needs a home that still stands, and the loss counts who would st
     data: { hiddenFromWorkspaceAt: new Date() },
   });
   try {
-    await expect(
-      artifacts.visibility.change({
-        workspaceId,
-        artifactId: id,
-        userId: people.alice,
-        tier: "conversation",
-      }),
-    ).rejects.toMatchObject({ code: "CONFLICT" });
-    await expect(
-      artifacts.visibility.loss({ workspaceId, artifactId: id, userId: people.alice }),
-    ).rejects.toMatchObject({ code: "CONFLICT" });
+    await refusesNarrowing(id, { code: "CONFLICT" });
   } finally {
     await db.conversation.update({ where: { id: room }, data: { hiddenFromWorkspaceAt: null } });
   }
   expect(await tierOf(id)).toBe("workspace");
 });
+
+const refusesNarrowing = async (
+  id: string,
+  expected: Record<string, string>,
+  userId = people.alice,
+) => {
+  await expect(
+    artifacts.visibility.change({ workspaceId, artifactId: id, userId, tier: "conversation" }),
+  ).rejects.toMatchObject(expected);
+  await expect(
+    artifacts.visibility.loss({ workspaceId, artifactId: id, userId }),
+  ).rejects.toMatchObject(expected);
+};
 
 const widen = async (id: string) =>
   artifacts.visibility.change({
@@ -327,11 +332,7 @@ test("narrowing is refused while its author Agent is not in the home, and while 
     data: { leftAt: new Date() },
   });
   try {
-    await expect(narrow(id)).rejects.toMatchObject({
-      code: "CONFLICT",
-      errorId: "artifact-author-not-member",
-    });
-    await expect(preview(id)).rejects.toMatchObject({ errorId: "artifact-author-not-member" });
+    await refusesNarrowing(id, { code: "CONFLICT", errorId: "artifact-author-not-member" });
   } finally {
     await db.conversationMember.updateMany({
       where: { conversationId: room, agentId: agents.bot },
@@ -340,11 +341,7 @@ test("narrowing is refused while its author Agent is not in the home, and while 
   }
   await db.agent.update({ where: { id: agents.bot }, data: { deletedAt: new Date() } });
   try {
-    await expect(narrow(id)).rejects.toMatchObject({
-      code: "CONFLICT",
-      errorId: "artifact-author-cannot-see",
-    });
-    await expect(preview(id)).rejects.toMatchObject({ errorId: "artifact-author-cannot-see" });
+    await refusesNarrowing(id, { code: "CONFLICT", errorId: "artifact-author-cannot-see" });
   } finally {
     await db.agent.update({ where: { id: agents.bot }, data: { deletedAt: null } });
   }
@@ -356,7 +353,7 @@ test("narrowing commits only for the count that was shown, and turns the public 
   const id = await make(agents.bot, room);
   await widen(id);
   const shown = await preview(id);
-  const expectedLost = shown.people + shown.agents;
+  const expectedLost = shown.total;
   const late = (
     await db.agent.create({
       data: {

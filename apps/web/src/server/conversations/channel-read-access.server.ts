@@ -254,18 +254,6 @@ export function actorConversationHomeSql(alias: string, workspaceId: string, act
   return { stands, reads };
 }
 
-export async function agentHasConversationSeat(
-  db: Pick<PrismaClient, "conversationMember">,
-  conversationId: string,
-  agentId: string,
-): Promise<boolean> {
-  const seat = await db.conversationMember.findFirst({
-    where: { conversationId, agentId, ...ACTIVE_MEMBER_WHERE },
-    select: { id: true },
-  });
-  return seat !== null;
-}
-
 export async function actorsWithoutConversationRead(
   db: Pick<PrismaClient, "conversation" | "workspaceMembership" | "agent">,
   workspaceId: string,

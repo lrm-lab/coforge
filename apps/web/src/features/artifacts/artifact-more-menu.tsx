@@ -41,6 +41,7 @@ export function ArtifactMoreMenu({
   canFind,
   following,
   visibility,
+  narrowable,
   linkAvailable,
   onChooseVersion,
   onAction,
@@ -53,10 +54,8 @@ export function ArtifactMoreMenu({
   canDelete: boolean;
   canFind: boolean;
   following: boolean;
-  visibility: Pick<
-    ReturnType<typeof useArtifactVisibility>,
-    "current" | "label" | "request" | "narrowable"
-  >;
+  visibility: Pick<ReturnType<typeof useArtifactVisibility>, "current" | "label" | "request">;
+  narrowable: boolean;
   linkAvailable: boolean;
   onChooseVersion: (version: number) => void;
   onAction: (action: MoreAction) => void;
@@ -76,7 +75,11 @@ export function ArtifactMoreMenu({
             <SubmenuTrigger>
               <Dropdown.Item id="who" icon={Building02} label={m.av_who_can_see()} />
               <Dropdown.SubmenuPopover className="w-64">
-                <VisibilityMenu visibility={visibility} linkAvailable={linkAvailable} />
+                <VisibilityMenu
+                  visibility={visibility}
+                  linkAvailable={linkAvailable}
+                  narrowable={narrowable}
+                />
               </Dropdown.SubmenuPopover>
             </SubmenuTrigger>
           )}
