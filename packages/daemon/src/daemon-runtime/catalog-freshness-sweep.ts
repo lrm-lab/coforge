@@ -59,7 +59,16 @@ export class CatalogFreshnessSweep {
 
   async #sweep(): Promise<void> {
     const transport = this.#ports.transport();
-    if (!transport) return;
+    if (!transport) {
+      // The one reason this class can stop on: said out loud, so "no probe happened" is never
+      // confused with "the timer never ran" (task #42).
+      logger.debug("Code Agent catalog sweep skipped", {
+        event: "code_agent_catalog:sweep_skipped",
+        reason: "no_transport",
+        outcome: "skipped",
+      });
+      return;
+    }
     await this.#ports.recheck(transport);
   }
 }

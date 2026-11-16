@@ -82,13 +82,21 @@ export class CatalogFreshness {
     runtimes: RuntimeMetadata[] | undefined,
     now = Date.now(),
   ): Promise<void> {
-    if (!runtimes || !this.#ports.isLive(transport)) return;
+    if (!runtimes || !this.#ports.isLive(transport)) {
+      // Silent once: a sweep that decides nothing here looked exactly like a timer that never ran,
+      // so the reason is logged rather than inferred from an empty log (task #42).
+      this.#skipped(!runtimes ? "no_runtimes" : "transport_not_live", now);
+      return;
+    }
     const { changedProviders = [] } = await this.#ports.discovery.cachedCatalogs(runtimes);
     const refreshableChanged = this.refreshable(changedProviders, now);
     const dueRetries = this.#retries.due(now);
     const changedSet = new Set(refreshableChanged);
     const retryProviders = dueRetries.filter((provider) => !changedSet.has(provider));
-    if (!refreshableChanged.length && !retryProviders.length) return;
+    if (!refreshableChanged.length && !retryProviders.length) {
+      this.#skipped("nothing_due", now);
+      return;
+    }
     if (refreshableChanged.length)
       logger.info("Code Agent catalog changed on disk; refreshing", {
         event: "code_agent_catalog:changed",
@@ -116,6 +124,17 @@ export class CatalogFreshness {
       catalogs,
     );
     for (const provider of retryProviders) await this.#retry(provider, runtimes, transport);
+  }
+
+  /** A sweep that probed nothing, and which of the three reasons stopped it. */
+  #skipped(reason: "no_runtimes" | "transport_not_live" | "nothing_due", now: number): void {
+    logger.debug("Code Agent catalog sweep skipped", {
+      event: "code_agent_catalog:sweep_skipped",
+      reason,
+      at: new Date(now).toISOString(),
+      ...this.#scope(),
+      outcome: "skipped",
+    });
   }
 
   /** One failed provider's catalog, re-discovered on its own after its wait elapsed. */
