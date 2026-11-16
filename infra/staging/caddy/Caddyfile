@@ -12,6 +12,7 @@
 			wrap json
 			fields {
 				request>headers>X-Coforge-Agent-Api-Key delete
+				request>headers>Apikey delete
 			}
 		}
 	}
@@ -23,6 +24,18 @@ staging.coforge.cn {
 	# (https://hstspreload.org/#deployment-recommendations): 300, then
 	# 604800, then 2592000, waiting out each stage before the next.
 	header Strict-Transport-Security "max-age=300; includeSubDomains"
+
+	# db_bridge PostgREST (cfb-bridge stack on this host, port 54321). GPU job nodes can only
+	# egress on 443, so they reach it through this route. PostgREST still requires a valid
+	# service-role JWT: this adds reachability, not access. Only these two paths are forwarded.
+	@cfb_bridge path /cfb-db/rest/v1/* /cfb-db/healthz
+	handle @cfb_bridge {
+		uri strip_prefix /cfb-db
+		header Cache-Control "no-store"
+		reverse_proxy 172.27.157.244:54321 {
+			header_up -Cookie
+		}
+	}
 
 	# Realtime transport stays standalone Centrifugo; everything else is the
 	# web application. Route order: explicit realtime prefixes first.
