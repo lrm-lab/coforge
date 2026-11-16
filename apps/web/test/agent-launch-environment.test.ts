@@ -320,7 +320,7 @@ test("launch identity follows the owner's current memory choice without rejectin
   runtimeConfig = { ...runtimeConfig, environment: undefined };
   allowed = true;
   runtimeAllowed = true;
-  launchRefusal = undefined;
+  launchRefusal = "none";
   try {
     memoryChoice = false;
     const disabled = (await request("valid")) as Response;
