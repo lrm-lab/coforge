@@ -32,15 +32,37 @@ export function LabelDot({ color, className }: { color: string; className?: stri
   );
 }
 
-/** One label: its color as a dot, then its name, as Linear's labels read. */
-export function TaskLabelChip({ label, className }: { label: TaskLabel; className?: string }) {
+/**
+ * One label: its color as a dot, then its name, as Linear's labels read. A card or a chip row cuts
+ * a long name; `full` (the Task popup) writes it whole, wrapping if it must: the popup is the one
+ * place the whole name shows, since its menu does not repeat the label (Frank, task #7).
+ */
+export function TaskLabelChip({
+  label,
+  className,
+  full = false,
+}: {
+  label: TaskLabel;
+  className?: string;
+  full?: boolean;
+}) {
   const { color, archived } = useCachedLabel(label);
   // Archived (deleted) while the Task is on screen: it is off the Task already, though the Task
   // has not been read again.
   if (archived) return null;
   return (
-    <BadgeWithDot type="modern" size="sm" color={badgeColor(color)} className={className}>
-      <span className="min-w-0 max-w-32 truncate">{label.name}</span>
+    <BadgeWithDot
+      type="modern"
+      size="sm"
+      color={badgeColor(color)}
+      // The badge is one line at its text's width; a whole name may take the row and wrap in it.
+      className={
+        full ? cn("h-auto w-fit max-w-full whitespace-normal text-left", className) : className
+      }
+    >
+      <span className={full ? "min-w-0 wrap-anywhere" : "min-w-0 max-w-32 truncate"}>
+        {label.name}
+      </span>
     </BadgeWithDot>
   );
 }
@@ -124,9 +146,9 @@ export function ManageableLabelChip({ label }: { label: TaskLabel }) {
       >
         <AriaButton
           aria-label={m.tasks_label_color_change({ name: label.name })}
-          className="cursor-pointer rounded-md outline-focus-ring focus-visible:outline-2"
+          className="max-w-full min-w-0 cursor-pointer rounded-md text-left outline-focus-ring focus-visible:outline-2"
         >
-          <TaskLabelChip label={label} />
+          <TaskLabelChip label={label} full />
         </AriaButton>
         <Dropdown.Popover placement="bottom start" className="w-56">
           <AriaDialog aria-label={label.name} className="outline-hidden">

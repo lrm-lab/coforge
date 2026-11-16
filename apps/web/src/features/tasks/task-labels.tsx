@@ -140,7 +140,7 @@ export function TaskLabelsField({
         canManage ? (
           <ManageableLabelChip key={label.id} label={label} />
         ) : (
-          <TaskLabelChip key={label.id} label={label} />
+          <TaskLabelChip key={label.id} label={label} full />
         ),
       )}
       <PickerSurface
