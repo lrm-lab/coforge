@@ -69,6 +69,58 @@ test("Session reporting persists before sending and replays the same snapshot af
   expect(snapshots).toHaveLength(2);
 });
 
+test("a permanent session scope rejection drops the snapshot instead of replaying it", async () => {
+  let record: AgentRuntimeRecord = {
+    version: 1,
+    scope: {
+      protocolMajor: 1,
+      requestId: "request",
+      workspaceId: "w",
+      computerId: "c",
+      agentId: "a",
+      provider: "pi",
+      epoch: 158,
+    },
+    action: "start",
+    phase: "running",
+    daemonInstanceId: "daemon",
+    sequence: 35,
+    launchId: "launch",
+    report: {
+      protocolMajor: 1,
+      requestId: "request",
+      workspaceId: "w",
+      computerId: "c",
+      agentId: "a",
+      provider: "pi",
+      epoch: 158,
+      launchId: "launch",
+      sequence: 35,
+      identity: { sessionId: "native", state: "resumable" },
+    },
+  };
+  const state = new AgentRuntimeState({
+    listAgentIds: async () => ["a"],
+    read: async () => structuredClone(record),
+    write: async (_id, next) => {
+      record = structuredClone(next);
+    },
+    clearWorkspace: async () => {},
+  });
+  let sends = 0;
+  const reject = async () => {
+    sends++;
+    throw Object.assign(new Error("Stale Agent scope"), { code: 403 });
+  };
+
+  await new AgentSessions(state, reject).replay();
+  expect(sends).toBe(1);
+  expect(record.report).toBeUndefined();
+
+  await new AgentSessions(state, reject).replay();
+  expect(sends).toBe(1);
+});
+
 test("Session replay sends different Agents concurrently", async () => {
   const recordFor = (agentId: string): AgentRuntimeRecord => ({
     version: 1,

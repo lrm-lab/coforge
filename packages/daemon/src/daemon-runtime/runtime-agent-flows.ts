@@ -1,6 +1,7 @@
 import type {
   AgentStartIntent,
   AgentStopIntent,
+  AgentStaleRuntimeStop,
   AgentTurnInterruptIntent,
   AgentWorkspaceResetRequest,
   AgentTurnInterruptResult,
@@ -133,7 +134,7 @@ export async function scanUsage(
 
 /** What the control-intent handlers need from the runtime that owns the Agents. */
 export type AgentControlIntentPorts = {
-  assertOwnIntent(intent: AgentStartIntent | AgentStopIntent): void;
+  assertOwnIntent(intent: AgentStartIntent | AgentStopIntent | AgentStaleRuntimeStop): void;
   connection: { workspaceId: string; computerId: string };
   started: boolean;
   stopping: boolean;
@@ -157,6 +158,7 @@ export type AgentControlIntentPorts = {
   ): Promise<AgentRuntime>;
   stopAgent(agentId: string): Promise<void>;
   resetWorkspace(request: AgentWorkspaceResetRequest): Promise<void>;
+  staleRuntimeStop(agentId: string, controlEpoch: number): Promise<"released" | "rejected">;
 };
 
 /** What `controlIntentPorts` reads from the runtime: its collaborators, and `started` and
@@ -166,7 +168,10 @@ export type AgentControlIntentDeps = {
   connection: { workspaceId: string; computerId: string };
   started: boolean;
   stopping: boolean;
-  agentControl: Pick<AgentControl, "start" | "stop" | "managed" | "resetWorkspace">;
+  agentControl: Pick<
+    AgentControl,
+    "start" | "stop" | "managed" | "resetWorkspace" | "staleRuntimeStop"
+  >;
   agentSessions: Pick<AgentSessions, "replay">;
   processes: Pick<AgentProcessManager, "runtime" | "pendingRelease">;
   stops: Pick<AgentStopRegistry, "pendingStop">;
@@ -198,6 +203,8 @@ export function controlIntentPorts(deps: AgentControlIntentDeps): AgentControlIn
       deps.startAgent(agentId, config, recovery, request),
     stopAgent: (agentId) => deps.stopAgent(agentId),
     resetWorkspace: (request) => deps.agentControl.resetWorkspace(request),
+    staleRuntimeStop: (agentId, controlEpoch) =>
+      deps.agentControl.staleRuntimeStop(agentId, controlEpoch),
   };
 }
 
@@ -254,6 +261,23 @@ export async function handleAgentStop(
   await ports.stopAgent(intent.agentId);
   // A person's Stop of an unmanaged Agent: nothing a cold start owed its next launch is told to it.
   ports.dropOwedRecovery(intent.agentId);
+}
+
+export async function handleAgentStaleRuntimeStop(
+  ports: AgentControlIntentPorts,
+  intent: AgentStaleRuntimeStop,
+): Promise<void> {
+  ports.assertOwnIntent(intent);
+  await ports.staleRuntimeStop(intent.agentId, intent.controlEpoch);
+}
+
+export function handleAgentStopIntent(
+  ports: AgentControlIntentPorts,
+  intent: AgentStopIntent | AgentStaleRuntimeStop,
+): Promise<void> {
+  return "messageType" in intent
+    ? handleAgentStop(ports, intent)
+    : handleAgentStaleRuntimeStop(ports, intent as AgentStaleRuntimeStop);
 }
 
 /** A server workspace reset: only for this runtime's own, started, not-stopping scope. */

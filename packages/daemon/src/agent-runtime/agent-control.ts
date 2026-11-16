@@ -29,6 +29,7 @@ const logger = getLogger(["coforge", "daemon", "agent-control"]);
 /** Owns separate stop, workspace reset, and start primitives. */
 export class AgentControl {
   readonly #known = new Set<string>();
+  readonly #stopped = new Set<string>();
   readonly #context: AgentControlContext;
   readonly #launches: ManagedLaunches;
   constructor(
@@ -43,6 +44,10 @@ export class AgentControl {
   }
   managed(agentId: string) {
     return this.#known.has(agentId);
+  }
+
+  isStopped(agentId: string): boolean {
+    return this.#stopped.has(agentId);
   }
   stop(scope: AgentControlScope): Promise<void> {
     const known = this.#known.has(scope.agentId);
@@ -64,6 +69,7 @@ export class AgentControl {
       // retry both belong to the launch operation this Stop is ending. Cleared only after every
       // validation above passed, so a stale/out-of-scope Stop cannot disarm a live retry.
       this.#launches.supersede(scope.agentId);
+      this.#stopped.add(scope.agentId);
       this.#context.runtime.stopAccepted?.(scope.agentId);
       const resetWorkspaceRequired =
         record?.action === "reset-workspace" && record.phase !== "workspace-reset";
@@ -109,6 +115,37 @@ export class AgentControl {
       await this.#context.state.store.write(scope.agentId, record);
       await this.#context.runtime.result(record.lastResult).catch(() => {});
       assertPhaseInvariants(this.#context, scope.agentId, record);
+    });
+  }
+
+  staleRuntimeStop(agentId: string, controlEpoch: number): Promise<"released" | "rejected"> {
+    return this.#context.state.run(agentId, async () => {
+      const record = await this.#context.state.store.read(agentId);
+      if (!record || record.scope.epoch >= controlEpoch) {
+        logger.warning("Stale runtime stop was refused by the local fence", {
+          event: "agent_stale_runtime_stop:rejected",
+          agent_id: agentId,
+          local_epoch: record?.scope.epoch,
+          control_epoch: controlEpoch,
+          reason: "local_epoch_not_older",
+          outcome: "rejected",
+        });
+        return "rejected";
+      }
+      this.#stopped.add(agentId);
+      if (!this.#context.runtime.running(agentId)) return "released";
+      await this.#context.runtime.stop(agentId);
+      record.phase = "stopped";
+      this.#context.sessions.clear(record);
+      await this.#context.state.store.write(agentId, record);
+      logger.info("Released a stale Agent runtime", {
+        event: "agent_stale_runtime_stop:released",
+        agent_id: agentId,
+        local_epoch: record.scope.epoch,
+        control_epoch: controlEpoch,
+        outcome: "released",
+      });
+      return "released";
     });
   }
   resetWorkspace(scope: AgentWorkspaceResetRequest): Promise<void> {
@@ -202,6 +239,7 @@ export class AgentControl {
       await requireRecord(record, known);
       record = await repairStaleRecord(this.#context, intent.agentId, record);
       fence(record, scope);
+      this.#stopped.delete(intent.agentId);
       if (record?.scope.epoch === scope.epoch && record.startResult) {
         if (record.startResult.requestId !== scope.requestId)
           throw new Error("control_request_mismatch");

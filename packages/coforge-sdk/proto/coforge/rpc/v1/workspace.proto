@@ -227,6 +227,17 @@ message AgentStopIntent {
   optional uint32 control_epoch = 8;
 }
 
+// Server-to-daemon reconciliation for a process the current Computer no longer owns. It is
+// intentionally separate from AgentStopIntent: it has no control-state receipt or reply.
+message AgentStaleRuntimeStop {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string agent_id = 4;
+  string computer_id = 5;
+  uint32 control_epoch = 6;
+}
+
 message AgentRecoveryMessage {
   string message_id = 1;
   string delivery_id = 2;

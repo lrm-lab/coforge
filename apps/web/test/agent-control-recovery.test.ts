@@ -9,7 +9,11 @@ import {
 import { WorkspaceAgentRecovery } from "#src/server/agents/agent-runtime-control.server";
 import type { AgentRecord } from "#src/server/db/repositories/agent.repositories.server";
 import { AgentControlReceiver } from "#src/server/agents/agent-control-receiver.server";
-import { decodeAgentStartIntent, type AgentControlResult } from "@lrm/coforge-sdk/internal";
+import {
+  decodeAgentStartIntent,
+  decodeAgentStaleRuntimeStop,
+  type AgentControlResult,
+} from "@lrm/coforge-sdk/internal";
 import { pendingOpStore, pendingRuntimeConfig } from "./helpers/agent-control-store";
 
 test("recover republishes a pending start unchanged, without superseding it", async () => {
@@ -479,6 +483,73 @@ test("a Computer whose only Agent fails recovery still completes the Daemon's re
   await recovery.recoverWorkspace(dorothyWorkspaceId, dorothyComputerId, []);
 
   expect(sent).toHaveLength(0);
+});
+
+test("ready reconciliation stops a moved Agent the new Computer has never started", async () => {
+  const state: AgentControlState = {
+    version: 1,
+    protocolMajor: 1,
+    requestId: "old-start",
+    workspaceId: "w",
+    computerId: "new-computer",
+    agentId: "moved",
+    provider: "pi",
+    epoch: 8,
+    action: "start",
+    phase: "completed",
+    configRevision: agentControlRevision(pendingRuntimeConfig),
+    controlSequence: 1,
+    sessionSequence: 0,
+  };
+  const agent = agentRecord({ id: "moved", name: "moved", computerId: "new-computer" });
+  const controlStore: AgentControlStore = {
+    memberRole: async () => "owner",
+    get: async () => ({
+      ...agent,
+      state,
+      storedControlState: state,
+      storedRuntimeConfig: pendingRuntimeConfig,
+    }),
+    replace: async () => false,
+  };
+  const control = new AgentControl(
+    controlStore,
+    { publish: async () => {} },
+    { run: async (_id, work) => work() },
+    { timeoutMs: 0, fallbackMs: 0 },
+  );
+  const sent: Uint8Array[] = [];
+  const recovery = new WorkspaceAgentRecovery(
+    {
+      getById: async () => agent,
+      listOwnedInWorkspace: async () => [],
+      listInWorkspace: async () => [],
+      listForComputer: async () => [],
+      listDeletedForComputer: async () => [],
+      create: async () => {
+        throw new Error("not used");
+      },
+      update: async () => {
+        throw new Error("not used");
+      },
+    },
+    { readAgentRecoveryContext: async () => ({ resumeMessages: [], unreadSummary: {} }) },
+    { publish: async (_channel, bytes) => void sent.push(bytes) },
+    { run: async (_id, work) => work() },
+    { resendPending: async () => {} },
+    undefined,
+    control,
+    controlStore,
+  );
+
+  await recovery.recoverWorkspace("w", "old-computer", ["moved"]);
+
+  expect(sent).toHaveLength(1);
+  expect(decodeAgentStaleRuntimeStop(sent[0]!)).toMatchObject({
+    agentId: "moved",
+    computerId: "old-computer",
+    controlEpoch: 8,
+  });
 });
 
 function startingStateFixture(overrides: Partial<AgentControlState> = {}) {

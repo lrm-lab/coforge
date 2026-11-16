@@ -42,7 +42,31 @@ async function setup() {
       displayName: "Mover",
       ownerId: owner.id,
       computerId: source.id,
+      controlState: {
+        version: 1,
+        protocolMajor: 1,
+        requestId: "source-start",
+        workspaceId: workspace.id,
+        computerId: source.id,
+        agentId: "pending",
+        provider: "pi",
+        epoch: 1,
+        action: "start",
+        phase: "completed",
+        configRevision: "config",
+        controlSequence: 1,
+        sessionSequence: 0,
+      },
       runtimeConfig: {},
+    },
+  });
+  await db.agent.update({
+    where: { id: agent.id },
+    data: {
+      controlState: {
+        ...(await db.agent.findUniqueOrThrow({ where: { id: agent.id } })).controlState,
+        agentId: agent.id,
+      },
     },
   });
   const input = {
@@ -134,6 +158,10 @@ test.skipIf(!connectionString)(
       expect(await computerOf()).toBe(target.id);
       const row = await db.agentMigration.findUniqueOrThrow({ where: { id: created.id } });
       expect(row.switchedAt).not.toBeNull();
+      expect(await db.agent.findUniqueOrThrow({ where: { id: agent.id } })).toMatchObject({
+        computerId: target.id,
+        controlState: expect.objectContaining({ computerId: target.id, epoch: 2 }),
+      });
     } finally {
       await cleanup();
     }

@@ -1,5 +1,19 @@
+import { diagnosticErrorCode, refusalText } from "@lrm/coforge-sdk/internal";
+import { getLogger } from "@logtape/logtape";
 import type { AgentSessionSnapshot, SessionIdentity } from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeRecord, AgentRuntimeState } from "./agent-runtime-state";
+
+const logger = getLogger(["coforge", "daemon", "agent-control"]);
+
+export function isPermanentSessionReportRejection(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const value = error as { code?: unknown; category?: unknown; message?: unknown };
+  const code = typeof value.code === "number" ? value.code : Number(value.code);
+  if (code !== 403) return false;
+  if (value.category === "session_mismatch") return true;
+  const message = typeof value.message === "string" ? value.message : refusalText(error);
+  return /stale agent scope|agent session(?: snapshot)? scope is not authorized/i.test(message);
+}
 
 /** Owns native Session bindings and reliable current-snapshot reporting. */
 export class AgentSessions {
@@ -37,7 +51,7 @@ export class AgentSessions {
       if (!record || record.launchId !== launchId || record.phase !== "running") return;
       this.capture(record, identity);
       await this.state.store.write(agentId, record);
-      if (record.report) await this.send(record.report).catch(() => {});
+      if (record.report) await this.#sendOrClearReport(record, record.report);
     });
   }
 
@@ -47,9 +61,33 @@ export class AgentSessions {
       ids.map((id) =>
         this.state.run(id, async () => {
           const record = await this.state.store.read(id);
-          if (record?.report) await this.send(record.report).catch(() => {});
+          if (record?.report) await this.#sendOrClearReport(record, record.report);
         }),
       ),
     );
+  }
+
+  async #sendOrClearReport(
+    record: AgentRuntimeRecord,
+    report: AgentSessionSnapshot,
+  ): Promise<void> {
+    try {
+      await this.send(report);
+    } catch (error) {
+      if (!isPermanentSessionReportRejection(error)) return;
+      if (record.report === report) {
+        delete record.report;
+        await this.state.store.write(report.agentId, record);
+      }
+      logger.warning("Dropped a permanently rejected Agent session snapshot", {
+        event: "agent_session:snapshot_dropped",
+        agent_id: report.agentId,
+        epoch: report.epoch,
+        sequence: report.sequence,
+        reason: refusalText(error).slice(0, 200),
+        error_code: diagnosticErrorCode(error),
+        outcome: "dropped",
+      });
+    }
   }
 }

@@ -25,7 +25,7 @@ import {
   type AgentReplyIntent,
 } from "@lrm/coforge-sdk/internal/reply-intent";
 import { ListenerSlot } from "./listener-slot";
-import { ServerPublications } from "./server-publications";
+import { ServerPublications, type AgentStopPublication } from "./server-publications";
 import { routePublication } from "./publication-routing";
 import {
   defaultDaemonConnectionTiming,
@@ -108,7 +108,6 @@ import {
   type AgentActivity,
   type AgentStatus,
   type AgentStartIntent,
-  type AgentStopIntent,
   type AgentConfigSync,
   type AgentTurnInterruptIntent,
   type AgentActivityProbe,
@@ -232,7 +231,7 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   );
   readonly #runtimeAuthIntent = new ListenerSlot<(intent: RuntimeAuthIntent) => void>();
   readonly #agentStart = new ListenerSlot<(intent: AgentStartIntent) => void>();
-  readonly #agentStop = new ListenerSlot<(intent: AgentStopIntent) => void>();
+  readonly #agentStop = new ListenerSlot<(intent: AgentStopPublication) => void>();
   readonly #agentTurnInterrupt = new ListenerSlot<(intent: AgentTurnInterruptIntent) => void>();
   readonly #agentActivityProbe = new ListenerSlot<(probe: AgentActivityProbe) => void>();
   readonly #agentInboxPurge = new ListenerSlot<(purge: AgentInboxPurge) => void>();
@@ -308,11 +307,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   readonly #supersededActivityLaunches = new Map<string, Set<string>>();
   /** Latest-per-agent, like `#pendingActivity`. */
   readonly #pendingSessionInvalidate = new Map<string, AgentSessionInvalidate>();
-  /** The latest launch a *non*-Activity, non-invalidate outbound message has reported for an
-   * Agent (today, only `reportAgentSession` carries a `launchId`; `AgentStatus` does not).
-   * Drives `sendSessionInvalidate`'s drop/refuse-to-queue rule below — deliberately not
-   * Activity's own `#supersededActivityLaunches` bookkeeping, which stays exactly as it was for
-   * Activity replay. */
   readonly #latestObservedLaunchByAgent = new Map<string, string>();
   /** True once an old server's "unknown RPC method" rejection of `agent:session:invalidate` has
    * been logged; suppresses repeats for the rest of this connection's lifetime (fix for a log
@@ -556,7 +550,7 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     return this.#agentStart.set(callback);
   }
 
-  onAgentStop(callback: (intent: AgentStopIntent) => void): () => void {
+  onAgentStop(callback: (intent: AgentStopPublication) => void): () => void {
     return this.#agentStop.set(callback);
   }
   onAgentTurnInterrupt(callback: (intent: AgentTurnInterruptIntent) => void): () => void {
@@ -911,6 +905,7 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
         data,
         { workspaceId, computerId: config.computerId },
         this.#readyPublications,
+        this.#agentStop,
       ) ||
       routePublication(data, decodeAppRegistrationNotice, (notice) => {
         if (!ownsDaemon(notice)) return false;

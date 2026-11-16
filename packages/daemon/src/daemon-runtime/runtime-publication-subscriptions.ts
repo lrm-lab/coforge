@@ -6,6 +6,7 @@ import type {
   AgentMessageDelivery,
   AgentStartIntent,
   AgentStopIntent,
+  AgentStaleRuntimeStop,
   AgentTurnInterruptIntent,
   AgentWorkspaceResetRequest,
   DaemonConnectRejectionReason,
@@ -37,7 +38,7 @@ export type RuntimePublicationSubscriptionPorts = {
   workspaceId: string;
   computerId: string;
   startAgent: (intent: AgentStartIntent) => Promise<unknown>;
-  stopAgent: (intent: AgentStopIntent) => Promise<unknown>;
+  stopAgent: (intent: AgentStopIntent | AgentStaleRuntimeStop) => Promise<unknown>;
   /** Optional so a runtime or test without config sync keeps working. */
   applyAgentConfigSync?: (sync: AgentConfigSync) => Promise<unknown>;
   interruptAgent: (intent: AgentTurnInterruptIntent) => Promise<unknown>;
@@ -81,7 +82,7 @@ export class RuntimePublicationSubscriptions {
       };
     const latest =
       <Value extends { agentId: string }>(
-        kind: "start" | "stop" | "config" | "probe",
+        kind: "start" | "stop" | "stale-runtime-stop" | "config" | "probe",
       ): Hold<Value> =>
       (value, run) =>
         this.#heldControl.latestFor(value.agentId, kind, run);
@@ -113,10 +114,27 @@ export class RuntimePublicationSubscriptions {
     );
     subscribe(
       transport.onAgentStop?.(
-        receive(
-          latest("stop"),
-          failure("stop", (intent: AgentStopIntent) => this.ports.stopAgent(intent)),
-        ),
+        receive(latest("stop"), async (intent: AgentStopIntent | AgentStaleRuntimeStop) => {
+          if (!("messageType" in intent)) {
+            try {
+              await this.ports.stopAgent(intent as AgentStopIntent);
+            } catch (error) {
+              logger.warning("Stale runtime stop failed", {
+                event: "agent_stale_runtime_stop:failed",
+                agent_id: intent.agentId,
+                control_epoch: intent.controlEpoch,
+                error_code: diagnosticErrorCode(error),
+                outcome: "failed",
+              });
+            }
+            return;
+          }
+          await this.ports
+            .stopAgent(intent)
+            .catch((error) =>
+              logAgentOperationFailure(this.ports.computerId, "stop", intent, error),
+            );
+        }),
       ),
     );
     const applyAgentConfigSync = this.ports.applyAgentConfigSync;

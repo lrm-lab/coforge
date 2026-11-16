@@ -2,11 +2,13 @@ import {
   AGENT_START_METHOD,
   AGENT_ACTIVITY_METHOD,
   decodeAgentActivity,
+  encodeAgentStaleRuntimeStop,
   encodeAgentStartIntent,
   encodeAgentStopIntent,
   type AgentActivity,
   type AgentStartIntent,
   type AgentStopIntent,
+  type AgentStaleRuntimeStop,
 } from "@lrm/coforge-sdk/internal";
 import type { MentionDeliveryReports } from "#src/server/conversations/mention-deliveries.server";
 import {
@@ -125,23 +127,13 @@ export class WorkspaceAgentRecovery {
     const push = (await this.configPush?.supports(workspaceId, computerId).catch(() => false))
       ? this.configPush
       : undefined;
-    // A deleted Agent is never recovered — but if the Daemon still reports one running
-    // (its Stop never reached an offline Daemon, or its result was lost), reconcile with a Stop.
-    // Deleted Agents are listed separately because `listForComputer` only returns live ones.
     const control = this.control;
     if (control) {
-      const deleted = await this.agents.listDeletedForComputer(workspaceId, computerId);
+      const listedIds = new Set(agents.map((agent) => agent.id));
       await Promise.all(
-        deleted
-          .filter((agent) => runningAgents.has(agent.id))
-          .map((agent) =>
-            control
-              .publishStop(
-                { agentId: agent.id, workspaceId, requestId: crypto.randomUUID() },
-                agent.ownerId,
-              )
-              .catch(() => {}),
-          ),
+        [...runningAgents]
+          .filter((agentId) => !listedIds.has(agentId))
+          .map((agentId) => this.#stopStaleRuntime(workspaceId, computerId, agentId)),
       );
     }
     // Each Agent recovers under its own lock, so all of them recover at once — and one Agent's
@@ -227,6 +219,48 @@ export class WorkspaceAgentRecovery {
       daemonControlChannel(workspaceId, computerId),
       encodeAgentStartIntent(this.sessions ? await this.sessions.prepare(intent) : intent),
     );
+  }
+
+  async #stopStaleRuntime(workspaceId: string, computerId: string, agentId: string) {
+    const [agent, controlled] = await Promise.all([
+      this.agents.getById(agentId),
+      this.controlAgents?.get(agentId),
+    ]);
+    const state = controlled?.state;
+    if (
+      !state ||
+      state.workspaceId !== workspaceId ||
+      (agent?.workspaceId === workspaceId && agent.computerId === computerId && !agent.deletedAt) ||
+      state.epoch < 1
+    )
+      return;
+    const message: AgentStaleRuntimeStop = {
+      protocolMajor: 1,
+      requestId: crypto.randomUUID(),
+      workspaceId,
+      computerId,
+      agentId,
+      controlEpoch: state.epoch,
+    };
+    try {
+      await this.api.publish(
+        daemonControlChannel(workspaceId, computerId),
+        encodeAgentStaleRuntimeStop(message),
+      );
+    } catch (error) {
+      console.warn(
+        JSON.stringify({
+          event: "agent_stale_runtime_stop:publish_failed",
+          request_id: message.requestId,
+          workspace_id: workspaceId,
+          computer_id: computerId,
+          agent_id: agentId,
+          control_epoch: state.epoch,
+          error_type: errorType(error),
+          outcome: "failed",
+        }),
+      );
+    }
   }
 }
 
