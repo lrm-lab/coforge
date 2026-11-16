@@ -300,6 +300,7 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
     request: import("./weekly-report-memory").WeeklyReportMemoryCommand,
     agentApiKey: string,
   ): Promise<import("./weekly-report-memory").WeeklyReportMemoryResult>;
+  agentMemory?(request: unknown, agentApiKey: string): Promise<unknown>;
   agentMemoryDisposition?(request: unknown, agentApiKey: string): Promise<unknown>;
   agentOpenviking?(request: OpenVikingAgentProxyCommand, agentApiKey: string): Promise<unknown>;
   agentAttachment?(attachmentId: string, agentApiKey: string): Promise<Response>;

@@ -73,6 +73,7 @@ export type AgentRequestForwarderPorts = Readonly<{
     | "agentApp"
     | "agentArtifact"
     | "agentTaskConversation"
+    | "agentMemory"
     | "agentMemoryDisposition"
     | "agentOpenviking"
     | "threadList"
@@ -317,6 +318,11 @@ export class AgentRequestForwarder {
   ): Promise<Response> {
     this.#ports.authorizedAgent(context, agentApiKey);
     return this.#transportCall("agentArtifact", NOT_CONNECTED)(request, agentApiKey);
+  }
+
+  async agentMemory(context: string, request: unknown, agentApiKey: string): Promise<unknown> {
+    this.#ports.authorizedAgent(context, agentApiKey);
+    return this.#transportCall("agentMemory", NOT_CONNECTED)(request, agentApiKey);
   }
 
   async agentMemoryDisposition(

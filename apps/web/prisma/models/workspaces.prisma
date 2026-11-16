@@ -1,4 +1,6 @@
 model Workspace {
+  platformMemoryHeads    PlatformMemoryHead[]
+  platformMemoryReceipts PlatformMemoryReceipt[]
   assistant WorkspaceAssistant?
   id                     String                  @id @default(uuid(7)) @db.Uuid
   slug                   String                  @unique

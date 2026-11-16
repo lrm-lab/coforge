@@ -51,7 +51,7 @@ export { MemoryAgentTurnBudget } from "./memory-agent-turn";
 
 import { installChannelTurnPolicy } from "./channel-turn-policy";
 
-import { createMemoryDispositionTool } from "./memory-disposition-tool";
+import { createTaskMemoryTools } from "./task-memory-tools";
 import { modelWithSizes } from "./model-size-override";
 import { contextViewRequestLogFields } from "./session-context-view-log";
 import type { CreateSessionOptions } from "./session-options";
@@ -550,7 +550,7 @@ export async function createSession(options: CreateSessionOptions) {
         ]
       : []),
     ...memoryTools,
-    ...(!memoryFence ? [createMemoryDispositionTool(defaultMemoryProxy(environment))] : []),
+    ...createTaskMemoryTools(memoryFence, environment, defaultMemoryProxy(environment)),
   ];
   const created = await createAgentSessionFromServices({
     services,

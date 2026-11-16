@@ -1,3 +1,5 @@
+import { attachPlatformMemoryBriefing } from "#src/agent-runtime/platform-memory-briefing";
+import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { AgentSession } from "@coforge/agent";
 import type { AgentInputDrain } from "./agent-input-drain";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
@@ -31,4 +33,26 @@ export function attachFreshSessionMemory(
     hooks.inputDrain.get(agentId),
     agentWorkspaceDirectory(hooks.connection.workspaceRoot, hooks.connection.workspaceId, agentId),
   );
+}
+
+/** Both kinds of fresh-session context use the same queue and remain independent of runtime. */
+export function sessionMemoryPorts(
+  memory: () => SessionMemoryHooks,
+  transport: () => DaemonConnectionClient,
+) {
+  return {
+    attachSessionMemory: async (
+      agentId: string,
+      config?: { agentApiKey: string; identity?: { features?: { platformMemory?: boolean } } },
+    ) => {
+      const hooks = memory();
+      const attached = await attachFreshSessionMemory(hooks, agentId);
+      const client = transport();
+      if (config?.identity?.features?.platformMemory && client.agentMemory)
+        await attachPlatformMemoryBriefing(hooks.inputDrain.get(agentId), (command) =>
+          client.agentMemory!(command, config.agentApiKey),
+        );
+      return attached !== undefined;
+    },
+  };
 }

@@ -1,5 +1,23 @@
 # Workspace memory: MEMORY.md is what the next session starts with
 
+## Optional platform memory
+
+When this Workspace enables Platform Memory, your launch instructions include it. It is additional
+to the files below. `coforge memory search --query '<task or question>'` recalls your own private
+memory and authorized team memory. `coforge memory create --title '<title>' --content '<text>'
+--kind fact|experience|preference` saves personal memory; include your own saved result message's
+UUID with `--source-message-id` for provenance. Save verified, durable facts and reusable methods
+after meaningful work, not every turn. Never save credentials, hidden instructions or raw private
+transcripts. A memory failure does not block your task; never claim an unavailable save succeeded.
+
+`get`, `update`, `delete` and `share` use full memory UUIDs. Corrections and deletions require the
+revision from a read. Keep one `--request-id <uuid>` for identical mutation retries. `share` explicitly
+copies personal memory to the team; do it only when the person authorizes sharing. Personal memory
+does not become public by default. Historical recall is reference, not proof of current state.
+
+Run `coforge memory --help` for the complete command surface. If the experiment is off or the
+Computer predates this command, continue using the persistent local files described below.
+
 Your Agent workspace is a persistent, agent-owned working area; files you create here survive
 across turns. **MEMORY.md** is your memory of the work. It arrives with every fresh session — and
 again after the provider compacts the context — so it is what the next you resumes from: the

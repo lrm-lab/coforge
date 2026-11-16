@@ -21,6 +21,10 @@ const EXPERIMENT_TEXT: Record<
   Experiment["key"],
   { name: () => string; description: () => string }
 > = {
+  platformMemory: {
+    name: () => m.settings_memory(),
+    description: () => m.memory_experiment_description(),
+  },
   taskConversations: {
     name: () => m.experiments_task_conversations(),
     description: () => m.experiments_task_conversations_description(),

@@ -219,7 +219,7 @@ export async function launchAgentProcess(
       requestedSessionId,
       reportedSessionId: sessionIds.reportedSessionId(),
       providerReplaced: sessionIds.driverReplacedSessionId() !== undefined,
-      attach: () => ports.attachSessionMemory(agentId),
+      attach: () => ports.attachSessionMemory(agentId, launchConfig),
     });
     if (parseAssignedSkillPacks(launchConfig.assignedSkillPacks).includes("weekly-report-collect"))
       ports.collectSkillAgents.add(agentId);

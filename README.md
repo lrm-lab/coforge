@@ -47,6 +47,7 @@ The architecture invariants every change must respect are in
 | [docs/architecture/](docs/architecture/) | Task-scoped Agent sessions: one Agent identity, a disposable execution session per delegated Task |
 | [docs/records/](docs/records/) | Weekly report behaviour specs: present mode, reading and editing |
 | [docs/memory-disposition.md](docs/memory-disposition.md) | Target-only Memory Hint receipts, configuration, and validation |
+| [docs/memory/platform.md](docs/memory/platform.md) | Opt-in personal Agent and team memory, management, runtime integration and rollout |
 | [docs/reliable-message-delivery.md](docs/reliable-message-delivery.md) | Message delivery guarantees |
 | [docs/realtime-events.md](docs/realtime-events.md) | Realtime events: who publishes each `*.v1` event and who receives it |
 | [docs/workspace-deletion.md](docs/workspace-deletion.md) | What deleting a Workspace removes, and when |

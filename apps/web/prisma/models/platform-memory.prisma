@@ -1,0 +1,54 @@
+/// Access and current-revision references only. The engine owns memory content and its search index.
+model PlatformMemoryHead {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  workspaceId     String    @db.Uuid
+  scope           String
+  agentId         String?   @db.Uuid
+  author          String
+  dedupKey        String
+  createRequestId String    @db.Uuid
+  fingerprint     String
+  title           String
+  kind            String
+  uri             String?
+  revision        Int       @default(0)
+  sourceMessageId String?   @db.Uuid
+  expiresAt       DateTime?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  keys            PlatformMemoryKey[]
+  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, author, createRequestId])
+  @@unique([workspaceId, dedupKey])
+  @@index([workspaceId, scope, agentId, updatedAt, id], map: "platform_memory_heads_scope_updated_idx")
+  @@map("platform_memory_heads")
+}
+
+/// Mutation receipts contain no memory body, provider secret, or model transcript.
+model PlatformMemoryReceipt {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workspaceId String    @db.Uuid
+  actor       String
+  requestId   String    @db.Uuid
+  fingerprint String
+  entryId     String    @db.Uuid
+  deleted     Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, actor, requestId])
+  @@map("platform_memory_receipts")
+}
+
+model PlatformMemoryKey {
+  workspaceId String @db.Uuid
+  key         String
+  entryId     String @db.Uuid
+  entry       PlatformMemoryHead @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, key])
+  @@index([entryId])
+  @@map("platform_memory_keys")
+}

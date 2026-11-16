@@ -1,5 +1,6 @@
 import {
   Beaker01,
+  BookOpen01,
   BellRinging01,
   Building07,
   Link03,
@@ -37,6 +38,7 @@ export const SETTINGS_SECTION_GROUPS = [
       { id: "members", label: () => m.settings_members(), icon: Users01 },
       { id: "labels", label: () => m.settings_labels(), icon: Tag01 },
       { id: "applications", label: () => m.settings_applications(), icon: Link03 },
+      { id: "memory", label: () => m.settings_memory(), icon: BookOpen01 },
       { id: "experiments", label: () => m.settings_experiments(), icon: Beaker01 },
     ],
   },

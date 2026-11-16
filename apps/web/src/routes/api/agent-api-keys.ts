@@ -1,3 +1,5 @@
+import { Experiments } from "#src/server/experiments/experiments.server";
+import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { createFileRoute } from "@tanstack/react-router";
 import { taskConversationsEnabled } from "#src/server/tasks/task-conversations-gate.server";
 import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
@@ -73,7 +75,12 @@ function buildAgentLaunchIdentity(agent: {
   computer: LaunchIdentityComputer;
   apps: AgentLaunchApp[];
   /** The Workspace's features as of this launch; a daemon older than the field ignores it. */
-  features: { taskConversations: boolean; artifacts: boolean; agentContextView: boolean };
+  features: {
+    taskConversations: boolean;
+    artifacts: boolean;
+    agentContextView: boolean;
+    platformMemory?: boolean;
+  };
 }) {
   const runtimeContext = buildAgentRuntimeContext(agent);
   const identity = {
@@ -213,10 +220,14 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           computerId: principal.computerId,
           repository: new PrismaAgentApiKeyRepository(db),
         });
-        const [taskConversations, artifacts, agentContextView] = await Promise.all([
+        const [taskConversations, artifacts, agentContextView, platformMemory] = await Promise.all([
           taskConversationsEnabled(db, { workspaceId: agent.workspaceId }),
           artifactsEnabled(db, agent.workspaceId),
           isFeatureEnabled("agentContextView", { workspaceId: agent.workspaceId }),
+          new Experiments(new PrismaExperimentsRepository(db), isFeatureEnabled).enabled(
+            "platformMemory",
+            { workspaceId: agent.workspaceId },
+          ),
         ]);
         const identity = buildAgentLaunchIdentity({
           systemKind: agent.systemKind,
@@ -229,7 +240,12 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           // The lookup above already requires `computerId: principal.computerId`.
           computer: agent.computer,
           apps: await agentLaunchApps(db, agent.workspaceId),
-          features: { taskConversations, artifacts, agentContextView },
+          features: {
+            taskConversations,
+            artifacts,
+            agentContextView,
+            ...(platformMemory ? { platformMemory: true } : {}),
+          },
         });
         const assignedSkillPacks = agent.weeklyReportAssistant
           ? (["weekly-report"] as const)

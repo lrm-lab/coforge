@@ -54,6 +54,9 @@ type ArtifactCalls = Pick<
 
 export type MessageTransport = LabelTransport &
   ArtifactCalls & {
+    memory?(
+      request: import("@lrm/coforge-sdk/agent").PlatformMemoryCommand,
+    ): Promise<import("@lrm/coforge-sdk/agent").PlatformMemoryResult>;
     check(target?: string): Promise<MessageCheckResult>;
     read(target: string, options?: MessageReadOptions): Promise<unknown>;
     search?(options: MessageSearchOptions): Promise<unknown>;

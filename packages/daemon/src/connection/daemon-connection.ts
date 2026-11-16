@@ -1,3 +1,4 @@
+import { agentMemoryHttp } from "./agent-memory-http";
 import type {
   AgentLaunchConfig,
   DaemonConnectionConfig,
@@ -83,11 +84,7 @@ import {
   threadList,
   userInfo,
 } from "./agent-envelope-requests";
-import {
-  forwardOpenVikingControl,
-  forwardOpenVikingRead,
-  type OpenVikingAgentProxyCommand,
-} from "../openviking-read-proxy";
+import { type OpenVikingAgentProxyCommand } from "../openviking-read-proxy";
 import { DaemonConnectionRefusedError } from "./daemon-connection-refused-error";
 import { DaemonConnectionStoppedError } from "./daemon-connection-stopped-error";
 import { ReadyPublicationHold } from "./ready-publication-hold";
@@ -209,7 +206,7 @@ import { controlPayloadShape } from "./control-payload";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "./shutdown-notice-timeout";
 import { reportAgentSessionWithRetry } from "./agent-session-report";
 import { getLogger } from "@logtape/logtape";
-import { AGENT_RPC_TIMEOUT_MS, channelEndpointFor, sendAgentJson } from "./agent-http-wire";
+import { AGENT_RPC_TIMEOUT_MS, channelEndpointFor } from "./agent-http-wire";
 import { AgentMigrationHttpClient } from "./agent-migration-http-client";
 import type { AgentMigrationServer } from "#src/agent-migration/transfer-ports";
 import {
@@ -1002,21 +999,14 @@ export class DaemonConnection
     return decodeAppConfigSync(rpcData(reply));
   }
 
+  async agentMemory(request: unknown, agentApiKey: string): Promise<unknown> {
+    this.#assertConnected();
+    return agentMemoryHttp(this.#serverHttpUrl, this.#token, agentApiKey).memory(request);
+  }
+
   async agentMemoryDisposition(request: unknown, agentApiKey: string): Promise<unknown> {
     this.#assertConnected();
-    return sendAgentJson(fetch, {
-      url: serverEndpoint(
-        this.#serverHttpUrl,
-        "Agent Memory disposition",
-        agentApiRoutes.cloud.memoryDisposition.path,
-      ),
-      agentApiKey,
-      daemonApiKey: this.#token,
-      method: "POST",
-      body: request,
-      what: "Memory disposition",
-      timeoutMs: 30_000,
-    });
+    return agentMemoryHttp(this.#serverHttpUrl, this.#token, agentApiKey).disposition(request);
   }
 
   async agentOpenviking(
@@ -1024,25 +1014,7 @@ export class DaemonConnection
     agentApiKey: string,
   ): Promise<unknown> {
     this.#assertConnected();
-    const url = serverEndpoint(
-      this.#serverHttpUrl,
-      "Agent OpenViking HTTP",
-      agentApiRoutes.cloud.openviking.path,
-    );
-    if (request.op === "offer" || request.op === "diagnose") {
-      return forwardOpenVikingControl({
-        url,
-        command: request,
-        agentApiKey,
-        daemonApiKey: this.#token,
-      });
-    }
-    return forwardOpenVikingRead({
-      url,
-      command: request,
-      agentApiKey,
-      daemonApiKey: this.#token,
-    });
+    return agentMemoryHttp(this.#serverHttpUrl, this.#token, agentApiKey).openviking(request);
   }
 
   async agentTask(request: TaskRequest, agentApiKey: string): Promise<TaskResponse> {

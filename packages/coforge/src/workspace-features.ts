@@ -4,6 +4,7 @@
  * `false` is the server's word, not a spoof. Absent or unparsable means an older Daemon that
  * states no features — callers then keep the full surface rather than guess at gates (task #711). */
 export type CoforgeWorkspaceFeatures = {
+  platformMemory?: boolean;
   taskConversations?: boolean;
   artifacts?: boolean;
 };
@@ -22,6 +23,7 @@ export function workspaceFeatures(): CoforgeWorkspaceFeatures | undefined {
   const features: CoforgeWorkspaceFeatures = {};
   if (typeof record.taskConversations === "boolean")
     features.taskConversations = record.taskConversations;
+  if (record.platformMemory === true) features.platformMemory = true;
   if (typeof record.artifacts === "boolean") features.artifacts = record.artifacts;
   return Object.keys(features).length > 0 ? features : undefined;
 }

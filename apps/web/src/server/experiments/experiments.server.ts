@@ -20,6 +20,7 @@ import type {
  * `mise run check` does not.
  */
 export const EXPERIMENTS = {
+  platformMemory: { flag: null, defaultEnabled: false, reload: true },
   taskConversations: { flag: null, defaultEnabled: false, reload: false },
   drafts: { flag: null, defaultEnabled: true, reload: false },
   artifacts: { flag: null, defaultEnabled: false, reload: false },

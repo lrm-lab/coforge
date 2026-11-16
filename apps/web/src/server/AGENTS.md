@@ -42,6 +42,7 @@ The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENT
 - `server/notifications/` — Web Push and in-page notification delivery (its egress check is `server/egress/`), and a person's account notification settings (pause, quiet hours, preview, sound, a phone's wait while the computer is in use, the device list and test).
 
 - `server/onboarding/` — `OnboardingWizard`: the first-sign-in wizard's state, assistant configuration (while it has never run) and completion (role saved, `onboardingPendingSince` cleared, assistant started).
+- `server/platform-memory/` — runtime-neutral Agent-private and team memory, revision checks, explicit sharing, tombstones and engine-owned content.
 - `server/openviking/` — OpenViking account, user and ACL provisioning, the deny-by-default route catalog, its policy gateway and private runtime client, and Memory Agent read shaping (see Workspace memory modules in `apps/web/AGENTS.md`).
 - `server/pi-chat/` — User/Workspace-authorized native Pi commands (started, then their reply read by request id), scoped RPC reply chunks and private live feedback over the existing Daemon connection.
 - `server/profiles/` — user avatars.

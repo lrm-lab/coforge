@@ -15,6 +15,7 @@ export * from "./artifacts";
 export * from "./app-marketplace";
 export * from "./memory-citations";
 export * from "./openviking-memory";
+export * from "./platform-memory";
 export * from "./memory-tool-fences";
 export * from "./mention-actions";
 export * from "./attachment-comments";

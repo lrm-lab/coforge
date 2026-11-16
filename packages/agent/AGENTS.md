@@ -4,6 +4,8 @@ These rules extend the repository root instructions for `packages/agent`.
 
 ## Module map
 
+- `src/task-memory-tools.ts` assembles ordinary memory tools; `src/platform-memory-tool.ts` exposes opt-in personal/team commands without changing the Memory Agent fence.
+
 - `src/runner.ts` is the importable library: it never starts RPC at import. `src/runner-main.ts` is the executable entry that starts the RPC runner; never import it from libraries.
 - `src/pi-chat/`: own independent cloud chat sessions, native history, durable turn checkpoints/recovery and native live updates and private working-directory file operations on the stdio worker.
 - `src/agent-proxy-error.ts` preserves proxy status, error codes and validated Offer publication outcomes.

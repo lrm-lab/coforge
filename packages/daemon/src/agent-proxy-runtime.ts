@@ -269,6 +269,7 @@ export type AgentProxyRuntime = {
     request: WeeklyReportMemoryCommand,
     agentApiKey: string,
   ): Promise<WeeklyReportMemoryResult>;
+  agentMemory?(context: string, request: unknown, agentApiKey: string): Promise<unknown>;
   agentMemoryDisposition?(context: string, request: unknown, agentApiKey: string): Promise<unknown>;
   agentOpenviking?(
     context: string,

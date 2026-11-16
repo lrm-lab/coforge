@@ -13,7 +13,11 @@ import {
   UUID_LIKE_SOURCE,
   isRecord,
 } from "@lrm/coforge-sdk/internal";
-import { agentApiRoutes, decodeAgentArtifactRequest } from "@lrm/coforge-sdk/agent";
+import {
+  agentApiRoutes,
+  decodeAgentArtifactRequest,
+  decodePlatformMemoryCommand,
+} from "@lrm/coforge-sdk/agent";
 import { isAgentApiKey } from "#src/credentials/agent-api-key";
 import {
   parseActionPrepareRequest,
@@ -306,6 +310,15 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
     handler: "githubCommitTrailers",
     parse: ({ fields }) => parseGithubCommitTrailersRequest(fields),
     respond: (result) => Response.json(result, { headers: { "cache-control": "no-store" } }),
+  }),
+  defineRoute({
+    family: "agent-api/memory",
+    method: LOCAL_PROXY_ROUTES.memory.method,
+    match: exactPath(LOCAL_PROXY_ROUTES.memory.path),
+    body: "json-object",
+    maxBodyBytes: 72000,
+    handler: "agentMemory",
+    parse: ({ fields }) => decodePlatformMemoryCommand(fields),
   }),
   defineRoute({
     family: "agent-api/memory-disposition",

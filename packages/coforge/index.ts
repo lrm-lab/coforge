@@ -28,9 +28,10 @@ import {
 } from "@lrm/coforge-sdk/agent";
 import { COFORGE_CLI_VERSION } from "#src/version";
 import { formatManualGet, formatManualSearchResults } from "#src/manual-format";
-import { formatProfile } from "#src/user-format";
+import { runProfileCommand } from "#src/profile-commands";
 import { parseWhoamiArgs, runWhoami, type WhoamiInvocation, type WhoamiResult } from "#src/whoami";
 import { parseProfileUpdateArgs, type ProfileUpdateInvocation } from "#src/profile-update";
+import { runMemoryCommand } from "#src/memory-commands";
 import type { MessageTransport } from "#src/message-transport";
 import { parseContextArgs, runContextCommand, type ContextInvocation } from "#src/context-commands";
 
@@ -638,6 +639,7 @@ function parseActionPrepareArgs(args: readonly string[]): ActionPrepareInvocatio
 }
 
 export async function run(args: readonly string[], transport: MessageTransport): Promise<unknown> {
+  if (args[0] === "memory") return runMemoryCommand(args.slice(1), transport.memory);
   if (args.length === 0) return cliUsage();
   if (args.includes("--help")) {
     const help = commandHelp(args.filter((arg) => arg !== "--help"));
@@ -685,19 +687,8 @@ export async function run(args: readonly string[], transport: MessageTransport):
     if (!transport.userInfo) throw new Error("User info transport is unavailable");
     return runUserInfo(transport.userInfo.bind(transport), invocation);
   }
-  if (invocation.command === "profile-show") {
-    if (!transport.profileShow) throw new Error("Profile transport is unavailable");
-    const result = await transport.profileShow(invocation.target);
-    return invocation.json ? result : formatProfile(result);
-  }
-  if (invocation.command === "profile-update") {
-    if (!transport.profileUpdate) throw new Error("Profile transport is unavailable");
-    const result = await transport.profileUpdate({
-      displayName: invocation.displayName,
-      description: invocation.description,
-    });
-    return invocation.json ? result : formatProfile(result);
-  }
+  if (invocation.command === "profile-show" || invocation.command === "profile-update")
+    return runProfileCommand(invocation, transport);
   if (invocation.command === "app-config") return runAppConfig(invocation, transport);
   if (invocation.command === "artifact") return runArtifact(invocation, transport);
   if (invocation.command === "mention-pending")

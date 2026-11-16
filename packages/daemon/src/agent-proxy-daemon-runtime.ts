@@ -25,6 +25,7 @@ export function daemonAgentProxyRuntime(
     inbox: async (...args) => requireRuntime().inbox(...args),
     reminder: async (...args) => requireRuntime().reminder(...args),
     agentTask: async (...args) => requireRuntime().agentTask(...args),
+    agentMemory: async (...args) => agentApi().agentMemory(...args),
     agentMemoryDisposition: async (...args) => agentApi().agentMemoryDisposition(...args),
     agentOpenviking: async (...args) => agentApi().agentOpenviking(...args),
     memoryFence: (agentId) => requireRuntime().memoryFence(agentId),
