@@ -34,6 +34,23 @@ function usageOutput(groups: unknown[], status = "SUCCESS", description?: string
   });
 }
 
+test("a background scan without cached login never starts the CLI or an OAuth browser", async () => {
+  let commandRuns = 0;
+  const host = {
+    ...fixtureAntigravityHost,
+    readAcpUsage: undefined,
+    readUsageAuthStatus: async () => false,
+    catalogCommandRunner: async () => {
+      commandRuns += 1;
+      throw new Error("the CLI usage path must not run");
+    },
+  };
+  await expect(readAntigravityUsage(tmpdir(), {}, host)).rejects.toBeInstanceOf(
+    UsageUnavailableError,
+  );
+  expect(commandRuns).toBe(0);
+});
+
 test(
   "the real /usage capture reports the tightest group's 5-hour and weekly windows",
   async () => {
@@ -265,14 +282,13 @@ test(
 );
 
 test(
-  "an answer that is not JSON is a failed scan that names the exit code, not a signed-out account",
+  "an ACP reader that cannot return quota is unavailable, not a CLI failure",
   async () => {
     const read = readUsage({
       COFORGE_ANTIGRAVITY_USAGE_OUTPUT: "panic: runtime error\n",
       COFORGE_ANTIGRAVITY_USAGE_EXIT: "2",
     });
-    await expect(read).rejects.not.toBeInstanceOf(UsageUnavailableError);
-    await expect(read).rejects.toThrow("agy /usage exited 2 without a JSON answer");
+    await expect(read).rejects.toBeInstanceOf(UsageUnavailableError);
   },
   USAGE_BUDGET_MS,
 );

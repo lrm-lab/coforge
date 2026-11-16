@@ -1,4 +1,4 @@
-import type { AgentRuntimeEvent, AgentSessionOptions } from "@coforge/agent";
+import type { AgentRuntimeEvent, AgentSessionOptions, UsageSnapshot } from "@coforge/agent";
 import type { ProcessTreeSpawner } from "#src/process-tree";
 import type { CliVersionReader } from "#src/version-gate";
 import type { CatalogCommandRunner } from "#src/catalog-command";
@@ -11,6 +11,19 @@ export interface AntigravityAcpRuntimeHost {
   readonly processTreeSpawner: ProcessTreeSpawner;
   readonly versionReader: CliVersionReader;
   readonly catalogCommandRunner: CatalogCommandRunner;
+  /** Whether the ACP/CLI credential store already contains an account. This probe never spawns. */
+  readonly readUsageAuthStatus?: () => Promise<boolean>;
+  /**
+   * Reads quota through the same ACP server that Agent sessions use. The official ACP server
+   * currently exposes no quota method, so production hosts may omit this and the scan answers
+   * unavailable instead of falling back to the interactive CLI (which can open OAuth).
+   */
+  readonly readAcpUsage?: (options: {
+    workingDirectory: string;
+    timeoutMs?: number;
+    command?: readonly string[];
+    environment?: Readonly<Record<string, string | undefined>>;
+  }) => Promise<UsageSnapshot>;
   /** A bounded tail of the runtime's stderr, delivered once when its process closes — the lines
    * a crash or a silent exit reports only there. */
   stderrHint?(lines: readonly string[]): void;

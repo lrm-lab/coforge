@@ -13,6 +13,10 @@ for (const name of ["SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY"]) {
 }
 
 if (argv.join(" ") === "-p /usage --output-format json") {
+  if (Bun.env.CI !== "1" || Bun.env.BROWSER !== "false" || Bun.env.AGY_NO_BROWSER !== "1") {
+    console.error("unsafe browser environment");
+    process.exit(1);
+  }
   process.stdout.write(
     Bun.env.COFORGE_ANTIGRAVITY_USAGE_OUTPUT ??
       (await Bun.file(new URL("./antigravity-usage.json", import.meta.url)).text()),

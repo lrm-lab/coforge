@@ -10,6 +10,7 @@ export const fixtureAntigravityHost: AntigravityAcpRuntimeHost = {
   processTreeSpawner: fixturePerTurnHost.processTreeSpawner,
   versionReader: fixtureVersionReader,
   catalogCommandRunner: fixtureCatalogCommand,
+  readUsageAuthStatus: async () => true,
   readUsageEnvironment: () => ({}),
   buildEnvironment: () => ({}),
   createReplyIntentScanner: () => ({

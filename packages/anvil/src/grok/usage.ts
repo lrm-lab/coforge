@@ -62,10 +62,10 @@ export async function readGrokUsage(
       clientInfo: host.usageClientInfo,
       _meta: { cwd: workingDirectory },
     };
-    const initialized = await bounded(connection.agent.request("initialize", request), timeoutMs);
-    const method = initialized.authMethods?.[0]?.id;
-    if (method)
-      await bounded(connection.agent.request("authenticate", { methodId: method }), timeoutMs);
+    await bounded(connection.agent.request("initialize", request), timeoutMs);
+    // A background usage scan must never start an interactive login. The Agent's normal ACP
+    // session already uses the cached credentials; billing will answer an auth refusal when that
+    // account is absent, which `classifyUsageFailure` maps to unavailable.
     const billing = await bounded(connection.agent.request("_x.ai/billing", {}), timeoutMs);
     let email: string | undefined;
     try {
