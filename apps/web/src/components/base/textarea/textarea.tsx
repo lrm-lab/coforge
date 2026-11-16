@@ -2,6 +2,7 @@ import type { ReactNode, Ref } from "react";
 import React from "react";
 import type { TextAreaProps as AriaTextAreaProps, TextFieldProps as AriaTextFieldProps } from "react-aria-components";
 import { TextArea as AriaTextArea, TextField as AriaTextField } from "react-aria-components";
+import { FIELD_STATES } from "#src/components/base/input/field-states";
 import { HintText } from "#src/components/base/input/hint-text";
 import { Label } from "#src/components/base/input/label";
 import { cx } from "#src/utils/cx";
@@ -28,7 +29,9 @@ export const TextAreaBase = ({ className, size = "md", ...props }: TextAreaBaseP
             }
             className={(state) =>
                 cx(
-                    "w-full scroll-py-3 rounded-lg bg-primary text-primary shadow-xs ring-1 ring-primary transition duration-100 ease-linear ring-inset placeholder:text-placeholder autofill:rounded-lg autofill:text-primary focus:outline-hidden",
+                    "w-full scroll-py-3 autofill:rounded-lg autofill:text-primary focus:outline-hidden",
+                    FIELD_STATES.box,
+                    FIELD_STATES.text,
 
                     size === "sm" && "p-3 text-sm",
                     size === "md" && "px-3.5 py-3 text-md",
@@ -36,10 +39,10 @@ export const TextAreaBase = ({ className, size = "md", ...props }: TextAreaBaseP
                     // Resize handle
                     "[&::-webkit-resizer]:bg-(image:--resize-handle-bg) [&::-webkit-resizer]:bg-contain dark:[&::-webkit-resizer]:bg-(image:--resize-handle-bg-dark)",
 
-                    state.isFocused && !state.isDisabled && "ring-2 ring-border-input-focus",
-                    state.isDisabled && "cursor-not-allowed opacity-50",
-                    state.isInvalid && "ring-error_subtle",
-                    state.isInvalid && state.isFocused && "ring-2 ring-error",
+                    state.isFocused && !state.isDisabled && FIELD_STATES.typing,
+                    state.isDisabled && FIELD_STATES.disabled,
+                    state.isInvalid && FIELD_STATES.invalid,
+                    state.isInvalid && state.isFocused && FIELD_STATES.invalidTyping,
 
                     typeof className === "function" ? className(state) : className,
                 )

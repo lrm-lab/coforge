@@ -28,6 +28,7 @@ import { ProjectImage } from "#src/features/projects/project-image";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { GroupAvatar, type GroupAvatarMember } from "#src/features/conversations/group-avatar";
+import { FIELD_STATES } from "#src/components/base/input/field-states";
 
 /**
  * One picker for every "choose a person, an Agent or a Project" in the app (task #415): a channel's
@@ -421,17 +422,20 @@ export function EntityPickerField({
           <AriaButton
             isDisabled={isDisabled}
             aria-label={chosen ? `${menu.label}: ${chosen.label}` : menu.label}
-            className={cn(
-              "flex h-10 w-full cursor-pointer items-center gap-2 rounded-lg bg-primary px-3 text-left shadow-xs ring-1 ring-primary outline-hidden transition duration-100 ease-linear ring-inset",
-              "focus-visible:ring-2 focus-visible:ring-border-input-focus pressed:ring-2 pressed:ring-border-input-focus",
-              "disabled:cursor-not-allowed disabled:opacity-50",
-            )}
+            className={({ isFocusVisible, isPressed, isDisabled }) =>
+              cn(
+                "flex h-10 w-full cursor-pointer items-center gap-2 px-3 text-left outline-hidden",
+                FIELD_STATES.box,
+                (isFocusVisible || isPressed) && FIELD_STATES.typing,
+                isDisabled && FIELD_STATES.disabled,
+              )
+            }
           >
             {chosen?.face && <Face face={chosen.face} />}
             <span
               className={cn(
                 "min-w-0 flex-1 truncate text-md",
-                chosen ? "font-medium text-primary" : "text-placeholder",
+                chosen ? "font-medium text-field-text" : "text-field-placeholder",
               )}
             >
               {chosen?.label ?? placeholder}

@@ -22,6 +22,7 @@ const FLAT_ON_PURPOSE = new Map([
     "--color-field-border-typing",
     "the designer's typing border is the same lavender in both themes",
   ],
+  ["--color-field-border-error", "the designer's error border is the same red in both themes"],
 ]);
 
 // Comments are stripped first: the file's own prose quotes `.dark-mode { ... }` when it explains

@@ -5,6 +5,8 @@ import { Select } from "#src/components/base/select/select";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { m } from "#src/paraglide/messages";
 import type { PiChatDraft } from "./pi-chat-state";
+import { FIELD_STATES } from "#src/components/base/input/field-states";
+import { cx } from "#src/utils/cx";
 
 export function PiChatComposer({
   draft,
@@ -112,7 +114,7 @@ export function PiChatComposer({
             </ol>
           </div>
         )}
-        <div className="overflow-hidden rounded-xl border border-primary bg-primary shadow-xs focus-within:border-border-input-focus">
+        <div className={cx("overflow-hidden", FIELD_STATES.frame, FIELD_STATES.frameTyping)}>
           <TextArea
             aria-label={m.pi_chat_message()}
             placeholder={busy ? m.pi_chat_busy_placeholder() : m.pi_chat_placeholder()}

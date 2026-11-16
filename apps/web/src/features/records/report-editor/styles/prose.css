@@ -187,10 +187,12 @@
 .rich-text-editor .math-node-input,
 .rich-text-editor .math-node-textarea {
   width: 100%;
-  border: 1px solid color-mix(in srgb, var(--color-text-primary) 14%, transparent);
-  border-radius: var(--radius-md);
+  /* The field states every text field takes (`FIELD_STATES`, task #112). */
+  border: 1px solid var(--color-field-border);
+  border-radius: var(--radius-lg);
   background: var(--color-bg-primary);
-  color: var(--color-text-primary);
+  box-shadow: var(--shadow-xs);
+  color: var(--color-field-text);
   font-family: var(--font-mono, monospace);
   font-size: var(--text-sm);
   line-height: var(--text-sm--line-height);
@@ -208,10 +210,26 @@
   padding: 0.5rem 0.625rem;
 }
 
+.rich-text-editor .math-node-input::placeholder,
+.rich-text-editor .math-node-textarea::placeholder {
+  color: var(--color-field-placeholder);
+}
+
+/* Typing: the 1px border plus a 1px inset ring, so the text does not move; forced colors drop
+   the ring, so an outline marks the focus there. */
 .rich-text-editor .math-node-input:focus,
 .rich-text-editor .math-node-textarea:focus {
-  border-color: var(--color-focus-ring);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-focus-ring) 20%, transparent);
+  border-color: var(--color-field-border-typing);
+  box-shadow:
+    var(--shadow-xs),
+    inset 0 0 0 1px var(--color-field-border-typing);
+}
+
+@media (forced-colors: active) {
+  .rich-text-editor .math-node-input:focus,
+  .rich-text-editor .math-node-textarea:focus {
+    outline: 2px solid;
+  }
 }
 
 .rich-text-editor .math-node-editor {

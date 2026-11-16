@@ -2,6 +2,7 @@ import { type ComponentType, type HTMLAttributes, type ReactNode, type Ref, crea
 import { Eye, EyeOff, HelpCircle, InfoCircle } from "@untitledui/icons";
 import type { InputProps as AriaInputProps, TextFieldProps as AriaTextFieldProps } from "react-aria-components";
 import { Button as AriaButton, Group as AriaGroup, Input as AriaInput, TextField as AriaTextField } from "react-aria-components";
+import { FIELD_STATES } from "#src/components/base/input/field-states";
 import { HintText } from "#src/components/base/input/hint-text";
 import { Label } from "#src/components/base/input/label";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
@@ -95,21 +96,17 @@ export const InputBase = ({
             ref={groupRef}
             className={({ isFocusWithin, isDisabled, isInvalid }) =>
                 cx(
-                    "group/input relative flex w-full flex-row place-content-center place-items-center rounded-lg bg-primary shadow-xs ring-1 ring-primary transition-shadow duration-100 ease-linear ring-inset",
+                    "group/input relative flex w-full flex-row place-content-center place-items-center",
+                    FIELD_STATES.box,
 
-                    isFocusWithin && !isDisabled && "ring-2 ring-border-input-focus",
+                    isFocusWithin && !isDisabled && FIELD_STATES.typing,
 
                     // Disabled state styles
-                    isDisabled && "cursor-not-allowed opacity-50",
-                    "group-disabled:cursor-not-allowed group-disabled:opacity-50",
+                    isDisabled && FIELD_STATES.disabled,
 
-                    // Invalid state styles
-                    isInvalid && "ring-error_subtle",
-                    "group-invalid:ring-error_subtle",
-
-                    // Invalid state with focus-within styles
-                    isInvalid && isFocusWithin && "ring-2 ring-error",
-                    isFocusWithin && "group-invalid:ring-2 group-invalid:ring-error",
+                    // Invalid state styles, and being typed in while invalid
+                    isInvalid && FIELD_STATES.invalid,
+                    isInvalid && isFocusWithin && FIELD_STATES.invalidTyping,
 
                     context?.wrapperClassName,
                     wrapperClassName,
@@ -129,7 +126,8 @@ export const InputBase = ({
                 type={type === "password" && isPasswordVisible ? "text" : type}
                 placeholder={placeholder}
                 className={cx(
-                    "m-0 w-full bg-transparent text-primary ring-0 outline-hidden placeholder:text-placeholder autofill:rounded-lg autofill:text-primary disabled:cursor-not-allowed",
+                    "m-0 w-full bg-transparent ring-0 outline-hidden autofill:rounded-lg autofill:text-primary disabled:cursor-not-allowed disabled:text-tertiary",
+                    FIELD_STATES.text,
                     sizes[inputSize].root,
                     context?.inputClassName,
                     inputClassName,
@@ -273,7 +271,7 @@ export const Input = ({
 }: InputProps) => {
     return (
         <TextField aria-label={!label ? placeholder : undefined} {...props} size={size} className={className}>
-            {({ isRequired, isInvalid }) => (
+            {({ isRequired, isInvalid, isDisabled }) => (
                 <>
                     {label && (
                         <Label isRequired={hideRequiredIndicator ? !hideRequiredIndicator : isRequired} isInvalid={isInvalid}>
@@ -295,6 +293,9 @@ export const Input = ({
                             tooltipClassName,
                             tooltip,
                             type,
+                            // The field's own states, which its box draws (`FIELD_STATES`).
+                            isInvalid,
+                            isDisabled,
                         }}
                     />
 

@@ -4,6 +4,7 @@ import { ChevronDown } from "@untitledui/icons";
 import type { SelectProps as AriaSelectProps } from "react-aria-components";
 import { Button as AriaButton, ListBox as AriaListBox, Select as AriaSelect, SelectValue as AriaSelectValue } from "react-aria-components";
 import { Avatar } from "#src/components/base/avatar/avatar";
+import { FIELD_STATES } from "#src/components/base/input/field-states";
 import { HintText } from "#src/components/base/input/hint-text";
 import { Label } from "#src/components/base/input/label";
 import { cx } from "#src/utils/cx";
@@ -29,20 +30,24 @@ interface SelectValueProps {
     size: "sm" | "md" | "lg";
     isFocused: boolean;
     isDisabled: boolean;
+    isInvalid: boolean;
     placeholder?: string;
     ref?: Ref<HTMLButtonElement>;
     icon?: FC | ReactNode;
     wrapValue?: boolean;
 }
 
-const SelectValue = ({ isOpen, isFocused, isDisabled, size, placeholder, icon, wrapValue, ref }: SelectValueProps) => {
+const SelectValue = ({ isOpen, isFocused, isDisabled, isInvalid, size, placeholder, icon, wrapValue, ref }: SelectValueProps) => {
     return (
         <AriaButton
             ref={ref}
             className={cx(
-                "relative flex w-full cursor-pointer items-center rounded-lg bg-primary shadow-xs ring-1 ring-primary outline-hidden transition duration-100 ease-linear ring-inset",
-                (isFocused || isOpen) && "ring-2 ring-border-input-focus",
-                isDisabled && "cursor-not-allowed opacity-50",
+                "relative flex w-full cursor-pointer items-center outline-hidden",
+                FIELD_STATES.box,
+                (isFocused || isOpen) && FIELD_STATES.typing,
+                isDisabled && FIELD_STATES.disabled,
+                isInvalid && FIELD_STATES.invalid,
+                isInvalid && (isFocused || isOpen) && FIELD_STATES.invalidTyping,
             )}
         >
             <AriaSelectValue<SelectItemType>
@@ -77,11 +82,11 @@ const SelectValue = ({ isOpen, isFocused, isDisabled, size, placeholder, icon, w
 
                             {selectedItem ? (
                                 <section className={cx("flex min-w-0 flex-1", !wrapValue && "w-full truncate", sizes[size].textContainer)}>
-                                    <p className={cx("font-medium text-primary", wrapValue ? "min-w-0 wrap-break-word whitespace-normal" : "truncate", sizes[size].text)}>{selectedItem?.label}</p>
+                                    <p className={cx("font-medium", isDisabled ? "text-tertiary" : "text-field-text", wrapValue ? "min-w-0 wrap-break-word whitespace-normal" : "truncate", sizes[size].text)}>{selectedItem?.label}</p>
                                     {selectedItem?.supportingText && <p className={cx("text-tertiary", sizes[size].text)}>{selectedItem?.supportingText}</p>}
                                 </section>
                             ) : (
-                                <p className={cx("text-placeholder", sizes[size].text)}>{placeholder}</p>
+                                <p className={cx("text-field-placeholder", sizes[size].text)}>{placeholder}</p>
                             )}
 
                             <ChevronDown
