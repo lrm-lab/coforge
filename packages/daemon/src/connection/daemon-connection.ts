@@ -1,5 +1,4 @@
 import type {
-  AgentLaunchConfig,
   DaemonConnectionConfig,
   DaemonConnectionClient,
   ReceivedAgentMigrationLease,
@@ -38,56 +37,14 @@ import { rpcData } from "./rpc-data";
 import { serverEndpoint } from "./daemon-endpoints";
 import { DaemonQueries } from "./daemon-queries";
 import { routeRuntimeAuthPublication } from "./runtime-auth-publication";
-import { DaemonConnectionWorkspaceBindings } from "./daemon-connection-workspace-bindings";
+import { DaemonConnectionAgentHttp, type AgentHttpDeps } from "./daemon-connection-agent-http";
 import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
 import type {
-  AgentActionPrepareRequest,
-  AgentActionPrepareResponse,
-  GitHubCredentialRequest,
-  GitHubCommitTrailersRequest,
-  AgentManualGetRequest,
-  AgentManualSearchRequest,
-  AgentUserInfoRequest,
-  AgentProfileShowRequest,
-  AgentProfileUpdateRequest,
-  AgentAppConfigGetRequest,
   AgentAppRequest,
   AgentTaskConversationRequest,
-  AgentAppConfigUpdateRequest,
-  AgentMentionExecuteRequest,
-  AgentMentionPendingRequest,
-  AgentAttachmentCommentsRequest,
-  AgentInboxListResponse,
-  AgentInboxRequest,
-  AgentThreadListResponse,
-  AgentMentionDeliveryRequest,
-  AgentLabelListResponse,
   AgentLabelWriteRequest,
   AgentSendReconciliationResponse,
 } from "@lrm/coforge-sdk/agent";
-import {
-  appConfigGet,
-  appConfigUpdate,
-  attachmentComments,
-  githubCommitTrailers,
-  githubCredential,
-  inboxList,
-  labelList,
-  manualGet,
-  manualSearch,
-  mentionDelivery,
-  mentionExecute,
-  mentionPending,
-  profileShow,
-  profileUpdate,
-  threadList,
-  userInfo,
-} from "./agent-envelope-requests";
-import {
-  forwardOpenVikingControl,
-  forwardOpenVikingRead,
-  type OpenVikingAgentProxyCommand,
-} from "../openviking-read-proxy";
 import { DaemonConnectionRefusedError } from "./daemon-connection-refused-error";
 import { DaemonConnectionStoppedError } from "./daemon-connection-stopped-error";
 import { ReadyPublicationHold } from "./ready-publication-hold";
@@ -186,10 +143,6 @@ import {
   encodeAppConfigSnapshotRequest,
   type AppConfigSnapshotRequest,
   type AgentMigrationCancel,
-  type TaskRequest,
-  type TaskResponse,
-  type WeeklyReportRequest,
-  type WeeklyReportResponse,
   thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 
@@ -198,18 +151,12 @@ import {
   decodeAppRegistrationNotice,
   type AppRegistrationNotice,
 } from "@lrm/coforge-sdk/internal/app-registration-notice";
-import {
-  requestAgentApiKey,
-  requestAgentLaunchConfig,
-  revokeAgentApiKey,
-  type AgentApiKeyEndpoint,
-} from "./agent-api-key-requests";
 import { controlPayloadShape } from "./control-payload";
 
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "./shutdown-notice-timeout";
 import { reportAgentSessionWithRetry } from "./agent-session-report";
 import { getLogger } from "@logtape/logtape";
-import { AGENT_RPC_TIMEOUT_MS, channelEndpointFor, sendAgentJson } from "./agent-http-wire";
+import { AGENT_RPC_TIMEOUT_MS } from "./agent-http-wire";
 import { AgentMigrationHttpClient } from "./agent-migration-http-client";
 import type { AgentMigrationServer } from "#src/agent-migration/transfer-ports";
 import {
@@ -233,24 +180,9 @@ import {
   type ForwardPorts,
 } from "./agent-forwarded-routes";
 import {
-  weeklyReport,
-  weeklyReportCollect,
-  weeklyReportKeyPoints,
-  weeklyReportMemory,
-  type WeeklyReportCollectCommand,
-  type WeeklyReportCollectFailRunningCommand,
-  type WeeklyReportCollectResult,
-  type WeeklyReportKeyPointsCommand,
-  type WeeklyReportKeyPointsResult,
-  type WeeklyReportMemoryCommand,
-  type WeeklyReportMemoryResult,
-} from "./agent-weekly-report";
-import {
   createAgentTaskIdleNudgeHttpClient,
-  taskIdleNudge,
   type AgentTaskIdleNudgeHttpClient,
 } from "./agent-task-idle-nudge-client";
-import type { AgentTaskIdleNudgeRequest, AgentTaskIdleNudgeResponse } from "@lrm/coforge-sdk/agent";
 import {
   defaultAgentMessageHttpClient,
   defaultAgentWeeklyReportHttpClient,
@@ -262,7 +194,6 @@ import {
   type AgentChannelHttpClient,
   type AgentActionPrepareHttpClient,
   type AgentWeeklyReportHttpClient,
-  type AgentChannelRequest,
   type AgentMessageTransportResponse,
   type AgentSendReconciliationRequest,
 } from "./agent-http-clients";
@@ -285,10 +216,27 @@ import { DaemonStatusRefresh } from "./daemon-status-refresh";
 const logger = getLogger(["coforge", "daemon", "connection"]);
 
 /** The Daemon's single connection for its configured Workspace. */
-export class DaemonConnection
-  extends DaemonConnectionWorkspaceBindings
-  implements DaemonConnectionClient
-{
+export class DaemonConnection extends DaemonConnectionAgentHttp implements DaemonConnectionClient {
+  /** What the forwarded Agent HTTPS requests read from this connection: the server's origin, the
+   * daemon's key, the request gate and the route clients. Built per request, so every value is the
+   * one the current `start` configured. */
+  protected get agentHttp(): AgentHttpDeps {
+    return {
+      serverHttpUrl: this.#serverHttpUrl,
+      token: this.#token,
+      assertConnected: () => this.#assertConnected(),
+      requireClient: (label: string, client: unknown) => this.#requireAgentClient(label, client),
+      keys: (agentApiKey: string) => this.#agentKeys(agentApiKey),
+      clients: {
+        message: this.agentMessageHttpClient,
+        task: this.agentTaskHttpClient,
+        channel: this.agentChannelHttpClient,
+        actionPrepare: this.agentActionPrepareHttpClient,
+        weeklyReport: this.agentWeeklyReportHttpClient,
+        taskIdleNudge: this.agentTaskIdleNudgeHttpClient,
+      },
+    };
+  }
   #client: CentrifugeWorkspaceClient | undefined;
   #connected = false;
   #hasConnected = false;
@@ -904,80 +852,11 @@ export class DaemonConnection
     });
   }
 
-  async githubCredential(request: GitHubCredentialRequest, agentApiKey: string) {
-    return githubCredential(this.#agentPorts(this.agentMessageHttpClient), request, agentApiKey);
-  }
-
-  async githubCommitTrailers(request: GitHubCommitTrailersRequest, agentApiKey: string) {
-    return githubCommitTrailers(
-      this.#agentPorts(this.agentMessageHttpClient),
-      request,
-      agentApiKey,
-    );
-  }
-
-  async manualGet(request: AgentManualGetRequest, agentApiKey: string) {
-    return manualGet(this.#agentPorts(this.agentMessageHttpClient), request, agentApiKey);
-  }
-
-  async manualSearch(request: AgentManualSearchRequest, agentApiKey: string) {
-    return manualSearch(this.#agentPorts(this.agentMessageHttpClient), request, agentApiKey);
-  }
-
-  async userInfo(request: AgentUserInfoRequest, agentApiKey: string) {
-    return userInfo(this.#agentPorts(this.agentMessageHttpClient), request, agentApiKey);
-  }
-
-  async profileShow(request: AgentProfileShowRequest, agentApiKey: string) {
-    return profileShow(this.#agentPorts(this.agentMessageHttpClient), request, agentApiKey);
-  }
-
-  async profileUpdate(request: AgentProfileUpdateRequest, agentApiKey: string) {
-    return profileUpdate(this.#agentPorts(this.agentMessageHttpClient), request, agentApiKey);
-  }
-
-  async appConfigGet(request: AgentAppConfigGetRequest, agentApiKey: string) {
-    return appConfigGet(this.#agentPorts(this.agentMessageHttpClient), request, agentApiKey);
-  }
-
-  async appConfigUpdate(request: AgentAppConfigUpdateRequest, agentApiKey: string) {
-    return appConfigUpdate(this.#agentPorts(this.agentMessageHttpClient), request, agentApiKey);
-  }
-
   /** A forwarded Agent request needs a connected daemon and the HTTP client for its route. */
   #requireAgentClient(label: string, client: unknown): void {
     if (!this.#connected || !this.#serverHttpUrl)
       throw new Error(`${label} endpoint is not configured`);
     if (!client) throw new Error(`${label} HTTP client is unavailable`);
-  }
-
-  inboxList(request: AgentInboxRequest, agentApiKey: string): Promise<AgentInboxListResponse> {
-    return inboxList(this.#agentPorts(this.agentMessageHttpClient), request, agentApiKey);
-  }
-
-  threadList(agentApiKey: string): Promise<AgentThreadListResponse> {
-    return threadList(this.#agentPorts(this.agentMessageHttpClient), agentApiKey);
-  }
-
-  /** `coforge label list`: the Workspace's labels, forwarded like the other envelope reads. */
-  labelList(agentApiKey: string): Promise<AgentLabelListResponse> {
-    return labelList(this.#agentPorts(this.agentMessageHttpClient), agentApiKey);
-  }
-
-  mentionPending(request: AgentMentionPendingRequest, agentApiKey: string) {
-    return mentionPending(this.#agentPorts(this.agentMessageHttpClient), request, agentApiKey);
-  }
-
-  async mentionExecute(request: AgentMentionExecuteRequest, agentApiKey: string) {
-    return mentionExecute(this.#agentPorts(this.agentMessageHttpClient), request, agentApiKey);
-  }
-
-  attachmentComments(request: AgentAttachmentCommentsRequest, agentApiKey: string) {
-    return attachmentComments(this.#agentPorts(this.agentMessageHttpClient), request, agentApiKey);
-  }
-
-  async mentionDelivery(request: AgentMentionDeliveryRequest, agentApiKey: string) {
-    return mentionDelivery(this.#agentPorts(this.agentMessageHttpClient), request, agentApiKey);
   }
 
   async agentReminder(request: AgentReminderOperationRequest, agentApiKey: string) {
@@ -1000,148 +879,6 @@ export class DaemonConnection
       encodeAppConfigSnapshotRequest(request),
     );
     return decodeAppConfigSync(rpcData(reply));
-  }
-
-  async agentMemoryDisposition(request: unknown, agentApiKey: string): Promise<unknown> {
-    this.#assertConnected();
-    return sendAgentJson(fetch, {
-      url: serverEndpoint(
-        this.#serverHttpUrl,
-        "Agent Memory disposition",
-        agentApiRoutes.cloud.memoryDisposition.path,
-      ),
-      agentApiKey,
-      daemonApiKey: this.#token,
-      method: "POST",
-      body: request,
-      what: "Memory disposition",
-      timeoutMs: 30_000,
-    });
-  }
-
-  async agentOpenviking(
-    request: OpenVikingAgentProxyCommand,
-    agentApiKey: string,
-  ): Promise<unknown> {
-    this.#assertConnected();
-    const url = serverEndpoint(
-      this.#serverHttpUrl,
-      "Agent OpenViking HTTP",
-      agentApiRoutes.cloud.openviking.path,
-    );
-    if (request.op === "offer" || request.op === "diagnose") {
-      return forwardOpenVikingControl({
-        url,
-        command: request,
-        agentApiKey,
-        daemonApiKey: this.#token,
-      });
-    }
-    return forwardOpenVikingRead({
-      url,
-      command: request,
-      agentApiKey,
-      daemonApiKey: this.#token,
-    });
-  }
-
-  async agentTask(request: TaskRequest, agentApiKey: string): Promise<TaskResponse> {
-    this.#assertConnected();
-    return this.agentTaskHttpClient.execute({
-      url: serverEndpoint(this.#serverHttpUrl, "Agent Task HTTP", agentApiRoutes.cloud.tasks.path),
-      ...this.#agentKeys(agentApiKey),
-      request,
-    });
-  }
-
-  async agentChannel(
-    request: AgentChannelRequest,
-    agentApiKey: string,
-  ): Promise<Record<string, unknown>> {
-    this.#assertConnected();
-    const endpoint = channelEndpointFor(request.operation, request.target);
-    return this.agentChannelHttpClient.execute({
-      method: endpoint.method,
-      url: serverEndpoint(this.#serverHttpUrl, "Agent channel", endpoint.path),
-      ...this.#agentKeys(agentApiKey),
-      request,
-    });
-  }
-
-  async agentActionPrepare(
-    request: AgentActionPrepareRequest,
-    agentApiKey: string,
-  ): Promise<AgentActionPrepareResponse> {
-    this.#assertConnected();
-    return this.agentActionPrepareHttpClient.execute({
-      url: serverEndpoint(
-        this.#serverHttpUrl,
-        "Agent action-prepare HTTP",
-        agentApiRoutes.cloud.actionPrepare.path,
-      ),
-      ...this.#agentKeys(agentApiKey),
-      request,
-    });
-  }
-
-  /** The endpoint, keys, liveness and client gate one Agent HTTP client needs. */
-  #agentPorts<T>(client: T) {
-    return {
-      assertConnected: () => this.#assertConnected(),
-      requireClient: (label: string, routeClient: unknown) =>
-        this.#requireAgentClient(label, routeClient),
-      endpoint: (what: string, path: string) => serverEndpoint(this.#serverHttpUrl, what, path),
-      keys: (agentApiKey: string) => this.#agentKeys(agentApiKey),
-      client,
-    };
-  }
-
-  async agentWeeklyReport(
-    request: WeeklyReportRequest,
-    agentApiKey: string,
-  ): Promise<WeeklyReportResponse> {
-    return weeklyReport(this.#agentPorts(this.agentWeeklyReportHttpClient), request, agentApiKey);
-  }
-
-  async agentWeeklyReportCollect(
-    request: WeeklyReportCollectCommand | WeeklyReportCollectFailRunningCommand,
-    agentApiKey: string,
-  ): Promise<WeeklyReportCollectResult> {
-    return weeklyReportCollect(
-      this.#agentPorts(this.agentWeeklyReportHttpClient),
-      request,
-      agentApiKey,
-    );
-  }
-
-  async agentWeeklyReportKeyPoints(
-    request: WeeklyReportKeyPointsCommand,
-    agentApiKey: string,
-  ): Promise<WeeklyReportKeyPointsResult> {
-    return weeklyReportKeyPoints(
-      this.#agentPorts(this.agentWeeklyReportHttpClient),
-      request,
-      agentApiKey,
-    );
-  }
-
-  async agentWeeklyReportMemory(
-    request: WeeklyReportMemoryCommand,
-    agentApiKey: string,
-  ): Promise<WeeklyReportMemoryResult> {
-    return weeklyReportMemory(
-      this.#agentPorts(this.agentWeeklyReportHttpClient),
-      request,
-      agentApiKey,
-    );
-  }
-
-  /** The task idle reminder's question; `undefined` when this server has no such route (404). */
-  async agentTaskIdleNudge(
-    request: AgentTaskIdleNudgeRequest,
-    agentApiKey: string,
-  ): Promise<AgentTaskIdleNudgeResponse | undefined> {
-    return taskIdleNudge(this.#agentPorts(this.agentTaskIdleNudgeHttpClient), request, agentApiKey);
   }
 
   #forwardPorts(): ForwardPorts {
@@ -1193,27 +930,6 @@ export class DaemonConnection
     agentApiKey: string,
   ): Promise<Response> {
     return agentTaskConversation(this.#forwardPorts(), request, agentApiKey);
-  }
-
-  #agentApiKeyEndpoint(): AgentApiKeyEndpoint {
-    return {
-      url: (what) => serverEndpoint(this.#serverHttpUrl, what, "/api/agent-api-keys"),
-      token: () => this.#token,
-    };
-  }
-
-  requestAgentApiKey(input: { agentId: string; workspaceId: string }): Promise<string> {
-    return requestAgentApiKey(this.#agentApiKeyEndpoint(), input);
-  }
-
-  requestAgentLaunchConfig(
-    input: Parameters<typeof requestAgentLaunchConfig>[1],
-  ): Promise<AgentLaunchConfig> {
-    return requestAgentLaunchConfig(this.#agentApiKeyEndpoint(), input);
-  }
-
-  revokeAgentApiKey(agentApiKey: string, scope?: "all"): Promise<void> {
-    return revokeAgentApiKey(this.#agentApiKeyEndpoint(), agentApiKey, scope);
   }
 
   #handleAgentPublication(data: Uint8Array, config: DaemonConnectionConfig): void {
