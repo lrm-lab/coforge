@@ -2,17 +2,14 @@
 // rules a script can check, and injects the doc an edit needs. Inline
 // suppressions are blocked at commit by the new-suppression hard rule.
 import { relative } from "node:path";
+import { type Decision, respond } from "./hook-output";
 
 type HookInput = {
   cwd?: string;
   tool_input?: { file_path?: string };
 };
 
-export type Decision =
-  | { kind: "deny"; reason: string }
-  | { kind: "ask"; reason: string }
-  | { kind: "context"; text: string }
-  | { kind: "allow" };
+export type { Decision };
 
 const EXEMPTION_CONFIG = /(^|\/)(\.oxlintrc\.json|tsconfig[^/]*\.json|\.prettierignore|bunfig\.toml)$/;
 
@@ -37,13 +34,5 @@ if (import.meta.main) {
   const input = (await Bun.stdin.json()) as HookInput;
   const t = input.tool_input ?? {};
   if (!t.file_path) process.exit(0);
-  const path = relative(input.cwd ?? process.cwd(), t.file_path);
-  const d = decide(path);
-  const out =
-    d.kind === "deny" || d.kind === "ask"
-      ? { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: d.kind, permissionDecisionReason: d.reason } }
-      : d.kind === "context"
-        ? { hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: d.text } }
-        : null;
-  if (out) console.log(JSON.stringify(out));
+  respond(decide(relative(input.cwd ?? process.cwd(), t.file_path)));
 }

@@ -3,6 +3,8 @@
 // repository path each one names. See docs/agents/git-hooks/hard-rules.md.
 import { dirname, posix } from "node:path";
 
+export const MARKDOWN = /\.(?:mdx?|mdc|markdown)$/i;
+
 // Inline links, whose destination may hold balanced parentheses, and reference definitions
 // (`[label]: path`, not a `[^note]:` footnote).
 const LINK =
