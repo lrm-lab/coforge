@@ -78,15 +78,14 @@ export class StoredArtifactBlobs implements ArtifactBlobStore {
     workspaceId: string;
     bytes: Uint8Array<ArrayBuffer>;
     sha256?: string;
-    actor?: ArtifactPublisher;
+    actor: ArtifactPublisher;
     unreferencedQuotaBytes?: number;
   }) {
     const blob = await this.#store(input);
-    if (!input.actor) return blob;
     const grant = () =>
       this.db.artifactBlobGrant.createMany({
         data: [
-          { workspaceId: input.workspaceId, sha256: blob.sha256, actorKey: actorKey(input.actor!) },
+          { workspaceId: input.workspaceId, sha256: blob.sha256, actorKey: actorKey(input.actor) },
         ],
         skipDuplicates: true,
       });

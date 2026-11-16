@@ -83,9 +83,11 @@ const age = (workspace: string, sha256: string, ms: number) =>
 
 test("an upload is stored once by its sha256, with the size and kind its bytes have", async () => {
   const bytes = text(`# Notes ${handle}\n`);
-  const first = await blobs.upload({ workspaceId, bytes });
+  const first = await blobs.upload({ workspaceId, bytes, actor: { agentId } });
   expect(first).toEqual({ sha256: sha256Of(bytes), sizeBytes: bytes.length, kind: "text" });
-  expect(await blobs.upload({ workspaceId, bytes, sha256: sha256Of(bytes) })).toEqual(first);
+  expect(
+    await blobs.upload({ workspaceId, bytes, sha256: sha256Of(bytes), actor: { agentId } }),
+  ).toEqual(first);
   expect(await db.artifactBlob.count({ where: { workspaceId, sha256: first.sha256 } })).toBe(1);
   const objectKey = await objectOf(workspaceId, first.sha256);
   expect(objectKey.startsWith(`workspaces/${workspaceId}/artifacts/`)).toBe(true);
@@ -94,10 +96,12 @@ test("an upload is stored once by its sha256, with the size and kind its bytes h
 
   // Bytes that are not UTF-8 text, or carry a NUL, are binary.
   const image = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff]);
-  expect((await blobs.upload({ workspaceId, bytes: image })).kind).toBe("binary");
+  expect((await blobs.upload({ workspaceId, bytes: image, actor: { agentId } })).kind).toBe(
+    "binary",
+  );
   // A claimed sha256 the bytes do not have is refused, and nothing is stored.
   await expect(
-    blobs.upload({ workspaceId, bytes: text("other"), sha256: first.sha256 }),
+    blobs.upload({ workspaceId, bytes: text("other"), sha256: first.sha256, actor: { agentId } }),
   ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId: "artifact-blob-sha256" });
   const inspected = await blobs.inspectMany(workspaceId, [first.sha256, "0".repeat(64)]);
   expect([...inspected.keys()]).toEqual([first.sha256]);
@@ -106,7 +110,9 @@ test("an upload is stored once by its sha256, with the size and kind its bytes h
 
 test("an upload larger than a file may be is refused before anything is stored", async () => {
   const tooBig = new Uint8Array(ARTIFACT_TEXT_LIMIT + 1).fill(0x61);
-  await expect(blobs.upload({ workspaceId, bytes: tooBig })).rejects.toMatchObject({
+  await expect(
+    blobs.upload({ workspaceId, bytes: tooBig, actor: { agentId } }),
+  ).rejects.toMatchObject({
     code: "INVALID_INPUT",
     errorId: "artifact-file-too-large",
   });
@@ -136,11 +142,19 @@ test("a blob no version names goes a day after its upload; one any version names
   // Version 1's file is replaced in version 2, so only an old version names it now.
   const old = await save(`first ${handle}`, 0);
   const current = await save(`second ${handle}`, 1);
-  const unused = (await blobs.upload({ workspaceId, bytes: text(`unused ${handle}`) })).sha256;
-  const fresh = (await blobs.upload({ workspaceId, bytes: text(`fresh ${handle}`) })).sha256;
+  const unused = (
+    await blobs.upload({ workspaceId, bytes: text(`unused ${handle}`), actor: { agentId } })
+  ).sha256;
+  const fresh = (
+    await blobs.upload({ workspaceId, bytes: text(`fresh ${handle}`), actor: { agentId } })
+  ).sha256;
   // The same bytes as a used file, but in another Workspace, where no version names them.
   const elsewhere = (
-    await blobs.upload({ workspaceId: otherWorkspaceId, bytes: text(`first ${handle}`) })
+    await blobs.upload({
+      workspaceId: otherWorkspaceId,
+      bytes: text(`first ${handle}`),
+      actor: { agentId },
+    })
   ).sha256;
   const day = ARTIFACT_BLOB_GRACE_MS + 60_000;
   for (const sha256 of [old, current, unused]) await age(workspaceId, sha256, day);
@@ -170,7 +184,11 @@ test("a blob no version names goes a day after its upload; one any version names
 });
 
 test("a sweep while a save naming the blob is open leaves the blob to that save", async () => {
-  const blob = await blobs.upload({ workspaceId, bytes: text(`racing ${handle}`) });
+  const blob = await blobs.upload({
+    workspaceId,
+    bytes: text(`racing ${handle}`),
+    actor: { agentId },
+  });
   await age(workspaceId, blob.sha256, ARTIFACT_BLOB_GRACE_MS + 60_000);
   let swept = -1;
   await db.$transaction(async (tx) => {
