@@ -75,15 +75,16 @@ export function ReportDetailHeader({
           className="mt-0.5"
         />
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-lg font-semibold text-primary">{report.title}</h1>
+          {/* The whole title, wrapped on a narrow screen rather than cut short (task #107). */}
+          <h1 className="text-lg font-semibold wrap-anywhere text-primary">{report.title}</h1>
           {report.submittedAt ? (
             <p className="mt-1 flex min-w-0 flex-wrap items-center gap-x-6 gap-y-1 text-sm text-tertiary">
-              <span className="truncate">
+              <span className="min-w-0 wrap-anywhere">
                 {m.records_report_completed_at({
                   time: formatWeeklyReportCompletedAt(report.submittedAt),
                 })}
               </span>
-              <span className="truncate">
+              <span className="min-w-0 wrap-anywhere">
                 {messageSlots(m.records_report_shared_by, {
                   // The sharer's face before the name (task #521).
                   name: (

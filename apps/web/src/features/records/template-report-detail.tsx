@@ -349,13 +349,13 @@ export function TemplateReportDetail({
       <div
         className={`${sideOpen ? "hidden lg:flex" : "flex"} relative min-w-0 flex-1 flex-col overflow-hidden`}
       >
-        <header className="flex h-12 shrink-0 items-center gap-3 border-b border-secondary px-4 sm:px-6">
+        <header className="flex min-h-12 shrink-0 items-center gap-3 border-b border-secondary px-4 py-2 sm:px-6">
           <span className="flex shrink-0 items-center gap-2">
             {returnTo ? <RecordsKeyPointReturnBack returnTo={returnTo} /> : <BackToRecords />}
             <WeekBadge week={report.cycle.week} />
           </span>
           {isOverview ? (
-            <h1 className="min-w-0 truncate text-md font-semibold text-primary sm:text-lg">
+            <h1 className="min-w-0 flex-1 text-md font-semibold wrap-anywhere text-primary sm:text-lg">
               {report.title}
             </h1>
           ) : (
