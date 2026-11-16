@@ -24,6 +24,7 @@ import {
   retryHorizon,
 } from "./reminder-retry-policy";
 import { ReminderTimers } from "./reminder-timers";
+import { UnsyncedReminderChanges } from "./reminder-unsynced-changes";
 import { ReminderWork } from "./reminder-work";
 import { assertCorrelated, assertSyncScope } from "./reminder-wire-checks";
 import type {
@@ -40,6 +41,7 @@ const LATE_AFTER_MS = 60_000;
 /** Authenticated authoritative reminder mirror and durable fire state machine. */
 export class ReminderScheduler {
   readonly #mirror = new ReminderJobMirror();
+  readonly #unsynced = new UnsyncedReminderChanges();
   readonly #ledger: ReminderReceiptLedger;
   readonly #scheduleTimers: ReminderTimers;
   readonly #receiptTimers: ReminderTimers;
@@ -58,6 +60,8 @@ export class ReminderScheduler {
     private readonly wake: (job: ReminderJob, occurrence: { late: boolean }) => Promise<boolean>,
     private readonly clock: ReminderClock = defaultClock,
     private readonly random: () => number = Math.random,
+    /** Asks for the Agent's snapshot; the requester it is given coalesces the asks. */
+    private readonly requestSnapshot?: (agentId: string) => void,
   ) {
     this.#ledger = new ReminderReceiptLedger(store, clock);
     this.#scheduleTimers = new ReminderTimers(clock, () => this.#running);
@@ -71,15 +75,27 @@ export class ReminderScheduler {
       if (sync.operation === "snapshot") {
         this.#scheduleTimers.cancelWithPrefix(`${sync.agentId}:`);
         this.#mirror.replaceWithSnapshot(sync);
+        for (const kept of this.#unsynced.take(sync.agentId)) this.#applyChange(kept);
         this.#armSchedules(sync.agentId);
         await this.#restore(sync.agentId);
         return;
       }
-      const change = this.#mirror.applyChange(sync);
-      if (!change) return;
-      this.#cancelSchedule(sync.agentId, change.reminderId);
-      if (change.job) this.#armSchedule(change.job);
+      // Nothing has synchronised this Agent yet: keep the change, and ask for the snapshot that
+      // installs it, instead of dropping it.
+      if (!this.#mirror.authorized(sync.agentId)) {
+        if (this.#unsynced.remember(sync)) this.requestSnapshot?.(sync.agentId);
+        return;
+      }
+      this.#applyChange(sync);
     });
+  }
+
+  /** One version-fenced change, from the cloud or from what waited for a snapshot. */
+  #applyChange(sync: ReminderSync): void {
+    const change = this.#mirror.applyChange(sync);
+    if (!change) return;
+    this.#cancelSchedule(sync.agentId, change.reminderId);
+    if (change.job) this.#armSchedule(change.job);
   }
 
   /**
@@ -131,6 +147,7 @@ export class ReminderScheduler {
     this.#receiptTimers.cancelAll();
     this.#lastFailures.clear();
     this.#mirror.clear();
+    this.#unsynced.clear();
   }
 
   async #restore(agentId: string): Promise<void> {

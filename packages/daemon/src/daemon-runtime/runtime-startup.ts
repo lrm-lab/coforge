@@ -42,6 +42,7 @@ import { readyCapabilities } from "./ready-capabilities";
 import { RuntimeReadyWaitWatch } from "./runtime-ready-wait";
 import { subscribeRuntimeAuth } from "./runtime-auth-subscription";
 import { subscribeRuntimeReconnect } from "./runtime-reconnect";
+import type { ReminderSnapshotAsks } from "./reminder-snapshot-asks";
 import { subscribeProviderScans } from "./provider-scan-handlers";
 import type { ResetCreditConsumeResult } from "./reset-credit-consume";
 import { subscribeWorkspaceQueries } from "./workspace-query-handlers";
@@ -118,7 +119,9 @@ export type RuntimeStartupPorts = {
     recoveredRestartRequestIds?: string[];
     recoveredUpgradeRequestIds?: string[];
   };
-  requestReminderSnapshot(agentId: string): Promise<void>;
+  reminderSnapshots: Pick<ReminderSnapshotAsks, "request" | "connected">;
+  /** Every Agent whose reminders matter now: running, idle, or still launching. */
+  reminderAgentIds(): string[];
   resyncAppConfigs(): void;
   activityPublisher: Pick<AgentActivityPublisher<ActivityLaunch>, "enable">;
   coldIdleSweep: Pick<ColdIdleSweep, "start">;
@@ -127,15 +130,8 @@ export type RuntimeStartupPorts = {
   machineStatus: Pick<ReturnType<typeof runtimeMachineStatus>, "start">;
 };
 
-/**
- * One Workspace connection's open sequence: install the publication and auxiliary listeners,
- * start the transport, replay the control and session records, complete the ready handshake, then
- * release what the cloud held and kick off the optional work that must not gate the handshake.
- *
- * It also owns the state the sequence installs — the start promise and its abort signal, the
- * connection's subscriptions, the Pi chat relay, the runtime auth controller, and whether the
- * runtime counts as started — so `DaemonRuntime` only decides when to open a connection.
- */
+/** One Workspace connection's open sequence: listeners, transport, the control and session replay,
+ * the ready handshake, then the work that must not gate it — and the state it installs. */
 export class RuntimeStartup {
   #promise: Promise<void> | undefined;
   /** Aborted by `abort`, so a start still waiting for the cloud never holds a stop up. */
@@ -203,6 +199,13 @@ export class RuntimeStartup {
     if (unsubscribe) this.#subscriptions.push(unsubscribe);
   }
 
+  /** A connection, the first one or a reconnect: every Agent's reminders are asked for again. */
+  #askRunningAgentReminders(): void {
+    this.ports.reminderSnapshots.connected();
+    for (const agentId of this.ports.reminderAgentIds())
+      this.ports.reminderSnapshots.request(agentId, "connection");
+  }
+
   async #open(connection: DaemonConfig, signal: AbortSignal): Promise<void> {
     const { ports } = this;
     mkdirSync(connection.workspaceRoot, { recursive: true });
@@ -255,8 +258,7 @@ export class RuntimeStartup {
               .then((report) => ports.codeAgentInventory.refreshStaleCatalogs(report, transport))
               .catch(() => {});
           },
-          runningAgentIds: () => ports.readyRunningAgentIds(),
-          requestReminderSnapshot: (agentId) => ports.requestReminderSnapshot(agentId),
+          requestRunningReminderSnapshots: () => this.#askRunningAgentReminders(),
           resyncAppConfigs: () => ports.resyncAppConfigs(),
           replayAgentControl: () => ports.agentControl.replay(),
           replayAgentSessions: () => ports.agentSessions.replay(),
@@ -376,9 +378,7 @@ export class RuntimeStartup {
         };
       }, signal);
       await ports.upgradeResults.report();
-      await Promise.all(
-        ports.readyRunningAgentIds().map((agentId) => ports.requestReminderSnapshot(agentId)),
-      );
+      this.#askRunningAgentReminders();
       ports.resyncAppConfigs();
       const { buffered, dropped } = publications.release();
       this.#readyWait?.settle();
