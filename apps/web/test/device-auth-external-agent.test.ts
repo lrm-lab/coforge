@@ -179,26 +179,14 @@ describe("coforge-cli authorize", () => {
     expect(parseExternalAuthorizeBody(control)).toBeUndefined();
   });
 
-  test("an unknown Workspace or Agent is agent_not_found and a managed Agent agent_not_external", async () => {
+  test("an unknown Workspace or Agent and a managed Agent are one refusal before sign-in", async () => {
     const request = parseExternalAuthorizeBody(BODY)!;
-    expect(
+    for (const resolution of [
       await resolveExternalAgentGrant(directory(), { ...request, workspace: "nope" }),
-    ).toMatchObject({
-      ok: false,
-      coforgeCode: "agent_not_found",
-    });
-    expect(
       await resolveExternalAgentGrant(directory(), { ...request, agent: "nope" }),
-    ).toMatchObject({
-      ok: false,
-      coforgeCode: "agent_not_found",
-    });
-    expect(
       await resolveExternalAgentGrant(directory({ hosting: "managed" }), request),
-    ).toMatchObject({
-      ok: false,
-      coforgeCode: "agent_not_external",
-    });
+    ])
+      expect(resolution).toEqual({ ok: false });
   });
 
   test("the grant is stored with the client id and carries no verification_uri_complete", async () => {
@@ -220,12 +208,27 @@ describe("coforge-cli authorize", () => {
 });
 
 describe("the approval page lookup", () => {
-  test("a coforge-cli code returns the grant details", async () => {
+  test("a person who may not approve learns only that, never the Agent or the machine", async () => {
+    const { store } = memoryStore();
+    const grant = await externalGrant(store);
+    expect(
+      await lookupUserCode({
+        store,
+        userCode: grant.userCode,
+        userId: STRANGER,
+        now: () => START,
+        directory: directory(),
+      }),
+    ).toEqual({ found: false, reason: "not_authorized" });
+  });
+
+  test("a coforge-cli code returns the grant details to a person who may approve it", async () => {
     const { store } = memoryStore();
     const grant = await externalGrant(store);
     const lookup = await lookupUserCode({
       store,
       userCode: grant.userCode,
+      userId: OWNER,
       now: () => START,
       directory: directory(),
     });
@@ -325,6 +328,7 @@ describe("approving a coforge-cli code", () => {
         await denyUserCode({
           store,
           userCode: grant.userCode,
+          userId: OWNER,
           now: () => START,
           directory: directory(),
         })
@@ -492,5 +496,27 @@ describe("the token endpoint", () => {
         environment,
       }),
     ).toEqual({ status: "error", error: "access_denied", coforgeCode: "credential_limit" });
+  });
+
+  test("an approver who lost the right before the poll gets no key, and the grant ends", async () => {
+    const { store, rows } = memoryStore();
+    let allowed = true;
+    const { credentials, external } = deps({
+      refusal: () => (allowed ? undefined : "not_authorized"),
+    });
+    const grant = await approvedCode(store);
+    allowed = false;
+    expect(
+      await pollDeviceToken({
+        store,
+        deviceCode: grant.deviceCode,
+        now: () => START + 20_000,
+        clientId: "coforge-cli",
+        external,
+        environment,
+      }),
+    ).toEqual({ status: "error", error: "access_denied", coforgeCode: "not_authorized" });
+    expect(credentials.rows.size).toBe(0);
+    expect([...rows.values()][0]!.status).toBe("consumed");
   });
 });

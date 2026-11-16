@@ -166,6 +166,7 @@ test("minting is refused for an Agent that is gone, stopped, managed or at the k
     credentialId: first!.id,
     agentId: AGENT,
     workspaceId: WORKSPACE,
+    actorUserId: "admin-1",
   });
   expect(await refusal(full)).toBe("ok");
 });
@@ -180,6 +181,7 @@ test("revoke-all revokes every live key with its reason, and one revoke stays in
       credentialId: first.credentialId,
       agentId: "agent-2",
       workspaceId: WORKSPACE,
+      actorUserId: "admin-1",
     }),
   ).toBe(false);
   expect(
@@ -187,6 +189,7 @@ test("revoke-all revokes every live key with its reason, and one revoke stays in
       agentId: AGENT,
       workspaceId: WORKSPACE,
       reason: "agent_deleted",
+      actorUserId: "admin-1",
     }),
   ).toBe(2);
   const listed = await repository.list(AGENT);

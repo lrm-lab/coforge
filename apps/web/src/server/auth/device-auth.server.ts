@@ -9,6 +9,7 @@ import { signComputerAccessToken } from "./computer-access-token.server";
 import {
   EXTERNAL_DEVICE_CLIENT_ID,
   externalGrantDetails,
+  readExternalAgentGrant,
   redeemExternalAgentGrant,
   type ExternalAgentDeviceDeps,
   type ExternalAgentDeviceDirectory,
@@ -177,12 +178,29 @@ export async function pollDeviceToken(input: {
   // Consume before minting: a device code is single-use. The conditional write is what enforces
   // it - two polls can both read `approved`, and only the one whose consume actually transitions
   // the row may be handed a token. The loser sees the same answer a replayed code gets.
-  const consumed = await input.store.consume(record.id);
-  if (!consumed) return { status: "error", error: "invalid_grant" };
   if (clientId === EXTERNAL_DEVICE_CLIENT_ID) {
     if (!input.external) return { status: "error", error: "invalid_grant" };
-    return redeemExternalAgentGrant(input.external, record);
+    // What approval checked may have changed since (the approver lost the role, the Agent was
+    // stopped, its keys filled up): check it again before the code is spent, and end the grant
+    // instead of minting.
+    const grant = readExternalAgentGrant(record.grant);
+    const refusal =
+      grant &&
+      (await input.external.directory.approvalRefusal({
+        userId: record.userId,
+        workspaceId: grant.workspaceId,
+        agentId: grant.agentId,
+      }));
+    if (refusal) {
+      // Spent rather than denied: `deny` only settles a pending grant, and this one was approved.
+      await input.store.consume(record.id);
+      return { status: "error", error: "access_denied", coforgeCode: refusal };
+    }
   }
+  const consumed = await input.store.consume(record.id);
+  if (!consumed) return { status: "error", error: "invalid_grant" };
+  if (clientId === EXTERNAL_DEVICE_CLIENT_ID)
+    return redeemExternalAgentGrant(input.external!, record);
   const { token, expiresInSeconds } = await signComputerAccessToken(
     record.userId,
     input.environment,
@@ -203,7 +221,10 @@ export async function lookupUserCode(input: {
   store: DeviceAuthorizationStore;
   userCode: string;
   now?: () => number;
-  directory?: Pick<ExternalAgentDeviceDirectory, "identity">;
+  /** Who is looking: a coforge-cli code shows its Agent, Workspace and machine only to a person
+   * allowed to approve it; anyone else learns only that they cannot. */
+  userId?: string;
+  directory?: Pick<ExternalAgentDeviceDirectory, "identity" | "approvalRefusal">;
 }): Promise<UserCodeLookup> {
   const now = input.now?.() ?? Date.now();
   const normalized = normalizeUserCode(input.userCode);
@@ -213,7 +234,15 @@ export async function lookupUserCode(input: {
   if (record.expiresAt.getTime() <= now) return { found: false, reason: "expired" };
   if (record.status !== "pending") return { found: false, reason: "settled" };
   if (record.clientId === EXTERNAL_DEVICE_CLIENT_ID) {
-    const external = input.directory && (await externalGrantDetails(input.directory, record.grant));
+    const grant = readExternalAgentGrant(record.grant);
+    if (!input.directory || !input.userId || !grant) return { found: false, reason: "unknown" };
+    const refusal = await input.directory.approvalRefusal({
+      userId: input.userId,
+      workspaceId: grant.workspaceId,
+      agentId: grant.agentId,
+    });
+    if (refusal) return { found: false, reason: refusal };
+    const external = await externalGrantDetails(input.directory, record.grant);
     if (!external) return { found: false, reason: "unknown" };
     return { found: true, id: record.id, expiresAt: record.expiresAt, external };
   }
@@ -234,10 +263,6 @@ export async function approveUserCode(input: {
     agentId: lookup.external.agentId,
     workspaceId: lookup.external.workspaceId,
   };
-  if (target) {
-    const refusal = await input.directory!.approvalRefusal({ userId: input.userId, ...target });
-    if (refusal) return { found: false, reason: refusal };
-  }
   const approved = await input.store.approve(lookup.id, input.userId, at, target);
   // The grant expired or settled between the lookup and the write; report what it is now.
   if (!approved) return lookupUserCode(input);
@@ -248,7 +273,8 @@ export async function denyUserCode(input: {
   store: DeviceAuthorizationStore;
   userCode: string;
   now?: () => number;
-  directory?: Pick<ExternalAgentDeviceDirectory, "identity">;
+  userId?: string;
+  directory?: Pick<ExternalAgentDeviceDirectory, "identity" | "approvalRefusal">;
 }): Promise<UserCodeLookup> {
   const lookup = await lookupUserCode(input);
   if (!lookup.found) return lookup;

@@ -36,6 +36,7 @@ import { taskComputerRefusal } from "#src/server/tasks/task-computer-gate.server
 import { SourceMessageTaken } from "#src/server/tasks/task-conversation-creation.server";
 import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "#src/features/tasks/task-assignment";
 import { readAgentJsonBody } from "#src/server/agents/agent-http-routes.server";
+import { isExternalAgentPrincipal } from "#src/server/agents/external-agent-credentials.server";
 
 const taskOperations = [
   "list",
@@ -239,16 +240,19 @@ export const Route = createFileRoute("/api/agent/v1/tasks")({
             realtime: new CentrifugoConversationRealtime(createCentrifugoServerApi()),
           }),
           (command) => agentTaskBoardFreshness(db, agentTaskPrincipal(principal), command),
-          {
-            computerId: principal.computerId,
-            computerVersion: async () =>
-              (
-                await db.computer.findUnique({
-                  where: { id: principal.computerId },
-                  select: { computerVersion: true },
-                })
-              )?.computerVersion ?? null,
-          },
+          // An external Agent has no Computer whose version the rollout gate could read.
+          isExternalAgentPrincipal(principal)
+            ? undefined
+            : {
+                computerId: principal.computerId,
+                computerVersion: async () =>
+                  (
+                    await db.computer.findUnique({
+                      where: { id: principal.computerId },
+                      select: { computerVersion: true },
+                    })
+                  )?.computerVersion ?? null,
+              },
         ),
     },
   },

@@ -39,7 +39,7 @@ export const revokeAllExternalAgentCredentials = createServerFn({ method: "POST"
     await managedExternalAgent(db, { userId: user.id, workspaceId, agentId: data.agentId });
     const revoked = await revokeAllExternalCredentials(
       new PrismaExternalAgentCredentialRepository(db),
-      { agentId: data.agentId, workspaceId, reason: "revoke_all" },
+      { agentId: data.agentId, workspaceId, reason: "revoke_all", actorUserId: user.id },
     );
     return { revoked };
   });
@@ -51,7 +51,12 @@ export const revokeExternalAgentCredential = createServerFn({ method: "POST" })
     await managedExternalAgent(db, { userId: user.id, workspaceId, agentId: data.agentId });
     const revoked = await revokeOneExternalCredential(
       new PrismaExternalAgentCredentialRepository(db),
-      { credentialId: data.credentialId, agentId: data.agentId, workspaceId },
+      {
+        credentialId: data.credentialId,
+        agentId: data.agentId,
+        workspaceId,
+        actorUserId: user.id,
+      },
     );
     return { revoked };
   });
