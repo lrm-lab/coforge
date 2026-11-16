@@ -203,7 +203,7 @@ export async function revokeSelfExternalCredential(
 
 export async function revokeOneExternalCredential(
   repository: Pick<ExternalAgentCredentialRepository, "revoke">,
-  input: { credentialId: string; agentId: string; workspaceId: string },
+  input: { credentialId: string; agentId: string; workspaceId: string; actorUserId: string },
   now: () => number = Date.now,
 ): Promise<boolean> {
   const revoked = await repository.revoke(
@@ -218,13 +218,19 @@ export async function revokeOneExternalCredential(
       agentId: input.agentId,
       workspaceId: input.workspaceId,
       reason: "revoked",
+      actorUserId: input.actorUserId,
     });
   return revoked;
 }
 
 export async function revokeAllExternalCredentials(
   repository: Pick<ExternalAgentCredentialRepository, "revokeAll">,
-  input: { agentId: string; workspaceId: string; reason: ExternalCredentialRevokeReason },
+  input: {
+    agentId: string;
+    workspaceId: string;
+    reason: ExternalCredentialRevokeReason;
+    actorUserId: string;
+  },
   now: () => number = Date.now,
 ): Promise<number> {
   const { count } = await repository.revokeAll(input.agentId, input.reason, new Date(now()));
@@ -234,6 +240,7 @@ export async function revokeAllExternalCredentials(
       workspaceId: input.workspaceId,
       reason: input.reason,
       count,
+      actorUserId: input.actorUserId,
     });
   return count;
 }

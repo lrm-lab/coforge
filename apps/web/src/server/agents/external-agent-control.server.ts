@@ -47,6 +47,7 @@ export async function handleExternalAgentControl(
         workspaceId: input.workspaceId,
         reason: "agent_stopped",
         count: revoked.count,
+        actorUserId: input.userId,
       });
     return true;
   }

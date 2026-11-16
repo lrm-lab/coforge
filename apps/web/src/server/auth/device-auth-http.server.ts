@@ -75,8 +75,7 @@ export async function deviceAuthorizationRequest(
       return Response.json(
         {
           error: "invalid_request",
-          error_description: resolution.description,
-          coforge_code: resolution.coforgeCode,
+          error_description: "no external Agent with that name in that Workspace",
         },
         { status: 400, headers: NO_STORE },
       );

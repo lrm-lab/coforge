@@ -25,7 +25,8 @@ export type DeviceCodeState =
   | "unavailable"
   | "not_authorized"
   | "agent_not_external"
-  | "agent_unavailable";
+  | "agent_unavailable"
+  | "credential_limit";
 
 /** Resolves the signed-in user for the approval page, redirecting to /login when there is none -
  * which is what makes "sign in first, then approve" a property of the route rather than an
@@ -43,17 +44,23 @@ export const getDeviceVerifyUser = createServerFn({ method: "GET" })
 export const checkDeviceCode = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(userCodeInputSchema)
-  .handler(async ({ data }): Promise<{ state: DeviceCodeState; grant?: ExternalGrantDetails }> => {
-    const store = deviceAuthorizationStore();
-    if (!store) return { state: "unavailable" };
-    const lookup = await lookupUserCode({
-      store,
-      userCode: data.userCode,
-      directory: externalAgentDeviceDeps()?.directory,
-    });
-    if (!lookup.found) return { state: lookup.reason };
-    return lookup.external ? { state: "ok", grant: lookup.external } : { state: "ok" };
-  });
+  .handler(
+    async ({
+      data,
+      context,
+    }): Promise<{ state: DeviceCodeState; grant?: ExternalGrantDetails }> => {
+      const store = deviceAuthorizationStore();
+      if (!store) return { state: "unavailable" };
+      const lookup = await lookupUserCode({
+        store,
+        userCode: data.userCode,
+        userId: context.user.id,
+        directory: externalAgentDeviceDeps()?.directory,
+      });
+      if (!lookup.found) return { state: lookup.reason };
+      return lookup.external ? { state: "ok", grant: lookup.external } : { state: "ok" };
+    },
+  );
 
 export const approveDeviceCode = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
@@ -74,12 +81,13 @@ export const approveDeviceCode = createServerFn({ method: "POST" })
 export const denyDeviceCode = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator(userCodeInputSchema)
-  .handler(async ({ data }): Promise<{ state: DeviceCodeState }> => {
+  .handler(async ({ data, context }): Promise<{ state: DeviceCodeState }> => {
     const store = deviceAuthorizationStore();
     if (!store) return { state: "unavailable" };
     const result = await denyUserCode({
       store,
       userCode: data.userCode,
+      userId: context.user.id,
       directory: externalAgentDeviceDeps()?.directory,
     });
     return { state: result.found ? "ok" : result.reason };

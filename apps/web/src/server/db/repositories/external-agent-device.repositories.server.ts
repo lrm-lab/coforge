@@ -1,5 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { MAX_LIVE_EXTERNAL_CREDENTIALS } from "#src/server/agents/external-agent-credentials.server";
 import { externalAgentManagerAccess } from "#src/server/agents/external-agent-access.server";
 import type { ExternalAgentDeviceDirectory } from "#src/server/auth/device-auth-external-agent.server";
 
@@ -38,6 +39,11 @@ export class PrismaExternalAgentDeviceDirectory implements ExternalAgentDeviceDi
     if (!access.ok) return "not_authorized" as const;
     if (access.agent.hosting !== "external") return "agent_not_external" as const;
     if (access.agent.deletedAt || access.agent.stoppedAt) return "agent_unavailable" as const;
+    // Refused at approval rather than after the code is spent, so nobody approves for nothing.
+    const live = await this.db.externalAgentCredential.count({
+      where: { agentId: input.agentId, revokedAt: null },
+    });
+    if (live >= MAX_LIVE_EXTERNAL_CREDENTIALS) return "credential_limit" as const;
     return undefined;
   }
 }

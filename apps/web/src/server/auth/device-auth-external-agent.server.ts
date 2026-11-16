@@ -22,7 +22,11 @@ export type ExternalGrantDetails = {
   machine: ExternalMachine;
 };
 
-export type ExternalApprovalRefusal = "not_authorized" | "agent_not_external" | "agent_unavailable";
+export type ExternalApprovalRefusal =
+  | "not_authorized"
+  | "agent_not_external"
+  | "agent_unavailable"
+  | "credential_limit";
 
 export interface ExternalAgentDeviceDirectory {
   resolve(
@@ -80,27 +84,16 @@ export function parseExternalAuthorizeBody(
   return { workspace, agent, machine: { machineName, hostname, os, clientName } };
 }
 
-export type ExternalGrantResolution =
-  | { ok: true; grant: ExternalAgentGrant }
-  | { ok: false; coforgeCode: "agent_not_found" | "agent_not_external"; description: string };
+/** Before sign-in nothing may tell an Agent that does not exist from one that runs on a Computer:
+ * both are the same refusal, so a Workspace slug and a guessed name reveal nothing. */
+export type ExternalGrantResolution = { ok: true; grant: ExternalAgentGrant } | { ok: false };
 
 export async function resolveExternalAgentGrant(
   directory: Pick<ExternalAgentDeviceDirectory, "resolve">,
   request: ExternalAuthorizeRequest,
 ): Promise<ExternalGrantResolution> {
   const found = await directory.resolve(request.workspace, request.agent);
-  if (!found)
-    return {
-      ok: false,
-      coforgeCode: "agent_not_found",
-      description: "no such Agent in that Workspace",
-    };
-  if (found.hosting !== "external")
-    return {
-      ok: false,
-      coforgeCode: "agent_not_external",
-      description: "that Agent runs on a Computer, not on an external machine",
-    };
+  if (!found || found.hosting !== "external") return { ok: false };
   return {
     ok: true,
     grant: {
@@ -183,6 +176,8 @@ export async function redeemExternalAgentGrant(
     record.approvedWorkspaceId !== grant.workspaceId
   )
     return { status: "error", error: "invalid_grant" };
+  const identity = await deps.directory.identity(grant.workspaceId, grant.agentId);
+  if (!identity) return { status: "error", error: "access_denied", coforgeCode: "agent_not_found" };
   const minted = await mintExternalAgentCredential({
     repository: deps.credentials,
     agentId: grant.agentId,
@@ -196,8 +191,6 @@ export async function redeemExternalAgentGrant(
     },
   });
   if (!minted.ok) return { status: "error", error: "access_denied", coforgeCode: minted.reason };
-  const identity = await deps.directory.identity(grant.workspaceId, grant.agentId);
-  if (!identity) return { status: "error", error: "access_denied", coforgeCode: "agent_not_found" };
   return {
     status: "authorized_external_agent",
     credentialId: minted.credentialId,

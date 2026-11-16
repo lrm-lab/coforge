@@ -112,6 +112,7 @@ export class PrismaAgentDeletionStore implements AgentDeletionStore {
           workspaceId: input.workspaceId,
           reason: "agent_deleted",
           count: externalRevoked.count,
+          actorUserId: input.deletedByUserId ?? null,
         });
       return {
         outcome: "deleted" as const,
