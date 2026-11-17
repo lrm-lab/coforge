@@ -40,20 +40,39 @@ Prefer a restricted `authorized_keys` line when your OpenSSH version supports
 it (`restrict,port-forwarding,...`). Never commit the private key; never reuse
 `DEPLOY_SSH_KEY` on the Swarm manager.
 
-## Swarm manager: systemd unit
+## Install the public key on the ECS via GitHub
 
-Unit file in-repo: [`infra/staging/desktop-tunnel/coforge-staging-desktop-tunnel.service`](../../../infra/staging/desktop-tunnel/coforge-staging-desktop-tunnel.service).
+After generating the key on the Swarm manager:
 
 ```sh
-sudo cp infra/staging/desktop-tunnel/coforge-staging-desktop-tunnel.service \
-  /etc/systemd/system/
-# Edit User=/Group= if the host owner is not jian40.
-sudo systemctl daemon-reload
-sudo systemctl enable --now coforge-staging-desktop-tunnel.service
-systemctl is-active coforge-staging-desktop-tunnel.service
+gh variable set STAGING_DESKTOP_TUNNEL_PUBLIC_KEY --env staging --repo lrm-lab/coforge \
+  < ~/.coforge-host/staging-desktop-tunnel.pub
+gh workflow run install-staging-desktop-tunnel-key.yml --repo lrm-lab/coforge --ref main
 ```
 
-The unit runs:
+The workflow SSHs as `deploy` with `DEPLOY_SSH_KEY` and appends the pubkey to
+`authorized_keys` (idempotent).
+
+## Swarm manager: systemd unit
+
+Prefer the **user** unit when passwordless `sudo` is unavailable:
+[`coforge-staging-desktop-tunnel.user.service`](../../../infra/staging/desktop-tunnel/coforge-staging-desktop-tunnel.user.service).
+
+```sh
+mkdir -p ~/.config/systemd/user
+cp infra/staging/desktop-tunnel/coforge-staging-desktop-tunnel.user.service \
+  ~/.config/systemd/user/coforge-staging-desktop-tunnel.service
+systemctl --user daemon-reload
+systemctl --user enable --now coforge-staging-desktop-tunnel.service
+systemctl --user is-active coforge-staging-desktop-tunnel.service
+# Survive logout (needs one sudo):
+sudo loginctl enable-linger "$USER"
+```
+
+System unit (needs sudo):
+[`coforge-staging-desktop-tunnel.service`](../../../infra/staging/desktop-tunnel/coforge-staging-desktop-tunnel.service).
+
+Both run:
 
 `ssh -N -R 127.0.0.1:16090:127.0.0.1:6090 deploy@101.200.210.144`
 
