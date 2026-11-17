@@ -20,6 +20,12 @@ summary has a table per shard (file, result, seconds). A failed shard uploads
 `web-e2e-shard-<n>` for a week: each file's output, the Web's, Centrifugo's and the front door's
 logs, and the screenshots the tests wrote under `.amp/e2e/`.
 
+A manual dispatch can instead soak one file: the `file` input (a name under `apps/web/test`,
+listed or not) and `repeat` (1-99) run only that file, that many times in a row, on one runner
+(`E2E_FILE` and `E2E_REPEAT` for the script). Every run is counted and keeps its own log
+(`<file>.<n>.log`); one failure turns the run red. Ask for it with
+`gh workflow run web-e2e.yml --ref <branch> -f file=<name>.e2e.ts -f repeat=10`.
+
 ## What is on the list
 
 Admission to the scheduled list requires three consecutive clean runs on a private stack,
