@@ -90,6 +90,8 @@ e2e-workspace-join-link.e2e.ts 7
 e2e-activity-inbox-dm.e2e.ts 6
 e2e-activity-waiting.e2e.ts 6
 e2e-modal-keyboard-viewport.e2e.ts 6
+e2e-confirm-sheet.e2e.ts 6
+e2e-archive-agent-sheet.e2e.ts 6
 e2e-public-agent-direct-message.e2e.ts 6
 e2e-search-no-vertical-overflow.e2e.ts 6
 e2e-attachment-card.e2e.ts 6
