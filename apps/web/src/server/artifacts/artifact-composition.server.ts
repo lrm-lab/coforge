@@ -63,7 +63,11 @@ export function productionArtifacts(db: PrismaClient) {
     drafts,
     documents: new ArtifactDocuments(db, artifacts, blobs),
     visibility: artifacts.visibility,
-    publicLinks: new ArtifactPublicLinks(db),
+    publicLinks: new ArtifactPublicLinks(
+      db,
+      (workspaceId) => artifactsEnabled(db, workspaceId),
+      productionArtifactSignals(),
+    ),
     gallery: new ArtifactGallery(
       db,
       (workspaceId) => artifactsEnabled(db, workspaceId),

@@ -1,9 +1,3 @@
-/**
- * An artifact's link (task #514): its own page, `/w/<slug>/artifacts/<id>`, which "Copy link"
- * gives; before it, its home conversation's page with `doc=<id>` (task #385), which still opens
- * it. A message that carries either shows the artifact's card.
- */
-
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const DOC_PARAM = new RegExp(String.raw`(?:[?&]doc=|/w/[^\s/?#]+/artifacts/)(${UUID})\b`, "gi");
 /** A link to a page of this app: `/w/<slug>/…`, with or without a locale or an origin. */

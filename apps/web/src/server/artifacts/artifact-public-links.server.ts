@@ -2,10 +2,12 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { artifactOpenableKind } from "#src/features/artifacts/artifact-path-kind";
 import { artifactPageOrigin, artifactSandboxOrigin } from "./artifact-sandbox-config.server";
+import { announceAccessChange, type ArtifactSignals } from "./artifact-signals.server";
 import {
   artifactAuthorOwnerId,
   artifactsDisabled,
   artifactsEnabled,
+  artifactTier,
   canManageArtifactSharing,
   requireArtifactRead,
 } from "./artifact-access.server";
@@ -37,6 +39,7 @@ export class ArtifactPublicLinks {
     private readonly db: PrismaClient,
     private readonly enabled: (workspaceId: string) => Promise<boolean> = (workspaceId) =>
       artifactsEnabled(db, workspaceId),
+    private readonly signals?: ArtifactSignals,
   ) {}
 
   /**
@@ -71,7 +74,7 @@ export class ArtifactPublicLinks {
   async set(input: { workspaceId: string; artifactId: string; userId: string; enabled: boolean }) {
     const origin = artifactSandboxOrigin();
     if (!origin) throw new AppError("INVALID_INPUT", { errorId: "artifact-public-origin" });
-    return this.db.$transaction(async (tx) => {
+    const outcome = await this.db.$transaction(async (tx) => {
       const [artifact] = await tx.$queryRaw<
         {
           id: string;
@@ -100,21 +103,32 @@ export class ArtifactPublicLinks {
       });
       if (!input.enabled) {
         if (live) await revokeArtifactPublicLinks(tx, artifact.id, input.userId);
-        return { enabled: false as const };
+        return { artifact, changed: live !== null, result: { enabled: false as const } };
       }
-      if (live)
-        return {
-          enabled: true as const,
-          url: `${artifactPageOrigin(origin, input.artifactId)}/p/${live.token}`,
-        };
-      const created = await tx.artifactPublicLink.create({
-        data: { artifactId: artifact.id, token: mintToken(), createdByUserId: input.userId },
-        select: { token: true },
-      });
+      const token =
+        live?.token ??
+        (
+          await tx.artifactPublicLink.create({
+            data: { artifactId: artifact.id, token: mintToken(), createdByUserId: input.userId },
+            select: { token: true },
+          })
+        ).token;
       return {
-        enabled: true as const,
-        url: `${artifactPageOrigin(origin, input.artifactId)}/p/${created.token}`,
+        artifact,
+        changed: live === null,
+        result: {
+          enabled: true as const,
+          url: `${artifactPageOrigin(origin, input.artifactId)}/p/${token}`,
+        },
       };
     });
+    if (outcome.changed)
+      await announceAccessChange(this.signals, {
+        workspaceId: input.workspaceId,
+        homeKey: outcome.artifact.homeKey,
+        artifactId: outcome.artifact.id,
+        tier: artifactTier(outcome.artifact),
+      });
+    return outcome.result;
   }
 }

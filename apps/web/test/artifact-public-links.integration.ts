@@ -5,6 +5,7 @@ import { ArtifactPublicLinks } from "#src/server/artifacts/artifact-public-links
 import { publicPageLookup } from "#src/server/artifacts/artifact-public-page.server";
 import { artifactKindOfPath } from "#src/features/artifacts/artifact-path-kind";
 import { rememberArtifactSandboxConfig } from "#src/server/artifacts/artifact-sandbox-config.server";
+import { conversationRealtimeChannel } from "#src/features/conversations/conversation-realtime";
 
 /**
  * Reading an artifact's public link (task #646): whoever can see the artifact sees whether it can
@@ -91,6 +92,25 @@ test("one who can read it sees the link, on and after it is off", async () => {
   expect(await read()).toEqual({ available: true, url: set.enabled ? set.url : null });
   await links.set({ workspaceId, artifactId, userId: owner, enabled: false });
   expect(await read()).toEqual({ available: true, url: null });
+});
+
+test("turning the link on or off tells the pages that show the artifact, and a no-op tells none", async () => {
+  const published: string[] = [];
+  const signalled = new ArtifactPublicLinks(db, async () => true, {
+    publish: async (channel) => void published.push(channel),
+  });
+  const { id: artifactId } = await artifact("md");
+  const home = conversationRealtimeChannel(channelId);
+  await signalled.set({ workspaceId, artifactId, userId: owner, enabled: true });
+  expect(published).toEqual([home]);
+  published.length = 0;
+  await signalled.set({ workspaceId, artifactId, userId: owner, enabled: true });
+  expect(published).toEqual([]);
+  await signalled.set({ workspaceId, artifactId, userId: owner, enabled: false });
+  expect(published).toEqual([home]);
+  published.length = 0;
+  await signalled.set({ workspaceId, artifactId, userId: owner, enabled: false });
+  expect(published).toEqual([]);
 });
 
 test("one outside the Workspace gets what a missing artifact gets", async () => {

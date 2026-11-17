@@ -261,8 +261,15 @@ function ArtifactPageFor({
     if (await copyText(text)) toast.success(done);
     else toast.error(m.conversation_copy_failed());
   };
-  const pageHref = () =>
-    `${window.location.origin}${router.buildLocation(artifactPageRoute(workspaceSlug, artifactId)).publicHref}`;
+  const copyLink = async () => {
+    const shared = await link.current().catch(() => undefined);
+    if (shared === undefined) return void toast.error(m.conversation_copy_failed());
+    await copy(
+      shared ??
+        `${window.location.origin}${router.buildLocation(artifactPageRoute(workspaceSlug, artifactId)).publicHref}`,
+      m.doc_link_copied(),
+    );
+  };
   const backHome = () => {
     if (pane) pane.onClose();
     else void router.navigate(homeLinkProps(home, workspaceSlug));
@@ -288,7 +295,7 @@ function ArtifactPageFor({
     loaded: current !== undefined,
     actions: {
       find: () => setFinding(true),
-      "copy-link": () => void copy(pageHref(), m.doc_link_copied()),
+      "copy-link": () => void copyLink(),
       send: () => setSendingTo(true),
       files: () => setPanel("files"),
       delete: () => setDeleting(true),
@@ -324,7 +331,7 @@ function ArtifactPageFor({
                   pane={pane}
                   onChooseVersion={choose}
                   onFind={webPage && !openPath ? () => setFinding(true) : undefined}
-                  onCopyLink={current && (() => void copy(pageHref(), m.doc_link_copied()))}
+                  onCopyLink={current && (() => void copyLink())}
                   comments={
                     current && (
                       <ArtifactCommentButton

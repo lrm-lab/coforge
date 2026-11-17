@@ -14,8 +14,9 @@ import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
 /**
  * Anyone with the link, from the who-can-see pill (task #646): choosing it asks first, the link
  * it gives opens with no session and serves the page's own content, and choosing a narrower level
- * asks again and ends that link, for a document and a web page. The link is read from the
- * database, since the page never shows it; a signed-out visitor is a browser session of its own.
+ * asks again and ends that link, for a document and a web page. "Copy link" copies that public link
+ * while it is on and the member page otherwise; the expected link is read from the database. A
+ * signed-out visitor is a browser session of its own.
  * What a web page shows inside its frame is on another origin, so its content is read from the
  * response the visitor gets.
  *
@@ -96,6 +97,14 @@ test("an artifact's public link: turned on from the pill, served to a visitor, t
     expect(url).not.toBeNull();
     return url!;
   };
+  const copiedLink = async () => {
+    await evaluate(
+      `(navigator.clipboard.writeText = async (text) => { window.__copiedLink = text; }, window.__copiedLink = null, true)`,
+    );
+    await browser("find", "role", "button", "click", "--name", "Copy link");
+    await chrome.until(`typeof window.__copiedLink === "string"`);
+    return evaluate<string>(`window.__copiedLink`);
+  };
   const turnOff = async () => {
     await chrome.chooseFromPill(`Everyone in ${workspace.name}`);
     await chrome.until(`document.body.textContent.includes("Turn off link sharing?")`);
@@ -147,7 +156,11 @@ test("an artifact's public link: turned on from the pill, served to a visitor, t
       expect((await fetch(url, { redirect: "manual" })).status).toBe(404);
     };
 
+    await browser("open", pageOf(doc.id));
+    await browser("wait", "--fn", artifactChromeReady);
+    expect(await copiedLink()).toBe(pageOf(doc.id));
     const docUrl = await turnOn(doc.id);
+    expect(await copiedLink()).toBe(docUrl);
     const served = await fetch(docUrl, { redirect: "manual" });
     expect(served.status).toBe(302);
     expect(served.headers.get("set-cookie")).toBeNull();
@@ -162,6 +175,7 @@ test("an artifact's public link: turned on from the pill, served to a visitor, t
     await turnOff();
     await gone(docUrl);
     expect(await liveLink(doc.id)).toBeNull();
+    expect(await copiedLink()).toBe(pageOf(doc.id));
     await visitor.browser("open", docUrl);
     expect(
       await visitor.evaluate<boolean>(
