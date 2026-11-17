@@ -1,14 +1,13 @@
+import { MemoryFields } from "./memory-fields";
 import { useState } from "react";
 import { MEMORY_KINDS, type TeamMemoryHead, type TeamMemoryDraft } from "@lrm/coforge-sdk/agent";
 import { Button } from "#src/components/base/buttons/button";
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { Input } from "#src/components/base/input/input";
-import { TextArea } from "#src/components/base/textarea/textarea";
-import { Select } from "#src/components/base/select/select";
 import * as m from "#src/paraglide/messages";
 import { MemoryProjectPicker } from "./memory-project-picker";
 import { memoryCommand } from "./memory.functions";
-import { memoryError, memoryKind } from "./memory-copy";
+import { memoryError } from "./memory-copy";
 
 export type MemoryDraft = TeamMemoryDraft & { revision: number; reason: string; requestId: string };
 export function memoryDraft(entry?: TeamMemoryHead): MemoryDraft {
@@ -68,52 +67,7 @@ export function MemoryEditor({
         }
       }}
     >
-      <Input
-        label={m.memory_name()}
-        value={draft.title}
-        onChange={(title) => change({ title })}
-        isRequired
-        maxLength={200}
-        isDisabled={busy}
-      />
-      <TextArea
-        label={m.memory_content()}
-        value={draft.content}
-        onChange={(content) => change({ content })}
-        isRequired
-        maxLength={16000}
-        rows={8}
-        isDisabled={busy}
-      />
-      <TextArea
-        label={m.memory_source()}
-        value={draft.source}
-        onChange={(source) => change({ source })}
-        isRequired
-        maxLength={1000}
-        rows={3}
-        isDisabled={busy}
-      />
-      <Input
-        label={m.memory_applies()}
-        value={draft.applicability}
-        onChange={(applicability) => change({ applicability })}
-        maxLength={300}
-        isDisabled={busy}
-      />
-      <Select
-        label={m.memory_kind()}
-        selectedKey={draft.kind}
-        onSelectionChange={(key) => {
-          const kind = MEMORY_KINDS.find((kind) => kind === key);
-          if (kind) change({ kind });
-        }}
-        isDisabled={busy}
-      >
-        {MEMORY_KINDS.map((kind) => (
-          <Select.Item key={kind} id={kind} label={memoryKind(kind)} />
-        ))}
-      </Select>
+      <MemoryFields draft={draft} busy={busy} onChange={change} />
       <MemoryProjectPicker
         value={draft.projectId ?? null}
         selectedName={projectName}
