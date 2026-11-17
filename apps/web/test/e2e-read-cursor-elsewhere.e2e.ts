@@ -252,7 +252,17 @@ test("a channel the pointer rested on, then read on another device, opens here w
   await here.until(visible(otherBody), 60_000);
   await post(readId, 6, body(6));
   await post(readId, 7, body(7));
-  await here.run("hover", `a[href*="/channel/${readId}"]`);
+  // The link may sit just past the list's bottom edge once other suites' channels fill the list:
+  // `hover` takes a link that pokes into the window as visible, moves the pointer to its centre
+  // outside the window, and hovers nothing. So bring it into view first, and check it is hovered.
+  const link = `a[href*="/channel/${readId}"]`;
+  await here.run("scrollintoview", link);
+  await here.run("hover", link);
+  expect(
+    await here.evaluate<boolean>(
+      `document.querySelector(${JSON.stringify(link)}).matches(":hover")`,
+    ),
+  ).toBe(true);
   const rested = Date.now();
   await here.until(openReadLanded(readId));
   const preloaded = await here.evaluate<number>(`${openReadState(readId)}.dataUpdatedAt`);
