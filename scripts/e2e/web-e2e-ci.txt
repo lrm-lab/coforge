@@ -3,7 +3,7 @@
 # Admission requires three consecutive clean private-stack runs followed by a clean Linux runner run.
 # Every browser e2e must be registered here or in web-e2e-ci-excluded.txt with a reason.
 # Files that drive ego-browser (a signed-in desktop browser) never belong here: CI has none.
-e2e-activity-open-cached.e2e.ts 90
+e2e-activity-open-cached.e2e.ts 50
 e2e-task-popup-esc.e2e.ts 47
 e2e-hover-popover-stuck.e2e.ts 43
 e2e-first-sign-in-name.e2e.ts 42

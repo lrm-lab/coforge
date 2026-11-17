@@ -143,8 +143,9 @@ test("a channel opened from Activity round after round shows each round's divide
     await openActivity();
 
     // QA's rounds on staging's #video-gen (task #358): another conversation open beside the
-    // Unread view, three messages into the channel four seconds apart, and the channel opened from
-    // its card; then back to the other conversation. Some rounds come while the window kept from
+    // Unread view, three messages into the channel (QA's came four seconds apart; a second apart
+    // still has the router read ahead before the round's last message, and fails the same way
+    // with the task #102 fix undone), and the channel opened from its card; then back to the other conversation. Some rounds come while the window kept from
     // the last is still fresh, one after it has gone stale, one after the page loaded again.
     let before = channel.ids.at(-1)!;
     let sequence = read.length;
@@ -191,7 +192,7 @@ test("a channel opened from Activity round after round shows each round's divide
           await browser("wait", "--fn", `${row(`E2E open-rounds r${round} b1`)} !== null`);
           await browser("find", "text", `E2E open-rounds r${round} b1`, "hover");
         }
-        await browser("wait", n === 3 ? "3000" : "4000");
+        await browser("wait", "1000");
       }
       await browser("wait", "--fn", `${row(`E2E open-rounds r${round} b3`)} !== null`);
       // The pane's first picture of the channel, as the last message read first appears in it:
