@@ -53,9 +53,12 @@ export function PersonalMemoryPage({
   const [historical, setHistorical] = useState<LocalMemoryEntry>();
   const selected = search.create ? "<create>" : search.key;
   const stamp = useMemo(() => ({}), [workspaceSlug, search.agent, selected]);
+  const historicalRequest = useRef(0);
   const active = useRef(stamp);
   active.current = stamp;
   useEffect(() => {
+    historicalRequest.current++;
+    setBusy(false);
     setError("");
     setHistory(undefined);
     setHistorical(undefined);
@@ -397,8 +400,11 @@ export function PersonalMemoryPage({
                         <Button
                           color="link-gray"
                           size="sm"
+                          isDisabled={busy}
                           onPress={async () => {
                             if (!search.agent) return;
+                            const requestId = ++historicalRequest.current;
+                            setBusy(true);
                             try {
                               const result = await personalMemoryCommand({
                                 data: {
@@ -410,13 +416,23 @@ export function PersonalMemoryPage({
                                   },
                                 },
                               });
-                              if (active.current !== stamp) return;
+                              if (
+                                active.current !== stamp ||
+                                historicalRequest.current !== requestId
+                              )
+                                return;
                               const failure = responseError(result);
                               if (failure) setError(failure);
                               else if (result.status === "ready" && result.result.status === "ok")
                                 setHistorical(result.result.result.entries[0]);
                             } catch {
-                              if (active.current === stamp) setError(m.memory_failed());
+                              if (
+                                active.current === stamp &&
+                                historicalRequest.current === requestId
+                              )
+                                setError(m.memory_failed());
+                            } finally {
+                              if (historicalRequest.current === requestId) setBusy(false);
                             }
                           }}
                         >
@@ -447,6 +463,7 @@ export function PersonalMemoryPage({
                     <Button
                       color="secondary"
                       size="sm"
+                      isDisabled={busy}
                       onPress={() => {
                         setDrafts((previous) => ({
                           ...previous,

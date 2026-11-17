@@ -58,9 +58,10 @@ The Computer must be online and upgraded. Content remains local; archives stay r
 
 ## Size-triggered maintenance
 
-The configured System Cleaner marks a check after a successful local save or archive. It waits
+The configured System Cleaner marks a check after a successful Agent memory-command save or archive. It waits
 until your current turn ends, including any background work, to inspect sizes and present an inbox
-hint. Periodic checks also see direct file edits. No applied config or `enabled=false` means no
+hint. Human page edits and direct file edits are inspected by the configured periodic checks;
+these edits do not mark an immediate idle check or wake an Agent. No applied config or `enabled=false` means no
 cleaner. Nothing is automatically rewritten or deleted.
 
 Each startup file keeps its own configured threshold. Active knowledge has a separate soft
