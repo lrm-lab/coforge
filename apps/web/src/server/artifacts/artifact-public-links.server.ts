@@ -1,6 +1,5 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
-import { artifactOpenableKind } from "#src/features/artifacts/artifact-path-kind";
 import { artifactPageOrigin, artifactSandboxOrigin } from "./artifact-sandbox-config.server";
 import { announceAccessChange, type ArtifactSignals } from "./artifact-signals.server";
 import {
@@ -19,9 +18,6 @@ function mintToken(): string {
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
-
-/** The types a public link serves: an artifact whose entry file is a web page or Markdown. */
-const linkable = (entryPath: string) => artifactOpenableKind(entryPath) !== null;
 
 export async function revokeArtifactPublicLinks(
   tx: Prisma.TransactionClient,
@@ -42,12 +38,6 @@ export class ArtifactPublicLinks {
     private readonly signals?: ArtifactSignals,
   ) {}
 
-  /**
-   * Whether an artifact can have a public link, and the one it has, for anyone who can read it.
-   * None can be made while the sandbox origin is unset, nor for an entry that is neither a web
-   * page nor Markdown. One the viewer
-   * cannot read is refused just as one that does not exist is.
-   */
   async read(input: { workspaceId: string; artifactId: string; userId: string }) {
     if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     const artifact = await this.db.artifact.findFirst({
@@ -56,7 +46,6 @@ export class ArtifactPublicLinks {
         homeKey: true,
         access: true,
         authorAgentId: true,
-        entryPath: true,
         publicLinks: { where: { revokedAt: null }, select: { token: true } },
       },
     });
@@ -65,7 +54,7 @@ export class ArtifactPublicLinks {
     const origin = artifactSandboxOrigin();
     const live = artifact.publicLinks.at(0);
     return {
-      available: origin !== null && linkable(artifact.entryPath),
+      available: origin !== null,
       url:
         origin && live ? `${artifactPageOrigin(origin, input.artifactId)}/p/${live.token}` : null,
     };
@@ -81,17 +70,11 @@ export class ArtifactPublicLinks {
           homeKey: string;
           access: string;
           authorAgentId: string | null;
-          entryPath: string;
         }[]
-      >`SELECT "id", "homeKey", "access", "authorAgentId", "entryPath" FROM "artifacts"
+      >`SELECT "id", "homeKey", "access", "authorAgentId" FROM "artifacts"
         WHERE "id" = ${input.artifactId}::uuid AND "workspaceId" = ${input.workspaceId}::uuid
           AND "deletedAt" IS NULL FOR UPDATE`;
       if (!artifact) throw new AppError("NOT_FOUND");
-      if (input.enabled && !linkable(artifact.entryPath))
-        throw new AppError("INVALID_INPUT", {
-          errorId: "artifact-public-kind",
-          hint: "public links support HTML and Markdown artifacts",
-        });
       const actor = { userId: input.userId };
       const authorAgentOwnerId = await artifactAuthorOwnerId(tx, artifact.authorAgentId);
       await requireArtifactRead(tx, input.workspaceId, actor, artifact, { authorAgentOwnerId });

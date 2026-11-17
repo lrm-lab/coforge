@@ -25,6 +25,11 @@
   as the only frame ancestor, `no-store` like a page, no runtime and no bridge. Its frame carries no `sandbox` attribute, because Chrome
   refuses to render a PDF in a sandboxed frame; the origin is the artifact's own, holds no
   credential, and serves nothing else to that frame. The document read re-checks access like a page.
+- A public link to an entry that is neither a web page nor Markdown redirects to
+  `/p/<token>/file/<entry>` and serves that path only. Text and CSV (up to 1 MiB; a CSV of at
+  most 50,000 cells) are drawn into an escaped static page, and an image (up to 8 MiB) into a page
+  whose `<img>` is the one image request answered with the bytes. Anything else, a PDF included,
+  gets a page asking the visitor to sign in, without reading the bytes.
 - A page reader's access is checked on the ticket and on each page document; a subresource serves
   under its file token until the token expires. Do not widen who can read in this module; call
   `ArtifactReads` as it is.

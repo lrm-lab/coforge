@@ -1,23 +1,20 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { artifactHomeHidden, artifactsEnabled } from "./artifact-access.server";
-import { artifactOpenableKind } from "#src/features/artifacts/artifact-path-kind";
+import {
+  artifactKindOfPath,
+  type ArtifactPathKind,
+} from "#src/features/artifacts/artifact-path-kind";
 
-type PublicPage = {
+export type PublicPage = {
   workspaceId: string;
   artifactId: string;
   title: string;
-  kind: "html" | "markdown";
+  kind: ArtifactPathKind;
   entryPath: string;
   sha256: string;
+  sizeBytes: number;
 };
 
-/**
- * What a public link shows now (`ArtifactSandbox`'s `publicPage`): its artifact's current
- * version's entry path, and the sha256 of the file at `path` (the entry's when none is asked
- * for). Null when the link is revoked or unknown, the artifact is gone, not a web page or
- * document, or has no such file, or artifacts are off for its Workspace. Two reads, the second
- * with the file nested in it and run beside the experiment check.
- */
 export function publicPageLookup(
   db: PrismaClient,
   enabled: (workspaceId: string) => Promise<boolean> = (workspaceId) =>
@@ -43,8 +40,6 @@ export function publicPageLookup(
     });
     const artifact = link?.artifact;
     if (!artifact || artifact.deletedAt || artifact.currentVersion <= 0) return null;
-    const kind = artifactOpenableKind(artifact.entryPath);
-    if (!kind) return null;
     const [on, version, homeHidden] = await Promise.all([
       enabled(artifact.workspaceId),
       db.artifactVersion.findUnique({
@@ -53,7 +48,10 @@ export function publicPageLookup(
         },
         select: {
           entryPath: true,
-          files: { where: { path: path ?? artifact.entryPath }, select: { sha256: true } },
+          files: {
+            where: { path: path ?? artifact.entryPath },
+            select: { sha256: true, sizeBytes: true },
+          },
         },
       }),
       artifactHomeHidden(db, artifact.workspaceId, artifact),
@@ -65,9 +63,10 @@ export function publicPageLookup(
       workspaceId: artifact.workspaceId,
       artifactId: artifact.id,
       title: artifact.title,
-      kind,
+      kind: artifactKindOfPath(version.entryPath),
       entryPath: version.entryPath,
       sha256: file.sha256,
+      sizeBytes: file.sizeBytes,
     };
   };
 }

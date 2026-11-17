@@ -40,7 +40,7 @@ app.raft.build 的 Web 端（浏览器只读观察）。只做设计对照，不
 | 未读门槛：拒绝带内容、展示即已读、resolve 也受门槛 | 已对齐 |
 | 按 id、链接、页面源链接或精确标题引用；标题重名返回候选 | 已对齐 |
 | 关注与通知（含改名），通知走 `@app.system.artifacts` | 已对齐 |
-| 非入口 HTML 文件（同一每 artifact 源、沙盒、CSP 和桥接）和 PDF（每 artifact 源上不带沙盒属性的框架，只送 PDF 字节）的预览；其他文件仍显示"无法预览"并提供下载 | 已对齐（公开链接页仍只显示 HTML 和 Markdown） |
+| 非入口 HTML 文件（同一每 artifact 源、沙盒、CSP 和桥接）和 PDF（每 artifact 源上不带沙盒属性的框架，只送 PDF 字节）的预览；其他文件仍显示"无法预览"并提供下载 | 已对齐 |
 | 评论图片（最多 4 张，去元数据）、`download --image` | 已对齐 |
 | `save`：把消息附件存为 artifact | 已对齐 |
 | 每 artifact 独立源、一次性票据、页面桥接、页面内查找 | 已对齐 |
@@ -73,6 +73,8 @@ app.raft.build 的 Web 端（浏览器只读观察）。只做设计对照，不
 ## Raft 未说明、由 CoForge 自定的细节
 
 - 未读展示的条数（完整 5 条、8000 字符，另加 5 条摘录）；链接里的版本参数名（`version` 或 `v`）。
+- 公开链接的文件入口：文本、CSV（1 MiB 内）和图片（8 MiB 内）直接显示，与 Raft 的上限相同；CSV 另限
+  5 万个单元格。PDF 和其他文件只提示登录 CoForge 查看。Raft 在这里还有登录按钮，CoForge 没有：用户内容源不知道应用的地址。
 - 页面源的子域名形如 `a-<uuid>`（前缀区分 artifact 页面，与同域下的其他主机名分开）。
 - 在场信息走 Centrifugo 频道在场（`presence:artifact:<workspace>:<artifact>`），进出即时推送，没有心跳和轮询；
   头像叠放只放正在看的人（别人在前、自己在后，最多三张，其余记作 "+N"），后台标签页也算在看，参照 Figma

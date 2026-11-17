@@ -134,12 +134,16 @@ test("a member outside the home sees the link state only once the artifact is wi
   );
 });
 
-test("an artifact whose entry file is neither a web page nor Markdown has no public link", async () => {
-  const { id: artifactId } = await artifact("pdf");
-  expect(await links.read({ workspaceId, artifactId, userId: owner })).toEqual({
-    available: false,
-    url: null,
-  });
+test("an artifact of any entry file can have a public link", async () => {
+  for (const extension of ["pdf", "csv", "png", "txt", "mp4"]) {
+    const { id: artifactId } = await artifact(extension);
+    const set = await links.set({ workspaceId, artifactId, userId: owner, enabled: true });
+    expect(set.enabled, extension).toBe(true);
+    expect(await links.read({ workspaceId, artifactId, userId: owner })).toEqual({
+      available: true,
+      url: set.enabled ? set.url : null,
+    });
+  }
 });
 
 test("no link can be made while the sandbox origin is unset", async () => {
@@ -236,6 +240,7 @@ test("a public link shows the current version's entry and any one file of it", a
     kind: "html",
     entryPath: "home.html",
     sha256: "home",
+    sizeBytes: 1,
   });
   expect(await lookup(token, "site.css")).toMatchObject({ sha256: "css", entryPath: "home.html" });
   expect(await lookup(token, "img/a.png")).toMatchObject({ sha256: "png" });
@@ -249,4 +254,43 @@ test("a public link shows the current version's entry and any one file of it", a
   enabled = true;
   await links.set({ workspaceId, artifactId: made.id, userId: owner, enabled: false });
   expect(await lookup(token, "site.css")).toBeNull();
+});
+
+test("a public link to a file entry is looked up with its kind and size", async () => {
+  const made = await db.artifact.create({
+    data: {
+      workspaceId,
+      homeKey: `conversation:${channelId}`,
+      name: `paper-${crypto.randomUUID()}`,
+      title: "Paper",
+      entryPath: "paper.pdf",
+      currentVersion: 1,
+    },
+  });
+  await db.artifactVersion.create({
+    data: {
+      artifactId: made.id,
+      number: 1,
+      entryPath: "paper.pdf",
+      changedPaths: [],
+      idempotencyKey: "paper",
+      files: {
+        create: {
+          artifactId: made.id,
+          path: "paper.pdf",
+          sha256: "pdf",
+          sizeBytes: 4096,
+          kind: "binary",
+        },
+      },
+    },
+  });
+  const set = await links.set({ workspaceId, artifactId: made.id, userId: owner, enabled: true });
+  const token = set.enabled ? set.url.slice(set.url.lastIndexOf("/") + 1) : "";
+  expect(await publicPageLookup(db, async () => true)(token, "paper.pdf")).toMatchObject({
+    kind: "pdf",
+    entryPath: "paper.pdf",
+    sha256: "pdf",
+    sizeBytes: 4096,
+  });
 });

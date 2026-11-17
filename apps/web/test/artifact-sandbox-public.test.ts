@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { ArtifactSandbox } from "#src/server/artifacts/artifact-sandbox.server";
 import { MemoryTicketNonces } from "#src/server/artifacts/artifact-sandbox-nonces.server";
 import type { AppRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
+import type { ArtifactPathKind } from "#src/features/artifacts/artifact-path-kind";
 import { FRAME, subresource } from "./helpers/artifact-sandbox-open";
 
 /**
@@ -21,9 +22,10 @@ type Lookup = {
   workspaceId: string;
   artifactId: string;
   title: string;
-  kind: "html" | "markdown";
+  kind: ArtifactPathKind;
   entryPath: string;
   sha256: string;
+  sizeBytes: number;
 };
 
 function publicSandbox(
@@ -55,6 +57,7 @@ const page = (overrides: Partial<Lookup> = {}): Lookup => ({
   kind: "html",
   entryPath: "index.html",
   sha256: "sha",
+  sizeBytes: 10,
   ...overrides,
 });
 
@@ -227,5 +230,103 @@ describe("a public link", () => {
     expect((await service.serve(asking("document.md", FRAME))).status).toBe(200);
     for (const path of ["site.css", "other.html"])
       expect((await service.serve(asking(path, FRAME))).status).toBe(404);
+  });
+
+  function entry(kind: ArtifactPathKind, entryPath: string, text: string, sizeBytes = text.length) {
+    const reads: string[] = [];
+    const service = publicSandbox(
+      async (_token, path) =>
+        page({ title: "Roster", kind, entryPath, sha256: path ?? entryPath, sizeBytes }),
+      {
+        readBlob: async (_workspaceId, sha256) => {
+          reads.push(sha256);
+          return new TextEncoder().encode(text);
+        },
+      },
+    );
+    const file = (path: string, headers: Record<string, string>) =>
+      new Request(`${ORIGIN}/p/${token}/file/${path}`, { headers });
+    return { service, reads, file };
+  }
+
+  test("a public text or CSV entry is drawn, escaped, on a page of its own and of nothing else", async () => {
+    const text = entry("text", "notes.txt", "one <b>two</b>\nthree");
+    const redirect = await text.service.serve(new Request(`${ORIGIN}/p/${token}`));
+    expect(redirect.headers.get("location")).toBe(`/p/${token}/file/notes.txt`);
+    const shown = await text.service.serve(text.file("notes.txt", FRAME));
+    expect(shown.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(shown.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+    expect(shown.headers.get("cache-control")).toBe("no-store");
+    const html = await shown.text();
+    expect(html).toContain("<h1>Roster</h1>");
+    expect(html).toContain("<pre>one &lt;b&gt;two&lt;/b&gt;\nthree</pre>");
+    expect((await text.service.serve(text.file("notes.txt", subresource("script")))).status).toBe(
+      404,
+    );
+    expect((await text.service.serve(text.file("other.txt", FRAME))).status).toBe(404);
+    expect((await text.service.serve(asking("notes.txt", FRAME))).status).toBe(404);
+    const csv = entry("csv", "team.csv", 'name,team\nAda,"<x>, y"\n');
+    const table = await (await csv.service.serve(csv.file("team.csv", FRAME))).text();
+    expect(table).toContain("<thead><tr><th>name</th><th>team</th></tr></thead>");
+    expect(table).toContain("<td>&lt;x&gt;, y</td>");
+    const wide = entry("csv", "wide.csv", `${",".repeat(999)}\n`.repeat(60));
+    expect(await (await wide.service.serve(wide.file("wide.csv", FRAME))).text()).toContain(
+      "Sign in to CoForge to view this file",
+    );
+  });
+
+  test("a web page or Markdown entry is never served as a file, nor a file entry as a page", async () => {
+    for (const [kind, entryPath] of [
+      ["html", "index.html"],
+      ["markdown", "document.md"],
+    ] as const) {
+      const service = publicSandbox(async () => page({ kind, entryPath }));
+      const file = new Request(`${ORIGIN}/p/${token}/file/${entryPath}`, { headers: FRAME });
+      expect((await service.serve(file)).status, entryPath).toBe(404);
+    }
+    const csv = entry("csv", "team.csv", "a,b\n");
+    expect((await csv.service.serve(asking("team.csv", FRAME))).status).toBe(404);
+  });
+
+  test("a public image entry is a page that shows it; its bytes go only to an image request", async () => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>';
+    const image = entry("image", "logo.svg", svg);
+    const shown = await image.service.serve(image.file("logo.svg", FRAME));
+    const html = await shown.text();
+    expect(shown.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(html).toContain('<img src="logo.svg" alt="Roster">');
+    expect(image.reads).toEqual([]);
+    const bytes = await image.service.serve(image.file("logo.svg", subresource("image")));
+    expect(bytes.headers.get("content-type")).toBe("image/svg+xml");
+    expect(bytes.headers.get("content-security-policy")).toBe("sandbox; default-src 'none'");
+    expect(await bytes.text()).toBe(svg);
+    expect((await image.service.serve(image.file("logo.svg", subresource("script")))).status).toBe(
+      404,
+    );
+  });
+
+  test("a PDF, a video, or a file too large to draw shows that it has no preview, unread", async () => {
+    for (const [kind, path, size] of [
+      ["pdf", "paper.pdf", 10],
+      ["video", "clip.mp4", 10],
+      ["text", "big.txt", 1024 * 1024 + 1],
+      ["image", "big.png", 8 * 1024 * 1024 + 1],
+    ] as const) {
+      const file = entry(kind, path, "x", size);
+      const shown = await file.service.serve(
+        file.file(path, { ...FRAME, "Accept-Language": "zh-CN,zh;q=0.9" }),
+      );
+      expect(shown.status, path).toBe(200);
+      const html = await shown.text();
+      expect(html, path).toContain("登录 CoForge 后可以查看这个文件");
+      expect(html, path).toContain('lang="zh-CN"');
+      expect((await file.service.serve(file.file(path, subresource("image")))).status, path).toBe(
+        404,
+      );
+      expect(file.reads, path).toEqual([]);
+    }
+    const english = entry("pdf", "paper.pdf", "x");
+    const shown = await english.service.serve(english.file("paper.pdf", FRAME));
+    expect(await shown.text()).toContain('lang="en"');
   });
 });

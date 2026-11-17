@@ -211,6 +211,7 @@
   "av_unfollow": "Unfollow",
   "av_follow_failed": "Couldn't change following. Try again.",
   "av_file_no_preview": "No preview here",
+  "public_file_sign_in": "Sign in to CoForge to view this file",
   "av_file_back": "Back to the artifact",
   "av_file_failed": "Couldn't load this file.",
   "av_card_updates": "Has updates",

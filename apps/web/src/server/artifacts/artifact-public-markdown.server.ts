@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-/** Reading type, on its own: the page loads nothing, so no font of ours reaches it. */
 const STYLE = `:root{color-scheme:light dark;--text:#101319;--muted:#4d5562;--line:#e4e6ea;--wash:#f4f5f6}
 @media (prefers-color-scheme:dark){:root{--text:#eceef1;--muted:#a3a9b3;--line:#2c2f35;--wash:#1c1e22;background:#111214}}
 body{margin:0 auto;max-width:42rem;padding:3.5rem 1.5rem 5rem;color:var(--text);font:400 1rem/1.7 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;overflow-wrap:break-word}
@@ -22,21 +21,34 @@ table{display:block;border-collapse:collapse;overflow-x:auto}
 th,td{padding:.5rem .75rem;border:1px solid var(--line);text-align:left}
 th{font-weight:600}
 img{max-width:100%}
+figure{margin:0}
+figure img{display:block;height:auto;border-radius:.5rem}
+.empty{color:var(--muted)}
 @media (max-width:40rem){body{padding:2rem 1.25rem 3rem}h1{font-size:1.625rem}}`;
 
-const escape = (value: string) =>
-  value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+export const escapeHtml = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 
-/**
- * A public Markdown artifact as a page to read (task #646). Raw HTML in the text stays text, as
- * `react-markdown` leaves it. A text that opens with its own title keeps one heading.
- */
+export function publicReadingPage(input: {
+  title: string;
+  body: string;
+  lang?: string;
+}): Uint8Array<ArrayBuffer> {
+  const title = escapeHtml(input.title);
+  const lang = input.lang ? ` lang="${input.lang}"` : "";
+  return new TextEncoder().encode(
+    `<!doctype html><html${lang}><head><meta charset="utf-8"><meta name="robots" content="noindex"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${STYLE}</style></head><body>${input.body}</body></html>`,
+  );
+}
+
 export function publicMarkdownPage(title: string, text: string): Uint8Array<ArrayBuffer> {
   const body = renderToStaticMarkup(createElement(Markdown, { remarkPlugins: [remarkGfm] }, text));
-  const heading = text.trimStart().startsWith(`# ${title}`) ? "" : `<h1>${escape(title)}</h1>`;
-  return new TextEncoder().encode(
-    `<!doctype html><html><head><meta charset="utf-8"><meta name="robots" content="noindex"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(title)}</title><style>${STYLE}</style></head><body>${heading}${body}</body></html>`,
-  );
+  const heading = text.trimStart().startsWith(`# ${title}`) ? "" : `<h1>${escapeHtml(title)}</h1>`;
+  return publicReadingPage({ title, body: `${heading}${body}` });
 }
 
 export function publicMarkdownResponse(input: {
@@ -46,12 +58,22 @@ export function publicMarkdownResponse(input: {
   limit: number;
 }): Response | null {
   if (!input.bytes || input.bytes.byteLength > input.limit) return null;
-  const served = publicMarkdownPage(input.title, new TextDecoder().decode(input.bytes));
-  return new Response(input.method === "HEAD" ? null : new Blob([served]), {
+  return publicReadingResponse(
+    input.method,
+    publicMarkdownPage(input.title, new TextDecoder().decode(input.bytes)),
+  );
+}
+
+export function publicReadingResponse(
+  method: string,
+  served: Uint8Array<ArrayBuffer>,
+  imageSource = "'none'",
+): Response {
+  return new Response(method === "HEAD" ? null : new Blob([served]), {
     status: 200,
     headers: {
       "Content-Type": "text/html; charset=utf-8",
-      "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'`,
+      "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; img-src ${imageSource}; frame-ancestors 'none'`,
       "Content-Length": String(served.byteLength),
       "X-Content-Type-Options": "nosniff",
       "X-Robots-Tag": "noindex, nofollow",

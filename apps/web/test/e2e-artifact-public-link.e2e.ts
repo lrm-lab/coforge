@@ -11,19 +11,6 @@ import { artifactPageOrigin } from "#src/server/artifacts/artifact-sandbox-confi
 import { artifactChrome, artifactChromeReady } from "./helpers/artifact-chrome";
 import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
 
-/**
- * Anyone with the link, from the who-can-see pill (task #646): choosing it asks first, the link
- * it gives opens with no session and serves the page's own content, and choosing a narrower level
- * asks again and ends that link, for a document and a web page. "Copy link" copies that public link
- * while it is on and the member page otherwise; the expected link is read from the database. A
- * signed-out visitor is a browser session of its own.
- * What a web page shows inside its frame is on another origin, so its content is read from the
- * response the visitor gets.
- *
- * Opt-in like `e2e-artifact-page`: real local Web with `COFORGE_ARTIFACT_SANDBOX_ORIGIN` on
- * another host of the same server and a `COFORGE_SESSION_SECRET`. Screenshots go under
- * `.amp/e2e/artifact-public-link/`.
- */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const sandboxOrigin = Bun.env.COFORGE_ARTIFACT_SANDBOX_ORIGIN;
 if (!sandboxOrigin) throw new Error("COFORGE_ARTIFACT_SANDBOX_ORIGIN is required");
@@ -67,7 +54,7 @@ test("an artifact's public link: turned on from the pill, served to a visitor, t
     await settled();
     await browser("screenshot", join(artifacts, `${name}.png`));
     await evaluate(`(document.documentElement.classList.add("dark-mode"), true)`);
-    await browser("wait", "300"); // Controls ease between themes.
+    await browser("wait", "300");
     await settled();
     await browser("screenshot", join(artifacts, `${name}-dark.png`));
     await evaluate(`(document.documentElement.classList.remove("dark-mode"), true)`);
@@ -184,7 +171,6 @@ test("an artifact's public link: turned on from the pill, served to a visitor, t
     ).toBe(false);
     await shots("doc-off");
 
-    // On again: a new link, never the old one.
     const again = await turnOn(doc.id);
     expect(again).not.toBe(docUrl);
     await gone(docUrl);
@@ -197,7 +183,54 @@ test("an artifact's public link: turned on from the pill, served to a visitor, t
     await turnOff();
     await gone(webUrl);
 
-    // A phone: the confirmation fits the screen.
+    const roster = await bot.create({
+      conversationId: channel.id,
+      title: "Roster",
+      files: { "team.csv": `name,team\nNoor ${tail},Growth\nAmir,<Ops>\n` },
+    });
+    const rosterUrl = await turnOn(roster.id);
+    expect((await fetch(rosterUrl, { redirect: "manual" })).headers.get("location")).toContain(
+      "/file/team.csv",
+    );
+    await visit(rosterUrl, `Noor ${tail}`);
+    expect(
+      await visitor.evaluate<string[]>(
+        `[...document.querySelectorAll("th")].map((th) => th.textContent)`,
+      ),
+    ).toEqual(["name", "team"]);
+    expect(await visitor.evaluate<boolean>(`document.body.textContent.includes("<Ops>")`)).toBe(
+      true,
+    );
+    await turnOff();
+
+    const logo = await bot.create({
+      conversationId: channel.id,
+      title: `Logo ${tail}`,
+      files: {
+        "brand/logo.svg":
+          '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120"><rect width="240" height="120" rx="16" fill="#2f6f5e"/></svg>',
+      },
+    });
+    const logoUrl = await turnOn(logo.id);
+    await visit(logoUrl, `Logo ${tail}`);
+    await visitor.browser(
+      "wait",
+      "--fn",
+      `(() => { const img = document.querySelector("figure img"); return !!img && img.complete && img.naturalWidth === 240; })()`,
+    );
+    await visitor.browser("screenshot", join(artifacts, "visitor-image.png"));
+    await turnOff();
+
+    const paper = await bot.create({
+      conversationId: channel.id,
+      title: `Paper ${tail}`,
+      files: { "paper.pdf": "%PDF-1.4\n%%EOF\n" },
+    });
+    const paperUrl = await turnOn(paper.id);
+    await visit(paperUrl, "Sign in to CoForge to view this file");
+    await turnOff();
+    await gone(paperUrl);
+
     await browser("set", "viewport", "390", "844");
     await browser("open", pageOf(doc.id));
     await browser("wait", "--fn", artifactChromeReady);

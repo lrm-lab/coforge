@@ -1,5 +1,8 @@
 import { AppError } from "#src/lib/app-error";
-import { artifactKindOfPath } from "#src/features/artifacts/artifact-path-kind";
+import {
+  artifactKindOfPath,
+  type ArtifactPathKind,
+} from "#src/features/artifacts/artifact-path-kind";
 import {
   NO_RATE_LIMIT,
   type AppRateLimit,
@@ -10,7 +13,15 @@ import { pageLevelOf } from "./artifact-page-access.server";
 import { pageAssetName, type ArtifactPageAssets } from "./artifact-page-assets.server";
 import type { PageLevel } from "#src/features/artifacts/artifact-page-levels";
 import { PAGE_RUNTIME_PATH } from "./artifact-page-runtime.server";
+import { artifactContentType } from "./artifact-content-types.server";
+import {
+  publicFileDrawn,
+  publicImagePage,
+  publicNoPreviewPage,
+  publicTextPage,
+} from "./artifact-public-files.server";
 import { publicMarkdownResponse } from "./artifact-public-markdown.server";
+import type { PublicPage } from "./artifact-public-page.server";
 import { artifactPageOrigin, sandboxTarget } from "./artifact-sandbox-config.server";
 import {
   ARTIFACT_HTML_LIMIT,
@@ -50,17 +61,7 @@ type SandboxDependencies = {
   nonces: TicketNonces;
   secret(): Promise<string>;
   now(): Date;
-  publicPage?(
-    token: string,
-    path?: string,
-  ): Promise<{
-    workspaceId: string;
-    artifactId: string;
-    title: string;
-    kind: "html" | "markdown";
-    entryPath: string;
-    sha256: string;
-  } | null>;
+  publicPage?(token: string, path?: string): Promise<PublicPage | null>;
   viewerName?: (workspaceId: string, userId: string) => Promise<string>;
   publicRateLimit?: AppRateLimit;
   publicFileRateLimit?: AppRateLimit;
@@ -149,6 +150,8 @@ export class ArtifactSandbox {
     if (file) return this.serveFile(request, host, file[1]!, file[2]!);
     const asset = /^\/_a\/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\/([^/]+)$/.exec(pathname);
     if (asset) return this.serveAsset(request, host, asset[1]!, asset[2]!);
+    const publicFile = /^\/p\/([A-Za-z0-9_-]{43})\/file\/(.+)$/.exec(pathname);
+    if (publicFile) return this.servePublicFile(request, host, publicFile[1]!, publicFile[2]!);
     const publicPage = /^\/p\/([A-Za-z0-9_-]{43})(?:\/page\/(.+))?$/.exec(pathname);
     if (publicPage) return this.servePublic(request, host, publicPage[1]!, publicPage[2]);
     return sandboxRefusal(404, "Not found.");
@@ -275,23 +278,18 @@ export class ArtifactSandbox {
     const use = path === undefined ? null : fileRequestUse(request.headers);
     if (path === null || (path !== undefined && (!use || !publicUseAllowed(path, use))))
       return sandboxRefusal(404, "Not found.");
-    const limit =
-      use === "subresource"
-        ? (this.deps.publicFileRateLimit ?? this.deps.publicRateLimit)
-        : this.deps.publicRateLimit;
-    const admitted = await (limit ?? NO_RATE_LIMIT).admit(
-      (this.deps.publicClientAddress ?? clientAddress)(request) ?? "unknown",
-    );
-    if (!admitted.allowed) {
-      const response = sandboxRefusal(429, "Too many requests.");
-      response.headers.set("Retry-After", String(admitted.retryAfterSeconds));
-      return response;
-    }
+    const refused = await this.admitPublic(request, use);
+    if (refused) return refused;
     const page = await this.deps.publicPage(token, path);
     if (!page || page.artifactId !== host.artifactId) return sandboxRefusal(404, "Not found.");
     if (path === undefined)
-      return sandboxRedirect(`/p/${token}/page/${sandboxFileUrlPath(page.entryPath)}`);
-    if (page.kind === "markdown" && (path !== page.entryPath || use !== "frame"))
+      return sandboxRedirect(
+        `/p/${token}/${publicPageKind(page.kind) ? "page" : "file"}/${sandboxFileUrlPath(page.entryPath)}`,
+      );
+    if (
+      !publicPageKind(page.kind) ||
+      (page.kind === "markdown" && (path !== page.entryPath || use !== "frame"))
+    )
       return sandboxRefusal(404, "Not found.");
     const bytes = await this.deps.readBlob(page.workspaceId, page.sha256);
     return (
@@ -314,6 +312,70 @@ export class ArtifactSandbox {
             fileCache: PUBLIC_FILE_CACHE,
           })) ?? sandboxRefusal(404, "Not found.")
     );
+  }
+
+  private async admitPublic(
+    request: Request,
+    use: FileRequestUse | null,
+  ): Promise<Response | null> {
+    const limit =
+      use === "subresource"
+        ? (this.deps.publicFileRateLimit ?? this.deps.publicRateLimit)
+        : this.deps.publicRateLimit;
+    const admitted = await (limit ?? NO_RATE_LIMIT).admit(
+      (this.deps.publicClientAddress ?? clientAddress)(request) ?? "unknown",
+    );
+    if (admitted.allowed) return null;
+    const response = sandboxRefusal(429, "Too many requests.");
+    response.headers.set("Retry-After", String(admitted.retryAfterSeconds));
+    return response;
+  }
+
+  private async servePublicFile(
+    request: Request,
+    host: ArtifactHost,
+    token: string,
+    raw: string,
+  ): Promise<Response> {
+    if (!this.deps.publicPage) return sandboxRefusal(404, "Not found.");
+    const path = decodeSandboxFilePath(raw);
+    const use = fileRequestUse(request.headers);
+    if (path === null || !use) return sandboxRefusal(404, "Not found.");
+    const refused = await this.admitPublic(request, use);
+    if (refused) return refused;
+    const page = await this.deps.publicPage(token, path);
+    if (
+      !page ||
+      page.artifactId !== host.artifactId ||
+      publicPageKind(page.kind) ||
+      path !== page.entryPath
+    )
+      return sandboxRefusal(404, "Not found.");
+    const drawn = publicFileDrawn(page.kind, page.sizeBytes);
+    if (use === "subresource") {
+      if (!drawn || page.kind !== "image" || request.headers.get("sec-fetch-dest") !== "image")
+        return sandboxRefusal(404, "Not found.");
+      const bytes = await this.deps.readBlob(page.workspaceId, page.sha256);
+      return bytes
+        ? sandboxAssetResponse(
+            request.method,
+            artifactContentType(path, "other"),
+            bytes,
+            "no-store",
+          )
+        : sandboxRefusal(404, "Not found.");
+    }
+    const shown = {
+      method: request.method,
+      title: page.title,
+      acceptLanguage: request.headers.get("accept-language"),
+    };
+    if (!drawn) return publicNoPreviewPage(shown);
+    if (page.kind === "image") return publicImagePage({ ...shown, path });
+    const bytes = await this.deps.readBlob(page.workspaceId, page.sha256);
+    return bytes
+      ? publicTextPage({ ...shown, kind: page.kind, bytes })
+      : sandboxRefusal(404, "Not found.");
   }
 
   private async page(input: {
@@ -347,6 +409,8 @@ const useAllowed = (path: string, use: FileRequestUse) => use === "subresource" 
 
 const signedUseAllowed = (path: string, use: FileRequestUse) =>
   useAllowed(path, use) || isPdfFile(path);
+
+const publicPageKind = (kind: ArtifactPathKind) => kind === "html" || kind === "markdown";
 
 const publicUseAllowed = (path: string, use: FileRequestUse) =>
   useAllowed(path, use) || artifactKindOfPath(path) === "markdown";

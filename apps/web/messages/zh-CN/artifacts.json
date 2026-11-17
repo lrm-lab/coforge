@@ -173,6 +173,7 @@
   "av_unfollow": "取消关注",
   "av_follow_failed": "无法更改关注状态，请重试。",
   "av_file_no_preview": "这里还不能预览这个文件",
+  "public_file_sign_in": "登录 CoForge 后可以查看这个文件",
   "av_file_back": "回到 Artifact",
   "av_file_failed": "无法加载这个文件。",
   "av_card_updates": "有更新",

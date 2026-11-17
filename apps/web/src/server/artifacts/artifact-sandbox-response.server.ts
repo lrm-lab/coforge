@@ -54,8 +54,9 @@ export function sandboxAssetResponse(
   method: string,
   contentType: string,
   bytes: Uint8Array,
+  cacheControl = "private, no-cache",
 ): Response {
-  const headers = sandboxFileHeaders(contentType, bytes.byteLength, "private, no-cache");
+  const headers = sandboxFileHeaders(contentType, bytes.byteLength, cacheControl);
   return new Response(method === "HEAD" ? null : new Blob([bytes as Uint8Array<ArrayBuffer>]), {
     status: 200,
     headers,
