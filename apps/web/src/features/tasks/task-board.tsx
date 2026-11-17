@@ -78,6 +78,7 @@ export function TaskBoard<T extends BoardTask>({
   onOpenTask,
   renderTitle,
   onCommand,
+  commandsPending = false,
   conversation,
   project = false,
   tree,
@@ -95,6 +96,9 @@ export function TaskBoard<T extends BoardTask>({
   renderTitle?: (task: T, title: ReactNode) => ReactNode;
   /** Absent where the viewer may not change Tasks: no drag, no menu. */
   onCommand?: (task: T, command: OverviewTaskCommand) => Promise<void>;
+  /** The commands arrive after hydration (the server render offers none). Until then New task and
+   * the drag handles stand where they will be, inert, so the page does not shift when they come. */
+  commandsPending?: boolean;
   conversation?: ConversationBoard;
   /** One Project's board, on its page under the page's own header: no Project is offered. */
   project?: boolean;
@@ -194,12 +198,12 @@ export function TaskBoard<T extends BoardTask>({
             </Button>
           ) : (
             newTaskChoice &&
-            onCommand && (
+            (onCommand || commandsPending) && (
               <Button
                 type="button"
                 size="sm"
                 iconLeading={Plus}
-                isDisabled={!canFile}
+                isDisabled={!onCommand || !canFile}
                 onPress={() => setCreating("todo")}
               >
                 {m.task_board_create_new_task()}
@@ -247,10 +251,11 @@ export function TaskBoard<T extends BoardTask>({
             hidden={hiddenColumns}
             onHiddenChange={setColumnHidden}
             disabled={!onCommand}
+            commandsPending={commandsPending}
             // A conversation's board says above it when any command, a move included, is refused.
             showMoveError={!conversation}
             adding={
-              newTaskChoice && onCommand && canFile
+              newTaskChoice && (onCommand || commandsPending) && canFile
                 ? { statuses: TASK_WRITE_STATUSES.filter(canCreateIn), onAdd: setCreating }
                 : undefined
             }

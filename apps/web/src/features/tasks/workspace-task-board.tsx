@@ -165,6 +165,7 @@ export function WorkspaceTaskBoard({
           onOpenTask={openPopup}
           renderTitle={renderTaskTitle}
           onCommand={command}
+          commandsPending={!hydrated}
           project={project !== undefined}
           newTask={{ projectSlug, onCreated: refreshOverview }}
           tree={

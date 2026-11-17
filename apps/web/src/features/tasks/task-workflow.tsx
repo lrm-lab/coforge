@@ -60,6 +60,7 @@ export function TaskWorkflow<T extends TaskView>({
   currentMemberId,
   canSetAnyStatus = false,
   disabled,
+  commandsPending = false,
   onMove,
   renderTask,
   paged,
@@ -81,6 +82,8 @@ export function TaskWorkflow<T extends TaskView>({
    * move the server accepts, not only the ordinary transitions. */
   canSetAnyStatus?: boolean;
   disabled?: boolean;
+  /** Disabled only until the commands arrive: the handles stand in place, inert (`TaskBoard`). */
+  commandsPending?: boolean;
   onMove: (task: T, command: TaskMoveCommand) => Promise<void>;
   renderTask: (task: T, controls: TaskControls) => ReactNode;
   /** False where the page already says a refused command failed (a conversation's board), so a
@@ -141,15 +144,15 @@ export function TaskWorkflow<T extends TaskView>({
   };
 
   const controls = (task: T): TaskControls => {
-    if (disabled) return { handle: null, moves: [] };
+    if (disabled && !commandsPending) return { handle: null, moves: [] };
     const moves = TASK_WRITE_STATUSES.filter((status) =>
       getTaskMoveCommand(task, currentMemberId(task), status, { canSetAnyStatus }),
     ).map((status) => ({ status, onMove: () => void move(task, status) }));
     if (moves.length === 0) return { handle: null, moves };
-    const isPending = Boolean(pending);
+    const inert = Boolean(pending) || Boolean(disabled);
     return {
-      handle: <DragHandle task={task} disabled={isPending} />,
-      moves: isPending ? [] : moves,
+      handle: <DragHandle task={task} disabled={inert} />,
+      moves: inert ? [] : moves,
     };
   };
 
