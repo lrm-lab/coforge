@@ -52,7 +52,7 @@ export function FormatCloudComputerDialog({
 
   return (
     <ModalOverlay
-      centered
+      confirmation
       isOpen={open}
       onOpenChange={(nextOpen: boolean) => {
         if (formatting) return;

@@ -121,7 +121,7 @@ export function StopChannelAgentsDialog({
 
   return (
     <ModalOverlay
-      centered
+      confirmation
       isOpen
       isDismissable={!busy}
       onOpenChange={(next) => {
