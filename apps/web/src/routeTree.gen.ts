@@ -128,6 +128,7 @@ import { Route as WWorkspaceSlugComputersComputersRouteImport } from './routes/w
 import { Route as WWorkspaceSlugAgentAgentIdRouteImport } from './routes/w.$workspaceSlug/agent.$agentId'
 import { Route as WWorkspaceSlugArtifactsIndexRouteImport } from './routes/w.$workspaceSlug/artifacts.index'
 import { Route as WWorkspaceSlugArtifactsArtifactIdRouteImport } from './routes/w.$workspaceSlug/artifacts.$artifactId'
+import { Route as WWorkspaceSlugMemoryPersonalRouteImport } from './routes/w.$workspaceSlug/memory_.personal'
 import { Route as WWorkspaceSlugProjectsIndexRouteImport } from './routes/w.$workspaceSlug/projects.index'
 import { Route as WWorkspaceSlugProjectsProjectSlugRouteImport } from './routes/w.$workspaceSlug/projects.$projectSlug'
 import { Route as WWorkspaceSlugRecordsIndexRouteImport } from './routes/w.$workspaceSlug/records.index'
@@ -841,6 +842,12 @@ const WWorkspaceSlugArtifactsArtifactIdRoute =
     path: '/artifacts/$artifactId',
     getParentRoute: () => WWorkspaceSlugRoute,
   } as any)
+const WWorkspaceSlugMemoryPersonalRoute =
+  WWorkspaceSlugMemoryPersonalRouteImport.update({
+    id: '/memory_/personal',
+    path: '/memory/personal',
+    getParentRoute: () => WWorkspaceSlugRoute,
+  } as any)
 const WWorkspaceSlugProjectsIndexRoute =
   WWorkspaceSlugProjectsIndexRouteImport.update({
     id: '/projects/',
@@ -1433,6 +1440,7 @@ export interface FileRoutesByFullPath {
   '/w/$workspaceSlug/computers': typeof WWorkspaceSlugComputersComputersRoute
   '/w/$workspaceSlug/agent/$agentId': typeof WWorkspaceSlugAgentAgentIdRoute
   '/w/$workspaceSlug/artifacts/$artifactId': typeof WWorkspaceSlugArtifactsArtifactIdRoute
+  '/w/$workspaceSlug/memory/personal': typeof WWorkspaceSlugMemoryPersonalRoute
   '/w/$workspaceSlug/projects/$projectSlug': typeof WWorkspaceSlugProjectsProjectSlugRoute
   '/w/$workspaceSlug/records/$recordId': typeof WWorkspaceSlugRecordsRecordIdRoute
   '/w/$workspaceSlug/records/dashboard': typeof WWorkspaceSlugRecordsDashboardRoute
@@ -1631,6 +1639,7 @@ export interface FileRoutesByTo {
   '/w/$workspaceSlug/computers': typeof WWorkspaceSlugComputersComputersRoute
   '/w/$workspaceSlug/agent/$agentId': typeof WWorkspaceSlugAgentAgentIdRoute
   '/w/$workspaceSlug/artifacts/$artifactId': typeof WWorkspaceSlugArtifactsArtifactIdRoute
+  '/w/$workspaceSlug/memory/personal': typeof WWorkspaceSlugMemoryPersonalRoute
   '/w/$workspaceSlug/projects/$projectSlug': typeof WWorkspaceSlugProjectsProjectSlugRoute
   '/w/$workspaceSlug/records/$recordId': typeof WWorkspaceSlugRecordsRecordIdRoute
   '/w/$workspaceSlug/records/dashboard': typeof WWorkspaceSlugRecordsDashboardRoute
@@ -1832,6 +1841,7 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/_computers/computers': typeof WWorkspaceSlugComputersComputersRoute
   '/w/$workspaceSlug/agent/$agentId': typeof WWorkspaceSlugAgentAgentIdRoute
   '/w/$workspaceSlug/artifacts/$artifactId': typeof WWorkspaceSlugArtifactsArtifactIdRoute
+  '/w/$workspaceSlug/memory_/personal': typeof WWorkspaceSlugMemoryPersonalRoute
   '/w/$workspaceSlug/projects/$projectSlug': typeof WWorkspaceSlugProjectsProjectSlugRoute
   '/w/$workspaceSlug/records/$recordId': typeof WWorkspaceSlugRecordsRecordIdRoute
   '/w/$workspaceSlug/records/dashboard': typeof WWorkspaceSlugRecordsDashboardRoute
@@ -2033,6 +2043,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/computers'
     | '/w/$workspaceSlug/agent/$agentId'
     | '/w/$workspaceSlug/artifacts/$artifactId'
+    | '/w/$workspaceSlug/memory/personal'
     | '/w/$workspaceSlug/projects/$projectSlug'
     | '/w/$workspaceSlug/records/$recordId'
     | '/w/$workspaceSlug/records/dashboard'
@@ -2231,6 +2242,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/computers'
     | '/w/$workspaceSlug/agent/$agentId'
     | '/w/$workspaceSlug/artifacts/$artifactId'
+    | '/w/$workspaceSlug/memory/personal'
     | '/w/$workspaceSlug/projects/$projectSlug'
     | '/w/$workspaceSlug/records/$recordId'
     | '/w/$workspaceSlug/records/dashboard'
@@ -2431,6 +2443,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/_computers/computers'
     | '/w/$workspaceSlug/agent/$agentId'
     | '/w/$workspaceSlug/artifacts/$artifactId'
+    | '/w/$workspaceSlug/memory_/personal'
     | '/w/$workspaceSlug/projects/$projectSlug'
     | '/w/$workspaceSlug/records/$recordId'
     | '/w/$workspaceSlug/records/dashboard'
@@ -3503,6 +3516,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WWorkspaceSlugArtifactsArtifactIdRouteImport
       parentRoute: typeof WWorkspaceSlugRoute
     }
+    '/w/$workspaceSlug/memory_/personal': {
+      id: '/w/$workspaceSlug/memory_/personal'
+      path: '/memory/personal'
+      fullPath: '/w/$workspaceSlug/memory/personal'
+      preLoaderRoute: typeof WWorkspaceSlugMemoryPersonalRouteImport
+      parentRoute: typeof WWorkspaceSlugRoute
+    }
     '/w/$workspaceSlug/projects/': {
       id: '/w/$workspaceSlug/projects/'
       path: '/projects'
@@ -4189,6 +4209,7 @@ interface WWorkspaceSlugRouteChildren {
   WWorkspaceSlugWorkspaceRoute: typeof WWorkspaceSlugWorkspaceRoute
   WWorkspaceSlugAgentAgentIdRoute: typeof WWorkspaceSlugAgentAgentIdRoute
   WWorkspaceSlugArtifactsArtifactIdRoute: typeof WWorkspaceSlugArtifactsArtifactIdRoute
+  WWorkspaceSlugMemoryPersonalRoute: typeof WWorkspaceSlugMemoryPersonalRoute
   WWorkspaceSlugProjectsProjectSlugRoute: typeof WWorkspaceSlugProjectsProjectSlugRoute
   WWorkspaceSlugArtifactsIndexRoute: typeof WWorkspaceSlugArtifactsIndexRoute
   WWorkspaceSlugProjectsIndexRoute: typeof WWorkspaceSlugProjectsIndexRoute
@@ -4213,6 +4234,7 @@ const WWorkspaceSlugRouteChildren: WWorkspaceSlugRouteChildren = {
   WWorkspaceSlugAgentAgentIdRoute: WWorkspaceSlugAgentAgentIdRoute,
   WWorkspaceSlugArtifactsArtifactIdRoute:
     WWorkspaceSlugArtifactsArtifactIdRoute,
+  WWorkspaceSlugMemoryPersonalRoute: WWorkspaceSlugMemoryPersonalRoute,
   WWorkspaceSlugProjectsProjectSlugRoute:
     WWorkspaceSlugProjectsProjectSlugRoute,
   WWorkspaceSlugArtifactsIndexRoute: WWorkspaceSlugArtifactsIndexRoute,

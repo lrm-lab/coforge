@@ -53,5 +53,16 @@
   "memory_correction": "Correction",
   "memory_saved": "Saved",
   "memory_experience": "Experience",
-  "memory_rebase_draft": "Use my draft after reviewing this version"
+  "memory_rebase_draft": "Use my draft after reviewing this version",
+  "memory_personal": "Personal memory",
+  "memory_agent": "My Agent",
+  "memory_agent_search": "Find my Agent",
+  "memory_no_agents": "No Agents you own match this search.",
+  "memory_key": "Memory key",
+  "memory_offline": "Connect this Agent’s Computer to manage its local memory.",
+  "memory_unsupported": "Update this Computer to manage personal memory.",
+  "memory_timeout": "The Computer did not reply. Read the current memory before retrying a change.",
+  "memory_private_help": "Only you can access your Agent’s personal memory here. It remains on its Computer.",
+  "memory_historical": "Previous version",
+  "memory_choose_agent": "Choose one of your Agents to manage its memory."
 }
