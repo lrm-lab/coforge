@@ -26,6 +26,11 @@ export class TurnEvidenceLedger {
     this.#exempt = false;
   }
 
+  /** Marks an internal maintenance turn (such as `/compact`) exempt from zero-evidence checks. */
+  markExempt(): void {
+    this.#exempt = true;
+  }
+
   observe(event: AgentRuntimeEvent): void {
     if (event.conversation) return;
     switch (event.type) {

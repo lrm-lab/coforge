@@ -63,6 +63,7 @@ export class CodexTurnControl {
   }
 
   async sendMessage(text: string): Promise<void> {
+    if (this.#state.type === "compacting" && this.#starting) await this.#starting;
     if (this.#state.type !== "idle") throw new Error("code agent is already running");
     const starting = this.#startTurn(text);
     this.#starting = starting;
@@ -77,7 +78,8 @@ export class CodexTurnControl {
     return (
       this.#state.type === "running" ||
       this.#state.type === "interrupting" ||
-      (this.#state.type === "starting" && this.#state.completedTurnIds.size === 0)
+      ((this.#state.type === "starting" || this.#state.type === "compacting") &&
+        this.#state.completedTurnIds.size === 0)
     );
   }
 
@@ -196,11 +198,21 @@ export class CodexTurnControl {
   }
 
   async interrupt(): Promise<void> {
-    if (this.#state.type === "starting") {
+    if (
+      this.#state.type === "starting" ||
+      (this.#state.type === "compacting" && this.#state.turnId === undefined)
+    ) {
       // The turn id is not known until `turn/start` answers, so the interrupt cannot be sent yet.
       // Remember it and send it the moment the turn begins; dropping it would let the turn run on
       // against the user's stop (task #703).
       this.#interruptWhileStarting = true;
+      return;
+    }
+    if (this.#state.type === "compacting" && this.#state.turnId !== undefined) {
+      await this.#process.request({
+        method: "turn/interrupt",
+        params: { threadId: this.#threadId, turnId: this.#state.turnId },
+      });
       return;
     }
     if (this.#state.type !== "running") return;

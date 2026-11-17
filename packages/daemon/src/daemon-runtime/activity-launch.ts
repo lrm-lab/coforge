@@ -29,6 +29,8 @@ export type ActivityLaunch = PublishedActivityLaunch & {
   toolCalls?: ToolCallLedger;
   /** Tracks assistant text and tool calls per turn so zero-evidence completions retry. */
   turnEvidence?: TurnEvidenceLedger;
+  /** Most recent input context token reading observed on this launch. */
+  lastContextTokens?: number;
   /** The busy turn's silence clock: one visible stalled notice per turn. */
   stalled?: StalledTurnTracker;
   /** Reply intents this launch announced; a turn interrupt clears them. */

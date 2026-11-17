@@ -19,6 +19,11 @@ import {
   type AgentServiceTierObserved,
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
+import {
+  acceptCodexCompactionRecord,
+  acceptsCompactingTurnItem,
+  runCodexCompactRequest,
+} from "./compaction";
 import { scrubError } from "./provider-support";
 import { CodexTurnControl } from "./turn-control";
 
@@ -158,12 +163,32 @@ export class CodexAgentSession implements AgentSession {
     await this.#process.killTurnProcesses(window);
   }
 
+  async compact(): Promise<void> {
+    if (this.#turns.state.type !== "idle") return;
+    const compacting = runCodexCompactRequest({
+      process: this.#process,
+      threadId: this.#threadId,
+      getState: () => this.#turns.state,
+      setState: (next) => {
+        this.#turns.state = next;
+      },
+      beginIdle: () => this.#turns.beginIdle(),
+    });
+    this.#turns.starting = compacting;
+    try {
+      await compacting;
+    } finally {
+      if (this.#turns.starting === compacting) this.#turns.starting = undefined;
+    }
+  }
+
   onExit(listener: (exit?: AgentSessionExit) => void): () => void {
     return this.#process.onClose(listener);
   }
 
   async dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void> {
     if (this.#turns.isDisposed()) return;
+    if (this.#turns.state.type === "compacting") this.#turns.state.settle();
     this.#turns.state = { type: "disposed" };
     await this.#process.dispose(options);
   }
@@ -214,6 +239,24 @@ export class CodexAgentSession implements AgentSession {
         return;
       }
       this.#emit({ type: "error", message: error.message, occurredAt: eventTime(record) });
+      return;
+    }
+    if (
+      this.#turns.state.type === "compacting" &&
+      acceptCodexCompactionRecord(this.#turns.state, record, params, {
+        acceptsTurnItem: (itemParams) => this.#acceptsTurnItem(itemParams),
+        lastCompletedTurnId: this.#lastCompletedTurnId,
+        noteCompletedTurn: (turnId) => {
+          this.#lastCompletedTurnId = turnId;
+          this.#itemEvents.reset();
+        },
+        beginIdle: () => this.#turns.beginIdle(),
+        consumePendingInterrupt: () => this.#turns.consumePendingInterrupt(),
+        interrupt: () => void this.interrupt().catch(() => {}),
+        emit: (event) => this.#emit(event),
+        emitItemEvents: () => this.#emitAll(this.#itemEvents.accept(record, params)),
+      })
+    ) {
       return;
     }
     if (record.method === "turn/started") {
@@ -346,6 +389,7 @@ export class CodexAgentSession implements AgentSession {
     if (typeof params?.turnId !== "string") return true;
     if (params.turnId === this.#lastCompletedTurnId) return false;
     if (state.type === "starting") return !state.completedTurnIds.has(params.turnId);
+    if (state.type === "compacting") return acceptsCompactingTurnItem(state, params.turnId);
     return params.turnId === state.turnId;
   }
 

@@ -7,6 +7,7 @@ import {
   decideWakeRecycle,
   describeRecycledSession,
   resolveWakeRecycleConfig,
+  resolveWarmRecycleConfig,
 } from "#src/agent-runtime/wake-session-recycle";
 import type { CodeAgentProvider } from "@lrm/coforge-anvil";
 import { runtimeDisplayName } from "./session-invalidate-activity";
@@ -41,6 +42,9 @@ export class WakeRecycle {
   constructor(ports: WakeRecyclePorts) {
     this.#ports = ports;
   }
+  provider(provider: RuntimeProvider): CodeAgentProvider {
+    return this.#ports.provider(provider);
+  }
   async plan(request: WakeRecycleRequest): Promise<RecycledWake | undefined> {
     try {
       return await this.#plan(request);
@@ -62,6 +66,7 @@ export class WakeRecycle {
       Bun.env,
       provider.idleRecycleMinColdGapMs,
     );
+    const warmConfig = resolveWarmRecycleConfig(request.envVars, Bun.env);
     const supported = supportsSessionResume(provider);
     const facts =
       config.enabled && supported && !request.hasResumePrompt
@@ -72,6 +77,7 @@ export class WakeRecycle {
         : undefined;
     const decision = decideWakeRecycle({
       config,
+      warmConfig,
       supported,
       sessionId,
       hasResumePrompt: request.hasResumePrompt,

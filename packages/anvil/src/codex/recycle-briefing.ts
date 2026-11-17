@@ -1,8 +1,10 @@
 import {
+  escapeXmlText,
   frameUntrustedText,
   truncateCodePoints,
   truncateCodePointsWithEllipsis,
 } from "@lrm/coforge-sdk/internal";
+import { resolve, sep } from "node:path";
 import { escapePanelClosingTags } from "#src/briefing-text";
 import { collapseWhitespace } from "#src/inline-text";
 import { asRecord } from "#src/json-record";
@@ -27,9 +29,12 @@ const MIN_ACTIONS = 5;
 const RECENT_ACTIONS = 12;
 const RECENT_MESSAGES = 25;
 const MESSAGE_MAX_TOKENS = 2_000;
+const OBJECT_CONTENT_CAP_TOKENS = 700;
+const MAX_PANEL_OBJECTS = 10;
 const ELIDE_SCAN_CHARS = 4_096;
 const TRUNCATED = "\n[… truncated]";
 const MESSAGE_TRUNCATED = "\n[… truncated — read the channel for the rest]";
+const MEMORY_FILE_RE = /(^|\/)MEMORY\.md$/;
 /** Same credential-path rule as the Claude briefing. A match keeps the call and drops its output. */
 const SENSITIVE_PATH_RE =
   /(secret|credential|password|token|\.key$|\.pem$|\.env(\.[^/]+)?$|(^|\/)\.(npmrc|netrc|pgpass|pypirc)$|(^|\/)\.(ssh|aws|gnupg|kube)\/|(^|\/)id_(rsa|dsa|ecdsa|ed25519)|\.(p12|pfx|jks|keystore)$)/i;
@@ -252,10 +257,121 @@ function within(lines: readonly string[], budgetTokens: number): string {
   return fit(kept.join("\n"), budgetTokens);
 }
 
+type CodexObjectInPlay = {
+  name: string;
+  touches: number;
+  rereadBody: string;
+};
+
+function rereadableWorkspacePath(candidate: string, root: string): string | undefined {
+  const trimmed = candidate.trim();
+  if (!trimmed || trimmed.startsWith("-")) return undefined;
+  const full = resolve(root, trimmed);
+  if (!full.startsWith(root + sep)) return undefined;
+  if (SENSITIVE_PATH_RE.test(trimmed) || SENSITIVE_PATH_RE.test(full)) return undefined;
+  if (MEMORY_FILE_RE.test(trimmed) || MEMORY_FILE_RE.test(full)) return undefined;
+  return full;
+}
+
+function candidatePathsFromAction(action: Action): string[] {
+  const found: string[] = [];
+  for (const key of ["path", "file_path", "file", "target_file"]) {
+    const val = action.input[key];
+    if (typeof val === "string" && val.length > 0) found.push(val);
+  }
+  const patchText =
+    typeof action.input.input === "string"
+      ? action.input.input
+      : typeof action.input.patch === "string"
+        ? action.input.patch
+        : "";
+  if (patchText) {
+    for (const match of patchText.matchAll(/^\*\*\* (?:Update|Add) File:\s+(.+)$/gm)) {
+      if (match[1]) found.push(match[1].trim());
+    }
+  }
+  if (action.tool === "shell" && typeof action.input.command === "string") {
+    for (const token of action.input.command.split(/\s+/)) {
+      if (token.includes("/") || /\.[A-Za-z0-9]{1,8}$/.test(token)) {
+        const cleaned = token.replace(/^['"`]|['"`;,)]+$/g, "");
+        if (cleaned && !cleaned.includes("://")) found.push(cleaned);
+      }
+    }
+  }
+  return found;
+}
+
+async function collectCodexObjectsInPlay(
+  actions: readonly Action[],
+  workingDirectory: string,
+  host: CodexHistoryHost,
+): Promise<CodexObjectInPlay[]> {
+  if (!host.realWorkspaceRoot || !host.rereadFile) return [];
+  const root = resolve(workingDirectory);
+  const realRoot = await host.realWorkspaceRoot(root);
+  if (!realRoot) return [];
+
+  const counts = new Map<
+    string,
+    { name: string; fullPath: string; touches: number; lastIdx: number }
+  >();
+  for (let i = 0; i < actions.length; i++) {
+    const action = actions[i]!;
+    if (action.sensitive) continue;
+    for (const raw of candidatePathsFromAction(action)) {
+      const fullPath = rereadableWorkspacePath(raw, root);
+      if (!fullPath) continue;
+      const rel = fullPath.slice(root.length + 1);
+      const prev = counts.get(rel);
+      counts.set(rel, {
+        name: rel,
+        fullPath,
+        touches: (prev?.touches ?? 0) + 1,
+        lastIdx: i,
+      });
+    }
+  }
+
+  const ranked = [...counts.values()]
+    .sort((a, b) => b.touches - a.touches || b.lastIdx - a.lastIdx)
+    .slice(0, MAX_PANEL_OBJECTS);
+
+  const resolved = await Promise.all(
+    ranked.map(async (item) => {
+      const rereadBody = await host.rereadFile!(item.fullPath, realRoot);
+      if (rereadBody === null || rereadBody.length === 0) return undefined;
+      return { name: item.name, touches: item.touches, rereadBody };
+    }),
+  );
+  return resolved.filter((item): item is CodexObjectInPlay => item !== undefined);
+}
+
+function formatObjectsSection(objects: readonly CodexObjectInPlay[], budgetTokens: number): string {
+  if (objects.length === 0 || budgetTokens <= 80) return "";
+  let left = budgetTokens;
+  const lines = ["<objects-in-play>"];
+  for (const object of objects) {
+    if (left <= 80) break;
+    const name = escapeXmlText(object.name);
+    const title = `<object name="${name}" touched="${object.touches}x" freshness="current — re-read just now">`;
+    const cost = estimateTokens(title.length) + 4;
+    if (left - cost <= 0) break;
+    left -= cost;
+    const cap = Math.min(OBJECT_CONTENT_CAP_TOKENS, left);
+    const body = escapePanelClosingTags(frameUntrustedText(fit(object.rereadBody, cap)));
+    lines.push(title, body, "</object>");
+    left -= estimateTokens(body.length);
+  }
+  if (lines.length === 1) return "";
+  lines.push("</objects-in-play>");
+  return lines.join("\n");
+}
+
 /** The panel for these records, or `undefined` when the session did too little to brief. */
 export function formatCodexRecycleBriefing(
   records: readonly CodexRolloutRecord[],
   budgetTokens: number,
+  objectsInPlay: readonly CodexObjectInPlay[] = [],
 ): string | undefined {
   if (!(budgetTokens > 0)) return;
   const { messages, actions } = collect(records);
@@ -277,7 +393,13 @@ export function formatCodexRecycleBriefing(
     ),
     "</recent-actions>",
   ].join("\n");
-  const panel = [messageSection, actionSection]
+  const remainingBudget =
+    budgetTokens -
+    estimateTokens(messageSection.length) -
+    estimateTokens(actionSection.length) -
+    40;
+  const objectSection = formatObjectsSection(objectsInPlay, remainingBudget);
+  const panel = [messageSection, objectSection, actionSection]
     .filter((section) => section.length > 0)
     .join("\n\n");
   return fit(panel, budgetTokens);
@@ -299,7 +421,13 @@ export async function readCodexRecycleBriefing(
     if (!path) return;
     const lines = await readTailLines(path, CODEX_BRIEFING_TAIL_BYTES, host);
     if (!lines) return;
-    return formatCodexRecycleBriefing(rolloutRecords(lines), options.budgetTokens);
+    const parsed = rolloutRecords(lines);
+    const { actions } = collect(parsed);
+    const objects =
+      actions.length >= MIN_ACTIONS
+        ? await collectCodexObjectsInPlay(actions, options.workingDirectory, host)
+        : [];
+    return formatCodexRecycleBriefing(parsed, options.budgetTokens, objects);
   } catch {
     return;
   }

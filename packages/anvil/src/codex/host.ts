@@ -41,6 +41,8 @@ export interface CodexHistoryHost {
     path: string,
     tailBytes: number,
   ): Promise<{ bytes: Uint8Array; startOffset: number }>;
+  realWorkspaceRoot?(path: string): Promise<string | null>;
+  rereadFile?(path: string, realRoot: string | null): Promise<string | null>;
 }
 
 /** Native session and usage policies consume distinct host environment compositions. */

@@ -148,6 +148,54 @@ async function handle(message: Message): Promise<void> {
     write({ id, result: {} });
     return;
   }
+  if (method === "thread/compact/start" && id !== undefined) {
+    turn += 1;
+    const compactTurnId = `turn-compact-${turn}`;
+    const targetThread = String(message.params?.threadId ?? threadId);
+    write({ id, result: {} });
+    if (scenarios.has("slow-compact")) await Bun.sleep(15);
+    write({
+      method: "turn/started",
+      params: { threadId: targetThread, turn: { id: compactTurnId } },
+    });
+    write({
+      method: "item/started",
+      params: {
+        threadId: targetThread,
+        turnId: compactTurnId,
+        item: { id: `compact-${turn}`, type: "contextCompaction" },
+      },
+    });
+    if (scenarios.has("slow-compact")) await Bun.sleep(45);
+    write({
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: targetThread,
+        turnId: compactTurnId,
+        tokenUsage: {
+          modelContextWindow: 400_000,
+          last: { totalTokens: 48_000, inputTokens: 46_000, outputTokens: 2_000 },
+          total: { totalTokens: 318_000, inputTokens: 300_000, outputTokens: 18_000 },
+        },
+      },
+    });
+    write({
+      method: "item/completed",
+      params: {
+        threadId: targetThread,
+        turnId: compactTurnId,
+        item: { id: `compact-${turn}`, type: "contextCompaction" },
+      },
+    });
+    write({
+      method: "turn/completed",
+      params: {
+        threadId: targetThread,
+        turn: { id: compactTurnId, status: "completed" },
+      },
+    });
+    return;
+  }
   if (method === "turn/start" && id !== undefined) {
     turn += 1;
     const turnId = `turn-${turn}`;

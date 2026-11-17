@@ -45,6 +45,7 @@ export type ReleasableLaunch = {
   progress?: ProviderProgress;
   toolCalls?: ToolCallLedger;
   backgroundTasks?: OutstandingBackgroundTasks;
+  lastContextTokens?: number;
 };
 export type WakeRestart = AgentRestartConfig &
   Readonly<{
@@ -202,6 +203,9 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
       busyReason,
       sessionId: this.#ports.sessionId(agentId),
       lastEventAtMs: launch?.progress?.lastEventAtMs,
+      ...(launch?.lastContextTokens !== undefined
+        ? { lastContextTokens: launch.lastContextTokens }
+        : {}),
     };
   }
   async stopColdIdle(stop: ColdIdleStop): Promise<void> {

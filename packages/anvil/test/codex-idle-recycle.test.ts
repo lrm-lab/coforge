@@ -480,3 +480,41 @@ test("fewer than five actions, or an unreadable rollout, builds no briefing", as
     }),
   ).toBeUndefined();
 });
+
+test("the Codex briefing enriches referenced workspace paths with live <objects-in-play> excerpts and skips outside or sensitive paths", async () => {
+  const lines = [
+    message("2026-10-28T01:00:00.000Z", "user", "update widget"),
+    ...call("2026-10-28T01:01:00.000Z", "fn-1", "read_file", { path: "src/widget.ts" }, "old"),
+    ...call("2026-10-28T01:02:00.000Z", "fn-2", "read_file", { path: "../outside.ts" }, "secret"),
+    ...call("2026-10-28T01:03:00.000Z", "fn-3", "read_file", { path: "MEMORY.md" }, "mem"),
+    ...call("2026-10-28T01:04:00.000Z", "fn-4", "read_file", { path: ".env" }, "KEY=1"),
+    ...shell("2026-10-28T01:05:00.000Z", "sh-1", ["bun", "test", "src/widget.ts"], "pass"),
+  ];
+  const path = rolloutPath("/codex-home", "2026-10-28T01-00-00");
+  const baseHost = rolloutHost({ files: { [path]: lines.join("\n") + "\n" } });
+  const rereadCalls: string[] = [];
+  const provider = new CodexProvider({
+    host: {
+      ...fixtureCodexHost,
+      ...baseHost,
+      realWorkspaceRoot: async (dir) => dir,
+      rereadFile: async (filePath, realRoot) => {
+        rereadCalls.push(filePath);
+        if (realRoot === "/work" && filePath === "/work/src/widget.ts") {
+          return "export const widgetVersion = 42;\n";
+        }
+        return null;
+      },
+    },
+  });
+  const briefing = await provider.readRecycleBriefing?.({
+    sessionId: THREAD,
+    workingDirectory: "/work",
+    budgetTokens: 8_000,
+    envVars: { CODEX_HOME: "/codex-home" },
+  });
+  expect(briefing).toContain("<objects-in-play>");
+  expect(briefing).toContain('freshness="current — re-read just now"');
+  expect(briefing).toContain("export const widgetVersion = 42;");
+  expect(rereadCalls).toEqual(["/work/src/widget.ts"]);
+});

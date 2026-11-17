@@ -5,6 +5,13 @@ export { RUNTIME_PROVIDER };
 export { API_KEY_ENV_BY_PROVIDER, SessionEnvironmentError } from "#src/runtime-provider";
 export { createSession, findSessionFile, resolveAgentSessionFile } from "#src/runner";
 export {
+  DEFAULT_PI_SESSION_ROTATE_BYTES,
+  resolvePiSessionRotateBytes,
+  rotatePiSessionFileIfOversized,
+  rotatePiSessionTranscriptIfOversized,
+  type PiSessionRotationResult,
+} from "#src/session-rotation";
+export {
   discoverModels,
   discoverPiModels,
   PI_MODEL_REFRESH_TIMEOUT_MS,

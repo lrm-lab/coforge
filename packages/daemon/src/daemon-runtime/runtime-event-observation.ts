@@ -76,6 +76,7 @@ export function observeRuntimeEvent(
     return;
   }
   if (event.type === AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE) {
+    if (!event.conversation && event.usedTokens > 0) launch.lastContextTokens = event.usedTokens;
     const recorded = ports.usageReport.contextUsage(
       agentId,
       launch,

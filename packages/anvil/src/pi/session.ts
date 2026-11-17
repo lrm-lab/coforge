@@ -87,6 +87,7 @@ class AgentSessionImpl implements AgentSession {
    * prompts still in preflight keep the turn live and interrupt()/dispose() waiting
    * for work about to start (task #651). */
   #runPrompt: Promise<void> | undefined;
+  #compacting: Promise<void> | undefined;
   #interrupting = false;
   #failure: string | undefined;
   /** The current model's context window, read at the stream seam for the compaction log. */
@@ -226,6 +227,7 @@ class AgentSessionImpl implements AgentSession {
     ]);
   }
   async sendMessage(message: string) {
+    if (this.#compacting) await this.#compacting;
     if (this.#disposed || this.#interrupting || this.#runtime.session.isStreaming) {
       throw new Error("code agent cannot accept a new message");
     }
@@ -248,10 +250,38 @@ class AgentSessionImpl implements AgentSession {
     }
   }
 
+  async compact(): Promise<void> {
+    if (
+      this.#disposed ||
+      this.#interrupting ||
+      this.hasLiveTurn ||
+      this.#runtime.session.isCompacting
+    ) {
+      return;
+    }
+    const compacting = (async () => {
+      await this.#runtime.session.compact();
+      await this.#runtime.rotateTranscript();
+    })();
+    this.#compacting = compacting;
+    try {
+      await compacting;
+    } finally {
+      if (this.#compacting === compacting) this.#compacting = undefined;
+    }
+  }
+
   get hasLiveTurn(): boolean {
-    return !this.#disposed && (this.#runtime.session.isStreaming || this.#pendingPrompts.size > 0);
+    return (
+      !this.#disposed &&
+      (this.#runtime.session.isStreaming ||
+        this.#runtime.session.isCompacting ||
+        this.#compacting !== undefined ||
+        this.#pendingPrompts.size > 0)
+    );
   }
   async notify(notice: string) {
+    if (this.#compacting) await this.#compacting;
     if (this.#disposed || this.#interrupting) {
       throw new Error("code agent cannot accept a notification");
     }
@@ -301,7 +331,10 @@ class AgentSessionImpl implements AgentSession {
     this.#runtime.session.clearQueue();
     this.#disposal = (async () => {
       await this.#runtime.session.abort();
-      await Promise.allSettled(this.#pendingPrompts);
+      await Promise.allSettled([
+        ...this.#pendingPrompts,
+        ...(this.#compacting ? [this.#compacting] : []),
+      ]);
       await this.#runtime.dispose();
       this.#exit.finish();
     })();

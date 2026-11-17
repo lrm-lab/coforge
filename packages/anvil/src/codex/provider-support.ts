@@ -3,10 +3,12 @@ import {
   type AgentServiceTierObserved,
 } from "@lrm/coforge-sdk/internal";
 import { asRecord } from "@lrm/coforge-anvil";
+import type { CodexCompactingState } from "./compaction";
 
 export type CodexSessionState =
   | { type: "idle" }
   | { type: "starting"; completedTurnIds: Set<string> }
+  | CodexCompactingState
   | { type: "running"; turnId: string }
   | { type: "interrupting"; turnId: string }
   | { type: "disposed" };

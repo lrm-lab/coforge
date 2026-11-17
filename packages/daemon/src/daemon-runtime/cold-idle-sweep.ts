@@ -2,11 +2,14 @@ import { getLogger } from "@logtape/logtape";
 import { thrownMessage, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import type { CodeAgentProvider, SessionResumeFacts } from "@lrm/coforge-anvil";
 import {
+  resolveWakeRecycleConfig,
   resolveWakeRecycleSweepMs,
+  resolveWarmRecycleConfig,
   selectColdIdleStops,
   type ColdIdleStop,
   type ColdIdleSweepView,
 } from "#src/agent-runtime/wake-session-recycle";
+import { scheduleUnrefTimer } from "./unref-timer";
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 export type AgentIdleFacts = Readonly<{
   launched: boolean;
@@ -71,6 +74,7 @@ export function supportsSessionResume(provider: CodeAgentProvider): boolean {
 }
 export class ColdIdleSweep {
   readonly #ports: ColdIdleSweepPorts;
+  readonly #warmTimers = new Map<string, () => void>();
   #timer: ReturnType<typeof setInterval> | undefined;
   #running: Promise<void> | undefined;
   constructor(ports: ColdIdleSweepPorts) {
@@ -78,12 +82,81 @@ export class ColdIdleSweep {
   }
   start(): void {
     if (this.#timer) return;
-    this.#timer = setInterval(() => void this.sweep(), resolveWakeRecycleSweepMs());
+    const explicitSweep = Bun.env.COFORGE_WAKE_RECYCLE_SWEEP_MS?.trim();
+    const periodMs = explicitSweep
+      ? resolveWakeRecycleSweepMs()
+      : Math.min(resolveWakeRecycleSweepMs(), resolveWarmRecycleConfig().warmQuietMs);
+    this.#timer = setInterval(() => void this.sweep(), periodMs);
     this.#timer.unref();
   }
   stop(): void {
     clearInterval(this.#timer);
     this.#timer = undefined;
+    for (const cancel of this.#warmTimers.values()) cancel();
+    this.#warmTimers.clear();
+  }
+  cancelWarmCheck(agentId: string): void {
+    this.#warmTimers.get(agentId)?.();
+    this.#warmTimers.delete(agentId);
+  }
+  notifyIdle(
+    agentId: string,
+    options?: Readonly<{ immediateOnly?: boolean; recheck?: boolean }>,
+  ): boolean {
+    const agent = this.#ports.agent(agentId);
+    if (!agent || !agent.sessionId || agent.lastContextTokens === undefined) return false;
+    const provider = this.#ports.provider(agent.provider);
+    if (!supportsSessionResume(provider)) return false;
+    const config = resolveWakeRecycleConfig(
+      agent.envVars,
+      Bun.env,
+      provider.idleRecycleMinColdGapMs,
+    );
+    if (!config.enabled) return false;
+    const warm = resolveWarmRecycleConfig(agent.envVars, Bun.env);
+    if (agent.busyReason !== undefined) {
+      if (
+        !options?.recheck &&
+        (agent.busyReason === "queued_input" || agent.busyReason === "launching") &&
+        agent.lastContextTokens > warm.warmMinContextTokens
+      ) {
+        this.cancelWarmCheck(agentId);
+        this.#warmTimers.set(
+          agentId,
+          scheduleUnrefTimer(async () => {
+            this.#warmTimers.delete(agentId);
+            this.notifyIdle(agentId, { recheck: true });
+          }, 10),
+        );
+        return agent.lastContextTokens > warm.immediateContextTokens;
+      }
+      return false;
+    }
+    const now = this.#now();
+    const idleMs = Math.max(0, now - (agent.lastEventAtMs ?? now));
+    if (agent.lastContextTokens > warm.immediateContextTokens) {
+      this.cancelWarmCheck(agentId);
+      void this.sweep();
+      return true;
+    }
+    if (options?.immediateOnly || agent.lastContextTokens <= warm.warmMinContextTokens) {
+      return false;
+    }
+    if (idleMs > warm.warmQuietMs) {
+      this.cancelWarmCheck(agentId);
+      void this.sweep();
+      return true;
+    }
+    this.cancelWarmCheck(agentId);
+    const delayMs = Math.max(10, warm.warmQuietMs - idleMs + 25);
+    this.#warmTimers.set(
+      agentId,
+      scheduleUnrefTimer(async () => {
+        this.#warmTimers.delete(agentId);
+        void this.sweep();
+      }, delayMs),
+    );
+    return false;
   }
   sweep(): Promise<void> {
     this.#running ??= this.#sweep()

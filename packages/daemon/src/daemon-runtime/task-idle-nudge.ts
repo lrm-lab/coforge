@@ -35,6 +35,8 @@ export type TaskIdleNudgePorts = {
   freshSession(agentId: string): boolean;
   /** Current context generation (`AgentContextLedger.generation()`), advancing on compaction. */
   contextGeneration?(agentId: string): number | undefined;
+  /** Optional turn-end hook (e.g. proactive idle compaction); returning `true` defers this ask. */
+  beforeIdleAsk?(agentId: string): boolean;
   /** Writes the reminder as idle input, the way a wake message is written. */
   deliver(agentId: string, text: string): Promise<boolean>;
   timeoutMs?: number;
@@ -89,8 +91,9 @@ export class TaskIdleNudge {
 
   /** Called where a turn ends or a process exits; never throws, never blocks that path. */
   maybeAsk(agentId: string): void {
-    if (this.#inFlight.has(agentId)) return this.#skipped(agentId, "in_flight");
     if (!this.ports.idle(agentId)) return this.#skipped(agentId, "not_idle");
+    if (this.ports.beforeIdleAsk?.(agentId) === true) return this.#skipped(agentId, "compacting");
+    if (this.#inFlight.has(agentId)) return this.#skipped(agentId, "in_flight");
     if (this.#now() < this.#unsupportedUntil) return this.#skipped(agentId, "unsupported");
     const sessionId = this.ports.sessionId(agentId);
     const generation = this.ports.contextGeneration?.(agentId);

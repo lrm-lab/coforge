@@ -7,6 +7,10 @@ import {
   readHistoryFileTailBytes,
   resolveDirectoryWithoutSymlinks,
 } from "#src/code-agent/bounded-history-file";
+import {
+  rereadWorkspaceFile,
+  resolveRealWorkspaceRoot,
+} from "#src/code-agent/workspace-file-reread";
 
 /** File IO for Codex rollout reads. `node:fs/promises` `readdir` supplies the directory types. */
 export const codexHistoryHost: CodexHistoryHost = {
@@ -17,4 +21,6 @@ export const codexHistoryHost: CodexHistoryHost = {
   readFileTail: readHistoryFileTail,
   readFileHeadBytes: readHistoryFileHeadBytes,
   readFileTailBytes: readHistoryFileTailBytes,
+  realWorkspaceRoot: resolveRealWorkspaceRoot,
+  rereadFile: rereadWorkspaceFile,
 };

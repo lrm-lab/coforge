@@ -27,7 +27,7 @@ import type { AgentProxy, LaunchRequest } from "./runtime-launch-types";
 import { resolveLaunchIdentity } from "./launch-identity";
 import { ResumedEarlyCrashStreak } from "./resumed-early-crash";
 import { runtimeDisplayName, sessionInvalidateActivityText } from "./session-invalidate-activity";
-import { type AgentActivity } from "@lrm/coforge-sdk/internal";
+import { RUNTIME_PROVIDER, type AgentActivity } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { launchAgentProcess } from "./agent-launch-process";
 import { OwedRecovery } from "./provider-replay-recovery";
@@ -37,7 +37,9 @@ import { coldStartRejectedReplay, coldStartResumedSession } from "./resumed-sess
 import { getLogger } from "@logtape/logtape";
 import type { AgentSessionReport } from "@lrm/coforge-sdk/internal";
 import { SystemCleaner } from "#src/system-cleaner/system-cleaner";
+import { ColdIdleSweep } from "./cold-idle-sweep";
 import { TaskIdleNudge } from "./task-idle-nudge";
+import { TurnEndCompaction } from "./turn-end-compaction";
 import { installAgentApiKeyHealer } from "./agent-api-key-heal";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
@@ -79,7 +81,8 @@ export type AgentLaunchCoordinatorPorts = {
   collectSkillAgents: Set<string>;
   introducedAgents: Set<string>;
   messageAttention: AgentMessageAttentionIndex;
-  runtimeRelease: Pick<RuntimeRelease<ActivityLaunch>, "endAndReplace">;
+  runtimeRelease: Pick<RuntimeRelease<ActivityLaunch>, "endAndReplace"> &
+    Partial<Pick<RuntimeRelease<ActivityLaunch>, "coldIdleAgent" | "stopColdIdle">>;
   agentControl: AgentControl;
   agentSessions: AgentSessions;
   runtimeErrorHold: RuntimeErrorDeliveryHold;
@@ -148,11 +151,81 @@ export class AgentLaunchCoordinator {
   readonly resumedEarlyCrash = new ResumedEarlyCrashStreak();
   /** What a cold start of a rejected Session still owes the Agent's next launch. */
   readonly #owed: OwedRecovery;
+  /** Proactive native compaction at Working->Idle when context tokens exceed 250k. */
+  readonly turnEndCompaction: TurnEndCompaction;
+  /** Event-driven warm/immediate recycle sweep for live idle sessions. */
+  readonly #liveWarmSweep: ColdIdleSweep;
   /** The task idle reminder's daemon side, built from this coordinator's own collaborators. */
   readonly idleNudge: TaskIdleNudge;
 
   constructor(readonly ports: AgentLaunchCoordinatorPorts) {
     this.#owed = new OwedRecovery(ports.deliveryGate.inboxes);
+    const isAgentIdle = (agentId: string) => {
+      const session = this.ports.agentProcessManager.session(agentId);
+      return (
+        session !== undefined &&
+        session.hasLiveTurn === false &&
+        !this.ports.deliveryGate.hasQueued(agentId) &&
+        !this.ports.deliveryGate.shouldHold(agentId)
+      );
+    };
+    this.#liveWarmSweep = new ColdIdleSweep({
+      agentIds: () => this.ports.agentProcessManager.runningAgentIds?.() ?? [],
+      agent: (agentId) => this.ports.runtimeRelease?.coldIdleAgent?.(agentId),
+      provider: (provider) =>
+        this.ports.wakeRecycle?.provider?.(provider) ?? ({ provider } as never),
+      stop: async (stop) => {
+        await this.ports.runtimeRelease?.stopColdIdle?.(stop);
+      },
+    });
+    this.turnEndCompaction = new TurnEndCompaction({
+      idle: (agentId) =>
+        isAgentIdle(agentId) &&
+        (this.ports.currentActivityLaunches.get(agentId)?.backgroundTasks?.count ?? 0) === 0,
+      launchId: (agentId) => this.ports.currentActivityLaunches.get(agentId)?.launchId,
+      provider: (agentId) => this.ports.currentActivityLaunches.get(agentId)?.provider,
+      envVars: (agentId) => this.ports.agentProcessManager.runtime?.(agentId)?.config.envVars,
+      contextTokens: (agentId) =>
+        this.ports.usageReport?.lastContextUsage?.(agentId)?.usedTokens ??
+        this.ports.currentActivityLaunches.get(agentId)?.lastContextTokens,
+      contextGeneration: (agentId) => this.ports.contexts?.contextGeneration?.(agentId),
+      needsSessionReset: (agentId) => this.ports.contexts?.needsSessionReset?.(agentId) === true,
+      canCompact: (agentId) => {
+        const session = this.ports.agentProcessManager.session(agentId);
+        if (!session) return false;
+        if (typeof session.compact === "function") return true;
+        return (
+          this.ports.currentActivityLaunches.get(agentId)?.provider === RUNTIME_PROVIDER.CLAUDE_CODE
+        );
+      },
+      compact: async (agentId) => {
+        const session = this.ports.agentProcessManager.session(agentId);
+        if (!session) return;
+        if (session.compact) {
+          await session.compact();
+          return;
+        }
+        const launch = this.ports.currentActivityLaunches.get(agentId);
+        if (launch?.provider === RUNTIME_PROVIDER.CLAUDE_CODE) {
+          const turnFinished = this.turnEndCompaction.waitForTurnFinish(agentId);
+          launch.turnEvidence?.markExempt();
+          try {
+            await session.sendMessage("/compact");
+          } catch (error) {
+            launch.turnEvidence?.reset();
+            this.turnEndCompaction.noteTurnFinished(agentId);
+            throw error;
+          }
+          if (session.hasLiveTurn !== false) await turnFinished;
+          else this.turnEndCompaction.noteTurnFinished(agentId);
+        }
+      },
+      onSettled: (agentId) => {
+        if (this.#liveWarmSweep.notifyIdle(agentId, { immediateOnly: true })) return;
+        this.#liveWarmSweep.notifyIdle(agentId);
+        this.idleNudge.maybeAsk(agentId);
+      },
+    });
     this.idleNudge = new TaskIdleNudge({
       ask: async (agentId, request) => {
         const agentApiKey = this.ports.agentApiKeys.get(agentId);
@@ -161,14 +234,13 @@ export class AgentLaunchCoordinator {
         if (!transport.agentTaskIdleNudge) throw new Error("idle nudge is unavailable");
         return transport.agentTaskIdleNudge(request, agentApiKey);
       },
-      idle: (agentId) => {
-        const session = this.ports.agentProcessManager.session(agentId);
-        return (
-          session !== undefined &&
-          session.hasLiveTurn === false &&
-          !this.ports.deliveryGate.hasQueued(agentId) &&
-          !this.ports.deliveryGate.shouldHold(agentId)
-        );
+      idle: isAgentIdle,
+      beforeIdleAsk: (agentId) => {
+        if (this.turnEndCompaction.isCompacting(agentId)) return true;
+        if (this.#liveWarmSweep.notifyIdle(agentId, { immediateOnly: true })) return true;
+        if (this.turnEndCompaction.maybeCompact(agentId)) return true;
+        this.#liveWarmSweep.notifyIdle(agentId);
+        return false;
       },
       backgroundTasks: (agentId) =>
         this.ports.currentActivityLaunches.get(agentId)?.backgroundTasks?.count ?? 0,
@@ -287,6 +359,23 @@ export class AgentLaunchCoordinator {
     return launchAgentProcess(
       {
         ...this.ports,
+        observeRuntimeEvent: (id, activeLaunch, activeConfig, activeRuntime, managed, event) => {
+          this.ports.observeRuntimeEvent(
+            id,
+            activeLaunch,
+            activeConfig,
+            activeRuntime,
+            managed,
+            event,
+          );
+          if (event.type === "completed" && !event.conversation)
+            this.turnEndCompaction.noteTurnFinished(id);
+        },
+        disposeLaunchObservations: (id) => {
+          this.turnEndCompaction.noteTurnFinished(id);
+          this.#liveWarmSweep.cancelWarmCheck(id);
+          this.ports.disposeLaunchObservations(id);
+        },
         idleNudge: this.idleNudge,
         resumedEarlyCrash: this.resumedEarlyCrash,
         coldStartResumedSession: (id, ended, stale) =>
@@ -308,6 +397,8 @@ export class AgentLaunchCoordinator {
 
   /** Drops what the Agent was owed: a Stop a person made, or the Agent's delete. */
   dropOwedRecovery(agentId: string): void {
+    this.turnEndCompaction.noteTurnFinished(agentId);
+    this.#liveWarmSweep.cancelWarmCheck(agentId);
     this.#owed.drop(agentId);
   }
 
@@ -319,6 +410,8 @@ export class AgentLaunchCoordinator {
 
   /** Drops every debt, as a whole-runtime stop does: the cloud's next Start is the source then. */
   clearOwedRecovery(): void {
+    this.turnEndCompaction.disposeAll();
+    this.#liveWarmSweep.stop();
     this.#owed.clear();
   }
 

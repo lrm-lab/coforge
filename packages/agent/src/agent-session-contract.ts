@@ -31,6 +31,8 @@ export interface AgentSession {
    * already reach a quiet session omits it, which the daemon reads as no wake needed. */
   readonly wakesAfterSubagents?: boolean;
   sendMessage(message: string): Promise<void>;
+  /** Proactively compacts session context while idle on runtimes supporting native compaction. */
+  compact?(): Promise<void>;
   cancelPendingNotices?(): void;
   readSessionIdentity?(): Promise<AgentSessionIdentity | undefined>;
   /**

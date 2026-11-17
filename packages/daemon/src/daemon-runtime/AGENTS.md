@@ -45,6 +45,9 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   answer as idle input: one ask per Agent at a time, 15 seconds, a 404 pauses asking for an hour
   (the web and the Computer ship separately), and `freshSession` is sent once per fresh session and
   re-armed once whenever `AgentContextLedger.generation()` advances on compaction.
+- `turn-end-compaction.ts` triggers native provider compaction once per context generation at
+  `Working -> Idle` when observed context usage exceeds `250_000` tokens (`COFORGE_IDLE_COMPACT`,
+  `COFORGE_IDLE_COMPACT_MIN_TOKENS`) and the Agent is genuinely idle.
 - `wake-loop-guard.ts` tracks consecutive wakes on the same message/delivery key that complete with
   zero tool calls and zero `coforge` message/task writes or holds: 60-second backoff at streak 2 and
   parked at streak 3, resetting when a new delivery key arrives or real work happens.

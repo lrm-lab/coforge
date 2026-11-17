@@ -153,11 +153,11 @@ Rules for Agent lifecycle, control, Session state, and Activity in
 ## Idle recycle of a cold, large session
 
 - On by default. A native session whose last context exceeds 128k tokens is not resumed once it
-  has been idle past that runtime's prompt-cache lifetime. The provider declares the lifetime
-  (`idleRecycleMinColdGapMs`): Claude Code 60 minutes, Codex 30 minutes. A provider that does not
-  declare one uses 60 minutes. `wake-session-recycle.ts` holds the provider-neutral decision and the
-  env knobs (listed in `docs/observability/agent-status-and-activity/runtime-lifecycle.md`). An
-  Agent's runtime variables override the daemon environment and the provider's declaration. Only
+  has been idle past that runtime's prompt-cache lifetime (`idleRecycleMinColdGapMs`: Claude Code
+  60 minutes, Codex 30 minutes, default 60 minutes), and warm bloated sessions recycle past 250k
+  tokens after 2 minutes quiet or immediately past 500k tokens. `wake-session-recycle.ts` holds the
+  provider-neutral decision and env knobs (`docs/observability/agent-status-and-activity/runtime-lifecycle.md`).
+  An Agent's runtime variables override the daemon environment and the provider's declaration. Only
   the sweep period is daemon-wide.
 - Codex's 30 minutes is shorter on purpose. On this Mac, over three to four days of Codex use,
   cache hits were nearly complete inside 35 minutes and about half gone after one to three hours.
@@ -168,11 +168,11 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   `readRecycleBriefing` seam on the provider contract; a provider without it never does. Any
   fact the seam cannot supply means resume, never recycle. Provider transcript parsing stays in the
   provider's own directory. The cold-idle sweep uses the same declared lifetime.
-- `daemon-runtime/cold-idle-sweep.ts` stops a live runtime every sweep period only when every guard
-  of the daemon's own state holds (no live turn, queued delivery or input, open tool call, background
-  task, launch, stop, stalled recovery, runner hold or migration) and the runtime's last event and the
-  session's own record are both older than the cold gap. The Agent stays active; its next message wakes
-  it through the ordinary exited-delivery path, never `no_process`.
+- `daemon-runtime/cold-idle-sweep.ts` stops a live runtime when every guard of the daemon's own
+  state holds (no live turn, queued delivery or input, open tool call, background task, launch,
+  stop, stalled recovery, runner hold or migration) and the session qualifies for cold-idle or
+  live warm/immediate bloat recycle. The Agent stays active; its next message wakes it through the
+  ordinary exited-delivery path, never `no_process`.
 - `daemon-runtime/wake-recycle.ts` decides at `#launchAgent`, once the launch config (and so the
   Agent's variables) is known and inside the registered launch, never before its first await. A
   recycle starts a session with no id, reports the old one as `replacedSessionId` (no session
