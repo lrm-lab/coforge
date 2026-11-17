@@ -3,7 +3,7 @@ import { z } from "zod";
 import { MemoryPage } from "#src/features/memory/memory-page";
 import { memoryCommand } from "#src/features/memory/memory.functions";
 import { PageLoadError } from "#src/features/errors/page-load-error";
-import * as m from "#src/paraglide/messages";
+import { MemoryPending } from "#src/features/memory/memory-pending";
 
 export const Route = createFileRoute("/w/$workspaceSlug/memory")({
   validateSearch: z.object({
@@ -41,11 +41,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/memory")({
     ]);
     return { list, detail };
   },
-  pendingComponent: () => (
-    <p role="status" className="p-5 text-sm text-tertiary">
-      {m.memory_loading()}
-    </p>
-  ),
+  pendingComponent: MemoryPending,
   errorComponent: PageLoadError,
   component: () => (
     <MemoryPage

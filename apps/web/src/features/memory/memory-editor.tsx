@@ -1,13 +1,13 @@
 import { MemoryFields } from "./memory-fields";
 import { useState } from "react";
-import { MEMORY_KINDS, type TeamMemoryHead, type TeamMemoryDraft } from "@lrm/coforge-sdk/agent";
+import { type TeamMemoryHead, type TeamMemoryDraft } from "@lrm/coforge-sdk/agent";
 import { Button } from "#src/components/base/buttons/button";
 import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { Input } from "#src/components/base/input/input";
 import * as m from "#src/paraglide/messages";
 import { MemoryProjectPicker } from "./memory-project-picker";
 import { memoryCommand } from "./memory.functions";
-import { memoryError } from "./memory-copy";
+import { memoryError, memoryKind } from "./memory-copy";
 
 export type MemoryDraft = TeamMemoryDraft & { revision: number; reason: string; requestId: string };
 export function memoryDraft(entry?: TeamMemoryHead): MemoryDraft {
@@ -39,9 +39,11 @@ export function MemoryEditor({
   onCancel: () => void;
   projectName?: string;
 }) {
+  const [projectPending, setProjectPending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [comparison, setComparison] = useState<TeamMemoryHead>();
+  const [comparisonProject, setComparisonProject] = useState<string>();
   const change = (patch: Partial<MemoryDraft>) =>
     onChange({ ...draft, ...patch, requestId: crypto.randomUUID() });
   return (
@@ -49,6 +51,7 @@ export function MemoryEditor({
       className="flex flex-col gap-5"
       onSubmit={async (event) => {
         event.preventDefault();
+        if (projectPending) return;
         setBusy(true);
         setError("");
         try {
@@ -72,6 +75,7 @@ export function MemoryEditor({
         value={draft.projectId ?? null}
         selectedName={projectName}
         onChange={(projectId) => change({ projectId })}
+        onCreatingChange={setProjectPending}
         allowCreate
         disabled={busy}
       />
@@ -106,7 +110,13 @@ export function MemoryEditor({
             try {
               const result = await memoryCommand({ data: { operation: "get", id: entry.id } });
               if (result.kind === "error") setError(memoryError(result.error));
-              else setComparison(result.result.entries[0]);
+              else {
+                const current = result.result.entries[0];
+                setComparison(current);
+                setComparisonProject(
+                  current?.projectId ? result.names[current.projectId] : undefined,
+                );
+              }
             } catch {
               setError(m.memory_failed());
             } finally {
@@ -128,6 +138,16 @@ export function MemoryEditor({
           <p className="whitespace-pre-wrap break-words text-sm text-secondary">
             {comparison.source}
           </p>
+          <dl className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)] gap-3 text-sm">
+            <dt className="text-tertiary">{m.memory_applies()}</dt>
+            <dd className="break-words text-primary">{comparison.applicability || "—"}</dd>
+            <dt className="text-tertiary">{m.memory_kind()}</dt>
+            <dd className="text-primary">{memoryKind(comparison.kind)}</dd>
+            <dt className="text-tertiary">{m.memory_project()}</dt>
+            <dd className="break-words text-primary">
+              {comparisonProject ?? m.memory_no_project()}
+            </dd>
+          </dl>
           <Button
             color="secondary"
             size="sm"
@@ -146,6 +166,7 @@ export function MemoryEditor({
           type="submit"
           isLoading={busy}
           isDisabled={
+            projectPending ||
             !draft.title.trim() ||
             !draft.content.trim() ||
             !draft.source.trim() ||

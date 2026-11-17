@@ -53,5 +53,16 @@
   "memory_correction": "修正",
   "memory_saved": "已保存",
   "memory_experience": "经验",
-  "memory_rebase_draft": "已核对当前版本，继续使用我的草稿"
+  "memory_rebase_draft": "已核对当前版本，继续使用我的草稿",
+  "memory_personal": "个人记忆",
+  "memory_agent": "我的 Agent",
+  "memory_agent_search": "查找我的 Agent",
+  "memory_no_agents": "没有找到属于你的 Agent。",
+  "memory_key": "记忆名称（小写字母、数字或横线）",
+  "memory_offline": "请连接这个 Agent 所在的 Computer，再管理它的本地记忆。",
+  "memory_unsupported": "请升级这个 Computer 后再管理个人记忆。",
+  "memory_timeout": "Computer 暂未回复。重试修改前，请先读取当前记忆确认是否已经保存。",
+  "memory_private_help": "只有你能在这里管理自己 Agent 的个人记忆，内容保存在它的 Computer 上。",
+  "memory_historical": "历史版本",
+  "memory_choose_agent": "选择你自己的一个 Agent，管理它的个人记忆。"
 }
