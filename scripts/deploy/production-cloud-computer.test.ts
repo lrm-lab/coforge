@@ -22,7 +22,10 @@ describe("production cloud computer deploy wiring", () => {
     expect(caddy).toContain("X-Coforge-Desktop-Proxy-Secret {$COFORGE_DESKTOP_PROXY_SECRET}");
 
     const productionComposeHead = compose.slice(0, compose.indexOf("\n  web:\n"));
-    expect(productionComposeHead).toContain("COFORGE_DESKTOP_UPSTREAM: 10.110.158.147:6090");
+    expect(productionComposeHead).toContain(
+      "COFORGE_DESKTOP_UPSTREAM: ${COFORGE_DESKTOP_HOST_GATEWAY:?deploy writes ECS private IP}:16090",
+    );
+    expect(productionComposeHead).not.toContain("COFORGE_DESKTOP_UPSTREAM: 10.110.158.147:6090");
     expect(productionComposeHead).toContain(
       "COFORGE_DESKTOP_PROXY_SECRET: ${COFORGE_CLOUD_CLUSTER_TOKEN:-}",
     );
@@ -35,5 +38,8 @@ describe("production cloud computer deploy wiring", () => {
     expect(workflow).toContain("secrets.COFORGE_CLOUD_SERVICE_PASSWORD");
     expect(workflow).toContain('--optional "COFORGE_CLOUD_CLUSTER_TOKEN ');
     expect(workflow).not.toMatch(/echo "\$COFORGE_CLOUD_CLUSTER_TOKEN"/);
+    expect(workflow).toContain("PRODUCTION_DESKTOP_TUNNEL_PUBLIC_KEY");
+    expect(workflow).toContain("Ensure desktop tunnel relay on the ECS");
+    expect(workflow).toContain("infra/production/desktop-tunnel/desktop-tunnel-docker-relay.py");
   });
 });

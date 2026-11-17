@@ -8,7 +8,9 @@ name: Deploy Web (production)
 # workflow ships the Compose assets and refreshes only the cloud-computer
 # secrets (COFORGE_CLOUD_CLUSTER_TOKEN / COFORGE_CLOUD_SERVICE_PASSWORD) and the
 # Caddy DNS-01 credentials (ALIDNS_ACCESS_KEY_ID / ALIDNS_ACCESS_KEY_SECRET)
-# from the production GitHub Environment.
+# from the production GitHub Environment. It also installs the desktop reverse
+# tunnel public key and the ECS private-IP relay when configured
+# (docs/operations/cloud-swarm/production-desktop-tunnel.md).
 
 on:
   workflow_dispatch:
@@ -137,6 +139,35 @@ jobs:
           chmod 600 "$ssh_dir/key"
           echo "SSH_DIR=$ssh_dir" >> "$GITHUB_ENV"
 
+      - name: Ensure desktop tunnel public key on the ECS
+        env:
+          PRODUCTION_DESKTOP_TUNNEL_PUBLIC_KEY: ${{ vars.PRODUCTION_DESKTOP_TUNNEL_PUBLIC_KEY }}
+          DEPLOY_SSH_HOST: ${{ vars.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
+        run: |
+          if [ -z "${PRODUCTION_DESKTOP_TUNNEL_PUBLIC_KEY}" ]; then
+            echo "PRODUCTION_DESKTOP_TUNNEL_PUBLIC_KEY unset; skipping tunnel key install"
+            exit 0
+          fi
+          case "$PRODUCTION_DESKTOP_TUNNEL_PUBLIC_KEY" in
+            ssh-ed25519\ *|ssh-rsa\ *) ;;
+            *)
+              echo "PRODUCTION_DESKTOP_TUNNEL_PUBLIC_KEY must be an OpenSSH public key line" >&2
+              exit 1
+              ;;
+          esac
+          ssh -i "$SSH_DIR/key" \
+            -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
+            -o BatchMode=yes \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=8 \
+            "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
+            "pubkey=\$(cat); mkdir -p ~/.ssh && chmod 700 ~/.ssh &&
+             touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys &&
+             grep -qxF \"\$pubkey\" ~/.ssh/authorized_keys || echo \"\$pubkey\" >> ~/.ssh/authorized_keys &&
+             echo tunnel-key-ready" \
+            <<<"$PRODUCTION_DESKTOP_TUNNEL_PUBLIC_KEY"
+
       - name: Log in to the image registry
         env:
           GHCR_TOKEN: ${{ github.token }}
@@ -156,6 +187,8 @@ jobs:
             infra/production/docker-compose.yml \
             infra/production/caddy/Caddyfile \
             infra/production/centrifugo/config.yaml \
+            infra/production/desktop-tunnel/desktop-tunnel-docker-relay.py \
+            infra/production/desktop-tunnel/coforge-production-desktop-docker-relay.user.service \
             scripts/deploy/deploy-secrets.sh \
             scripts/deploy/deploy-release-snapshot.sh \
             scripts/deploy/deploy-diagnostics.sh \
@@ -170,6 +203,26 @@ jobs:
             -o ServerAliveCountMax=8 \
             "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
             "mkdir -p $REMOTE_ROOT && tar -xzf - -C $REMOTE_ROOT" < "$REMOTE_ASSETS"
+
+      - name: Ensure desktop tunnel relay on the ECS
+        run: |
+          ssh -i "$SSH_DIR/key" \
+            -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
+            -o BatchMode=yes \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=8 \
+            "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
+            "set -e
+             install -d -m 755 \"\$HOME/bin\" \"\$HOME/.config/systemd/user\"
+             install -m 755 \
+               '$REMOTE_ROOT/infra/production/desktop-tunnel/desktop-tunnel-docker-relay.py' \
+               \"\$HOME/bin/desktop-tunnel-docker-relay.py\"
+             install -m 644 \
+               '$REMOTE_ROOT/infra/production/desktop-tunnel/coforge-production-desktop-docker-relay.user.service' \
+               \"\$HOME/.config/systemd/user/coforge-production-desktop-docker-relay.service\"
+             systemctl --user daemon-reload
+             systemctl --user enable --now coforge-production-desktop-docker-relay.service
+             systemctl --user is-active coforge-production-desktop-docker-relay.service"
 
       # Other runtime secrets stay on the host. Cloud-computer secrets are also
       # kept as production Environment secrets so a deploy can refresh them

@@ -36,10 +36,14 @@ services:
       COFORGE_CADDYFILE_SHA256: ${COFORGE_CADDYFILE_SHA256:?deploy script writes .env}
       ALIDNS_ACCESS_KEY_ID: ${ALIDNS_ACCESS_KEY_ID:?deploy script reads alidns_access_key_id}
       ALIDNS_ACCESS_KEY_SECRET: ${ALIDNS_ACCESS_KEY_SECRET:?deploy script reads alidns_access_key_secret}
-      # Internal address of the Swarm desktop proxy on the production cloud
-      # computer manager (this lab host). Caddy reaches it after the web app
-      # allows the signed-in computer owner. Not a public listener.
-      COFORGE_DESKTOP_UPSTREAM: 10.110.158.147:6090
+      # Swarm host is on the Lenovo intranet; the ECS cannot dial it. The Swarm
+      # manager keeps an SSH reverse tunnel on the ECS loopback only
+      # (127.0.0.1:16090 → manager :6090). Compose containers cannot reach
+      # loopback or docker0 (host-gateway), so a host relay listens on the ECS
+      # private IP and write_deploy_env records that IP as
+      # COFORGE_DESKTOP_HOST_GATEWAY. Do not bind the tunnel on 0.0.0.0.
+      # docs/operations/cloud-swarm/production-desktop-tunnel.md
+      COFORGE_DESKTOP_UPSTREAM: ${COFORGE_DESKTOP_HOST_GATEWAY:?deploy writes ECS private IP}:16090
       # Shared with the Swarm host (`COFORGE_CLUSTER_TOKEN`). Caddy sets it on
       # the upstream request after forward_auth; the host rejects callers that
       # omit it. Same plaintext as COFORGE_CLOUD_CLUSTER_TOKEN on this host.
