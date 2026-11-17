@@ -49,14 +49,13 @@ These rules apply to `src/features/computers/`.
   user to pick a host. Another member's default cloud Computer stays linked for
   that owner's Agents and daemons, but `listComputers` / `listComputerNames`
   hide it from everyone except its owner (`computer-list-visibility.server.ts`);
-  extras and local Computers stay listed for every member. The owner's Open desktop button opens
+  extras and local Computers stay listed for every member. The owner's Computer detail Open desktop still opens
   `<COFORGE_CLOUD_DESKTOP_ORIGIN>/desktop/<computer id>/` in its own window when that
   deployment variable is set, and opening it again brings that window forward.
-  The same owner's Computer tab opens that Agent's
-  own screen at `/desktop/<computer id>/<agent id>/`, in that Agent's window.
-  That origin is the deployment site; Caddy confirms the signed-in owner before
-  proxying to the Swarm host. The address carries no token. Without the variable
-  the button is absent. Formatting a cloud computer removes its service and disk,
+  The Agent profile Computer row embeds `/desktop/<computer id>/<agent id>/` in-page
+  (thumbnail → overlay; see `agent-desktop-thumbnail.tsx`). That origin is the
+  deployment site; Caddy confirms the signed-in owner before proxying to the Swarm
+  host. The address carries no token. Without the variable the control is absent. Formatting a cloud computer removes its service and disk,
   then places the same computer again. The owner must type its name; the server
   checks that name. Agents, messages, and workspace links stay.
 - An upgrade's status is polled and settled only by `ComputerUpgradeWatcher`, mounted in the

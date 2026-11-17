@@ -1,0 +1,8 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "computer_desktop_wake": "Wake desktop",
+  "computer_desktop_minimize": "Minimize desktop",
+  "computer_desktop_sleep": "Sleep desktop",
+  "computer_desktop_sleeping_in": "Sleeps in {seconds}s",
+  "computer_desktop_offline": "Desktop unavailable while offline"
+}
