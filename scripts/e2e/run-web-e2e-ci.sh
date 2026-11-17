@@ -178,6 +178,22 @@ for file in "${files[@]}"; do
   fi
 done
 
+# Shard 1 also sweeps every seeded page, theme and width for layout defects
+# (apps/web/scripts/ui-sweep.mjs, strict: any finding fails), the check that stands in for the
+# per-page layout e2es (docs/release/web-e2e.md). Its report and screenshots join the output. A
+# single-file soak (E2E_FILE) skips it.
+if [ "$shard" = 1 ] && [ -z "${E2E_FILE:-}" ] && [ ${#failed[@]} -eq 0 ]; then
+  start=$(date +%s)
+  result=pass
+  UI_SWEEP_STRICT=1 UI_SWEEP_BASE="$COFORGE_E2E_WEB_URL" UI_SWEEP_OUT="$output/ui-sweep" \
+    UI_SWEEP_CHROME_PATH="${COFORGE_E2E_CHROME:-}" \
+    timeout 900 bun run ./scripts/ui-sweep.mjs > "$output/logs/ui-sweep.log" 2>&1 || result=fail
+  seconds=$(( $(date +%s) - start ))
+  printf '%s ui-sweep (%ss)\n' "$result" "$seconds"
+  printf '| ui-sweep | %s | %s |\n' "$result" "$seconds" >> "$summary"
+  [ "$result" = pass ] || failed+=("ui-sweep (see ui-sweep/findings.md)")
+fi
+
 if [ ${#failed[@]} -gt 0 ]; then
   printf '\n%s failed:\n' "${#failed[@]}" >&2
   printf '  %s\n' "${failed[@]}" >&2

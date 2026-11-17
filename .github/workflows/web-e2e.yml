@@ -126,6 +126,7 @@ jobs:
           path: |
             ${{ env.E2E_OUTPUT }}/logs
             ${{ env.E2E_OUTPUT }}/screenshots
+            ${{ env.E2E_OUTPUT }}/ui-sweep
             ${{ env.E2E_OUTPUT }}/summary.md
           if-no-files-found: ignore
           retention-days: 7

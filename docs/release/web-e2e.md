@@ -26,6 +26,18 @@ listed or not) and `repeat` (1-99) run only that file, that many times in a row,
 (`<file>.<n>.log`); one failure turns the run red. Ask for it with
 `gh workflow run web-e2e.yml --ref <branch> -f file=<name>.e2e.ts -f repeat=10`.
 
+## Layout sweep
+
+After shard 1's files pass, the same stack runs `apps/web/scripts/ui-sweep.mjs` with
+`UI_SWEEP_STRICT=1`: every page and dialog the dev seed populates, in light and dark, at 1440, 1024
+and 390 wide, checked for horizontal overflow, elements past the viewport, clipped text, fixed
+elements over the page title, header controls under 24px, dialogs that do not cover the page or
+do not close on Escape, popovers off screen, forbidden classes, page exceptions and console
+errors. Any finding fails the run; the report (`findings.md`, `index.html`) and its screenshots
+are in the shard's output under `ui-sweep/`. This is where page-layout checks live, rather than
+in one browser e2e per page (task #coforge-designer-team:#128). Run it locally against a
+`managed-web.sh` stack with `UI_SWEEP_BASE=http://127.0.0.1:<port> bun run --cwd apps/web ui:sweep`.
+
 ## What is on the list
 
 Admission to the scheduled list requires three consecutive clean runs on a private stack,

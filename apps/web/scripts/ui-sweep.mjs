@@ -21,6 +21,8 @@
 //   UI_SWEEP_LOCALE       locale path prefix (default "en")
 //   UI_SWEEP_THEMES       comma-separated theme names (light,dark)
 //   UI_SWEEP_VIEWPORTS    comma-separated viewport names (1440,1024,390)
+//   UI_SWEEP_STRICT       "1": exit non-zero when any capture has a finding, exception or
+//                         console error (CI)
 
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -378,7 +380,13 @@ async function main() {
 
             if (surface.postEscape) {
               await page.pressEscape();
-              const after = await page.evalJs('document.querySelectorAll("[role=dialog]").length');
+              // A dialog leaves through its exit animation: count what is still there once that
+              // has had time to run, not in the same frame as the key.
+              let after = await page.evalJs('document.querySelectorAll("[role=dialog]").length');
+              for (let waited = 0; after !== 0 && waited < 1500; waited += 100) {
+                await sleep(100);
+                after = await page.evalJs('document.querySelectorAll("[role=dialog]").length');
+              }
               record.dialogCountAfterEscape = after;
               if (after !== 0) {
                 record.findings.push({
@@ -451,6 +459,17 @@ async function main() {
 
     writeReports(results, notes);
     printSummary(results);
+    // In CI (UI_SWEEP_STRICT=1) any finding, page exception or console error fails the run; the
+    // report above says which surface, theme and width.
+    if (process.env.UI_SWEEP_STRICT === "1") {
+      const failures = results.filter(
+        (r) => r.findings.length || r.exceptions.length || r.consoleErrors.length,
+      ).length;
+      if (failures) {
+        console.error(`UI sweep: ${failures} capture(s) with findings; see findings.md`);
+        process.exitCode = 1;
+      }
+    }
 
     ws.close();
   } finally {

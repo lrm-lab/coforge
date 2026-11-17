@@ -85,6 +85,9 @@ export async function launchChrome(chromePath, port, profilePrefix = "ui-sweep-c
       "--force-color-profile=srgb",
       `--remote-debugging-port=${port}`,
       `--user-data-dir=${profileDir}`,
+      // Extra flags the environment needs, as for the e2e files that launch Chrome themselves
+      // (a CI runner has no user namespaces for the sandbox: --no-sandbox).
+      ...(process.env.COFORGE_E2E_CHROME_ARGS?.split(/\s+/).filter(Boolean) ?? []),
       "about:blank",
     ],
     { stdin: "ignore", stdout: "ignore", stderr: "ignore" },

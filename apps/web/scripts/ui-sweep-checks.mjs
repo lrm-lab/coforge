@@ -76,11 +76,16 @@ export const CHECKS_EXPR = `
     }
   }
 
-  // 4. fixed/absolute elements overlapping the page <h1>
+  // 4. fixed elements overlapping the page <h1>: a floating bar or banner over the title. An
+  // absolutely positioned piece belongs to its component (an avatar's sticker beside a DM's
+  // title reaches into the title's box without covering a letter), so it is not counted.
   const h1 = document.querySelector("h1");
+  // While a dialog, menu or listbox is open the page under it, <h1> included, is covered by
+  // design (its underlay is a transparent fixed layer over everything).
+  const overlayOpen = document.querySelector('[role="dialog"], [role="menu"], [role="listbox"]');
   if (!h1) {
     findings.push({ check: "missing-h1", detail: "no <h1> found on the page" });
-  } else {
+  } else if (!overlayOpen) {
     const h1Rect = h1.getBoundingClientRect();
     let overlapCount = 0;
     for (const el of all) {
@@ -90,19 +95,21 @@ export const CHECKS_EXPR = `
       // fixed/absolute wrapper that contains one.
       if (el.querySelector('[role="dialog"], [role="menu"], [role="listbox"]')) continue;
       const style = getComputedStyle(el);
-      if (style.position !== "fixed" && style.position !== "absolute") continue;
+      if (style.position !== "fixed") continue;
       if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") continue;
       const r = el.getBoundingClientRect();
       if (r.width === 0 || r.height === 0) continue;
       const overlaps = !(r.right <= h1Rect.left || r.left >= h1Rect.right || r.bottom <= h1Rect.top || r.top >= h1Rect.bottom);
       if (overlaps && overlapCount < 5) {
-        findings.push({ check: "overlaps-h1", detail: "fixed/absolute element overlaps the page <h1>", locator: locator(el) });
+        findings.push({ check: "overlaps-h1", detail: "fixed element overlaps the page <h1>", locator: locator(el) });
         overlapCount++;
       }
     }
   }
 
-  // 5. buttons/inputs inside headers: height outside [32, 48]
+  // 5. buttons/inputs inside headers smaller than 24px tall, the smallest target WCAG 2.2 allows
+  // (2.5.8). Bigger is never a defect: a header holds avatar stacks (24px) and an account
+  // photo button (101px) by design.
   const headers = document.querySelectorAll("header");
   let headerControlCount = 0;
   for (const header of headers) {
@@ -112,8 +119,8 @@ export const CHECKS_EXPR = `
       if (style.display === "none" || style.visibility === "hidden") continue;
       const r = el.getBoundingClientRect();
       if (r.height === 0) continue;
-      if ((r.height < 32 || r.height > 48) && headerControlCount < 8) {
-        findings.push({ check: "header-control-size", detail: \`height=\${Math.round(r.height)}px (expected 32-48px)\`, locator: locator(el) });
+      if (r.height < 24 && headerControlCount < 8) {
+        findings.push({ check: "header-control-size", detail: \`height=\${Math.round(r.height)}px (at least 24px)\`, locator: locator(el) });
         headerControlCount++;
       }
     }
