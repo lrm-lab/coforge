@@ -19,7 +19,7 @@ describe("cli-guide-sections", () => {
       "Before using a Memory Hint, call native `memory_disposition`",
     );
     expect(sections.execution).toContain("Cloud skills here.");
-    expect(sections.execution).toContain("MEMORY.md and notes/active-context.md");
+    expect(sections.execution).toContain("Local memory: save decisions/corrections with sources.");
     expect(sections.safety).toContain("post a `page:fill` action card");
     expect(sections.safety).toContain("Extra rule.");
   });
