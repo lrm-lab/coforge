@@ -245,6 +245,28 @@ describe("staging environment configuration", () => {
   });
 });
 
+test("deploy workflows ship every helper remote-deploy.sh sources", async () => {
+  const remote = await Bun.file(new URL("./remote-deploy.sh", import.meta.url)).text();
+  const sourced = [
+    ...remote.matchAll(/source "\$\(dirname "\$\{BASH_SOURCE\[0\]\}"\)\/([A-Za-z0-9._-]+)"/g),
+  ].map((match) => match[1]);
+  expect(sourced).toContain("deploy-image-retention.sh");
+  for (const workflowPath of [
+    "../../.github/workflows/deploy-staging.yml",
+    "../../.github/workflows/deploy-production.yml",
+  ]) {
+    const workflow = await Bun.file(new URL(workflowPath, import.meta.url)).text();
+    const marker = "- name: Copy deployment assets";
+    const start = workflow.indexOf(marker);
+    expect(start).toBeGreaterThanOrEqual(0);
+    const next = workflow.indexOf("\n      - name:", start + marker.length);
+    const assets = workflow.slice(start, next === -1 ? undefined : next);
+    for (const name of sourced) {
+      expect(assets).toContain(`scripts/deploy/${name}`);
+    }
+  }
+});
+
 test("GitHub workflows pin external actions to full commit SHAs", async () => {
   for (const path of [
     "../../.github/workflows/ci.yml",

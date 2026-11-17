@@ -183,6 +183,7 @@ jobs:
             scripts/deploy/deploy-release-snapshot.sh \
             scripts/deploy/deploy-diagnostics.sh \
             scripts/deploy/deploy-wildcard-probe.sh \
+            scripts/deploy/deploy-image-retention.sh \
             scripts/deploy/catalog-snapshot.sh \
             scripts/deploy/remote-deploy.sh
           ssh -i "$SSH_DIR/key" \
