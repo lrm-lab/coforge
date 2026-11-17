@@ -179,8 +179,17 @@ test("Don't answer asks once, then sends the decline and grays the card", async 
   /** True once the element stands where it stood at the last check: the stream has settled. */
   const still = (selector: string) =>
     `(() => { const box = document.querySelector('${selector}')?.getBoundingClientRect(); const at = box && box.top + "," + box.left; const same = !!box && window.__still === at; window.__still = at; return same; })()`;
+  const historyOf = (id: string) => `${card(id)}.closest("[data-scroll-restoration-id]")`;
+  const returningFocusAfterDeclineNeverScrollsTheConversation = async (id: string) => {
+    const readingAt = await evaluate<number>(
+      `(() => { const history = ${historyOf(id)}; const at = history.scrollTop; history.scrollTop = 0; return at; })()`,
+    );
+    await waitFor(`document.activeElement === ${card(id)}`);
+    expect(await evaluate<number>(`${historyOf(id)}.scrollTop`)).toBe(0);
+    await evaluate(`(${historyOf(id)}.scrollTop = ${readingAt}, true)`);
+  };
   /** Asks to decline, backs out two ways (Escape, Keep answering), asks again and confirms. */
-  const declineOnce = async (id: string, title: string, shot: string) => {
+  const declineOnce = async (id: string, title: string, shot: string, moveOn = false) => {
     await waitFor(still(decline(id)));
     await browser("click", decline(id));
     await waitFor(`${dialogWith(title)} !== undefined`);
@@ -203,6 +212,7 @@ test("Don't answer asks once, then sends the decline and grays the card", async 
     await waitFor(`${dialogWith(title)} !== undefined`);
     await browser("screenshot", join(artifacts, `${shot}-confirm.png`));
     await clickText('[role="dialog"] button', "Don't answer");
+    if (moveOn) await returningFocusAfterDeclineNeverScrollsTheConversation(id);
     await waitFor(`${state(id)} === "cancelled"`);
     const declined = await stored(id);
     expect(declined.state).toBe("cancelled");
@@ -231,8 +241,11 @@ test("Don't answer asks once, then sends the decline and grays the card", async 
     await evaluate(`(${card(choice.id)}.scrollIntoView({ block: "start" }), true)`);
     // A reader's own scroll, which a programmatic one is not: it ends following the latest, so the
     // stream does not return to the bottom when the card settles.
+    const history = historyOf(choice.id);
+    const scrolledFrom = await evaluate<number>(`${history}.scrollTop`);
     await browser("mouse", "move", "900", "300");
     await browser("mouse", "wheel", "-40");
+    await waitFor(`${history}.scrollTop < ${scrolledFrom}`);
     await waitFor(still(decline(choice.id)));
     await waitFor(still(decline(choice.id)));
 
@@ -253,7 +266,7 @@ test("Don't answer asks once, then sends the decline and grays the card", async 
     // The questions card waiting below is declined the same way, its popover naming the count.
     await evaluate(`(${card(questions.id)}.scrollIntoView({ block: "start" }), true)`);
     const questionsBefore = await look(questions.id);
-    await declineOnce(questions.id, "Don't answer these 2 questions?", "desktop-questions");
+    await declineOnce(questions.id, "Don't answer these 2 questions?", "desktop-questions", true);
     await expectDeclined(questions.id, questionsBefore);
 
     // In Chinese the popover speaks Chinese, and "继续回答" goes back with nothing sent.

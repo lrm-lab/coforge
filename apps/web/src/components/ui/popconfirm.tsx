@@ -49,7 +49,7 @@ export function Popconfirm({
     window.setTimeout(() => {
       const active = document.activeElement;
       if (active && active !== document.body) return;
-      fallbackFocus()?.focus();
+      fallbackFocus()?.focus({ preventScroll: true });
     }, POPOVER_EXIT_SETTLE_MS);
   }
 
