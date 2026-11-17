@@ -19,6 +19,7 @@ import {
   type AcpSessionInput,
   rememberCompletedPrompt,
 } from "./session-turn";
+import { resolveAcpPermission } from "./session-permission";
 import { AcpSteering } from "./steering";
 import { SessionExit } from "#src/session-exit";
 
@@ -405,15 +406,10 @@ export class AcpSession implements AgentSession {
   #permission(request: RequestPermissionRequest) {
     const live =
       !this.#disposed &&
+      !this.#failed &&
       !this.#interrupting &&
-      !!this.#active &&
       request.sessionId === this.#identity?.sessionId;
-    const allow = live ? request.options.find((option) => option.kind === "allow_once") : undefined;
-    return {
-      outcome: allow
-        ? { outcome: "selected" as const, optionId: allow.optionId }
-        : { outcome: "cancelled" as const },
-    };
+    return resolveAcpPermission(request, live);
   }
 
   cancelPendingNotices() {

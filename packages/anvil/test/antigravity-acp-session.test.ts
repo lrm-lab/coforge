@@ -377,3 +377,37 @@ test("a launch against agy below the ACP floor is refused without spawning the s
     await f.cleanup();
   }
 });
+
+test("permission requests for the live session are allowed between turns, while other sessions are cancelled", async () => {
+  await withSession(async ({ f, session, events }) => {
+    await session.sendMessage("permission-after-turn");
+    await waitFor(() => completed(events).length > 0);
+    let answers: Record<string, unknown> = {};
+    for (let i = 0; i < 100; i++) {
+      answers = Object.fromEntries(
+        (await f.requests()).filter((r) => !r.method).map((r) => [r.id, r.result?.outcome]),
+      );
+      if ("perm-own" in answers && "perm-other" in answers) break;
+      await Bun.sleep(20);
+    }
+    expect(answers).toEqual({
+      "perm-other": { outcome: "cancelled" },
+      "perm-own": { outcome: "selected", optionId: "allow" },
+    });
+  });
+});
+
+test("permission requests arriving while interrupting are cancelled", async () => {
+  await withSession(async ({ f, session, events }) => {
+    await session.sendMessage("permission-on-interrupt");
+    await waitForRequest(f, "session/prompt");
+    await session.interrupt!();
+    await waitFor(() => completed(events).length > 0);
+    const answers = Object.fromEntries(
+      (await f.requests()).filter((r) => !r.method).map((r) => [r.id, r.result?.outcome]),
+    );
+    expect(answers).toEqual({
+      "perm-interrupting": { outcome: "cancelled" },
+    });
+  });
+});
