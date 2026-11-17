@@ -272,8 +272,15 @@ test("a questions card is answered in the stream, question by question, then sen
     await waitFor(picked("keep"));
     await goTo(2);
 
-    // Offline, the send fails: the card says so and keeps every answer for another try.
+    // Offline, the send fails: the card says so and keeps every answer for another try. Going
+    // offline can add a line under the stream (`ConversationUpdateNotice`), which moves the card
+    // up; Send is clicked once the page has handled it, as the click lands where it was measured.
+    // This listener comes after the page's own, so the line, if any, is in place by the next frame.
+    await evaluate(
+      `(window.addEventListener("offline", () => requestAnimationFrame(() => (window.__e2eOffline = true)), { once: true }), true)`,
+    );
     await browser("set", "offline", "on");
+    await waitFor(`window.__e2eOffline === true`);
     await browser("click", send);
     await waitFor(`${card(messageId)}.querySelector('[role="alert"]') !== null`);
     await browser("set", "offline", "off");
