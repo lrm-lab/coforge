@@ -19,10 +19,11 @@ import {
  * Signing in with GitHub on CoForge's own page, end to end. The browser goes to GitHub's authorize
  * page with CoForge's redirect URI and comes back with a code, which the Web server has Authing
  * exchange (`signin-by-mobile`); the person is then signed in like any other. A new person is
- * asked for a name, a returning one goes to the page they came for; a state that does not match
- * the browser's, a refusal on GitHub's page and a code Authing cannot exchange each send the
- * person back to the sign-in page with a message, and Authing hears nothing of the first two. A
- * deployment without GitHub sign-in shows no button and answers the routes with 404.
+ * asked for a name, a returning one goes to the page they came for, and a code Authing cannot
+ * exchange sends the person back to the sign-in page with a message. The ways back refused before
+ * Authing is asked (a state other than the browser's, no start of ours, a refusal on GitHub's page)
+ * and a deployment without GitHub sign-in are unit tests
+ * (`authentication-tests/github-sign-in-refusals.test.ts`).
  *
  * Opt-in like the other browser E2Es, and brings its own servers (`e2e-sign-in-harness.ts`,
  * `e2e-fake-github.ts`). It needs `agent-browser`, `openssl`, the local dev database and a local
@@ -63,21 +64,6 @@ test("signing in with GitHub", async () => {
     await removeSeeded();
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
-
-    // A deployment without GitHub sign-in: no button, and the routes are not there.
-    stack = await startSignInStack({
-      people,
-      webPort,
-      artifacts,
-      env: { COFORGE_GITHUB_SIGN_IN_CLIENT_ID: "", AUTHING_GITHUB_CONNECTION: "" },
-    });
-    await browser("open", `${stack.origin}/login`);
-    await waitFor(onSignInPage(stack.origin));
-    expect(await hasGitHubButton()).toBe(false);
-    expect((await fetch(`${stack.origin}/auth/github`)).status).toBe(404);
-    expect((await fetch(`${stack.origin}/auth/github/callback?code=x&state=y`)).status).toBe(404);
-    await stack.stop();
-    stack = undefined;
 
     stack = await startSignInStack({
       people,
@@ -181,33 +167,7 @@ test("signing in with GitHub", async () => {
     expect(fake.registered.map((person) => person.sub)).toEqual([fresh.sub]);
     expect(await evaluate<string>(`${nameField}.value`)).toBe("Fresh Octo");
 
-    // A state other than the browser's, or none, is refused before Authing is asked anything.
     const signInsBefore = fake.signIns.length;
-    for (const state of ["tampered-state", null]) {
-      github.respondWith({ kind: "approve", person: people.octo, state });
-      await openSignIn(`/login?returnTo=${encodeURIComponent(returnTo)}`);
-      await pressGitHub();
-      await waitFor(returnedToSignIn("Could not sign in with GitHub. Try again."));
-      expect(
-        await evaluate<string | null>(`new URL(location.href).searchParams.get("returnTo")`),
-      ).toBe(returnTo);
-    }
-    await browser("screenshot", join(artifacts, "3-state-mismatch.png"));
-    expect(fake.signIns).toHaveLength(signInsBefore);
-
-    // A callback with no start (no cookie of ours) is refused the same way.
-    await browser("cookies", "clear");
-    await browser("open", `${origin}/auth/github/callback?code=abc&state=abc`);
-    await waitFor(returnedToSignIn("Could not sign in with GitHub. Try again."));
-    expect(fake.signIns).toHaveLength(signInsBefore);
-
-    // Refusing on GitHub's page says so, and Authing is not asked.
-    github.respondWith({ kind: "deny" });
-    await openSignIn();
-    await pressGitHub();
-    await waitFor(returnedToSignIn("GitHub sign-in was cancelled."));
-    expect(fake.signIns).toHaveLength(signInsBefore);
-    await browser("screenshot", join(artifacts, "4-denied.png"));
 
     // A code Authing cannot exchange is a failure, with no one signed in.
     github.respondWith({ kind: "approve", person: null });
