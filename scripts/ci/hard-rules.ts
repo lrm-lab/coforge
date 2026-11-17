@@ -36,6 +36,7 @@ import {
   RENAME_PURITY_FIX,
   REVERT_EFFECT_FIX,
 } from "./commit-granularity";
+import { E2E_FLOW_FIX, rangeE2eFlowViolations } from "./e2e-flow";
 
 type Rule =
   | "size-ratchet"
@@ -49,6 +50,7 @@ type Rule =
   | "revert-effect"
   | "rename-purity"
   | "commit-mix"
+  | "e2e-flow"
   | TreeRule;
 type Violation = { rule: Rule; location: string; found: string };
 
@@ -68,6 +70,7 @@ const FIX: Record<Rule, string> = {
   "revert-effect": REVERT_EFFECT_FIX,
   "rename-purity": RENAME_PURITY_FIX,
   "commit-mix": COMMIT_MIX_FIX,
+  "e2e-flow": E2E_FLOW_FIX,
   ...TREE_FIX,
 };
 
@@ -416,6 +419,11 @@ async function check(args: string[]): Promise<Violation[] | string> {
       ...(await fileViolations({ kind: "range", base, head })),
       ...(await granularityFor(base, head)).map((v) => ({
         rule: v.rule,
+        location: v.sha,
+        found: v.found,
+      })),
+      ...rangeE2eFlowViolations(base, head).map((v) => ({
+        rule: "e2e-flow" as const,
         location: v.sha,
         found: v.found,
       })),

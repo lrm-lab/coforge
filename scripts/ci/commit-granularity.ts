@@ -22,6 +22,7 @@
 // usage: bun scripts/ci/commit-granularity.ts --message <file>
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { E2E_FLOW_FIX, stagedE2eFlowProblem } from "./e2e-flow";
 
 export const REVERT_EFFECT_FIX =
   "Add a `Revert-effect: <what reverting this commit would break>` trailer to the message (`none` for docs and tests only).";
@@ -256,6 +257,9 @@ async function checkMessageFile(path: string): Promise<number> {
     ...(hasRevertEffect(message)
       ? []
       : [`commit-msg: missing Revert-effect trailer.\n${REVERT_EFFECT_FIX}`]),
+    ...[stagedE2eFlowProblem(message)]
+      .filter((problem) => problem !== undefined)
+      .map((problem) => `commit-msg: ${problem}.\n${E2E_FLOW_FIX}`),
   ];
   for (const problem of problems) console.error(problem);
   return problems.length === 0 ? 0 : 1;
