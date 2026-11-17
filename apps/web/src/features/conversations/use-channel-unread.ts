@@ -9,6 +9,7 @@ import {
   userConversationChannel,
   workspaceConversationChannel,
 } from "./conversation-realtime";
+import type { MarkedEventUnreadPayload } from "./sidebar-unread-state";
 import {
   decodeConversationActivityEvent,
   type ConversationActivityEvent,
@@ -46,43 +47,37 @@ export function useChannelUnread({
   userId,
   channels,
   openConversationId,
+  openThreadRootId,
   listedConversationIds,
   onClosedConversationActivity,
   onChannelSignal,
   onSidebarListsChanged,
   onConversationActivity,
+  onConversationMarked,
   readPosition,
 }: {
   workspaceId?: string;
-  /** The viewer, whose own direct-message signal channel carries their DM badges, and whose own
-   * messages never count. */
   userId?: string;
-  /** Channel rows currently listed; channel events for anything else are ignored. */
   channels: readonly UnreadChannel[];
-  /** The channel or DM currently shown in the detail pane, if any. */
   openConversationId?: string;
-  /** Every chat the sidebar lists, channels and DMs, by conversation id. */
+  openThreadRootId?: string;
   listedConversationIds: ReadonlySet<string>;
-  /** A new message arrived in a closed chat, or a DM the list has not read yet: these lists
-   * bring it in. */
   onClosedConversationActivity: (lists: readonly ChatList[], event: UnreadEventInput) => void;
-  /** A channel was created, renamed, described, archived, unarchived or is gone
-   * (`channel.created.v1`, `channel.updated.v1`). */
   onChannelSignal: (signal: ChannelSignal) => void;
-  /** These lists are stale: the viewer's own place in a chat changed elsewhere (`ViewerEvent`),
-   * or a subscribe may have missed what kept them live (`listsMissedBySubscribe`). */
   onSidebarListsChanged: (lists: readonly ChatList[]) => void;
-  /** Where a list was read in a signal channel's stream, once a read of it under way has settled;
-   * it settles to undefined for a list read without one (`useListReadPosition`,
-   * `listReadPosition`), which is then re-read. */
   readPosition: (
     list: ChatList,
     channel: string,
   ) => Promise<StreamPosition | undefined> | undefined;
-  /** One message in a chat the sidebar lists: write that row from the event, no read. */
-  onConversationActivity: (event: ConversationActivityEvent) => void;
+  onConversationActivity: (
+    event: ConversationActivityEvent,
+    options?: { openConversationId?: string; openThreadRootId?: string },
+  ) => void;
+  onConversationMarked?: (
+    event: MarkedEventUnreadPayload,
+    options: { openConversationId?: string },
+  ) => void;
 }): UnreadState {
-  // Never replaced, so the callbacks below read it without listing it.
   const [store] = useState(() => new UnreadStore());
   const queryClient = useQueryClient();
   const refs = useRef({
@@ -90,24 +85,28 @@ export function useChannelUnread({
     userId,
     channels,
     openConversationId,
+    openThreadRootId,
     listedConversationIds,
     onClosedConversationActivity,
     onChannelSignal,
     onSidebarListsChanged,
     readPosition,
     onConversationActivity,
+    onConversationMarked,
   });
   refs.current = {
     workspaceId,
     userId,
     channels,
     openConversationId,
+    openThreadRootId,
     listedConversationIds,
     onClosedConversationActivity,
     onChannelSignal,
     onSidebarListsChanged,
     readPosition,
     onConversationActivity,
+    onConversationMarked,
   };
   const rereadMissed = useCallback(
     (kind: "workspace" | "user", channel: string, recovery: SubscribedRecovery) =>
@@ -146,8 +145,7 @@ export function useChannelUnread({
         if ("unreadCount" in event) {
           const open = refs.current.openConversationId;
           store.update((current) => applyMarked(current, event, { openConversationId: open }));
-          // Read or marked unread elsewhere (another tab, Activity): a kept open read, a preload's,
-          // no longer says where a next open's unread starts. The open on screen keeps what it froze.
+          refs.current.onConversationMarked?.(event, { openConversationId: open });
           markOpenReadStale(queryClient, event.conversationId);
         }
         const lists = listsChangedIn(refs.current.workspaceId, event);
@@ -177,6 +175,7 @@ export function useChannelUnread({
       const {
         channels: channelRows,
         openConversationId: open,
+        openThreadRootId: openThread,
         listedConversationIds: listed,
         onClosedConversationActivity: reopenFromActivity,
         onConversationActivity: writeRow,
@@ -184,10 +183,8 @@ export function useChannelUnread({
       const conversations = new Set(channelRows.map((channel) => channel.id));
       const viewerId = refs.current.userId;
       const stale = closedConversationLists(message, listed, viewerId);
-      // A chat the list does not hold is brought in by a read of that one list; every other row is
-      // written from the event itself.
       if (stale.length > 0) reopenFromActivity(stale, message);
-      else writeRow(activity);
+      else writeRow(activity, { openConversationId: open, openThreadRootId: openThread });
       store.update((current) =>
         applyUnreadEvent(current, message, {
           conversations,

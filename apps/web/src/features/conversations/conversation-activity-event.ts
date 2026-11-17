@@ -39,9 +39,10 @@ export type ConversationActivityEvent = {
   /** Set only for a thread reply: the row keeps its last *top-level* message, so a reply lights
    * the Activity dot for the thread's followers but changes no row. */
   threadRootId?: string;
-  /** Set for a recipient who muted the conversation: their row still counts the message, but it
-   * lights no Workspace-wide Activity dot, as Raft's rule has it (task #420, #478). */
   muted?: true;
+  mentioned?: true;
+  unreadThreadCount?: number;
+  threadMentioned?: true;
 };
 
 /** Undefined for anything else on the channel, binary publications included: `chat:user:` also
@@ -66,6 +67,9 @@ export function decodeConversationActivityEvent(
   const senderAgentId = Reflect.get(value, "senderAgentId");
   const threadRootId = Reflect.get(value, "threadRootId");
   const muted = Reflect.get(value, "muted");
+  const mentioned = Reflect.get(value, "mentioned");
+  const unreadThreadCount = Reflect.get(value, "unreadThreadCount");
+  const threadMentioned = Reflect.get(value, "threadMentioned");
   if (
     type !== "conversation.activity.v1" ||
     typeof workspaceId !== "string" ||
@@ -86,7 +90,11 @@ export function decodeConversationActivityEvent(
     (senderUserId !== undefined && (typeof senderUserId !== "string" || !senderUserId)) ||
     (senderAgentId !== undefined && (typeof senderAgentId !== "string" || !senderAgentId)) ||
     (threadRootId !== undefined && (typeof threadRootId !== "string" || !threadRootId)) ||
-    (muted !== undefined && muted !== true)
+    (muted !== undefined && muted !== true) ||
+    (mentioned !== undefined && mentioned !== true) ||
+    (unreadThreadCount !== undefined &&
+      (!Number.isSafeInteger(unreadThreadCount) || (unreadThreadCount as number) < 0)) ||
+    (threadMentioned !== undefined && threadMentioned !== true)
   )
     return undefined;
   return {
@@ -105,6 +113,9 @@ export function decodeConversationActivityEvent(
     ...(senderAgentId ? { senderAgentId } : {}),
     ...(threadRootId ? { threadRootId } : {}),
     ...(muted ? { muted } : {}),
+    ...(mentioned ? { mentioned } : {}),
+    ...(unreadThreadCount !== undefined ? { unreadThreadCount: unreadThreadCount as number } : {}),
+    ...(threadMentioned ? { threadMentioned } : {}),
   };
 }
 

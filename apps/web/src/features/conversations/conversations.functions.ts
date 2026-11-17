@@ -205,6 +205,13 @@ export const setDirectConversationUnread = createServerFn({ method: "POST" })
     new DirectConversations(db).setUnread(workspaceId, user.id, data.conversationId, data.unread),
   );
 
+export const markDirectConversationAllRead = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(directConversationInputSchema)
+  .handler(async ({ context: { user, db, workspaceId }, data }) => {
+    await new DirectConversations(db).markAllRead(workspaceId, user.id, data.conversationId);
+  });
+
 /** Closes the viewer's DM in their list only, or brings it back (#122). */
 export const setDirectConversationHidden = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
