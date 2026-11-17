@@ -40,7 +40,7 @@ export function operatorRunnerPorts(
     stopAgent: async (agentId: string) => {
       const current = runtime();
       if (!current) throw new Error("daemon runtime is not running");
-      await current.stopAgent(agentId);
+      await Promise.all([current.stopAgent(agentId), current.stopAgentJobs?.(agentId)]);
     },
   };
 }

@@ -20,6 +20,7 @@ import type {
   DaemonCredentialStore,
 } from "#src/credentials/credential-store";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
+import { DaemonConnectionRefusedError } from "#src/connection/daemon-connection-refused-error";
 import { DaemonConnectionStoppedError } from "#src/connection/daemon-connection-stopped-error";
 import { PiChatRelay } from "#src/pi-chat/relay";
 import type { AgentControl } from "#src/agent-runtime/agent-control";
@@ -38,6 +39,7 @@ import type { ColdIdleSweep } from "./cold-idle-sweep";
 import type { StalledRecoverySweep } from "./stalled-recovery-sweep";
 import type { CatalogFreshnessSweep } from "./catalog-freshness-sweep";
 import type { runtimeMachineStatus } from "./machine-status-reporter";
+import type { ProcJobManager } from "#src/proc-jobs/proc-job-manager";
 import { readyCapabilities } from "./ready-capabilities";
 import { RuntimeReadyWaitWatch } from "./runtime-ready-wait";
 import { subscribeRuntimeAuth } from "./runtime-auth-subscription";
@@ -126,6 +128,7 @@ export type RuntimeStartupPorts = {
   stalledRecoverySweep: Pick<StalledRecoverySweep<ActivityLaunch>, "start">;
   catalogFreshnessSweep: Pick<CatalogFreshnessSweep, "start">;
   machineStatus: Pick<ReturnType<typeof runtimeMachineStatus>, "start">;
+  procJobs?: Pick<ProcJobManager, "startSweep" | "purgeWorkspace">;
 };
 
 /** One Workspace connection's open sequence: listeners, transport, the control and session replay,
@@ -222,6 +225,7 @@ export class RuntimeStartup {
     });
     const publications = new RuntimePublicationSubscriptions({
       ...ports.publications,
+      purgeProcJobs: ports.procJobs ? () => ports.procJobs!.purgeWorkspace() : undefined,
       transport: ports.transport(),
       workspaceId: connection.workspaceId,
       computerId: connection.computerId,
@@ -382,6 +386,7 @@ export class RuntimeStartup {
       ports.stalledRecoverySweep.start();
       ports.catalogFreshnessSweep.start();
       ports.machineStatus.start();
+      ports.procJobs?.startSweep();
       // Kick off optional inventory before flushing buffered publications so immediate probes can
       // make progress while the first Agent inputs are delivered.
       const codeAgentReport = ports.codeAgentInventory.reportRuntimes(transport);
@@ -402,6 +407,11 @@ export class RuntimeStartup {
       this.#started = false;
       // A connection left up keeps reporting this Computer online for a Workspace that never
       // started, so a failed start takes its transport down too.
+      if (
+        error instanceof DaemonConnectionRefusedError &&
+        (error.reason === "workspace_deleted" || error.reason === "computer_unlinked")
+      )
+        await ports.procJobs?.purgeWorkspace().catch(() => {});
       const stopError = await ports.replaceTransport();
       if (stopError !== undefined)
         logger.warn("Stopping the connection of a failed start failed", {

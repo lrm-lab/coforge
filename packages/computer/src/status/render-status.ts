@@ -33,6 +33,11 @@ export function renderStatusHuman(report: ComputerStatusReport): string[] {
   lines.push(...renderLocks(report));
   lines.push("");
   lines.push(...renderLeftoverJobs(report));
+  const procLines = renderProcJobs(report);
+  if (procLines.length > 0) {
+    lines.push("");
+    lines.push(...procLines);
+  }
   return lines;
 }
 
@@ -250,6 +255,21 @@ function renderLeftoverJobs(report: ComputerStatusReport): string[] {
       (job) =>
         `  ${terminalText(job.label)}  pid=${job.pid ?? "-"}${job.runs !== null ? `  runs=${job.runs}` : ""}`,
     ),
+  ];
+}
+
+function renderProcJobs(report: ComputerStatusReport): string[] {
+  const { procJobs } = report;
+  if (!procJobs) return [];
+  if (!procJobs.supported) return ["Background jobs", "  Not supported on this platform."];
+  if (procJobs.jobs.length === 0) return ["Background jobs", "  none"];
+  return [
+    `Background jobs (${procJobs.jobs.length} running)`,
+    ...procJobs.jobs.map(
+      (job) =>
+        `  ${terminalText(job.workspaceId)}  agent=${terminalText(job.agentId)}  name=${terminalText(job.name)}  pid=${job.pid}`,
+    ),
+    "  Run coforge-computer stop --jobs to stop Agent background jobs.",
   ];
 }
 

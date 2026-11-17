@@ -10,6 +10,10 @@ import { UpgradeLaunchFailedError } from "./upgrade-error";
 import type { MachineSupervisor } from "./machine-supervisor";
 import type { ComputerUpgradeReceipt } from "#src/platform/computer-upgrade-receipts";
 import type { ComputerSelfClient } from "#src/connection/computer-self-client";
+import {
+  removeWorkspaceProcJobLedger,
+  stopMachineRunningProcJobs,
+} from "#src/proc-jobs/proc-job-ledger";
 
 const logger = getLogger(["coforge", "daemon", "supervisor", "upgrades"]);
 
@@ -262,6 +266,10 @@ export async function runWorkspaceLifecycleCommand({
         code: "detach_unconfirmed",
         workspaceId: request.workspaceId,
       });
+    await stopMachineRunningProcJobs(stateDirectory, { workspaceId: request.workspaceId }).catch(
+      () => {},
+    );
+    await removeWorkspaceProcJobLedger(workspaceDirectory(request.workspaceId));
     // The revoked-key answer rides the view as a marker so `local-rpc` can set the response's
     // detach_key_revoked — the CLI says "key revoked", not "detached" (task #417).
     return {

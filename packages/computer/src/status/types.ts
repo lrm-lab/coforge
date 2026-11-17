@@ -5,6 +5,7 @@
 
 import type {
   LifecycleFailure,
+  RunningProcJobSummary,
   WorkspaceCloudConnectionReport,
   WorkspaceHealthState,
 } from "@lrm/coforge-daemon";
@@ -121,6 +122,7 @@ export type AgentsStatus = { supported: boolean; workspaces: WorkspaceAgents[] }
 
 export type LeftoverJob = { label: string; pid: number | null; runs: number | null };
 export type LeftoverJobsStatus = { supported: boolean; jobs: LeftoverJob[] };
+export type ProcJobsStatus = { supported: boolean; jobs: RunningProcJobSummary[] };
 
 export type LocksStatus = {
   machineMutationLock: LockState;
@@ -144,6 +146,7 @@ export type ComputerStatusReport = {
   agents: AgentsStatus;
   locks: LocksStatus;
   leftoverJobs: LeftoverJobsStatus;
+  procJobs?: ProcJobsStatus;
 };
 
 /** The subset of a persisted Workspace binding the status report reads. Matches
@@ -215,6 +218,7 @@ export interface StatusPorts {
   probeMachineMutationLock(): LockState;
   readSupervisorLockOwner(): Promise<number | null>;
   listLeftoverUpgradeJobs: { supported: boolean; list(): Promise<LeftoverJob[]> };
+  listProcJobs?: { supported: boolean; list(): Promise<RunningProcJobSummary[]> };
   readWorkspaceHealth(workspaceId: string): Promise<WorkspaceHealth>;
   /** The Workspace process's own report of its cloud connection, or null when it does not
    * answer in time. */

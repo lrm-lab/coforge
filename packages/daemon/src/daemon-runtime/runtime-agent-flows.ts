@@ -157,6 +157,7 @@ export type AgentControlIntentPorts = {
     request: LaunchRequest,
   ): Promise<AgentRuntime>;
   stopAgent(agentId: string): Promise<void>;
+  stopAgentJobs?(agentId: string): Promise<void>;
   resetWorkspace(request: AgentWorkspaceResetRequest): Promise<void>;
   staleRuntimeStop(agentId: string, controlEpoch: number): Promise<"released" | "rejected">;
 };
@@ -178,6 +179,7 @@ export type AgentControlIntentDeps = {
   launchCoordinator: Pick<AgentLaunchCoordinator, "dropOwedRecovery" | "credentialStarted">;
   startAgent: AgentControlIntentPorts["startAgent"];
   stopAgent(agentId: string): Promise<void>;
+  stopAgentJobs?(agentId: string): Promise<void>;
 };
 
 /** The ports the control-intent handlers run on, bound to the runtime's collaborators. */
@@ -202,6 +204,7 @@ export function controlIntentPorts(deps: AgentControlIntentDeps): AgentControlIn
     startAgent: (agentId, config, recovery, request) =>
       deps.startAgent(agentId, config, recovery, request),
     stopAgent: (agentId) => deps.stopAgent(agentId),
+    stopAgentJobs: deps.stopAgentJobs,
     resetWorkspace: (request) => deps.agentControl.resetWorkspace(request),
     staleRuntimeStop: (agentId, controlEpoch) =>
       deps.agentControl.staleRuntimeStop(agentId, controlEpoch),
@@ -258,7 +261,7 @@ export async function handleAgentStop(
     return;
   }
   if (ports.managed(intent.agentId)) throw new Error("Agent requires a fenced Stop");
-  await ports.stopAgent(intent.agentId);
+  await Promise.all([ports.stopAgent(intent.agentId), ports.stopAgentJobs?.(intent.agentId)]);
   // A person's Stop of an unmanaged Agent: nothing a cold start owed its next launch is told to it.
   ports.dropOwedRecovery(intent.agentId);
 }

@@ -10,6 +10,7 @@ import type { CleanerInbox } from "#src/system-cleaner/system-cleaner";
 import { AgentAppConfigSync as AppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
 import { AgentMigrationBucketClient } from "#src/connection/agent-migration-bucket-client";
 import { AgentMigrationRunner as MigrationRunner } from "#src/agent-migration/migration-runner";
+import { ProcJobManager } from "#src/proc-jobs/proc-job-manager";
 import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-store";
 import { ReminderScheduler as Reminders } from "#src/agent-reminder/reminder-scheduler";
 import { ReminderAcknowledgementSync } from "#src/agent-reminder/reminder-acknowledgement-sync";
@@ -65,6 +66,7 @@ export type RuntimeServices = {
   appConfigs: AgentAppConfigSync;
   migrations: AgentMigrationRunner | undefined;
   upgradeResults: UpgradeResultReporter;
+  procJobs: ProcJobManager;
 };
 
 /**
@@ -122,12 +124,22 @@ export function composeRuntimeServices(ports: RuntimeServicesPorts): RuntimeServ
   });
   // The transport is replaced on each start, so the runner reaches the route through whichever
   // one is current.
+  const procJobs = new ProcJobManager({
+    workspaceId: connection.workspaceId,
+    workspaceRoot: connection.workspaceRoot,
+    stateDirectory,
+  });
   const migrations = transport().agentMigrationServer
     ? new MigrationRunner({
         server: () => transport().agentMigrationServer!(),
         bucket: new AgentMigrationBucketClient(),
         agents: {
-          stop: (agentId) => ports.stopAgent(agentId),
+          stop: async (agentId) => {
+            await Promise.all([
+              ports.stopAgent(agentId),
+              procJobs.stopAllForAgent(agentId, "migrated"),
+            ]);
+          },
           isRunning: (agentId) => ports.runningAgentIds().includes(agentId),
           movedAway: (agentId) => ports.forgetLocalAgent(agentId),
         },
@@ -146,7 +158,7 @@ export function composeRuntimeServices(ports: RuntimeServicesPorts): RuntimeServ
     acknowledge: upgradeLifecycle.acknowledgeUpgradeResult,
     schedule: upgradeLifecycle.upgradeResultSchedule,
   });
-  return { reminders, systemCleaner, appConfigs, migrations, upgradeResults };
+  return { reminders, systemCleaner, appConfigs, migrations, upgradeResults, procJobs };
 }
 
 /** The migration runner's operations as the publication subscriptions call them; absent when the

@@ -44,5 +44,6 @@ and starts nothing. `--version <v>` on `sh -s --` pins a version
 | [Labels](labels.md)                                    | `label list`: the Workspace's labels; `task ... --label` attaches and filters                                                                       |
 | [Action cards](action-cards.md)                        | `action prepare`, supported card kinds, the app approval card, how a human commits a card                                                           |
 | [Output formats](output.md)                            | The plain-text formats the CLI prints                                                                                                               |
+| [Background jobs](proc.md)                             | `proc start/list/logs/stop`: detached background jobs per Agent, bounded rotated logs, lifecycle stop rules                                         |
 | [External Agents](external-agent.md)                   | `agent login/status/logout/bridge`, profiles, `--profile`, wake hints and push, what an external Agent cannot do                                    |
 | [Agent context](context.md)                            | `context search/read`, stable entry ids, bounded pagination, and current-session authorization                                                      |

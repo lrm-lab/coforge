@@ -1,6 +1,7 @@
 import { APP_REGISTRATION_REQUEST_MAX_BYTES } from "./app-management";
 import { TEAM_MEMORY_ROUTE } from "./team-memory";
 import { ARTIFACT_REQUEST_MAX_BYTES, ARTIFACT_UPLOAD_MAX_BYTES } from "./artifacts";
+import { PROC_START_MAX_BODY_BYTES } from "./proc";
 const MENTION_DELIVERIES_ROUTE = {
   method: "GET",
   path: (messageId: string) =>
@@ -136,6 +137,17 @@ const ATTACHMENT_UPLOAD_SESSION_ROUTES = {
       `/api/agent/v1/attachment-upload-sessions/${encodeURIComponent(uploadId)}`,
   },
 } as const;
+const PROC_ROUTES = {
+  list: { method: "GET", path: "/api/agent/v1/proc" },
+  logs: { method: "GET", path: "/api/agent/v1/proc/logs" },
+  start: {
+    method: "POST",
+    path: "/api/agent/v1/proc/start",
+    maxBodyBytes: PROC_START_MAX_BODY_BYTES,
+  },
+  stop: { method: "POST", path: "/api/agent/v1/proc/stop" },
+} as const;
+
 export const agentApiRoutes = {
   proxy: {
     workspace: { method: "GET", path: "/api/agent/v1/workspace" },
@@ -179,6 +191,7 @@ export const agentApiRoutes = {
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
     appRegistrations: APP_REGISTRATION_LOCAL_ROUTE,
+    proc: PROC_ROUTES,
   },
   local: {
     messages: {
@@ -224,6 +237,7 @@ export const agentApiRoutes = {
     appConfig: APP_CONFIG_ROUTES,
     apps: APP_ROUTES,
     appRegistrations: APP_REGISTRATION_LOCAL_ROUTE,
+    proc: PROC_ROUTES,
   },
   cloud: {
     teamMemory: TEAM_MEMORY_ROUTE,

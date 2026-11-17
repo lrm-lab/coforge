@@ -5,6 +5,7 @@ import {
   coordinatorServiceName,
   FileBindingStore,
   isLockContention,
+  listMachineRunningProcJobs,
   LocalDaemonLauncher,
   readLoginShellPath,
   resolveDaemonExecutablePath,
@@ -188,6 +189,14 @@ export function createStatusPorts(input: CreateStatusPortsInput): StatusPorts {
     listLeftoverUpgradeJobs:
       input.platform === "darwin"
         ? { supported: true, list: listDarwinLeftoverUpgradeJobs }
+        : { supported: false, list: async () => [] },
+    listProcJobs:
+      input.platform === "darwin" || input.platform === "linux"
+        ? {
+            supported: true,
+            list: () =>
+              listMachineRunningProcJobs(input.stateDirectory, { platform: input.platform }),
+          }
         : { supported: false, list: async () => [] },
     async readWorkspaceSlugs() {
       try {

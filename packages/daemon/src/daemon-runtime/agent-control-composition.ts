@@ -27,6 +27,7 @@ export type AgentControlCompositionPorts = {
   running(agentId: string): boolean;
   session(agentId: string): ControlSessionHandle | undefined;
   stopAgent(agentId: string): Promise<void>;
+  stopAgentJobs?(agentId: string): Promise<void>;
   startAgent(
     agentId: string,
     config: AgentRuntimeConfig,
@@ -90,14 +91,23 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
     await ports.stopAgent(intent.agentId);
     return false;
   };
+  const pendingJobStops = new Map<string, Promise<void>>();
   const agentControl = new AgentControl(runtimeInstanceId, state, agentSessions, {
     running: (agentId) => ports.running(agentId),
     stop: async (agentId) => {
       const session = ports.session(agentId);
-      await ports.stopAgent(agentId);
+      await Promise.all([ports.stopAgent(agentId), pendingJobStops.get(agentId)]);
       return session?.readSessionIdentity?.();
     },
-    stopAccepted: (agentId) => ports.dropOwedRecovery(agentId),
+    stopAccepted: (agentId) => {
+      ports.dropOwedRecovery(agentId);
+      if (!ports.stopAgentJobs) return;
+      const stopping = ports.stopAgentJobs(agentId).catch(() => {});
+      pendingJobStops.set(agentId, stopping);
+      void stopping.finally(() => {
+        if (pendingJobStops.get(agentId) === stopping) pendingJobStops.delete(agentId);
+      });
+    },
     launch: async (intent, launchId, replacedSessionId, invalidateReason) => {
       for (
         let inFlight = ports.launchInFlight(intent.agentId);

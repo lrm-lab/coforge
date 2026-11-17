@@ -70,6 +70,7 @@ export type RuntimeStopPorts = {
   replaceTransport(): Promise<unknown>;
   consumedSeqs: Pick<AgentConsumedSeqStore, "close">;
   sendAgentStatus(agentId: string, status: "active" | "inactive"): void;
+  procJobs?: { close(): void };
 };
 
 /**
@@ -136,6 +137,7 @@ export class RuntimeStop {
     ports.startup.abort();
     ports.reminders.stop();
     ports.systemCleaner.clear();
+    ports.procJobs?.close();
     // Each attempt is leased again on the next ready, and its run picks up from the server's state.
     this.#migrationsClosed = ports.migrations?.close();
     for (const token of ports.agentProxyTokens.values()) ports.agentProxy?.revoke(token);

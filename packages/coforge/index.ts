@@ -37,6 +37,7 @@ export type { MessageSearchOptions };
 export type { ChannelInvocation, InboxInvocation, ThreadInvocation };
 
 export type { LabelInvocation } from "#src/label-commands";
+export type { ProcInvocation } from "#src/proc-commands";
 
 export { createAgentApiClient } from "@lrm/coforge-sdk/agent";
 

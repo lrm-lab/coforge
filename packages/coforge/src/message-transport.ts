@@ -11,6 +11,13 @@ import type {
   AgentMentionExecuteRequest,
   AgentMentionExecuteResponse,
   AgentMentionPendingResponse,
+  AgentProcListResponse,
+  AgentProcLogsRequest,
+  AgentProcLogsResponse,
+  AgentProcStartRequest,
+  AgentProcStartResponse,
+  AgentProcStopRequest,
+  AgentProcStopResponse,
   AgentProfileShowResponse,
   AgentProfileUpdateRequest,
   AgentProfileUpdateResponse,
@@ -150,4 +157,8 @@ export type MessageTransport = LabelTransport &
     /** What became of each @mention in a message the calling Agent sent (`coforge mention
      * delivery`). */
     mentionDelivery?(messageId: string): Promise<AgentMentionDeliveryResponse>;
+    procList?(): Promise<AgentProcListResponse>;
+    procStart?(request: AgentProcStartRequest): Promise<AgentProcStartResponse>;
+    procLogs?(request: AgentProcLogsRequest): Promise<AgentProcLogsResponse>;
+    procStop?(request: AgentProcStopRequest): Promise<AgentProcStopResponse>;
   };

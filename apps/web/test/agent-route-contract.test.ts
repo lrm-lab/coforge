@@ -94,6 +94,22 @@ const NOT_SERVED_BY_WEB = new Map([
     "/api/agent/v1/app-registrations",
     "the Daemon's local route for app status, owned list, secret rotation and app management: it forwards each operation to a cloud route the contract declares under cloud.appRegistrations (comment on APP_REGISTRATION_LOCAL_ROUTE)",
   ],
+  [
+    "/api/agent/v1/proc",
+    "ProcJobManager lists the Agent's local background jobs in the Daemon and never forwards the query to Web/backend",
+  ],
+  [
+    "/api/agent/v1/proc/logs",
+    "ProcJobManager reads local proc-logs slices in the Daemon and never forwards the query to Web/backend",
+  ],
+  [
+    "/api/agent/v1/proc/start",
+    "ProcJobManager spawns a local detached background job in the Daemon and never forwards the request to Web/backend",
+  ],
+  [
+    "/api/agent/v1/proc/stop",
+    "ProcJobManager stops local background jobs in the Daemon and never forwards the request to Web/backend",
+  ],
 ]);
 
 /** Web routes the contract does not declare. Empty: every route served here is a contract member. */

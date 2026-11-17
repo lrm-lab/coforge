@@ -9,9 +9,14 @@ export function daemonAgentProxyRuntime(
   requireRuntime: () => DaemonRuntime,
 ): Required<AgentProxyRuntime> {
   const agentApi = () => requireRuntime().agentRequests;
+  const localQueries = () => requireRuntime().localQueries;
   return {
     agentMemory: async (...args) => requireRuntime().agentMemory(...args),
-    agentContext: async (...args) => requireRuntime().agentContext(...args),
+    agentContext: async (...args) => localQueries().context(...args),
+    procList: async (...args) => localQueries().procList(...args),
+    procStart: async (...args) => localQueries().procStart(...args),
+    procLogs: async (...args) => localQueries().procLogs(...args),
+    procStop: async (...args) => localQueries().procStop(...args),
     agentMessage: async (...args) => requireRuntime().agentMessage(...args),
     ...attachmentRuntime(agentApi),
     ...mentionRuntime(agentApi),
@@ -29,7 +34,7 @@ export function daemonAgentProxyRuntime(
     githubCredential: async (...args) => agentApi().githubCredential(...args),
     githubCommitTrailers: async (...args) => agentApi().githubCommitTrailers(...args),
     version: async (...args) => requireRuntime().version(...args),
-    computerUpdateNotice: async (...args) => requireRuntime().computerUpdateNotice(...args),
+    computerUpdateNotice: async (...args) => localQueries().computerUpdateNotice(...args),
     ...workspaceRuntime(agentApi),
     ...appRuntime(agentApi),
     agentTeamMemory: async (...args) => agentApi().agentTeamMemory(...args),

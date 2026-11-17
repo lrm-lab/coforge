@@ -49,6 +49,13 @@ import type {
   AgentContextQueryResponse,
   AgentContextReadRequest,
   AgentContextSearchRequest,
+  AgentProcListResponse,
+  AgentProcLogsRequest,
+  AgentProcLogsResponse,
+  AgentProcStartRequest,
+  AgentProcStartResponse,
+  AgentProcStopRequest,
+  AgentProcStopResponse,
 } from "@lrm/coforge-sdk/agent";
 import type {
   WeeklyReportCollectCommand,
@@ -79,6 +86,26 @@ export type AgentProxyRuntime = {
     request: AgentContextSearchRequest | AgentContextReadRequest,
     agentApiKey: string,
   ): Promise<AgentContextQueryResponse>;
+  procList?(
+    context: string,
+    request: Record<string, never>,
+    agentApiKey: string,
+  ): Promise<AgentProcListResponse>;
+  procStart?(
+    context: string,
+    request: AgentProcStartRequest,
+    agentApiKey: string,
+  ): Promise<AgentProcStartResponse>;
+  procLogs?(
+    context: string,
+    request: AgentProcLogsRequest,
+    agentApiKey: string,
+  ): Promise<AgentProcLogsResponse>;
+  procStop?(
+    context: string,
+    request: AgentProcStopRequest,
+    agentApiKey: string,
+  ): Promise<AgentProcStopResponse>;
   agentMessage(
     context: string,
     request: LocalAgentMessageRequest,

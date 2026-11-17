@@ -2,6 +2,13 @@ import type {
   AgentContextQueryResponse,
   AgentContextReadRequest,
   AgentContextSearchRequest,
+  AgentProcListResponse,
+  AgentProcLogsRequest,
+  AgentProcLogsResponse,
+  AgentProcStartRequest,
+  AgentProcStartResponse,
+  AgentProcStopRequest,
+  AgentProcStopResponse,
   AgentVersionResponse,
 } from "@lrm/coforge-sdk/agent";
 import { COFORGE_DAEMON_VERSION } from "../version";
@@ -10,6 +17,7 @@ import type { ComputerUpdateNotice } from "./computer-update-notice";
 import { AgentContextRuntime } from "#src/daemon-runtime/agent-context-runtime";
 import type { AgentContextViewService } from "#src/agent-context-view/agent-context-view-service";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
+import type { ProcJobManager } from "#src/proc-jobs/proc-job-manager";
 import { resolveContextViewProviderSource } from "./context-view-runtime-wiring";
 
 type RuntimeLocalQueryHost = {
@@ -23,7 +31,9 @@ type RuntimeLocalQueryHost = {
   ):
     | { config: { provider: string; envVars?: Record<string, string> }; session?: unknown }
     | undefined;
-  restartConfig(agentId: string): { config: { envVars?: Record<string, string> } } | undefined;
+  restartConfig(
+    agentId: string,
+  ): { config: { provider: string; envVars?: Record<string, string> } } | undefined;
   reported(agentId: string): { launchId?: string; sessionId?: string } | undefined;
   currentActivityLaunch(agentId: string): { launchId?: string } | undefined;
   stopping(agentId: string): boolean;
@@ -85,21 +95,26 @@ export async function queryLocalComputerUpdateNotice(input: {
 
 export class RuntimeLocalQueries {
   readonly #context: AgentContextRuntime;
+  readonly #host: RuntimeLocalQueryHost;
   readonly #authorize: (context: string, agentApiKey: string | undefined) => string;
   readonly #computerVersion: string | undefined;
   readonly #startedAt: number;
   readonly #notice: ComputerUpdateNotice;
+  readonly #procJobs: ProcJobManager;
 
   constructor(
     host: RuntimeLocalQueryHost,
     computerVersion: string | undefined,
     startedAt: number,
     notice: ComputerUpdateNotice,
+    procJobs: ProcJobManager,
   ) {
+    this.#host = host;
     this.#authorize = host.authorizedAgent.bind(host);
     this.#computerVersion = computerVersion;
     this.#startedAt = startedAt;
     this.#notice = notice;
+    this.#procJobs = procJobs;
     this.#context = new AgentContextRuntime({
       authorize: this.#authorize,
       workspaceRoot: host.workspaceRoot,
@@ -150,5 +165,48 @@ export class RuntimeLocalQueries {
       agentApiKey,
       notice: this.#notice,
     });
+  }
+
+  procList(
+    context: string,
+    _request: Record<string, never>,
+    agentApiKey: string,
+  ): Promise<AgentProcListResponse> {
+    const agentId = this.#authorize(context, agentApiKey);
+    return this.#procJobs.list(agentId);
+  }
+
+  procStart(
+    context: string,
+    request: AgentProcStartRequest,
+    agentApiKey: string,
+  ): Promise<AgentProcStartResponse> {
+    const agentId = this.#authorize(context, agentApiKey);
+    const active = this.#host.runtime(agentId);
+    const remembered = this.#host.restartConfig(agentId);
+    return this.#procJobs.start({
+      agentId,
+      provider: active?.config.provider ?? remembered?.config.provider,
+      agentEnvVars: active?.config.envVars ?? remembered?.config.envVars,
+      request,
+    });
+  }
+
+  procLogs(
+    context: string,
+    request: AgentProcLogsRequest,
+    agentApiKey: string,
+  ): Promise<AgentProcLogsResponse> {
+    const agentId = this.#authorize(context, agentApiKey);
+    return this.#procJobs.logs(agentId, request);
+  }
+
+  procStop(
+    context: string,
+    request: AgentProcStopRequest,
+    agentApiKey: string,
+  ): Promise<AgentProcStopResponse> {
+    const agentId = this.#authorize(context, agentApiKey);
+    return this.#procJobs.stop(agentId, request, "agent_stop");
   }
 }

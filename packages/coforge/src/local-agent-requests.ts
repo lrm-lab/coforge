@@ -1,6 +1,7 @@
 import { teamMemoryRequests } from "./team-memory-request";
 import { CliError } from "./cli-error";
 import { memoryRequests } from "./memory-request";
+import { procRequests } from "./proc-request";
 import { proxyHttpFailure } from "./local-proxy-failure";
 import { readProxyErrorBody, requireProxySetup } from "./proxy-request";
 import {
@@ -126,6 +127,7 @@ export function localAgentRequests(
     ...contextRequests(proxyEndpoint, context, proxyUrl),
     ...teamMemoryRequests(proxyEndpoint, context, proxyUrl),
     ...memoryRequests(proxyEndpoint, context, proxyUrl),
+    ...procRequests(proxyEndpoint, context, proxyUrl),
   };
 }
 /**

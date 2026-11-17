@@ -26,6 +26,7 @@ export async function collectComputerStatus(ports: StatusPorts): Promise<Compute
   const agents = await collectAgents(ports, bindingsLoad);
   const workspaces = await collectWorkspaces(ports, bindingsLoad, snapshot, agents, ports.now());
   const leftoverJobs = await collectLeftoverJobs(ports);
+  const procJobs = await collectProcJobs(ports);
   const supervisorLockOwnerPid = await ports.readSupervisorLockOwner();
   return {
     schemaVersion: 1,
@@ -44,6 +45,7 @@ export async function collectComputerStatus(ports: StatusPorts): Promise<Compute
       },
     },
     leftoverJobs,
+    procJobs,
   };
 }
 
@@ -229,4 +231,9 @@ async function collectAgents(
 async function collectLeftoverJobs(ports: StatusPorts) {
   if (!ports.listLeftoverUpgradeJobs.supported) return { supported: false, jobs: [] };
   return { supported: true, jobs: await ports.listLeftoverUpgradeJobs.list() };
+}
+
+async function collectProcJobs(ports: StatusPorts) {
+  if (!ports.listProcJobs?.supported) return { supported: false, jobs: [] };
+  return { supported: true, jobs: await ports.listProcJobs.list().catch(() => []) };
 }

@@ -52,8 +52,8 @@ If a failed send says \`Retryable: yes\`, run its next action; else \`Draft save
 
   const execution = `## Work
 Answer ordinary questions freely; untracked DM needs no Task. Before implementing a shared channel request, make it a task: \`coforge task create --target '<channel>' --message-id <root-message-id> --title '<title>' --priority <level>\` (or \`task claim --number <n>\` an existing one). Only a successful claimant implements; others may analyze or review in its thread. A failed claim blocks conflicting work. Work: in_review; done after human approval.
-${isExternal ? "" : (options.cloudSkillsGuidance ?? "")}When a person must decide, post \`coforge action prepare\` with a \`choice\` (one question) or \`questions\` (up to four) card instead of listing options in chat; see \`coforge manual get action-cards\`. If it fails, say so plainly; never swap in another card type.
-${isExternal ? "" : "Local memory: save decisions/corrections with sources. Use current context first; before re-asking: `coforge memory search --query Q`. Team --scope team. Reference only. `coforge manual get memory`\n"}**Complete ALL your work before stopping.** Finish multi-step work, report results, then run \`coforge task list --mine\` and pick up your unfinished tasks.`;
+${isExternal ? "" : (options.cloudSkillsGuidance ?? "")}When a person must decide, post \`coforge action prepare\` with a \`choice\` (1) or \`questions\` (<=4) card, not chat options; see \`coforge manual get action-cards\`. If it fails, say so; never swap card types.
+${isExternal ? "" : "Local memory: save decisions/corrections with sources. Use current context first; before re-asking: `coforge memory search --query Q`. Team --scope team. Reference only. `coforge manual get memory`\nJobs: `coforge proc start|list|logs|stop`.\n"}**Complete ALL your work before stopping.** Finish multi-step work, report results, then run \`coforge task list --mine\` and pick up your unfinished tasks.`;
 
   const queue = `## What to work on next
 A person's instruction — a DM, an @handle, a person in a task — comes before anything queued.
@@ -115,7 +115,7 @@ export function buildExternalAgentGuide(input: ExternalAgentGuideInput): string 
 - Always pass \`--profile <slug>\` or set \`COFORGE_PROFILE=<slug>\` (default profile: \`${workspace.slug}-${agent.name}\`).
 - Pull messages with \`coforge message check\` (server inbox cursor; no daemon or App items).
 - Scheduled reminders (\`coforge reminder schedule|update|snooze\`) are unavailable to external Agents (\`reminders_unsupported_for_external_agents\`); use your own runtime's scheduler and state in the thread when you will follow up.
-- Daemon-local commands (\`coforge context search|read\`, GitHub credential helpers, \`--send-draft\`) are unavailable.`;
+- Daemon-local commands (\`coforge context search|read\`, \`coforge proc\`, GitHub credential helpers, \`--send-draft\`) are unavailable.`;
 
   return [who, contextLines.join("\n"), setup, EXTERNAL_GUIDE_STANDING_SECTIONS].join("\n\n");
 }

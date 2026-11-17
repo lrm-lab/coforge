@@ -544,3 +544,32 @@ test("a platform whose manager keeps no service file reports no service definiti
   expect("serviceDefinition" in report.supervisor).toBe(false);
   expect(JSON.parse(JSON.stringify(report)).supervisor).not.toHaveProperty("serviceDefinition");
 });
+
+test("collects running background proc jobs when supported and falls back cleanly otherwise", async () => {
+  const sampleJob = {
+    id: "job-1",
+    workspaceId: "ws-1",
+    agentId: "agent-1",
+    name: "dev-srv",
+    command: ["bun", "run", "dev"],
+    cwd: "/tmp/ws-1/agent-1",
+    pid: 5555,
+    pgid: 5555,
+    status: "running" as const,
+    startedAt: "2026-11-17T10:00:00.000Z",
+    logPath: "/tmp/ws-1/agent-1/proc-logs/dev-srv.log",
+  };
+  const withJobs = await collectComputerStatus(
+    fakePorts({
+      listProcJobs: { supported: true, list: async () => [sampleJob] },
+    }),
+  );
+  expect(withJobs.procJobs).toEqual({ supported: true, jobs: [sampleJob] });
+
+  const unsupported = await collectComputerStatus(
+    fakePorts({
+      listProcJobs: { supported: false, list: async () => [] },
+    }),
+  );
+  expect(unsupported.procJobs).toEqual({ supported: false, jobs: [] });
+});

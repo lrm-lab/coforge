@@ -5,6 +5,7 @@ import type { AgentInboxCoordinator } from "./agent-inbox-coordinator";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import type { AgentOfflineResidency } from "./agent-offline-residency";
 import type { AgentContextViewService } from "#src/agent-context-view/agent-context-view-service";
+import type { ProcJobManager } from "#src/proc-jobs/proc-job-manager";
 
 export function forgetAgent(
   agentId: string,
@@ -17,10 +18,12 @@ export function forgetAgent(
   consumedSeqs: AgentConsumedSeqStore,
   featureSync: AgentFeatureSync,
   dropOwedRecovery: (agentId: string) => void,
+  procJobs?: Pick<ProcJobManager, "forgetAgent">,
 ): void {
   dropOwedRecovery(agentId);
   contextViewEnabled.delete(agentId);
   contextViewService.disable(agentId);
+  void procJobs?.forgetAgent(agentId, "agent_deleted").catch(() => {});
   inboxCoordinator.forgetAgent(agentId, {
     systemCleaner,
     offlineResidency,

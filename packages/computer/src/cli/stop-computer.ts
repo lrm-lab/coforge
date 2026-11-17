@@ -1,7 +1,11 @@
 // `coforge-computer stop`: the whole Computer down, through the manager that runs it.
 
 import { thrownMessage } from "@lrm/coforge-sdk/internal";
-import { DAEMON_STOP_WAIT_MS } from "@lrm/coforge-daemon";
+import {
+  DAEMON_STOP_WAIT_MS,
+  type RunningProcJobSummary,
+  type StopMachineProcJobsResult,
+} from "@lrm/coforge-daemon";
 import { CliError } from "#src/errors";
 
 /** Platform and local control seams used by `stopComputer`. `assertRestartable` is the hosts'
@@ -16,11 +20,14 @@ export type StopComputerHost = {
    * as stopped so `status` reads it that way until the next `start`. Best effort: the manager's
    * own stop takes those runtimes down whether or not this answers. */
   stopRuntimes?(): Promise<unknown>;
+  listRunningProcJobs?(): Promise<RunningProcJobSummary[]>;
+  stopProcJobs?(): Promise<StopMachineProcJobsResult>;
 };
 
 export type StopComputerOptions = {
   /** Write one stable JSON result instead of the prose a person reads. */
   json?: boolean;
+  jobs?: boolean;
   /** How long to wait for the Coordinator to stop answering, and the seams that wait runs on.
    * Defaults to the Daemon's own stop budget (`DAEMON_STOP_WAIT_MS`) rather than a number of its
    * own: waiting less reported a stop that was still finishing as one that failed (task #726). */
@@ -51,10 +58,29 @@ export async function stopComputer(
     // Not a service this manager runs. Nothing to do only when nothing answers either; a
     // `foreground` process is up and only its own supervisor can stop it.
     if (!(await host.isRunning())) {
+      if (options.jobs && host.stopProcJobs) {
+        const stoppedJobs = await host.stopProcJobs();
+        write(
+          options.json
+            ? JSON.stringify({
+                ok: true,
+                stopped: false,
+                stoppedProcJobs: stoppedJobs.stopped.length,
+                failedProcJobs: stoppedJobs.failed.length,
+              })
+            : `The CoForge Computer is not running.\nStopped ${stoppedJobs.stopped.length} Agent background job(s).${stoppedJobs.failed.length > 0 ? ` (${stoppedJobs.failed.length} failed to stop)` : ""}`,
+        );
+        return;
+      }
+      const runningProcJobs = (await host.listRunningProcJobs?.().catch(() => []))?.length ?? 0;
       write(
         options.json
-          ? JSON.stringify({ ok: true, stopped: false })
-          : "The CoForge Computer is not running; nothing to stop.",
+          ? JSON.stringify({
+              ok: true,
+              stopped: false,
+              ...(runningProcJobs > 0 ? { runningProcJobs } : {}),
+            })
+          : `The CoForge Computer is not running; nothing to stop.${runningProcJobs > 0 ? `\n${runningProcJobs} Agent background job(s) still running; run \`coforge-computer stop --jobs\` to stop them.` : ""}`,
       );
       return;
     }
@@ -70,10 +96,29 @@ export async function stopComputer(
   if (await host.isRunning()) await host.stopRuntimes?.().catch(() => undefined);
   await host.stop();
   await confirmStopped(host, options);
+  if (options.jobs && host.stopProcJobs) {
+    const stoppedJobs = await host.stopProcJobs();
+    write(
+      options.json
+        ? JSON.stringify({
+            ok: true,
+            stopped: true,
+            stoppedProcJobs: stoppedJobs.stopped.length,
+            failedProcJobs: stoppedJobs.failed.length,
+          })
+        : `CoForge Computer stopped; its Workspaces and Agents came down with it.\nStopped ${stoppedJobs.stopped.length} Agent background job(s). Run \`coforge-computer start\` to bring it back.`,
+    );
+    return;
+  }
+  const runningProcJobs = (await host.listRunningProcJobs?.().catch(() => []))?.length ?? 0;
   write(
     options.json
-      ? JSON.stringify({ ok: true, stopped: true })
-      : "CoForge Computer stopped; its Workspaces and Agents came down with it. Run `coforge-computer start` to bring it back.",
+      ? JSON.stringify({
+          ok: true,
+          stopped: true,
+          ...(runningProcJobs > 0 ? { runningProcJobs } : {}),
+        })
+      : `CoForge Computer stopped; its Workspaces and Agents came down with it. Run \`coforge-computer start\` to bring it back.${runningProcJobs > 0 ? `\n${runningProcJobs} Agent background job(s) still running; run \`coforge-computer stop --jobs\` to stop them.` : ""}`,
   );
 }
 

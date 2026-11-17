@@ -57,7 +57,10 @@ export async function deleteWorkspace(
   processManager: AgentProcessManager,
   stopAgent: (agentId: string) => Promise<void>,
   forget: (agentId: string) => void,
+  stopProcJobs?: (agentId: string) => Promise<void>,
 ): Promise<Pick<AgentWorkspaceDeleteResult, "status">> {
+  const mainRunning = (agentId: string) =>
+    Boolean(processManager.runtime(agentId)) || processManager.isStopping(agentId);
   return deleteAgentWorkspace({
     agentId: request.agentId,
     agentWorkspaceDirectory: agentWorkspaceDirectory(
@@ -65,9 +68,11 @@ export async function deleteWorkspace(
       connection.workspaceId,
       request.agentId,
     ),
-    isRunning: (agentId) =>
-      Boolean(processManager.runtime(agentId)) || processManager.isStopping(agentId),
-    stopAgent,
+    isRunning: (agentId) => mainRunning(agentId) || Boolean(stopProcJobs),
+    stopAgent: async (agentId) => {
+      if (mainRunning(agentId)) await stopAgent(agentId);
+      await stopProcJobs?.(agentId);
+    },
     forget,
   });
 }

@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { DAEMON_STOP_WAIT_MS } from "@lrm/coforge-daemon";
 import { CliError } from "#src/errors";
+import { FileComputerConfig } from "#src/local-config";
+import { createCommand } from "#src/cli/daemon-commands";
 import { stopComputer, type StopComputerHost } from "#src/cli/stop-computer";
 import { rejection } from "./rejection";
 
@@ -189,4 +194,143 @@ test("stop --json writes one stable result instead of prose", async () => {
 
   expect(JSON.parse(output[0]!)).toEqual({ ok: true, stopped: true });
   expect(output.join("\n")).not.toContain("CoForge Computer stopped");
+});
+
+test("stop without --jobs keeps running proc jobs and reports how to stop them", async () => {
+  const output: string[] = [];
+  const host = fakeHost({
+    listRunningProcJobs: async () => [
+      {
+        id: "job-1",
+        workspaceId: "ws-1",
+        agentId: "agent-1",
+        name: "dev-srv",
+        command: ["bun", "dev"],
+        cwd: "/tmp/ws-1",
+        pid: 8888,
+        pgid: 8888,
+        status: "running",
+        startedAt: "2026-11-17T10:00:00.000Z",
+        logPath: "/tmp/ws-1/proc-logs/dev-srv.log",
+      },
+    ],
+    stopProcJobs: async () => {
+      host.calls.push("stop-proc-jobs");
+      return { stopped: [], alreadyExited: [], failed: [] };
+    },
+  });
+
+  await stopComputer(host, { stdout: (line) => output.push(line) }, impatient());
+  expect(host.calls).toEqual(["assert-restartable", "stop"]);
+  expect(output.join("\n")).toContain("1 Agent background job(s) still running");
+  expect(output.join("\n")).toContain("coforge-computer stop --jobs");
+});
+
+test("stop --jobs stops running proc jobs both when Computer runs and when already stopped", async () => {
+  const outputRunning: string[] = [];
+  const stoppedJob = {
+    id: "job-1",
+    workspaceId: "ws-1",
+    agentId: "agent-1",
+    name: "dev-srv",
+    command: ["bun", "dev"],
+    cwd: "/tmp/ws-1",
+    pid: 8888,
+    pgid: 8888,
+    status: "exited" as const,
+    startedAt: "2026-11-17T10:00:00.000Z",
+    stopReason: "computer_stop" as const,
+    logPath: "/tmp/ws-1/proc-logs/dev-srv.log",
+  };
+  const runningHost = fakeHost({
+    stopProcJobs: async () => {
+      runningHost.calls.push("stop-proc-jobs");
+      return { stopped: [stoppedJob], alreadyExited: [], failed: [] };
+    },
+  });
+
+  await stopComputer(
+    runningHost,
+    { stdout: (line) => outputRunning.push(line) },
+    { ...impatient(), jobs: true, json: true },
+  );
+  expect(runningHost.calls).toEqual(["assert-restartable", "stop", "stop-proc-jobs"]);
+  expect(JSON.parse(outputRunning[0]!)).toEqual({
+    ok: true,
+    stopped: true,
+    stoppedProcJobs: 1,
+    failedProcJobs: 0,
+  });
+
+  const outputStopped: string[] = [];
+  const downHost = fakeHost(
+    {
+      async assertRestartable() {
+        throw new Error("not loaded");
+      },
+      stopProcJobs: async () => {
+        downHost.calls.push("stop-proc-jobs");
+        return { stopped: [stoppedJob], alreadyExited: [], failed: [] };
+      },
+    },
+    false,
+  );
+  await stopComputer(
+    downHost,
+    { stdout: (line) => outputStopped.push(line) },
+    { ...impatient(), jobs: true },
+  );
+  expect(downHost.calls).toEqual(["stop-proc-jobs"]);
+  expect(outputStopped.join("\n")).toContain("Stopped 1 Agent background job(s)");
+});
+
+test("scoped stop --workspace --jobs --json suppresses prose and writes one JSON summary", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "coforge-scoped-stop-"));
+  try {
+    const config = new FileComputerConfig(join(dir, "config"));
+    await config.saveRegistration({
+      id: "ws-scoped",
+      slug: "ws-scoped",
+      computerId: "comp-1",
+    });
+    const output: string[] = [];
+    const command = createCommand(
+      "darwin",
+      join(dir, "install"),
+      join(dir, "state"),
+      "https://coforge.cn",
+      config,
+      undefined,
+      { stdout: (line) => output.push(line) },
+      {
+        launcher: {
+          ensureRunning: async () => {},
+          isRunning: async () => true,
+          command: async () => [
+            {
+              workspaceId: "ws-scoped",
+              computerId: "comp-1",
+              enabled: true,
+              processId: 1234,
+              instanceId: "inst-1",
+              version: "1.0.0",
+            },
+          ],
+          stop: async () => {},
+        } as never,
+      },
+    );
+
+    await command.stop("ws-scoped", { json: true, jobs: true });
+    expect(output).toHaveLength(1);
+    expect(JSON.parse(output[0]!)).toEqual({
+      ok: true,
+      workspace: "ws-scoped",
+      stopped: true,
+      stoppedProcJobs: 0,
+      failedProcJobs: 0,
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

@@ -48,6 +48,7 @@ export type RuntimePublicationSubscriptionPorts = {
   resetWorkspace: (request: AgentWorkspaceResetRequest) => Promise<void>;
   deliverMessage: (message: AgentMessageDelivery) => Promise<void>;
   stopRuntime: () => Promise<void>;
+  purgeProcJobs?: () => Promise<void>;
   connectionRefused: (reason: DaemonConnectRejectionReason) => void;
   applyReminderSync: (sync: ReminderSync) => Promise<void>;
   applyAppConfigSync: (sync: AppConfigSync) => void;
@@ -217,8 +218,11 @@ export class RuntimePublicationSubscriptions {
     );
     subscribe(
       transport.onConnectionRefused?.((reason) => {
-        void this.ports
-          .stopRuntime()
+        const shouldPurge = reason === "workspace_deleted" || reason === "computer_unlinked";
+        void Promise.all([
+          this.ports.stopRuntime(),
+          shouldPurge ? (this.ports.purgeProcJobs?.() ?? Promise.resolve()) : Promise.resolve(),
+        ])
           .catch((error) =>
             logger.warn("Stopping Agents after the cloud refused the connection failed", {
               event: "daemon_runtime:refused_stop_failed",

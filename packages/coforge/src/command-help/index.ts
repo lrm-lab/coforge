@@ -4,6 +4,7 @@ import { agentHelp } from "./agent";
 import { appHelp } from "./app";
 import { artifactHelp } from "./artifact";
 import { messageHelp } from "./message";
+import { procHelp } from "./proc";
 import { taskHelp } from "./task";
 import { artifactCommandsHidden } from "../workspace-features";
 
@@ -18,6 +19,7 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
     example: "coforge memory search --query 'preview domain'",
   },
   ...taskHelp,
+  ...procHelp,
   ...artifactHelp,
   ...appHelp,
   ...agentHelp,

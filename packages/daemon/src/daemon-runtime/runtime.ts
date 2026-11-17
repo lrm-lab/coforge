@@ -81,7 +81,6 @@ import {
   type AgentWorkspaceDeleteRequest,
   type AgentWorkspaceDeleteResult,
 } from "@lrm/coforge-sdk/internal";
-import type { AgentMigrationRunner } from "#src/agent-migration/migration-runner";
 import { AgentControl } from "#src/agent-runtime/agent-control";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
 import { AgentWorkspaceQueries } from "./agent-workspace-queries";
@@ -166,13 +165,14 @@ import { RuntimeStartup } from "./runtime-startup";
 import { RuntimeStop } from "./runtime-stop";
 import { composeMessages } from "./message-composition";
 import { assembleExitedDelivery } from "./assemble-exited-delivery";
-import { composeRuntimeServices, migrationRoute } from "./runtime-services-composition";
+import {
+  composeRuntimeServices,
+  migrationRoute,
+  type RuntimeServices,
+} from "./runtime-services-composition";
 import { AgentOperations } from "./agent-operations";
 import { composeAgentControl } from "./agent-control-composition";
-import { UpgradeResultReporter } from "./upgrade-result-reporter";
 import type { DaemonRuntimeLifecycle } from "./runtime-lifecycle";
-import type { ReminderScheduler } from "#src/agent-reminder/reminder-scheduler";
-import type { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
 import { logComputerUpdateNoticeFailure } from "./agent-failure-logs";
 import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registration-notice";
 
@@ -200,7 +200,7 @@ export class DaemonRuntime {
     () => this.#currentActivityLaunches,
   );
   readonly #contextViewService: AgentContextViewService;
-  readonly #localQueries: RuntimeLocalQueries;
+  readonly localQueries: RuntimeLocalQueries;
   readonly #deliveryGate = new AgentDeliveryGate();
   readonly #wakeLaunchFailures = new LaunchFailureBackoff();
   readonly #turn = new RuntimeTurn(() => this.#turnPorts());
@@ -243,7 +243,7 @@ export class DaemonRuntime {
     agentLaunches: () => this.#agentLaunches,
     stopState: () => this.#stopState,
     runnerHold: () => this.#runnerHold,
-    migrations: () => this.#migrations,
+    migrations: () => this.#services.migrations,
     runningMentionIdentity: (agentId) => this.#reported.identity(agentId),
     noticeActionClocks: () => this.#messageAttention.noticeActionClocks,
     releaseSurvivingHolds: (agentId) => this.#turn.releaseSurvivingHolds(agentId),
@@ -313,14 +313,12 @@ export class DaemonRuntime {
     backoffEnded: (agentId) => this.#exitedDelivery.backoffEnded(agentId),
     credential: this.#credentialHolds,
   });
-  readonly #reminders: ReminderScheduler;
+  readonly #services: RuntimeServices;
   readonly #reminderSnapshots = new ReminderSnapshotAsks({
     requestReminderSnapshot: (agentId, reason) =>
       requestReminderSnapshot(this.#appInboxSyncPorts(), agentId, { reason }),
   });
-  readonly #appConfigs: AgentAppConfigSync;
 
-  readonly #migrations: AgentMigrationRunner | undefined;
   readonly #inboxCoordinator: AgentInboxCoordinator;
   readonly #stopCoordinator: AgentStopCoordinator;
   readonly #launchCoordinator: AgentLaunchCoordinator;
@@ -422,7 +420,6 @@ export class DaemonRuntime {
   readonly #observationPorts: RuntimeEventObservationPorts;
   readonly #codeAgentInventory: CodeAgentInventorySync;
   readonly #runtimeAuth: RuntimeAuthReporter;
-  readonly #upgradeResults: UpgradeResultReporter;
 
   readonly #startup: RuntimeStartup;
 
@@ -484,12 +481,6 @@ export class DaemonRuntime {
       workspaceId: connection.workspaceId,
       requestLogDirectory: (agentId) => this.#contextViewService.requestLogDirectory(agentId),
     });
-    this.#localQueries = new RuntimeLocalQueries(
-      this,
-      this.computerVersion,
-      this.#startedAt,
-      this.#computerUpdateNotice,
-    );
     this.#credentials = credentials;
     this.#transportFactory = transportFactory;
     this.#agentProxy = agentProxy;
@@ -546,7 +537,7 @@ export class DaemonRuntime {
     this.#messageAttention = messages.messageAttention;
     this.#inboxCoordinator = messages.inboxCoordinator;
     this.#messageOperations = messages.messageOperations;
-    const services = composeRuntimeServices({
+    this.#services = composeRuntimeServices({
       connection,
       stateDirectory,
       transport: () => this.#transport,
@@ -569,11 +560,14 @@ export class DaemonRuntime {
       forgetLocalAgent: (agentId) => this.#forgetLocalAgent(agentId),
       upgradeResults: this.lifecycle,
     });
-    this.#reminders = services.reminders;
-    this.systemCleaner = services.systemCleaner;
-    this.#appConfigs = services.appConfigs;
-    this.#migrations = services.migrations;
-    this.#upgradeResults = services.upgradeResults;
+    this.systemCleaner = this.#services.systemCleaner;
+    this.localQueries = new RuntimeLocalQueries(
+      this,
+      this.computerVersion,
+      this.#startedAt,
+      this.#computerUpdateNotice,
+      this.#services.procJobs,
+    );
     const control = composeAgentControl({
       connection,
       runtimeInstanceId: this.#runtimeInstanceId,
@@ -581,6 +575,7 @@ export class DaemonRuntime {
         !this.#stopState.isStopping(agentId) && this.#agentProcessManager.isRunning(agentId),
       session: (agentId) => this.#agentProcessManager.session(agentId),
       stopAgent: (agentId) => this.stopAgent(agentId),
+      stopAgentJobs: (agentId) => this.stopAgentJobs(agentId),
       startAgent: (agentId, config, recovery, request) =>
         this.#startAgent(agentId, config, recovery, request),
       launchInFlight: (agentId) => this.#agentLaunches.get(agentId),
@@ -770,22 +765,22 @@ export class DaemonRuntime {
         deliverMessage: (message) => this.handleAgentMessage(message),
         stopRuntime: () => this.stop(),
         connectionRefused: (reason) => this.lifecycle.connectionRefused?.(reason),
-        applyReminderSync: (sync) => this.#reminders.apply(sync),
-        applyAppConfigSync: (sync) => this.#appConfigs.apply(sync),
+        applyReminderSync: (sync) => this.#services.reminders.apply(sync),
+        applyAppConfigSync: (sync) => this.#services.appConfigs.apply(sync),
         applyAgentServerFeatures: (sync) => this.#sync.applyServerFeatures(sync),
         acceptAppRegistrationNotice: (notice) =>
           acceptAppRegistrationNotice(notice, {
             isRunning: (agentId) => this.#readyRunningAgentIds().includes(agentId),
             mint: (agentId, item) => this.mintAppItem(agentId, item),
           }).then(() => {}),
-        migration: migrationRoute(this.#migrations),
+        migration: migrationRoute(this.#services.migrations),
       },
       agentControl: this.#agentControl,
       agentSessions: this.#agentSessions,
       configApply: this.#configApply,
       readyRunningAgentIds: () => this.#readyRunningAgentIds(),
       operatingSystem: this.#operatingSystem,
-      upgradeResults: this.#upgradeResults,
+      upgradeResults: this.#services.upgradeResults,
       runtimeAuth: this.#runtimeAuth,
       credentialHolds: this.#credentialHolds,
       runtimeAuthFactory: this.runtimeAuthFactory,
@@ -806,7 +801,7 @@ export class DaemonRuntime {
       },
       lifecycle: startupLifecycle(
         this.lifecycle,
-        this.#upgradeResults,
+        this.#services.upgradeResults,
         this.#connection.workspaceId,
       ),
       reminderSnapshots: this.#reminderSnapshots,
@@ -817,6 +812,7 @@ export class DaemonRuntime {
       stalledRecoverySweep: this.#stalledRecoverySweep,
       catalogFreshnessSweep: this.#catalogFreshnessSweep,
       machineStatus: this.#machineStatus,
+      procJobs: this.#services.procJobs,
     });
   }
 
@@ -860,7 +856,7 @@ export class DaemonRuntime {
       currentActivityLaunches: this.#currentActivityLaunches,
       phaseBookkeeping: this.#phaseBookkeeping,
       runtimeErrorHold: this.#runtimeErrorHold,
-      upgradeResults: this.#upgradeResults,
+      upgradeResults: this.#services.upgradeResults,
       usageReport: this.#usageReport,
       fastModeWarned: this.#fastModeWarned,
       inputDrain: this.#inputDrain,
@@ -870,9 +866,10 @@ export class DaemonRuntime {
       launchCoordinator: this.#launchCoordinator,
       messageAttention: this.#messageAttention,
       mentionDeliveries: this.#mentionDeliveries,
-      reminders: this.#reminders,
+      reminders: this.#services.reminders,
       systemCleaner: this.systemCleaner,
-      migrations: this.#migrations,
+      migrations: this.#services.migrations,
+      procJobs: this.#services.procJobs,
       agentProxy: this.#agentProxy,
       agentProxyTokens: this.#agentProxyTokens,
       agentContexts: this.#agentContexts,
@@ -974,6 +971,7 @@ export class DaemonRuntime {
       this.#agentProcessManager,
       (agentId) => this.stopAgent(agentId),
       (agentId) => this.#forgetLocalAgent(agentId),
+      (agentId) => this.#services.procJobs.forgetAgent(agentId, "agent_deleted"),
     );
   startAgent(
     agentId: string,
@@ -1010,7 +1008,7 @@ export class DaemonRuntime {
       {
         assertRunning: () => this.#assertRunning(),
         assertAgentNotStopping: (id) => this.#assertAgentNotStopping(id),
-        migrations: this.#migrations,
+        migrations: this.#services.migrations,
         requestAppConfigSnapshot: (id) => requestAppConfigSnapshot(this.#appInboxSyncPorts(), id),
         requestReminderSnapshot: (id) => this.#reminderSnapshots.request(id, "agent_start"),
         inputDrain: this.#inputDrain,
@@ -1054,8 +1052,8 @@ export class DaemonRuntime {
   #appInboxSyncPorts() {
     return {
       transport: () => this.#transport,
-      appConfigs: this.#appConfigs,
-      reminders: this.#reminders,
+      appConfigs: this.#services.appConfigs,
+      reminders: this.#services.reminders,
       inboxCoordinator: this.#inboxCoordinator,
       env: () => this.#env(),
       readyRunningAgentIds: () => this.#readyRunningAgentIds(),
@@ -1071,7 +1069,7 @@ export class DaemonRuntime {
       workspaceId: this.#connection.workspaceId,
       computerId: this.#connection.computerId,
       messageAttention: this.#messageAttention,
-      reminders: this.#reminders,
+      reminders: this.#services.reminders,
       inboxCoordinator: this.#inboxCoordinator,
     };
   }
@@ -1149,6 +1147,7 @@ export class DaemonRuntime {
       launchCoordinator: this.#launchCoordinator,
       startAgent: this.#startAgent,
       stopAgent: (agentId) => this.stopAgent(agentId),
+      stopAgentJobs: (agentId) => this.stopAgentJobs(agentId),
     });
   }
   async handleAgentWorkspaceReset(request: AgentWorkspaceResetRequest): Promise<void> {
@@ -1236,6 +1235,9 @@ export class DaemonRuntime {
     this.#configApply.stopped(agentId);
     return this.#agentOperations.stopAgent(agentId);
   }
+  stopAgentJobs(agentId: string): Promise<void> {
+    return this.#services.procJobs.stopAllForAgent(agentId, "owner_stop").then(() => {});
+  }
 
   #disposeLaunchObservations = (agentId: string): void => {
     disposeLaunchObservations(
@@ -1286,6 +1288,7 @@ export class DaemonRuntime {
       this.#consumedSeqs,
       this.#sync,
       (agentId) => this.#launchCoordinator.dropOwedRecovery(agentId),
+      this.#services.procJobs,
     );
 
   get #revokeAgentApiKey() {
@@ -1299,19 +1302,13 @@ export class DaemonRuntime {
     return this.#agentOperations.agentMessage(context, request, agentApiKey);
   }
   get version() {
-    return this.#localQueries.version.bind(this.#localQueries);
-  }
-  get agentContext() {
-    return this.#localQueries.context.bind(this.#localQueries);
+    return this.localQueries.version.bind(this.localQueries);
   }
   readonly agentMemory = new LocalMemoryRuntime(
     (context, key) => this.#authorizedAgent(context, key),
     () => this.#connection,
     (id) => this.systemCleaner.onMemoryWrite(id),
   ).execute;
-  get computerUpdateNotice() {
-    return this.#localQueries.computerUpdateNotice.bind(this.#localQueries);
-  }
   async agentTask(context: string, command: TaskCommand, agentApiKey: string): Promise<TaskResult> {
     return agentTask(this.#agentApiRemindersPorts(), context, command, agentApiKey);
   }

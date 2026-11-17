@@ -1,0 +1,55 @@
+# Agent background jobs (`coforge proc`)
+
+`coforge proc` manages detached, per-Agent background jobs through the local
+Daemon proxy so long-running dev servers, builds, and watchers survive Agent
+turns, provider session replacement, and Daemon restarts.
+
+## Commands
+
+```sh
+coforge proc start [--name <name>] [--cwd <dir>] [--env KEY=VALUE]... [--json] [--] <command> [args...]
+coforge proc list [--json]
+coforge proc logs <name> [--tail <lines>] [--follow] [--json]
+coforge proc stop (<name> | --all) [--force] [--json]
+```
+
+- **Auto-naming**: omitting `--name` derives a name from the executable
+  (`1-40` characters matching `[A-Za-z0-9_-]`) and appends `-2`, `-3`, ... on
+  collision with a running job. Reusing the name of an exited job replaces that
+  exited record and resets its log file.
+- **Working directory**: `--cwd` resolves relative to the Agent workspace
+  directory and must exist as a directory.
+- **Environment**: jobs inherit the Workspace environment plus `--env KEY=VALUE`
+  overrides, with transient CoForge Daemon launch variables (`DAEMON_LAUNCH_ENV_KEYS`)
+  stripped so background processes do not carry Agent tokens or sockets.
+- **Follow streaming**: `proc logs <name> --follow` polls for up to `30s`
+  (`--tail` defaults to `50`, max `2000`; each poll slice is bounded to `256 KiB`).
+
+## Limits, logs, and storage
+
+- Each Agent may run at most **8** concurrent jobs (`proc_limit`).
+- Up to **8** exited job records are retained per Agent (oldest pruned first).
+- Combined `stdout` and `stderr` are written to
+  `<agentWorkspace>/proc-logs/<name>.log` (`0o700` dir, `0o600` file, symlinks
+  rejected) and rotated to `.log.1` when a running job exceeds **20 MiB**.
+- Per-Workspace state is stored in `<workspaceState>/proc-jobs.json`.
+
+## Lifecycle and operator control
+
+- Running jobs stay alive across Agent turns, session replacement, and normal
+  Daemon stops (the Daemon re-adopts live OS processes by recorded PID/start-time
+  identity on startup).
+- All running jobs for an Agent stop automatically (SIGTERM with SIGKILL
+  escalation) when the Agent is stopped, deleted/reset, or migrated, or when
+  a Workspace is deleted.
+- On Linux without user `systemd-run`, jobs fall back to a detached process
+  group (`stopsWithService: true`).
+- `coforge-computer status` surfaces running Agent background jobs across
+  Workspaces; `coforge-computer stop --jobs` stops all running background jobs.
+
+## Availability
+
+- Supported on macOS and Linux Daemons when the Agent runtime is active; Windows
+  Daemon hosts return `proc_unsupported`.
+- External Agents connecting via `agent login` or `agent bridge` receive an
+  unsupported-for-external-Agents refusal (`UNSUPPORTED_FOR_EXTERNAL_AGENTS`).

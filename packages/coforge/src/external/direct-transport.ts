@@ -214,6 +214,18 @@ export function connectExternal(
     contextRead: refuse(
       "`coforge context` reads the daemon's context view, which an external Agent does not have.",
     ),
+    procList: refuse(
+      "`coforge proc` manages background jobs inside the Computer's daemon, which an external Agent does not have.",
+    ),
+    procStart: refuse(
+      "`coforge proc` manages background jobs inside the Computer's daemon, which an external Agent does not have.",
+    ),
+    procLogs: refuse(
+      "`coforge proc` manages background jobs inside the Computer's daemon, which an external Agent does not have.",
+    ),
+    procStop: refuse(
+      "`coforge proc` manages background jobs inside the Computer's daemon, which an external Agent does not have.",
+    ),
     githubCredential: refuse("The GitHub credential helper needs the Computer's daemon."),
     githubCommitTrailers: refuse("Commit co-author trailers need the Computer's daemon."),
     setChannelMuted: refuse(`Muting a channel ${NOT_YET}`),

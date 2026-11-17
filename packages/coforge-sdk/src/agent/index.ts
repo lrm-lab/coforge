@@ -35,3 +35,4 @@ export * from "./team-memory";
 export * from "./cli-guide-sections";
 export * from "./app-registration";
 export * from "./wake-hints";
+export * from "./proc";

@@ -1,5 +1,6 @@
 import { runVersion } from "#src/version-commands";
 import { runMemoryCommand } from "./memory-commands";
+import { runProcCommand } from "./proc-commands";
 import { cliUsage } from "#src/usage";
 import { commandHelp } from "#src/command-help/index";
 import { runMessageResolve } from "#src/message-resolve";
@@ -58,8 +59,10 @@ import { parseArgs } from "./parse-args";
 
 export async function run(args: readonly string[], transport: MessageTransport): Promise<unknown> {
   if (args.length === 0) return cliUsage();
-  if (args.includes("--help")) {
-    const help = commandHelp(args.filter((arg) => arg !== "--help"));
+  const separator = args.indexOf("--");
+  const ownArgs = separator === -1 ? args : args.slice(0, separator);
+  if (ownArgs.includes("--help")) {
+    const help = commandHelp(ownArgs.filter((arg) => arg !== "--help"));
     if (help) return help;
   }
   const invocation = parseArgs(args);
@@ -73,6 +76,7 @@ export async function run(args: readonly string[], transport: MessageTransport):
   }
   if (invocation.command === "version") return runVersion(invocation, transport);
   if (invocation.command === "memory") return runMemoryCommand(invocation, transport);
+  if (invocation.command === "proc") return runProcCommand(invocation, transport);
   if (invocation.command === "context-search" || invocation.command === "context-read")
     return runContextCommand(invocation, transport);
   if (invocation.command === "manual-get") {

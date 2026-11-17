@@ -1,4 +1,12 @@
 export * from "./src/daemon-public-api";
+export { daemonAgentProxyRuntime } from "./src/agent-proxy-daemon-runtime";
+export {
+  listMachineRunningProcJobs,
+  removeWorkspaceProcJobLedger,
+  stopMachineRunningProcJobs,
+  type RunningProcJobSummary,
+  type StopMachineProcJobsResult,
+} from "./src/proc-jobs/proc-job-ledger";
 import { runDaemon } from "./src/daemon-public-api";
 
 // Standalone source/development harness; releases enter through Computer.

@@ -1,8 +1,13 @@
 // The daemon lifecycle and log-follow command wiring behind `start`, `stop`, `restart`, `logs`.
 
-import { homedir } from "os";
+import {
+  listMachineRunningProcJobs,
+  removeWorkspaceProcJobLedger,
+  stopMachineRunningProcJobs,
+  workspaceStateDirectory,
+  type DaemonCommandRunner,
+} from "@lrm/coforge-daemon";
 import { FileComputerConfig, loadBuildProfile } from "#src/local-config";
-import { resolveComputerConfigDirectory } from "#src/paths";
 import { createDaemonLauncher } from "#src/daemon-service/daemon-host";
 import {
   createRestartSupervisorHost,
@@ -23,25 +28,33 @@ export function createCommand(
   config: FileComputerConfig,
   logger?: import("@logtape/logtape").Logger,
   io: { stdout: (line: string) => void } = { stdout: (line) => console.log(line) },
+  seams?: {
+    launcher?: DaemonCommandRunner & {
+      preflight?: () => Promise<void>;
+      assertRestartable: () => Promise<void>;
+      stop: () => Promise<void>;
+    };
+    resolveWorkspace?: (selector: string) => Promise<{ id: string; slug: string }>;
+  },
 ): DaemonCommand {
-  const launcher = createDaemonLauncher(platform, installDirectory, stateDirectory, serverUrl);
+  const launcher =
+    seams?.launcher ?? createDaemonLauncher(platform, installDirectory, stateDirectory, serverUrl);
+  const resolveWorkspace =
+    seams?.resolveWorkspace ??
+    (async (selector: string) => {
+      const binding = await config.loadRegistration(selector);
+      if (!binding) throw new Error(`Workspace '${selector}' is not registered locally`);
+      return { id: binding.id, slug: binding.slug };
+    });
+  let suppressClientWrite = false;
   const command = createClientCommand({
     daemon: launcher,
     config,
     logger,
-    resolveWorkspace: async (selector) => {
-      const config = new FileComputerConfig(
-        resolveComputerConfigDirectory({
-          platform,
-          homeDirectory: homedir(),
-          environment: Bun.env,
-        }),
-      );
-      const binding = await config.loadRegistration(selector);
-      if (!binding) throw new Error(`Workspace '${selector}' is not registered locally`);
-      return { id: binding.id, slug: binding.slug };
+    resolveWorkspace,
+    write: (line) => {
+      if (!suppressClientWrite) io.stdout(line);
     },
-    write: io.stdout,
     logindRisk: () => detectLogindSessionRisk({ platform }),
   });
   return {
@@ -53,7 +66,43 @@ export function createCommand(
     async stop(workspace, options) {
       // A scoped stop is one Workspace runtime and goes through the Coordinator; an unscoped one
       // is the whole Computer, which only the manager that runs it can stop (task #696).
-      if (workspace) return command.stop(workspace);
+      if (workspace) {
+        const resolved = options?.jobs
+          ? await resolveWorkspace(workspace)
+          : await resolveWorkspace(workspace).catch(() => undefined);
+        suppressClientWrite = Boolean(options?.json);
+        try {
+          await command.stop(workspace);
+        } finally {
+          suppressClientWrite = false;
+        }
+        const stoppedJobs = options?.jobs
+          ? await stopMachineRunningProcJobs(stateDirectory, {
+              platform,
+              workspaceId: resolved!.id,
+            })
+          : undefined;
+        if (options?.json) {
+          io.stdout(
+            JSON.stringify({
+              ok: true,
+              workspace: resolved?.slug ?? workspace,
+              stopped: true,
+              ...(stoppedJobs
+                ? {
+                    stoppedProcJobs: stoppedJobs.stopped.length,
+                    failedProcJobs: stoppedJobs.failed.length,
+                  }
+                : {}),
+            }),
+          );
+        } else if (stoppedJobs) {
+          io.stdout(
+            `Stopped ${stoppedJobs.stopped.length} Agent background job(s) in workspace '${resolved!.slug}'.`,
+          );
+        }
+        return;
+      }
       logger?.info("Computer stop requested", { event: "computer:stopping" });
       await stopComputer(
         {
@@ -61,13 +110,28 @@ export function createCommand(
           isRunning: () => launcher.isRunning(),
           stop: () => launcher.stop(),
           stopRuntimes: () => launcher.command("stop"),
+          listRunningProcJobs: () => listMachineRunningProcJobs(stateDirectory, { platform }),
+          stopProcJobs: () => stopMachineRunningProcJobs(stateDirectory, { platform }),
         },
         io,
-        { json: options?.json ?? false },
+        { json: options?.json ?? false, jobs: options?.jobs ?? false },
       );
       logger?.info("Computer stop completed", { event: "computer:stopped" });
     },
-    detach: (workspace) => command.detach(workspace),
+    async detach(workspace) {
+      const resolved = workspace
+        ? await resolveWorkspace(workspace).catch(() => undefined)
+        : await config.loadRegistration().catch(() => undefined);
+      const outcome = await command.detach(workspace);
+      if ((outcome.kind === "detached" || outcome.kind === "key_revoked") && resolved?.id) {
+        await stopMachineRunningProcJobs(stateDirectory, {
+          platform,
+          workspaceId: resolved.id,
+        }).catch(() => {});
+        await removeWorkspaceProcJobLedger(workspaceStateDirectory(stateDirectory, resolved.id));
+      }
+      return outcome;
+    },
     async restart(workspace) {
       await launcher.preflight?.();
       await loadBuildProfile(config, serverUrl, "daemon");

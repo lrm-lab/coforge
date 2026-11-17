@@ -33,9 +33,13 @@ export function registerLifecycleCommands(
       "Stop only this local Workspace runtime, leaving the Daemon up",
     )
     .option("--json", "write one stable JSON result to stdout")
-    .action((options: { workspace?: string; json?: boolean }) => {
+    .option("--jobs", "Also stop running Agent background jobs (coforge proc)", false)
+    .action((options: { workspace?: string; json?: boolean; jobs?: boolean }) => {
       setJson(options.json ?? false);
-      return requireDaemon(dependencies).stop(options.workspace, { json: options.json ?? false });
+      return requireDaemon(dependencies).stop(options.workspace, {
+        json: options.json ?? false,
+        jobs: options.jobs ?? false,
+      });
     });
   program
     .command("detach")
