@@ -9,6 +9,8 @@ These rules apply to `src/server/db/`.
 - Use parameterized Prisma queries. Use `$queryRaw`/`$executeRaw` only for a
   reviewed PostgreSQL-specific requirement, and keep that SQL in a server-only
   repository or migration.
+- Team memory repositories share one admission check and row projection; keep Workspace
+  membership and the team-memory switch in that admission boundary for every read and write.
 - `workspace-resource-recovery.repositories.server.ts` reads membership and default-resource
   links in one indexed query for Workspace-open recovery. Provisioning and role checks
   stay in `server/workspaces/resource-recovery.server.ts`.
