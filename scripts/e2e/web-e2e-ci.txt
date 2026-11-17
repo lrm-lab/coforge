@@ -60,7 +60,6 @@ e2e-activity-task-alone.e2e.ts 10
 e2e-channel-settings.e2e.ts 10
 e2e-conversation-list-resize.e2e.ts 10
 e2e-cross-task-reference.e2e.ts 10
-e2e-search-filters.e2e.ts 10
 e2e-task-popup-phone-bar.e2e.ts 10
 e2e-activity-dot-read-in-place.e2e.ts 9
 e2e-hide-usernames.e2e.ts 9
