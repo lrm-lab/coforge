@@ -273,3 +273,49 @@ test("an Agent creates a label; only an owner or admin Agent renames, archives o
     await db.$disconnect();
   }
 });
+
+test("Settings → Labels: recolor and rename stick, a restore keeps the label out of a delete, and a delete takes it off every task (task #508)", async () => {
+  const { db, make, show, principals, refusal } = await setup();
+  try {
+    const workspaceId = principals.alice.workspaceId;
+    const aliceId = principals.alice.userId!;
+    const labels = new Labels(db);
+    const docs = await labels.create(workspaceId, aliceId, { name: "Docs" });
+    const bug = await labels.create(workspaceId, aliceId, { name: "Bug" });
+    const numbers = await make("alice", 2, { labels: ["Bug"] });
+
+    const recolored = await labels.update(workspaceId, aliceId, docs.id, { color: "indigo" });
+    expect(recolored).toMatchObject({ name: "Docs", color: "indigo" });
+    // A name taken in another case is refused and leaves the label as it was.
+    const taken = await refusal(labels.update(workspaceId, aliceId, docs.id, { name: "bug" }));
+    expect(taken).toMatchObject({ code: "CONFLICT", errorId: "task-label-name-taken" });
+    await labels.update(workspaceId, aliceId, docs.id, { name: "Guides" });
+    expect(await db.label.findUniqueOrThrow({ where: { id: docs.id } })).toMatchObject({
+      name: "Guides",
+      color: "indigo",
+    });
+
+    // Archived, then restored: the label and its two tasks come back as they were.
+    await labels.update(workspaceId, aliceId, bug.id, { archived: true });
+    await labels.update(workspaceId, aliceId, bug.id, { archived: false });
+    expect((await labels.list(workspaceId, aliceId)).find((l) => l.id === bug.id)).toMatchObject({
+      taskCount: 2,
+      archivedAt: null,
+    });
+
+    // Someone else restored it while a page still listed it archived: the delete is refused and
+    // the label stays.
+    const meanwhile = await refusal(labels.delete(workspaceId, aliceId, bug.id));
+    expect(meanwhile).toMatchObject({ code: "INVALID_INPUT", errorId: "task-label-not-archived" });
+    expect(await db.label.findUnique({ where: { id: bug.id } })).not.toBeNull();
+
+    // Archived again, a delete for good takes it off both tasks.
+    await labels.update(workspaceId, aliceId, bug.id, { archived: true });
+    await labels.delete(workspaceId, aliceId, bug.id);
+    expect(await db.label.findUnique({ where: { id: bug.id } })).toBeNull();
+    expect(await db.taskLabel.count({ where: { labelId: bug.id } })).toBe(0);
+    for (const number of numbers) expect((await show(number)).tasks[0]!.labels ?? []).toEqual([]);
+  } finally {
+    await db.$disconnect();
+  }
+});

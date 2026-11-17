@@ -24,7 +24,9 @@ pgTest("candidates are the file's own conversation's members who may read it", a
       data: {
         workspaceId: f.workspace.id,
         channelName: "elsewhere",
-        members: { create: [f.owner, f.viewer].map((user) => ({ userId: user.id })) },
+        members: {
+          create: [f.owner, f.viewer].map((user) => ({ userId: user.id })),
+        },
       },
     });
     // A seat on the file's channel without Workspace membership reads nothing.
@@ -42,7 +44,11 @@ pgTest("candidates are the file's own conversation's members who may read it", a
     expect(audience.viewerId).toBe(f.member.id);
     // Every active member of the file's channel resolves a mention; only readers are notified.
     const reads = Object.fromEntries(audience.members.map((member) => [member.id, member.reads]));
-    expect(reads).toEqual({ [f.owner.id]: true, [f.member.id]: true, [f.outsider.id]: false });
+    expect(reads).toEqual({
+      [f.owner.id]: true,
+      [f.member.id]: true,
+      [f.outsider.id]: false,
+    });
     // The uploader is notified before anyone is named; naming a member who cannot read adds no one.
     expect(audience.subscribed).toEqual([{ kind: "user", id: f.owner.id, label: "owner" }]);
     expect(commentNotifier(audience)(`@${f.outsider.username} look`, [])).toEqual(["owner"]);
@@ -64,9 +70,15 @@ pgTest("will-notify matches whom a posted comment notifies", async () => {
     // The uploader alone: their own comment notifies no one.
     let audience = await comments.audience(owner, f.attachment.id);
     expect(commentNotifier(audience)("first", [])).toEqual([]);
-    await comments.post(owner, { attachmentId: f.attachment.id, body: "first" });
+    await comments.post(owner, {
+      attachmentId: f.attachment.id,
+      body: "first",
+    });
     // A commenter is notified from then on; the author never is.
-    await comments.post(member, { attachmentId: f.attachment.id, body: "second" });
+    await comments.post(member, {
+      attachmentId: f.attachment.id,
+      body: "second",
+    });
     audience = await comments.audience(owner, f.attachment.id);
     expect(commentNotifier(audience)("third", [])).toEqual(["member"]);
     // A muted channel keeps a subscriber asleep, but a mention wakes them.
@@ -78,9 +90,59 @@ pgTest("will-notify matches whom a posted comment notifies", async () => {
     expect(commentNotifier(audience)("quiet", [])).toEqual([]);
     const body = `@${f.member.username} please look`;
     expect(commentNotifier(audience)(body, [])).toEqual(["member"]);
-    const posted = await comments.post(owner, { attachmentId: f.attachment.id, body });
-    const notified = await f.db.pendingMentionAction.findMany({ where: { messageId: posted.id } });
+    const posted = await comments.post(owner, {
+      attachmentId: f.attachment.id,
+      body,
+    });
+    const notified = await f.db.pendingMentionAction.findMany({
+      where: { messageId: posted.id },
+    });
     expect(notified.map((row) => row.targetUserId)).toEqual([f.member.id]);
+  } finally {
+    await f.close();
+  }
+});
+
+// task #465: the comment field's `@Name` is sent as an id-bound mention; the stored body keeps
+// who was meant, and only a member of the file's own conversation can be bound.
+test("a bound mention stores the person's token, a mention row and a notification", async () => {
+  const f = await attachmentCommentsFixture();
+  try {
+    const comments = new AttachmentComments(new PrismaAttachmentCommentStore(f.db));
+    const bind = (user: { id: string; username: string }) => ({
+      type: "user" as const,
+      id: user.id,
+      name: user.username,
+    });
+    const posted = await comments.post(f.actor, {
+      attachmentId: f.attachment.id,
+      body: `@${f.member.username} please check`,
+      mentions: [bind(f.member)],
+    });
+    const stored = await f.db.message.findUniqueOrThrow({
+      where: { id: posted.id },
+      include: { mentions: true },
+    });
+    expect(stored.body).toBe(`<@human:${f.member.id}> please check`);
+    expect(stored.mentions.map((row) => [row.kind, row.actorId])).toEqual([["user", f.member.id]]);
+    const notified = await f.db.pendingMentionAction.findMany({
+      where: { messageId: posted.id },
+    });
+    expect(notified.map((row) => [row.targetUserId, row.reason])).toEqual([
+      [f.member.id, "mentioned"],
+    ]);
+    // Binding someone outside the file's conversation names no one and notifies no one.
+    const outside = await comments.post(f.actor, {
+      attachmentId: f.attachment.id,
+      body: `@${f.viewer.username} hello`,
+      mentions: [bind(f.viewer)],
+    });
+    expect(await f.db.messageMention.count({ where: { messageId: outside.id } })).toBe(0);
+    expect(
+      await f.db.pendingMentionAction.count({
+        where: { messageId: outside.id },
+      }),
+    ).toBe(0);
   } finally {
     await f.close();
   }
