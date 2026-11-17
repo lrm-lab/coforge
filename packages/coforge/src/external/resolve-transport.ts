@@ -32,8 +32,7 @@ export async function resolveAgentTransport(
       code: "PROFILE_NOT_LOGGED_IN",
       message: `Profile "${profileSlug}" has no credential.`,
       retryable: false,
-      suggestedNextAction:
-        "Run `coforge agent login --server <url> --workspace <slug> --agent <name>` first.",
+      suggestedNextAction: "Run `coforge agent login --server <url> --agent <id-or-name>` first.",
     });
   if (env.COFORGE_AGENT_PROXY_URL || env.COFORGE_AGENT_CONTEXT)
     process.stderr.write(

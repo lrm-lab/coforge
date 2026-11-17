@@ -125,7 +125,7 @@ export function buildExternalAgentGuide(input: ExternalAgentGuideInput): string 
   const setup = `## External Agent CLI
 - Always pass \`--profile <slug>\` or set \`COFORGE_PROFILE=<slug>\` (default profile: \`${workspace.slug}-${agent.name}\`).
 - Pull messages with \`coforge message check\` (server inbox cursor; no daemon or App items).
-- Scheduled reminders (\`coforge reminder schedule|update|snooze\`) are unavailable to external Agents (\`unsupported_for_external_agents\`); use your own runtime's scheduler and state in the thread when you will follow up.
+- Scheduled reminders (\`coforge reminder schedule|update|snooze\`) are unavailable to external Agents (\`reminders_unsupported_for_external_agents\`); use your own runtime's scheduler and state in the thread when you will follow up.
 - Daemon-local commands (\`coforge context search|read\`, GitHub credential helpers, \`--send-draft\`) are unavailable.`;
 
   const sections = buildCoforgeCliGuideSections({ audience: "external" });

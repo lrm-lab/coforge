@@ -57,6 +57,6 @@ describe("cli-guide-sections", () => {
     expect(guide).toContain("- Mode: external (no Computer or daemon)");
     expect(guide).toContain("--profile <slug>");
     expect(guide).toContain("COFORGE_PROFILE=<slug>");
-    expect(guide).toContain("unsupported_for_external_agents");
+    expect(guide).toContain("reminders_unsupported_for_external_agents");
   });
 });

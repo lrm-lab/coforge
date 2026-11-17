@@ -22,23 +22,16 @@ export type LoginDeps = {
   sleep: (milliseconds: number) => Promise<void>;
   stdout: (text: string) => void;
   machine: MachineIdentity;
-  /** Called with the verification URI and profile server URL when a terminal user may open it. */
-  offerBrowser?: (verificationUri: string, serverUrl: string) => void;
+  readKey: () => Promise<string>;
 };
 
 export type LoginInvocation =
-  | {
-      resume: false;
-      server: string;
-      workspace: string;
-      agent: string;
-      noBrowser: boolean;
-      noWait: boolean;
-    }
-  | { resume: true };
+  | { mode: "paste"; server: string; agent: string }
+  | { mode: "start"; server: string; workspace: string; agent: string }
+  | { mode: "wait" };
 
 const LOGIN_USAGE =
-  "Usage: coforge agent login --server <url> --workspace <slug> --agent <name> [--profile <slug>] [--no-browser] [--no-wait] | coforge agent login --resume [--profile <slug>]";
+  "Usage: coforge agent login --server <url> --agent <id-or-name> [--profile <slug>] | coforge agent login start --server <url> --workspace <slug> --agent <name> [--profile <slug>] | coforge agent login wait [--profile <slug>]";
 const MAX_CONSECUTIVE_FAILURES = 5;
 const SLOW_DOWN_SECONDS = 5;
 
@@ -68,34 +61,41 @@ export function normalizeServerUrl(value: string): string {
   return url.origin;
 }
 
-export function parseAgentLoginArgs(args: readonly string[]): LoginInvocation {
+function parseValues(args: readonly string[], allowed: readonly string[]): Map<string, string> {
   const values = new Map<string, string>();
-  const flags = new Set<string>();
   for (let index = 0; index < args.length; index++) {
     const arg = args[index]!;
-    if (arg === "--resume" || arg === "--no-browser" || arg === "--no-wait") flags.add(arg);
-    else if (arg === "--server" || arg === "--workspace" || arg === "--agent") {
-      const value = args[++index];
-      if (!value || value.startsWith("--") || values.has(arg)) throw usage();
-      values.set(arg, value);
-    } else throw usage();
+    if (!allowed.includes(arg)) throw usage();
+    const value = args[++index];
+    if (!value || value.startsWith("--") || values.has(arg)) throw usage();
+    values.set(arg, value);
   }
-  if (flags.has("--resume")) {
-    if (values.size > 0 || flags.size > 1) throw usage();
-    return { resume: true };
+  return values;
+}
+
+export function parseAgentLoginArgs(args: readonly string[]): LoginInvocation {
+  if (args[0] === "wait") {
+    if (args.length > 1) throw usage();
+    return { mode: "wait" };
   }
+  if (args[0] === "start") {
+    const values = parseValues(args.slice(1), ["--server", "--workspace", "--agent"]);
+    const server = values.get("--server");
+    const workspace = values.get("--workspace");
+    const agent = values.get("--agent");
+    if (!server || !workspace || !agent) throw usage();
+    return {
+      mode: "start",
+      server: normalizeServerUrl(server),
+      workspace,
+      agent: agent.replace(/^@/, ""),
+    };
+  }
+  const values = parseValues(args, ["--server", "--agent"]);
   const server = values.get("--server");
-  const workspace = values.get("--workspace");
   const agent = values.get("--agent");
-  if (!server || !workspace || !agent) throw usage();
-  return {
-    resume: false,
-    server: normalizeServerUrl(server),
-    workspace,
-    agent: agent.replace(/^@/, ""),
-    noBrowser: flags.has("--no-browser"),
-    noWait: flags.has("--no-wait"),
-  };
+  if (!server || !agent) throw usage();
+  return { mode: "paste", server: normalizeServerUrl(server), agent: agent.replace(/^@/, "") };
 }
 
 function minutes(milliseconds: number): string {
@@ -112,7 +112,7 @@ function pendingLines(pending: PendingLogin, now: number): string[] {
 }
 
 function rerun(slug: string): string {
-  return `then run: coforge agent login --resume --profile ${slug}`;
+  return `then run: coforge agent login wait --profile ${slug}`;
 }
 
 function sameAgent(profile: AgentProfile, server: string, workspace: string, agent: string) {
@@ -162,8 +162,30 @@ async function awaitKey(deps: LoginDeps, slug: string, pending: PendingLogin): P
     code: "DEVICE_CODE_EXPIRED",
     message: "The sign-in code expired before it was approved.",
     retryable: false,
-    suggestedNextAction: "Run `coforge agent login` again.",
+    suggestedNextAction: "Run `coforge agent login start` again.",
   });
+}
+
+type SavedKey = Omit<AgentProfile, "schemaVersion" | "createdAt">;
+
+async function saveKey(deps: LoginDeps, slug: string, key: SavedKey): Promise<void> {
+  const previous = await deps.store.readProfileIgnoreCorrupt(slug);
+  await deps.store.writeProfile(slug, {
+    schemaVersion: 1,
+    ...key,
+    createdAt: new Date(deps.now()).toISOString(),
+  });
+  deps.stdout("state: authorized\n");
+  deps.stdout(`Agent: @${key.agentName} in ${key.workspaceSlug}\nProfile: ${slug}\n`);
+  if (previous && previous.agentId === key.agentId && previous.apiKey !== key.apiKey) {
+    const outcome = await revokeSelf(deps.fetch, previous.serverUrl, previous.apiKey);
+    deps.stdout(
+      outcome.state === "failed"
+        ? `Previous key: not revoked (${outcome.detail}); revoke credential ${previous.credentialId} from the Agent's settings.\n`
+        : `Previous key: ${outcome.state === "revoked" ? "revoked" : "already revoked"}.\n`,
+    );
+  }
+  deps.stdout(`Use it with: coforge --profile ${slug} <command>, or COFORGE_PROFILE=${slug}\n`);
 }
 
 async function finish(
@@ -172,9 +194,7 @@ async function finish(
   pending: PendingLogin,
   key: IssuedKey,
 ): Promise<void> {
-  const previous = await deps.store.readProfileIgnoreCorrupt(slug);
-  await deps.store.writeProfile(slug, {
-    schemaVersion: 1,
+  await saveKey(deps, slug, {
     serverUrl: pending.serverUrl,
     workspaceId: key.workspaceId,
     workspaceSlug: key.workspaceSlug,
@@ -182,20 +202,60 @@ async function finish(
     agentName: key.agentName,
     credentialId: key.credentialId,
     apiKey: key.apiKey,
-    createdAt: new Date(deps.now()).toISOString(),
   });
   await deps.store.removePending(slug);
-  deps.stdout("state: authorized\n");
-  deps.stdout(`Agent: @${key.agentName} in ${key.workspaceSlug}\nProfile: ${slug}\n`);
-  if (previous && previous.agentId === key.agentId && previous.apiKey !== key.apiKey) {
-    const outcome = await revokeSelf(deps.fetch, previous.serverUrl, previous.apiKey);
-    deps.stdout(
-      outcome.state === "failed"
-        ? `Previous key: not revoked (${outcome.detail}); revoke it from the Agent's settings.\n`
-        : `Previous key: ${outcome.state === "revoked" ? "revoked" : "already revoked"}.\n`,
-    );
-  }
-  deps.stdout(`Use it with: coforge --profile ${slug} <command>, or COFORGE_PROFILE=${slug}\n`);
+}
+
+function invalidKey(message: string): CliError {
+  return new CliError({
+    code: "EXTERNAL_KEY_INVALID",
+    message,
+    retryable: false,
+    suggestedNextAction: "Create a new credential on the Agent's page and run login again.",
+  });
+}
+
+async function pasteLogin(
+  invocation: Extract<LoginInvocation, { mode: "paste" }>,
+  profileSlug: string | undefined,
+  deps: LoginDeps,
+): Promise<void> {
+  const apiKey = (await deps.readKey()).trim();
+  if (!apiKey.startsWith("sk_ext_"))
+    throw invalidKey("That is not an external Agent key (sk_ext_...).");
+  const probe = await probeContext({ serverUrl: invocation.server, apiKey }, deps.fetch);
+  if (probe.state === "unauthorized")
+    throw invalidKey("The server rejected this key; it was revoked, replaced or mistyped.");
+  if (probe.state === "unreachable")
+    throw new CliError({
+      code: "LOGIN_NETWORK_FAILED",
+      message: `Could not verify the key with ${invocation.server} (${probe.detail}).`,
+      retryable: true,
+    });
+  const { agent, workspace, credential } = probe.context;
+  const wanted = invocation.agent.toLowerCase();
+  if (!agent.external || !credential)
+    throw invalidKey("This key does not belong to an external Agent.");
+  if (agent.id.toLowerCase() !== wanted && agent.name.toLowerCase() !== wanted)
+    throw new CliError({
+      code: "AGENT_MISMATCH",
+      message: `This key belongs to @${agent.name} in ${workspace.slug}, not to ${invocation.agent}.`,
+      retryable: false,
+      suggestedNextAction: "Copy the key from the page of the Agent you named with --agent.",
+    });
+  const slug = profileSlug ?? defaultProfileSlug(workspace.slug, agent.name);
+  const existing = await deps.store.readProfileIgnoreCorrupt(slug);
+  if (existing && !(existing.serverUrl === invocation.server && existing.agentId === agent.id))
+    throw alreadyExists(slug, existing);
+  await saveKey(deps, slug, {
+    serverUrl: invocation.server,
+    workspaceId: workspace.id,
+    workspaceSlug: workspace.slug,
+    agentId: agent.id,
+    agentName: agent.name,
+    credentialId: credential.id,
+    apiKey,
+  });
 }
 
 async function wait(deps: LoginDeps, slug: string, pending: PendingLogin): Promise<void> {
@@ -208,7 +268,8 @@ export async function runAgentLogin(
   profileSlug: string | undefined,
   deps: LoginDeps,
 ): Promise<void> {
-  if (invocation.resume) return resume(profileSlug, deps);
+  if (invocation.mode === "paste") return pasteLogin(invocation, profileSlug, deps);
+  if (invocation.mode === "wait") return waitForPending(profileSlug, deps);
   const slug = profileSlug ?? defaultProfileSlug(invocation.workspace, invocation.agent);
   const existing = await deps.store.readProfileIgnoreCorrupt(slug);
   if (existing) {
@@ -239,18 +300,12 @@ export async function runAgentLogin(
     agent: invocation.agent,
   };
   await deps.store.writePending(slug, pending);
-  if (invocation.noWait) {
-    deps.stdout(
-      `state: pending_human_action\n${pendingLines(pending, now).join("\n")}\nA person must approve it; ${rerun(slug)}\n`,
-    );
-    return;
-  }
-  deps.stdout(`${pendingLines(pending, now).join("\n")}\nWaiting for approval...\n`);
-  if (!invocation.noBrowser) deps.offerBrowser?.(pending.verificationUri, pending.serverUrl);
-  await wait(deps, slug, pending);
+  deps.stdout(
+    `state: pending_human_action\n${pendingLines(pending, now).join("\n")}\nA person must approve it; ${rerun(slug)}\n`,
+  );
 }
 
-async function resume(profileSlug: string | undefined, deps: LoginDeps): Promise<void> {
+async function waitForPending(profileSlug: string | undefined, deps: LoginDeps): Promise<void> {
   let slug = profileSlug;
   if (slug === undefined) {
     const waiting = await deps.store.listPendingLogins();
@@ -259,12 +314,12 @@ async function resume(profileSlug: string | undefined, deps: LoginDeps): Promise
         code: waiting.length === 0 ? "LOGIN_NOT_PENDING" : "PROFILE_AMBIGUOUS",
         message:
           waiting.length === 0
-            ? "No sign-in is waiting to be resumed."
+            ? "No sign-in is waiting for approval."
             : `Several sign-ins are waiting (${waiting.join(", ")}).`,
         retryable: false,
         suggestedNextAction:
           waiting.length === 0
-            ? "Run `coforge agent login --server <url> --workspace <slug> --agent <name>`."
+            ? "Run `coforge agent login start --server <url> --workspace <slug> --agent <name>`."
             : "Pass --profile <slug>.",
       });
     slug = waiting[0]!;
@@ -273,10 +328,10 @@ async function resume(profileSlug: string | undefined, deps: LoginDeps): Promise
   if (!pending)
     throw new CliError({
       code: "LOGIN_NOT_PENDING",
-      message: `Profile "${slug}" has no sign-in waiting to be resumed.`,
+      message: `Profile "${slug}" has no sign-in waiting for approval.`,
       retryable: false,
       suggestedNextAction:
-        "Run `coforge agent login --server <url> --workspace <slug> --agent <name>`.",
+        "Run `coforge agent login start --server <url> --workspace <slug> --agent <name>`.",
     });
   const existing = await deps.store.readProfileIgnoreCorrupt(slug);
   if (existing && !sameAgent(existing, pending.serverUrl, pending.workspace, pending.agent))

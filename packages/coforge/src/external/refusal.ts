@@ -36,6 +36,8 @@ export function externalRefusalOf(status: number, body: unknown): CliError | und
   const { code, feature } = body as { code?: unknown; feature?: unknown };
   if (status === 403 && code === "unsupported_for_external_agents")
     return unsupportedFeatureError(typeof feature === "string" ? feature : undefined);
+  if (status === 409 && code === "reminders_unsupported_for_external_agents")
+    return unsupportedFeatureError(typeof feature === "string" ? feature : undefined);
   if (status === 401 && code === "invalid_credential") return invalidCredentialError();
   return undefined;
 }

@@ -50,7 +50,7 @@ function failure(code: string, message: string, next?: string): CliError {
   return new CliError({ code, message, retryable: false, suggestedNextAction: next });
 }
 
-const RERUN = "Run `coforge agent login` again.";
+const RERUN = "Run `coforge agent login start` again.";
 
 async function jsonOf(response: Response): Promise<Record<string, unknown>> {
   const parsed: unknown = await response.json().catch(() => undefined);

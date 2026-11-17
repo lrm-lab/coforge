@@ -257,8 +257,12 @@ test("reminders.schedule gets the scheduler advice, list goes to the server", as
     const body = JSON.parse(request.body);
     return body.operation === "schedule"
       ? json(
-          { error: "no", code: "unsupported_for_external_agents", feature: "reminders.schedule" },
-          403,
+          {
+            error: "no",
+            code: "reminders_unsupported_for_external_agents",
+            feature: "reminders.schedule",
+          },
+          409,
         )
       : json({
           idempotencyKey: body.idempotencyKey,
