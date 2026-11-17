@@ -48,7 +48,15 @@ import {
 } from "#src/server/records/weekly-report-assistant.server";
 
 import { declareNoStore } from "#src/features/no-store-response.server";
-import { issueExternalAgentPageCredential } from "#src/server/agents/external-agent-credentials.server";
+import {
+  EXTERNAL_MINT_REFUSAL,
+  getExternalMintRateLimits,
+  peekExternalMint,
+} from "#src/server/agents/external-agent-mint-rate-limit.server";
+import {
+  issueExternalAgentPageCredential,
+  mintRefusalError,
+} from "#src/server/agents/external-agent-credentials.server";
 import { PrismaExternalAgentCredentialRepository } from "#src/server/db/repositories/external-agent-credential.repositories.server";
 import { readAgentRoster } from "#src/server/agents/agent-roster.server";
 import { AgentEnvironment } from "#src/server/agents/agent-environment.server";
@@ -144,11 +152,20 @@ export const createExternalAgent = createServerFn({ method: "POST" })
   .validator(createExternalAgentInputSchema)
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     const role = await workspaceMemberRole(db, workspaceId, user.id);
+    const mintLimits = getExternalMintRateLimits();
+    const mintable = await peekExternalMint(mintLimits, { userId: user.id });
+    if (!mintable.allowed)
+      throw mintRefusalError({
+        ok: false,
+        reason: EXTERNAL_MINT_REFUSAL,
+        retryAfterSeconds: mintable.retryAfterSeconds,
+      });
     const created = await manageAgents(db).create({ userId: user.id, workspaceId, role }, data);
     await publishAgentDirectoryChanged(workspaceId, created.agent.id, "created");
     declareNoStore();
     const credential = await issueExternalAgentPageCredential({
       repository: new PrismaExternalAgentCredentialRepository(db),
+      rateLimits: mintLimits,
       agentId: created.agent.id,
       workspaceId,
       actorUserId: user.id,

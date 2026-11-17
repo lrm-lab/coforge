@@ -1,4 +1,4 @@
-import { beforeEach, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 
 import { AppInstallationApi } from "#src/server/app-installation-data/app-installation-api.server";
 import type { AppInstallationData } from "#src/server/app-installation-data/app-installation-data.server";
@@ -31,6 +31,10 @@ function smallLimit() {
 
 beforeEach(() => {
   spyOn(console, "info").mockImplementation(() => {});
+});
+
+afterEach(() => {
+  mock.restore();
 });
 
 async function expectRateLimited(response: Response) {

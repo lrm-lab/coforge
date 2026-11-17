@@ -1,3 +1,4 @@
+import { externalCredentialRateLimitMessage } from "./external-agent-credential-error";
 import {
   AGENT_ENVIRONMENT_MAX_NAME_LENGTH,
   AGENT_ENVIRONMENT_MAX_VARIABLES,
@@ -113,7 +114,10 @@ export function agentUpdateErrorMessage(cause: unknown): string {
 }
 
 export function agentCreateErrorMessage(cause: unknown): string {
-  return agentFormErrorMessage(cause, m.agent_form_server_error);
+  return (
+    externalCredentialRateLimitMessage(cause) ??
+    agentFormErrorMessage(cause, m.agent_form_server_error)
+  );
 }
 
 /**

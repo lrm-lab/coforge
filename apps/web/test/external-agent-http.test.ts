@@ -1,3 +1,4 @@
+import { NO_EXTERNAL_MINT_RATE_LIMITS } from "#src/server/agents/external-agent-mint-rate-limit.server";
 import { describe, expect, test } from "bun:test";
 import {
   externalAgentFeature,
@@ -118,9 +119,10 @@ async function externalFixture() {
   repository.addAgent("agent-1");
   const minted = await mintExternalAgentCredential({
     repository,
+    rateLimits: NO_EXTERNAL_MINT_RATE_LIMITS,
     agentId: "agent-1",
     workspaceId: "workspace-1",
-    approvedByUserId: null,
+    approvedByUserId: "user-1",
     source: "device",
     machine: { machineName: "m", hostname: "h", os: "o", clientName: "c" },
   });

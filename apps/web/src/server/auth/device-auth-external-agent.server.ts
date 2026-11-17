@@ -4,36 +4,39 @@ import {
   type ExternalCredentialMintRefusal,
   type ExternalMachine,
 } from "#src/server/agents/external-agent-credentials.server";
+import {
+  EXTERNAL_MINT_REFUSAL,
+  type ExternalMintRateLimits,
+} from "#src/server/agents/external-agent-mint-rate-limit.server";
 
 export const EXTERNAL_DEVICE_CLIENT_ID = "coforge-cli";
 
 export type ExternalAgentGrant = {
   kind: "external_agent";
-  workspaceId: string;
-  agentId: string;
   machine: ExternalMachine;
 };
 
-export type ExternalGrantDetails = {
-  kind: "external_agent";
-  workspaceId: string;
+export type ExternalGrantDetails = ExternalAgentGrant;
+
+export type ApprovableExternalAgent = {
   agentId: string;
-  agent: { name: string; displayName: string };
-  workspace: { name: string; slug: string };
-  machine: ExternalMachine;
+  name: string;
+  displayName: string;
+  workspaceId: string;
+  workspaceName: string;
+  workspaceSlug: string;
 };
 
 export type ExternalApprovalRefusal =
   | "not_authorized"
   | "agent_not_external"
   | "agent_unavailable"
-  | "credential_limit";
+  | "credential_limit"
+  | "agent_not_found"
+  | "mint_rate_limited";
 
 export interface ExternalAgentDeviceDirectory {
-  resolve(
-    workspaceSlug: string,
-    agentName: string,
-  ): Promise<{ workspaceId: string; agentId: string; hosting: string } | undefined>;
+  target(agentId: string): Promise<{ workspaceId: string; hosting: string } | undefined>;
   identity(
     workspaceId: string,
     agentId: string,
@@ -46,11 +49,13 @@ export interface ExternalAgentDeviceDirectory {
     workspaceId: string;
     agentId: string;
   }): Promise<ExternalApprovalRefusal | undefined>;
+  approvable(userId: string): Promise<ApprovableExternalAgent[]>;
 }
 
 export type ExternalAgentDeviceDeps = {
   directory: ExternalAgentDeviceDirectory;
   credentials: ExternalAgentCredentialRepository;
+  mintLimits: ExternalMintRateLimits;
 };
 
 const MACHINE_FIELD_LIMITS = {
@@ -61,11 +66,7 @@ const MACHINE_FIELD_LIMITS = {
 } as const;
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
 
-export type ExternalAuthorizeRequest = {
-  workspace: string;
-  agent: string;
-  machine: ExternalMachine;
-};
+export type ExternalAuthorizeRequest = { machine: ExternalMachine };
 
 function boundedField(body: URLSearchParams, name: string, max: number): string | undefined {
   const value = body.get(name)?.trim();
@@ -75,33 +76,16 @@ function boundedField(body: URLSearchParams, name: string, max: number): string 
 export function parseExternalAuthorizeBody(
   body: URLSearchParams,
 ): ExternalAuthorizeRequest | undefined {
-  const workspace = boundedField(body, "workspace", 100);
-  const agent = boundedField(body, "agent", 100);
   const machineName = boundedField(body, "machine_name", MACHINE_FIELD_LIMITS.machine_name);
   const hostname = boundedField(body, "hostname", MACHINE_FIELD_LIMITS.hostname);
   const os = boundedField(body, "os", MACHINE_FIELD_LIMITS.os);
   const clientName = boundedField(body, "client_name", MACHINE_FIELD_LIMITS.client_name);
-  if (!workspace || !agent || !machineName || !hostname || !os || !clientName) return undefined;
-  return { workspace, agent, machine: { machineName, hostname, os, clientName } };
+  if (!machineName || !hostname || !os || !clientName) return undefined;
+  return { machine: { machineName, hostname, os, clientName } };
 }
 
-export type ExternalGrantResolution = { ok: true; grant: ExternalAgentGrant } | { ok: false };
-
-export async function resolveExternalAgentGrant(
-  directory: Pick<ExternalAgentDeviceDirectory, "resolve">,
-  request: ExternalAuthorizeRequest,
-): Promise<ExternalGrantResolution> {
-  const found = await directory.resolve(request.workspace, request.agent);
-  if (!found || found.hosting !== "external") return { ok: false };
-  return {
-    ok: true,
-    grant: {
-      kind: "external_agent",
-      workspaceId: found.workspaceId,
-      agentId: found.agentId,
-      machine: request.machine,
-    },
-  };
+export function externalGrantOf(request: ExternalAuthorizeRequest): ExternalAgentGrant {
+  return { kind: "external_agent", machine: request.machine };
 }
 
 export function readExternalAgentGrant(value: unknown): ExternalAgentGrant | undefined {
@@ -115,8 +99,6 @@ export function readExternalAgentGrant(value: unknown): ExternalAgentGrant | und
       : {};
   const read = {
     kind: grant.kind,
-    workspaceId: text(grant, "workspaceId"),
-    agentId: text(grant, "agentId"),
     machine: {
       machineName: text(machine, "machineName"),
       hostname: text(machine, "hostname"),
@@ -124,25 +106,8 @@ export function readExternalAgentGrant(value: unknown): ExternalAgentGrant | und
       clientName: text(machine, "clientName"),
     },
   };
-  if (read.kind !== "external_agent" || !read.workspaceId || !read.agentId) return undefined;
+  if (read.kind !== "external_agent") return undefined;
   return read as ExternalAgentGrant;
-}
-
-export async function externalGrantDetails(
-  directory: Pick<ExternalAgentDeviceDirectory, "identity">,
-  value: unknown,
-): Promise<ExternalGrantDetails | undefined> {
-  const grant = readExternalAgentGrant(value);
-  if (!grant) return undefined;
-  const identity = await directory.identity(grant.workspaceId, grant.agentId);
-  if (!identity) return undefined;
-  return {
-    kind: "external_agent",
-    workspaceId: grant.workspaceId,
-    agentId: grant.agentId,
-    ...identity,
-    machine: grant.machine,
-  };
 }
 
 export type ExternalAgentRedeemed =
@@ -158,7 +123,11 @@ export type ExternalAgentRedeemed =
   | {
       status: "error";
       error: "access_denied" | "invalid_grant";
-      coforgeCode?: ExternalCredentialMintRefusal | "agent_not_found";
+      coforgeCode?:
+        | ExternalCredentialMintRefusal
+        | typeof EXTERNAL_MINT_REFUSAL
+        | "agent_not_found";
+      retryAfterSeconds?: number;
     };
 
 export async function redeemExternalAgentGrant(
@@ -171,30 +140,33 @@ export async function redeemExternalAgentGrant(
   },
 ): Promise<ExternalAgentRedeemed> {
   const grant = readExternalAgentGrant(record.grant);
-  if (
-    !grant ||
-    record.approvedAgentId !== grant.agentId ||
-    record.approvedWorkspaceId !== grant.workspaceId
-  )
-    return { status: "error", error: "invalid_grant" };
-  const identity = await deps.directory.identity(grant.workspaceId, grant.agentId);
+  const { approvedAgentId: agentId, approvedWorkspaceId: workspaceId } = record;
+  if (!grant || !agentId || !workspaceId) return { status: "error", error: "invalid_grant" };
+  const identity = await deps.directory.identity(workspaceId, agentId);
   if (!identity) return { status: "error", error: "access_denied", coforgeCode: "agent_not_found" };
   const minted = await mintExternalAgentCredential({
     repository: deps.credentials,
-    agentId: grant.agentId,
-    workspaceId: grant.workspaceId,
+    rateLimits: deps.mintLimits,
+    agentId,
+    workspaceId,
     approvedByUserId: record.userId,
     source: "device",
     machine: grant.machine,
   });
-  if (!minted.ok) return { status: "error", error: "access_denied", coforgeCode: minted.reason };
+  if (!minted.ok)
+    return {
+      status: "error",
+      error: "access_denied",
+      coforgeCode: minted.reason,
+      ...("retryAfterSeconds" in minted ? { retryAfterSeconds: minted.retryAfterSeconds } : {}),
+    };
   return {
     status: "authorized_external_agent",
     credentialId: minted.credentialId,
     apiKey: minted.apiKey,
-    agentId: grant.agentId,
+    agentId,
     agentName: identity.agent.name,
-    workspaceId: grant.workspaceId,
+    workspaceId,
     workspaceSlug: identity.workspace.slug,
   };
 }

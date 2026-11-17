@@ -41,7 +41,15 @@ local seen = tonumber(ARGV[5])
 local window = tonumber(ARGV[6])
 project(state, now)
 local before_kind, before_detail = external_shown(state, now)
+if seen > 0 then
+  if state.seenFence and seen <= tonumber(state.seenFence) then return false end
+else
+  state.seenFence = now
+end
 local lease_until = seen + window
+if seen > 0 and external_live(state, now) and state.process.leaseUntil > lease_until then
+  lease_until = state.process.leaseUntil
+end
 local live = seen > 0 and now < lease_until
 if live and state.offlineReport and state.offlineLease and now < state.offlineLease then
   state.offlineLease = lease_until

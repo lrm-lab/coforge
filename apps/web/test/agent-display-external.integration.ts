@@ -137,4 +137,28 @@ describe("external Agent display", () => {
     expect(await status(subject, "working", now + 10, "", false)).toBeUndefined();
     expect((await subject.snapshot(scope)).activityKind).toBe("thinking");
   });
+  test("a seen captured before the offline sync cannot relight the dot; a later one can", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    const touchedAt = now;
+    await presence(subject, touchedAt);
+    now += 1_000;
+    expect((await presence(subject, 0))?.activityKind).toBe("offline");
+    now += 500;
+    expect(await presence(subject, touchedAt)).toBeUndefined();
+    expect((await subject.snapshot(scope)).activityKind).toBe("offline");
+    const next = await presence(subject, now);
+    expect(next?.activityKind).toBe("online");
+    expect(next?.expiresAt).toBe(now + WINDOW);
+  });
+
+  test("an older seen never shortens the lease", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await presence(subject, now);
+    expect(await presence(subject, now - 60_000)).toBeUndefined();
+    const held = await subject.snapshot(scope);
+    expect(held.activityKind).toBe("online");
+    expect(held.expiresAt).toBe(now + WINDOW);
+  });
 });

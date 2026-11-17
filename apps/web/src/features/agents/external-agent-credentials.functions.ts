@@ -10,6 +10,7 @@ import {
   listExternalCredentials,
   revokeOneExternalCredential,
 } from "#src/server/agents/external-agent-credentials.server";
+import { getExternalMintRateLimits } from "#src/server/agents/external-agent-mint-rate-limit.server";
 import { PrismaExternalAgentCredentialRepository } from "#src/server/db/repositories/external-agent-credential.repositories.server";
 import { agentIdInputSchema, agentIdSchema } from "./agent.schemas";
 
@@ -59,6 +60,7 @@ export const createExternalAgentPageCredential = createServerFn({ method: "POST"
     await managedExternalAgent(db, { userId: user.id, workspaceId, agentId: data.agentId });
     const issued = await issueExternalAgentPageCredential({
       repository: new PrismaExternalAgentCredentialRepository(db),
+      rateLimits: getExternalMintRateLimits(),
       agentId: data.agentId,
       workspaceId,
       actorUserId: user.id,

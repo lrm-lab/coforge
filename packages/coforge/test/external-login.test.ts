@@ -109,14 +109,12 @@ test("login prints the link and user code, waits through pending, and saves the 
   expect(await home.store.readPending("acme-builder")).toBeUndefined();
 });
 
-test("the device grant request carries the workspace, agent and machine, and never the key", async () => {
+test("the device grant request names no Workspace or Agent, only the machine, and never the key", async () => {
   const s = setup(grantThen([json(issued)]));
   await signIn(s.deps);
   const device = new URLSearchParams(s.requests[0]!.body);
   expect(Object.fromEntries(device)).toEqual({
     client_id: "coforge-cli",
-    workspace: "acme",
-    agent: "builder",
     machine_name: "laptop",
     hostname: "laptop.local",
     os: "darwin 25",
@@ -182,26 +180,55 @@ test("a plain access_denied is a denial and invalid_grant a stale code", async (
   });
 });
 
-test("an unknown Agent or a managed one is refused when the grant starts", async () => {
-  const missing = setup(() =>
-    json(
-      { error: "invalid_request", error_description: "x", coforge_code: "agent_not_found" },
-      400,
-    ),
+test("a mint over the rate limit names the wait and asks to try again later", async () => {
+  const s = setup(
+    grantThen([
+      json(
+        {
+          error: "access_denied",
+          coforge_code: "agent_credential_mint_rate_limited",
+          retry_after: 240,
+        },
+        400,
+      ),
+    ]),
   );
-  await expect(signIn(missing.deps)).rejects.toMatchObject({
-    code: "AGENT_NOT_FOUND",
+  await expect(signIn(s.deps)).rejects.toMatchObject({
+    code: "LOGIN_RATE_LIMITED",
+    message: expect.stringContaining("4 minutes"),
+    retryable: true,
   });
-  const managed = setup(() =>
-    json(
-      { error: "invalid_request", error_description: "x", coforge_code: "agent_not_external" },
-      400,
-    ),
-  );
-  await expect(signIn(managed.deps)).rejects.toMatchObject({
-    code: "AGENT_NOT_EXTERNAL",
+});
+
+test("login start tells the person to choose the Agent on the page", async () => {
+  const s = setup(grantThen([]));
+  await runAgentLogin(login, undefined, s.deps);
+  expect(s.text()).toContain("choose @builder in acme");
+});
+
+test.each([
+  ["a key for another Agent", { agent_id: "a9", agent_name: "other" }, "@other"],
+  ["a key in another Workspace", { workspace_slug: "elsewhere" }, "elsewhere"],
+])("%s is refused, names what it is for, and saves nothing", async (_name, over, named) => {
+  const s = setup(grantThen([json({ ...issued, ...over })]));
+  await expect(signIn(s.deps)).rejects.toMatchObject({
+    code: "AGENT_IDENTITY_MISMATCH",
+    message: expect.stringContaining(named),
+    suggestedNextAction: expect.stringContaining("Revoke"),
   });
+  expect(await home.store.readProfile("acme-builder")).toBeUndefined();
   expect(await home.store.readPending("acme-builder")).toBeUndefined();
+});
+
+test("--agent may be the Agent's id", async () => {
+  const s = setup(grantThen([json(issued)]));
+  await runAgentLogin(
+    parseAgentLoginArgs(["start", "--server", SERVER, "--workspace", "acme", "--agent", "a1"]),
+    "by-id",
+    s.deps,
+  );
+  await runAgentLogin(waiting, "by-id", s.deps);
+  expect(await home.store.readProfile("by-id")).toMatchObject({ agentId: "a1" });
 });
 
 test("login start saves the pending sign-in, prints the page and code, and does not poll", async () => {

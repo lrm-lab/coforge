@@ -6,3 +6,7 @@ import { z } from "zod";
 export const userCodeInputSchema = z.object({
   userCode: z.string().min(1).max(32),
 });
+
+export const approveDeviceCodeInputSchema = userCodeInputSchema.extend({
+  agentId: z.uuid().optional(),
+});

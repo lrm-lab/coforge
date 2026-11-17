@@ -193,6 +193,19 @@ async function finish(
   pending: PendingLogin,
   key: IssuedKey,
 ): Promise<void> {
+  const wanted = pending.agent.toLowerCase();
+  if (
+    key.workspaceSlug.toLowerCase() !== pending.workspace.toLowerCase() ||
+    (key.agentName.toLowerCase() !== wanted && key.agentId.toLowerCase() !== wanted)
+  ) {
+    await deps.store.removePending(slug);
+    throw new CliError({
+      code: "AGENT_IDENTITY_MISMATCH",
+      message: `The approval gave a key for @${key.agentName} in ${key.workspaceSlug}, not for @${pending.agent} in ${pending.workspace}. The profile was not changed.`,
+      retryable: false,
+      suggestedNextAction: `Revoke credential ${key.credentialId} in the credentials list on @${key.agentName}'s page, then run \`coforge agent login start\` again and choose @${pending.agent}.`,
+    });
+  }
   await saveKey(deps, slug, { serverUrl: pending.serverUrl, ...key });
   await deps.store.removePending(slug);
 }
@@ -269,11 +282,7 @@ export async function runAgentLogin(
       return;
     }
   }
-  const grant = await startDeviceGrant(deps.fetch, invocation.server, {
-    workspace: invocation.workspace,
-    agent: invocation.agent,
-    machine: deps.machine,
-  });
+  const grant = await startDeviceGrant(deps.fetch, invocation.server, { machine: deps.machine });
   const now = deps.now();
   const pending: PendingLogin = {
     serverUrl: invocation.server,
@@ -287,7 +296,7 @@ export async function runAgentLogin(
   };
   await deps.store.writePending(slug, pending);
   deps.stdout(
-    `state: pending_human_action\n${pendingLines(pending, now).join("\n")}\nA person must approve it; ${rerun(slug)}\n`,
+    `state: pending_human_action\n${pendingLines(pending, now).join("\n")}\nA person must open that page, enter the code and choose @${invocation.agent} in ${invocation.workspace}; ${rerun(slug)}\n`,
   );
 }
 

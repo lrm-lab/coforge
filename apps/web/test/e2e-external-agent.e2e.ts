@@ -130,8 +130,6 @@ test("external Agent: page credential, browser-approved login, presence, revoke 
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         client_id: "coforge-cli",
-        workspace: workspace.slug,
-        agent: agentName,
         machine_name: machineName,
         hostname: `${machineName}.internal.example`,
         os: "linux 6.8.0-generic",
@@ -155,6 +153,17 @@ test("external Agent: page credential, browser-approved login, presence, revoke 
       "wait",
       "--fn",
       `document.body.innerText.includes(${JSON.stringify(machineName)})`,
+    );
+    await browser(
+      "wait",
+      "--fn",
+      `document.body.innerText.includes(${JSON.stringify(`@${agentName}`)})`,
+    );
+    await browser("click", `label:has(input[value="${createdAgentId}"])`);
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('input[value="${createdAgentId}"]')?.checked === true`,
     );
     await shots("3-device-verify");
     await browser("set", "viewport", "390", "844");

@@ -10,8 +10,8 @@ import {
 } from "#src/server/auth/device-auth.server";
 import {
   EXTERNAL_DEVICE_CLIENT_ID,
+  externalGrantOf,
   parseExternalAuthorizeBody,
-  resolveExternalAgentGrant,
   type ExternalAgentDeviceDeps,
   type ExternalAgentDeviceDirectory,
 } from "#src/server/auth/device-auth-external-agent.server";
@@ -19,6 +19,7 @@ import {
   isExternalAgentKeyShape,
   MAX_LIVE_EXTERNAL_CREDENTIALS,
 } from "#src/server/agents/external-agent-credentials.server";
+import { NO_EXTERNAL_MINT_RATE_LIMITS } from "#src/server/agents/external-agent-mint-rate-limit.server";
 import { MemoryExternalAgentCredentials } from "./helpers/memory-external-agent-credentials";
 
 type Row = DeviceAuthorizationRecord & { deviceHash: string; userHash: string };
@@ -100,13 +101,9 @@ function directory(
   overrides: { hosting?: string; refusal?: (userId: string) => string | undefined } = {},
 ): ExternalAgentDeviceDirectory {
   return {
-    async resolve(workspaceSlug, agentName) {
-      return workspaceSlug === "acme" && agentName === "scout"
-        ? {
-            workspaceId: WORKSPACE_ID,
-            agentId: AGENT_ID,
-            hosting: overrides.hosting ?? "external",
-          }
+    async target(agentId) {
+      return agentId === AGENT_ID
+        ? { workspaceId: WORKSPACE_ID, hosting: overrides.hosting ?? "external" }
         : undefined;
     },
     async identity() {
@@ -119,6 +116,20 @@ function directory(
       return (overrides.refusal?.(userId) ??
         (userId === OWNER ? undefined : "not_authorized")) as never;
     },
+    async approvable(userId) {
+      return userId === OWNER
+        ? [
+            {
+              agentId: AGENT_ID,
+              name: "scout",
+              displayName: "Scout",
+              workspaceId: WORKSPACE_ID,
+              workspaceName: "Acme",
+              workspaceSlug: "acme",
+            },
+          ]
+        : [];
+    },
   };
 }
 
@@ -127,46 +138,63 @@ function deps(overrides: Parameters<typeof directory>[0] = {}) {
   credentials.addAgent(AGENT_ID);
   return {
     credentials,
-    external: { directory: directory(overrides), credentials } satisfies ExternalAgentDeviceDeps,
+    external: {
+      directory: directory(overrides),
+      credentials,
+      mintLimits: NO_EXTERNAL_MINT_RATE_LIMITS,
+    } satisfies ExternalAgentDeviceDeps,
   };
 }
 
 const BODY = new URLSearchParams({
   client_id: "coforge-cli",
-  workspace: "acme",
-  agent: "scout",
   machine_name: "laptop",
   hostname: "mac.local",
   os: "darwin",
   client_name: "coforge 1.0",
 });
 
-async function externalGrant(store: DeviceAuthorizationStore, d = directory()) {
-  const request = parseExternalAuthorizeBody(BODY)!;
-  const resolution = await resolveExternalAgentGrant(d, request);
-  if (!resolution.ok) throw new Error("grant refused");
+async function externalGrant(store: DeviceAuthorizationStore) {
   return authorizeDevice({
     store,
     origin: "https://example.test",
     now: () => START,
     clientId: EXTERNAL_DEVICE_CLIENT_ID,
-    grant: resolution.grant,
+    grant: externalGrantOf(parseExternalAuthorizeBody(BODY)!),
+  });
+}
+
+const MACHINE = {
+  machineName: "laptop",
+  hostname: "mac.local",
+  os: "darwin",
+  clientName: "coforge 1.0",
+};
+
+function approve(
+  store: DeviceAuthorizationStore,
+  userCode: string,
+  over: Partial<Parameters<typeof approveUserCode>[0]> = {},
+) {
+  return approveUserCode({
+    store,
+    userCode,
+    userId: OWNER,
+    agentId: AGENT_ID,
+    now: () => START + 1000,
+    directory: directory(),
+    ...over,
   });
 }
 
 describe("coforge-cli authorize", () => {
-  test("every machine field and the Agent are required and bounded", () => {
-    expect(parseExternalAuthorizeBody(BODY)).toEqual({
-      workspace: "acme",
-      agent: "scout",
-      machine: {
-        machineName: "laptop",
-        hostname: "mac.local",
-        os: "darwin",
-        clientName: "coforge 1.0",
-      },
-    });
-    for (const field of ["workspace", "agent", "machine_name", "hostname", "os", "client_name"]) {
+  test("every machine field is required and bounded; no Agent or Workspace is read", () => {
+    expect(parseExternalAuthorizeBody(BODY)).toEqual({ machine: MACHINE });
+    const named = new URLSearchParams(BODY);
+    named.set("workspace", "acme");
+    named.set("agent", "scout");
+    expect(parseExternalAuthorizeBody(named)).toEqual({ machine: MACHINE });
+    for (const field of ["machine_name", "hostname", "os", "client_name"]) {
       const missing = new URLSearchParams(BODY);
       missing.delete(field);
       expect(parseExternalAuthorizeBody(missing)).toBeUndefined();
@@ -182,111 +210,70 @@ describe("coforge-cli authorize", () => {
     expect(parseExternalAuthorizeBody(control)).toBeUndefined();
   });
 
-  test("an unknown Workspace or Agent and a managed Agent are one refusal before sign-in", async () => {
-    const request = parseExternalAuthorizeBody(BODY)!;
-    for (const resolution of [
-      await resolveExternalAgentGrant(directory(), { ...request, workspace: "nope" }),
-      await resolveExternalAgentGrant(directory(), { ...request, agent: "nope" }),
-      await resolveExternalAgentGrant(directory({ hosting: "managed" }), request),
-    ])
-      expect(resolution).toEqual({ ok: false });
-  });
-
-  test("the grant is stored with the client id and carries no verification_uri_complete", async () => {
+  test("the grant is stored with the client id and the machine only, and carries no verification_uri_complete", async () => {
     const { store, rows } = memoryStore();
     const grant = await externalGrant(store);
     expect(grant).not.toHaveProperty("verificationUriComplete");
     const [row] = [...rows.values()];
     expect(row!.clientId).toBe("coforge-cli");
-    expect(row!.grant).toEqual({
-      kind: "external_agent",
-      workspaceId: WORKSPACE_ID,
-      agentId: AGENT_ID,
-      machine: {
-        machineName: "laptop",
-        hostname: "mac.local",
-        os: "darwin",
-        clientName: "coforge 1.0",
-      },
-    });
+    expect(row!.grant).toEqual({ kind: "external_agent", machine: MACHINE });
   });
 });
 
 describe("the approval page lookup", () => {
-  test("a person who may not approve learns only that, never the Agent or the machine", async () => {
+  test("any signed-in person gets the machine and no Agent, and a code with nobody signed in is unknown", async () => {
     const { store } = memoryStore();
     const grant = await externalGrant(store);
-    expect(
-      await lookupUserCode({
-        store,
-        userCode: grant.userCode,
-        userId: STRANGER,
-        now: () => START,
-        directory: directory(),
-      }),
-    ).toEqual({ found: false, reason: "not_authorized" });
-  });
-
-  test("a coforge-cli code returns the grant details to a person who may approve it", async () => {
-    const { store } = memoryStore();
-    const grant = await externalGrant(store);
-    const lookup = await lookupUserCode({
-      store,
-      userCode: grant.userCode,
-      userId: OWNER,
-      now: () => START,
-      directory: directory(),
-    });
-    expect(lookup).toMatchObject({
-      found: true,
-      external: {
-        agent: { name: "scout", displayName: "Scout" },
-        workspace: { name: "Acme", slug: "acme" },
-        machine: {
-          machineName: "laptop",
-          hostname: "mac.local",
-          os: "darwin",
-          clientName: "coforge 1.0",
-        },
-      },
+    for (const userId of [OWNER, STRANGER])
+      expect(
+        await lookupUserCode({ store, userCode: grant.userCode, userId, now: () => START }),
+      ).toMatchObject({ found: true, external: { kind: "external_agent", machine: MACHINE } });
+    expect(await lookupUserCode({ store, userCode: grant.userCode, now: () => START })).toEqual({
+      found: false,
+      reason: "unknown",
     });
   });
 
-  test("a Computer code has no grant details, and a cli code without a directory is unknown", async () => {
+  test("a Computer code has no grant details", async () => {
     const { store } = memoryStore();
     const computer = await authorizeDevice({
       store,
       origin: "https://example.test",
       now: () => START,
     });
-    const computerLookup = await lookupUserCode({
+    const lookup = await lookupUserCode({
       store,
       userCode: computer.userCode,
       now: () => START,
     });
-    expect(computerLookup.found && computerLookup.external).toBeFalsy();
-    const cli = await externalGrant(store);
-    expect(await lookupUserCode({ store, userCode: cli.userCode, now: () => START })).toEqual({
-      found: false,
-      reason: "unknown",
-    });
+    expect(lookup.found && lookup.external).toBeFalsy();
+  });
+
+  test("a person over the mint limit sees mint_rate_limited", async () => {
+    const { store } = memoryStore();
+    const grant = await externalGrant(store);
+    const refusing = {
+      admit: async () => ({ allowed: true as const }),
+      peek: async () => ({ allowed: false as const, retryAfterSeconds: 120 }),
+    };
+    expect(
+      await lookupUserCode({
+        store,
+        userCode: grant.userCode,
+        userId: OWNER,
+        now: () => START,
+        mintLimits: { person: refusing, agent: refusing },
+      }),
+    ).toEqual({ found: false, reason: "mint_rate_limited" });
   });
 });
 
-describe("approving a coforge-cli code", () => {
-  test("the Agent's owner approves and the Agent and Workspace are recorded", async () => {
+describe("approving a coforge-cli code with a chosen Agent", () => {
+  test("the owner approves and the chosen Agent and its Workspace are recorded", async () => {
     const { store, rows } = memoryStore();
     const grant = await externalGrant(store);
-    const result = await approveUserCode({
-      store,
-      userCode: grant.userCode,
-      userId: OWNER,
-      now: () => START + 1000,
-      directory: directory(),
-    });
-    expect(result.found).toBe(true);
-    const [row] = [...rows.values()];
-    expect(row).toMatchObject({
+    expect((await approve(store, grant.userCode)).found).toBe(true);
+    expect([...rows.values()][0]).toMatchObject({
       status: "approved",
       userId: OWNER,
       approvedAgentId: AGENT_ID,
@@ -294,50 +281,72 @@ describe("approving a coforge-cli code", () => {
     });
   });
 
-  test.each(["not_authorized", "agent_not_external", "agent_unavailable"] as const)(
+  test("no choice, an unknown Agent and a managed Agent are agent_not_found or agent_not_external and leave the grant pending", async () => {
+    const { store, rows } = memoryStore();
+    const grant = await externalGrant(store);
+    expect(await approve(store, grant.userCode, { agentId: undefined })).toEqual({
+      found: false,
+      reason: "agent_not_found",
+    });
+    expect(await approve(store, grant.userCode, { agentId: "other" })).toEqual({
+      found: false,
+      reason: "agent_not_found",
+    });
+    expect(
+      await approve(store, grant.userCode, { directory: directory({ hosting: "managed" }) }),
+    ).toEqual({ found: false, reason: "agent_not_external" });
+    expect([...rows.values()][0]!.status).toBe("pending");
+  });
+
+  test.each(["not_authorized", "agent_unavailable", "credential_limit"] as const)(
     "a %s refusal leaves the grant pending",
     async (refusal) => {
       const { store, rows } = memoryStore();
       const grant = await externalGrant(store);
-      const result = await approveUserCode({
-        store,
-        userCode: grant.userCode,
-        userId: STRANGER,
-        now: () => START + 1000,
-        directory: directory({ refusal: () => refusal }),
-      });
-      expect(result).toEqual({ found: false, reason: refusal });
+      expect(
+        await approve(store, grant.userCode, {
+          directory: directory({ refusal: () => refusal }),
+        }),
+      ).toEqual({ found: false, reason: refusal });
       expect([...rows.values()][0]!.status).toBe("pending");
     },
   );
 
-  test("a person who is not allowed is refused by the directory", async () => {
+  test("a person who may not manage the Agent is refused", async () => {
     const { store } = memoryStore();
     const grant = await externalGrant(store);
-    expect(
-      await approveUserCode({
-        store,
-        userCode: grant.userCode,
-        userId: STRANGER,
-        now: () => START + 1000,
-        directory: directory(),
-      }),
-    ).toEqual({ found: false, reason: "not_authorized" });
+    expect(await approve(store, grant.userCode, { userId: STRANGER })).toEqual({
+      found: false,
+      reason: "not_authorized",
+    });
   });
 
-  test("a cli code can be denied with the directory", async () => {
+  test("the chosen Agent's mint budget is checked and the grant stays pending", async () => {
+    const { store, rows } = memoryStore();
+    const grant = await externalGrant(store);
+    const asked: string[] = [];
+    const agentLimit = {
+      admit: async () => ({ allowed: true as const }),
+      peek: async (id: string) => {
+        asked.push(id);
+        return { allowed: false as const, retryAfterSeconds: 60 };
+      },
+    };
+    expect(
+      await approve(store, grant.userCode, {
+        mintLimits: { person: NO_EXTERNAL_MINT_RATE_LIMITS.person, agent: agentLimit },
+      }),
+    ).toEqual({ found: false, reason: "mint_rate_limited" });
+    expect(asked).toEqual([AGENT_ID]);
+    expect([...rows.values()][0]!.status).toBe("pending");
+  });
+
+  test("a cli code can be denied without choosing an Agent", async () => {
     const { store } = memoryStore();
     const grant = await externalGrant(store);
     expect(
-      (
-        await denyUserCode({
-          store,
-          userCode: grant.userCode,
-          userId: OWNER,
-          now: () => START,
-          directory: directory(),
-        })
-      ).found,
+      (await denyUserCode({ store, userCode: grant.userCode, userId: OWNER, now: () => START }))
+        .found,
     ).toBe(true);
     expect(
       await pollDeviceToken({
@@ -349,18 +358,17 @@ describe("approving a coforge-cli code", () => {
       }),
     ).toEqual({ status: "error", error: "access_denied" });
   });
+
+  test("the Agents an approver may choose come from the directory", async () => {
+    expect(await directory().approvable(OWNER)).toHaveLength(1);
+    expect(await directory().approvable(STRANGER)).toEqual([]);
+  });
 });
 
 describe("the token endpoint", () => {
   async function approvedCode(store: DeviceAuthorizationStore) {
     const grant = await externalGrant(store);
-    await approveUserCode({
-      store,
-      userCode: grant.userCode,
-      userId: OWNER,
-      now: () => START + 1000,
-      directory: directory(),
-    });
+    await approve(store, grant.userCode);
     return grant;
   }
 
@@ -476,6 +484,32 @@ describe("the token endpoint", () => {
         environment,
       }),
     ).toEqual({ status: "error", error: "access_denied", coforgeCode: "agent_unavailable" });
+  });
+
+  test("a redeem over the mint limit answers access_denied with the wait", async () => {
+    const { store } = memoryStore();
+    const { credentials, external } = deps();
+    const grant = await approvedCode(store);
+    const refusing = {
+      admit: async () => ({ allowed: false as const, retryAfterSeconds: 240 }),
+      peek: async () => ({ allowed: true as const }),
+    };
+    expect(
+      await pollDeviceToken({
+        store,
+        deviceCode: grant.deviceCode,
+        now: () => START + 20_000,
+        clientId: "coforge-cli",
+        external: { ...external, mintLimits: { person: refusing, agent: refusing } },
+        environment,
+      }),
+    ).toEqual({
+      status: "error",
+      error: "access_denied",
+      coforgeCode: "agent_credential_mint_rate_limited",
+      retryAfterSeconds: 240,
+    });
+    expect(credentials.rows.size).toBe(0);
   });
 
   test("the fifty-first live key is refused as credential_limit", async () => {

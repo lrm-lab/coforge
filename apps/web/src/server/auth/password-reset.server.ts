@@ -19,6 +19,7 @@ import {
   type CodeSendRateLimits,
   type ResetCodeRateLimits,
 } from "./sign-in-rate-limits.server";
+import { errorType } from "#src/server/errors/error-type.server";
 import { codeDestinationKey, type CodeDestination } from "#src/features/auth/code-destination";
 
 export type SendPasswordResetCodeResult =
@@ -99,6 +100,7 @@ export async function resetPasswordWithCode(input: {
   /** The client's address, counted against the address limit. */
   clientAddress?: string | undefined;
   authing?: AuthingAuthentication;
+  onPasswordReset?: (destination: CodeDestination) => Promise<void>;
 }): Promise<ResetPasswordResult> {
   const authing = input.authing ?? createAuthingAuthentication(input.config);
   try {
@@ -115,6 +117,14 @@ export async function resetPasswordWithCode(input: {
       passCode: input.passCode,
     });
     await authing.resetPassword({ resetToken, password: input.newPassword });
+    await input.onPasswordReset?.(input.destination).catch((cause: unknown) => {
+      console.warn(
+        JSON.stringify({
+          event: "external_agent.password_reset_revoke_failed",
+          error_type: errorType(cause),
+        }),
+      );
+    });
     return { status: "updated" };
   } catch (error) {
     if (error instanceof PasswordResetRefusedError) {

@@ -67,6 +67,36 @@ test("each id and each prefix counts separately", async () => {
   expect((await other.admit("a")).allowed).toBe(true);
 });
 
+test("a request can cost more than one, and the cost alone can pass the limit", async () => {
+  const limit = new RedisAppRateLimit(redis, {
+    keyPrefix: prefix(),
+    limit: 10,
+    windowMs: 60_000,
+    outageLog,
+  });
+  expect(await limit.admit("agent", 6)).toEqual({ allowed: true });
+  expect(await limit.admit("agent", 4)).toEqual({ allowed: true });
+  expect((await limit.admit("agent", 1)).allowed).toBe(false);
+  expect((await limit.admit("other", 11)).allowed).toBe(false);
+});
+
+test("peek reads the window without counting", async () => {
+  const limit = new RedisAppRateLimit(redis, {
+    keyPrefix: prefix(),
+    limit: 2,
+    windowMs: 60_000,
+    outageLog,
+  });
+  for (let i = 0; i < 5; i++) expect(await limit.peek("a")).toEqual({ allowed: true });
+  await limit.admit("a");
+  expect(await limit.peek("a")).toEqual({ allowed: true });
+  await limit.admit("a");
+  const refused = await limit.peek("a");
+  expect(refused.allowed).toBe(false);
+  if (!refused.allowed) expect(refused.retryAfterSeconds).toBeGreaterThan(55);
+  expect((await limit.peek("b")).allowed).toBe(true);
+});
+
 /** Collects what `console.warn` is given while `run` goes. */
 async function warnings(run: () => Promise<void>) {
   const lines: string[] = [];

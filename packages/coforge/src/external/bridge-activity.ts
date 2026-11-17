@@ -25,10 +25,11 @@ export function activityDrainBeside(wakeEndpoint: URL): URL {
 
 export type ActivitySource = { endpoint: URL; limit: number; token?: string };
 
-type Deps = { fetch: FetchLike; stderr: (text: string) => void };
+type Deps = { fetch: FetchLike; stderr: (text: string) => void; now?: () => number };
 
 export class ActivityPump {
   private pending: Record<string, unknown>[] = [];
+  private retryNotBefore = 0;
 
   constructor(
     private readonly source: ActivitySource,
@@ -46,7 +47,8 @@ export class ActivityPump {
         this.deps.stderr(`activity backlog full; dropped the ${excess} oldest events.\n`);
       }
     }
-    if (this.pending.length) await this.forward(signal);
+    if (this.pending.length && (this.deps.now?.() ?? Date.now()) >= this.retryNotBefore)
+      await this.forward(signal);
   }
 
   private async drain(signal: AbortSignal): Promise<Record<string, unknown>[]> {
@@ -107,6 +109,12 @@ export class ActivityPump {
       return;
     }
     await response.body?.cancel();
+    if (response.status === 429) {
+      const seconds = Math.max(1, Number(response.headers.get("retry-after")) || 30);
+      this.retryNotBefore = (this.deps.now?.() ?? Date.now()) + seconds * 1000;
+      this.deps.stderr(`the server is rate limiting activity; will retry in ${seconds}s.\n`);
+      return;
+    }
     this.deps.stderr(`activity forward answered HTTP ${response.status}; will retry.\n`);
   }
 }

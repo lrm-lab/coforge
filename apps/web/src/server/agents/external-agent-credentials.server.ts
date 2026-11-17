@@ -1,4 +1,9 @@
 import { AppError } from "#src/lib/app-error";
+import {
+  EXTERNAL_MINT_REFUSAL,
+  admitExternalMint,
+  type ExternalMintRateLimits,
+} from "./external-agent-mint-rate-limit.server";
 import { agentKeyHashMatches, generateAgentApiKey, hashAgentApiKey } from "./agent-api-key.server";
 
 export const EXTERNAL_AGENT_KEY_PREFIX = "sk_ext_";
@@ -12,7 +17,8 @@ export type ExternalCredentialRevokeReason =
   | "revoked"
   | "agent_deleted"
   | "agent_stopped"
-  | "replaced";
+  | "replaced"
+  | "issuer_password_reset";
 
 export type ExternalCredentialSource = "device" | "app";
 
@@ -30,7 +36,15 @@ export type ExternalCredentialMintRefusal =
   | "agent_not_external"
   | "credential_limit";
 
-export type ExternalCredentialAuthFailure = "key_not_found" | "key_revoked" | "agent_unavailable";
+export type ExternalCredentialMintFailure =
+  | { ok: false; reason: ExternalCredentialMintRefusal }
+  | { ok: false; reason: typeof EXTERNAL_MINT_REFUSAL; retryAfterSeconds: number };
+
+export type ExternalCredentialAuthFailure =
+  | "key_not_found"
+  | "key_revoked"
+  | "agent_unavailable"
+  | "issuer_left";
 
 export type ExternalCredentialRecord = {
   id: string;
@@ -39,6 +53,7 @@ export type ExternalCredentialRecord = {
   workspaceId: string;
   lastUsedAt: Date | null;
   revokedAt: Date | null;
+  issuerActive: boolean;
   agent: {
     ownerId: string;
     deletedAt: Date | null;
@@ -133,15 +148,30 @@ export function auditExternalCredential(
 
 export async function mintExternalAgentCredential(input: {
   repository: ExternalAgentCredentialRepository;
+  rateLimits: ExternalMintRateLimits;
   agentId: string;
   workspaceId: string;
   approvedByUserId: string | null;
   source: ExternalCredentialSource;
   machine: ExternalMachine | null;
-}): Promise<
-  | { ok: true; credentialId: string; apiKey: string }
-  | { ok: false; reason: ExternalCredentialMintRefusal }
-> {
+}): Promise<{ ok: true; credentialId: string; apiKey: string } | ExternalCredentialMintFailure> {
+  const admission = await admitExternalMint(input.rateLimits, {
+    userId: input.approvedByUserId,
+    agentId: input.agentId,
+  });
+  if (!admission.allowed) {
+    auditExternalCredential("credential_issue_refused", {
+      agentId: input.agentId,
+      workspaceId: input.workspaceId,
+      reason: EXTERNAL_MINT_REFUSAL,
+      limit: admission.limit,
+    });
+    return {
+      ok: false,
+      reason: EXTERNAL_MINT_REFUSAL,
+      retryAfterSeconds: admission.retryAfterSeconds,
+    };
+  }
   const apiKey = generateExternalAgentKey();
   const minted = await input.repository.mint({
     agentId: input.agentId,
@@ -170,24 +200,34 @@ export async function mintExternalAgentCredential(input: {
   return { ok: true, credentialId: minted.id, apiKey };
 }
 
+export function mintRefusalError(refusal: ExternalCredentialMintFailure): AppError {
+  if (refusal.reason === EXTERNAL_MINT_REFUSAL)
+    return new AppError("RATE_LIMITED", {
+      errorId: EXTERNAL_MINT_REFUSAL,
+      details: { retryAfterSeconds: refusal.retryAfterSeconds },
+    });
+  return refusal.reason === "credential_limit"
+    ? new AppError("CONFLICT", { errorId: "credential_limit" })
+    : new AppError("NOT_FOUND");
+}
+
 export async function issueExternalAgentPageCredential(input: {
   repository: ExternalAgentCredentialRepository;
+  rateLimits: ExternalMintRateLimits;
   agentId: string;
   workspaceId: string;
   actorUserId: string;
 }): Promise<{ credentialId: string; key: string }> {
   const minted = await mintExternalAgentCredential({
     repository: input.repository,
+    rateLimits: input.rateLimits,
     agentId: input.agentId,
     workspaceId: input.workspaceId,
     approvedByUserId: input.actorUserId,
     source: "app",
     machine: null,
   });
-  if (!minted.ok)
-    throw minted.reason === "credential_limit"
-      ? new AppError("CONFLICT", { errorId: "credential_limit" })
-      : new AppError("NOT_FOUND");
+  if (!minted.ok) throw mintRefusalError(minted);
   return { credentialId: minted.credentialId, key: minted.apiKey };
 }
 
@@ -203,6 +243,7 @@ export async function authenticateExternalAgentKey(
   if (!record || !agentKeyHashMatches(record.keyHash, actual))
     throw new ExternalCredentialError("key_not_found");
   if (record.revokedAt) throw new ExternalCredentialError("key_revoked");
+  if (!record.issuerActive) throw new ExternalCredentialError("issuer_left");
   const { agent } = record;
   if (agent.deletedAt || agent.stoppedAt || agent.hosting !== "external")
     throw new ExternalCredentialError("agent_unavailable");

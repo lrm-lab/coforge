@@ -2,6 +2,7 @@ import { getDatabaseClient } from "#src/server/db/client.server";
 import { PrismaDeviceAuthorizationStore } from "#src/server/db/repositories/device-auth.repositories.server";
 import { PrismaExternalAgentCredentialRepository } from "#src/server/db/repositories/external-agent-credential.repositories.server";
 import { PrismaExternalAgentDeviceDirectory } from "#src/server/db/repositories/external-agent-device.repositories.server";
+import { getExternalMintRateLimits } from "#src/server/agents/external-agent-mint-rate-limit.server";
 import type { ExternalAgentDeviceDeps } from "./device-auth-external-agent.server";
 import type { DeviceAuthorizationStore } from "./device-auth.server";
 
@@ -28,6 +29,7 @@ export function externalAgentDeviceDeps(): ExternalAgentDeviceDeps | undefined {
     ? {
         directory: new PrismaExternalAgentDeviceDirectory(db),
         credentials: new PrismaExternalAgentCredentialRepository(db),
+        mintLimits: getExternalMintRateLimits(),
       }
     : undefined;
 }

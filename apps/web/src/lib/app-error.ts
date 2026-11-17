@@ -17,6 +17,7 @@ export const APP_ERROR_CODES = [
   "AGENT_DM_RATE_LIMIT",
   "INVALID_TARGET",
   "TARGET_NOT_ACCESSIBLE",
+  "RATE_LIMITED",
 ] as const;
 
 export type AppErrorCode = (typeof APP_ERROR_CODES)[number];
@@ -54,6 +55,7 @@ export const APP_ERROR_HTTP_STATUS: Record<AppErrorCode, number> = {
   // direct-message scope outside the Workspace. Unknown and unreachable read the same
   // deliberately — the send reveals neither.
   TARGET_NOT_ACCESSIBLE: 403,
+  RATE_LIMITED: 429,
 };
 
 const APP_ERROR_PREFIX = "COFORGE_APP_ERROR:";

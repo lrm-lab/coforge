@@ -10,7 +10,12 @@ import {
   parseExternalActivityIngest,
 } from "#src/server/agents/external-agent-activity-ingest.server";
 import { EXTERNAL_ONLINE_WINDOW_MS } from "#src/server/agents/external-agent-presence.server";
-import { handleExternalActivityPost } from "#src/server/agents/external-agent-activity-http.server";
+import {
+  EXTERNAL_ACTIVITY_EVENTS_PER_WINDOW,
+  EXTERNAL_ACTIVITY_WINDOW_MS,
+  handleExternalActivityPost,
+} from "#src/server/agents/external-agent-activity-http.server";
+import { NO_RATE_LIMIT } from "#src/server/app-rate-limits/app-rate-limit.server";
 
 const NOW = Date.parse("2026-11-18T10:00:00Z");
 const AGENT = { workspaceId: "ws", agentId: "agent" };
@@ -67,6 +72,7 @@ function fixture(options: { reported?: boolean; failRecord?: boolean } = {}) {
         };
       },
     },
+    rateLimit: NO_RATE_LIMIT,
     statusReported: {
       isSet: async () => reported,
       set: async (_agentId, at) => {
@@ -320,6 +326,55 @@ describe("the activity endpoint", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ code, retryable: false });
     expect([observed.length, rows.length, claimed.size, flagWrites.length]).toEqual([0, 0, 0, 0]);
+  });
+
+  test("an Agent over its event budget gets 429 activity_rate_limited with Retry-After and nothing is written", async () => {
+    const { ports, observed, rows, claimed, flagWrites } = fixture();
+    const admitted: [string, number | undefined][] = [];
+    const refusing = {
+      admit: async (id: string, cost?: number) => {
+        admitted.push([id, cost]);
+        return { allowed: false as const, retryAfterSeconds: 17 };
+      },
+    };
+    const response = await handleExternalActivityPost(
+      post({
+        schema: EXTERNAL_ACTIVITY_SCHEMA,
+        events: [report("a", "working"), report("b", "online")],
+      }),
+      PRINCIPAL,
+      () => ({ ...ports, rateLimit: refusing }),
+      () => NOW,
+    );
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("17");
+    expect(await response.json()).toMatchObject({ code: "activity_rate_limited", retryable: true });
+    expect(admitted).toEqual([[PRINCIPAL.agentId, 2]]);
+    expect([observed.length, rows.length, claimed.size, flagWrites.length]).toEqual([0, 0, 0, 0]);
+  });
+
+  test("an invalid request spends none of the budget", async () => {
+    const { ports } = fixture();
+    let admits = 0;
+    const counting = {
+      admit: async () => {
+        admits++;
+        return { allowed: true as const };
+      },
+    };
+    const response = await handleExternalActivityPost(
+      post({ schema: EXTERNAL_ACTIVITY_SCHEMA, events: [{ status: "busy" }] }),
+      PRINCIPAL,
+      () => ({ ...ports, rateLimit: counting }),
+      () => NOW,
+    );
+    expect(response.status).toBe(400);
+    expect(admits).toBe(0);
+  });
+
+  test("the budget is 600 events a minute for each Agent", () => {
+    expect(EXTERNAL_ACTIVITY_EVENTS_PER_WINDOW).toBe(600);
+    expect(EXTERNAL_ACTIVITY_WINDOW_MS).toBe(60_000);
   });
 
   test("a body that is not JSON is a 400", async () => {

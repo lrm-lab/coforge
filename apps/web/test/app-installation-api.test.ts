@@ -1,4 +1,4 @@
-import { beforeEach, expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 
 import {
   AppInstallationApi,
@@ -27,6 +27,10 @@ const data = {
 
 beforeEach(() => {
   spyOn(console, "info").mockImplementation(() => {});
+});
+
+afterEach(() => {
+  mock.restore();
 });
 
 async function setup() {

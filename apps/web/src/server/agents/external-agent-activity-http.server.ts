@@ -1,6 +1,10 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { encodeAgentActivity } from "@lrm/coforge-sdk/internal";
 import { agentActivityChannelFor } from "#src/features/agents/agent-activity";
+import {
+  RateLimitOutageLog,
+  RedisAppRateLimit,
+} from "#src/server/app-rate-limits/app-rate-limit.server";
 import { AgentActivityRepository } from "#src/server/db/repositories/agent-activity.repositories.server";
 import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
@@ -21,7 +25,11 @@ import {
 } from "./external-agent-presence-publish.server";
 import { externalAgentsOnly } from "./external-agent-http.server";
 
+export const EXTERNAL_ACTIVITY_EVENTS_PER_WINDOW = 600;
+export const EXTERNAL_ACTIVITY_WINDOW_MS = 60_000;
+
 let eventIdRedis: ReturnType<typeof openRedisClient> | undefined;
+const outageLog = new RateLimitOutageLog();
 
 export function productionExternalActivityPorts(db: PrismaClient): ExternalActivityPorts {
   eventIdRedis ??= openRedisClient(redisUrlFor("external Agent activity"));
@@ -31,6 +39,12 @@ export function productionExternalActivityPorts(db: PrismaClient): ExternalActiv
     claimEventIds: (agent, ids) => claimExternalEventIds(redis, agent, ids),
     releaseEventIds: (agent, ids) => releaseExternalEventIds(redis, agent, ids),
     display: getAgentDisplay(),
+    rateLimit: new RedisAppRateLimit(redis, {
+      keyPrefix: "coforge:ratelimit:external-activity:v1",
+      limit: EXTERNAL_ACTIVITY_EVENTS_PER_WINDOW,
+      windowMs: EXTERNAL_ACTIVITY_WINDOW_MS,
+      outageLog,
+    }),
     statusReported: {
       isSet: async (agentId) =>
         Boolean(
@@ -88,5 +102,21 @@ export async function handleExternalActivityPost(
       400,
       false,
     );
-  return Response.json(await ingestExternalActivity(ports(), principal, parsed.events, received));
+  const activityPorts = ports();
+  const admission =
+    parsed.events.length > 0
+      ? await activityPorts.rateLimit.admit(principal.agentId, parsed.events.length)
+      : { allowed: true as const };
+  if (!admission.allowed)
+    return Response.json(
+      {
+        error: "too many activity events; retry after the wait",
+        code: "activity_rate_limited",
+        retryable: true,
+      },
+      { status: 429, headers: { "retry-after": String(admission.retryAfterSeconds) } },
+    );
+  return Response.json(
+    await ingestExternalActivity(activityPorts, principal, parsed.events, received),
+  );
 }

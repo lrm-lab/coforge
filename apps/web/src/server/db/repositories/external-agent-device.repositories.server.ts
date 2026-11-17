@@ -2,19 +2,53 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { MAX_LIVE_EXTERNAL_CREDENTIALS } from "#src/server/agents/external-agent-credentials.server";
 import { externalAgentManagerAccess } from "#src/server/agents/external-agent-access.server";
+import { WORKSPACE_ADMIN_ROLES } from "#src/features/workspaces/workspace-roles";
 import type { ExternalAgentDeviceDirectory } from "#src/server/auth/device-auth-external-agent.server";
+
+const APPROVABLE_LIMIT = 200;
 
 export class PrismaExternalAgentDeviceDirectory implements ExternalAgentDeviceDirectory {
   constructor(private readonly db: PrismaClient) {}
 
-  async resolve(workspaceSlug: string, agentName: string) {
+  async target(agentId: string) {
     const agent = await this.db.agent.findFirst({
-      where: { name: agentName, workspace: { slug: workspaceSlug }, ...ACTIVE_AGENT_WHERE },
-      select: { id: true, workspaceId: true, hosting: true },
+      where: { id: agentId, ...ACTIVE_AGENT_WHERE },
+      select: { workspaceId: true, hosting: true },
     });
-    return agent
-      ? { workspaceId: agent.workspaceId, agentId: agent.id, hosting: agent.hosting }
-      : undefined;
+    return agent ?? undefined;
+  }
+
+  async approvable(userId: string) {
+    const agents = await this.db.agent.findMany({
+      where: {
+        hosting: "external",
+        stoppedAt: null,
+        ...ACTIVE_AGENT_WHERE,
+        OR: [
+          { ownerId: userId, workspace: { members: { some: { userId } } } },
+          {
+            workspace: { members: { some: { userId, role: { in: [...WORKSPACE_ADMIN_ROLES] } } } },
+          },
+        ],
+      },
+      orderBy: [{ workspace: { name: "asc" } }, { name: "asc" }, { id: "asc" }],
+      take: APPROVABLE_LIMIT,
+      select: {
+        id: true,
+        name: true,
+        displayName: true,
+        workspaceId: true,
+        workspace: { select: { name: true, slug: true } },
+      },
+    });
+    return agents.map((agent) => ({
+      agentId: agent.id,
+      name: agent.name,
+      displayName: agent.displayName,
+      workspaceId: agent.workspaceId,
+      workspaceName: agent.workspace.name,
+      workspaceSlug: agent.workspace.slug,
+    }));
   }
 
   async identity(workspaceId: string, agentId: string) {

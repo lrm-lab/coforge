@@ -8,7 +8,8 @@ import type {
   ExternalPresenceRow,
 } from "#src/server/agents/external-agent-credentials.server";
 
-type Row = Omit<ExternalCredentialRecord, "agent"> & {
+type Row = Omit<ExternalCredentialRecord, "agent" | "issuerActive"> & {
+  approvedByUserId: string | null;
   source: ExternalCredentialSource;
   machine: ExternalMachine | null;
   createdAt: Date;
@@ -27,6 +28,7 @@ export class MemoryExternalAgentCredentials implements ExternalAgentCredentialRe
   rows = new Map<string, Row>();
   touches = 0;
   agents = new Map<string, MemoryAgent>();
+  departedUsers = new Set<string>();
   #next = 1;
 
   addAgent(agentId: string, overrides: Partial<MemoryAgent> = {}) {
@@ -64,6 +66,7 @@ export class MemoryExternalAgentCredentials implements ExternalAgentCredentialRe
       keyHash: input.keyHash,
       agentId: input.agentId,
       workspaceId: input.workspaceId,
+      approvedByUserId: input.approvedByUserId,
       lastUsedAt: null,
       revokedAt: null,
       revokedReason: null,
@@ -77,7 +80,10 @@ export class MemoryExternalAgentCredentials implements ExternalAgentCredentialRe
   async findByHash(hash: string) {
     const row = this.rows.get(hash);
     const agent = row && this.agents.get(row.agentId);
-    return row && agent ? { ...row, agent } : undefined;
+    if (!row || !agent) return undefined;
+    const issuerActive =
+      row.approvedByUserId !== null && !this.departedUsers.has(row.approvedByUserId);
+    return { ...row, issuerActive, agent };
   }
 
   async touch(id: string, at: Date, notAfter: Date) {

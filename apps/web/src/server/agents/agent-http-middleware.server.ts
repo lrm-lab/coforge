@@ -58,6 +58,7 @@ const APP_ERROR_REASON: Record<AppErrorCode, string> = {
   AGENT_DM_RATE_LIMIT: "rate limited",
   INVALID_TARGET: "invalid target",
   TARGET_NOT_ACCESSIBLE: "target is not accessible",
+  RATE_LIMITED: "rate limited",
 };
 
 /**

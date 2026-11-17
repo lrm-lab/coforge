@@ -2,9 +2,13 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import type { DatabaseScope } from "#src/server/db/transaction.server";
 import type {
   ExternalAgentCredentialRepository,
+  ExternalCredentialRecord,
   ExternalCredentialRevokeReason,
   ExternalPresenceRow,
 } from "#src/server/agents/external-agent-credentials.server";
+
+type CredentialLookupRow = Omit<ExternalCredentialRecord, "agent"> &
+  ExternalCredentialRecord["agent"];
 
 export function revokeExternalCredentialsOf(
   scope: DatabaseScope,
@@ -78,28 +82,18 @@ export class PrismaExternalAgentCredentialRepository implements ExternalAgentCre
     });
 
   async findByHash(hash: string) {
-    return (
-      (await this.db.externalAgentCredential.findUnique({
-        where: { keyHash: hash },
-        select: {
-          id: true,
-          keyHash: true,
-          agentId: true,
-          workspaceId: true,
-          lastUsedAt: true,
-          revokedAt: true,
-          agent: {
-            select: {
-              ownerId: true,
-              deletedAt: true,
-              stoppedAt: true,
-              hosting: true,
-              visibility: true,
-            },
-          },
-        },
-      })) ?? undefined
-    );
+    const [row] = await this.db.$queryRaw<CredentialLookupRow[]>`SELECT
+        c."id", c."keyHash", c."agentId", c."workspaceId", c."lastUsedAt", c."revokedAt",
+        (m."userId" IS NOT NULL) AS "issuerActive",
+        a."ownerId", a."deletedAt", a."stoppedAt", a."hosting", a."visibility"
+      FROM "external_agent_credentials" c
+      JOIN "agents" a ON a."id" = c."agentId" AND a."workspaceId" = c."workspaceId"
+      LEFT JOIN "workspace_memberships" m
+        ON m."workspaceId" = c."workspaceId" AND m."userId" = c."approvedByUserId"
+      WHERE c."keyHash" = ${hash}`;
+    if (!row) return undefined;
+    const { ownerId, deletedAt, stoppedAt, hosting, visibility, ...credential } = row;
+    return { ...credential, agent: { ownerId, deletedAt, stoppedAt, hosting, visibility } };
   }
 
   async touch(id: string, at: Date, notAfter: Date): Promise<void> {

@@ -1,3 +1,4 @@
+import type { AppRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
 import {
   AGENT_ACTIVITY_DETAIL_KIND,
   type ActivityTrajectoryEntry,
@@ -16,6 +17,7 @@ export type ExternalActivityPorts = {
   claimEventIds(agent: ExternalAgentIds, eventIds: readonly string[]): Promise<Set<string>>;
   releaseEventIds(agent: ExternalAgentIds, eventIds: readonly string[]): Promise<void>;
   display: Pick<AgentDisplay, "observeExternalStatus">;
+  rateLimit: AppRateLimit;
   statusReported: {
     isSet(agentId: string): Promise<boolean>;
     set(agentId: string, at: Date): Promise<void>;

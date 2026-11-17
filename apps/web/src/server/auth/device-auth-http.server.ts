@@ -3,7 +3,7 @@ import { deviceAuthorizationStore, externalAgentDeviceDeps } from "./device-auth
 import {
   EXTERNAL_DEVICE_CLIENT_ID,
   parseExternalAuthorizeBody,
-  resolveExternalAgentGrant,
+  externalGrantOf,
 } from "./device-auth-external-agent.server";
 import { authorizeDevice, DEVICE_CLIENT_ID, pollDeviceToken } from "./device-auth.server";
 import { e2eDevice, e2eToken, oauthDiscovery as e2eDiscovery } from "./e2e-device-auth.server";
@@ -58,28 +58,16 @@ export async function deviceAuthorizationRequest(
   if (!deviceStore) return unavailable();
   let grant;
   if (clientId === EXTERNAL_DEVICE_CLIENT_ID) {
-    const external = externalAgentDeviceDeps();
-    if (!external) return unavailable();
     const requested = parseExternalAuthorizeBody(body);
     if (!requested)
       return Response.json(
         {
           error: "invalid_request",
-          error_description:
-            "workspace, agent, machine_name, hostname, os and client_name are required",
+          error_description: "machine_name, hostname, os and client_name are required",
         },
         { status: 400, headers: NO_STORE },
       );
-    const resolution = await resolveExternalAgentGrant(external.directory, requested);
-    if (!resolution.ok)
-      return Response.json(
-        {
-          error: "invalid_request",
-          error_description: "no external Agent with that name in that Workspace",
-        },
-        { status: 400, headers: NO_STORE },
-      );
-    grant = resolution.grant;
+    grant = externalGrantOf(requested);
   }
   const result = await authorizeDevice({
     store: deviceStore,
@@ -127,8 +115,17 @@ export async function deviceTokenRequest(
       {
         error: outcome.error,
         ...(outcome.coforgeCode ? { coforge_code: outcome.coforgeCode } : {}),
+        ...(outcome.retryAfterSeconds ? { retry_after: outcome.retryAfterSeconds } : {}),
       },
-      { status: 400, headers: NO_STORE },
+      {
+        status: 400,
+        headers: {
+          ...NO_STORE,
+          ...(outcome.retryAfterSeconds
+            ? { "retry-after": String(outcome.retryAfterSeconds) }
+            : {}),
+        },
+      },
     );
   if (outcome.status === "authorized_external_agent")
     return Response.json(

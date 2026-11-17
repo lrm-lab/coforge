@@ -5,10 +5,13 @@ import {
   normalizeUserCode,
   USER_CODE_LENGTH,
 } from "#src/features/device-auth/device-code-format";
+import {
+  peekExternalMint,
+  type ExternalMintRateLimits,
+} from "#src/server/agents/external-agent-mint-rate-limit.server";
 import { signComputerAccessToken } from "./computer-access-token.server";
 import {
   EXTERNAL_DEVICE_CLIENT_ID,
-  externalGrantDetails,
   readExternalAgentGrant,
   redeemExternalAgentGrant,
   type ExternalAgentDeviceDeps,
@@ -138,6 +141,7 @@ export type PollOutcome =
         | "access_denied"
         | "invalid_grant";
       coforgeCode?: string;
+      retryAfterSeconds?: number;
     };
 
 /**
@@ -180,14 +184,13 @@ export async function pollDeviceToken(input: {
   // the row may be handed a token. The loser sees the same answer a replayed code gets.
   if (clientId === EXTERNAL_DEVICE_CLIENT_ID) {
     if (!input.external) return { status: "error", error: "invalid_grant" };
-    const grant = readExternalAgentGrant(record.grant);
-    const refusal =
-      grant &&
-      (await input.external.directory.approvalRefusal({
-        userId: record.userId,
-        workspaceId: grant.workspaceId,
-        agentId: grant.agentId,
-      }));
+    const { approvedAgentId: agentId, approvedWorkspaceId: workspaceId } = record;
+    if (!agentId || !workspaceId) return { status: "error", error: "invalid_grant" };
+    const refusal = await input.external.directory.approvalRefusal({
+      userId: record.userId,
+      workspaceId,
+      agentId,
+    });
     if (refusal) {
       await input.store.consume(record.id);
       return { status: "error", error: "access_denied", coforgeCode: refusal };
@@ -212,13 +215,14 @@ export type UserCodeLookup =
     };
 
 /** Resolves a typed code for the approval page, without disclosing more than whether it is
- * actionable. */
+ * actionable. A coforge-cli code carries only the machine that asked: the person picks the Agent
+ * on approval, so nothing here names one. */
 export async function lookupUserCode(input: {
   store: DeviceAuthorizationStore;
   userCode: string;
   now?: () => number;
   userId?: string;
-  directory?: Pick<ExternalAgentDeviceDirectory, "identity" | "approvalRefusal">;
+  mintLimits?: ExternalMintRateLimits;
 }): Promise<UserCodeLookup> {
   const now = input.now?.() ?? Date.now();
   const normalized = normalizeUserCode(input.userCode);
@@ -228,19 +232,43 @@ export async function lookupUserCode(input: {
   if (record.expiresAt.getTime() <= now) return { found: false, reason: "expired" };
   if (record.status !== "pending") return { found: false, reason: "settled" };
   if (record.clientId === EXTERNAL_DEVICE_CLIENT_ID) {
-    const grant = readExternalAgentGrant(record.grant);
-    if (!input.directory || !input.userId || !grant) return { found: false, reason: "unknown" };
-    const refusal = await input.directory.approvalRefusal({
-      userId: input.userId,
-      workspaceId: grant.workspaceId,
-      agentId: grant.agentId,
-    });
-    if (refusal) return { found: false, reason: refusal };
-    const external = await externalGrantDetails(input.directory, record.grant);
-    if (!external) return { found: false, reason: "unknown" };
+    const external = readExternalAgentGrant(record.grant);
+    if (!input.userId || !external) return { found: false, reason: "unknown" };
+    if (
+      input.mintLimits &&
+      !(await peekExternalMint(input.mintLimits, { userId: input.userId })).allowed
+    )
+      return { found: false, reason: "mint_rate_limited" };
     return { found: true, id: record.id, expiresAt: record.expiresAt, external };
   }
   return { found: true, id: record.id, expiresAt: record.expiresAt };
+}
+
+async function externalApprovalRefusal(input: {
+  directory: Pick<ExternalAgentDeviceDirectory, "target" | "approvalRefusal">;
+  mintLimits?: ExternalMintRateLimits | undefined;
+  userId: string;
+  agentId: string | undefined;
+}): Promise<
+  { refusal: ExternalApprovalRefusal } | { target: { agentId: string; workspaceId: string } }
+> {
+  if (!input.agentId) return { refusal: "agent_not_found" };
+  const target = await input.directory.target(input.agentId);
+  if (!target) return { refusal: "agent_not_found" };
+  if (target.hosting !== "external") return { refusal: "agent_not_external" };
+  const refusal = await input.directory.approvalRefusal({
+    userId: input.userId,
+    workspaceId: target.workspaceId,
+    agentId: input.agentId,
+  });
+  if (refusal) return { refusal };
+  if (
+    input.mintLimits &&
+    !(await peekExternalMint(input.mintLimits, { userId: input.userId, agentId: input.agentId }))
+      .allowed
+  )
+    return { refusal: "mint_rate_limited" };
+  return { target: { agentId: input.agentId, workspaceId: target.workspaceId } };
 }
 
 export async function approveUserCode(input: {
@@ -248,17 +276,26 @@ export async function approveUserCode(input: {
   userCode: string;
   userId: string;
   now?: () => number;
-  directory?: ExternalAgentDeviceDirectory;
+  agentId?: string | undefined;
+  directory?: Pick<ExternalAgentDeviceDirectory, "target" | "approvalRefusal">;
+  mintLimits?: ExternalMintRateLimits | undefined;
 }): Promise<UserCodeLookup> {
   const lookup = await lookupUserCode(input);
   if (!lookup.found) return lookup;
   const at = new Date(input.now?.() ?? Date.now());
-  const target = lookup.external && {
-    agentId: lookup.external.agentId,
-    workspaceId: lookup.external.workspaceId,
-  };
+  let target: { agentId: string; workspaceId: string } | undefined;
+  if (lookup.external) {
+    if (!input.directory) return { found: false, reason: "unknown" };
+    const checked = await externalApprovalRefusal({
+      directory: input.directory,
+      mintLimits: input.mintLimits,
+      userId: input.userId,
+      agentId: input.agentId,
+    });
+    if ("refusal" in checked) return { found: false, reason: checked.refusal };
+    target = checked.target;
+  }
   const approved = await input.store.approve(lookup.id, input.userId, at, target);
-  // The grant expired or settled between the lookup and the write; report what it is now.
   if (!approved) return lookupUserCode(input);
   return lookup;
 }
@@ -268,7 +305,6 @@ export async function denyUserCode(input: {
   userCode: string;
   now?: () => number;
   userId?: string;
-  directory?: Pick<ExternalAgentDeviceDirectory, "identity" | "approvalRefusal">;
 }): Promise<UserCodeLookup> {
   const lookup = await lookupUserCode(input);
   if (!lookup.found) return lookup;

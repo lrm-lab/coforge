@@ -17,20 +17,33 @@ export type RateLimitDecision = { allowed: true } | { allowed: false; retryAfter
 
 /** Admits or refuses one request from `id` (a client or an installation). */
 export interface AppRateLimit {
-  admit(id: string): Promise<RateLimitDecision>;
+  admit(id: string, cost?: number): Promise<RateLimitDecision>;
 }
+
+export interface PeekableRateLimit extends AppRateLimit {
+  peek(id: string): Promise<RateLimitDecision>;
+}
+
+export const NO_PEEKABLE_RATE_LIMIT: PeekableRateLimit = {
+  admit: async () => ({ allowed: true }),
+  peek: async () => ({ allowed: true }),
+};
 
 export const NO_RATE_LIMIT: AppRateLimit = { admit: async () => ({ allowed: true }) };
 
 /** Count, and start the window on the first request, in one atomic step. Answers {count, ttl ms}. */
 const COUNT_IN_WINDOW = `
-local count = redis.call("INCR", KEYS[1])
+local count = redis.call("INCRBY", KEYS[1], ARGV[2])
 local ttl = redis.call("PTTL", KEYS[1])
-if count == 1 or ttl < 0 then
+if count == tonumber(ARGV[2]) or ttl < 0 then
   redis.call("PEXPIRE", KEYS[1], ARGV[1])
   ttl = tonumber(ARGV[1])
 end
 return {count, ttl}`;
+
+const READ_WINDOW = `
+local count = tonumber(redis.call("GET", KEYS[1]) or "0")
+return {count, redis.call("PTTL", KEYS[1])}`;
 
 const UNAVAILABLE_LOG_INTERVAL_MS = 60_000;
 
@@ -77,7 +90,7 @@ function windowOf(reply: unknown): { count: number; ttlMs: number } {
  * request is admitted, because a counter outage must not take the apps' token and data endpoints
  * down with it (every one of them is already authenticated). The outage goes to `outageLog`.
  */
-export class RedisAppRateLimit implements AppRateLimit {
+export class RedisAppRateLimit implements PeekableRateLimit {
   constructor(
     private readonly redis: RateLimitRedis,
     private readonly options: {
@@ -88,7 +101,7 @@ export class RedisAppRateLimit implements AppRateLimit {
     },
   ) {}
 
-  async admit(id: string): Promise<RateLimitDecision> {
+  async admit(id: string, cost = 1): Promise<RateLimitDecision> {
     const { keyPrefix, limit, windowMs, outageLog } = this.options;
     try {
       const { count, ttlMs } = windowOf(
@@ -97,10 +110,28 @@ export class RedisAppRateLimit implements AppRateLimit {
           "1",
           `${keyPrefix}:${encodeURIComponent(id)}`,
           String(windowMs),
+          String(cost),
         ]),
       );
       if (count <= limit) return { allowed: true };
       return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil(ttlMs / 1000)) };
+    } catch (error) {
+      outageLog.report(keyPrefix, error);
+      return { allowed: true };
+    }
+  }
+
+  async peek(id: string): Promise<RateLimitDecision> {
+    const { keyPrefix, limit, windowMs, outageLog } = this.options;
+    try {
+      const { count, ttlMs } = windowOf(
+        await this.redis.send("EVAL", [READ_WINDOW, "1", `${keyPrefix}:${encodeURIComponent(id)}`]),
+      );
+      if (count < limit) return { allowed: true };
+      return {
+        allowed: false,
+        retryAfterSeconds: Math.max(1, Math.ceil((ttlMs > 0 ? ttlMs : windowMs) / 1000)),
+      };
     } catch (error) {
       outageLog.report(keyPrefix, error);
       return { allowed: true };

@@ -11,6 +11,13 @@ import {
   revokeOneExternalCredential,
   revokeSelfExternalCredential,
 } from "#src/server/agents/external-agent-credentials.server";
+import {
+  EXTERNAL_MINT_AGENT_LIMIT,
+  EXTERNAL_MINT_PERSON_LIMIT,
+  EXTERNAL_MINT_WINDOW_MS,
+  NO_EXTERNAL_MINT_RATE_LIMITS,
+  admitExternalMint,
+} from "#src/server/agents/external-agent-mint-rate-limit.server";
 import { isAgentApiKeyShape } from "#src/server/agents/agent-api-key.server";
 import {
   EXTERNAL_ONLINE_WINDOW_MS,
@@ -31,6 +38,7 @@ function setup(overrides = {}) {
 async function mint(repository: MemoryExternalAgentCredentials) {
   const minted = await mintExternalAgentCredential({
     repository,
+    rateLimits: NO_EXTERNAL_MINT_RATE_LIMITS,
     agentId: AGENT,
     workspaceId: WORKSPACE,
     approvedByUserId: "user-1",
@@ -70,6 +78,26 @@ test("a presented key authenticates to the Agent's owner with no Computer", asyn
     agentId: AGENT,
     credentialId,
   });
+});
+
+test("a key whose issuer left the Workspace or was deleted no longer authenticates", async () => {
+  const repository = setup();
+  const { apiKey } = await mint(repository);
+  repository.departedUsers.add("user-1");
+  expect(await failure(authenticateExternalAgentKey(apiKey, repository))).toBe("issuer_left");
+
+  const orphaned = setup();
+  const minted = await mintExternalAgentCredential({
+    repository: orphaned,
+    rateLimits: NO_EXTERNAL_MINT_RATE_LIMITS,
+    agentId: AGENT,
+    workspaceId: WORKSPACE,
+    approvedByUserId: null,
+    source: "device",
+    machine: MACHINE,
+  });
+  if (!minted.ok) throw new Error("mint refused");
+  expect(await failure(authenticateExternalAgentKey(minted.apiKey, orphaned))).toBe("issuer_left");
 });
 
 test("malformed, unknown and sk_agent_ keys are not found", async () => {
@@ -182,6 +210,7 @@ test("minting is refused for an Agent that is gone, stopped, managed or at the k
   const refusal = async (repository: MemoryExternalAgentCredentials) => {
     const minted = await mintExternalAgentCredential({
       repository,
+      rateLimits: NO_EXTERNAL_MINT_RATE_LIMITS,
       agentId: AGENT,
       workspaceId: WORKSPACE,
       approvedByUserId: null,
@@ -248,6 +277,7 @@ test("audit lines never carry key material", async () => {
 async function issuePage(repository: MemoryExternalAgentCredentials) {
   return issueExternalAgentPageCredential({
     repository,
+    rateLimits: NO_EXTERNAL_MINT_RATE_LIMITS,
     agentId: AGENT,
     workspaceId: WORKSPACE,
     actorUserId: "user-1",
@@ -298,11 +328,90 @@ test("a page credential is refused at the limit, but replaces itself when only i
   await expect(
     issueExternalAgentPageCredential({
       repository: setup({ hosting: "managed" }),
+      rateLimits: NO_EXTERNAL_MINT_RATE_LIMITS,
       agentId: AGENT,
       workspaceId: WORKSPACE,
       actorUserId: "user-1",
     }),
   ).rejects.toMatchObject({ code: "NOT_FOUND" });
+});
+
+describe("minting rate limit", () => {
+  const WHO = { userId: "user-1", agentId: AGENT };
+  const limits = (agent: number, person: number) => {
+    const counts = { agent: 0, person: 0 };
+    const make = (name: "agent" | "person", max: number) => ({
+      admit: async () => {
+        counts[name]++;
+        return counts[name] <= max
+          ? { allowed: true as const }
+          : { allowed: false as const, retryAfterSeconds: 90 };
+      },
+      peek: async () => ({ allowed: true as const }),
+    });
+    return { counts, limits: { agent: make("agent", agent), person: make("person", person) } };
+  };
+
+  test("the numbers are 30 per person and 20 per Agent every 10 minutes", () => {
+    expect(EXTERNAL_MINT_PERSON_LIMIT).toBe(30);
+    expect(EXTERNAL_MINT_AGENT_LIMIT).toBe(20);
+    expect(EXTERNAL_MINT_WINDOW_MS).toBe(10 * 60_000);
+  });
+
+  test("a refused mint writes nothing and names the wait; the Agent's refusal does not count the person", async () => {
+    const repository = setup();
+    const { counts, limits: refusing } = limits(0, 100);
+    const minted = await mintExternalAgentCredential({
+      repository,
+      rateLimits: refusing,
+      agentId: AGENT,
+      workspaceId: WORKSPACE,
+      approvedByUserId: "user-1",
+      source: "device",
+      machine: MACHINE,
+    });
+    expect(minted).toEqual({
+      ok: false,
+      reason: "agent_credential_mint_rate_limited",
+      retryAfterSeconds: 90,
+    });
+    expect(repository.rows.size).toBe(0);
+    expect(counts).toEqual({ agent: 1, person: 0 });
+  });
+
+  test("the person's limit refuses a page credential as a rate-limited error with the wait", async () => {
+    const repository = setup();
+    const { limits: refusing } = limits(100, 0);
+    await expect(
+      issueExternalAgentPageCredential({
+        repository,
+        rateLimits: refusing,
+        agentId: AGENT,
+        workspaceId: WORKSPACE,
+        actorUserId: "user-1",
+      }),
+    ).rejects.toMatchObject({
+      code: "RATE_LIMITED",
+      errorId: "agent_credential_mint_rate_limited",
+      details: { retryAfterSeconds: 90 },
+    });
+    expect(repository.rows.size).toBe(0);
+  });
+
+  test("admission checks the Agent first, then the person, and skips a missing person", async () => {
+    const { counts, limits: open } = limits(100, 100);
+    expect(await admitExternalMint(open, WHO)).toEqual({ allowed: true });
+    expect(await admitExternalMint(open, { userId: null, agentId: AGENT })).toEqual({
+      allowed: true,
+    });
+    expect(counts).toEqual({ agent: 2, person: 1 });
+    const person = limits(100, 0);
+    expect(await admitExternalMint(person.limits, WHO)).toEqual({
+      allowed: false,
+      limit: "person",
+      retryAfterSeconds: 90,
+    });
+  });
 });
 
 describe("externalSetup", () => {

@@ -121,7 +121,7 @@ model ExternalAgentCredential {
   createdAt        DateTime  @default(now())
   lastUsedAt       DateTime?
   revokedAt        DateTime?
-  /// logout | revoked (one key, by a manager) | agent_deleted | agent_stopped | replaced
+  /// logout | revoked (one key, by a manager) | agent_deleted | agent_stopped | replaced | issuer_password_reset
   revokedReason    String?
   agent            Agent     @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
   approvedBy       User?     @relation("ExternalAgentCredentialApprover", fields: [approvedByUserId], references: [id], onDelete: SetNull)

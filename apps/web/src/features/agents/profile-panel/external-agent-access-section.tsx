@@ -20,6 +20,7 @@ import {
   ExternalConnectionState,
   type ExternalSetup,
 } from "#src/features/agents/external-agent-setup";
+import { externalCredentialErrorMessage } from "#src/features/agents/external-agent-credential-error";
 import { SECTION_CAPTION_CLASS } from "./inline-edit-field";
 
 export type ExternalCredentialSummary = {
@@ -60,6 +61,7 @@ export function ExternalAgentAccessSection({
   const revoke = useServerFn(revokeExternalAgentCredential);
   const [freshKey, setFreshKey] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const connected = setup.state === "online" || setup.state === "offline";
   const [stepsOpen, setStepsOpen] = useState(!connected);
   const pageCredential = credentials.find((credential) => credential.source === "app");
@@ -73,8 +75,11 @@ export function ExternalAgentAccessSection({
 
   async function createFirst() {
     setCreating(true);
+    setCreateError(null);
     try {
       await issue();
+    } catch (cause) {
+      setCreateError(externalCredentialErrorMessage(cause));
     } finally {
       setCreating(false);
     }
@@ -95,6 +100,11 @@ export function ExternalAgentAccessSection({
         >
           {m.external_agent_credential_create()}
         </Button>
+      ) : null}
+      {createError ? (
+        <p role="alert" className="text-sm text-error-primary">
+          {createError}
+        </p>
       ) : null}
     </div>
   ) : null;
@@ -225,7 +235,7 @@ function CredentialMenu({
         title={m.external_agent_credential_replace_title()}
         description={m.external_agent_credential_replace_body({ name: displayName })}
         confirmLabel={m.external_agent_credential_replace()}
-        errorMessage={m.external_agent_credential_failed()}
+        errorMessage={externalCredentialErrorMessage}
         onConfirm={onReplace}
       />
       <ConfirmDialog

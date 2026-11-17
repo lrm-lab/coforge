@@ -17,6 +17,7 @@ import {
   getCodeSendRateLimits,
   getResetCodeRateLimits,
 } from "#src/server/auth/sign-in-rate-limits.server";
+import { requireDatabaseClient } from "#src/server/db/client.server";
 import { signInRequestContext } from "#src/server/auth/sign-in-request.server";
 
 /**
@@ -78,6 +79,11 @@ export const resetPassword = createServerFn({ method: "POST" })
       newPassword: data.password,
       rateLimits: getResetCodeRateLimits(),
       clientAddress,
+      onPasswordReset: async (reset) => {
+        const { revokeCredentialsOfResetPassword } =
+          await import("#src/server/agents/external-agent-issuer-password.server");
+        await revokeCredentialsOfResetPassword(requireDatabaseClient(), reset);
+      },
     });
     return result.status === "updated"
       ? ({ ok: true } as const)

@@ -38,6 +38,7 @@ export type BridgeDeps = {
   sleep: (milliseconds: number) => Promise<void>;
   signal: AbortSignal;
   random?: () => number;
+  now?: () => number;
 };
 
 const USAGE =

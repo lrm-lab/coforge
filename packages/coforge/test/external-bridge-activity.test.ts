@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ActivityPump } from "../src/external/bridge-activity";
 import { parseBridgeArgs, runBridge, type BridgeDeps } from "../src/external/bridge";
 import { OLD_KEY, fakeFetch, json, profile, useAgentHome, type Handler } from "./external-fixture";
 
@@ -67,6 +68,50 @@ describe("activity arguments", () => {
     [["--activity-drain-limit", "0"], "INVALID_ARG"],
   ])("%j is refused as %s", (args, code) => {
     expect(() => parseBridgeArgs(args, {})).toThrow(expect.objectContaining({ code }));
+  });
+});
+
+describe("a rate-limited forward", () => {
+  test("keeps the batch, waits out Retry-After, then sends it whole", async () => {
+    let clock = 1_000_000;
+    let posts = 0;
+    let drains = 0;
+    const requests: string[] = [];
+    const answers = [
+      () => new Response("{}", { status: 429, headers: { "retry-after": "30" } }),
+      () => json({ acceptedCount: 2 }),
+    ];
+    const fetchFn = (async (input: URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        requests.push(String(init.body));
+        return answers[posts++]!();
+      }
+      drains++;
+      return drained(drains === 1 ? [event("e1"), event("e2")] : []);
+    }) as never;
+    const err: string[] = [];
+    const pump = new ActivityPump(
+      { endpoint: new URL(`${RUNTIME}/d`), limit: 50 },
+      { serverUrl: "https://forge.example", apiKey: "k" },
+      { fetch: fetchFn, stderr: (text) => err.push(text), now: () => clock },
+    );
+    const signal = new AbortController().signal;
+    await pump.cycle(signal);
+    expect(posts).toBe(1);
+    expect(err.join("")).toContain("30");
+    clock += 10_000;
+    await pump.cycle(signal);
+    expect(posts).toBe(1);
+    clock += 21_000;
+    await pump.cycle(signal);
+    expect(posts).toBe(2);
+    const ids = requests.map((body) =>
+      JSON.parse(body).events.map((e: { eventId: string }) => e.eventId),
+    );
+    expect(ids).toEqual([
+      ["e1", "e2"],
+      ["e1", "e2"],
+    ]);
   });
 });
 

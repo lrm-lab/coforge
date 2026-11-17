@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Radio, RadioGroup } from "react-aria-components";
 import {
   Check,
   Laptop01 as Laptop,
@@ -14,26 +15,32 @@ import {
   InputOTPSeparator,
   InputOTPSlot,
 } from "#src/components/ui/input-otp";
-import type { ExternalGrantDetails } from "#src/server/auth/device-auth-external-agent.server";
+import type {
+  ApprovableExternalAgent,
+  ExternalGrantDetails,
+} from "#src/server/auth/device-auth-external-agent.server";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 import { formatUserCode, USER_CODE_LENGTH } from "./device-code-format";
 import {
   approveDeviceCode,
   checkDeviceCode,
   denyDeviceCode,
+  listApprovableExternalAgents,
   type DeviceCodeState,
 } from "./device-auth.functions";
 
 type Stage =
   | { name: "entry" }
-  | { name: "confirm"; code: string; grant?: ExternalGrantDetails }
+  | {
+      name: "confirm";
+      code: string;
+      grant?: ExternalGrantDetails;
+      agents: ApprovableExternalAgent[];
+    }
   | { name: "approved" }
   | { name: "denied" };
 
-/** The generated alphabet plus the lowercase a user may type - the field uppercases as it goes,
- * but `pattern` is applied to the raw keystroke, so it has to admit both cases. Digits 0/1 and
- * letters I/L/O/U are absent from the alphabet on purpose (see device-auth.server.ts) and are
- * refused here too, rather than accepted and then reported back as an unknown code. */
 const CODE_PATTERN = "[BCDFGHJKMNPQRSTVWXYZbcdfghjkmnpqrstvwxyz23456789]*";
 
 function problemMessage(state: DeviceCodeState): string | null {
@@ -45,19 +52,17 @@ function problemMessage(state: DeviceCodeState): string | null {
   if (state === "agent_not_external") return m.device_verify_agent_not_external();
   if (state === "agent_unavailable") return m.device_verify_agent_unavailable();
   if (state === "credential_limit") return m.device_verify_credential_limit();
+  if (state === "agent_not_found") return m.device_verify_agent_not_found();
+  if (state === "mint_rate_limited") return m.device_verify_mint_rate_limited();
   return null;
 }
 
-export function DeviceVerifyPage({
-  account,
-}: {
-  /** How the signed-in account is named: its email, or its @username. */
-  account: string;
-}) {
+export function DeviceVerifyPage({ account }: { account: string }) {
   const [code, setCode] = useState("");
   const [stage, setStage] = useState<Stage>({ name: "entry" });
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [agentId, setAgentId] = useState<string | null>(null);
   const complete = code.length === USER_CODE_LENGTH;
 
   async function submitCode(value: string = code) {
@@ -66,8 +71,13 @@ export function DeviceVerifyPage({
     setProblem(null);
     try {
       const result = await checkDeviceCode({ data: { userCode: value } });
-      if (result.state === "ok") setStage({ name: "confirm", code: value, grant: result.grant });
-      else setProblem(problemMessage(result.state));
+      if (result.state !== "ok") {
+        setProblem(problemMessage(result.state));
+        return;
+      }
+      const agents = result.grant ? (await listApprovableExternalAgents()).agents : [];
+      setAgentId(agents.length === 1 ? agents[0]!.agentId : null);
+      setStage({ name: "confirm", code: value, grant: result.grant, agents });
     } finally {
       setBusy(false);
     }
@@ -79,7 +89,7 @@ export function DeviceVerifyPage({
     setProblem(null);
     try {
       const result = approve
-        ? await approveDeviceCode({ data: { userCode: code } })
+        ? await approveDeviceCode({ data: { userCode: code, agentId: agentId ?? undefined } })
         : await denyDeviceCode({ data: { userCode: code } });
       if (result.state === "ok") setStage(approve ? { name: "approved" } : { name: "denied" });
       else {
@@ -113,12 +123,18 @@ export function DeviceVerifyPage({
             </div>
 
             <h1 className="text-center text-display-xs font-semibold text-primary">
-              {stage.name === "confirm" ? m.device_verify_confirm_title() : m.device_verify_title()}
+              {stage.name !== "confirm"
+                ? m.device_verify_title()
+                : stage.grant
+                  ? m.device_verify_external_title()
+                  : m.device_verify_confirm_title()}
             </h1>
             <p className="mt-2 text-center text-sm text-tertiary">
-              {stage.name === "confirm"
-                ? m.device_verify_confirm_description({ code: formatUserCode(stage.code) })
-                : m.device_verify_description()}
+              {stage.name !== "confirm"
+                ? m.device_verify_description()
+                : stage.grant
+                  ? m.device_verify_external_description({ code: formatUserCode(stage.code) })
+                  : m.device_verify_confirm_description({ code: formatUserCode(stage.code) })}
             </p>
 
             {stage.name === "entry" ? (
@@ -129,9 +145,6 @@ export function DeviceVerifyPage({
                     maxLength={USER_CODE_LENGTH}
                     value={code}
                     pattern={CODE_PATTERN}
-                    // The code is displayed uppercase everywhere, so both entry paths normalize:
-                    // typing through onChange, and a pasted `xxxx-xxxx` through pasteTransformer,
-                    // which also drops the dash the code is displayed with.
                     pasteTransformer={(pasted: string) =>
                       pasted.replace(/[\s-]/g, "").toUpperCase()
                     }
@@ -139,7 +152,6 @@ export function DeviceVerifyPage({
                       setCode(next.toUpperCase());
                       setProblem(null);
                     }}
-                    // Firing on completion is what makes a pasted code need no second action.
                     onComplete={submitCode}
                     disabled={busy}
                     aria-label={m.device_verify_code_label()}
@@ -184,7 +196,17 @@ export function DeviceVerifyPage({
               </div>
             ) : (
               <div className="mt-6 space-y-6">
-                {stage.grant ? <ExternalGrantSummary grant={stage.grant} /> : null}
+                {stage.grant ? (
+                  <>
+                    <ExternalAgentChoice
+                      agents={stage.agents}
+                      value={agentId}
+                      onChange={setAgentId}
+                      isDisabled={busy}
+                    />
+                    <ExternalGrantSummary grant={stage.grant} />
+                  </>
+                ) : null}
                 <div className="flex gap-3">
                   <Button
                     type="button"
@@ -200,7 +222,7 @@ export function DeviceVerifyPage({
                     type="button"
                     size="lg"
                     className="flex-1"
-                    isDisabled={busy}
+                    isDisabled={busy || (stage.grant !== undefined && agentId === null)}
                     onPress={() => settle(true)}
                   >
                     {m.device_verify_approve()}
@@ -219,6 +241,60 @@ export function DeviceVerifyPage({
   );
 }
 
+function ExternalAgentChoice({
+  agents,
+  value,
+  onChange,
+  isDisabled,
+}: {
+  agents: ApprovableExternalAgent[];
+  value: string | null;
+  onChange: (agentId: string) => void;
+  isDisabled: boolean;
+}) {
+  if (agents.length === 0)
+    return (
+      <p role="alert" className="text-center text-sm text-error-primary">
+        {m.device_verify_external_none()}
+      </p>
+    );
+  return (
+    <RadioGroup
+      aria-label={m.device_verify_external_choose()}
+      value={value}
+      onChange={onChange}
+      isDisabled={isDisabled}
+      className="space-y-2"
+    >
+      <p className="text-sm font-medium text-secondary">{m.device_verify_external_choose()}</p>
+      <div className="max-h-64 space-y-1 overflow-y-auto">
+        {agents.map((agent) => (
+          <Radio
+            key={agent.agentId}
+            value={agent.agentId}
+            className={({ isSelected, isFocusVisible }) =>
+              cx(
+                "flex cursor-pointer flex-col rounded-lg border px-3 py-2 transition duration-100 ease-linear",
+                isSelected
+                  ? "border-brand bg-secondary"
+                  : "border-secondary hover:bg-primary_hover",
+                isFocusVisible && "outline-2 outline-offset-2 outline-focus-ring",
+              )
+            }
+          >
+            <span className="truncate text-sm font-medium text-primary">
+              {agent.displayName || agent.name}
+            </span>
+            <span className="truncate text-xs text-tertiary">
+              @{agent.name} · {agent.workspaceName || agent.workspaceSlug}
+            </span>
+          </Radio>
+        ))}
+      </div>
+    </RadioGroup>
+  );
+}
+
 function ExternalGrantSummary({ grant }: { grant: ExternalGrantDetails }) {
   const machineLabel = grant.machine.machineName || grant.machine.hostname || "—";
   const rows = [
@@ -232,13 +308,7 @@ function ExternalGrantSummary({ grant }: { grant: ExternalGrantDetails }) {
   ];
   return (
     <div className="rounded-xl border border-secondary bg-secondary_subtle p-4 text-sm">
-      <p className="font-medium break-words text-primary">
-        {m.device_verify_external_target({
-          agent: grant.agent.name,
-          workspace: grant.workspace.name || grant.workspace.slug,
-        })}
-      </p>
-      <p className="mt-2 text-xs text-tertiary">{m.device_verify_external_machine()}</p>
+      <p className="text-xs text-tertiary">{m.device_verify_external_machine()}</p>
       <dl className="mt-2 space-y-1.5">
         {rows.map((row) => (
           <div key={row.label} className="flex items-baseline justify-between gap-4">

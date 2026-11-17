@@ -46,6 +46,12 @@ const DENIED: Record<string, string> = {
   agent_not_found: "This Agent no longer exists in the Workspace.",
 };
 
+function waitText(seconds: number): string {
+  if (!(seconds > 0)) return "a few minutes";
+  const minutes = Math.ceil(seconds / 60);
+  return minutes === 1 ? "1 minute" : `${minutes} minutes`;
+}
+
 function failure(code: string, message: string, next?: string): CliError {
   return new CliError({ code, message, retryable: false, suggestedNextAction: next });
 }
@@ -81,7 +87,7 @@ function form(fields: Record<string, string>): RequestInit {
 export async function startDeviceGrant(
   fetchFn: FetchLike,
   serverUrl: string,
-  request: { workspace: string; agent: string; machine: MachineIdentity },
+  request: { machine: MachineIdentity },
 ): Promise<DeviceGrant> {
   let response: Response;
   try {
@@ -89,8 +95,6 @@ export async function startDeviceGrant(
       endpoint(serverUrl, "/oauth/device"),
       form({
         client_id: EXTERNAL_CLIENT_ID,
-        workspace: request.workspace,
-        agent: request.agent,
         machine_name: request.machine.machineName,
         hostname: request.machine.hostname,
         os: request.machine.os,
@@ -102,14 +106,6 @@ export async function startDeviceGrant(
   }
   const body = await jsonOf(response);
   if (!response.ok) {
-    const code = text(body, "coforge_code");
-    if (code === "agent_not_found")
-      throw failure(
-        "AGENT_NOT_FOUND",
-        `No Agent @${request.agent} in Workspace ${request.workspace}, or it is not visible to the approver.`,
-      );
-    if (code === "agent_not_external")
-      throw failure("AGENT_NOT_EXTERNAL", DENIED.agent_not_external!);
     throw failure(
       "LOGIN_REFUSED",
       response.status >= 500
@@ -174,6 +170,13 @@ export async function pollDeviceToken(
     throw failure("DEVICE_CODE_EXPIRED", "The sign-in code expired before it was approved.", RERUN);
   if (error === "access_denied") {
     const code = text(body, "coforge_code");
+    if (code === "agent_credential_mint_rate_limited")
+      throw new CliError({
+        code: "LOGIN_RATE_LIMITED",
+        message: `Too many keys were created recently, so this sign-in was refused. Try again in ${waitText(Number(body.retry_after))}.`,
+        retryable: true,
+        suggestedNextAction: `Wait ${waitText(Number(body.retry_after))}, then run \`coforge agent login start\` again.`,
+      });
     const reason = code ? DENIED[code] : undefined;
     throw failure(
       code === "agent_not_found" ? "AGENT_NOT_FOUND" : "LOGIN_DENIED",

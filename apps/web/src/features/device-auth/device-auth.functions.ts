@@ -1,13 +1,17 @@
 import { createServerFn } from "@tanstack/react-start";
 
 import { authMiddleware } from "#src/features/auth/function-auth";
-import { userCodeInputSchema } from "./device-auth.schemas";
+import { approveDeviceCodeInputSchema, userCodeInputSchema } from "./device-auth.schemas";
 import { approveUserCode, denyUserCode, lookupUserCode } from "#src/server/auth/device-auth.server";
 import {
   deviceAuthorizationStore,
   externalAgentDeviceDeps,
 } from "#src/server/auth/device-auth-store.server";
-import type { ExternalGrantDetails } from "#src/server/auth/device-auth-external-agent.server";
+import type {
+  ApprovableExternalAgent,
+  ExternalGrantDetails,
+} from "#src/server/auth/device-auth-external-agent.server";
+import { declareNoStore } from "#src/features/no-store-response.server";
 import { signedInAccount } from "#src/server/auth/signed-in-account.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
 
@@ -26,7 +30,9 @@ export type DeviceCodeState =
   | "not_authorized"
   | "agent_not_external"
   | "agent_unavailable"
-  | "credential_limit";
+  | "credential_limit"
+  | "agent_not_found"
+  | "mint_rate_limited";
 
 /** Resolves the signed-in user for the approval page, redirecting to /login when there is none -
  * which is what makes "sign in first, then approve" a property of the route rather than an
@@ -55,16 +61,24 @@ export const checkDeviceCode = createServerFn({ method: "POST" })
         store,
         userCode: data.userCode,
         userId: context.user.id,
-        directory: externalAgentDeviceDeps()?.directory,
+        mintLimits: externalAgentDeviceDeps()?.mintLimits,
       });
       if (!lookup.found) return { state: lookup.reason };
       return lookup.external ? { state: "ok", grant: lookup.external } : { state: "ok" };
     },
   );
 
+export const listApprovableExternalAgents = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }): Promise<{ agents: ApprovableExternalAgent[] }> => {
+    declareNoStore();
+    const external = externalAgentDeviceDeps();
+    return { agents: external ? await external.directory.approvable(context.user.id) : [] };
+  });
+
 export const approveDeviceCode = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator(userCodeInputSchema)
+  .validator(approveDeviceCodeInputSchema)
   .handler(async ({ data, context }): Promise<{ state: DeviceCodeState }> => {
     const user = context.user;
     const store = deviceAuthorizationStore();
@@ -73,7 +87,9 @@ export const approveDeviceCode = createServerFn({ method: "POST" })
       store,
       userCode: data.userCode,
       userId: user.id,
+      agentId: data.agentId,
       directory: externalAgentDeviceDeps()?.directory,
+      mintLimits: externalAgentDeviceDeps()?.mintLimits,
     });
     return { state: result.found ? "ok" : result.reason };
   });
@@ -88,7 +104,6 @@ export const denyDeviceCode = createServerFn({ method: "POST" })
       store,
       userCode: data.userCode,
       userId: context.user.id,
-      directory: externalAgentDeviceDeps()?.directory,
     });
     return { state: result.found ? "ok" : result.reason };
   });
