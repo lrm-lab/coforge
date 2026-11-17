@@ -24,6 +24,9 @@ export const DSH_MISSING_KEY_MESSAGE = "DeepSeek API key is not set";
 /** One native prompt at a time; local queue custody is never native acceptance. */
 export class DshSession implements AgentSession {
   readonly #session: AcpSession;
+  get processId(): number | undefined {
+    return this.#session.processId;
+  }
   readonly #files: DshLaunchFiles;
   readonly #timeoutMs: number;
   #instructionsInvalid = false;

@@ -1,4 +1,5 @@
 import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
+import { countLiveProcessDescendants } from "#src/agent-runtime/process-descendants";
 import {
   OutstandingBackgroundTasks,
   SubagentWakeTracker,
@@ -70,8 +71,11 @@ export function trackAgentLaunch(
   launch.trajectory = trajectory;
   const progress = new ProviderProgress();
   launch.progress = progress;
+  const identity = { agentId, launchId: launch.launchId };
   const toolCalls = new ToolCallLedger(undefined, undefined, undefined, {
-    identity: { agentId, launchId: launch.launchId },
+    identity,
+    countLiveDescendants: (startedAfterMs) =>
+      countLiveProcessDescendants(runtime.session.processId, { startedAfterMs }),
   });
   launch.toolCalls = toolCalls;
   launch.stalled = new StalledTurnTracker(
@@ -90,7 +94,10 @@ export function trackAgentLaunch(
   );
   const replyIntents = ports.replyIntents.tracker(agentId, launch);
   launch.replyIntents = replyIntents;
-  launch.backgroundTasks = new OutstandingBackgroundTasks();
+  launch.backgroundTasks = new OutstandingBackgroundTasks({
+    identity,
+    countLiveDescendants: () => countLiveProcessDescendants(runtime.session.processId),
+  });
   if (runtime.session.wakesAfterSubagents === true) launch.subagentWake = new SubagentWakeTracker();
   return { trajectory, progress, toolCalls, replyIntents };
 }

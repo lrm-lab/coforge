@@ -29,6 +29,24 @@ test("a busy turn with no provider event for 15 minutes, no open tool call and a
   expect(shouldRecoverStalledRuntime({ ...stalled, turnBusy: false })).toBe(false);
   // A long build or test run is silent until it ends; it is never killed for a message.
   expect(shouldRecoverStalledRuntime({ ...stalled, hasOpenToolCall: true })).toBe(false);
+  // Once OS inspection proves the open tool holds no live child processes (completion_loss),
+  // stalled recovery proceeds instead of freezing the Agent forever.
+  expect(
+    shouldRecoverStalledRuntime({
+      ...stalled,
+      hasOpenToolCall: true,
+      openToolHoldsNoLiveWork: true,
+    }),
+  ).toBe(true);
+  // Still respects the silence fuse even when openToolHoldsNoLiveWork is true.
+  expect(
+    shouldRecoverStalledRuntime({
+      ...stalled,
+      silentForMs: STALLED_RECOVERY_SILENCE_MS - 1,
+      hasOpenToolCall: true,
+      openToolHoldsNoLiveWork: true,
+    }),
+  ).toBe(false);
   // A restart that cannot resume the session would start the conversation over.
   expect(shouldRecoverStalledRuntime({ ...stalled, resumable: false })).toBe(false);
 });

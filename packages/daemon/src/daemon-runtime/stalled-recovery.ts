@@ -115,6 +115,8 @@ export type StalledRecoveryFacts = Readonly<{
   queuedForMs?: number;
   /** A tool call is running: a long build or test is silent until it ends. */
   hasOpenToolCall: boolean;
+  /** OS descendant inspection proved open tool calls hold zero live child processes (`completion_loss`). */
+  openToolHoldsNoLiveWork?: boolean;
   /** The session reported a native session id the relaunch can resume. */
   resumable: boolean;
   /** How long since the Agent's process last accepted an inbox notice; undefined when none was
@@ -176,8 +178,9 @@ type StalledRecoveryJudgment = Readonly<{
 }>;
 
 function stalledRecoveryJudgment(facts: StalledRecoveryFacts): StalledRecoveryJudgment | undefined {
-  // Nothing is judged over a tool still running: a long build is silent until it ends.
-  if (facts.hasOpenToolCall || !facts.resumable) return undefined;
+  // Nothing is judged over a tool still running unless OS inspection proved its children exited.
+  const openToolBlocks = facts.hasOpenToolCall && facts.openToolHoldsNoLiveWork !== true;
+  if (openToolBlocks || !facts.resumable) return undefined;
   const silentTurnThresholdMs = stalledRecoveryThresholdMs(facts);
   if (facts.turnBusy && facts.silentForMs >= silentTurnThresholdMs)
     return { reason: "silent_turn", thresholdMs: silentTurnThresholdMs };
@@ -233,6 +236,8 @@ export type StalledRecoveryBasis = Readonly<{
   /** Whether this session's input can reach a turn already in progress; a queue-only session's
    * silent turn is the one judged against the longer fuse. */
   steersBusyTurn: boolean;
+  /** Set when an open tool call's child processes had exited (`completion_loss`). */
+  completionLoss?: true;
 }>;
 
 /** The judgment and its basis, or `undefined` when this Agent's runtime is not stalled. */
@@ -247,6 +252,7 @@ export function stalledRecoveryBasis(
     silentForMs: facts.silentForMs,
     ...observation,
     steersBusyTurn: facts.steersBusyTurn,
+    ...(facts.hasOpenToolCall && facts.openToolHoldsNoLiveWork ? { completionLoss: true } : {}),
   };
 }
 
@@ -260,6 +266,7 @@ export function stalledRecoveryLogFields(
     threshold_ms: basis.thresholdMs,
     last_event_at: basis.lastEventAtMs,
     steers_busy_turn: basis.steersBusyTurn,
+    ...(basis.completionLoss ? { completion_loss: true } : {}),
   };
 }
 

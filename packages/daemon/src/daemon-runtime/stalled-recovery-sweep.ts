@@ -21,8 +21,10 @@ export type StalledRecoverySweepPorts<L extends ReleasableLaunch> = Readonly<{
   isStopping(agentId: string): boolean;
   /** A recovery in flight is not restarted by the next sweep. */
   isRecovering(agentId: string): boolean;
+  /** Reaps silent zombie background tasks whose OS descendants exited. */
+  reapBackgroundTasks?(agentId: string): Promise<void>;
   /** The same stalled judgment a new message applies. */
-  stalled(agentId: string): StalledRuntime<L> | undefined;
+  stalled(agentId: string): StalledRuntime<L> | undefined | Promise<StalledRuntime<L> | undefined>;
   /** Ends the stalled provider and wakes the Agent on the same launch, resuming its session. */
   recover(
     agentId: string,
@@ -83,7 +85,8 @@ export class StalledRecoverySweep<L extends ReleasableLaunch> {
         this.#ports.isRecovering(agentId)
       )
         continue;
-      const stalled = this.#ports.stalled(agentId);
+      await this.#ports.reapBackgroundTasks?.(agentId).catch(() => {});
+      const stalled = await this.#ports.stalled(agentId);
       if (!stalled) continue;
       judged++;
       // With nothing queued the restart is the sweep's own: capped, and told where it stopped.
@@ -117,7 +120,9 @@ export type StalledRecoverySweepHost<L extends ReleasableLaunch> = Readonly<{
   isStopping(agentId: string): boolean;
   release: Readonly<{
     isRecovering(agentId: string): boolean;
+    reapBackgroundTasks?(agentId: string): Promise<void>;
     stalled(agentId: string): StalledRuntime<L> | undefined;
+    probeStalled?(agentId: string): Promise<StalledRuntime<L> | undefined>;
     recoverStalled(
       agentId: string,
       stalled: StalledRuntime<L>,
@@ -135,7 +140,12 @@ export function stalledRecoverySweep<L extends ReleasableLaunch>(
     runnerHold: host.runnerHold,
     isStopping: host.isStopping,
     isRecovering: (agentId) => host.release.isRecovering(agentId),
-    stalled: (agentId) => host.release.stalled(agentId),
+    reapBackgroundTasks: (agentId) =>
+      host.release.reapBackgroundTasks?.(agentId) ?? Promise.resolve(),
+    stalled: (agentId) =>
+      host.release.probeStalled
+        ? host.release.probeStalled(agentId)
+        : host.release.stalled(agentId),
     recover: (agentId, stalled, options) => host.release.recoverStalled(agentId, stalled, options),
   });
 }

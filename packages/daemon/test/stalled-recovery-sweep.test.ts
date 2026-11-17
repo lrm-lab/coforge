@@ -122,3 +122,26 @@ test("concurrent sweeps join rather than repeat", async () => {
   expect(calls).toBe(1);
   expect(recovered).toEqual(["agent-a"]);
 });
+
+test("the sweep reaps zombie background tasks and awaits async stalled descendant probes", async () => {
+  const stalled = stalledRuntime("agent-a");
+  const order: string[] = [];
+  const { p, recovered } = ports({
+    agentIds: () => ["agent-a"],
+    hasQueuedDeliveries: () => false,
+    reapBackgroundTasks: async (agentId) => {
+      order.push(`reap:${agentId}`);
+    },
+    stalled: async (agentId) => {
+      order.push(`probe:${agentId}`);
+      return stalled;
+    },
+    recover: async (agentId) => {
+      order.push(`recover:${agentId}`);
+      recovered.push(agentId);
+    },
+  });
+  await new StalledRecoverySweep(p).sweep();
+  expect(order).toEqual(["reap:agent-a", "probe:agent-a", "recover:agent-a"]);
+  expect(recovered).toEqual(["agent-a"]);
+});

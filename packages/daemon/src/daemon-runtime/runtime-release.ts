@@ -17,7 +17,12 @@ import type { DaemonIdleFacts } from "./agent-idle-facts";
 import type { BusyActivity } from "./agent-activity-publisher";
 import type { DeliveryHoldReason } from "./agent-delivery-gate";
 import type { LaunchRequest } from "./runtime-launch-types";
-import { stalledRuntime, type StalledRuntime } from "./runtime-release-stalled";
+import {
+  needsOpenToolLivenessProbe,
+  probeStalledRuntime,
+  stalledRuntime,
+  type StalledRuntime,
+} from "./runtime-release-stalled";
 import {
   coldIdleRuntimePlan,
   configApplyRuntimePlan,
@@ -83,10 +88,12 @@ export type RuntimeReleasePorts<L extends ReleasableLaunch> = Readonly<{
   carryMentions(agentId: string, freshSession: boolean): ReadonlyMap<string, number>;
   abortMentionCarry(agentId: string): void;
   release(agentId: string, timeoutMs: number): Promise<void>;
+  reconcileIdleTurn?(agentId: string, launch: L): boolean;
 }>;
 export class RuntimeRelease<L extends ReleasableLaunch> {
   readonly #ports: RuntimeReleasePorts<L>;
   readonly #recovering = new Set<string>();
+  readonly #probing = new Map<string, Promise<StalledRuntime<L> | undefined>>();
   readonly #replacements = new StalledReplacements();
   constructor(ports: RuntimeReleasePorts<L>) {
     this.#ports = ports;
@@ -96,6 +103,28 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
   }
   stalled(agentId: string): StalledRuntime<L> | undefined {
     return stalledRuntime(this.#ports, agentId);
+  }
+  needsStalledProbe(agentId: string): boolean {
+    return this.#probing.has(agentId) || needsOpenToolLivenessProbe(this.#ports, agentId);
+  }
+  probeStalled(agentId: string): Promise<StalledRuntime<L> | undefined> {
+    const existing = this.#probing.get(agentId);
+    if (existing) return existing;
+    const probe = (async () => {
+      await this.reapBackgroundTasks(agentId);
+      return probeStalledRuntime(this.#ports, agentId);
+    })().finally(() => {
+      if (this.#probing.get(agentId) === probe) this.#probing.delete(agentId);
+    });
+    this.#probing.set(agentId, probe);
+    return probe;
+  }
+  async reapBackgroundTasks(agentId: string): Promise<void> {
+    const launch = this.#ports.launch(agentId);
+    if (!launch?.backgroundTasks) return;
+    const reaped = await launch.backgroundTasks.reapZombies();
+    if (reaped.length > 0 && launch.backgroundTasks.count === 0)
+      this.#ports.reconcileIdleTurn?.(agentId, launch);
   }
   async recoverStalled(
     agentId: string,

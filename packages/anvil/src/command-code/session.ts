@@ -31,6 +31,9 @@ import { COMMAND_CODE_MIN_CLI_VERSION } from "./version";
 /** One native prompt at a time; local queue custody is never native acceptance. */
 export class CommandCodeSession implements AgentSession {
   readonly #session: AcpSession;
+  get processId(): number | undefined {
+    return this.#session.processId;
+  }
   #mod: CommandCodeInstructionMod | undefined;
   readonly #timeoutMs: number;
 

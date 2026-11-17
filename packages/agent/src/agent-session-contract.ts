@@ -8,6 +8,8 @@ export type AgentNoticeOptions = {
 };
 export interface AgentSession {
   readonly contextViewRequestLogPath?: string;
+  /** OS PID of the runtime's owned child process, when backed by one; absent once exited or embedded. */
+  readonly processId?: number;
   /** Associates the next provider request with the daemon's triggering message. */
   setContextViewMessageId?(messageId: string | undefined): void;
   /** Associates the next provider request with every delivery in a coalesced notice. */

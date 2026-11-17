@@ -50,8 +50,13 @@ export async function handleAgentMessage(
     throw new Error(`Agent runtime is stopping: ${message.agentId}`);
   if (ports.runnerHold === undefined) {
     // A stalled provider is restarted for this message; arrivals meanwhile wait for that relaunch.
-    const recovering = ports.runtimeRelease.isRecovering(message.agentId);
-    const stalled = recovering ? undefined : ports.runtimeRelease.stalled(message.agentId);
+    let recovering = ports.runtimeRelease.isRecovering(message.agentId);
+    let stalled = recovering ? undefined : ports.runtimeRelease.stalled(message.agentId);
+    if (!recovering && !stalled && ports.runtimeRelease.needsStalledProbe(message.agentId)) {
+      const probed = await ports.runtimeRelease.probeStalled(message.agentId);
+      recovering = ports.runtimeRelease.isRecovering(message.agentId);
+      stalled = recovering ? undefined : probed;
+    }
     if (recovering || stalled) {
       ports.exitedDelivery.keepForNextLaunch(message.agentId, message);
       if (stalled) return ports.runtimeRelease.recoverStalled(message.agentId, stalled);

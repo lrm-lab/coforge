@@ -51,6 +51,8 @@ async function harness(
     sessionLiveTurn?: () => boolean;
     /** Whether the server refuses the session report (a 403 stale reference). */
     reportSessionFails?: boolean;
+    /** Optional OS PID reported by the first session for descendant-liveness checks. */
+    firstSessionProcessId?: () => number | undefined;
   } = {},
 ) {
   setSystemTime(START);
@@ -110,6 +112,9 @@ async function harness(
           },
           get hasLiveTurn() {
             return options.sessionLiveTurn?.() ?? true;
+          },
+          get processId() {
+            return first ? options.firstSessionProcessId?.() : undefined;
           },
           // The fake stands in for a steer-capable provider (pi): the 15-minute fuse applies.
           steersBusyTurn: true,
@@ -489,6 +494,31 @@ test("a Stop during the restart wins: the Agent is not woken again", async () =>
     expect(h.runtime.agentProcessManager.restartConfig("agent-a")).toBeUndefined();
   } finally {
     disposeGate.resolve();
+    await h.runtime.stop();
+  }
+});
+
+test("an open tool call whose runtime process has zero live OS descendants triggers stalled recovery", async () => {
+  // Spawn a real idle helper process that owns zero children, modeling a runtime process whose
+  // tool child already exited while the tool promise wedged (completion_loss).
+  const idleChild = Bun.spawn({
+    cmd: [process.execPath, "-e", "setInterval(() => {}, 60_000)"],
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "ignore",
+  });
+  const h = await harness({ firstSessionProcessId: () => idleChild.pid });
+  try {
+    h.sessions[0]!.emit({ type: "tool-start", id: "wedged-bash", name: "bash" });
+    setSystemTime(minutes(20));
+    await h.deliver(1);
+
+    expect(h.sessions).toHaveLength(2);
+    expect(h.sessions[0]!.disposed).toBe(true);
+    expect(h.activities.map((activity) => activity.detailKind)).toContain("stalled_recovery");
+  } finally {
+    idleChild.kill("SIGKILL");
+    await idleChild.exited.catch(() => {});
     await h.runtime.stop();
   }
 });

@@ -24,6 +24,9 @@ export const DEVIN_PERMISSION_MODE = "bypass";
 /** One native prompt at a time; local queue custody is never native acceptance. */
 export class DevinSession implements AgentSession {
   readonly #session: AcpSession;
+  get processId(): number | undefined {
+    return this.#session.processId;
+  }
   #rule: DevinRuleFile | undefined;
   readonly #timeoutMs: number;
 

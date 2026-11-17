@@ -178,6 +178,11 @@ export class AgentActivityPublisher<L extends PublishedActivityLaunch> {
     return this.#lastBusy.get(agentId);
   }
 
+  /** Reconciles an ended turn to Idle once background tasks clear. */
+  reconcileIdle(agentId: string, launch: L): boolean {
+    return this.#ports.reconcileIdleTurn(agentId, launch);
+  }
+
   busyAgents(): BusyAgentReport[] {
     return [...this.#lastBusy.entries()].map(([agentId, remembered]) => ({
       agentId,

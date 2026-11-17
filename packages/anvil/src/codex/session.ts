@@ -115,6 +115,10 @@ export class CodexAgentSession implements AgentSession {
     );
   }
 
+  get processId(): number | undefined {
+    return this.#process.pid;
+  }
+
   async #startTurn(text: string): Promise<void> {
     if (!this.#serviceTierReported) {
       this.#serviceTierReported = true;

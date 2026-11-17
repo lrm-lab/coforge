@@ -21,6 +21,7 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
   activityPublisher(): {
     lastBusy(agentId: string): BusyActivity<L> | undefined;
     publish(agentId: string, launch: L, draft: ActivityDraft): void;
+    reconcileIdle?(agentId: string, launch: L): boolean;
   };
   activity: (
     agentId: string,
@@ -108,5 +109,7 @@ export function assembleRuntimeRelease<L extends ReleasableLaunch>(input: {
       input.mentionDeliveries().carry.carryForRelaunch(agentId, freshSession),
     abortMentionCarry: (agentId) => input.mentionDeliveries().carry.abortRelaunch(agentId),
     release: (agentId, timeoutMs) => input.processManager().release(agentId, timeoutMs),
+    reconcileIdleTurn: (agentId, launch) =>
+      input.activityPublisher().reconcileIdle?.(agentId, launch) ?? false,
   });
 }

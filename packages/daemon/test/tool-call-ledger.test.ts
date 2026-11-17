@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
+import { countLiveProcessDescendants } from "#src/agent-runtime/process-descendants";
 import { TOOL_CALL_LEDGER_MAX, ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
+import { captureDaemonLogs } from "./log-capture";
 
 /** A ledger on a clock the test sets. */
 function ledger() {
@@ -94,4 +96,76 @@ test("bounds tracked open tools", () => {
   for (let i = 0; i < TOOL_CALL_LEDGER_MAX + 1; i++)
     ledger.observe({ type: "tool-start", id: `tool-${i}`, name: "Bash", input: {} });
   expect(ledger.oldestOpenTool()?.name).toBe("Bash");
+});
+
+test("openToolHoldsNoLiveWork detects completion loss only when OS descendants are proven zero", async () => {
+  let now = 100;
+  let procClock = 5_000;
+  let live: number | undefined = 2;
+  const observedCutoffs: number[] = [];
+  const calls = new ToolCallLedger(
+    () => now,
+    () => now,
+    () => procClock,
+    {
+      identity: { agentId: "agent-a", launchId: "launch-1" },
+      countLiveDescendants: async (startedAfterMs) => {
+        observedCutoffs.push(startedAfterMs);
+        return live;
+      },
+    },
+  );
+  expect(await calls.openToolHoldsNoLiveWork()).toBe(false);
+  calls.observe({ type: "tool-start", id: "call-1", name: "bash" });
+  now = 900_100;
+  expect(await calls.openToolHoldsNoLiveWork()).toBe(false);
+  expect(observedCutoffs).toEqual([5_000]);
+
+  // Unknown process table (e.g. Windows or embedded mock) never claims dead children.
+  live = undefined;
+  expect(await calls.openToolHoldsNoLiveWork()).toBe(false);
+
+  // Zero live descendants means the child exited while the tool completion wedged.
+  live = 0;
+  const { records } = await captureDaemonLogs(async () => {
+    expect(await calls.openToolHoldsNoLiveWork()).toBe(true);
+    // Repeated checks on the same wedged call do not spam duplicate log lines.
+    expect(await calls.openToolHoldsNoLiveWork()).toBe(true);
+  });
+  const logged = records.filter(
+    (entry) => entry.properties.event === "agent_runtime:tool_completion_loss",
+  );
+  expect(logged).toHaveLength(1);
+  expect(logged[0]?.properties).toMatchObject({
+    agent_id: "agent-a",
+    launch_id: "launch-1",
+    call_id: "call-1",
+    tool: "bash",
+    silent_for_ms: 900_000,
+  });
+});
+
+test("countLiveProcessDescendants walks the process tree and fences by processClockMs resolution", async () => {
+  const table = {
+    resolutionMs: 1_000,
+    async list() {
+      return [
+        { pid: 100, ppid: 1, pgid: 100, startedAtMs: 1_000 },
+        // Session-level helper started before the tool call.
+        { pid: 101, ppid: 100, pgid: 100, startedAtMs: 2_000 },
+        // Tool child and grandchild started inside the tool window.
+        { pid: 200, ppid: 100, pgid: 200, startedAtMs: 10_000 },
+        { pid: 201, ppid: 200, pgid: 200, startedAtMs: 11_000 },
+      ];
+    },
+  };
+  expect(await countLiveProcessDescendants(undefined, { processTable: table })).toBeUndefined();
+  expect(await countLiveProcessDescendants(999, { processTable: table })).toBeUndefined();
+  expect(await countLiveProcessDescendants(100, { processTable: table })).toBe(3);
+  expect(
+    await countLiveProcessDescendants(100, { processTable: table, startedAfterMs: 10_500 }),
+  ).toBe(2);
+  expect(
+    await countLiveProcessDescendants(100, { processTable: table, startedAfterMs: 20_000 }),
+  ).toBe(0);
 });

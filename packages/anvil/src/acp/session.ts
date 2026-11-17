@@ -146,6 +146,10 @@ export class AcpSession implements AgentSession {
     return !this.#disposed && (!!this.#active || !!this.#native || this.#queue.length > 0);
   }
 
+  get processId(): number | undefined {
+    return this.#transport?.process.pid;
+  }
+
   sendMessage(text: string) {
     return this.notify(text);
   }

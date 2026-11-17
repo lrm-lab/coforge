@@ -313,6 +313,11 @@ export class JsonlProcess {
     return this.#exitCode;
   }
 
+  /** OS PID of the owned child while it is still running; `undefined` once it has exited. */
+  get pid(): number | undefined {
+    return this.#child.exitCode === null ? this.#child.pid : undefined;
+  }
+
   async #observeExit(): Promise<void> {
     const exitCode = (this.#exitCode = await this.#child.exited);
     const expectedExit = this.#state.type === "disposing" || this.#state.type === "closed";

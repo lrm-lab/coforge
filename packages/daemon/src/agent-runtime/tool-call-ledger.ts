@@ -42,6 +42,8 @@ export type ToolCallLogIdentity = Readonly<{ agentId: string; launchId: string }
 type ToolCallLedgerOptions = {
   /** Absent for a ledger outside a daemon launch (a test): nothing is logged then. */
   identity?: ToolCallLogIdentity;
+  /** OS descendant count after `startedAfterProcessClockMs`; `undefined` when unobservable. */
+  countLiveDescendants?: (startedAfterProcessClockMs: number) => Promise<number | undefined>;
 };
 
 /**
@@ -59,6 +61,10 @@ type ToolCallLedgerOptions = {
 export class ToolCallLedger {
   readonly #calls = new Map<string, ToolCall>();
   readonly #identity: ToolCallLogIdentity | undefined;
+  readonly #countLiveDescendants:
+    | ((startedAfterProcessClockMs: number) => Promise<number | undefined>)
+    | undefined;
+  readonly #loggedCompletionLoss = new Set<string>();
   #loggedCalls = 0;
   #reportedTruncation = false;
 
@@ -69,6 +75,7 @@ export class ToolCallLedger {
     options: ToolCallLedgerOptions = {},
   ) {
     this.#identity = options.identity;
+    this.#countLiveDescendants = options.countLiveDescendants;
   }
 
   observe(event: AgentRuntimeEvent): void {
@@ -78,6 +85,7 @@ export class ToolCallLedger {
       // A repeated start for a known id re-starts that call: it takes fresh clocks and is open
       // again, as before this ledger logged anything. Its line is written once, when the turn
       // ends or the call finishes.
+      this.#loggedCompletionLoss.delete(event.id);
       this.#calls.set(event.id, {
         name: event.name,
         startedAtMs: this.clock(),
@@ -99,6 +107,7 @@ export class ToolCallLedger {
             : "agent_runtime:tool_finished",
         );
       this.#calls.clear();
+      this.#loggedCompletionLoss.clear();
     }
   }
 
@@ -128,6 +137,34 @@ export class ToolCallLedger {
     return this.#oldestOpenTool()?.startedAtProcessClockMs;
   }
 
+  /**
+   * Whether open tool calls hold zero live OS child/descendant processes (`completion_loss`).
+   * Returns `false` when no tool is open, when OS descendant liveness is unobservable, or while
+   * any descendant started at or after the oldest open call's start remains alive.
+   */
+  async openToolHoldsNoLiveWork(): Promise<boolean> {
+    if (!this.#countLiveDescendants) return false;
+    const oldest = this.#oldestOpenToolEntry();
+    if (!oldest) return false;
+    const [callId, call] = oldest;
+    const live = await this.#countLiveDescendants(call.startedAtProcessClockMs).catch(
+      () => undefined,
+    );
+    if (live !== 0) return false;
+    if (this.#identity && !this.#loggedCompletionLoss.has(callId)) {
+      this.#loggedCompletionLoss.add(callId);
+      logger.warning("Open tool call holds no live OS descendants", {
+        event: "agent_runtime:tool_completion_loss",
+        agent_id: this.#identity.agentId,
+        launch_id: this.#identity.launchId,
+        call_id: callId,
+        tool: call.name,
+        silent_for_ms: Math.max(0, Math.round(this.clock() - call.startedAtMs)),
+      });
+    }
+    return true;
+  }
+
   /** Writes the line for every call this launch was still holding when its process ended — the
    * turn-scoped kill, a shutdown, an unexpected exit — and forgets them. Such a call never
    * reaches `finish()` and its turn never completes, so without this the one thing worth knowing
@@ -135,13 +172,18 @@ export class ToolCallLedger {
   logAbandoned(): void {
     for (const [id, call] of this.#calls) this.#logCall(id, call, "agent_runtime:tool_unfinished");
     this.#calls.clear();
+    this.#loggedCompletionLoss.clear();
   }
 
   #oldestOpenTool(): ToolCall | undefined {
-    let oldest: ToolCall | undefined;
-    for (const call of this.#calls.values()) {
+    return this.#oldestOpenToolEntry()?.[1];
+  }
+
+  #oldestOpenToolEntry(): [string, ToolCall] | undefined {
+    let oldest: [string, ToolCall] | undefined;
+    for (const [id, call] of this.#calls) {
       if (call.endedAtMs !== undefined) continue;
-      if (!oldest || call.startedAtMs < oldest.startedAtMs) oldest = call;
+      if (!oldest || call.startedAtMs < oldest[1].startedAtMs) oldest = [id, call];
     }
     return oldest;
   }

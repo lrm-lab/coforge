@@ -92,6 +92,9 @@ export class KiroProvider implements CodeAgentProvider {
 class KiroSession implements AgentSession {
   /** Busy input steers the live turn through Kiro's `_session/steer` extension. */
   readonly steersBusyTurn = true;
+  get processId(): number | undefined {
+    return this.#transport.process.pid;
+  }
   readonly #transport: KiroConnection;
   readonly #listeners = new Set<(event: AgentRuntimeEvent) => void>();
   readonly #seenMessageIds = new Set<string>();

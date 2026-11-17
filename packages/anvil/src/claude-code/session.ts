@@ -219,6 +219,10 @@ export class ClaudeCodeAgentSession implements AgentSession {
     return this.#state === "running" || this.#state === "interrupting";
   }
 
+  get processId(): number | undefined {
+    return this.#process.pid;
+  }
+
   async #sendInput(text: string): Promise<void> {
     if (this.#inputFailure) throw this.#inputFailure;
     this.#firstInput ??= text;

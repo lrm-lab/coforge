@@ -31,9 +31,9 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
 - `agent-stop-coordinator.ts` owns release/stop ordering once admission closes; a stop always completes ([agent-runtime](../agent-runtime/AGENTS.md)).
 - `stalled-recovery-sweep.ts` restarts a busy turn silent past its fuse — 15
   minutes for a session that declares `steersBusyTurn`, 60 for one that only queues
-  input — with no open tool call and
-  a resumable session even when no message waits, but never while a background task
-  runs. Silence is awake time (`platform/awake-clock.ts`), so a machine's sleep never counts
+  input — with no live open tool call (an open call whose OS descendants exited counts as
+  `completion_loss`) and a resumable session even when no message waits, reaping 60-minute-silent
+  zombie background tasks with zero live OS descendants before judging background work. Silence is awake time (`platform/awake-clock.ts`), so a machine's sleep never counts
   toward a fuse. Such an unattended restart resumes
   with a prompt naming where the turn stopped, and at most `UNATTENDED_RECOVERY_LIMIT` run in a row
   before a turn completes; past that the owner sees an error and only a message or a restart helps.

@@ -27,6 +27,8 @@ export type TaskIdleNudgePorts = {
   idle(agentId: string): boolean;
   /** Background tasks this Agent's launch still runs. */
   backgroundTasks(agentId: string): number;
+  /** Reaps silent zombie background tasks whose OS descendants exited before reading count. */
+  reapBackgroundTasks?(agentId: string): Promise<void>;
   /** The native session the Agent is in now, if any. */
   sessionId(agentId: string): string | undefined;
   /** The current session is a new one, not a resume of an older session. */
@@ -78,10 +80,21 @@ export class TaskIdleNudge {
     if (fresh && sessionId !== undefined) this.#askedSessions.set(agentId, sessionId);
     const backgroundTasks = this.ports.backgroundTasks(agentId);
     this.#inFlight.add(agentId);
-    void this.#ask(agentId, {
+    void this.#askWithReap(agentId, fresh, backgroundTasks).finally(() =>
+      this.#inFlight.delete(agentId),
+    );
+  }
+
+  async #askWithReap(agentId: string, fresh: boolean, initialTasks: number): Promise<void> {
+    let backgroundTasks = initialTasks;
+    if (backgroundTasks > 0 && this.ports.reapBackgroundTasks) {
+      await this.ports.reapBackgroundTasks(agentId).catch(() => {});
+      backgroundTasks = this.ports.backgroundTasks(agentId);
+    }
+    await this.#ask(agentId, {
       ...(fresh ? { freshSession: true } : {}),
       ...(backgroundTasks > 0 ? { backgroundTasks } : {}),
-    }).finally(() => this.#inFlight.delete(agentId));
+    });
   }
 
   #now(): number {

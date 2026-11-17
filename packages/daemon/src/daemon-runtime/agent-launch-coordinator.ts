@@ -182,6 +182,9 @@ export class AgentLaunchCoordinator {
       },
       backgroundTasks: (agentId) =>
         this.ports.currentActivityLaunches.get(agentId)?.backgroundTasks?.count ?? 0,
+      reapBackgroundTasks: async (agentId) => {
+        await this.ports.currentActivityLaunches.get(agentId)?.backgroundTasks?.reapZombies();
+      },
       sessionId: (agentId) => this.ports.currentActivityLaunches.get(agentId)?.launchId,
       freshSession: (agentId) => {
         const launchId = this.ports.currentActivityLaunches.get(agentId)?.launchId;
