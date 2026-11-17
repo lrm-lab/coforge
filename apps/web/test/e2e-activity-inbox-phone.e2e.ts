@@ -195,9 +195,9 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     );
 
     // The phone's bottom tab bar (task #77): the open conversation above hid it, and the list
-    // brings it back with Activity marked current. Chats, Activity, Workspace and Me lead to each
-    // other, the current one marked.
-    expect(await evaluate<string | null>(currentTab)).toBe("Activity");
+    // brings it back with Activity marked current, a render after the list itself, so the check
+    // waits for it. Chats, Activity, Workspace and Me lead to each other, the current one marked.
+    await browser("wait", "--fn", `(${currentTab}) === "Activity"`);
     await pressTab("Chats", workspacePath);
     await pressTab("Activity", "/activity");
     await pressTab("Workspace", "/workspace");
