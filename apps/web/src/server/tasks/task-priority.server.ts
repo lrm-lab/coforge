@@ -1,4 +1,4 @@
-import { taskPriorityRank, type TaskView } from "@lrm/coforge-sdk/internal";
+import { compareTaskOrder } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import type { Member, Transaction } from "./task-board-ports.server";
 import { isTaskManager } from "./task-assignees.server";
@@ -31,13 +31,8 @@ export async function assertCanSetPriority(
   });
 }
 
-/** Highest priority first; `tie` keeps a level's own order (oldest first). Stable. */
-export function byPriority<T extends Pick<TaskView, "priority">>(
-  tasks: T[],
-  tie: (left: T, right: T) => number = () => 0,
-): T[] {
-  return [...tasks].sort(
-    (left, right) =>
-      taskPriorityRank(left.priority) - taskPriorityRank(right.priority) || tie(left, right),
-  );
+/** The one Task order every list shares (task #13): priority, then earliest due, then oldest.
+ * Stable. */
+export function byPriority<T extends Parameters<typeof compareTaskOrder>[0]>(tasks: T[]): T[] {
+  return [...tasks].sort(compareTaskOrder);
 }

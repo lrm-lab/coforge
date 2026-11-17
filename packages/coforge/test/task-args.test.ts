@@ -263,3 +263,68 @@ test("create and convert require --priority, and none is never a choice", () => 
       parseTaskArgs([operation, ...target, "--number", "7", "--priority", "high"]),
     ).toThrow("Usage:");
 });
+
+// Task #13: an optional due instant on create, set or cleared on amend.
+test("--due sets a new task's due instant; a bare date means end of local day with dueHasTime=false", () => {
+  const target = ["--target", "#general"];
+  const endOfDay = new Date("2026-11-21T00:00:00").toISOString();
+  const localEvening = new Date("2026-11-20T17:30").toISOString();
+  expect(
+    parseTaskArgs([
+      "create",
+      ...target,
+      "--title",
+      "A",
+      "--priority",
+      "high",
+      "--due",
+      "2026-11-20",
+    ]),
+  ).toMatchObject({ task: { operation: "create", dueAt: endOfDay, dueHasTime: false } });
+  expect(
+    parseTaskArgs([
+      "create",
+      ...target,
+      "--title",
+      "A",
+      "--priority",
+      "high",
+      "--due",
+      "2026-11-20T17:30",
+    ]),
+  ).toMatchObject({ task: { dueAt: localEvening, dueHasTime: true } });
+  expect(() =>
+    parseTaskArgs(["create", ...target, "--title", "A", "--priority", "high", "--due", "friday"]),
+  ).toThrow("--due must be a date or datetime");
+  expect(() =>
+    parseTaskArgs(["create", ...target, "--title", "A", "--priority", "high", "--due", " "]),
+  ).toThrow("--due must be a date or datetime");
+});
+
+test("amend takes --due or --clear-due as its amendment, never both", () => {
+  const target = ["--target", "#general"];
+  const endOfDay = new Date("2026-11-21T00:00:00").toISOString();
+  const instant = new Date("2026-11-20T09:00:00").toISOString();
+  expect(parseTaskArgs(["amend", ...target, "--number", "7", "--due", "2026-11-20"])).toEqual({
+    command: "task",
+    task: { operation: "amend", target: "#general", number: 7, dueAt: endOfDay, dueHasTime: false },
+  });
+  expect(
+    parseTaskArgs(["amend", ...target, "--number", "7", "--due", "2026-11-20T09:00"]),
+  ).toMatchObject({ task: { dueAt: instant, dueHasTime: true } });
+  expect(parseTaskArgs(["amend", ...target, "--number", "7", "--clear-due"])).toEqual({
+    command: "task",
+    task: { operation: "amend", target: "#general", number: 7, dueAt: null },
+  });
+  expect(() =>
+    parseTaskArgs(["amend", ...target, "--number", "7", "--due", "2026-11-20", "--clear-due"]),
+  ).toThrow("Use either --due or --clear-due, not both");
+  expect(() => parseTaskArgs(["amend", ...target, "--number", "7", "--due", "soonish"])).toThrow(
+    "--due must be a date or datetime",
+  );
+  // A due flag alone is an amendment; other operations refuse it outright.
+  for (const operation of ["list", "show", "update", "claim", "convert"])
+    expect(() =>
+      parseTaskArgs([operation, ...target, "--number", "7", "--due", "2026-11-20"]),
+    ).toThrow("Usage:");
+});

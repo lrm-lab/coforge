@@ -1,7 +1,7 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import {
+  compareTaskOrder,
   taskNameLabel,
-  taskPriorityRank,
   type TaskPriority,
   type TaskStatus,
 } from "@lrm/coforge-sdk/internal";
@@ -21,8 +21,8 @@ import {
  * An Agent's own task queue (task #716): the one ordering every reader of "what should I do
  * next" shares — `list --mine`, an assignment notice and the idle reminder. A Task enters the
  * queue when it is Todo or In Progress and no unfinished blocker holds it; In Review, a blocked
- * Task and a finished one wait outside it. Order is highest priority first, oldest first within
- * a level, id for stability — the order `list --mine` and the idle reminder always used.
+ * Task and a finished one wait outside it. Order is the shared Task order — highest priority
+ * first, earliest due next (undated last), oldest first, id for stability.
  */
 
 /** The fields the queue reads of one Task: enough to order it and to say whether it can start. */
@@ -30,19 +30,14 @@ export type QueueTask = {
   id: string;
   status: TaskStatus;
   priority?: TaskPriority;
+  dueAt?: Date | string | null;
   blocked: boolean;
   createdAt: Date | string;
 };
 
-const queueTime = (at: Date | string) => (typeof at === "string" ? Date.parse(at) : at.getTime());
-
-/** Queue order: priority rank, then oldest first, then id so the order never depends on input. */
+/** Queue order: the shared Task order — priority, then earliest due, then oldest, then id. */
 export function compareQueueTasks(left: QueueTask, right: QueueTask): number {
-  return (
-    taskPriorityRank(left.priority) - taskPriorityRank(right.priority) ||
-    queueTime(left.createdAt) - queueTime(right.createdAt) ||
-    left.id.localeCompare(right.id)
-  );
+  return compareTaskOrder(left, right);
 }
 
 /** Whether the queue numbers the Task: work that can start now. */
@@ -105,6 +100,7 @@ export async function readOwnQueueTasks(
       number: true,
       status: true,
       priority: true,
+      dueAt: true,
       createdAt: true,
       conversationId: true,
       workspaceId: true,
@@ -117,6 +113,7 @@ export async function readOwnQueueTasks(
     number: row.number,
     status: storedTaskStatus(row.status, { number: row.number }),
     priority: storedTaskPriority(row.priority),
+    dueAt: row.dueAt,
     blocked: relationsOf(relations, row.id).blocked,
     createdAt: row.createdAt,
     conversationId: row.conversationId,

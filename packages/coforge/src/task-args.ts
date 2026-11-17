@@ -66,6 +66,7 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--project",
     "--anyway",
     "--priority",
+    "--due",
     "--json",
   ],
   convert: ["--target", "--peer-kind", "--message-id", "--priority", "--json"],
@@ -116,6 +117,8 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--label-description",
     "--project",
     "--clear-project",
+    "--due",
+    "--clear-due",
     "--expected-revision",
     "--reviewer-isolation",
     "--json",
@@ -150,6 +153,7 @@ const TASK_REPEATABLE_FLAGS: Partial<Record<TaskOperation, readonly string[]>> =
 
 const TASK_SWITCHES = new Set([
   "--clear-description",
+  "--clear-due",
   "--reviewer-isolation",
   "--mine",
   "--ready",
@@ -343,6 +347,14 @@ export function parseTaskArgs(
     task.priority = priority as TaskPriorityLevel;
   }
 
+  if (operation === "create") {
+    const due = dueAtOption(one("--due"));
+    if (due !== undefined) {
+      task.dueAt = due.dueAt;
+      task.dueHasTime = due.dueHasTime;
+    }
+  }
+
   if (operation === "assign") {
     const assignee = one("--assignee")?.trim();
     if (!assignee)
@@ -368,9 +380,13 @@ export function parseTaskArgs(
     const parent = one("--parent");
     const project = one("--project")?.trim();
     const clearProject = values.has("--clear-project");
+    const due = one("--due");
+    const clearDue = values.has("--clear-due");
     if (project !== undefined && clearProject)
       throw invalidTaskArg("Use either --project or --clear-project, not both");
     if (project === "") throw invalidTaskArg("--project must name a Project by slug");
+    if (due !== undefined && clearDue)
+      throw invalidTaskArg("Use either --due or --clear-due, not both");
     const rawLabels = values.get("--label") ?? [];
     const addedLabels = rawLabels
       .filter((label) => !label.trimStart().startsWith("-"))
@@ -389,10 +405,12 @@ export function parseTaskArgs(
       addedLabels.length === 0 &&
       removedLabels.length === 0 &&
       project === undefined &&
-      !clearProject
+      !clearProject &&
+      due === undefined &&
+      !clearDue
     )
       throw invalidTaskArg(
-        "At least one amendment is required: --title, --description, --clear-description, --blocked-by, --parent, --label, --project, or --clear-project",
+        "At least one amendment is required: --title, --description, --clear-description, --blocked-by, --parent, --label, --project, --clear-project, --due, or --clear-due",
       );
     if (blockedBy !== undefined) task.blockedBy = blockedByOption(blockedBy, true);
     if (parent !== undefined) task.parent = parentOption(parent, true);
@@ -405,6 +423,14 @@ export function parseTaskArgs(
     }
     if (clearProject) task.project = null;
     else if (project !== undefined) task.project = project;
+    if (clearDue) task.dueAt = null;
+    else if (due !== undefined) {
+      const parsed = dueAtOption(due);
+      if (parsed !== undefined) {
+        task.dueAt = parsed.dueAt;
+        task.dueHasTime = parsed.dueHasTime;
+      }
+    }
     if (title !== undefined) task.title = title;
     if (clear) task.description = null;
     else if (description !== undefined) task.description = description;
@@ -418,6 +444,29 @@ export function parseTaskArgs(
   )
     task.freshnessContextMode = "withheld";
   return { command: "task", task, ...(json ? { json: true } : {}) };
+}
+
+/** `--due`: a date or datetime, normalized to an ISO instant. A bare `YYYY-MM-DD` means the end
+ * of that local calendar day (next day 00:00:00) with `dueHasTime = false`; anything else parses
+ * as a datetime with `dueHasTime = true`. */
+function dueAtOption(
+  value: string | undefined,
+): { dueAt: string; dueHasTime: boolean } | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) throw invalidTaskArg("--due must be a date or datetime");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const [year, month, day] = trimmed.split("-").map(Number);
+    const check = new Date(year!, month! - 1, day!);
+    if (check.getFullYear() !== year || check.getMonth() !== month! - 1 || check.getDate() !== day)
+      throw invalidTaskArg("--due must be a date or datetime, like 2026-11-20 or 2026-11-20T17:00");
+    const endOfDay = new Date(year!, month! - 1, day! + 1, 0, 0, 0, 0);
+    return { dueAt: endOfDay.toISOString(), dueHasTime: false };
+  }
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime()))
+    throw invalidTaskArg("--due must be a date or datetime, like 2026-11-20 or 2026-11-20T17:00");
+  return { dueAt: date.toISOString(), dueHasTime: true };
 }
 
 /** The seven resource-receipt fields, each required and nonblank. */

@@ -61,6 +61,25 @@ function priorityField(task: TaskView): string {
   return `prio=${task.priority ?? "none"}`;
 }
 
+function formatDueValue(dueAt: string, dueHasTime?: boolean): string {
+  if (dueHasTime === false) {
+    const endOfDay = new Date(Date.parse(dueAt) - 1);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${endOfDay.getFullYear()}-${pad(endOfDay.getMonth() + 1)}-${pad(endOfDay.getDate())}`;
+  }
+  return formatUtcTimestamp(dueAt);
+}
+
+/** A row's due instant and how it reads now; nothing when the Task has none (or an older
+ * server does not send the field). */
+function dueField(task: TaskView): string {
+  if (task.dueAt === undefined || task.dueAt === null) return "";
+  const state = task.dueState
+    ? ` (${task.dueState === "due_soon" ? "due soon" : task.dueState})`
+    : "";
+  return ` due=${formatDueValue(task.dueAt, task.dueHasTime)}${state}`;
+}
+
 function times(task: TaskView): string {
   return ` created=${formatUtcTimestamp(task.createdAt)} updated=${formatUtcTimestamp(task.updatedAt)}`;
 }
@@ -71,7 +90,7 @@ function boardRow(task: TaskView): string {
   const creatorMark = departure(task.creator);
   const creator = ` (by @${task.creator.handle}${creatorMark ? ` [${creatorMark}]` : ""})`;
   const details = task.description ? `\n  details: ${fenceMessageBody(task.description)}` : "";
-  return `#${task.number} [${task.status}] ${priorityField(task)} ${fenceMessageBody(task.title)}${owner}${creator} ${messageField(task)} rev=${task.revision}${resourceReceipt(task)}${relationMarks(task)}${labelsField(task)}${times(task)}${details}`;
+  return `#${task.number} [${task.status}] ${priorityField(task)}${dueField(task)} ${fenceMessageBody(task.title)}${owner}${creator} ${messageField(task)} rev=${task.revision}${resourceReceipt(task)}${relationMarks(task)}${labelsField(task)}${times(task)}${details}`;
 }
 
 /** One conversation's Tasks, in board order, as `coforge task list --target` prints them. */
@@ -90,13 +109,13 @@ function ownRow(task: TaskView, queuePosition?: number): string {
   const creator = ` by=@${task.creator.handle}${mark ? ` creator=${mark}` : ""}`;
   const title = foldUntrustedLine(task.title);
   const queue = queuePosition === undefined ? "" : ` queue=${queuePosition}`;
-  return `- ${task.channelRef ?? "<unknown conversation>"} task #${task.number} [${task.status}] ${priorityField(task)}${queue}${creator} ${messageField(task)}${resourceReceipt(task)}${relationMarks(task)}${labelsField(task)}${times(task)} ${title}`;
+  return `- ${task.channelRef ?? "<unknown conversation>"} task #${task.number} [${task.status}] ${priorityField(task)}${dueField(task)}${queue}${creator} ${messageField(task)}${resourceReceipt(task)}${relationMarks(task)}${labelsField(task)}${times(task)} ${title}`;
 }
 
 /** One line of the queue section: its number, then enough of the Task to recognize it. */
 function queueRow(position: number, task: TaskView): string {
   const title = foldUntrustedLine(task.title);
-  return `#${position} ${task.channelRef ?? "<unknown conversation>"} task #${task.number} [${task.status}] ${priorityField(task)} ${title}`;
+  return `#${position} ${task.channelRef ?? "<unknown conversation>"} task #${task.number} [${task.status}] ${priorityField(task)}${dueField(task)} ${title}`;
 }
 
 /**
@@ -301,6 +320,7 @@ export function formatTaskShow(
     `Labels: ${(task.labels ?? []).map((label) => label.name).join(", ") || "(none)"}`,
     ...projectLine(task.project),
     `Priority: ${task.priority ?? "none"}`,
+    `Due: ${task.dueAt ? `${formatDueValue(task.dueAt, task.dueHasTime)}${task.dueState ? ` (${task.dueState === "due_soon" ? "due soon" : task.dueState})` : ""}` : "(none)"}`,
     ...showRelationLines(task, relations),
   ].join("\n");
 }

@@ -403,3 +403,52 @@ test("an explicit none priority is refused before the board is called", async ()
   expect(result.status).toBe(400);
   expect(called).toBe(false);
 });
+
+// Task #13: the route's schema takes an ISO due instant (an offset spelling included) and a
+// null clear on amend, and refuses anything else before the board.
+test("a due instant reaches the board on create and amend, and a bad one is refused", async () => {
+  const received: unknown[] = [];
+  const board = {
+    execute: async (_principal: unknown, command: unknown) => {
+      received.push(command);
+      return { tasks: [] };
+    },
+  };
+  const post = (body: Record<string, unknown>) =>
+    handleAgentTaskPost(request({ idempotencyKey: "k", ...body }), principal, board);
+
+  expect(
+    (
+      await post({
+        operation: "create",
+        target: "#general",
+        title: "x",
+        dueAt: "2026-11-20T17:00:00+08:00",
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (await post({ operation: "amend", target: "#general", number: 4, dueAt: null })).status,
+  ).toBe(200);
+  expect(
+    (await post({ operation: "amend", target: "#general", number: 4, dueAt: "friday" })).status,
+  ).toBe(400);
+  // Which operations may carry one is the board's `validateTaskCommand`, not this schema's.
+  expect(
+    (
+      await post({
+        operation: "update",
+        target: "#general",
+        number: 4,
+        status: "done",
+        dueAt: "2026-11-20T09:00:00Z",
+      })
+    ).status,
+  ).toBe(200);
+
+  expect(received).toMatchObject([
+    { operation: "create", dueAt: "2026-11-20T17:00:00+08:00" },
+    { operation: "amend", number: 4, dueAt: null },
+    { operation: "update", number: 4, dueAt: "2026-11-20T09:00:00Z" },
+  ]);
+});

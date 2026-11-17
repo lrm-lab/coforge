@@ -174,3 +174,33 @@ test("validateTaskRequest accepts a priority on create, convert and update, and 
     validateTaskRequest({ ...base, operation: "amend", number: 4, title: "x", priority: "high" }),
   ).toThrow("invalid Task priority");
 });
+
+// Task #13: a due instant on create, and an amend that sets or clears it alone.
+test("validateTaskRequest accepts a due instant on create and amend, and rejects it elsewhere", () => {
+  const amend = { ...base, operation: "amend" as const, number: 4 };
+  const due = "2026-11-20T09:00:00.000Z";
+  expect(() =>
+    validateTaskRequest({ ...base, operation: "create", title: "x", dueAt: due }),
+  ).not.toThrow();
+  expect(() =>
+    validateTaskRequest({
+      ...base,
+      operation: "create",
+      title: "x",
+      dueAt: "2026-11-20T17:00:00+08:00",
+    }),
+  ).not.toThrow();
+  expect(() => validateTaskRequest({ ...amend, dueAt: due })).not.toThrow();
+  expect(() => validateTaskRequest({ ...amend, dueAt: null })).not.toThrow();
+  expect(() => validateTaskRequest(amend)).toThrow("missing Task operation argument");
+  expect(() =>
+    validateTaskRequest({ ...base, operation: "create", title: "x", dueAt: null }),
+  ).toThrow("invalid Task due date");
+  expect(() =>
+    validateTaskRequest({ ...base, operation: "create", title: "x", dueAt: "March 3, 2026" }),
+  ).toThrow("invalid Task due date");
+  expect(() =>
+    validateTaskRequest({ ...base, operation: "update", number: 4, status: "done", dueAt: due }),
+  ).toThrow("invalid Task due date");
+  expect(() => validateTaskRequest({ ...base, dueAt: due })).toThrow("invalid Task due date");
+});

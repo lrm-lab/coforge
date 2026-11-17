@@ -1,11 +1,11 @@
 /** Message-backed Task contract shared by browser, Agent RPC and backend. */
 import type { AgentMessageRecord } from "./local-daemon";
 import { CHANNEL_NAME_PATTERN } from "./channel-references";
+import type { TaskPriority, TaskPriorityLevel } from "./task-order";
 
 import type { TaskStatus, TaskWriteStatus } from "./task-status";
 export * from "./task-status";
-import type { TaskPriority, TaskPriorityLevel } from "./task-order";
-export * from "./task-order";
+
 export type TaskPeerKind = "human" | "agent";
 
 /** A conversation member named on a Task: its owner or its creator. */
@@ -131,6 +131,14 @@ export type TaskView = {
   project?: TaskProjectRef | null;
   /** Absent reads as `none` (an older server does not send it). */
   priority?: TaskPriority;
+  /** When the Task is due, an ISO instant; null or absent when it has none (an older server
+   * does not send it). */
+  dueAt?: string | null;
+  /** True when `dueAt` carries an explicit time of day; false for date-only deadlines. */
+  dueHasTime?: boolean;
+  /** How the due instant reads now: `overdue` once it has passed, `due_soon` within a day,
+   * null when it is further out or unset. Absent from an older server. */
+  dueState?: "overdue" | "due_soon" | null;
   createdAt: string;
   updatedAt: string;
   /** The conversation's target (`#channel` or `@user`); an Agent's own cross-conversation list sets it. */
@@ -217,6 +225,11 @@ export type TaskHistoryChange =
     }
   | { eventType: "priority_changed"; payload: { from: TaskPriority; to: TaskPriority } }
   | {
+      eventType: "due_changed";
+      /** The due instants before and after, ISO; null for none. */
+      payload: { from: string | null; to: string | null };
+    }
+  | {
       eventType: "labels_changed";
       /** The labels added and removed. */
       payload: { added: TaskLabel[]; removed: TaskLabel[] };
@@ -298,6 +311,11 @@ type TaskCommandFields = {
    * `none` while old Computers still send none. `update`: the new priority, with or without a
    * `status`. */
   priority?: TaskPriorityLevel;
+  /** `create`: the new Tasks' due instant, an ISO datetime. `amend`: the new due instant, or
+   * null to clear it. */
+  dueAt?: string | null;
+  /** True when `dueAt` carries an explicit time of day; false for date-only deadlines. */
+  dueHasTime?: boolean;
   /** `list`: only Tasks ready to start: todo, unowned and not blocked. */
   ready?: boolean;
   assignee?: string | null;
@@ -344,7 +362,7 @@ export type TaskListCoverage = {
 export type TaskListPagination = { mode: "complete"; truncated: false };
 
 /** One entry of an Agent's own-task queue: `position` is the Task's 1-based number in the
- * whole queue (todo/in_progress, unblocked, highest priority first), `taskId` the Task it
+ * whole queue (todo/in_progress, unblocked, in the shared Task order), `taskId` the Task it
  * ranks. Positions count the full queue even when `tasks` is filtered, so a filtered row
  * still shows its true rank. */
 export type TaskQueueEntry = { position: number; taskId: string };

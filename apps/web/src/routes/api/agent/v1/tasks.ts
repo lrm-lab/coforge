@@ -129,6 +129,7 @@ const taskRequestFields = z
     status: z.enum(taskStatuses).optional(),
     statuses: z.array(z.enum(TASK_READ_STATUSES)).min(1).max(TASK_READ_STATUSES.length).optional(),
     priority: z.enum(TASK_PRIORITY_LEVELS).optional(),
+    dueAt: z.iso.datetime({ offset: true }).nullable().optional(),
     labels: z.array(z.string().min(1).max(64)).max(5).optional(),
     removeLabels: z.array(z.string().min(1).max(64)).max(5).optional(),
     labelDescription: z.string().min(1).max(500).optional(),

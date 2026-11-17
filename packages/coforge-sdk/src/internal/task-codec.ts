@@ -1,6 +1,6 @@
 import { isSeenExactSeqs, MAX_MESSAGE_SEQUENCE } from "./freshness-decision";
+import { TASK_PRIORITY_LEVELS } from "./task-order";
 import {
-  TASK_PRIORITY_LEVELS,
   TASK_WRITE_STATUSES,
   TASK_READ_STATUSES,
   type TaskCommand,
@@ -67,6 +67,8 @@ const amendFields = [
   "labels",
   "removeLabels",
   "project",
+  "dueAt",
+  "dueHasTime",
 ] as const satisfies readonly (keyof TaskCommand)[];
 
 function validReceipt(value: unknown): value is TaskResourceReceipt {
@@ -173,6 +175,20 @@ export function validateTaskRequest(value: TaskRequest): void {
     (!priorities.has(value.priority) || !["create", "convert", "update"].includes(value.operation))
   )
     throw new Error("invalid Task priority");
+  if (
+    value.dueAt !== undefined &&
+    (!["create", "amend"].includes(value.operation) ||
+      (value.dueAt !== null && !isIsoDate(value.dueAt)) ||
+      (value.dueAt === null && value.operation !== "amend"))
+  )
+    throw new Error("invalid Task due date");
+  if (
+    value.dueHasTime !== undefined &&
+    (!["create", "amend"].includes(value.operation) ||
+      typeof value.dueHasTime !== "boolean" ||
+      typeof value.dueAt !== "string")
+  )
+    throw new Error("invalid Task due date");
   if (value.freshnessContextMode !== undefined && !modes.has(value.freshnessContextMode))
     throw new Error("invalid Task mode");
   if (value.createsResource !== undefined && typeof value.createsResource !== "boolean")
