@@ -462,6 +462,7 @@ export * from "./agent-control";
 export * from "./agent-migration";
 export * from "./reminder";
 export * from "./reminder-grammar";
+export * from "./reminder-due";
 export * from "./app-config";
 export * from "./tasks";
 export * from "./task-assign-reason";

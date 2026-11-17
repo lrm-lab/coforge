@@ -117,16 +117,16 @@ import { createAgentControlResultMethod } from "./agent-control-receiver.server"
 import { computerRuntimeMethods } from "./runtime-auth-report-receiver.server";
 import { daemonReportMethods } from "./daemon-report-methods.server";
 import { agentReadingMethods } from "./agent-reading-methods";
-import { PrismaReminderRepository } from "#src/server/db/repositories/reminder.repositories.server";
-import { Reminders } from "#src/server/reminders/reminders.server";
+import { createReminders } from "#src/server/reminders/reminder-composition.server";
 import { createAgentAppConfigs } from "#src/server/agent-app-configs/agent-app-configs-composition.server";
 import { fromCentrifugoProxy } from "./proxy-secret.server";
-import { daemonControlChannel } from "./server-api.server";
-import { encodeReminderSync } from "@lrm/coforge-sdk/internal";
 import { getAgentDisplay } from "#src/server/agents/agent-display.server";
 import { createAgentStopReasonRecorder } from "#src/server/agents/agent-stop-reason.server";
 import { registerBackgroundSweeps } from "#src/server/sweeps/background-sweeps.server";
 import { reminderCallbackMethods } from "./reminder-callback-methods.server";
+import { REMINDER_DUE_ACK_METHOD } from "@lrm/coforge-sdk/internal";
+import { createReminderDueWorker } from "#src/server/reminders/reminder-due-composition.server";
+import { createReminderDueAckMethod } from "./reminder-due-ack-method.server";
 
 const unavailable: CentrifugoRpcError = {
   code: 503,
@@ -255,15 +255,9 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
         (await getComputerRestartStore().identity?.({ workspaceId, computerId }))?.workerInstanceId,
       mentionReports,
     );
-    const reminderRepository = new PrismaReminderRepository(db);
     const { reminderLease, capabilityLeases } = daemonCapabilityLeases();
     const appConfigs = createAgentAppConfigs(db, centrifugo);
-    const reminders = new Reminders(reminderRepository, reminderLease, (sync) =>
-      centrifugo.publish(
-        daemonControlChannel(sync.workspaceId, sync.computerId),
-        encodeReminderSync(sync),
-      ),
-    );
+    const reminders = createReminders(db, centrifugo, reminderLease);
     const agentActivity = new AgentActivityRepository(db);
     const computerLifecycle = new ComputerLifecycleActivity({
       agents: ({ workspaceId, computerId }) =>
@@ -317,6 +311,9 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
         ...reminderCallbackMethods(
           createReminderFireMethod(reminders),
           createReminderSnapshotMethod(reminders),
+        ),
+        [REMINDER_DUE_ACK_METHOD]: createReminderDueAckMethod(
+          createReminderDueWorker(db, centrifugo),
         ),
         [APP_CONFIG_SNAPSHOT_METHOD]: createAppConfigSnapshotMethod(appConfigs),
         [DAEMON_CONNECTION_STATUS_METHOD]: createDaemonConnectionStatusMethod(
@@ -416,6 +413,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
       [AGENT_MENTION_DELIVERY_TRANSITION_METHOD]: unavailableMethod,
       [AGENT_MENTION_DELIVERY_TERMINAL_ERROR_METHOD]: unavailableMethod,
       ...reminderCallbackMethods(unavailableMethod, unavailableMethod),
+      [REMINDER_DUE_ACK_METHOD]: unavailableMethod,
       [APP_CONFIG_SNAPSHOT_METHOD]: unavailableMethod,
     },
     authenticateEnvelope: (request, context) =>

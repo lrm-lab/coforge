@@ -1,3 +1,5 @@
+import type { ReminderJob } from "./reminder-job";
+export type { ReminderJob } from "./reminder-job";
 import { RPC_METHODS } from "./rpc-methods";
 import { RECURRENCE } from "./reminder-grammar";
 import { SEAL_OWNER_MAX_CHARS, SEAL_UNTIL_MAX_CHARS, sealText } from "./reminder-seal-text";
@@ -107,15 +109,7 @@ export type AgentReminderOperationResponse = ReminderOperationScope & {
   reminders: ReminderSummaryRecord[];
   events: ReminderLogEvent[];
 };
-export type ReminderJob = {
-  reminderId: string;
-  ownerAgentId: string;
-  version: number;
-  title: string;
-  target: string;
-  messageId: string;
-  fireAt: string;
-};
+
 export type ReminderSync = ReminderScope & {
   operation: "snapshot" | "upsert" | "cancel";
   jobs: ReminderJob[];
@@ -403,14 +397,14 @@ export function decodeAgentReminderOperationResponse(
   } as AgentReminderOperationResponse);
 }
 
-function job(value: ReminderJob): ReminderJob {
+export function validateReminderJob(value: ReminderJob): ReminderJob {
   fields(value, true);
   if (!hasReminderCore(value)) throw new Error("invalid reminder job");
   return value;
 }
 function sync(value: ReminderSync): ReminderSync {
   scope(value);
-  value.jobs.forEach(job);
+  value.jobs.forEach(validateReminderJob);
   if (value.jobs.some((item) => item.ownerAgentId !== value.agentId))
     throw new Error("reminder job owner does not match sync Agent");
   if (new Set(value.jobs.map((item) => item.reminderId)).size !== value.jobs.length)

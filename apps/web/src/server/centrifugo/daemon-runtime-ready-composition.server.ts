@@ -23,6 +23,8 @@ import type { daemonCapabilityLeases } from "./capability-composition.server";
 import type { ComputerLifecycleActivity } from "#src/server/agents/computer-lifecycle-activity.server";
 import { getComputerReleaseState } from "#src/server/computers/computer-release-state-composition.server";
 import { createAgentServerFeaturesBroadcaster } from "#src/server/feature-flags/agent-server-features-broadcast-composition.server";
+import { PrismaReminderDueRepository } from "#src/server/db/repositories/reminder-due.repositories.server";
+import { createReminderDueWorker } from "#src/server/reminders/reminder-due-composition.server";
 
 /** The ready method's ports, assembled beside the composition so the file's `createDaemon*
  * table stays a list of names rather than one method's dependency graph. */
@@ -59,6 +61,20 @@ export function daemonRuntimeReadyPorts(input: {
     ),
     restarts: getComputerRestartStore(),
     capabilities: input.capabilityLeases,
+    reminderDue: {
+      ready: async (workspaceId, computerId, capabilities, identity) => {
+        await new PrismaReminderDueRepository(db).record(
+          workspaceId,
+          computerId,
+          capabilities,
+          identity,
+        );
+        await createReminderDueWorker(db, centrifugo).replay(
+          { workspaceId, computerId },
+          new Date(),
+        );
+      },
+    },
     featuresRepublish: {
       republish: (workspaceId, computerId) =>
         createAgentServerFeaturesBroadcaster(db, centrifugo).publishComputer(
