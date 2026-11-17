@@ -1,13 +1,12 @@
 import { ProgressBar } from "react-aria-components";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Link, getRouteApi } from "@tanstack/react-router";
+import { getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { RefreshCcw01 as Refresh } from "@untitledui/icons";
 import { Spinner } from "#src/components/ui/spinner";
 
 import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
-import { formatAgentProfileParam } from "#src/features/agents/profile-panel/profile-panel-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cx } from "#src/utils/cx";
 import { useConversationRealtime } from "#src/features/conversations/conversation-realtime-client";
@@ -18,6 +17,7 @@ import type {
   ReportContent,
 } from "./records-content";
 import { commentThreadStates, sideTimeline } from "./record-side-timeline-model";
+import { RecordAssistantSetupCard } from "./record-assistant-setup-card";
 import { RecordSideTimeline, type CommentRow } from "./record-side-timeline";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import {
@@ -714,39 +714,14 @@ export function RecordSidePanel({
           {assistantStatus &&
           (!assistantStatus.computerConfigured || !assistantStatus.runtimeConfigured) &&
           !setupDismissed ? (
-            <div className="space-y-3 rounded-xl border border-secondary bg-warning-primary p-3">
-              <div>
-                <p className="text-sm font-semibold text-primary">
-                  {m.records_weekly_ai_setup_title()}
-                </p>
-                <p className="mt-1 text-sm text-secondary">
-                  {m.records_weekly_ai_setup_description()}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  to="/w/$workspaceSlug/members"
-                  params={{ workspaceSlug }}
-                  search={{
-                    profile: formatAgentProfileParam(assistantStatus.agentId),
-                    agentTab: "profile",
-                  }}
-                  className="text-sm font-semibold text-brand-secondary"
-                >
-                  {m.records_weekly_ai_setup_action()}
-                </Link>
-                <Button
-                  size="sm"
-                  color="tertiary"
-                  onPress={() => {
-                    session.setupDismissed = true;
-                    setSetupDismissed(true);
-                  }}
-                >
-                  {m.records_weekly_ai_setup_dismiss()}
-                </Button>
-              </div>
-            </div>
+            <RecordAssistantSetupCard
+              workspaceSlug={workspaceSlug}
+              agentId={assistantStatus.agentId}
+              onDismiss={() => {
+                session.setupDismissed = true;
+                setSetupDismissed(true);
+              }}
+            />
           ) : null}
           {keyPointExtraction &&
           (keyPointExtraction.status === "ready" ||
