@@ -8,24 +8,13 @@ import {
   AGENT_CONTEXT_USAGE_METHOD,
   AGENT_SERVICE_TIER_METHOD,
   WORKSPACE_LIST_METHOD,
-  AGENT_SKILLS_LIST_RESULT_METHOD,
-  AGENT_WORKSPACE_FILES_LIST_RESULT_METHOD,
-  AGENT_WORKSPACE_FILE_READ_RESULT_METHOD,
-  AGENT_WORKSPACE_DELETE_RESULT_METHOD,
-  AGENT_WORKSPACE_SCAN_RESULT_METHOD,
   AGENT_CONTROL_RESULT_METHOD,
   APP_CONFIG_SNAPSHOT_METHOD,
 } from "@lrm/coforge-sdk/internal";
 import { PI_CHAT_FRAME_METHOD } from "@lrm/coforge-sdk/internal/pi-chat-wire";
 import { createPiChatFrameMethod } from "#src/server/pi-chat/pi-chat-frame-receiver.server";
 import { canUsePiChat, getPiChatResults } from "#src/server/pi-chat/pi-chat-production.server";
-import { createAgentSkillsListResultMethod } from "./agent-skills-cache.server";
-import {
-  createAgentWorkspaceFileReadResultMethod,
-  createAgentWorkspaceFilesListResultMethod,
-  createAgentWorkspaceDeleteResultMethod,
-  createAgentWorkspaceScanResultMethod,
-} from "./agent-workspace-files-cache.server";
+import { workspaceQueryResultMethods } from "./workspace-query-result-methods.server";
 import { computerFilePullResultMethods } from "./computer-file-upload-results.server";
 
 import {
@@ -336,11 +325,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
           createDaemonRuntimeResetCreditConsumeResultMethod(),
         [COMPUTER_UPGRADE_RESULT_METHOD]:
           createComputerUpgradeResultMethod(getComputerUpgradeStore()),
-        [AGENT_SKILLS_LIST_RESULT_METHOD]: createAgentSkillsListResultMethod(),
-        [AGENT_WORKSPACE_FILES_LIST_RESULT_METHOD]: createAgentWorkspaceFilesListResultMethod(),
-        [AGENT_WORKSPACE_FILE_READ_RESULT_METHOD]: createAgentWorkspaceFileReadResultMethod(),
-        [AGENT_WORKSPACE_DELETE_RESULT_METHOD]: createAgentWorkspaceDeleteResultMethod(),
-        [AGENT_WORKSPACE_SCAN_RESULT_METHOD]: createAgentWorkspaceScanResultMethod(),
+        ...workspaceQueryResultMethods(true, unavailableMethod),
         ...computerFilePullResultMethods(),
         [AGENT_CONTROL_RESULT_METHOD]: createAgentControlResultMethod(control),
         ...daemonReportMethods(db),
@@ -395,10 +380,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
       [DAEMON_RUNTIME_RESET_CREDIT_RESULT_METHOD]:
         createDaemonRuntimeResetCreditConsumeResultMethod(),
       [COMPUTER_UPGRADE_RESULT_METHOD]: unavailableMethod,
-      [AGENT_SKILLS_LIST_RESULT_METHOD]: unavailableMethod,
-      [AGENT_WORKSPACE_FILES_LIST_RESULT_METHOD]: unavailableMethod,
-      [AGENT_WORKSPACE_FILE_READ_RESULT_METHOD]: unavailableMethod,
-      [AGENT_WORKSPACE_DELETE_RESULT_METHOD]: unavailableMethod,
+      ...workspaceQueryResultMethods(false, unavailableMethod),
       ...computerFilePullResultMethods(false),
       [AGENT_CONTROL_RESULT_METHOD]: unavailableMethod,
       ...daemonReportMethods(null),
