@@ -1,3 +1,4 @@
+import { isInlineImage } from "#src/lib/inline-image";
 import {
   attachmentPreviewKind,
   isTextPreviewKind,
@@ -5,14 +6,7 @@ import {
 import { PRIVATE_NO_STORE } from "#src/server/http/cache-control.server";
 import type { StoredFile } from "#src/server/files/file-storage.server";
 
-/** Image types the browser may render inline from `/api/attachments/:id`. Everything else is
- * delivered as an opaque download so a stored HTML/SVG/PDF can never execute in the app origin. */
-const INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
-
-/** Whether `contentType` is one of the raster image types the browser may render inline. */
-export function isInlineImage(contentType: string): boolean {
-  return INLINE_IMAGE_TYPES.has(contentType);
-}
+export { isInlineImage };
 
 /**
  * Files the browser may render, but only from the signed delivery (CDN) origin — never from this
