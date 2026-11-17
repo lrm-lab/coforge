@@ -118,7 +118,7 @@ export async function listOwnTasks(
           ? undefined
           : (command.status ?? { in: UNFINISHED_TASK_STATUSES }),
       conversation: scope.conversations,
-      ...(labels ?? {}),
+      ...labels,
     },
     orderBy: [{ conversationId: "asc" }, { number: "asc" }],
     select: {
@@ -195,7 +195,7 @@ export async function listConversationTasks(
                 ? undefined
                 : command.status,
           }),
-      ...(labels ?? {}),
+      ...labels,
     },
     orderBy: { number: "asc" },
     select: taskSelection,
