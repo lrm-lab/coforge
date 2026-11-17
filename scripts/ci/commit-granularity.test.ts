@@ -4,6 +4,7 @@ import {
   hasConventionalTitle,
   hasRevertEffect,
   mixStats,
+  PUSHED_GRANULARITY_EXEMPTIONS,
   rangeGranularity,
   sub100Renames,
 } from "./commit-granularity";
@@ -282,6 +283,69 @@ describe("range checks", () => {
     const ok = repo.range(base, "HEAD");
     expect(ok.exitCode).toBe(0);
     expect(ok.stdout).toContain("Granularity exemptions used");
+  });
+
+  test("a pushed exemption covers only its SHA and only the diff rules", () => {
+    const base = repo.seed({ "old.ts": `${LONG(40)}\n` });
+    repo.write({ "new.ts": `${LONG(40)}\n${EXTRA(60)}\n` });
+    repo.ok("rm", "-q", "old.ts");
+    repo.ok("add", "-A");
+    repo.run([
+      "git",
+      "commit",
+      "-q",
+      "--no-verify",
+      "-m",
+      "feat: move and change",
+      "-m",
+      "Revert-effect: none",
+    ]);
+    const sha = repo.head();
+
+    expect(
+      rangeGranularity(base, sha, PUSHED_GRANULARITY_EXEMPTIONS, repo.dir).violations.map(
+        (v) => v.rule,
+      ),
+    ).toContain("commit-mix");
+    const exempted = rangeGranularity(base, sha, { [sha]: "approved exemption" }, repo.dir);
+    expect(exempted.violations).toEqual([]);
+    expect(exempted.exemptions).toEqual([{ sha: sha.slice(0, 9), reason: "approved exemption" }]);
+    // A different commit of the same shape is still flagged.
+    repo.ok("reset", "-q", "--hard", base);
+    repo.write({ "new2.ts": `${LONG(40)}\n${EXTRA(60)}\n` });
+    repo.ok("rm", "-q", "old.ts");
+    repo.ok("add", "-A");
+    repo.run([
+      "git",
+      "commit",
+      "-q",
+      "--no-verify",
+      "-m",
+      "feat: move and change again",
+      "-m",
+      "Revert-effect: none",
+    ]);
+    const other = rangeGranularity(base, repo.head(), { [sha]: "approved exemption" }, repo.dir);
+    expect(other.violations.map((v) => v.rule)).toContain("commit-mix");
+  });
+
+  test("a pushed exemption does not cover commit-title or revert-effect", () => {
+    const base = repo.seed({ "a.txt": "one\n" });
+    repo.write({ "b.txt": "two\n" });
+    repo.ok("add", "-A");
+    repo.run(["git", "commit", "-q", "--no-verify", "-m", "Tweak things"]);
+    const sha = repo.head();
+    const result = rangeGranularity(base, sha, { [sha]: "approved exemption" }, repo.dir);
+    expect(result.violations.map((v) => v.rule).sort()).toEqual(["commit-title", "revert-effect"]);
+  });
+
+  test("the pushed exemption table holds only the approved squash merge", () => {
+    expect(Object.keys(PUSHED_GRANULARITY_EXEMPTIONS)).toEqual([
+      "6a74b2d6ca594d65ba9ccd99045668345dcfcc54",
+    ]);
+    expect(PUSHED_GRANULARITY_EXEMPTIONS["6a74b2d6ca594d65ba9ccd99045668345dcfcc54"]).toContain(
+      "#520",
+    );
   });
 
   test("a git failure is an error, not an empty pass", () => {

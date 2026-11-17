@@ -121,7 +121,10 @@ splits into the move and the change. A move into an existing file is not detecte
 extraction under 30 moved lines is not judged — five such commits in the last 200 were accepted
 as known non-triggers. `Granularity-exempt: <reason>` in the message bypasses the two diff
 rules only — `Revert-effect:` is still required — and each use is printed as a warning and
-listed in the CI step summary. Merge commits skip all three rules.
+listed in the CI step summary. A commit already pushed whose message can no longer change —
+a squash merge, say — cannot carry the trailer; `PUSHED_GRANULARITY_EXEMPTIONS` in
+`commit-granularity.ts` lifts the same two diff rules for one full SHA at a time, only after
+the user approves and with the reason recorded. Merge commits skip all three rules.
 
 **Reviewed-in warnings.** `scripts/ci/reviewed-in.ts` is the warn-only companion,
 run by `scripts/ci/range-checks.ts` — the `--range` entrypoint pre-push and ci.yml share —

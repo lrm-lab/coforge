@@ -13,7 +13,8 @@
 //                  non-move share of changed lines is >= 40%, split the commit.
 //
 // `Granularity-exempt: <reason>` in the message bypasses rename-purity and commit-mix —
-// never revert-effect — and the bypass is reported, not silent. Merge commits are exempt
+// never revert-effect — and the bypass is reported, not silent. PUSHED_GRANULARITY_EXEMPTIONS
+// does the same for one already-pushed SHA whose message can no longer change. Merge commits are exempt
 // from all four. The commit-msg hook checks only the message; hard-rules.ts --range
 // (pre-push and CI) checks whole commits. --staged skips these rules: the index has no
 // message for a trailer or an exemption to live in.
@@ -31,6 +32,14 @@ export const COMMIT_MIX_FIX =
 
 export const COMMIT_TITLE_FIX =
   'Start the message with a Conventional Commit title: `<type>(<optional scope>)!: <description>`, where type is feat, fix, docs, test, refactor, chore, perf, ci, build, style or revert. `Merge`, `Revert "…"`, `Reapply "…"`, `fixup!`, `squash!` and `amend!` titles pass.';
+
+// A commit already pushed cannot gain a `Granularity-exempt:` trailer (a squash merge, a
+// rebase), so the same two diff rules can be lifted for one full SHA at a time here — only
+// after the user approves, with the reason recorded. commit-title and revert-effect still apply.
+export const PUSHED_GRANULARITY_EXEMPTIONS: Record<string, string> = {
+  "6a74b2d6ca594d65ba9ccd99045668345dcfcc54":
+    "PR #520 squash-merged; the original 8 commits each passed granularity. Frank approved the exemption 2026-11-17.",
+};
 
 const MIN_MOVED_LINES = 30;
 const MIX_RATIO = 0.4;
@@ -148,33 +157,40 @@ export function sub100Renames(nameStatus: string): string[] {
 }
 
 // A gate must not pass on a git error: rev-list failing used to read as "zero commits".
-const git = (args: string[]) => {
-  const result = Bun.spawnSync(["git", ...args], { stdout: "pipe", stderr: "pipe" });
+const git = (args: string[], cwd?: string) => {
+  const result = Bun.spawnSync(["git", ...args], { stdout: "pipe", stderr: "pipe", cwd });
   if (result.exitCode !== 0)
     throw new Error(`git ${args.join(" ")} failed: ${result.stderr.toString().trim()}`);
   return result;
 };
-const gitText = (args: string[]) => git(args).stdout.toString();
+const gitText = (args: string[], cwd?: string) => git(args, cwd).stdout.toString();
 
-function commitMessage(sha: string): string {
-  return gitText(["show", "-s", "--format=%B", sha]);
+function commitMessage(sha: string, cwd?: string): string {
+  return gitText(["show", "-s", "--format=%B", sha], cwd);
 }
 
-function isMerge(sha: string): boolean {
-  return gitText(["show", "-s", "--format=%P", sha]).trim().split(/\s+/).filter(Boolean).length > 1;
+function isMerge(sha: string, cwd?: string): boolean {
+  return (
+    gitText(["show", "-s", "--format=%P", sha], cwd).trim().split(/\s+/).filter(Boolean).length > 1
+  );
 }
 
 /** Granularity violations and exemptions for each commit `base..head` adds. */
-export function rangeGranularity(base: string, head: string): GranularityResult {
+export function rangeGranularity(
+  base: string,
+  head: string,
+  pushedExemptions: Record<string, string> = PUSHED_GRANULARITY_EXEMPTIONS,
+  cwd?: string,
+): GranularityResult {
   const result: GranularityResult = { violations: [], exemptions: [] };
-  const shas = gitText(["rev-list", "--reverse", `${base}..${head}`])
+  const shas = gitText(["rev-list", "--reverse", `${base}..${head}`], cwd)
     .split("\n")
     .map((sha) => sha.trim())
     .filter(Boolean);
   for (const sha of shas) {
-    if (isMerge(sha)) continue;
-    const message = commitMessage(sha);
-    const exempt = exemptReason(message);
+    if (isMerge(sha, cwd)) continue;
+    const message = commitMessage(sha, cwd);
+    const exempt = exemptReason(message) ?? pushedExemptions[sha];
     if (exempt) result.exemptions.push({ sha: sha.slice(0, 9), reason: exempt });
     if (!hasConventionalTitle(message))
       result.violations.push({
@@ -189,10 +205,10 @@ export function rangeGranularity(base: string, head: string): GranularityResult 
         found: "no Revert-effect trailer",
       });
     if (exempt) continue;
-    const nameStatus = gitText(["show", "--format=", "--name-status", "-M", "-l0", sha]);
+    const nameStatus = gitText(["show", "--format=", "--name-status", "-M", "-l0", sha], cwd);
     for (const rename of sub100Renames(nameStatus))
       result.violations.push({ rule: "rename-purity", sha: sha.slice(0, 9), found: rename });
-    const patch = gitText(["show", "--format=", "--unified=0", "--text", "-M", "-l0", sha]);
+    const patch = gitText(["show", "--format=", "--unified=0", "--text", "-M", "-l0", sha], cwd);
     const stats = mixStats(patch);
     if (stats && stats.ratio >= MIX_RATIO)
       result.violations.push({
