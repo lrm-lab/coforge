@@ -1,4 +1,5 @@
 import { CliError } from "./cli-error";
+import { memoryRequests } from "./memory-request";
 import { proxyHttpFailure } from "./local-proxy-failure";
 import { readProxyErrorBody, requireProxySetup } from "./proxy-request";
 import {
@@ -114,7 +115,7 @@ export function contextRequests(
   };
 }
 
-export function localReadonlyRequests(
+export function localAgentRequests(
   proxyEndpoint: (path: string) => URL,
   context: string,
   proxyUrl: string,
@@ -122,6 +123,7 @@ export function localReadonlyRequests(
   return {
     version: () => versionRequest(proxyEndpoint, context, proxyUrl),
     ...contextRequests(proxyEndpoint, context, proxyUrl),
+    ...memoryRequests(proxyEndpoint, context, proxyUrl),
   };
 }
 /**

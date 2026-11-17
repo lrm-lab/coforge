@@ -1,0 +1,40 @@
+import { COFORGE_CLI_VERSION } from "./version";
+import type { MessageTransport } from "./message-transport";
+import type { VersionInvocation } from "../index";
+
+const VERSION_USAGE = "Usage: coforge version [--json]";
+
+export function parseVersionArgs(args: readonly string[]): VersionInvocation {
+  let json = false;
+  for (const arg of args) {
+    if (arg === "--json") json = true;
+    else throw new Error(VERSION_USAGE);
+  }
+  return { command: "version", ...(json ? { json: true } : {}) };
+}
+
+type VersionInfo = { cli: string; daemon?: string; computer?: string };
+
+/** `coforge version`'s text output: `CLI:`/`Daemon:`/`Computer:` lines, in that order, each
+ * omitted only when unknown. `CLI` is always known; `Daemon`/`Computer` come from the live query. */
+export function formatVersionInfo(info: VersionInfo): string {
+  const lines = [`CLI: ${info.cli}`];
+  if (info.daemon) lines.push(`Daemon: ${info.daemon}`);
+  if (info.computer) lines.push(`Computer: ${info.computer}`);
+  return lines.join("\n");
+}
+
+export async function runVersion(
+  invocation: VersionInvocation,
+  transport: Pick<MessageTransport, "version">,
+): Promise<string> {
+  if (!transport.version) throw new Error("Version transport is unavailable");
+  const response = await transport.version();
+  const info = {
+    cli: COFORGE_CLI_VERSION,
+    daemon: response.daemonVersion,
+    ...(response.computerVersion ? { computer: response.computerVersion } : {}),
+  };
+  if (invocation.json) return JSON.stringify({ ok: true, data: info });
+  return formatVersionInfo(info);
+}

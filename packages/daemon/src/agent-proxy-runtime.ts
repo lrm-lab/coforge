@@ -67,10 +67,16 @@ import type {
   AgentArtifactUploadRequest,
 } from "#src/connection/agent-forwarded-routes";
 import type { OpenVikingAgentProxyCommand } from "./openviking-read-proxy";
+import type { LocalMemoryCommand, LocalMemoryResult } from "@lrm/coforge-sdk/agent";
 
 /** The runtime handlers a local Agent proxy dispatches to; every member but `agentMessage` is
  * optional so a daemon build can light routes up incrementally (a missing handler is a 404). */
 export type AgentProxyRuntime = {
+  agentMemory?(
+    context: string,
+    request: LocalMemoryCommand,
+    agentApiKey: string,
+  ): Promise<LocalMemoryResult>;
   agentContext?(
     context: string,
     request: AgentContextSearchRequest | AgentContextReadRequest,

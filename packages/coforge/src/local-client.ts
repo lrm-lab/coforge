@@ -1,3 +1,4 @@
+import { manualRequest } from "./manual-request";
 import { appConfigRequests } from "#src/app-config-request";
 import { artifactTransport } from "#src/artifact-file-transport";
 import {
@@ -16,7 +17,6 @@ import {
   agentApiRoutes,
   decodeAgentApiRefusal,
   decodeAgentChannelErrorResponse,
-  decodeAgentManualErrorResponse,
   decodeAgentManualGetResponse,
   decodeAgentManualSearchResponse,
   decodeGitHubCredentialResponse,
@@ -35,14 +35,14 @@ import {
   type AgentManualSearchResponse,
   type AgentAttachmentCommentsRequest,
 } from "@lrm/coforge-sdk/agent";
-import { CliError, MANUAL_NOT_FOUND_NEXT_ACTION } from "./cli-error";
+import { CliError } from "./cli-error";
 import type { MessageSearchOptions } from "./message-search-args";
 import type { LocalCallOptions } from "./local-call-options";
 import type { MessageReadOptions } from "./message-read-args";
 import { refusalNextAction } from "./refusal-guidance";
 import { refuseCredentialSolicitationIfNeeded } from "./send-credential-gate";
 import { proxyHttpFailure, proxyTransportFailure } from "./local-proxy-failure";
-import { computerUpdateNoticeRequest, localReadonlyRequests } from "./local-readonly-requests";
+import { computerUpdateNoticeRequest, localAgentRequests } from "./local-agent-requests";
 import {
   envelopeRequest,
   operationFailedCode,
@@ -66,30 +66,6 @@ const OPERATION_DEADLINE_MS = 10_000;
 /** Past the daemon's own 10-second upstream deadline (`AGENT_RPC_TIMEOUT_MS`, started later), so
  * the daemon's classified failure, with its correlation id, arrives before this one gives up. */
 const GITHUB_CREDENTIAL_DEADLINE_MS = 12_000;
-
-/**
- * The Manual routes use the shared domain envelope, with "browse the index" guidance when a
- * topic cannot be found.
- */
-async function manualRequest<T>(
-  proxyEndpoint: (path: string) => URL,
-  context: string,
-  proxyUrl: string,
-  path: string,
-  query: Record<string, string>,
-  decode: (value: unknown) => T,
-): Promise<T> {
-  return envelopeRequest(
-    proxyEndpoint,
-    context,
-    proxyUrl,
-    { method: "GET", path, query },
-    decode,
-    decodeAgentManualErrorResponse,
-    "manual",
-    (code) => (code === "knowledge_not_found" ? MANUAL_NOT_FOUND_NEXT_ACTION : undefined),
-  );
-}
 
 export function connectLocal(
   _socketPath: string,
@@ -282,7 +258,7 @@ export function connectLocal(
         { query, intent, reason },
         decodeAgentManualSearchResponse,
       ),
-    ...localReadonlyRequests(proxyEndpoint, context, proxyUrl),
+    ...localAgentRequests(proxyEndpoint, context, proxyUrl),
     computerUpdateNotice: (): Promise<{ ok: true; notice: string | null }> =>
       computerUpdateNoticeRequest(proxyEndpoint, context, proxyUrl),
     ...profileRequests(proxyEndpoint, context, proxyUrl),

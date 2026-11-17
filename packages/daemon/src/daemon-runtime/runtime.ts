@@ -9,6 +9,7 @@ import {
 import { OperatingSystemInfo } from "#src/platform/operating-system";
 import { assembleInputDrain } from "./assemble-input-drain";
 import { attachFreshSessionMemoryPort } from "./session-memory-hooks";
+import { LocalMemoryRuntime } from "./local-memory-runtime";
 import { rebindAgent } from "./agent-rebind";
 import { AgentLaunchCustody } from "./agent-launch-custody";
 import { AgentContexts } from "./agent-contexts";
@@ -193,19 +194,15 @@ export class DaemonRuntime {
   readonly #agentSessions: AgentSessions;
   readonly #messageAttention: AgentMessageAttentionIndex;
   readonly #messageOperations: AgentMessageOperations;
-  /** The Agent requests the daemon only authorizes and forwards over Agent HTTPS. */
   readonly agentRequests: AgentRequestForwarder;
   readonly #mentionDeliveries: MentionDeliveryTracker;
-  /** Last cloud-reported launch/session identity per Agent. */
   readonly #reported = new ReportedSessions(
     () => this.#agentProcessManager,
     () => this.#currentActivityLaunches,
   );
   readonly #contextViewService: AgentContextViewService;
   readonly #localQueries: RuntimeLocalQueries;
-  /** Busy-gated delivery holding for providers with no safe busy path. */
   readonly #deliveryGate = new AgentDeliveryGate();
-  /** Launch failures of message-triggered wakes, per Agent. */
   readonly #wakeLaunchFailures = new LaunchFailureBackoff();
   // Before the ports objects that reference them.
   readonly #turn = new RuntimeTurn(() => this.#turnPorts());
@@ -1322,6 +1319,13 @@ export class DaemonRuntime {
   }
   get agentContext() {
     return this.#localQueries.context.bind(this.#localQueries);
+  }
+  readonly #localMemory = new LocalMemoryRuntime(
+    (context, key) => this.#authorizedAgent(context, key),
+    () => this.#connection,
+  );
+  get agentMemory() {
+    return this.#localMemory.execute.bind(this.#localMemory);
   }
   get computerUpdateNotice() {
     return this.#localQueries.computerUpdateNotice.bind(this.#localQueries);

@@ -1,129 +1,42 @@
-import { cliUsage } from "./src/usage";
-import { commandHelp, invalidArgument, unknownCommandError } from "./src/command-help";
-import { runMessageResolve } from "./src/message-resolve";
-import { formatReaction } from "./src/message-format";
-import { parseChannelManagementArgs, type ChannelManagementInvocation } from "./src/channel-args";
-import { weeklyReportWorkflowSchema } from "@lrm/coforge-sdk/internal";
 import {
-  MESSAGE_ANCHOR_SOURCE,
-  UUID_LIKE_SOURCE,
-  UUID_LIKE_PATTERN,
-  isValidReactionEmoji,
-  mentionsInContent,
-  parseMentionSelector,
-  RFC_UUID_PATTERN,
-  type AgentMessageRecord,
   type MentionSelectorInput as MentionSelector,
-  type TaskCommand,
   type WeeklyReportCommand,
-  validateWeeklyReportMemoryCommand,
   type WeeklyReportMemoryCommand,
   type WeeklyReportMemoryResult,
-  WEEKLY_REPORT_SUBJECT_TYPES,
 } from "@lrm/coforge-sdk/internal";
+import { type AgentMentionActionKind } from "@lrm/coforge-sdk/agent";
+import { type WhoamiInvocation, type WhoamiResult } from "#src/whoami";
+import { type ProfileUpdateInvocation } from "#src/profile-update";
+import { type AttachmentViewInvocation } from "#src/attachment-view-args";
+import { type UserInfoInvocation } from "#src/user-info";
 import {
-  createAgentApiClient,
-  createMessageTransportAgentApiTransport,
-  type AgentMentionActionKind,
-} from "@lrm/coforge-sdk/agent";
-import { COFORGE_CLI_VERSION } from "#src/version";
-import { formatManualGet, formatManualSearchResults } from "#src/manual-format";
-import { formatProfile } from "#src/user-format";
-import { parseWhoamiArgs, runWhoami, type WhoamiInvocation, type WhoamiResult } from "#src/whoami";
-import { parseProfileUpdateArgs, type ProfileUpdateInvocation } from "#src/profile-update";
-import type { MessageTransport } from "#src/message-transport";
-import { parseContextArgs, runContextCommand, type ContextInvocation } from "#src/context-commands";
-
-export type { WhoamiInvocation, WhoamiResult, ProfileUpdateInvocation };
-export type { ContextInvocation } from "#src/context-commands";
-import { parseAttachmentViewArgs, type AttachmentViewInvocation } from "#src/attachment-view-args";
-import {
-  parseAttachmentCommentsArgs,
-  runAttachmentComments,
-  type AttachmentCommentsInvocation,
-} from "#src/attachment-comments";
-import { parseUserInfoArgs, runUserInfo, type UserInfoInvocation } from "#src/user-info";
-
-export type { UserInfoInvocation };
-import { parseAppConfigArgs, runAppConfig, type AppConfigInvocation } from "#src/app-config";
-import { parseArtifactArgs, runArtifact, type ArtifactInvocation } from "#src/artifact-commands";
-import {
-  formatMentionActionResults,
-  formatMentionDeliveries,
-  incompleteMentionActions,
-  mentionDeliveryFailure,
-} from "#src/mention-format";
-import { runActionPrepare } from "#src/action-prepare-run";
-import { formatReadWindow } from "#src/message-read-format";
-import {
-  formatAttachmentDownloadSuccess,
-  formatAttachmentUploadSuccess,
-  formatSendSuccess,
-  formatSendCommitted,
-  type PendingMentionAction,
-} from "#src/message-format";
-import { refuseTaskRef, undeliveredMentionError } from "#src/send-undelivered";
-import {
-  heldSendCliError,
-  isCommittedSend,
-  isHeldSend,
-  type HeldSendResult,
-} from "#src/send-held-result";
-import { parseMessageContinueArgs, runMessageContinue } from "#src/message-continue";
-import {
-  readPipedSendContent,
-  refuseForeignStdinFile,
-  sendDraftStdinHasContent,
-} from "#src/send-stdin";
-import { parseMessageSendArgs } from "#src/send-args";
-import { formatSearchResults } from "#src/search-format";
-import { formatWorkspaceInfo } from "#src/workspace-info-format";
-import {
-  runWeeklyReportCollect,
-  type WeeklyReportCollectInvocation,
-} from "#src/weekly-report-collect";
-import {
-  parseWorkspaceInfoArgs,
   type WorkspaceInfoInvocation,
   type WorkspaceInfoOptions,
   type WorkspaceInfoResult,
 } from "#src/workspace-info";
-
-export type { WorkspaceInfoInvocation, WorkspaceInfoOptions, WorkspaceInfoResult };
-import { parseMessageSearchArgs, type MessageSearchOptions } from "#src/message-search-args";
-import { formatMessageCheck } from "#src/message-check-format";
-import { parseMessageReadArgs, type MessageReadOptions } from "#src/message-read-args";
-
-export type { MessageSearchOptions };
-import { runChannelCommand } from "#src/channel-commands";
-import { parseLabelArgs, runLabelCommand, type LabelInvocation } from "#src/label-commands";
+import { type MessageSearchOptions } from "#src/message-search-args";
+import { type MessageReadOptions } from "#src/message-read-args";
+import { type MentionPendingInvocation } from "#src/mention-pending";
 import {
-  CliError,
-  NO_MESSAGE_SENT_NEXT_ACTION,
-  unknownDeliveryNextAction,
-  withOutputMode,
-} from "#src/cli-error";
-import { inferAttachmentMimeType, validateAttachmentUploadArgs } from "#src/attachment-upload";
-import { runMentionPending, type MentionPendingInvocation } from "#src/mention-pending";
-import { parseMentionArgs } from "#src/mention-args";
-import { runInboxCheck } from "#src/inbox-check";
-import { runAttention } from "#src/attention-format";
-import { parseTaskArgs, type TaskInvocation } from "#src/task-args";
-import { reviewerIsolationFromEnvironment } from "#src/reviewer-isolation";
-import type { TaskConversationInvocation } from "#src/task-conversation-args";
-import { runTaskConversation } from "#src/task-conversation-run";
-import {
-  isAttentionInvocation,
-  parseAttentionArgs,
   type ChannelInvocation,
   type InboxInvocation,
   type ThreadInvocation,
 } from "#src/attention-args";
+import type { ActionPrepareResult } from "#src/action-prepare-run";
+
+export type { WhoamiInvocation, WhoamiResult, ProfileUpdateInvocation };
+
+export type { ContextInvocation } from "#src/context-commands";
+
+export type { UserInfoInvocation };
+
+export type { WorkspaceInfoInvocation, WorkspaceInfoOptions, WorkspaceInfoResult };
+
+export type { MessageSearchOptions };
 
 export type { ChannelInvocation, InboxInvocation, ThreadInvocation };
+
 export type { LabelInvocation } from "#src/label-commands";
-import { formatTaskResult } from "#src/task-format";
-import { heldTaskCliError } from "#src/task-held-result";
 
 export { createAgentApiClient } from "@lrm/coforge-sdk/agent";
 
@@ -135,6 +48,7 @@ export type MessageCommand =
   | "continue"
   | "resolve"
   | "react";
+
 export type MessageInvocation =
   | { command: "check"; target?: string }
   | ({ command: "read"; target: string } & MessageReadOptions)
@@ -162,7 +76,9 @@ export type MessageInvocation =
     }
   | { command: "resolve"; messageId: string }
   | { command: "react"; messageId: string; emoji: string; remove?: true };
+
 export type AttachmentInvocation = AttachmentViewInvocation;
+
 export type AttachmentUploadInvocation = {
   command: "attachment.upload";
   path?: string;
@@ -170,60 +86,73 @@ export type AttachmentUploadInvocation = {
   mimeType?: string;
   json?: boolean;
 };
+
 export type { ChannelManagementInvocation } from "./src/channel-args";
-import { parseReminderArgs, runReminder } from "#src/reminder-commands";
-import type { ReminderInvocation } from "#src/reminder-commands";
+
 export type {
   ReminderInvocation,
   ReminderResponse,
   ReminderTransportRequest,
 } from "#src/reminder-commands";
+
 export { resolveReminderId } from "#src/reminder-commands";
+
 export type WeeklyReportInvocation =
   | {
       command: "weekly-report";
       weeklyReport: WeeklyReportCommand;
     }
   | { command: "weekly-report"; inputPath: string };
+
 export type {
   WeeklyReportCollectCommand,
   WeeklyReportCollectInvocation,
   WeeklyReportCollectResult,
 } from "#src/weekly-report-collect";
+
 export type WeeklyReportKeyPointsCommand = {
   idempotencyKey: string;
   reportId: string;
   markdown: string;
 };
+
 export type WeeklyReportKeyPointsResult = {
   idempotencyKey: string;
   reportId: string;
   status: string;
 };
+
 export type WeeklyReportKeyPointsInvocation = {
   command: "weekly-report-key-points";
   keyPoints: WeeklyReportKeyPointsCommand;
   /** When set, `run` loads this file into `keyPoints.markdown` before posting. */
   markdownPath?: string;
 };
+
 export type { WeeklyReportMemoryCommand, WeeklyReportMemoryResult };
+
 export type WeeklyReportMemoryInvocation = {
   command: "weekly-report-memory";
   filePath: string;
   memory: Pick<WeeklyReportMemoryCommand, "idempotencyKey" | "reportId">;
 };
+
 export type ActionPrepareInvocation = { command: "action-prepare"; target: string };
-import type { ActionPrepareResult } from "#src/action-prepare-run";
+
 export type { ActionPrepareResult };
+
 export type ManualInvocation =
   | { command: "manual-get"; topic: string; intent: string; reason: string }
   | { command: "manual-search"; query: string; intent: string; reason: string };
+
 export type VersionInvocation = { command: "version"; json?: boolean };
+
 export type ProfileShowInvocation = {
   command: "profile-show";
   target?: string;
   json?: boolean;
 };
+
 export type MentionInvocation =
   | MentionPendingInvocation
   | { command: "mention-delivery"; messageId: string; json?: boolean }
@@ -233,1004 +162,8 @@ export type MentionInvocation =
       resolutionIds: string[];
       json?: boolean;
     };
+
 export type { MessageTransport } from "#src/message-transport";
 
-/** The message-id short forms (twelve hex, dashed, or eight hex) or a full UUID; the server stores
- * ids lowercase. */
-const MESSAGE_ANCHOR_PATTERN = new RegExp(
-  `^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`,
-  "i",
-);
-/** A full UUID; `--attachment-id` never accepts an eight-hex short form. */
-const UUID_PATTERN = UUID_LIKE_PATTERN;
-
-export function parseArgs(
-  args: readonly string[],
-):
-  | MessageInvocation
-  | AttachmentInvocation
-  | AttachmentUploadInvocation
-  | InboxInvocation
-  | ChannelInvocation
-  | ChannelManagementInvocation
-  | ReminderInvocation
-  | ThreadInvocation
-  | TaskInvocation
-  | TaskConversationInvocation
-  | WorkspaceInfoInvocation
-  | WeeklyReportInvocation
-  | WeeklyReportCollectInvocation
-  | WeeklyReportKeyPointsInvocation
-  | WeeklyReportMemoryInvocation
-  | ActionPrepareInvocation
-  | ManualInvocation
-  | WhoamiInvocation
-  | VersionInvocation
-  | ContextInvocation
-  | UserInfoInvocation
-  | AttachmentCommentsInvocation
-  | ProfileShowInvocation
-  | ProfileUpdateInvocation
-  | AppConfigInvocation
-  | ArtifactInvocation
-  | LabelInvocation
-  | MentionInvocation {
-  if (args[0] === "whoami") return parseWhoamiArgs(args.slice(1));
-  if (args[0] === "version") return parseVersionArgs(args.slice(1));
-  if (args[0] === "context" && (args[1] === "search" || args[1] === "read"))
-    return parseContextArgs(args.slice(1));
-  if (args[0] === "manual" && (args[1] === "get" || args[1] === "search"))
-    return parseManualArgs(args.slice(1));
-  if (args[0] === "user" && args[1] === "info") return parseUserInfoArgs(args.slice(2));
-  if (args[0] === "profile" && args[1] === "show") return parseProfileShowArgs(args.slice(2));
-  if (args[0] === "profile" && args[1] === "update") return parseProfileUpdateArgs(args.slice(2));
-  if (args[0] === "workspace" && args[1] === "info") return parseWorkspaceInfoArgs(args.slice(2));
-  if (args[0] === "app" && args[1] === "config") return parseAppConfigArgs(args.slice(2));
-  if (args[0] === "mention") return parseMentionArgs(args.slice(1));
-  if (args[0] === "reminder") return parseReminderArgs(args.slice(1));
-  if (args[0] === "artifact") return parseArtifactArgs(args.slice(1));
-  if (args[0] === "task") return parseTaskArgs(args.slice(1));
-  if (args[0] === "label") return parseLabelArgs(args.slice(1));
-  if (args[0] === "weekly-report-collect") return parseWeeklyReportCollectArgs(args.slice(1));
-  if (args[0] === "weekly-report-key-points") return parseWeeklyReportKeyPointsArgs(args.slice(1));
-  if (args[0] === "weekly-report-memory") return parseWeeklyReportMemoryArgs(args.slice(1));
-  if (args[0] === "weekly-report") return parseWeeklyReportArgs(args.slice(1));
-  if (args[0] === "action" && args[1] === "prepare") return parseActionPrepareArgs(args.slice(2));
-  const attention = parseAttentionArgs(args);
-  if (attention) return attention;
-  if (args[0] === "channel" && args[1] !== undefined && args[1] !== "mute" && args[1] !== "unmute")
-    return parseChannelManagementArgs(args.slice(1));
-  if (args[0] === "attachment" && args[1] === "view") return parseAttachmentViewArgs(args);
-  if (args[0] === "attachment" && args[1] === "comments")
-    return parseAttachmentCommentsArgs(args.slice(2));
-  if (args[0] === "attachment" && args[1] === "upload") {
-    let path: string | undefined;
-    let target: string | undefined;
-    // Legacy alias for --target; giving both is a usage error.
-    let channelAlias: string | undefined;
-    let mimeType: string | undefined;
-    let json = false;
-    for (let index = 2; index < args.length; index++) {
-      if (args[index] === "--path" && args[index + 1]) path = args[++index];
-      else if (args[index] === "--target" && args[index + 1]) target = args[++index];
-      else if (args[index] === "--channel" && args[index + 1]) channelAlias = args[++index];
-      else if (args[index] === "--mime-type" && args[index + 1]) mimeType = args[++index];
-      else if (args[index] === "--json") json = true;
-      else throw new Error("Usage:");
-    }
-    if (target !== undefined && channelAlias !== undefined) throw new Error("Usage:");
-    return {
-      command: "attachment.upload",
-      path,
-      target: target ?? channelAlias,
-      mimeType,
-      ...(json ? { json: true as const } : {}),
-    };
-  }
-  if (args[0] === "message" && isMessageCommand(args[1])) {
-    if (args[1] === "check") {
-      if (args.length === 2) return { command: "check" };
-      if (args[2] === "--target") {
-        const target = args[3];
-        if (!target) throw invalidArgument("message check", "--target needs a value.");
-        if (args.length !== 4)
-          throw invalidArgument("message check", `Unknown argument "${args[4] ?? ""}".`);
-        return { command: "check", target };
-      }
-      throw invalidArgument("message check", `Unknown argument "${args[2] ?? ""}".`);
-    }
-    if (args[1] === "resolve") {
-      const messageId = args[2];
-      if (messageId && args.length === 3 && MESSAGE_ANCHOR_PATTERN.test(messageId))
-        return { command: "resolve", messageId: messageId.toLowerCase() };
-      throw new Error("Usage:");
-    }
-    if (args[1] === "react") {
-      let messageId: string | undefined;
-      let emoji: string | undefined;
-      let remove = false;
-      for (let index = 2; index < args.length; index++) {
-        if (args[index] === "--message-id" && args[index + 1]) messageId = args[++index];
-        else if (args[index] === "--emoji" && args[index + 1]) emoji = args[++index];
-        else if (args[index] === "--remove") remove = true;
-        else throw new Error("Usage:");
-      }
-      if (
-        !messageId ||
-        !emoji ||
-        !MESSAGE_ANCHOR_PATTERN.test(messageId) ||
-        !isValidReactionEmoji(emoji)
-      )
-        throw new Error("Usage:");
-      return {
-        command: "react",
-        messageId: messageId.toLowerCase(),
-        emoji,
-        ...(remove ? { remove: true as const } : {}),
-      };
-    }
-    if (args[1] === "continue") return { command: "continue", ...parseMessageContinueArgs(args) };
-    if (args[1] === "search") return { command: "search", ...parseMessageSearchArgs(args) };
-    if (args[1] === "read") {
-      const read = parseMessageReadArgs(args);
-      if (read) return { command: "read", ...read };
-    } else if (args[1] === "send") {
-      const flags = parseMessageSendArgs(args, reviewerIsolationFromEnvironment());
-      const {
-        target,
-        sendDraft,
-        expectedDraftKey,
-        continueAnyway,
-        json,
-        reviewerIsolation,
-        rawAttachmentIds,
-        rawMentions,
-        targetConfirmed,
-      } = flags;
-      const outputMode = json ? "json" : "text";
-      if (!target?.trim())
-        throw withOutputMode(
-          invalidArgument(
-            "message send",
-            "--target is required, for example '#general' or '@ada'.",
-          ),
-          outputMode,
-        );
-      refuseTaskRef("send", target, [], outputMode);
-      // Repeatable; duplicates collapse; the server caps the count.
-      const attachmentIds = rawAttachmentIds.length ? [...new Set(rawAttachmentIds)] : undefined;
-      if (attachmentIds?.some((id) => !UUID_PATTERN.test(id)))
-        throw withOutputMode(
-          new CliError({
-            code: "INVALID_ARG",
-            message: "--attachment-id must be a full attachment UUID.",
-            retryable: false,
-            draftSaved: false,
-            suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION,
-          }),
-          outputMode,
-        );
-      if (attachmentIds && sendDraft)
-        throw withOutputMode(
-          new CliError({
-            code: "SEND_DRAFT_ATTACHMENTS_UNSUPPORTED",
-            message:
-              "--attachment-id cannot be used with --send-draft. Use a normal send to replace the draft.",
-            retryable: false,
-            draftSaved: false,
-            suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION,
-          }),
-          outputMode,
-        );
-      if (continueAnyway && !sendDraft)
-        throw withOutputMode(
-          new CliError({
-            code: "SEND_DRAFT_ANYWAY_REQUIRES_SEND_DRAFT",
-            message: "--anyway can only be used together with --send-draft.",
-            retryable: false,
-            draftSaved: false,
-            suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION,
-          }),
-          outputMode,
-        );
-      if (expectedDraftKey !== undefined && !sendDraft)
-        throw withOutputMode(
-          new CliError({
-            code: "EXPECTED_DRAFT_KEY_REQUIRES_SEND_DRAFT",
-            message: "--expected-draft-key can only be used together with --send-draft.",
-            retryable: false,
-            draftSaved: false,
-            suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION,
-          }),
-          outputMode,
-        );
-      const mentions = rawMentions.length
-        ? parseMentionSelectors(rawMentions, outputMode)
-        : undefined;
-      if (target && (!continueAnyway || sendDraft))
-        return {
-          command: "send",
-          target,
-          ...(sendDraft ? { sendDraft: true } : {}),
-          ...(expectedDraftKey !== undefined ? { expectedDraftKey } : {}),
-          ...(continueAnyway ? { continueAnyway: true } : {}),
-          ...(reviewerIsolation ? { freshnessContextMode: "withheld" as const } : {}),
-          ...(json ? { json: true as const } : {}),
-          ...(attachmentIds ? { attachmentIds } : {}),
-          ...(mentions ? { mentions } : {}),
-          ...(targetConfirmed ? { targetConfirmed: true } : {}),
-        };
-    }
-  }
-  throw unknownCommandError(args);
-}
-
-/**
- * Validates each `--mention` value's shape and rejects a handle bound to two different actors in
- * the same message. Duplicate identical bindings (same handle, same actor) collapse to one entry.
- * Whether each bound handle actually appears in the message body is checked separately in `run()`,
- * once the body is known.
- */
-function parseMentionSelectors(
-  raw: readonly string[],
-  outputMode: "text" | "json",
-): MentionSelector[] {
-  const byHandle = new Map<string, MentionSelector>();
-  const result: MentionSelector[] = [];
-  for (const value of raw) {
-    const parsed = parseMentionSelector(value);
-    if (!parsed)
-      throw withOutputMode(
-        new CliError({
-          code: "INVALID_MENTION_SELECTOR",
-          message: "--mention must be human:<actor-uuid>:<handle> or agent:<actor-uuid>:<handle>.",
-          retryable: false,
-          draftSaved: false,
-          suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION,
-        }),
-        outputMode,
-      );
-    const existing = byHandle.get(parsed.name);
-    if (existing && (existing.type !== parsed.type || existing.id !== parsed.id))
-      throw withOutputMode(
-        new CliError({
-          code: "MENTION_BINDING_CONFLICT",
-          message: `@${parsed.name} cannot be bound to more than one actor in the same message.`,
-          retryable: false,
-          draftSaved: false,
-          suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION,
-        }),
-        outputMode,
-      );
-    if (!existing) {
-      byHandle.set(parsed.name, parsed);
-      result.push(parsed);
-    }
-  }
-  return result;
-}
-
-const MANUAL_INTENT_REASON_MIN_LENGTH = 12;
-const MANUAL_INTENT_REASON_MAX_LENGTH = 500;
-const MANUAL_USAGE =
-  'Usage: coforge manual get <topic> [--intent "<text>"] [--reason "<text>"] | coforge manual ' +
-  'search "<keywords>" [--intent "<text>"] [--reason "<text>"]';
-
-function isValidManualField(value: string | undefined): boolean {
-  if (value === undefined || value.trim() === "") return true;
-  const trimmed = value.trim();
-  return (
-    trimmed.length >= MANUAL_INTENT_REASON_MIN_LENGTH &&
-    trimmed.length <= MANUAL_INTENT_REASON_MAX_LENGTH
-  );
-}
-
-/** Client-side mirror of the server's `--intent`/`--reason` validation (see
- * `apps/web/src/server/agents/manual/manual-validation.server.ts`): optional; non-empty values are trimmed, 12-500
- * characters. When both are invalid, one error names both rather than only the first checked. */
-function validateManualIntentReasonArgs(intent: string | undefined, reason: string | undefined) {
-  const intentValid = isValidManualField(intent);
-  const reasonValid = isValidManualField(reason);
-  if (intentValid && reasonValid) return;
-  const range = `${MANUAL_INTENT_REASON_MIN_LENGTH}-${MANUAL_INTENT_REASON_MAX_LENGTH}`;
-  const safetyNote =
-    "Never put a raw prompt, a credential, a private URL, or a message payload in either field.";
-  if (!intentValid && !reasonValid)
-    throw new CliError({
-      code: "KNOWLEDGE_INTENT_INVALID",
-      message:
-        `--intent and --reason, when provided, must be ${range} characters after ` +
-        `trimming. ${safetyNote}`,
-      retryable: false,
-    });
-  if (!intentValid)
-    throw new CliError({
-      code: "KNOWLEDGE_INTENT_INVALID",
-      message:
-        `--intent, when provided, must be ${range} characters after trimming: state what you ` +
-        `ultimately want to accomplish. ${safetyNote}`,
-      retryable: false,
-    });
-  throw new CliError({
-    code: "KNOWLEDGE_REASON_INVALID",
-    message:
-      `--reason, when provided, must be ${range} characters after trimming: state why the ` +
-      `Manual is needed at this point. ${safetyNote}`,
-    retryable: false,
-  });
-}
-
-const VERSION_USAGE = "Usage: coforge version [--json]";
-
-function parseVersionArgs(args: readonly string[]): VersionInvocation {
-  let json = false;
-  for (const arg of args) {
-    if (arg === "--json") json = true;
-    else throw new Error(VERSION_USAGE);
-  }
-  return { command: "version", ...(json ? { json: true } : {}) };
-}
-
-function parseManualArgs(args: readonly string[]): ManualInvocation {
-  const sub = args[0];
-  let value: string | undefined;
-  let intent: string | undefined;
-  let reason: string | undefined;
-  // The positional may come before or after the flags; Agents write both orders.
-  for (let index = 1; index < args.length; index += 1) {
-    const name = args[index]!;
-    if (name === "--intent" || name === "--reason") {
-      const flagValue = args[index + 1];
-      if (flagValue === undefined) throw new Error(MANUAL_USAGE);
-      if (name === "--intent") intent = flagValue;
-      else reason = flagValue;
-      index += 1;
-    } else if (name.startsWith("--") || value !== undefined) throw new Error(MANUAL_USAGE);
-    else value = name;
-  }
-  if (!value?.trim()) throw new Error(MANUAL_USAGE);
-  validateManualIntentReasonArgs(intent, reason);
-  const context = { intent: intent?.trim() ?? "", reason: reason?.trim() ?? "" };
-  return sub === "get"
-    ? { command: "manual-get", topic: value.trim(), ...context }
-    : { command: "manual-search", query: value.trim(), ...context };
-}
-
-/** `@handle` and `handle` are both accepted; the leading `@` is stripped before the CLI sends
- * the name to the server (Usernames themselves never carry one). */
-function stripHandlePrefix(value: string): string {
-  return value.startsWith("@") ? value.slice(1) : value;
-}
-
-const PROFILE_SHOW_USAGE = "Usage: coforge profile show [<target>] [--json]";
-
-function parseProfileShowArgs(args: readonly string[]): ProfileShowInvocation {
-  let target: string | undefined;
-  let json = false;
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === "--json") json = true;
-    else if (arg !== undefined && !arg.startsWith("--") && target === undefined) target = arg;
-    else throw new Error(PROFILE_SHOW_USAGE);
-  }
-  const trimmed = target?.trim();
-  return {
-    command: "profile-show",
-    ...(trimmed ? { target: stripHandlePrefix(trimmed) } : {}),
-    ...(json ? { json: true } : {}),
-  };
-}
-
-function parseActionPrepareArgs(args: readonly string[]): ActionPrepareInvocation {
-  let target: string | undefined;
-  for (let index = 0; index < args.length; index++) {
-    if (args[index] === "--target" && args[index + 1]) target = args[++index];
-    else
-      throw new CliError({
-        code: "INVALID_ARG",
-        message: "Usage: coforge action prepare --target <target>",
-        retryable: false,
-      });
-  }
-  if (!target?.trim())
-    throw new CliError({ code: "INVALID_ARG", message: "--target is required", retryable: false });
-  return { command: "action-prepare", target };
-}
-
-export async function run(args: readonly string[], transport: MessageTransport): Promise<unknown> {
-  if (args.length === 0) return cliUsage();
-  if (args.includes("--help")) {
-    const help = commandHelp(args.filter((arg) => arg !== "--help"));
-    if (help) return help;
-  }
-  const invocation = parseArgs(args);
-  if (invocation.command === "whoami") {
-    return runWhoami(
-      transport.profileShow && (() => transport.profileShow!()),
-      invocation.json === true,
-    );
-  }
-  if (invocation.command === "version") {
-    if (!transport.version) throw new Error("Version transport is unavailable");
-    const response = await transport.version();
-    const info = {
-      cli: COFORGE_CLI_VERSION,
-      daemon: response.daemonVersion,
-      ...(response.computerVersion ? { computer: response.computerVersion } : {}),
-    };
-    if (invocation.json) return JSON.stringify({ ok: true, data: info });
-    return formatVersionInfo(info);
-  }
-  if (invocation.command === "context-search" || invocation.command === "context-read")
-    return runContextCommand(invocation, transport);
-  if (invocation.command === "manual-get") {
-    if (!transport.manualGet) throw new Error("Manual transport is unavailable");
-    const result = await transport.manualGet(
-      invocation.topic,
-      invocation.intent,
-      invocation.reason,
-    );
-    return formatManualGet(result.content);
-  }
-  if (invocation.command === "manual-search") {
-    if (!transport.manualSearch) throw new Error("Manual transport is unavailable");
-    const result = await transport.manualSearch(
-      invocation.query,
-      invocation.intent,
-      invocation.reason,
-    );
-    return formatManualSearchResults(result.results);
-  }
-  if (invocation.command === "user-info") {
-    if (!transport.userInfo) throw new Error("User info transport is unavailable");
-    return runUserInfo(transport.userInfo.bind(transport), invocation);
-  }
-  if (invocation.command === "profile-show") {
-    if (!transport.profileShow) throw new Error("Profile transport is unavailable");
-    const result = await transport.profileShow(invocation.target);
-    return invocation.json ? result : formatProfile(result);
-  }
-  if (invocation.command === "profile-update") {
-    if (!transport.profileUpdate) throw new Error("Profile transport is unavailable");
-    const result = await transport.profileUpdate({
-      displayName: invocation.displayName,
-      description: invocation.description,
-    });
-    return invocation.json ? result : formatProfile(result);
-  }
-  if (invocation.command === "app-config") return runAppConfig(invocation, transport);
-  if (invocation.command === "artifact") return runArtifact(invocation, transport);
-  if (invocation.command === "mention-pending")
-    return runMentionPending(transport.mentionPending?.bind(transport), invocation);
-  if (invocation.command === "mention-delivery") {
-    if (!transport.mentionDelivery) throw new Error("Mention transport is unavailable");
-    const outputMode = invocation.json ? "json" : "text";
-    const result = await transport.mentionDelivery(invocation.messageId).catch((error: unknown) => {
-      throw error instanceof CliError
-        ? mentionDeliveryFailure(error, invocation.messageId, outputMode)
-        : error;
-    });
-    return invocation.json
-      ? { ok: true, messageId: result.messageId, deliveries: result.deliveries }
-      : formatMentionDeliveries(result.messageId, result.deliveries);
-  }
-  if (invocation.command === "mention-action") {
-    if (!transport.mentionExecute) throw new Error("Mention transport is unavailable");
-    const outputMode = invocation.json ? "json" : "text";
-    const { action, resolutionIds } = invocation;
-    const result = await transport
-      .mentionExecute({ action, resolutionIds })
-      .catch((error: unknown) => {
-        throw error instanceof CliError ? withOutputMode(error, outputMode) : error;
-      });
-    const incomplete = incompleteMentionActions(action, resolutionIds, result.results);
-    if (incomplete.length)
-      throw new CliError({
-        code: "MENTION_ACTION_FAILED",
-        message: `Mention ${action} did not complete for every requested target: ${incomplete.join(", ")}`,
-        retryable: false,
-        details: { action: result.action, results: result.results },
-        outputMode,
-      });
-    return invocation.json
-      ? { ok: true, action: result.action, results: result.results }
-      : formatMentionActionResults(result.action, result.results);
-  }
-  if (invocation.command === "workspace.info") {
-    const client = createAgentApiClient(createMessageTransportAgentApiTransport(transport));
-    return formatWorkspaceInfo(await client.workspace.info(), invocation);
-  }
-  if (invocation.command === "reminder") return runReminder(invocation, transport);
-  if (invocation.command === "task") {
-    if (!transport.task) throw new Error("Task transport is unavailable");
-    const outputJson = invocation.json === true;
-    let command = { ...invocation.task, idempotencyKey: crypto.randomUUID() } as TaskCommand;
-    if (
-      (command.operation === "update" || command.operation === "unclaim") &&
-      command.expectedRevision === undefined
-    ) {
-      const listed = await transport.task({
-        operation: "list",
-        idempotencyKey: crypto.randomUUID(),
-        target: command.target,
-      });
-      const current = listed.tasks.find((task) => task.number === command.number);
-      if (!current)
-        throw new Error(`Task #${command.number} was not found; read the Task list again`);
-      command = { ...command, expectedRevision: current.revision };
-    }
-    try {
-      const result = await transport.task(command);
-      if (result.state === "held") throw heldTaskCliError(command, result, outputJson);
-      return outputJson ? result : formatTaskResult(command, result);
-    } catch (error) {
-      // Deleting is irreversible and a refusal is an authority fact, not a race: name who may.
-      if (
-        error instanceof CliError &&
-        command.operation === "delete" &&
-        error.proxy?.upstreamStatus === 403
-      )
-        throw new CliError({
-          code: error.code,
-          message: error.message,
-          retryable: error.retryable,
-          correlationId: error.correlationId,
-          proxy: error.proxy,
-          suggestedNextAction:
-            "Only the task's creator or a Workspace owner or admin can delete a task; ask one of them, or close it instead.",
-        });
-      // A typed failure is already redacted where it was raised; anything else may carry detail.
-      if (command.freshnessContextMode === "withheld" && !(error instanceof CliError))
-        throw new Error("Reviewer-isolation Task request failed; upstream detail was withheld");
-      throw error;
-    }
-  }
-  if (invocation.command === "weekly-report") {
-    if (!transport.weeklyReport) throw new Error("Weekly report transport is unavailable");
-    if ("inputPath" in invocation) {
-      const action = weeklyReportWorkflowSchema.parse(await Bun.file(invocation.inputPath).json());
-      return transport.weeklyReport({ operation: "workflow", action });
-    }
-    return transport.weeklyReport(invocation.weeklyReport);
-  }
-  if (invocation.command === "weekly-report-collect")
-    return runWeeklyReportCollect(invocation, transport);
-  if (invocation.command === "weekly-report-key-points") {
-    if (!transport.weeklyReportKeyPoints)
-      throw new Error("Weekly report key-points transport is unavailable");
-    let keyPoints = invocation.keyPoints;
-    if (invocation.markdownPath) {
-      const markdown = await Bun.file(invocation.markdownPath).text();
-      keyPoints = { ...keyPoints, markdown };
-    }
-    const result = await transport.weeklyReportKeyPoints(keyPoints);
-    return `Key points ${result.status} (report ${result.reportId}).`;
-  }
-  if (invocation.command === "weekly-report-memory") {
-    if (!transport.weeklyReportMemory)
-      throw new Error("Weekly report memory transport is unavailable");
-    const file = (await Bun.file(invocation.filePath).json()) as unknown;
-    if (!file || typeof file !== "object" || Array.isArray(file))
-      throw new Error("invalid weekly-report-memory file");
-    const memory = validateWeeklyReportMemoryCommand({
-      ...(file as Record<string, unknown>),
-      idempotencyKey: invocation.memory.idempotencyKey,
-      reportId: invocation.memory.reportId,
-    });
-    if (!memory) throw new Error("invalid weekly-report-memory file");
-    const result = await transport.weeklyReportMemory(memory);
-    return `Memory ${result.status} (report ${result.reportId}).`;
-  }
-  if (invocation.command === "action-prepare") return runActionPrepare(transport, invocation);
-  if (isAttentionInvocation(invocation)) return runAttention(transport, invocation);
-  if (invocation.command === "task-conversation") return runTaskConversation(transport, invocation);
-  if (invocation.command === "channel-manage") return runChannelCommand(transport, invocation);
-  if (invocation.command === "label") return runLabelCommand(transport, invocation);
-  if (invocation.command === "inbox-check") return runInboxCheck(transport, invocation);
-  if (invocation.command === "attachment-comments") {
-    if (!transport.attachmentComments)
-      throw new Error("Attachment comments transport is unavailable");
-    return runAttachmentComments(transport.attachmentComments.bind(transport), invocation);
-  }
-  if (invocation.command === "attachment.view") {
-    const result = await transport.view(invocation.attachmentId);
-    await Bun.write(invocation.output, result.bytes);
-    if (invocation.json)
-      return JSON.stringify({ attachmentId: invocation.attachmentId, path: invocation.output });
-    return formatAttachmentDownloadSuccess(invocation.output);
-  }
-  if (invocation.command === "attachment.upload") {
-    if (!transport.upload) throw new Error("Attachment upload transport is unavailable");
-    const { path, target } = await validateAttachmentUploadArgs(invocation);
-    const mimeType = await inferAttachmentMimeType(path, invocation.mimeType);
-    const result = await transport.upload({ path, target, mimeType });
-    if (invocation.json) return JSON.stringify(result);
-    return formatAttachmentUploadSuccess(result);
-  }
-  const { command } = invocation;
-  if (command === "send") {
-    const outputMode = invocation.json ? "json" : "text";
-    if (invocation.sendDraft && (await sendDraftStdinHasContent())) {
-      throw withOutputMode(
-        new CliError({
-          code: "SEND_DRAFT_STDIN_UNSUPPORTED",
-          message: [
-            "--send-draft sends the current saved draft and does not accept stdin.",
-            "To update the draft, send the revised content normally without --send-draft:",
-            `  coforge message send --target "${invocation.target}" <<'COFORGE_MESSAGE'`,
-            "  revised message",
-            "  COFORGE_MESSAGE",
-          ].join("\n"),
-          retryable: false,
-          draftSaved: false,
-          suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION,
-        }),
-        outputMode,
-      );
-    }
-    if (!invocation.sendDraft)
-      refuseForeignStdinFile(
-        [
-          `coforge message send --target "${invocation.target}" <<'COFORGE_MESSAGE'`,
-          "reply body",
-          "COFORGE_MESSAGE",
-        ],
-        { draftSaved: false, suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION, outputMode },
-      );
-    const body = invocation.sendDraft ? undefined : await readPipedSendContent();
-    // With `--send-draft`, the body (and thus content presence) is only known to the daemon, which
-    // already re-sends the draft's own saved mentions when no explicit override is given.
-    if (invocation.mentions?.length && body !== undefined) {
-      const present = mentionsInContent(body);
-      for (const mention of invocation.mentions)
-        if (!present.has(mention.name))
-          throw withOutputMode(
-            new CliError({
-              code: "MENTION_NOT_IN_CONTENT",
-              message: `Structured mention @${mention.name} is not present in the message body.`,
-              retryable: false,
-              draftSaved: false,
-              suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION,
-            }),
-            outputMode,
-          );
-    }
-    let result: unknown;
-    try {
-      result = await transport.send(invocation.target, body, {
-        sendDraft: invocation.sendDraft,
-        expectedDraftKey: invocation.expectedDraftKey,
-        continueAnyway: invocation.continueAnyway,
-        freshnessContextMode: invocation.freshnessContextMode,
-        attachmentIds: invocation.attachmentIds,
-        mentions: invocation.mentions,
-        targetConfirmed: invocation.targetConfirmed,
-      });
-    } catch (error) {
-      // The transport (`local-client.ts`) already redacts upstream detail for a withheld request;
-      // this fallback only covers a transport that throws a bare `Error` without going through it.
-      if (invocation.freshnessContextMode === "withheld" && !(error instanceof CliError))
-        throw withOutputMode(
-          new CliError({
-            code: "SEND_FAILED",
-            message: "Reviewer-isolation send failed; upstream response detail was withheld.",
-            retryable: false,
-            draftSaved: true,
-            suggestedNextAction: unknownDeliveryNextAction(invocation.target),
-          }),
-          outputMode,
-        );
-      throw error instanceof CliError ? withOutputMode(error, outputMode) : error;
-    }
-    if (isHeldSend(result))
-      throw withOutputMode(
-        heldSendCliError(
-          invocation.target,
-          result as HeldSendResult,
-          invocation.freshnessContextMode === "withheld",
-        ),
-        outputMode,
-      );
-    if (isCommittedSend(result))
-      return invocation.json
-        ? JSON.stringify({
-            state: "committed",
-            target: invocation.target,
-            messageId: result.messageId,
-            idempotencyKey: result.idempotencyKey,
-            reconciliation: true,
-            receiptComplete: false,
-          })
-        : formatSendCommitted(invocation.target, result.messageId);
-    const sent = result as {
-      messageId?: string;
-      recentUnread?: AgentMessageRecord[];
-      pendingMentionActions?: PendingMentionAction[];
-      unresolvedMentionHandles?: string[];
-      joinedChannel?: string;
-    };
-    const undelivered = undeliveredMentionError(invocation.target, sent, outputMode);
-    if (invocation.json) {
-      if (undelivered) throw undelivered;
-      return JSON.stringify({
-        state: "sent",
-        target: invocation.target,
-        messageId: sent.messageId,
-        recentUnread: sent.recentUnread ?? [],
-        ...(sent.joinedChannel ? { joinedChannel: sent.joinedChannel } : {}),
-      });
-    }
-    if (undelivered) throw undelivered;
-    return formatSendSuccess(invocation.target, sent, sent.recentUnread);
-  }
-  if (command === "continue") {
-    if (!transport.continue) throw new Error("Message continue transport is unavailable");
-    return runMessageContinue(invocation, transport.continue);
-  }
-  if (command === "search") {
-    if (!transport.search) throw new Error("Message search transport is unavailable");
-    const { command: _command, ...options } = invocation;
-    const response = (await transport.search(options)) as {
-      messages: AgentMessageRecord[];
-      hasMore?: boolean;
-      nextCursor?: string;
-      incomplete?: boolean;
-      searchedMessages?: number;
-      searchedThrough?: string;
-    };
-    return formatSearchResults(options.query ?? "", response, options);
-  }
-  if (command === "resolve") {
-    if (!transport.resolve) throw new Error("Message resolve transport is unavailable");
-    return runMessageResolve(transport.resolve, invocation.messageId);
-  }
-  if (command === "react") {
-    if (!transport.react) throw new Error("Message reaction transport is unavailable");
-    await transport.react(invocation.messageId, invocation.emoji, invocation.remove === true);
-    return formatReaction(invocation.messageId, invocation.emoji, invocation.remove === true);
-  }
-  if (command === "check") return formatMessageCheck(await transport.check(invocation.target));
-  const readOptions = invocation.command === "read" ? invocation : undefined;
-  const readResponse = (await transport.read(invocation.target, readOptions)) as {
-    messages: AgentMessageRecord[];
-    hasOlder?: boolean;
-    hasNewer?: boolean;
-    unreadCursorBefore?: number;
-    readPositionAfter?: number;
-    moreUnread?: boolean;
-    foldedMessageCount?: number;
-    foldedFromSequence?: number;
-    foldedThroughSequence?: number;
-  };
-  return formatReadWindow(invocation.target, readResponse, {
-    around: readOptions?.around,
-    unread: readOptions?.unread,
-  });
-}
-
-type VersionInfo = { cli: string; daemon?: string; computer?: string };
-
-/** `coforge version`'s text output: `CLI:`/`Daemon:`/`Computer:` lines, in that order, each
- * omitted only when unknown. `CLI` is always known; `Daemon`/`Computer` come from the live query. */
-function formatVersionInfo(info: VersionInfo): string {
-  const lines = [`CLI: ${info.cli}`];
-  if (info.daemon) lines.push(`Daemon: ${info.daemon}`);
-  if (info.computer) lines.push(`Computer: ${info.computer}`);
-  return lines.join("\n");
-}
-
-function isMessageCommand(value: string | undefined): value is MessageCommand {
-  return (
-    value === "check" ||
-    value === "read" ||
-    value === "search" ||
-    value === "send" ||
-    value === "continue" ||
-    value === "resolve" ||
-    value === "react"
-  );
-}
-
-function parseWeeklyReportCollectArgs(args: readonly string[]): WeeklyReportCollectInvocation {
-  const operation = args[0];
-  if (operation !== "submit-pack" && operation !== "submit-empty" && operation !== "submit-failure")
-    throw unknownCommandError(["weekly-report-collect", ...args]);
-  const values = new Map<string, string>();
-  for (let index = 1; index < args.length; index++) {
-    const name = args[index];
-    const value = args[++index];
-    if (!name?.startsWith("--") || !value || value.startsWith("--") || values.has(name))
-      throw new Error("Usage:");
-    values.set(name, value);
-  }
-  const runId = values.get("--run-id");
-  const idempotencyKey = values.get("--idempotency-key");
-  if (
-    !runId ||
-    !RFC_UUID_PATTERN.test(runId) ||
-    !idempotencyKey ||
-    !RFC_UUID_PATTERN.test(idempotencyKey)
-  )
-    throw new Error("Usage:");
-  if (operation === "submit-pack") {
-    const markdownPath = values.get("--markdown");
-    if (!markdownPath || values.size !== 3) throw new Error("Usage:");
-    return {
-      command: "weekly-report-collect",
-      markdownPath,
-      collect: {
-        idempotencyKey,
-        runId,
-        outcome: "ready",
-      },
-    };
-  }
-  if (operation === "submit-empty") {
-    if (values.size !== 2) throw new Error("Usage:");
-    return {
-      command: "weekly-report-collect",
-      collect: { idempotencyKey, runId, outcome: "empty" },
-    };
-  }
-  const reason = values.get("--reason");
-  if (!reason || values.size !== 3) throw new Error("Usage:");
-  return {
-    command: "weekly-report-collect",
-    collect: { idempotencyKey, runId, outcome: "failed", failureReason: reason },
-  };
-}
-
-function parseWeeklyReportKeyPointsArgs(args: readonly string[]): WeeklyReportKeyPointsInvocation {
-  if (args[0] !== "submit") throw unknownCommandError(["weekly-report-key-points", ...args]);
-  const values = new Map<string, string>();
-  for (let index = 1; index < args.length; index++) {
-    const name = args[index];
-    const value = args[++index];
-    if (!name?.startsWith("--") || !value || value.startsWith("--") || values.has(name))
-      throw new Error("Usage:");
-    values.set(name, value);
-  }
-  const reportId = values.get("--report-id");
-  const idempotencyKey = values.get("--idempotency-key");
-  const markdownPath = values.get("--markdown");
-  if (
-    !reportId ||
-    !RFC_UUID_PATTERN.test(reportId) ||
-    !idempotencyKey ||
-    !RFC_UUID_PATTERN.test(idempotencyKey) ||
-    !markdownPath ||
-    values.size !== 3
-  )
-    throw new Error("Usage:");
-  return {
-    command: "weekly-report-key-points",
-    markdownPath,
-    keyPoints: { idempotencyKey, reportId, markdown: "" },
-  };
-}
-
-function parseWeeklyReportMemoryArgs(args: readonly string[]): WeeklyReportMemoryInvocation {
-  if (args[0] !== "submit") throw unknownCommandError(["weekly-report-memory", ...args]);
-  const values = new Map<string, string>();
-  for (let index = 1; index < args.length; index++) {
-    const name = args[index];
-    const value = args[++index];
-    if (!name?.startsWith("--") || !value || value.startsWith("--") || values.has(name))
-      throw new Error("Usage:");
-    values.set(name, value);
-  }
-  const reportId = values.get("--report-id");
-  const idempotencyKey = values.get("--idempotency-key");
-  const filePath = values.get("--file");
-  if (
-    !reportId ||
-    !RFC_UUID_PATTERN.test(reportId) ||
-    !idempotencyKey ||
-    !RFC_UUID_PATTERN.test(idempotencyKey) ||
-    !filePath ||
-    values.size !== 3
-  )
-    throw new Error("Usage:");
-  return {
-    command: "weekly-report-memory",
-    filePath,
-    memory: { idempotencyKey, reportId },
-  };
-}
-
-function parseWeeklyReportArgs(args: readonly string[]): WeeklyReportInvocation {
-  const operation = args[0];
-  if (operation === "templates" || operation === "inbox" || operation === "members") {
-    if (args.length !== 1) throw new Error("Usage:");
-    return {
-      command: "weekly-report",
-      weeklyReport: { operation: "workflow", action: { type: operation } },
-    };
-  }
-  if (operation === "workflow") {
-    if (args.length !== 3 || args[1] !== "--input" || !args[2] || args[2].startsWith("--"))
-      throw new Error("Usage:");
-    return { command: "weekly-report", inputPath: args[2] };
-  }
-  if (operation !== "context" && operation !== "list" && operation !== "read")
-    throw unknownCommandError(["weekly-report", ...args]);
-  const values = new Map<string, string>();
-  for (let index = 1; index < args.length; index++) {
-    const name = args[index];
-    const value = args[++index];
-    if (!name?.startsWith("--") || !value || value.startsWith("--") || values.has(name))
-      throw new Error("Usage:");
-    values.set(name, value);
-  }
-  if (operation === "context") {
-    const subjectType = values.get("--subject-type");
-    const subjectId = values.get("--subject-id");
-    if (
-      values.size !== 2 ||
-      !WEEKLY_REPORT_SUBJECT_TYPES.includes(
-        subjectType as (typeof WEEKLY_REPORT_SUBJECT_TYPES)[number],
-      ) ||
-      !subjectId ||
-      !RFC_UUID_PATTERN.test(subjectId)
-    )
-      throw new Error("Usage:");
-    return {
-      command: "weekly-report",
-      weeklyReport: {
-        operation: "context",
-        subjectType: subjectType as (typeof WEEKLY_REPORT_SUBJECT_TYPES)[number],
-        subjectId,
-      },
-    };
-  }
-  if (operation === "list") {
-    const cycleId = values.get("--cycle-id");
-    const cursor = values.get("--cursor");
-    const limitValue = values.get("--limit");
-    for (const name of values.keys()) {
-      if (name !== "--cycle-id" && name !== "--cursor" && name !== "--limit")
-        throw new Error("Usage:");
-    }
-    if (cycleId && !RFC_UUID_PATTERN.test(cycleId)) throw new Error("Usage:");
-    if (cursor && !RFC_UUID_PATTERN.test(cursor)) throw new Error("Usage:");
-    let limit: number | undefined;
-    if (limitValue) {
-      limit = Number(limitValue);
-      if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new Error("Usage:");
-    }
-    return {
-      command: "weekly-report",
-      weeklyReport: {
-        operation: "list",
-        ...(cycleId ? { cycleId } : {}),
-        ...(cursor ? { cursor } : {}),
-        ...(limit !== undefined ? { limit } : {}),
-      },
-    };
-  }
-  const reportId = values.get("--report-id");
-  const section = values.get("--section");
-  const maxCharactersValue = values.get("--max-characters");
-  for (const name of values.keys()) {
-    if (name !== "--report-id" && name !== "--section" && name !== "--max-characters")
-      throw new Error("Usage:");
-  }
-  if (!reportId || !RFC_UUID_PATTERN.test(reportId) || !section) throw new Error("Usage:");
-  let maxCharacters: number | undefined;
-  if (maxCharactersValue) {
-    maxCharacters = Number(maxCharactersValue);
-    if (!Number.isInteger(maxCharacters) || maxCharacters < 1 || maxCharacters > 12_000)
-      throw new Error("Usage:");
-  }
-  return {
-    command: "weekly-report",
-    weeklyReport: {
-      operation: "read",
-      reportId,
-      section,
-      ...(maxCharacters !== undefined ? { maxCharacters } : {}),
-    },
-  };
-}
-
-/** A write the server held until the Agent has seen the conversation's newer messages. */
+export { parseArgs } from "#src/parse-args";
+export { run } from "#src/command-run";

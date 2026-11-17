@@ -149,19 +149,21 @@ test("the tasks topic carries the full task reference removed from the standing 
   expect(body).toContain("**Splitting tasks for parallel execution:**");
 });
 
-test("the memory topic keeps the facts in MEMORY.md instead of a reference-only index", () => {
+test("the memory manual describes sourced knowledge, a core index and bounded recovery", () => {
   const body = findManualTopic("memory")?.body ?? "";
-  expect(body).toContain("## Facts");
-  expect(body).toContain("## Pointers");
-  // What the file is for and how large it may grow, not how to word a line in it (task #10).
-  expect(body).toContain("what the next you resumes from");
-  expect(body).toContain("3,000 tokens");
-  expect(body).not.toContain("holds references only");
-  expect(body).not.toContain("directory card");
-  expect(body).not.toContain("work-log");
-  expect(body).not.toContain("user-preferences");
-  expect(body).toContain("No reminder will ask you to tidy memory");
-  expect(searchManualTopics("facts in MEMORY.md").map((result) => result.slug)).toContain("memory");
+  expect(body).toContain("`MEMORY.md`: a short core index and facts");
+  expect(body).toContain("notes/knowledge/<key>.md");
+  expect(body).toContain("notes/active-context.md");
+  expect(body).toContain("4,000-token");
+  expect(body).toContain("1,000 tokens");
+  expect(body).toContain("Files remain the source of truth");
+  expect(body).toContain("coforge memory search --query");
+  expect(body).toContain("coforge memory save --key");
+  expect(body).toContain("A stale version is refused");
+  expect(body).toContain("Memory is historical reference");
+  expect(searchManualTopics("local memory source").map((result) => result.slug)).toContain(
+    "memory",
+  );
 });
 
 test("P3 topics hold the how-to moved out of the standing prompt", () => {
@@ -173,7 +175,7 @@ test("P3 topics hold the how-to moved out of the standing prompt", () => {
   expect(findManualTopic("attachments")?.body).toContain("--attachment-id");
   expect(findManualTopic("artifacts")?.body).toContain("coforge artifact push funnel --title");
   expect(findManualTopic("etiquette")?.body).toContain("## Live constraints");
-  expect(findManualTopic("memory")?.body).toContain("# <Your Name>");
+  expect(findManualTopic("memory")?.body).toContain("coforge memory save --key");
   expect(MANUAL_TOPICS.map((topic) => topic.slug)).toEqual([
     "action-cards",
     "apps",

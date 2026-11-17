@@ -29,6 +29,7 @@ import type { ActionCardAction } from "@lrm/coforge-sdk/agent";
 import type { ActionPrepareResult } from "#src/action-prepare-run";
 import type { ArtifactDirectoryTransport } from "#src/artifact-directory-args";
 import type { InboxTransport } from "#src/inbox-check";
+import type { LocalMemoryCommand, LocalMemoryResult } from "@lrm/coforge-sdk/agent";
 import type { LabelTransport } from "#src/label-commands";
 import type { ReminderResponse, ReminderTransportRequest } from "#src/reminder-commands";
 import type { TaskConversationTransport } from "#src/task-conversation-run";
@@ -54,6 +55,7 @@ type ArtifactCalls = Pick<
 
 export type MessageTransport = LabelTransport &
   ArtifactCalls & {
+    memory?(request: LocalMemoryCommand): Promise<LocalMemoryResult>;
     check(target?: string): Promise<MessageCheckResult>;
     read(target: string, options?: MessageReadOptions): Promise<unknown>;
     search?(options: MessageSearchOptions): Promise<unknown>;
