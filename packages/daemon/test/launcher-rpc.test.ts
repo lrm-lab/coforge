@@ -1,3 +1,6 @@
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, test } from "bun:test";
 import {
   decodeDaemonCommandRequest,
@@ -9,6 +12,8 @@ import {
   encodeDaemonHoldResponse,
   encodeLocalRpcResponse,
   LOCAL_RPC_METHODS,
+  LocalRpcFrameTooLargeError,
+  MAX_LOCAL_RPC_FRAME_BYTES,
   readLocalRpcFrame,
 } from "@lrm/coforge-sdk/internal";
 import { LocalDaemonLauncher } from "#src/daemon-host/launcher";
@@ -188,3 +193,28 @@ test.each(connectionOperations)(
     }
   },
 );
+
+test("connectToLocalDaemon rejects immediately when a peer sends an oversized frame header", async () => {
+  const socketPath = join(tmpdir(), `coforge-oversized-${crypto.randomUUID()}.sock`);
+  const listener = Bun.listen({
+    unix: socketPath,
+    socket: {
+      data(socket) {
+        const header = new Uint8Array(4);
+        new DataView(header.buffer).setUint32(0, MAX_LOCAL_RPC_FRAME_BYTES + 1);
+        socket.write(header);
+      },
+    },
+  });
+  try {
+    const launcher = new LocalDaemonLauncher({
+      executablePath: "/unused",
+      socketPath,
+      serverUrl: "https://coforge.test",
+    });
+    await expect(launcher.identity(1_000)).rejects.toBeInstanceOf(LocalRpcFrameTooLargeError);
+  } finally {
+    listener.stop(true);
+    await rm(socketPath, { force: true });
+  }
+});

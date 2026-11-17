@@ -7,6 +7,8 @@ import {
   encodeDaemonHandshakeResponse,
   encodeDaemonCommandResponse,
   frameLocalRpc,
+  LocalRpcFrameTooLargeError,
+  MAX_LOCAL_RPC_FRAME_BYTES,
   readLocalRpcFrames,
   decodeLocalRpcRequest,
   encodeLocalRpcResponse,
@@ -148,7 +150,9 @@ export async function startDaemonLocalRpcServer(
   };
 }
 
-type LocalSocketData = { buffer: Uint8Array; processing: Promise<void> };
+const MAX_LOCAL_RPC_BUFFER_BYTES = 4 + MAX_LOCAL_RPC_FRAME_BYTES;
+
+type LocalSocketData = { buffer: Uint8Array; processing: Promise<void>; closed?: boolean };
 
 /** Decodes framed local RPC requests and answers each one with a framed response payload. */
 class LocalRpcDispatcher {
@@ -169,10 +173,25 @@ class LocalRpcDispatcher {
   }
 
   async receive(socket: Bun.Socket<LocalSocketData>, chunk: Uint8Array): Promise<void> {
-    const next = new Uint8Array(socket.data.buffer.byteLength + chunk.byteLength);
+    if (socket.data.closed) return;
+    const bufferedBytes = socket.data.buffer.byteLength + chunk.byteLength;
+    if (bufferedBytes > MAX_LOCAL_RPC_BUFFER_BYTES) {
+      this.#rejectOversizedFrame(socket, bufferedBytes);
+      return;
+    }
+    const next = new Uint8Array(bufferedBytes);
     next.set(socket.data.buffer);
     next.set(chunk, socket.data.buffer.byteLength);
-    const parsed = readLocalRpcFrames(next);
+    let parsed: ReturnType<typeof readLocalRpcFrames>;
+    try {
+      parsed = readLocalRpcFrames(next);
+    } catch (error) {
+      if (error instanceof LocalRpcFrameTooLargeError) {
+        this.#rejectOversizedFrame(socket, error.frameBytes);
+        return;
+      }
+      throw error;
+    }
     socket.data.buffer = parsed.remainder;
     for (const frame of parsed.frames) {
       // Captured outside the try so a failure can still say which request failed, including when
@@ -190,12 +209,16 @@ class LocalRpcDispatcher {
             method,
             outcome: "rejected",
           });
-          socket.end();
+          this.#closeSocket(socket);
           return;
         }
         const payload = await handler(envelope.payload);
         socket.write(frameLocalRpc(encodeLocalRpcResponse({ method, payload })));
       } catch (error) {
+        if (error instanceof LocalRpcFrameTooLargeError) {
+          this.#rejectOversizedFrame(socket, error.frameBytes);
+          return;
+        }
         // Closing the connection is the right response - the caller is a local process that will
         // retry - but doing it silently was not. Every guard in the handlers above (a server-origin
         // mismatch, a runtime that refuses to configure, a malformed frame) reached the caller as an
@@ -209,10 +232,26 @@ class LocalRpcDispatcher {
           errorName: error instanceof Error ? error.name : undefined,
           outcome: "error",
         });
-        socket.end();
+        this.#closeSocket(socket);
         return;
       }
     }
+  }
+
+  #closeSocket(socket: Bun.Socket<LocalSocketData>): void {
+    socket.data.buffer = new Uint8Array();
+    socket.data.closed = true;
+    socket.end();
+  }
+
+  #rejectOversizedFrame(socket: Bun.Socket<LocalSocketData>, frameBytes: number): void {
+    logger.warn("Local RPC frame exceeded maximum size", {
+      event: "daemon.local_rpc.frame_too_large",
+      frame_bytes: frameBytes,
+      max_frame_bytes: MAX_LOCAL_RPC_FRAME_BYTES,
+      outcome: "rejected",
+    });
+    this.#closeSocket(socket);
   }
 
   async #handshake(payload: Uint8Array): Promise<Uint8Array> {

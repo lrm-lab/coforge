@@ -477,7 +477,13 @@ export function decodeDaemonHandshakeResponse(bytes: Uint8Array): DaemonHandshak
   };
 }
 
-export * from "./local-rpc-frame";
+export {
+  frameLocalRpc,
+  LocalRpcFrameTooLargeError,
+  MAX_LOCAL_RPC_FRAME_BYTES,
+  readLocalRpcFrame,
+  readLocalRpcFrames,
+} from "./local-rpc-frame";
 
 function connectionFields(value: { cloudConnection?: string; cloudConnectionError?: string }) {
   const state = cloudConnection(value.cloudConnection);

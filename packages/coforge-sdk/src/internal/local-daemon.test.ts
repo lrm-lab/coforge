@@ -12,6 +12,8 @@ import {
   encodeDaemonRuntimeConfigureRequest,
   encodeDaemonRuntimeConfigureResponse,
   frameLocalRpc,
+  LocalRpcFrameTooLargeError,
+  MAX_LOCAL_RPC_FRAME_BYTES,
   readLocalRpcFrame,
   readLocalRpcFrames,
 } from "./local-daemon";
@@ -180,4 +182,37 @@ test("a configure answered while its start is still under way round trips that",
   expect(
     decodeDaemonRuntimeConfigureResponse(encodeDaemonRuntimeConfigureResponse(response)),
   ).toEqual(response);
+});
+
+describe("bounded local RPC frame size", () => {
+  test("accepts a payload right at MAX_LOCAL_RPC_FRAME_BYTES and rejects 1 byte above on encode", () => {
+    expect(MAX_LOCAL_RPC_FRAME_BYTES).toBe(4 * 1024 * 1024);
+    const exact = new Uint8Array(MAX_LOCAL_RPC_FRAME_BYTES);
+    exact[0] = 7;
+    exact[exact.length - 1] = 9;
+    const framed = frameLocalRpc(exact);
+    const decoded = readLocalRpcFrame(framed);
+    expect(decoded?.byteLength).toBe(MAX_LOCAL_RPC_FRAME_BYTES);
+    expect(decoded?.[0]).toBe(7);
+    expect(decoded?.[MAX_LOCAL_RPC_FRAME_BYTES - 1]).toBe(9);
+
+    expect(() => frameLocalRpc(new Uint8Array(MAX_LOCAL_RPC_FRAME_BYTES + 1))).toThrow(
+      LocalRpcFrameTooLargeError,
+    );
+  });
+
+  test("rejects an oversized 4-byte frame header immediately without waiting for payload bytes", () => {
+    const justOver = new Uint8Array(4);
+    new DataView(justOver.buffer).setUint32(0, MAX_LOCAL_RPC_FRAME_BYTES + 1);
+    expect(() => readLocalRpcFrame(justOver)).toThrow(LocalRpcFrameTooLargeError);
+
+    const maxUint32 = new Uint8Array([0xff, 0xff, 0xff, 0xff]);
+    expect(() => readLocalRpcFrame(maxUint32)).toThrow(LocalRpcFrameTooLargeError);
+
+    const valid = frameLocalRpc(new Uint8Array([1, 2, 3]));
+    const combined = new Uint8Array(valid.byteLength + 4);
+    combined.set(valid);
+    combined.set(maxUint32, valid.byteLength);
+    expect(() => readLocalRpcFrames(combined)).toThrow(LocalRpcFrameTooLargeError);
+  });
 });

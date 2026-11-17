@@ -5,6 +5,8 @@ import {
   encodeDaemonHandshakeRequest,
   encodeDaemonRuntimeConfigureRequest,
   frameLocalRpc,
+  LocalRpcFrameTooLargeError,
+  MAX_LOCAL_RPC_FRAME_BYTES,
   readLocalRpcFrame,
   encodeLocalRpcRequest,
   decodeLocalRpcResponse,
@@ -441,15 +443,36 @@ async function connectToLocalDaemon(socketPath: string): Promise<LocalDaemonConn
   let buffer = new Uint8Array();
   let resolveResponse: ((payload: Uint8Array) => void) | undefined;
   let rejectResponse: ((error: Error) => void) | undefined;
+  let socketRef: { end(): void } | undefined;
+  const failSocket = (error: Error) => {
+    buffer = new Uint8Array();
+    const reject = rejectResponse;
+    resolveResponse = undefined;
+    rejectResponse = undefined;
+    socketRef?.end();
+    reject?.(error);
+  };
   const socket = await Bun.connect({
     unix: socketPath,
     socket: {
-      data(_socket, chunk) {
-        const next = new Uint8Array(buffer.byteLength + chunk.byteLength);
+      data(activeSocket, chunk) {
+        socketRef = activeSocket;
+        const bufferedBytes = buffer.byteLength + chunk.byteLength;
+        if (bufferedBytes > 4 + MAX_LOCAL_RPC_FRAME_BYTES) {
+          failSocket(new LocalRpcFrameTooLargeError(bufferedBytes, "decode"));
+          return;
+        }
+        const next = new Uint8Array(bufferedBytes);
         next.set(buffer);
         next.set(chunk, buffer.byteLength);
         buffer = next;
-        const frame = readLocalRpcFrame(buffer);
+        let frame: Uint8Array | null;
+        try {
+          frame = readLocalRpcFrame(buffer);
+        } catch (error) {
+          failSocket(error instanceof Error ? error : new Error("local daemon frame failed"));
+          return;
+        }
         if (!frame || !resolveResponse) return;
         const resolve = resolveResponse;
         resolveResponse = undefined;
