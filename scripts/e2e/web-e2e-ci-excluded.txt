@@ -25,7 +25,7 @@ e2e-agent-sign-in-status.e2e.ts 待分拣
 e2e-agent-start-offline-computer.e2e.ts 待分拣
 e2e-agent-tab-reorder.e2e.ts 待分拣
 e2e-ai-workbench-switch.e2e.ts 待分拣
-e2e-archive-agent-centered.e2e.ts 待分拣
+e2e-archive-agent-sheet.e2e.ts 待分拣
 e2e-artifact-comment-activity.e2e.ts 待分拣
 e2e-artifact-comment-anchors.e2e.ts 待分拣
 e2e-artifact-comment-drafts.e2e.ts 待分拣
@@ -46,7 +46,7 @@ e2e-channel-thread.e2e.ts 待分拣
 e2e-choice-card-long-text.e2e.ts 待分拣
 e2e-cloud-agent-create-state.e2e.ts 待分拣
 e2e-computer-refusal.e2e.ts 待分拣
-e2e-confirm-centered.e2e.ts 待分拣
+e2e-confirm-sheet.e2e.ts 待分拣
 e2e-departure-impact.e2e.ts 待分拣
 e2e-dm-agent-unread-realtime.e2e.ts 待分拣
 e2e-dm-agent-unread.e2e.ts 待分拣
