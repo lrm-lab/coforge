@@ -169,7 +169,8 @@ export function clearSidebarTopLevelUnread(
   conversationId: string,
 ): void {
   if (!sidebar || sidebar.savesRetrying.count() > 0) return;
-  if (sidebar.channels.status === "ready" && sidebar.channels.has(conversationId)) {
+  const clearChannel = () => {
+    if (sidebar.savesRetrying.count() > 0 || !sidebar.channels.has(conversationId)) return false;
     const current = sidebar.channels.get(conversationId);
     if (current?.mentioned || current?.markedUnread || (current?.unreadCount ?? 0) > 0) {
       sidebar.channels.utils.writeUpdate({
@@ -179,9 +180,10 @@ export function clearSidebarTopLevelUnread(
         markedUnread: false,
       });
     }
-    return;
-  }
-  if (sidebar.directs.status === "ready" && sidebar.directs.has(conversationId)) {
+    return true;
+  };
+  const clearDirect = () => {
+    if (sidebar.savesRetrying.count() > 0 || !sidebar.directs.has(conversationId)) return false;
     const current = sidebar.directs.get(conversationId);
     if (current?.markedUnread || (current?.unreadCount ?? 0) > 0) {
       sidebar.directs.utils.writeUpdate({
@@ -190,5 +192,18 @@ export function clearSidebarTopLevelUnread(
         markedUnread: false,
       });
     }
+    return true;
+  };
+  if (sidebar.channels.status === "ready" && clearChannel()) return;
+  if (sidebar.directs.status === "ready" && clearDirect()) return;
+  if (sidebar.channels.status !== "ready") {
+    void sidebar.channels.stateWhenReady().then(() => {
+      clearChannel();
+    });
+  }
+  if (sidebar.directs.status !== "ready") {
+    void sidebar.directs.stateWhenReady().then(() => {
+      clearDirect();
+    });
   }
 }
