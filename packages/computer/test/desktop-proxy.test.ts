@@ -4,6 +4,7 @@ import { createDockerContainers, parseDesktopInspect } from "#src/host/docker-co
 import {
   adaptDesktopHtml,
   DESKTOP_PROXY_SECRET_HEADER,
+  DESKTOP_WEBSOCKET_IDLE_TIMEOUT_SECONDS,
   desktopProxySecretAllows,
   parseDesktopRoute,
   startDesktopProxy,
@@ -316,6 +317,11 @@ describe("desktop proxy", () => {
       proxy.stop();
       upstream.stop(true);
     }
+  });
+
+  test("keeps desktop websockets alive longer than Bun's default idle cut-off", () => {
+    expect(DESKTOP_WEBSOCKET_IDLE_TIMEOUT_SECONDS).toBeGreaterThan(120);
+    expect(DESKTOP_WEBSOCKET_IDLE_TIMEOUT_SECONDS).toBeLessThanOrEqual(960);
   });
 
   test("a websocket reaches the computer with the token kept off the browser url", async () => {

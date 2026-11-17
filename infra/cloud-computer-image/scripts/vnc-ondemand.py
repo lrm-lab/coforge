@@ -80,6 +80,17 @@ def port_open(port: int) -> bool:
         return False
 
 
+def backend_ready(port: int) -> bool:
+    """True when the backend speaks RFB, not merely when the TCP port is open."""
+    try:
+        with socket.create_connection(("127.0.0.1", port), 0.5) as sock:
+            sock.settimeout(0.5)
+            banner = sock.recv(12)
+    except OSError:
+        return False
+    return banner.startswith(b"RFB ")
+
+
 def stop_server() -> None:
     global server
     if server is not None and server.poll() is None:
@@ -98,10 +109,8 @@ def stop_server() -> None:
             pass
 
 
-def start_server() -> None:
+def launch_server() -> None:
     global server
-    if port_open(BACKEND_PORT):
-        return
     write_password()
     xstartup = "/usr/local/share/coforge/vnc-xstartup"
     if not os.path.exists("/root/.vnc/xstartup"):
@@ -141,6 +150,26 @@ def start_server() -> None:
         time.sleep(0.1)
     stop_server()
     raise RuntimeError("TigerVNC did not open the backend port")
+
+
+def ensure_desktop(
+    *,
+    port_open=port_open,
+    backend_ready=backend_ready,
+    stop_server=stop_server,
+    launch_server=launch_server,
+) -> None:
+    """Start TigerVNC, or replace a listener that no longer speaks RFB."""
+    if port_open(BACKEND_PORT):
+        if backend_ready(BACKEND_PORT):
+            return
+        log("desktop port open but RFB unhealthy; restarting")
+        stop_server()
+    launch_server()
+
+
+def start_server() -> None:
+    ensure_desktop()
 
 
 def splice(left: socket.socket, right: socket.socket) -> None:
@@ -227,12 +256,12 @@ def idle_loop() -> None:
     while True:
         time.sleep(5)
         with lock:
-            quiet = clients == 0 and time.time() - last_used >= IDLE_SECONDS
-        if quiet and port_open(BACKEND_PORT):
+            if clients != 0 or time.time() - last_used < IDLE_SECONDS:
+                continue
+            if not port_open(BACKEND_PORT):
+                continue
             log(f"no clients for {IDLE_SECONDS}s, stopping desktop")
-            with lock:
-                if clients == 0:
-                    stop_server()
+            stop_server()
 
 
 def main() -> None:
