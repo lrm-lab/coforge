@@ -57,7 +57,7 @@ export function MemoryPage({
     setQuery(search.q);
   }, [search.q]);
   const isEditing = selected === "new" || (!!selected && editing === selected);
-  const key = selected ?? "new";
+  const key = `${workspaceSlug}:${selected ?? "new"}`;
   const draft = drafts[key] ?? memoryDraft(entry);
   const names = detail?.kind === "ready" ? detail.names : {};
   const updateSearch = (patch: Partial<MemorySearch>) =>
@@ -248,6 +248,7 @@ export function MemoryPage({
             )}
             {isEditing && (selected === "new" || entry) ? (
               <MemoryEditor
+                key={key}
                 entry={entry}
                 draft={draft}
                 projectName={names[draft.projectId ?? ""]}

@@ -199,3 +199,25 @@ test("searching archived personal memory does not return active notes", async ()
   ).toContain(entry.key);
   expect((await memory.execute({ operation: "search", query: "域名" })).entries).toHaveLength(0);
 });
+
+test("history normalizes a long valid timestamp so every preview page advances", async () => {
+  const { root, memory } = await subject();
+  await memory.execute(purchased);
+  const path = join(root, "notes/knowledge/preview-domain.md");
+  const text = await readFile(path, "utf8");
+  const lines = text.split("\n");
+  const metadata = JSON.parse(lines[1]!);
+  metadata.updatedAt = "Tue, 17 Nov 2026 00:00:00 GMT" + " ".repeat(12000);
+  lines[1] = JSON.stringify(metadata);
+  await writeFile(path, lines.join("\n"));
+  const manual = (await memory.execute({ operation: "get", key: purchased.key })).entries[0]!;
+  await memory.execute({ ...purchased, revision: manual.revision, content: "Verified correction" });
+  const history = await memory.execute({ operation: "history", key: purchased.key });
+  expect(history.entries).toHaveLength(1);
+  expect(history.entries[0]?.updatedAt).toBe("2026-11-17T00:00:00.000Z");
+  expect(history.nextOffset).toBeUndefined();
+  expect(
+    (await memory.execute({ operation: "get", key: purchased.key, revision: manual.revision }))
+      .entries[0]?.updatedAt,
+  ).toBe(metadata.updatedAt);
+});

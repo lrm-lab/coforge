@@ -10,6 +10,7 @@ import { PageLoadError } from "#src/features/errors/page-load-error";
 
 export const Route = createFileRoute("/w/$workspaceSlug/memory_/personal")({
   validateSearch: z.object({
+    create: z.boolean().catch(false),
     agent: z.uuid().optional().catch(undefined),
     key: z
       .string()
@@ -44,7 +45,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/memory_/personal")({
             },
           })
         : undefined,
-      deps.agent && deps.key && deps.key !== "new"
+      deps.agent && deps.key && !deps.create
         ? personalMemoryCommand({
             data: { agentId: deps.agent, command: { operation: "get", key: deps.key } },
           })
