@@ -41,7 +41,7 @@ export type AgentAccessDecision =
   | { kind: "grant_automatically"; scopes: string[] }
   /**
    * A person must approve a grant of `scopes`: the grant was revoked or does not cover the
-   * request, or the Agent has none and is outside a Selected Agents scope. `pendingRequestId`
+   * request. `pendingRequestId`
    * names the request already waiting, if there is one, and `scopes` are then that request's and
    * the ones this use asks for.
    */

@@ -125,7 +125,7 @@ export async function ensureWeeklyReportAssistantChatSession(
     });
     const created = await createWeeklyReportAssistantChatSession(db, {
       ...input,
-      title: legacyCount > 0 ? "" : "",
+      title: "",
     });
     if (legacyCount > 0) {
       await db.recordComment.updateMany({

@@ -48,7 +48,7 @@ Runtime, file-naming and import-protection mechanics are in [web runtime](../../
 Each line names a directory under `src/` (unless noted) and its single responsibility.
 
 - `routes/` — URL ownership and route lifecycle; `routes/api/` raw HTTP routes.
-- `components/` — `base/`, `application/` and `shared-assets/` official Untitled UI source (`shared-assets/` holds the backgrounds and illustrations `EmptyState` draws), `ui/` sanctioned primitives, `layout/` app chrome, `foundations/` logos and icons, `spell/` and `magicui/` landing-page motion.
+- `components/` — `base/`, `application/` and `shared-assets/` official Untitled UI source (`shared-assets/` holds the backgrounds and illustrations `EmptyState` draws), `ui/` sanctioned primitives, `layout/` app chrome, `foundations/` logos and icons, `spell/` landing-page motion.
 - `lib/` shared browser capabilities and pure helpers; `hooks/` shared React hooks; `utils/` Untitled UI class helpers.
 - `prisma/` (app root) — schema and migrations; `messages/` — UI translations.
 - `features/` — product feature modules, one line each in [`src/features/AGENTS.md`](src/features/AGENTS.md).
