@@ -1,7 +1,6 @@
 import { setCssHighlight } from "#src/lib/css-highlight";
 import {
   COMMENT_DRAFT_HIGHLIGHT,
-  CHANGED,
   NEUTRAL,
   type AnchorLocation,
   type SurfaceAdapter,
@@ -79,7 +78,7 @@ export const textAdapter: SurfaceAdapter<TextIndex, Range> = {
       prefix: typeof data.prefix === "string" ? data.prefix : undefined,
       suffix: typeof data.suffix === "string" ? data.suffix : undefined,
     });
-    return location ? { status: "found", location } : CHANGED;
+    return location ? { status: "found", location } : NEUTRAL;
   },
   fromSelection(index, range) {
     const quote = quoteAnchor(

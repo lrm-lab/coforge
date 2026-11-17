@@ -59,10 +59,10 @@ describe("marks and their places", () => {
     expect(markPlaces([mark("a")], null).size).toBe(0);
   });
 
-  test("a reported mark is found in report order, an unreported one is changed", () => {
+  test("a reported mark is found in report order, an unreported one is neutral", () => {
     const places = markPlaces([mark("a"), mark("b")], ["b"]);
     expect(places.get("b")).toEqual({ status: "found", location: { order: 0 } });
-    expect(places.get("a")).toEqual({ status: "changed" });
+    expect(places.get("a")).toEqual({ status: "neutral" });
   });
 
   test("marks past the cap the frame is sent stay unplaced, so they read as neutral", () => {

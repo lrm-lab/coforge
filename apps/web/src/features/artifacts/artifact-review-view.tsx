@@ -98,6 +98,7 @@ export function ReviewComments({
             key={comment.id}
             thread={{ root: comment, replies: [] }}
             context={context}
+            versionTag
           />
         ))}
       </ul>

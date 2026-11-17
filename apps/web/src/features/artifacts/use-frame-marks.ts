@@ -3,11 +3,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { m } from "#src/paraglide/messages";
 import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
 import type { CommentAnchor } from "./artifact-comment-inputs";
-import {
-  useArtifactCommenting,
-  useCommentRequests,
-  useCommentThreads,
-} from "./artifact-commenting";
+import { useArtifactCommenting, useCommentRequests, useShownThreads } from "./artifact-commenting";
 import { isFrameAnchor, markPlaces, sameAnchor, type PageMark } from "./artifact-page-annotations";
 import type { PageBridge } from "./artifact-page-bridge";
 
@@ -32,13 +28,13 @@ export function useFrameMarks({
   composing: RefObject<boolean>;
   path: string;
 }) {
-  const { commenting, panelOpen, publishPlaces, openThread } = useArtifactCommenting();
+  const { version, commenting, panelOpen, publishPlaces, openThread } = useArtifactCommenting();
   const { drafts } = useCommentDrafts();
   const { openDraft } = useCommentDraftActions();
   const draftsRef = useRef(drafts);
   draftsRef.current = drafts;
   const { reveal, consumeReveal } = useCommentRequests();
-  const anchored = useCommentThreads();
+  const anchored = useShownThreads();
   const [sentRevision, setSentRevision] = useState(0);
   const [report, setReport] = useState<Report | null>(null);
   const active = commenting || panelOpen;
@@ -51,7 +47,7 @@ export function useFrameMarks({
       return [{ id: root.id, anchor: root.anchor, count, label: markLabel(root.anchor, count) }];
     });
     const unsent = drafts.flatMap((draft) =>
-      draft.path === path && isFrameAnchor(draft.anchor)
+      draft.path === path && draft.version === version && isFrameAnchor(draft.anchor)
         ? [
             {
               id: draft.id,
@@ -64,7 +60,7 @@ export function useFrameMarks({
         : [],
     );
     return [...threads, ...unsent];
-  }, [active, anchored, drafts, path]);
+  }, [active, anchored, drafts, path, version]);
   const held = useRef(computed);
   if (JSON.stringify(held.current) !== JSON.stringify(computed)) held.current = computed;
   const marks = held.current;
@@ -94,10 +90,11 @@ export function useFrameMarks({
   useEffect(() => () => publishPlaces(path, null), [publishPlaces, path]);
 
   useEffect(() => {
-    if (!reveal || reveal.path !== path || !reveal.anchor || !foundIds) return;
+    if (!reveal || reveal.path !== path || reveal.version !== version || !reveal.anchor) return;
+    if (!foundIds) return;
     const { anchor } = reveal;
     const target = marks.find((mark) => sameAnchor(mark.anchor, anchor));
     if (target && foundIds.includes(target.id)) bridge.annotations.focus(target.id);
     consumeReveal();
-  }, [reveal, path, foundIds, marks, bridge, consumeReveal]);
+  }, [reveal, path, version, foundIds, marks, bridge, consumeReveal]);
 }

@@ -84,9 +84,11 @@ function useCommentActions(artifactId: string) {
 export function CommentThreadView({
   thread,
   context,
+  versionTag,
 }: {
   thread: CommentThread;
   context: CommentContext;
+  versionTag: boolean;
 }) {
   const actions = useCommentActions(context.artifactId);
   return (
@@ -105,6 +107,7 @@ export function CommentThreadView({
             <CommentRow
               comment={comment}
               isRoot={comment.id === thread.root.id}
+              versionTag={versionTag && comment.id === thread.root.id}
               context={context}
               actions={actions}
             />
@@ -126,11 +129,13 @@ type RowAction = {
 function CommentRow({
   comment,
   isRoot,
+  versionTag,
   context,
   actions,
 }: {
   comment: ArtifactCommentView;
   isRoot: boolean;
+  versionTag: boolean;
   context: CommentContext;
   actions: ReturnType<typeof useCommentActions>;
 }) {
@@ -197,12 +202,19 @@ function CommentRow({
           )}
           <RelativeTime value={comment.createdAt} plain className="text-xs text-tertiary" />
           {comment.editedAt && <span className="text-xs text-tertiary">{m.av_cm_edited()}</span>}
-          <span className="text-xs text-quaternary tabular-nums">
-            {m.av_cm_version({ version: comment.version })}
-          </span>
+          {versionTag && (
+            <span className="text-xs text-quaternary tabular-nums">
+              {m.av_cm_version({ version: comment.version })}
+            </span>
+          )}
         </header>
         {isRoot && (
-          <CommentAnchorLine commentId={comment.id} path={comment.path} anchor={comment.anchor} />
+          <CommentAnchorLine
+            commentId={comment.id}
+            version={comment.version}
+            path={comment.path}
+            anchor={comment.anchor}
+          />
         )}
         {editing ? (
           <CommentEditor

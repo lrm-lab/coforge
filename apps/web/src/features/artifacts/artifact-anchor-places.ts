@@ -8,15 +8,14 @@ export type AnchorLocation = { range: Range; element: Element; order: number };
 
 export type Place<Location extends { order: number }> =
   | { status: "found"; location: Location }
-  | { status: "changed" | "neutral" };
+  | { status: "neutral" };
 
 export type PublishedPlace = Place<{ order: number }>;
 
 export type AnchorPlace = Place<AnchorLocation>;
 
-export type AnchorStatus = AnchorPlace["status"] | "missing";
+export type AnchorStatus = AnchorPlace["status"] | "elsewhere";
 
-export const CHANGED = { status: "changed" } as const;
 export const NEUTRAL = { status: "neutral" } as const;
 
 export type DraftTarget = {

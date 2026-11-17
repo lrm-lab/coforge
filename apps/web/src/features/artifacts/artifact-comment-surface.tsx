@@ -15,11 +15,7 @@ import {
   stackMarkers,
   type CommentMarker,
 } from "./artifact-comment-markers";
-import {
-  useArtifactCommenting,
-  useCommentRequests,
-  useCommentThreads,
-} from "./artifact-commenting";
+import { useArtifactCommenting, useCommentRequests, useShownThreads } from "./artifact-commenting";
 import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
 import { DraftAffordance } from "./artifact-draft-affordance";
 import { linesAdapter, type LineIndex } from "./artifact-line-ranges";
@@ -70,7 +66,7 @@ function Surface<Index>({
   const { version, commenting, panelOpen, publishPlaces, revealThread, openThread } =
     useArtifactCommenting();
   const { reveal, consumeReveal } = useCommentRequests();
-  const anchored = useCommentThreads();
+  const anchored = useShownThreads();
   const { drafts } = useCommentDrafts();
   const { openDraft } = useCommentDraftActions();
   const reducedMotion = usePrefersReducedMotion();
@@ -78,19 +74,22 @@ function Surface<Index>({
   const content = useRef<HTMLDivElement>(null);
   const composingRef = useRef(false);
   const [layout, setLayout] = useState<Layout>({ markerLeft: null, revision: 0 });
-  const [flashed, flash] = useFlash<AnchorLocation>();
+  const [flashed, flash] = useFlash<{ version: number; range: Range }>();
   const active = commenting || panelOpen;
   const key = commenting ? `${path}@${version}` : null;
 
   const { get, settled, revision } = useSurfaceIndex(content, adapter.build, active);
 
   const threads = useMemo(
-    () => anchored.filter((thread) => thread.root.path === path && !("deleted" in thread.root)),
+    () => anchored.filter(({ root }) => root.path === path && !("deleted" in root)),
     [anchored, path],
   );
   const unsent = useMemo(
-    () => drafts.filter((draft) => draft.path === path && draft.anchor !== null),
-    [drafts, path],
+    () =>
+      drafts.filter(
+        (draft) => draft.path === path && draft.version === version && draft.anchor !== null,
+      ),
+    [drafts, path, version],
   );
   const places = useMemo<ReadonlyMap<string, AnchorPlace>>(() => {
     const index = active ? get() : null;
@@ -101,7 +100,7 @@ function Surface<Index>({
         found.set(root.id, adapter.locate(index, root.anchor));
     for (const draft of unsent) found.set(draft.id, adapter.locate(index, draft.anchor!));
     return found;
-  }, [active, get, revision, threads, unsent, version, adapter]);
+  }, [active, get, revision, threads, unsent, adapter]);
 
   useEffect(() => {
     publishPlaces(path, places);
@@ -118,14 +117,14 @@ function Surface<Index>({
         block: "center",
         behavior: reducedMotion ? "auto" : "smooth",
       });
-      flash(location);
+      flash({ version, range: location.range });
     },
-    [flash, reducedMotion],
+    [flash, reducedMotion, version],
   );
 
   useEffect(() => {
-    setCssHighlight(COMMENT_FOCUS_HIGHLIGHT, flashed ? [flashed.range] : []);
-  }, [flashed]);
+    setCssHighlight(COMMENT_FOCUS_HIGHLIGHT, flashed?.version === version ? [flashed.range] : []);
+  }, [flashed, version]);
   useEffect(
     () => () => {
       setCssHighlight(COMMENT_FOCUS_HIGHLIGHT, []);
@@ -135,7 +134,7 @@ function Surface<Index>({
   );
 
   useEffect(() => {
-    if (!reveal || reveal.path !== path) return;
+    if (!reveal || reveal.path !== path || reveal.version !== version) return;
     const index = settled() ? get() : null;
     if (!index) return;
     if (!reveal.anchor) return consumeReveal();
@@ -143,7 +142,7 @@ function Surface<Index>({
     if (place.status !== "found") return;
     consumeReveal();
     focus(place.location);
-  }, [reveal, path, get, settled, revision, adapter, consumeReveal, focus]);
+  }, [reveal, path, version, get, settled, revision, adapter, consumeReveal, focus]);
 
   const measure = useCallback(() => {
     const outer = frame.current?.getBoundingClientRect();
@@ -191,7 +190,7 @@ function Surface<Index>({
             left={layout.markerLeft}
             onOpen={({ root }) => {
               if ("deleted" in root) return;
-              revealThread({ path, anchor: root.anchor });
+              revealThread({ version, path, anchor: root.anchor });
               openThread(root.id);
             }}
             onOpenDraft={openDraft}

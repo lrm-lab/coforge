@@ -28,6 +28,30 @@ export function groupThreads(comments: readonly ArtifactCommentView[]): CommentG
   return groups;
 }
 
+export type VersionSection = {
+  version: number;
+  whole: CommentThread[];
+  anchored: CommentThread[];
+};
+
+export function versionSections(groups: CommentGroups, shownVersion: number): VersionSection[] {
+  const sections = new Map<number, VersionSection>();
+  const sectionOf = (version: number) => {
+    const held = sections.get(version);
+    if (held) return held;
+    const made: VersionSection = { version, whole: [], anchored: [] };
+    sections.set(version, made);
+    return made;
+  };
+  for (const thread of groups.whole) sectionOf(thread.root.version).whole.push(thread);
+  for (const thread of groups.anchored) sectionOf(thread.root.version).anchored.push(thread);
+  return [...sections.values()].sort(
+    (left, right) =>
+      Number(right.version === shownVersion) - Number(left.version === shownVersion) ||
+      right.version - left.version,
+  );
+}
+
 const UNPLACED = Number.MAX_SAFE_INTEGER;
 
 function threadPosition({ root }: CommentThread, places: ThreadPlaces | undefined): number {

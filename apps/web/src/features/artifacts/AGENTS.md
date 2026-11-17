@@ -51,12 +51,15 @@ These rules apply to `src/features/artifacts/`. They extend
   The kind picks an adapter (`textAdapter`, `linesAdapter`: `build`, `locate`, `fromSelection`) once.
   The surface keeps one cached index per content revision (`useSurfaceIndex`: the observer only marks
   it dirty and runs only while comment mode is on or the panel is open) and publishes one
-  `ThreadPlaces` map (comment id to found, changed or neutral) through `publishPlaces`; marker
-  tops, panel order, the anchor line's status and reveal all read that map. Status is decided once
-  per thread per viewed version: found; changed (the kind fits but the place is gone, e.g. a quote
-  that no longer matches, shown as "the source changed"); missing (the file is not in the version,
-  "not in this version"); neutral (the surface cannot place that anchor type or the row is beyond
-  the shown cap: the place shows without a warning).
+  `ThreadPlaces` map (comment id to found or neutral) through `publishPlaces`; marker tops, panel
+  order, the anchor line's status and reveal all read that map. Comments follow their version: the page
+  hands surfaces only the shown version's threads (`useShownThreads`), a surface places only drafts
+  written on that version, and nothing is re-anchored across versions; an anchor it cannot place reads neutral, and a thread on another version reads
+  `elsewhere` (`anchorStatus`). The panel groups open threads by version (`versionSections`: the
+  shown version first, then newest), titled only when another version has threads; every reveal pins
+  the thread's version first and fires once it shows (`use-thread-reveal.ts`); moving the pin
+  anywhere else drops the pending reveal. A `?comment=` link reveals its thread the same way once
+  the comment loads, so it opens the version the thread was written on.
 - A draft is one machine (`useAnchorDraft`: offered, composing, close) keyed by file and version;
   switching either discards it. Its target is `{ rect, highlight }`, never a `Range`, so the element
   picker can anchor into a sandbox frame through the same machine. `DraftAffordance` is the one
@@ -100,8 +103,8 @@ These rules apply to `src/features/artifacts/`. They extend
   `use-frame-marks.ts` (marks, found keyed by the revision the bridge echoes, places through
   `publishPlaces`, reveal; `activated` is ignored while a composer is open) and
   `artifact-frame-comment-layer.tsx`. Reports are provisional until the runtime reports after the
-  page's load; marks past the 500 cap are never placed and read as neutral; an element that is gone
-  is "changed". `revealThread` for an `element` or `text` anchor on a framed entry focuses the mark
+  page's load; marks past the 500 cap are never placed and read as neutral, and so does an element
+  that is gone. `revealThread` for an `element` or `text` anchor on a framed entry focuses the mark
   and leaves the page open; a `lines` anchor opens the source view.
 - Comment drafts are private and server-held (`use-comment-drafts.ts` is the one store;
   `use-submit-drafts.ts` owns send; both run under the store's one `exclusive` lock and busy state,

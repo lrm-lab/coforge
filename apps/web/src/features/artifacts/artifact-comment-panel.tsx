@@ -17,7 +17,12 @@ import type { useArtifactComments } from "./artifact-comment-queries";
 import { ArtifactSidePanel } from "./artifact-side-panel";
 import { CommentThreadView, type CommentContext } from "./artifact-comment-thread";
 import { useArtifactCommenting, useCommentPlaces, useCommentRequests } from "./artifact-commenting";
-import { orderAnchored, type CommentGroups, type CommentThread } from "./artifact-comment-threads";
+import {
+  orderAnchored,
+  versionSections,
+  type CommentGroups,
+  type CommentThread,
+} from "./artifact-comment-threads";
 import { useFlash } from "./use-flash";
 import { useCommentDrafts } from "./artifact-comment-drafts-context";
 import { DraftGroup } from "./artifact-draft-group";
@@ -54,16 +59,21 @@ export function ArtifactCommentPanel({
   const [resolvedOpen, setResolvedOpen] = useState(false);
   const [flashId, flashThread] = useFlash<string>();
   const listElement = useRef<HTMLDivElement>(null);
-  const anchored = useMemo(
-    () => orderAnchored(groups.anchored, [entryPath, ...filePaths], places?.byId),
-    [groups.anchored, entryPath, filePaths, places],
+  const sections = useMemo(
+    () =>
+      versionSections(groups, shownVersion).map((section) => ({
+        ...section,
+        anchored: orderAnchored(
+          section.anchored,
+          [entryPath, ...filePaths],
+          section.version === shownVersion ? places?.byId : undefined,
+        ),
+      })),
+    [groups, shownVersion, entryPath, filePaths, places],
   );
+  const titled = sections.some((section) => section.version !== shownVersion);
   const context: CommentContext = { artifactId, plainMentions, flashId, onReply: setReplyTo };
-  const empty =
-    groups.whole.length === 0 &&
-    anchored.length === 0 &&
-    groups.resolved.length === 0 &&
-    drafts.drafts.length === 0;
+  const empty = sections.length === 0 && groups.resolved.length === 0 && drafts.drafts.length === 0;
   useEffect(() => {
     if (focus === null) return;
     const thread = listElement.current?.querySelector(
@@ -162,10 +172,34 @@ export function ArtifactCommentPanel({
               <p className="text-sm text-tertiary">{m.av_cm_empty()}</p>
             )}
             <DraftGroup artifactId={artifactId} comments={comments} plainMentions={plainMentions} />
-            {groups.whole.length > 0 && (
-              <ThreadGroup title={m.av_cm_group_whole()} threads={groups.whole} context={context} />
-            )}
-            {anchored.length > 0 && <ThreadGroup threads={anchored} context={context} />}
+            {sections.map((section) => (
+              <section
+                key={section.version}
+                data-version-section={section.version}
+                className="flex flex-col gap-3"
+              >
+                {titled && (
+                  <h3 className="text-xs font-semibold text-tertiary tabular-nums">
+                    {section.version === shownVersion
+                      ? m.av_cm_version_viewing({ version: section.version })
+                      : m.av_cm_version_section({
+                          version: section.version,
+                          count: section.whole.length + section.anchored.length,
+                        })}
+                  </h3>
+                )}
+                {section.whole.length > 0 && (
+                  <ThreadGroup
+                    title={m.av_cm_group_whole()}
+                    threads={section.whole}
+                    context={context}
+                  />
+                )}
+                {section.anchored.length > 0 && (
+                  <ThreadGroup threads={section.anchored} context={context} />
+                )}
+              </section>
+            ))}
             {groups.resolved.length > 0 && (
               <section>
                 <AriaButton
@@ -183,7 +217,12 @@ export function ArtifactCommentPanel({
                 {resolvedOpen && (
                   <ul className="mt-2 flex flex-col gap-2">
                     {groups.resolved.map((thread) => (
-                      <CommentThreadView key={thread.root.id} thread={thread} context={context} />
+                      <CommentThreadView
+                        key={thread.root.id}
+                        thread={thread}
+                        context={context}
+                        versionTag
+                      />
                     ))}
                   </ul>
                 )}
@@ -215,7 +254,12 @@ function ThreadGroup({
       {title && <h3 className="mb-2 truncate text-xs font-semibold text-tertiary">{title}</h3>}
       <ul className="flex flex-col gap-2">
         {threads.map((thread) => (
-          <CommentThreadView key={thread.root.id} thread={thread} context={context} />
+          <CommentThreadView
+            key={thread.root.id}
+            thread={thread}
+            context={context}
+            versionTag={false}
+          />
         ))}
       </ul>
     </section>

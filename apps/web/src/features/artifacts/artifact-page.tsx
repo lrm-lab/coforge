@@ -27,10 +27,9 @@ import {
   ArtifactCommentingContext,
   CommentPlacesContext,
   CommentRequestsContext,
-  CommentThreadsContext,
+  ShownThreadsContext,
   type ArtifactCommenting,
   type CommentRequests,
-  type CommentTarget,
   type PublishedPlaces,
 } from "./artifact-commenting";
 import { groupThreads } from "./artifact-comment-threads";
@@ -39,6 +38,7 @@ import { createComposerHolds } from "./artifact-composer-holds";
 import { useCommentHandoff } from "./use-comment-handoff";
 import { useOpenFile } from "./use-open-file";
 import { useShownVersion } from "./use-shown-version";
+import { useRevealOnArrival, useThreadReveal } from "./use-thread-reveal";
 import { useCommentMode, type ArtifactPanelName } from "./use-comment-mode";
 import { ArtifactFilesPanel } from "./artifact-files-panel";
 import { ArtifactMarkdown } from "./artifact-markdown";
@@ -226,9 +226,6 @@ function ArtifactPageFor({
   const commentsOpen = commentMode.mode || panel === "comments";
   const { openPath, source, framesPage, openFile, openThread } = useOpenFile(entryPath, webPage);
   const shownPath = openPath ?? entryPath;
-  const [reveal, postReveal, consumeReveal] = useCommentHandoff<CommentTarget>(
-    (target) => commentsOpen && target.path === shownPath,
-  );
   const [focus, postFocus, consumeFocus] = useCommentHandoff<string>(() => panel === "comments");
   useEffect(() => {
     if (commentId === undefined) return;
@@ -242,11 +239,17 @@ function ArtifactPageFor({
       setPlaces((held) => (byId ? { path, byId } : held?.path === path ? null : held)),
     [],
   );
-  const revealThread = useCallback<ArtifactCommenting["revealThread"]>(
-    (target) => {
-      if (openThread(target)) postReveal(target);
-    },
-    [openThread, postReveal],
+  const { reveal, consumeReveal, revealThread } = useThreadReveal({
+    shown: { latest, pinned, pinFailed: pinnedRead.isError, shownVersion, pin },
+    shownPath,
+    commentsOpen,
+    openFile,
+    openThread,
+  });
+  useRevealOnArrival(commentId, arrival, list.comments, revealThread);
+  const shownThreads = useMemo(
+    () => groups.anchored.filter(({ root }) => root.version === shownVersion),
+    [groups.anchored, shownVersion],
   );
   const commenting = useMemo<ArtifactCommenting>(
     () => ({
@@ -344,7 +347,7 @@ function ArtifactPageFor({
     <ArtifactCommentingContext.Provider value={commenting}>
       <ArtifactDraftsProvider enabled={current !== undefined}>
         <ReviewToolsContext.Provider value={setPicker}>
-          <CommentThreadsContext.Provider value={groups.anchored}>
+          <ShownThreadsContext.Provider value={shownThreads}>
             <CommentRequestsContext.Provider value={requests}>
               <CommentPlacesContext.Provider value={places}>
                 <ArtifactPageHeader
@@ -500,7 +503,7 @@ function ArtifactPageFor({
                 />
               </CommentPlacesContext.Provider>
             </CommentRequestsContext.Provider>
-          </CommentThreadsContext.Provider>
+          </ShownThreadsContext.Provider>
         </ReviewToolsContext.Provider>
       </ArtifactDraftsProvider>
     </ArtifactCommentingContext.Provider>

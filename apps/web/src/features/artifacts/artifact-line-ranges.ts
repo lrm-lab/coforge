@@ -1,6 +1,5 @@
 import {
   COMMENT_DRAFT_HIGHLIGHT,
-  CHANGED,
   NEUTRAL,
   type AnchorLocation,
   type SurfaceAdapter,
@@ -51,10 +50,9 @@ export const linesAdapter: SurfaceAdapter<LineIndex, LineSpan> = {
     if (anchor.type !== "lines") return NEUTRAL;
     const start = Number(anchor.data.start);
     const end = Number(anchor.data.end);
-    if (!Number.isInteger(start) || !Number.isInteger(end)) return CHANGED;
+    if (!Number.isInteger(start) || !Number.isInteger(end)) return NEUTRAL;
     const covered = span(index, start, end);
-    if (!covered) return index.capped && start > index.rows.at(-1)!.endLine ? NEUTRAL : CHANGED;
-    if (covered.last.endLine < end && !index.capped) return CHANGED;
+    if (!covered || (covered.last.endLine < end && !index.capped)) return NEUTRAL;
     return { status: "found", location: locationOf(covered.first, covered.last) };
   },
   fromSelection(index, selection) {

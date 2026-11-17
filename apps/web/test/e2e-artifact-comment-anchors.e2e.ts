@@ -1,4 +1,4 @@
-import { test } from "bun:test";
+import { expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -26,7 +26,7 @@ const shots =
 const locale = Bun.env.COFORGE_E2E_LOCALE ?? "en";
 const [width, height] = (Bun.env.COFORGE_E2E_VIEWPORT ?? "1280x860").split("x");
 
-test("people comment on a selection and on lines; markers show beside the text; a changed source says so", async () => {
+test("people comment on a selection and on lines; markers show beside the text on the version they were written on", async () => {
   await installFeatureFlags(
     await readFeatureFlagsConfiguration({
       COFORGE_FEATURE_FLAGS_FILE: "/tmp/coforge-flags-docs.json",
@@ -165,12 +165,32 @@ test("people comment on a selection and on lines; markers show beside the text; 
     await waitFor(`document.querySelector('[role="status"] button') != null`);
     await click('[role="status"] button');
     await waitFor(
-      `document.querySelector('[data-comment-thread="${mine}"] [data-anchor-status="changed"]') != null`,
+      `document.querySelector('[data-version-section="1"] [data-comment-thread="${mine}"] [data-anchor-status="elsewhere"]') != null`,
+    );
+    await waitFor(`document.querySelectorAll("[data-comment-marker]").length === 0`);
+    expect(await evaluate<number>(`CSS.highlights.get("artifact-comment-focus")?.size ?? 0`)).toBe(
+      0,
+    );
+    await shoot("36-anchor-other-version");
+    await click(`[data-comment-thread="${mine}"] [data-comment-anchor]`);
+    await waitFor(
+      `document.querySelector('[data-comment-thread="${mine}"] [data-anchor-status="found"]') != null && document.querySelector('[data-comment-marker="${mine}"]') != null`,
     );
     await waitFor(
       `document.querySelector('[data-comment-thread="${second.id}"] [data-anchor-status="found"]') != null`,
     );
-    await shoot("36-anchor-changed");
+    await shoot("36-anchor-on-its-version");
+
+    await browser(
+      "open",
+      `${proxy.origin}/${locale}/w/${workspace.slug}/artifacts/${artifact.id}?comment=${mine}`,
+    );
+    await waitFor(
+      `document.querySelector('[data-comment-thread="${mine}"] [data-anchor-status="found"]') != null`,
+    );
+    await click('button[aria-pressed="false"]');
+    await waitFor(`document.querySelector('[data-comment-marker="${mine}"]') != null`);
+    await shoot("36-comment-link-on-its-version");
 
     const onLines = await services.comments.post({
       workspaceId,

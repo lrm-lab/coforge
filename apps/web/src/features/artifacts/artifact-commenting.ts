@@ -5,7 +5,7 @@ import type { CommentAnchor } from "./artifact-comment-inputs";
 import type { CommentThread } from "./artifact-comment-threads";
 import type { ComposerHolds } from "./artifact-composer-holds";
 
-export type CommentTarget = { path: string; anchor: CommentAnchor | null };
+export type CommentTarget = { version: number; path: string; anchor: CommentAnchor | null };
 
 export type ThreadPlaces = ReadonlyMap<string, PublishedPlace>;
 
@@ -38,29 +38,24 @@ function required<T>(name: string, value: T | null): T {
 }
 
 export const ArtifactCommentingContext = createContext<ArtifactCommenting | null>(null);
-export const CommentThreadsContext = createContext<readonly CommentThread[] | null>(null);
+export const ShownThreadsContext = createContext<readonly CommentThread[] | null>(null);
 export const CommentRequestsContext = createContext<CommentRequests | null>(null);
 export const CommentPlacesContext = createContext<PublishedPlaces>(null);
 
 export const useArtifactCommenting = () =>
   required("ArtifactCommentingContext", useContext(ArtifactCommentingContext));
-export const useCommentThreads = () =>
-  required("CommentThreadsContext", useContext(CommentThreadsContext));
+export const useShownThreads = () =>
+  required("ShownThreadsContext", useContext(ShownThreadsContext));
 export const useCommentRequests = () =>
   required("CommentRequestsContext", useContext(CommentRequestsContext));
 export const useCommentPlaces = () => useContext(CommentPlacesContext);
 
-export const artifactHasFile = (
-  { entryPath, filePaths }: Pick<ArtifactCommenting, "entryPath" | "filePaths">,
-  path: string,
-) => path === entryPath || filePaths.includes(path);
-
 export function anchorStatus(
-  commenting: Pick<ArtifactCommenting, "entryPath" | "filePaths">,
+  commenting: Pick<ArtifactCommenting, "version">,
   places: PublishedPlaces,
   commentId: string,
-  path: string,
+  version: number,
 ): AnchorStatus {
-  if (!artifactHasFile(commenting, path)) return "missing";
+  if (version !== commenting.version) return "elsewhere";
   return places?.byId.get(commentId)?.status ?? "neutral";
 }

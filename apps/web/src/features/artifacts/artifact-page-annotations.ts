@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { CHANGED, type PublishedPlace } from "./artifact-anchor-places";
+import { NEUTRAL, type PublishedPlace } from "./artifact-anchor-places";
 import type { CommentAnchor } from "./artifact-comment-inputs";
 import type { ThreadPlaces } from "./artifact-commenting";
 
@@ -146,7 +146,7 @@ export function markPlaces(
   const places = new Map<string, PublishedPlace>();
   for (const { id } of marks.slice(0, MARKS_MAX)) {
     const order = foundIds.indexOf(id);
-    places.set(id, order >= 0 ? { status: "found", location: { order } } : CHANGED);
+    places.set(id, order >= 0 ? { status: "found", location: { order } } : NEUTRAL);
   }
   return places;
 }

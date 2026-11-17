@@ -161,17 +161,17 @@ A person anchors a comment on the Web by selecting text in a Markdown file (a `t
 file or a CSV file and shift-clicking to extend (a `lines` anchor: physical file lines, the same as
 an Agent's `lines`; a CSV row's number is the line its record starts on, so the header is line 1 and
 a quoted cell spanning lines advances the count, and `\n`, `\r\n` and a lone `\r` each end one line). The anchor names the file and the version being
-viewed. A viewer whose version no longer contains the quote sees "the source changed", and one whose
-version lacks the file sees "not in this version"; the server stores the anchor as sent and never
-re-finds a quote.
+viewed. Its marker shows only on that version: the Web never re-finds an anchor in another version,
+and the comments panel groups threads by version, so opening a thread on another version, or a link
+to one, switches the page to it. The server stores the anchor as sent.
 
 On an HTML page the viewer's comment mode (the header toggle, which does not open the comments panel)
 starts with a pill, "pick an element", pressed; the pill turns picking off and on. With picking on,
 hovering outlines an element in the frame and a click anchors it (an `element` anchor: a CSS `selector` of at most 1000
 characters, preferring ids and data attributes, else a path of `nth-of-type` steps, and a short
 visible `quote` of at most 120 characters). Selecting text in the page, with picking off, offers a `text` anchor (the
-same as Markdown, a 64-character context). Marks sit beside found elements and quotes in the page;
-a thread whose element or quote is no longer in the viewed version shows "the source changed". The
+same as Markdown, a 64-character context). Marks sit beside found elements and quotes in the page,
+only for threads written on the viewed version. The
 page runs in its own frame, so the host drives all of it over the bridge. The page can choose what it
 reports as picked or selected; the composer always shows the anchor's label or quote before the
 viewer sends, and nothing is posted without the viewer sending. An anchor's quote is page-chosen text

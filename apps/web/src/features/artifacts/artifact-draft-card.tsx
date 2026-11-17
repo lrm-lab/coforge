@@ -109,7 +109,12 @@ export function DraftCard({
       ) : draft.path === null ? (
         <p className="text-xs font-medium text-secondary">{m.av_cm_group_whole()}</p>
       ) : (
-        <CommentAnchorLine commentId={draft.id} path={draft.path} anchor={draft.anchor} />
+        <CommentAnchorLine
+          commentId={draft.id}
+          version={draft.version}
+          path={draft.path}
+          anchor={draft.anchor}
+        />
       )}
       {editing ? (
         <CommentEditor

@@ -62,7 +62,7 @@ addEventListener("message", (event) => {
 tell("ready");
 </script></body></html>`;
 
-test("people comment on a page element and a text selection; marks show in the frame, live, and a changed page says so", async () => {
+test("people comment on a page element and a text selection; marks show in the frame, live, on the version they were written on", async () => {
   await installFeatureFlags(
     await readFeatureFlagsConfiguration({
       COFORGE_FEATURE_FLAGS_FILE: "/tmp/coforge-flags-docs.json",
@@ -268,8 +268,12 @@ test("people comment on a page element and a text selection; marks show in the f
     await bot.push(artifact.id, 1, revised).catch(() => bot.push(artifact.id, 1, revised));
     await waitFor(`document.querySelector('[role="status"] button') != null`);
     await click('[role="status"] button');
-    await waitFor(`${statusOf(mine)} === "changed"`, 30_000);
-    await waitFor(`${statusOf(onButton.id)} === "found"`);
+    await waitFor(
+      `${statusOf(mine)} === "elsewhere" && ${statusOf(onButton.id)} === "elsewhere"`,
+      30_000,
+    );
+    await click(`[data-comment-thread="${onButton.id}"] [data-comment-anchor]`);
+    await waitFor(`${statusOf(mine)} === "found" && ${statusOf(onButton.id)} === "found"`, 30_000);
   } finally {
     await browser("close").catch(() => undefined);
     proxy.stop();

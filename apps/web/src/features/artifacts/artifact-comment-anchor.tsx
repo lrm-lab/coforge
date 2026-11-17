@@ -45,10 +45,12 @@ export function describeAnchor(anchor: CommentAnchor | null): AnchorDescription 
 
 export function CommentAnchorLine({
   commentId,
+  version,
   path,
   anchor,
 }: {
   commentId: string;
+  version: number;
   path: string | null;
   anchor: CommentAnchor | null;
 }) {
@@ -56,28 +58,20 @@ export function CommentAnchorLine({
   const places = useCommentPlaces();
   if (path === null) return null;
   const { place, excerpt } = describeAnchor(anchor);
-  const status = anchorStatus(commenting, places, commentId, path);
+  const status = anchorStatus(commenting, places, commentId, version);
   return (
     <AriaButton
       data-comment-anchor=""
       data-anchor-status={status}
-      isDisabled={status === "missing"}
       className={cn(
-        "min-w-0 text-left text-xs text-tertiary [overflow-wrap:anywhere]",
-        "rounded-sm outline-focus-ring focus-visible:outline-2",
-        status !== "missing" && "cursor-pointer hover:text-secondary",
+        "min-w-0 cursor-pointer text-left text-xs text-tertiary [overflow-wrap:anywhere]",
+        "rounded-sm outline-focus-ring hover:text-secondary focus-visible:outline-2",
       )}
-      onPress={() => commenting.revealThread({ path, anchor })}
+      onPress={() => commenting.revealThread({ version, path, anchor })}
     >
       <span>
         <span className="font-medium text-secondary">{m.av_cm_in_file({ path })}</span>
         {place && ` · ${place}`}
-        {status === "changed" && (
-          <span className="text-warning-primary"> · {m.av_cm_anchor_changed()}</span>
-        )}
-        {status === "missing" && (
-          <span className="text-warning-primary"> · {m.av_cm_anchor_missing()}</span>
-        )}
       </span>
       {excerpt && <span className="line-clamp-2 block">{excerpt}</span>}
     </AriaButton>
