@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type TaskStatus } from "@lrm/coforge-sdk/internal";
+import { TASK_READ_STATUSES, type TaskStatus } from "@lrm/coforge-sdk/internal";
 
 import { taskMatches, type TaskFilter } from "./task-filters";
 import type { loadFinishedTaskSummary } from "./tasks.functions";
@@ -11,7 +11,7 @@ export type FinishedStatus = "done" | "closed";
 export const isFinishedStatus = (status: string): status is FinishedStatus =>
   status === "done" || status === "closed";
 /** The statuses a board lists itself; Done and Closed are counted and paged apart. */
-export const UNFINISHED_STATUSES: TaskStatus[] = TASK_STATUSES.filter(
+export const UNFINISHED_STATUSES: TaskStatus[] = TASK_READ_STATUSES.filter(
   (status) => !isFinishedStatus(status),
 );
 /** How far back a board reads finished Tasks; the `completed` search param, week when absent. */

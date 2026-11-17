@@ -194,3 +194,11 @@ describe("taskStatusOptions", () => {
     ).toEqual(["closed", "todo", "in_progress", "in_review", "done"]);
   });
 });
+
+test("Backlog menus read an existing task without offering a Backlog write target", () => {
+  expect(taskStatusOptions(task("backlog"), "me")).toEqual(["backlog", "todo", "closed"]);
+  expect(taskStatusOptions(task("todo"), "me", { canSetAnyStatus: true })).not.toContain("backlog");
+  expect(
+    getTaskMoveCommand(task("todo"), "me", "backlog", { canSetAnyStatus: true }),
+  ).toBeUndefined();
+});

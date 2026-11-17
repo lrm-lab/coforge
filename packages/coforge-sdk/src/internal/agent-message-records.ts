@@ -3,10 +3,10 @@ import { assertValidMessageSender } from "./message-sender";
 import { isAttachmentCommentAnchor } from "../agent/attachment-comments";
 import {
   decodeLocalAttachments,
-  decodeMessageTask,
   encodeLocalAttachments,
   type RawLocalAttachment,
 } from "./local-daemon";
+import { decodeMessageTask } from "./message-task-codec";
 import type { AgentMessageRecord } from "./agent-message-record";
 
 /** Agent message records as the local socket carries them: protobuf `AgentMessageRecord` on the

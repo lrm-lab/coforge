@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  decodeMessageTask,
   decodeDaemonCommandResponse,
   decodeDaemonHandshakeRequest,
   decodeDaemonHandshakeResponse,
@@ -14,6 +15,13 @@ import {
   readLocalRpcFrame,
   readLocalRpcFrames,
 } from "./local-daemon";
+
+test("message metadata preserves a Backlog task", () => {
+  expect(decodeMessageTask({ number: 12, status: "backlog" })).toEqual({
+    number: 12,
+    status: "backlog",
+  });
+});
 
 describe("local daemon RPC", () => {
   test("round trips the handshake through a length-prefixed frame", () => {

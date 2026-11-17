@@ -2,6 +2,7 @@ import {
   isTaskRef,
   TASK_PRIORITY_LEVELS,
   TASK_STATUSES,
+  TASK_READ_STATUSES,
   taskAssignReasonProblem,
   type TaskCommand,
 } from "@lrm/coforge-sdk/internal";
@@ -47,7 +48,9 @@ export function validateTaskCommand(command: TaskCommand) {
   if (
     command.status !== undefined &&
     command.status !== "all" &&
-    !(TASK_STATUSES as readonly unknown[]).includes(command.status)
+    !(
+      (command.operation === "list" ? TASK_READ_STATUSES : TASK_STATUSES) as readonly unknown[]
+    ).includes(command.status)
   )
     throw new AppError("INVALID_INPUT");
   if (command.status === "all" && command.operation !== "list") throw new AppError("INVALID_INPUT");
@@ -77,8 +80,10 @@ export function validateTaskCommand(command: TaskCommand) {
       command.status !== undefined ||
       !Array.isArray(command.statuses) ||
       command.statuses.length === 0 ||
-      command.statuses.length > TASK_STATUSES.length ||
-      !command.statuses.every((status) => (TASK_STATUSES as readonly string[]).includes(status)))
+      command.statuses.length > TASK_READ_STATUSES.length ||
+      !command.statuses.every((status) =>
+        (TASK_READ_STATUSES as readonly string[]).includes(status),
+      ))
   )
     throw new AppError("INVALID_INPUT");
   if (command.peerKind !== undefined && !["human", "agent"].includes(command.peerKind))

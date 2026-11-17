@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type TaskStatus } from "@lrm/coforge-sdk/internal";
+import { TASK_READ_STATUSES, type TaskStatus } from "@lrm/coforge-sdk/internal";
 import { useCallback } from "react";
 
 import { createDevicePreference } from "./device-preference";
@@ -17,6 +17,7 @@ export const taskColumnHiddenClass = (status: TaskStatus) => `task-column-hidden
 
 /** A hidden board column before hydration: the boot script's class on <html> hides it. */
 export const HIDDEN_COLUMN_CLASS: Record<TaskStatus, string> = {
+  backlog: "[.task-column-hidden-backlog_&]:hidden",
   todo: "[.task-column-hidden-todo_&]:hidden",
   in_progress: "[.task-column-hidden-in_progress_&]:hidden",
   in_review: "[.task-column-hidden-in_review_&]:hidden",
@@ -26,15 +27,15 @@ export const HIDDEN_COLUMN_CLASS: Record<TaskStatus, string> = {
 
 export function parseHiddenColumns(stored: string | null): ReadonlySet<TaskStatus> {
   const names = new Set(stored?.split(",") ?? []);
-  return new Set(TASK_STATUSES.filter((status) => names.has(status)));
+  return new Set(TASK_READ_STATUSES.filter((status) => names.has(status)));
 }
 
 export function serializeHiddenColumns(hidden: ReadonlySet<TaskStatus>): string {
-  return TASK_STATUSES.filter((status) => hidden.has(status)).join(",");
+  return TASK_READ_STATUSES.filter((status) => hidden.has(status)).join(",");
 }
 
 /** The boot script's part (in __root.tsx). */
-export const TASK_HIDDEN_COLUMNS_BOOT = `var taskColumns=localStorage.getItem("${STORAGE_KEY}");if(taskColumns){taskColumns.split(",").forEach(function(status){if(${JSON.stringify(TASK_STATUSES)}.indexOf(status)>=0){document.documentElement.classList.add("task-column-hidden-"+status)}})}`;
+export const TASK_HIDDEN_COLUMNS_BOOT = `var taskColumns=localStorage.getItem("${STORAGE_KEY}");if(taskColumns){taskColumns.split(",").forEach(function(status){if(${JSON.stringify(TASK_READ_STATUSES)}.indexOf(status)>=0){document.documentElement.classList.add("task-column-hidden-"+status)}})}`;
 
 const preference = createDevicePreference({
   key: STORAGE_KEY,
@@ -42,7 +43,7 @@ const preference = createDevicePreference({
   serialize: serializeHiddenColumns,
   fallback: NONE,
   apply: (hidden) => {
-    for (const status of TASK_STATUSES)
+    for (const status of TASK_READ_STATUSES)
       document.documentElement.classList.toggle(taskColumnHiddenClass(status), hidden.has(status));
   },
 });

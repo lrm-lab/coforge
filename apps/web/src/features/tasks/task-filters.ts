@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type TaskMember, type TaskStatus } from "@lrm/coforge-sdk/internal";
+import { TASK_READ_STATUSES, type TaskMember, type TaskStatus } from "@lrm/coforge-sdk/internal";
 
 /**
  * A Task board's owner and Project filters, applied to the rows the board shows. Each takes
@@ -162,7 +162,7 @@ export function parseFilterParam(value: string | undefined): string[] {
  */
 export function parseStatusParam(value: string | undefined): TaskStatus[] {
   const picked = new Set(parseFilterParam(value));
-  return TASK_STATUSES.filter((status) => picked.has(status));
+  return TASK_READ_STATUSES.filter((status) => picked.has(status));
 }
 
 /** Whether a Task's status passes the pick; an empty pick keeps every Task. */

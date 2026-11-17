@@ -1,6 +1,6 @@
 import {
   foldUntrustedLine,
-  TASK_STATUSES,
+  TASK_READ_STATUSES,
   type TaskCommand,
   type TaskHistoryEvent,
   type TaskMember,
@@ -151,10 +151,10 @@ export function formatMyTaskList(result: TaskResult, status: TaskListStatus): st
     ].join("\n");
   // A status this build does not know — a newer server's — gets its own section, so a Task is
   // never dropped from the list for its vocabulary being newer than the CLI's (task #61).
-  const known = new Set<string>(TASK_STATUSES);
+  const known = new Set<string>(TASK_READ_STATUSES);
   const others = tasks.filter((task) => !known.has(task.status));
   const sections = [
-    ...TASK_STATUSES.flatMap((section) => {
+    ...TASK_READ_STATUSES.flatMap((section) => {
       const rows = tasks.filter((task) => task.status === section);
       return rows.length
         ? [

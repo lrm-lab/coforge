@@ -43,6 +43,7 @@ export function TaskGroup({
   count,
   loaded,
   board,
+  compact = false,
   dropState,
   paged,
   hidable,
@@ -68,6 +69,7 @@ export function TaskGroup({
   /** The cards the group holds now. */
   loaded: number;
   board: boolean;
+  compact?: boolean;
   dropState: DropState;
   paged?: PagedTaskGroup;
   /** The group's first `shown` cards. */
@@ -99,7 +101,8 @@ export function TaskGroup({
       className={
         board
           ? cn(
-              "flex min-w-0 flex-col rounded-xl bg-secondary md:max-w-80 md:min-w-52 md:flex-1",
+              "flex min-w-0 flex-col rounded-xl bg-secondary md:max-w-80 md:flex-1",
+              compact ? "md:min-w-46" : "md:min-w-52",
               hidable && HIDDEN_COLUMN_CLASS[status],
               !expanded && "md:self-start",
               dropTargetClass(dropState, drop.isOver),

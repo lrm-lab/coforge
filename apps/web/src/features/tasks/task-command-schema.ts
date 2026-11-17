@@ -2,6 +2,7 @@ import {
   isTaskRef,
   TASK_PRIORITY_LEVELS,
   TASK_STATUSES,
+  TASK_READ_STATUSES,
   type TaskRef,
 } from "@lrm/coforge-sdk/internal";
 import { z } from "zod";
@@ -61,8 +62,15 @@ export const taskCommand = z
       })
       .optional(),
     attachmentId: z.uuid().optional(),
-    status: z.enum(TASK_STATUSES).optional(),
+    status: z.enum(TASK_READ_STATUSES).optional(),
     priority: z.enum(TASK_PRIORITY_LEVELS).optional(),
     expectedRevision: z.number().int().nonnegative().optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (command) =>
+      command.status === undefined ||
+      command.operation === "list" ||
+      (TASK_STATUSES as readonly string[]).includes(command.status),
+    { path: ["status"], message: "Task status is read-only" },
+  );

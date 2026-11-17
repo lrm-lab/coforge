@@ -36,6 +36,7 @@ export function TaskCardSkeleton({ list }: { list: boolean }) {
 
 // Fewer placeholders further right, as a real board usually has.
 const PLACEHOLDERS: Record<TaskStatus, number> = {
+  backlog: 3,
   todo: 3,
   in_progress: 2,
   in_review: 2,

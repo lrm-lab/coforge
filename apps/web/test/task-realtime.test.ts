@@ -25,6 +25,14 @@ const event = {
   deleted: ["gone"],
 };
 
+test("a Backlog task does not discard the rest of its realtime batch", () => {
+  const batch = {
+    ...event,
+    tasks: [...event.tasks, { ...event.tasks[0], id: "backlog-task", status: "backlog" }],
+  };
+  expect(decodeTaskChangedEvent(batch)).toEqual(batch as never);
+});
+
 test("a Task announcement decodes, as JSON or as bytes", () => {
   expect(decodeTaskChangedEvent(event)).toEqual(event as never);
   const bytes = new TextEncoder().encode(JSON.stringify(event));

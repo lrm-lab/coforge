@@ -8,7 +8,7 @@ import {
   isRecord,
   TASK_BLOCKER_SATISFIED_STATUSES,
   TASK_PRIORITIES,
-  TASK_STATUSES,
+  TASK_READ_STATUSES,
   type TaskConversationKind,
   type TaskMember,
   type TaskName,
@@ -151,7 +151,7 @@ export type FinishedTaskStatus = (typeof FINISHED_TASK_STATUSES)[number];
  * finished ones: PostgreSQL ranges an `IN` list over a Task index, but must read every finished
  * Task in the Workspace to discard a `NOT IN`.
  */
-export const UNFINISHED_TASK_STATUSES = TASK_STATUSES.filter(
+export const UNFINISHED_TASK_STATUSES = TASK_READ_STATUSES.filter(
   (status) => !(FINISHED_TASK_STATUSES as readonly string[]).includes(status),
 );
 
@@ -169,6 +169,7 @@ export function storedTaskPriority(value: string): TaskPriority {
 
 export function storedTaskStatus(value: string, context?: { number?: number }): TaskStatus {
   switch (value) {
+    case "backlog":
     case "todo":
     case "in_progress":
     case "in_review":

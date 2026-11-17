@@ -1,4 +1,9 @@
-import { TASK_STATUSES, type TaskStatus, type TaskView } from "@lrm/coforge-sdk/internal";
+import {
+  TASK_READ_STATUSES,
+  TASK_STATUSES,
+  type TaskStatus,
+  type TaskView,
+} from "@lrm/coforge-sdk/internal";
 
 import { useMemo, useState, type FocusEvent, type ReactNode } from "react";
 import { Plus } from "@untitledui/icons";
@@ -102,6 +107,9 @@ export function TaskBoard<T extends BoardTask>({
   newTask?: { projectSlug?: string; onCreated: () => void };
 }) {
   const { statuses, filter, layout } = view;
+  const availableStatuses = tasks.some((task) => task.status === "backlog")
+    ? TASK_READ_STATUSES
+    : TASK_STATUSES;
   const showTree = tree !== undefined;
   const [hiddenColumns, setColumnHidden] = useTaskHiddenColumns();
   const [createOpen, setCreateOpen] = useState(false);
@@ -172,6 +180,7 @@ export function TaskBoard<T extends BoardTask>({
         tasks={tree ? tree.tasks : choices}
         filter={filter}
         statuses={statuses}
+        availableStatuses={availableStatuses}
         layout={layout}
         onFilterChange={view.changeFilter}
         onStatusesChange={view.changeStatuses}
@@ -227,7 +236,13 @@ export function TaskBoard<T extends BoardTask>({
             tasks={visible}
             canSetAnyStatus={canSetAnyStatus}
             layout={layout}
-            statuses={empty || loading ? [] : statuses.length > 0 ? statuses : TASK_STATUSES}
+            statuses={
+              empty || loading
+                ? []
+                : statuses.length > 0
+                  ? availableStatuses.filter((status) => statuses.includes(status))
+                  : availableStatuses
+            }
             paged={paged}
             hidden={hiddenColumns}
             onHiddenChange={setColumnHidden}

@@ -15,26 +15,26 @@ test("storedTaskStatus passes an unknown status through and says so", () => {
   const original = console.warn;
   console.warn = (line: unknown) => warnings.push(String(line));
   try {
-    const stored = storedTaskStatus("backlog" as Parameters<typeof storedTaskStatus>[0], {
+    const stored = storedTaskStatus("future_state" as Parameters<typeof storedTaskStatus>[0], {
       number: 12,
     });
-    expect(String(stored)).toBe("backlog");
+    expect(String(stored)).toBe("future_state");
   } finally {
     console.warn = original;
   }
   const warning = warnings.find((line) => line.includes("unknown_status_passthrough"));
   expect(warning).toBeDefined();
-  expect(warning).toContain('"status":"backlog"');
+  expect(warning).toContain('"status":"future_state"');
   expect(warning).toContain('"taskNumber":12');
 });
 
 test("a status the bundle does not know renders as its raw key, with To do's ring", () => {
-  const unknown = "backlog" as Parameters<typeof statusLabel>[0];
-  expect(statusLabel(unknown)).toBe("backlog");
+  const unknown = "future_state" as Parameters<typeof statusLabel>[0];
+  expect(statusLabel(unknown)).toBe("future_state");
   // The badge draws without crashing, on To do's neutral colours, showing the label it was given.
   const markup = renderToStaticMarkup(
     <TaskNumberBadge number={12} status={unknown} label={statusLabel(unknown)} />,
   );
-  expect(markup).toContain(">backlog<");
+  expect(markup).toContain(">future_state<");
   expect(markup).toContain("bg-utility-orange-50");
 });

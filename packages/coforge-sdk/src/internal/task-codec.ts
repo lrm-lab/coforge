@@ -2,6 +2,7 @@ import { isSeenExactSeqs, MAX_MESSAGE_SEQUENCE } from "./freshness-decision";
 import {
   TASK_PRIORITY_LEVELS,
   TASK_STATUSES,
+  TASK_READ_STATUSES,
   type TaskCommand,
   type TaskResourceReceipt,
   type TaskResult,
@@ -37,6 +38,7 @@ const operations = new Set<TaskCommand["operation"]>([
   "receipt",
 ]);
 const statuses = new Set<string>(TASK_STATUSES);
+const readStatuses = new Set<string>(TASK_READ_STATUSES);
 const priorities = new Set<string>(TASK_PRIORITY_LEVELS);
 const modes = new Set(["inline", "withheld"]);
 /** The largest PostgreSQL `integer`, the column type of a task's number and revision: a larger
@@ -150,7 +152,10 @@ export function validateTaskRequest(value: TaskRequest): void {
     throw new Error("invalid Task description");
   if (
     value.status !== undefined &&
-    !(statuses.has(value.status) || (value.operation === "list" && value.status === "all"))
+    !(
+      (value.operation === "list" ? readStatuses : statuses).has(value.status) ||
+      (value.operation === "list" && value.status === "all")
+    )
   )
     throw new Error("invalid Task status");
   if (
@@ -159,8 +164,8 @@ export function validateTaskRequest(value: TaskRequest): void {
       value.status !== undefined ||
       !Array.isArray(value.statuses) ||
       value.statuses.length === 0 ||
-      value.statuses.length > 5 ||
-      !value.statuses.every((status) => statuses.has(status)))
+      value.statuses.length > TASK_READ_STATUSES.length ||
+      !value.statuses.every((status) => readStatuses.has(status)))
   )
     throw new Error("invalid Task statuses");
   if (
