@@ -53,7 +53,6 @@ test("Task create takes repeated titles, an @handle assignee and a resource rece
       "Review",
       "--assignee",
       " @ada ",
-      "--creates-resource",
       "--priority",
       "high",
     ]),
@@ -62,7 +61,6 @@ test("Task create takes repeated titles, an @handle assignee and a resource rece
       operation: "create",
       titles: ["Draft", "Review"],
       assignee: "@ada",
-      createsResource: true,
       priority: "high",
     },
   });
@@ -81,6 +79,10 @@ test("Task create takes repeated titles, an @handle assignee and a resource rece
   expect(single.task).toMatchObject({ title: "One" });
   expect(single.task).not.toHaveProperty("titles");
   expect(single.task).not.toHaveProperty("createsResource");
+  // No new task is a resource task (task #coforge-backend:#26): the flag is gone.
+  expect(() =>
+    parseArgs(["task", "create", "--target", "#general", "--title", "One", "--creates-resource"]),
+  ).toThrow("Usage:");
   expect(refusal(["task", "create", "--target", "#general"])).toEqual(
     invalidArg("--title is required (at least one)"),
   );

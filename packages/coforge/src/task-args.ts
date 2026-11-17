@@ -56,7 +56,6 @@ const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
     "--peer-kind",
     "--title",
     "--assignee",
-    "--creates-resource",
     "--description",
     "--message-id",
     "--alongside",
@@ -154,7 +153,6 @@ const TASK_SWITCHES = new Set([
   "--reviewer-isolation",
   "--mine",
   "--ready",
-  "--creates-resource",
   "--alongside",
   "--anyway",
   "--json",
@@ -234,7 +232,6 @@ export function parseTaskArgs(
     const assignee = one("--assignee");
     if (assignee !== undefined)
       task.assignee = handleOption(assignee, "--assignee must be an @handle");
-    if (values.has("--creates-resource")) task.createsResource = true;
     const description = one("--description");
     if (description !== undefined) {
       if (titles.length !== 1)

@@ -17,6 +17,11 @@ import { commitTaskChange } from "./task-change.server";
 import { signalTaskChange } from "./task-publication.server";
 import { requireManager } from "./task-assignees.server";
 
+/** `create --creates-resource`: no new task is a resource task (task #coforge-backend:#26). */
+export const TASK_CREATES_RESOURCE_RETIRED = "task_creates_resource_retired";
+/** `receipt` on a task that was not created as a resource task. */
+export const TASK_NOT_RESOURCE = "task_not_resource";
+
 export async function recordResourceReceipt(
   ports: TaskBoardPorts,
   conversationId: string,
@@ -47,7 +52,11 @@ export async function recordResourceReceipt(
       },
     });
     if (!task) throw new AppError("NOT_FOUND");
-    if (!task.createsResource) throw new AppError("CONFLICT");
+    if (!task.createsResource)
+      throw new AppError("CONFLICT", {
+        errorId: TASK_NOT_RESOURCE,
+        hint: `task #${task.number} was not created with --creates-resource, so it has no resource receipt to record`,
+      });
     if (task.ownerMemberId !== member.id) await requireManager(tx, workspaceId, member);
     const teardownOwner = await tx.agent.findFirst({
       where: {
