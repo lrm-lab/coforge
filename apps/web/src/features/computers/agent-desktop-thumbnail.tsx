@@ -5,7 +5,9 @@ import { useServerFn } from "@tanstack/react-start";
 import { HotkeysProvider, useHotkeys } from "@tanstack/react-hotkeys";
 import { Minimize01 as Minimize, Monitor01 as Monitor, XClose as X } from "@untitledui/icons";
 
+import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
@@ -112,36 +114,38 @@ export function AgentDesktopThumbnail({
 
   const canWake = online && phase === "sleeping";
   const streamOn = embeddedDesktopStreamActive(phase);
+  const wakeLabel = online ? m.computer_desktop_wake() : m.computer_desktop_offline();
 
   return (
     <>
       <div ref={slotRef} className="relative h-14 w-[5.5rem] shrink-0">
         {phase === "sleeping" ? (
-          <button
-            type="button"
-            disabled={!canWake}
-            aria-label={online ? m.computer_desktop_wake() : m.computer_desktop_offline()}
-            title={online ? m.computer_desktop_wake() : m.computer_desktop_offline()}
-            onClick={() => {
-              if (!canWake) return;
-              setPhase((p) => reduceEmbeddedDesktop(p, "wake"));
-            }}
-            className={cx(
-              "flex h-full w-full flex-col overflow-hidden rounded-md border border-secondary bg-secondary_alt text-left transition",
-              canWake
-                ? "cursor-pointer hover:border-brand hover:bg-primary"
-                : "cursor-not-allowed opacity-50",
-            )}
-          >
-            <span className="flex h-3 items-center justify-center gap-0.5 border-b border-secondary bg-tertiary/40 px-1">
-              <span className="size-1 rounded-full bg-fg-quaternary" />
-              <span className="size-1 rounded-full bg-fg-quaternary" />
-              <span className="size-1 rounded-full bg-fg-quaternary" />
-            </span>
-            <span className="flex min-h-0 flex-1 items-center justify-center text-fg-quaternary">
-              <Monitor className="size-5" aria-hidden="true" />
-            </span>
-          </button>
+          <Tooltip title={wakeLabel}>
+            <Button
+              type="button"
+              size="sm"
+              color="secondary"
+              isDisabled={!canWake}
+              aria-label={wakeLabel}
+              onPress={() => {
+                if (!canWake) return;
+                setPhase((p) => reduceEmbeddedDesktop(p, "wake"));
+              }}
+              className={cx(
+                "h-full w-full flex-col gap-0 overflow-hidden rounded-md p-0 before:rounded-md data-icon-only:p-0",
+                canWake && "hover:border-brand",
+              )}
+            >
+              <span className="flex h-3 w-full items-center justify-center gap-0.5 border-b border-secondary bg-tertiary/40 px-1">
+                <span className="size-1 rounded-full bg-fg-quaternary" />
+                <span className="size-1 rounded-full bg-fg-quaternary" />
+                <span className="size-1 rounded-full bg-fg-quaternary" />
+              </span>
+              <span className="flex min-h-0 w-full flex-1 items-center justify-center text-fg-quaternary">
+                <Monitor className="size-5" aria-hidden="true" />
+              </span>
+            </Button>
+          </Tooltip>
         ) : (
           <div
             className="h-full w-full rounded-md border border-dashed border-secondary bg-secondary_alt"
@@ -224,6 +228,7 @@ function DesktopStreamSurface({
                 size="sm"
                 color="tertiary"
                 icon={Minimize}
+                tooltip={m.computer_desktop_minimize()}
                 aria-label={m.computer_desktop_minimize()}
                 onClick={onCollapse}
               />
@@ -231,6 +236,7 @@ function DesktopStreamSurface({
                 size="sm"
                 color="tertiary"
                 icon={X}
+                tooltip={m.computer_desktop_sleep()}
                 aria-label={m.computer_desktop_sleep()}
                 onClick={onSleep}
               />
@@ -239,22 +245,24 @@ function DesktopStreamSurface({
         ) : null}
         <div className={cx("relative min-h-0", maximized ? "flex-1" : "h-full w-full")}>
           <iframe
-            title={title}
+            aria-label={title}
             src={url}
             className="absolute inset-0 h-full w-full border-0 bg-black"
             allow="clipboard-read; clipboard-write"
           />
           {!maximized ? (
-            <button
+            <Button
               type="button"
-              className="absolute inset-0 flex flex-col justify-between bg-overlay/20 p-1 text-left"
+              size="sm"
+              color="tertiary"
               aria-label={m.computer_desktop_wake()}
-              onClick={onWake}
+              onPress={onWake}
+              className="absolute inset-0 h-full w-full flex-col items-stretch justify-start rounded-none p-1 before:rounded-none"
             >
-              <span className="rounded bg-primary/90 px-1 py-0.5 text-[10px] font-medium text-primary">
+              <span className="rounded bg-primary/90 px-1 py-0.5 text-xs font-medium text-primary">
                 {m.computer_desktop_sleeping_in({ seconds: secondsLeft })}
               </span>
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>
