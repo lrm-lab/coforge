@@ -172,8 +172,8 @@ test("provider-specific rules remain available once when supplied", () => {
   });
   expect(rendered.split("- This runtime uses PowerShell.")).toHaveLength(2);
 });
-test("the shared standing guidance stays within a 7000-byte budget", () => {
-  expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(7000);
+test("the shared standing guidance stays within a 5800-byte budget", () => {
+  expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(5800);
 });
 test("the standing guidance says what to work on next, in the queue the CLI now prints", () => {
   expect(instructions).toContain(
@@ -187,7 +187,7 @@ test("the standing guidance says what to work on next, in the queue the CLI now 
   // Every level means what the person who set it meant, and there is no fifth level to hide in.
   for (const level of ["urgent", "high", "medium", "low"])
     expect(instructions).toContain(`\`${level}\``);
-  expect(instructions).toContain("Always pick one of the four");
+  expect(instructions).toContain("`task create` needs `--priority`");
   expect(instructions).not.toContain("`none`");
 });
 test("CLI instructions include a copyable stdin submission example", () => {
