@@ -88,8 +88,7 @@ mise run setup
 ./scripts/start-server.sh    # http://127.0.0.1:8789 (compiled Nitro)
 ```
 
-`./scripts/dev-frontend.sh` and `./scripts/dev-backend.sh` are aliases for
-`start-web` / `start-server`. They require a prior `build-prod` and no longer
+`start-web` and `start-server` require a prior `build-prod` and do not
 auto-compile. For Vite HMR while iterating on UI (and for
 `COFORGE_DEV_SKIP_AUTH`), use `./scripts/dev-web-hmr.sh` instead.
 

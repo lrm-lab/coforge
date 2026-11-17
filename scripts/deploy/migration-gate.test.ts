@@ -60,14 +60,11 @@ describe("migrate container entry", () => {
 });
 
 describe("the deploy scripts", () => {
-  test.each(["remote-deploy.sh", "blue-green-deploy.sh"])(
-    "%s runs migrations only through the gate",
-    (script) => {
-      const text = readFileSync(join(import.meta.dir, script), "utf8");
-      expect(text).toContain("run_migrations");
-      expect(text).not.toContain("migrate deploy' </dev/null");
-    },
-  );
+  test("remote-deploy.sh runs migrations only through the gate", () => {
+    const text = readFileSync(join(import.meta.dir, "remote-deploy.sh"), "utf8");
+    expect(text).toContain("run_migrations");
+    expect(text).not.toContain("migrate deploy' </dev/null");
+  });
 
   test("the image carries the runtime files of the checker, not its tests, and they are enough", async () => {
     const ignore = readFileSync(join(import.meta.dir, "../../.dockerignore"), "utf8");

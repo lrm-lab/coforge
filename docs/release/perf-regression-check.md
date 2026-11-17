@@ -64,8 +64,8 @@ Alerts are a `::warning::` annotation per regressed function plus a Markdown
 report appended to the job summary. Nothing messages Chat or executes a
 rollback: the report prints the command instead —
 `gh workflow run deploy-production.yml -f image=<previous digest>` for
-production, `scripts/deploy/rollback.sh` on the host for staging. A human
-decides.
+production, and for staging that it has no pinned-image rollback (redeploy
+`main` with `deploy-staging.yml` after reverting). A human decides.
 
 Implementation: `scripts/deploy/perf-regression-check.ts` (SSH discovery,
 journald reads, bundle map extraction, comparison, report).

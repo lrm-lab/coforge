@@ -405,9 +405,6 @@ async function main() {
     await Bun.sleep(waitMs);
   }
 
-  // journald tags are container names; blue-green slot naming varies, so read
-  // every discovered web container's tag and merge — time windows keep old and
-  // new output apart even when both share one tag.
   const tags = [...new Set(containers.map((c) => c.name).filter(Boolean))];
   if (newContainer && !tags.includes(newContainer.name)) tags.push(newContainer.name);
   const readWindow = (since: string, until: string) =>
@@ -476,7 +473,7 @@ async function main() {
       );
     } else {
       lines.push(
-        `on the host: \`bash ${opts.remoteRoot}/scripts/deploy/rollback.sh --compose-file ${opts.remoteRoot}/infra/${opts.environment}/docker-compose.yml --state-file ${opts.remoteRoot}/state.env --project ${opts.project}\``,
+        "staging has no pinned-image rollback: deploy-staging.yml redeploys main, so revert the change on main.",
       );
     }
   }

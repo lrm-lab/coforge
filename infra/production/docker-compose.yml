@@ -113,7 +113,7 @@ services:
       # production build, never the staging one.
       COFORGE_RELEASE_FEED_URL: https://releases.coforge.cn
       # Web-page artifacts' sandbox origin (task #544): the dedicated domain; Caddy routes it
-      # to web like the app and 301s the interim coforge.cn subdomain.
+      # to web like the app.
       COFORGE_ARTIFACT_SANDBOX_ORIGIN: https://coforgeusercontent.com
       # Site origin so Open desktop and page-fill go through Caddy forward_auth
       # (owner only). The Swarm :6090 proxy is not a browser entry point.

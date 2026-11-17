@@ -23,9 +23,8 @@ Part of [Git hooks](README.md), the rule `migration-safety` of the [hard rules](
 
 A migration that locks or rewrites a table with data can stall the running version for as long as
 it waits for the lock or rewrites. The check reads the SQL, asks what each statement does to which
-table, and judges that against how big the table is in production. It builds on the expand-contract
-rules of [`check-migration-safety.sh`](../../../scripts/deploy/check-migration-safety.sh)
-(additive changes first, destructive ones in a later release).
+table, and judges that against how big the table is in production. Additive changes go first and
+destructive ones in a later release (expand-contract).
 
 ## What is high risk
 
@@ -122,8 +121,8 @@ In CI, the hard rule downloads the newest unexpired `catalog-snapshot-production
 run on `main` (`gh api repos/<repo>/actions/artifacts?name=...`) into `MIGRATION_SAFETY_SNAPSHOT`,
 only for a migration that needs a verdict; with none (a pull request from a fork) a high-risk
 migration fails and the rest pass. A snapshot older than 14 days fails too: deploy to refresh it
-(see the Deploy workflow's snapshot artifact). `check-migration-safety.sh` has no bypass any more:
-a deliberate breaking change is annotated and judged by the deploy gate.
+(see the Deploy workflow's snapshot artifact). A deliberate breaking change is annotated and
+judged by the deploy gate.
 
 ## The catalog snapshot
 

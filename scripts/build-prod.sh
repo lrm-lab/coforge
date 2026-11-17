@@ -59,6 +59,6 @@ fi
 
 echo ""
 echo "✓ Production build complete"
-echo "  Frontend: ./scripts/start-web.sh   (or ./scripts/dev-frontend.sh)"
-echo "  Backend:  ./scripts/start-server.sh (or ./scripts/dev-backend.sh)"
+echo "  Frontend: ./scripts/start-web.sh"
+echo "  Backend:  ./scripts/start-server.sh"
 echo "  HMR only: ./scripts/dev-web-hmr.sh"
