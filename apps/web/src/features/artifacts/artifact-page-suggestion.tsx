@@ -17,15 +17,17 @@ type Suggested = {
 };
 
 export function PageSuggestion({
+  path,
   suggestions,
   container,
   composing,
 }: {
+  path: string;
   suggestions: RefObject<PageSuggestHandler | null>;
   container: RefObject<HTMLDivElement | null>;
   composing: RefObject<boolean>;
 }) {
-  const { artifactId, version, entryPath, holds } = useArtifactCommenting();
+  const { artifactId, version, holds } = useArtifactCommenting();
   const drafts = useCommentDrafts();
   const [suggested, setSuggested] = useState<Suggested | null>(null);
   const shown = suggested?.version === version ? suggested : null;
@@ -58,7 +60,7 @@ export function PageSuggestion({
     <ArtifactCommentPopover
       artifactId={artifactId}
       version={shown.version}
-      path={entryPath}
+      path={path}
       anchor={shown.anchor}
       suggestion={shown.draft}
       top={TOP_PX}

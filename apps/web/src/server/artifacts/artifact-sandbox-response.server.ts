@@ -39,11 +39,12 @@ export function sandboxFileHeaders(
   contentType: string,
   length: number,
   cacheControl: string,
+  policy = "sandbox; default-src 'none'",
 ): Headers {
   return new Headers({
     "Content-Type": contentType,
     "Content-Length": String(length),
-    "Content-Security-Policy": "sandbox; default-src 'none'",
+    "Content-Security-Policy": policy,
     ...COMMON,
     "Cache-Control": cacheControl,
   });

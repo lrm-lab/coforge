@@ -15,23 +15,35 @@ import { useArtifactCommenting } from "./artifact-commenting";
 import { ArtifactMarkdown } from "./artifact-markdown";
 import { artifactKindOfPath } from "./artifact-path-kind";
 import { artifactFilePreviewQuery } from "./artifact-queries";
+import { ArtifactPdfFrame, ArtifactWebPage } from "./artifact-web-page";
+import { framedKind } from "./use-open-file";
 
 const CSV_ROWS_SHOWN = 1000;
 
 export function ArtifactFileView({
   artifactId,
   version,
+  title,
+  entryPath,
   path,
+  source,
+  finding,
+  onFindingChange,
   onBack,
 }: {
   artifactId: string;
   version: number;
+  title: string;
+  entryPath: string;
   path: string;
+  source: boolean;
+  finding: boolean;
+  onFindingChange: (finding: boolean) => void;
   onBack: () => void;
 }) {
   const workspaceSlug = useWorkspaceSlug();
-  const preview = useQuery(artifactFilePreviewQuery(artifactId, version, path));
   const download = artifactDownloadUrl(workspaceSlug, artifactId, { path, version });
+  const framed = framedKind(path, entryPath, source);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-2 border-b border-secondary px-3 py-2">
@@ -43,15 +55,50 @@ export function ArtifactFileView({
           {m.av_menu_download()}
         </Button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-        {preview.isPending ? (
-          <Skeleton className="m-4 h-40" />
-        ) : preview.isError ? (
-          <p className="p-6 text-sm text-error-primary">{m.av_file_failed()}</p>
-        ) : (
-          <FileBody path={path} preview={preview.data} />
-        )}
-      </div>
+      {framed === "pdf" ? (
+        <ArtifactPdfFrame
+          key={`${version}:${path}`}
+          artifactId={artifactId}
+          version={version}
+          path={path}
+        />
+      ) : framed === "html" ? (
+        <ArtifactWebPage
+          key={`${version}:${path}`}
+          artifactId={artifactId}
+          version={version}
+          title={title}
+          entryPath={entryPath}
+          path={path}
+          finding={finding}
+          onFindingChange={onFindingChange}
+        />
+      ) : (
+        <FilePreview artifactId={artifactId} version={version} path={path} />
+      )}
+    </div>
+  );
+}
+
+function FilePreview({
+  artifactId,
+  version,
+  path,
+}: {
+  artifactId: string;
+  version: number;
+  path: string;
+}) {
+  const preview = useQuery(artifactFilePreviewQuery(artifactId, version, path));
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+      {preview.isPending ? (
+        <Skeleton className="m-4 h-40" />
+      ) : preview.isError ? (
+        <p className="p-6 text-sm text-error-primary">{m.av_file_failed()}</p>
+      ) : (
+        <FileBody path={path} preview={preview.data} />
+      )}
     </div>
   );
 }

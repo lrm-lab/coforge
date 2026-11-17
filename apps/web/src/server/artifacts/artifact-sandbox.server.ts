@@ -16,6 +16,8 @@ import {
   ARTIFACT_HTML_LIMIT,
   fileRequestUse,
   isPageFile,
+  isPdfDocument,
+  isPdfFile,
   pageFileResponse,
   PUBLIC_FILE_CACHE,
   SIGNED_FILE_CACHE,
@@ -75,6 +77,7 @@ export class ArtifactSandbox {
     userId: string;
     artifactId: string;
     version?: number;
+    path?: string;
     embedderOrigin: string;
   }): Promise<{
     url: string;
@@ -98,6 +101,7 @@ export class ArtifactSandbox {
       artifactId: input.artifactId,
       userId: input.userId,
       version: input.version,
+      path: input.path,
     });
     if (!page) throw new AppError("NOT_FOUND");
     const pageOrigin = artifactPageOrigin(origin, input.artifactId);
@@ -109,6 +113,7 @@ export class ArtifactSandbox {
         u: input.userId,
         o: new URL(input.embedderOrigin).origin,
         s: pageOrigin,
+        p: input.path,
       },
       await this.deps.secret(),
       this.deps.now(),
@@ -179,6 +184,7 @@ export class ArtifactSandbox {
       artifactId: ticket.a,
       userId: ticket.u,
       version: ticket.v,
+      path: ticket.p,
     }).catch(refusable);
     if (!page) return sandboxRefusal(404, "Not found.");
     const token = signSandboxFileToken(
@@ -186,7 +192,7 @@ export class ArtifactSandbox {
       secret,
       now,
     );
-    return sandboxRedirect(`/_f/${token}/${sandboxFileUrlPath(page.entryPath)}`);
+    return sandboxRedirect(`/_f/${token}/${sandboxFileUrlPath(page.openPath)}`);
   }
 
   private async serveFile(
@@ -197,28 +203,29 @@ export class ArtifactSandbox {
   ): Promise<Response> {
     const path = decodeSandboxFilePath(raw);
     const use = fileRequestUse(request.headers);
-    if (!path || !use || !useAllowed(path, use)) return sandboxRefusal(404, "Not found.");
+    if (!path || !use || !signedUseAllowed(path, use)) return sandboxRefusal(404, "Not found.");
     const token = readSandboxFileToken(tokenValue, await this.deps.secret());
     if (!token || token.s !== host.pageOrigin || token.a !== host.artifactId || !isOrigin(token.o))
       return sandboxRefusal(404, "Not found.");
     if (sandboxGrantExpired(token, this.deps.now()))
       return sandboxRefusal(403, "This link has expired. Open the page again from CoForge.");
-    const row = isPageFile(path)
-      ? await this.deps.reads
-          .file({
+    const row =
+      isPageFile(path) || isPdfDocument(path, use)
+        ? await this.deps.reads
+            .file({
+              workspaceId: token.w,
+              artifactId: token.a,
+              reader: { userId: token.u },
+              version: token.v,
+              path,
+            })
+            .catch(refusable)
+        : await this.deps.reads.fileInVersion({
             workspaceId: token.w,
             artifactId: token.a,
-            reader: { userId: token.u },
             version: token.v,
             path,
-          })
-          .catch(refusable)
-      : await this.deps.reads.fileInVersion({
-          workspaceId: token.w,
-          artifactId: token.a,
-          version: token.v,
-          path,
-        });
+          });
     if (!row || (isPageFile(path) && row.sizeBytes > ARTIFACT_HTML_LIMIT))
       return sandboxRefusal(404, "Not found.");
     return (
@@ -314,25 +321,32 @@ export class ArtifactSandbox {
     artifactId: string;
     userId: string;
     version?: number;
-  }): Promise<{ version: number; entryPath: string; level: PageLevel } | null> {
+    path?: string;
+  }): Promise<{ version: number; openPath: string; level: PageLevel } | null> {
     const { version, files, artifact, authorAgentOwnerId } = await this.deps.reads.read({
       workspaceId: input.workspaceId,
       artifactId: input.artifactId,
       reader: { userId: input.userId },
       version: input.version,
     });
-    if (!version || !isPageFile(version.entryPath)) return null;
-    const entry = files.find((file) => file.path === version.entryPath);
-    if (!entry || entry.sizeBytes > ARTIFACT_HTML_LIMIT) return null;
+    if (!version) return null;
+    const openPath = input.path ?? version.entryPath;
+    const openable = isPageFile(openPath) || (input.path !== undefined && isPdfFile(openPath));
+    if (!openable) return null;
+    const opened = files.find((file) => file.path === openPath);
+    if (!opened || (isPageFile(openPath) && opened.sizeBytes > ARTIFACT_HTML_LIMIT)) return null;
     return {
       version: version.number,
-      entryPath: version.entryPath,
+      openPath,
       level: pageLevelOf({ canChange: artifact.canChange, authorAgentOwnerId }, input.userId),
     };
   }
 }
 
 const useAllowed = (path: string, use: FileRequestUse) => use === "subresource" || isPageFile(path);
+
+const signedUseAllowed = (path: string, use: FileRequestUse) =>
+  useAllowed(path, use) || isPdfFile(path);
 
 const publicUseAllowed = (path: string, use: FileRequestUse) =>
   useAllowed(path, use) || artifactKindOfPath(path) === "markdown";

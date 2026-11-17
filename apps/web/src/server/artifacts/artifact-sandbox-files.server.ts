@@ -9,6 +9,11 @@ export const ARTIFACT_HTML_LIMIT = ARTIFACT_ENTRY_READ_LIMIT;
 
 export const isPageFile = (path: string) => artifactKindOfPath(path) === "html";
 
+export const isPdfFile = (path: string) => artifactKindOfPath(path) === "pdf";
+
+export const isPdfDocument = (path: string, use: FileRequestUse) =>
+  use === "frame" && isPdfFile(path);
+
 export type FileRequestUse = "frame" | "subresource";
 
 export const requiredUse = (path: string, kind: "html" | "markdown" = "html"): FileRequestUse =>
@@ -55,6 +60,7 @@ export function pageFileResponse(input: {
   const page = isPageFile(input.path);
   if (page && bytes.byteLength > ARTIFACT_HTML_LIMIT) return null;
   const document = page && input.use === "frame";
+  const pdf = isPdfDocument(input.path, input.use);
   const served = document ? withPageRuntime(bytes, input.hostOrigin) : bytes;
   const headers = document
     ? sandboxPageHeaders({
@@ -66,7 +72,8 @@ export function pageFileResponse(input: {
     : sandboxFileHeaders(
         artifactContentType(input.path, "other"),
         served.byteLength,
-        input.fileCache,
+        pdf ? "no-store" : input.fileCache,
+        pdf ? `default-src 'none'; frame-ancestors ${input.frameAncestor}` : undefined,
       );
   headers.set("Content-Length", String(served.byteLength));
   const body = input.method === "HEAD" ? null : new Blob([served as Uint8Array<ArrayBuffer>]);

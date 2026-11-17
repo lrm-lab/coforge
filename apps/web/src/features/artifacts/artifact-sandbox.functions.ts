@@ -11,7 +11,11 @@ export const loadArtifactSandboxLink = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(
     z
-      .object({ artifactId: artifactInputs.id, version: artifactInputs.version.optional() })
+      .object({
+        artifactId: artifactInputs.id,
+        version: artifactInputs.version.optional(),
+        path: z.string().min(1).max(512).optional(),
+      })
       .strict(),
   )
   .handler(async ({ context, data }) => {
@@ -20,6 +24,7 @@ export const loadArtifactSandboxLink = createServerFn({ method: "GET" })
       userId: context.user.id,
       artifactId: data.artifactId,
       version: data.version,
+      path: data.path,
       embedderOrigin: publicOrigin(getRequest()),
     });
     return {

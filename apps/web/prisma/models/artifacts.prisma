@@ -384,6 +384,7 @@ model ArtifactCommentImage {
 
   @@index([commentId, position])
   @@index([artifactId])
+  @@index([sha256])
   @@map("artifact_comment_images")
 }
 

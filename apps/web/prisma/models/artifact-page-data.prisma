@@ -37,5 +37,6 @@ model ArtifactPageAsset {
   artifact         Artifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
 
   @@unique([artifactId, name])
+  @@index([sha256])
   @@map("artifact_page_assets")
 }

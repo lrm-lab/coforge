@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Browser } from "@untitledui/icons";
 
@@ -16,9 +16,9 @@ import { PageErrorBanner, PageExpiredCard, PageFindBar } from "./artifact-page-n
 import type { PageSuggestHandler } from "./artifact-page-bridge";
 import { useArtifactPageBridge } from "./use-artifact-page-bridge";
 
-const sandboxLinkQuery = (artifactId: string, version: number) => ({
-  queryKey: [...ARTIFACTS_KEY, "sandbox", artifactId, version],
-  queryFn: () => loadArtifactSandboxLink({ data: { artifactId, version } }),
+const sandboxLinkQuery = (artifactId: string, version: number, path?: string) => ({
+  queryKey: [...ARTIFACTS_KEY, "sandbox", artifactId, version, path ?? null],
+  queryFn: () => loadArtifactSandboxLink({ data: { artifactId, version, path } }),
   staleTime: 0,
   gcTime: 0,
   refetchOnWindowFocus: false,
@@ -27,22 +27,18 @@ const sandboxLinkQuery = (artifactId: string, version: number) => ({
 
 type PageLink = Awaited<ReturnType<typeof loadArtifactSandboxLink>>;
 
-export function ArtifactWebPage({
+function WithSandboxLink({
   artifactId,
   version,
-  title,
-  entryPath,
-  finding,
-  onFindingChange,
+  path,
+  children,
 }: {
   artifactId: string;
   version: number;
-  title: string;
-  entryPath: string;
-  finding: boolean;
-  onFindingChange: (finding: boolean) => void;
+  path: string | undefined;
+  children: (link: PageLink, reload: () => void) => ReactNode;
 }) {
-  const link = useQuery(sandboxLinkQuery(artifactId, version));
+  const link = useQuery(sandboxLinkQuery(artifactId, version, path));
   if (link.isError) {
     const off = isAppError(link.error) && link.error.errorId === "artifact-sandbox-off";
     return (
@@ -65,18 +61,72 @@ export function ArtifactWebPage({
     );
   }
   if (!link.data) return <Skeleton className="m-4 flex-1 rounded-xl md:mx-6" />;
+  return children(link.data, () => void link.refetch());
+}
+
+export function ArtifactPdfFrame({
+  artifactId,
+  version,
+  path,
+}: {
+  artifactId: string;
+  version: number;
+  path: string;
+}) {
   return (
-    <PageFrame
-      key={link.data.url}
-      link={link.data}
+    <WithSandboxLink artifactId={artifactId} version={version} path={path}>
+      {(link) => (
+        <iframe
+          key={link.url}
+          aria-label={path}
+          src={link.url}
+          allow="clipboard-read 'none'; clipboard-write 'none'"
+          referrerPolicy="no-referrer"
+          className="min-h-[24rem] w-full flex-1 bg-white"
+        />
+      )}
+    </WithSandboxLink>
+  );
+}
+
+export function ArtifactWebPage({
+  artifactId,
+  version,
+  title,
+  entryPath,
+  path,
+  finding,
+  onFindingChange,
+}: {
+  artifactId: string;
+  version: number;
+  title: string;
+  entryPath: string;
+  path: string;
+  finding: boolean;
+  onFindingChange: (finding: boolean) => void;
+}) {
+  return (
+    <WithSandboxLink
       artifactId={artifactId}
       version={version}
-      title={title}
-      entryPath={entryPath}
-      finding={finding}
-      onFindingChange={onFindingChange}
-      onReload={() => void link.refetch()}
-    />
+      path={path === entryPath ? undefined : path}
+    >
+      {(link, reload) => (
+        <PageFrame
+          key={link.url}
+          link={link}
+          artifactId={artifactId}
+          version={version}
+          title={title}
+          entryPath={entryPath}
+          path={path}
+          finding={finding}
+          onFindingChange={onFindingChange}
+          onReload={reload}
+        />
+      )}
+    </WithSandboxLink>
   );
 }
 
@@ -86,6 +136,7 @@ function PageFrame({
   version,
   title,
   entryPath,
+  path,
   finding,
   onFindingChange,
   onReload,
@@ -95,6 +146,7 @@ function PageFrame({
   version: number;
   title: string;
   entryPath: string;
+  path: string;
   finding: boolean;
   onFindingChange: (finding: boolean) => void;
   onReload: () => void;
@@ -155,6 +207,7 @@ function PageFrame({
           bridge={bridge}
           frame={frame}
           container={container}
+          path={path}
           suggestions={suggestions}
         />
         {blocked && <PageExpiredCard onReload={onReload} />}

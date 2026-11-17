@@ -13,15 +13,17 @@ export function ArtifactFrameCommentLayer({
   bridge,
   frame,
   container,
+  path,
   suggestions,
 }: {
   bridge: PageBridge;
   frame: RefObject<HTMLIFrameElement | null>;
   container: RefObject<HTMLDivElement | null>;
+  path: string;
   suggestions: RefObject<PageSuggestHandler | null>;
 }) {
-  const { version, entryPath, commenting } = useArtifactCommenting();
-  const key = commenting ? `${entryPath}@${version}` : null;
+  const { version, commenting } = useArtifactCommenting();
+  const key = commenting ? `${path}@${version}` : null;
   const composingRef = useRef(false);
   const { picking, togglePicking, ...offers } = useFrameOffer({
     bridge,
@@ -29,7 +31,7 @@ export function ArtifactFrameCommentLayer({
     key,
     composing: composingRef,
   });
-  useFrameMarks({ bridge, composing: composingRef });
+  useFrameMarks({ bridge, composing: composingRef, path });
   const draft = useAnchorDraft({ key, frame: container, ...offers });
   composingRef.current = draft.composing !== null;
   useRegisterFramePicker(
@@ -37,8 +39,13 @@ export function ArtifactFrameCommentLayer({
   );
   return (
     <>
-      {commenting && <DraftAffordance draft={draft} path={entryPath} />}
-      <PageSuggestion suggestions={suggestions} container={container} composing={composingRef} />
+      {commenting && <DraftAffordance draft={draft} path={path} />}
+      <PageSuggestion
+        path={path}
+        suggestions={suggestions}
+        container={container}
+        composing={composingRef}
+      />
     </>
   );
 }

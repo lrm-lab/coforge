@@ -18,6 +18,7 @@ export type SandboxGrant = {
 
 export type SandboxTicket = SandboxGrant & {
   n: string;
+  p?: string;
 };
 
 export type SandboxFileToken = SandboxGrant;
@@ -28,10 +29,12 @@ export const SANDBOX_FILE_TTL_SECONDS = 10 * 60;
 
 type GrantInput = Omit<SandboxGrant, "iat" | "exp">;
 
+type TicketInput = Omit<SandboxTicket, "iat" | "exp" | "n">;
+
 const epochSeconds = (now: Date) => Math.floor(now.getTime() / 1000);
 
 export function signSandboxTicket(
-  input: GrantInput,
+  input: TicketInput,
   secret: string,
   now: Date,
 ): { ticket: string; expiresAt: Date } {
@@ -53,7 +56,8 @@ export function signSandboxFileToken(input: GrantInput, secret: string, now: Dat
 export function readSandboxTicket(value: string, secret: string): SandboxTicket | null {
   const payload = readSignedValue<Partial<SandboxTicket>>("artifact-sandbox-ticket", value, secret);
   if (!payload || !isGrant(payload)) return null;
-  const nonce = (payload as { n?: unknown }).n;
+  const { n: nonce, p: path } = payload as { n?: unknown; p?: unknown };
+  if (path !== undefined && typeof path !== "string") return null;
   return typeof nonce === "string" && nonce ? (payload as SandboxTicket) : null;
 }
 

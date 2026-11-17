@@ -83,6 +83,15 @@ The artifacts module follows the reference product, Raft; add nothing it does no
   from live only in `artifact-sandbox-cdns.server.ts`. A nonce or hash in `script-src` would turn
   `'unsafe-inline'` off, so the runtime (`artifact-page-runtime.server.ts`) is a script file of the
   page's own origin, injected first.
+- A ticket may name one file (`p`: an html file or a PDF the version holds; `link({ path })`), and
+  opening redirects to it, so a non-entry page is served exactly as the entry is: same origin,
+  sandbox flags, CSP, runtime and bridge, and relative links resolve against its own path under
+  `/_f/<token>/`. A path the version lacks, or that is neither, is `NOT_FOUND`.
+- A PDF is served as a frame document only under a file token (never on a public link): bytes with
+  `Content-Type: application/pdf`, `nosniff`, and a policy of `default-src 'none'` plus the host
+  as the only frame ancestor, `no-store` like a page, no runtime and no bridge. Its frame carries no `sandbox` attribute, because Chrome
+  refuses to render a PDF in a sandboxed frame; the origin is the artifact's own, holds no
+  credential, and serves nothing else to that frame. The document read re-checks access like a page.
 - A page reader's access is checked on the ticket and on each page document; a subresource serves
   under its file token until the token expires. Do not widen who can read in this module; call
   `ArtifactReads` as it is.

@@ -33,11 +33,11 @@ import {
   type CommentTarget,
   type PublishedPlaces,
 } from "./artifact-commenting";
-import { revealsInFrame } from "./artifact-page-annotations";
 import { groupThreads } from "./artifact-comment-threads";
 import { useArtifactComments, syncCommentsChange } from "./artifact-comment-queries";
 import { createComposerHolds } from "./artifact-composer-holds";
 import { useCommentHandoff } from "./use-comment-handoff";
+import { useOpenFile } from "./use-open-file";
 import { useCommentMode, type ArtifactPanelName } from "./use-comment-mode";
 import { ArtifactFilesPanel } from "./artifact-files-panel";
 import { ArtifactMarkdown } from "./artifact-markdown";
@@ -141,7 +141,6 @@ function ArtifactPageFor({
   const [sendingTo, setSendingTo] = useState(false);
   const [finding, setFinding] = useState(false);
   const [panel, setPanel] = useState<ArtifactPanelName | null>(null);
-  const [openPath, setOpenPath] = useState<string | null>(null);
   const commentMode = useCommentMode(setPanel);
   const [places, setPlaces] = useState<PublishedPlaces>(null);
   const [holds] = useState(createComposerHolds);
@@ -231,6 +230,7 @@ function ArtifactPageFor({
     [current?.files],
   );
   const commentsOpen = commentMode.mode || panel === "comments";
+  const { openPath, source, framesPage, openFile, openThread } = useOpenFile(entryPath, webPage);
   const shownPath = openPath ?? entryPath;
   const [reveal, postReveal, consumeReveal] = useCommentHandoff<CommentTarget>(
     (target) => commentsOpen && target.path === shownPath,
@@ -250,12 +250,9 @@ function ArtifactPageFor({
   );
   const revealThread = useCallback<ArtifactCommenting["revealThread"]>(
     (target) => {
-      const framed = webPage && target.path === entryPath && revealsInFrame(target.anchor);
-      setOpenPath(framed || (target.path === entryPath && !webPage) ? null : target.path);
-      if (framed || !webPage || target.path !== entryPath || target.anchor?.type === "lines")
-        postReveal(target);
+      if (openThread(target)) postReveal(target);
     },
-    [entryPath, webPage, postReveal],
+    [openThread, postReveal],
   );
   const commenting = useMemo<ArtifactCommenting>(
     () => ({
@@ -312,11 +309,11 @@ function ArtifactPageFor({
   const viewLatest = () => {
     setIncoming(null);
     setPinned(null);
-    setOpenPath(null);
+    openFile(null);
     void refreshArtifact(queryClient, artifactId, homeId ?? null);
   };
   const choose = (version: number) => {
-    setOpenPath(null);
+    openFile(null);
     setPinned(version === latest ? null : version);
   };
   const { onMoreAction, dialogs, following } = useArtifactActions({
@@ -365,7 +362,7 @@ function ArtifactPageFor({
                   homeName={homeName}
                   pane={pane}
                   onChooseVersion={choose}
-                  onFind={webPage && !openPath ? () => setFinding(true) : undefined}
+                  onFind={framesPage ? () => setFinding(true) : undefined}
                   onCopyLink={current && (() => void copyLink())}
                   comments={
                     current && (
@@ -400,7 +397,7 @@ function ArtifactPageFor({
                         phone={phone}
                         fileCount={files.length}
                         canDelete={current.canDelete}
-                        canFind={webPage}
+                        canFind={framesPage}
                         following={following}
                         visibility={visibility}
                         onChooseVersion={choose}
@@ -431,8 +428,13 @@ function ArtifactPageFor({
                       <ArtifactFileView
                         artifactId={artifactId}
                         version={shownVersion}
+                        title={title}
+                        entryPath={current.artifact.entryPath}
                         path={openPath}
-                        onBack={() => setOpenPath(null)}
+                        source={source}
+                        finding={finding}
+                        onFindingChange={setFinding}
+                        onBack={() => openFile(null)}
                       />
                     ) : webPage ? (
                       <ArtifactWebPage
@@ -441,6 +443,7 @@ function ArtifactPageFor({
                         version={shownVersion}
                         title={title}
                         entryPath={current.artifact.entryPath}
+                        path={current.artifact.entryPath}
                         finding={finding}
                         onFindingChange={setFinding}
                       />
@@ -467,7 +470,7 @@ function ArtifactPageFor({
                       entryPath={current.artifact.entryPath}
                       files={files}
                       openPath={openPath}
-                      onOpen={setOpenPath}
+                      onOpen={openFile}
                       onClose={() => setPanel(null)}
                     />
                   )}
