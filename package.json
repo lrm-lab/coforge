@@ -26,7 +26,8 @@
     "prepare": "[ ! -f scripts/git-hooks/install-hooks-path.ts ] || bun scripts/git-hooks/install-hooks-path.ts",
     "test:docs-site": "bun scripts/test/isolated-test-run.ts bun test scripts/docs",
     "check:docs-site": "bunx oxfmt --check scripts/docs && bunx oxlint scripts/docs",
-    "format:ci": "bunx oxfmt scripts/ci scripts/audit scripts/test scripts/git-hooks scripts/dev"
+    "format:ci": "bunx oxfmt scripts/ci scripts/audit scripts/test scripts/git-hooks scripts/dev",
+    "format:release": "bunx oxfmt scripts/release"
   },
   "devDependencies": {
     "@alicloud/alidns20150109": "4.6.1",

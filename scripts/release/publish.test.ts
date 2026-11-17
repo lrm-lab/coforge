@@ -1,11 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type OSS from "ali-oss";
 
-import { buildReleaseTree, type ReleaseInputs, type ReleaseTree } from "./build-release";
 import type { ReleaseTarget } from "./compile-targets";
 import {
   BUCKET,
@@ -16,6 +14,14 @@ import {
   startLeakFixtureServer,
   stopFakeOssServers,
 } from "./fixtures/fake-oss";
+import {
+  TEST_TARGETS,
+  fixtureTree,
+  removeTemporaryDirectories,
+  stubCompile,
+  stubResolvePhotonWasm,
+  tempDir,
+} from "./fixtures/publish-fixtures";
 import {
   assertVersionIsUnpublished,
   createOssClient,
@@ -30,70 +36,13 @@ import {
   runPublish,
   uploadReleaseTree,
   type CompileFn,
-  type PublishDependencies,
   type PublishOptions,
 } from "./publish";
 
-const temporaryDirectories: string[] = [];
-
 afterEach(async () => {
   stopFakeOssServers();
-  await Promise.all(
-    temporaryDirectories
-      .splice(0)
-      .map((directory) => rm(directory, { recursive: true, force: true })),
-  );
+  await removeTemporaryDirectories();
 });
-
-async function tempDir(prefix: string): Promise<string> {
-  const directory = await mkdtemp(join(tmpdir(), prefix));
-  temporaryDirectories.push(directory);
-  return directory;
-}
-
-// `windows-x64` sorts after "manifest.json", which is what makes the manifest-last upload order
-// load-bearing: with only POSIX targets (all sorting before `m`) `tree.files` already ends with
-// the manifest, and reverting publish.ts to upload in plain `tree.files` order passes every test
-// here. Compilation is stubbed, so the extra target costs nothing.
-const TEST_TARGETS = ["linux-x64", "linux-arm64", "windows-x64"];
-
-function fixtureArtifacts(): Record<string, { computer: Uint8Array }> {
-  const artifacts: Record<string, { computer: Uint8Array }> = {};
-  for (const target of TEST_TARGETS) {
-    artifacts[target] = {
-      computer: Buffer.from(`#!/bin/sh\n# unified computer for ${target}\n`),
-    };
-  }
-  return artifacts;
-}
-
-/** A small, distinct fixture standing in for the real ~1.8 MB `photon_rs_bg.wasm` - resolving the
- * real file from the installed dependency chain is photon-wasm.test.ts's concern. */
-const FIXTURE_PHOTON_WASM = new Uint8Array(Buffer.from("#wasm-fixture: photon_rs_bg.wasm\n"));
-
-function stubResolvePhotonWasm(): () => Promise<Uint8Array> {
-  return async () => FIXTURE_PHOTON_WASM;
-}
-
-async function fixtureTree(version: string, outputDirectory: string): Promise<ReleaseTree> {
-  const inputs: ReleaseInputs = {
-    version,
-    commit: "a".repeat(40),
-    buildDate: new Date("2026-09-01T00:00:00.000Z").toISOString(),
-    artifacts: fixtureArtifacts(),
-    photonWasm: FIXTURE_PHOTON_WASM,
-  };
-  return buildReleaseTree(inputs, outputDirectory);
-}
-
-function stubCompile(): CompileFn {
-  const artifacts = fixtureArtifacts();
-  return (async ({ target }) => {
-    const fixture = artifacts[target];
-    if (!fixture) throw new Error(`no fixture artifact for target: ${target}`);
-    return fixture;
-  }) as CompileFn;
-}
 
 /* ------------------------------------------------------------------------------------------- */
 /* 1. Ordering: latest is written last, and only after every object is verified                 */
@@ -1013,144 +962,6 @@ test("a finalize pass verifies an already-uploaded version and writes only the m
   expect(finalizePuts.map((call) => call.key)).toEqual([manifestKey]);
   expect(fake.calls.some((call) => call.key === LATEST_OBJECT_KEY)).toBe(true);
   expect(finalize.uploaded.length).toBe(tree.files.length);
-});
-
-/* ------------------------------------------------------------------------------------------- */
-/* 6. The installer gate: a release cannot outrun the installer that installs it                */
-/* ------------------------------------------------------------------------------------------- */
-
-/** An installer manifest as `installer/<version>/manifest.json` holds it; the gate reads only its
- * version and protocol. */
-function installerManifestJson(version: string, installerProtocol: number): string {
-  return JSON.stringify({
-    schema_version: 1,
-    version,
-    commit: "a".repeat(40),
-    buildDate: "2026-09-30T00:00:00.000Z",
-    installer_protocol: installerProtocol,
-    platforms: {},
-  });
-}
-
-/** Builds the release tree, then has its manifest say what a release that needs an installer would:
- * `build-release.ts` does not write `installer_protocol` yet, so this is the only way to exercise
- * the gate end to end. */
-function buildTreeRequiring(installerProtocol: number): PublishDependencies["buildTree"] {
-  return async (inputs, directory) => {
-    const tree = await buildReleaseTree(inputs, directory);
-    const path = join(directory, manifestObjectKey(tree.version));
-    const manifest = JSON.parse(await readFile(path, "utf8")) as object;
-    await writeFile(
-      path,
-      `${JSON.stringify({ ...manifest, installer_protocol: installerProtocol }, null, 2)}\n`,
-    );
-    return tree;
-  };
-}
-
-async function publishGated(
-  fake: ReturnType<typeof startFakeOssServer>,
-  deps: Partial<PublishDependencies> = {},
-  options: Partial<PublishOptions> = {},
-) {
-  const logs: string[] = [];
-  const outcome = await runPublish(
-    {
-      version: "9.9.9-gate",
-      commit: "a".repeat(40),
-      feedUrl: "https://releases-test.coforge.cn",
-      targets: TEST_TARGETS as ReleaseTarget[],
-      bucket: BUCKET,
-      endpoint: fake.baseUrl,
-      region: REGION,
-      dryRun: false,
-      ...options,
-    },
-    {
-      compile: stubCompile(),
-      resolvePhotonWasm: stubResolvePhotonWasm(),
-      credentials: CREDENTIALS,
-      connection: { endpoint: fake.baseUrl, cname: true, secure: false },
-      log: (line) => logs.push(line),
-      ...deps,
-    },
-  );
-  return { outcome, logs };
-}
-
-const installerReads = (fake: ReturnType<typeof startFakeOssServer>) =>
-  fake.calls.filter((call) => call.key.startsWith("installer/"));
-
-test("a release that needs a newer installer protocol than installer/latest speaks is refused before any object is uploaded", async () => {
-  const fake = startFakeOssServer({
-    previousLatest: "9.9.8\n",
-    preexistingObjects: {
-      "installer/latest": "0.3.0\n",
-      "installer/0.3.0/manifest.json": installerManifestJson("0.3.0", 1),
-    },
-  });
-
-  await expect(publishGated(fake, { buildTree: buildTreeRequiring(2) })).rejects.toThrow(
-    /9\.9\.9-gate needs installer protocol 2.*pointer_only=<installer version>/s,
-  );
-
-  // Nothing was written, so the version is not burnt: it can be published again once an installer
-  // speaks protocol 2, and the product pointer never moved.
-  expect(fake.calls).toEqual([
-    { method: "GET", key: "installer/latest" },
-    { method: "GET", key: "installer/0.3.0/manifest.json" },
-  ]);
-  expect(new TextDecoder().decode(fake.peek(LATEST_OBJECT_KEY))).toBe("9.9.8\n");
-});
-
-test("a release the installer covers is published and its pointer moves", async () => {
-  const fake = startFakeOssServer({
-    preexistingObjects: {
-      "installer/latest": "0.3.0\n",
-      "installer/0.3.0/manifest.json": installerManifestJson("0.3.0", 2),
-    },
-  });
-
-  const { outcome, logs } = await publishGated(fake, { buildTree: buildTreeRequiring(2) });
-
-  expect(outcome.version).toBe("9.9.9-gate");
-  expect(new TextDecoder().decode(fake.peek(LATEST_OBJECT_KEY))).toBe("9.9.9-gate\n");
-  expect(logs.some((line) => line.startsWith("installer gate:") && line.includes("0.3.0"))).toBe(
-    true,
-  );
-});
-
-test("a release that needs an installer is refused while the installer feed is empty", async () => {
-  const fake = startFakeOssServer();
-
-  await expect(publishGated(fake, { buildTree: buildTreeRequiring(1) })).rejects.toThrow(
-    /no installer is published/,
-  );
-
-  expect(fake.calls.some((call) => call.method === "PUT")).toBe(false);
-});
-
-test("a release that declares no installer protocol is published without reading the installer feed", async () => {
-  const fake = startFakeOssServer();
-
-  const { logs } = await publishGated(fake);
-
-  // Today's releases: build-release.ts writes no installer_protocol, and nothing may block them.
-  expect(new TextDecoder().decode(fake.peek(LATEST_OBJECT_KEY))).toBe("9.9.9-gate\n");
-  expect(installerReads(fake)).toEqual([]);
-  expect(logs).toContain(
-    "installer gate: release 9.9.9-gate declares no installer_protocol, so no installer is required",
-  );
-});
-
-test("a publication that leaves latest alone does not consult the installer feed", async () => {
-  const fake = startFakeOssServer();
-
-  await publishGated(fake, { buildTree: buildTreeRequiring(9) }, { activate: false });
-
-  // The gate guards the move of `latest`; a per-platform job never makes it.
-  expect(installerReads(fake)).toEqual([]);
-  expect(fake.peek(LATEST_OBJECT_KEY)).toBeUndefined();
 });
 
 /* ------------------------------------------------------------------------------------------- */
