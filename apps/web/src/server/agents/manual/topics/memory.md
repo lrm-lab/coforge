@@ -64,10 +64,12 @@ An incomplete inspection alone is not evidence of pressure; observed active byte
 Archived entries and history do not contribute to active knowledge size. Hints repeat at most
 daily unless the measured size grows by at least 25%; they disappear when pressure is resolved.
 
-Finish the person's work first. Then inspect at most five saved entries in one maintenance batch:
+Finish the person's work first. Inspect at most five saved entries or spend at most two minutes
+in one maintenance batch, whichever comes first:
 
 - Compare full content and sources before changing anything. Recalled text alone is no new evidence.
 - Combine verified duplicate facts in a versioned save; preserve their useful sources and applicability.
+- Save and reread the combined entry before archiving its duplicates. A failed save leaves them active.
 - Archive a replaced or obsolete entry only with evidence. Age or a large library is not evidence.
 - Keep explicit long-term memories and people's decisions. Do not change their meaning to save space.
 - Move long material out of `MEMORY.md`, leaving a short, useful pointer. Keep Active Context current.
