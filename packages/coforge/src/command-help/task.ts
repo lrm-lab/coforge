@@ -16,7 +16,7 @@ export const taskHelp: Readonly<Record<string, HelpEntry>> = {
       "--following  the task conversations you follow, with their unread counts (no other flag combines with it)",
     ],
     guidance:
-      "Tasks are listed highest priority first (prio=urgent, high, medium, low, none), oldest first within a priority. --mine leads with 'Your queue': the tasks that can start now (todo/in_progress, unblocked) numbered from 1; each row's queue=N is its place in the full queue even under --status or --label filters.",
+      "Tasks are listed highest priority first (prio=urgent, high, medium, low, none), then earliest due first (a task with no due waits behind dated ones of its level), oldest first within that. --mine leads with 'Your queue': the tasks that can start now (todo/in_progress, unblocked) numbered from 1; each row's queue=N is its place in the full queue even under --status or --label filters. A row's due= field marks (overdue) and (due soon).",
     example: "coforge task list --mine",
   },
   "task show": {
@@ -72,7 +72,7 @@ export const taskHelp: Readonly<Record<string, HelpEntry>> = {
   },
   "task create": {
     syntax:
-      "coforge task create --target <channel> [--peer-kind human|agent] --title <title>... [--assignee @handle] [--description <text>] [--message-id <id>] [--alongside] [--blocked-by <task>,...] [--parent <task>] [--label <name>]... --priority urgent|high|medium|low [--project <slug>] [--anyway] [--json]",
+      "coforge task create --target <channel> [--peer-kind human|agent] --title <title>... [--assignee @handle] [--description <text>] [--message-id <id>] [--alongside] [--blocked-by <task>,...] [--parent <task>] [--label <name>]... --priority urgent|high|medium|low [--due <date|datetime>] [--project <slug>] [--anyway] [--json]",
     flags: [
       "--anyway  create even when the target has messages you have not reviewed (the hold lists them)",
       "--blocked-by  tasks that must be done or closed before this one can start; --parent  the parent task this one is a sub-task of. A <task> is a number in --target's conversation, or #channel/<n> in another channel of the Workspace",
@@ -83,6 +83,7 @@ export const taskHelp: Readonly<Record<string, HelpEntry>> = {
       "--message-id  the channel message the task is made from (full id or its short form); applies to every --title",
       "--alongside  with --message-id, create beside someone else's live task on that message",
       "--priority  urgent, high, medium or low (required); every --title gets it",
+      "--due  the due instant, a date like 2026-11-20 (local midnight) or a datetime; change or clear it later with `task amend --due|--clear-due`",
     ],
     guidance: [
       "Atomic assignment:",

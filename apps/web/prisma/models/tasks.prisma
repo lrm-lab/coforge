@@ -46,6 +46,11 @@ model Task {
   childLinks                   TaskParent[]        @relation("TaskParentOf")
   /// urgent | high | medium | low | none (`TASK_PRIORITIES`); a CHECK holds the five.
   priority                     String              @default("none")
+  /// When the Task is due, an instant; surfaces show it in the viewer's own timezone.
+  dueAt                        DateTime?
+  /// True when `dueAt` carries an explicit time of day; false for date-only deadlines (end of day).
+  dueHasTime                   Boolean             @default(false)
+  dueReminders                 TaskDueReminder[]
   /// The channel message a task made under task conversations was made from, when it names one.
   /// A message may have several tasks; the message is not the task's.
   sourceMessageId              String?             @db.Uuid
@@ -64,6 +69,7 @@ model Task {
   @@unique([conversationId, number])
   @@unique([messageId, conversationId])
   @@index([deletedAt], map: "tasks_deletedAt_idx", where: raw("\"deletedAt\" IS NOT NULL"))
+  @@index([dueAt], map: "tasks_dueAt_open_idx", where: raw("\"dueAt\" IS NOT NULL AND \"status\" NOT IN ('done', 'closed')"))
   @@unique([id, conversationId])
   @@unique([conversationId, creatorMemberId, requestId])
   @@index([workspaceId, conversationId, status])

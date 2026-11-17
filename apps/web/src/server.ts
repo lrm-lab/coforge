@@ -17,6 +17,7 @@ import { startMessageReadRetentionTickFromEnv } from "#src/server/conversations/
 import { startWorkspaceAssistantOnboarding } from "#src/server/agents/workspace-assistant-onboarding.server";
 import { startPlatformOperatorSeedingFromEnv } from "#src/server/app-marketplace/platform-operator-seeding.server";
 import { ensureReminderDueSweep } from "#src/server/reminders/reminder-due-sweep.server";
+import { ensureTaskDueSweep } from "#src/server/tasks/task-due-sweep.server";
 
 // This module loads on the first request (Nitro loads the SSR entry lazily), not at boot. It
 // validates and installs the configuration the request handlers read, so a request never runs
@@ -25,6 +26,7 @@ import { ensureReminderDueSweep } from "#src/server/reminders/reminder-due-sweep
 await assertStartupConfig();
 installServerLifecycle();
 ensureReminderDueSweep();
+ensureTaskDueSweep();
 // Backend-owned memory sweep: independent of incidental Centrifugo traffic.
 // Optional in-process clock for weekly-report auto-send. No-op unless
 // COFORGE_WEEKLY_REPORT_SCHEDULE_TICK_MS is set; external HTTP cron remains valid.

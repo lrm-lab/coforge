@@ -179,6 +179,30 @@ export function validateTaskCommand(command: TaskCommand) {
     )
       throw new AppError("INVALID_INPUT");
   }
+  // A due instant is set on create and changed or cleared (null) on amend; nothing else takes
+  // one, and the instant must be an ISO datetime (task #13).
+  if (command.dueAt !== undefined) {
+    const clearing = command.dueAt === null && command.operation === "amend";
+    if (
+      (command.operation !== "create" && command.operation !== "amend") ||
+      (!clearing &&
+        (typeof command.dueAt !== "string" ||
+          !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(command.dueAt) ||
+          Number.isNaN(Date.parse(command.dueAt))))
+    )
+      throw new AppError("INVALID_INPUT", {
+        hint: "dueAt must be an ISO datetime on create, or a datetime or null on amend",
+      });
+  }
+  if (
+    command.dueHasTime !== undefined &&
+    (!["create", "amend"].includes(command.operation) ||
+      typeof command.dueHasTime !== "boolean" ||
+      typeof command.dueAt !== "string")
+  )
+    throw new AppError("INVALID_INPUT", {
+      hint: "dueHasTime requires a string dueAt on create or amend",
+    });
   if (command.blockedBy !== undefined) {
     if (
       !relational ||

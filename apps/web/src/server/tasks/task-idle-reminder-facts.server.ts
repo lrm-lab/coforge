@@ -31,6 +31,8 @@ export type IdleTaskFacts = {
   title: string;
   status: TaskStatus;
   priority: TaskPriority;
+  /** The due instant; null for none. Orders the reminder's non-queueable tail (task #13). */
+  dueAt: Date | null;
   createdAt: Date;
   /** The newest assignment to this Agent, and whether it claimed the Task itself. */
   givenAt: Date | null;
@@ -93,6 +95,7 @@ export async function readIdleTaskFacts(
       title: true,
       status: true,
       priority: true,
+      dueAt: true,
       createdAt: true,
       messageId: true,
       conversationId: true,
@@ -210,6 +213,7 @@ export async function readIdleTaskFacts(
       title: readTaskText(task.title, "agent", task.message?.mentions ?? []),
       status,
       priority: storedTaskPriority(task.priority),
+      dueAt: task.dueAt,
       createdAt: task.createdAt,
       givenAt: given?.createdAt ?? null,
       givenBySelf: given ? isSelf(given) : false,

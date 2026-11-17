@@ -144,10 +144,13 @@ export async function idleNudge(
     ...byPriority(
       due
         .filter((entry) => !queueActionable(entry.task))
-        .map((entry) => ({ ...entry, priority: entry.task.priority })),
-      (left, right) =>
-        left.task.createdAt.getTime() - right.task.createdAt.getTime() ||
-        left.task.id.localeCompare(right.task.id),
+        .map((entry) => ({
+          ...entry,
+          id: entry.task.id,
+          priority: entry.task.priority,
+          dueAt: entry.task.dueAt,
+          createdAt: entry.task.createdAt,
+        })),
     ),
   ];
   const listed = ordered.slice(0, LISTED_ITEMS);

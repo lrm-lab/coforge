@@ -1,0 +1,14 @@
+/// One row per claimed due notification for a Task's current `dueAt` and `occurrence` (1 = due,
+/// 2+ = 24h overdue repeat). Deleted inside the same transaction when `dueAt` changes or clears.
+model TaskDueReminder {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  taskId     String   @db.Uuid
+  dueAt      DateTime
+  occurrence Int
+  sentAt     DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, dueAt, occurrence], map: "task_due_reminders_taskId_dueAt_occurrence_key")
+  @@map("task_due_reminders")
+}

@@ -1,7 +1,8 @@
 # Task board
 
 These rules apply to `src/server/tasks/`. The framework-free shared Task
-contract is `packages/coforge-sdk/src/internal/tasks.ts`.
+contract is `packages/coforge-sdk/src/internal/tasks.ts`; its priority and
+order helpers live beside it in `task-order.ts`.
 
 - A comment author seat is never a Task destination. Task scopes keep `TASK_SCOPE_WHERE` (channel or DM only), including create and conversion; a person's scope is `readableConversationWhere` (a private channel they are not in is a missing one); a comment Conversation id is refused exactly like a missing one.
 - `TaskBoard.execute(principal, command)` is the single place for Task
@@ -17,7 +18,7 @@ contract is `packages/coforge-sdk/src/internal/tasks.ts`.
   a malformed one is `INVALID_INPUT`. It reads no database and decides no
   authorization; who may act on which conversation stays in TaskBoard.
 - Workspace task labels (`labels.server.ts`): the rows (a name unique case-insensitively per Workspace and one Badge color), resolution by name for a Task command (an unknown name is refused, never created), the five-per-task cap, and who creates (any member) or renames and deletes (owner or admin) one. `TaskView.labels` carries them; a Task write records `labels_changed`.
-- Who sets a Task's priority (`task-priority.server.ts`; stored levels `urgent|high|medium|low|none`, the four above the unset `none`; a CHECK holds the five): anyone who may speak in the conversation, an Agent only on a Task it created or in a channel it coordinates (`coordinatorAgentId`), a Workspace owner or admin always (`task_priority_denied`). A command may name only the four levels — `none` is refused (`task_priority_invalid`); `create`, `convert` and `update` take it (`update` with or without a status, the same priority again writes nothing), while a create or convert that names none still lands `none` while old Computers send none (the Agent route logs those as `task_priority_absent`). History records `priority_changed`, and both `list` forms sort by it, highest first, then oldest first (`byPriority`). "Send as task" carries `taskPriority` on the send; a send without one (a page from before priorities were required) lands `none` the same way.
+- Who sets a Task's priority (`task-priority.server.ts`; stored levels `urgent|high|medium|low|none`, the four above the unset `none`; a CHECK holds the five): anyone who may speak in the conversation, an Agent only on a Task it created or in a channel it coordinates (`coordinatorAgentId`), a Workspace owner or admin always (`task_priority_denied`). A command may name only the four levels — `none` is refused (`task_priority_invalid`); `create`, `convert` and `update` take it (`update` with or without a status, the same priority again writes nothing), while a create or convert that names none still lands `none` while old Computers send none (the Agent route logs those as `task_priority_absent`). History records `priority_changed`, and both `list` forms sort by the shared `compareTaskOrder` (task #13): highest priority first, then earliest `dueAt` (undated last), then oldest first, id for stability. A Task's optional due instant is `dueAt`: `create` takes an ISO instant, `amend` sets or clears it with `null`, `update` refuses it; `dueState` (`overdue`/`due_soon`, computed at read, never stored) and `due_changed` history ride the same write. "Send as task" carries `taskPriority` on the send; a send without one (a page from before priorities were required) lands `none` the same way.
 - `task-view.server.ts` owns how a stored Task reads: its selection, its
   `TaskView`, and its stored status. `task-history.server.ts` owns which
   history events a Task write records and how they read back. TaskBoard and

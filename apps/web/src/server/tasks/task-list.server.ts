@@ -134,7 +134,7 @@ export async function listOwnTasks(
       },
     },
   });
-  // Highest priority first; within a level, oldest first across conversations.
+  // The shared Task order: priority, then earliest due, then oldest, across conversations.
   const ordered = (
     await viewsWithCounts(ports.db, ports.reader, principal.workspaceId, tasks, (task, extras) => ({
       ...taskView(task, ports.reader, extras),
@@ -200,7 +200,7 @@ export async function listConversationTasks(
     orderBy: { number: "asc" },
     select: taskSelection,
   });
-  // Highest priority first; within a level, by number (oldest first), as read.
+  // The shared Task order: priority, then earliest due, then oldest, then id.
   return {
     tasks: byPriority(
       await viewsWithCounts(ports.db, ports.reader, workspaceId, tasks, (task, extras) =>

@@ -79,3 +79,48 @@ test("Rows, cards and update receipts show the priority", () => {
     }),
   ).toBe("#4 moved to done, priority set to high.");
 });
+
+// Task #13: a row's due= field names the instant and how it reads now; show names it too.
+test("Rows, the queue and show name a task's due instant and state", () => {
+  const due = "2026-11-20T09:00:00.000Z";
+  const stamp = "due=2026-11-20 09:00:00Z";
+  expect(
+    formatTaskBoard(
+      "#general",
+      {
+        tasks: [
+          task(5, { dueAt: due, dueState: "overdue" }),
+          task(6, { dueAt: due, dueState: "due_soon" }),
+          task(7, { dueAt: due }),
+          task(8),
+        ],
+      },
+      undefined,
+    ),
+  ).toContain(`#5 [todo] prio=none ${stamp} (overdue) Task 5`);
+  expect(
+    formatTaskBoard(
+      "#general",
+      { tasks: [task(6, { dueAt: due, dueState: "due_soon" })] },
+      undefined,
+    ),
+  ).toContain(`${stamp} (due soon)`);
+  expect(formatTaskBoard("#general", { tasks: [task(7, { dueAt: due })] }, undefined)).toContain(
+    `${stamp} Task 7`,
+  );
+  expect(formatTaskBoard("#general", { tasks: [task(8)] }, undefined)).not.toContain("due=");
+  expect(
+    formatMyTaskList(
+      {
+        tasks: [task(5, { dueAt: due, dueState: "overdue", channelRef: "#general" })],
+        coverage,
+        queue: [{ taskId: task(5).id, position: 1 }],
+      },
+      undefined,
+    ),
+  ).toContain(`- #general task #5 [todo] prio=none ${stamp} (overdue) queue=1`);
+  expect(formatTaskShow(task(5, { dueAt: due, dueState: "due_soon" }))).toContain(
+    `\nDue: 2026-11-20 09:00:00Z (due soon)`,
+  );
+  expect(formatTaskShow(task(5))).toContain("\nDue: (none)");
+});

@@ -164,6 +164,44 @@ const refused: [string, TaskCommand][] = [
     "a priority that is not a level",
     command({ operation: "create", title: "x", priority: "asap" as "high" }),
   ],
+  // Task #13: a due instant is a create/amend field only, and only a parseable one; amend's
+  // null is the one way to clear it.
+  ["a dueAt on a list", command({ operation: "list", dueAt: "2026-11-20T09:00:00.000Z" })],
+  [
+    "a dueAt on an update",
+    command({
+      operation: "update",
+      number: 1,
+      status: "done",
+      dueAt: "2026-11-20T09:00:00.000Z",
+    }),
+  ],
+  [
+    "a dueAt on a convert",
+    command({ operation: "convert", messageId: "m-1", dueAt: "2026-11-20T09:00:00.000Z" }),
+  ],
+  [
+    "a dueAt on a delete",
+    command({ operation: "delete", number: 1, dueAt: "2026-11-20T09:00:00.000Z" }),
+  ],
+  [
+    "a create dueAt that is not a datetime",
+    command({ operation: "create", title: "x", dueAt: "next week" }),
+  ],
+  [
+    "a create dueAt that is not text",
+    command({ operation: "create", title: "x", dueAt: 7 as unknown as string }),
+  ],
+  ["a create dueAt of null", command({ operation: "create", title: "x", dueAt: null })],
+  ["an amend dueAt that is blank", command({ operation: "amend", number: 1, dueAt: " " })],
+  [
+    "an amend dueAt that is not a datetime",
+    command({ operation: "amend", number: 1, dueAt: "friday" }),
+  ],
+  [
+    "an amend dueAt that is not text",
+    command({ operation: "amend", number: 1, dueAt: 7 as unknown as string }),
+  ],
 ];
 
 test.each(refused)("execute refuses %s as INVALID_INPUT before reading", async (_, input) => {
@@ -243,6 +281,21 @@ const accepted: [string, TaskPrincipal, TaskCommand][] = [
   ],
   ["a history", person, command({ operation: "history", number: 1 })],
   ["a delete", person, command({ operation: "delete", number: 1 })],
+  [
+    "a create with a due instant",
+    person,
+    command({ operation: "create", title: "x", dueAt: "2026-11-20T09:00:00.000Z" }),
+  ],
+  [
+    "an amend setting a due instant",
+    person,
+    command({ operation: "amend", number: 1, dueAt: "2026-11-20T09:00:00.000Z" }),
+  ],
+  [
+    "an amend clearing the due instant",
+    person,
+    command({ operation: "amend", number: 1, dueAt: null }),
+  ],
   ["a receipt", person, command({ operation: "receipt", number: 1 })],
   [
     "an Agent's list by target",

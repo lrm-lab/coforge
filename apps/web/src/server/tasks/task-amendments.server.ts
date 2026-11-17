@@ -160,12 +160,14 @@ export async function amendTask(
   const relational = command.blockedBy !== undefined || command.parent !== undefined;
   const labelEdit = command.labels !== undefined || command.removeLabels !== undefined;
   const projectEdit = command.project !== undefined;
+  const dueEdit = command.dueAt !== undefined;
   if (
     command.title === undefined &&
     command.description === undefined &&
     !relational &&
     !labelEdit &&
-    !projectEdit
+    !projectEdit &&
+    !dueEdit
   )
     throw new AppError("INVALID_INPUT");
   const authorityEdit = relational || projectEdit;
@@ -245,6 +247,18 @@ export async function amendTask(
       projectEdit && (nextProject?.id ?? null) !== (task.project?.id ?? null)
         ? { eventType: "project_changed", payload: { from: task.project ?? null, to: nextProject } }
         : null;
+    // The due instant: a datetime sets it, null clears it; an unchanged one writes nothing.
+    const nextDue = dueEdit
+      ? command.dueAt === null
+        ? null
+        : new Date(command.dueAt!)
+      : (task.dueAt ?? null);
+    const nextDueHasTime =
+      nextDue === null ? false : dueEdit ? (command.dueHasTime ?? true) : task.dueHasTime;
+    const dueChanged =
+      dueEdit &&
+      ((nextDue?.getTime() ?? null) !== (task.dueAt?.getTime() ?? null) ||
+        nextDueHasTime !== task.dueHasTime);
     // An amended title is typed text. One that reads the same as the current title does for this
     // reader (its stored tokens read back as names or `@handle`, `task #N`, `#name`) is left as
     // stored, tokens included.
@@ -261,6 +275,9 @@ export async function amendTask(
       await tx.taskLabel.createMany({
         data: addedLabels.map((label) => ({ taskId: task.id, labelId: label.id })),
       });
+    // Rescheduling or clearing `dueAt` resets the due-reminder cycle so re-setting the same
+    // due instant later starts fresh from occurrence 1.
+    if (dueChanged) await tx.taskDueReminder.deleteMany({ where: { taskId: task.id } });
     const committed = await commitTaskChange(
       tx,
       member,
@@ -270,6 +287,7 @@ export async function amendTask(
         ...(retitled && { title }),
         ...(command.description !== undefined && { description: command.description }),
         ...(projectEdit && { projectId: nextProject?.id ?? null }),
+        ...(dueChanged && { dueAt: nextDue, dueHasTime: nextDueHasTime }),
       },
       {
         relationChanges: [

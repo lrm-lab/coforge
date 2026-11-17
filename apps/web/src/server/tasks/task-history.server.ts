@@ -83,6 +83,11 @@ export function creationChanges(task: SelectedTask): TaskHistoryChange[] {
   const priority = storedTaskPriority(task.priority);
   if (priority !== "none")
     changes.push({ eventType: "priority_changed", payload: { from: "none", to: priority } });
+  if (task.dueAt)
+    changes.push({
+      eventType: "due_changed",
+      payload: { from: null, to: task.dueAt.toISOString() },
+    });
   return changes;
 }
 
@@ -105,6 +110,14 @@ export function taskChanges(before: SelectedTask, after: SelectedTask): TaskHist
       payload: {
         from: storedTaskPriority(before.priority),
         to: storedTaskPriority(after.priority),
+      },
+    });
+  if ((before.dueAt?.getTime() ?? null) !== (after.dueAt?.getTime() ?? null))
+    changes.push({
+      eventType: "due_changed",
+      payload: {
+        from: before.dueAt?.toISOString() ?? null,
+        to: after.dueAt?.toISOString() ?? null,
       },
     });
   const amended: Extract<TaskHistoryChange, { eventType: "amended" }>["payload"]["changes"] = {};

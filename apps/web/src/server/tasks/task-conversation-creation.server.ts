@@ -185,6 +185,8 @@ export async function createConversationTasks(
         description: command.description,
         createsResource: command.createsResource ?? false,
         priority: command.priority,
+        dueAt: command.dueAt ? new Date(command.dueAt) : null,
+        dueHasTime: command.dueAt ? (command.dueHasTime ?? true) : false,
         status: initial,
         assignee,
         requestId: requestIds[index]!,
@@ -298,6 +300,9 @@ export async function insertConversationTask(
     description?: string | null;
     createsResource?: boolean;
     priority?: TaskPriorityLevel;
+    /** The due instant the new Task opens with; null or absent for none. */
+    dueAt?: Date | null;
+    dueHasTime?: boolean;
     /** The status the new Task opens in; absent, the defaults (a self-assign starts in
      * progress, anything else waits in todo). */
     status?: TaskWriteStatus;
@@ -328,6 +333,8 @@ export async function insertConversationTask(
       description: input.description,
       createsResource: input.createsResource ?? false,
       priority: input.priority,
+      dueAt: input.dueAt ?? null,
+      dueHasTime: input.dueAt ? (input.dueHasTime ?? true) : false,
       ownerMemberId: assignee?.id,
       status: input.status ?? (started ? "in_progress" : "todo"),
       claimedAt: claimed ? new Date() : null,
