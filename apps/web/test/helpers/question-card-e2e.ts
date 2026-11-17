@@ -1,5 +1,7 @@
+import { expect } from "bun:test";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
+import type { browserSession } from "./browser-e2e";
 
 export const IN_COMPOSER = `document.querySelector("[data-composer]").contains(document.activeElement)`;
 export const FOCUS_COMPOSER = `(() => { const c = document.querySelector("[data-composer]"); (c.querySelector("textarea, input, [contenteditable]") ?? c).focus(); return true; })()`;
@@ -111,3 +113,59 @@ export const signUpQuestions = (tail: string, to: string) => ({
   ],
   to,
 });
+
+/** How the desktop questions-card e2e reads and works a card: `messageId` is the viewer's card,
+ * and a query given another card's id reads that one. */
+export function questionCardQueries(
+  messageId: string,
+  { browser, evaluate }: Pick<ReturnType<typeof browserSession>, "browser" | "evaluate">,
+) {
+  const card = (id: string) =>
+    `document.querySelector('[data-message-id="${id}"] [data-question-card]')`;
+  const scoped = (id: string, selector: string) => `[data-message-id="${id}"] ${selector}`;
+  const cardText = `(${card(messageId)}?.textContent ?? "")`;
+  const onQuestion = (index: number, id = messageId) =>
+    `${card(id)}?.dataset.questionAt === "${index}"`;
+  const picked = (option: string, id = messageId) =>
+    `document.querySelector('${scoped(id, `[data-question-option="${option}"]`)}')?.getAttribute("aria-selected") === "true"`;
+  const send = scoped(messageId, "button[data-question-send]");
+  const nextButton = scoped(messageId, "button[data-question-next]");
+  const nextLabel = `document.querySelector('${nextButton}')?.textContent.trim()`;
+  const draftKey = `coforge.question-draft:${messageId}`;
+  const highlighted = (id = messageId) =>
+    evaluate<string | null>(
+      `${card(id)}.querySelector("[data-question-option][data-hi]")?.dataset.questionOption ?? null`,
+    );
+  /** Moves the highlight onto `option` with the arrow keys; the first press only shows it. */
+  const highlightTo = async (option: string, id = messageId) => {
+    for (const key of ["ArrowDown", "ArrowDown", "ArrowDown", "ArrowUp", "ArrowUp", "ArrowUp"]) {
+      if ((await highlighted(id)) === option) return;
+      await browser("press", key);
+    }
+    expect(await highlighted(id)).toBe(option);
+  };
+  const listFocused = (id = messageId) =>
+    `${card(id)}.querySelector("[data-question-options]")?.contains(document.activeElement) === true`;
+  const rows = (id: string) =>
+    evaluate<string[]>(
+      `[...${card(id)}.querySelectorAll("[data-question-answer]")].map((row) => row.dataset.questionAnswer)`,
+    );
+  const answerRow = (id: string, question: string) =>
+    `(${card(id)}.querySelector('[data-question-answer="${question}"]')?.textContent ?? "")`;
+  return {
+    card,
+    scoped,
+    cardText,
+    onQuestion,
+    picked,
+    send,
+    nextButton,
+    nextLabel,
+    draftKey,
+    highlighted,
+    highlightTo,
+    listFocused,
+    rows,
+    answerRow,
+  };
+}
