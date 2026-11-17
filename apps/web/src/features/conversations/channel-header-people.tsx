@@ -9,6 +9,7 @@ import {
   useOpenAgentProfile,
   type OpenAgentProfile,
 } from "#src/features/agents/profile-panel/open-agent-profile";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useChannelMembers } from "./channel-members-query";
 import { PersonHoverCard } from "./person-hover-card";
@@ -50,11 +51,7 @@ export function ChannelHeaderFaces({
   return (
     <div className="flex shrink-0 items-center">
       {shown.length > 0 && (
-        <ActorAvatarStack
-          overlap="tight"
-          className="hidden md:flex"
-          aria-label={m.channel_settings_members()}
-        >
+        <ActorAvatarStack className="hidden md:flex" aria-label={m.channel_settings_members()}>
           {shown.map((entry) => {
             const isAgent = Boolean(entry.agentId) || entry.kind === "agent";
             const agentId = isAgent
@@ -71,11 +68,11 @@ export function ChannelHeaderFaces({
                   presence
                   agentId={agentId}
                   userId={userId}
-                  size="xs"
+                  size="sm"
                   alt=""
                   src={entry.avatarUrl ?? undefined}
                   name={entry.displayName}
-                  className={AVATAR_STACK_RING.thin}
+                  className={cn("avatar-header", AVATAR_STACK_RING.regular)}
                 />
                 <span className="sr-only">{entry.displayName}</span>
               </>
@@ -122,11 +119,18 @@ export function ChannelHeaderFaces({
               >
                 <ActorAvatar
                   presence={false}
-                  size="xs"
+                  size="sm"
                   alt=""
                   initials={`+${more}`}
-                  contentClassName="bg-brand-primary text-brand-secondary *:text-brand-secondary"
-                  className={AVATAR_STACK_RING.thin}
+                  contentClassName={cn(
+                    "bg-avatar-more text-avatar-more-fg outline-none [&>span]:text-avatar-more-fg [&>span]:tabular-nums",
+                    more > 99 && "px-1.5",
+                  )}
+                  className={cn(
+                    "avatar-header",
+                    more > 99 && "[&&]:w-auto [&&]:min-w-8",
+                    AVATAR_STACK_RING.regular,
+                  )}
                 />
                 <span className="sr-only">{m.channel_settings_members_more({ count: more })}</span>
               </TooltipTrigger>
@@ -136,8 +140,8 @@ export function ChannelHeaderFaces({
       )}
       {canAdd && (
         <AvatarAddButton
-          size="xs"
-          className={shown.length > 0 ? "md:ml-2" : undefined}
+          size="sm"
+          className={cn("border-secondary text-avatar-add-fg", shown.length > 0 && "md:ml-2")}
           title={m.channel_settings_add_members()}
           onPress={onAddMembers}
         />
@@ -166,10 +170,10 @@ export function ChannelHeaderMemberCluster({
       <div
         aria-busy="true"
         aria-label={m.channel_members_loading()}
-        className="hidden shrink-0 -space-x-1 md:flex"
+        className="hidden shrink-0 -space-x-1.5 md:flex"
       >
         {Array.from({ length: 3 }, (_, index) => (
-          <Skeleton key={index} className="size-6 rounded-full" />
+          <Skeleton key={index} className="size-8 rounded-full" />
         ))}
       </div>
     );

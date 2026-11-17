@@ -303,16 +303,41 @@ html[data-drag-cursor] [data-drop-blocked] * {
     border-radius: 9999px;
   }
 
+  /* A channel header's 32 × 32px round avatar (`sm` without the message stream's 38px bump). */
+  [data-avatar].avatar-header {
+    width: 2rem;
+    height: 2rem;
+    --avatar-size: 2rem;
+    border-radius: 9999px;
+  }
+
   /* An Agent's mascot sticker (`AvatarSticker`) is a circle at every size, as in Frank's
      references, profile sizes included. */
   [data-avatar][data-avatar-sticker] {
     border-radius: 9999px;
   }
 
+  /* Stacked stickers (`AVATAR_STACK_RING`) sit on pure white in both themes (jing, task #132). */
+  .avatar-stack-face[data-avatar-sticker],
+  .avatar-stack-face [data-avatar-sticker] {
+    background-color: var(--color-avatar-outline);
+  }
+
   /* So is a cartoon person: the portrait is drawn as a circle (`IdentityAvatar`), where an
      uploaded photo takes the size's shape. */
   [data-avatar].avatar-portrait {
     border-radius: 9999px;
+  }
+
+  /* A cartoon portrait is drawn on its own coloured disc, edge to edge: it takes none of the hairline
+     and glossy edge a photo gets to keep it off the page (`Avatar`), which on the artwork read as a
+     muddy, jagged ring (jing, task #132). */
+  [data-avatar].avatar-portrait > :first-child {
+    outline: none;
+  }
+
+  [data-avatar].avatar-portrait > :first-child::before {
+    content: none;
   }
 
   /* A channel row's group avatar (`group-avatar.tsx`): a 48 × 48px box with no fill

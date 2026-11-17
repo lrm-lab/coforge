@@ -27,6 +27,7 @@ export function ActorAvatarStack({
           size="xs"
           alt=""
           initials={`+${more}`}
+          contentClassName="bg-avatar-more text-avatar-more-fg outline-none [&>span]:text-avatar-more-fg [&>span]:tabular-nums"
           className={AVATAR_STACK_RING[ring]}
         />
       )}

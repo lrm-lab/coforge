@@ -99,6 +99,12 @@
      mascot artwork's own edge is white in both themes, so the photo's is too. */
   --color-avatar-outline: #ffffff;
 
+  /* An avatar stack's "+N" overflow circle and the dashed "add member" button beside it
+     (design spec, jing, task #132). Re-pointed under `.dark-mode` below. */
+  --color-avatar-more: #f9f5ff;
+  --color-avatar-more-fg: var(--color-brand-600);
+  --color-avatar-add-fg: #777d8d;
+
   /* A message image's frame: the grey it sits on and its hairline border, Raft's own values
      (task #212). The dark values are re-pointed under `.dark-mode` below. */
   --color-image-frame: oklch(0.9642 0 0);
@@ -217,6 +223,9 @@
     --color-online: #42c83f;
     --color-offline: #778393;
     --color-avatar-deleted: #778393;
+    --color-avatar-more: var(--color-sidebar-accent);
+    --color-avatar-more-fg: var(--color-sidebar-accent-fg);
+    --color-avatar-add-fg: var(--color-nav-fg);
   }
 }
 
