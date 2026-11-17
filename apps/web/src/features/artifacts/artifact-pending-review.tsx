@@ -43,7 +43,7 @@ export function ArtifactPendingReview({
           <p
             role="status"
             data-pending-banner={pending.banner}
-            className="mb-3 rounded-lg bg-warning-secondary px-3 py-2 text-sm text-warning-primary"
+            className="mb-3 rounded-lg bg-secondary px-3 py-2 text-sm text-secondary"
           >
             {pending.banner === "refused" ? m.av_dr_pending_refused() : m.av_dr_pending_changed()}
           </p>

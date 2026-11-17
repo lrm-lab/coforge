@@ -127,7 +127,7 @@ export function useArtifactVisibility({
     <ConfirmDialog
       open={confirming !== null}
       onOpenChange={(open) => !open && setConfirming(null)}
-      tone={confirming?.choice === "link" ? "default" : "destructive"}
+      tone="default"
       title={title}
       description={description}
       detail={

@@ -83,7 +83,7 @@ export function DraftCard({
       data-draft-id={draft.id}
       aria-invalid={flagged || undefined}
       className={cn(
-        "flex flex-col gap-1.5 rounded-lg border bg-primary px-3 py-2.5",
+        "flex flex-col gap-2 rounded-lg border bg-primary p-3",
         flagged ? "border-error" : "border-dashed border-primary",
       )}
     >
@@ -101,7 +101,7 @@ export function DraftCard({
             {parent ? m.av_dr_replying_to({ name: parent.name }) : m.av_dr_replying_earlier()}
           </span>
           {parent?.excerpt && (
-            <span className="line-clamp-2 block italic">
+            <span className="line-clamp-2 block">
               {m.av_cm_anchor_quote({ quote: parent.excerpt })}
             </span>
           )}
@@ -158,7 +158,7 @@ export function DraftCard({
       {!editing && (
         <div className="flex justify-end gap-1">
           <Button
-            size="sm"
+            size="xs"
             color="tertiary"
             iconLeading={Edit03}
             isDisabled={quiet}
@@ -168,8 +168,8 @@ export function DraftCard({
             {m.av_cm_edit()}
           </Button>
           <Button
-            size="sm"
-            color="tertiary-destructive"
+            size="xs"
+            color="tertiary"
             iconLeading={Trash01}
             isDisabled={quiet}
             data-draft-delete=""

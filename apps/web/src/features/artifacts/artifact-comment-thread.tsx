@@ -138,7 +138,7 @@ function CommentRow({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   if (!isLive(comment))
     return (
-      <p data-comment-id={comment.id} className="px-3 py-2 text-sm text-tertiary italic">
+      <p data-comment-id={comment.id} className="px-3 py-2 text-sm text-tertiary">
         {m.av_cm_deleted()}
       </p>
     );
