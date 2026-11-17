@@ -191,8 +191,19 @@ test("external Agent: create, device login, approve, message check and revoke", 
     expect(revokedCtx.status).toBe(401);
   } finally {
     await browser("close").catch(() => undefined);
-    if (createdAgentId)
-      await db.agent.deleteMany({ where: { id: createdAgentId } }).catch(() => undefined);
+    // Look the Agent up by name too: a run that fails before `createdAgentId` is set still
+    // created it. Device grants don't cascade from the Agent, so delete them by `grant.agentId`.
+    const agentIds = createdAgentId
+      ? [createdAgentId]
+      : (
+          await db.agent.findMany({ where: { workspaceId, name: agentName }, select: { id: true } })
+        ).map((agent) => agent.id);
+    for (const agentId of agentIds) {
+      await db.deviceAuthorization
+        .deleteMany({ where: { grant: { path: ["agentId"], equals: agentId } } })
+        .catch(() => undefined);
+    }
+    await db.agent.deleteMany({ where: { id: { in: agentIds } } }).catch(() => undefined);
     await db.$disconnect();
   }
-}, 300_000);
+}, 60_000);
