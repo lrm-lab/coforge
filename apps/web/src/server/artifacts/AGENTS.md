@@ -155,6 +155,9 @@ The rules are in `docs/agent-cli/artifact-follows.md`. Their modules:
   (`server/app-agent-events/system-agent-events.server.ts`), which stores the Message. This module
   imports nothing of conversations or events.
 - `artifact_follows` goes with the artifact and holds no foreign key on an Agent.
+- People hear of artifact activity through the Activity inbox: `artifact-activity.server.ts` is the public
+  entry (the derived rows, their details, `settleWrite`); `server/inbox/` unions the rows into
+  the list and the nav dot and imports nothing else of this module.
 
 ## People's reads and writes
 

@@ -1,11 +1,12 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { startFollowing } from "./artifact-follows.server";
 import type { ArtifactReads } from "./artifact-reads.server";
 
 type Scope = { workspaceId: string; artifactId: string; userId: string };
 
 export class ArtifactPersonFollows {
   constructor(
-    private readonly db: Pick<PrismaClient, "artifactFollow">,
+    private readonly db: Pick<PrismaClient, "artifactFollow" | "$executeRaw">,
     private readonly reads: Pick<ArtifactReads, "artifact">,
   ) {}
 
@@ -24,18 +25,16 @@ export class ArtifactPersonFollows {
     const artifact = await this.reads.artifact(input.workspaceId, input.artifactId, {
       userId: input.userId,
     });
-    const where = { artifactId_userId: { artifactId: artifact.id, userId: input.userId } };
-    const unfollowedAt = input.following ? null : new Date();
+    if (input.following) {
+      await startFollowing(this.db, artifact.id, [{ userId: input.userId }]);
+      return true;
+    }
+    const unfollowedAt = new Date();
     await this.db.artifactFollow.upsert({
-      where,
-      create: {
-        artifactId: artifact.id,
-        userId: input.userId,
-        following: input.following,
-        unfollowedAt,
-      },
-      update: { following: input.following, unfollowedAt },
+      where: { artifactId_userId: { artifactId: artifact.id, userId: input.userId } },
+      create: { artifactId: artifact.id, userId: input.userId, following: false, unfollowedAt },
+      update: { following: false, unfollowedAt },
     });
-    return input.following;
+    return false;
   }
 }

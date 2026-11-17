@@ -21,22 +21,16 @@ import {
 } from "#src/server/conversations/direct-conversation-peer.server";
 import { peopleDirectPeerId } from "#src/features/conversations/direct-key";
 import { storedTaskStatus } from "#src/server/tasks/task-view.server";
-import { type ActivityPageRow } from "./activity-inbox-page-sql.server";
+import type { ActivityPageRow } from "./activity-inbox-page-sql.server";
 
-/** One listed item, from its page row (`activity-inbox-page-sql.server.ts`). */
 export type ActivityCandidate = {
-  /** The item's key on the page, the list order's last tiebreaker: its mention notification, its
-   * thread, its task conversation or its conversation. */
   key: string;
   kind: "channel" | "direct";
-  /** The viewer's member row the item is read through; none for a notification. */
   memberId: string | null;
   conversationId: string;
   rootMessageId: string | null;
   channelName: string | null;
-  /** A channel's `Conversation.visibility`; a direct conversation's is never read. */
   visibility: string;
-  /** A direct message's key, which names the member on the other side of a DM between people. */
   directKey: string | null;
   agentId: string | null;
   latestMessageId: string;
@@ -45,31 +39,19 @@ export type ActivityCandidate = {
   unreadCount: number;
   firstUnreadMessageId: string | null;
   unreadMention: boolean;
-  /**
-   * The first message past Done that mentions the viewer, read or not: the item is listed under
-   * Mentions, and opens there when it has nothing unread. Null when nothing past Done mentions them.
-   */
   firstMentionMessageId: string | null;
-  /** A mention the viewer was notified of from outside the channel, until they mark it Done. */
   mentionAction?: { resolutionId: string; threadRootId: string | null };
-  /** An attachment-comment notification: the file the comment is on, the message the file rides
-   * on (`sourceMessageId`, the message the item opens at — null while the file has none), and
-   * the comment's own thread. */
   attachmentComment?: {
     attachmentId: string;
     fileName: string;
     threadRootId: string | null;
     sourceMessageId: string | null;
   };
-  /** A conversation's own item the viewer pinned: its place among their pins. Null otherwise. */
   pin: { order: number; at: Date } | null;
-  /** A task conversation's item: its channel board, which is where the item lives, and the task. */
   task?: { boardId: string; number: number; title: string };
 };
 
-/** Loads the messages, DM peers (Agents and members), channel avatar members and tasks one page
- * of items renders, in a fixed number of queries. */
-export async function hydrateConversationItems(
+async function hydrateConversationItems(
   db: PrismaClient,
   workspaceId: string,
   userId: string,
@@ -77,7 +59,6 @@ export async function hydrateConversationItems(
 ) {
   const messageIds = new Set<string>();
   const agentIds = new Set<string>();
-  // The member on the other side of each DM between people (the viewer, in their own), by key.
   const peerUserIds = new Map<string, string>();
   const rootIds: string[] = [];
   const channelIds = new Set<string>();
@@ -96,7 +77,6 @@ export async function hydrateConversationItems(
   const [messages, agents, people, channelMembers, tasks] = await Promise.all([
     db.message.findMany({
       where: { id: { in: [...messageIds] }, workspaceId },
-      // A card's row reads in the viewer's language, not as its stored English body.
       select: { ...browserMessageFields, actionCard: ACTION_CARD_PREVIEW_SELECT },
     }),
     db.agent.findMany({
@@ -109,12 +89,10 @@ export async function hydrateConversationItems(
         appBot: APP_BOT_LOGO_SELECT,
       },
     }),
-    // By the key, not a membership: the member stays named after leaving the Workspace.
     db.user.findMany({
       where: { id: { in: [...new Set(peerUserIds.values())] } },
       select: peoplePeerUserFields,
     }),
-    // The members a channel's group avatar shows, as on the Chat sidebar's row.
     channelListMembers(db, workspaceId, [...channelIds]),
     db.task.findMany({
       where: { messageId: { in: rootIds }, workspaceId, deletedAt: null },
@@ -170,7 +148,6 @@ export async function hydrateConversationItems(
         number: task.number,
         status: storedTaskStatus(task.status),
         ownerName: task.owner ? browserSenderName(task.owner) : null,
-        // The owner's face, drawn beside the name (task #521).
         ownerFace: task.owner
           ? {
               kind: task.owner.userId ? ("user" as const) : ("agent" as const),
@@ -178,7 +155,6 @@ export async function hydrateConversationItems(
               avatarUrl: browserSenderAvatarUrl(task.owner, workspaceId),
             }
           : null,
-        // A deleted Agent keeps its Tasks; the card says so instead of reading as a live owner.
         ownerDeleted: Boolean(task.owner?.agent?.deletedAt),
       },
     ]),
@@ -195,7 +171,6 @@ export async function hydrateConversationItems(
       candidate.kind === "channel"
         ? {
             kind: "channel" as const,
-            // A task conversation's place is its board; the item's own conversation is the task's.
             conversationId: candidate.task?.boardId ?? candidate.conversationId,
             channelName: candidate.channelName ?? "",
             visibility: channelVisibilityOf(candidate),
@@ -205,17 +180,13 @@ export async function hydrateConversationItems(
           ? { kind: "direct" as const, conversationId: candidate.conversationId, peer }
           : null;
     const root = candidate.rootMessageId ? messageById.get(candidate.rootMessageId) : null;
-    // A row deleted between the two reads leaves the page rather than rendering half an item.
     if (!latest || !place || root === undefined) return [];
     return [
       {
+        kind: "conversation" as const,
         key: candidate.key,
         place,
-        // A channel thread is listed because the viewer follows it; a direct-message thread
-        // has no follow switch.
         thread: root ? { root, task: taskByRoot.get(root.id) ?? null } : null,
-        // A task conversation: its number and title on the board, and the conversation Done and
-        // reads name (`conversationId`, in the `conversation` kind of item).
         task: candidate.task
           ? { ...candidate.task, conversationId: candidate.conversationId }
           : null,
@@ -227,54 +198,59 @@ export async function hydrateConversationItems(
         firstMentionMessageId: candidate.firstMentionMessageId,
         mentionAction: candidate.mentionAction ?? null,
         attachmentComment: candidate.attachmentComment ?? null,
-        /** The viewer pinned this conversation, in whichever view lists it. */
         pinned: candidate.pin !== null,
       },
     ];
   });
 }
-/** A candidate from its page row. */
-export function activityCandidate({
-  key,
-  unreadItemCount: _unreadItemCount,
-  unreadMentionItemCount: _unreadMentionItemCount,
-  activeItemCount: _activeItemCount,
-  isPin: _isPin,
-  pastDone: _pastDone,
-  hasUnread: _hasUnread,
-  pinOrder,
-  pinnedAt,
-  taskBoardId,
-  taskNumber,
-  taskTitle,
-  mentionId,
-  noticeThreadRootId,
-  attachmentId,
-  attachmentFileName,
-  attachmentSourceMessageId,
-  ...row
-}: ActivityPageRow): ActivityCandidate {
+
+function activityCandidate(row: ActivityPageRow): ActivityCandidate {
   return {
-    ...row,
-    key: key!,
-    ...(mentionId && {
+    key: row.key!,
+    kind: row.kind,
+    memberId: row.memberId,
+    conversationId: row.conversationId!,
+    rootMessageId: row.rootMessageId,
+    channelName: row.channelName,
+    visibility: row.visibility,
+    directKey: row.directKey,
+    agentId: row.agentId,
+    latestMessageId: row.latestMessageId!,
+    latestSequence: row.latestSequence,
+    latestAt: row.latestAt,
+    unreadCount: row.unreadCount,
+    firstUnreadMessageId: row.firstUnreadMessageId,
+    unreadMention: row.unreadMention,
+    firstMentionMessageId: row.firstMentionMessageId,
+    ...(row.mentionId && {
       mentionAction: {
-        resolutionId: mentionId,
-        // A comment notification opens its file's comment thread, not a thread of the source.
-        threadRootId: attachmentId ? null : noticeThreadRootId,
+        resolutionId: row.mentionId,
+        threadRootId: row.attachmentId ? null : row.noticeThreadRootId,
       },
     }),
-    ...(attachmentId && {
+    ...(row.attachmentId && {
       attachmentComment: {
-        attachmentId,
-        fileName: attachmentFileName!,
-        threadRootId: noticeThreadRootId,
-        sourceMessageId: attachmentSourceMessageId,
+        attachmentId: row.attachmentId,
+        fileName: row.attachmentFileName!,
+        threadRootId: row.noticeThreadRootId,
+        sourceMessageId: row.attachmentSourceMessageId,
       },
     }),
-    pin: pinOrder !== null && pinnedAt !== null ? { order: pinOrder, at: pinnedAt } : null,
-    ...(taskBoardId && {
-      task: { boardId: taskBoardId, number: taskNumber!, title: taskTitle! },
+    pin:
+      row.pinOrder !== null && row.pinnedAt !== null
+        ? { order: row.pinOrder, at: row.pinnedAt }
+        : null,
+    ...(row.taskBoardId && {
+      task: { boardId: row.taskBoardId, number: row.taskNumber!, title: row.taskTitle! },
     }),
   };
 }
+
+export type ActivityConversationItem = Awaited<ReturnType<typeof hydrateConversationItems>>[number];
+
+export const hydrateConversationRows = (
+  db: PrismaClient,
+  workspaceId: string,
+  userId: string,
+  rows: readonly ActivityPageRow[],
+) => hydrateConversationItems(db, workspaceId, userId, rows.map(activityCandidate));

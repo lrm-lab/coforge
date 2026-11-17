@@ -1,0 +1,16 @@
+model ArtifactCommentMention {
+  id          String                  @id @default(uuid(7)) @db.Uuid
+  artifactId  String                  @db.Uuid
+  userId      String                  @db.Uuid
+  commentId   String?                 @db.Uuid
+  reviewId    String?                 @db.Uuid
+  mentionedAt DateTime
+  artifact    Artifact                @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  comment     ArtifactComment?        @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  review      ArtifactCommentReview?  @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId], where: { commentId: { not: null } }, map: "artifact_comment_mentions_comment_key")
+  @@unique([reviewId, userId], where: { reviewId: { not: null } }, map: "artifact_comment_mentions_review_key")
+  @@index([artifactId, userId, mentionedAt(sort: Desc)])
+  @@map("artifact_comment_mentions")
+}

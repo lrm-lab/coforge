@@ -29,7 +29,7 @@ export const NOBODY_TOLD: NoticeReport = { notified: [], notNotified: [] };
 
 const DELIVERIES_AT_ONCE = 4;
 
-async function inBatches<T, R>(
+export async function inBatches<T, R>(
   items: readonly T[],
   size: number,
   run: (item: T) => Promise<R>,

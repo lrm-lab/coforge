@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouterState } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { ArtifactPage } from "#src/features/artifacts/artifact-page";
@@ -11,14 +11,19 @@ import { NotFoundPage } from "#src/features/errors/not-found-page";
 export const Route = createFileRoute("/w/$workspaceSlug/artifacts/$artifactId")({
   ssr: "data-only",
   staticData: { standalone: true },
-  validateSearch: z.object({ review: z.uuid().optional().catch(undefined) }),
+  validateSearch: z.object({
+    review: z.uuid().optional().catch(undefined),
+    comment: z.uuid().optional().catch(undefined),
+    version: z.coerce.number().int().positive().optional().catch(undefined),
+  }),
   component: ArtifactRoutePage,
 });
 
 function ArtifactRoutePage() {
   const { artifactId } = Route.useParams();
-  const { review } = Route.useSearch();
+  const { review, comment, version } = Route.useSearch();
   const navigate = Route.useNavigate();
+  const arrival = useRouterState({ select: (state) => state.location.state.__TSR_key });
   const on = useQuery(artifactsOnQuery(useCurrentWorkspaceId()));
   if (on.isPending) return null;
   if (on.data === false) return <NotFoundPage />;
@@ -26,6 +31,9 @@ function ArtifactRoutePage() {
     <ArtifactPage
       artifactId={artifactId}
       reviewId={review}
+      commentId={comment}
+      version={version}
+      arrival={arrival}
       onClearReview={() => void navigate({ search: {}, replace: true, resetScroll: false })}
     />
   );

@@ -1,4 +1,3 @@
-import { readMessageReferences } from "@lrm/coforge-sdk/internal/message-references";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { containsPattern, searchTerms } from "#src/lib/search-terms";
@@ -204,27 +203,29 @@ export class ArtifactGallery {
   }
 
   async #unseenComments(userId: string, ids: readonly string[]) {
+    const artifactIds = Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`));
     const rows = await this.db.$queryRaw<
-      { artifactId: string; newComments: number; candidates: string[]; username: string }[]
+      { artifactId: string; newComments: number; mentioned: boolean }[]
     >`
-      SELECT c."artifactId", COUNT(*)::int AS "newComments", u."username",
-        COALESCE(ARRAY_AGG(c."body") FILTER (WHERE c."body" ILIKE '%@' || u."username" || '%'),
-          '{}') AS "candidates"
-      FROM "artifact_comments" c
-      JOIN "users" u ON u."id" = ${userId}::uuid
-      JOIN "artifact_viewer_positions" p
-        ON p."artifactId" = c."artifactId" AND p."userId" = ${userId}::uuid
-      WHERE c."artifactId" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
-        AND c."deletedAt" IS NULL
-        AND (c."authorUserId" IS NULL OR c."authorUserId" <> ${userId}::uuid)
-        AND c."createdAt" > p."openedAt"
-      GROUP BY c."artifactId", u."username"`;
-    return new Map(rows.map((row) => [row.artifactId, row]));
+      SELECT p."artifactId",
+        (SELECT COUNT(*)::int FROM "artifact_comments" c
+          WHERE c."artifactId" = p."artifactId" AND c."deletedAt" IS NULL
+            AND (c."authorUserId" IS NULL OR c."authorUserId" <> p."userId")
+            AND c."createdAt" > p."openedAt") AS "newComments",
+        EXISTS (SELECT 1 FROM "artifact_comment_mentions" mm
+          WHERE mm."artifactId" = p."artifactId" AND mm."userId" = p."userId"
+            AND mm."mentionedAt" > p."openedAt") AS "mentioned"
+      FROM "artifact_viewer_positions" p
+      WHERE p."userId" = ${userId}::uuid AND p."artifactId" IN (${artifactIds})`;
+    return {
+      newComments: new Map(rows.map((row) => [row.artifactId, row.newComments])),
+      mentioned: new Set(rows.filter((row) => row.mentioned).map((row) => row.artifactId)),
+    };
   }
 
   private async cards(userId: string, ids: readonly string[]) {
     if (ids.length === 0) return [];
-    const [rows, positions, links, counts, unseenByArtifact] = await Promise.all([
+    const [rows, positions, links, counts, unseen] = await Promise.all([
       this.db.artifact.findMany({ where: { id: { in: [...ids] } }, select: CARD_SELECT }),
       this.db.artifactViewerPosition.findMany({
         where: { userId, artifactId: { in: [...ids] } },
@@ -249,7 +250,6 @@ export class ArtifactGallery {
       if (!row) return [];
       const { authorAgentId, ...shown } = row;
       const place = position.get(id);
-      const unseen = unseenByArtifact.get(id);
       const tier = artifactTier(row);
       return [
         {
@@ -261,17 +261,10 @@ export class ArtifactGallery {
           openedAt: place?.openedAt ?? null,
           commentCount: total.get(id) ?? 0,
           hasUpdates: place !== undefined && place.seenVersion < row.currentVersion,
-          newComments: unseen?.newComments ?? 0,
-          mentionsYou:
-            unseen !== undefined &&
-            unseen.candidates.some((body) => mentions(body, unseen.username)),
+          newComments: unseen.newComments.get(id) ?? 0,
+          mentionsYou: unseen.mentioned.has(id),
         },
       ];
     });
   }
 }
-
-const mentions = (body: string, username: string) =>
-  readMessageReferences(body).candidates.handles.some(
-    (handle) => handle.toLowerCase() === username.toLowerCase(),
-  );

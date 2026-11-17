@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { ActivityInbox } from "#src/server/inbox/activity-inbox.server";
-import { cleanup, database, seed } from "./helpers/activity-inbox-fixture";
+import { cleanup, database, seed, isConversation } from "./helpers/activity-inbox-fixture";
 
 test("Done takes a pinned conversation out of Pinned until something new arrives, like every row", async () => {
   const db = database();
@@ -16,7 +16,7 @@ test("Done takes a pinned conversation out of Pinned until something new arrives
       const page = await inbox.list(workspace.id, alice.id, { filter: "all" });
       return {
         pinned: page.pinned.map((entry) => entry.place.conversationId),
-        items: page.items.map((entry) => entry.place.conversationId),
+        items: page.items.filter(isConversation).map((entry) => entry.place.conversationId),
         unreadItemCount: page.unreadItemCount,
         activeItemCount: page.activeItemCount,
       };

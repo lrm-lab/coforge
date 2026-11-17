@@ -9,10 +9,10 @@ import {
   waitingChoiceTarget,
 } from "#src/features/inbox/activity-open-target";
 import type { WaitingChoiceCard } from "#src/server/conversations/waiting-choice-cards.server";
-import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
+import type { ActivityConversationItem } from "#src/server/inbox/activity-inbox.server";
 
 /** A channel's Activity item: only what `activityOpenTarget` reads. */
-function item(overrides: Partial<ActivityInboxItem>): ActivityInboxItem {
+function item(overrides: Partial<ActivityConversationItem>): ActivityConversationItem {
   return {
     place: { kind: "channel", conversationId: "channel" },
     thread: null,
@@ -22,7 +22,7 @@ function item(overrides: Partial<ActivityInboxItem>): ActivityInboxItem {
     firstUnreadMessageId: null,
     firstMentionMessageId: null,
     ...overrides,
-  } as unknown as ActivityInboxItem;
+  } as unknown as ActivityConversationItem;
 }
 
 test("an item opens at its first unread message, ahead of a mention already read (task #358)", () => {
@@ -56,7 +56,7 @@ test("with nothing unread, an item that mentions the viewer opens at its first m
 test("a thread opens at its first unread reply, ahead of a mention already read", () => {
   const target = activityOpenTarget(
     item({
-      thread: { root: { id: "root" } } as ActivityInboxItem["thread"],
+      thread: { root: { id: "root" } } as ActivityConversationItem["thread"],
       firstMentionMessageId: "old-reply",
       firstUnreadMessageId: "new-reply",
     }),
@@ -70,7 +70,7 @@ test("a thread opens at its first unread reply, ahead of a mention already read"
 
 test("a comment on a file opens its conversation at the file's message, with the file's review at the comment", () => {
   const comment = item({
-    latest: { id: "comment" } as ActivityInboxItem["latest"],
+    latest: { id: "comment" } as ActivityConversationItem["latest"],
     attachmentComment: {
       attachmentId: "file",
       fileName: "review.txt",
@@ -97,7 +97,7 @@ test("a comment on a file opens its conversation at the file's message, with the
 
 test("a reply to a comment opens at the comment it answers, the one the comments list shows", () => {
   const reply = item({
-    latest: { id: "reply" } as ActivityInboxItem["latest"],
+    latest: { id: "reply" } as ActivityConversationItem["latest"],
     attachmentComment: {
       attachmentId: "file",
       fileName: "review.txt",
@@ -158,7 +158,7 @@ test("a waiting choice card in a Task's conversation opens the Task's popup alon
 });
 
 test("a Task card opens the Task's popup alone, not its channel's chat (Frank, 11-04)", () => {
-  const task = item({ task: { number: 4 } as ActivityInboxItem["task"] });
+  const task = item({ task: { number: 4 } as ActivityConversationItem["task"] });
   const target = activityOpenTarget(task);
   expect(target).toEqual({
     kind: "channel",

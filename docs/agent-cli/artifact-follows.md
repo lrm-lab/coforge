@@ -79,7 +79,7 @@ a failure is logged and reported as `delivery-failed`. A notice is stored once p
 
 ## Storage
 
-`artifact_follows` (`artifactId`, `userId` or `agentId`, exactly one, `following`, `unfollowedAt`;
+`artifact_follows` (`artifactId`, `userId` or `agentId`, exactly one, `following`, `unfollowedAt`, and for a person `followedAt`, `readAt`, `doneAt`;
 unique per artifact and Agent and per artifact and person, going with the artifact, no foreign key
-on either; only Agents follow so far) and `system_agent_events` (the notice row, with the
+on either). A person who comments, replies or sends a review follows the artifact, and a person mentioned who can read it follows too (an explicit unfollow stays until they write again; a re-follow counts from the re-follow, `followedAt`) and hears of it in Activity: see `apps/web/src/server/artifacts/comments.md` and `system_agent_events` (the notice row, with the
 Message it became).

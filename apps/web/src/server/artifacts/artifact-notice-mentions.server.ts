@@ -8,6 +8,19 @@ export type MentionedPerson = { id: string; username: string };
 export const mentionHandles = (text: string, max = Number.POSITIVE_INFINITY) =>
   readMessageReferences(text).candidates.handles.slice(0, max);
 
+export async function peopleNamed(
+  db: Pick<PrismaClient, "workspaceMembership">,
+  workspaceId: string,
+  handles: readonly string[],
+): Promise<MentionedPerson[]> {
+  if (handles.length === 0) return [];
+  const memberships = await db.workspaceMembership.findMany({
+    where: { workspaceId, user: { username: { in: [...handles] } } },
+    select: { user: { select: { id: true, username: true } } },
+  });
+  return memberships.map((membership) => membership.user);
+}
+
 export async function mentionedIn(
   db: Pick<PrismaClient, "agent" | "workspaceMembership">,
   workspaceId: string,
@@ -16,15 +29,12 @@ export async function mentionedIn(
 ): Promise<{ agents: MentionedAgent[]; people: MentionedPerson[] }> {
   const handles = [...new Set(texts.flatMap((text) => mentionHandles(text, handlesPerText)))];
   if (handles.length === 0) return { agents: [], people: [] };
-  const [agents, memberships] = await Promise.all([
+  const [agents, people] = await Promise.all([
     db.agent.findMany({
       where: { workspaceId, name: { in: handles }, ...ACTIVE_AGENT_WHERE },
       select: { id: true, name: true },
     }),
-    db.workspaceMembership.findMany({
-      where: { workspaceId, user: { username: { in: handles } } },
-      select: { user: { select: { id: true, username: true } } },
-    }),
+    peopleNamed(db, workspaceId, handles),
   ]);
-  return { agents, people: memberships.map((membership) => membership.user) };
+  return { agents, people };
 }

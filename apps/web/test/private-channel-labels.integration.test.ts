@@ -11,6 +11,7 @@ import {
 } from "#src/server/conversations/saved-messages.server";
 import { ActivityInbox } from "#src/server/inbox/activity-inbox.server";
 import { connectionString, privateChannelFixture } from "./helpers/private-channel-fixture";
+import { isConversation } from "./helpers/activity-inbox-fixture";
 
 /**
  * Every place outside the channel's own page that names a channel says whether it is private
@@ -67,7 +68,9 @@ test.skipIf(!connectionString)(
         });
       const inbox = await new ActivityInbox(db, {}).list(ws, insider, { filter: "all" });
       const placeOf = (id: string) =>
-        [...inbox.items, ...inbox.pinned].find((item) => item.place.conversationId === id)?.place;
+        [...inbox.items.filter(isConversation), ...inbox.pinned].find(
+          (item) => item.place.conversationId === id,
+        )?.place;
       expect(placeOf(closed.id)).toMatchObject({ kind: "channel", visibility: "private" });
       expect(placeOf(open.id)).toMatchObject({ kind: "channel", visibility: "public" });
 

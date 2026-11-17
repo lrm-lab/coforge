@@ -50,5 +50,40 @@
   "activity_bulk_mark_all_done": "Mark all done",
   "activity_bulk_marked_done": "Marked {count} done",
   "activity_flow_switch": "Switch",
-  "activity_flow_back": "Back to list"
+  "activity_flow_back": "Back to list",
+  "activity_artifact_commented": "commented",
+  "activity_artifact_comment_edited": "edited a comment",
+  "activity_artifact_review": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "submitted a review · {count} comment",
+        "countPlural=other": "submitted a review · {count} comments"
+      }
+    }
+  ],
+  "activity_artifact_mentioned": "mentioned you",
+  "activity_artifact_mentioned_in_review": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "mentioned you in a review · {count} comment",
+        "countPlural=other": "mentioned you in a review · {count} comments"
+      }
+    }
+  ],
+  "activity_artifact_version": "published v{version}",
+  "activity_artifact_images": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} image",
+        "countPlural=other": "{count} images"
+      }
+    }
+  ],
+  "activity_artifact_line": "{event}: {preview}"
 }

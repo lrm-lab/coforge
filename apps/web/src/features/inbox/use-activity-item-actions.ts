@@ -17,9 +17,17 @@ import {
   markTaskConversationRead,
   setTaskFollow,
 } from "#src/features/tasks/task-conversation.functions";
+import { doneTarget } from "./activity-item-kind";
 import { taskFollowQueryKey } from "#src/features/tasks/task-follow";
-import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
-import { markActivityItemDone, setActivityMentionRead } from "./activity-inbox.functions";
+import type {
+  ActivityConversationItem,
+  ActivityInboxItem,
+} from "#src/server/inbox/activity-inbox.server";
+import {
+  markActivityItemDone,
+  markActivityItemRead,
+  setActivityMentionRead,
+} from "./activity-inbox.functions";
 import {
   cancelActivityInboxListReads,
   type ActivityCompletionItem,
@@ -27,12 +35,6 @@ import {
 
 export type ActivityItemActions = ReturnType<typeof useActivityItemActions>;
 
-/**
- * What a row can do. Reading, marking unread and following reuse the conversation's own
- * functions, so the Chat sidebar and the inbox move the same cursors. Done hides the row at once
- * and the refetch puts it back if the server refused. The returned object is stable, so rows
- * re-render only when their own item changes.
- */
 export function useActivityItemActions({
   workspaceId,
   onChanged,
@@ -57,6 +59,7 @@ export function useActivityItemActions({
   const markTaskRead = useServerFn(markTaskConversationRead);
   const setTaskFollowed = useServerFn(setTaskFollow);
   const markDone = useServerFn(markActivityItemDone);
+  const markItemRead = useServerFn(markActivityItemRead);
   const setMentionRead = useServerFn(setActivityMentionRead);
 
   return useMemo(() => {
@@ -66,7 +69,6 @@ export function useActivityItemActions({
     ) {
       onFailure(null);
       lifecycle?.start();
-      // Through a resolved promise, so a synchronous throw is reported like a rejection.
       void Promise.resolve()
         .then(action)
         .catch(() => onFailure({ retry: () => run(action, lifecycle) }))
@@ -85,8 +87,7 @@ export function useActivityItemActions({
       task,
       latestSequence: throughSequence,
       mentionAction,
-    }: ActivityInboxItem) {
-      // A mention the viewer was notified of keeps its own read state: they are not in the channel.
+    }: ActivityConversationItem) {
       if (mentionAction)
         return setMentionRead({ data: { resolutionId: mentionAction.resolutionId, read: true } });
       if (task)
@@ -109,21 +110,31 @@ export function useActivityItemActions({
     }
 
     return {
-      read: (item: ActivityInboxItem) => run(() => read(item)),
-      // Saved directly: the sidebar's optimistic lists are synced only on the Chat page, and the
-      // refresh afterwards brings the sidebar's badge along.
-      unread: ({ place, mentionAction }: ActivityInboxItem) =>
+      read: (item: ActivityInboxItem) =>
         run(() =>
+          item.kind === "artifact"
+            ? markItemRead({
+                data: {
+                  kind: "artifact",
+                  artifactId: item.artifact.id,
+                  throughAt: new Date(item.at).getTime(),
+                },
+              })
+            : read(item),
+        ),
+      unread: (item: ActivityConversationItem) => {
+        const { place, mentionAction } = item;
+        return run(() =>
           mentionAction
             ? setMentionRead({ data: { resolutionId: mentionAction.resolutionId, read: false } })
             : place.kind === "channel"
               ? setChannelUnread({ data: { channelId: place.conversationId, unread: true } })
               : setDirectUnread({ data: { conversationId: place.conversationId, unread: true } }),
-        ),
-      unfollow: ({ place, thread, task }: ActivityInboxItem) => {
+        );
+      },
+      unfollow: ({ place, thread, task }: ActivityConversationItem) => {
         if (task) {
           const ref = { conversationId: place.conversationId, number: task.number };
-          // The Task's popup may be open beside the list, its menu reading the follow.
           return run(async () => {
             await setTaskFollowed({ data: { ...ref, follow: false } });
             await queryClient.invalidateQueries({ queryKey: taskFollowQueryKey(ref) });
@@ -145,21 +156,7 @@ export function useActivityItemActions({
           async () => {
             await cancelActivityInboxListReads(queryClient, workspaceId);
             await markDone({
-              data: item.mentionAction
-                ? { kind: "mention_action", resolutionId: item.mentionAction.resolutionId }
-                : item.thread
-                  ? {
-                      kind: "thread",
-                      conversationId: item.place.conversationId,
-                      rootMessageId: item.thread.root.id,
-                      throughSequence: item.latestSequence,
-                    }
-                  : {
-                      kind: "conversation",
-                      // A Task's item is its own conversation's, listed under the board.
-                      conversationId: item.task?.conversationId ?? item.place.conversationId,
-                      throughSequence: item.latestSequence,
-                    },
+              data: doneTarget(item),
             });
           },
           { start: () => onDoneStarted(item), settle: () => onDoneSettled(item) },
@@ -182,6 +179,7 @@ export function useActivityItemActions({
     markTaskRead,
     setTaskFollowed,
     markDone,
+    markItemRead,
     setMentionRead,
   ]);
 }

@@ -7,6 +7,7 @@ import type {
 import {
   conversationRealtimeChannel,
   workspaceConversationChannel,
+  type ActivityChangedEvent,
 } from "#src/features/conversations/conversation-realtime";
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
@@ -21,10 +22,12 @@ export type ArtifactSignalEvent =
   | ArtifactVersionPublishedEvent
   | ArtifactAccessChangedEvent
   | ArtifactDataChangedEvent
-  | ArtifactCommentsChangedEvent;
+  | ArtifactCommentsChangedEvent
+  | ActivityChangedEvent;
 
 export type ArtifactSignals = {
   publish(channel: string, event: ArtifactSignalEvent): Promise<void>;
+  background?(work: () => Promise<void>): void;
 };
 
 export function centrifugoArtifactSignals(

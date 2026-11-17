@@ -29,6 +29,12 @@ import {
   commentAudience,
   requireMentionable,
 } from "./artifact-notices.server";
+import { settleWrite } from "./artifact-activity-wake.server";
+import {
+  peopleMentionedIn,
+  removeMentions,
+  rewriteMentions,
+} from "./artifact-comment-mention-rows.server";
 import { announceArtifactComments, type ArtifactSignals } from "./artifact-signals.server";
 import { ArtifactStorageFull, type StoredArtifactBlobs } from "./artifact-blobs.server";
 
@@ -108,6 +114,7 @@ export class ArtifactPersonComments {
       change: "posted",
       commentIds: [comment.id],
     });
+    settleWrite(this.db, this.signals, written.after);
     const told =
       "deleted" in comment
         ? NOBODY_TOLD
@@ -135,25 +142,43 @@ export class ArtifactPersonComments {
       commentAudience(input.body, COMMENT_HANDLES_RESOLVED_MAX),
     );
     requireMentionable(mentions);
-    await withCommentLock(this.db, artifact.id, (tx) =>
-      editOwnComment(tx, { ...input, artifactId: artifact.id }),
-    );
+    const [people] = await peopleMentionedIn(this.db, input.workspaceId, [input.body]);
+    const place = { workspaceId: input.workspaceId, artifact };
+    const changed = await withCommentLock(this.db, artifact.id, async (tx) => {
+      const edited = await editOwnComment(tx, { ...input, artifactId: artifact.id });
+      if (!edited) return undefined;
+      const { followed, removed } = await rewriteMentions(tx, place, {
+        commentId: input.commentId,
+        people: people ?? [],
+        editedAt: edited.editedAt,
+        authorUserId: input.userId,
+      });
+      return { ...place, writerUserId: input.userId, alsoUserIds: [...followed, ...removed] };
+    });
     await announceArtifactComments(this.signals, input.workspaceId, artifact, {
       change: "edited",
       commentIds: [input.commentId],
     });
+    settleWrite(this.db, this.signals, changed);
     return { id: input.commentId };
   }
 
   async remove(input: Place & { commentId: string }) {
     const artifact = await this.readable(input);
-    await withCommentLock(this.db, artifact.id, async (tx) => {
+    const told = await withCommentLock(this.db, artifact.id, async (tx) => {
       const released = await deleteOwnComment(tx, { ...input, artifactId: artifact.id });
       await this.blobs.release(tx, input.workspaceId, released);
+      return removeMentions(tx, input.commentId);
     });
     await announceArtifactComments(this.signals, input.workspaceId, artifact, {
       change: "deleted",
       commentIds: [input.commentId],
+    });
+    settleWrite(this.db, this.signals, {
+      workspaceId: input.workspaceId,
+      artifact,
+      writerUserId: input.userId,
+      alsoUserIds: told,
     });
     return { id: input.commentId };
   }

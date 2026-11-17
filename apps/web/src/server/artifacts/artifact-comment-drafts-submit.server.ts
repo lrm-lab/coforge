@@ -24,10 +24,17 @@ import {
   type CommentTx,
   type PreparedComment,
 } from "./artifact-comment-write.server";
+import {
+  peopleMentionedIn,
+  reviewMentions,
+  writeMentions,
+} from "./artifact-comment-mention-rows.server";
 import { idempotencyMismatch } from "./artifact-idempotency.server";
 import type { ArtifactNoticePort } from "./artifact-notice-port.server";
 import { mentionHandles } from "./artifact-notice-mentions.server";
 import { ArtifactNotices, mentionCheckOf, requireMentionable } from "./artifact-notices.server";
+import { settleWrite } from "./artifact-activity-wake.server";
+import { startFollowing } from "./artifact-follows.server";
 import { announceArtifactComments, type ArtifactSignals } from "./artifact-signals.server";
 
 export type DraftSubmitDeps = {
@@ -197,6 +204,10 @@ export async function submitDrafts(
   if (!sameSet(shown, input.draftIds)) throw draftsChanged();
   const mentions = await mentionRefusals(notices, input, shown);
 
+  const people = await peopleMentionedIn(db, workspaceId, [
+    "",
+    ...shown.map((draft) => draft.body),
+  ]);
   const written = await withCommentLock(db, artifact.id, async (tx) => {
     const raced = await replayOf(tx);
     if (raced) return { kind: "replayed" as const, sent: raced };
@@ -233,12 +244,15 @@ export async function submitDrafts(
     const roots = new Set(prepared.prepared.flatMap((entry) => entry.rootId ?? []));
     if (roots.size) await reopenThreads(tx, [...roots]);
     await tx.artifactCommentDraft.deleteMany({ where: { id: { in: rows.map((row) => row.id) } } });
-    return { kind: "written" as const, review, inserted };
+    const place = { workspaceId, artifact };
+    const readers = await writeMentions(tx, place, reviewMentions(review, inserted, people));
+    await startFollowing(tx, artifact.id, [{ userId }]);
+    return { kind: "written" as const, review, inserted, readers };
   });
   if (written.kind === "replayed") return written.sent;
   if (written.kind === "rejected") return written.rejected;
 
-  const { review, inserted } = written;
+  const { review, inserted, readers } = written;
   const sent = {
     status: "sent" as const,
     reviewId: review.id,
@@ -247,6 +261,12 @@ export async function submitDrafts(
   await announceArtifactComments(deps.signals, workspaceId, artifact, {
     change: "posted",
     commentIds: sent.commentIds,
+  });
+  settleWrite(db, deps.signals, {
+    workspaceId,
+    artifact,
+    writerUserId: userId,
+    alsoUserIds: readers,
   });
   const views = await reviewViews(db, workspaceId, review, inserted);
   const told = await notices.review({

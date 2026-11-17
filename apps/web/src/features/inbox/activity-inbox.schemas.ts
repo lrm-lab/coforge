@@ -1,19 +1,10 @@
 import { z } from "zod";
 
-/** The Activity page's three views: every listed item, only unread ones, only ones that
- * mention the viewer. */
 export const ACTIVITY_INBOX_FILTERS = ["all", "unread", "mentions"] as const;
 export type ActivityInboxFilter = (typeof ACTIVITY_INBOX_FILTERS)[number];
 
-/**
- * Where a page starts: after the last item the previous page showed, in list order (newest
- * activity first: its newest message's instant in epoch milliseconds, then its sequence, then the
- * item's key).
- */
 export const activityInboxCursorSchema = z.object({
-  // The end of year 9999: the last instant PostgreSQL reads back from an ISO timestamp.
   at: z.number().int().min(0).max(253_402_300_799_999),
-  // A message sequence is a PostgreSQL `integer`.
   sequence: z.number().int().min(0).max(2_147_483_647),
   key: z.string().min(1).max(64),
 });
@@ -24,7 +15,18 @@ export const activityInboxPageSchema = z.object({
   cursor: activityInboxCursorSchema.optional(),
 });
 
-/** Marks one item Done through the newest message the viewer saw in it. */
+export const ACTIVITY_MAX_TIME = Date.UTC(2100, 0, 1);
+
+export const activityArtifactMarkSchema = z.object({
+  kind: z.literal("artifact"),
+  artifactId: z.uuid(),
+  throughAt: z.number().int().min(0).max(ACTIVITY_MAX_TIME),
+});
+export type ActivityArtifactMark = z.infer<typeof activityArtifactMarkSchema>;
+
+export const activityItemReadSchema = z.discriminatedUnion("kind", [activityArtifactMarkSchema]);
+export type ActivityItemRead = z.infer<typeof activityItemReadSchema>;
+
 export const activityItemDoneSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("conversation"),
@@ -37,34 +39,26 @@ export const activityItemDoneSchema = z.discriminatedUnion("kind", [
     rootMessageId: z.uuid(),
     throughSequence: z.number().int().min(1),
   }),
-  // A mention the viewer was notified of from outside its channel: Done clears it.
   z.object({ kind: z.literal("mention_action"), resolutionId: z.uuid() }),
+  activityArtifactMarkSchema,
 ]);
 export type ActivityItemDone = z.infer<typeof activityItemDoneSchema>;
 
-/** Reads everything posted up to when the viewer's list was loaded (epoch milliseconds). */
 export const activityInboxReadAllSchema = z.object({
-  // The largest instant a JavaScript Date can hold.
-  before: z.number().int().positive().max(8.64e15),
+  before: z.number().int().positive().max(ACTIVITY_MAX_TIME),
 });
 
-/** Reads or unreads one mention the viewer was notified of from outside its channel. */
 export const activityMentionReadSchema = z.object({
   resolutionId: z.uuid(),
   read: z.boolean(),
 });
 
-/** The most rows an Undo may name. A bigger write is not handed back for Undo. */
 export const ACTIVITY_UNDO_LIMIT = 5_000;
+
+const timeSchema = z.number().int().min(0).max(ACTIVITY_MAX_TIME);
 
 const sequenceSchema = z.number().int().min(1).max(2_147_483_647);
 
-/**
- * What a Mark all done changed, handed back to undo it: per member row (or thread) the Done boundary it
- * held (`previous`; null: none) and the one the write left (`through`), which Undo checks is
- * still there before it restores; and the mention actions the write dismissed, with the instant it
- * did (epoch milliseconds). Nothing here grants reach: Undo only touches the caller's own rows.
- */
 export const activityDoneUndoSchema = z.object({
   members: z
     .array(
@@ -89,5 +83,16 @@ export const activityDoneUndoSchema = z.object({
     ids: z.array(z.uuid()).max(ACTIVITY_UNDO_LIMIT),
     at: z.number().int().positive().max(8.64e15),
   }),
+  artifacts: z
+    .array(
+      z.object({
+        artifactId: z.uuid(),
+        previousReadAt: timeSchema.nullable(),
+        previousDoneAt: timeSchema.nullable(),
+        through: timeSchema,
+      }),
+    )
+    .max(ACTIVITY_UNDO_LIMIT)
+    .default([]),
 });
 export type ActivityDoneUndo = z.infer<typeof activityDoneUndoSchema>;

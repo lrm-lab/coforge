@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { isConversation } from "./helpers/activity-inbox-fixture";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { ActivityInbox } from "#src/server/inbox/activity-inbox.server";
 import { storeAttachment } from "#src/server/attachments/attachment.server";
@@ -31,9 +32,9 @@ const inbox = new ActivityInbox(db, {});
 const as = (key: Key) => ({ workspaceId, userId: people[key].id });
 const ref = { number: 1, conversationId: "" };
 const listed = async (key: Key) =>
-  (await inbox.list(workspaceId, people[key].id, { filter: "all" })).items.filter(
-    (item) => item.task,
-  );
+  (await inbox.list(workspaceId, people[key].id, { filter: "all" })).items
+    .filter(isConversation)
+    .filter((item) => item.task);
 
 beforeAll(async () => {
   const users = await Promise.all(

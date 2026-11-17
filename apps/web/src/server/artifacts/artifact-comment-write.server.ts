@@ -212,11 +212,13 @@ export async function editOwnComment(
   input: { artifactId: string; commentId: string; userId: string; body: string },
 ) {
   const row = await ownCommentRow(tx, input);
-  if (row.body === input.body) return;
+  if (row.body === input.body) return undefined;
+  const editedAt = new Date();
   await tx.artifactComment.update({
     where: { id: row.id },
-    data: { body: input.body, editedAt: new Date() },
+    data: { body: input.body, editedAt },
   });
+  return { editedAt };
 }
 
 export async function deleteOwnComment(
