@@ -18,6 +18,7 @@ import { listMyMemoryAgents, personalMemoryCommand } from "./personal-memory.fun
 
 export type PersonalSearch = {
   agent?: string;
+  create: boolean;
   key?: string;
   q: string;
   archived: boolean;
@@ -49,7 +50,7 @@ export function PersonalMemoryPage({
   const [history, setHistory] = useState<LocalMemoryEntry[]>();
   const [historyOffset, setHistoryOffset] = useState<number>();
   const [historical, setHistorical] = useState<LocalMemoryEntry>();
-  const selected = search.key;
+  const selected = search.create ? "<create>" : search.key;
   const stamp = useMemo(() => ({}), [workspaceSlug, search.agent, selected]);
   const active = useRef(stamp);
   active.current = stamp;
@@ -79,7 +80,7 @@ export function PersonalMemoryPage({
     list?.status === "ready" && list.result.status === "ok"
       ? list.result.result.nextOffset
       : undefined;
-  const cacheKey = `${search.agent}:${selected ?? "new"}`;
+  const cacheKey = `${workspaceSlug}:${search.agent}:${selected ?? "new"}`;
   const draft = drafts[cacheKey] ?? initial(entry);
   const patch = (patch: Partial<Draft>) =>
     setDrafts((previous) => ({ ...previous, [cacheKey]: { ...draft, ...patch } }));
@@ -98,10 +99,10 @@ export function PersonalMemoryPage({
       delete next[cacheKey];
       return next;
     });
-    if (entry) await update({ key: entry.key });
+    if (entry) await update({ key: entry.key, create: false });
     await router.invalidate({ sync: true });
   };
-  const isEditing = selected === "new" || editing;
+  const isEditing = search.create || editing;
   const loadHistory = async (offset = 0) => {
     if (!search.agent || !entry) return;
     setBusy(true);
@@ -133,7 +134,7 @@ export function PersonalMemoryPage({
           isDisabled={!search.agent || busy || !!(list && responseError(list))}
           onPress={() => {
             setEditing(false);
-            void update({ key: "new" });
+            void update({ key: undefined, create: true });
           }}
         >
           {m.memory_new()}
@@ -174,7 +175,7 @@ export function PersonalMemoryPage({
                   setHistory(undefined);
                   setHistorical(undefined);
                   setError("");
-                  void update({ agent: String(key), key: undefined, offset: 0 });
+                  void update({ agent: String(key), key: undefined, create: false, offset: 0 });
                 }
               }}
             >
@@ -254,7 +255,7 @@ export function PersonalMemoryPage({
                     <Link
                       to="/w/$workspaceSlug/memory/personal"
                       params={{ workspaceSlug }}
-                      search={{ ...search, key: item.key }}
+                      search={{ ...search, key: item.key, create: false }}
                       className="block cursor-pointer px-5 py-4 hover:bg-primary_hover"
                       aria-current={selected === item.key ? "true" : undefined}
                     >
@@ -301,7 +302,7 @@ export function PersonalMemoryPage({
                 color="link-gray"
                 size="sm"
                 iconLeading={ArrowLeft}
-                onPress={() => update({ key: undefined })}
+                onPress={() => update({ key: undefined, create: false })}
               >
                 {m.memory_back()}
               </Button>
@@ -315,8 +316,9 @@ export function PersonalMemoryPage({
               {responseError(detail)}
             </p>
           )}
-          {isEditing && search.agent && (selected === "new" || entry) ? (
+          {isEditing && search.agent && (search.create || entry) ? (
             <PersonalMemoryEditor
+              key={cacheKey}
               agentId={search.agent}
               entry={entry}
               draft={draft}
@@ -325,7 +327,7 @@ export function PersonalMemoryPage({
               current={() => active.current === stamp}
               onCancel={() => {
                 setEditing(false);
-                if (selected === "new") void update({ key: undefined });
+                if (search.create) void update({ key: undefined, create: false });
               }}
             />
           ) : (

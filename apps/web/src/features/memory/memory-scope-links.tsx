@@ -23,7 +23,7 @@ export function MemoryScopeLinks() {
       <Link
         to="/w/$workspaceSlug/memory/personal"
         params={{ workspaceSlug }}
-        search={{ q: "", archived: false, offset: 0, agentQuery: "", page: 1 }}
+        search={{ q: "", archived: false, offset: 0, agentQuery: "", page: 1, create: false }}
         className={classes}
         activeProps={{ className: "text-primary underline underline-offset-8" }}
       >
