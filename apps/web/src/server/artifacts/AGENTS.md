@@ -40,7 +40,7 @@ The artifacts module follows the reference product, Raft; add nothing it does no
 
 - An artifact is a versioned set of files with an entry file. Its type comes from the entry file's
   extension (`artifactKindOfPath`: html, markdown, text, csv, image, pdf, video, other); no request
-  field states it and the `kind` column a create still fills is write-only until its drop release.
+  field states it.
   Any file may be the entry; only an html or markdown entry is read whole (2 MiB).
 - Who sees an artifact: whoever reads its home conversation (`access` `conversation`), or every
   Workspace member and Agent once it is `workspace`; a legacy `homeKey` of `workspace` reads as

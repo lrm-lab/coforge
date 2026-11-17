@@ -107,7 +107,6 @@ export class WorkspaceDeletion {
       SELECT "iconObjectKey" FROM "workspaces" WHERE "id" = ${workspaceId}::uuid FOR UPDATE`;
     if (!locked) throw new AppError("NOT_FOUND");
     await lockWorkspaceConversations(tx, workspaceId);
-    await tx.workspaceMemoryCleanupWork.deleteMany({ where: { workspaceId } });
     const fileKeys = {
       files: await attachmentKeys(tx, { workspaceId }),
       images: await this.#imageKeys(tx, workspaceId, locked.iconObjectKey),
@@ -124,7 +123,6 @@ export class WorkspaceDeletion {
         revocations,
       }),
     );
-    await tx.memoryOfferCitation.deleteMany({ where: { workspaceId } });
     await tx.message.deleteMany({ where: { workspaceId } });
     await tx.workspace.delete({ where: { id: workspaceId } });
     return { computerIds: computers.map(({ computerId }) => computerId), fileKeys };

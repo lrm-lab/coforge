@@ -3,7 +3,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { ArtifactPublicLinks } from "#src/server/artifacts/artifact-public-links.server";
 import { publicPageLookup } from "#src/server/artifacts/artifact-public-page.server";
-import { artifactKindOfPath } from "#src/features/artifacts/artifact-path-kind";
 import { rememberArtifactSandboxConfig } from "#src/server/artifacts/artifact-sandbox-config.server";
 import { conversationRealtimeChannel } from "#src/features/conversations/conversation-realtime";
 
@@ -33,7 +32,6 @@ const artifact = (extension: string) =>
       workspaceId,
       homeKey: `conversation:${channelId}`,
       name: `${extension}-${crypto.randomUUID()}`,
-      kind: artifactKindOfPath(`index.${extension}`),
       entryPath: `index.${extension}`,
     },
   });
@@ -201,7 +199,6 @@ test("a public link shows the current version's entry and any one file of it", a
       homeKey: `conversation:${channelId}`,
       name: `files-${crypto.randomUUID()}`,
       title: "Site",
-      kind: "html",
       entryPath: "home.html",
       currentVersion: 2,
     },

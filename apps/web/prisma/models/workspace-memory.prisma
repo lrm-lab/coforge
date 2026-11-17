@@ -124,7 +124,7 @@ model AdmittedSegmentDispatch {
   @@map("admitted_segment_dispatches")
 }
 
-/// Durable, leaseable Workspace-memory cleanup. Survives remote failure; Restrict blocks silent Workspace delete.
+/// Retired Workspace-memory cleanup rows; nothing reads or writes them and they go with their Workspace.
 model WorkspaceMemoryCleanupWork {
   id             String    @id @default(uuid(7)) @db.Uuid
   workspaceId    String    @map("workspace_id") @db.Uuid
@@ -137,7 +137,7 @@ model WorkspaceMemoryCleanupWork {
   sanitizedError String?   @map("sanitized_error")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
-  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, operationId, target])
   @@index([workspaceId, state])

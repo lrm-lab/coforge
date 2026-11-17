@@ -1,8 +1,5 @@
 import type { Artifact, PrismaClient } from "#src/generated/prisma/client";
-import {
-  artifactKindOfPath,
-  artifactOpenableKind,
-} from "#src/features/artifacts/artifact-path-kind";
+import { artifactOpenableKind } from "#src/features/artifacts/artifact-path-kind";
 import { AppError } from "#src/lib/app-error";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
 import type { ArtifactPublisher } from "./artifact-access.server";
@@ -44,7 +41,6 @@ export async function createArtifact(
       name: input.name,
       title: input.title ?? "",
       description: input.description ?? "",
-      kind: artifactKindOfPath(input.entryPath),
       entryPath: input.entryPath,
       authorAgentId: input.author.agentId,
       ...(input.origin

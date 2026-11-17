@@ -10,14 +10,13 @@ These rules apply to `src/server/workspaces/`.
   large Workspace slow (one FK trigger per row per referencing table).
 - Lock in the Workspace-deletion order of `server/AGENTS.md` ("Lock order"). Retry only on a PostgreSQL write conflict, through
   `server/db/write-conflict.server.ts`.
-- Memory Offer citations and messages are deleted before the Workspace: they name
+- Messages are deleted before the Workspace: they name
   rows the same cascade removes with `Restrict`. A new `Restrict` or `NO ACTION`
   reference into the Workspace's cascade goes there too, or the delete fails;
   `test/workspace-delete.integration.test.ts` lists every such key and fails on a
   new one.
-- Native team memory, versions and request/review receipts cascade with the Workspace.
-  Historical restrictive memory cleanup/citation rows are removed locally in the transaction;
-  deletion calls no external memory service.
+- Native team memory, versions and request/review receipts cascade with the Workspace, and so do
+  the retired memory tables' rows; deletion calls no external memory service.
 - Stored files go after the answer (`WorkspaceFileCleanup`), never awaited by it.
 - A flow that hard-deletes a Workspace calls
   `DaemonCredentialRevocations.recordForWorkspace(tx, workspaceId)` inside its

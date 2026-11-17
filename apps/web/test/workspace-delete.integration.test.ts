@@ -260,14 +260,10 @@ test.skipIf(!connectionString)(
         "action_cards_preparedByAgentId_workspaceId_fkey",
         // `NO ACTION` is checked at the end of the cascading statement, when both rows are gone.
         "conversations_coordinatorAgentId_workspaceId_fkey",
-        // Memory Offer citations are deleted first.
-        "memory_offer_citations_openviking_citation_fkey",
         // Messages are deleted first; Tasks go with their message.
         "messages_senderMemberId_conversationId_workspaceId_fkey",
         "tasks_creatorMemberId_conversationId_workspaceId_fkey",
         "tasks_ownerMemberId_conversationId_workspaceId_fkey",
-        // Settled rows are deleted first; any other refuses the delete with CONFLICT.
-        "workspace_memory_cleanup_work_workspace_id_fkey",
       ]);
     } finally {
       await db.$disconnect();

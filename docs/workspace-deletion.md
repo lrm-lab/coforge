@@ -13,8 +13,8 @@ the dialog says it cannot be undone. This page states what goes and when. The co
 ## Workspace memory
 
 Native team entries, versions, review state and receipts are removed by workspace foreign-key
-cascades in the final transaction. Historical cleanup/citation rows with restrictive foreign keys
-are removed locally first. Workspace deletion makes no external memory-service call.
+cascades in the final transaction, and so are the retired memory tables' rows. Workspace deletion
+makes no external memory-service call.
 
 ## Database rows: during the request
 

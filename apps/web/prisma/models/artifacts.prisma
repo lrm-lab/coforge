@@ -17,14 +17,13 @@ model Artifact {
   /// current version (`artifactPreview`). An html entry's is its description's. The type of an
   /// artifact is its entry file's (`entryPath`); nothing reads a stored kind.
   preview         String            @default("")
-  /// The entry file's kind at create, written for rows created while the column lived; nothing
-  /// reads it. Unused since the type became the entry file's; kept for rollout compatibility and
-  /// dropped by a later migration.
-  kind            String
+  /// Retired: the type is the entry file's. Out of the client, so no query names it; the column is
+  /// dropped once this release is live.
+  kind            String?           @ignore
   entryPath       String
-  /// Unused since only Agents author artifacts; kept for rollout compatibility and dropped by a
-  /// later migration.
-  authorUserId    String?           @db.Uuid
+  /// Retired: only Agents author artifacts. Out of the client, so no query names it; the column is
+  /// dropped once this release is live.
+  authorUserId    String?           @db.Uuid @ignore
   authorAgentId   String?           @db.Uuid
   /// The client's key for an idempotent create, and a hash of that create's inputs (task #385):
   /// the same key with the same inputs replays this row; the same key with different inputs is a
@@ -96,8 +95,7 @@ model ArtifactVersion {
   id               String         @id @default(uuid(7)) @db.Uuid
   artifactId       String         @db.Uuid
   number           Int
-  /// Unused since only Agents publish versions; kept for rollout compatibility and dropped by a
-  /// later migration.
+  /// The person who published a version before only Agents did; its history and activity read it.
   publisherUserId  String?        @db.Uuid
   publisherAgentId String?        @db.Uuid
   note             String         @default("")
@@ -111,9 +109,9 @@ model ArtifactVersion {
   /// What this version took from others' saves since its base: `{ files: paths, settings: names }`;
   /// null when it took nothing.
   merged           Json?
-  /// Unused since a version is never a revert; kept for rollout compatibility and dropped by a
-  /// later migration.
-  revertedFrom     Int?
+  /// Retired: a version is never a revert. Out of the client, so no query names it; the column is
+  /// dropped once this release is live.
+  revertedFrom     Int?           @ignore
   idempotencyKey   String
   createdAt        DateTime       @default(now())
   artifact         Artifact       @relation(fields: [artifactId], references: [id], onDelete: Cascade)

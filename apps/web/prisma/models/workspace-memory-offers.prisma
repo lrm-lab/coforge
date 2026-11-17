@@ -47,7 +47,7 @@ model MemoryOfferCitation {
   createdAt            DateTime                @default(now()) @map("created_at")
   workspace            Workspace               @relation(fields: [workspaceId], references: [id], onDelete: Cascade, map: "memory_offer_citations_workspace_fkey")
   offer                MemoryOfferRecord       @relation(fields: [workspaceId, offerOperationId], references: [workspaceId, operationId], onDelete: Cascade, map: "memory_offer_citations_offer_fkey")
-  openvikingCitation   OpenVikingCitationRecord @relation(fields: [workspaceId, openvikingCitationId], references: [workspaceId, citationId], onDelete: Restrict, map: "memory_offer_citations_openviking_citation_fkey")
+  openvikingCitation   OpenVikingCitationRecord @relation(fields: [workspaceId, openvikingCitationId], references: [workspaceId, citationId], onDelete: Cascade, map: "memory_offer_citations_openviking_citation_fkey")
 
   @@unique([workspaceId, offerOperationId, citationKind, citationId])
   @@index([workspaceId, citationKind, citationId])

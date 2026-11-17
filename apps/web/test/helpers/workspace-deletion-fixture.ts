@@ -295,9 +295,6 @@ export async function setup() {
     },
   });
   const cleanup = async () => {
-    await db.workspaceMemoryCleanupWork
-      .deleteMany({ where: { workspaceId: workspace.id } })
-      .catch(() => {});
     await db.workspace.delete({ where: { id: workspace.id } }).catch(() => {});
     await db.daemonCredentialRevocation
       .deleteMany({ where: { apiKeyHash: liveKey.record.apiKeyHash } })

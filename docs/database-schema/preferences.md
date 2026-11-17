@@ -4,9 +4,8 @@
 
 One row per user for active account-level settings (time zone, time format and browser
 notifications), keyed by `userId` with `ON DELETE CASCADE`. Every active setting column is
-nullable and NULL means the code default. `conversationOpenMode` is a retired compatibility
-column: its historical closed-set values remain constrained, but the application neither reads
-nor writes them. `role` is what the person said they mainly do in the first-sign-in survey
+nullable and NULL means the code default. `conversationOpenMode` is a retired column the
+Prisma client leaves out (`@ignore`), so no query names it; a later release drops it. `role` is what the person said they mainly do in the first-sign-in survey
 (`engineer`, `designer`, `product`, `marketing`, `research`, `founder`, guarded by
 `user_preferences_role_check`); metadata the platform assistant reads, never shown in the UI.
 
