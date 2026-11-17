@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { tmpdir } from "node:os";
 import { AntigravityAcpProvider } from "@lrm/coforge-anvil/antigravity";
 import { antigravityAcpRuntimeHost } from "#src/code-agent/antigravity/acp-host";
+import { SIGNED_IN, withAntigravityHome } from "./fixtures/antigravity-home";
 import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 
 test("Antigravity usage reads the current host environment per call and strips inherited SSH markers", async () => {
@@ -32,7 +33,9 @@ test("Antigravity usage reads the current host environment per call and strips i
           },
         },
       });
-      const usage = await provider.readUsage({ workingDirectory: tmpdir() });
+      const usage = await withAntigravityHome(SIGNED_IN, () =>
+        provider.readUsage({ workingDirectory: tmpdir() }),
+      );
       expect(usage.officialDescription).toBe(marker);
       expect(usage.primary?.usedPercent).toBe(50);
     }
