@@ -2,10 +2,10 @@ import { assertValidMessageSender } from "./message-sender";
 import { isAttachmentCommentAnchor } from "../agent/attachment-comments";
 import {
   decodeLocalAttachments,
-  decodeMessageTask,
   encodeLocalAttachments,
   type RawLocalAttachment,
 } from "./local-daemon";
+import { decodeMessageTask } from "./message-task-codec";
 import type { AgentMessageRecord } from "./agent-message-record";
 export function encodeAgentMessageRecords(records: readonly AgentMessageRecord[]) {
   for (const m of records)

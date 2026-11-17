@@ -1,6 +1,15 @@
 import { expect, test } from "bun:test";
 import { parseTaskArgs } from "../src/task-args";
 
+test("Backlog is a list filter but not a writable status", () => {
+  expect(parseTaskArgs(["list", "--target", "#general", "--status", "backlog"])).toMatchObject({
+    task: { status: "backlog" },
+  });
+  expect(() =>
+    parseTaskArgs(["update", "--target", "#general", "--number", "7", "--status", "backlog"]),
+  ).toThrow();
+});
+
 test("task show is the board command", () => {
   expect(parseTaskArgs(["show", "--target", "#general", "--number", "7"])).toEqual({
     command: "task",

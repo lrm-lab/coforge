@@ -9,6 +9,12 @@ import { m } from "#src/paraglide/messages";
  * colour, the solid dot, the icon's colour, and the lighter line the popup's history timeline
  * draws between nodes. */
 export const TASK_STATUS_COLOR = {
+  backlog: {
+    badge: "slate",
+    dot: "bg-utility-slate-400",
+    text: "text-utility-slate-500",
+    line: "bg-utility-slate-300",
+  },
   todo: {
     badge: "orange",
     dot: "bg-utility-orange-500",
@@ -47,7 +53,8 @@ export const TASK_STATUS_COLOR = {
  * Closed a filled cross. Colours follow `TASK_STATUS_COLOR`, so the icon, the popup's badge and
  * the history timeline agree.
  */
-const RING: Record<TaskStatus, { fill: number; mark?: string }> = {
+const RING: Record<TaskStatus, { fill: number; mark?: string; dashed?: boolean }> = {
+  backlog: { fill: 0, dashed: true },
   todo: { fill: 0 },
   in_progress: { fill: 0.5 },
   in_review: { fill: 0.75 },
@@ -69,8 +76,9 @@ export function TaskStatusIcon({ status, className }: { status: TaskStatus; clas
   // A status this build does not know draws To do's ring and colour, the neutral fallback, until
   // this bundle learns the newer vocabulary (task #61).
   const ring =
-    (RING as Record<string, { fill: number; mark?: string } | undefined>)[status as string] ??
-    RING.todo;
+    (RING as Record<string, { fill: number; mark?: string; dashed?: boolean } | undefined>)[
+      status as string
+    ] ?? RING.todo;
   const color =
     (TASK_STATUS_COLOR as Record<string, { text: string } | undefined>)[status as string]?.text ??
     TASK_STATUS_COLOR.todo.text;
@@ -83,6 +91,7 @@ export function TaskStatusIcon({ status, className }: { status: TaskStatus; clas
         fill={ring.mark ? "currentColor" : "none"}
         stroke="currentColor"
         strokeWidth="1.5"
+        {...(ring.dashed ? { strokeDasharray: "2.5 2.5" } : {})}
       />
       {!ring.mark && ring.fill > 0 && (
         <circle
@@ -118,6 +127,7 @@ const ringIcon =
     <TaskStatusIcon status={status} className={cn(className, taskStatusColor(status).text)} />
   );
 const STATUS_BADGE_ICON: Record<TaskStatus, IconComponentType> = {
+  backlog: ringIcon("backlog"),
   todo: ringIcon("todo"),
   in_progress: ringIcon("in_progress"),
   in_review: ringIcon("in_review"),
@@ -135,6 +145,7 @@ export function statusLabel(status: TaskStatus) {
 
 /** The localized status names, by status; a status this build does not know reads as its key. */
 const LABELS: Record<TaskStatus, () => string> = {
+  backlog: m.tasks_status_backlog,
   todo: m.tasks_status_todo,
   in_progress: m.tasks_status_in_progress,
   in_review: m.tasks_status_in_review,

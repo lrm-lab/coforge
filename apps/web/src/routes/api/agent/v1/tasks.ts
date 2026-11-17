@@ -6,6 +6,7 @@ import {
   SEEN_EXACT_SEQS_LIMIT,
   TASK_PRIORITY_LEVELS,
   TASK_STATUSES,
+  TASK_READ_STATUSES,
   type TaskPrincipal,
   type TaskResult,
 } from "@lrm/coforge-sdk/internal";
@@ -52,7 +53,7 @@ const taskOperations = [
   "delete",
   "receipt",
 ] as const;
-const taskStatuses = [...TASK_STATUSES, "all"] as const;
+const taskStatuses = [...TASK_READ_STATUSES, "all"] as const;
 
 /** The HTTP status a board refusal's code means. Codes outside this map (workspace/computer
  * invariants the board does not raise) fall through to 500. */
@@ -129,7 +130,7 @@ export const taskRequestSchema = z
     alongside: z.boolean().optional(),
     attachmentId: z.uuid().optional(),
     status: z.enum(taskStatuses).optional(),
-    statuses: z.array(z.enum(TASK_STATUSES)).min(1).max(TASK_STATUSES.length).optional(),
+    statuses: z.array(z.enum(TASK_READ_STATUSES)).min(1).max(TASK_READ_STATUSES.length).optional(),
     priority: z.enum(TASK_PRIORITY_LEVELS).optional(),
     labels: z.array(z.string().min(1).max(64)).max(5).optional(),
     removeLabels: z.array(z.string().min(1).max(64)).max(5).optional(),
@@ -137,7 +138,14 @@ export const taskRequestSchema = z
     project: z.string().trim().min(1).max(PROJECT_SLUG_MAX_LENGTH).nullable().optional(),
     expectedRevision: z.number().int().nonnegative().optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (command) =>
+      command.status === undefined ||
+      command.operation === "list" ||
+      (TASK_STATUSES as readonly string[]).includes(command.status),
+    { path: ["status"], message: "Task status is read-only" },
+  );
 
 /** The raw HTTP adapter validates JSON shape; the board owns command invariants and authorization. */
 export async function handleAgentTaskPost(

@@ -1,25 +1,15 @@
 import type { MessageTaskMetadata } from "./agent-message-record";
+import { isTaskReadStatus } from "./task-status";
 
 export function decodeMessageTask(value: {
   number: number;
   status: string;
   owner?: { displayName: string; handle: string; deleted?: boolean };
 }): MessageTaskMetadata {
-  let status: MessageTaskMetadata["status"];
-  switch (value.status) {
-    case "todo":
-    case "in_progress":
-    case "in_review":
-    case "done":
-    case "closed":
-      status = value.status;
-      break;
-    default:
-      throw new Error("invalid message Task status");
-  }
+  if (!isTaskReadStatus(value.status)) throw new Error("invalid message Task status");
   return {
     number: value.number,
-    status,
+    status: value.status,
     ...(value.owner
       ? {
           owner: {

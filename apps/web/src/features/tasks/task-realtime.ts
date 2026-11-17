@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type TaskView } from "@lrm/coforge-sdk/internal";
+import { TASK_READ_STATUSES, type TaskView } from "@lrm/coforge-sdk/internal";
 import {
   publicationDataOrUndefined,
   publicationType,
@@ -42,7 +42,7 @@ const taskView = z.looseObject({
   number: z.number().int(),
   title: z.string(),
   description: z.string().nullable().optional(),
-  status: z.enum(TASK_STATUSES),
+  status: z.enum(TASK_READ_STATUSES),
   revision: z.number().int(),
   owner: member.nullable(),
   creator: member,

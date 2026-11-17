@@ -16,6 +16,15 @@ const task = (id: string, fields: Partial<Omit<QueueTask, "id">> = {}): QueueTas
   ...fields,
 });
 
+test("Backlog remains outside the Agent's actionable queue", () => {
+  const { queue, positions } = ownTaskQueue([
+    task("parked", { status: "backlog", priority: "urgent" }),
+    task("ready"),
+  ]);
+  expect(queue.map(({ task }) => task.id)).toEqual(["ready"]);
+  expect(positions.has("parked")).toBe(false);
+});
+
 test("the queue numbers Todo and In Progress Tasks no blocker holds, in priority then age order", () => {
   const entries = [
     task("late-low", { priority: "low", createdAt: "2026-11-01T00:00:02.000Z" }),

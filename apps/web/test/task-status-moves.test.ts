@@ -2,6 +2,10 @@ import { expect, test } from "bun:test";
 
 import { ordinaryTaskStatusMove, taskStatusMoveAllowed } from "@lrm/coforge-sdk/internal";
 
+test("an existing Backlog task can return to Todo without a missing transition table", () => {
+  expect(ordinaryTaskStatusMove("backlog" as never, "todo")).toBe(true);
+});
+
 /** The whole table, so a change to it is a change here on purpose. */
 const TABLE: Record<string, string[]> = {
   todo: ["in_progress", "closed"],

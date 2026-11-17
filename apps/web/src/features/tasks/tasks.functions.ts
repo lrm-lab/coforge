@@ -1,5 +1,5 @@
 import { canAssignOther } from "#src/server/tasks/task-assignment-authority.server";
-import { TASK_STATUSES, type TaskCommand } from "@lrm/coforge-sdk/internal";
+import { TASK_READ_STATUSES, type TaskCommand } from "@lrm/coforge-sdk/internal";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
@@ -56,7 +56,11 @@ export const loadConversationTasks = createServerFn({ method: "GET" })
     z
       .object({
         conversationId: z.uuid(),
-        statuses: z.array(z.enum(TASK_STATUSES)).min(1).max(TASK_STATUSES.length).optional(),
+        statuses: z
+          .array(z.enum(TASK_READ_STATUSES))
+          .min(1)
+          .max(TASK_READ_STATUSES.length)
+          .optional(),
         numbers: z
           .array(z.number().int().positive())
           .min(1)

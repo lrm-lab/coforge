@@ -32,8 +32,8 @@ import {
 import { statusLabel, type TaskLayout } from "./task-workflow";
 
 /** The status choices in the board's column order; read per render, so the language follows. */
-const STATUS_OPTIONS = (): PickerOption[] =>
-  TASK_STATUSES.map((value) => ({ id: value, label: statusLabel(value) }));
+const STATUS_OPTIONS = (statuses: readonly TaskStatus[]): PickerOption[] =>
+  statuses.map((value) => ({ id: value, label: statusLabel(value) }));
 
 /**
  * A Task board's toolbar: "Filter" (owner, Project, labels and status, each a submenu where
@@ -45,6 +45,7 @@ export function TaskToolbar({
   tasks,
   filter,
   statuses,
+  availableStatuses = TASK_STATUSES,
   layout,
   onFilterChange,
   onStatusesChange,
@@ -57,6 +58,7 @@ export function TaskToolbar({
   filter: TaskFilter;
   /** The statuses shown; none picked shows every status. */
   statuses: readonly TaskStatus[];
+  availableStatuses?: readonly TaskStatus[];
   layout: TaskLayout;
   onFilterChange: (filter: TaskFilter) => void;
   onStatusesChange: (statuses: readonly TaskStatus[]) => void;
@@ -219,10 +221,10 @@ export function TaskToolbar({
               {/* Several statuses at once, picked like owners and labels (task #506). */}
               <FilterSubmenu
                 name={m.tasks_overview_status()}
-                options={STATUS_OPTIONS()}
+                options={STATUS_OPTIONS(availableStatuses)}
                 picked={statuses}
                 onChange={(picked) =>
-                  onStatusesChange(TASK_STATUSES.filter((value) => picked.includes(value)))
+                  onStatusesChange(availableStatuses.filter((value) => picked.includes(value)))
                 }
               />
             </Dropdown.Menu>

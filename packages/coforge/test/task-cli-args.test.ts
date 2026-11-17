@@ -309,7 +309,7 @@ test("Task list takes exactly one of --target or --mine and names the valid stat
   });
   expect(invalid(["task", "list", "--mine", "--status", "open"])).toEqual({
     code: "INVALID_ARG",
-    message: "--status must be one of all|todo|in_progress|in_review|done|closed; got open",
+    message: "--status must be one of all|backlog|todo|in_progress|in_review|done|closed; got open",
   });
   expect(() => parseArgs(["task", "list", "--mine", "--mine"])).toThrow("Usage:");
   expect(() => parseArgs(["task", "claim", "--mine", "--number", "1"])).toThrow("Usage:");

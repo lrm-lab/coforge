@@ -1,6 +1,14 @@
 import { expect, test } from "bun:test";
 
-import { finishedCount, finishedRows } from "#src/features/tasks/finished-tasks";
+import {
+  finishedCount,
+  finishedRows,
+  UNFINISHED_STATUSES,
+} from "#src/features/tasks/finished-tasks";
+
+test("Backlog is part of unfinished work", () => {
+  expect(UNFINISHED_STATUSES).toContain("backlog");
+});
 
 const row = (id: string, status: string) => ({ id, status });
 

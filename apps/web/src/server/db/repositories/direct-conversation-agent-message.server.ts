@@ -190,6 +190,7 @@ export function toAgentMessage(
 }
 function taskStatus(value: string): TaskStatus {
   switch (value) {
+    case "backlog":
     case "todo":
     case "in_progress":
     case "in_review":

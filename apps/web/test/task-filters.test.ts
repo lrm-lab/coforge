@@ -21,6 +21,10 @@ import {
  * empty pick means everyone / every Project.
  */
 const VIEWER = "user-viewer";
+
+test("a Backlog URL filter keeps its status", () => {
+  expect(parseStatusParam("backlog,todo")).toEqual(["backlog", "todo"]);
+});
 const person = (id: string, name: string) => ({
   memberId: `m-${id}`,
   kind: "user" as const,

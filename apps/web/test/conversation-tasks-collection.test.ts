@@ -100,7 +100,7 @@ const unfinishedQuery = (tasks: ReturnType<typeof fixture>["tasks"]) =>
   );
 
 test("each live query reads only its own subset; the collection holds what they read", async () => {
-  const { tasks, reads } = fixture();
+  const { tasks, reads } = fixture([...serverTasks, task(6, { status: "backlog" })]);
   const board = unfinishedQuery(tasks);
   const window = createLiveQueryCollection((q) =>
     q.from({ task: tasks.collection }).where(({ task }) => gte(task.sequence, 40)),
@@ -111,14 +111,14 @@ test("each live query reads only its own subset; the collection holds what they 
   await Promise.all([board.preload(), window.preload(), references.preload()]);
 
   expect(reads).toEqual([
-    { statuses: ["todo", "in_progress", "in_review"] },
+    { statuses: ["backlog", "todo", "in_progress", "in_review"] },
     { sequenceFrom: 40 },
     { numbers: [2] },
   ]);
-  expect(board.toArray.map((row) => row.number).sort()).toEqual([1, 3]);
+  expect(board.toArray.map((row) => row.number).sort()).toEqual([1, 3, 6]);
   const { byId, byNumber } = tasks.store.state;
   expect([...byId.keys()].sort()).toEqual(
-    ["message-1", "message-2", "message-3", "message-4", "message-5"].sort(),
+    ["message-1", "message-2", "message-3", "message-4", "message-5", "message-6"].sort(),
   );
   expect(byNumber.get(4)?.status).toBe("closed");
 });

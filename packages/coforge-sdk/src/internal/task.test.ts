@@ -7,6 +7,22 @@ const base = {
   target: "#general",
 } as const;
 
+test("Backlog is readable but cannot be written during compatibility rollout", () => {
+  expect(() => validateTaskRequest({ ...base, status: "backlog" as never })).not.toThrow();
+  expect(() => validateTaskRequest({ ...base, statuses: ["backlog" as never] })).not.toThrow();
+  expect(() =>
+    validateTaskRequest({
+      ...base,
+      operation: "create",
+      title: "Park",
+      status: "backlog" as never,
+    }),
+  ).toThrow();
+  expect(() =>
+    validateTaskRequest({ ...base, operation: "update", number: 1, status: "backlog" as never }),
+  ).toThrow();
+});
+
 test("validateTaskRequest accepts a well-formed list command", () => {
   expect(() => validateTaskRequest(base)).not.toThrow();
   expect(() => validateTaskRequest({ ...base, target: "@ada", peerKind: "human" })).not.toThrow();

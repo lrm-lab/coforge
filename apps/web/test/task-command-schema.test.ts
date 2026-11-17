@@ -10,6 +10,20 @@ const amend = {
   number: 7,
 } as const;
 
+test("Backlog commands permit reads while refusing writes", () => {
+  const list = { ...amend, operation: "list", status: "backlog" };
+  expect(() => taskCommand.parse(list)).not.toThrow();
+  expect(() => validateTaskCommand(list as never)).not.toThrow();
+  expect(() =>
+    validateTaskCommand({ ...list, status: undefined, statuses: ["backlog"] } as never),
+  ).not.toThrow();
+  for (const operation of ["create", "update"] as const) {
+    const write = { ...list, operation, title: "Park" };
+    expect(() => taskCommand.parse(write)).toThrow();
+    expect(() => validateTaskCommand(write as never)).toThrow();
+  }
+});
+
 test("a person's amend may file the Task under a Project by slug, or clear it with null", () => {
   expect(taskCommand.parse({ ...amend, project: "launch" }).project).toBe("launch");
   expect(taskCommand.parse({ ...amend, project: null }).project).toBeNull();

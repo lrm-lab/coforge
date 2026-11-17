@@ -1,5 +1,6 @@
 import {
   TASK_STATUSES,
+  TASK_READ_STATUSES,
   taskPriorityRank,
   type TaskStatus,
   type TaskView,
@@ -51,7 +52,7 @@ export function useTaskLayout(layout: TaskLayout | undefined): TaskLayout {
 export function TaskWorkflow<T extends TaskView>({
   tasks,
   layout,
-  statuses = TASK_STATUSES,
+  statuses = tasks.some((task) => task.status === "backlog") ? TASK_READ_STATUSES : TASK_STATUSES,
   currentMemberId,
   canSetAnyStatus = false,
   disabled,
@@ -178,6 +179,7 @@ export function TaskWorkflow<T extends TaskView>({
             loaded={group.tasks.length}
             paged={paged?.[group.status]}
             board={layout === "board"}
+            compact={groups.length > TASK_STATUSES.length}
             dropState={dropState(group.status)}
             hidable={hides}
             onHide={hides && onHiddenChange ? () => onHiddenChange(group.status, true) : undefined}
