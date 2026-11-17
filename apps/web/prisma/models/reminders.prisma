@@ -1,4 +1,4 @@
-/// Canonical cloud scheduling state. Daemons only own volatile timers for these records.
+/// Canonical cloud scheduling state.
 model Reminder {
   id                String                     @id @default(uuid(7)) @db.Uuid
   workspaceId       String                     @db.Uuid
@@ -22,10 +22,36 @@ model Reminder {
   events            ReminderEvent[]
   fireReceipts      ReminderFireReceipt[]
   operationReceipts ReminderOperationReceipt[]
+  occurrences       ReminderOccurrence[]
 
   @@unique([id, workspaceId])
   @@index([workspaceId, ownerAgentId, status, fireAt])
+  @@index([status, fireAt])
   @@map("reminders")
+}
+
+/// Immutable due revisions awaiting transport custody, scoped only to reminders.
+model ReminderOccurrence {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  reminderId   String    @db.Uuid
+  workspaceId  String    @db.Uuid
+  computerId   String    @db.Uuid
+  agentId      String    @db.Uuid
+  version      Int
+  scheduledFor DateTime
+  claimedAt    DateTime  @default(now())
+  nextPublishAt DateTime @default(now())
+  expiresAt    DateTime
+  status       String    @default("pending")
+  deliveredAt  DateTime?
+  payload      Bytes
+  reminder     Reminder  @relation(fields: [reminderId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@unique([reminderId, version])
+  @@index([status, expiresAt])
+  @@index([workspaceId, computerId, status])
+  @@index([status, nextPublishAt])
+  @@map("reminder_occurrences")
 }
 
 /// Stable Agent CRUD request replay. This is reminder-specific, not a general mailbox.

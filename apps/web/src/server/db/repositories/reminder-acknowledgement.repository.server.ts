@@ -53,6 +53,40 @@ export async function acknowledgeReminder(
         },
       });
       if (!reminder) throw new ReminderRefusal("NOT_FOUND", "reminder not found");
+      const occurrence = await tx.reminderOccurrence.findUnique({
+        where: { reminderId_version: { reminderId: id, version: revision } },
+      });
+      if (occurrence) {
+        if (
+          occurrence.workspaceId !== scope.workspaceId ||
+          occurrence.computerId !== scope.computerId ||
+          occurrence.agentId !== scope.agentId ||
+          occurrence.status !== "delivered"
+        )
+          throw new ReminderRefusal("CONFLICT", "reminder revision was not delivered");
+        const already = await tx.reminderEvent.findFirst({
+          where: {
+            reminderId: id,
+            workspaceId: scope.workspaceId,
+            type: { in: ["acknowledged", "dismissed"] },
+            scheduledFor: occurrence.scheduledFor,
+          },
+        });
+        if (!already)
+          await tx.reminderEvent.create({
+            data: {
+              reminderId: id,
+              workspaceId: scope.workspaceId,
+              type: eventType,
+              title: reminder.title,
+              time: now,
+              scheduledFor: occurrence.scheduledFor,
+            },
+          });
+        const result = summary(reminder);
+        await recordOperation(tx, scope, requestId, fingerprint, id, result);
+        return result;
+      }
       const fireReceipts = await tx.reminderFireReceipt.findMany({
         where: {
           reminderId: id,
@@ -65,11 +99,13 @@ export async function acknowledgeReminder(
       });
       const index = fireReceipts.findIndex((receipt) => receipt.version === revision);
       if (index < 0) throw new ReminderRefusal("CONFLICT", "reminder revision was not fired");
-      const fired = await tx.reminderEvent.findMany({
-        where: { reminderId: id, workspaceId: scope.workspaceId, type: "fired" },
-        orderBy: [{ time: "asc" }, { id: "asc" }],
-        select: { scheduledFor: true },
-      });
+      const fired = await tx.$queryRaw<Array<{ scheduledFor: Date }>>`
+        SELECT e."scheduledFor" FROM "reminder_events" e
+        WHERE e."reminderId" = ${id}::uuid AND e."workspaceId" = ${scope.workspaceId}::uuid
+          AND e."type" = 'fired' AND NOT EXISTS (
+            SELECT 1 FROM "reminder_occurrences" o
+            WHERE o."reminderId" = e."reminderId" AND o."scheduledFor" = e."scheduledFor"
+          ) ORDER BY e."time", e."id"`;
       const scheduledFor = fired[Math.min(index, fired.length - 1)]?.scheduledFor;
       if (!scheduledFor) throw new ReminderRefusal("CONFLICT", "reminder revision was not fired");
       const already = await tx.reminderEvent.findFirst({

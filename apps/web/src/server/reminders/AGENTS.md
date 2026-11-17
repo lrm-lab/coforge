@@ -7,8 +7,12 @@ These rules apply to `src/server/reminders/`.
   and persistence only.
 - The authenticated Agent HTTPS and Daemon WSS compositions are adapters
   only; they never re-implement Reminder rules.
-- Daemon capability leases remain volatile, and reminder timer state remains
-  owned by the Daemon.
+- ReminderDue timing belongs to the server for Computers whose persisted ready
+  capabilities include `reminder-due:v1`, even while offline. Other Computers
+  keep the legacy daemon timer/fire path. Ready capability downgrades expire
+  pending Due records with an alert; they never convert them to legacy fires.
+- Due transport ACK takes custody of an exact occurrence and revision; user
+  acknowledgement and dismissal are separate lifecycle operations.
 - The browser read model in `server/agents/agent-reminders.server.ts` (the Agent's creator or a Workspace owner/admin)
   reads bounded, scheduled Reminders only; lifecycle and history persistence
   stay here.

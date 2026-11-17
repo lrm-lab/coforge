@@ -135,6 +135,9 @@ model WorkspaceComputer {
   computer    Computer   @relation(fields: [computerId], references: [id], onDelete: Cascade)
   createdAt   DateTime   @default(now())
   reminders   Reminder[]
+  readyCapabilities String[] @default([])
+  readyWorkerInstanceId String?
+  readyStartedAt BigInt?
 
   @@unique([workspaceId, computerId])
   @@map("workspace_computers")
