@@ -22,6 +22,7 @@ export function personalMemoryManagement(db: PrismaClient) {
       createCentrifugoServerApi().publish(
         daemonControlChannel(request.workspaceId, request.computerId),
         encodeAgentMemoryRequest(request),
+        { skipHistory: true },
       ),
     results: getAgentMemoryResults(),
   });
