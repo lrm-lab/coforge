@@ -6,6 +6,13 @@ export { adaptDesktopHtml, withDesktopTitle };
 /** Caddy sets this when reverse-proxying after forward_auth; browsers never send it. */
 export const DESKTOP_PROXY_SECRET_HEADER = "x-coforge-desktop-proxy-secret";
 
+/**
+ * Bun's default WebSocket idleTimeout is 120s. A still desktop rarely sends
+ * frames, so the proxy would close the browser socket and leave a black noVNC
+ * canvas. Bun's maximum is 960s; with sendPings the client pong refreshes it.
+ */
+export const DESKTOP_WEBSOCKET_IDLE_TIMEOUT_SECONDS = 960;
+
 export type DesktopEndpoint = { host: string; port: number; token: string };
 
 /**
@@ -123,6 +130,8 @@ export function startDesktopProxy(input: {
       return proxyHttp(request, target, route.upstreamPath, url.search);
     },
     websocket: {
+      idleTimeout: DESKTOP_WEBSOCKET_IDLE_TIMEOUT_SECONDS,
+      sendPings: true,
       open(ws) {
         const { target, upstreamPath } = ws.data;
         const upstream = new WebSocket(

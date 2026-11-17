@@ -8,11 +8,17 @@ chmod 700 "${XDG_RUNTIME_DIR}"
 config_home="${XDG_CONFIG_HOME:-${HOME}/.config}"
 mkdir -p "${config_home}/gtk-3.0"
 cp /etc/xdg/gtk-3.0/gtk.css "${config_home}/gtk-3.0/gtk.css"
+# Remote viewers keep the VNC socket up while X blanking paints a black
+# framebuffer; turn blanking off for the life of this session.
+xset s off 2>/dev/null || true
+xset s noblank 2>/dev/null || true
 nohup /usr/local/bin/coforge-maximize-chromium >/dev/null 2>&1 &
 exec dbus-run-session -- sh -c '
   startxfce4 &
   pid=$!
   sleep 1
+  xset s off 2>/dev/null || true
+  xset s noblank 2>/dev/null || true
   /usr/local/bin/coforge-dock-ui &
   wait "$pid"
 '
