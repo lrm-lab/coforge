@@ -26,8 +26,7 @@ export function isSessionReportSuperseded(error: unknown): boolean {
     if ((error as { category?: unknown }).category === "superseded") return true;
     if ((error as { code?: unknown }).code === 409) return true;
   }
-  const message = error instanceof Error ? error.message : String(error ?? "");
-  return /superseded/iu.test(message);
+  return false;
 }
 
 export type SessionIdReporterPorts = Pick<

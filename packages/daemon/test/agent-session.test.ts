@@ -69,7 +69,18 @@ test("Session reporting persists before sending and replays the same snapshot af
   expect(snapshots).toHaveLength(2);
 });
 
-test("a permanent session scope rejection drops the snapshot instead of replaying it", async () => {
+test.each([
+  { code: 403, category: "scope_unauthorized", message: "wording changed", drop: true },
+  {
+    code: 403,
+    category: "session_mismatch",
+    message: "Agent Session snapshot is not authorized",
+    drop: true,
+  },
+  { code: 409, category: "superseded", message: "wording changed", drop: true },
+  { code: 403, message: "Stale Agent scope", drop: false },
+  { code: 503, category: "session_mismatch", message: "temporary failure", drop: false },
+])("session rejection %j only drops classified permanent snapshots", async ({ drop, ...error }) => {
   let record: AgentRuntimeRecord = {
     version: 1,
     scope: {
@@ -110,15 +121,15 @@ test("a permanent session scope rejection drops the snapshot instead of replayin
   let sends = 0;
   const reject = async () => {
     sends++;
-    throw Object.assign(new Error("Stale Agent scope"), { code: 403 });
+    throw error;
   };
 
   await new AgentSessions(state, reject).replay();
   expect(sends).toBe(1);
-  expect(record.report).toBeUndefined();
+  expect(record.report === undefined).toBe(drop);
 
   await new AgentSessions(state, reject).replay();
-  expect(sends).toBe(1);
+  expect(sends).toBe(drop ? 1 : 2);
 });
 
 test("Session replay sends different Agents concurrently", async () => {

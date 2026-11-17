@@ -12,6 +12,10 @@ import {
 import type { CentrifugoRpcMethod } from "./rpc-handler.server";
 import { rejectionReason } from "./rejection-reason.server";
 import { rejectNonDaemonPrincipal } from "./daemon-principal.server";
+import {
+  agentSessionRejection,
+  type AgentSessionRejectionCategory,
+} from "@lrm/coforge-sdk/internal/agent-session-rejection";
 
 /** Every fixed message this handler's collaborators throw for a rejected snapshot: the shared
  * `requireCurrentAgentScope`, `AgentSessionReceiver`, and `AgentSessions`. Mirrors the same
@@ -30,18 +34,38 @@ const KNOWN_REJECTION_REASONS = new Set([
 export function createAgentSessionMethod(
   sessions: Pick<AgentSessions, "accept" | "verify">,
   receiver?: AgentSessionReceiver,
+  capabilities?: {
+    supports(workspaceId: string, computerId: string, workerInstanceId: string): Promise<boolean>;
+  },
 ): CentrifugoRpcMethod {
   return async (payload, metadata) => {
     const rejection = rejectNonDaemonPrincipal(metadata.principal);
     if (rejection) return rejection;
     let report: AgentSessionReport | undefined;
+    const reject = async (
+      category: AgentSessionRejectionCategory,
+      message: string,
+      legacyCategory = true,
+    ) => {
+      const supported =
+        report?.daemonInstanceId &&
+        (await capabilities
+          ?.supports(
+            metadata.principal.workspaceId,
+            metadata.principal.computerId,
+            report.daemonInstanceId,
+          )
+          .catch(() => false));
+      const result = agentSessionRejection(category, message, supported === true);
+      return supported || legacyCategory ? result : { code: result.code, message };
+    };
     try {
       report = decodeAgentSessionReport(payload);
       if (
         metadata.principal.workspaceId !== report.workspaceId ||
         metadata.principal.computerId !== report.computerId
       )
-        return { code: 403, message: "Agent session scope is not authorized" };
+        return reject("scope_unauthorized", "Agent session scope is not authorized", false);
       await receiver?.authorize(metadata.principal, report);
       if (
         report.sequence !== undefined &&
@@ -77,17 +101,9 @@ export function createAgentSessionMethod(
           }),
         );
         if (error.category === "superseded") {
-          return {
-            code: 409,
-            message: "Agent session launch was superseded",
-            category: "superseded",
-          };
+          return reject("superseded", "Agent session launch was superseded");
         }
-        return {
-          code: 403,
-          message: "Agent Session snapshot is not authorized",
-          category: "session_mismatch",
-        };
+        return reject("session_mismatch", "Agent Session snapshot is not authorized");
       }
       const isKnown = error instanceof Error && KNOWN_REJECTION_REASONS.has(error.message);
       console.warn(
@@ -102,7 +118,7 @@ export function createAgentSessionMethod(
         }),
       );
       if (isKnown) {
-        return { code: 403, message: "Agent Session snapshot is not authorized" };
+        return reject("scope_unauthorized", "Agent Session snapshot is not authorized", false);
       }
       return { code: 503, message: "Agent session could not be accepted" };
     }
