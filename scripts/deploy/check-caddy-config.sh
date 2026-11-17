@@ -45,12 +45,21 @@ fi
 upstream="$(awk '
 	/^  caddy:/ { in_service = 1; next }
 	in_service && /^  [^ ]/ { in_service = 0 }
-	in_service && /^      COFORGE_DESKTOP_UPSTREAM:/ { print $2; exit }
+	in_service && /^      COFORGE_DESKTOP_UPSTREAM:/ {
+		sub(/^      COFORGE_DESKTOP_UPSTREAM:[[:space:]]*/, "")
+		print
+		exit
+	}
 ' "$compose_file")"
 if [ -z "$upstream" ]; then
 	printf 'check-caddy-config: COFORGE_DESKTOP_UPSTREAM is missing from the caddy service in %s\n' \
 		"$compose_file" >&2
 	exit 1
+fi
+# Staging Compose interpolates the ECS private IP at deploy time; validate with
+# a loopback placeholder so `caddy validate` still sees host:port.
+if [[ "$upstream" == *'${'* ]]; then
+	upstream="127.0.0.1:16090"
 fi
 
 # `caddy validate` loads and provisions every module without starting servers

@@ -209,6 +209,7 @@ describe("write_deploy_env", () => {
       expect(envFile).toContain(
         `COFORGE_CADDYFILE_SHA256=${createHash("sha256").update(caddyfile).digest("hex")}`,
       );
+      expect(envFile).toMatch(/^COFORGE_DESKTOP_HOST_GATEWAY=\d{1,3}(?:\.\d{1,3}){3}$/m);
       expect((await stat(envPath)).mode & 0o777).toBe(0o600);
     } finally {
       await rm(root, { recursive: true, force: true });

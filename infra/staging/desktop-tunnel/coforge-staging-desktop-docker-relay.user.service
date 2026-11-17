@@ -1,0 +1,19 @@
+[Unit]
+Description=CoForge staging desktop relay (ECS private IP :16090 → loopback tunnel)
+Documentation=https://github.com/lrm-lab/coforge/blob/main/docs/operations/cloud-swarm/staging-desktop-tunnel.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# RELAY_LISTEN_HOST must be the ECS primary private IP (same value deploy writes
+# as COFORGE_DESKTOP_HOST_GATEWAY). Detect once when installing the unit.
+Environment=RELAY_LISTEN_PORT=16090
+Environment=RELAY_TARGET_HOST=127.0.0.1
+Environment=RELAY_TARGET_PORT=16090
+ExecStart=%h/bin/desktop-tunnel-docker-relay.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
