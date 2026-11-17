@@ -70,7 +70,9 @@ describe("proc job edge cases and lifecycle purge", () => {
     const error = await spawnDetachedProcJob({
       command: ["./run.sh"],
       cwd: workDir,
-      env: { PATH: process.env.PATH ?? "/usr/bin:/bin" },
+      // Use a nonexistent PATH so `systemd-run` is never launched even on Linux, while `./run.sh`
+      // is still validated against `cwd` without using PATH.
+      env: { PATH: "/nonexistent" },
       logPath,
       systemdUnit: "coforge-proc-test.scope",
       onExit: () => {},
@@ -78,6 +80,18 @@ describe("proc job edge cases and lifecycle purge", () => {
 
     expect(error).toBeInstanceOf(Error);
     expect(String(error)).not.toContain("run.sh");
+
+    const missingError = await spawnDetachedProcJob({
+      command: ["./missing.sh"],
+      cwd: workDir,
+      env: { PATH: "/nonexistent" },
+      logPath,
+      systemdUnit: "coforge-proc-test-missing.scope",
+      onExit: () => {},
+    }).catch((err: unknown) => err);
+
+    expect(missingError).toBeInstanceOf(Error);
+    expect(String(missingError)).toContain("missing.sh");
   });
 
   test("readProcJobLogSlice and rotateProcLogIfNeeded refuse symlinks and keep active log on backup failure", async () => {

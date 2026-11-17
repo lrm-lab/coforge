@@ -227,6 +227,7 @@ export async function spawnDetachedProcJob(input: {
   const argv = input.systemdUnit
     ? [
         "systemd-run",
+        "--quiet",
         "--user",
         "--scope",
         "--unit",
