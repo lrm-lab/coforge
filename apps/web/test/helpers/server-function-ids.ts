@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+const bundle = join(import.meta.dir, "../../.output/server/index.mjs");
+
 /**
  * This build's Server Function ids, by id, for the export names given. The id on the wire is the
  * hash the build gave the function - it does not encode the name, so it cannot be decoded back
@@ -10,7 +12,18 @@ import { join } from "node:path";
  * (docs/agents/testing.md).
  */
 export function serverFunctionIds<const N extends string>(names: readonly N[]): Map<string, N> {
-  const bundle = join(import.meta.dir, "../../.output/server/index.mjs");
+  const byName = new Map([...serverFunctionNames()].map(([id, name]) => [name, id]));
+  const ids = new Map<string, N>();
+  for (const name of names) {
+    const id = byName.get(name);
+    if (!id) throw new Error(`Server Function ${name} is not in ${bundle}`);
+    ids.set(id, name);
+  }
+  return ids;
+}
+
+/** Every Server Function in this build, export name by id: what a test names in a request log. */
+export function serverFunctionNames(): Map<string, string> {
   let source: string;
   try {
     source = readFileSync(bundle, "utf8");
@@ -19,17 +32,11 @@ export function serverFunctionIds<const N extends string>(names: readonly N[]): 
       `${bundle} is missing: build the Web package first (NODE_ENV=production bun run --cwd apps/web build)`,
     );
   }
-  const byName = new Map<string, string>();
+  const names = new Map<string, string>();
   const pattern =
     /([A-Za-z0-9_$]+)_createServerFn_handler\s*=\s*createServerRpc\(\{\s*id:\s*"([0-9a-f]{64})"/g;
-  for (const [, name, id] of source.matchAll(pattern)) byName.set(name!, id!);
-  const ids = new Map<string, N>();
-  for (const name of names) {
-    const id = byName.get(name);
-    if (!id) throw new Error(`Server Function ${name} is not in ${bundle}`);
-    ids.set(id, name);
-  }
-  return ids;
+  for (const [, name, id] of source.matchAll(pattern)) names.set(id!, name!);
+  return names;
 }
 
 /** The Server Function a request calls, by its export name among `ids`, if any. */

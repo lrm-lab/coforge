@@ -1,4 +1,4 @@
-import { serverFunctionOf } from "./server-function-ids";
+import { serverFunctionNames, serverFunctionOf } from "./server-function-ids";
 
 type ProxySocket = {
   path: string;
@@ -7,11 +7,19 @@ type ProxySocket = {
   pending: Array<string | Uint8Array<ArrayBuffer>>;
 };
 
-/** Forwards to the local Web service at `upstreamOrigin`, holding the Server Functions `heldReads`
- * names (by id) while `hold()` is on. */
+/**
+ * Forwards to the local Web service at `upstreamOrigin`, holding the Server Functions `heldReads`
+ * names (by id) while `hold()` is on. From `hold()`
+ * on it also records each Server Function call, held or let through, and whether an answer let
+ * through carries a watched message: what a failed assertion under the gate reports.
+ */
+const allServerFunctions = serverFunctionNames();
+
 export function gatedProxy(upstreamOrigin: string, heldReads: ReadonlyMap<string, string>) {
   let gate: { release: () => void; opened: Promise<void> } | undefined;
   const heldNow = new Set<string>();
+  let log: { start: number; lines: string[]; watched: string[] } | undefined;
+  const note = (line: string) => log?.lines.push(`+${Date.now() - log.start}ms ${line}`);
   const upstream = new URL(upstreamOrigin);
   const server = Bun.serve<ProxySocket>({
     hostname: "127.0.0.1",
@@ -29,6 +37,8 @@ export function gatedProxy(upstreamOrigin: string, heldReads: ReadonlyMap<string
       if (url.pathname === "/auth/logout" || url.pathname.endsWith("/auth/logout"))
         return new Response("signed out (stand-in for Authing)", { status: 200 });
       const name = serverFunctionOf(heldReads, url);
+      const called = allServerFunctions.get(url.pathname.split("/_serverFn/")[1] ?? "");
+      if (called) note(`-> ${called}${gate && name ? " (held)" : ""}`);
       if (gate && name) {
         const held = `${name} ${heldNow.size}`;
         heldNow.add(held);
@@ -48,6 +58,13 @@ export function gatedProxy(upstreamOrigin: string, heldReads: ReadonlyMap<string
         duplex: "half",
       };
       const response = await fetch(upstream.origin + url.pathname + url.search, init);
+      if (called && log) {
+        const body = await response.clone().text();
+        const carries = log.watched.filter((text) => body.includes(text));
+        note(
+          `<- ${called} ${response.status}${carries.length ? ` carries ${carries.join(", ")}` : ""}`,
+        );
+      }
       const headers = new Headers(response.headers);
       headers.delete("content-encoding");
       headers.delete("content-length");
@@ -85,8 +102,10 @@ export function gatedProxy(upstreamOrigin: string, heldReads: ReadonlyMap<string
   });
   return {
     origin: `http://127.0.0.1:${server.port}`,
-    /** From now on the held reads wait for `release()`. */
-    hold() {
+    /** From now on the held reads wait for `release()`, and calls are recorded for `report()`,
+     * noting an answer that carries one of `watched`. */
+    hold(watched: string[] = []) {
+      log = { start: Date.now(), lines: [], watched };
       let release: () => void = () => {};
       const opened = new Promise<void>((resolve) => (release = resolve));
       gate = { release, opened };
@@ -97,6 +116,10 @@ export function gatedProxy(upstreamOrigin: string, heldReads: ReadonlyMap<string
     },
     /** How many held reads are waiting right now. */
     held: () => heldNow.size,
+    /** Marks a point of the test in the record. */
+    mark: (label: string) => note(`-- ${label}`),
+    /** The record since the last `hold()`. */
+    report: () => log?.lines.join("\n") ?? "(nothing recorded)",
     stop: () => server.stop(true),
   };
 }

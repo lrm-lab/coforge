@@ -116,6 +116,27 @@ const stored = (key: string) =>
     `return new Promise((r) => { const q = store.getKey(${JSON.stringify(key)}); q.onsuccess = () => r(q.result !== undefined); });`,
   );
 /**
+ * Runs `body` with the Chat reads held, and always lets them through after. A failure inside
+ * carries the record of the calls made meanwhile, so a run that shows a watched message too early
+ * names the read that brought it.
+ */
+async function whileHeld(watched: string[], body: () => Promise<void>) {
+  proxy.hold(watched);
+  try {
+    await body();
+  } catch (error) {
+    proxy.mark("failed");
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)}
+Server Function calls while held:
+${proxy.report()}`,
+      { cause: error },
+    );
+  } finally {
+    proxy.release();
+  }
+}
+/**
  * The page just opened is up: its own reads are done (no request for a moment), so what it stores
  * is stored and a click reaches it. Per load, unlike a row a previous load left behind (the daily
  * sweep's marker made every later wait return at once).
@@ -194,20 +215,21 @@ test("Chat opens from the browser's copy while its reads are outstanding, then t
   // A new page load away from Chat: nothing of the conversation is in memory.
   await browser("open", `${proxy.origin}${workspacePath}/members`);
   await pageIsUp(`!!(${chatLink()})`);
-  proxy.hold();
-  await browser("eval", "window.__stayedInThisDocument = true");
-  await browser("eval", `${chatLink()}.click()`);
+  await whileHeld([second], async () => {
+    await browser("eval", "window.__stayedInThisDocument = true");
+    await browser("eval", `${chatLink()}.click()`);
 
-  // The sidebar and the conversation are on screen from storage, with the reads still waiting.
-  await waitFor(visible(first));
-  await waitFor(`document.querySelector('a[href*="/channel/${channelId}"]') !== null`);
-  expect(proxy.held()).toBeGreaterThan(0);
-  expect(await evaluate<boolean>("window.__stayedInThisDocument === true")).toBe(true);
-  expect(await evaluate<boolean>(visible(second))).toBe(false);
-  await browser("screenshot", join(artifacts, "from-the-browsers-copy.png"));
+    // The sidebar and the conversation are on screen from storage, with the reads still waiting.
+    await waitFor(visible(first));
+    await waitFor(`document.querySelector('a[href*="/channel/${channelId}"]') !== null`);
+    proxy.mark("on screen from storage");
+    expect(proxy.held()).toBeGreaterThan(0);
+    expect(await evaluate<boolean>("window.__stayedInThisDocument === true")).toBe(true);
+    expect(await evaluate<boolean>(visible(second))).toBe(false);
+    await browser("screenshot", join(artifacts, "from-the-browsers-copy.png"));
+  });
 
   // The reads then answer, and the page catches up.
-  proxy.release();
   await waitFor(visible(second));
   await browser("screenshot", join(artifacts, "brought-up-to-date.png"));
 }, 300_000);
@@ -252,19 +274,17 @@ test("a conversation read in one page load opens from the browser's copy without
   await pageIsUp(`!!(${chatLink()})`);
 
   // A new page load opens the channel from storage, with its reads held.
-  proxy.hold();
-  try {
+  await whileHeld([third], async () => {
     await browser("eval", `${chatLink()}.click()`);
     await waitFor(visible(third));
+    proxy.mark("on screen from storage");
     expect(proxy.held()).toBeGreaterThan(0);
     expect(
       await evaluate<boolean>(
         `document.querySelector('[role="separator"][aria-label="New messages"]') !== null`,
       ),
     ).toBe(false);
-  } finally {
-    proxy.release();
-  }
+  });
   // Nor once the open's own read has landed.
   await waitFor(openReadLanded(channelId));
   expect(
