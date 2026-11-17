@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { describe, expect, test } from "bun:test";
 import { parseRemoteOutputs } from "./deployment";
-import { registryImage, timeoutShim } from "./deploy-test-support";
+import { ipShim, registryImage, timeoutShim } from "./deploy-test-support";
 
 const secretsScript = new URL("./deploy-secrets.sh", import.meta.url).pathname;
 
@@ -65,6 +65,7 @@ describe("candidate failure diagnostics", () => {
         const state = `CURRENT_WEB_IMAGE=${previous}\nPREVIOUS_WEB_IMAGE=\n`;
         await Bun.write(join(root, "state.env"), state);
         await writeFile(join(root, "bin/timeout"), timeoutShim(), { mode: 0o700 });
+        await writeFile(join(root, "bin/ip"), ipShim(), { mode: 0o700 });
         await writeFile(
           join(root, "bin/docker"),
           `#!/bin/bash

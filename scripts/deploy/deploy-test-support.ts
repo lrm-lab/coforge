@@ -59,6 +59,15 @@ ${recording}${run}
 `;
 }
 
+/**
+ * An `ip` shim for write_deploy_env fixtures: always outputs a fixed
+ * `ip -4 route get` line so tests do not depend on host `ip` availability or
+ * host routing tables on either macOS or Linux.
+ */
+export function ipShim(): string {
+  return `#!/bin/bash\nprintf '1.1.1.1 via 10.0.0.1 dev eth0 src 10.0.0.2 uid 1000\\n'\n`;
+}
+
 export const readCompose = async (environment: string) =>
   Bun.YAML.parse(
     await Bun.file(
