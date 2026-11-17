@@ -1,5 +1,14 @@
+import { teamMemoryAccess as access } from "./team-memory-access.repositories.server";
+import {
+  head,
+  versionHead,
+  searchText,
+  escapeLike,
+  fingerprint,
+  type Row,
+  type Version,
+} from "./team-memory-projections.server";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
-import { EXPERIMENTS } from "#src/server/experiments/experiments.server";
 import {
   teamMemoryTerms,
   type TeamMemoryCommand,
@@ -19,75 +28,6 @@ import {
 type Database = PrismaClient | Prisma.TransactionClient;
 const PREVIEW_WHITESPACE =
   " \t\n\r\v\f\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
-type Row = TeamMemoryDraft & {
-  id: string;
-  workspaceId: string;
-  revision: number;
-  status: string;
-  authorAgentId: string;
-  updatedAt: Date;
-};
-type Version = {
-  snapshot: Prisma.JsonValue;
-  actorAgentId: string;
-  operation: string;
-  reason: string;
-  mergedFrom: Prisma.JsonValue;
-};
-
-function versionHead(version: Version): TeamMemoryHead {
-  return {
-    ...(version.snapshot as unknown as TeamMemoryHead),
-    change: {
-      actorAgentId: version.actorAgentId,
-      operation: version.operation,
-      reason: version.reason,
-      mergedFrom: version.mergedFrom as { id: string; revision: number }[],
-    },
-  };
-}
-
-function head(row: Row): TeamMemoryHead {
-  if (row.status !== "active" && row.status !== "archived") throw new TeamMemoryError("not_found");
-  return {
-    id: row.id,
-    revision: row.revision,
-    status: row.status,
-    authorAgentId: row.authorAgentId,
-    updatedAt: row.updatedAt.toISOString(),
-    title: row.title,
-    content: row.content,
-    source: row.source,
-    applicability: row.applicability,
-    kind: row.kind,
-  };
-}
-function searchText(draft: TeamMemoryDraft): string {
-  return `${draft.title}\n${draft.content}\n${draft.applicability}`.normalize("NFKC").toLowerCase();
-}
-function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/g, "\\$&");
-}
-function fingerprint(command: TeamMemoryWrite): string {
-  return new Bun.CryptoHasher("sha256")
-    .update(JSON.stringify({ ...command, reviewToken: undefined }))
-    .digest("hex");
-}
-
-async function access(db: Database, actor: TeamMemoryActor, lock = false): Promise<boolean> {
-  const rows = await db.$queryRaw<{ role: string; teamMemoryEnabled: boolean | null }[]>(Prisma.sql`
-    SELECT a."role", COALESCE(NULLIF(w.experiments->'teamMemory', 'null'::jsonb),
-      ${JSON.stringify(EXPERIMENTS.teamMemory.defaultEnabled)}::jsonb) = 'true'::jsonb AS "teamMemoryEnabled"
-    FROM "agents" a JOIN "workspace_memberships" m
-    ON m."workspaceId" = a."workspaceId" AND m."userId" = a."ownerId"
-    JOIN "workspaces" w ON w.id = a."workspaceId"
-    WHERE a."id" = ${actor.agentId}::uuid AND a."workspaceId" = ${actor.workspaceId}::uuid AND a."deletedAt" IS NULL
-    ${lock ? Prisma.sql`FOR SHARE OF a, m, w` : Prisma.empty}`);
-  if (!rows[0]) throw new TeamMemoryError("forbidden");
-  if (!rows[0].teamMemoryEnabled) throw new TeamMemoryError("disabled");
-  return rows[0].role === "owner" || rows[0].role === "admin";
-}
-
 async function readTarget(db: Database, actor: TeamMemoryActor, id: string): Promise<Row> {
   const row = await db.teamMemoryEntry.findFirst({
     where: { workspaceId: actor.workspaceId, id, status: { not: "deleted" } },
