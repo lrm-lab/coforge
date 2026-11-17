@@ -37,6 +37,7 @@ import {
   REVERT_EFFECT_FIX,
 } from "./commit-granularity";
 import { E2E_FLOW_FIX, rangeE2eFlowViolations } from "./e2e-flow";
+import { UI_EVIDENCE_FIX, uiEvidenceFor } from "./ui-evidence";
 
 type Rule =
   | "size-ratchet"
@@ -51,6 +52,7 @@ type Rule =
   | "rename-purity"
   | "commit-mix"
   | "e2e-flow"
+  | "ui-evidence"
   | TreeRule;
 type Violation = { rule: Rule; location: string; found: string };
 
@@ -71,6 +73,7 @@ const FIX: Record<Rule, string> = {
   "rename-purity": RENAME_PURITY_FIX,
   "commit-mix": COMMIT_MIX_FIX,
   "e2e-flow": E2E_FLOW_FIX,
+  "ui-evidence": UI_EVIDENCE_FIX,
   ...TREE_FIX,
 };
 
@@ -427,6 +430,7 @@ async function check(args: string[]): Promise<Violation[] | string> {
         location: v.sha,
         found: v.found,
       })),
+      ...(await uiEvidenceFor(base, head, usable)),
       ...identityViolations(commitIdentities([head, ...authorsFrom.map((rev) => `^${rev}`)])),
     ];
   }
