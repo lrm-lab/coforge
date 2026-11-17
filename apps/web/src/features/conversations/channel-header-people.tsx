@@ -1,5 +1,6 @@
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
-import { ActorAvatarStack, AVATAR_STACK_RING } from "#src/features/avatars/actor-avatar-stack";
+import { ActorAvatarStack } from "#src/features/avatars/actor-avatar-stack";
+import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { AvatarAddButton } from "#src/components/base/avatar/base-components/avatar-add-button";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { Skeleton } from "#src/components/ui/skeleton";

@@ -4,7 +4,8 @@ import { Button as AriaButton, Dialog, DialogTrigger, Popover } from "react-aria
 
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
-import { ActorAvatarStack, AVATAR_STACK_RING } from "#src/features/avatars/actor-avatar-stack";
+import { ActorAvatarStack } from "#src/features/avatars/actor-avatar-stack";
+import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { m } from "#src/paraglide/messages";
 import { POPOVER_MOTION } from "#src/utils/popover-motion";
 import { cn } from "#src/lib/utils";
