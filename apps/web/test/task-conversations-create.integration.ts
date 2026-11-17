@@ -5,6 +5,10 @@ import { handleAgentTaskPost } from "#src/routes/api/agent/v1/tasks";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { agentTaskPrincipal } from "#src/server/tasks/task-principal.server";
 import { SourceMessageTaken } from "#src/server/tasks/task-conversation-creation.server";
+import {
+  TASK_CREATES_RESOURCE_RETIRED,
+  TASK_NOT_RESOURCE,
+} from "#src/server/tasks/task-resource-receipt.server";
 
 const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("TASK_TEST_DATABASE_URL must point to local PostgreSQL");
@@ -227,7 +231,30 @@ test("alongside needs a source message, and a create cannot create a resource", 
   ).rejects.toMatchObject({ code: "INVALID_INPUT" });
   await expect(
     run("maker", { operation: "create", title: "x", createsResource: true }),
-  ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId: TASK_CREATES_RESOURCE_RETIRED });
+});
+
+test("a receipt on a task that is not a resource task says so instead of failing", async () => {
+  const created = await run("maker", {
+    operation: "create",
+    title: "No resource",
+    priority: "low",
+  });
+  await expect(
+    run("maker", {
+      operation: "receipt",
+      number: created.tasks[0]!.number,
+      receipt: {
+        object: "o",
+        purpose: "p",
+        teardownOwner: `@${agents.maker.name}`,
+        securityPrivacy: "s",
+        expiry: new Date(Date.now() + 86_400_000).toISOString(),
+        runbook: "r",
+        tracking: "t",
+      },
+    }),
+  ).rejects.toMatchObject({ code: "CONFLICT", errorId: TASK_NOT_RESOURCE });
 });
 
 const post = (principal: object, body: Record<string, unknown>) =>

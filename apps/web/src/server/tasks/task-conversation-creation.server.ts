@@ -39,6 +39,7 @@ import { ownTaskScope } from "./task-list.server";
 import { parentTasksOf, taskViewsOf } from "./task-relations.server";
 import { postTaskNotice } from "./task-conversations.server";
 import { followTask } from "./task-discussion-store.server";
+import { TASK_CREATES_RESOURCE_RETIRED } from "./task-resource-receipt.server";
 import {
   taskSelection,
   UNFINISHED_TASK_STATUSES,
@@ -96,8 +97,14 @@ export async function createConversationTasks(
     throw new AppError("INVALID_INPUT");
   const titles = convert ? [""] : (command.titles ?? [command.title!]).map((title) => title.trim());
   if (command.description != null && titles.length !== 1) throw new AppError("INVALID_INPUT");
-  // A resource task records its receipt against a message, which this task does not have yet.
-  if (command.attachmentId || command.createsResource) throw new AppError("INVALID_INPUT");
+  if (command.attachmentId) throw new AppError("INVALID_INPUT");
+  // A resource receipt was anchored to the message a v1 task was; a task with its own
+  // conversation has none, so no new task is a resource task. Existing ones still take receipts.
+  if (command.createsResource)
+    throw new AppError("INVALID_INPUT", {
+      errorId: TASK_CREATES_RESOURCE_RETIRED,
+      hint: "new tasks no longer track resources: drop --creates-resource. `coforge task receipt` still records the receipt of a task created with it before",
+    });
   if (command.alongside && !command.messageId) throw new AppError("INVALID_INPUT");
   const requestIds = await Promise.all(
     titles.map((_, index) => indexedRequestId(command.idempotencyKey, index)),
