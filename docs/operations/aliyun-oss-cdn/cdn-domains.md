@@ -79,7 +79,15 @@ EdgeScript：域名边界本身就是 fail-closed 的，一个域名请求另一
 5. 三个域名都新增全域 Modify Outgoing Request Headers `Delete Cookie` 与 Modify
    Outgoing Response Headers `Delete Set-Cookie`。应用 session cookie 必须是 application
    host-only，不能设置 `Domain=.coforge.cn`。CDN 不用 Cookie 鉴权或形成 cache identity。
-6. 启用 HTTPS 证书后强制 HTTPS；每个域名各自记录 certificate ID/expiry，不导出私钥。
+6. `files.coforge.cn` 无条件下发两个安全响应头，是安全边界，任何时候不能去掉：
+   `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox`
+   与 `X-Content-Type-Options: nosniff`。`files` 与主站同属 `coforge.cn` 一个站点，
+   签名 URL 可能被直接打开成文档（例如右键"在新标签页打开"），SVG 在此头下不执行
+   脚本。它覆盖全部历史与新对象，刻意不用规则引擎条件（本账号未开通该功能，条件类
+   配置不会生效）。注意 `default-src 'none'` 会拦截顶层音视频文档的媒体请求：将来
+   修复视频 CORS（补 `Access-Control-Allow-Origin`）时必须同时加显式 `media-src`，
+   且 sandbox 的 opaque origin 下 `'self'` 无效，要写域名或 `https:`。
+7. 启用 HTTPS 证书后强制 HTTPS；每个域名各自记录 certificate ID/expiry，不导出私钥。
    一张 `*.coforge.cn` 证书可以覆盖多个域名，但域名配置本身不得使用 wildcard。
 
 ## 5.4 访问日志

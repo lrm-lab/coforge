@@ -67,5 +67,12 @@ backend 现在为 `files-staging.coforge.cn` 签发 Type A 签名 URL
 添加 `Cache-Control: private, max-age=1800`；实测同一签名 URL 重复请求为
 `X-Cache: HIT`，未签名请求仍是 `403`。
 
+2026-11-17 起 `files-staging.coforge.cn` 无条件下发两个安全响应头（ConfigId
+`530544316837888`/`530544316837889`，无条件 `set_resp_header`）：
+`Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox`
+与 `X-Content-Type-Options: nosniff`。这是安全边界，任何时候不能去掉；刻意不用规则
+引擎条件（本账号未开通该功能）。实测：带 `<script>` 的 SVG 直接打开签名地址脚本不
+执行（origin 为 opaque），PNG/PDF/视频行为不变，Chrome iframe PDF 预览正常。
+
 CDN real-time log delivery 与 OSS access logging 两项 staging 均**未启用**，属于已知
 缺口：出事时没有取证能力。
