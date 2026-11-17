@@ -84,11 +84,12 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     // The thread's channel goes by its group avatar and name, no `#` (task #55).
     expect(rows[1]).toContain("e2e-activity-inbox · Activity Peer: ");
     expect(rows[1]).not.toContain("#e2e-activity-inbox");
-    // Under a day's heading a row gives the time of day, never "3d ago" (task #24).
-    const times = await evaluate<string[]>(
-      `[...document.querySelectorAll('[data-activity-list] ol[aria-label="Today"] time')].map((t) => t.textContent.trim())`,
-    );
-    expect(times.length).toBeGreaterThan(0);
+    // Under a day's heading a row gives the time of day, never "3d ago" (task #24). The rows are
+    // one undated list until the days are named, a render after hydration (task #64), so wait for
+    // this test's rows under "Today": they were written during this run, so today in any zone.
+    const todayTimes = `[...document.querySelectorAll('[data-activity-list] ol[aria-label="Today"] > li')].filter((row) => row.textContent.includes("e2e-activity-inbox")).map((row) => row.querySelector("time")?.textContent.trim() ?? "")`;
+    await browser("wait", "--fn", `${todayTimes}.length === 2`);
+    const times = await evaluate<string[]>(todayTimes);
     expect(times.every((text) => /^\d{1,2}:\d{2}(\s?[AP]M)?$/i.test(text))).toBe(true);
     // Nothing is open, so there is no conversation area: the list spans the page.
     expect(await evaluate<boolean>(`${pane} === null`)).toBe(true);
