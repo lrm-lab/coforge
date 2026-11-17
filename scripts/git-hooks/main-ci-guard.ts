@@ -11,6 +11,7 @@ export type CiRunSummary = {
 export type CiJobSummary = {
   name: string;
   conclusion: string | null;
+  steps?: { name?: string }[];
 };
 
 export type MainCiStatus =
@@ -71,8 +72,20 @@ export function evaluateMainCiRuns(
   }
 
   const failedJobs = latestRunJobs
-    .filter((job) => job.conclusion === "failure" || job.conclusion === "timed_out")
+    .filter(
+      (job) =>
+        job.name !== "CI passed" &&
+        (job.conclusion === "failure" ||
+          job.conclusion === "timed_out" ||
+          (job.conclusion === "cancelled" && (job.steps?.length ?? 0) > 0)),
+    )
     .map((job) => job.name);
+  // If jobs were fetched and none of the real check jobs failed, timed out, or
+  // were cancelled after running steps (only 0-step unacquired-runner jobs were
+  // cancelled and the aggregate `CI passed` gate failed), treat main as green.
+  if (latestRunJobs.length > 0 && failedJobs.length === 0) {
+    return { state: "green" };
+  }
 
   return { state: "red", latestRun: latest, firstRedRun, failedJobs };
 }

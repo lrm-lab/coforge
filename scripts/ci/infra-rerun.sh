@@ -24,9 +24,21 @@ if [ "$attempt" != "1" ]; then
 fi
 
 jobs="$(gh api "repos/$REPO/actions/runs/$run_id/jobs?filter=latest&per_page=100")"
-failed_steps="$(jq -r '[.jobs[] | select(.conclusion == "failure") | .steps[]? | select(.conclusion == "failure") | .name] | .[]' <<<"$jobs")"
+timed_out_jobs="$(jq -r '[.jobs[] | select(.name != "CI passed" and .conclusion == "timed_out")] | length' <<<"$jobs")"
+if [ "$timed_out_jobs" -gt 0 ]; then
+  echo "run $run_id has $timed_out_jobs timed_out check job(s); leaving it"
+  exit 0
+fi
+
+failed_steps="$(jq -r '[.jobs[] | select(.name != "CI passed" and .conclusion == "failure") | .steps[]? | select(.conclusion == "failure") | .name] | .[]' <<<"$jobs")"
+unacquired_jobs="$(jq -r '[.jobs[] | select(.conclusion == "cancelled" and ((.steps // []) | length) == 0)] | length' <<<"$jobs")"
 
 if [ -z "$failed_steps" ]; then
+  if [ "$unacquired_jobs" -gt 0 ]; then
+    echo "run $run_id has $unacquired_jobs unacquired cancelled job(s) and no real check failures; rerunning its failed jobs once"
+    gh run rerun "$run_id" --repo "$REPO" --failed
+    exit 0
+  fi
   echo "run $run_id failed but no job reports a failed step; leaving it"
   exit 0
 fi

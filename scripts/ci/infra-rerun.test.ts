@@ -111,3 +111,49 @@ test("infra-rerun treats registry logins and browser installs as infrastructure"
   expect(code).toBe(0);
   expect(reruns).toContain("--failed");
 });
+
+test("infra-rerun reruns when a job was cancelled without acquiring a runner and CI passed failed", async () => {
+  const { code, reruns } = await decide(
+    runFixture("failure", 1),
+    JSON.stringify({
+      jobs: [
+        {
+          name: "Validate Web 1/3",
+          conclusion: "success",
+          steps: [{ name: "Run tests", conclusion: "success" }],
+        },
+        { name: "Check installer darwin-arm64", conclusion: "cancelled", steps: [] },
+        {
+          name: "CI passed",
+          conclusion: "failure",
+          steps: [{ name: "Assert every required check passed", conclusion: "failure" }],
+        },
+      ],
+    }),
+  );
+  expect(code).toBe(0);
+  expect(reruns).toBe("run rerun 42 --repo test/repo --failed");
+});
+
+test("infra-rerun leaves a run alone when a real check failed alongside an unacquired job", async () => {
+  const { code, reruns } = await decide(
+    runFixture("failure", 1),
+    JSON.stringify({
+      jobs: [
+        {
+          name: "Validate Web 1/3",
+          conclusion: "failure",
+          steps: [{ name: "Run tests", conclusion: "failure" }],
+        },
+        { name: "Check installer darwin-arm64", conclusion: "cancelled", steps: [] },
+        {
+          name: "CI passed",
+          conclusion: "failure",
+          steps: [{ name: "Assert every required check passed", conclusion: "failure" }],
+        },
+      ],
+    }),
+  );
+  expect(code).toBe(0);
+  expect(reruns).toBe("");
+});

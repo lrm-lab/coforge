@@ -55,6 +55,50 @@ describe("evaluateMainCiRuns", () => {
     expect(status.firstRedRun.head_sha).toBe("sha-first-red");
     expect(status.failedJobs).toEqual(["Validate Web 1/3", "Validate Daemon 1/2"]);
   });
+
+  test("returns green when only 0-step cancelled jobs and the CI passed aggregate job failed", () => {
+    const status = evaluateMainCiRuns(
+      [mkRun(4, "failure", "sha-cancelled")],
+      [
+        { name: "Plan checks", conclusion: "success" },
+        { name: "Validate Web 1/3", conclusion: "success" },
+        { name: "Check installer darwin-arm64", conclusion: "cancelled", steps: [] },
+        { name: "CI passed", conclusion: "failure" },
+      ],
+    );
+    expect(status).toEqual({ state: "green" });
+  });
+
+  test("stays red when a check job was cancelled after running steps", () => {
+    const status = evaluateMainCiRuns(
+      [mkRun(4, "failure", "sha-mid-cancel")],
+      [
+        { name: "Plan checks", conclusion: "success" },
+        {
+          name: "Validate Daemon 1/2",
+          conclusion: "cancelled",
+          steps: [{ name: "Run tests" }],
+        },
+        { name: "CI passed", conclusion: "failure" },
+      ],
+    );
+    expect(status.state).toBe("red");
+    if (status.state !== "red") throw new Error("expected red");
+    expect(status.failedJobs).toEqual(["Validate Daemon 1/2"]);
+  });
+
+  test("excludes CI passed from failedJobs when a real check job failed", () => {
+    const status = evaluateMainCiRuns(
+      [mkRun(4, "failure", "sha-real-fail")],
+      [
+        { name: "Validate Web 1/3", conclusion: "failure" },
+        { name: "CI passed", conclusion: "failure" },
+      ],
+    );
+    expect(status.state).toBe("red");
+    if (status.state !== "red") throw new Error("expected red");
+    expect(status.failedJobs).toEqual(["Validate Web 1/3"]);
+  });
 });
 
 describe("decideRedMainPush", () => {
