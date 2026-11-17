@@ -3,6 +3,7 @@ import type { CodeAgentProvider } from "@lrm/coforge-anvil";
 import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import { CodexAgentSession } from "./session";
 import { rejectServerRequests } from "./server-requests";
+import { codexAccountModel } from "./account-model";
 import { openCodexThread } from "./thread-open";
 import { codexReasoningSummary } from "./reasoning-summary";
 import { readCodexRecycleBriefing } from "./recycle-briefing";
@@ -88,6 +89,10 @@ export class CodexProvider implements CodeAgentProvider {
         options,
         reasoningSummary,
       );
+      const model = await codexAccountModel(process, result, options.runtime?.model, {
+        agent_id: options.agentId,
+        runtime_id: options.runtimeId,
+      });
       await options.onSessionId?.(threadId, replacedSessionId);
       logger.info("Codex thread received standing instructions", {
         event: "codex.instructions.injected",
@@ -105,6 +110,7 @@ export class CodexProvider implements CodeAgentProvider {
         // Only a launch that asked for the Fast tier has anything to report about it.
         options.runtime?.fastMode ? codexServiceTierState(result?.serviceTier) : undefined,
         replacementWarning,
+        model,
       );
     } catch (error) {
       await process.dispose();

@@ -55,7 +55,13 @@ export function codexTurnOutcome(turn: Readonly<Record<string, unknown>>): Codex
   if (status !== "failed") return { status };
   const error = asRecord(turn.error);
   const message = typeof error?.message === "string" ? error.message : "Codex turn failed.";
-  const code = typeof error?.code === "string" ? error.code : undefined;
+  // Codex's typed category, where it has one CoForge names: a model the account cannot use.
+  const code =
+    typeof error?.code === "string"
+      ? error.code
+      : error?.codexErrorInfo === "modelNotFound"
+        ? "model_not_found"
+        : undefined;
   const details =
     typeof error?.additionalDetails === "string" ? error.additionalDetails : undefined;
   const sessionRecovery = sessionRecoveryOf(code, message, details);

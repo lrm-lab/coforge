@@ -67,6 +67,7 @@ async function handle(message: Message): Promise<void> {
       result: {
         thread: { id: threadId, name: threadName() },
         serviceTier: "default",
+        ...openedModel(message.params),
       },
     });
     return;
@@ -107,9 +108,23 @@ async function handle(message: Message): Promise<void> {
         result: {
           thread: { id: resumed, name: threadName() },
           serviceTier: "default",
+          ...openedModel(message.params),
         },
       });
     }
+    return;
+  }
+  // `chatgpt` / `api-key`: the sign-in `account/read` reports; `model/list` answers in two pages.
+  if (method === "account/read" && id !== undefined) {
+    const type = scenarios.has("chatgpt") ? "chatgpt" : "apiKey";
+    write({ id, result: { account: { type }, requiresOpenaiAuth: true } });
+    return;
+  }
+  if (method === "model/list" && id !== undefined) {
+    const data = message.params?.cursor
+      ? [{ model: "gpt-account", isDefault: true }, { model: "gpt-other" }]
+      : [{ model: "gpt-hidden", hidden: true, isDefault: true }];
+    write({ id, result: { data, nextCursor: message.params?.cursor ? null : "page-2" } });
     return;
   }
   if (method === "thread/unarchive" && id !== undefined) {
@@ -177,6 +192,17 @@ async function handle(message: Message): Promise<void> {
     return;
   }
   if (id === 7 && message.error?.code === -32601) completeTurn(`turn-${turn}`);
+}
+
+/** The model an opened thread reports, as Codex does, under `chatgpt`/`api-key`: the requested
+ * one, else `config-model=<id>`, else a built-in default no fixture account lists. */
+function openedModel(params: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (!scenarios.has("chatgpt") && !scenarios.has("api-key")) return {};
+  const configured = process.argv
+    .find((argument) => argument.startsWith("config-model="))
+    ?.slice("config-model=".length);
+  const model = typeof params?.model === "string" ? params.model : (configured ?? "gpt-builtin");
+  return { model, modelProvider: "openai" };
 }
 
 function threadName(): string | null {
@@ -292,6 +318,13 @@ function failedTurnError(input: string | undefined): Record<string, unknown> | u
       message: "Turn failed",
       codexErrorInfo: "badRequest",
       additionalDetails: "Encrypted content could not be decrypted or parsed.",
+    };
+  // Codex 0.169.0's reply when a ChatGPT account cannot use the thread's model.
+  if (input === "model-not-found")
+    return {
+      message: "The 'gpt-builtin' model is not supported when using Codex with a ChatGPT account.",
+      codexErrorInfo: "modelNotFound",
+      additionalDetails: null,
     };
   if (input === "usage-limit")
     return { message: "usage limit reached", code: "usageLimitExceeded" };

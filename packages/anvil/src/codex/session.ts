@@ -57,6 +57,8 @@ export class CodexAgentSession implements AgentSession {
   readonly #serviceTier: AgentServiceTierObserved | undefined;
   #serviceTierReported = false;
   #replacementWarning: string | undefined;
+  /** The account's default model, sent with every turn when Codex's own was unusable. */
+  readonly #model: string | undefined;
 
   constructor(
     process: JsonlProcess,
@@ -66,6 +68,7 @@ export class CodexAgentSession implements AgentSession {
     runtimeId?: string,
     serviceTier?: AgentServiceTierObserved,
     replacementWarning?: string,
+    model?: string,
   ) {
     this.#process = process;
     this.#threadId = threadId;
@@ -75,6 +78,7 @@ export class CodexAgentSession implements AgentSession {
     this.#signals = new CodexTurnSignals(threadId, agentId, runtimeId);
     this.#serviceTier = serviceTier;
     this.#replacementWarning = replacementWarning;
+    this.#model = model;
     this.#identity = {
       sessionId: threadId,
       state: resumed ? "resumable" : "empty",
@@ -125,6 +129,7 @@ export class CodexAgentSession implements AgentSession {
         params: {
           threadId: this.#threadId,
           input: [{ type: "text", text }],
+          ...(this.#model ? { model: this.#model } : {}),
         },
       });
     } catch (error) {
