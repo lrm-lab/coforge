@@ -12,7 +12,7 @@
 
 Staging 不把令牌写进仓库。把它存成 GitHub Environment `staging` 的 secret `COFORGE_CLOUD_CLUSTER_TOKEN`。部署时 workflow 写到主机 `secrets/coforge_cloud_cluster_token`，再传进 Web 容器。没设这个 secret 时，staging 部署会停住。
 
-浏览器打开桌面只走站点源上的 `/desktop/...`（Caddy `forward_auth` 校验机主）。同一份集群令牌还作为 Caddy → Swarm `:6090` 的共享密钥；没有该密钥的直连会被 host 拒绝。不要把 `:6090` 当成产品入口。Staging 上 ECS 到不了内网 Swarm 时，用管理节点打出的 SSH 反连，见 [staging desktop reverse tunnel](staging-desktop-tunnel.md)。
+浏览器打开桌面只走站点源上的 `/desktop/...`（Caddy `forward_auth` 校验机主）。同一份集群令牌还作为 Caddy → Swarm `:6090` 的共享密钥；没有该密钥的直连会被 host 拒绝。不要把 `:6090` 当成产品入口。ECS 到不了内网 Swarm 时，用管理节点打出的 SSH 反连：staging 见 [staging desktop reverse tunnel](staging-desktop-tunnel.md)，production 见 [production desktop reverse tunnel](production-desktop-tunnel.md)。
 
 令牌、节点密钥和 Daemon 密钥不要写入仓库、镜像层、日志或命令回显。
 

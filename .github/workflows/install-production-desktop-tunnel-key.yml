@@ -1,0 +1,73 @@
+name: Install production desktop tunnel key
+
+# One-shot / idempotent: append the Swarm manager's tunnel public key to
+# deploy@ECS authorized_keys. The private key stays on the intranet host.
+# docs/operations/cloud-swarm/production-desktop-tunnel.md
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: install-production-desktop-tunnel-key
+  cancel-in-progress: false
+
+jobs:
+  install:
+    name: Install authorized_keys entry
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    steps:
+      - name: Require the tunnel public key variable
+        env:
+          PRODUCTION_DESKTOP_TUNNEL_PUBLIC_KEY: ${{ vars.PRODUCTION_DESKTOP_TUNNEL_PUBLIC_KEY }}
+        run: |
+          if [ -z "${PRODUCTION_DESKTOP_TUNNEL_PUBLIC_KEY}" ]; then
+            echo "Set production Environment variable PRODUCTION_DESKTOP_TUNNEL_PUBLIC_KEY to the Swarm manager pubkey" >&2
+            exit 1
+          fi
+          case "$PRODUCTION_DESKTOP_TUNNEL_PUBLIC_KEY" in
+            ssh-ed25519\ *|ssh-rsa\ *) ;;
+            *)
+              echo "PRODUCTION_DESKTOP_TUNNEL_PUBLIC_KEY must be an OpenSSH public key line" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Prepare the SSH identity
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_HOST: ${{ vars.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
+          DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_SSH_HOST_KEY }}
+        run: |
+          if [ "$DEPLOY_SSH_USER" != "deploy" ]; then
+            echo "DEPLOY_SSH_USER must be the non-root deploy identity" >&2
+            exit 1
+          fi
+          ssh_dir="$(mktemp -d)"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$ssh_dir/key"
+          printf '%s %s\n' "$DEPLOY_SSH_HOST" "$DEPLOY_HOST_KEY" > "$ssh_dir/known_hosts"
+          chmod 700 "$ssh_dir" "$ssh_dir/known_hosts"
+          chmod 600 "$ssh_dir/key"
+          echo "SSH_DIR=$ssh_dir" >> "$GITHUB_ENV"
+
+      - name: Append the tunnel public key on the ECS
+        env:
+          PRODUCTION_DESKTOP_TUNNEL_PUBLIC_KEY: ${{ vars.PRODUCTION_DESKTOP_TUNNEL_PUBLIC_KEY }}
+          DEPLOY_SSH_HOST: ${{ vars.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
+        run: |
+          ssh -i "$SSH_DIR/key" \
+            -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
+            -o BatchMode=yes \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=8 \
+            "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
+            "pubkey=\$(cat); mkdir -p ~/.ssh && chmod 700 ~/.ssh &&
+             touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys &&
+             grep -qxF \"\$pubkey\" ~/.ssh/authorized_keys || echo \"\$pubkey\" >> ~/.ssh/authorized_keys &&
+             echo installed" \
+            <<<"$PRODUCTION_DESKTOP_TUNNEL_PUBLIC_KEY"

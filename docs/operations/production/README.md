@@ -171,9 +171,11 @@ certificate and pages do not load.
 
 ## Cloud computers
 
-Swarm manager for production is the lab host `10.110.158.147` (Compose
-`COFORGE_DESKTOP_UPSTREAM`; browser desktop origin is the site). Enablement steps:
-[`docs/operations/cloud-swarm/production-bring-up.md`](../cloud-swarm/production-bring-up.md).
+Swarm manager for production is the lab host `10.110.158.147`. Browser desktop
+origin is the site; Caddy reaches `:6090` through an SSH reverse tunnel and ECS
+relay (`COFORGE_DESKTOP_HOST_GATEWAY:16090`). Enablement steps:
+[`docs/operations/cloud-swarm/production-bring-up.md`](../cloud-swarm/production-bring-up.md);
+tunnel: [`production-desktop-tunnel.md`](../cloud-swarm/production-desktop-tunnel.md).
 
 ## Not yet covered
 
