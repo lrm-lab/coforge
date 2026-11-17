@@ -1,6 +1,11 @@
 import { terminalText } from "#src/terminal-output";
 import { collectComputerStatus } from "#src/status/collect-status";
-import type { ComputerStatusReport, StatusPorts, WorkspaceStatus } from "#src/status/types";
+import type {
+  ComputerStatusReport,
+  StatusPorts,
+  WorkspaceCredentialState,
+  WorkspaceStatus,
+} from "#src/status/types";
 
 export type DoctorCheck = { name: string; ok: boolean; detail: string };
 
@@ -20,11 +25,16 @@ export function createDoctorCommand(
   io: { stdout: (line: string) => void },
   readStatus: (() => Promise<ComputerStatusReport>) | StatusPorts,
 ): DoctorCommand {
+  const ports = typeof readStatus === "function" ? undefined : readStatus;
   const read =
     typeof readStatus === "function" ? readStatus : () => collectComputerStatus(readStatus);
   return {
     async run(options) {
-      const report = createDoctorReport(await read());
+      const [status, credentialsByWorkspace] = await Promise.all([
+        read(),
+        ports?.probeWorkspaceCredential ? probeCredentials(ports) : Promise.resolve(undefined),
+      ]);
+      const report = createDoctorReport(status, { credentialsByWorkspace });
       if (options.json) {
         io.stdout(renderDoctorJson(report));
       } else {
@@ -35,13 +45,34 @@ export function createDoctorCommand(
   };
 }
 
-export function createDoctorReport(status: ComputerStatusReport): DoctorReport {
+async function probeCredentials(
+  ports: StatusPorts,
+): Promise<ReadonlyMap<string, WorkspaceCredentialState>> {
+  if (!ports.probeWorkspaceCredential) return new Map();
+  const loaded = await ports.loadBindings();
+  if (!loaded.ok) return new Map();
+  const entries = await Promise.all(
+    loaded.bindings.map(
+      async (binding) =>
+        [
+          binding.workspaceId,
+          await ports.probeWorkspaceCredential!(binding).catch(() => "unreachable" as const),
+        ] as const,
+    ),
+  );
+  return new Map(entries);
+}
+
+export function createDoctorReport(
+  status: ComputerStatusReport,
+  options?: { credentialsByWorkspace?: ReadonlyMap<string, WorkspaceCredentialState> },
+): DoctorReport {
   const checks = [
     checkInstall(status),
     checkSupervisor(status),
     checkLocks(status),
     checkLoginShellPath(status),
-    checkWorkspaces(status),
+    checkWorkspaces(status, options?.credentialsByWorkspace),
     checkLeftoverJobs(status),
   ];
   return {
@@ -73,6 +104,13 @@ function checkInstall(status: ComputerStatusReport): DoctorCheck {
   if (!status.install.readable) {
     return { name: "install", ok: false, detail: status.install.error };
   }
+  if (status.install.unfinishedTransaction) {
+    const tx = status.install.unfinishedTransaction;
+    const detail = tx.valid
+      ? `unfinished installer-transaction.json (${tx.from ? `${tx.from} -> ${tx.to}` : `to ${tx.to}`}, request ${tx.requestId}); run coforge-computer repair`
+      : `unreadable installer-transaction.json (${tx.error}); run coforge-computer repair`;
+    return { name: "install", ok: false, detail };
+  }
   if (!status.install.active) {
     return { name: "install", ok: false, detail: "no active version is selected" };
   }
@@ -103,6 +141,15 @@ function checkSupervisor(status: ComputerStatusReport): DoctorCheck {
       name: "supervisor",
       ok: false,
       detail: `local RPC is unreachable: ${status.supervisor.rpc.error}`,
+    };
+  }
+  if (status.supervisor.rpc.versionSkew && status.supervisor.rpc.version) {
+    const active =
+      status.install.readable && status.install.active ? status.install.active.current : "unknown";
+    return {
+      name: "supervisor",
+      ok: false,
+      detail: `SERVICE_VERSION_SKEW: running supervisor version ${status.supervisor.rpc.version} differs from active version ${active}`,
     };
   }
   const external = status.supervisor.externalSupervisor;
@@ -164,6 +211,21 @@ function checkLocks(status: ComputerStatusReport): DoctorCheck {
       detail: `supervisor lock is held by pid ${status.locks.supervisorLock.ownerPid ?? "unknown"}, but no CoForge Daemon is running`,
     };
   }
+  if (status.workspaces.readable) {
+    const contended = status.workspaces.workspaces.filter((workspace) => workspace.lockContention);
+    if (contended.length > 0) {
+      return {
+        name: "locks",
+        ok: false,
+        detail: contended
+          .map(
+            (workspace) =>
+              `workspace lock for ${workspace.workspaceSlug ?? workspace.workspaceId} is held by contending pid ${workspace.lockContention!.holderPid ?? "unknown"}`,
+          )
+          .join("; "),
+      };
+    }
+  }
   return {
     name: "locks",
     ok: true,
@@ -176,7 +238,10 @@ function checkLocks(status: ComputerStatusReport): DoctorCheck {
 }
 
 function nextDoctorCommand(name: string, detail: string): string | undefined {
-  if (name === "install") return "coforge-computer install";
+  if (name === "install") {
+    if (detail.includes("installer-transaction.json")) return "coforge-computer repair";
+    return "coforge-computer install";
+  }
   if (name === "supervisor") {
     if (detail.includes("OOMPolicy=")) {
       const reload = detail.includes("(user scope)")
@@ -188,11 +253,18 @@ function nextDoctorCommand(name: string, detail: string): string | undefined {
   }
   if (name === "locks") {
     if (detail.startsWith("machine mutation lock is held")) return "coforge-computer status";
+    if (detail.startsWith("workspace lock for ")) return "coforge-computer status";
     return "coforge-computer restart --supervisor";
   }
   if (name === "workspaces") {
     if (detail === "no workspace bindings configured") {
       return "coforge-computer setup --workspace <slug>";
+    }
+    if (detail.includes("server revoked sk_computer credential")) {
+      return "coforge-computer detach --workspace <slug> && coforge-computer setup --workspace <slug>";
+    }
+    if (detail.includes("SERVICE_VERSION_SKEW")) {
+      return "coforge-computer restart";
     }
     return "coforge-computer status";
   }
@@ -211,14 +283,21 @@ function checkLoginShellPath(status: ComputerStatusReport): DoctorCheck {
   return { name: "login-shell-path", ok: false, detail: "has not been probed" };
 }
 
-function checkWorkspaces(status: ComputerStatusReport): DoctorCheck {
+function checkWorkspaces(
+  status: ComputerStatusReport,
+  credentialsByWorkspace?: ReadonlyMap<string, WorkspaceCredentialState>,
+): DoctorCheck {
   if (!status.workspaces.readable) {
     return { name: "workspaces", ok: false, detail: status.workspaces.error };
   }
   if (status.workspaces.workspaces.length === 0) {
     return { name: "workspaces", ok: false, detail: "no workspace bindings configured" };
   }
-  const failures = status.workspaces.workspaces.flatMap(workspaceProblems);
+  const activeVersion =
+    status.install.readable && status.install.active ? status.install.active.current : "unknown";
+  const failures = status.workspaces.workspaces.flatMap((workspace) =>
+    workspaceProblems(workspace, activeVersion, credentialsByWorkspace?.get(workspace.workspaceId)),
+  );
   if (failures.length > 0) return { name: "workspaces", ok: false, detail: failures.join("; ") };
   const enabled = status.workspaces.workspaces.filter((workspace) => workspace.enabled).length;
   return {
@@ -228,11 +307,23 @@ function checkWorkspaces(status: ComputerStatusReport): DoctorCheck {
   };
 }
 
-function workspaceProblems(workspace: WorkspaceStatus): string[] {
-  if (!workspace.enabled) return [];
+function workspaceProblems(
+  workspace: WorkspaceStatus,
+  activeVersion: string,
+  credentialState?: WorkspaceCredentialState,
+): string[] {
   const problems: string[] = [];
   const label = workspace.workspaceSlug ?? workspace.workspaceId;
-  if (!workspace.running) problems.push(`${label}: enabled but not running`);
+  if (credentialState === "revoked") {
+    problems.push(`${label}: server revoked sk_computer credential`);
+  }
+  if (!workspace.enabled) return problems;
+  if (!workspace.running) {
+    const lockNote = workspace.lockContention
+      ? ` (lock held by pid ${workspace.lockContention.holderPid ?? "unknown"})`
+      : "";
+    problems.push(`${label}: enabled but not running${lockNote}`);
+  }
   if (workspace.health.status !== "ok") {
     const reason = "reason" in workspace.health ? ` (${workspace.health.reason})` : "";
     const health = `health=${workspace.health.status}${reason}`;
@@ -242,6 +333,11 @@ function workspaceProblems(workspace: WorkspaceStatus): string[] {
   if (workspace.running && workspace.cloudConnection?.state !== "connected") {
     const state = workspace.cloudConnection?.state ?? "unknown";
     problems.push(`${label}: cloud=${state}`);
+  }
+  if (workspace.versionSkew && workspace.version) {
+    problems.push(
+      `${label}: SERVICE_VERSION_SKEW (running ${workspace.version}, active ${activeVersion})`,
+    );
   }
   if (workspace.pending.length > 0) problems.push(`${label}: pending operation`);
   if (workspace.unsettledUpgrades.length > 0) problems.push(`${label}: unsettled upgrade`);

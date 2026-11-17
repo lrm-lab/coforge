@@ -14,6 +14,16 @@ export type SupportedStatusPlatform = "darwin" | "linux" | "win32";
 
 export type LockState = "held" | "free" | "unknown";
 
+export type UnfinishedInstallerTransaction =
+  | {
+      valid: true;
+      requestId: string;
+      from: string | null;
+      to: string;
+      supervisorRunning: boolean;
+    }
+  | { valid: false; error: string };
+
 export type InstallStatus =
   | {
       readable: true;
@@ -21,11 +31,12 @@ export type InstallStatus =
       binaryOnPath: string | null;
       resolvesToActive: boolean | null;
       releaseFeedUrl: string;
+      unfinishedTransaction?: UnfinishedInstallerTransaction;
     }
   | { readable: false; error: string };
 
 export type SupervisorRpcStatus =
-  | { reachable: true; runtimeCount: number }
+  | { reachable: true; runtimeCount: number; version?: string; versionSkew?: true }
   | { reachable: false; error: string };
 
 /** Whether the service file on disk is what this Computer would register. */
@@ -107,6 +118,11 @@ export type WorkspaceStatus = {
   health: WorkspaceHealth;
   /** `null` when the Workspace is not running or its handshake did not answer. */
   cloudConnection: WorkspaceCloudStatus | null;
+  /** Live handshake version of this Workspace daemon, and whether it differs from `active.json`. */
+  version?: string;
+  versionSkew?: true;
+  /** Present when `workspace-daemon-lock.sqlite` is held by an untracked or contending PID. */
+  lockContention?: { holderPid: number | null };
   /** Set while a start or restart of this Workspace is queued or running. */
   underWay?: true;
   /** The last operator command that failed after it had already answered; `at` is ISO. */
@@ -162,6 +178,7 @@ export type ComputerStatusReport = {
  * imports the Coordinator's mutable binding shape while it is being redesigned elsewhere. */
 export type StatusBinding = {
   workspaceId: string;
+  computerId?: string;
   serverHttpUrl?: string;
   enabled: boolean;
   restart?: { requestId: string; phase: string };
@@ -184,8 +201,16 @@ export type DaemonRuntimeSnapshotEntry = {
 };
 
 export type DaemonSnapshotProbe =
-  | { reachable: true; runtimes: DaemonRuntimeSnapshotEntry[] }
+  | { reachable: true; version?: string; runtimes: DaemonRuntimeSnapshotEntry[] }
   | { reachable: false; error: string };
+
+export type WorkspaceCredentialState =
+  | "live"
+  | "revoked"
+  | "forbidden"
+  | "unsupported"
+  | "unreachable"
+  | "absent";
 
 export type BindingsLoad = { ok: true; bindings: StatusBinding[] } | { ok: false; error: string };
 
@@ -202,6 +227,7 @@ export interface StatusPorts {
   releaseFeedUrl: string;
   socketPath: string;
   readActiveInstall(): Promise<ActiveInstallRead>;
+  readInstallerJournal?(): Promise<UnfinishedInstallerTransaction | null>;
   /** The latest result the Coordinator recorded for its login-shell PATH import. */
   readLoginShellPath(): LoginShellPathStatus;
   locateBinaryOnPath(): Promise<string | null>;
@@ -232,6 +258,16 @@ export interface StatusPorts {
   /** The Workspace process's own report of its cloud connection, or null when it does not
    * answer in time. */
   readCloudConnection(workspaceId: string): Promise<WorkspaceCloudStatus | null>;
+  readWorkspaceHandshake?(
+    workspaceId: string,
+  ): Promise<{ version?: string; cloudConnection: WorkspaceCloudStatus | null }>;
+  readWorkspaceLock?(workspaceId: string): Promise<{ held: boolean; holderPid: number | null }>;
+  /** Bounded `GET /api/computer/self` credential check used by `doctor` (never called by `status`). */
+  probeWorkspaceCredential?(binding: {
+    workspaceId: string;
+    computerId?: string;
+    serverHttpUrl?: string | null;
+  }): Promise<WorkspaceCredentialState>;
   /** Workspace id to slug, from the local Workspace registrations; empty when unreadable. */
   readWorkspaceSlugs(): Promise<ReadonlyMap<string, string>>;
 }

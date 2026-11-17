@@ -3,7 +3,10 @@ import { join, posix, win32 } from "node:path";
 import {
   acquireProcessLock,
   coordinatorServiceName,
+  createComputerSelfClient,
   FileBindingStore,
+  FileDaemonCredentialStore,
+  isComputerApiKey,
   isLockContention,
   listMachineRunningProcJobs,
   LocalDaemonLauncher,
@@ -17,6 +20,8 @@ import {
   systemdPresent,
 } from "@lrm/coforge-daemon";
 import { readSupervisorOomPolicy } from "@lrm/coforge-daemon/src/daemon-host/external-supervisor";
+import { installerJournalPath } from "@lrm/coforge-daemon/src/platform/installer-journal";
+import { readWorkspaceDaemonLockHolder } from "@lrm/coforge-daemon/src/supervisor/workspace-daemon-lock";
 import {
   currentMachine,
   resolveServiceDefinition,
@@ -41,11 +46,14 @@ import type {
   StatusBinding,
   StatusPorts,
   SupportedStatusPlatform,
+  UnfinishedInstallerTransaction,
 } from "./types";
 import { thrownMessage } from "@lrm/coforge-sdk/internal";
 
 /** How long a Workspace process gets to answer its handshake before status reports it unknown. */
 const CLOUD_CONNECTION_PROBE_MS = 2_000;
+/** Bounded timeout for `GET /api/computer/self` credential checks in `coforge-computer doctor`. */
+export const DOCTOR_CREDENTIAL_PROBE_TIMEOUT_MS = 5_000;
 
 export type CreateStatusPortsInput = {
   platform: SupportedStatusPlatform;
@@ -87,6 +95,9 @@ export function createStatusPorts(input: CreateStatusPortsInput): StatusPorts {
     coordinatorLabel,
     async readActiveInstall(): Promise<ActiveInstallRead> {
       return readActiveInstall(join(input.installDirectory, "active.json"));
+    },
+    async readInstallerJournal(): Promise<UnfinishedInstallerTransaction | null> {
+      return readInstallerJournal(installerJournalPath(input.installDirectory));
     },
     readLoginShellPath(): LoginShellPathStatus {
       const record = readLoginShellPath(input.stateDirectory);
@@ -148,9 +159,13 @@ export function createStatusPorts(input: CreateStatusPortsInput): StatusPorts {
         serverUrl: input.serverUrl,
       });
       try {
-        const runtimes = await launcher.control("snapshot");
+        const [runtimes, handshake] = await Promise.all([
+          launcher.control("snapshot"),
+          launcher.identity(CLOUD_CONNECTION_PROBE_MS).catch(() => null),
+        ]);
         return {
           reachable: true,
+          ...(handshake?.version ? { version: handshake.version } : {}),
           runtimes: runtimes.map((runtime) => ({
             workspaceId: runtime.workspaceId,
             processId: runtime.processId,
@@ -219,6 +234,48 @@ export function createStatusPorts(input: CreateStatusPortsInput): StatusPorts {
         socketPath: workspaceSocketPath(input.stateDirectory, workspaceId),
         serverUrl: input.serverUrl,
       }).cloudConnection(CLOUD_CONNECTION_PROBE_MS),
+    async readWorkspaceHandshake(workspaceId) {
+      const reported = await new LocalDaemonLauncher({
+        executablePath: activeBinaryPath,
+        socketPath: workspaceSocketPath(input.stateDirectory, workspaceId),
+        serverUrl: input.serverUrl,
+      })
+        .identity(CLOUD_CONNECTION_PROBE_MS)
+        .catch(() => null);
+      const cloudConnection = reported?.cloudConnection
+        ? {
+            state: reported.cloudConnection,
+            ...(reported.cloudConnectionError ? { error: reported.cloudConnectionError } : {}),
+          }
+        : null;
+      return {
+        ...(reported?.version ? { version: reported.version } : {}),
+        cloudConnection,
+      };
+    },
+    readWorkspaceLock: (workspaceId) =>
+      readWorkspaceDaemonLockHolder(workspaceStateDirectory(input.stateDirectory, workspaceId)),
+    async probeWorkspaceCredential(binding) {
+      let computerId = binding.computerId;
+      if (!computerId) {
+        const registrations = await input.registrations.listRegistrations().catch(() => []);
+        computerId = registrations.find((item) => item.id === binding.workspaceId)?.computerId;
+      }
+      if (!computerId) return "absent";
+      const apiKey = await new FileDaemonCredentialStore(
+        workspaceStateDirectory(input.stateDirectory, binding.workspaceId),
+      )
+        .load(binding.workspaceId, computerId)
+        .catch(() => null);
+      if (!apiKey || !isComputerApiKey(apiKey)) return "absent";
+      const targetUrl = binding.serverHttpUrl || input.serverUrl;
+      const controller = new AbortController();
+      const result = await createComputerSelfClient(
+        targetUrl,
+        DOCTOR_CREDENTIAL_PROBE_TIMEOUT_MS,
+      ).self(apiKey, controller.signal);
+      return result.state;
+    },
     async readWorkspaceHealth(workspaceId) {
       try {
         const directory = workspaceStateDirectory(input.stateDirectory, workspaceId);
@@ -270,6 +327,49 @@ async function readActiveInstall(path: string): Promise<ActiveInstallRead> {
   }
   const active = value as { current: string; previous: string | null };
   return { kind: "present", current: active.current, previous: active.previous };
+}
+
+async function readInstallerJournal(path: string): Promise<UnfinishedInstallerTransaction | null> {
+  let text: string;
+  try {
+    text = await readFile(path, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    return { valid: false, error: thrownMessage(error) };
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return { valid: false, error: "installer-transaction.json is not valid JSON" };
+  }
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    (value as { schema_version?: unknown }).schema_version !== 1 ||
+    typeof (value as { request_id?: unknown }).request_id !== "string" ||
+    !(
+      (value as { from?: unknown }).from === null ||
+      typeof (value as { from?: unknown }).from === "string"
+    ) ||
+    typeof (value as { to?: unknown }).to !== "string" ||
+    typeof (value as { supervisor_running?: unknown }).supervisor_running !== "boolean"
+  ) {
+    return { valid: false, error: "installer-transaction.json has an unexpected shape" };
+  }
+  const record = value as {
+    request_id: string;
+    from: string | null;
+    to: string;
+    supervisor_running: boolean;
+  };
+  return {
+    valid: true,
+    requestId: record.request_id,
+    from: record.from,
+    to: record.to,
+    supervisorRunning: record.supervisor_running,
+  };
 }
 
 async function locateBinaryOnPath(

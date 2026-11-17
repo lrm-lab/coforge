@@ -59,11 +59,21 @@ function renderInstall(report: ComputerStatusReport): string[] {
   );
   lines.push(`  Resolves to active:    ${yesNo(install.resolvesToActive)}`);
   lines.push(`  Release feed:          ${terminalText(install.releaseFeedUrl)}`);
+  if (install.unfinishedTransaction) {
+    const tx = install.unfinishedTransaction;
+    lines.push(
+      tx.valid
+        ? `  Unfinished upgrade:    ${tx.from ? `${terminalText(tx.from)} -> ` : "-> "}${terminalText(tx.to)} (request ${terminalText(tx.requestId)}) — run coforge-computer repair`
+        : `  Unfinished upgrade:    unreadable (${terminalText(tx.error)}) — run coforge-computer repair`,
+    );
+  }
   return lines;
 }
 
 function renderSupervisor(report: ComputerStatusReport): string[] {
   const { supervisor } = report;
+  const activeVersion =
+    report.install.readable && report.install.active ? report.install.active.current : null;
   return [
     "Supervisor",
     `  Coordinator job:       ${terminalText(supervisor.label)}`,
@@ -82,6 +92,11 @@ function renderSupervisor(report: ComputerStatusReport): string[] {
         ? `reachable (${supervisor.rpc.runtimeCount} workspace runtime(s))`
         : `unreachable (${terminalText(supervisor.rpc.error)})`
     }`,
+    ...(supervisor.rpc.reachable && supervisor.rpc.versionSkew && supervisor.rpc.version
+      ? [
+          `  Version skew:          SERVICE_VERSION_SKEW (running ${terminalText(supervisor.rpc.version)}, active ${terminalText(activeVersion ?? "unknown")}) — run coforge-computer restart --supervisor`,
+        ]
+      : []),
     `  PATH source:           ${renderLoginShellPath(report.loginShellPath)}`,
   ];
 }
@@ -127,15 +142,17 @@ function renderWorkspaces(report: ComputerStatusReport): string[] {
     return ["Workspaces", `  Error:                 ${terminalText(workspaces.error)}`];
   if (workspaces.workspaces.length === 0)
     return ["Workspaces", "  No workspace bindings configured."];
+  const activeVersion =
+    report.install.readable && report.install.active ? report.install.active.current : null;
   return [
     `Workspaces (${workspaces.workspaces.length})`,
-    ...workspaces.workspaces.flatMap(renderWorkspace),
+    ...workspaces.workspaces.flatMap((workspace) => renderWorkspace(workspace, activeVersion)),
   ];
 }
 
 /** One Workspace binding: its summary line, then a detail line for each thing that needs
  * attention (cloud reason, pending or unsettled work, a failure to retry, degraded or parked). */
-function renderWorkspace(workspace: WorkspaceStatus): string[] {
+function renderWorkspace(workspace: WorkspaceStatus, activeVersion: string | null): string[] {
   const lines: string[] = [];
   const pid = workspace.pid === null ? "-" : `${workspace.pid} (${workspace.pidSource})`;
   lines.push(
@@ -143,6 +160,16 @@ function renderWorkspace(workspace: WorkspaceStatus): string[] {
   );
   const cloudDetail = renderCloudConnection(workspace.cloudConnection);
   if (cloudDetail) lines.push(`    cloud: ${cloudDetail}`);
+  if (workspace.versionSkew && workspace.version) {
+    lines.push(
+      `    version skew: SERVICE_VERSION_SKEW (running ${terminalText(workspace.version)}, active ${terminalText(activeVersion ?? "unknown")}) — run coforge-computer restart --workspace ${terminalText(workspace.workspaceSlug ?? workspace.workspaceId)}`,
+    );
+  }
+  if (workspace.lockContention) {
+    lines.push(
+      `    lock contention: workspace-daemon-lock.sqlite is held by pid ${workspace.lockContention.holderPid ?? "unknown"}`,
+    );
+  }
   for (const pending of workspace.pending) lines.push(`    pending: ${renderPending(pending)}`);
   for (const unsettled of workspace.unsettledUpgrades)
     lines.push(`    unsettled upgrade: ${renderUnsettledUpgrade(unsettled)}`);
@@ -249,6 +276,9 @@ function renderAgents(report: ComputerStatusReport): string[] {
 
 function renderLocks(report: ComputerStatusReport): string[] {
   const { locks } = report;
+  const contendedWorkspaces = report.workspaces.readable
+    ? report.workspaces.workspaces.filter((workspace) => workspace.lockContention)
+    : [];
   return [
     "Locks",
     `  Machine mutation lock: ${locks.machineMutationLock}`,
@@ -257,6 +287,10 @@ function renderLocks(report: ComputerStatusReport): string[] {
         ? `held (owner pid ${locks.supervisorLock.ownerPid ?? "unknown"})`
         : "free"
     }`,
+    ...contendedWorkspaces.map(
+      (workspace) =>
+        `  Workspace lock (${terminalText(workspace.workspaceSlug ?? workspace.workspaceId)}): held by contending pid ${workspace.lockContention!.holderPid ?? "unknown"}`,
+    ),
   ];
 }
 

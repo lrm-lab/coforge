@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { acquireProcessLock } from "#src/platform/process-lock";
-import { holdWorkspaceDaemonLock } from "#src/supervisor/workspace-daemon-lock";
+import {
+  holdWorkspaceDaemonLock,
+  readWorkspaceDaemonLockHolder,
+} from "#src/supervisor/workspace-daemon-lock";
 
 const directories: string[] = [];
 const locks: { release(): void }[] = [];
@@ -74,5 +77,46 @@ describe("holdWorkspaceDaemonLock", () => {
     });
     controller.abort();
     await expect(pending).rejects.toBeDefined();
+  });
+
+  test("readWorkspaceDaemonLockHolder reports the live holder PID without breaking contender takeover", async () => {
+    const directory = await stateDirectory();
+    expect(await readWorkspaceDaemonLockHolder(directory)).toEqual({
+      held: false,
+      holderPid: null,
+    });
+
+    const first = await holdWorkspaceDaemonLock(directory, { retryMs: 5, pid: 4101 });
+    locks.push(first);
+    expect(await readWorkspaceDaemonLockHolder(directory)).toEqual({
+      held: true,
+      holderPid: 4101,
+    });
+
+    const contender = holdWorkspaceDaemonLock(directory, { retryMs: 10, pid: 4102 });
+    await Bun.sleep(25);
+    // Probing while a contender waits must keep the first holder and leave the contender waiting.
+    expect(await readWorkspaceDaemonLockHolder(directory)).toEqual({
+      held: true,
+      holderPid: 4101,
+    });
+
+    first.release();
+    locks.splice(locks.indexOf(first), 1);
+    const second = await contender;
+    locks.push(second);
+    expect(await readWorkspaceDaemonLockHolder(directory)).toEqual({
+      held: true,
+      holderPid: 4102,
+    });
+
+    second.release();
+    locks.splice(locks.indexOf(second), 1);
+    // Even if an abrupt crash left an owner file behind, an unheld SQLite lock reads as free.
+    await Bun.write(join(directory, "workspace-daemon-lock.owner"), "9999");
+    expect(await readWorkspaceDaemonLockHolder(directory)).toEqual({
+      held: false,
+      holderPid: null,
+    });
   });
 });

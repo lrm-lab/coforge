@@ -20,11 +20,19 @@ import { thrownMessage } from "@lrm/coforge-sdk/internal";
  * already reads. */
 export async function collectComputerStatus(ports: StatusPorts): Promise<ComputerStatusReport> {
   const install = await collectInstall(ports);
+  const activeVersion = install.readable && install.active ? install.active.current : null;
   const snapshot = await ports.probeDaemonSnapshot();
-  const supervisor = await collectSupervisor(ports, snapshot);
+  const supervisor = await collectSupervisor(ports, snapshot, activeVersion);
   const bindingsLoad = await ports.loadBindings();
   const agents = await collectAgents(ports, bindingsLoad);
-  const workspaces = await collectWorkspaces(ports, bindingsLoad, snapshot, agents, ports.now());
+  const workspaces = await collectWorkspaces(
+    ports,
+    bindingsLoad,
+    snapshot,
+    agents,
+    ports.now(),
+    activeVersion,
+  );
   const leftoverJobs = await collectLeftoverJobs(ports);
   const procJobs = await collectProcJobs(ports);
   const supervisorLockOwnerPid = await ports.readSupervisorLockOwner();
@@ -50,7 +58,10 @@ export async function collectComputerStatus(ports: StatusPorts): Promise<Compute
 }
 
 async function collectInstall(ports: StatusPorts): Promise<InstallStatus> {
-  const read = await ports.readActiveInstall();
+  const [read, unfinishedTransaction] = await Promise.all([
+    ports.readActiveInstall(),
+    ports.readInstallerJournal ? ports.readInstallerJournal().catch(() => null) : null,
+  ]);
   if (read.kind === "corrupt") return { readable: false, error: read.error };
   const active =
     read.kind === "present" ? { current: read.current, previous: read.previous } : null;
@@ -62,6 +73,7 @@ async function collectInstall(ports: StatusPorts): Promise<InstallStatus> {
     binaryOnPath,
     resolvesToActive,
     releaseFeedUrl: ports.releaseFeedUrl,
+    ...(unfinishedTransaction ? { unfinishedTransaction } : {}),
   };
 }
 
@@ -82,12 +94,18 @@ async function resolveBinaryMatchesActive(
 async function collectSupervisor(
   ports: StatusPorts,
   snapshot: DaemonSnapshotProbe,
+  activeVersion: string | null,
 ): Promise<SupervisorStatus> {
   const [coordinator, serviceDefinition, externalSupervisor] = await Promise.all([
     ports.probeCoordinator(),
     collectServiceDefinition(ports),
     ports.readExternalSupervisor ? ports.readExternalSupervisor().catch(() => null) : null,
   ]);
+  const versionSkew =
+    snapshot.reachable &&
+    snapshot.version !== undefined &&
+    activeVersion !== null &&
+    snapshot.version !== activeVersion;
   return {
     label: ports.coordinatorLabel,
     loaded: coordinator.loaded,
@@ -95,7 +113,12 @@ async function collectSupervisor(
     ...(coordinator.detached ? { detached: true as const } : {}),
     socketPath: ports.socketPath,
     rpc: snapshot.reachable
-      ? { reachable: true, runtimeCount: snapshot.runtimes.length }
+      ? {
+          reachable: true,
+          runtimeCount: snapshot.runtimes.length,
+          ...(snapshot.version ? { version: snapshot.version } : {}),
+          ...(versionSkew ? { versionSkew: true as const } : {}),
+        }
       : { reachable: false, error: snapshot.error },
     ...(serviceDefinition ? { serviceDefinition } : {}),
     ...(externalSupervisor ? { externalSupervisor } : {}),
@@ -125,6 +148,7 @@ async function collectWorkspaces(
   snapshot: DaemonSnapshotProbe,
   agents: AgentsStatus,
   now: Date,
+  activeVersion: string | null,
 ): Promise<WorkspacesStatus> {
   if (!bindingsLoad.ok) return { readable: false, error: bindingsLoad.error };
   const runtimeByWorkspace = new Map(
@@ -149,22 +173,48 @@ async function collectWorkspaces(
         const pid = snapshotPid ?? osJobPid;
         const pidSource =
           snapshotPid !== null ? "daemon-snapshot" : osJobPid !== null ? "os-job" : null;
-        const [health, cloudConnection] = await Promise.all([
+        const [health, handshake, workspaceLock] = await Promise.all([
           ports.readWorkspaceHealth(binding.workspaceId),
-          pid === null ? null : ports.readCloudConnection(binding.workspaceId),
+          pid === null
+            ? Promise.resolve(null)
+            : ports.readWorkspaceHandshake
+              ? ports.readWorkspaceHandshake(binding.workspaceId)
+              : ports
+                  .readCloudConnection(binding.workspaceId)
+                  .then(
+                    (
+                      cloudConnection,
+                    ): { version?: string; cloudConnection: typeof cloudConnection } => ({
+                      cloudConnection,
+                    }),
+                  ),
+          ports.readWorkspaceLock
+            ? ports.readWorkspaceLock(binding.workspaceId).catch(() => null)
+            : Promise.resolve(null),
         ]);
+        const running = pid !== null;
+        const cloudConnection = handshake?.cloudConnection ?? null;
+        const version = handshake?.version;
+        const versionSkew =
+          version !== undefined && activeVersion !== null && version !== activeVersion;
+        const lockContended =
+          workspaceLock?.held === true &&
+          (!running || (workspaceLock.holderPid !== null && workspaceLock.holderPid !== pid));
         return {
           workspaceId: binding.workspaceId,
           workspaceSlug: slugs.get(binding.workspaceId) ?? null,
           serverHttpUrl: binding.serverHttpUrl ?? null,
           enabled: binding.enabled,
-          running: pid !== null,
+          running,
           pid,
           pidSource,
           pending: pendingRequestsFor(binding),
           unsettledUpgrades: unsettledUpgradesFor(binding, now),
           health,
           cloudConnection,
+          ...(version ? { version } : {}),
+          ...(versionSkew ? { versionSkew: true as const } : {}),
+          ...(lockContended ? { lockContention: { holderPid: workspaceLock.holderPid } } : {}),
           ...(runtime?.underWay ? { underWay: true as const } : {}),
           ...(binding.lastFailure
             ? {
