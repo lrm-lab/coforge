@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { formatMonthDayTime } from "#src/lib/dates";
 import { useTimeFormat } from "#src/lib/time-format-context";
@@ -12,6 +12,7 @@ import { QuestionAsk } from "./question-card-ask";
 import { QuestionOptions } from "./question-card-options";
 import { QuestionPager } from "./question-card-pager";
 import { cardStatus } from "./question-card-status";
+import { dropQuestionDrafts } from "./question-drafts";
 import { AnswerSummary, UnansweredQuestions } from "./question-card-summary";
 import { useSettleInPlace } from "./settle-in-place";
 
@@ -26,6 +27,11 @@ export function QuestionCard({ card, asker }: { card: AskingView; asker: string 
   const timeZone = useTimeZone();
   const pending = view.state === "pending";
   const answered = view.state === "executed";
+  // Answered, declined or expired, here or anywhere else, the card keeps no draft. The card drops
+  // it, not the asking part, which is gone by the time the new state shows.
+  useEffect(() => {
+    if (!pending) dropQuestionDrafts(view.messageId);
+  }, [pending, view.messageId]);
   const questions = cardQuestions(view);
   const several = questions.length > 1;
   const time = (iso: string) => formatMonthDayTime(iso, timeZone, getLocale(), timeFormat);
