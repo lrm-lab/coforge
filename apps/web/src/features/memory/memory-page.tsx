@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { MemoryScopeLinks } from "./memory-scope-links";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { ArrowLeft, Plus } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
@@ -43,6 +44,9 @@ export function MemoryPage({
   const [confirmation, setConfirmation] = useState("");
   const [reason, setReason] = useState("");
   const selected = search.id;
+  const selection = useMemo(() => ({}), [selected, workspaceSlug]);
+  const activeSelection = useRef(selection);
+  activeSelection.current = selection;
   useEffect(() => {
     setError("");
     setDestructive(false);
@@ -60,6 +64,10 @@ export function MemoryPage({
     navigate({ search: (previous) => ({ ...previous, ...patch }) });
   const refresh = () => router.invalidate({ sync: true });
   const saved = async (savedEntry: TeamMemoryHead) => {
+    if (activeSelection.current !== selection) {
+      await refresh();
+      return;
+    }
     setEditing(undefined);
     setDrafts((previous) => {
       const next = { ...previous };
@@ -86,6 +94,10 @@ export function MemoryPage({
             ? { operation, ...target, fromRevision: entry.revision }
             : { operation, ...target },
       });
+      if (activeSelection.current !== selection) {
+        if (result.kind === "ready") await refresh();
+        return;
+      }
       if (result.kind === "error") setError(memoryError(result.error));
       else {
         setDestructive(false);
@@ -95,7 +107,7 @@ export function MemoryPage({
         await refresh();
       }
     } catch {
-      setError(m.memory_failed());
+      if (activeSelection.current === selection) setError(m.memory_failed());
     } finally {
       setBusy(false);
     }
@@ -114,6 +126,7 @@ export function MemoryPage({
           {m.memory_new()}
         </Button>
       </header>
+      <MemoryScopeLinks />
       {list.kind === "error" ? (
         <p role="alert" className="px-5 py-8 text-sm text-error-primary">
           {memoryError(list.error)}
@@ -155,6 +168,7 @@ export function MemoryPage({
                 <Select.Item id="archived" label={m.memory_archived()} />
               </Select>
               <MemoryProjectPicker
+                emptyLabel={m.memory_all_projects()}
                 value={search.project ?? null}
                 onChange={(project) => {
                   void updateSearch({ project: project ?? undefined, offset: 0, id: undefined });

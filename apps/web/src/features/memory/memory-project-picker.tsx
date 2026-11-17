@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
@@ -14,13 +14,25 @@ export function MemoryProjectPicker({
   selectedName,
   disabled = false,
   allowCreate = false,
+  emptyLabel,
+  onCreatingChange,
 }: {
   value: string | null;
   onChange: (id: string | null) => void;
   selectedName?: string;
   disabled?: boolean;
   allowCreate?: boolean;
+  emptyLabel?: string;
+  onCreatingChange?: (pending: boolean) => void;
 }) {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const [createPending, setCreatePending] = useState(false);
   const [query, setQuery] = useState("");
   const [offset, setOffset] = useState(0);
   const [items, setItems] = useState<Project[]>([]);
@@ -75,7 +87,7 @@ export function MemoryProjectPicker({
           if (key) onChange(key === "none" ? null : String(key));
         }}
       >
-        <Select.Item id="none" label={m.memory_no_project()} />
+        <Select.Item id="none" label={emptyLabel ?? m.memory_no_project()} />
         {value && !items.some((item) => item.id === value) && (
           <Select.Item id={value} label={selectedName || m.memory_project()} />
         )}
@@ -137,14 +149,19 @@ export function MemoryProjectPicker({
           <Button
             color="secondary"
             size="sm"
-            isDisabled={disabled || !name.trim() || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)}
+            isDisabled={
+              disabled || createPending || !name.trim() || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)
+            }
             isLoading={loading}
             onPress={async () => {
+              setCreatePending(true);
+              onCreatingChange?.(true);
               setLoading(true);
               try {
                 const result = await memoryCommand({
                   data: { operation: "project-create", name: name.trim(), slug, description: "" },
                 });
+                if (!mounted.current) return;
                 if (result.kind === "error") setError(memoryError(result.error));
                 else {
                   const project = result.result.projects?.[0];
@@ -159,9 +176,13 @@ export function MemoryProjectPicker({
                   }
                 }
               } catch {
-                setError(m.memory_failed());
+                if (mounted.current) setError(m.memory_failed());
               } finally {
-                setLoading(false);
+                onCreatingChange?.(false);
+                if (mounted.current) {
+                  setCreatePending(false);
+                  setLoading(false);
+                }
               }
             }}
           >
