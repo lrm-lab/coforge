@@ -182,8 +182,10 @@ These rules apply to `src/features/agents/`.
   Agent its pending requests and active grants; Approve, Deny, Grant access and Revoke only when
   the read's `canManage` says so (Workspace owner/admin or the Agent's creator). Revoke acts at
   once, with no confirmation, and every failure stays inline at the top of the tab.
-- The Profile tab's computer row opens that Agent's desktop in its own window, titled with the
-  Agent's name, for the cloud computer's owner only. The panel does not embed the desktop.
+- The Profile tab's computer row embeds that Agent's desktop for the cloud computer's owner only:
+  a sleeping monitor thumbnail wakes into a same-page near-fullscreen overlay; minimize keeps the
+  stream in the thumbnail until an idle countdown sleeps it (disconnects the iframe). Offline leaves
+  the thumbnail disabled. Computer detail and `desktop:takeover` may still open a popup.
 - The Skills tab displays Global/Workspace metadata only, never skill bodies
   or a claim that a running session has loaded each entry.
 - The Context usage row reads passive Agent display observations only: opening a

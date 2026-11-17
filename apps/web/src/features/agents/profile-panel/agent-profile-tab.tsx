@@ -21,7 +21,7 @@ import { humanLabel } from "#src/lib/human-label";
 import { m } from "#src/paraglide/messages";
 import { runtimeProviderLabel } from "#src/features/agents/runtime-provider-display";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
-import { AgentDesktopButton } from "#src/features/computers/agent-desktop-button";
+import { AgentDesktopThumbnail } from "#src/features/computers/agent-desktop-thumbnail";
 import { computerIcon } from "#src/features/computers/computer-identity";
 import { RuntimeUsage, UsageHealthDot } from "#src/features/computers/runtime-usage";
 import { type AgentRuntimeControls } from "#src/features/agents/agent-runtime-controls";
@@ -266,7 +266,7 @@ function AgentProfileTabBody({
                 )}
               </div>
               {profile.computer && (
-                <AgentDesktopButton
+                <AgentDesktopThumbnail
                   computerId={profile.computer.id}
                   agentId={profile.id}
                   title={profile.displayName}
