@@ -25,12 +25,9 @@ import { SEARCH_FOCUS_EVENT } from "./search-shortcut";
 import { SEARCH_QUERY_MAX_LENGTH } from "./search.schemas";
 import { useSearchMemory } from "./use-search-memory";
 
-/** Pause in typing before the query is searched. */
 const COMMIT_DELAY_MS = 200;
 
-/** What the arrow keys walk through: the results and the remembered places, in reading order. */
 const OPTION = "[data-search-option]";
-/** Set on the first option: Enter in the box opens it, so it shows as chosen while the box has focus. */
 const FIRST_OPTION = "data-search-first";
 
 function selectBox(box: HTMLInputElement | null) {
@@ -38,12 +35,6 @@ function selectBox(box: HTMLInputElement | null) {
   box?.select();
 }
 
-/**
- * Workspace search, over the current page: the viewer's history and frequent places until something
- * is typed, then channels, Agents, Computers and messages. Opening a result closes the dialog. Up
- * and Down move the real focus along the results, so a screen reader follows and Enter opens the
- * link; typing returns to the box.
- */
 export function SearchDialog({
   workspaceId,
   viewerId,
@@ -81,7 +72,6 @@ export function SearchDialog({
     return () => document.removeEventListener(SEARCH_FOCUS_EVENT, onFocusRequest);
   }, []);
 
-  // The options arrive with their queries, so the first one is found whenever the list changes.
   useEffect(() => {
     const root = list.current;
     if (!root) return;
@@ -105,19 +95,16 @@ export function SearchDialog({
     if (!inBox && index < 0) return;
     if (event.key === "Enter" && inBox) {
       event.preventDefault();
-      // Words not yet searched would open the previous results' first row: search them now.
       if (text.trim() !== query) setQuery(text.trim());
       else options[0]?.click();
     } else if (event.key === "ArrowDown") {
       event.preventDefault();
-      // From the box the first option already shows as chosen, so Down goes to the next.
       (options[index + (inBox ? 2 : 1)] ?? options.at(inBox ? 0 : -1))?.focus();
     } else if (event.key === "ArrowUp" && !inBox) {
       event.preventDefault();
       if (index === 0) box.current?.focus();
       else options[index - 1]?.focus();
     } else if (!inBox && typing && event.key !== " ") {
-      // Space presses the focused option; any other character is typed into the box.
       box.current?.focus();
     }
   };
@@ -132,12 +119,8 @@ export function SearchDialog({
       isOpen
       isDismissable
       onOpenChange={(open) => !open && onClose()}
-      // High on the screen, under where the eye starts. Search opens hundreds of times a day, from
-      // the keyboard as often as not, so on a desktop it neither fades nor zooms, and the page
-      // behind only dims: flat, no frosted glass (docs/design/ui-principles.md).
       className="bg-overlay/30 backdrop-blur-none max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px] sm:items-start sm:[--modal-pt:12vh] lg:animate-none"
     >
-      {/* In dark, one surface up from the page with a hairline edge, as the New task window. */}
       <Modal className="flex w-full flex-col max-sm:h-full max-sm:rounded-none sm:max-w-[40rem] lg:animate-none dark:bg-secondary dark:ring-1 dark:ring-secondary_alt">
         <Dialog
           aria-label={m.search_title()}
@@ -161,7 +144,6 @@ export function SearchDialog({
                   onChange={(event) => setText(event.target.value)}
                   className="w-full min-w-0 bg-transparent text-lg text-primary caret-fg-brand-primary outline-hidden placeholder:text-placeholder [&::-webkit-search-cancel-button]:appearance-none"
                 />
-                {/* A phone has no Esc and no backdrop to tap: the dialog fills the screen. */}
                 <ButtonUtility
                   icon={XClose}
                   size="sm"

@@ -1,17 +1,4 @@
-/*
- * CoForge brand overrides on top of Untitled UI's stock theme (./theme.css, unmodified).
- * This is the ONLY file that redefines Untitled tokens or adds CoForge-specific ones.
- * See docs/design-tokens.md for the full mapping table and rationale.
- *
- * Mechanism: Untitled itself never edits its `--color-brand-*` ramp between light/dark —
- * it only re-points a handful of *semantic* tokens (e.g. `--color-bg-brand-solid`,
- * `--color-border-brand`) at a different ramp step inside `.dark-mode { ... }`
- * (see theme.css around line 700). We follow the same pattern here.
- */
-
 @theme {
-  /* CoForge brand ramp (violet, hue ~254°). 600 is the primary brand solid (#5d36dc);
-     400 (#a993ff) is the old dark-mode accent color, reused for accents/focus rings. */
   --color-brand-50: #f8f5ff;
   --color-brand-100: #efe8ff;
   --color-brand-200: #ded1ff;
@@ -24,60 +11,31 @@
   --color-brand-900: #332073;
   --color-brand-950: #21134d;
 
-  /* Tokens Untitled has no equivalent for. */
   --color-sidebar: #f8f7fe;
   --color-sidebar-fg: #101319;
   --color-sidebar-accent: #ebeaf7;
   --color-sidebar-accent-fg: #5d36dc;
-  /* Expanded sidebar nav rows: the hover fill. A resting row paints nothing in either theme: the
-     sidebar background is a gradient, so any opaque fill reads darker than it at the top of the
-     column and lighter at the bottom — a list of hard-edged blocks. Re-pointed under `.dark-mode`
-     below. */
   --color-sidebar-item-active: #f3f1ff;
-  /* The current left-navigation item's fill (task #222), its own token so `bg-tertiary`, which it
-     used, stays put everywhere else. Re-pointed under `.dark-mode` below. */
   --color-nav-bg-current: #efeff7;
 
-  /* A text field's states from the design spec (task #104, jing 11-13, typing state revised
-     11-16): the resting border, the typing border (2px: the 1px border plus a 1px inset ring, so
-     nothing inside moves), the text, the placeholder and the disabled fill. The 1px drop shadow is
-     `shadow-xs`. The composer and the sidebar search entry use them directly; every other field
-     through `FIELD_STATES` (task #112). Re-pointed under `.dark-mode` below. */
   --color-field-border: #e0e5f1;
   --color-field-border-typing: #c7b9f3;
   --color-field-text: #101319;
   --color-field-placeholder: #cbcfdb;
   --color-field-bg-disabled: #f4f6fa;
-  /* A field holding a wrong value: 1px, 2px while typed in (task #112). The same red on a dark
-     page until the designer picks one. */
   --color-field-border-error: #f15341;
 
-  /* Left-navigation label and icon: the tertiary text grey at rest (#777d8d was 4:1 on the
-     sidebar and read as disabled), the sidebar's ink on the current item. Re-pointed under
-     `.dark-mode` below. */
   --color-nav-fg: var(--color-text-tertiary);
   --color-nav-fg-current: var(--color-sidebar-fg);
 
-  /* The chat list's selected row (design spec): a bordered card; its radius is rounded-xl (12px)
-     in the row component. Re-pointed under `.dark-mode` below. */
   --color-chat-selected-bg: #f4f6fa;
   --color-chat-selected-border: #e0e5f1;
-  /* A message row's hover/focus fill (design spec): opaque, not the border grey (#e0e5f1 is for
-     borders and dividers only). Re-pointed under `.dark-mode` below. */
   --color-message-hover: #f7f8fb;
-  /* Untitled's faintest text (times, counts, secondary notes; task #3): its neutral-500 was
-     4.0-4.5:1 on hover rows, the selected chat and the sidebar, under WCAG AA. One step darker
-     clears 4.5:1 on every light surface and stays lighter than `text-tertiary` (#525252).
-     Untitled's dark value is restated under `.dark-mode` below. */
   --color-text-quaternary: #696969;
-  /* The reply count on a thread preview card ("3 replies"); the unread count after it stays the
-     brand accent. Re-pointed under `.dark-mode` below. */
   --color-thread-reply-count: var(--color-text-quaternary);
-  /* Terminal / command blocks stay dark in both themes. */
   --color-terminal: #171b23;
   --color-terminal-fg: #f4f6fb;
 
-  /* Avatar placeholder background tones (used when there is no photo). */
   --color-avatar-1: #7556b9;
   --color-avatar-2: #d18a38;
   --color-avatar-3: #b65757;
@@ -85,33 +43,20 @@
   --color-avatar-5: #497665;
   --color-avatar-6: #ba5937;
 
-  /* Presence dots. Untitled's success/gray scales don't give us a single flat
-     "online green" / "offline gray" dot color, so these stay as CoForge tokens. */
   --color-online: #1bb618;
   --color-offline: #afbccb;
 
-  /* Deleted-Agent avatar background. Same greys as `--color-offline`, but a separate
-     token because that one is documented as the presence-dot colour and a deleted identity is not
-     a presence state. See docs/design-tokens.md. */
   --color-avatar-deleted: #afbccb;
 
-  /* The white edge a person's photo gets beside stickers in a channel's group avatar. The
-     mascot artwork's own edge is white in both themes, so the photo's is too. */
   --color-avatar-outline: #ffffff;
 
-  /* An avatar stack's "+N" overflow circle and the dashed "add member" button beside it
-     (design spec, jing, task #132). Re-pointed under `.dark-mode` below. */
   --color-avatar-more: #f9f5ff;
   --color-avatar-more-fg: var(--color-brand-600);
   --color-avatar-add-fg: #777d8d;
 
-  /* A message image's frame: the grey it sits on and its hairline border, Raft's own values
-     (task #212). The dark values are re-pointed under `.dark-mode` below. */
   --color-image-frame: oklch(0.9642 0 0);
   --color-image-frame-border: oklch(0.1813 0.005 17.62 / 0.149);
 
-  /* Conversation and Activity unread capsule + subdued muted/mention pills (task #135).
-     Re-pointed under `.dark-mode` below so components never carry `dark:` overrides. */
   --color-unread-capsule: var(--color-neutral-950);
   --color-unread-capsule-fg: var(--color-white);
   --color-unread-capsule-divider: oklch(1 0 0 / 0.34);
@@ -120,11 +65,6 @@
   --color-unread-capsule-muted-divider: oklch(0.15 0.01 260 / 0.24);
 }
 
-/* Light-mode values from the design spec's Color page (docs/design/color-palette.md): the
-   spec's cool near-black text, border, brand tint and alert-box fill replace Untitled's neutral
-   greys, as semantic tokens so the shared ramps are untouched. The spec's red, green and text grey
-   are not applied: as text or under white text they fall below WCAG AA (docs/design/color-palette.md).
-   The spec gives no dark-mode values, so `.dark-mode` keeps Untitled's own. */
 :root:not(.dark-mode) {
   --color-text-primary: #101319;
   --color-border-secondary: #e0e5f1;
@@ -132,20 +72,6 @@
 }
 
 @layer base {
-  /* Sidebar retint for the official NavItemBase / NavButton components (used
-   * unmodified by src/components/layout/sidebar/{sidebar-expanded,sidebar-collapsed}.tsx).
-   * Their `bg-primary` / `bg-secondary` / `text-secondary` / `text-fg-quaternary` utilities
-   * do NOT read `--color-bg-primary` etc. directly: Untitled's theme.css routes them through
-   * a second, utility-scoped namespace declared once on `:root` — e.g.
-   * `--background-color-primary: var(--color-bg-primary)`. Custom-property inheritance
-   * freezes that indirection's *computed* value at `:root` and hands descendants the
-   * already-resolved color, so overriding `--color-bg-primary` on a descendant (as an
-   * earlier version of this file did, via an inline style on the <aside>) has no effect —
-   * confirmed via `getComputedStyle(navItem).backgroundColor` still returning white.
-   * The fix is to override the second-namespace variables directly on the sidebar root,
-   * via `[data-sidebar]` (set on every sidebar <aside>, desktop and mobile, expanded and
-   * collapsed), so nothing downstream needs to change. See docs/design-tokens.md.
-   */
   [data-sidebar] {
     --background-color-primary: var(--color-sidebar);
     --background-color-primary_hover: var(--color-sidebar-accent);
@@ -158,10 +84,6 @@
     --color-fg-quaternary_hover: var(--color-sidebar-accent-fg);
   }
 
-  /* `--color-sidebar*` are already theme-aware (redefined below under `.dark-mode`), so
-   * the mapping above re-resolves correctly per theme with no changes needed here. This
-   * block exists anyway, matching Untitled's own light-block/`.dark-mode`-block pattern,
-   * so a future token that isn't purely var()-indirected has an obvious place to diverge. */
   .dark-mode [data-sidebar] {
     --background-color-primary: var(--color-sidebar);
     --background-color-primary_hover: var(--color-sidebar-accent);
@@ -178,55 +100,28 @@
     --color-image-frame: oklch(0.3161 0.0052 106.7);
     --color-image-frame-border: oklch(0.9843 0.004 106.47 / 0.102);
 
-    /* Re-point ramp-based semantic tokens at a lighter step, matching Untitled's own
-       dark-mode pattern of remapping rather than redefining the ramp (see theme.css). */
     --color-focus-ring: var(--color-brand-400);
-
-    /* NOTE: --color-bg-brand-solid intentionally keeps Untitled's own default
-       (var(--color-brand-600), unchanged from light) instead of the lighter #a993ff.
-       The official Button component (src/components/base/buttons/button.tsx) hardcodes
-       `text-white` for color="primary" with no themeable ink token, so a lighter dark-mode
-       solid would render white-on-light-lavender text with poor contrast. Editing
-       button.tsx to make the ink themeable is out of scope (official components are not
-       modified). #a993ff remains available as brand-400 for accents, focus rings, and
-       borders where white text isn't involved. See docs/design-tokens.md. */
 
     --color-sidebar: #141720;
     --color-sidebar-fg: #f4f6fb;
-    /* One selected/hover fill for the rail and the expanded rows alike, light enough to read on
-       every stop of the sidebar gradient (1.4:1 against #21183b … #141720; the old #2b2544 was
-       1.15:1, i.e. invisible). */
     --color-sidebar-accent: #3a3160;
     --color-sidebar-item-active: var(--color-sidebar-accent);
-    /* Dark mode keeps the grey it had until the requester picks one. */
     --color-nav-bg-current: var(--color-bg-tertiary);
-    /* The spec's field states on a dark page: white text and the same typing violet (both the
-       spec's); the resting border and placeholder are ours, the spec has none for dark. */
     --color-field-border: var(--color-border-primary);
     --color-field-text: #ffffff;
     --color-field-placeholder: var(--color-neutral-600);
     --color-field-bg-disabled: var(--color-bg-disabled);
     --color-sidebar-accent-fg: #c5bafe;
 
-    /* A resting nav item keeps the light theme's cool-grey hue, lightened for a dark column
-       (7.6:1 on the gradient): dimmer than the row label, brighter than the light-theme value,
-       which on dark drops to 4.4:1 and reads muddy next to the #c5bafe current icon. */
     --color-nav-fg: #a4a9b8;
 
-    /* The chat list's selected card, mirroring the light values' logic (a fill one step off the
-       list background plus a slightly lighter outline) with the sidebar's selected violet, so a
-       selected row and the current nav item speak the same language. The light values are opaque
-       and near-white, which on the dark list rendered as a white card under light-grey text. */
     --color-chat-selected-bg: var(--color-sidebar-accent);
     --color-chat-selected-border: #4c4081;
 
-    /* Untitled's own opaque row hover; the light value is a near-white tuned for a white page. */
     --color-message-hover: var(--color-bg-primary_hover);
 
-    /* Untitled's own dark quaternary text, which the light override above would otherwise hide. */
     --color-text-quaternary: var(--color-neutral-400);
 
-    /* Untitled's own dark tertiary text: the light value is a mid grey tuned for white. */
     --color-thread-reply-count: var(--color-text-tertiary);
 
     --color-online: #42c83f;
@@ -244,10 +139,6 @@
   }
 }
 
-/* In the chrome, violet is the primary action and what is picked (a filled checkbox, radio or
-   toggle), through `bg-brand-solid`, and the keyboard focus ring. Every other brand token (active
-   tabs, links, selected cards, tints, spinners) reads as the neutral ink or surface in both themes,
-   so a screen has one violet thing and it is the thing to press. */
 :root,
 .dark-mode {
   --color-text-brand-primary: var(--color-text-primary);
@@ -267,8 +158,6 @@
   --color-bg-brand-secondary: var(--color-bg-tertiary);
 }
 
-/* A reference in message text (an @mention, a channel, a thread, a link) is content, not chrome: a
-   reader scans for it, so it keeps its violet tint while the chrome around it stays neutral. */
 :root {
   --color-reference-bg: #f3f1ff;
   --color-reference-text: var(--color-brand-700);

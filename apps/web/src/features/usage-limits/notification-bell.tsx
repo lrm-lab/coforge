@@ -29,7 +29,6 @@ import type { UsageLimitNotice } from "./usage-limit-notices";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
-/** One card; the same shape takes the notices to come (a Computer offline, an update needed). */
 function UsageLimitCard({
   notice,
   unseen,
@@ -76,14 +75,12 @@ function UsageLimitCard({
   );
 }
 
-/** The title and the cards, which fade and fold away as they go. */
 function NoticeList({
   workspaceSlug,
   shownUnseen,
   close,
 }: {
   workspaceSlug: string;
-  /** What was unseen when the list opened: their dots stay until it closes and marks them seen. */
   shownUnseen: ReadonlySet<string>;
   close: () => void;
 }) {
@@ -125,7 +122,6 @@ function NoticeList({
   );
 }
 
-/** A phone's panel: a sheet up from the bottom, over the page the bell sits in. */
 function NoticeSheet({ children }: { children: ReactNode }) {
   return (
     <AriaModalOverlay
@@ -153,19 +149,11 @@ function NoticeSheet({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * Every member's bell (task #641), with the unread count in the same badge as the Activity row's.
- * In the sidebar it opens to the right, clear of the sidebar's edge; on a phone, in a tab home's
- * header, it opens as a sheet. What was open counts as seen once the panel closes, so its dots stay
- * for as long as it is read.
- */
 export function NotificationBell({
   workspaceSlug,
   badgeRing,
 }: {
   workspaceSlug: string;
-  /** The badge's ring, in the colour of what the bell sits on, so the count reads apart from the
-   * bell's outline. */
   badgeRing: string;
 }) {
   const notifications = useSystemNotifications();
@@ -217,7 +205,6 @@ export function NotificationBell({
       </span>
       {wide ? (
         <AriaPopover
-          // The bell sits 0.75rem in from the sidebar's edge; the panel opens 0.5rem past it.
           placement="right bottom"
           offset={20}
           className={cn(
