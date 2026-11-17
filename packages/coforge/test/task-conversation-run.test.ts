@@ -80,11 +80,11 @@ test("reply with --json prints the response as JSON", async () => {
   expect(JSON.parse(text)).toEqual({ ok: true, data: { messageId: "m1", sequence: 4 } });
 });
 
-test("a reply over the server's length is refused before anything is sent", async () => {
+test("a reply over 50,000 chars is not refused locally and delegates size limits to attachment upload", async () => {
   const error = await runTaskConversation(transportAnswering(), invoke(["reply", REF]), async () =>
     "x".repeat(50_001),
   ).catch((failure: CliError) => failure);
-  expect((error as CliError).code).toBe("INVALID_ARG");
+  expect((error as CliError).code).toBe("UPLOAD_UNAVAILABLE");
 });
 
 test("reply without a body is refused before anything is sent, with the heredoc to use", async () => {
