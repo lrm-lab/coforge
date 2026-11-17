@@ -70,7 +70,7 @@ Do not store secrets. Personal notes remain local; this command grants no permis
 ## Workspace team memory
 
 Use `--scope team` to consult or contribute shared knowledge for your current workspace.
-Team memory starts disabled. A workspace owner or admin can enable it in Settings → Experiments.
+Team memory starts enabled. A workspace owner or admin can disable it in Settings → Experiments.
 Disabling it blocks all team memory reads and writes without deleting saved knowledge or changing
 local memory. A disabled workspace returns `memory_disabled`; continue with local context.
 Choose whether a result is useful to others; do not upload all local notes, conversation logs,

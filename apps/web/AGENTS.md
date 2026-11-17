@@ -97,5 +97,5 @@ Each line names a directory under `src/` (unless noted) and its single responsib
 `server/team-memory/` owns Agent-selected workspace knowledge and review rules. The Prisma
 repository enforces current Agent/owner membership, versions, request deduplication and atomic
 merges in PostgreSQL. Routes assemble the repository and domain service; no model or extraction
-agent runs at the storage boundary. The Workspace `teamMemory` experiment defaults off and gates
+agent runs at the storage boundary. The Workspace `teamMemory` experiment defaults on and gates
 every team-memory operation; only Workspace owners/admins change it. See [memory](../../docs/memory/team-memory.md).

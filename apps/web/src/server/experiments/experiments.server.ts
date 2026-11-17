@@ -9,7 +9,7 @@ export const EXPERIMENTS = {
   drafts: { flag: null, defaultEnabled: true, reload: false },
   artifacts: { flag: null, defaultEnabled: false, reload: false },
   aiWorkbench: { flag: null, defaultEnabled: true, reload: false },
-  teamMemory: { flag: null, defaultEnabled: false, reload: false },
+  teamMemory: { flag: null, defaultEnabled: true, reload: false },
 } as const satisfies Record<
   string,
   {
