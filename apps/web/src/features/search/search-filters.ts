@@ -86,6 +86,27 @@ export function withScope(
   return { ...filters, scope: next, senderId: dropSender ? undefined : filters.senderId };
 }
 
+/**
+ * Toggles one scope chip. Humans and Agents switch places rather than turning on together (both
+ * together would match every sender kind), while `@ Me` combines with either.
+ */
+export function toggleScope(
+  filters: SearchFilters,
+  target: SearchScope,
+  senderKind: SenderKind | undefined,
+): SearchFilters {
+  const current = filters.scope ?? [];
+  if (current.includes(target)) {
+    return withScope(
+      filters,
+      current.filter((item) => item !== target),
+      senderKind,
+    );
+  }
+  const opposite = target === "humans" ? "agents" : target === "agents" ? "humans" : undefined;
+  return withScope(filters, [...current.filter((item) => item !== opposite), target], senderKind);
+}
+
 const DAY_MS = 86_400_000;
 
 /**

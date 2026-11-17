@@ -193,7 +193,7 @@ test("the search dialog finds a message and opens it in its channel", async () =
     await waitFor(`Date.now() - window.__composingSince > 600`);
     expect(
       await evaluate<boolean>(
-        `document.querySelector('[role="dialog"] [aria-label="Search filters"]') !== null || document.querySelector('[role="dialog"] ol li') !== null`,
+        `document.querySelector('[role="dialog"] [aria-labelledby="search-messages-heading"], [role="dialog"] ol li, [role="dialog"] [aria-busy="true"]') !== null`,
       ),
     ).toBe(false);
     await browser(

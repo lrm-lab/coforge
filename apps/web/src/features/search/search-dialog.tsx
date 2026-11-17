@@ -1,4 +1,11 @@
-import { useEffect, useEffectEvent, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { SearchLg, XClose } from "@untitledui/icons";
 import { Input as AriaInput } from "react-aria-components";
 
@@ -8,7 +15,7 @@ import { channelLabel } from "#src/features/conversations/channel-visibility";
 import { isImeComposing } from "#src/lib/ime";
 import { m } from "#src/paraglide/messages";
 import type { SearchIntent } from "./search-dialog-context";
-import { SearchFilterChips, SearchFilterMenu, useSearchChannel } from "./search-filter-bar";
+import { SearchFilterBar, useSearchChannel } from "./search-filter-bar";
 import { clearedFilters, hasActiveFilter, type SearchFilters } from "./search-filters";
 import { SearchHome } from "./search-home";
 import { SearchKeyHints } from "./search-key-hints";
@@ -58,7 +65,6 @@ export function SearchDialog({
   const scopedChannel = useSearchChannel(workspaceId, filters.channelId);
   const [composing, setComposing] = useState(false);
   const box = useRef<HTMLInputElement>(null);
-  const panel = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -116,10 +122,10 @@ export function SearchDialog({
     }
   };
 
-  const changeFilters = (next: SearchFilters) => {
+  const changeFilters = useCallback((next: SearchFilters) => {
     setDeferred(false);
     setFilters(next);
-  };
+  }, []);
   const searching = query || (hasActiveFilter(filters) && !deferred);
   return (
     <ModalOverlay
@@ -137,13 +143,9 @@ export function SearchDialog({
           aria-label={m.search_title()}
           className="group/search min-h-0 flex-1 overflow-hidden"
         >
-          <div
-            ref={panel}
-            onKeyDown={onKeyDown}
-            className="flex max-h-[inherit] h-full min-h-0 flex-col"
-          >
+          <div onKeyDown={onKeyDown} className="flex max-h-[inherit] h-full min-h-0 flex-col">
             <div
-              className="flex flex-col gap-3 border-b border-secondary p-4"
+              className="flex flex-col gap-3 border-b border-secondary px-4 pt-3.5 pb-3"
               onCompositionStart={() => setComposing(true)}
               onCompositionEnd={() => setComposing(false)}
             >
@@ -159,13 +161,6 @@ export function SearchDialog({
                   onChange={(event) => setText(event.target.value)}
                   className="w-full min-w-0 bg-transparent text-lg text-primary caret-fg-brand-primary outline-hidden placeholder:text-placeholder [&::-webkit-search-cancel-button]:appearance-none"
                 />
-                <SearchFilterMenu
-                  workspaceId={workspaceId}
-                  query={query}
-                  filters={filters}
-                  onChange={changeFilters}
-                  besideRef={panel}
-                />
                 {/* A phone has no Esc and no backdrop to tap: the dialog fills the screen. */}
                 <ButtonUtility
                   icon={XClose}
@@ -177,7 +172,7 @@ export function SearchDialog({
                   onClick={onClose}
                 />
               </div>
-              <SearchFilterChips
+              <SearchFilterBar
                 workspaceId={workspaceId}
                 filters={filters}
                 onChange={changeFilters}

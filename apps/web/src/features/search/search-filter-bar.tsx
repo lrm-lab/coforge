@@ -1,28 +1,23 @@
-import { channelLabel } from "#src/features/conversations/channel-visibility";
-import { useMemo, useState, type FC, type ReactNode, type RefObject } from "react";
+import { memo, type ReactNode, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, FilterLines, Hash02, User01, XClose } from "@untitledui/icons";
-import {
-  Button as AriaButton,
-  Dialog as AriaDialog,
-  DialogTrigger,
-  Popover as AriaPopover,
-} from "react-aria-components";
+import { ChevronDown, XClose } from "@untitledui/icons";
+import { Button as AriaButton, ToggleButton as AriaToggleButton } from "react-aria-components";
 
-import { ActorName } from "#src/features/avatars/actor-name";
-import { PickerMenu } from "#src/features/pickers/entity-picker";
-import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { useBreakpoint } from "#src/hooks/use-breakpoint";
-import { GroupAvatar, type GroupAvatarMember } from "#src/features/conversations/group-avatar";
+import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { channelLabel } from "#src/features/conversations/channel-visibility";
+import {
+  EntityPicker,
+  Face,
+  type PickerFace,
+  type PickerOption,
+} from "#src/features/pickers/entity-picker";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import {
   isSearchRange,
   SEARCH_RANGES,
   SEARCH_SCOPES,
-  withScope,
+  toggleScope,
   withSender,
   type SearchFilters,
   type SearchRange,
@@ -44,6 +39,18 @@ const SCOPE_LABEL: Record<SearchScope, () => string> = {
   humans: () => m.search_scope_humans(),
   agents: () => m.search_scope_agents(),
 };
+
+const INACTIVE_CHIP_CLASS =
+  "relative inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-lg px-2.5 text-xs font-medium text-secondary ring-1 ring-secondary ring-inset outline-focus-ring transition-colors duration-100 ease-linear hover:bg-primary_hover hover:text-primary focus-visible:outline-2 focus-visible:-outline-offset-2 max-sm:h-9 max-sm:px-3 max-sm:after:absolute max-sm:after:inset-x-0 max-sm:after:-inset-y-1";
+
+const ACTIVE_SHELL_CLASS =
+  "inline-flex h-7 shrink-0 items-center rounded-lg bg-(--color-reference-bg) text-(--color-reference-text) ring-1 ring-(--color-reference-text)/35 ring-inset max-sm:h-9";
+
+const ACTIVE_TRIGGER_CLASS =
+  "relative inline-flex h-full cursor-pointer items-center gap-1.5 rounded-l-lg pl-2.5 pr-0.5 text-xs font-medium outline-focus-ring transition-colors duration-100 ease-linear hover:bg-(--color-reference-text)/10 focus-visible:outline-2 focus-visible:-outline-offset-2 max-sm:pl-3 max-sm:pr-0.5 max-sm:after:absolute max-sm:after:inset-x-0 max-sm:after:-inset-y-1";
+
+const ACTIVE_CLEAR_CLASS =
+  "relative inline-flex h-full cursor-pointer items-center justify-center rounded-r-lg pl-0.5 pr-2 text-(--color-reference-text)/80 outline-focus-ring transition-colors duration-100 ease-linear hover:bg-(--color-reference-text)/10 hover:text-(--color-reference-text) focus-visible:outline-2 focus-visible:-outline-offset-2 max-sm:pl-1 max-sm:pr-2.5 max-sm:after:absolute max-sm:after:-inset-x-1 max-sm:after:-inset-y-1";
 
 /** The channel a search is limited to, as the directory names it. */
 export function useSearchChannel(workspaceId: string, channelId: string | undefined) {
@@ -69,8 +76,13 @@ function useFilterNames(workspaceId: string, filters: SearchFilters) {
   };
 }
 
-/** What is filtered, each in a full phrase; pressing one removes it. Nothing without a filter. */
-export function SearchFilterChips({
+/**
+ * The inline filter capsules directly under the search box: From, Channel, Time, the three Scope
+ * toggles (`@ Me`, `Humans`, `Agents`), and Sort. Active capsules highlight in reference violet
+ * and expose an inline `×` button to clear in one tap while keeping the main label pressable to
+ * switch values. Wraps on wide screens and scrolls horizontally on phones.
+ */
+export const SearchFilterBar = memo(function SearchFilterBar({
   workspaceId,
   filters,
   onChange,
@@ -79,433 +91,260 @@ export function SearchFilterChips({
   filters: SearchFilters;
   onChange: (filters: SearchFilters) => void;
 }) {
-  const { sender, channel } = useFilterNames(workspaceId, filters);
-  const chips: { name: string; next: SearchFilters; members?: readonly GroupAvatarMember[] }[] = [
-    sender && {
-      name: m.search_chip_sender({ name: sender.label }),
-      next: withSender(filters, undefined),
-    },
-    ...(filters.scope ?? []).map((scope) => ({
-      name: SCOPE_LABEL[scope](),
-      next: withScope(
-        filters,
-        (filters.scope ?? []).filter((other) => other !== scope),
-        sender?.kind,
-      ),
-    })),
-    channel && {
-      // As the sidebar draws it: its group avatar and its name, no `#` (Frank, 11-10).
-      name: channel.name,
-      next: { ...filters, channelId: undefined },
-      members: channel.members,
-    },
-    filters.range && { name: RANGE_LABEL[filters.range](), next: { ...filters, range: undefined } },
-    filters.sort === "recent" && {
-      name: m.search_sort_recent(),
-      next: { ...filters, sort: undefined },
-    },
-  ].filter((chip) => !!chip);
-  if (chips.length === 0) return null;
-  return (
-    <div role="group" aria-label={m.search_filters()} className="flex flex-wrap gap-2">
-      {chips.map((chip) => (
-        <AriaButton
-          key={chip.name}
-          aria-label={m.search_chip_remove({ name: chip.name })}
-          onPress={() => onChange(chip.next)}
-          className="inline-flex max-w-[16rem] cursor-pointer items-center gap-1 rounded-lg bg-brand-primary_alt px-2 py-1 text-xs font-medium text-fg-brand-primary outline-focus-ring focus-visible:outline-2"
-        >
-          {chip.members?.length ? (
-            <GroupAvatar members={chip.members} className="avatar-group-xs" />
-          ) : null}
-          <span className="truncate">{chip.name}</span>
-          <XClose aria-hidden="true" className="size-3 shrink-0" />
-        </AriaButton>
-      ))}
-    </div>
-  );
-}
-
-/** The filter button beside the search box and, behind it, the filters (design B, task #46): time
- * and scope, which have few choices, as pills that wrap; the sender and the channel, which have
- * many, as rows that turn the menu into their searchable list and come back once one is picked;
- * the sort last. Sort applies only to a query, so it is disabled without one. */
-export function SearchFilterMenu({
-  workspaceId,
-  query,
-  filters,
-  onChange,
-  besideRef,
-}: {
-  workspaceId: string;
-  query: string;
-  filters: SearchFilters;
-  onChange: (filters: SearchFilters) => void;
-  /** The search dialog: where the window has room on its side, the filters open beside it, level
-   * with its top (Frank, 11-10), not hanging past its edge; otherwise under the button. */
-  besideRef: RefObject<Element | null>;
-}) {
-  const wide = useBreakpoint("sm");
-  // The 40rem panel is centered, so each side keeps half of what is left: the 18rem menu and its
-  // gap fit there from `xl`. Below that, beside the panel it was cut off at the window's edge.
-  const beside = useBreakpoint("xl");
   const { directory, senders, sender, channel } = useFilterNames(workspaceId, filters);
-  const [list, setList] = useState<"sender" | "channel">();
 
-  const body = (
-    <>
-      {list === "sender" ? (
-        <FilterList label={m.search_from()} onBack={() => setList(undefined)}>
-          <PickerMenu
-            label={m.search_find_sender()}
-            searchPlaceholder={m.search_find_sender()}
-            selectedKey={sender?.key ?? ANY}
-            options={[
-              { id: ANY, label: m.search_from_anyone() },
-              ...senders.map((candidate) => ({
-                id: candidate.key,
-                label: candidate.label,
-                face: {
-                  kind: "identity" as const,
-                  name: candidate.name,
-                  src: candidate.avatarUrl,
-                  ...(candidate.kind === "agent"
-                    ? { agentId: candidate.id }
-                    : { userId: candidate.id }),
-                },
-                addon: candidate.addon,
-                keywords: candidate.textValue,
-              })),
-            ]}
-            onSelect={(key) => {
-              const chosen = senders.find((candidate) => candidate.key === key);
-              onChange(withSender(filters, chosen && { id: chosen.id, kind: chosen.kind }));
-            }}
-            onClose={() => setList(undefined)}
-            // On a phone, typing waits for a tap: focus would raise the keyboard over the list.
-            autoFocus={wide}
-          />
-        </FilterList>
-      ) : list === "channel" ? (
-        <FilterList label={m.search_channel()} onBack={() => setList(undefined)}>
-          <PickerMenu
-            label={m.search_find_channel()}
-            searchPlaceholder={m.search_find_channel()}
-            selectedKey={filters.channelId ?? ANY}
-            options={[
-              { id: ANY, label: m.search_channel_any() },
-              ...(directory?.channels ?? []).map((candidate) => ({
-                id: candidate.id,
-                label: candidate.name,
-                ariaLabel: channelLabel(candidate),
-                face: {
-                  kind: "channel" as const,
-                  visibility: candidate.visibility,
-                  members: candidate.members,
-                },
-                // The row's `#` is an icon; typing it still finds the channel.
-                keywords: `#${candidate.name} ${candidate.description}`,
-                addon: candidate.archived ? m.search_archived() : undefined,
-              })),
-            ]}
-            onSelect={(key) => onChange({ ...filters, channelId: key === ANY ? undefined : key })}
-            onClose={() => setList(undefined)}
-            // On a phone, typing waits for a tap: focus would raise the keyboard over the list.
-            autoFocus={wide}
-          />
-        </FilterList>
-      ) : (
-        <>
-          <FilterSection label={m.search_time()}>
-            <ChoiceGroup
-              label={m.search_time()}
-              selected={[filters.range ?? ANY]}
-              options={[
-                { key: ANY, label: m.search_time_any() },
-                ...SEARCH_RANGES.map((range) => ({ key: range, label: RANGE_LABEL[range]() })),
-              ]}
-              onChange={([key]) =>
-                onChange({ ...filters, range: key && isSearchRange(key) ? key : undefined })
-              }
-            />
-          </FilterSection>
-          <FilterSection label={m.search_scope()}>
-            <ChoiceGroup
-              label={m.search_scope()}
-              multiple
-              selected={filters.scope?.length ? filters.scope : [ANY]}
-              options={[
-                { key: ANY, label: m.search_scope_all() },
-                ...SEARCH_SCOPES.map((scope) => ({ key: scope, label: SCOPE_LABEL[scope]() })),
-              ]}
-              onChange={(keys, added) =>
-                // "All" is no scope at all: choosing it clears the rest, choosing any other leaves it.
-                onChange(
-                  withScope(
-                    filters,
-                    added === ANY ? [] : keys.filter((key) => key !== ANY),
-                    sender?.kind,
-                  ),
-                )
-              }
-            />
-          </FilterSection>
-          <Separator />
-          <FilterRow
-            icon={User01}
-            label={m.search_from()}
-            value={
-              sender && (
-                // The face before the name (task #521).
-                <ActorName
-                  actor={{
-                    kind: sender.kind,
-                    id: sender.id,
-                    name: sender.label,
-                    avatarUrl: sender.avatarUrl,
-                  }}
-                />
-              )
-            }
-            fallback={m.search_from_anyone()}
-            onPress={() => setList("sender")}
-          />
-          <FilterRow
-            icon={Hash02}
-            label={m.search_channel()}
-            value={
-              channel && (
-                // As the chip draws it: its group avatar, then its name (Frank, 11-10).
-                <span className="flex min-w-0 items-center gap-1.5">
-                  {channel.members?.length ? (
-                    <GroupAvatar members={channel.members} className="avatar-group-xs" />
-                  ) : null}
-                  <span className="truncate">{channel.name}</span>
-                </span>
-              )
-            }
-            fallback={m.search_channel_any()}
-            onPress={() => setList("channel")}
-          />
-          <Separator />
-          <FilterSection label={m.search_sort()}>
-            <SortControl
-              disabled={!query}
-              selected={filters.sort ?? "relevance"}
-              onChange={(sort) =>
-                onChange({ ...filters, sort: sort === "recent" ? "recent" : undefined })
-              }
-            />
-          </FilterSection>
-        </>
-      )}
-    </>
+  const senderOptions = useMemo<PickerOption[]>(
+    () => [
+      { id: ANY, label: m.search_from_anyone() },
+      ...senders.map((candidate) => ({
+        id: candidate.key,
+        label: candidate.label,
+        face: {
+          kind: "identity" as const,
+          name: candidate.name,
+          src: candidate.avatarUrl,
+          ...(candidate.kind === "agent" ? { agentId: candidate.id } : { userId: candidate.id }),
+        },
+        addon: candidate.addon,
+        keywords: candidate.textValue,
+      })),
+    ],
+    [senders],
   );
-  const trigger = (
-    <ButtonUtility
-      icon={FilterLines}
-      size="sm"
-      color="tertiary"
-      tooltip={m.search_filter_open()}
-      aria-label={m.search_filter_open()}
-    />
+
+  const channelOptions = useMemo<PickerOption[]>(
+    () => [
+      { id: ANY, label: m.search_channel_any() },
+      ...(directory?.channels ?? []).map((candidate) => ({
+        id: candidate.id,
+        label: candidate.name,
+        ariaLabel: channelLabel(candidate),
+        face: {
+          kind: "channel" as const,
+          visibility: candidate.visibility,
+          members: candidate.members,
+        },
+        // The row's `#` is an icon; typing it still finds the channel.
+        keywords: `#${candidate.name} ${candidate.description}`,
+        addon: candidate.archived ? m.search_archived() : undefined,
+      })),
+    ],
+    [directory?.channels],
   );
-  const menu = "flex flex-col items-stretch p-1.5 outline-hidden";
+
+  const senderActive = filters.senderId !== undefined;
+  const senderLabel = sender?.label ?? m.search_from();
+  const senderFace: PickerFace | undefined = sender && {
+    kind: "identity",
+    name: sender.name,
+    src: sender.avatarUrl,
+    ...(sender.kind === "agent" ? { agentId: sender.id } : { userId: sender.id }),
+  };
+
+  const channelActive = filters.channelId !== undefined;
+  const channelName = channel?.name ?? m.search_channel();
+  const channelFace: PickerFace | undefined = channel?.members?.length
+    ? {
+        kind: "channel",
+        visibility: channel.visibility,
+        members: channel.members,
+      }
+    : undefined;
+
+  const rangeLabel = filters.range ? RANGE_LABEL[filters.range]() : undefined;
+  const recentSort = filters.sort === "recent";
 
   return (
-    <DialogTrigger onOpenChange={() => setList(undefined)}>
-      {trigger}
-      {wide ? (
-        <AriaPopover
-          triggerRef={beside ? besideRef : undefined}
-          placement={beside ? "end top" : "bottom end"}
-          className="rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt"
-        >
-          <AriaDialog
-            aria-label={m.search_filters()}
-            data-search-filter-menu=""
-            className={cx(menu, "w-72")}
-          >
-            {body}
-          </AriaDialog>
-        </AriaPopover>
-      ) : (
-        // A phone: a sheet from the bottom edge, the width of the screen, as every picker there.
-        <ModalOverlay isDismissable className="px-0 [--modal-pb:0px]">
-          <Modal className="w-full rounded-t-2xl rounded-b-none">
-            <Dialog
-              aria-label={m.search_filters()}
-              data-search-filter-menu=""
-              className={cx(menu, "pb-safe-bottom")}
+    <div
+      role="group"
+      aria-label={m.search_filters()}
+      className="flex flex-wrap items-center gap-1.5 max-sm:-mx-4 max-sm:-my-1 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:px-4 max-sm:py-1 max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden"
+    >
+      <FilterChipShell
+        active={senderActive}
+        clearLabel={m.search_chip_remove({
+          name: sender ? m.search_chip_sender({ name: sender.label }) : m.search_from(),
+        })}
+        onClear={() => onChange(withSender(filters, undefined))}
+      >
+        <EntityPicker
+          label={m.search_find_sender()}
+          searchPlaceholder={m.search_find_sender()}
+          selectedKey={sender?.key ?? (senderActive ? null : ANY)}
+          placement="bottom start"
+          className="w-72"
+          options={senderOptions}
+          onSelect={(key) => {
+            const chosen = senders.find((candidate) => candidate.key === key);
+            onChange(withSender(filters, chosen && { id: chosen.id, kind: chosen.kind }));
+          }}
+          trigger={
+            <FilterTriggerButton
+              active={senderActive}
+              ariaLabel={sender ? m.search_from_named({ name: sender.label }) : m.search_from()}
+              face={senderFace}
+              label={senderActive ? senderLabel : m.search_from()}
+            />
+          }
+        />
+      </FilterChipShell>
+
+      <FilterChipShell
+        active={channelActive}
+        clearLabel={m.search_chip_remove({ name: channelName })}
+        onClear={() => onChange({ ...filters, channelId: undefined })}
+      >
+        <EntityPicker
+          label={m.search_find_channel()}
+          searchPlaceholder={m.search_find_channel()}
+          selectedKey={filters.channelId ?? ANY}
+          placement="bottom start"
+          className="w-72"
+          options={channelOptions}
+          onSelect={(key) => onChange({ ...filters, channelId: key === ANY ? undefined : key })}
+          trigger={
+            <FilterTriggerButton
+              active={channelActive}
+              ariaLabel={
+                channel ? `${m.search_channel()}: ${channelLabel(channel)}` : m.search_channel()
+              }
+              face={channelFace}
+              label={channelActive ? channelName : m.search_channel()}
+            />
+          }
+        />
+      </FilterChipShell>
+
+      <FilterChipShell
+        active={rangeLabel !== undefined}
+        clearLabel={rangeLabel ? m.search_chip_remove({ name: rangeLabel }) : ""}
+        onClear={() => onChange({ ...filters, range: undefined })}
+      >
+        <Dropdown.Root>
+          <FilterTriggerButton
+            active={rangeLabel !== undefined}
+            ariaLabel={rangeLabel ? `${m.search_time()}: ${rangeLabel}` : m.search_time()}
+            label={rangeLabel ?? m.search_time()}
+          />
+          <Dropdown.Popover placement="bottom start" className="w-44">
+            <Dropdown.Menu
+              aria-label={m.search_time()}
+              selectionMode="single"
+              disallowEmptySelection
+              selectedKeys={[filters.range ?? ANY]}
+              onAction={(key) =>
+                onChange({ ...filters, range: isSearchRange(key) ? key : undefined })
+              }
             >
-              <div
-                aria-hidden="true"
-                className="mx-auto mt-0.5 mb-1.5 h-1 w-9 rounded-full bg-quaternary/40"
-              />
-              {body}
-            </Dialog>
-          </Modal>
-        </ModalOverlay>
-      )}
-    </DialogTrigger>
+              <Dropdown.Item id={ANY} label={m.search_time_any()} />
+              {SEARCH_RANGES.map((range) => (
+                <Dropdown.Item key={range} id={range} label={RANGE_LABEL[range]()} />
+              ))}
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown.Root>
+      </FilterChipShell>
+
+      {SEARCH_SCOPES.map((scope) => {
+        const active = Boolean(filters.scope?.includes(scope));
+        const label = SCOPE_LABEL[scope]();
+        return (
+          <AriaToggleButton
+            key={scope}
+            isSelected={active}
+            onChange={() => onChange(toggleScope(filters, scope, sender?.kind))}
+            className={cx(
+              "relative inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-lg text-xs font-medium ring-1 ring-inset outline-focus-ring transition-colors duration-100 ease-linear focus-visible:outline-2 focus-visible:-outline-offset-2 max-sm:h-9 max-sm:after:absolute max-sm:after:inset-x-0 max-sm:after:-inset-y-1",
+              active
+                ? "bg-(--color-reference-bg) pl-2.5 pr-2 text-(--color-reference-text) ring-(--color-reference-text)/35 hover:bg-(--color-reference-bg) max-sm:pl-3 max-sm:pr-2.5"
+                : "px-2.5 text-secondary ring-secondary hover:bg-primary_hover hover:text-primary max-sm:px-3",
+            )}
+          >
+            <span>{label}</span>
+            {active && <XClose aria-hidden="true" className="size-3 shrink-0 opacity-80" />}
+          </AriaToggleButton>
+        );
+      })}
+
+      <FilterChipShell
+        active={recentSort}
+        clearLabel={m.search_chip_remove({ name: m.search_sort_recent() })}
+        onClear={() => onChange({ ...filters, sort: undefined })}
+      >
+        <Dropdown.Root>
+          <FilterTriggerButton
+            active={recentSort}
+            ariaLabel={
+              recentSort ? m.search_sort_named({ order: m.search_sort_recent() }) : m.search_sort()
+            }
+            label={recentSort ? m.search_sort_recent() : m.search_sort()}
+          />
+          <Dropdown.Popover placement="bottom end" className="w-40">
+            <Dropdown.Menu
+              aria-label={m.search_sort()}
+              selectionMode="single"
+              disallowEmptySelection
+              selectedKeys={[filters.sort ?? "relevance"]}
+              onAction={(key) =>
+                onChange({ ...filters, sort: key === "recent" ? "recent" : undefined })
+              }
+            >
+              <Dropdown.Item id="relevance" label={m.search_sort_relevant()} />
+              <Dropdown.Item id="recent" label={m.search_sort_recent()} />
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown.Root>
+      </FilterChipShell>
+    </div>
   );
-}
+});
 
-function Separator() {
-  return <div className="-mx-1.5 my-1.5 h-px bg-border-secondary" />;
-}
-
-function FilterSection({ label, children }: { label: string; children: ReactNode }) {
+function FilterChipShell({
+  active,
+  clearLabel,
+  onClear,
+  children,
+}: {
+  active: boolean;
+  clearLabel: string;
+  onClear: () => void;
+  children: ReactNode;
+}) {
+  if (!active) return <>{children}</>;
   return (
-    <div className="flex flex-col gap-1.5 px-2.5 pt-2 pb-1.5">
-      <span aria-hidden="true" className="text-xs text-tertiary">
-        {label}
-      </span>
+    <div className={ACTIVE_SHELL_CLASS}>
       {children}
+      <AriaButton aria-label={clearLabel} onPress={onClear} className={ACTIVE_CLEAR_CLASS}>
+        <XClose aria-hidden="true" className="size-3 shrink-0" />
+      </AriaButton>
     </div>
   );
 }
 
-/** A filter with few choices, each a pill of its own that wraps to the next line rather than be
- * cut short: a single choice, or several (`multiple`). */
-function ChoiceGroup({
+function FilterTriggerButton({
+  active,
+  ariaLabel,
+  face,
   label,
-  multiple,
-  selected,
-  options,
-  onChange,
 }: {
+  active: boolean;
+  ariaLabel: string;
+  face?: PickerFace;
   label: string;
-  multiple?: boolean;
-  selected: string[];
-  options: { key: string; label: string }[];
-  /** The keys now chosen, and the one this press added, if any. */
-  onChange: (keys: string[], added: string | undefined) => void;
-}) {
-  return (
-    <ButtonGroup
-      size="sm"
-      aria-label={label}
-      selectionMode={multiple ? "multiple" : "single"}
-      disallowEmptySelection={!multiple}
-      selectedKeys={selected}
-      onSelectionChange={(keys) => {
-        const next = [...keys].map(String);
-        onChange(
-          next,
-          next.find((key) => !selected.includes(key)),
-        );
-      }}
-      className="w-full flex-wrap gap-1.5 space-x-0 shadow-none"
-    >
-      {options.map((option) => (
-        <ButtonGroupItem
-          key={option.key}
-          id={option.key}
-          // What is picked is content the person chose: the reference violet, as in the mockup.
-          className="h-7 rounded-lg px-2.5 py-0 max-sm:h-9 max-sm:px-3.5 font-medium shadow-none ring-secondary not-last:pr-2.5 first:rounded-lg last:rounded-lg selected:bg-(--color-reference-bg) selected:text-(--color-reference-text) selected:ring-(--color-reference-text)/40"
-        >
-          {option.label}
-        </ButtonGroupItem>
-      ))}
-    </ButtonGroup>
-  );
-}
-
-/** Relevance or newest first: a segmented control, as Untitled's bordered tabs. */
-function SortControl({
-  disabled,
-  selected,
-  onChange,
-}: {
-  disabled: boolean;
-  selected: string;
-  onChange: (sort: string) => void;
-}) {
-  return (
-    <ButtonGroup
-      size="sm"
-      aria-label={m.search_sort()}
-      disallowEmptySelection
-      isDisabled={disabled}
-      selectedKeys={[selected]}
-      onSelectionChange={(keys) => {
-        const [key] = [...keys].map(String);
-        if (key) onChange(key);
-      }}
-      className="w-full gap-0.5 space-x-0 rounded-lg bg-secondary_alt p-0.5 shadow-none ring-1 ring-secondary ring-inset"
-    >
-      {[
-        { key: "relevance", label: m.search_sort_relevant() },
-        { key: "recent", label: m.search_sort_recent() },
-      ].map((option) => (
-        <ButtonGroupItem
-          key={option.key}
-          id={option.key}
-          className="flex-1 justify-center rounded-md bg-transparent px-3 py-1.5 max-sm:py-2.5 text-tertiary shadow-none ring-0 not-last:pr-3 first:rounded-md last:rounded-md hover:bg-transparent hover:text-secondary selected:bg-primary_alt selected:text-secondary selected:shadow-sm"
-        >
-          {option.label}
-        </ButtonGroupItem>
-      ))}
-    </ButtonGroup>
-  );
-}
-
-/** A filter with many choices: its name, what is chosen, and a chevron to its list. */
-function FilterRow({
-  icon: Icon,
-  label,
-  value,
-  fallback,
-  onPress,
-}: {
-  icon: FC<{ className?: string }>;
-  label: string;
-  value: ReactNode;
-  fallback: string;
-  onPress: () => void;
 }) {
   return (
     <AriaButton
-      onPress={onPress}
-      className="flex h-9 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-sm text-secondary max-sm:h-11 max-sm:text-md outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
+      aria-label={ariaLabel}
+      className={cx(
+        active ? ACTIVE_TRIGGER_CLASS : INACTIVE_CHIP_CLASS,
+        face && "pl-1.5 max-sm:pl-2",
+      )}
     >
-      <Icon aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
-      <span className="shrink-0">{label}</span>
-      <span
-        className={cx(
-          "ml-auto min-w-0 truncate",
-          value ? "font-medium text-(--color-reference-text)" : "text-tertiary",
-        )}
-      >
-        {value ?? fallback}
-      </span>
-      <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+      {face && <Face face={face} />}
+      <span className={cx("whitespace-nowrap", active && "max-w-36 truncate")}>{label}</span>
+      {!active && (
+        <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-fg-quaternary" />
+      )}
     </AriaButton>
-  );
-}
-
-/** A filter's list in place of the menu, under a row back to it. */
-function FilterList({
-  label,
-  onBack,
-  children,
-}: {
-  label: string;
-  onBack: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <>
-      <AriaButton
-        onPress={onBack}
-        className="flex h-9 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-sm text-secondary max-sm:h-11 max-sm:text-md outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
-      >
-        <ChevronLeft aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
-        {label}
-      </AriaButton>
-      <Separator />
-      {children}
-    </>
   );
 }

@@ -5,6 +5,7 @@ import {
   hasActiveFilter,
   messageSearchParams,
   parseScope,
+  toggleScope,
   withScope,
   withSender,
 } from "#src/features/search/search-filters";
@@ -46,6 +47,21 @@ test("scope keeps one order and ignores unknown entries", () => {
   expect(parseScope("humans,bogus,mentioned")).toEqual(["mentioned", "humans"]);
   expect(parseScope("bogus")).toBeUndefined();
   expect(parseScope(undefined)).toBeUndefined();
+});
+
+test("toggling a scope chip switches between Humans and Agents while preserving @Me", () => {
+  const mentionedHumans = toggleScope({ scope: ["mentioned"] }, "humans", undefined);
+  expect(mentionedHumans.scope).toEqual(["mentioned", "humans"]);
+
+  const switchedToAgents = toggleScope({ ...mentionedHumans, senderId: "ada" }, "agents", "user");
+  expect(switchedToAgents).toEqual({
+    senderId: undefined,
+    scope: ["mentioned", "agents"],
+  });
+
+  const clearedAgents = toggleScope(switchedToAgents, "agents", undefined);
+  expect(clearedAgents.scope).toEqual(["mentioned"]);
+  expect(toggleScope(clearedAgents, "mentioned", undefined).scope).toBeUndefined();
 });
 
 test("filters narrow on their own; the sort order does not", () => {
