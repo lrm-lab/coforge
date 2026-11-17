@@ -1,4 +1,5 @@
 import type { WakeHint } from "@lrm/coforge-sdk/agent";
+import type { OutboundResult } from "#src/server/egress/outbound-egress.server";
 import { ExternalInboxNoticeDelivery } from "#src/server/agents/external-inbox-notice-delivery.server";
 import { pushWebhookSealer } from "#src/server/agents/external-push-webhook-secret.server";
 import { MemoryPushWebhookStore } from "./memory-push-webhook-store";
@@ -21,7 +22,7 @@ export const hint: WakeHint = {
 export type Sent = { url: string; headers: Record<string, string>; body: string };
 
 export async function setup(
-  respond: () => { status: number; retryAfter?: string } | Error,
+  respond: () => OutboundResult | Error,
   over: { hints?: WakeHint[]; agent?: Parameters<MemoryPushWebhookStore["addAgent"]>[1] } = {},
 ) {
   const store = new MemoryPushWebhookStore();

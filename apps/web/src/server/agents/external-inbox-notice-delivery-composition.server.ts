@@ -5,6 +5,7 @@ import { ExternalInboxNoticeDelivery } from "./external-inbox-notice-delivery.se
 import {
   sendExternalInboxNotice,
   sendExternalInboxProbe,
+  sendExternalInboxRetry,
   type NoticeBoss,
 } from "./external-inbox-notice-queue.server";
 import { productionPushWebhookSealer } from "./external-push-webhook-secret.server";
@@ -17,7 +18,7 @@ export function createExternalInboxNoticeDelivery(boss: NoticeBoss, egress = new
     sealer: productionPushWebhookSealer,
     listHints: (scope) => listWakeHints(db, scope),
     reschedule: (agentId, noticeId, delaySeconds) =>
-      sendExternalInboxNotice(boss, agentId, { noticeId, delaySeconds }),
+      sendExternalInboxRetry(boss, agentId, noticeId, delaySeconds),
     scheduleProbe: (agentId, delaySeconds) => sendExternalInboxProbe(boss, agentId, delaySeconds),
     announce: (agentId) => sendExternalInboxNotice(boss, agentId),
   });

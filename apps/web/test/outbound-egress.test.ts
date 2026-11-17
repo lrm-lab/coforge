@@ -111,6 +111,20 @@ test("a Retry-After the endpoint answers with is returned, and nothing else of t
   });
 });
 
+test("the X-Request-Id an endpoint answers with is returned when it is printable ASCII of at most 128 characters", async () => {
+  const answer = (requestId: string) =>
+    new OutboundEgress({
+      resolve: public4,
+      fetch: async () =>
+        new Response(null, { status: 204, headers: { "x-request-id": requestId } }),
+    }).sendToAny("https://hooks.example/x", { method: "POST" }, 5_000);
+  expect(await answer("req_123-abc")).toEqual({ status: 204, requestId: "req_123-abc" });
+  expect(await answer("r".repeat(128))).toEqual({ status: 204, requestId: "r".repeat(128) });
+  expect(await answer("r".repeat(129))).toEqual({ status: 204 });
+  expect(await answer("caf\u00e9")).toEqual({ status: 204 });
+  expect(await answer("")).toEqual({ status: 204 });
+});
+
 test("a request is pinned to the checked address, verified against the real hostname", async () => {
   const seen: { url: string; init: BunFetchRequestInit }[] = [];
   const egress = new OutboundEgress({

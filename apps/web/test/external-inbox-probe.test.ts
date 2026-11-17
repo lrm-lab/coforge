@@ -1,9 +1,12 @@
 import { createHmac } from "node:crypto";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import type { SendOptions } from "pg-boss";
 import { NOTICE_SCHEMA } from "#src/server/agents/external-inbox-notice-delivery.server";
 import {
   sendExternalInboxNotice,
   sendExternalInboxProbe,
+  sendExternalInboxRetry,
+  type NoticeBoss,
 } from "#src/server/agents/external-inbox-notice-queue.server";
 import { PROBE_WINDOW_SECONDS } from "#src/server/agents/external-push-recovery.server";
 import { NOW, SECRET, setup } from "./helpers/notice-delivery-harness";
@@ -163,5 +166,61 @@ describe("the probe job", () => {
       options: { singletonKey: "a1:probe", startAfter: 7200 },
     });
     expect(sent[1]).toMatchObject({ options: { singletonKey: "a1" } });
+  });
+});
+
+function shortPolicyBoss() {
+  const queued = new Set<string>();
+  const sent: { data: unknown; options: SendOptions }[] = [];
+  const boss: NoticeBoss = {
+    send: async (_name, data, options) => {
+      const key = options.singletonKey ?? crypto.randomUUID();
+      if (queued.has(key)) return null;
+      queued.add(key);
+      sent.push({ data, options });
+      return key;
+    },
+  };
+  return { boss, sent };
+}
+
+describe("the retry job", () => {
+  test("is not swallowed by a fresh notice already queued for the Agent", async () => {
+    const { boss, sent } = shortPolicyBoss();
+    await sendExternalInboxNotice(boss, "a1");
+    await sendExternalInboxRetry(boss, "a1", "n1", 5);
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toMatchObject({
+      data: { agentId: "a1", noticeId: "n1" },
+      options: { singletonKey: "a1:retry", startAfter: 5 },
+    });
+  });
+
+  test("a send that returns null is logged as a structured event", async () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => undefined);
+    const { boss } = shortPolicyBoss();
+    await sendExternalInboxNotice(boss, "a1");
+    await sendExternalInboxNotice(boss, "a1");
+    await sendExternalInboxProbe(boss, "a1", 10);
+    await sendExternalInboxProbe(boss, "a1", 10);
+    await sendExternalInboxRetry(boss, "a1", "n1", 5);
+    await sendExternalInboxRetry(boss, "a1", "n2", 5);
+    const events = warn.mock.calls.map(([line]) => JSON.parse(String(line)));
+    warn.mockRestore();
+    expect(events).toEqual([
+      { event: "external_agent.inbox_notice_send_dropped", kind: "notice", agentId: "a1" },
+      { event: "external_agent.inbox_notice_send_dropped", kind: "probe", agentId: "a1" },
+      { event: "external_agent.inbox_notice_send_dropped", kind: "retry", agentId: "a1" },
+    ]);
+  });
+});
+
+describe("a probe that fires before it is due", () => {
+  test("schedules itself again for the remaining time", async () => {
+    const early = await disabled(() => ({ status: 204 }));
+    early.clock.at = new Date(NOW.getTime() + HOUR - 90_500);
+    await early.probe();
+    expect(early.sent).toHaveLength(0);
+    expect(early.probes).toEqual([{ agentId: "a1", delaySeconds: 91 }]);
   });
 });

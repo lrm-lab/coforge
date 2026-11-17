@@ -159,3 +159,52 @@ test("heartbeats without a signal do not re-query the hints", async () => {
 test("a heartbeat past the safety interval re-queries the hints", async () => {
   expect(await hintQueriesAfterBeats(15)).toBeGreaterThan(1);
 });
+
+function lifecycle(over: { subscribe?: () => () => void; aborted?: boolean } = {}) {
+  const counts = { unsubscribed: 0, released: 0, listed: 0 };
+  const controller = new AbortController();
+  if (over.aborted) controller.abort();
+  const stream = openWakeStream(
+    {
+      listHints: async () => {
+        counts.listed++;
+        return [];
+      },
+      subscribe:
+        over.subscribe ??
+        (() => () => {
+          counts.unsubscribed++;
+        }),
+      revalidate: async () => true,
+      release: () => {
+        counts.released++;
+      },
+      heartbeatMs: 5,
+      debounceMs: 1,
+    },
+    controller.signal,
+  );
+  return { counts, controller, stream };
+}
+
+test("a request already aborted opens nothing and releases the slot", async () => {
+  const { counts, stream } = lifecycle({ aborted: true });
+  const result = await stream
+    .getReader()
+    .read()
+    .catch(() => ({ done: true }));
+  await Bun.sleep(30);
+  expect(result.done).toBe(true);
+  expect(counts).toEqual({ unsubscribed: 0, released: 1, listed: 0 });
+});
+
+test("a subscribe that throws releases the slot and errors the stream", async () => {
+  const { counts, stream } = lifecycle({
+    subscribe: () => {
+      throw new Error("bus down");
+    },
+  });
+  await expect(stream.getReader().read()).rejects.toThrow("bus down");
+  await Bun.sleep(30);
+  expect(counts.released).toBe(1);
+});

@@ -141,12 +141,22 @@ export function openWakeStream(
   return new ReadableStream<Uint8Array>({
     async start(c) {
       controller = c;
+      if (aborted.aborted) {
+        close();
+        return;
+      }
       aborted.addEventListener("abort", close, { once: true });
-      unsubscribe = deps.subscribe(onSignal);
-      heartbeat = setInterval(() => void beat(), heartbeatMs);
-      await refresh(true);
+      try {
+        unsubscribe = deps.subscribe(onSignal);
+        heartbeat = setInterval(() => void beat(), heartbeatMs);
+        await refresh(true);
+      } catch (error) {
+        shutdown();
+        throw error;
+      }
     },
     cancel() {
+      aborted.removeEventListener("abort", close);
       shutdown();
     },
   });

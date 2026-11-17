@@ -234,6 +234,50 @@ describe("the landing lookup", () => {
   });
 });
 
+describe("the landing lookup scope", () => {
+  test("a channel message not delivered to the external member signals nothing, a mention or a DM does", async () => {
+    const { f, agentId, post, dm, channel } = await world();
+    await db.agent.update({ where: { id: agentId }, data: { hosting: "external" } });
+    const woken: string[] = [];
+    const enqueued: string[] = [];
+    const deps = {
+      notify: (id: string) => woken.push(id),
+      enqueueNotice: async (id: string) => {
+        enqueued.push(id);
+      },
+    };
+    const store = new PrismaExternalPushWebhookStore(db);
+    await store.save({
+      agentId,
+      workspaceId: f.workspaceId,
+      url: "https://hooks.example/x",
+      secretSealed: "v1.x.y",
+    });
+    await db.conversationMember.updateMany({
+      where: { conversationId: channel.id, agentId },
+      data: { notificationLevel: "relevant" },
+    });
+    const plain = await post("nobody in particular");
+    await noticeExternalInbox(db, { conversationId: channel.id, messageId: plain.id }, deps);
+    expect(woken).toEqual([]);
+    expect(enqueued).toEqual([]);
+
+    const mention = await post(`@${f.key} you`);
+    await noticeExternalInbox(db, { conversationId: channel.id, messageId: mention.id }, deps);
+    expect(woken).toEqual([agentId]);
+    expect(enqueued).toEqual([agentId]);
+
+    const direct = await dm("hello");
+    await noticeExternalInbox(
+      db,
+      { conversationId: direct.conversationId, messageId: direct.sent.id },
+      deps,
+    );
+    expect(woken).toEqual([agentId, agentId]);
+    expect(enqueued).toEqual([agentId, agentId]);
+  });
+});
+
 describe("the push webhook store", () => {
   test("saves, fences attempts by revision, re-enables on a new save and cascades with the Agent", async () => {
     const { f, agentId } = await world();

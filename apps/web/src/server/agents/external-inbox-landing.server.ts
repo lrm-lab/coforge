@@ -1,4 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { liveDeliverySql } from "#src/server/db/repositories/agent-attention-deliveries.repositories.server";
 import { startedAppNotificationQueue } from "#src/server/app-notifications/app-notification-queue.server";
 import { sendExternalInboxNotice } from "./external-inbox-notice-queue.server";
 import { externalInboxSignal } from "./external-inbox-signal.server";
@@ -33,12 +34,17 @@ export async function noticeExternalInbox(
       LEFT JOIN "external_agent_push_webhooks" w ON w."agentId" = a."id"
       WHERE c."id" = ${message.conversationId}::uuid
         AND (EXISTS (
+          SELECT 1 FROM "agent_message_deliveries" d
+          WHERE d."messageId" = ${message.messageId}::uuid AND d."agentId" = a."id"
+            AND ${liveDeliverySql("d")}
+        ) OR (c."directKey" IS NOT NULL AND EXISTS (
           SELECT 1 FROM "conversation_members" m
           WHERE m."conversationId" = c."id" AND m."agentId" = a."id" AND m."leftAt" IS NULL
-        ) OR EXISTS (
-          SELECT 1 FROM "pending_mention_actions" p
-          WHERE p."messageId" = ${message.messageId}::uuid AND p."targetAgentId" = a."id"
-        ))`;
+        ) AND EXISTS (
+          SELECT 1 FROM "messages" msg
+          JOIN "conversation_members" sm ON sm."id" = msg."senderMemberId"
+          WHERE msg."id" = ${message.messageId}::uuid AND sm."userId" IS NOT NULL
+        )))`;
     await Promise.all(
       agents.map(({ agentId, pushable }) => {
         deps.notify(agentId);

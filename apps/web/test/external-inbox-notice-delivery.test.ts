@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { NOTICE_SCHEMA } from "#src/server/agents/external-inbox-notice-delivery.server";
 import { NonPublicAddressError } from "#src/server/egress/outbound-egress.server";
 import { NOW, SECRET, hint, setup } from "./helpers/notice-delivery-harness";
@@ -205,5 +205,40 @@ describe("a registration changed mid-attempt", () => {
     });
     await run();
     expect(store.rows.get("a1")!.consecutiveFailures).toBe(0);
+  });
+});
+
+describe("the delivery log event", () => {
+  test("carries the delivery id and the request id the receiver answered with", async () => {
+    const info = spyOn(console, "info").mockImplementation(() => undefined);
+    const { run } = await setup(() => ({ status: 204, requestId: "recv-42" }));
+    await run("n9");
+    const events = info.mock.calls.map(([line]) => JSON.parse(String(line)));
+    info.mockRestore();
+    expect(events).toEqual([
+      {
+        event: "external_agent.inbox_notice_response",
+        agentId: "a1",
+        deliveryId: "n9",
+        status: 204,
+        requestId: "recv-42",
+      },
+    ]);
+  });
+
+  test("omits the request id when the receiver sent none", async () => {
+    const info = spyOn(console, "info").mockImplementation(() => undefined);
+    const { run } = await setup(() => ({ status: 500 }));
+    await run("n9");
+    const events = info.mock.calls.map(([line]) => JSON.parse(String(line)));
+    info.mockRestore();
+    expect(events).toEqual([
+      {
+        event: "external_agent.inbox_notice_response",
+        agentId: "a1",
+        deliveryId: "n9",
+        status: 500,
+      },
+    ]);
   });
 });

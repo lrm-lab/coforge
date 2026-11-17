@@ -145,7 +145,13 @@ export class ExternalInboxNoticeDelivery {
     const at = this.now();
     const { disabledAt, nextProbeAt } = row;
     if (row.disabledReason !== "endpoint_rejected" || !disabledAt || !nextProbeAt) return;
-    if (nextProbeAt > at) return;
+    if (nextProbeAt > at) {
+      await this.deps.scheduleProbe(
+        row.agentId,
+        Math.ceil((nextProbeAt.getTime() - at.getTime()) / 1000),
+      );
+      return;
+    }
     const sealer = await this.prepare(row, agent);
     if (!sealer) return;
     const noticeId = (this.deps.newId ?? (() => crypto.randomUUID()))();
@@ -223,6 +229,15 @@ export class ExternalInboxNoticeDelivery {
           body,
         },
         WEBHOOK_REQUEST_TIMEOUT_MS,
+      );
+      console.info(
+        JSON.stringify({
+          event: "external_agent.inbox_notice_response",
+          agentId: row.agentId,
+          deliveryId: notice.noticeId,
+          status: result.status,
+          ...(result.requestId ? { requestId: result.requestId } : {}),
+        }),
       );
       return classify(result, row.consecutiveFailures, notice.at);
     } catch (error) {

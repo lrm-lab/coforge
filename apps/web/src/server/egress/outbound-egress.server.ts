@@ -75,7 +75,9 @@ export class EgressProxyConfiguredError extends Error {
   }
 }
 
-export type OutboundResult = { status: number; retryAfter?: string };
+export type OutboundResult = { status: number; retryAfter?: string; requestId?: string };
+
+const REQUEST_ID = /^[\x21-\x7e]{1,128}$/;
 
 export type OutboundTarget = { hostname: string; address: string; family: 4 | 6 };
 
@@ -177,7 +179,12 @@ export class OutboundEgress {
     });
     await response.body?.cancel();
     const retryAfter = response.headers.get("retry-after");
-    return { status: response.status, ...(retryAfter ? { retryAfter } : {}) };
+    const requestId = response.headers.get("x-request-id");
+    return {
+      status: response.status,
+      ...(retryAfter ? { retryAfter } : {}),
+      ...(requestId && REQUEST_ID.test(requestId) ? { requestId } : {}),
+    };
   }
 
   /**
