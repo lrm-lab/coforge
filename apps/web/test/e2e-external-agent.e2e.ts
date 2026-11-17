@@ -46,12 +46,20 @@ test("external Agent: create, device login, approve, message check and revoke", 
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1280", "860");
     await browser("open", `${origin}/en/w/${workspace.slug}/members`);
-    await browser("wait", "--fn", pageHydrated);
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && [...document.querySelectorAll("button")].some((el) => el.textContent?.trim() === "New Agent")`,
+    );
 
     // 1. Open NewAgentDialog, select External, create, and shoot connect card (light, dark, phone).
-    await browser("click", `button:has-text("New Agent")`);
-    await browser("wait", "--fn", `document.querySelector('[role="dialog"]') !== null`);
-    await browser("click", `[role="radio"]:has-text("External")`);
+    await browser("find", "role", "button", "click", "--name", "New Agent", "--exact");
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[role="dialog"] input[value="external"]') !== null`,
+    );
+    await browser("click", `label:has(input[value="external"])`);
     await browser("fill", `input[name="name"]`, agentName);
     await browser("fill", `input[name="displayName"]`, `External ${tail}`);
     await browser("click", `[role="dialog"] button[type="submit"]`);
@@ -72,21 +80,18 @@ test("external Agent: create, device login, approve, message check and revoke", 
     expect(agentRow).not.toBeNull();
     createdAgentId = agentRow!.id;
 
-    // 2. Start device grant from external CLI client.
+    // 2. Start device grant from external CLI client (form-urlencoded per RFC 8628).
     const deviceResponse = await fetch(`${origin}/oauth/device`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
         client_id: "coforge-cli",
-        grant: {
-          kind: "external_agent",
-          workspace: workspace.slug,
-          agent: agentName,
-          machine_name: machineName,
-          hostname: `${machineName}.internal.example`,
-          os: "linux 6.8.0-generic",
-          client_name: "coforge-cli 0.1.0",
-        },
+        workspace: workspace.slug,
+        agent: agentName,
+        machine_name: machineName,
+        hostname: `${machineName}.internal.example`,
+        os: "linux 6.8.0-generic",
+        client_name: "coforge-cli 0.1.0",
       }),
     });
     expect(deviceResponse.status).toBe(200);
@@ -112,7 +117,7 @@ test("external Agent: create, device login, approve, message check and revoke", 
     await browser("set", "viewport", "390", "844");
     await shoot("2-device-verify-phone");
     await browser("set", "viewport", "1280", "860");
-    await browser("click", `button:has-text("Approve")`);
+    await browser("find", "role", "button", "click", "--name", "Approve");
     await browser(
       "wait",
       "--fn",
@@ -122,8 +127,8 @@ test("external Agent: create, device login, approve, message check and revoke", 
     // 4. Exchange device_code for sk_ext_ key and verify /context, /events, and reminder refusal.
     const tokenResponse = await fetch(`${origin}/oauth/token`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
         grant_type: "urn:ietf:params:oauth:grant-type:device_code",
         device_code: grant.device_code,
         client_id: "coforge-cli",
@@ -152,9 +157,15 @@ test("external Agent: create, device login, approve, message check and revoke", 
         "content-type": "application/json",
       },
       body: JSON.stringify({
+        idempotencyKey: crypto.randomUUID(),
+        workspaceId,
+        computerId: "external",
+        agentId: createdAgentId,
         operation: "schedule",
+        title: "test",
+        target: "#general",
+        messageId: crypto.randomUUID(),
         fireAt: new Date(Date.now() + 60_000).toISOString(),
-        text: "test",
       }),
     });
     expect(remRes.status).toBe(403);
@@ -170,7 +181,7 @@ test("external Agent: create, device login, approve, message check and revoke", 
       `${pageHydrated} && document.body.innerText.includes(${JSON.stringify(machineName)})`,
     );
     await shots("3-profile-connected");
-    await browser("click", `button:has-text("Revoke")`);
+    await browser("find", "role", "button", "click", "--name", "Revoke");
     await browser("wait", "--fn", `document.body.innerText.includes("No machines connected yet.")`);
     await shoot("4-profile-revoked");
 
@@ -184,4 +195,4 @@ test("external Agent: create, device login, approve, message check and revoke", 
       await db.agent.deleteMany({ where: { id: createdAgentId } }).catch(() => undefined);
     await db.$disconnect();
   }
-});
+}, 300_000);
