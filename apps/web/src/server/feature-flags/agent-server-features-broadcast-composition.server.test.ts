@@ -1,6 +1,17 @@
-import { expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 
-import { installAgentServerFeaturesBroadcast } from "./agent-server-features-broadcast-composition.server";
+import {
+  installAgentServerFeaturesBroadcast,
+  resetAgentServerFeaturesBroadcastForTest,
+} from "./agent-server-features-broadcast-composition.server";
+
+beforeEach(() => {
+  resetAgentServerFeaturesBroadcastForTest();
+});
+
+afterEach(() => {
+  resetAgentServerFeaturesBroadcastForTest();
+});
 
 test("install skips the broadcast with one info log when Centrifugo is not configured", () => {
   const info = spyOn(console, "info").mockImplementation(() => {});

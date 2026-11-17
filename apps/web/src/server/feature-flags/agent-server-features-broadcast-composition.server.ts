@@ -26,6 +26,15 @@ export function createAgentServerFeaturesBroadcaster(
 
 let installed = false;
 let broadcastQueue = Promise.resolve();
+let activeStop: (() => void) | undefined;
+
+/** Resets process-wide broadcast state so tests do not leak singleton state across files. */
+export function resetAgentServerFeaturesBroadcastForTest() {
+  activeStop?.();
+  activeStop = undefined;
+  installed = false;
+  broadcastQueue = Promise.resolve();
+}
 
 /** Installs the process-wide reload hook. A failed broadcast never invalidates the flag reload.
  * Without a configured Centrifugo server API there is no daemon channel to publish on, so the
@@ -40,7 +49,12 @@ export function installAgentServerFeaturesBroadcast(env = process.env): () => vo
         reason: "centrifugo_server_api_not_configured",
       }),
     );
-    return () => {};
+    const uninstall = () => {
+      if (activeStop === uninstall) activeStop = undefined;
+      installed = false;
+    };
+    activeStop = uninstall;
+    return uninstall;
   }
   const publish = () => {
     const db = getDatabaseClient();
@@ -57,6 +71,12 @@ export function installAgentServerFeaturesBroadcast(env = process.env): () => vo
     });
   };
   const stop = onFeatureFlagsChanged(publish);
+  const uninstall = () => {
+    if (activeStop === uninstall) activeStop = undefined;
+    installed = false;
+    stop();
+  };
+  activeStop = uninstall;
   publish();
-  return stop;
+  return uninstall;
 }
