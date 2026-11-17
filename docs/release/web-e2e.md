@@ -22,6 +22,10 @@ logs, and the screenshots the tests wrote under `.amp/e2e/`.
 
 ## What is on the list
 
+Admission to the scheduled list requires three consecutive clean runs on a private stack,
+followed by a clean run on the Linux runner. Temporary scheduling budgets must be explicitly
+annotated and replaced by measured runtime after the first successful CI run.
+
 Every `.e2e.ts` under `apps/web/test` must be registered exactly once: either in
 `scripts/e2e/web-e2e-ci.txt` with the seconds used to balance shards, or in
 `scripts/e2e/web-e2e-ci-excluded.txt` with a non-empty reason. The exclusion file does not run
