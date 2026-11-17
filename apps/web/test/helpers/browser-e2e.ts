@@ -26,6 +26,17 @@ export const hydratedElement = (element: string) =>
   `Object.keys(${element} ?? {}).some((key) => key.startsWith("__reactProps"))`;
 
 /**
+ * `element` (as in {@link hydratedElement}) is hydrated and holding still: neither it nor any
+ * ancestor is running an animation. A click is aimed where the element is when it is measured; a
+ * dialog still zooming in (`zoom-in-95`) moves its controls, and on a slow runner the press arrived
+ * after the zoom ended, just below the button it was aimed at (task #coforge-backend:#23, CI run
+ * 44034672096: 3 of 10 runs pressed the `dl` under the status trigger). Animations elsewhere on
+ * the page do not count.
+ */
+export const elementAtRest = (element: string) =>
+  `(() => { const target = ${element}; if (!target || !(${hydratedElement("target")})) return false; for (let node = target; node instanceof Element; node = node.parentElement) if (node.getAnimations().some((animation) => animation.playState === "running")) return false; return true; })()`;
+
+/**
  * The local stack a browser E2E runs against: the Web service (`COFORGE_E2E_WEB_URL`),
  * `agent-browser`, and PostgreSQL (`DATABASE_URL`). Anything not local is refused, so a run never
  * seeds or resets a shared database.
@@ -185,7 +196,9 @@ export async function pickTaskPriority(
   scope: string,
   label: string,
 ) {
-  await run("click", `${scope} button[aria-label^="Change priority:"]`);
+  const trigger = `${scope} button[aria-label^="Change priority:"]`;
+  await run("wait", "--fn", elementAtRest(`document.querySelector(${JSON.stringify(trigger)})`));
+  await run("click", trigger);
   await run(
     "wait",
     "--fn",
