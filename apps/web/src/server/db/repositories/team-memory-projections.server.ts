@@ -7,12 +7,14 @@ export type Row = TeamMemoryDraft & {
   workspaceId: string;
   revision: number;
   status: string;
-  authorAgentId: string;
+  authorAgentId: string | null;
+  authorUserId?: string | null;
   updatedAt: Date;
 };
 export type Version = {
   snapshot: Prisma.JsonValue;
-  actorAgentId: string;
+  actorAgentId: string | null;
+  actorUserId?: string | null;
   operation: string;
   reason: string;
   mergedFrom: Prisma.JsonValue;
@@ -23,6 +25,7 @@ export function versionHead(version: Version): TeamMemoryHead {
     ...(version.snapshot as unknown as TeamMemoryHead),
     change: {
       actorAgentId: version.actorAgentId,
+      actorUserId: version.actorUserId ?? null,
       operation: version.operation,
       reason: version.reason,
       mergedFrom: version.mergedFrom as { id: string; revision: number }[],
@@ -37,6 +40,9 @@ export function head(row: Row): TeamMemoryHead {
     revision: row.revision,
     status: row.status,
     authorAgentId: row.authorAgentId,
+    authorUserId: row.authorUserId ?? null,
+    projectId: row.projectId ?? null,
+    pinned: row.pinned ?? false,
     updatedAt: row.updatedAt.toISOString(),
     title: row.title,
     content: row.content,

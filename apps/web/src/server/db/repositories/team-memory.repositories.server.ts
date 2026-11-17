@@ -1,3 +1,5 @@
+import { teamMemoryCatalog } from "./team-memory-projects.repositories.server";
+import { memoryReceipts } from "./team-memory-receipts.repositories.server";
 import { teamMemoryAccess as access } from "./team-memory-access.repositories.server";
 import {
   head,
@@ -12,6 +14,7 @@ import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import {
   teamMemoryTerms,
   type TeamMemoryCommand,
+  type TeamMemoryCatalogCommand,
   type TeamMemoryDraft,
   type TeamMemoryHead,
   type TeamMemoryResult,
@@ -41,6 +44,8 @@ async function search(
   workspaceId: string,
   query: string,
   offset = 0,
+  projectId?: string,
+  archived = false,
 ): Promise<Row[]> {
   const terms = teamMemoryTerms(query);
   if (!terms.length) return [];
@@ -51,9 +56,10 @@ async function search(
   );
   return db.$queryRaw<Row[]>(Prisma.sql`
     SELECT id, workspace_id AS "workspaceId", title, left(content, 600) AS content, left(source, 200) AS source, kind, applicability, status,
-      revision, author_agent_id AS "authorAgentId", updated_at AS "updatedAt"
-    FROM team_memory_entries WHERE workspace_id = ${workspaceId}::uuid AND status = 'active'
+      revision, author_agent_id AS "authorAgentId", author_user_id AS "authorUserId", project_id AS "projectId", pinned, updated_at AS "updatedAt"
+    FROM team_memory_entries WHERE workspace_id = ${workspaceId}::uuid AND status = ${archived ? "archived" : "active"}
     AND (${Prisma.join(matches, " OR ")})
+    ${projectId ? Prisma.sql`AND project_id = ${projectId}::uuid` : Prisma.empty}
     ORDER BY (${Prisma.join(ranks, " + ")}) DESC, updated_at DESC, id ASC LIMIT 11 OFFSET ${offset}`);
 }
 
@@ -70,9 +76,13 @@ function page(rows: Row[], offset: number, snippets = false): TeamMemoryResult {
 export class PrismaTeamMemoryStore implements TeamMemoryStore {
   constructor(private readonly db: PrismaClient) {}
 
+  catalog(actor: TeamMemoryActor, command: TeamMemoryCatalogCommand): Promise<TeamMemoryResult> {
+    return teamMemoryCatalog(this.db, actor, command);
+  }
+
   async read(
     actor: TeamMemoryActor,
-    command: Exclude<TeamMemoryCommand, TeamMemoryWrite>,
+    command: Exclude<TeamMemoryCommand, TeamMemoryWrite | TeamMemoryCatalogCommand>,
   ): Promise<TeamMemoryResult> {
     return this.db.$transaction(
       async (tx) => {
@@ -85,15 +95,22 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
           );
         if (command.operation === "search")
           return page(
-            await search(tx, actor.workspaceId, command.query, command.offset),
+            await search(
+              tx,
+              actor.workspaceId,
+              command.query,
+              command.offset,
+              command.projectId,
+              command.archived,
+            ),
             command.offset ?? 0,
             true,
           );
         if (command.operation === "list")
           return page(
-            await tx.$queryRaw<
-              Row[]
-            >`SELECT id, workspace_id AS "workspaceId", title, left(content,600) AS content, left(source,200) AS source, kind, applicability, status, revision, author_agent_id AS "authorAgentId", updated_at AS "updatedAt" FROM team_memory_entries WHERE workspace_id = ${actor.workspaceId}::uuid AND status = ${command.archived ? "archived" : "active"} ORDER BY updated_at DESC, id ASC LIMIT 11 OFFSET ${command.offset ?? 0}`,
+            await tx.$queryRaw<Row[]>(
+              Prisma.sql`SELECT id, workspace_id AS "workspaceId", title, left(content,600) AS content, left(source,200) AS source, kind, applicability, status, revision, author_agent_id AS "authorAgentId", author_user_id AS "authorUserId", project_id AS "projectId", pinned, updated_at AS "updatedAt" FROM team_memory_entries WHERE workspace_id = ${actor.workspaceId}::uuid AND status = ${command.archived ? "archived" : "active"} ${command.projectId ? Prisma.sql`AND project_id = ${command.projectId}::uuid` : Prisma.empty} ORDER BY updated_at DESC, id ASC LIMIT 11 OFFSET ${command.offset ?? 0}`,
+            ),
             command.offset ?? 0,
             true,
           );
@@ -117,7 +134,7 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
           SELECT snapshot || jsonb_build_object(
             'content', left(ltrim(snapshot->>'content', ${PREVIEW_WHITESPACE}), 600),
             'source', left(ltrim(snapshot->>'source', ${PREVIEW_WHITESPACE}), 200)
-          ) AS snapshot, actor_agent_id AS "actorAgentId", operation, left(reason, 200) AS reason, merged_from AS "mergedFrom"
+          ) AS snapshot, actor_agent_id AS "actorAgentId", actor_user_id AS "actorUserId", operation, left(reason, 200) AS reason, merged_from AS "mergedFrom"
           FROM team_memory_versions
           WHERE workspace_id = ${actor.workspaceId}::uuid AND entry_id = ${target.id}::uuid
           ORDER BY revision DESC LIMIT 11 OFFSET ${offset}`;
@@ -163,14 +180,8 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
             ? `${command.title} ${command.content} ${command.applicability}`
             : head(await readTarget(tx, actor, command.id)).title;
         const related = await this.prepare(tx, actor, query);
-        const key = {
-          workspaceId: actor.workspaceId,
-          agentId: actor.agentId,
-          requestId: command.requestId,
-        };
-        const existing = await tx.teamMemoryReceipt.findUnique({
-          where: { workspaceId_agentId_requestId: key },
-        });
+        const receipts = memoryReceipts(tx, actor, command.requestId);
+        const existing = await receipts.get();
         if (existing && existing.fingerprint !== hash) throw new TeamMemoryError("conflict");
         if (existing?.entryId)
           return existing.deleted
@@ -186,12 +197,8 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
           reviewRevision: related.reviewRevision!,
           reviewExpiresAt: new Date(Date.now() + 10 * 60_000),
         };
-        await tx.$executeRaw`DELETE FROM team_memory_receipts WHERE (workspace_id, agent_id, request_id) IN (SELECT workspace_id, agent_id, request_id FROM team_memory_receipts WHERE workspace_id = ${actor.workspaceId}::uuid AND agent_id = ${actor.agentId}::uuid AND entry_id IS NULL AND review_expires_at < now() LIMIT 100)`;
-        await tx.teamMemoryReceipt.upsert({
-          where: { workspaceId_agentId_requestId: key },
-          create: { ...key, fingerprint: hash, ...data },
-          update: data,
-        });
+        await receipts.prune();
+        await receipts.review(hash, data);
         return { ...related, status: "review_required", reviewToken };
       },
       { isolationLevel: "RepeatableRead" },
@@ -212,14 +219,8 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
           const [state] = await tx.$queryRaw<
             { revision: number }[]
           >`SELECT revision FROM team_memory_states WHERE workspace_id = ${actor.workspaceId}::uuid FOR UPDATE`;
-          const receiptKey = {
-            workspaceId: actor.workspaceId,
-            agentId: actor.agentId,
-            requestId: command.requestId,
-          };
-          const receipt = await tx.teamMemoryReceipt.findUnique({
-            where: { workspaceId_agentId_requestId: receiptKey },
-          });
+          const receipts = memoryReceipts(tx, actor, command.requestId);
+          const receipt = await receipts.get();
           if (receipt && receipt.fingerprint !== hash) throw new TeamMemoryError("conflict");
           if (receipt?.entryId) {
             return receipt.deleted
@@ -265,7 +266,20 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
             command,
             target ? head(target) : undefined,
             sources.map(head),
-            admin,
+            admin ||
+              !!(
+                actor.userId &&
+                target?.authorAgentId &&
+                (await tx.agent.findFirst({
+                  where: {
+                    id: target.authorAgentId,
+                    workspaceId: actor.workspaceId,
+                    ownerId: actor.userId,
+                    deletedAt: null,
+                  },
+                  select: { id: true },
+                }))
+              ),
           );
           if (command.operation === "delete") {
             await tx.teamMemoryEntry.update({
@@ -284,14 +298,11 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
             await tx.teamMemoryVersion.deleteMany({
               where: { workspaceId: actor.workspaceId, entryId: target!.id },
             });
-            await tx.teamMemoryReceipt.update({
-              where: { workspaceId_agentId_requestId: receiptKey },
-              data: {
-                entryId: target!.id,
-                deleted: true,
-                reviewToken: null,
-                reviewExpiresAt: null,
-              },
+            await receipts.update({
+              entryId: target!.id,
+              deleted: true,
+              reviewToken: null,
+              reviewExpiresAt: null,
             });
             await tx.teamMemoryState.update({
               where: { workspaceId: actor.workspaceId },
@@ -313,14 +324,29 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
             if (!version) throw new TeamMemoryError("not_found");
             draft = version.snapshot as unknown as TeamMemoryHead;
           } else draft = "title" in command ? command : target!;
+          let projectId =
+            draft.projectId === undefined ? (target?.projectId ?? null) : draft.projectId;
+          if (projectId) {
+            const projects = await tx.$queryRaw<
+              { id: string }[]
+            >`SELECT id FROM projects WHERE id = ${projectId}::uuid AND "workspaceId" = ${actor.workspaceId}::uuid FOR SHARE`;
+            if (!projects.length) {
+              if (command.operation === "restore") projectId = null;
+              else throw new TeamMemoryError("forbidden");
+            }
+          }
           const data = {
+            projectId,
+            pinned: draft.pinned ?? target?.pinned ?? false,
             title: draft.title,
             content: draft.content,
             source: draft.source,
             kind: draft.kind,
             applicability: draft.applicability,
             dedupKey:
-              command.operation === "archive" ? `archived:${target!.id}` : teamMemoryDedup(draft),
+              command.operation === "archive"
+                ? `archived:${target!.id}`
+                : teamMemoryDedup({ ...draft, projectId }),
             searchText: searchText(draft),
             status: command.operation === "archive" ? "archived" : "active",
           };
@@ -333,7 +359,12 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
                 data: { ...data, revision: { increment: 1 } },
               })) as Row)
             : ((await tx.teamMemoryEntry.create({
-                data: { ...data, workspaceId: actor.workspaceId, authorAgentId: actor.agentId },
+                data: {
+                  ...data,
+                  workspaceId: actor.workspaceId,
+                  authorAgentId: actor.agentId ?? null,
+                  authorUserId: actor.userId ?? null,
+                },
               })) as Row);
           const saved = head(target);
           await tx.teamMemoryVersion.create({
@@ -342,7 +373,8 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
               entryId: target.id,
               revision: saved.revision,
               snapshot: { ...saved },
-              actorAgentId: actor.agentId,
+              actorAgentId: actor.agentId ?? null,
+              actorUserId: actor.userId ?? null,
               operation: command.operation,
               reason: "reason" in command ? command.reason : "Confirmed shared knowledge",
               mergedFrom: command.operation === "merge" ? command.sources : [],
@@ -360,17 +392,15 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
                   revision: source.revision + 1,
                   status: "archived",
                 },
-                actorAgentId: actor.agentId,
+                actorAgentId: actor.agentId ?? null,
+                actorUserId: actor.userId ?? null,
                 operation: "merge-source",
                 reason: `Merged into ${saved.id}`,
                 mergedFrom: [],
               })),
             });
           }
-          await tx.teamMemoryReceipt.update({
-            where: { workspaceId_agentId_requestId: receiptKey },
-            data: { entryId: target.id, reviewToken: null, reviewExpiresAt: null },
-          });
+          await receipts.update({ entryId: target.id, reviewToken: null, reviewExpiresAt: null });
           await tx.teamMemoryState.update({
             where: { workspaceId: actor.workspaceId },
             data: { revision: { increment: 1 } },

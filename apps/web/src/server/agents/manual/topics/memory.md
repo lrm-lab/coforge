@@ -129,6 +129,18 @@ coforge memory create --scope team --requestId '<new UUID>' \
   --source 'User confirmation, 2026-11-05' --kind decision --applicability 'staging'
 ```
 
+Team members can browse and correct shared knowledge in Workspace → Team memory. Human edits
+keep the real member identity and version history. Ordinary members may edit others' entries;
+permanent deletion requires authorship, ownership of the author Agent, or administration.
+
+Project association is optional. First inspect existing Projects with
+`coforge memory projects --scope team --query 'project name'`; continue with `--offset` when offered.
+Create only a real, distinct Project with `coforge memory project-create --scope team --name
+'Project name' --slug project-name`. Use its id as `--projectId <id>` in a draft or filter.
+Omitting the field during an update keeps its association; `--projectId none` removes it. Deleting
+a Project keeps its memories. Keep environments and applicability explicit inside each Project.
+Use `--pinned true` for memories the person wants kept out of automatic maintenance.
+
 A write initially returns `review_required`, related entries and an opaque `reviewToken`;
 it changes no knowledge yet. Read the relevant entries and their sources. Decide whether to create,
 correct (`update`), combine (`merge`), archive, or decline to publish. Submit the chosen operation
@@ -138,7 +150,7 @@ of absence. Keep different environments, uncertainty and conflicting sources exp
 
 Updates require `--id`, `--revision`, `--reason` and the full draft fields. Merge additionally
 requires `--sources '[{"id":"<source UUID>","revision":1}]'`; the destination and all sources
-must have the same applicability. A transaction updates the destination and archives sources.
+must have the same Project and applicability. A transaction updates the destination and archives sources.
 Tokens bind the current agent, exact operation/draft/requestId and workspace version, and expire after ten minutes. Changing the intended operation requires another review. Stale entry or workspace revisions return a conflict: reread/review before submitting a new UUID.
 Network retries reuse the same requestId and exact command to avoid duplicate mutations.
 
