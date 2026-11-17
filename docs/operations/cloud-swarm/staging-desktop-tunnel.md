@@ -47,11 +47,12 @@ After generating the key on the Swarm manager:
 ```sh
 gh variable set STAGING_DESKTOP_TUNNEL_PUBLIC_KEY --env staging --repo lrm-lab/coforge \
   < ~/.coforge-host/staging-desktop-tunnel.pub
-gh workflow run install-staging-desktop-tunnel-key.yml --repo lrm-lab/coforge --ref main
 ```
 
-The workflow SSHs as `deploy` with `DEPLOY_SSH_KEY` and appends the pubkey to
-`authorized_keys` (idempotent).
+`Deploy Web (staging)` appends that line to `deploy`'s `authorized_keys`
+(idempotent). The dedicated workflow
+`install-staging-desktop-tunnel-key.yml` does the same without a full deploy
+once it exists on `main`.
 
 ## Swarm manager: systemd unit
 
