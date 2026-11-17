@@ -33,6 +33,7 @@ import { SettingsCardFooter, SettingsField } from "#src/components/settings-layo
 import { saveErrorFrom, type SaveError } from "#src/components/save-error";
 import { m } from "#src/paraglide/messages";
 import { NotificationSettingsPanel } from "#src/features/notifications/notification-settings-panel";
+import type { BindArrival } from "#src/features/profiles/account-password-logic";
 import { AccountSettings, type AccountProfile } from "./settings-account";
 import { PreferencesSettings } from "./settings-preferences";
 import { WorkspaceProfileSettings } from "./settings-workspace-profile";
@@ -47,6 +48,10 @@ export interface SettingsContentProps {
   section?: SettingsSection;
   githubCallbackFailure?: GitHubCallbackFailure;
   onSectionChange?: (section: SettingsSection) => void;
+  /** Set while the page is opened by the way back from GitHub's confirmation, for the password dialog. */
+  bindArrival?: BindArrival;
+  /** Called once the page has taken `bindArrival` in, to drop it from the URL. */
+  onBindArrivalHandled?: () => void;
   profile: AccountProfile;
   /** The Agents the person created in this Workspace, for the profile. */
   createdAgents: Array<{ id: string; name: string; avatarUrl: string | null }>;

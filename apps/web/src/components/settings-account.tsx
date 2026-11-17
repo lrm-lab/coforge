@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useHydrated } from "@tanstack/react-router";
 import { Camera01, Check } from "@untitledui/icons";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { AccountPasswordDialog } from "#src/features/profiles/account-password-dialog";
 import { PersonAvatarDialog } from "#src/features/profiles/person-avatar-dialog";
 import { CreatedAgentFaces } from "#src/features/agents/created-agent-faces";
 import { Button } from "#src/components/base/buttons/button";
@@ -50,6 +51,8 @@ export function AccountSettings({
   onProfileSave,
   onAvatarUpload,
   onAvatarPresetChoose,
+  bindArrival,
+  onBindArrivalHandled,
 }: SettingsContentProps) {
   const hydrated = useHydrated();
   const [editing, setEditing] = useState(false);
@@ -59,6 +62,16 @@ export function AccountSettings({
   const [saveError, setSaveError] = useState<SaveError | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  // The way back from GitHub opens the password dialog at its bind step (or the reason it failed),
+  // and is then taken out of the URL so a reload does not open it again.
+  const [arrival, setArrival] = useState(bindArrival);
+  useEffect(() => {
+    if (!bindArrival) return;
+    setArrival(bindArrival);
+    setPasswordDialogOpen(true);
+    onBindArrivalHandled?.();
+  }, [bindArrival, onBindArrivalHandled]);
 
   useEffect(() => {
     if (!editing) {
@@ -209,6 +222,28 @@ export function AccountSettings({
               {/* The name is the heading above, so it is not listed again; a field with nothing
                   in it is left out rather than shown as a dash. */}
               <ContactValues profile={profile} />
+              <div className="flex min-w-0 flex-col gap-1">
+                <dt className="text-sm font-semibold text-primary">{m.settings_password()}</dt>
+                <dd>
+                  <Button
+                    type="button"
+                    color="secondary"
+                    size="sm"
+                    onPress={() => {
+                      setArrival(undefined);
+                      setPasswordDialogOpen(true);
+                    }}
+                  >
+                    {m.settings_password_set()}
+                  </Button>
+                </dd>
+              </div>
+              <AccountPasswordDialog
+                open={passwordDialogOpen}
+                onOpenChange={setPasswordDialogOpen}
+                profile={profile}
+                arrival={arrival}
+              />
               {profile.description ? (
                 <ProfileValue label={m.settings_user_description()} value={profile.description} />
               ) : null}

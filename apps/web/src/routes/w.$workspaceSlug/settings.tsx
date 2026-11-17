@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute, getRouteApi, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { z } from "zod";
@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { SettingsContent } from "#src/components/settings-content";
 import { GITHUB_CALLBACK_FAILURES } from "#src/features/integrations/github-callback";
+import { bindArrivalFrom } from "#src/features/profiles/account-password-logic";
 import { useAppToast } from "#src/components/ui/toast";
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { SettingsPending } from "#src/features/settings/settings-pending";
@@ -69,6 +70,15 @@ export const Route = createFileRoute("/w/$workspaceSlug/settings")({
       .enum(["connected", ...GITHUB_CALLBACK_FAILURES])
       .optional()
       .catch(undefined),
+    // The way back from GitHub's confirmation of who is adding a contact (`?bind=1`, or why not).
+    bind: z
+      .union([z.literal(1), z.literal("1")])
+      .optional()
+      .catch(undefined),
+    bindError: z
+      .enum(["github_denied", "github_failed", "identity_mismatch", "unavailable"])
+      .optional()
+      .catch(undefined),
     ...APPS_SETTINGS_SEARCH,
   }),
   // The loader reads nothing from the search. A navigation that stays on Settings (a section, the
@@ -111,7 +121,8 @@ function SettingsPage() {
   const [theme, setTheme] = useState<Theme>("system");
   const [hideEmptySidebarSections, setHideEmptySidebarSections] = useState(false);
   const [messageFullWidth, setMessageFullWidth] = useState(false);
-  const { section, github } = Route.useSearch();
+  const { section, github, bind, bindError } = Route.useSearch();
+  const bindArrival = useMemo(() => bindArrivalFrom({ bind, bindError }), [bind, bindError]);
   const navigate = Route.useNavigate();
   const {
     timeZone: savedTimeZone,
@@ -144,6 +155,11 @@ function SettingsPage() {
   const toast = useAppToast();
   const locale = savedLanguage ?? getLocale();
   const saveLanguage = useServerFn(saveLanguagePreference);
+
+  const dropBindArrival = useCallback(
+    () => void navigate({ search: { section }, replace: true }),
+    [navigate, section],
+  );
 
   async function changeLocale(next: Parameters<typeof setLocale>[0]) {
     await saveLanguage({ data: { language: next } });
@@ -325,6 +341,8 @@ function SettingsPage() {
 
   return (
     <SettingsContent
+      bindArrival={bindArrival}
+      onBindArrivalHandled={dropBindArrival}
       githubCallbackFailure={github === "connected" ? undefined : github}
       section={section}
       onSectionChange={(next) => void navigate({ search: { section: next }, replace: true })}
