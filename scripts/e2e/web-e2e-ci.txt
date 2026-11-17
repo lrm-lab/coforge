@@ -1,7 +1,6 @@
 # The browser e2es CI must pass (.github/workflows/web-e2e.yml), one per line: file, then the seconds
 # one run took on a private stack, which scripts/e2e/run-web-e2e-ci.sh uses to balance the shards.
-# A file is listed after it passed three clean runs in a row on a private stack and then on the
-# Linux runner (task #438: 2026-11-04, main a6618713e; second batch 2026-11-05, main 30c6ef0a2).
+# Every browser e2e must be registered here or in web-e2e-ci-excluded.txt with a reason.
 # Files that drive ego-browser (a signed-in desktop browser) never belong here: CI has none.
 e2e-activity-open-cached.e2e.ts 117
 e2e-task-popup-esc.e2e.ts 47
