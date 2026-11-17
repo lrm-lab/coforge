@@ -28,7 +28,11 @@ let installed = false;
 let broadcastQueue = Promise.resolve();
 let activeStop: (() => void) | undefined;
 
-/** Resets process-wide broadcast state so tests do not leak singleton state across files. */
+/**
+ * Resets process-wide broadcast state for tests. `assertStartupConfig` in `startup-config.server.ts`
+ * calls `installAgentServerFeaturesBroadcast()` across many tests without keeping its `stop` handle,
+ * so the composition test resets here rather than patching every startup-config test.
+ */
 export function resetAgentServerFeaturesBroadcastForTest() {
   activeStop?.();
   activeStop = undefined;
