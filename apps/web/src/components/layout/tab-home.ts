@@ -44,6 +44,7 @@ type BackTarget = "workspace" | "me" | "history";
  * Settings is reached from Me. */
 const WORKSPACE_PAGES: readonly string[] = [
   "projects",
+  "memory",
   "tasks",
   "members",
   "records",
