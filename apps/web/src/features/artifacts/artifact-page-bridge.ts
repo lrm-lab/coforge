@@ -70,6 +70,15 @@ export const BRIDGE_DATA_RATE_LIMIT_PER_MINUTE = 600;
 export const BRIDGE_DECLINES_BEFORE_MUTE = 3;
 export const BRIDGE_ERROR_REPORTS = 5;
 
+export const FRAME_STATUS = "coforge/notifications/frame-status";
+
+export function blockedFrameStatus(params: unknown): PageFrameStatus | null {
+  if (!isRecord(params)) return null;
+  const { state, reason, status } = params;
+  if (state !== "blocked" || typeof reason !== "string") return null;
+  return { state, reason, status: Number.isSafeInteger(status) ? Number(status) : 0 };
+}
+
 export type PageBridge = ReturnType<typeof createPageBridge>;
 
 export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
@@ -202,14 +211,11 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
         if (Number.isSafeInteger(params.total) && Number.isSafeInteger(params.active))
           host.reportFind({ total: Number(params.total), active: Number(params.active) });
         return;
-      case "coforge/notifications/frame-status":
-        if (params.state === "blocked" && typeof params.reason === "string")
-          host.frameStatus({
-            state: "blocked",
-            reason: params.reason,
-            status: Number.isSafeInteger(params.status) ? Number(params.status) : 0,
-          });
+      case FRAME_STATUS: {
+        const block = blockedFrameStatus(params);
+        if (block) host.frameStatus(block);
         return;
+      }
       default:
         return;
     }

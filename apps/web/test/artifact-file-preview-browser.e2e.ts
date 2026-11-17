@@ -93,6 +93,15 @@ test("a non-entry page runs on the artifact's origin and a PDF shows from it", a
     expect(new URL(pdf.src).host).toBe(`a-${created.id}.${new URL(sandboxOrigin).host}`);
     expect(pdf.sandboxed).toBe(false);
     await browser("screenshot", join(shots, "83-pdf.png"));
+    await evaluate(
+      `(() => { const f = document.querySelector("main iframe"); f.src = f.getAttribute("src"); return true; })()`,
+    );
+    await waitFor(`document.body.textContent.includes("这个视图已失效")`);
+    await browser("screenshot", join(shots, "84-pdf-expired.png"));
+    await browser("find", "role", "button", "click", "--name", "重新加载");
+    await waitFor(
+      `!document.body.textContent.includes("这个视图已失效") && document.querySelector("main iframe")?.src !== ${JSON.stringify(pdf.src)}`,
+    );
   } finally {
     await experiments.write(workspaceId, "artifacts", before);
     await db.conversation.delete({ where: { id: channel.id } }).catch(() => undefined);

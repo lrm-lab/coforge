@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { AppError } from "#src/lib/app-error";
 import { ArtifactSandbox } from "#src/server/artifacts/artifact-sandbox.server";
 import { MemoryTicketNonces } from "#src/server/artifacts/artifact-sandbox-nonces.server";
+import { SANDBOX_FILE_TTL_SECONDS } from "#src/server/artifacts/artifact-sandbox-ticket.server";
 import { sandboxFileUrlPath } from "#src/server/artifacts/artifact-sandbox-path.server";
 import { FRAME, openLink, openPage, subresource } from "./helpers/artifact-sandbox-open";
 
@@ -21,7 +22,7 @@ const FILES: Record<string, string> = {
   "notes.txt": "notes",
 };
 
-function sandbox(entryPath = "README.md") {
+function sandbox(entryPath = "README.md", now = () => NOW) {
   const row = (path: string) => ({
     path,
     sha256: `sha:${path}`,
@@ -44,7 +45,7 @@ function sandbox(entryPath = "README.md") {
     origin: SANDBOX,
     nonces: new MemoryTicketNonces(() => NOW.getTime()),
     secret: async () => SECRET,
-    now: () => NOW,
+    now,
   });
 }
 
@@ -108,6 +109,25 @@ describe("a PDF file", () => {
     const csp = response.headers.get("content-security-policy")!;
     expect(csp).toBe(`default-src 'none'; frame-ancestors ${APP}`);
     expect(await response.text()).toBe(FILES["docs/paper.pdf"]);
+  });
+
+  test("reloaded once its token has expired, tells the framing app so it can open it again", async () => {
+    let now = NOW;
+    const service = sandbox(undefined, () => now);
+    const { url } = await service.link({ ...linkInput, path: "docs/paper.pdf" });
+    const { filesUrl } = await openPage(service, url);
+    now = new Date(NOW.getTime() + SANDBOX_FILE_TTL_SECONDS * 1000);
+    const late = await service.serve(new Request(`${filesUrl}docs/paper.pdf`, { headers: FRAME }));
+    expect(late.status).toBe(403);
+    const page = await late.text();
+    expect(page).toContain('"method":"coforge/notifications/frame-status"');
+    expect(page).toContain('"reason":"expired"');
+    expect(page).toContain(JSON.stringify(APP));
+    const asset = await service.serve(
+      new Request(`${filesUrl}docs/paper.pdf`, { headers: subresource("empty") }),
+    );
+    expect(asset.status).toBe(403);
+    expect(await asset.text()).not.toContain("frame-status");
   });
 
   test("is still served as a subresource under the sandboxed policy", async () => {

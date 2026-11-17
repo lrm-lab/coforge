@@ -211,7 +211,13 @@ export class ArtifactSandbox {
     if (!token || token.s !== host.pageOrigin || token.a !== host.artifactId || !isOrigin(token.o))
       return sandboxRefusal(404, "Not found.");
     if (sandboxGrantExpired(token, this.deps.now()))
-      return sandboxRefusal(403, "This link has expired. Open the page again from CoForge.");
+      return use === "frame"
+        ? sandboxBlockedPage({
+            method: request.method,
+            block: { reason: "expired", status: 403 },
+            hostOrigin: token.o,
+          })
+        : sandboxRefusal(403, "This link has expired. Open the page again from CoForge.");
     const row =
       isPageFile(path) || isPdfDocument(path, use)
         ? await this.deps.reads

@@ -10,8 +10,10 @@
   an unspendable nonce refuses the ticket, never opens it), then a file token in the path
   (`/_f/<token>/<path>`) good for 10 minutes. A path, not a cookie: the page is a third-party frame
   and a browser may refuse it cookies. Both name the origin they are for and are refused on any
-  other. A used or expired ticket answers a small page that posts a `coforge/notifications/frame-status`
-  message to the ticket's embedder origin only.
+  other. A used or expired ticket, and an expired file token asked for a frame document (a page or a
+  PDF reloaded after 10 minutes), answer a small page that posts a
+  `coforge/notifications/frame-status` message to the embedder origin only; the viewer then offers
+  to reload, the PDF frame included.
 - The page's CSP and headers live in `artifact-sandbox-response.server.ts`; hosts a page may load
   from live only in `artifact-sandbox-cdns.server.ts`. A nonce or hash in `script-src` would turn
   `'unsafe-inline'` off, so the runtime (`artifact-page-runtime.server.ts`) is a script file of the

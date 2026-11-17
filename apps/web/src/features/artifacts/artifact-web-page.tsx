@@ -1,4 +1,4 @@
-import { useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Browser } from "@untitledui/icons";
 
@@ -13,7 +13,7 @@ import { ARTIFACTS_KEY } from "./artifact-queries";
 import { PageConfirmDialog } from "./artifact-page-confirm";
 import { ArtifactFrameCommentLayer } from "./artifact-frame-comment-layer";
 import { PageErrorBanner, PageExpiredCard, PageFindBar } from "./artifact-page-notices";
-import type { PageSuggestHandler } from "./artifact-page-bridge";
+import { blockedFrameStatus, FRAME_STATUS, type PageSuggestHandler } from "./artifact-page-bridge";
 import { useArtifactPageBridge } from "./use-artifact-page-bridge";
 
 const sandboxLinkQuery = (artifactId: string, version: number, path?: string) => ({
@@ -75,17 +75,36 @@ export function ArtifactPdfFrame({
 }) {
   return (
     <WithSandboxLink artifactId={artifactId} version={version} path={path}>
-      {(link) => (
-        <iframe
-          key={link.url}
-          aria-label={path}
-          src={link.url}
-          allow="clipboard-read 'none'; clipboard-write 'none'"
-          referrerPolicy="no-referrer"
-          className="min-h-[24rem] w-full flex-1 bg-white"
-        />
-      )}
+      {(link, reload) => <PdfFrame key={link.url} url={link.url} path={path} onReload={reload} />}
     </WithSandboxLink>
+  );
+}
+
+function PdfFrame({ url, path, onReload }: { url: string; path: string; onReload: () => void }) {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const [blocked, setBlocked] = useState(false);
+  useEffect(() => {
+    const origin = new URL(url).origin;
+    const listen = (event: MessageEvent) => {
+      if (event.source !== frame.current?.contentWindow || event.origin !== origin) return;
+      if (event.data?.method === FRAME_STATUS && blockedFrameStatus(event.data.params))
+        setBlocked(true);
+    };
+    window.addEventListener("message", listen);
+    return () => window.removeEventListener("message", listen);
+  }, [url]);
+  return (
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <iframe
+        ref={frame}
+        aria-label={path}
+        src={url}
+        allow="clipboard-read 'none'; clipboard-write 'none'"
+        referrerPolicy="no-referrer"
+        className="min-h-[24rem] w-full flex-1 bg-white"
+      />
+      {blocked && <PageExpiredCard onReload={onReload} />}
+    </div>
   );
 }
 
