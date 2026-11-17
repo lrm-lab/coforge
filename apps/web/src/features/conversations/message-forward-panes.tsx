@@ -7,6 +7,8 @@ import { Face } from "#src/features/pickers/entity-picker";
 import { PickerListRow } from "#src/features/pickers/picker-list";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { ChannelTitle } from "./channel-name";
+import { collageLayout } from "./collage-layout";
 import { ComposerField } from "./composer-field";
 import { COMPOSER_BOX_CLASS, COMPOSER_FOCUS_CLASS } from "./composer-frame";
 import {
@@ -52,9 +54,20 @@ function TargetRow({
       : target.kind === "agent"
         ? m.message_forward_target_agent()
         : undefined;
+  const channelFaces = target.kind === "channel" && collageLayout(target.members.length).length > 0;
   return (
     <PickerListRow
       label={target.name}
+      title={
+        channelFaces ? (
+          <ChannelTitle
+            name={target.name}
+            visibility={target.visibility}
+            hash={false}
+            lockClassName="size-3.5"
+          />
+        ) : undefined
+      }
       aria-label={
         target.kind === "agent"
           ? `${forwardTargetLabel(target)} @${target.handle}`
@@ -62,7 +75,13 @@ function TargetRow({
       }
       leading={
         target.kind === "channel" ? (
-          <Face face={{ kind: "channel", visibility: target.visibility }} />
+          <Face
+            face={{
+              kind: "channel",
+              visibility: target.visibility,
+              members: target.members,
+            }}
+          />
         ) : (
           <Face face={{ kind: "identity", name: target.name, src: target.avatarUrl }} />
         )
