@@ -177,6 +177,13 @@ test("P3 topics hold the how-to moved out of the standing prompt", () => {
   expect(findManualTopic("artifact-pages")?.body).toContain("window.coforge.use(name)");
   expect(findManualTopic("etiquette")?.body).toContain("## Live constraints");
   expect(findManualTopic("memory")?.body).toContain("coforge memory save --key");
+  expect(findManualTopic("memory-maintenance")?.body).toContain(
+    "coforge memory maintenance --scope team",
+  );
+  expect(findManualTopic("memory-maintenance")?.body).toContain("--maintenanceToken <token>");
+  expect(searchManualTopics("automatic team maintenance").map((topic) => topic.slug)).toContain(
+    "memory-maintenance",
+  );
   expect(MANUAL_TOPICS.map((topic) => topic.slug)).toEqual([
     "action-cards",
     "apps",
@@ -188,6 +195,7 @@ test("P3 topics hold the how-to moved out of the standing prompt", () => {
     "github",
     "manual",
     "memory",
+    "memory-maintenance",
     "profile",
     "reminders",
     "tasks",
