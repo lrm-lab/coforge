@@ -198,21 +198,33 @@ export class PrismaReminderDueRepository implements ReminderDueStore {
   }
 
   async acknowledge(request: ReminderDueAckRequest, now: Date): Promise<boolean> {
-    const where = {
-      id: request.occurrenceId,
-      reminderId: request.reminderId,
-      version: request.version,
-      workspaceId: request.workspaceId,
-      computerId: request.computerId,
-      agentId: request.agentId,
-    };
-    const changed = await this.db.reminderOccurrence.updateMany({
-      where: { ...where, status: "pending", expiresAt: { gt: now } },
-      data: { status: "delivered", deliveredAt: now },
+    const result = await this.db.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<Array<{ status: string }>>`
+        SELECT "status" FROM "reminder_occurrences"
+        WHERE "id" = ${request.occurrenceId}::uuid AND "reminderId" = ${request.reminderId}::uuid
+          AND "version" = ${request.version} AND "workspaceId" = ${request.workspaceId}::uuid
+          AND "computerId" = ${request.computerId}::uuid AND "agentId" = ${request.agentId}::uuid
+        FOR UPDATE`;
+      const previous = rows[0]?.status;
+      if (previous === "delivered") return { accepted: true, late: false };
+      if (!previous || !["pending", "expiring", "expired"].includes(previous))
+        return { accepted: false, late: false };
+      await tx.reminderOccurrence.update({
+        where: { id: request.occurrenceId },
+        data: { status: "delivered", deliveredAt: now },
+      });
+      return { accepted: true, late: previous === "expired" };
     });
-    if (changed.count) return true;
-    return Boolean(
-      await this.db.reminderOccurrence.findFirst({ where: { ...where, status: "delivered" } }),
-    );
+    if (result.late)
+      console.info(
+        JSON.stringify({
+          event: "reminder.due_ack_late",
+          occurrence_id: request.occurrenceId,
+          reminder_id: request.reminderId,
+          revision: request.version,
+          deduplicated: false,
+        }),
+      );
+    return result.accepted;
   }
 }

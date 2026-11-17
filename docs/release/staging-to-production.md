@@ -26,6 +26,17 @@ does not authorize a different candidate. An approval of `latest`, a branch,
 an unspecified future release, or a commit without its full `sha256:...` digest
 is invalid.
 
+### Reminder Due compatibility
+
+- [ ] Deploy the ReminderDue Web migrations and server before publishing a
+  Computer that advertises `reminder-due:v1`.
+- [ ] Verify that upgraded Computers use server delivery and legacy Computers
+  retain daemon timing; an overdue scheduled reminder is delivered once on upgrade.
+- [ ] Before rolling Web back to a server without Due support, first downgrade
+  every due-capable daemon. A daemon that stopped its timer cannot receive due
+  reminders from an older Web server. Pending Due records expire with an alert
+  on capability downgrade; they are never converted to legacy fires.
+
 ## Local Computer distribution
 
 The local Computer distribution uses the same two-party boundary, but what

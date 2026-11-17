@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, spyOn, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PrismaReminderDueRepository } from "#src/server/db/repositories/reminder-due.repositories.server";
@@ -42,6 +42,21 @@ beforeAll(async () => {
   agentId = agent.id;
 });
 
+beforeEach(async () => {
+  await db.workspaceComputer.update({
+    where: { workspaceId_computerId: { workspaceId, computerId } },
+    data: {
+      readyCapabilities: [REMINDER_DUE_CAPABILITY],
+      readyStartedAt: null,
+      readyWorkerInstanceId: null,
+    },
+  });
+});
+
+afterEach(async () => {
+  if (workspaceId) await db.reminder.deleteMany({ where: { workspaceId } });
+});
+
 afterAll(async () => {
   if (workspaceId) await db.workspace.delete({ where: { id: workspaceId } });
   if (userId) await db.computer.deleteMany({ where: { ownerId: userId } });
@@ -66,6 +81,7 @@ function createReminder(fireAt = new Date(now.getTime() - 1_000), repeat?: strin
 }
 
 test("legacy Computer stays untouched; first capable ready claims overdue exactly once", async () => {
+  await repository.record(workspaceId, computerId, [], { workerInstanceId: "old", startedAt: 0 });
   const reminder = await createReminder();
   await repository.claim(now);
   expect(await db.reminderOccurrence.count({ where: { reminderId: reminder.id } })).toBe(0);
@@ -82,6 +98,69 @@ test("legacy Computer stays untouched; first capable ready claims overdue exactl
   expect((await db.reminder.findUniqueOrThrow({ where: { id: reminder.id } })).status).toBe(
     "fired",
   );
+});
+
+test.each(["pending", "expiring", "expired"])(
+  "late ACK records custody from %s exactly once",
+  async (status) => {
+    const reminder = await createReminder();
+    await repository.claim(now);
+    const due = await db.reminderOccurrence.findUniqueOrThrow({
+      where: { reminderId_version: { reminderId: reminder.id, version: 1 } },
+    });
+    const late = new Date(now.getTime() + 8 * 86_400_000);
+    if (status === "expired") {
+      await repository.expire(late);
+      expect(
+        (await db.reminderOccurrence.findUniqueOrThrow({ where: { id: due.id } })).status,
+      ).toBe("expired");
+    } else if (status === "expiring") {
+      await repository.record(workspaceId, computerId, [], {
+        workerInstanceId: "downgraded",
+        startedAt: 2,
+      });
+    }
+    const info = spyOn(console, "info").mockImplementation(() => {});
+    try {
+      const ack = {
+        protocolMajor: 1,
+        requestId: "late-ack",
+        workspaceId,
+        computerId,
+        agentId,
+        occurrenceId: due.id,
+        reminderId: reminder.id,
+        version: 1,
+      };
+      expect(await repository.acknowledge(ack, late)).toBe(true);
+      expect(await repository.acknowledge(ack, late)).toBe(true);
+      expect(
+        (await db.reminderOccurrence.findUniqueOrThrow({ where: { id: due.id } })).status,
+      ).toBe("delivered");
+      expect((await repository.expire(late)).some((item) => item.occurrenceId === due.id)).toBe(
+        false,
+      );
+      if (status === "expired")
+        expect(
+          info.mock.calls.filter(([line]) => String(line).includes("reminder.due_ack_late")),
+        ).toHaveLength(1);
+    } finally {
+      info.mockRestore();
+    }
+  },
+);
+
+test("occurrence storage rejects a status outside the closed lifecycle", async () => {
+  const reminder = await createReminder();
+  await repository.claim(now);
+  await expect(
+    Promise.resolve(
+      db.reminderOccurrence.updateMany({
+        where: { reminderId: reminder.id },
+        data: { status: "unknown" },
+      }),
+    ),
+  ).rejects.toThrow("reminder_occurrences_status_check");
 });
 
 test("transport ACK is revision and scope bound, and replays idempotently", async () => {
