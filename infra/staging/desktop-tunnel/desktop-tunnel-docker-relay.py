@@ -13,6 +13,7 @@ import select
 import socket
 import subprocess
 import sys
+import threading
 
 
 def detect_private_ip() -> str:
@@ -39,18 +40,33 @@ TARGET = (
 
 
 def pipe(a: socket.socket, b: socket.socket) -> None:
-    sockets = [a, b]
-    while True:
-        readable, _, errored = select.select(sockets, [], sockets, 60)
-        if errored:
-            break
-        if not readable:
-            continue
-        for src in readable:
-            data = src.recv(65536)
-            if not data:
-                return
-            (b if src is a else a).sendall(data)
+    try:
+        while True:
+            readable, _, errored = select.select([a, b], [], [a, b], 60)
+            if errored or not readable:
+                break
+            for src in readable:
+                data = src.recv(65536)
+                if not data:
+                    return
+                (b if src is a else a).sendall(data)
+    finally:
+        for s in (a, b):
+            try:
+                s.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            s.close()
+
+
+def handle(client: socket.socket) -> None:
+    try:
+        upstream = socket.create_connection(TARGET, timeout=5)
+    except OSError as exc:
+        print(f"upstream connect failed: {exc}", file=sys.stderr, flush=True)
+        client.close()
+        return
+    pipe(client, upstream)
 
 
 def main() -> int:
@@ -64,24 +80,7 @@ def main() -> int:
     )
     while True:
         client, _addr = srv.accept()
-        try:
-            upstream = socket.create_connection(TARGET, timeout=5)
-        except OSError as exc:
-            print(f"upstream connect failed: {exc}", file=sys.stderr, flush=True)
-            client.close()
-            continue
-        pid = os.fork()
-        if pid == 0:
-            srv.close()
-            try:
-                pipe(client, upstream)
-            finally:
-                client.close()
-                upstream.close()
-            os._exit(0)
-        client.close()
-        upstream.close()
-        os.waitpid(pid, os.WNOHANG)
+        threading.Thread(target=handle, args=(client,), daemon=True).start()
 
 
 if __name__ == "__main__":

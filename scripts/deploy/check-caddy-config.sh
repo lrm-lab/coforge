@@ -58,9 +58,11 @@ if [ -z "$upstream" ]; then
 fi
 # Staging Compose interpolates the ECS private IP at deploy time; validate with
 # a loopback placeholder so `caddy validate` still sees host:port.
-if [[ "$upstream" == *'${'* ]]; then
+case "$upstream" in
+*"\${"*)
 	upstream="127.0.0.1:16090"
-fi
+	;;
+esac
 
 # `caddy validate` loads and provisions every module without starting servers
 # or obtaining certificates.
