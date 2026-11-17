@@ -4,7 +4,8 @@ import { ArrowUpRight } from "@untitledui/icons";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
-import { ActorAvatarStack, AVATAR_STACK_RING } from "#src/features/avatars/actor-avatar-stack";
+import { ActorAvatarStack } from "#src/features/avatars/actor-avatar-stack";
+import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { loadFinishedTasks } from "#src/features/tasks/tasks.functions";
 import { finishedSummaryQuery } from "#src/features/tasks/use-finished-tasks";
 import { m } from "#src/paraglide/messages";

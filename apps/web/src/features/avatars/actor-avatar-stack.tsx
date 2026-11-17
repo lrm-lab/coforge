@@ -2,13 +2,9 @@ import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "#src/lib/utils";
 import { ActorAvatar } from "./actor-avatar";
+import { AVATAR_STACK_RING } from "./avatar-stack-ring";
 
 const OVERLAP = { tight: "-space-x-1", loose: "-space-x-1.5" } as const;
-
-export const AVATAR_STACK_RING = {
-  thin: "ring-[1.5px] ring-bg-primary",
-  regular: "ring-2 ring-bg-primary",
-} as const;
 
 export function ActorAvatarStack({
   overlap = "loose",

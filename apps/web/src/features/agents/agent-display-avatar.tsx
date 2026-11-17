@@ -5,6 +5,7 @@ import { IdentityAvatar } from "#src/features/avatars/identity-avatar";
 import { m } from "#src/paraglide/messages";
 import { agentDisplay } from "./agent-status-display";
 import { agentAvatarUrl } from "./agent-mascot";
+import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 
 export type AvatarSize = NonNullable<AvatarProps["size"]>;
 
@@ -83,7 +84,7 @@ export function AgentStackFace({
       alt=""
       src={agent.avatarUrl ?? agentAvatarUrl(agent.id)}
       name={agent.displayName}
-      className="ring-2 ring-bg-primary"
+      className={AVATAR_STACK_RING.regular}
     />
   );
 }
