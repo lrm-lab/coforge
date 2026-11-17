@@ -5,12 +5,10 @@ artifact-file-preview-browser.e2e.ts 待分拣
 artifact-page-annotate-browser.e2e.ts 待分拣
 artifact-page-bridge-browser.e2e.ts 待分拣
 artifact-page-data-browser.e2e.ts 待分拣
-e2e-activity-bulk-shots.e2e.ts 待分拣
 e2e-activity-bulk.e2e.ts 待分拣
 e2e-activity-days.e2e.ts 待分拣
 e2e-activity-flow.e2e.ts 待分拣
 e2e-activity-keyboard.e2e.ts 待分拣
-e2e-activity-keys-shots.e2e.ts 待分拣
 e2e-agent-activity-days.e2e.ts 待分拣
 e2e-agent-app-tokens.e2e.ts 待分拣
 e2e-agent-create-default-runtime.e2e.ts 待分拣
