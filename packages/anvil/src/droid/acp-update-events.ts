@@ -1,15 +1,12 @@
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import { acpToolOutput, acpToolUpdateEnded } from "#src/acp-tool-output";
-import { AGENT_RUNTIME_EVENT_TYPE } from "#src/contract";
+import { acpContextUsage } from "#src/acp-context-usage";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import type { DroidAcpRuntimeHost } from "./acp-host";
 
-/** One turn's ACP `session/update` projection: text and thinking deltas pass through, tool calls
- * announce once and end once, shell tools feed reply-intent, and every call closes its ledger. */
 export class DroidAcpTurnEvents {
   readonly #started = new Set<string>();
   readonly #ended = new Set<string>();
-  /** The output text already emitted per tool call: ACP resends the whole content each update. */
   readonly #output = new Map<string, string>();
   readonly #scanner;
   constructor(private readonly host: DroidAcpRuntimeHost) {
@@ -64,31 +61,9 @@ export class DroidAcpTurnEvents {
         }
         return events.length ? events : [{ type: "progress", source: "droid_tool_call_update" }];
       }
-      case "usage_update": {
-        // Verified on droid 1.4.1: every turn's answer carries the context reading
-        // (`{"used":348,"size":250000}` after a one-word prompt).
-        const used = update.used;
-        const size = update.size;
-        return typeof used === "number" &&
-          typeof size === "number" &&
-          Number.isFinite(used) &&
-          Number.isFinite(size) &&
-          used >= 0 &&
-          size > 0
-          ? [
-              {
-                type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE,
-                usedTokens: used,
-                windowTokens: size,
-              },
-            ]
-          : [];
-      }
+      case "usage_update":
+        return acpContextUsage(update);
       case "compaction_update":
-        // UNSTABLE in ACP: an agent sends this only after the client advertised
-        // `session.compaction` (see `acp/connection.ts`). Droid 1.4.1 never sent one in the
-        // verified handshake, so the provider does not declare compaction reporting; the branch
-        // only keeps the event if a later build starts publishing it.
         if (update.status === "in_progress") return [{ type: "compaction-started" }];
         if (update.status === "completed") return [{ type: "compaction-finished" }];
         if (update.status === "failed" || update.status === "cancelled")

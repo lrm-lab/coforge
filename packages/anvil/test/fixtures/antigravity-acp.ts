@@ -1,6 +1,6 @@
 import { appendFile, readFile, writeFile } from "node:fs/promises";
 if (process.argv.includes("--version")) {
-  console.log("1.5.0");
+  console.log("1.5.10");
   process.exit(0);
 }
 for (const name of ["SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY"]) {
@@ -10,15 +10,52 @@ for (const name of ["SSH_CLIENT", "SSH_CONNECTION", "SSH_TTY"]) {
   }
 }
 const log = Bun.env.AGY_ACP_FIXTURE_LOG;
-const configOptions = Bun.env.AGY_ACP_FIXTURE_CONFIG_OPTIONS
+const EFFORTS: Record<string, string[] | undefined> = {
+  "gemini-4-carbon": ["low", "medium", "high"],
+  "gemini-4-hydrogen": ["low", "medium", "high", "xhigh"],
+};
+let configOptions: Array<Record<string, unknown>> = Bun.env.AGY_ACP_FIXTURE_CONFIG_OPTIONS
   ? JSON.parse(Bun.env.AGY_ACP_FIXTURE_CONFIG_OPTIONS)
-  : [];
+  : [
+      {
+        id: "model",
+        name: "Model",
+        category: "model",
+        type: "select",
+        currentValue: "gemini-4-carbon",
+        options: [
+          { value: "gemini-4-carbon", name: "Gemini 4 Carbon" },
+          { value: "gemini-4-hydrogen", name: "Gemini 4 Hydrogen" },
+          { value: "gpt-oss-120b-medium", name: "GPT-OSS 120B (Medium)" },
+        ],
+      },
+    ];
+const withEfforts = (model: unknown) => {
+  const efforts = typeof model === "string" ? EFFORTS[model] : undefined;
+  const rest = configOptions.filter((entry) => entry.category !== "thought_level");
+  if (!efforts) return rest;
+  return [
+    ...rest,
+    {
+      id: "thought_level",
+      name: "Thinking Level",
+      category: "thought_level",
+      type: "select",
+      currentValue: "medium",
+      options: efforts.map((value) => ({ value, name: value })),
+    },
+  ];
+};
+configOptions = withEfforts(configOptions.find((entry) => entry.id === "model")?.currentValue);
 const modes = Bun.env.AGY_ACP_FIXTURE_MODES
   ? JSON.parse(Bun.env.AGY_ACP_FIXTURE_MODES)
-  : [{ id: "yolo", name: "YOLO", description: "Approve everything without asking." }];
+  : [
+      { id: "default", name: "Default", description: "Ask before edits and commands." },
+      { id: "accept-edits", name: "Accept edits", description: "Approve file edits." },
+      { id: "auto", name: "Auto", description: "Approve edits and safe commands." },
+      { id: "plan", name: "Plan", description: "Plan carefully before executing a task." },
+    ];
 const sessionId = "agy-acp-fixture-session";
-// The real server keeps credentials on disk — the fixture's state file is their stand-in, so a
-// `logout` in one process is visible to the next status read's fresh `agy acp`.
 const stateFile = Bun.env.AGY_ACP_FIXTURE_STATE;
 let signedIn = Bun.env.AGY_ACP_FIXTURE_SIGNED_OUT !== "1";
 if (stateFile) {
@@ -30,7 +67,6 @@ const persistSignedIn = async () => {
   if (stateFile) await writeFile(stateFile, signedIn ? "1" : "0");
 };
 if (process.argv.includes("--help")) {
-  // `agy acp --help` — NO_LOGIN_FLAG leaves --login out, standing in for an agy that predates it.
   const flags = Bun.env.AGY_ACP_FIXTURE_NO_LOGIN_FLAG
     ? ""
     : "  --login                           Log in with Google interactively, then exit (ACP terminal auth)\n";
@@ -38,8 +74,6 @@ if (process.argv.includes("--help")) {
   process.exit(0);
 }
 if (process.argv.includes("--login")) {
-  // `agy acp --login` — the headless terminal auth flow: print the link, take the paste on
-  // stdin, and persist the sign-in the way the ACP process's state file already does.
   if (Bun.env.AGY_ACP_FIXTURE_LOGIN_CRASH) {
     console.error("fixture crash: no usable display or browser");
     process.exit(1);
@@ -64,8 +98,6 @@ if (process.argv.includes("--login")) {
     }
     if (Bun.env.AGY_ACP_FIXTURE_LOGIN_REJECT && code !== "good-code") {
       rejects += 1;
-      // One re-prompt, then the process gives up — the adapter must read the non-zero exit
-      // as a rejected sign-in rather than waiting for another paste.
       if (rejects >= 2) {
         console.log("login failed: too many rejected authorization codes");
         process.exit(1);
@@ -91,13 +123,18 @@ const update = (value: unknown) =>
     params: { sessionId: currentSessionId, update: value },
   });
 let prompts = 0;
-// A "held" prompt stays in-flight until the next prompt arrives — the steer proof.
 let heldReply: (() => void) | undefined;
+let cancelHeld: (() => void) | undefined;
 for await (const line of console) {
   const request = JSON.parse(line);
   if (log) await appendFile(log, `${JSON.stringify(request)}\n`);
   const reply = (result: unknown) => write({ jsonrpc: "2.0", id: request.id, result });
+  const fail = (code: number, message: string) =>
+    write({ jsonrpc: "2.0", id: request.id, error: { code, message } });
   switch (request.method) {
+    case "session/cancel":
+      cancelHeld?.();
+      break;
     case "initialize":
       reply({
         protocolVersion: 1,
@@ -110,7 +147,6 @@ for await (const line of console) {
       break;
     case "authenticate":
       if (Bun.env.AGY_ACP_FIXTURE_AUTH_HANG) {
-        // A sign-in that never completes: only disposal or a deadline ends it.
         heldReply = () => {};
         break;
       }
@@ -127,8 +163,6 @@ for await (const line of console) {
       reply({});
       break;
     case "logout":
-      // LOGOUT_NOOP: the server acknowledges the call but the account stays signed in — the
-      // adapter must report `still_logged_in` instead of claiming a sign-out.
       if (!Bun.env.AGY_ACP_FIXTURE_LOGOUT_NOOP) {
         signedIn = false;
         await persistSignedIn();
@@ -149,44 +183,71 @@ for await (const line of console) {
         break;
       }
       if (request.params.sessionId === "missing-session") {
-        write({
-          jsonrpc: "2.0",
-          id: request.id,
-          error: { code: -32002, message: "Session not found" },
-        });
+        fail(-32002, "Session not found");
         break;
       }
       currentSessionId = request.params.sessionId ?? sessionId;
-      reply({ sessionId: currentSessionId, configOptions, modes: { availableModes: modes } });
+      reply({
+        sessionId: currentSessionId,
+        configOptions,
+        modes: { availableModes: modes },
+      });
       break;
     case "session/set_mode":
-    case "session/set_config_option":
-      reply({ configOptions: [] });
+      reply({});
       break;
+    case "session/set_config_option": {
+      const { configId, value } = request.params;
+      const option = configOptions.find((entry) => entry.id === configId);
+      if (!option) {
+        fail(-32602, `Unknown config option: ${configId}`);
+        break;
+      }
+      const offered = (option.options as Array<{ value: string }>).some((o) => o.value === value);
+      if (!offered) {
+        fail(-32602, `Value ${value} is not offered for ${configId}`);
+        break;
+      }
+      configOptions = (configId === "model" ? withEfforts(value) : configOptions).map((entry) =>
+        entry.id === configId ? { ...entry, currentValue: value } : entry,
+      );
+      reply({ configOptions });
+      break;
+    }
     case "session/prompt": {
       const text = request.params.prompt[0].text;
       prompts++;
-      if (text === "tool-call") {
-        update({
-          sessionUpdate: "tool_call",
-          toolCallId: "t1",
-          title: "Bash",
-          rawInput: { command: "ls" },
-        });
-        update({
-          sessionUpdate: "tool_call_update",
-          toolCallId: "t1",
-          status: "completed",
-          content: [],
-        });
+      if (text.startsWith("run:")) {
+        const commandLine = text.slice("run:".length);
+        const rawInput = { CommandLine: commandLine, toolSummary: "Run a command" };
+        const call = { toolCallId: "t1", name: "run_command", kind: "execute", title: commandLine };
+        update({ sessionUpdate: "tool_call", ...call, status: "in_progress", rawInput });
+        update({ sessionUpdate: "tool_call_update", ...call, status: "completed", rawInput });
       }
+      if (text === "read-file") {
+        const rawInput = { Path: "/workspace/a.txt" };
+        const call = { toolCallId: "t2", name: "read_file", kind: "read", title: "File a.txt" };
+        update({ sessionUpdate: "tool_call", ...call, status: "in_progress", rawInput });
+        update({ sessionUpdate: "tool_call_update", ...call, status: "completed", rawInput });
+      }
+      update({ sessionUpdate: "usage_update", used: 9000 + prompts, size: 1048576 });
+      const hold = (flush: () => void) => {
+        heldReply = () => {
+          cancelHeld = undefined;
+          flush();
+        };
+        cancelHeld = () => {
+          cancelHeld = undefined;
+          heldReply = undefined;
+          reply({ stopReason: "cancelled" });
+        };
+      };
       if (Bun.env.AGY_ACP_FIXTURE_HANG) {
-        // An accepted prompt emits work then stays live forever: only interrupt/disposal ends it.
         update({
           sessionUpdate: "agent_message_chunk",
           content: { type: "text", text: "working" },
         });
-        heldReply = () => {};
+        hold(() => {});
         break;
       }
       if (heldReply) {
@@ -195,20 +256,16 @@ for await (const line of console) {
         flush();
       }
       if (text === "held") {
-        // Holds its reply until the next prompt arrives: a second `session/prompt` accepted
-        // while this turn runs is the server's steer path.
-        heldReply = () => {
+        hold(() => {
           update({
             sessionUpdate: "agent_message_chunk",
             content: { type: "text", text: "held-ok" },
           });
           reply({ stopReason: "end_turn" });
-        };
+        });
         break;
       }
       if (text === "slow") {
-        // A steer whose answer takes a while: its work shows at once, the response lands later
-        // — a steer offered in between must still join the turn before `completed` fires.
         update({
           sessionUpdate: "agent_message_chunk",
           content: { type: "text", text: "slow-working" },

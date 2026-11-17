@@ -1,14 +1,25 @@
 import type { AgentRuntimeEvent } from "@coforge/agent";
+import { acpContextUsage } from "#src/acp-context-usage";
 import { acpToolOutput, acpToolUpdateEnded } from "#src/acp-tool-output";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import type { AntigravityAcpRuntimeHost } from "./acp-host";
 
-/** One turn's ACP `session/update` projection: text and thinking deltas pass through, tool calls
- * announce once and end once, shell tools feed reply-intent, and every call closes its ledger. */
+function antigravityToolCall(update: Readonly<Record<string, unknown>>) {
+  const name = nonEmptyString(update.name) ?? nonEmptyString(update.title);
+  if (!name) return undefined;
+  const rawInput = asRecord(update.rawInput);
+  const { CommandLine: command, Path: path } = rawInput ?? {};
+  const input = {
+    ...rawInput,
+    ...(typeof command === "string" ? { command } : {}),
+    ...(typeof path === "string" ? { file_path: path } : {}),
+  };
+  return { name, input: rawInput ? input : update.rawInput };
+}
+
 export class AntigravityAcpTurnEvents {
   readonly #started = new Set<string>();
   readonly #ended = new Set<string>();
-  /** The output text already emitted per tool call: ACP resends the whole content each update. */
   readonly #output = new Map<string, string>();
   readonly #scanner;
   constructor(private readonly host: AntigravityAcpRuntimeHost) {
@@ -31,17 +42,14 @@ export class AntigravityAcpTurnEvents {
       }
       case "tool_call": {
         const id = nonEmptyString(update.toolCallId);
-        const name = nonEmptyString(update.title);
-        if (!id || !name || this.#started.has(id)) return [];
+        const call = antigravityToolCall(update);
+        if (!id || !call || this.#started.has(id)) return [];
         this.#started.add(id);
         const events: AgentRuntimeEvent[] = [
-          { type: "tool-start", id, name, input: update.rawInput },
+          { type: "tool-start", id, name: call.name, input: call.input },
         ];
-        if (this.host.isShellToolName(name) && update.rawInput !== undefined) {
-          const intent = this.#scanner.feed({
-            callId: id,
-            fragment: JSON.stringify(update.rawInput),
-          });
+        if (this.host.isShellToolName(call.name) && call.input !== undefined) {
+          const intent = this.#scanner.feed({ callId: id, fragment: JSON.stringify(call.input) });
           if (intent) events.push(intent);
         }
         return events;
@@ -65,10 +73,9 @@ export class AntigravityAcpTurnEvents {
           ? events
           : [{ type: "progress", source: "antigravity_tool_call_update" }];
       }
+      case "usage_update":
+        return acpContextUsage(update);
       case "compaction_update":
-        // UNSTABLE in ACP: an agent sends this only after the client advertised
-        // `session.compaction` (see `acp/connection.ts`), and not every agent implements it. A
-        // repeated "in_progress" is de-duped into one episode by the daemon core.
         if (update.status === "in_progress") return [{ type: "compaction-started" }];
         if (update.status === "completed") return [{ type: "compaction-finished" }];
         if (update.status === "failed" || update.status === "cancelled")

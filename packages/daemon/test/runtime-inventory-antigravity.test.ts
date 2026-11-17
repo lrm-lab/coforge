@@ -21,7 +21,6 @@ import { anvilRuntimeFixtures } from "./fixtures/anvil-runtime";
 
 import { captureDaemonLogs } from "./log-capture";
 
-/** An inventory pass runs every provider's discovery at once and ends with the slowest. */
 const PASS_BUDGET_MS = Math.max(CATALOG_DISCOVERY_BUDGET_MS, ANTIGRAVITY_DISCOVERY_BUDGET_MS);
 
 const ACP_FIXTURE = anvilRuntimeFixtures.antigravityAcp;
@@ -29,6 +28,8 @@ const ACP_MODELS = JSON.stringify([
   {
     id: "model",
     name: "Model",
+    category: "model",
+    type: "select",
     currentValue: "gemini-3.8-flash-high",
     options: [
       { value: "gemini-3.8-flash-high", name: "Gemini 3.8 Flash (High)" },
@@ -48,37 +49,38 @@ function agyProbe(versionOutput: string, path = "/bin/agy"): ExternalCodeAgentPr
 }
 
 describe("Antigravity CLI version gate", () => {
-  test("compares dotted numbers, so 1.10.0 is newer than 1.5.0 and an unreadable version never gates", () => {
-    expect(ANTIGRAVITY_ACP_MIN_VERSION).toBe("1.5.0");
-    expect(isAntigravityAcpVersionUnsupported("1.4.9")).toBe(true);
+  test("compares dotted numbers, so 1.10.0 is newer than 1.5.8 and an unreadable version never gates", () => {
+    expect(ANTIGRAVITY_ACP_MIN_VERSION).toBe("1.5.8");
+    expect(isAntigravityAcpVersionUnsupported("1.5.7")).toBe(true);
+    expect(isAntigravityAcpVersionUnsupported("1.5.0")).toBe(true);
     expect(isAntigravityAcpVersionUnsupported("1.2.13")).toBe(true);
-    expect(isAntigravityAcpVersionUnsupported("1.5.0")).toBe(false);
-    expect(isAntigravityAcpVersionUnsupported("1.5.1")).toBe(false);
+    expect(isAntigravityAcpVersionUnsupported("1.5.8")).toBe(false);
+    expect(isAntigravityAcpVersionUnsupported("1.5.10")).toBe(false);
     expect(isAntigravityAcpVersionUnsupported("1.10.0")).toBe(false);
     expect(isAntigravityAcpVersionUnsupported("2.0.0")).toBe(false);
     expect(isAntigravityAcpVersionUnsupported("unknown")).toBe(false);
   });
 
   test("reports the runtime with the version `agy --version` prints", async () => {
-    await expect(discoverExternalCodeAgents(agyProbe("1.5.0\n"))).resolves.toEqual([
-      { provider: "antigravity", version: "1.5.0", displayName: "Antigravity CLI" },
+    await expect(discoverExternalCodeAgents(agyProbe("1.5.10\n"))).resolves.toEqual([
+      { provider: "antigravity", version: "1.5.10", displayName: "Antigravity CLI" },
     ]);
   });
 
   test("reads the version from the last token when a wrapper prints a line first", async () => {
     await expect(
-      discoverExternalCodeAgents(agyProbe("agy wrapper: using profile default\n1.5.1\n")),
+      discoverExternalCodeAgents(agyProbe("agy wrapper: using profile default\n1.5.11\n")),
     ).resolves.toEqual([
-      { provider: "antigravity", version: "1.5.1", displayName: "Antigravity CLI" },
+      { provider: "antigravity", version: "1.5.11", displayName: "Antigravity CLI" },
     ]);
   });
 
   test("reports the runtime as unusable, and logs a warning, when the CLI is below the baseline", async () => {
     const { records } = await captureDaemonLogs(async () => {
-      await expect(discoverExternalCodeAgents(agyProbe("1.4.9\n"))).resolves.toEqual([
+      await expect(discoverExternalCodeAgents(agyProbe("1.5.7\n"))).resolves.toEqual([
         {
           provider: "antigravity",
-          version: "1.4.9",
+          version: "1.5.7",
           displayName: "Antigravity CLI",
           unavailableCode: "version_unsupported",
         },
@@ -90,7 +92,7 @@ describe("Antigravity CLI version gate", () => {
     expect(warning?.properties).toMatchObject({
       provider: "antigravity",
       executable_name: "agy",
-      version: "1.4.9",
+      version: "1.5.7",
       minimum_version: ANTIGRAVITY_ACP_MIN_VERSION,
       outcome: "unavailable",
     });
@@ -104,8 +106,6 @@ describe("Antigravity CLI version gate", () => {
 });
 
 describe("Antigravity ACP model catalog in the inventory", () => {
-  // Pi's catalog is discovered in the same pass; each test's fake `piModels` and this fixture home
-  // keep it off the developer's real Pi SDK and configuration.
   const environment = {
     HOME: "/fixture/home",
     PATH: "",
@@ -117,7 +117,7 @@ describe("Antigravity ACP model catalog in the inventory", () => {
     "discovers the catalog of an installed runtime through `agy acp`",
     async () => {
       const inventory = await discoverCodeAgentInventory({
-        probe: agyProbe("1.5.0\n"),
+        probe: agyProbe("1.5.10\n"),
         commands: { antigravity: [process.execPath, ACP_FIXTURE] },
         environment: { ...environment, AGY_ACP_FIXTURE_CONFIG_OPTIONS: ACP_MODELS },
         piModels: async () => [],
@@ -125,7 +125,7 @@ describe("Antigravity ACP model catalog in the inventory", () => {
 
       expect(inventory.runtimes).toContainEqual({
         provider: "antigravity",
-        version: "1.5.0",
+        version: "1.5.10",
         displayName: "Antigravity CLI",
       });
       const catalog = inventory.catalogs.find((entry) => entry.provider === "antigravity");
@@ -142,7 +142,7 @@ describe("Antigravity ACP model catalog in the inventory", () => {
     "keeps the installed runtime when its catalog is unavailable",
     async () => {
       const inventory = await discoverCodeAgentInventory({
-        probe: agyProbe("1.5.0\n"),
+        probe: agyProbe("1.5.10\n"),
         commands: { antigravity: [process.execPath, "-e", "process.exit(1)"] },
         environment,
         piModels: async () => [],
@@ -163,7 +163,7 @@ describe("Antigravity ACP model catalog in the inventory", () => {
       );
       try {
         const inventory = await discoverCodeAgentInventory({
-          probe: agyProbe("1.4.9\n"),
+          probe: agyProbe("1.5.7\n"),
           commands: {
             antigravity: [
               process.execPath,
@@ -204,10 +204,10 @@ describe("Antigravity ACP model catalog in the inventory", () => {
       try {
         await Bun.write(agyPath, "#!/bin/sh\nexit 0\n");
         const runtimes = [
-          { provider: "antigravity" as const, version: "1.5.0", displayName: "Antigravity CLI" },
+          { provider: "antigravity" as const, version: "1.5.10", displayName: "Antigravity CLI" },
         ];
         const options = {
-          probe: agyProbe("1.5.0\n", agyPath),
+          probe: agyProbe("1.5.10\n", agyPath),
           commands: { antigravity: [process.execPath, ACP_FIXTURE] as const },
           environment: { ...environment, AGY_ACP_FIXTURE_CONFIG_OPTIONS: ACP_MODELS },
           piModels: async () => [],
@@ -216,7 +216,6 @@ describe("Antigravity ACP model catalog in the inventory", () => {
         const { catalogs: live } = await discoverCodeAgentCatalogs(runtimes, options);
         expect(live.find((catalog) => catalog.provider === "antigravity")?.models).toHaveLength(2);
 
-        // The cached read has no `commands`: it can only serve what the live pass wrote.
         const cached = await loadCachedCodeAgentCatalogs(runtimes, {
           probe: options.probe,
           piModels: options.piModels,
@@ -247,7 +246,7 @@ describe("Antigravity ACP model catalog in the inventory", () => {
       await Bun.write(join(geminiDirectory, "oauth_creds.json"), '{"expiry_date":1}');
       const environment = { HOME: home, PATH: "", PI_OFFLINE: "1" };
       const options = {
-        probe: agyProbe("1.5.0\n", agyPath),
+        probe: agyProbe("1.5.10\n", agyPath),
         commands: { antigravity: [process.execPath, ACP_FIXTURE] as const },
         environment: { ...environment, AGY_ACP_FIXTURE_CONFIG_OPTIONS: ACP_MODELS },
         piModels: async () => [],
@@ -256,32 +255,28 @@ describe("Antigravity ACP model catalog in the inventory", () => {
       const runtime = (version: string) => [
         { provider: "antigravity" as const, version, displayName: "Antigravity CLI" },
       ];
-      const served = async (version = "1.5.0") =>
+      const served = async (version = "1.5.10") =>
         (await loadCachedCodeAgentCatalogs(runtime(version), options)).catalogs.some(
           (catalog) => catalog.provider === "antigravity",
         );
 
-      await discoverCodeAgentCatalogs(runtime("1.5.0"), options);
+      await discoverCodeAgentCatalogs(runtime("1.5.10"), options);
       const cachedKey = (await Bun.file(
         join(stateDirectory, "code-agent-inventory-cache.json"),
       ).json()) as { antigravity?: { key?: string } };
-      expect(cachedKey.antigravity?.key).toContain("1.5.0|");
-      // Unchanged account: the key the live pass wrote is the one the cached read computes.
+      expect(cachedKey.antigravity?.key).toContain("1.5.10|");
       expect(await served()).toBe(true);
 
-      // A refreshed token rewrites the credential file without changing who is signed in.
       await Bun.write(join(geminiDirectory, "oauth_creds.json"), '{"expiry_date":2}');
       expect(await served()).toBe(true);
 
       await Bun.write(join(geminiDirectory, "google_account_id"), "account-two");
       expect(await served()).toBe(false);
 
-      // The upgrade that brings a different model list; the version is part of the key.
-      await discoverCodeAgentCatalogs(runtime("1.5.0"), options);
+      await discoverCodeAgentCatalogs(runtime("1.5.10"), options);
       expect(await served()).toBe(true);
-      expect(await served("1.5.1")).toBe(false);
+      expect(await served("1.5.11")).toBe(false);
 
-      // Signing out removes both files.
       await Bun.file(join(geminiDirectory, "google_account_id")).delete();
       await Bun.file(join(geminiDirectory, "oauth_creds.json")).delete();
       expect(await served()).toBe(false);

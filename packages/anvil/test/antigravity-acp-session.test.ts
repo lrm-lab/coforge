@@ -3,42 +3,87 @@ import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { AgentRuntimeEvent } from "@coforge/agent";
+import type { AgentRuntimeEvent, AgentSession } from "@coforge/agent";
 import { AntigravityAcpProvider } from "#src/antigravity/acp-provider";
+import { RuntimeModelNotFoundError } from "#src/contract";
 import { fixturePerTurnHost } from "./fixtures/runtime-host";
 
 const TEST_ACP_TIMEOUT_MS = 10_000;
 
-async function fixture(modes?: readonly Record<string, string>[]) {
+type Modes = readonly Record<string, string>[];
+
+function host(environment: Record<string, string>, fed: string[] = []) {
+  return {
+    clientInfo: { name: "agy-acp-fixture", version: "1" },
+    processTreeSpawner: fixturePerTurnHost.processTreeSpawner,
+    buildEnvironment: () => environment,
+    versionReader: async () => "1.5.10",
+    catalogCommandRunner: async () => ({ output: "{}", exitCode: 0 }),
+    readUsageEnvironment: () => ({}),
+    createReplyIntentScanner: () => ({
+      feed: (delta: { fragment: string }) => {
+        fed.push(delta.fragment);
+        return undefined;
+      },
+      complete: () => {},
+      reset: () => [],
+    }),
+    isShellToolName: (name: string) => name === "run_command",
+  };
+}
+
+async function fixture(modes?: Modes) {
   const cwd = await mkdtemp(join(tmpdir(), "anvil-agy-acp-"));
   const log = join(cwd, "rpc.jsonl");
+  const fed: string[] = [];
   const provider = new AntigravityAcpProvider({
     acpTimeoutMs: TEST_ACP_TIMEOUT_MS,
     command: [process.execPath, new URL("./fixtures/antigravity-acp.ts", import.meta.url).pathname],
-    host: {
-      clientInfo: { name: "agy-acp-fixture", version: "1" },
-      processTreeSpawner: fixturePerTurnHost.processTreeSpawner,
-      buildEnvironment: () => ({
+    host: host(
+      {
         AGY_ACP_FIXTURE_LOG: log,
         ...(modes ? { AGY_ACP_FIXTURE_MODES: JSON.stringify(modes) } : {}),
-      }),
-      versionReader: async () => "1.5.0",
-      catalogCommandRunner: async () => ({ output: "{}", exitCode: 0 }),
-      readUsageEnvironment: () => ({}),
-      createReplyIntentScanner: () => ({
-        feed: () => undefined,
-        complete: () => {},
-        reset: () => [],
-      }),
-      isShellToolName: () => false,
-    },
+      },
+      fed,
+    ),
   });
   const requests = async () =>
     (await readFile(log, "utf8"))
       .split("\n")
       .filter(Boolean)
       .map((line) => JSON.parse(line));
-  return { provider, cwd, requests, cleanup: () => rm(cwd, { recursive: true, force: true }) };
+  return { provider, cwd, requests, fed, cleanup: () => rm(cwd, { recursive: true, force: true }) };
+}
+
+type Fixture = Awaited<ReturnType<typeof fixture>>;
+
+const options = (cwd: string, runtime = { model: "gemini-4-carbon", reasoning: "high" }) => ({
+  agentWorkspaceDirectory: cwd,
+  instructions: "standing instructions",
+  runtime,
+});
+
+async function withSession(
+  body: (context: {
+    f: Fixture;
+    session: AgentSession;
+    events: AgentRuntimeEvent[];
+  }) => Promise<void>,
+  setup: { modes?: Modes; open?: (cwd: string) => object } = {},
+) {
+  const f = await fixture(setup.modes);
+  try {
+    const session = await f.provider.createAgentSession((setup.open ?? options)(f.cwd) as never);
+    const events: AgentRuntimeEvent[] = [];
+    session.subscribe((event) => events.push(event));
+    try {
+      await body({ f, session, events });
+    } finally {
+      await session.dispose();
+    }
+  } finally {
+    await f.cleanup();
+  }
 }
 
 const waitFor = async (ready: () => boolean) => {
@@ -46,198 +91,204 @@ const waitFor = async (ready: () => boolean) => {
   expect(ready()).toBe(true);
 };
 
-const options = (cwd: string) => ({
-  agentWorkspaceDirectory: cwd,
-  instructions: "standing instructions",
-  runtime: { model: "gemini-3.1-pro-high", reasoning: "high" },
-});
+const completed = (events: AgentRuntimeEvent[]) => events.filter((e) => e.type === "completed");
 
-test("a launch injects instructions, replays yolo, applies model and effort", async () => {
-  const f = await fixture();
-  try {
-    const session = await f.provider.createAgentSession(options(f.cwd) as never);
+const waitForRequest = async (f: Fixture, method: string) => {
+  for (let i = 0; i < 100; i++) {
+    if ((await f.requests()).some((r) => r.method === method)) return;
+    await Bun.sleep(20);
+  }
+  throw new Error(`${method} never reached agy`);
+};
+
+const configCalls = async (f: Fixture) =>
+  (await f.requests())
+    .filter((r) => r.method === "session/set_config_option")
+    .map((r) => [r.params.configId, r.params.value]);
+
+test("a launch injects instructions and selects the auto mode", async () => {
+  await withSession(async ({ f }) => {
     const requests = await f.requests();
-    const sessionNew = requests.find((r) => r.method === "session/new");
-    expect(sessionNew.params._meta).toEqual({
+    expect(requests.find((r) => r.method === "session/new").params._meta).toEqual({
       antigravity: { systemPrompt: { append: "standing instructions" } },
     });
     expect(requests.find((r) => r.method === "session/set_mode")?.params).toMatchObject({
-      modeId: "yolo",
+      modeId: "auto",
     });
-    const configCalls = requests.filter((r) => r.method === "session/set_config_option");
-    expect(configCalls).toContainEqual(
-      expect.objectContaining({
-        params: expect.objectContaining({ configId: "model", value: "gemini-3.1-pro-high" }),
-      }),
-    );
-    expect(configCalls).toContainEqual(
-      expect.objectContaining({
-        params: expect.objectContaining({ configId: "thinking_level", value: "high" }),
-      }),
-    );
-    await session.dispose();
-  } finally {
-    await f.cleanup();
-  }
+  });
 });
 
-test("a 1.5.9-style mode list selects auto instead of yolo", async () => {
-  const f = await fixture([
-    { id: "default", name: "Default", description: "Ask before edits." },
-    { id: "auto", name: "Auto", description: "Approve edits and safe commands." },
-  ]);
-  try {
-    const session = await f.provider.createAgentSession(options(f.cwd) as never);
-    const mode = (await f.requests()).find((r) => r.method === "session/set_mode");
-    expect(mode?.params).toMatchObject({ modeId: "auto" });
-    await session.dispose();
-  } finally {
-    await f.cleanup();
-  }
+test.each([
+  [
+    "the current model only sets its effort",
+    "gemini-4-carbon",
+    "high",
+    [["thought_level", "high"]],
+  ],
+  [
+    "thought_level follows the model just applied",
+    "gemini-4-hydrogen",
+    "xhigh",
+    [
+      ["model", "gemini-4-hydrogen"],
+      ["thought_level", "xhigh"],
+    ],
+  ],
+  [
+    "a model without a thought_level select keeps its own default",
+    "gpt-oss-120b-medium",
+    "high",
+    [["model", "gpt-oss-120b-medium"]],
+  ],
+  ["an effort already current sends nothing", "gemini-4-carbon", "medium", []],
+])("%s", async (_name, model, reasoning, calls) => {
+  await withSession(async ({ f }) => expect(await configCalls(f)).toEqual(calls), {
+    open: (cwd) => options(cwd, { model, reasoning }),
+  });
 });
 
-test("a mode list without an automatic equivalent opens without set_mode", async () => {
-  const f = await fixture([
-    { id: "default", name: "Default", description: "Ask before edits." },
-    { id: "plan", name: "Plan", description: "Plan carefully." },
-  ]);
-  try {
-    const session = await f.provider.createAgentSession(options(f.cwd) as never);
-    expect((await f.requests()).some((r) => r.method === "session/set_mode")).toBe(false);
-    await session.dispose();
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("does not infer a mode from its description", async () => {
-  const f = await fixture([
-    { id: "automatic", name: "Auto", description: "Approve automatically." },
-  ]);
-  try {
-    const session = await f.provider.createAgentSession(options(f.cwd) as never);
-    expect((await f.requests()).some((r) => r.method === "session/set_mode")).toBe(false);
-    await session.dispose();
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("a missing stored session is replaced with a fresh one and reported", async () => {
+test.each([
+  [
+    "a model agy does not offer",
+    { model: "gemini-3.1-pro-high", reasoning: "" },
+    RuntimeModelNotFoundError,
+  ],
+  [
+    "an effort the model does not offer",
+    { model: "gemini-4-carbon", reasoning: "xhigh" },
+    /thought_level/,
+  ],
+])("%s fails the launch", async (_name, runtime, failure) => {
   const f = await fixture();
   try {
-    const replaced: Array<[string, string | undefined]> = [];
-    const session = await f.provider.createAgentSession({
-      ...options(f.cwd),
-      sessionId: "missing-session",
-      onSessionId: async (id: string, prev: string | undefined) => {
-        replaced.push([id, prev]);
-      },
-    } as never);
-    expect(replaced).toEqual([["agy-acp-fixture-session", "missing-session"]]);
-    const requests = await f.requests();
-    const load = requests.find((r) => r.method === "session/load");
-    expect(load).toBeDefined();
-    await session.dispose();
+    const launch = f.provider.createAgentSession(options(f.cwd, runtime) as never);
+    if (failure instanceof RegExp) await expect(launch).rejects.toThrow(failure);
+    else await expect(launch).rejects.toBeInstanceOf(failure);
+    expect(await configCalls(f)).toEqual([]);
   } finally {
     await f.cleanup();
   }
 });
 
-test("a resumed session replays the session/load with the meta envelope", async () => {
-  const f = await fixture();
-  try {
-    const session = await f.provider.createAgentSession({
-      ...options(f.cwd),
-      sessionId: "native-session-1",
-    } as never);
-    const requests = await f.requests();
-    const load = requests.find((r) => r.method === "session/load");
-    expect(load?.params.sessionId).toBe("native-session-1");
-    expect(load?.params._meta.antigravity.systemPrompt.append).toBe("standing instructions");
-    await session.dispose();
-  } finally {
-    await f.cleanup();
-  }
+test.each([
+  [
+    "no automatic mode",
+    [
+      { id: "default", name: "Default", description: "Ask before edits." },
+      { id: "plan", name: "Plan", description: "Plan carefully." },
+    ],
+  ],
+  ["a look-alike id", [{ id: "automatic", name: "Auto", description: "Approve automatically." }]],
+])("a mode list with %s opens without set_mode", async (_name, modes) => {
+  await withSession(
+    async ({ f }) => {
+      expect((await f.requests()).some((r) => r.method === "session/set_mode")).toBe(false);
+    },
+    { modes },
+  );
+});
+
+test("a stored session agy answers -32002 for is replaced with a fresh one and reported", async () => {
+  const replaced: Array<[string, string | undefined]> = [];
+  await withSession(
+    async () => {
+      expect(replaced).toEqual([["agy-acp-fixture-session", "missing-session"]]);
+    },
+    {
+      open: (cwd) => ({
+        ...options(cwd),
+        sessionId: "missing-session",
+        onSessionId: async (id: string, prev: string | undefined) => {
+          replaced.push([id, prev]);
+        },
+      }),
+    },
+  );
+});
+
+test("a resumed session loads with the meta envelope and opens no new session", async () => {
+  await withSession(
+    async ({ f }) => {
+      const requests = await f.requests();
+      const load = requests.find((r) => r.method === "session/load");
+      expect(load?.params.sessionId).toBe("native-session-1");
+      expect(load?.params._meta.antigravity.systemPrompt.append).toBe("standing instructions");
+      expect(requests.some((r) => r.method === "session/new")).toBe(false);
+    },
+    { open: (cwd) => ({ ...options(cwd), sessionId: "native-session-1" }) },
+  );
 });
 
 test("a notice during a live turn steers it instead of waiting for the turn's end", async () => {
-  const f = await fixture();
-  try {
-    const session = await f.provider.createAgentSession(options(f.cwd) as never);
-    const events: AgentRuntimeEvent[] = [];
-    session.subscribe((event) => events.push(event));
+  await withSession(async ({ f, session, events }) => {
     const first = session.sendMessage("held");
-    const second = session.sendMessage("second");
-    await second; // admitted while "held" was still in-flight — the fixture only ends it then
+    await session.sendMessage("second");
     await first;
     const prompts = (await f.requests()).filter((r) => r.method === "session/prompt");
     expect(prompts.map((r) => r.params.prompt[0].text)).toEqual(["held", "second"]);
-    expect(events.some((e) => e.type === "completed")).toBe(true);
-    await session.dispose();
-  } finally {
-    await f.cleanup();
-  }
+    expect(completed(events).length).toBeGreaterThan(0);
+  });
 });
 
 test("a steered turn emits one completed and keeps its tool calls on one reader", async () => {
-  const f = await fixture();
-  try {
-    const session = await f.provider.createAgentSession(options(f.cwd) as never);
-    const events: AgentRuntimeEvent[] = [];
-    session.subscribe((event) => events.push(event));
+  await withSession(async ({ session, events }) => {
     const first = session.sendMessage("held");
-    const second = session.sendMessage("tool-call");
-    await second;
+    await session.sendMessage("run:ls");
     await first;
-    // The steer answer ends the merged turn: tool events from the steered prompt join the same
-    // turn, and `completed` fires once when the last prompt resolves.
-    await waitFor(() => events.some((e) => e.type === "completed"));
-    expect(events.filter((e) => e.type === "completed")).toHaveLength(1);
+    await waitFor(() => completed(events).length > 0);
+    expect(completed(events)).toHaveLength(1);
     expect(events.some((e) => e.type === "tool-start")).toBe(true);
     expect(events.some((e) => e.type === "tool-end")).toBe(true);
-    await session.dispose();
-  } finally {
-    await f.cleanup();
-  }
+  });
 });
 
 test("a steer offered while an earlier steer's answer is pending still joins the turn", async () => {
-  const f = await fixture();
-  try {
-    const session = await f.provider.createAgentSession(options(f.cwd) as never);
-    const events: AgentRuntimeEvent[] = [];
-    session.subscribe((event) => events.push(event));
+  await withSession(async ({ session, events }) => {
     const first = session.sendMessage("held");
     const steerB = session.sendMessage("slow");
-    // Offered after the turn's own answer arrived but before the earlier steer settles — the
-    // drain must keep waiting for it rather than reporting `completed` with it in flight.
     await Bun.sleep(30);
     const steerC = session.sendMessage("extra");
     await Promise.all([first, steerB, steerC]);
-    await waitFor(() => events.some((e) => e.type === "completed"));
-    expect(events.filter((e) => e.type === "completed")).toHaveLength(1);
-    const text = events
-      .filter((e) => e.type === "text-delta")
-      .map((e) => (e as { text?: string }).text);
+    await waitFor(() => completed(events).length > 0);
+    expect(completed(events)).toHaveLength(1);
+    const text = events.flatMap((e) => (e.type === "text-delta" ? [e.text] : []));
     expect(text).toContain("slow-working");
     expect(text).toContain("extra-working");
     expect(session.hasLiveTurn).toBe(false);
-    await session.dispose();
-  } finally {
-    await f.cleanup();
-  }
+  });
 });
 
-test("a relaunch after a process kill resumes the stored session", async () => {
+test("a refused steer reports notice-undelivered", async () => {
+  await withSession(async ({ session, events }) => {
+    const first = session.sendMessage("held");
+    const refused = session.sendMessage("refuse");
+    await first;
+    await refused;
+    expect(events.some((e) => e.type === "notice-undelivered")).toBe(true);
+  });
+});
+
+test("an interrupt cancels the turn and keeps the same agy process for the next turn", async () => {
+  await withSession(async ({ f, session, events }) => {
+    const held = session.sendMessage("held").catch(() => undefined);
+    await waitForRequest(f, "session/prompt");
+    await session.interrupt();
+    await held;
+    await session.sendMessage("after");
+    await waitFor(() => completed(events).length === 2);
+    const methods = (await f.requests()).map((r) => r.method);
+    expect(methods).toContain("session/cancel");
+    expect(methods.filter((m) => m === "initialize")).toHaveLength(1);
+    expect(completed(events).map((e) => e.status)).toEqual(["interrupted", "completed"]);
+    expect(events.some((e) => e.type === "error")).toBe(false);
+  });
+});
+
+test("a relaunch after the process is gone resumes the stored session", async () => {
   const f = await fixture();
   try {
     const first = await f.provider.createAgentSession(options(f.cwd) as never);
-    void first.sendMessage("held").catch(() => undefined);
-    await first.interrupt();
     await first.dispose();
-    // The daemon relaunches on the same id: the new process answers `session/load`, not
-    // `session/new`, and the session opens.
     const resumed = await f.provider.createAgentSession({
       ...options(f.cwd),
       sessionId: "resumed-session",
@@ -254,57 +305,52 @@ test("a relaunch after a process kill resumes the stored session", async () => {
   }
 });
 
-test("a refused steer reports notice-undelivered", async () => {
-  const f = await fixture();
-  try {
-    const session = await f.provider.createAgentSession(options(f.cwd) as never);
-    const events: AgentRuntimeEvent[] = [];
-    session.subscribe((event) => events.push(event));
-    const first = session.sendMessage("held");
-    const refused = session.sendMessage("refuse");
-    await first;
-    await refused;
-    expect(events.some((e) => e.type === "notice-undelivered")).toBe(true);
-    await session.dispose();
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("an interrupted turn reports completed as interrupted", async () => {
-  const f = await fixture();
-  try {
-    const session = await f.provider.createAgentSession(options(f.cwd) as never);
-    const events: AgentRuntimeEvent[] = [];
-    session.subscribe((event) => events.push(event));
-    void session.sendMessage("held").catch(() => undefined);
-    await session.interrupt();
-    expect(events.filter((e) => e.type === "completed")).toEqual([
-      expect.objectContaining({ status: "interrupted" }),
-    ]);
-    expect(events.some((e) => e.type === "error")).toBe(false);
-    await session.dispose();
-  } finally {
-    await f.cleanup();
-  }
-});
-
-test("a tool call emits start and a matching end", async () => {
-  const f = await fixture();
-  try {
-    const session = await f.provider.createAgentSession(options(f.cwd) as never);
-    const events: AgentRuntimeEvent[] = [];
-    session.subscribe((event) => events.push(event));
-    await session.sendMessage("tool-call");
-    await waitFor(() => events.some((e) => e.type === "completed"));
-    expect(events).toContainEqual(expect.objectContaining({ type: "tool-start", id: "t1" }));
+test("run_command keeps agy's name and reports its command line as command", async () => {
+  await withSession(async ({ f, session, events }) => {
+    await session.sendMessage("run:coforge message send --target '#general' --content hi");
+    await waitFor(() => completed(events).length > 0);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "tool-start",
+        id: "t1",
+        name: "run_command",
+        input: expect.objectContaining({
+          command: "coforge message send --target '#general' --content hi",
+        }),
+      }),
+    );
     expect(events).toContainEqual(
       expect.objectContaining({ type: "tool-end", id: "t1", isError: false }),
     );
-    await session.dispose();
-  } finally {
-    await f.cleanup();
-  }
+    expect(f.fed.map((fragment) => JSON.parse(fragment).command)).toEqual([
+      "coforge message send --target '#general' --content hi",
+    ]);
+  });
+});
+
+test("a file tool reports its native name and the path under file_path", async () => {
+  await withSession(async ({ session, events }) => {
+    await session.sendMessage("read-file");
+    await waitFor(() => completed(events).length > 0);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "tool-start",
+        id: "t2",
+        name: "read_file",
+        input: expect.objectContaining({ file_path: "/workspace/a.txt" }),
+      }),
+    );
+  });
+});
+
+test("usage_update reports the context window", async () => {
+  await withSession(async ({ session, events }) => {
+    await session.sendMessage("hello");
+    await waitFor(() => completed(events).length > 0);
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "context-usage", usedTokens: 9001, windowTokens: 1048576 }),
+    );
+  });
 });
 
 test("a launch against agy below the ACP floor is refused without spawning the server", async () => {
@@ -314,28 +360,17 @@ test("a launch against agy below the ACP floor is refused without spawning the s
     const provider = new AntigravityAcpProvider({
       command: ["/usr/bin/agy"],
       host: {
-        clientInfo: { name: "agy-acp-fixture", version: "1" },
+        ...host({}),
+        versionReader: async () => "1.5.7",
         processTreeSpawner: {
           spawn: (...args) => {
             spawns++;
             return fixturePerTurnHost.processTreeSpawner.spawn(...args);
           },
         },
-        buildEnvironment: () => ({}),
-        versionReader: async () => "1.4.9",
-        catalogCommandRunner: async () => ({ output: "{}", exitCode: 0 }),
-        readUsageEnvironment: () => ({}),
-        createReplyIntentScanner: () => ({
-          feed: () => undefined,
-          complete: () => {},
-          reset: () => [],
-        }),
-        isShellToolName: () => false,
       },
     });
-    await expect(provider.createAgentSession(options(f.cwd) as never)).rejects.toThrow(
-      /agy|1\.5\.0/i,
-    );
+    await expect(provider.createAgentSession(options(f.cwd) as never)).rejects.toThrow(/1\.5\.8/);
     expect(spawns).toBe(0);
     expect(existsSync(join(f.cwd, "rpc.jsonl"))).toBe(false);
   } finally {

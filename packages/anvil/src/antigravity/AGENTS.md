@@ -2,9 +2,9 @@
 
 Read [Antigravity ACP behavior](../../../../docs/agents/antigravity-acp.md) when changing Antigravity's session open, resume, steering, catalog or usage. Shared ACP rules: [Anvil instructions](../../AGENTS.md#acp-adapters).
 
-- Launch floor `agy --version >= 1.5.0` (`acp-version.ts`), the first release shipping `agy acp`.
+- Launch floor `agy --version >= 1.5.8` (`acp-version.ts`; the reasons are in the behavior doc).
   A launch asserts `agentCapabilities._meta.antigravity.systemPrompt.append` on `initialize`
-  (verified on 1.5.0) and refuses with `UnsupportedOptionError` when absent — no fallback. The
+  and refuses with `UnsupportedOptionError` when absent — no fallback. The
   version gate also runs before catalog discovery spawns a process; a below-floor agy is an
   upgrade prompt, not a failed launch, and an unreadable version never gates.
 - Auth is `agy_acp_server`'s own OAuth in `~/.gemini/antigravity-acp/`, never `agy` CLI's.

@@ -18,7 +18,7 @@
 | `src/contract.ts`, `src/runtime-auth-status.ts`                                                   | Provider-neutral sessions, provider and auth contracts                                                                           |
 | `src/execution.ts`, `src/jsonl-*.ts`, `src/catalog-*.ts`                                          | The explicit public entry for JSONL/ACP catalog execution and its shared process, error and discovery policy                     |
 | `src/process-tree.ts`, `src/version-gate.ts`                                                      | Host ports for process ownership, terminal transport, cleanup deadlines and version reads, plus shared version policy            |
-| `src/acp/`                                                                                        | Shared ACP connection, session state machine, profile and turn projection contracts                                              |
+| `src/acp/`                                                                                        | Shared ACP connection, session state machine, config-option reads, profile and turn projection contracts                         |
 | `src/<runtime>/` (one per runtime in the list below)                                              | One native runtime: its session, events, catalog, auth and usage behind host capabilities                                        |
 | Other `src/` modules                                                                              | Shared runtime Activity, error, JSON, stream, deadline and text-projection utilities                                             |
 
@@ -44,7 +44,7 @@ Rules shared by every ACP adapter; each runtime file keeps only its own codes an
 
 - A `tool_call_update` ends a call only through `acpToolUpdateEnded`; a status the set misses leaves the call open forever and suppresses stalled recovery.
 - Resume is `session/load`. Only the runtime's own stored-session-gone answer (its code is in the provider file) is replaced with a fresh session reported as `replaced` (`onSessionId(newId, oldId)`); any other load failure surfaces. DSH has `session/resume` instead and never replaces a failed resume.
-- A runtime without `session/cancel` (Cursor and Droid answer `-32601`, Antigravity leaves it unimplemented, OpenCode is not relied on) interrupts by process disposal, and the daemon relaunches on the same session id.
+- A runtime without `session/cancel` (Cursor and Droid answer `-32601`, OpenCode is not relied on) interrupts by process disposal, and the daemon relaunches on the same session id.
 - A terminal RPC failure after prompt submission is an accepted failed turn, never an admission refusal.
-- Model and effort apply through `session/set_config_option` after the session opens. `runtime.model` fails with `RuntimeModelNotFoundError` when the select lacks it; a missing effort option leaves the model's own default, and a present option that lacks the value fails.
+- Model and effort apply through `session/set_config_option` after the session opens; read `configOptions`, select values and per-model efforts through `src/acp/config-options.ts` instead of a local copy. `runtime.model` fails with `RuntimeModelNotFoundError` when the select lacks it; a missing effort option leaves the model's own default, and a present option that lacks the value fails.
 - Instruction files an adapter writes for a CLI are private (0700 directory, 0600 file) and removed when the session ends or the launch fails.

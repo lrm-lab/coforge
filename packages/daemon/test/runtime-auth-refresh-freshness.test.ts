@@ -66,7 +66,7 @@ function subject() {
 test("a sign-in through the controller reports the runtime signed in in the same breath", async () => {
   const s = subject();
   await s.reporter.inventoryReported([
-    { provider: "antigravity", version: "1.5.0", displayName: "Antigravity" },
+    { provider: "antigravity", version: "1.5.10", displayName: "Antigravity" },
   ] as RuntimeMetadata[]);
   expect(s.antigravity()?.state).toBe("logged_out");
   // A page open moments later would be throttled; a login landing never is.
@@ -85,7 +85,7 @@ test("a sign-out through the controller reports the runtime signed out in the sa
   const s = subject();
   s.state.signedIn = true;
   await s.reporter.inventoryReported([
-    { provider: "antigravity", version: "1.5.0", displayName: "Antigravity" },
+    { provider: "antigravity", version: "1.5.10", displayName: "Antigravity" },
   ] as RuntimeMetadata[]);
   expect(s.antigravity()?.state).toBe("logged_in");
   await s.controller.handle({
@@ -101,7 +101,7 @@ test("a sign-out through the controller reports the runtime signed out in the sa
 test("a page open re-reads a status the minute's throttle would otherwise keep", async () => {
   const s = subject();
   await s.reporter.inventoryReported([
-    { provider: "antigravity", version: "1.5.0", displayName: "Antigravity" },
+    { provider: "antigravity", version: "1.5.10", displayName: "Antigravity" },
   ] as RuntimeMetadata[]);
   s.reads.length = 0;
   // Signed in on the Computer itself: nothing tells the daemon but the page open.

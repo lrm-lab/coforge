@@ -368,7 +368,7 @@ test("a resumed session on a signed-out server asks for the Computer page's sign
         processTreeSpawner: fixturePerTurnHost.processTreeSpawner,
         clientInfo: { name: "agy-acp-fixture", version: "1" },
         maskAccountLabel: () => undefined,
-        versionReader: async () => "1.5.0",
+        versionReader: async () => "1.5.10",
         catalogCommandRunner: async () => ({ output: "{}", exitCode: 0 }),
         readUsageEnvironment: () => ({}),
         createReplyIntentScanner: () => ({

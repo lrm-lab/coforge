@@ -30,6 +30,7 @@ export const TOOL_ALIASES: Readonly<Record<string, string>> = {
   shell: "bash",
   command_execution: "bash",
   run_shell_command: "bash",
+  run_command: "bash",
   run_terminal_command: "bash",
   // Command Code CLI 1.87.3 names its shell tools `shell_command` and `powershell`.
   shell_command: "bash",

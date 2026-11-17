@@ -128,7 +128,7 @@ export type AcpSessionProfile = Readonly<{
    * ambiguous; absent for a runtime whose inputs always settle. */
   admissionTimeoutMs?: number;
   /** Interrupts the live turn without `session/cancel`, for a runtime that does not implement
-   * it — the Antigravity session kills its process instead. */
+   * it. */
   cancelTurn?(transport: AcpConnection): Promise<void>;
   /** Inserts a notice into the live turn instead of waiting for the next one. */
   steer?: AcpSteerProfile;

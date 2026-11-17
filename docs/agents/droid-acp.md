@@ -20,6 +20,10 @@ Part of [the documentation index](../../README.md). The Droid adapter runs one p
   the select lacks it; a missing effort option leaves the model's own default, and a present
   option that lacks the value fails. No launch field carries a mode, so `autonomy_level` is
   never written and the session keeps the server's default (`auto-medium`).
+- The model catalog is `session/new`'s `model` select. One probe session switches through the
+  models (at most 120) to read each one's `thought_level` choices (`acpReadModelEfforts`). A
+  model whose switch the server refuses keeps its entry with no efforts; a timeout or a closed
+  process ends the probe, and the catalog is unavailable for that pass.
 - Every answered turn carries `usage_update` (`{"used":348,"size":250000}` on a one-word
   prompt, verified on 1.4.1); the turn reader maps it to `context-usage`. That reading is the
   context window, never plan usage.

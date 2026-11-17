@@ -5,9 +5,10 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import { catalogErrorMessage, within } from "#src/catalog-discovery";
-import { acpProcess, type AcpConnection } from "#src/acp/connection";
+import { acpConfigOptions, acpReadModelEfforts, acpSelectEntries } from "#src/acp/config-options";
+import { acpBounded, acpProcess, type AcpConnection } from "#src/acp/connection";
 import { scrubStderrHint } from "#src/stderr-hint";
-import { asRecord } from "#src/json-record";
+import { asRecord, nonEmptyString } from "#src/json-record";
 import { ANTIGRAVITY_ACP_PROFILE } from "./acp-session";
 import type { AntigravityAcpRuntimeHost } from "./acp-host";
 import { assertAntigravityAcpVersionSupported } from "./acp-version";
@@ -15,11 +16,8 @@ import { withoutSshSessionVariables } from "./ssh-environment";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.ANTIGRAVITY]);
 
-/** The server takes 15-25 s to unpack on a cold start; a probe session is a full launch. */
 export const ANTIGRAVITY_ACP_CATALOG_TIMEOUT_MS = 60_000;
 
-/** The model catalog the server itself offers: `session/new`'s `model` config select — the same
- * source a session's model setting applies to, and independent of the `agy` CLI's own catalog. */
 export async function discoverAntigravityAcpCatalog(
   command: readonly string[],
   cwd: string,
@@ -28,10 +26,9 @@ export async function discoverAntigravityAcpCatalog(
   timeoutMs = ANTIGRAVITY_ACP_CATALOG_TIMEOUT_MS,
 ): Promise<CodeAgentModelCatalog | undefined> {
   let transport: AcpConnection | undefined;
+  let sessionId: string | undefined;
   let stderrHint: string | undefined;
   try {
-    // The version gate runs before the server spawns: a below-floor agy is an upgrade prompt,
-    // not a failed ACP launch.
     await assertAntigravityAcpVersionSupported(command, host.versionReader);
     transport = acpProcess(ANTIGRAVITY_ACP_PROFILE, {
       command,
@@ -48,28 +45,30 @@ export async function discoverAntigravityAcpCatalog(
       transport.connection.agent.request("session/new", { cwd, mcpServers: [] }),
       timeoutMs,
     );
-    const options = Array.isArray(session.configOptions) ? session.configOptions : [];
-    const model = options.find(
-      (entry) => asRecord(entry)?.id === "model" || asRecord(entry)?.category === "model",
-    );
-    const record = asRecord(model);
-    const entries = Array.isArray(record?.options) ? record.options : [];
-    const models = entries.flatMap((entry) => {
-      const option = asRecord(entry);
-      const id = typeof option?.value === "string" && option.value ? option.value : undefined;
-      if (!id) return [];
-      return [
-        {
-          id,
-          displayName: typeof option?.name === "string" && option.name ? option.name : id,
-          description: "",
-          modelProvider: "",
-          reasoningEfforts: [] as string[],
-          defaultReasoning: "",
-          recommended: false,
-        },
-      ];
-    });
+    sessionId = nonEmptyString(asRecord(session)?.sessionId);
+    if (!sessionId) throw new Error("agy acp model catalog unavailable");
+    const model = acpConfigOptions(session).find((entry) => entry.category === "model");
+    if (model?.type !== "select") throw new Error("agy acp model catalog unavailable");
+    const models = [];
+    for (const entry of acpSelectEntries(model)) {
+      const efforts = await acpReadModelEfforts(
+        transport,
+        sessionId,
+        model,
+        entry.value,
+        timeoutMs,
+        "agy acp session/set_config_option timed out",
+      );
+      models.push({
+        id: entry.value,
+        displayName: entry.name || entry.value,
+        description: entry.description ?? "",
+        modelProvider: "",
+        reasoningEfforts: efforts.values,
+        defaultReasoning: efforts.current,
+        recommended: entry.value === model.currentValue,
+      });
+    }
     if (models.length === 0) throw new Error("agy acp model catalog unavailable");
     return { provider: RUNTIME_PROVIDER.ANTIGRAVITY, models };
   } catch (error) {
@@ -81,6 +80,12 @@ export async function discoverAntigravityAcpCatalog(
     });
     return undefined;
   } finally {
+    if (transport && sessionId && !transport.closed)
+      await acpBounded(
+        transport.connection.agent.request("session/close", { sessionId }),
+        timeoutMs,
+        "agy acp session/close timed out",
+      ).catch(() => undefined);
     if (transport) await transport.dispose().catch(() => {});
   }
 }

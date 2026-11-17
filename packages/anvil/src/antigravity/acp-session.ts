@@ -1,10 +1,11 @@
-import type { InitializeResponse } from "@agentclientprotocol/sdk";
+import type { InitializeResponse, SessionConfigOption } from "@agentclientprotocol/sdk";
 import { RequestError } from "@agentclientprotocol/sdk";
 import { getLogger } from "@logtape/logtape";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { RuntimeLoginRequiredError } from "#src/contract";
+import { RuntimeLoginRequiredError, RuntimeModelNotFoundError } from "#src/contract";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
-import { acpBounded, acpProcess } from "#src/acp/connection";
+import { acpConfigOptions, acpSelectValues } from "#src/acp/config-options";
+import { acpBounded, acpProcess, type AcpConnection } from "#src/acp/connection";
 import type { AcpRuntimeProfile, AcpSessionProfile } from "#src/acp/profile";
 import { AcpSession } from "#src/acp/session";
 import { asRecord, nonEmptyString } from "#src/json-record";
@@ -12,18 +13,14 @@ import type { AntigravityAcpRuntimeHost } from "./acp-host";
 import { ANTIGRAVITY_AUTH_REQUIRED_CODE } from "./auth";
 import { AntigravityAcpTurnEvents } from "./acp-update-events";
 
-/** How long a production session waits for each bounded ACP answer. */
 export const ANTIGRAVITY_ACP_TIMEOUT_MS = 120_000;
 
-/** How many trailing stderr lines reach the host when the process closes. */
 const STDERR_TAIL_LINES = 40;
 
-/** `session/load`'s answer when the stored session is gone: a missing native session is
- * replaced with a fresh one and reported; any other failure surfaces. */
 const ANTIGRAVITY_SESSION_MISSING_CODE = -32002;
 
-/** What a launch or resume says when the server itself has nobody signed in: the sign-in lives on
- * the Computer page, so the sentence names that page rather than a terminal command. */
+const AUTOMATIC_MODE_ID = "auto";
+
 const ANTIGRAVITY_NOT_SIGNED_IN =
   "Antigravity is not signed in: open the Computer page and choose Log in — a browser opens on " +
   "that Computer.";
@@ -36,55 +33,23 @@ function antigravitySignInRequired(): RuntimeLoginRequiredError {
 
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.ANTIGRAVITY]);
 
-type AntigravityMode = {
-  id: string;
-  name?: string;
-  description?: string;
-};
-
-function antigravityAvailableModes(value: unknown): AntigravityMode[] {
-  const record = asRecord(value);
-  const modes = asRecord(record?.modes);
-  const available = Array.isArray(modes?.availableModes)
-    ? modes.availableModes
-    : Array.isArray(record?.availableModes)
-      ? record.availableModes
-      : [];
+function availableModeIds(state: unknown): string[] {
+  const modes = asRecord(asRecord(state)?.modes);
+  const available = Array.isArray(modes?.availableModes) ? modes.availableModes : [];
   return available.flatMap((entry) => {
-    const mode = asRecord(entry);
-    const id = nonEmptyString(mode?.id);
-    return id
-      ? [
-          {
-            id,
-            ...(typeof mode?.name === "string" ? { name: mode.name } : {}),
-            ...(typeof mode?.description === "string" ? { description: mode.description } : {}),
-          },
-        ]
-      : [];
+    const id = nonEmptyString(asRecord(entry)?.id);
+    return id ? [id] : [];
   });
 }
 
-/** Selects the mode that replaces the old `yolo` permission mode across agy ACP releases. */
-export function selectAntigravityAutomaticMode(value: unknown): AntigravityMode | undefined {
-  const available = antigravityAvailableModes(value);
-  return (
-    available.find((mode) => mode.id === "yolo") ?? available.find((mode) => mode.id === "auto")
-  );
-}
-
-function logAutomaticModeUnavailable(initialized: InitializeResponse, state: unknown): void {
-  const initializedRecord = asRecord(initialized);
-  const available = antigravityAvailableModes(state);
+function logAutomaticModeUnavailable(initialized: InitializeResponse, modeIds: string[]): void {
   logger.warning("Antigravity ACP has no automatic permission mode; continuing without set_mode", {
     event: "antigravity_acp:automatic_mode_unavailable",
-    agy_version: nonEmptyString(asRecord(initializedRecord?.agentInfo)?.version),
-    available_modes: available.map((mode) => mode.id),
+    agy_version: nonEmptyString(asRecord(asRecord(initialized)?.agentInfo)?.version),
+    available_modes: modeIds,
   });
 }
 
-/** Whether the server declares `_meta.antigravity.systemPrompt.append` on `initialize` — the
- * native standing-instructions channel this runtime requires (the launch refuses without it). */
 export function antigravitySystemPromptAppendDeclared(response: InitializeResponse): boolean {
   const meta = asRecord(response.agentCapabilities?._meta);
   const antigravity = asRecord(meta?.antigravity);
@@ -131,6 +96,43 @@ export async function createAntigravityAcpSession(
     await session.dispose();
     throw error;
   }
+}
+
+async function applyRuntimeConfig(
+  transport: AcpConnection,
+  sessionId: string,
+  initial: SessionConfigOption[],
+  runtime: AgentSessionOptions["runtime"],
+  timeoutMs: number,
+): Promise<void> {
+  let config = initial;
+  const apply = async (option: SessionConfigOption, value: string) => {
+    if (option.currentValue === value) return;
+    config = acpConfigOptions(
+      await acpBounded(
+        transport.connection.agent.request("session/set_config_option", {
+          sessionId,
+          configId: option.id,
+          value,
+        }),
+        timeoutMs,
+        "agy acp session/set_config_option timed out",
+      ),
+    );
+  };
+  const model = runtime?.model;
+  if (model && model !== "default") {
+    const option = config.find((entry) => entry.category === "model");
+    if (!option || !acpSelectValues(option).includes(model))
+      throw new RuntimeModelNotFoundError(model);
+    await apply(option, model);
+  }
+  const reasoning = runtime?.reasoning;
+  const effort = config.find((entry) => entry.category === "thought_level");
+  if (!reasoning || !effort) return;
+  if (!acpSelectValues(effort).includes(reasoning))
+    throw new Error(`agy acp does not offer thought_level ${reasoning} for this model`);
+  await apply(effort, reasoning);
 }
 
 function antigravitySessionProfile(
@@ -209,8 +211,6 @@ function antigravitySessionProfile(
             "agy acp session/new timed out",
           );
         } catch (error) {
-          // `-32000 Authentication required`: the server has its own credentials — the person
-          // signs in from the Computer page, not by running `agy` on a terminal.
           if (error instanceof RequestError && error.code === ANTIGRAVITY_AUTH_REQUIRED_CODE)
             throw antigravitySignInRequired();
           throw error;
@@ -218,50 +218,24 @@ function antigravitySessionProfile(
         opened = nonEmptyString(asRecord(state)?.sessionId);
         if (!opened) throw new Error("agy acp did not create a session");
       }
-      // A resumed session returns to the default mode, so the automatic mode and the selected
-      // model/effort replay on every open. agy 1.5.9 renamed `yolo` to `auto`; select from the
-      // server's advertised modes so older and newer ACP servers both work.
-      const automaticMode = selectAntigravityAutomaticMode(state);
-      if (automaticMode)
+      const modeIds = availableModeIds(state);
+      if (modeIds.includes(AUTOMATIC_MODE_ID))
         await acpBounded(
-          agent.request("session/set_mode", { sessionId: opened, modeId: automaticMode.id }),
+          agent.request("session/set_mode", { sessionId: opened, modeId: AUTOMATIC_MODE_ID }),
           timeoutMs,
           "agy acp session/set_mode timed out",
         );
-      else logAutomaticModeUnavailable(initialized, state);
-      const model = options.runtime?.model;
-      if (model && model !== "default")
-        await acpBounded(
-          agent.request("session/set_config_option", {
-            sessionId: opened,
-            configId: "model",
-            value: model,
-          }),
-          timeoutMs,
-          "agy acp session/set_config_option timed out",
-        );
-      const reasoning = options.runtime?.reasoning;
-      if (reasoning)
-        await acpBounded(
-          agent.request("session/set_config_option", {
-            sessionId: opened,
-            configId: "thinking_level",
-            value: reasoning,
-          }),
-          timeoutMs,
-          "agy acp session/set_config_option timed out",
-        );
+      else logAutomaticModeUnavailable(initialized, modeIds);
+      await applyRuntimeConfig(
+        transport,
+        opened,
+        acpConfigOptions(state),
+        options.runtime,
+        timeoutMs,
+      );
       return { sessionId: opened, resumable: resuming && !replaced, replacedSessionId: replaced };
     },
     turn: () => new AntigravityAcpTurnEvents(host),
-    // `session/cancel` is unimplemented on `agy acp`: interrupt kills the process, and the
-    // daemon relaunches on the same session id.
-    cancelTurn: async (transport) => {
-      await transport.process.dispose().catch(() => undefined);
-    },
-    // A prompt sent while a turn runs is this server's steer: the second `session/prompt`
-    // resolves with its own stopReason when its turn ends, so the request cannot hold the ACP
-    // deadline. A cancelled answer is a refused steer — the daemon redelivers once idle.
     steer: {
       unboundedRequest: true,
       request: (text, sessionId) => ({
@@ -269,10 +243,6 @@ function antigravitySessionProfile(
         params: { sessionId, prompt: [{ type: "text", text }] },
       }),
       accepted: (response) => {
-        // Any answered steer reached the model — `end_turn`, `max_tokens` and
-        // `max_turn_requests` all end the merged turn with the text consumed. Only a
-        // cancellation or a refusal means the notice never landed, and an answer without a
-        // stopReason is treated the same way rather than guessed delivered.
         const stopReason = nonEmptyString(asRecord(response)?.stopReason);
         return {
           accepted:
