@@ -116,7 +116,6 @@ test("the sender notifies a mentioned outsider once: an Agent gets the message a
       ["queued", "already_queued"],
       ["queued", "already_queued"],
     ]);
-    // One outsider delivery: this Workspace never switched the Memory Agent on.
     expect(await db.agentMessageDelivery.count({ where: { messageId: sent.id } })).toBe(1);
     expect(
       (await channels.send(send)).pendingMentionActions.map((action) => action.availableActions),

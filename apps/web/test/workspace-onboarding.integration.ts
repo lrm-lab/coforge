@@ -170,8 +170,6 @@ describe.skipIf(!connectionString)("workspace onboarding", () => {
   test("a mode and an Agent that disagree, or an Agent that cannot welcome, are invalid input", async () => {
     await reset();
     const agent = await newAgent();
-    const memory = await newAgent();
-    await db.workspaceMemoryAgent.create({ data: { workspaceId, agentId: memory.id } });
     const other = await db.workspace.create({
       data: { slug: `onb-other-${suffix}`, name: "Other Co" },
     });
@@ -188,7 +186,6 @@ describe.skipIf(!connectionString)("workspace onboarding", () => {
       (await newAgent({ systemKind: WORKSPACE_ASSISTANT_KIND })).id,
       (await newAgent({ visibility: "private" })).id,
       (await newAgent({ deletedAt: new Date() })).id,
-      memory.id,
       foreign.id,
       crypto.randomUUID(),
     ];

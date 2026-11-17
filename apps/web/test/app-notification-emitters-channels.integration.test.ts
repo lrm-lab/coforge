@@ -119,8 +119,6 @@ const environment = defineEmitterCases([
   emitterCase({
     type: "channel.member_added",
     label: "the creator of a new channel",
-    // Only the creator: the Memory Agent is opt-in per Workspace (task #6), and this one never
-    // switched it on. The case for a Workspace that did is in the completeness suite.
     others: 0,
     setup: async () => ({ id: "" }),
     act: async (env, fixture, made) => {

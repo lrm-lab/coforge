@@ -4,7 +4,6 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
-import { MEMORY_AGENT_ON, defaultMemoryAgentId } from "./helpers/default-memory-agent-fixture";
 
 /**
  * Creating a channel with the people and Agents picked for it: the channel exists with its
@@ -35,7 +34,6 @@ async function setup() {
     data: {
       slug: `ccm-${suffix}`,
       name: "Create with members",
-      experiments: MEMORY_AGENT_ON,
       members: {
         create: [
           { userId: creator.id, role: "member" },
@@ -121,9 +119,7 @@ test.skipIf(!connectionString)(
       expect(created.membersAddFailed).toBeFalse();
       const members = await activeMembers(db, created.id);
       expect(members.userIds).toEqual([ada.id, bob.id, creator.id].sort());
-      expect(members.agentIds).toEqual(
-        [publicAgent.id, await defaultMemoryAgentId(db, workspace.id)].sort(),
-      );
+      expect(members.agentIds).toEqual([publicAgent.id]);
       // The creator stays the channel's admin; the picked members are plain members.
       expect(members.adminUserIds).toEqual([creator.id]);
     } finally {
@@ -143,12 +139,12 @@ test.skipIf(!connectionString)(
         agentIds: [privateAgent.id],
       });
       expect(created.membersAddFailed).toBeTrue();
-      // The picked add is refused; the creator and the default Memory Agent remain.
+      // The picked add is refused; the creator remains.
       const channel = await db.conversation.findUniqueOrThrow({ where: { id: created.id } });
       expect(channel.channelName).toBe("private-pick");
       const members = await activeMembers(db, created.id);
       expect(members.userIds).toEqual([creator.id]);
-      expect(members.agentIds).toEqual([await defaultMemoryAgentId(db, workspace.id)]);
+      expect(members.agentIds).toEqual([]);
     } finally {
       await teardown(db, workspace.id, [creator.id, ada.id]);
     }
@@ -204,7 +200,7 @@ test.skipIf(!connectionString)(
       expect(created.membersAddFailed).toBeTrue();
       const members = await activeMembers(db, created.id);
       expect(members.userIds).toEqual([creator.id]);
-      expect(members.agentIds).toEqual([await defaultMemoryAgentId(db, workspace.id)]);
+      expect(members.agentIds).toEqual([]);
     } finally {
       await teardown(db, workspace.id, [creator.id, ada.id]);
     }
@@ -212,7 +208,7 @@ test.skipIf(!connectionString)(
 );
 
 test.skipIf(!connectionString)(
-  "a channel created with no one picked contains its creator and default Memory Agent",
+  "a channel created with no one picked contains only its creator",
   async () => {
     const { db, channels, workspace, creator } = await setup();
     try {
@@ -224,7 +220,7 @@ test.skipIf(!connectionString)(
       expect(created.membersAddFailed).toBeFalse();
       const members = await activeMembers(db, created.id);
       expect(members.userIds).toEqual([creator.id]);
-      expect(members.agentIds).toEqual([await defaultMemoryAgentId(db, workspace.id)]);
+      expect(members.agentIds).toEqual([]);
     } finally {
       await teardown(db, workspace.id, [creator.id]);
     }

@@ -362,8 +362,6 @@ test("Workspace humans enrolled in general see one general channel; outsiders ca
           where: { workspaceId: id, channelName: "general" },
           include: { members: true },
         });
-        // The Memory Agent is opt-in per Workspace (task #6), and a Workspace created here never
-        // switched it on: #general is its creator alone (memory-agent-channel-attach covers the rest).
         expect(createdGeneral?.members.map((m) => m.userId ?? m.agentId)).toEqual([alice.id]);
       } finally {
         await db.workspace.delete({ where: { id } });

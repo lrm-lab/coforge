@@ -224,7 +224,6 @@ test.skipIf(!connectionString)(
   "an archived channel refuses the whole request with CONFLICT and adds nobody",
   async () => {
     const { db, channels, workspace, creator, ada, outsider, ghost, team } = await setup();
-    // Channel creation may enrol the Workspace Memory Agent; nobody else may join.
     const before = await activeMemberIds(db, team.id);
     try {
       await channels.setArchived(workspace.id, { userId: creator.id }, team.id, true);
@@ -248,7 +247,6 @@ test.skipIf(!connectionString)(
   "a caller who is not an active member of the channel is refused with ACCESS_DENIED",
   async () => {
     const { db, channels, workspace, creator, ada, outsider, ghost, team } = await setup();
-    // Channel creation may enrol the Workspace Memory Agent; nobody else may join.
     const before = await activeMemberIds(db, team.id);
     try {
       expect(
@@ -329,7 +327,6 @@ test.skipIf(!connectionString)(
   "PublicChannels.addMembers (the Agent CLI and channel creation path) stays all-or-nothing",
   async () => {
     const { db, channels, workspace, creator, ada, outsider, ghost, team } = await setup();
-    // Channel creation may enrol the Workspace Memory Agent; nobody else may join.
     const before = await activeMemberIds(db, team.id);
     try {
       const error = await channels

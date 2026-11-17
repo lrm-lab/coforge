@@ -83,9 +83,6 @@ test.skipIf(!connectionString)(
       });
       created.push(fromEnrollment);
 
-      // The Memory Agent is opt-in per Workspace (task #6): a Workspace that never switched the
-      // experiment on starts with #general and its creator alone. The opted-in Workspace, which
-      // plants the Agent at creation, is covered by memory-agent-channel-attach.integration.test.
       expect(await generalMembers(db, fromCatalog.id)).toEqual({
         archived: false,
         members: [`user:${alice.id}`],
@@ -172,7 +169,6 @@ test.skipIf(!connectionString)(
       });
 
       const enrolled = await generalMembers(db, workspace.id);
-      // No Memory Agent: this Workspace never switched the experiment on (task #6).
       expect(enrolled?.members).toEqual(
         [`user:${owner.id}`, `user:${returning.id}`, `agent:${helper.id}`].sort(),
       );
