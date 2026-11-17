@@ -1,3 +1,4 @@
+import { executeScopedMemoryRequest } from "./agent-memory-query";
 import type {
   AgentWorkspaceDeleteRequest,
   AgentWorkspaceDeleteResult,
@@ -28,6 +29,17 @@ export function subscribeWorkspaceQueries(
 ): ((() => void) | undefined)[] {
   const { connection } = queries;
   return [
+    transport.onAgentMemory?.(async (request) => {
+      if (
+        queries.isStopping() ||
+        request.workspaceId !== connection.workspaceId ||
+        request.computerId !== connection.computerId
+      )
+        return;
+      const result = await executeScopedMemoryRequest(connection, request);
+      if (result && !queries.isStopping() && queries.currentTransport() === transport)
+        await transport.sendAgentMemoryResult?.(result);
+    }),
     transport.onSkillsList?.(async (request) => {
       if (
         queries.isStopping() ||

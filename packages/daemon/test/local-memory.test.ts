@@ -147,3 +147,55 @@ test("decision priority applies beyond the first 128 alphabetical files", async 
   await memory.execute(purchased);
   expect(await memory.brief(3_200)).toContain("coforgeusercontent.com");
 });
+
+test("independent memory clients cannot overwrite the same revision", async () => {
+  const { root, memory } = await subject();
+  const first = (await memory.execute(purchased)).entries[0]!;
+  const other = new LocalMemory(root);
+  const outcomes = await Promise.allSettled([
+    memory.execute({ ...purchased, revision: first.revision, content: "First correction" }),
+    other.execute({ ...purchased, revision: first.revision, content: "Second correction" }),
+  ]);
+  expect(outcomes.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+  expect(outcomes.filter((result) => result.status === "rejected")).toHaveLength(1);
+});
+
+test("history previews can be paged and one historical revision is read completely", async () => {
+  const { memory } = await subject();
+  let current = (await memory.execute({ ...purchased, content: "历史依据".repeat(1000) }))
+    .entries[0]!;
+  const original = current;
+  for (let index = 0; index < 7; index++)
+    current = (
+      await memory.execute({
+        ...purchased,
+        revision: current.revision,
+        content: `Correction ${index}`,
+      })
+    ).entries[0]!;
+  const page = await memory.execute({ operation: "history", key: current.key, offset: 0 });
+  expect(page.entries).toHaveLength(5);
+  expect(page.nextOffset).toBe(5);
+  expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThanOrEqual(12000);
+  const full = await memory.execute({
+    operation: "get",
+    key: current.key,
+    revision: original.revision,
+  });
+  expect(full.entries[0]?.content).toBe(original.content);
+  expect(
+    (await memory.execute({ operation: "history", key: current.key, offset: 5 })).entries,
+  ).toHaveLength(2);
+});
+
+test("searching archived personal memory does not return active notes", async () => {
+  const { memory } = await subject();
+  const entry = (await memory.execute(purchased)).entries[0]!;
+  await memory.execute({ operation: "archive", key: entry.key, revision: entry.revision });
+  expect(
+    (await memory.execute({ operation: "search", query: "域名", archived: true })).entries.map(
+      (entry) => entry.key,
+    ),
+  ).toContain(entry.key);
+  expect((await memory.execute({ operation: "search", query: "域名" })).entries).toHaveLength(0);
+});

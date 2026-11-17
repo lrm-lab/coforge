@@ -68,13 +68,21 @@ export async function runMemoryCommand(
     request.operation === "list"
       ? `coforge memory list${request.archived ? " --archived" : ""}`
       : request.operation === "search"
-        ? `coforge memory search --query '${request.query.replaceAll("'", "'\\''")}'`
-        : undefined;
+        ? `coforge memory search --query '${request.query.replaceAll("'", "'\\''")}'${request.archived ? " --archived" : ""}`
+        : request.operation === "history"
+          ? `coforge memory history --key ${request.key}`
+          : undefined;
   return [
     ...result.entries.map(
       (entry) =>
         `${entry.title} [${entry.key}]\n${entry.content}\nSource: ${entry.source}\nApplies to: ${entry.applicability || "unspecified"}\nRevision: ${entry.revision}\nState: ${entry.status}\nFile: ${entry.path}`,
     ),
+    ...(request.operation === "history"
+      ? result.entries.map(
+          (entry) =>
+            `Full version: coforge memory get --key ${entry.key} --revision ${entry.revision}`,
+        )
+      : []),
     ...(["list", "search"].includes(invocation.request.operation)
       ? result.entries.map(
           (entry) =>

@@ -35,6 +35,7 @@ coforge memory list
 coforge memory list --archived
 coforge memory get --key preview-domain
 coforge memory history --key preview-domain
+coforge memory get --key preview-domain --revision '<historical hash>'
 ```
 
 Search covers MEMORY.md and Markdown under notes, excluding history and symlinks. It uses exact
@@ -49,6 +50,11 @@ keyword; each page inspects at most five files within a 12,000-byte response bud
 entries with `--archived`. Continue with the offered offset even when a page has no entries.
 Use each result's `get --key` command for full content, source and current revision. Search may
 also find unstructured notes: read their named file rather than treating the path as a saved key.
+
+History returns five previews per page in stable revision-key order; continue with `--offset`.
+Read a complete revision with `get --revision`. People manage these structured entries at
+Workspace → Team memory → Personal memory; only the Agent owner may use that endpoint.
+The Computer must be online and upgraded. Content remains local; archives stay recoverable.
 
 ## Size-triggered maintenance
 
