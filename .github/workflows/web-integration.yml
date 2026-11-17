@@ -104,15 +104,7 @@ jobs:
       # suite throws without one), apart from the Redis service above. Install only the binary: the
       # policy-rc.d guard stops the package from starting its own server on 6379.
       - name: Install redis-server
-        run: |
-          printf '#!/bin/sh\nexit 101\n' | sudo tee /usr/sbin/policy-rc.d >/dev/null
-          sudo chmod +x /usr/sbin/policy-rc.d
-          for attempt in 1 2 3; do
-            sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends redis-server && break
-            [ "$attempt" = 3 ] && exit 1
-            sleep 10
-          done
-          redis-server --version
+        run: scripts/ci/install-redis.sh
 
       - name: Prepare the checkout and database
         run: ./scripts/test/prepare-web-integration.sh

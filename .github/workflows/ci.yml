@@ -288,6 +288,10 @@ jobs:
 
       - *bun-install
 
+      - name: Install redis-server
+        if: matrix.part != 'build'
+        run: scripts/ci/install-redis.sh
+
       - name: Run tests
         if: matrix.part != 'build'
         run: mise run test:web -- --shard=${{ matrix.part }}
