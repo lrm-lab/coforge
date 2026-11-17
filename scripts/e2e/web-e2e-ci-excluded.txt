@@ -19,7 +19,6 @@ e2e-agent-held-credential.e2e.ts 待分拣
 e2e-agent-introduction.e2e.ts 待分拣
 e2e-agent-profile-actions.e2e.ts 待分拣
 e2e-agent-profile-esc.e2e.ts 待分拣
-e2e-agent-profile-no-context.e2e.ts 待分拣
 e2e-agent-quota-status.e2e.ts 待分拣
 e2e-agent-runtime-dialog-spacing.e2e.ts 待分拣
 e2e-agent-sign-in-status.e2e.ts 待分拣
