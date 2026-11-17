@@ -15,36 +15,38 @@ export const listMyMemoryAgents = createServerFn({ method: "GET" })
     }),
   )
   .handler(async ({ data, context }) => {
-    const [agents, meta] = await paginated(context.db)
-      .agent.paginate({
-        where: {
-          workspaceId: context.workspaceId,
-          ownerId: context.user.id,
-          deletedAt: null,
-          ...(data.query
-            ? {
-                OR: [
-                  { displayName: { contains: data.query, mode: "insensitive" as const } },
-                  { name: { contains: data.query, mode: "insensitive" as const } },
-                ],
-              }
-            : {}),
-        },
-        select: { id: true, name: true, displayName: true },
-        orderBy: [{ name: "asc" }, { id: "asc" }],
-      })
-      .withPages({ limit: 20, page: data.page });
-    const selected = data.selected
-      ? await context.db.agent.findFirst({
+    const [[agents, meta], selected] = await Promise.all([
+      paginated(context.db)
+        .agent.paginate({
           where: {
-            id: data.selected,
             workspaceId: context.workspaceId,
             ownerId: context.user.id,
             deletedAt: null,
+            ...(data.query
+              ? {
+                  OR: [
+                    { displayName: { contains: data.query, mode: "insensitive" as const } },
+                    { name: { contains: data.query, mode: "insensitive" as const } },
+                  ],
+                }
+              : {}),
           },
           select: { id: true, name: true, displayName: true },
+          orderBy: [{ name: "asc" }, { id: "asc" }],
         })
-      : null;
+        .withPages({ limit: 20, page: data.page }),
+      data.selected
+        ? context.db.agent.findFirst({
+            where: {
+              id: data.selected,
+              workspaceId: context.workspaceId,
+              ownerId: context.user.id,
+              deletedAt: null,
+            },
+            select: { id: true, name: true, displayName: true },
+          })
+        : Promise.resolve(null),
+    ]);
     return { agents, selected, hasNextPage: meta.nextPage !== null };
   });
 export const personalMemoryCommand = createServerFn({ method: "POST" })
