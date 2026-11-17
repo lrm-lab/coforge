@@ -187,3 +187,49 @@ test("restart --supervisor releases the hold even when the restart itself fails"
   );
   expect(local.calls).toEqual(["identity", "hold:hold", "restart", "hold:release"]);
 });
+
+test("restart --supervisor skips holdRunnersUntilQuiescent when callerIsAgentHosted is true", async () => {
+  const output: string[] = [];
+  const local = fakeLocal({
+    async hold() {
+      throw new Error("hold must not be called when caller is hosted inside an Agent turn");
+    },
+  });
+  const host: RestartSupervisorHost = {
+    async assertRestartable() {
+      local.calls.push("assertRestartable");
+    },
+    async restart() {
+      local.calls.push("restart");
+    },
+  };
+
+  await restartSupervisor(
+    host,
+    local,
+    { stdout: (line) => output.push(line) },
+    { callerIsAgentHosted: true },
+  );
+
+  expect(local.calls).toEqual(["assertRestartable", "restart"]);
+  expect(output.some((line) => line.includes("skipping runner hold"))).toBe(true);
+});
+
+test("main.ts captures COFORGE_AGENT_LAUNCH_TAG before stripping it from process.env", async () => {
+  const mainSource = await Bun.file(new URL("../src/main.ts", import.meta.url)).text();
+  const captureIndex = mainSource.indexOf("callerIsAgentHosted");
+  const deleteIndex = mainSource.indexOf("delete Bun.env.COFORGE_AGENT_LAUNCH_TAG");
+  expect(captureIndex).toBeGreaterThanOrEqual(0);
+  expect(deleteIndex).toBeGreaterThan(captureIndex);
+
+  const child = Bun.spawn(
+    [process.execPath, new URL("../src/main.ts", import.meta.url).pathname, "--cli-version"],
+    {
+      env: { ...process.env, COFORGE_AGENT_LAUNCH_TAG: "launch-tag-test" },
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  expect(await child.exited).toBe(0);
+});

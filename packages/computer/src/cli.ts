@@ -3,7 +3,7 @@
 import { Command, CommanderError } from "commander";
 import { homedir } from "os";
 
-import { resolveComputerInstallDirectory } from "@lrm/coforge-daemon";
+import { FileBindingStore, resolveComputerInstallDirectory } from "@lrm/coforge-daemon";
 import { setupError } from "./errors";
 import { resolveComputerStateDirectory, resolveDaemonSocketPath } from "./paths";
 import { COFORGE_RELEASE_FEED_URL, COFORGE_SERVER_URL } from "./release-channel";
@@ -97,8 +97,11 @@ export interface DaemonCommand {
   restartSupervisor?(): Promise<void>;
 }
 
+import type { LogSource } from "#src/logging/computer-logs";
+
 export interface LogsCommand {
-  follow(): Promise<void>;
+  run?(options?: { lines?: number; follow?: boolean; source?: LogSource }): Promise<void>;
+  follow?(): Promise<void>;
 }
 
 export interface ForegroundCommand {
@@ -338,7 +341,7 @@ function requireHost(dependencies: CliDependencies): HostCommand {
   return dependencies.host;
 }
 
-export async function runComputer(): Promise<void> {
+export async function runComputer(options: { callerIsAgentHosted?: boolean } = {}): Promise<void> {
   const io = {
     stdout: (line: string) => console.log(line),
     stderr: (line: string) => console.error(line),
@@ -359,6 +362,16 @@ export async function runComputer(): Promise<void> {
     platform: platform.os,
     homeDirectory: homedir(),
   });
+  const resolveWorkspace = async (selector: string) => {
+    const binding = await config.loadRegistration(selector);
+    if (binding) return { id: binding.id, slug: binding.slug };
+    const stored = await new FileBindingStore(stateDirectory, COFORGE_SERVER_URL)
+      .load()
+      .catch(() => []);
+    const matched = stored.find((entry) => entry.workspaceId === selector);
+    if (matched) return { id: matched.workspaceId, slug: matched.workspaceId };
+    throw new Error(`Workspace '${selector}' is not registered locally`);
+  };
   const logging = await configureComputerLogger({
     dataDirectory: computerDirectory,
     version: VERSION,
@@ -384,8 +397,12 @@ export async function runComputer(): Promise<void> {
           config,
           logging.logger,
           io,
+          { callerIsAgentHosted: options.callerIsAgentHosted },
         ),
-        logs: createLogsCommand(computerDirectory, io),
+        logs: createLogsCommand(computerDirectory, io, {
+          stateDirectory,
+          resolveWorkspace,
+        }),
         status: createStatusCommand(
           io,
           createStatusPorts({

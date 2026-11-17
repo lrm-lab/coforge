@@ -25,6 +25,7 @@ export async function restartSupervisor(
   host: RestartSupervisorHost,
   local: RestartSupervisorLocal,
   io: { stdout: (line: string) => void },
+  options?: { callerIsAgentHosted?: boolean },
 ): Promise<void> {
   // A Computer no service manager runs answers under its own code, the way `stop` answers
   // STOP_OUTSIDE_SERVICE_MANAGER for the same situation: an unexplained fallback code reads as
@@ -44,11 +45,17 @@ export async function restartSupervisor(
     throw foregroundRefusal(error);
   }
   let held = false;
-  try {
-    await local.identity();
-    held = true;
-  } catch {
-    io.stdout("Computer supervisor is unreachable; restarting without a runner hold.");
+  if (options?.callerIsAgentHosted) {
+    io.stdout(
+      "Caller is running inside a managed Agent turn; skipping runner hold to avoid waiting on itself.",
+    );
+  } else {
+    try {
+      await local.identity();
+      held = true;
+    } catch {
+      io.stdout("Computer supervisor is unreachable; restarting without a runner hold.");
+    }
   }
   try {
     if (held) {

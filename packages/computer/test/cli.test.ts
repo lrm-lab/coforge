@@ -130,6 +130,44 @@ test.each(["", "n", "no", "maybe", null])(
   },
 );
 
+test.each(["-y", "--yes"])(
+  "upgrade %s skips interactive confirmation for unattended execution",
+  async (flag) => {
+    const upgraded: string[] = [];
+    const exitCode = await runCli(
+      ["upgrade", flag],
+      {
+        login: { async run() {} },
+        setup: { async run() {} },
+        updater: {
+          async resolveVersion() {
+            return "1.0.18";
+          },
+          async getCurrentVersion() {
+            return "1.0.17";
+          },
+          async install() {},
+          async upgrade(version) {
+            upgraded.push(version);
+          },
+          async repair() {
+            return 0;
+          },
+        },
+      },
+      {
+        stdout: () => {},
+        stderr: () => {},
+        prompt: () => {
+          throw new Error("prompt must not be called when --yes is set");
+        },
+      },
+    );
+    expect(exitCode).toBe(0);
+    expect(upgraded).toEqual(["1.0.18"]);
+  },
+);
+
 test.each(["y", " YES "])(
   "install, upgrade, and repair run their own operations; upgrade requires consent: %s",
   async (answer) => {

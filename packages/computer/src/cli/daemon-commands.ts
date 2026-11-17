@@ -16,7 +16,12 @@ import {
 } from "./restart-supervisor";
 import { stopComputer } from "./stop-computer";
 import { createCommand as createClientCommand } from "#src/daemon-client/index";
-import { followComputerLogs } from "#src/logging/computer-logs";
+import {
+  DEFAULT_LOG_LINES,
+  followComputerLogs,
+  readComputerLogs,
+  resolveLogSourceTarget,
+} from "#src/logging/computer-logs";
 import type { DaemonCommand, LogsCommand } from "#src/cli";
 import { detectLogindSessionRisk } from "#src/logind-session-risk";
 
@@ -35,6 +40,7 @@ export function createCommand(
       stop: () => Promise<void>;
     };
     resolveWorkspace?: (selector: string) => Promise<{ id: string; slug: string }>;
+    callerIsAgentHosted?: boolean;
   },
 ): DaemonCommand {
   const launcher =
@@ -147,7 +153,9 @@ export function createCommand(
         stateDirectory,
         serverUrl,
       );
-      return restartSupervisor(host, local, io);
+      return restartSupervisor(host, local, io, {
+        callerIsAgentHosted: seams?.callerIsAgentHosted,
+      });
     },
   };
 }
@@ -155,8 +163,27 @@ export function createCommand(
 export function createLogsCommand(
   dataDirectory: string,
   io: { stdout: (line: string) => void },
+  options?: {
+    stateDirectory?: string;
+    resolveWorkspace?: (selector: string) => Promise<{ id: string; slug: string }>;
+  },
 ): LogsCommand {
   return {
+    async run(runOptions) {
+      const target = await resolveLogSourceTarget({
+        source: runOptions?.source ?? "computer",
+        dataDirectory,
+        stateDirectory: options?.stateDirectory,
+        resolveWorkspace: options?.resolveWorkspace,
+      });
+      await readComputerLogs({
+        logPath: target.logPath,
+        missingMessage: target.missingMessage,
+        lines: runOptions?.lines ?? DEFAULT_LOG_LINES,
+        follow: runOptions?.follow ?? false,
+        write: io.stdout,
+      });
+    },
     follow: () => followComputerLogs({ dataDirectory, write: io.stdout }),
   };
 }

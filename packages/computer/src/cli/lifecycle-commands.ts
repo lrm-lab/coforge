@@ -3,6 +3,7 @@ import type { Command } from "commander";
 import type { DaemonCommand, ForegroundCommand, LogsCommand } from "#src/cli";
 import type { DetachOutcome } from "#src/detach/detach";
 import { CliError } from "#src/errors";
+import { DEFAULT_LOG_LINES, type LogSource } from "#src/logging/computer-logs";
 
 /** The commands that start, stop and restart the Computer or one of its Workspace runtimes.
  * Split out of `cli.ts` to keep that module to the parser and the dependency wiring. */
@@ -98,8 +99,57 @@ export function registerLifecycleCommands(
     .action(() => requireForeground(dependencies).run());
   program
     .command("logs")
-    .description("Follow the Computer log, including rotated log files.")
-    .action(() => requireLogs(dependencies).follow());
+    .description("Print a bounded tail of the Computer, supervisor, or Workspace log.")
+    .option(
+      "-n, --lines <count>",
+      "Number of most recent log lines to print",
+      String(DEFAULT_LOG_LINES),
+    )
+    .option("-f, --follow", "Follow new log lines after printing the initial tail", false)
+    .option("--supervisor", "Read the Computer supervisor (Coordinator) daemon log")
+    .option("--workspace <slug-or-id>", "Read a local Workspace runtime's daemon log")
+    .option("--computer", "Read the Computer CLI log")
+    .action(
+      (options: {
+        lines: string;
+        follow?: boolean;
+        supervisor?: boolean;
+        workspace?: string;
+        computer?: boolean;
+      }) => {
+        const selected =
+          Number(Boolean(options.supervisor)) +
+          Number(options.workspace !== undefined) +
+          Number(Boolean(options.computer));
+        if (selected > 1) {
+          throw new CliError(
+            "LOGS_CONFLICTING_SOURCE",
+            "--supervisor, --workspace, and --computer cannot be used together.",
+            "Choose one log source: --supervisor, --workspace <slug>, or --computer.",
+          );
+        }
+        const trimmedLines = options.lines.trim();
+        const lines = Number(trimmedLines);
+        if (!/^\d+$/.test(trimmedLines) || !Number.isSafeInteger(lines) || lines < 1) {
+          throw new CliError(
+            "LOGS_INVALID_LINES",
+            `Invalid --lines value '${options.lines}': expected a positive integer.`,
+            "Pass a positive line count, for example `coforge-computer logs --lines 200`.",
+          );
+        }
+        const source: LogSource = options.supervisor
+          ? "supervisor"
+          : options.workspace !== undefined
+            ? { workspace: options.workspace }
+            : "computer";
+        const logs = requireLogs(dependencies);
+        if (logs.run) {
+          return logs.run({ lines, follow: Boolean(options.follow), source });
+        }
+        if (logs.follow) return logs.follow();
+        throw new Error("Computer logs are unavailable in this build");
+      },
+    );
 }
 
 /**

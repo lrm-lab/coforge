@@ -43,12 +43,14 @@ export function registerUpdateCommands(
       "--dry-run",
       "Show the version this would move to, and whether it would be refused, without changing anything",
     )
+    .option("-y, --yes", "Apply the upgrade without prompting")
     .action(
       async (options: {
         version: string;
         channel?: string;
         allowDowngrade?: boolean;
         dryRun?: boolean;
+        yes?: boolean;
       }) => {
         const allowDowngrade = options.allowDowngrade === true;
         const command = requireUpdater(updater);
@@ -69,12 +71,14 @@ export function registerUpdateCommands(
           io.stdout(`Already up to date: ${target}`);
           return;
         }
-        const answer = (io.prompt ?? globalThis.prompt)(
-          `Upgrade CoForge Computer to ${target}? [y/N] `,
-        );
-        if (!/^(y|yes)$/i.test(answer?.trim() ?? "")) {
-          io.stdout("Upgrade cancelled.");
-          return;
+        if (!options.yes) {
+          const answer = (io.prompt ?? globalThis.prompt)(
+            `Upgrade CoForge Computer to ${target}? [y/N] `,
+          );
+          if (!/^(y|yes)$/i.test(answer?.trim() ?? "")) {
+            io.stdout("Upgrade cancelled.");
+            return;
+          }
         }
         return command.upgrade(target, {
           allowDowngrade,

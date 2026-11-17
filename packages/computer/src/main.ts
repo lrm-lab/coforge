@@ -12,6 +12,7 @@ performance.mark("coforge:startup:main");
 // `__managed-agent` relays it into the Agent runtime itself, `__agent-cli` runs inside the
 // Agent's own process tree. The literal mirrors `AGENT_LAUNCH_TAG_ENV` in the daemon package —
 // importing it here would pull the Daemon into every CLI invocation.
+const callerIsAgentHosted = Boolean(Bun.env.COFORGE_AGENT_LAUNCH_TAG?.trim());
 if (Bun.argv[2] !== "__managed-agent" && Bun.argv[2] !== "__agent-cli")
   delete Bun.env.COFORGE_AGENT_LAUNCH_TAG;
 
@@ -169,5 +170,5 @@ if (Bun.argv[2] === "__pi-chat") {
   }
 } else {
   const { runComputer } = await import("./cli");
-  await runComputer();
+  await runComputer({ callerIsAgentHosted });
 }
