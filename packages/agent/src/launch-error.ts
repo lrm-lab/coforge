@@ -91,13 +91,13 @@ export function classifyPiLaunchFailure(
     detail = `Pi provider "${provider}" is not configured in the local model catalog.`;
   } else if (isModelUnavailable(cause)) {
     category = "model_missing";
-    detail = `Pi model not found: ${model ?? "(none)"}`;
+    detail = `Pi model not found: ${model ?? "(none)"}. This model is no longer available; pick another model in Agent settings and restart.`;
   } else if (!trace.providerKeyPresent && !trace.baseUrlPresent) {
     category = "provider_unconfigured";
     detail = `Pi provider "${provider}" has no usable credentials or base URL in the local model catalog.`;
   } else if (!trace.modelPresent) {
     category = "model_missing";
-    detail = `Pi model not found: ${model} (provider \"${provider}\")`;
+    detail = `Pi model not found: ${model} (provider "${provider}"). This model is no longer available; pick another model in Agent settings and restart.`;
   } else {
     category = "spawn_failed";
     detail = "Pi model runtime failed to start.";
