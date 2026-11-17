@@ -15,12 +15,14 @@ CREATE TABLE "reminder_occurrences" (
     "version" INTEGER NOT NULL,
     "scheduledFor" TIMESTAMP(3) NOT NULL,
     "claimedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "nextPublishAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "expiresAt" TIMESTAMP(3) NOT NULL,
     "status" TEXT NOT NULL DEFAULT 'pending',
     "deliveredAt" TIMESTAMP(3),
     "payload" BYTEA NOT NULL,
 
-    CONSTRAINT "reminder_occurrences_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "reminder_occurrences_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "reminder_occurrences_status_check" CHECK ("status" IN ('pending', 'expiring', 'delivered', 'superseded', 'expired'))
 );
 
 -- CreateIndex
@@ -34,9 +36,6 @@ CREATE UNIQUE INDEX "reminder_occurrences_reminderId_version_key" ON "reminder_o
 
 -- AddForeignKey
 ALTER TABLE "reminder_occurrences" ADD CONSTRAINT "reminder_occurrences_reminderId_workspaceId_fkey" FOREIGN KEY ("reminderId", "workspaceId") REFERENCES "reminders"("id", "workspaceId") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AlterTable
-ALTER TABLE "reminder_occurrences" ADD COLUMN     "nextPublishAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
 -- CreateIndex
 CREATE INDEX "reminder_occurrences_status_nextPublishAt_idx" ON "reminder_occurrences"("status", "nextPublishAt");
