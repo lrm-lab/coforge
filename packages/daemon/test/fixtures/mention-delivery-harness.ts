@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import type {
   AgentRuntimeConfig,
   AgentRuntimeEvent,
@@ -22,7 +22,7 @@ import { messageRecord } from "./message-record";
 const tempRoot = realpathSync(tmpdir());
 /** The state directory this file's runtimes read, and the one its tests seed. */
 export const workspaceRoot = join(tempRoot, `coforge-mention-delivery-${crypto.randomUUID()}`);
-export const connection: WorkspaceConfig = {
+export const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot,

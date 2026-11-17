@@ -32,8 +32,7 @@ const CONTAINER_BINDING_ENV_KEY_SET = new Set<string>(CONTAINER_BINDING_ENV_KEYS
 /**
  * Child-process per-Workspace containment for the MVP: one `__workspace-daemon` OS child per
  * binding, with a durable invocation id under the Workspace state directory so Coordinator
- * recovery can adopt the same instance after a crash. External Agent process trees remain
- * fail-closed in `ProcessTreeOwner` until Job Objects land; this seam only owns the Workspace
+ * recovery can adopt the same instance after a crash. This seam only owns the Workspace
  * daemon process itself.
  */
 export class ProcessWorkspaceInstance implements WorkspaceInstance {

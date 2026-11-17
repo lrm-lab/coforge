@@ -90,13 +90,9 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
       await messageAttention.flush(batch[0]!.agentId, batch);
       return messages.every((message) => messageAttention.wasNotified(message)) ? "told" : "gone";
     },
-    busy: (agentId, conversationId) => {
-      const session = ports.processManager.session(agentId);
-      return (
-        (conversationId ? session?.hasLiveTurnForConversation?.(conversationId) : undefined) ??
-        (session?.hasLiveTurn === true || ports.deliveryGate.isBusy(agentId))
-      );
-    },
+    busy: (agentId) =>
+      ports.processManager.session(agentId)?.hasLiveTurn === true ||
+      ports.deliveryGate.isBusy(agentId),
     blocked: (agentId) =>
       ports.deliveryGate.explicitHold(agentId) ??
       (ports.deliveryGate.shouldHold(agentId) ? "queued_until_idle" : undefined),

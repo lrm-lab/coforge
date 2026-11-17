@@ -8,7 +8,7 @@ import type {
   AgentMessageTransportResponse,
   AgentSendReconciliationRequest,
 } from "#src/connection/agent-http-clients";
-import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { emptyCodeAgentDiscovery } from "./code-agent-discovery";
 import { sessionSpy } from "./session-spy";
@@ -24,7 +24,7 @@ const tempRoot = realpathSync(tmpdir());
  * reads.
  */
 export function createMessageHarness(fixtures: {
-  connection: WorkspaceConfig;
+  connection: DaemonConfig;
   config: AgentRuntimeConfig;
 }) {
   const { connection, config } = fixtures;

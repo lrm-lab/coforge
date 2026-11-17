@@ -11,8 +11,8 @@ The module map and the install-layout rules are in [`src/AGENTS.md`](src/AGENTS.
 
 ## Contract with the product
 
-- Every change to an installation belongs to this crate: install, upgrade, repair, status, and
-  recover, with the machine mutation lock, download and verification, activation, service control,
+- Every change to an installation belongs to this crate: install, upgrade, repair, and status,
+  with the machine mutation lock, download and verification, activation, service control,
   probe, rolling back a failed upgrade, and receipts. The toolchain is pinned in
   `crates/installer/mise.toml`; this crate has its own version and release. Move that logic out of
   `packages/computer`; never add more of it to Computer.

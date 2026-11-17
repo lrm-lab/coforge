@@ -351,8 +351,7 @@ export class RuntimeStartup {
           protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
           requestId: crypto.randomUUID(),
           workspaceId: connection.workspaceId,
-          // Legacy connection records have no computer identity; the server rejects this.
-          computerId: connection.computerId ?? "",
+          computerId: connection.computerId,
           // Protocol field retained for compatibility with the existing ready handshake.
           workerInstanceId: ports.runtimeInstanceId,
           startedAt: ports.startedAtMs,

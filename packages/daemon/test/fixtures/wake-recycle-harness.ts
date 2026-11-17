@@ -20,11 +20,11 @@ import type {
 } from "@lrm/coforge-anvil";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
-import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import { emptyCodeAgentDiscovery } from "./code-agent-discovery";
 import { captureDaemonLogs } from "../log-capture";
 
-export const connection: WorkspaceConfig = {
+export const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot: join(realpathSync(tmpdir()), `coforge-wake-recycle-${crypto.randomUUID()}`),

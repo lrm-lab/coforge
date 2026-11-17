@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import type { AgentRuntimeConfig, AgentSession } from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { AgentRuntimeBackoffStore } from "#src/persistence/agent-runtime-backoff-store";
@@ -14,7 +14,7 @@ import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
  * cooldown, and a backoff a restart restored for an Agent not yet relaunched. */
 
 const tempRoot = realpathSync(tmpdir());
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot: join(tempRoot, `coforge-limit-lift-${crypto.randomUUID()}`),

@@ -1,7 +1,7 @@
 import type { AgentActivity, AgentActivityDetailKind } from "@lrm/coforge-sdk/internal";
 import type { AgentReplyIntent } from "@lrm/coforge-sdk/internal/reply-intent";
 import type { AgentRuntimeEvent, AgentSession, CodeAgentProvider } from "@lrm/coforge-anvil";
-import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { emptyCodeAgentDiscovery } from "./code-agent-discovery";
 
@@ -28,7 +28,7 @@ const config = {
 
 /** Boots a runtime whose one Agent session hands the test direct control over runtime events. */
 export async function activityHarness(
-  connection: WorkspaceConfig,
+  connection: DaemonConfig,
   provider?: CodeAgentProvider,
   transport: Record<string, unknown> = {},
 ) {

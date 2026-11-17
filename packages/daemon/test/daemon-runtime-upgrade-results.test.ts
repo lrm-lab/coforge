@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { UPGRADE_ERROR_CODE } from "@lrm/coforge-sdk/internal";
 import type { AgentSession } from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
-import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import {
   UPGRADE_RESULT_POLL_MS,
   type RecoveredUpgradeResult,
@@ -18,7 +18,7 @@ const workspaceRoot = join(
   realpathSync(tmpdir()),
   `coforge-daemon-upgrade-results-${crypto.randomUUID()}`,
 );
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot,

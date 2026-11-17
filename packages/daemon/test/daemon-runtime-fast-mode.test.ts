@@ -5,12 +5,12 @@ import {
   type AgentRuntimeEvent,
   type AgentSession,
 } from "@lrm/coforge-anvil";
-import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { DaemonRuntime } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot: "/tmp/coforge-fast-mode-runtime",

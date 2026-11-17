@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentStopIntent, DaemonRuntimeReadyRequest } from "@lrm/coforge-sdk/internal";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
-import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import {
   READY_WAIT_LOG_REPEAT_MS,
@@ -17,7 +17,7 @@ import { sessionSpy } from "./fixtures/session-spy";
 afterEach(() => jest.useRealTimers());
 
 const workspaceRoot = join(realpathSync(tmpdir()), `coforge-ready-wait-${crypto.randomUUID()}`);
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot,

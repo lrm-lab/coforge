@@ -8,7 +8,7 @@ import {
 } from "#src/credentials/credential-store";
 import { migrateComputerKey } from "#src/daemon-runtime/computer-key-migration";
 import type { ComputerSelfResult } from "#src/connection/computer-self-client";
-import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import { sessionSpy } from "./fixtures/session-spy";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 
@@ -282,7 +282,7 @@ test("the runtime migrates the stored key before opening the connection", async 
   try {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(WORKSPACE, COMPUTER, "dk_a");
-    const connection: WorkspaceConfig = {
+    const connection: DaemonConfig = {
       workspaceId: WORKSPACE,
       computerId: COMPUTER,
       workspaceRoot,

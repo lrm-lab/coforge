@@ -4,11 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll } from "bun:test";
 import { sessionSpy } from "./fixtures/session-spy";
-import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { DaemonRuntime, InMemoryDaemonCredentialStore } from "@lrm/coforge-daemon";
 
 const workspaceRoot = await mkdtemp(join(tmpdir(), "coforge-model-refresh-"));
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot,

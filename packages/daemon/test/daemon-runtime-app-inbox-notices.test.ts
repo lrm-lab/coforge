@@ -5,13 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import { DaemonRuntime } from "#src/daemon-runtime/runtime";
-import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import { sessionSpy } from "./fixtures/session-spy";
 
 const tempRoot = realpathSync(tmpdir());
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot: join(tempRoot, `coforge-app-inbox-notices-${crypto.randomUUID()}`),

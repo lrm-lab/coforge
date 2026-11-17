@@ -5,14 +5,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRuntimeConfig, AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
-import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import { sessionSpy } from "./fixtures/session-spy";
 
 // The System Cleaner tests own their runtime, clock and measurements, so they live apart from the
 // runtime suite's shared fixtures.
 const tempRoot = realpathSync(tmpdir());
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot: join(tempRoot, `coforge-daemon-runtime-cleaner-${crypto.randomUUID()}`),

@@ -5,7 +5,7 @@ import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { DaemonRuntime } from "#src/daemon-runtime/runtime";
 import type { AgentRuntimeConfig, AgentSession, AgentSessionOptions } from "@lrm/coforge-anvil";
-import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 
@@ -33,7 +33,7 @@ function agentLaunchConfig(agentApiKey: string) {
 }
 
 const tempRoot = realpathSync(tmpdir());
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot: join(tempRoot, `coforge-wake-launch-id-${crypto.randomUUID()}`),

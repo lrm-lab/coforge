@@ -3,7 +3,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentRuntimeConfig, WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import type { AgentRuntimeConfig, DaemonConfig } from "#src/daemon-runtime/runtime";
 import { DaemonRuntime } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { sessionSpy } from "./fixtures/session-spy";
@@ -13,7 +13,7 @@ const workspaceRoot = join(
   realpathSync(tmpdir()),
   `coforge-session-ack-lost-${crypto.randomUUID()}`,
 );
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot,

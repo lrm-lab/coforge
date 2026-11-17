@@ -41,7 +41,7 @@ import {
   type CodeAgentProvider,
   type AgentSession,
 } from "@lrm/coforge-anvil";
-import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { seedCursor } from "./fixtures/consumed-cursor";
 import type {
@@ -97,7 +97,7 @@ const DRAFT_ROOT = join(
   `coforge-cli-attested-send-${userDirectoryName}`,
 );
 const workspaceRoot = join(tempRoot, `coforge-daemon-runtime-${crypto.randomUUID()}`);
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot,

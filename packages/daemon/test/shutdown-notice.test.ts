@@ -13,7 +13,7 @@ import {
 import { DaemonConnection } from "#src/connection/daemon-connection";
 import type { CentrifugeWorkspaceClient } from "#src/connection/centrifuge-workspace-client";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "#src/connection/shutdown-notice-timeout";
-import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import { SHUTDOWN_HOLD_REASON_WINDOW_MS } from "#src/daemon-runtime/shutdown-reason";
 import type { AgentRuntimeConfig, AgentSession } from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
@@ -24,7 +24,7 @@ const tempRoot = realpathSync(tmpdir());
 const workspaceRoot = join(tempRoot, `coforge-shutdown-notice-${crypto.randomUUID()}`);
 afterAll(() => rm(workspaceRoot, { recursive: true, force: true }));
 
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot,

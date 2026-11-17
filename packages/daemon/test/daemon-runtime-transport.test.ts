@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRuntimeConfig, CodeAgentProvider } from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
-import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { DaemonRuntime } from "#src/daemon-runtime/runtime";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import { sessionSpy } from "./fixtures/session-spy";
@@ -13,7 +13,7 @@ import { sessionSpy } from "./fixtures/session-spy";
 // daemon-runtime.test.ts, which is over the size limit.
 
 const workspaceRoot = join(tmpdir(), `coforge-daemon-runtime-transport-${crypto.randomUUID()}`);
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot,

@@ -161,14 +161,12 @@ export class AgentDeliveryGate {
     this.inboxes.of(agentId).hold(message);
   }
 
-  /** Everything currently held for the Agent, oldest first — read-only; for a later PR carrying
-   * held deliveries into a relaunch. */
+  /** Everything currently held for the Agent, oldest first — read-only. */
   pending(agentId: string): readonly AgentMessageDelivery[] {
     return this.inboxes.peek(agentId)?.held ?? [];
   }
 
-  /** For a later PR's stall-recovery trigger: true while this Agent has at least one held,
-   * undelivered notice. */
+  /** True while this Agent has at least one held, undelivered notice. */
   hasQueued(agentId: string): boolean {
     return (this.inboxes.peek(agentId)?.held.length ?? 0) > 0;
   }

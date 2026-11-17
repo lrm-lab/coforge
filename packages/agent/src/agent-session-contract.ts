@@ -29,9 +29,7 @@ export interface AgentSession {
    * already reach a quiet session omits it, which the daemon reads as no wake needed. */
   readonly wakesAfterSubagents?: boolean;
   sendMessage(message: string): Promise<void>;
-  hasLiveTurnForConversation?(conversationId: string): boolean | undefined;
   cancelPendingNotices?(): void;
-  purgeConversation?(conversationId: string): Promise<void>;
   readSessionIdentity?(): Promise<AgentSessionIdentity | undefined>;
   /**
    * Accept a notification in this session, including while work is in progress.

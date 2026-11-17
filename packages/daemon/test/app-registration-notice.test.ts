@@ -17,7 +17,7 @@ import { DaemonConnection } from "#src/connection/daemon-connection";
 import type { CentrifugeWorkspaceClient } from "#src/connection/centrifuge-workspace-client";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { readyCapabilities } from "#src/daemon-runtime/ready-capabilities";
-import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import { captureDaemonLogs } from "./log-capture";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 
@@ -124,7 +124,7 @@ test("the connection hands a notice for this Computer to its slot, and none for 
 const tempRoot = realpathSync(tmpdir());
 const root = join(tempRoot, `coforge-app-registration-${crypto.randomUUID()}`);
 afterAll(() => rm(root, { recursive: true, force: true }));
-const workspace: WorkspaceConfig = {
+const workspace: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot: join(root, "workspace"),

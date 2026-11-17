@@ -1,5 +1,4 @@
 import { awakeClockMs } from "#src/platform/awake-clock";
-import type { AttentionDecisionOutcome } from "./agent-message-attention-decision-log";
 
 /** Per-Agent clocks for the frozen-after-notice judgment (task #318): when the process last
  * accepted an inbox notice, and when it last did anything a checked read or operation counts
@@ -53,50 +52,5 @@ export function actionStampingAuthorizedAgent(
     const agentId = authorizedAgent(context, agentApiKey);
     clocks.noteAgentAction(agentId);
     return agentId;
-  };
-}
-
-/** The release-facts ports `RuntimeRelease.stalled` reads that are not the notice clocks:
- * restart capability, the reported session, a stop in flight, and the delivery queue's wait. */
-export function releaseFactPorts(input: {
-  runningMentionIdentity(agentId: string): unknown;
-  sessionId(agentId: string): string | undefined;
-  stopping(agentId: string): boolean;
-  queuedForMs(agentId: string): number | undefined;
-}): Readonly<{
-  resumable(agentId: string): boolean;
-  sessionId(agentId: string): string | undefined;
-  isStopping(agentId: string): boolean;
-  queuedForMs(agentId: string): number | undefined;
-}> {
-  return {
-    resumable: (agentId) => input.runningMentionIdentity(agentId) !== undefined,
-    sessionId: input.sessionId,
-    isStopping: input.stopping,
-    queuedForMs: input.queuedForMs,
-  };
-}
-
-/** The attention-and-custody ports `AgentExitedDelivery`'s message bookkeeping reads, from one
- * input so `runtime.ts` assembles them in a call, not a list. */
-export function exitedDeliveryAttentionPorts<Message>(input: {
-  receive(message: Message): Promise<void>;
-  hasConsumed(message: Message): boolean;
-  logDecision(message: Message, decision: AttentionDecisionOutcome): void;
-  acknowledge(message: Message): Promise<void>;
-  acknowledgeCustody(message: Message): void;
-}): Readonly<{
-  holdRuntimeErrorDelivery(message: Message): Promise<void>;
-  hasConsumed(message: Message): boolean;
-  logConsumed(message: Message): void;
-  acknowledge(message: Message): Promise<void>;
-  acknowledgeCustody(message: Message): void;
-}> {
-  return {
-    holdRuntimeErrorDelivery: input.receive,
-    hasConsumed: input.hasConsumed,
-    logConsumed: (message) => input.logDecision(message, "consumed"),
-    acknowledge: input.acknowledge,
-    acknowledgeCustody: input.acknowledgeCustody,
   };
 }

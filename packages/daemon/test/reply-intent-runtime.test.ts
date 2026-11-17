@@ -3,13 +3,13 @@ import { rm } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { ReplyIntentPublisher } from "#src/daemon-runtime/reply-intent-publisher";
 import { activityHarness } from "./fixtures/activity-runtime";
 
 // macOS tmpdir lives under /var, a symlink; the state store rejects linked ancestors.
 const workspaceRoot = join(realpathSync(tmpdir()), `coforge-reply-intent-${crypto.randomUUID()}`);
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot,

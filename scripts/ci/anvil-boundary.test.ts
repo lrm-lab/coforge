@@ -28,19 +28,14 @@ const execution = [
   // process it wraps, so it may depend on those files and adapters may depend on it.
   "acp",
 ].map((name) => resolve(anvil, "src", name));
-const perTurn = resolve(anvil, "src/per-turn");
 
 function isRuntimeImplementation(path: string): boolean {
   return runtimes.some((directory) => path === directory || path.startsWith(directory + sep));
 }
 
 function isSharedImplementation(path: string): boolean {
-  return (
-    execution.some(
-      (file) => path === file || path === file + ".ts" || path.startsWith(file + sep),
-    ) ||
-    path === perTurn ||
-    path.startsWith(perTurn + sep)
+  return execution.some(
+    (file) => path === file || path === file + ".ts" || path.startsWith(file + sep),
   );
 }
 

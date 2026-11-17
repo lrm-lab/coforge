@@ -8,27 +8,6 @@ import type { ContextViewIndexEntry } from "#src/agent-context-view/context-view
 import { ContextViewRestoreCache } from "#src/agent-context-view/context-view-restore-cache";
 import { queryAgentContext } from "./agent-context-query";
 
-export function currentAgentContextSession(input: {
-  reportedSessions: ReadonlyMap<string, Readonly<{ launchId: string; sessionId: string }>>;
-  currentActivityLaunches: ReadonlyMap<string, Readonly<{ launchId: string }>>;
-  isStopping(agentId: string): boolean;
-  hasSession(agentId: string): boolean;
-}): (agentId: string) => string | undefined {
-  return (agentId) => {
-    const reported = input.reportedSessions.get(agentId);
-    const launch = input.currentActivityLaunches.get(agentId);
-    if (
-      !reported ||
-      !launch ||
-      reported.launchId !== launch.launchId ||
-      input.isStopping(agentId) ||
-      !input.hasSession(agentId)
-    )
-      return undefined;
-    return reported.sessionId;
-  };
-}
-
 export type AgentContextRuntimePorts = Readonly<{
   authorize(context: string, agentApiKey: string): string;
   workspaceRoot: string;

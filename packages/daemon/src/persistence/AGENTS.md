@@ -8,8 +8,6 @@ Rules for durable local state in `src/persistence/`. They extend
 - A connection outbox is not durable storage, and nothing here is a jobs queue
   or a Message outbox.
 
-- `conversation-session-store.ts` atomically stores Memory conversation identities outside
-  Agent workspaces, namespaced by the control session so a Session Reset starts fresh.
 - `agent-state-db.ts` owns each Agent's durable ledger (`agent-state/<agentId>/state.db`) in the
   daemon state directory — one SQLite database per Agent holding the consumed cursor, the
   held-send draft, and the held send's continuation — and the one-time import of the legacy JSON

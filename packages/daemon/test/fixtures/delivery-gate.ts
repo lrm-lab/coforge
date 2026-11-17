@@ -1,7 +1,7 @@
 import type { AgentRuntimeConfig, AgentRuntimeEvent, AgentSession } from "@lrm/coforge-anvil";
 import type { AgentActivity, AgentStatus } from "@lrm/coforge-sdk/internal";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
-import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import { emptyCodeAgentDiscovery } from "./code-agent-discovery";
 
 /** A fake session whose `subscribe` listener the test drives directly, so it can
@@ -93,7 +93,7 @@ export async function createDeliveryGateHarness({
   onActivity,
   agentConfig = {},
 }: {
-  connection: WorkspaceConfig;
+  connection: DaemonConfig;
   config: AgentRuntimeConfig;
   provider: AgentRuntimeConfig["provider"];
   acks?: ReturnType<typeof ackGate>;

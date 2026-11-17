@@ -7,7 +7,7 @@ import type { ReminderSync } from "@lrm/coforge-sdk/internal";
 import {
   DaemonRuntime,
   type AgentRuntimeConfig,
-  type WorkspaceConfig,
+  type DaemonConfig,
 } from "#src/daemon-runtime/runtime";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
@@ -16,7 +16,7 @@ import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 
 const tempRoot = realpathSync(tmpdir());
 const workspaceRoot = join(tempRoot, `coforge-reminder-connection-${crypto.randomUUID()}`);
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot,

@@ -140,11 +140,7 @@ export type {
   AgentStateTransition,
   AgentStatus as AgentStateStatus,
 } from "#src/agent-runtime/agent-state-machine";
-export {
-  DaemonRuntime,
-  type DaemonConfig,
-  type WorkspaceConfig,
-} from "#src/daemon-runtime/runtime";
+export { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 export {
   SystemdWorkspaceInstance,
   workspaceUnit,

@@ -18,7 +18,6 @@ const SOURCE_ROOTS: readonly string[] = [
   "packages/coforge/src",
   "packages/computer/src",
   "packages/daemon/src",
-  "packages/cli/src",
 ];
 
 /** Bytes no shipped source may hold: all controls except tab, LF, VT, FF, CR, and not DEL. */

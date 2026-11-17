@@ -5,13 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RuntimeAuthAdapter } from "@lrm/coforge-anvil";
 import type { RuntimeAuthIntent, RuntimeAuthStatusReport } from "@lrm/coforge-sdk/internal";
-import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 
 const workspaceRoot = join(realpathSync(tmpdir()), `coforge-auth-wiring-${crypto.randomUUID()}`);
 afterAll(() => rm(workspaceRoot, { recursive: true, force: true }));
 
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot,

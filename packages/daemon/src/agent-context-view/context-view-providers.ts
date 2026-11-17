@@ -43,9 +43,6 @@ export const CONTEXT_VIEW_PROVIDERS = {
 } as const satisfies Record<string, ContextViewProviderReading>;
 
 export type ContextViewRuntime = keyof typeof CONTEXT_VIEW_PROVIDERS;
-export const CONTEXT_VIEW_SUPPORTED_RUNTIMES = Object.keys(
-  CONTEXT_VIEW_PROVIDERS,
-) as ContextViewRuntime[];
 
 /** The provider an Agent config names when the daemon can read its request log, else undefined. */
 export function contextViewRuntime(value: string): ContextViewRuntime | undefined {

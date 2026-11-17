@@ -155,10 +155,6 @@ export const SETUP_HINTS = {
     "Check the local configuration and credential permissions, or name the Workspace by its exact id, then rerun setup.",
   SETUP_FAILED: "Check your login and server configuration, then rerun setup.",
   SETUP_NOT_LOGGED_IN: "Complete Device Code login, then rerun setup.",
-  SETUP_REGISTRATION_UNAVAILABLE:
-    "The approved CoForge RPC transport is not available in this build.",
-  SETUP_WORKSPACE_RPC_UNAVAILABLE:
-    "Workspace queries are not available until their approved CoForge RPC methods are defined and implemented.",
   SETUP_WORKSPACE_REQUIRED:
     "Run `coforge-computer setup --workspace <slug>` with the Workspace slug shown on its page.",
   SETUP_WORKSPACE_INVALID:

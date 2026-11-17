@@ -11,12 +11,12 @@ import type {
   AgentSessionOptions,
 } from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
-import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import { captureDaemonLogs } from "./log-capture";
 
 const tempRoot = realpathSync(tmpdir());
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot: join(tempRoot, `coforge-session-report-rejection-${crypto.randomUUID()}`),

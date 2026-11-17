@@ -4,5 +4,3 @@ export type DaemonConfig = {
   workspaceRoot: string;
   serverHttpUrl?: string;
 };
-/** @deprecated wire-facing callers should use DaemonConfig internally. */
-export type WorkspaceConfig = DaemonConfig;

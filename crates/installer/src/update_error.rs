@@ -1,6 +1,6 @@
 //! Why preparing a version failed. The variants are the failure classes the Computer's
 //! `UpdateError` (packages/computer/src/updater.ts) reports, with the same code strings
-//! (installer/contract/upgrade-error-codes.json), because a receipt carries the code.
+//! (crates/installer/contract/upgrade-error-codes.json), because a receipt carries the code.
 //! `DownloadFailed` has no counterpart there: it keeps a transfer from the feed that failed apart
 //! from content the feed served that is invalid.
 

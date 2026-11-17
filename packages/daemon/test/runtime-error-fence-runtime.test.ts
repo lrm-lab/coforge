@@ -3,14 +3,14 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
-import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { ackGate, createDeliveryGateHarness } from "./fixtures/delivery-gate";
 
 /** The runtime-level companion to `runtime-error-fence-transient.test.ts`: the same three
  * transient classes, driven through a whole DaemonRuntime, so the observable claim is the one a
  * person would make — the Agent stayed online and its delivery waited out the backoff (task #726). */
 
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot: mkdtempSync(join(tmpdir(), "coforge-fence-runtime-")),

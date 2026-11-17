@@ -13,10 +13,10 @@ import type {
   AgentSessionOptions,
 } from "@lrm/coforge-anvil";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
-import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import { emptyCodeAgentDiscovery } from "./code-agent-discovery";
 
-export const connection: WorkspaceConfig = {
+export const connection: DaemonConfig = {
   computerId: "computer-replay",
   workspaceId: "workspace-replay",
   workspaceRoot: join(realpathSync(tmpdir()), `coforge-replay-recovery-${crypto.randomUUID()}`),

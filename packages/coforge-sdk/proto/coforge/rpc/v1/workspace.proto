@@ -181,9 +181,6 @@ message AgentStartIntent {
   // control_epoch is set (every managed start); absent only for an unmanaged
   // start, which this wire message no longer expects from a current server.
   optional string launch_id = 19;
-  // A recognized runtime tool fence. Absent retains the ordinary Agent tool
-  // profile. Field 21: 20 was taken by resume_prompt on main before this
-  // field landed.
   reserved 21, 22;
   reserved "tool_profile", "memory_agent";
   // Text the Agent's first turn opens with, in place of message recovery: the

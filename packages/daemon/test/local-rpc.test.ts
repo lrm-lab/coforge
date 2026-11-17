@@ -15,7 +15,7 @@ import {
 import { LocalDaemonLauncher } from "#src/daemon-host/launcher";
 import { startDaemonLocalRpcServer } from "#src/local-rpc";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
-import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import type { DaemonCredentialStore } from "#src/credentials/credential-store";
 import { WorkspaceLifecycleSupersededError } from "#src/supervisor/lifecycle-superseded-error";
 
@@ -178,7 +178,7 @@ test("a Workspace's cloud connection is read from its handshake", async () => {
 
 test("daemon stores configured connection metadata without its token", async () => {
   const socketPath = join(tmpdir(), `coforge-${crypto.randomUUID()}.sock`);
-  const saved: WorkspaceConfig[] = [];
+  const saved: DaemonConfig[] = [];
   const server = await startDaemonLocalRpcServer({
     socketPath,
     serverUrl: launcherEnvironment.serverUrl,

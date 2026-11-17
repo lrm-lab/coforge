@@ -4,13 +4,13 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sessionSpy } from "./fixtures/session-spy";
-import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { DaemonRuntime, InMemoryDaemonCredentialStore } from "@lrm/coforge-daemon";
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 
 const workspaceRoot = await mkdtemp(join(tmpdir(), "coforge-forget-"));
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot,

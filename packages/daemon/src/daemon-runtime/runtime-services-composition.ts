@@ -140,7 +140,7 @@ export function composeRuntimeServices(ports: RuntimeServicesPorts): RuntimeServ
   const recovered = { results: upgradeLifecycle.recoveredUpgradeResults ?? [], pending: false };
   const upgradeResults = new UpgradeResultReporter({
     workspaceId: connection.workspaceId,
-    computerId: connection.computerId ?? "",
+    computerId: connection.computerId,
     readOperations: upgradeLifecycle.readUpgradeOperations ?? (async () => recovered),
     transport,
     acknowledge: upgradeLifecycle.acknowledgeUpgradeResult,

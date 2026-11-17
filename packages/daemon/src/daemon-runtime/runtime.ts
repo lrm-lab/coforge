@@ -38,7 +38,7 @@ import type { AgentRecoveryContext } from "./runtime-launch-intent";
 import { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff";
 import { createAgentDesktopHolds } from "#src/agent-runtime/agent-desktop";
 import type { DaemonConfig } from "./runtime-connection-config";
-export type { DaemonConfig, WorkspaceConfig } from "./runtime-connection-config";
+export type { DaemonConfig } from "./runtime-connection-config";
 import type { DaemonCredentialStore } from "#src/credentials/credential-store";
 import type {
   DaemonConnectionClient,

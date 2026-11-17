@@ -2,7 +2,6 @@ import { getLogger } from "@logtape/logtape";
 import {
   AGENT_ACTIVITY_DETAIL_KIND,
   MENTION_DELIVERY_TERMINAL_CODES,
-  diagnosticErrorName,
   type AgentActivity,
   type AgentActivityProbe,
   type AgentInboxPurge,
@@ -148,15 +147,6 @@ export class AgentOperations {
     if (purge.workspaceId !== ports.connection.workspaceId)
       throw new Error("agent inbox purge targets another Workspace");
     const conversations = new Set(purge.conversationIds);
-    const session = ports.processManager.session(purge.agentId);
-    for (const conversationId of conversations)
-      void session?.purgeConversation?.(conversationId).catch((error) => {
-        logger.warning("Memory conversation cleanup failed", {
-          event: "agent.inbox.purge_cleanup_failed",
-          agent_id: purge.agentId,
-          error_code: diagnosticErrorName(error),
-        });
-      });
     let dropped = 0;
     const queue = ports.inputDrain.get(purge.agentId);
     if (queue)

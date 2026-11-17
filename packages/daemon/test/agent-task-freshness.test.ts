@@ -4,7 +4,7 @@ import { tmpdir, userInfo } from "node:os";
 import { realpathSync } from "node:fs";
 import { join } from "node:path";
 import { type AgentRuntimeConfig } from "@lrm/coforge-anvil";
-import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { type AgentMessageRequest, type TaskRequest } from "@lrm/coforge-sdk/internal";
 import { createMessageHarness } from "./fixtures/message-harness";
 import { messageRecord } from "./fixtures/message-record";
@@ -40,7 +40,7 @@ const DRAFT_ROOT = join(
   `coforge-cli-attested-send-${userDirectoryName}`,
 );
 const workspaceRoot = join(tempRoot, `coforge-daemon-runtime-${crypto.randomUUID()}`);
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot,

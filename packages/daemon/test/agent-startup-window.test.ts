@@ -3,7 +3,7 @@ import { rm } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DaemonRuntime, type WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import type { AgentStartIntent } from "@lrm/coforge-sdk/internal";
@@ -15,7 +15,7 @@ import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import { captureDaemonLogs } from "./log-capture";
 
 const tempRoot = realpathSync(tmpdir());
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "computer-a",
   workspaceId: "workspace-a",
   workspaceRoot: join(tempRoot, `coforge-startup-window-${crypto.randomUUID()}`),

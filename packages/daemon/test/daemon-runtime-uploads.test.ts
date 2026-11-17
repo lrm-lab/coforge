@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
-import type { WorkspaceConfig } from "#src/daemon-runtime/runtime";
+import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { createMessageHarness } from "./fixtures/message-harness";
 
-const connection: WorkspaceConfig = {
+const connection: DaemonConfig = {
   computerId: "c",
   workspaceId: "w",
   workspaceRoot: "/tmp/coforge-uploads-runtime",
