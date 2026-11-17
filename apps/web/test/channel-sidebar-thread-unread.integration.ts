@@ -88,12 +88,10 @@ test("channel sidebar thread unreads: counts distinct followed non-task threads,
     const rowFor = async (userId: string) =>
       (await channels.list(workspace.id, userId)).find((row) => row.id === team.id)!;
 
-    // 1. Bob creates two threads (auto-following them on reply) and Ada replies twice in root1 (mentioning Bob) and once in root2.
     const root1 = await send(bob.id, "thread one root");
     const root2 = await send(bob.id, "thread two root");
     await channels.markRead(workspace.id, bob.id, team.id, 10_000);
 
-    // Carol also follows root1 and mutes the channel to test batched follower SQL + muted @ behavior.
     await channels.setUserThreadFollowed(workspace.id, carol.id, team.id, root1.id, true);
     await channels.markRead(workspace.id, carol.id, team.id, 10_000);
     await channels.setUserMuted(workspace.id, carol.id, team.id, true);
@@ -109,14 +107,12 @@ test("channel sidebar thread unreads: counts distinct followed non-task threads,
       threadRootId: root2.id,
     });
 
-    // Two replies in root1 + one in root2 = 2 unread threads (NOT 3 replies!).
     const bobRowBeforeOpen = await rowFor(bob.id);
     expect(bobRowBeforeOpen.unreadCount).toBe(0);
     expect(bobRowBeforeOpen.mentioned).toBe(false);
     expect(bobRowBeforeOpen.unreadThreadCount).toBe(2);
     expect(bobRowBeforeOpen.threadMentioned).toBe(true);
 
-    // Muted Carol still gets unreadThreadCount; realtime activity carried exact per-follower counts.
     const carolRow = await rowFor(carol.id);
     expect(carolRow.muted).toBe(true);
     expect(carolRow.unreadThreadCount).toBe(1);
@@ -127,7 +123,6 @@ test("channel sidebar thread unreads: counts distinct followed non-task threads,
     expect(bobLatestActivity?.unreadThreadCount).toBe(2);
     expect(bobLatestActivity?.threadMentioned).toBe(true);
 
-    // 2. Top-level message mentioning Carol + ordinary message for Bob: opening channel clears ONLY top-level, NOT threads.
     const topMsg = await send(ada.id, `top level ping @${carol.username}`);
     expect((await rowFor(carol.id)).mentioned).toBe(true);
     expect((await rowFor(bob.id)).unreadCount).toBe(1);
@@ -147,7 +142,6 @@ test("channel sidebar thread unreads: counts distinct followed non-task threads,
       threadMentioned: true,
     });
 
-    // 3. Opening root1 clears ONLY root1 (unreadThreadCount 2 -> 1, threadMentioned true -> false); opening root2 clears 1 -> 0 (omitted in event).
     viewerEvents.length = 0;
     await channels.markThreadReadForUser(
       workspace.id,
@@ -176,7 +170,6 @@ test("channel sidebar thread unreads: counts distinct followed non-task threads,
     const bobAllThreadsRead = await rowFor(bob.id);
     expect(bobAllThreadsRead.unreadThreadCount ?? 0).toBe(0);
     expect(bobAllThreadsRead.threadMentioned ?? false).toBe(false);
-    // Omitted fields in channel.marked.v1 explicitly mean 0 / false when the last unread thread is read.
     expect(viewerEvents.find((e) => e.userIds.includes(bob.id))?.event).toEqual({
       type: "channel.marked.v1",
       workspaceId: workspace.id,
@@ -185,7 +178,6 @@ test("channel sidebar thread unreads: counts distinct followed non-task threads,
       readThroughSequence: topMsg.sequence,
     });
 
-    // 4. Right-click "Mark as read" (markAllRead) clears channel, manual unread marker AND all followed threads together.
     await send(ada.id, "new top message");
     await send(ada.id, `another thread reply @${bob.username}`, {
       threadRootId: root1.id,
@@ -208,7 +200,6 @@ test("channel sidebar thread unreads: counts distinct followed non-task threads,
       unreadCount: 0,
     });
 
-    // 5. Task threads (both task_thread conversations and legacy message-anchored tasks) are NEVER counted in unreadThreadCount.
     const legacyTaskRoot = await send(bob.id, "legacy task root");
     await channels.markAllRead(workspace.id, bob.id, team.id);
     const bobMember = await db.conversationMember.findFirstOrThrow({
@@ -262,7 +253,6 @@ test("channel sidebar thread unreads: counts distinct followed non-task threads,
       activities.find((entry) => entry.userIds.includes(bob.id))?.event.unreadThreadCount,
     ).toBeUndefined();
 
-    // 6. DM right-click markAllRead clears unreadCount and markedUnread; DM badge read carries no thread badge.
     const dm = await directs.open(workspace.id, bob.id, { userId: ada.id });
     await directs.send(
       workspace.id,
@@ -278,7 +268,6 @@ test("channel sidebar thread unreads: counts distinct followed non-task threads,
     expect(dmMember.unreadFromSequence).toBeNull();
     expect(dmMember.readThroughSequence).toBeGreaterThan(0);
 
-    // 7. EXPLAIN plan with 25 followed threads: must use index scans/probes, zero Seq Scan on messages or message_mentions.
     for (let i = 0; i < 25; i++) {
       const extraRoot = await send(bob.id, `bulk thread ${i}`);
       await send(ada.id, `bulk reply ${i}`, { threadRootId: extraRoot.id });

@@ -25,7 +25,6 @@ export function PickerListRow({
   "aria-label": ariaLabel,
 }: {
   label: string;
-  /** Rich content shown in place of `label` (a private channel's lock before its name). */
   title?: ReactNode;
   /** A second, quieter line under the name. */
   description?: string;

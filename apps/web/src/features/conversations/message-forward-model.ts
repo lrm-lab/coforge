@@ -30,7 +30,6 @@ export function canForwardMessage(
   return message.senderKind !== "system" && !message.actionCard && !message.forwarded;
 }
 
-/** The row's sender as the card's avatar reads it; none for a server notice. */
 function senderOf(
   message: Pick<MessageView, "senderKind" | "senderUserId" | "senderAgentId" | "senderAvatarUrl">,
 ): Pick<ForwardedMessageView, "sourceSender"> {

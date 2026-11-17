@@ -163,7 +163,6 @@ test("deleting the original leaves the forward, its copied files and its snapsho
     sourceAccessible: false,
   });
   expect(view!.forwarded?.[0]).not.toHaveProperty("sourceMessageId");
-  // With the original gone, its sender's face is still found, by the handle the snapshot kept.
   expect(view!.forwarded?.[0]?.sourceSender).toMatchObject({ kind: "user", id: carol.id });
 });
 
@@ -344,15 +343,11 @@ test("only a viewer who can read the source's conversation can open the original
   expect(await accessible(alice.id)).toBe(true);
   expect(await accessible(carol.id)).toBe(true);
   expect(await accessible(bob.id)).toBe(false);
-  // Every viewer sees who wrote it, from the original itself while it exists; the snapshot keeps
-  // no face of its own.
   expect(mapped.forwarded?.[0]).not.toHaveProperty("sourceSender");
   const senderFor = async (userId: string) =>
     (await attachForwardedAccess(db, workspaceId, userId, [mapped]))[0]!.forwarded?.[0]
       ?.sourceSender;
   expect(await senderFor(bob.id)).toMatchObject({ kind: "user", id: carol.id });
-  // Once carol renames, only a viewer who may open the original still learns it was her: bob,
-  // outside that DM, has just the old handle, which now names nobody.
   const before = await db.user.findUniqueOrThrow({ where: { id: carol.id } });
   await db.user.update({
     where: { id: carol.id },

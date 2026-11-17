@@ -106,7 +106,6 @@ export function ForwardedMessageCard({
   );
 }
 
-/** One original in the card: its author's face, handle and moment, its words, its attachments. */
 function ForwardedOriginal({
   original,
   attachments,
@@ -126,9 +125,6 @@ function ForwardedOriginal({
   const sender = original.sourceSender;
   return (
     <div className="flex min-w-0 gap-2.5">
-      {/* The author's face, as each row in the stream has one (Frank, 11-10): the server finds
-          who sent the original (`forwardedSenders`); a handle it cannot place gets an initial.
-          No presence dot: the card is a record of then, not who is around now. */}
       <ActorAvatar
         size="xs"
         presence={false}
@@ -139,8 +135,6 @@ function ForwardedOriginal({
         {...(sender?.kind === "user" ? { userId: sender.id } : {})}
       />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
-        {/* As Raft draws it: the author by handle and the month, day and time; the moment does not
-          age the way the row's own time does. */}
         <p className="flex min-w-0 items-center gap-1.5 text-xs">
           <span className="min-w-0 truncate font-semibold text-secondary">
             @{original.sourceSenderHandle}
@@ -160,7 +154,6 @@ function ForwardedOriginal({
         </p>
         {original.sourceRawBody !== undefined && original.sourceMentions
           ? // The original's own words with their chips. A task it names is the source
-            // conversation's, so no conversation is in scope to read it from: it stays `task #N`.
             rawBody && (
               <ConversationIdProvider conversationId={undefined}>
                 <MessageBody body={rawBody} mentions={original.sourceMentions} />

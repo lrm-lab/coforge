@@ -1,7 +1,5 @@
 import { AtSign } from "@untitledui/icons";
 
-/** The "@" icon marker of a channel row whose unread messages or unread followed threads mention
- * the viewer (shown even when the channel is muted; never on DM rows). */
 export function MentionBadge() {
   return (
     <span

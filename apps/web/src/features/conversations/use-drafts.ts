@@ -87,8 +87,6 @@ export function useDraftCount(): number {
   return useSyncExternalStore(subscribeComposerDrafts, count, () => 0);
 }
 
-/** Whether this conversation has an unsent message or thread draft on this device (excluding task
- * discussion drafts). Returns a boolean snapshot so typing re-renders only when presence flips. */
 export function useHasConversationDraft(conversationId: string): boolean {
   const check = useCallback(
     () =>

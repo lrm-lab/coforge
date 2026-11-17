@@ -18,7 +18,6 @@ export const FORWARD_SOURCES_MAX = 50;
  * snapshot, frozen when it was forwarded. `sourceBody` is plain text (mentions already read back as
  * names), never a stored body. The card's attachments are the message's own `attachments`.
  */
-/** A forwarded original's sender as the card draws their avatar. */
 export type ForwardedSender = {
   kind: "user" | "agent";
   id: string;
@@ -28,9 +27,6 @@ export type ForwardedSender = {
 export type ForwardedMessageView = {
   /** The original sender's handle, as Raft names them on the card. */
   sourceSenderHandle: string;
-  /** Who sent the original, for the face beside their handle (Frank, 11-10): the original's own
-   * sender while it exists, else the Workspace member or Agent with that handle. Absent when
-   * neither is found (a handle since renamed or gone); the card draws an initial instead. */
   sourceSender?: ForwardedSender;
   /** ISO timestamp the original was sent. */
   sourceCreatedAt: string;

@@ -30,7 +30,6 @@ function withNewest(data: InfiniteData<Page> | undefined, newest: (page: Page) =
   return data && first ? { ...data, pages: [newest(first), ...rest] } : data;
 }
 
-/** Reads messages newer than the newest cached page and merges them into the first page. */
 export async function catchUpTaskConversation(
   queryClient: QueryClient,
   id: string,
@@ -41,7 +40,6 @@ export async function catchUpTaskConversation(
 ) {
   const key = taskConversationQueryKey(id);
   const read = queryClient.getQueryData<InfiniteData<Page>>(key);
-  // Nothing read yet: the first page, on its way, brings the newest.
   if (!read) return;
   const after = read.pages[0]?.messages.at(-1)?.sequence ?? 0;
   const arrived = await readUpdates({ conversationId: id, afterSequence: after });
@@ -53,8 +51,6 @@ export async function catchUpTaskConversation(
   );
 }
 
-/** Ensures `messageId` is in the cached Task pages: catches up newer replies first (task #122),
- * then pages older history up to `BACK_PAGES` (task #99), or throws `"message not found"`. */
 export async function loadTaskBackTo({
   queryClient,
   conversationId,
@@ -77,8 +73,6 @@ export async function loadTaskBackTo({
   if (!WHOLE_ID.test(messageId)) throw new Error("message not found");
   const key = taskConversationQueryKey(conversationId);
   if (held(queryClient.getQueryData(key))) return messageId;
-  // Newer than the pages held: a popup reopened on pages kept from before the reply came (the
-  // first unread Activity lands on) reads what arrived since, before reading back (task #122).
   if (conversationId) {
     await catchUp(conversationId);
     if (held(queryClient.getQueryData(key))) return messageId;
@@ -214,14 +208,6 @@ export function useTaskConversation({
     () => [...(pages.data?.pages ?? [])].reverse().flatMap((page) => page.messages),
     [pages.data],
   );
-  // A message the pages held do not have (the first unread an open lands on, a jump's target): read
-  // what arrived after the newest page, then further back, a page at a time, until it is in (task
-  // #99, #122). Not a channel's read around the message (`loadConversationAround`): that replaces
-  // the window with one that may stand apart from the newest, and this list only grows from its
-  // newest page. At most `BACK_PAGES` pages: past them it is not found, and an open stays at the
-  // latest with no divider, as before. Only a whole id is looked for (the open's first unread is
-  // one); a link's short id needs the server to resolve it, which this read cannot, so it is not
-  // found at once.
   const { fetchNextPage } = pages;
   const loadBackTo = useCallback(
     (messageId: string) =>

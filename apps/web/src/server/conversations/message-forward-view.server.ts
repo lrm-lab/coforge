@@ -88,7 +88,6 @@ export async function attachForwardedAccess<T extends { forwarded?: ForwardedMes
   viewerUserId: string,
   messages: readonly T[],
 ): Promise<T[]> {
-  // Who may open each original decides how its sender is found, so access is settled first.
   const settled = await settleForwardedAccess(db, workspaceId, viewerUserId, messages);
   const senders = await forwardedSenders(db, workspaceId, settled);
   if (!senders.size) return settled;
@@ -105,15 +104,6 @@ export async function attachForwardedAccess<T extends { forwarded?: ForwardedMes
   );
 }
 
-/**
- * Who sent each forwarded original on the page, in one lookup each way: by the original when this
- * viewer may open it (exact, whatever the sender has renamed to since), else by the handle the
- * snapshot kept, among the Workspace's members and its Agents: an original the viewer cannot read
- * tells them nothing the snapshot does not. A handle a member and an Agent share names neither, so
- * the card draws an initial rather than the wrong face. Known limit: a deleted original's handle
- * taken since by someone else shows that person's face. Keyed `message:<id>` and
- * `handle:<handle>`.
- */
 async function forwardedSenders(
   db: Pick<PrismaClient, "message" | "user" | "agent">,
   workspaceId: string,
@@ -198,7 +188,6 @@ async function forwardedSenders(
   return found;
 }
 
-/** `attachForwardedAccess`'s half that decides, per viewer, whether each original opens. */
 async function settleForwardedAccess<T extends { forwarded?: ForwardedMessageView[] }>(
   db: Pick<PrismaClient, "conversation">,
   workspaceId: string,

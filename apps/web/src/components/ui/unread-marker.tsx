@@ -29,9 +29,6 @@ export function UnreadBadge({ count, className }: { count: number; className?: s
   );
 }
 
-/** Raft-style unified unread capsule (task #135): holds top-level unread message count, a 1px
- * vertical divider, and followed non-task unread thread count (`💬 N`) inside one pill; shows
- * whichever segment is non-zero, and subdues on muted or unjoined channels. */
 export function UnreadCapsule({
   unreadCount = 0,
   unreadThreadCount = 0,

@@ -12,9 +12,6 @@ import { conversationRoute, type ConversationTarget } from "./last-conversation"
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { createRowHover, RowHoverContext } from "./row-hover";
 
-/** The row's accessible name: the conversation it names, plus its unread count, unread followed
- * threads, "@" mention and unsent draft when present. A DM row's time and preview stay visible
- * without entering the accessible name, so a read DM is named by `label` alone. */
 function rowLabel(options: {
   label: string;
   unreadCount?: number;
@@ -76,7 +73,6 @@ function MutedIcon() {
   );
 }
 
-/** Beside a row's name when an unsent draft exists on this device. */
 function DraftIcon() {
   return <Edit03 aria-hidden="true" className="size-3.5 shrink-0 text-tertiary" />;
 }
@@ -108,9 +104,7 @@ export function ConversationRow({
    * darker than an unpinned row's, until it is selected or muted. */
   pinned?: boolean;
   icon: ReactNode;
-  /** Unread and audible (`sidebarRowIndicators`): darker, semibold title. */
   bold?: boolean;
-  /** Unjoined channel: dimmed and never bold, without rendering the muted bell. */
   unjoined?: boolean;
   muted?: boolean;
   subduedCapsule?: boolean;
@@ -192,7 +186,6 @@ export function ConversationRow({
       {lastMessage ? (
         <span className="flex min-w-0 flex-1 flex-col justify-center">
           <span className="flex min-w-0 items-center gap-2">
-            {/* Name -> Muted bell -> Draft icon, as Raft's; the time keeps the end of the line. */}
             <span className="flex min-w-0 flex-1 items-center gap-1">
               <span
                 className={cx(

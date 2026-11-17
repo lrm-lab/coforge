@@ -202,7 +202,6 @@ test("a viewer opens an original in a channel, or in a DM of theirs, and only wh
         ];
       },
     },
-    // Who sent each original is another lookup (`forwardedSenders`); nobody is found here.
     message: { findMany: async () => [] },
     user: { findMany: async () => [] },
     agent: { findMany: async () => [] },

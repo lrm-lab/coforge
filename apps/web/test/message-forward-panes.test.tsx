@@ -49,7 +49,6 @@ describe("ForwardTargetPane channel group avatars", () => {
     expect(html.match(/class="avatar-group avatar-group-xs"/g)?.length).toBe(2);
     expect(html).toContain(">coforge<");
     expect(html).not.toContain(">#coforge<");
-    // Private channel keeps its accessible lock icon before the bare name once GroupAvatar takes the leading slot.
     expect(html).toContain('role="img"');
     expect(html).toContain(">qa375-priv<");
   });
