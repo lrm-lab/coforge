@@ -5,13 +5,7 @@ import type {
   AgentSessionIdentity,
   AgentTurnProcessWindow,
 } from "@coforge/agent";
-import {
-  AGENT_RUNTIME_EVENT_TYPE,
-  JsonlRequestError,
-  asRecord,
-  eventTime,
-  nonEmptyString,
-} from "@lrm/coforge-anvil";
+import { AGENT_RUNTIME_EVENT_TYPE, asRecord, eventTime, nonEmptyString } from "@lrm/coforge-anvil";
 import { codexContextUsage } from "./context-usage";
 import { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import { CodexItemEvents } from "./item-events";
@@ -21,12 +15,12 @@ import { CodexTurnSignals } from "./turn-signals";
 import {
   AGENT_ACTIVITY_DETAIL_KIND,
   RUNTIME_PROVIDER,
-  thrownMessage,
   utf8Encoder,
   type AgentServiceTierObserved,
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
-import { scrubError, type CodexSessionState } from "./provider-support";
+import { scrubError } from "./provider-support";
+import { CodexTurnControl } from "./turn-control";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.CODEX]);
 
@@ -45,20 +39,10 @@ export class CodexAgentSession implements AgentSession {
   readonly #itemEvents = new CodexItemEvents();
   readonly #subagentThreads: CodexSubagentThreads;
   readonly #signals: CodexTurnSignals;
-  #state: CodexSessionState = { type: "idle" };
-  /** An interrupt that arrived while `turn/start` was in flight, sent once the turn id is known. */
-  #interruptWhileStarting = false;
+  readonly #turns: CodexTurnControl;
   #lastCompletedTurnId: string | undefined;
-  #starting: Promise<void> | undefined;
   #identity: AgentSessionIdentity;
-  /** The service tier codex applied at thread/start, from its own reply. Reported on the first
-   * turn rather than in the constructor: the daemon subscribes only after
-   * `createAgentSession` returns, so an event emitted here would be dropped. */
-  readonly #serviceTier: AgentServiceTierObserved | undefined;
-  #serviceTierReported = false;
   #replacementWarning: string | undefined;
-  /** The account's default model, sent with every turn when Codex's own was unusable. */
-  readonly #model: string | undefined;
 
   constructor(
     process: JsonlProcess,
@@ -76,13 +60,21 @@ export class CodexAgentSession implements AgentSession {
     this.#agentId = agentId;
     this.#runtimeId = runtimeId;
     this.#signals = new CodexTurnSignals(threadId, agentId, runtimeId);
-    this.#serviceTier = serviceTier;
     this.#replacementWarning = replacementWarning;
-    this.#model = model;
     this.#identity = {
       sessionId: threadId,
       state: resumed ? "resumable" : "empty",
     };
+    this.#turns = new CodexTurnControl({
+      process,
+      threadId,
+      agentId,
+      runtimeId,
+      serviceTier,
+      model,
+      emit: (event) => this.#emit(event),
+      setIdentity: (state) => this.#setIdentity(state),
+    });
     process.onRecord((record) => this.#accept(record));
     process.onStderr((text) => {
       const match = /Reconnecting\.\.\.\s*(\d+)\s*\/\s*\d+/i.exec(text);
@@ -97,102 +89,19 @@ export class CodexAgentSession implements AgentSession {
   }
 
   async sendMessage(text: string): Promise<void> {
-    if (this.#state.type !== "idle") throw new Error("code agent is already running");
-    const starting = this.#startTurn(text);
-    this.#starting = starting;
-    try {
-      await starting;
-    } finally {
-      if (this.#starting === starting) this.#starting = undefined;
-    }
+    return this.#turns.sendMessage(text);
   }
 
   get hasLiveTurn(): boolean {
-    return (
-      this.#state.type === "running" ||
-      this.#state.type === "interrupting" ||
-      (this.#state.type === "starting" && this.#state.completedTurnIds.size === 0)
-    );
+    return this.#turns.hasLiveTurn;
   }
 
   get processId(): number | undefined {
     return this.#process.pid;
   }
 
-  async #startTurn(text: string): Promise<void> {
-    if (!this.#serviceTierReported) {
-      this.#serviceTierReported = true;
-      if (this.#serviceTier) this.#emit({ type: "service-tier", state: this.#serviceTier });
-    }
-    this.#setIdentity("unknown");
-    this.#state = { type: "starting", completedTurnIds: new Set() };
-    let response: Readonly<Record<string, unknown>>;
-    try {
-      response = await this.#process.request({
-        method: "turn/start",
-        params: {
-          threadId: this.#threadId,
-          input: [{ type: "text", text }],
-          ...(this.#model ? { model: this.#model } : {}),
-        },
-      });
-    } catch (error) {
-      if (!this.#isDisposed()) this.#beginIdle();
-      throw error;
-    }
-    const turn = asRecord(asRecord(response.result)?.turn);
-    const turnId = turn?.id;
-    if (typeof turnId !== "string") {
-      if (!this.#isDisposed()) this.#beginIdle();
-      throw new Error("Codex did not create a turn");
-    }
-    this.#setIdentity("resumable");
-    // A disposed session keeps its state, and an interrupt has nothing to act on.
-    if (this.#state.type !== "starting") return;
-    // A turn that completed before its `turn/start` reply was read is already over.
-    if (this.#state.completedTurnIds.has(turnId)) {
-      this.#beginIdle();
-      return;
-    }
-    this.#state = { type: "running", turnId };
-    if (this.#interruptWhileStarting) {
-      this.#interruptWhileStarting = false;
-      // The caller of `interrupt()` has already returned, so a failure here has no caller to
-      // reach: say it in the log and leave the turn running for the daemon's stop to retry. A
-      // turn that ended anyway is what the interrupt asked for, so it is not a failure.
-      // Not awaited: `sendMessage` resolves at turn start, and an app-server that never answers
-      // `turn/interrupt` must not hold the send (and every notice queued behind it) open.
-      void this.interrupt().catch((error: unknown) => {
-        if (!this.#isLiveTurn(turnId)) return;
-        logger.warning("Codex could not interrupt the turn it had just started", {
-          event: "codex.interrupt.failed",
-          agent_id: this.#agentId,
-          runtime_id: this.#runtimeId,
-          error_message: scrubError(thrownMessage(error)),
-          outcome: "error",
-        });
-      });
-    }
-  }
-
-  /** Whether this turn is still the one the session is running or interrupting. */
-  #isLiveTurn(turnId: string): boolean {
-    const state = this.#state;
-    return (
-      !this.#isDisposed() &&
-      (state.type === "running" || state.type === "interrupting") &&
-      state.turnId === turnId
-    );
-  }
-
-  /** Back to idle from anywhere but disposal, forgetting an interrupt that had no turn to act on. */
-  #beginIdle(): void {
-    this.#interruptWhileStarting = false;
-    this.#state = { type: "idle" };
-  }
-
   async notify(notice: string): Promise<void> {
-    await this.#acceptNotice(notice);
+    await this.#turns.acceptNotice(notice);
     logger.info("Codex accepted inbox wakeup", {
       event: "codex.wakeup.accepted",
       agent_id: this.#agentId,
@@ -200,42 +109,6 @@ export class CodexAgentSession implements AgentSession {
       notice_bytes: utf8Encoder.encode(notice).byteLength,
       outcome: "ok",
     });
-  }
-
-  async #acceptNotice(notice: string): Promise<void> {
-    // Only retry a rejected admission when the active turn ended. Other RPC
-    // failures remain failures so the daemon retains the unacknowledged attention.
-    for (let attempt = 0; attempt < 2; attempt++) {
-      if (this.#starting) await this.#starting;
-      const state = this.#state;
-      if (state.type === "idle") return this.sendMessage(notice);
-      if (state.type !== "running") throw new Error("code agent cannot accept a notification");
-      try {
-        const response = await this.#process.request({
-          method: "turn/steer",
-          params: {
-            threadId: this.#threadId,
-            expectedTurnId: state.turnId,
-            input: [{ type: "text", text: notice }],
-          },
-        });
-        if (asRecord(response.result)?.turnId !== state.turnId) {
-          throw new Error("Codex did not accept the notification for the active turn");
-        }
-        return;
-      } catch (error) {
-        const rpcError =
-          error instanceof JsonlRequestError ? asRecord(error.responseError) : undefined;
-        if (
-          attempt > 0 ||
-          rpcError?.code !== -32600 ||
-          rpcError.message !== "no active turn to steer"
-        ) {
-          throw error;
-        }
-        if (this.#state === state) this.#state = { type: "idle" };
-      }
-    }
   }
 
   subscribe(listener: (event: AgentRuntimeEvent) => void): () => void {
@@ -267,35 +140,13 @@ export class CodexAgentSession implements AgentSession {
   }
 
   async interrupt(): Promise<void> {
-    if (this.#state.type === "starting") {
-      // The turn id is not known until `turn/start` answers, so the interrupt cannot be sent yet.
-      // Remember it and send it the moment the turn begins; dropping it would let the turn run on
-      // against the user's stop (task #703).
-      this.#interruptWhileStarting = true;
-      return;
-    }
-    if (this.#state.type !== "running") return;
-    const turnId = this.#state.turnId;
-    this.#state = { type: "interrupting", turnId };
-    try {
-      await this.#process.request({
-        method: "turn/interrupt",
-        params: { threadId: this.#threadId, turnId },
-      });
-    } catch (error) {
-      // Roll back only this turn's own interrupting: the turn may have completed while the
-      // request was in flight, and a session that is idle then must stay idle (task #703).
-      const state = this.#state;
-      if (!this.#isDisposed() && state.type === "interrupting" && state.turnId === turnId)
-        this.#state = { type: "running", turnId };
-      throw error;
-    }
+    return this.#turns.interrupt();
   }
 
   /** A subagent's own thread takes the same `turn/interrupt` the main thread does. */
   async interruptSubagent(taskId: string): Promise<"interrupted" | "not_running"> {
     const turn = this.#subagentThreads.runningSubagentTurn(taskId);
-    if (!turn || this.#isDisposed()) return "not_running";
+    if (!turn || this.#turns.isDisposed()) return "not_running";
     await this.#process.request({
       method: "turn/interrupt",
       params: { threadId: turn.threadId, turnId: turn.turnId },
@@ -312,8 +163,8 @@ export class CodexAgentSession implements AgentSession {
   }
 
   async dispose(options?: Readonly<{ cutoffAtMs?: number }>): Promise<void> {
-    if (this.#state.type === "disposed") return;
-    this.#state = { type: "disposed" };
+    if (this.#turns.isDisposed()) return;
+    this.#turns.state = { type: "disposed" };
     await this.#process.dispose(options);
   }
 
@@ -436,12 +287,12 @@ export class CodexAgentSession implements AgentSession {
       const turn = asRecord(params?.turn);
       if (typeof turn?.id !== "string") return;
       if (turn.id === this.#lastCompletedTurnId) return;
-      if (this.#state.type === "starting") this.#state.completedTurnIds.add(turn.id);
+      if (this.#turns.state.type === "starting") this.#turns.state.completedTurnIds.add(turn.id);
       else if (
-        (this.#state.type === "running" || this.#state.type === "interrupting") &&
-        this.#state.turnId === turn.id
+        (this.#turns.state.type === "running" || this.#turns.state.type === "interrupting") &&
+        this.#turns.state.turnId === turn.id
       ) {
-        this.#state = { type: "idle" };
+        this.#turns.state = { type: "idle" };
       } else {
         return;
       }
@@ -490,7 +341,7 @@ export class CodexAgentSession implements AgentSession {
 
   #acceptsTurnItem(params: Record<string, unknown> | undefined): boolean {
     if (params?.threadId !== undefined && params.threadId !== this.#threadId) return false;
-    const state = this.#state;
+    const state = this.#turns.state;
     if (state.type === "idle" || state.type === "disposed") return false;
     if (typeof params?.turnId !== "string") return true;
     if (params.turnId === this.#lastCompletedTurnId) return false;
@@ -502,9 +353,5 @@ export class CodexAgentSession implements AgentSession {
     if (this.#identity.state === state) return;
     this.#identity = { sessionId: this.#threadId, state };
     this.#emit({ type: "session", identity: this.#identity });
-  }
-
-  #isDisposed(): boolean {
-    return this.#state.type === "disposed";
   }
 }
