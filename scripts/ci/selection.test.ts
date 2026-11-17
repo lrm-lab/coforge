@@ -356,10 +356,10 @@ test("Anvil source changes validate every product consumer", () => {
 });
 
 test("Anvil library changes run its dependency-direction guard", () => {
-  for (const path of ["packages/anvil/index.ts", "packages/anvil/src/per-turn/session.ts"]) {
+  for (const path of ["packages/anvil/index.ts", "packages/anvil/src/jsonl-process.ts"]) {
     expect(selectChecks([path], "changes")).toContain("ci");
   }
-  expect(selectChecks(["packages/anvil/test/per-turn-process.test.ts"], "changes")).not.toContain(
-    "ci",
-  );
+  expect(
+    selectChecks(["packages/anvil/test/jsonl-process-cleanup.test.ts"], "changes"),
+  ).not.toContain("ci");
 });
