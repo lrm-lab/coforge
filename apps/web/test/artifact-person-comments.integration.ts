@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { avatarPresetReference, avatarPresets } from "#src/features/profiles/avatar-presets";
+import { agentFaceUrl } from "#src/server/apps/app-logo.server";
 import type { ArtifactSignalEvent } from "#src/server/artifacts/artifact-signals.server";
 import { ArtifactPersonComments } from "#src/server/artifacts/artifact-person-comments.server";
 import type { CommentsFixture } from "./helpers/artifact-comments-fixture";
@@ -265,4 +267,40 @@ test("a deleted root that keeps replies cannot be resolved", async () => {
   await comments.remove({ ...place(artifact), commentId: root.id });
   const shown = await list(artifact);
   expect(shown.comments[0]).toMatchObject({ id: root.id, deleted: true, canResolve: false });
+});
+
+test("a comment shows its author's own face, also once they left; an Agent's read carries none", async () => {
+  const artifact = await f.make("Faces");
+  const preset = avatarPresets[1]!;
+  await f.db.user.update({
+    where: { id: f.bob },
+    data: { avatarObjectKey: avatarPresetReference(preset.id), avatarContentType: null },
+  });
+  await f.post(f.agents.reader, {
+    operation: "comment",
+    artifact,
+    body: "From the Agent.",
+    idempotencyKey: f.key(),
+  });
+  await post(artifact, "From Bob.", {}, f.bob);
+  const reader = await f.db.agent.findUniqueOrThrow({
+    where: { id: f.agents.reader },
+    select: { id: true, avatarMascot: true },
+  });
+  await f.db.workspaceMembership.deleteMany({
+    where: { workspaceId: f.workspaceId, userId: f.bob },
+  });
+  try {
+    const page = await list(artifact);
+    expect(page.comments.map((comment) => [comment.authorId, comment.authorAvatarUrl])).toEqual([
+      [f.agents.reader, agentFaceUrl(reader)],
+      [f.bob, preset.url],
+    ]);
+    const read = await f.post(f.agents.reader, { operation: "comments", artifact, all: true });
+    expect(read.body.comments[0]).not.toHaveProperty("authorAvatarUrl");
+  } finally {
+    await f.db.workspaceMembership.create({
+      data: { workspaceId: f.workspaceId, userId: f.bob, role: "member" },
+    });
+  }
 });

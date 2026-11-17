@@ -1,5 +1,10 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
-import { actorNames, actorOf, type ArtifactActorName } from "./artifact-actor-names.server";
+import {
+  actorDirectory,
+  actorNames,
+  actorOf,
+  type ArtifactActorName,
+} from "./artifact-actor-names.server";
 
 export const COMMENT_SELECT = {
   id: true,
@@ -83,11 +88,11 @@ type Named = {
 
 const isString = (value: string | null | undefined): value is string => typeof value === "string";
 
-async function namesOf(db: ViewDb, workspaceId: string, rows: readonly Named[]) {
-  return actorNames(db, workspaceId, {
+function actorIdsOf(rows: readonly Named[]) {
+  return {
     userIds: rows.flatMap((row) => [row.authorUserId, row.resolvedByUserId].filter(isString)),
     agentIds: rows.flatMap((row) => [row.authorAgentId, row.resolvedByAgentId].filter(isString)),
-  });
+  };
 }
 
 type ImagesByComment = ReadonlyMap<string, ArtifactCommentImageView[]>;
@@ -148,10 +153,19 @@ export async function commentViewPairs(
   db: ViewDb,
   workspaceId: string,
   rows: readonly CommentRow[],
-): Promise<{ row: CommentRow; view: ArtifactCommentView | DeletedCommentView }[]> {
+): Promise<
+  { row: CommentRow; view: ArtifactCommentView | DeletedCommentView; face: string | null }[]
+> {
   if (rows.length === 0) return [];
-  const [names, images] = await Promise.all([namesOf(db, workspaceId, rows), imagesOf(db, rows)]);
-  return rows.map((row) => ({ row, view: commentViewOf(names, images, row) }));
+  const [{ names, faces }, images] = await Promise.all([
+    actorDirectory(db, workspaceId, actorIdsOf(rows)),
+    imagesOf(db, rows),
+  ]);
+  return rows.map((row) => ({
+    row,
+    view: commentViewOf(names, images, row),
+    face: faces.get(row.authorAgentId ?? row.authorUserId ?? "") ?? null,
+  }));
 }
 
 export async function commentViews(
@@ -159,7 +173,12 @@ export async function commentViews(
   workspaceId: string,
   rows: readonly CommentRow[],
 ): Promise<(ArtifactCommentView | DeletedCommentView)[]> {
-  return (await commentViewPairs(db, workspaceId, rows)).map(({ view }) => view);
+  if (rows.length === 0) return [];
+  const [names, images] = await Promise.all([
+    actorNames(db, workspaceId, actorIdsOf(rows)),
+    imagesOf(db, rows),
+  ]);
+  return rows.map((row) => commentViewOf(names, images, row));
 }
 
 export async function commentView(db: ViewDb, workspaceId: string, row: CommentRow) {
@@ -173,7 +192,7 @@ export async function reviewViews(
   rows: readonly CommentRow[],
 ): Promise<{ review: ReviewView; comments: (ArtifactCommentView | DeletedCommentView)[] }> {
   const [names, images] = await Promise.all([
-    namesOf(db, workspaceId, [review, ...rows]),
+    actorNames(db, workspaceId, actorIdsOf([review, ...rows])),
     imagesOf(db, rows),
   ]);
   return {

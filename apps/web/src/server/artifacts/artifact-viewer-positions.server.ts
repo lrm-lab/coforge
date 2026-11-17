@@ -1,5 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { actorNames } from "./artifact-actor-names.server";
+import { actorDirectory } from "./artifact-actor-names.server";
 import { artifactUnreadKeysSql } from "./artifact-activity.server";
 import type { ArtifactViewing } from "./artifact-viewing.server";
 import type { ArtifactReads } from "./artifact-reads.server";
@@ -68,11 +68,15 @@ export class ArtifactViewerPositions {
       }),
       this.viewing.now(artifact.id),
     ]);
-    const names = await actorNames(this.db, input.workspaceId, {
+    const { names, faces } = await actorDirectory(this.db, input.workspaceId, {
       userIds: [...rows.map((row) => row.userId), ...nowIds],
       agentIds: [],
     });
-    const named = (id: string) => ({ userId: id, name: names.get(id) ?? "" });
+    const named = (id: string) => ({
+      userId: id,
+      name: names.get(id) ?? "",
+      avatarUrl: faces.get(id) ?? null,
+    });
     return {
       you: input.userId,
       currentVersion: artifact.currentVersion,

@@ -121,12 +121,9 @@ export function ArtifactPresenceChip({
       >
         <ActorAvatarStack>
           {faces.map((person) => (
-            <ActorAvatar
+            <PersonFace
               key={person.userId}
-              presence={false}
-              userId={person.userId}
-              name={person.name}
-              size="xs"
+              person={person}
               className={cn("size-5", AVATAR_STACK_RING.regular)}
             />
           ))}
@@ -185,15 +182,34 @@ function PresenceRow({
   name,
   detail,
 }: {
-  person: { userId: string; name: string };
+  person: { userId: string; name: string; avatarUrl: string | null };
   name: string;
   detail: ReactNode;
 }) {
   return (
     <li className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm">
-      <ActorAvatar presence={false} userId={person.userId} name={person.name} size="xs" />
+      <PersonFace person={person} />
       <span className="min-w-0 flex-1 truncate font-medium text-secondary">{name}</span>
       <span className="shrink-0 text-xs text-tertiary">{detail}</span>
     </li>
+  );
+}
+
+function PersonFace({
+  person,
+  className,
+}: {
+  person: { userId: string; name: string; avatarUrl: string | null };
+  className?: string;
+}) {
+  return (
+    <ActorAvatar
+      presence={false}
+      userId={person.userId}
+      src={person.avatarUrl ?? undefined}
+      name={person.name}
+      size="xs"
+      className={className}
+    />
   );
 }

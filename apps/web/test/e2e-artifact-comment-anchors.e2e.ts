@@ -2,7 +2,9 @@ import { expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { avatarPresetReference, avatarPresets } from "#src/features/profiles/avatar-presets";
 import { PrismaClient } from "#src/generated/prisma/client";
+import { defaultPersonPictureId } from "#src/lib/person-picture";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
@@ -51,6 +53,12 @@ test("people comment on a selection and on lines; markers show beside the text o
     },
   });
   const lin = await db.user.create({ data: { username: `lin-a-${tail}`, displayName: "Lin Xia" } });
+  const chosenFace = (userId: string) =>
+    avatarPresets.find((preset) => preset.id !== defaultPersonPictureId(userId))!;
+  const devFace = await db.user.findUniqueOrThrow({
+    where: { id: DEV_BROWSER_USER.id },
+    select: { avatarObjectKey: true, avatarContentType: true },
+  });
   await db.workspaceMembership.create({ data: { workspaceId, userId: lin.id } });
   const channel = await db.conversation.create({
     data: {
@@ -98,6 +106,14 @@ test("people comment on a selection and on lines; markers show beside the text o
   const lines = "const a = 1;\nconst b = 2;\nconst c = 3;\nconst d = 4;\n";
   const table = 'name,note\nLee,"first\nsecond"\nBo,ok\n';
   try {
+    for (const userId of [lin.id, DEV_BROWSER_USER.id])
+      await db.user.update({
+        where: { id: userId },
+        data: {
+          avatarObjectKey: avatarPresetReference(chosenFace(userId).id),
+          avatarContentType: null,
+        },
+      });
     await experiments.write(workspaceId, "artifacts", true);
     await mkdir(shots, { recursive: true });
     await browser("set", "viewport", width!, height!);
@@ -148,6 +164,11 @@ test("people comment on a selection and on lines; markers show beside the text o
     });
     await waitFor(`document.querySelectorAll("[data-comment-marker]").length === 2`);
     await shoot("35-margin-markers");
+    const showsChosen = (selector: string, userId: string) =>
+      `document.querySelector(${JSON.stringify(`${selector} img[data-avatar-img]`)})?.getAttribute("src") === ${JSON.stringify(chosenFace(userId).url)}`;
+    await waitFor(showsChosen(`[data-comment-thread="${second.id}"]`, lin.id));
+    await waitFor(showsChosen(`[data-comment-marker="${second.id}"]`, lin.id));
+    await waitFor(showsChosen('button[aria-label="Who is viewing"]', DEV_BROWSER_USER.id));
     await waitFor(
       `[...document.querySelectorAll("[data-comment-thread]")].map((thread) => thread.dataset.commentThread).join() === ${JSON.stringify(`${mine},${second.id}`)}`,
     );
@@ -277,6 +298,9 @@ test("people comment on a selection and on lines; markers show beside the text o
       `[...document.querySelectorAll("[data-comment-thread]")].some((thread) => thread.textContent.includes("Two lines in one row ${tail}") && thread.textContent.includes("2–3"))`,
     );
   } finally {
+    await db.user
+      .update({ where: { id: DEV_BROWSER_USER.id }, data: devFace })
+      .catch(() => undefined);
     await browser("close").catch(() => undefined);
     proxy.stop();
     await experiments.write(workspaceId, "artifacts", before);

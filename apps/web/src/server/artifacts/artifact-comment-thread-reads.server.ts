@@ -38,6 +38,7 @@ export type PersonCommentView = (
   | Extract<SharedView, { deleted: true }>
 ) & {
   authorId: string | null;
+  authorAvatarUrl: string | null;
   mine: boolean;
   canResolve: boolean;
 };
@@ -63,11 +64,12 @@ async function personViews(
       { artifact, root: { authorUserId: null, authorAgentId: null } },
     ),
   ]);
-  return pairs.map(({ row, view }) => {
+  return pairs.map(({ row, view, face }) => {
     const mine = row.authorUserId === userId;
     return {
       ...("deleted" in view ? view : { ...view, anchor: view.anchor as PersonAnchor | null }),
       authorId: row.authorAgentId ?? row.authorUserId,
+      authorAvatarUrl: face,
       mine,
       canResolve: row.rootId === null && row.deletedAt === null && (mine || managesAll),
     };
