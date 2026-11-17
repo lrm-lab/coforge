@@ -26,7 +26,11 @@ export type TeamMemoryHead = TeamMemoryDraft & {
     mergedFrom: { id: string; revision: number }[];
   };
 };
-export type TeamMemoryWrite = { requestId: string; reviewToken?: string } & (
+export type TeamMemoryWrite = {
+  requestId: string;
+  reviewToken?: string;
+  maintenanceToken?: string;
+} & (
   | ({ operation: "create" } & TeamMemoryDraft)
   | ({ operation: "update"; id: string; revision: number; reason: string } & TeamMemoryDraft)
   | ({
@@ -42,7 +46,9 @@ export type TeamMemoryWrite = { requestId: string; reviewToken?: string } & (
 export type TeamMemoryCatalogCommand =
   | { operation: "projects"; query?: string; offset?: number }
   | { operation: "project-create"; name: string; slug: string; description: string };
+export type TeamMemoryMaintenanceCommand = { operation: "maintenance" };
 export type TeamMemoryCommand =
+  | TeamMemoryMaintenanceCommand
   | TeamMemoryCatalogCommand
   | ({ operation: "prepare" } & TeamMemoryDraft)
   | { operation: "search"; query: string; offset?: number; projectId?: string; archived?: boolean }
@@ -50,10 +56,22 @@ export type TeamMemoryCommand =
   | { operation: "get"; id: string; revision?: number }
   | { operation: "history"; id: string; offset?: number }
   | TeamMemoryWrite;
+export const TEAM_MEMORY_MAINTENANCE_COMMAND = "coforge memory maintenance --scope team";
+export const TEAM_MEMORY_MAINTENANCE_GUIDANCE =
+  "Finish the person’s task first. Then inspect at most five entries within two minutes. Read full evidence; preserve important decisions, sources and history. Stop for new work. Never delete, unpin or mix Projects. Use maintenanceToken and normal reviewToken for each change.";
 export type TeamMemoryResult = {
   status: "ok" | "review_required" | "deleted";
   entries: TeamMemoryHead[];
   projects?: { id: string; name: string; slug: string; description: string }[];
+  maintenanceHint?: {
+    projectId: string | null;
+    observedEntries: number;
+    observedBytes: number;
+    incomplete: boolean;
+    nextCommand: string;
+    guidance: string;
+  };
+  maintenance?: { token: string; expiresAt: string; remaining: number; projectId: string | null };
   reviewRevision?: number;
   reviewToken?: string;
   nextOffset?: number;
@@ -91,6 +109,11 @@ export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {
     return item;
   };
   const operation = string("operation", 20);
+  if (operation === "maintenance") {
+    if (Object.keys(value).some((key) => key !== "operation"))
+      throw new Error("invalid_memory_field");
+    return { operation };
+  }
   if (operation === "projects" || operation === "project-create") {
     const keys =
       operation === "projects"
@@ -125,6 +148,7 @@ export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {
   const writeKeys = [
     "requestId",
     "reviewToken",
+    "maintenanceToken",
     ...(operation === "create" ? [] : ["id", "revision", "reason"]),
     ...(operation === "restore" ? ["fromRevision"] : []),
     ...(operation === "merge" ? ["sources"] : []),
@@ -189,6 +213,7 @@ export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {
   if (operation === "prepare") return { operation, ...draft! };
   const common = {
     requestId: uuid("requestId"),
+    ...(value.maintenanceToken === undefined ? {} : { maintenanceToken: uuid("maintenanceToken") }),
     ...(value.reviewToken === undefined ? {} : { reviewToken: uuid("reviewToken") }),
   };
   if (operation === "create") return { operation, ...common, ...draft! };
@@ -291,6 +316,41 @@ export function decodeTeamMemoryResult(value: unknown): TeamMemoryResult {
       ))
   )
     throw new Error("invalid_memory_projects");
+  const validProject = (id: unknown) => id === null || (typeof id === "string" && UUID.test(id));
+  if (value.maintenanceHint !== undefined) {
+    const hint = value.maintenanceHint;
+    if (
+      !isRecord(hint) ||
+      !validProject(hint.projectId) ||
+      !Number.isSafeInteger(hint.observedEntries) ||
+      Number(hint.observedEntries) < 0 ||
+      Number(hint.observedEntries) > 65 ||
+      !Number.isSafeInteger(hint.observedBytes) ||
+      Number(hint.observedBytes) < 0 ||
+      Number(hint.observedBytes) > 8 * 1024 * 1024 ||
+      typeof hint.incomplete !== "boolean" ||
+      typeof hint.nextCommand !== "string" ||
+      hint.nextCommand.length > 200 ||
+      typeof hint.guidance !== "string" ||
+      hint.guidance.length > 600
+    )
+      throw new Error("invalid_memory_maintenance_hint");
+  }
+  if (value.maintenance !== undefined) {
+    const batch = value.maintenance;
+    if (
+      !isRecord(batch) ||
+      typeof batch.token !== "string" ||
+      !UUID.test(batch.token) ||
+      typeof batch.expiresAt !== "string" ||
+      !Number.isFinite(Date.parse(batch.expiresAt)) ||
+      !Number.isSafeInteger(batch.remaining) ||
+      Number(batch.remaining) < 0 ||
+      Number(batch.remaining) > 5 ||
+      !validProject(batch.projectId)
+    )
+      throw new Error("invalid_memory_maintenance");
+  }
   for (const key of ["reviewRevision", "nextOffset"])
     if (value[key] !== undefined && (!Number.isSafeInteger(value[key]) || Number(value[key]) < 0))
       throw new Error("invalid_memory_response");

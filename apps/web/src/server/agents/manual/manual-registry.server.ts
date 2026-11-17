@@ -12,6 +12,7 @@ import channelsBody from "#src/server/agents/manual/topics/channels.md?raw";
 import etiquetteBody from "#src/server/agents/manual/topics/etiquette.md?raw";
 import githubBody from "#src/server/agents/manual/topics/github.md?raw";
 import manualBody from "#src/server/agents/manual/topics/manual.md?raw";
+import memoryMaintenanceBody from "#src/server/agents/manual/topics/memory-maintenance.md?raw";
 import memoryBody from "#src/server/agents/manual/topics/memory.md?raw";
 import profileBody from "#src/server/agents/manual/topics/profile.md?raw";
 import remindersBody from "#src/server/agents/manual/topics/reminders.md?raw";
@@ -105,6 +106,13 @@ export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
     summary:
       "Memory is what the next session resumes from, within limits: MEMORY.md (3,000 tokens, about 12 KB per fresh session), notes/active-context.md (the current state, overwritten, about 4 KB), and notes/<topic>.md for long material behind a pointer; both ride in after compaction.",
     body: memoryBody,
+  },
+  {
+    slug: "memory-maintenance",
+    title: "Bounded team memory maintenance",
+    summary:
+      "Same-writer maintenance after a size hint: full evidence, protected entries, Project scope, versioned changes, a five-entry allowance and a two-minute deadline.",
+    body: memoryMaintenanceBody,
   },
   {
     slug: "profile",

@@ -41,7 +41,11 @@ export async function handleTeamMemory(
 ): Promise<Response> {
   try {
     const caller = actor.agentId
-      ? { ...actor, includeHumanAuthors: request.headers.get("x-coforge-memory-authors") === "2" }
+      ? {
+          ...actor,
+          includeHumanAuthors: request.headers.get("x-coforge-memory-authors") === "2",
+          includeMaintenance: request.headers.get("x-coforge-memory-maintenance") === "1",
+        }
       : actor;
     return Response.json(await memory.execute(caller, await readCommand(request)), {
       headers: { "cache-control": "no-store" },

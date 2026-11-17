@@ -1,3 +1,8 @@
+import {
+  beginTeamMemoryMaintenance,
+  suggestTeamMemoryMaintenance,
+  consumeTeamMemoryMaintenance,
+} from "./team-memory-maintenance.repositories.server";
 import { teamMemoryCatalog } from "./team-memory-projects.repositories.server";
 import { memoryReceipts } from "./team-memory-receipts.repositories.server";
 import { teamMemoryAccess as access } from "./team-memory-access.repositories.server";
@@ -14,6 +19,7 @@ import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import {
   teamMemoryTerms,
   type TeamMemoryCommand,
+  type TeamMemoryMaintenanceCommand,
   type TeamMemoryCatalogCommand,
   type TeamMemoryDraft,
   type TeamMemoryHead,
@@ -80,13 +86,20 @@ function page(rows: Row[], offset: number, snippets = false): TeamMemoryResult {
 export class PrismaTeamMemoryStore implements TeamMemoryStore {
   constructor(private readonly db: PrismaClient) {}
 
+  beginMaintenance(actor: TeamMemoryActor): Promise<TeamMemoryResult> {
+    return beginTeamMemoryMaintenance(this.db, actor);
+  }
+
   catalog(actor: TeamMemoryActor, command: TeamMemoryCatalogCommand): Promise<TeamMemoryResult> {
     return teamMemoryCatalog(this.db, actor, command);
   }
 
   async read(
     actor: TeamMemoryActor,
-    command: Exclude<TeamMemoryCommand, TeamMemoryWrite | TeamMemoryCatalogCommand>,
+    command: Exclude<
+      TeamMemoryCommand,
+      TeamMemoryWrite | TeamMemoryCatalogCommand | TeamMemoryMaintenanceCommand
+    >,
   ): Promise<TeamMemoryResult> {
     return this.db.$transaction(
       async (tx) => {
@@ -287,6 +300,8 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
                   take: 10,
                 })) as Row[])
               : [];
+          if (command.maintenanceToken)
+            await consumeTeamMemoryMaintenance(tx, actor, command, target, sources);
           validateTeamMutation(
             actor,
             command,
@@ -436,7 +451,15 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
             where: { workspaceId: actor.workspaceId },
             data: { revision: { increment: 1 } },
           });
-          return { status: "ok", entries: [saved] };
+          const maintenanceHint =
+            !command.maintenanceToken && actor.agentId
+              ? await suggestTeamMemoryMaintenance(tx, actor, saved)
+              : undefined;
+          return {
+            status: "ok",
+            entries: [saved],
+            ...(maintenanceHint ? { maintenanceHint } : {}),
+          };
         },
         { timeout: 10_000 },
       );
