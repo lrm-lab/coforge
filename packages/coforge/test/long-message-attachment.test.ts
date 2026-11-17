@@ -162,7 +162,6 @@ describe("CLI long message auto-attachment (#42)", () => {
   test("task reply at 8000 sends directly, at 8001 uploads once even on retryable failure, and surfaces upload size error", async () => {
     const task = { ref: "#coforge-backend:#42", board: "coforge-backend", number: 42 };
 
-    // 1. Exact 8000 -> no upload
     let uploads = 0;
     const exactOut = await runTaskConversation(
       {
@@ -181,7 +180,6 @@ describe("CLI long message auto-attachment (#42)", () => {
     expect(uploads).toBe(0);
     expect(exactOut).not.toContain("超长，已作为文件发送");
 
-    // 2. Over 8000 + retryable failure -> uploads once, retries with same idempotencyKey & merged attachments
     let replyCalls = 0;
     const seenKeys: string[] = [];
     let seenAttachments: string[] | undefined;
@@ -228,7 +226,6 @@ describe("CLI long message auto-attachment (#42)", () => {
     expect(retryOut).toContain("超长，已作为文件发送");
     expect(retryOut).toContain(uploadedId);
 
-    // 3. Upload rejected for attachment size limit -> clear error, no reply sent
     let sentAfterLimitError = false;
     await expect(
       runTaskConversation(

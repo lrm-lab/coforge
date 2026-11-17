@@ -12,10 +12,6 @@ export type LongMessageUploadResult = {
   convertedAttachmentId?: string;
 };
 
-/**
- * Converts an over-limit message body into a Markdown file attachment and a short preview using
- * the shared SDK rule so `message send` and `task reply` behave identically to the Web composer.
- */
 export async function convertLongMessageToAttachment(input: {
   body: string;
   target: string;
