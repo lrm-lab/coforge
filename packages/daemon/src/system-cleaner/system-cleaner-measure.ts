@@ -2,7 +2,7 @@ import { lstat, statfs } from "node:fs/promises";
 import type { ReminderClock } from "#src/agent-reminder/reminder-clock";
 
 export type MemoryMeasurement =
-  | Readonly<{ kind: "measured"; bytes: number }>
+  | Readonly<{ kind: "measured"; bytes: number; incomplete?: boolean }>
   | Readonly<{ kind: "not_established"; reason: string }>;
 
 export type DiskMeasurement =
@@ -12,7 +12,6 @@ export type DiskMeasurement =
 const DISK_LOW_MAX_AVAILABLE_BYTES = 20 * 1024 ** 3;
 const DISK_LOW_MAX_AVAILABLE_PERCENT = 10;
 
-/** Whether a disk reading is low on both absolute headroom and the share left. */
 export function isDiskLow(availableBytes: number, totalBytes: number): boolean {
   return (
     availableBytes < DISK_LOW_MAX_AVAILABLE_BYTES &&
@@ -20,14 +19,12 @@ export function isDiskLow(availableBytes: number, totalBytes: number): boolean {
   );
 }
 
-/** A measurement that never answers is `not_established`, never a hang. */
 export function withMeasurementTimeout<T extends { kind: string }>(
   clock: ReminderClock,
   timeoutMs: number,
   measure: () => Promise<T>,
 ): Promise<T | Readonly<{ kind: "not_established"; reason: string }>> {
   return new Promise((resolve) => {
-    // A second call is a no-op: `resolve` keeps the first result, and the timer is gone.
     const finish = (result: T | Readonly<{ kind: "not_established"; reason: string }>) => {
       clock.cancel(timer);
       resolve(result);
@@ -42,7 +39,6 @@ export function withMeasurementTimeout<T extends { kind: string }>(
   });
 }
 
-/** MEMORY.md's size, measurable only when it is a regular file (never a symlink). */
 export async function measureMemoryFile(path: string): Promise<MemoryMeasurement> {
   try {
     const info = await lstat(path);
@@ -57,7 +53,6 @@ export async function measureMemoryFile(path: string): Promise<MemoryMeasurement
   }
 }
 
-/** Free and total space of the filesystem holding `path`. */
 export async function measureDiskSpace(path: string): Promise<DiskMeasurement> {
   try {
     const info = await statfs(path);

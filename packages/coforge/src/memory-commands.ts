@@ -33,8 +33,13 @@ export function parseMemoryArgs(args: readonly string[]): MemoryInvocation {
       json = true;
       continue;
     }
+    if (flag === "--archived") {
+      if ("archived" in row) throw new Error("repeated flag: --archived");
+      row.archived = true;
+      continue;
+    }
     if (!flag.startsWith("--") || args[index + 1] === undefined)
-      throw new Error("Usage: coforge memory search|get|save|archive|history --key <key> ...");
+      throw new Error("Usage: coforge memory list|search|get|save|archive|history ...");
     const key = flag.slice(2);
     if (key in row) throw new Error(`repeated flag: ${flag}`);
     row[key] = key === "offset" ? Number(args[++index]) : args[++index];
@@ -58,15 +63,31 @@ export async function runMemoryCommand(
   if (!transport.memory) throw new Error("Local memory requires an updated Computer");
   const result = await transport.memory(invocation.request);
   if (invocation.json) return JSON.stringify(result);
+  const request = invocation.request;
+  const continuation =
+    request.operation === "list"
+      ? `coforge memory list${request.archived ? " --archived" : ""}`
+      : request.operation === "search"
+        ? `coforge memory search --query '${request.query.replaceAll("'", "'\\''")}'`
+        : undefined;
   return [
     ...result.entries.map(
       (entry) =>
         `${entry.title} [${entry.key}]\n${entry.content}\nSource: ${entry.source}\nApplies to: ${entry.applicability || "unspecified"}\nRevision: ${entry.revision}\nState: ${entry.status}\nFile: ${entry.path}`,
     ),
+    ...(["list", "search"].includes(invocation.request.operation)
+      ? result.entries.map(
+          (entry) =>
+            `Full entry: ${entry.path.startsWith("notes/knowledge/") ? `coforge memory get --key ${entry.key}` : `read ${entry.path}`}`,
+        )
+      : []),
     ...(result.incomplete
       ? [
           `Search is incomplete.${result.nextOffset === undefined ? " Narrow the notes being searched." : ` Continue with --offset ${result.nextOffset}.`}`,
         ]
+      : []),
+    ...(result.nextOffset !== undefined && continuation
+      ? [`Run: ${continuation} --offset ${result.nextOffset}`]
       : []),
     ...(result.entries.length === 0 && !result.incomplete ? ["No matching local memory."] : []),
   ].join("\n\n");

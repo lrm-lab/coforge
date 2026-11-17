@@ -1,5 +1,3 @@
-// The System Cleaner tests' shared driving: a manual clock, an App Inbox per owner under a
-// temporary state root, injectable measurements and a period/idle helper.
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -31,7 +29,6 @@ export const LOW_DISK: DiskMeasurement = {
   totalBytes: 500 * GIB,
 };
 
-/** A manual clock: timers fire only when a test advances time past them. */
 export class ManualClock implements CleanerClock {
   nowMs = 1_000_000;
   #nextId = 1;
@@ -68,12 +65,10 @@ export class ManualClock implements CleanerClock {
 
 const roots: string[] = [];
 
-/** Registers a directory this test file made, so `cleanupHarnesses` removes it. */
 export function trackRoot(path: string): void {
   roots.push(path);
 }
 
-/** Removes every directory a harness in this test file created; call it from `afterEach`. */
 export function cleanupHarnesses(): Promise<void[]> {
   return Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 }
@@ -90,8 +85,6 @@ export async function harness() {
     inboxes.set(agentId, opened);
     return opened;
   };
-  // Each file a fresh session carries is measured by its own path; `activeContext` starts at
-  // zero so the tests that only care about MEMORY.md see no second hint.
   const measured = {
     memory: 0 as number | undefined,
     activeContext: 0 as number | undefined,
@@ -112,6 +105,7 @@ export async function harness() {
         : { kind: "measured", bytes };
     },
     measureDiskSpace: async () => measured.disk,
+    measureKnowledgeSize: async () => ({ kind: "measured", bytes: 0 }),
     inbox: {
       upsert: async (agentId, item) => (await inbox(agentId)).upsert(item),
       remove: async (agentId, itemId) => (await inbox(agentId)).remove(itemId),
@@ -121,8 +115,6 @@ export async function harness() {
     },
   });
   const items = async (agentId = OWNER): Promise<AgentAppItem[]> => (await inbox(agentId)).list();
-  /** Advances time an hour (one period) at a time, letting each period's measurements settle
-   * before the next, as they do when real periods are an interval apart. */
   const period = async (ms = HOUR_MS) => {
     for (let remaining = ms; remaining > 0; remaining -= HOUR_MS) {
       clock.advance(Math.min(HOUR_MS, remaining));

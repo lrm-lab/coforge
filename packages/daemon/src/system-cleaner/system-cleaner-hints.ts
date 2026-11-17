@@ -10,11 +10,8 @@ const CONFIG_COMMAND = `coforge app config --app ${CLEANER_APP_ID}`;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
 
-/** The two files a fresh session carries, each measured against its own limit and hinted about in
- * its own words: what to trim differs between the index and the current state. */
-export type FileKind = "memory" | "activeContext";
+export type FileKind = "memory" | "activeContext" | "knowledge";
 
-/** One of those files: where it lives, which config key limits it, and how the hint reads. */
 export type FileHint = Readonly<{
   path: string;
   label: string;
@@ -25,7 +22,7 @@ export type FileHint = Readonly<{
   maximumBytes: number;
 }>;
 
-export const FILE_KINDS = ["memory", "activeContext"] as const;
+export const FILE_KINDS = ["memory", "activeContext", "knowledge"] as const;
 
 export const FILE_HINTS: Readonly<Record<FileKind, FileHint>> = {
   memory: {
@@ -33,7 +30,7 @@ export const FILE_HINTS: Readonly<Record<FileKind, FileHint>> = {
     label: AGENT_MEMORY_FILE,
     thresholdKey: "threshold_bytes",
     guidance:
-      "Merge duplicates; move long text to notes. Write facts from their source, not context; stale needs evidence; a person's decision changes only when they change it.",
+      "At task end, merge duplicates; move details to notes with pointers. Keep sourced facts and people's decisions. See coforge manual get memory.",
     notificationClass: MEMORY_HINT.notificationClass,
     sourceKind: MEMORY_HINT.sourceKind,
     maximumBytes: CLEANER_CONFIG_BOUNDS.thresholdBytes.max,
@@ -48,9 +45,18 @@ export const FILE_HINTS: Readonly<Record<FileKind, FileHint>> = {
     sourceKind: ACTIVE_CONTEXT_HINT.sourceKind,
     maximumBytes: CLEANER_CONFIG_BOUNDS.activeContextThresholdBytes.max,
   },
+  knowledge: {
+    path: "notes/knowledge",
+    label: "notes/knowledge/",
+    thresholdKey: "threshold_bytes",
+    guidance:
+      "After your task, inspect at most 5 entries with coforge memory list. Merge verified duplicates, archive only confirmed obsolete facts; keep sources, important decisions and history. Never delete for size alone. See coforge manual get memory.",
+    notificationClass: SYSTEM_CLEANER_CLASSES.knowledge.notificationClass,
+    sourceKind: SYSTEM_CLEANER_CLASSES.knowledge.sourceKind,
+    maximumBytes: CLEANER_CONFIG_BOUNDS.thresholdBytes.max * 8,
+  },
 };
 
-/** What a hint's action does to the file's limit: doubles it, capped at the maximum. */
 export function raiseLimitAction(hint: FileHint, thresholdBytes: number): string {
   if (thresholdBytes >= hint.maximumBytes)
     return `The limit is at its maximum; view or lower it with ${CONFIG_COMMAND}`;

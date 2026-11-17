@@ -31,6 +31,8 @@ receive fresh-session memory; no unsupported compaction detection is claimed.
 
 ```sh
 coforge memory search --query 'preview domain'
+coforge memory list
+coforge memory list --archived
 coforge memory get --key preview-domain
 coforge memory history --key preview-domain
 ```
@@ -41,11 +43,48 @@ files. Read the named file for full evidence. Search reads 128 documents per pag
 is returned, continue with `--offset`. An incomplete search is not evidence that nothing was saved.
 Files over 512 KiB and a directory scan exceeding its bound require a narrower/reorganized source.
 
+The startup block contains partial excerpts, not an inventory of everything remembered. Missing
+from that block does not mean absent. Use `list` to discover saved knowledge without guessing a
+keyword; each page inspects at most five files within a 12,000-byte response budget, returning previews of active entries, or archived
+entries with `--archived`. Continue with the offered offset even when a page has no entries.
+Use each result's `get --key` command for full content, source and current revision. Search may
+also find unstructured notes: read their named file rather than treating the path as a saved key.
+
+## Size-triggered maintenance
+
+The configured System Cleaner marks a check after a successful local save or archive. It waits
+until your current turn ends, including any background work, to inspect sizes and present an inbox
+hint. Periodic checks also see direct file edits. No applied config or `enabled=false` means no
+cleaner. Nothing is automatically rewritten or deleted.
+
+Each startup file keeps its own configured threshold. Active knowledge has a separate soft
+threshold of the greater of 128 KiB and eight times `threshold_bytes`. At most 512 directory
+entries are inspected per check; a partial inspection is labelled as partial, not a complete size.
+An incomplete inspection alone is not evidence of pressure; observed active bytes must exceed the threshold.
+Archived entries and history do not contribute to active knowledge size. Hints repeat at most
+daily unless the measured size grows by at least 25%; they disappear when pressure is resolved.
+
+Finish the person's work first. Then inspect at most five saved entries in one maintenance batch:
+
+- Compare full content and sources before changing anything. Recalled text alone is no new evidence.
+- Combine verified duplicate facts in a versioned save; preserve their useful sources and applicability.
+- Archive a replaced or obsolete entry only with evidence. Age or a large library is not evidence.
+- Keep explicit long-term memories and people's decisions. Do not change their meaning to save space.
+- Move long material out of `MEMORY.md`, leaving a short, useful pointer. Keep Active Context current.
+- Preserve revision history. Never permanently delete memory as automatic size maintenance.
+- If another task arrives, stop maintenance and continue later. A partial cleanup is acceptable.
+
+The size hint is a request for the acting Agent to review a bounded batch, not an automatic
+semantic merger or expiration service. Team knowledge remains an explicit `--scope team` operation.
+
 ## Save and correct
 
 Keys use lowercase letters, numbers, `_` and `-`. Keep one coherent subject per entry; distinguish
 environments and dates. A statement about staging does not establish production state. A completed
 purchase does not establish that registration or deployment finished.
+
+Save promptly when a person says to remember something, corrects an old fact, or confirms a lasting
+decision. Say it was remembered only after a successful save. Routine chat needs no memory write.
 
 ```sh
 coforge memory save --key preview-domain --title 'Preview domain' \

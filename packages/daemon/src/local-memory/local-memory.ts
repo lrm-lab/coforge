@@ -22,6 +22,8 @@ export class LocalMemory {
 
   async execute(input: LocalMemoryCommand): Promise<LocalMemoryResult> {
     const command = decodeLocalMemoryCommand(input);
+    if (command.operation === "list")
+      return this.list(command.offset ?? 0, command.archived ?? false);
     if (command.operation === "search") return this.search(command.query, command.offset ?? 0);
     if (command.operation === "get") return { entries: [await this.get(command.key)] };
     if (command.operation === "history") {
@@ -151,15 +153,60 @@ export class LocalMemory {
     };
   }
 
+  private async list(offset: number, archived: boolean): Promise<LocalMemoryResult> {
+    const listed = await listMemoryFiles(this.root);
+    const paths = listed.paths.filter((path) => path.startsWith("notes/knowledge/"));
+    const page = paths.slice(offset, offset + 5);
+    let incomplete = listed.incomplete;
+    const candidates = await Promise.all(
+      page.map(async (path) => {
+        try {
+          const text = await this.#index.read(path);
+          const entry = text ? decodeMemoryRecord(text, path) : undefined;
+          if (!entry) {
+            incomplete = true;
+            return undefined;
+          }
+          if (entry.status !== (archived ? "archived" : "active")) return undefined;
+          return {
+            ...entry,
+            content: entry.content.slice(0, 600),
+            source: entry.source.slice(0, 200),
+            applicability: entry.applicability.slice(0, 150),
+          };
+        } catch {
+          incomplete = true;
+          return undefined;
+        }
+      }),
+    );
+    const entries: LocalMemoryEntry[] = [];
+    let processed = 0;
+    for (const candidate of candidates) {
+      if (candidate && Buffer.byteLength(JSON.stringify([...entries, candidate])) > 11_000) break;
+      processed++;
+      if (candidate) entries.push(candidate);
+    }
+    const nextOffset = offset + processed < paths.length ? offset + processed : undefined;
+    return {
+      entries,
+      ...(nextOffset === undefined ? {} : { nextOffset }),
+      ...(incomplete || nextOffset !== undefined ? { incomplete: true } : {}),
+    };
+  }
+
   async brief(maxBytes: number): Promise<string> {
-    const { paths } = await listMemoryFiles(this.root);
+    const { paths, incomplete } = await listMemoryFiles(this.root);
+    let unreadable = false;
     const entries: LocalMemoryEntry[] = [];
     const selected = paths.filter((item) => item.startsWith("notes/knowledge/"));
     for (let index = 0; index < selected.length; index += 8) {
       const batch = await Promise.all(
         selected.slice(index, index + 8).map(async (path) => {
-          const text = await readMemoryFile(this.root, path, 8_192).catch(() => undefined);
-          return text ? decodeMemoryRecord(text, path) : undefined;
+          const text = await readMemoryFile(this.root, path, 16_384).catch(() => undefined);
+          const entry = text ? decodeMemoryRecord(text, path) : undefined;
+          if (!entry) unreadable = true;
+          return entry;
         }),
       );
       entries.push(
@@ -174,7 +221,9 @@ export class LocalMemory {
         b.updatedAt.localeCompare(a.updatedAt),
     );
     const lines: string[] = [];
-    let bytes = 0;
+    const discovery =
+      "These are partial excerpts. Find more with coforge memory list or coforge memory search --query <query>; read full evidence with coforge memory get --key <key>. Continue when an offset is offered.";
+    let bytes = Buffer.byteLength(discovery) + 1;
     for (const entry of entries) {
       const line = `- ${entry.title}: ${entry.content.slice(0, 500)} [${entry.applicability}; source: ${entry.source.slice(0, 160)}; ${entry.updatedAt}; ${entry.path}]`;
       const length = Buffer.byteLength(line) + 1;
@@ -182,6 +231,8 @@ export class LocalMemory {
       lines.push(line);
       bytes += length;
     }
-    return lines.join("\n");
+    return (entries.length || incomplete || unreadable) && bytes <= maxBytes
+      ? [discovery, ...lines].join("\n")
+      : "";
   }
 }
