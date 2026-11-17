@@ -33,9 +33,8 @@ test("an unset hooks path fails with the command that installs the hook", () => 
   const result = runGate();
 
   expect(result.exitCode).not.toBe(0);
-  expect(result.stderr).toContain(
-    "pre-commit hook not installed: run `bun install` (sets core.hooksPath=.githooks)",
-  );
+  expect(result.stderr).toContain("core.hooksPath is unset");
+  expect(result.stderr).toContain("git config --local core.hooksPath .githooks");
 });
 
 test("an installed hook and a clean range pass", () => {
@@ -120,22 +119,20 @@ test("with no origin remote, or no origin/main, the range part is skipped in one
   expect(unfetched.stdout).toContain("git fetch origin");
 });
 
-test("a custom hooks path is the user's: one warning, no failure, and the range still checked", () => {
+test("a custom hooks path fails with the fix command, and the range is still checked", () => {
   repo.seed({ "README.md": "# Repo\n" });
   withOrigin();
   repo.ok("config", "core.hooksPath", "my-hooks");
-  const warning =
-    "core.hooksPath is my-hooks, not .githooks: the repository's pre-commit and pre-push run only " +
-    "if your hooks call them";
 
   const clean = runGate();
-  expect(clean.exitCode).toBe(0);
-  expect(clean.stderr.trim()).toBe(`local gate: ${warning}`);
+  expect(clean.exitCode).not.toBe(0);
+  expect(clean.stderr).toContain('core.hooksPath is "my-hooks", not ".githooks"');
+  expect(clean.stderr).toContain("git config --local core.hooksPath .githooks");
 
   repo.seed({ "big.ts": "x".repeat(20_001) });
   const violation = runGate();
   expect(violation.exitCode).not.toBe(0);
-  expect(violation.stderr).toContain(warning);
+  expect(violation.stderr).toContain('core.hooksPath is "my-hooks", not ".githooks"');
   expect(violation.stderr).toContain("big.ts: 5,001 tokens, new file over the limit");
 });
 
@@ -163,7 +160,7 @@ test("a hooks path set by -c or GIT_CONFIG_* (an Agent's shim) is not the reposi
   expect(runGate(shim)).toMatchObject({ exitCode: 0, stderr: "" });
 
   repo.ok("config", "--unset", "core.hooksPath");
-  expect(runGate(shim).stderr).toContain("pre-commit hook not installed");
+  expect(runGate(shim).stderr).toContain("core.hooksPath is unset");
 });
 
 test("with several hooks paths, the last one git reads wins", () => {
@@ -175,7 +172,7 @@ test("with several hooks paths, the last one git reads wins", () => {
 
   repo.ok("config", "--global", "core.hooksPath", ".githooks");
   repo.ok("config", "core.hooksPath", "my-hooks");
-  expect(runGate().stderr).toContain("core.hooksPath is my-hooks, not .githooks");
+  expect(runGate().stderr).toContain('core.hooksPath is "my-hooks", not ".githooks"');
 });
 
 test("a hooks path naming .githooks another way counts as installed", () => {
@@ -187,15 +184,15 @@ test("a hooks path naming .githooks another way counts as installed", () => {
   }
 });
 
-test("a custom hooks path whose pre-commit is a directory only warns", () => {
+test("a custom hooks path whose pre-commit is a directory also fails", () => {
   repo.seed({ "README.md": "# Repo\n" });
   withOrigin();
   mkdirSync(join(repo.dir, "my-hooks/pre-commit"), { recursive: true });
   repo.ok("config", "core.hooksPath", "my-hooks");
 
   const result = runGate();
-  expect(result.exitCode).toBe(0);
-  expect(result.stderr).toContain("core.hooksPath is my-hooks, not .githooks");
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr).toContain('core.hooksPath is "my-hooks", not ".githooks"');
 });
 
 test("a branch with no history shared with origin/main is reported in one line, not judged", () => {
@@ -229,7 +226,7 @@ test("any CI value but false or 0 skips the gate", () => {
   repo.seed({ "README.md": "# Repo\n" });
   for (const value of ["1", "yes"]) expect(runGate({ CI: value }).exitCode, value).toBe(0);
   for (const value of ["0", "false", ""])
-    expect(runGate({ CI: value }).stderr, value).toContain("pre-commit hook not installed");
+    expect(runGate({ CI: value }).stderr, value).toContain("core.hooksPath is unset");
 });
 
 test("a hooks path through a symlink, or written with ~/, names .githooks too", () => {

@@ -17,4 +17,5 @@ if [ -z "${bun_path:-}" ]; then
   echo "Install the toolchain (mise install), or bypass the checks once with git push --no-verify." >&2
   exit 1
 fi
+"$bun_path" "$scripts/git-hooks/hooks-path.ts" || exit 1
 exec "$bun_path" "$scripts/git-hooks/pre-push.ts"

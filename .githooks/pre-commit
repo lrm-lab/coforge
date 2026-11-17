@@ -18,6 +18,7 @@ if [ -z "${bun_path:-}" ]; then
   echo "Install the toolchain (mise install); do not use --no-verify to bypass the checks." >&2
   exit 1
 fi
+"$bun_path" "$scripts/git-hooks/hooks-path.ts" || exit 1
 format_status=0
 "$bun_path" "$scripts/ci/staged-format.ts" || format_status=$?
 rules_status=0

@@ -11,6 +11,8 @@
 // rejects as bad input (exit 2), is skipped with a warning. A deletion sends nothing to check.
 // See docs/agents/git-hooks/hard-rules.md.
 import { join } from "node:path";
+import { checkRepoHooksPath } from "./hooks-path";
+import { decideRedMainPush, fetchMainCiStatus, parseGitHubRepo } from "./main-ci-guard";
 
 const checker = join(import.meta.dir, "../ci/range-checks.ts");
 const ZERO = /^0+$/;
@@ -56,20 +58,58 @@ function refPasses(line: string): boolean {
     stdout: "inherit",
     stderr: "inherit",
   });
-  if (result.exitCode === 0) return true;
   if (result.exitCode === 2) return skipped(localRef, "could not be judged (above)");
-  console.error(
-    `pre-push: ${localRef} -> ${remoteRef} breaks the hard rules (judged from ${base}).`,
-  );
-  if (remoteSha && !ZERO.test(remoteSha) && !known)
+  if (result.exitCode !== 0) {
     console.error(
-      "pre-push: the remote sha is unknown here, so it was judged from origin/main: run " +
-        "`git fetch origin` and push again if main's commits are listed.",
+      `pre-push: ${localRef} -> ${remoteRef} breaks the hard rules (judged from ${base}).`,
     );
-  return false;
+    if (remoteSha && !ZERO.test(remoteSha) && !known)
+      console.error(
+        "pre-push: the remote sha is unknown here, so it was judged from origin/main: run " +
+          "`git fetch origin` and push again if main's commits are listed.",
+      );
+    return false;
+  }
+
+  if (remoteRef === "refs/heads/main") {
+    const remoteUrl = git("remote", "get-url", "origin");
+    const repo = remoteUrl ? parseGitHubRepo(remoteUrl) : null;
+    if (repo) {
+      const status = fetchMainCiStatus(repo.owner, repo.repo);
+      if (!status) {
+        console.error(
+          "pre-push: warning: could not read main CI status via `gh`; allowing push unchecked.",
+        );
+      } else {
+        const subjectsRaw = git("log", "--format=%s", `${base}..${localSha}`) ?? "";
+        const filesRaw = git("diff", "--name-only", "--no-renames", base, localSha) ?? "";
+        const decision = decideRedMainPush({
+          status,
+          commitSubjects: subjectsRaw.split("\n").filter(Boolean),
+          changedFiles: filesRaw.split("\n").filter(Boolean),
+        });
+        if (!decision.allowed) {
+          console.error(decision.message);
+          return false;
+        }
+        if (decision.reason) {
+          console.error(`pre-push: allowing push to red main (${decision.reason}).`);
+        }
+      }
+    }
+  }
+  return true;
 }
 
 if (import.meta.main) {
+  const top = git("rev-parse", "--show-toplevel");
+  if (top) {
+    const hooksCheck = checkRepoHooksPath(top);
+    if (!hooksCheck.ok) {
+      console.error(`pre-push: ${hooksCheck.error}`);
+      process.exit(1);
+    }
+  }
   const lines = (await Bun.stdin.text()).split("\n").filter(Boolean);
   // Every ref is judged, so one push reports all of them.
   const results = lines.map(refPasses);
