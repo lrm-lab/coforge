@@ -76,7 +76,6 @@ describe("AgentEnvironment.save with a Daemon that takes a config push", () => {
   test.each([
     ["failed latest operation", { control: "failed" }],
     ["in-flight latest operation", { control: "starting" }],
-    ["Workspace Memory Agent", {}],
   ] as const)("a %s stops, writes, then starts", async (_name, options) => {
     const f = setup(options);
     expect(await f.environment.save(owner, "agent-1", { TOKEN: "secret" })).toEqual({

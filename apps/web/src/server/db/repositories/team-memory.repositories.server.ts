@@ -24,6 +24,25 @@ type Row = TeamMemoryDraft & {
   authorAgentId: string;
   updatedAt: Date;
 };
+type Version = {
+  snapshot: Prisma.JsonValue;
+  actorAgentId: string;
+  operation: string;
+  reason: string;
+  mergedFrom: Prisma.JsonValue;
+};
+
+function versionHead(version: Version): TeamMemoryHead {
+  return {
+    ...(version.snapshot as unknown as TeamMemoryHead),
+    change: {
+      actorAgentId: version.actorAgentId,
+      operation: version.operation,
+      reason: version.reason,
+      mergedFrom: version.mergedFrom as { id: string; revision: number }[],
+    },
+  };
+}
 
 function head(row: Row): TeamMemoryHead {
   if (row.status !== "active" && row.status !== "archived") throw new TeamMemoryError("not_found");
@@ -53,12 +72,15 @@ function fingerprint(command: TeamMemoryWrite): string {
 }
 
 async function access(db: Database, actor: TeamMemoryActor, lock = false): Promise<boolean> {
-  const rows = await db.$queryRaw<{ role: string }[]>(Prisma.sql`
-    SELECT a."role" FROM "agents" a JOIN "workspace_memberships" m
+  const rows = await db.$queryRaw<{ role: string; teamMemoryEnabled: boolean | null }[]>(Prisma.sql`
+    SELECT a."role", w.experiments->'teamMemory' = 'true'::jsonb AS "teamMemoryEnabled"
+    FROM "agents" a JOIN "workspace_memberships" m
     ON m."workspaceId" = a."workspaceId" AND m."userId" = a."ownerId"
+    JOIN "workspaces" w ON w.id = a."workspaceId"
     WHERE a."id" = ${actor.agentId}::uuid AND a."workspaceId" = ${actor.workspaceId}::uuid AND a."deletedAt" IS NULL
-    ${lock ? Prisma.sql`FOR SHARE OF a, m` : Prisma.empty}`);
+    ${lock ? Prisma.sql`FOR SHARE OF a, m, w` : Prisma.empty}`);
   if (!rows[0]) throw new TeamMemoryError("forbidden");
+  if (!rows[0].teamMemoryEnabled) throw new TeamMemoryError("disabled");
   return rows[0].role === "owner" || rows[0].role === "admin";
 }
 
@@ -132,26 +154,43 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
             true,
           );
         const target = await readTarget(tx, actor, command.id);
-        if (command.operation === "get") return { status: "ok", entries: [head(target)] };
-        const versions = await tx.teamMemoryVersion.findMany({
-          where: { workspaceId: actor.workspaceId, entryId: target.id },
-          orderBy: { revision: "desc" },
-          take: 11,
-          skip: command.offset ?? 0,
-        });
-        return {
-          status: "ok",
-          entries: versions.slice(0, 10).map((version) => ({
-            ...(version.snapshot as unknown as TeamMemoryHead),
-            change: {
-              actorAgentId: version.actorAgentId,
-              operation: version.operation,
-              reason: version.reason,
-              mergedFrom: version.mergedFrom as { id: string; revision: number }[],
+        if (command.operation === "get") {
+          if (command.revision === undefined) return { status: "ok", entries: [head(target)] };
+          const version = await tx.teamMemoryVersion.findUnique({
+            where: {
+              workspaceId_entryId_revision: {
+                workspaceId: actor.workspaceId,
+                entryId: target.id,
+                revision: command.revision,
+              },
             },
-          })),
-          ...(versions.length > 10 ? { nextOffset: (command.offset ?? 0) + 10 } : {}),
-        };
+          });
+          if (!version) throw new TeamMemoryError("not_found");
+          return { status: "ok", entries: [versionHead(version)] };
+        }
+        const offset = command.offset ?? 0;
+        const versions = await tx.$queryRaw<Version[]>`
+          SELECT snapshot || jsonb_build_object(
+            'content', left(snapshot->>'content', 600),
+            'source', left(snapshot->>'source', 200)
+          ) AS snapshot, actor_agent_id AS "actorAgentId", operation, left(reason, 200) AS reason, merged_from AS "mergedFrom"
+          FROM team_memory_versions
+          WHERE workspace_id = ${actor.workspaceId}::uuid AND entry_id = ${target.id}::uuid
+          ORDER BY revision DESC LIMIT 11 OFFSET ${offset}`;
+        const result: TeamMemoryResult = { status: "ok", entries: [] };
+        for (const version of versions.slice(0, 10)) {
+          const entry = versionHead(version);
+          const candidate = {
+            ...result,
+            entries: [...result.entries, entry],
+            nextOffset: offset + result.entries.length + 1,
+          };
+          if (Buffer.byteLength(JSON.stringify(candidate)) > 12_000) break;
+          result.entries.push(entry);
+        }
+        if (versions.length > result.entries.length)
+          result.nextOffset = offset + result.entries.length;
+        return result;
       },
       { isolationLevel: "RepeatableRead" },
     );

@@ -160,7 +160,7 @@ test("a reason nobody has to act on leaves the plain offline status", () => {
 });
 
 test("every stop a person has to clear gets the banner and its way back, in the Daemon's words", () => {
-  const sentence = "The runtime cannot host this Agent's memory sessions.";
+  const sentence = "The runtime could not start this Agent.";
   for (const [stopReason, recovery] of Object.entries(STOP_REASON_RECOVERY)) {
     const view = agentDisplay(
       display({ activityKind: "offline", stopReason, stopMessage: sentence }),
@@ -179,7 +179,7 @@ test("every stop a person has to clear gets the banner and its way back, in the 
   ).toBe("reset_session");
   // A reason we have no words for, and no sentence came: the plain status word, nothing invented.
   const bare = agentDisplay(
-    display({ activityKind: "offline", stopReason: "runtime_memory_unsupported" }),
+    display({ activityKind: "offline", stopReason: "runtime_spawn_failed" }),
   );
   expect(bare.alertText).toBe(m.agent_status_offline());
   expect(bare.statusDetail).toBeUndefined();

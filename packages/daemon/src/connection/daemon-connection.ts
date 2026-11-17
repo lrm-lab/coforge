@@ -1,4 +1,3 @@
-import { forwardAgentRequest } from "./agent-forwarded-routes";
 import type {
   DaemonConnectionConfig,
   DaemonConnectionClient,

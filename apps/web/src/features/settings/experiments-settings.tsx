@@ -37,6 +37,10 @@ const EXPERIMENT_TEXT: Record<
     name: () => m.experiments_ai_workbench(),
     description: () => m.experiments_ai_workbench_description(),
   },
+  teamMemory: {
+    name: () => m.experiments_team_memory(),
+    description: () => m.experiments_team_memory_description(),
+  },
 };
 const EXPERIMENTS_QUERY_KEY = ["settings-experiments"];
 function saveErrorText(error: unknown) {

@@ -20,6 +20,10 @@ Reads are optional. An Agent chooses whether to share useful verified knowledge 
 to reconcile related entries before a write. Nothing automatically uploads local notes, private
 messages, environment variables or conversation transcripts.
 
+Team memory defaults to off. A Workspace owner or admin can enable or disable it in Settings →
+Experiments. The backend checks the switch on every operation; disabling it blocks team reads and
+writes while keeping existing entries and history. Local memory is independent of this switch.
+
 The Web/backend stores entries, versions, workspace revisions and idempotency receipts in the
 existing PostgreSQL database. A trigram index and lexical ranking provide bounded search. There is
 no separate vector service, OpenViking engine or dedicated Memory Agent. Ordinary work continues
@@ -30,6 +34,9 @@ A stale writer rereads before retrying. Merge updates its destination and archiv
 transaction, and only combines entries with the same applicability. History records source,
 writer, reason and merged references. Only the original author or an Agent with admin authority
 can permanently clear an entry and its versions. Workspace deletion cascades all native memory.
+
+History pages contain previews within a 12,000-byte response budget. Full historical evidence is
+available one version at a time through `get --revision`, without loading every version into context.
 
 ## Upgrade and retained data
 

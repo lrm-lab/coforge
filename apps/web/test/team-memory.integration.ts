@@ -3,6 +3,9 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { teamMemory } from "#src/server/team-memory/composition.server";
 import type { TeamMemoryWrite } from "@lrm/coforge-sdk/agent";
+import { Experiments } from "#src/server/experiments/experiments.server";
+import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
+import { handleTeamMemory } from "#src/server/team-memory/http.server";
 
 const url = Bun.env.TEAM_MEMORY_TEST_DATABASE_URL;
 if (!url)
@@ -22,6 +25,7 @@ beforeAll(async () => {
       data: {
         slug: `native-memory-${crypto.randomUUID()}`,
         name: "Team memory",
+        experiments: { teamMemory: true },
         members: { create: { userId, role: "owner" } },
       },
     })
@@ -31,6 +35,7 @@ beforeAll(async () => {
       data: {
         slug: `native-memory-other-${crypto.randomUUID()}`,
         name: "Other",
+        experiments: { teamMemory: true },
         members: { create: { userId } },
       },
     })
@@ -107,6 +112,56 @@ test("team writes require review and share confirmed knowledge with another Agen
   ).rejects.toThrow("memory_forbidden");
 });
 
+test("disabling workspace memory blocks every operation and re-enabling preserves knowledge", async () => {
+  const settings = new Experiments(new PrismaExperimentsRepository(db), async () => false);
+  const workspace = { workspaceId, workspaceSlug: "team-memory" };
+  const entry = await create("Switch retention", "Retain confirmed knowledge");
+  await expect(settings.set(workspace, "member", "teamMemory", false)).rejects.toMatchObject({
+    code: "ACCESS_DENIED",
+  });
+  const pending = await reviewed({
+    operation: "update",
+    ...draft(entry.title, "New knowledge"),
+    id: entry.id,
+    revision: entry.revision,
+    reason: "Correction",
+    requestId: crypto.randomUUID(),
+  });
+  const commands = [
+    { operation: "search", query: "Switch retention" },
+    { operation: "list" },
+    { operation: "get", id: entry.id },
+    { operation: "history", id: entry.id },
+    { operation: "prepare", ...draft("Switch retention", "New knowledge") },
+    { operation: "create", ...draft("Other", "Knowledge"), requestId: crypto.randomUUID() },
+    pending,
+  ] as const;
+  await db.workspace.update({ where: { id: workspaceId }, data: { experiments: {} } });
+  await expect(service().execute(actor(), { operation: "list" })).rejects.toThrow(
+    "memory_disabled",
+  );
+  await settings.set(workspace, "owner", "teamMemory", false);
+  try {
+    for (const command of commands)
+      await expect(service().execute(actor(), command)).rejects.toThrow("memory_disabled");
+    const response = await handleTeamMemory(
+      new Request("http://localhost/team-memory", {
+        method: "POST",
+        body: JSON.stringify({ operation: "list" }),
+      }),
+      actor(),
+      service(),
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ errorCode: "memory_disabled" });
+  } finally {
+    await settings.set(workspace, "admin", "teamMemory", true);
+  }
+  expect(
+    (await service().execute(actor(), { operation: "get", id: entry.id })).entries[0]?.content,
+  ).toBe("Retain confirmed knowledge");
+});
+
 test("corrections preserve versions and concurrent reviewed writers cannot overwrite", async () => {
   const first = await create("Filing status", "pending");
   const base = {
@@ -127,6 +182,50 @@ test("corrections preserve versions and concurrent reviewed writers cannot overw
   const history = await service().execute(actor(), { operation: "history", id: first.id });
   expect(history.entries.some((entry) => entry.content === "pending")).toBe(true);
   expect(history.entries[0]?.change?.reason).toBe("New verified confirmation");
+});
+
+test("history previews stay within a response budget and full versions are read explicitly", async () => {
+  const original = "Original evidence ".padEnd(16_000, "界");
+  const source = "原始证据".repeat(250);
+  let entry = (
+    await write({
+      operation: "create",
+      ...draft("Long evidence", original),
+      source,
+      requestId: crypto.randomUUID(),
+    })
+  ).entries[0]!;
+  for (let index = 0; index < 10; index++)
+    entry = (
+      await write({
+        operation: "update",
+        ...draft("Long evidence", `Revision ${index} `.padEnd(16_000, "界")),
+        source,
+        id: entry.id,
+        revision: entry.revision,
+        reason: "Verified correction".padEnd(1_000, "新"),
+        requestId: crypto.randomUUID(),
+      })
+    ).entries[0]!;
+  const seen: number[] = [];
+  let offset = 0;
+  while (true) {
+    const result = await service().execute(actor(), { operation: "history", id: entry.id, offset });
+    expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThanOrEqual(12_000);
+    expect(result.entries.every((item) => item.content.length <= 600)).toBe(true);
+    seen.push(...result.entries.map((item) => item.revision));
+    if (result.nextOffset === undefined) break;
+    expect(result.nextOffset).toBeGreaterThan(offset);
+    offset = result.nextOffset;
+  }
+  expect(seen).toEqual(Array.from({ length: 11 }, (_, index) => 11 - index));
+  const version = await service().execute(actor(), { operation: "get", id: entry.id, revision: 1 });
+  expect(version.entries[0]?.content).toBe(original);
+  expect(version.entries[0]?.source).toBe(source);
+  expect(version.entries[0]?.change?.operation).toBe("create");
+  await expect(
+    service().execute(actor(), { operation: "get", id: entry.id, revision: 999 }),
+  ).rejects.toThrow("memory_not_found");
 });
 
 test("merge is atomic and restore and permanent deletion affect current recall", async () => {

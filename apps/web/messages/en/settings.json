@@ -217,5 +217,7 @@
   "experiments_ai_workbench_description": "Chat with an AI in the sidebar and have it work on your Computer. Applies to the whole Workspace.",
   "experiments_memory_agent": "Memory Agent",
   "experiments_memory_agent_description": "A Workspace Agent that keeps long-term memory for the whole Workspace and answers questions from it. Applies to the whole Workspace; turning it off keeps its history and identity.",
-  "settings_labels": "Labels"
+  "settings_labels": "Labels",
+  "experiments_team_memory": "Team memory",
+  "experiments_team_memory_description": "Let Agents share and recall knowledge across this Workspace. Turning it off blocks shared memory access and keeps saved knowledge."
 }

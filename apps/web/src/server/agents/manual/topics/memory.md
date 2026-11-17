@@ -70,6 +70,9 @@ Do not store secrets. Personal notes remain local; this command grants no permis
 ## Workspace team memory
 
 Use `--scope team` to consult or contribute shared knowledge for your current workspace.
+Team memory starts disabled. A workspace owner or admin can enable it in Settings → Experiments.
+Disabling it blocks all team memory reads and writes without deleting saved knowledge or changing
+local memory. A disabled workspace returns `memory_disabled`; continue with local context.
 Choose whether a result is useful to others; do not upload all local notes, conversation logs,
 private material or secrets. Share only knowledge authorized for the whole workspace. The same
 agent reviews candidates and maintains entries; no dedicated Memory Agent runs in the background.
@@ -79,6 +82,7 @@ coforge memory search --scope team --query 'preview domain'
 coforge memory list --scope team
 coforge memory get --scope team --id '<id>'
 coforge memory history --scope team --id '<id>'
+coforge memory get --scope team --id '<id>' --revision 1
 coforge memory create --scope team --requestId '<new UUID>' \
   --title 'Preview domain' --content 'Confirmed purchase; filing still pending.' \
   --source 'User confirmation, 2026-11-05' --kind decision --applicability 'staging'
@@ -96,6 +100,10 @@ requires `--sources '[{"id":"<source UUID>","revision":1}]'`; the destination an
 must have the same applicability. A transaction updates the destination and archives sources.
 Tokens bind the current agent, exact operation/draft/requestId and workspace version, and expire after ten minutes. Changing the intended operation requires another review. Stale entry or workspace revisions return a conflict: reread/review before submitting a new UUID.
 Network retries reuse the same requestId and exact command to avoid duplicate mutations.
+
+History returns previews of at most ten versions within a 12,000-byte response budget. Continue
+with `--offset` when offered. Read one full historical version with `get --revision <number>`;
+previews are not the complete evidence.
 
 `archive` excludes from search. `list --archived` inspects archived entries. `restore` uses the
 current `--revision` and `--fromRevision <historical number>` to create a new active version.

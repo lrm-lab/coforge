@@ -39,7 +39,8 @@ export type TeamMemoryCommand =
   | ({ operation: "prepare" } & TeamMemoryDraft)
   | { operation: "search"; query: string; offset?: number }
   | { operation: "list"; offset?: number; archived?: boolean }
-  | { operation: "get" | "history"; id: string; offset?: number }
+  | { operation: "get"; id: string; revision?: number }
+  | { operation: "history"; id: string; offset?: number }
   | TeamMemoryWrite;
 export type TeamMemoryResult = {
   status: "ok" | "review_required" | "deleted";
@@ -87,7 +88,9 @@ export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {
       ? ["query", "offset"]
       : operation === "list"
         ? ["offset", "archived"]
-        : ["id", "offset"];
+        : operation === "get"
+          ? ["id", "revision"]
+          : ["id", "offset"];
   const writeKeys = [
     "requestId",
     "reviewToken",
@@ -113,8 +116,12 @@ export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {
       throw new Error("invalid_memory_archived");
     return { operation, offset: number("offset", 0), archived: value.archived === true };
   }
-  if (operation === "get" || operation === "history")
-    return { operation, id: uuid("id"), offset: number("offset", 0) };
+  if (operation === "get") {
+    const revision = value.revision === undefined ? undefined : number("revision");
+    if (revision === 0) throw new Error("invalid_memory_revision");
+    return { operation, id: uuid("id"), ...(revision === undefined ? {} : { revision }) };
+  }
+  if (operation === "history") return { operation, id: uuid("id"), offset: number("offset", 0) };
   let draft: TeamMemoryDraft | undefined;
   if (hasDraft) {
     const kind = string("kind", 20);

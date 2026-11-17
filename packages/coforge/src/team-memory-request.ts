@@ -28,9 +28,11 @@ export function teamMemoryRequests(
             : undefined,
         "team_memory",
         (code) =>
-          code === "memory_conflict"
-            ? "Read current entries and prepare again before retrying with current revisions."
-            : undefined,
+          code === "memory_disabled"
+            ? "A workspace owner or admin can enable Team memory in Settings > Experiments. Continue with local context."
+            : code === "memory_conflict"
+              ? "Read current entries and prepare again before retrying with current revisions."
+              : undefined,
       ),
   };
 }

@@ -86,7 +86,7 @@ import {
   revokeAgentApiKey,
   type AgentApiKeyEndpoint,
 } from "./agent-api-key-requests";
-import { channelEndpointFor, sendAgentJson } from "./agent-http-wire";
+import { channelEndpointFor } from "./agent-http-wire";
 import type {
   AgentMessageHttpClient,
   AgentTaskHttpClient,
