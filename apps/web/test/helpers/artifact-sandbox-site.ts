@@ -193,7 +193,7 @@ addEventListener("coforge:theme", (e) => post({ theme: e.detail.theme, attribute
   });
   document.getElementById("copy").onclick = async () => post({ copy: await settle(clipboard.copy("copied text")) });
   document.getElementById("link").onclick = async () => post({ link: await settle(links.open("https://example.com/path")) });
-  document.getElementById("comment").onclick = async () => post({ comment: await settle(comments.open({ body: "Approve" })) });
+  document.getElementById("comment").onclick = async () => post({ comment: await settle(comments.open({ name: "approve", label: "Approval" }, { draft: "Approve" })) });
   const rect = (id) => { const r = document.getElementById(id).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; };
   post({ buttons: { copy: rect("copy"), link: rect("link"), comment: rect("comment") } });
   setTimeout(() => { throw new Error("boom"); }, 300);

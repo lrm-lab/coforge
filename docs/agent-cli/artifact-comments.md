@@ -22,7 +22,9 @@ deleted one and another Workspace's all answer `NOT_FOUND`.
   artifact.
 - `anchor`: `{ type, data }`, only with a path (a reply's inherited path counts), `data` at most
   4 KiB as JSON: `file` `{}`, `lines` `{ start, end }` (1-based, `end >= start`), `element`
-  `{ selector, quote? }`, `text` `{ quote, prefix?, suffix? }`.
+  `{ selector, quote? }`, `text` `{ quote, prefix?, suffix? }`, `page` `{ name, label?, quote? }` (a
+  place the page itself named: `name` matches `^[A-Za-z0-9._~:/#-]{1,256}$`, `label` at most 200
+  characters, `quote` at most 2000; the CLI shows it as `place <name> "<label>", named by the page: "<excerpt>"`).
 - `version`: the version it is written on; the current one by default (`--rev`).
 - `replyTo`: any comment's id. The reply joins that comment's thread (its root is the thread's
   first comment, never another reply) and inherits its path unless it names its own. A reply to a
@@ -174,3 +176,9 @@ page runs in its own frame, so the host drives all of it over the bridge. The pa
 reports as picked or selected; the composer always shows the anchor's label or quote before the
 viewer sends, and nothing is posted without the viewer sending. An anchor's quote is page-chosen text
 that an Agent reads with the comment.
+
+A page can also suggest a comment: `comments.open(anchor, { draft })` in the page's runtime, from a
+click in the page. CoForge opens the viewer's comment box on a `page` anchor (the page's name for
+the place, an optional label and excerpt) with `draft` as ordinary editable text and says the page
+suggested it. Nothing is posted or saved unless the viewer sends or saves it, and the call resolves
+`false` when no box opened. The excerpt is page-chosen text that an Agent reads with the comment.

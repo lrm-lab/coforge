@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { describeAnchor } from "#src/features/artifacts/artifact-comment-anchor";
+import { m } from "#src/paraglide/messages";
+import { commentAnchor } from "#src/features/artifacts/artifact-comment-inputs";
 import {
   MARKS_MAX,
   clipAnchor,
@@ -18,16 +20,31 @@ const mark = (id: string): PageMark => ({
 describe("what the composer shows of a page anchor", () => {
   test("an element anchor shows its label, and its selector, truncated, without one", () => {
     expect(
-      describeAnchor({ type: "element", data: { selector: "h1", quote: "Launch plan" } }).quote,
-    ).toBe("Launch plan");
+      describeAnchor({ type: "element", data: { selector: "h1", quote: "Launch plan" } }).excerpt,
+    ).toContain("Launch plan");
     const shown = describeAnchor({
       type: "element",
       data: { selector: `body > ${"div > ".repeat(60)}p` },
-    }).quote!;
-    expect(shown.length).toBeLessThanOrEqual(120);
-    expect(shown.startsWith("body > div")).toBe(true);
-    expect(describeAnchor({ type: "text", data: { quote: "beta" } }).quote).toBe("beta");
+    }).excerpt!;
+    expect(shown.length).toBeLessThanOrEqual(122);
+    expect(shown).toContain("body > div");
+    expect(describeAnchor({ type: "text", data: { quote: "beta" } }).excerpt).toContain("beta");
   });
+
+  test("a page place shows its label, else its name, and marks the excerpt as the page's", () => {
+    expect(
+      describeAnchor({ type: "page", data: { name: "plan:2", label: "Plan two", quote: "Soon" } }),
+    ).toEqual({ place: "Plan two", excerpt: m.av_cm_page_quote({ quote: "Soon" }) });
+    expect(describeAnchor({ type: "page", data: { name: "plan:2" } })).toEqual({ place: "plan:2" });
+  });
+});
+
+test("a page place posted by anyone refuses hidden characters and a label over two lines", () => {
+  const place = (data: object) => commentAnchor.safeParse({ type: "page", data }).success;
+  expect(place({ name: "plan:2", label: "Plan two", quote: "Ships\nFriday" })).toBe(true);
+  expect(place({ name: "plan:2", label: "bidi\u202Eflip" })).toBe(false);
+  expect(place({ name: "plan:2", label: "two\nlines" })).toBe(false);
+  expect(place({ name: "plan:2", quote: "zero\u200Bwidth" })).toBe(false);
 });
 
 describe("marks and their places", () => {

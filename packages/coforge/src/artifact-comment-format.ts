@@ -67,6 +67,11 @@ export const commentId = (id: string) => `c_${id}`;
 export const name = (actor: Actor) => `@${foldUntrustedLine(actor.name)}`;
 const QUOTE_SHOWN = 40;
 
+function clipped(text: string): string {
+  const quote = foldUntrustedLine(text);
+  return `"${quote.length > QUOTE_SHOWN ? `${quote.slice(0, QUOTE_SHOWN)}…` : quote}"`;
+}
+
 /** The lines or place a comment points at, after its file: `plan.md:3-4`, `plan.md`. */
 function whereOf(path: string | null, anchor: CommentAnswer["anchor"]): string {
   if (path === null) return "";
@@ -78,10 +83,13 @@ function whereOf(path: string | null, anchor: CommentAnswer["anchor"]): string {
   }
   if (anchor?.type === "element" && typeof data.selector === "string")
     return `${file} (element ${foldUntrustedLine(data.selector)})`;
-  if (anchor?.type === "text" && typeof data.quote === "string") {
-    const quote = foldUntrustedLine(data.quote);
-    return `${file} ("${quote.length > QUOTE_SHOWN ? `${quote.slice(0, QUOTE_SHOWN)}…` : quote}")`;
+  if (anchor?.type === "page" && typeof data.name === "string") {
+    const label = typeof data.label === "string" ? ` "${foldUntrustedLine(data.label)}"` : "";
+    const quote = typeof data.quote === "string" ? `: ${clipped(data.quote)}` : "";
+    return `${file} (place ${foldUntrustedLine(data.name)}${label}, named by the page${quote})`;
   }
+  if (anchor?.type === "text" && typeof data.quote === "string")
+    return `${file} (${clipped(data.quote)})`;
   return file;
 }
 

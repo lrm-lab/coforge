@@ -10,6 +10,7 @@ import {
   artifactPathValid,
   type AgentArtifactAnchor,
 } from "@lrm/coforge-sdk/agent";
+import { PLACE_LABEL_MAX, PLACE_NAME_PATTERN, PLACE_QUOTE_MAX } from "./artifact-page-limits";
 import { artifactInputs } from "./artifact-inputs";
 
 export const COMMENT_PAGE_SIZE = 50;
@@ -35,6 +36,19 @@ export const hasTextOrImage = (comment: {
 
 const anchorText = (min: number, max: number) => z.string().min(min).max(max).refine(noNul);
 
+const HIDDEN =
+  /[\u0000-\u0008\u000B-\u001F\u007F\u061C\u200B-\u200F\u2028-\u202E\u2060-\u206F\uFEFF\u{E0000}-\u{E007F}]/u;
+
+export const isVisibleText = (value: string, multiline: boolean) =>
+  !HIDDEN.test(value) && (multiline || !value.includes("\n"));
+
+const visibleText = (max: number, multiline: boolean) =>
+  z
+    .string()
+    .min(1)
+    .max(max)
+    .refine((value) => isVisibleText(value, multiline), { message: "hidden characters" });
+
 const filePath = z
   .string()
   .min(1)
@@ -58,11 +72,22 @@ const textData = z
   })
   .strict();
 
+const pageData = z
+  .object({
+    name: z.string().regex(PLACE_NAME_PATTERN),
+    label: visibleText(PLACE_LABEL_MAX, false).optional(),
+    quote: visibleText(PLACE_QUOTE_MAX, true).optional(),
+  })
+  .strict();
+
+export type PlaceData = z.infer<typeof pageData>;
+
 const ANCHOR_DATA = {
   file: noData,
   lines: linesData,
   element: elementData,
   text: textData,
+  page: pageData,
 } satisfies Record<(typeof ARTIFACT_ANCHOR_TYPES)[number], z.ZodType>;
 
 export const commentAnchor = z

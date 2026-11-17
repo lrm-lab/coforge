@@ -67,8 +67,11 @@ test("the page runtime answers the bridge: who, which artifact, clipboard in a c
   expect(await tab.evaluate<string>("window.__opened")).toBe("https://example.com/path");
 
   await click(buttons.comment);
-  expect((await find("comment")).comment).toEqual({ ok: { opened: true } });
-  expect(await tab.evaluate<unknown>("window.__composer")).toEqual({ body: "Approve" });
+  expect((await find("comment")).comment).toEqual({ ok: true });
+  expect(await tab.evaluate<unknown>("window.__composer")).toEqual({
+    anchor: { name: "approve", label: "Approval" },
+    draft: "Approve",
+  });
 
   await until(async () => (await tab.evaluate<string[]>("window.__errors")).length > 0);
   expect((await tab.evaluate<string[]>("window.__errors"))[0]).toContain("boom");

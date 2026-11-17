@@ -96,6 +96,9 @@ export function parseFoundIds(value: unknown, known: ReadonlySet<string>): strin
 export const isFrameAnchor = (anchor: CommentAnchor | null): anchor is CommentAnchor =>
   anchor !== null && (anchor.type === "element" || anchor.type === "text");
 
+export const revealsInFrame = (anchor: CommentAnchor | null) =>
+  anchor?.type === "page" || isFrameAnchor(anchor);
+
 export function clipAnchor(anchor: CommentAnchor): CommentAnchor {
   const { data } = anchor;
   const text = (value: unknown, max: number, tail = false) =>

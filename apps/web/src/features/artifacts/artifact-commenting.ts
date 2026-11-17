@@ -3,6 +3,7 @@ import { createContext, useContext } from "react";
 import type { AnchorStatus, PublishedPlace } from "./artifact-anchor-places";
 import type { CommentAnchor } from "./artifact-comment-inputs";
 import type { CommentThread } from "./artifact-comment-threads";
+import type { ComposerHolds } from "./artifact-composer-holds";
 
 export type CommentTarget = { path: string; anchor: CommentAnchor | null };
 
@@ -19,6 +20,7 @@ export type ArtifactCommenting = {
   openThread(commentId: string): void;
   openPanel(): void;
   publishPlaces(path: string, places: ThreadPlaces | null): void;
+  holds: ComposerHolds;
 };
 
 export type CommentRequests = {

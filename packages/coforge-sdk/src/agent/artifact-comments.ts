@@ -1,6 +1,6 @@
 import { isRecord } from "#src/internal/json-record";
 
-export const ARTIFACT_ANCHOR_TYPES = ["file", "lines", "element", "text"] as const;
+export const ARTIFACT_ANCHOR_TYPES = ["file", "lines", "element", "text", "page"] as const;
 
 export type AgentArtifactAnchor = {
   type: (typeof ARTIFACT_ANCHOR_TYPES)[number];

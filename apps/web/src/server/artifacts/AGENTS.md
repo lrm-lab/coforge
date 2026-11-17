@@ -94,7 +94,11 @@ The artifacts module follows the reference product, Raft; add nothing it does no
   what it likes to the host, which treats everything from the frame as untrusted. Its quote logic is
   generated from `features/artifacts/artifact-text-anchor.ts` (`createTextAnchors`, one source;
   `artifact-page-annotate-text.test.ts` smoke-tests the generated snippet). The `coforge` object
-  offers no annotate method.
+  offers no annotate method. Its `comments.open(anchor, { draft })` is built in (no declaration): the
+  frame checks the user activation, and the host checks it again with its own
+  `navigator.userActivation` (a click in the frame activates the top window too), then validates the
+  arguments, applies the 30 a minute limit and refuses (`false`) while a composer holds text or a
+  send or another ask is open; it opens only a composer, never posts.
   The Vite dev server answers a script request for `/_coforge/runtime.js` with its own 404, so a
   browser e2e that needs the runtime in the real app runs against a built Web (as CI does).
 - Known gaps, pinned in `test/artifact-sandbox-browser.e2e.ts`: resource hints still reach out, and

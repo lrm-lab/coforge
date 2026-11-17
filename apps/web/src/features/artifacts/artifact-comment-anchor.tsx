@@ -7,7 +7,10 @@ import { clip } from "./artifact-text-anchor";
 import type { CommentAnchor } from "./artifact-comment-inputs";
 import { anchorStatus, useArtifactCommenting, useCommentPlaces } from "./artifact-commenting";
 
-export type AnchorDescription = { place?: string; quote?: string };
+export type AnchorDescription = { place?: string; excerpt?: string };
+
+const quoted = (quote: unknown): AnchorDescription =>
+  typeof quote === "string" && quote ? { excerpt: m.av_cm_anchor_quote({ quote }) } : {};
 
 export function describeAnchor(anchor: CommentAnchor | null): AnchorDescription {
   if (!anchor) return {};
@@ -19,16 +22,24 @@ export function describeAnchor(anchor: CommentAnchor | null): AnchorDescription 
       place: start === end ? m.av_cm_line({ line: start }) : m.av_cm_lines({ start, end }),
     };
   }
-  if (anchor.type === "text" && typeof data.quote === "string") return { quote: data.quote };
-  if (anchor.type === "element")
+  if (anchor.type === "page") {
+    const label = typeof data.label === "string" && data.label ? data.label : data.name;
     return {
-      quote:
-        typeof data.quote === "string" && data.quote
-          ? data.quote
-          : typeof data.selector === "string"
-            ? clip(data.selector, ELEMENT_LABEL_MAX)
-            : undefined,
+      ...(typeof label === "string" ? { place: label } : {}),
+      ...(typeof data.quote === "string" && data.quote
+        ? { excerpt: m.av_cm_page_quote({ quote: data.quote }) }
+        : {}),
     };
+  }
+  if (anchor.type === "text") return quoted(data.quote);
+  if (anchor.type === "element")
+    return quoted(
+      typeof data.quote === "string" && data.quote
+        ? data.quote
+        : typeof data.selector === "string"
+          ? clip(data.selector, ELEMENT_LABEL_MAX)
+          : undefined,
+    );
   return {};
 }
 
@@ -44,7 +55,7 @@ export function CommentAnchorLine({
   const commenting = useArtifactCommenting();
   const places = useCommentPlaces();
   if (path === null) return null;
-  const { place, quote } = describeAnchor(anchor);
+  const { place, excerpt } = describeAnchor(anchor);
   const status = anchorStatus(commenting, places, commentId, path);
   return (
     <AriaButton
@@ -68,9 +79,7 @@ export function CommentAnchorLine({
           <span className="text-warning-primary"> · {m.av_cm_anchor_missing()}</span>
         )}
       </span>
-      {quote && (
-        <span className="line-clamp-2 block italic">{m.av_cm_anchor_quote({ quote })}</span>
-      )}
+      {excerpt && <span className="line-clamp-2 block">{excerpt}</span>}
     </AriaButton>
   );
 }

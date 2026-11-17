@@ -93,8 +93,8 @@ function bridgeFor(
       openLink: (url) => {
         hooks.__opened = url;
       },
-      openComposer: (options) => {
-        hooks.__composer = options;
+      suggestComment: (request) => {
+        hooks.__composer = request;
         return true;
       },
       reportError: (message) => errors.push(message),

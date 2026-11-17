@@ -14,6 +14,7 @@ import {
 } from "./artifact-page-bridge-core";
 import { createAnnotationChannel } from "./artifact-page-bridge-annotate";
 import { createAssetCalls } from "./artifact-page-bridge-assets";
+import { createCommentCalls, type PageCommentRequest } from "./artifact-page-bridge-comments";
 import { createDataCalls } from "./artifact-page-bridge-data";
 import {
   PAGE_METHOD_LEVELS,
@@ -24,6 +25,7 @@ import {
 
 export { PageHostError } from "./artifact-page-bridge-core";
 export type { PageAnnotationEvent } from "./artifact-page-bridge-annotate";
+export type { PageCommentRequest, PageSuggestHandler } from "./artifact-page-bridge-comments";
 export type {
   PageAssetsPort,
   PageConfirm,
@@ -50,7 +52,7 @@ export type PageBridgeHost = {
   copyText(text: string): Promise<boolean>;
   confirm(request: PageConfirm): Promise<boolean>;
   openLink(url: string): void;
-  openComposer(options: { body?: string }): boolean;
+  suggestComment(request: PageCommentRequest): boolean;
   reportError(message: string): void;
   reportFind(result: { total: number; active: number }): void;
   frameStatus(status: PageFrameStatus): void;
@@ -137,10 +139,7 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
       if (!host.userActive()) throw new BridgeRefusal(REFUSED, "Copy needs a click in the page");
       return { copied: await host.copyText(args.text) };
     },
-    "comments.open": (args) => {
-      const body = typeof args.body === "string" ? args.body.slice(0, 8000) : undefined;
-      return { opened: host.openComposer({ body }) };
-    },
+    ...createCommentCalls(host),
   };
 
   const call = async (params: Params) => {

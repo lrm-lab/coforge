@@ -12,6 +12,7 @@ export function ArtifactCommentPopover({
   version,
   path,
   anchor,
+  suggestion,
   top,
   left,
   onClose,
@@ -20,6 +21,7 @@ export function ArtifactCommentPopover({
   version: number;
   path: string;
   anchor: CommentAnchor;
+  suggestion?: string | undefined;
   top: number;
   left: number;
   onClose: () => void;
@@ -28,7 +30,7 @@ export function ArtifactCommentPopover({
   useEffect(() => {
     root.current?.scrollIntoView({ block: "nearest" });
   }, []);
-  const { quote, place } = describeAnchor(anchor);
+  const { place, excerpt } = describeAnchor(anchor);
   return (
     <div
       ref={root}
@@ -51,10 +53,12 @@ export function ArtifactCommentPopover({
           version,
           path,
           anchor,
+          suggestion,
           header: (
             <div className="flex items-start gap-1">
-              <p className="line-clamp-3 min-w-0 flex-1 py-1 text-xs text-tertiary italic [overflow-wrap:anywhere]">
-                {quote ? m.av_cm_anchor_quote({ quote }) : place}
+              <p className="line-clamp-3 min-w-0 flex-1 py-1 text-xs text-tertiary [overflow-wrap:anywhere]">
+                {place && <span className="block font-medium text-secondary">{place}</span>}
+                {excerpt && <span className="block">{excerpt}</span>}
               </p>
               <ButtonUtility
                 icon={XClose}

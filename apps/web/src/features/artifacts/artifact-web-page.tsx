@@ -13,6 +13,7 @@ import { ARTIFACTS_KEY } from "./artifact-queries";
 import { PageConfirmDialog } from "./artifact-page-confirm";
 import { ArtifactFrameCommentLayer } from "./artifact-frame-comment-layer";
 import { PageErrorBanner, PageExpiredCard, PageFindBar } from "./artifact-page-notices";
+import type { PageSuggestHandler } from "./artifact-page-bridge";
 import { useArtifactPageBridge } from "./use-artifact-page-bridge";
 
 const sandboxLinkQuery = (artifactId: string, version: number) => ({
@@ -101,6 +102,7 @@ function PageFrame({
   const toast = useAppToast();
   const frame = useRef<HTMLIFrameElement>(null);
   const container = useRef<HTMLDivElement>(null);
+  const suggestions = useRef<PageSuggestHandler | null>(null);
   const origin = useMemo(() => new URL(link.url).origin, [link.url]);
   const artifact = useMemo(
     () => ({ id: artifactId, title, version, entryPath }),
@@ -112,6 +114,7 @@ function PageFrame({
     viewer: link.viewer,
     level: link.level,
     artifact,
+    suggestions,
   });
   const askAgent = async () => {
     const report = m.doc_page_error_report({
@@ -148,7 +151,12 @@ function PageFrame({
             }}
           />
         )}
-        <ArtifactFrameCommentLayer bridge={bridge} frame={frame} container={container} />
+        <ArtifactFrameCommentLayer
+          bridge={bridge}
+          frame={frame}
+          container={container}
+          suggestions={suggestions}
+        />
         {blocked && <PageExpiredCard onReload={onReload} />}
       </div>
       <PageConfirmDialog confirmation={confirmation} title={title} />

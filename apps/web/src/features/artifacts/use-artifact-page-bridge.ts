@@ -7,10 +7,10 @@ import {
   createPageBridge,
   type PageArtifact,
   type PageConfirm,
+  type PageSuggestHandler,
   type PageTheme,
   type PageViewer,
 } from "./artifact-page-bridge";
-import { artifactComposerRequests } from "./artifact-page-composer";
 import type { PageConfirmation } from "./artifact-page-confirm";
 import type { PageLevel } from "./artifact-page-levels";
 import { pageAssetsPort, pageDataPort } from "./artifact-page-ports";
@@ -24,8 +24,9 @@ export function useArtifactPageBridge(input: {
   viewer: PageViewer;
   level: PageLevel;
   artifact: PageArtifact;
+  suggestions: RefObject<PageSuggestHandler | null>;
 }) {
-  const { frame, origin, viewer, level, artifact } = input;
+  const { frame, origin, viewer, level, artifact, suggestions } = input;
   const toast = useAppToast();
   const [confirmation, setConfirmation] = useState<PageConfirmation | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,8 +69,8 @@ export function useArtifactPageBridge(input: {
               setConfirmation(next);
             }),
           openLink: (url) => void window.open(url, "_blank", "noopener,noreferrer"),
-          openComposer: (request) => {
-            const handled = artifactComposerRequests.request(request);
+          suggestComment: (request) => {
+            const handled = pending.current === null && (suggestions.current?.(request) ?? false);
             if (!handled) toast.notice(m.doc_page_comment_unavailable());
             return handled;
           },
@@ -80,7 +81,7 @@ export function useArtifactPageBridge(input: {
         },
         { origin, window: () => frame.current?.contentWindow ?? null },
       ),
-    [origin, viewer, level, artifact, frame, toast],
+    [origin, viewer, level, artifact, frame, suggestions, toast],
   );
 
   useEffect(() => {

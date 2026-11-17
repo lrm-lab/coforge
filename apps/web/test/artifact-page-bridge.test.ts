@@ -34,6 +34,7 @@ function setup(overrides: Partial<PageBridgeHost> = {}) {
     errors: [] as string[],
     opened: [] as string[],
     composer: [] as unknown[],
+    accept: true,
     data: [] as PageDataCall[],
     confirms: [] as PageConfirm[],
     uploads: [] as string[],
@@ -76,9 +77,9 @@ function setup(overrides: Partial<PageBridgeHost> = {}) {
       return true;
     },
     openLink: (url) => calls.opened.push(url),
-    openComposer: (options) => {
-      calls.composer.push(options);
-      return true;
+    suggestComment: (request) => {
+      calls.composer.push(request);
+      return calls.accept;
     },
     reportError: (message) => calls.errors.push(message),
     reportFind: () => {},
@@ -217,10 +218,86 @@ describe("the page bridge", () => {
     expect((await call("user", "get"))?.result).toBeDefined();
   });
 
-  test("the comment composer is asked to open with its body", async () => {
+  test("a page suggests a comment from a click, with an anchor and a draft", async () => {
     const { call, calls } = setup();
-    expect((await call("comments", "open", { body: "Approve" }))?.result).toEqual({ opened: true });
-    expect(calls.composer).toEqual([{ body: "Approve" }]);
+    expect((await call("comments", "open", { anchor: "pricing-table" }))?.result).toBe(true);
+    expect(
+      (
+        await call("comments", "open", {
+          anchor: { name: "plan:2", label: "Plan two", quote: "Ships Friday" },
+          draft: "Is this still true?\nPlease confirm.",
+        })
+      )?.result,
+    ).toBe(true);
+    expect(calls.composer).toEqual([
+      { anchor: { name: "pricing-table" } },
+      {
+        anchor: { name: "plan:2", label: "Plan two", quote: "Ships Friday" },
+        draft: "Is this still true?\nPlease confirm.",
+      },
+    ]);
+  });
+
+  test("a suggestion outside a user activation resolves false and opens nothing", async () => {
+    let active = false;
+    const { call, calls } = setup({ userActive: () => active });
+    expect((await call("comments", "open", { anchor: "a" }))?.result).toBe(false);
+    expect(calls.composer).toEqual([]);
+    active = true;
+    expect((await call("comments", "open", { anchor: "a" }))?.result).toBe(true);
+  });
+
+  test("a refusing host resolves false", async () => {
+    const { call, calls } = setup();
+    calls.accept = false;
+    expect((await call("comments", "open", { anchor: "a" }))?.result).toBe(false);
+  });
+
+  test("a suggestion's arguments are validated before anything opens", async () => {
+    const { call, calls } = setup();
+    const bad: object[] = [
+      {},
+      { anchor: "" },
+      { anchor: "a".repeat(257) },
+      { anchor: "has space" },
+      { anchor: "a<b" },
+      { anchor: 5 },
+      { anchor: { name: "a", extra: 1 } },
+      { anchor: { name: "a", label: "x".repeat(201) } },
+      { anchor: { name: "a", label: "two\nlines" } },
+      { anchor: { name: "a", quote: "x".repeat(2001) } },
+      { anchor: { name: "a", quote: 3 } },
+      { anchor: { name: "a", quote: "\u{20AC}".repeat(1400) } },
+      { anchor: "a", draft: "x".repeat(2001) },
+      { anchor: "a", draft: 4 },
+      { anchor: "a", draft: "zero\u200Bwidth" },
+      { anchor: "a", draft: "bidi\u202Eflip" },
+      { anchor: "a", draft: "isolate\u2066x" },
+      { anchor: "a", draft: "tag\u{E0041}" },
+      { anchor: "a", draft: "line\u2028sep" },
+      { anchor: "a", draft: "para\u2029sep" },
+      { anchor: "a", draft: "nul\u0000" },
+      { anchor: { name: "a", quote: "zero\u200Bwidth" } },
+    ];
+    for (const args of bad)
+      expect((await call("comments", "open", args))?.error?.code, JSON.stringify(args)).toBe(
+        -32602,
+      );
+    expect(calls.composer).toEqual([]);
+    expect((await call("comments", "open", { anchor: "a", draft: "x".repeat(2000) }))?.result).toBe(
+      true,
+    );
+  });
+
+  test("suggestions are limited to 30 a minute", async () => {
+    const { call, tick } = setup();
+    for (let i = 0; i < BRIDGE_RATE_LIMIT_PER_MINUTE; i++)
+      expect((await call("comments", "open", { anchor: "a" }))?.result).toBe(true);
+    expect((await call("comments", "open", { anchor: "a" }))?.error?.message).toBe(
+      "Too many requests",
+    );
+    tick(60_000);
+    expect((await call("comments", "open", { anchor: "a" }))?.result).toBe(true);
   });
 
   test("page errors are reported five times at most", async () => {

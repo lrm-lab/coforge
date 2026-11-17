@@ -161,7 +161,14 @@ var namespaces = {
   artifact: function () { return { get: function () { return call("artifact", "get"); } }; },
   clipboard: function () { return { copy: function (text) { return call("clipboard", "copy", { text: String(text) }); } }; },
   links: function () { return { open: function (url) { return request("ui/open-link", { url: String(url) }); } }; },
-  comments: function () { return { open: function (options) { return call("comments", "open", options || {}); } }; },
+  comments: function () {
+    return {
+      open: function (anchor, options) {
+        if (!navigator.userActivation || !navigator.userActivation.isActive) return Promise.resolve(false);
+        return call("comments", "open", { anchor: anchor, draft: options && options.draft });
+      }
+    };
+  },
   db: function () {
     return {
       get: function (collection, id) { return call("db", "get", { collection: String(collection), id: String(id) }); },

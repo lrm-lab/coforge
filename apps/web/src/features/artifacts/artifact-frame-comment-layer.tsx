@@ -2,7 +2,8 @@ import { useRef, type RefObject } from "react";
 
 import { useArtifactCommenting } from "./artifact-commenting";
 import { DraftAffordance } from "./artifact-draft-affordance";
-import type { PageBridge } from "./artifact-page-bridge";
+import type { PageBridge, PageSuggestHandler } from "./artifact-page-bridge";
+import { PageSuggestion } from "./artifact-page-suggestion";
 import { useRegisterFramePicker } from "./artifact-review-tools";
 import { useAnchorDraft } from "./use-anchor-draft";
 import { useFrameMarks } from "./use-frame-marks";
@@ -12,10 +13,12 @@ export function ArtifactFrameCommentLayer({
   bridge,
   frame,
   container,
+  suggestions,
 }: {
   bridge: PageBridge;
   frame: RefObject<HTMLIFrameElement | null>;
   container: RefObject<HTMLDivElement | null>;
+  suggestions: RefObject<PageSuggestHandler | null>;
 }) {
   const { version, entryPath, commenting } = useArtifactCommenting();
   const key = commenting ? `${entryPath}@${version}` : null;
@@ -32,6 +35,10 @@ export function ArtifactFrameCommentLayer({
   useRegisterFramePicker(
     commenting ? { picking, disabled: draft.composing !== null, toggle: togglePicking } : null,
   );
-  if (!commenting) return null;
-  return <DraftAffordance draft={draft} path={entryPath} />;
+  return (
+    <>
+      {commenting && <DraftAffordance draft={draft} path={entryPath} />}
+      <PageSuggestion suggestions={suggestions} container={container} composing={composingRef} />
+    </>
+  );
 }

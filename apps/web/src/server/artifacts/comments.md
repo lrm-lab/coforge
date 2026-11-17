@@ -64,6 +64,9 @@ Comments on artifacts are written for Agents (the Agent API's `comments`, `comme
   the person sees the anchor's label or quote in the composer before sending and nothing is posted
   without the person sending. A person's anchor quote is text the page chose, and an Agent later
   reads it with the comment: treat it as page content, not as the person's words.
+- A `page` anchor (`name`, `label?`, `quote?`) names a place the page itself offered through
+  `comments.open`; it is stored as sent, never located by the server, and its excerpt is page text
+  like any other anchor quote.
 
 ## Drafts and review send
 

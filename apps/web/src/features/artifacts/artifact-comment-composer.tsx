@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Image01, XClose } from "@untitledui/icons";
+import { Browser, Image01, XClose } from "@untitledui/icons";
 import { ARTIFACT_COMMENT_IMAGES_MAX, COMMENT_BODY_MAX } from "@lrm/coforge-sdk/agent";
 import { readMessageReferences } from "@lrm/coforge-sdk/internal/message-references";
 
@@ -32,6 +32,7 @@ import { postArtifactComment, previewArtifactCommentAudience } from "./artifact-
 import { ComposerActions } from "./artifact-comment-composer-actions";
 import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
 import { useArtifactCommenting } from "./artifact-commenting";
+import { useHoldComposer } from "./artifact-composer-holds";
 import { draftFailure } from "./use-comment-drafts";
 import { COMMENT_MENTIONS_MAX, type CommentAnchor } from "./artifact-comment-inputs";
 import { uploadCommentImage } from "./artifact-comment-images";
@@ -44,7 +45,14 @@ export type ComposerTarget =
   | { kind: "panel"; version: number }
   | { kind: "file"; version: number; path: string; onClear: () => void }
   | { kind: "reply"; id: string; name: string; onCancel: () => void }
-  | { kind: "anchor"; version: number; path: string; anchor: CommentAnchor; header: ReactNode };
+  | {
+      kind: "anchor";
+      version: number;
+      path: string;
+      anchor: CommentAnchor;
+      header: ReactNode;
+      suggestion?: string | undefined;
+    };
 
 type Attachment = {
   key: string;
@@ -112,7 +120,7 @@ export function ArtifactCommentComposer({
   const { create: createDraft } = useCommentDraftActions();
   const { version: shownVersion } = useArtifactCommenting();
   const [saving, setSaving] = useState(false);
-  const [body, setBody] = useState("");
+  const [body, setBody] = useState(target.kind === "anchor" ? (target.suggestion ?? "") : "");
   const [pins, setPins] = useState<readonly MentionPin[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [sending, setSending] = useState(false);
@@ -172,6 +180,7 @@ export function ArtifactCommentComposer({
   const cannotSend = invalid || sending || drafts.busy;
   const cannotSave = invalid || saving || sending || drafts.busy || drafts.atLimit;
   const hasDrafts = drafts.drafts.length > 0;
+  useHoldComposer(!empty || attachments.length > 0);
 
   function addFiles(files: readonly File[]) {
     const images = files.filter((file) => INLINE_IMAGE_TYPES.has(file.type));
@@ -308,6 +317,12 @@ export function ArtifactCommentComposer({
             removeLabel={m.av_cm_clear_target()}
           />
         )
+      )}
+      {target.kind === "anchor" && target.suggestion !== undefined && (
+        <p data-page-suggested="" className="flex items-center gap-1 text-xs text-tertiary">
+          <Browser aria-hidden="true" className="size-4 shrink-0" />
+          {m.av_cm_page_suggested()}
+        </p>
       )}
       <div className={cn(COMPOSER_BOX_CLASS, COMPOSER_FOCUS_CLASS)}>
         <ComposerField

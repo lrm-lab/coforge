@@ -67,6 +67,30 @@ test("a person anchors a comment to a text quote or a line range, and an anchor 
   ).toThrow();
 });
 
+test("a person posts a comment on a place a page named, and an Agent reads it as a page anchor", async () => {
+  const artifact = await f.make("Page places");
+  const place = {
+    type: "page" as const,
+    data: { name: "pricing:table", label: "Pricing", quote: "Ships Friday" },
+  };
+  await post(artifact, "Is this still true?", { path: "plan.md", anchor: place });
+  const page = await list(artifact);
+  expect(page.comments[0]).toMatchObject({ path: "plan.md", anchor: place });
+  const read = await f.post(f.agents.reader, { operation: "comments", artifact, all: true });
+  expect(read.body.comments[0]).toMatchObject({ anchor: place, path: "plan.md" });
+  const refused = (data: Record<string, unknown>) =>
+    expect(() => draft("Bad.", { path: "plan.md", anchor: { type: "page", data } })).toThrow();
+  refused({});
+  refused({ name: "" });
+  refused({ name: "has space" });
+  refused({ name: "a".repeat(257) });
+  refused({ name: "a", label: "x".repeat(201) });
+  refused({ name: "a", quote: "x".repeat(2001) });
+  refused({ name: "a", quote: "a\u0000b" });
+  refused({ name: "a", selector: "h1" });
+  refused({ name: "a", quote: "\u20AC".repeat(1400) });
+});
+
 test("a reply joins its thread, a retry with the same key stores once, and a reply to a deleted comment is refused", async () => {
   const artifact = await f.make("Replies");
   const root = await post(artifact, "Root.");

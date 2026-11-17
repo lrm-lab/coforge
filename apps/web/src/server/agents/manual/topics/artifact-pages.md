@@ -17,8 +17,14 @@ const who = user && (await user.get()); // { displayName, kind: "person" }
   writes the clipboard and tells the reader.
 - `links.open(url)` asks to open an `http` or `https` address in a new tab. CoForge shows the
   address and the reader decides; a page whose requests are declined three times is muted.
-- `comments.open({ body })` asks CoForge to open the comment box, with `body` filled in when
-  given. A button for a decision can prefill its answer this way.
+- `comments.open(anchor, { draft })` suggests a comment to the reader and resolves `true` when a
+  comment box opened, `false` when none did (outside a click in the page, or while the reader is
+  writing, sending a review, or answering another request of the page). `anchor` is a name
+  (`A-Z a-z 0-9 . _ ~ : / # -`, up to 256 characters) or `{ name, label?, quote? }` (`label` up to
+  200 characters, `quote` up to 2000: the excerpt the comment is about). `draft` (up to 2000
+  characters, no invisible or direction-control characters) fills the box as text the reader edits;
+  CoForge says the page suggested it, and nothing is posted unless the reader sends it. Call it
+  from a click; up to 30 calls a minute. It reads no comments back.
 - People comment on an element or a text selection of the page without any call from it: CoForge
   drives that itself, over the same channel, while the reader has comment mode on. The page cannot
   start the picker, read the comments, or send a comment for the reader. It does choose what it

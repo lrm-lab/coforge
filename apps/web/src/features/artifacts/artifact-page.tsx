@@ -33,9 +33,10 @@ import {
   type CommentTarget,
   type PublishedPlaces,
 } from "./artifact-commenting";
-import { isFrameAnchor } from "./artifact-page-annotations";
+import { revealsInFrame } from "./artifact-page-annotations";
 import { groupThreads } from "./artifact-comment-threads";
 import { useArtifactComments, syncCommentsChange } from "./artifact-comment-queries";
+import { createComposerHolds } from "./artifact-composer-holds";
 import { useCommentHandoff } from "./use-comment-handoff";
 import { useCommentMode, type ArtifactPanelName } from "./use-comment-mode";
 import { ArtifactFilesPanel } from "./artifact-files-panel";
@@ -143,6 +144,7 @@ function ArtifactPageFor({
   const [openPath, setOpenPath] = useState<string | null>(null);
   const commentMode = useCommentMode(setPanel);
   const [places, setPlaces] = useState<PublishedPlaces>(null);
+  const [holds] = useState(createComposerHolds);
   const [picker, setPicker] = useState<FramePicker | null>(null);
   const review = useReviewFilter(artifactId, reviewId, () => onClearReview?.());
   useEffect(() => {
@@ -248,7 +250,7 @@ function ArtifactPageFor({
   );
   const revealThread = useCallback<ArtifactCommenting["revealThread"]>(
     (target) => {
-      const framed = webPage && target.path === entryPath && isFrameAnchor(target.anchor);
+      const framed = webPage && target.path === entryPath && revealsInFrame(target.anchor);
       setOpenPath(framed || (target.path === entryPath && !webPage) ? null : target.path);
       if (framed || !webPage || target.path !== entryPath || target.anchor?.type === "lines")
         postReveal(target);
@@ -270,6 +272,7 @@ function ArtifactPageFor({
       },
       openPanel: () => setPanel("comments"),
       publishPlaces,
+      holds,
     }),
     [
       artifactId,
@@ -281,6 +284,7 @@ function ArtifactPageFor({
       revealThread,
       postFocus,
       publishPlaces,
+      holds,
     ],
   );
   const requests = useMemo<CommentRequests>(
