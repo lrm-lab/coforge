@@ -1,5 +1,6 @@
 import type { SessionConfigOption } from "@agentclientprotocol/sdk";
 import { RUNTIME_PROVIDER, type CodeAgentModelCatalog } from "@lrm/coforge-sdk/internal";
+import { acpSelectEntries, acpSelectValues } from "#src/acp/config-options";
 
 /** Values are DSH's opaque route/model selection tokens, not CoForge provider ids. */
 export function dshCatalogFromConfig(
@@ -7,15 +8,10 @@ export function dshCatalogFromConfig(
 ): CodeAgentModelCatalog {
   const model = options.find((option) => option.id === "model" || option.category === "model");
   if (model?.type !== "select") throw new Error("DSH model catalog is unavailable");
-  const entries = model.options.flatMap((entry) => ("value" in entry ? [entry] : entry.options));
+  const entries = acpSelectEntries(model);
   if (!entries.length) throw new Error("DSH model catalog is unavailable");
   const reasoning = options.find((option) => option.id === "reasoning_effort");
-  const reasoningEfforts =
-    reasoning?.type === "select"
-      ? reasoning.options.flatMap((entry) =>
-          "value" in entry ? [entry.value] : entry.options.map((option) => option.value),
-        )
-      : [];
+  const reasoningEfforts = acpSelectValues(reasoning);
   return {
     provider: RUNTIME_PROVIDER.DSH,
     models: entries.map((entry) => ({

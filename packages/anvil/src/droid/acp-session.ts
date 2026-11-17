@@ -1,12 +1,11 @@
 import type { InitializeResponse, SessionConfigOption } from "@agentclientprotocol/sdk";
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
-import { acpConfigOptions, acpSelectValues } from "#src/acp/config-options";
-import { acpBounded, acpProcess, type AcpConnection } from "#src/acp/connection";
+import { acpApplyRuntimeConfig, acpConfigOptions } from "#src/acp/config-options";
+import { acpBounded, acpProcess } from "#src/acp/connection";
 import type { AcpRuntimeProfile, AcpSessionProfile } from "#src/acp/profile";
 import { AcpSession } from "#src/acp/session";
 import { asRecord, nonEmptyString } from "#src/json-record";
-import { RuntimeModelNotFoundError } from "#src/contract";
 import type { DroidAcpRuntimeHost } from "./acp-host";
 import { DroidAcpTurnEvents } from "./acp-update-events";
 import type { DroidInstructions } from "./instructions";
@@ -103,7 +102,7 @@ function droidSessionProfile(
       const resuming = sessionId !== undefined && options.sessionMode !== "create";
       let opened: string | undefined;
       let replaced: string | undefined;
-      let configOptions: unknown[] = [];
+      let configOptions: SessionConfigOption[] = [];
       if (resuming) {
         try {
           const loaded = await acpBounded(
@@ -138,7 +137,18 @@ function droidSessionProfile(
         if (!opened) throw new Error("droid acp did not create a session");
         configOptions = acpConfigOptions(state);
       }
-      await applyRuntimeConfig(transport, options, opened, configOptions, timeoutMs);
+      await acpApplyRuntimeConfig(
+        {
+          transport,
+          sessionId: opened,
+          timeoutMs,
+          timedOut: "droid acp session/set_config_option timed out",
+          label: "Droid",
+          missingModel: "Droid exposes no model configuration; upgrade droid to 1.4.1 or newer",
+        },
+        configOptions,
+        options.runtime,
+      );
       return { sessionId: opened, resumable: resuming && !replaced, replacedSessionId: replaced };
     },
     turn: () => new DroidAcpTurnEvents(host),
@@ -149,44 +159,4 @@ function droidSessionProfile(
       await instructions?.remove();
     },
   };
-}
-
-async function applyRuntimeConfig(
-  transport: AcpConnection,
-  options: AgentSessionOptions,
-  sessionId: string,
-  initial: unknown[],
-  timeoutMs: number,
-): Promise<void> {
-  const model = options.runtime?.model;
-  const reasoning = options.runtime?.reasoning || undefined;
-  if ((!model || model === "default") && !reasoning) return;
-  let config = initial as SessionConfigOption[];
-  const select = async (id: string, value: string) => {
-    const option = config.find((entry) => entry.id === id || entry.category === id);
-    if (!acpSelectValues(option).includes(value)) {
-      if (id === "model") throw new RuntimeModelNotFoundError(value);
-      throw new Error(`Droid ${id} selection is unavailable`);
-    }
-    const configured = await acpBounded(
-      transport.connection.agent.request("session/set_config_option", {
-        sessionId,
-        configId: option!.id,
-        value,
-      }),
-      timeoutMs,
-      "droid acp session/set_config_option timed out",
-    );
-    config = acpConfigOptions(configured);
-    if (!config.some((entry) => entry.id === option!.id && entry.currentValue === value))
-      throw new Error(`Droid did not apply ${id}`);
-  };
-  if (model && model !== "default") {
-    if (!config.some((entry) => entry.id === "model" || entry.category === "model"))
-      throw new Error("Droid exposes no model configuration; upgrade droid to 1.4.1 or newer");
-    await select("model", model);
-  }
-  if (!reasoning) return;
-  const effort = config.find((entry) => entry.category === "thought_level");
-  if (effort) await select(effort.id, reasoning);
 }

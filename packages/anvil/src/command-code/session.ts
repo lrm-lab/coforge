@@ -8,12 +8,13 @@ import type {
   AgentSessionOptions,
   AgentTurnProcessWindow,
 } from "@coforge/agent";
-import { RuntimeModelNotFoundError } from "#src/contract";
 import type { AcpSessionProfile } from "#src/acp/profile";
+import { acpApplyRuntimeConfig } from "#src/acp/config-options";
 import { AcpSession } from "#src/acp/session";
 import type { AcpConnection } from "#src/acp/connection";
 import { commandCodeLoginRefusal } from "./auth";
 import {
+  COMMAND_CODE_PROFILE,
   commandCodeConnection,
   COMMAND_CODE_ACP_TIMEOUT_MS,
   commandCodeBounded,
@@ -107,44 +108,21 @@ export class CommandCodeSession implements AgentSession {
     sessionId: string,
     initial: SessionConfigOption[],
   ) {
-    const model = this.options.runtime?.model;
-    const reasoning = this.options.runtime?.reasoning;
-    if (!model && !reasoning) return;
-    let config = initial;
-    const select = async (id: string, value: string) => {
-      const option = config.find((entry) => entry.id === id);
-      const available =
-        option?.type === "select" &&
-        option.options.some((entry) =>
-          "value" in entry
-            ? entry.value === value
-            : entry.options.some((child) => child.value === value),
-        );
-      if (!available) {
-        if (id === "model") throw new RuntimeModelNotFoundError(value);
-        throw new Error(`Command Code ${id} selection is unavailable`);
-      }
-      const configured = await commandCodeBounded(
-        transport.connection.agent.request("session/set_config_option", {
-          sessionId,
-          configId: id,
-          value,
-        }),
-        this.#timeoutMs,
-      );
-      config = configured.configOptions;
-      if (!config.some((entry) => entry.id === id && entry.currentValue === value))
-        throw new Error(`Command Code did not apply ${id}`);
-    };
-    if (model) {
-      config = await transport.waitForConfig(sessionId, config, "model", this.#timeoutMs);
-      await select("model", model);
-    }
-    // Effort options depend on the model that was just selected. When the returned option does
-    // not exist, the model's own default stays. A present option that lacks the value fails.
-    if (!reasoning) return;
-    const effort = config.find((entry) => entry.category === "thought_level");
-    if (effort) await select(effort.id, reasoning);
+    const runtime = this.options.runtime;
+    const config = runtime?.model
+      ? await transport.waitForConfig(sessionId, initial, "model", this.#timeoutMs)
+      : initial;
+    await acpApplyRuntimeConfig(
+      {
+        transport,
+        sessionId,
+        timeoutMs: this.#timeoutMs,
+        timedOut: COMMAND_CODE_PROFILE.messages.timedOut,
+        label: "Command Code",
+      },
+      config,
+      runtime,
+    );
   }
 
   async open() {

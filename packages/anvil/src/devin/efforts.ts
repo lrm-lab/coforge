@@ -4,6 +4,7 @@ import { JsonlRequestError } from "#src/jsonl-error";
 import { DEVIN_CATALOG_TIMEOUT_MS } from "./catalog";
 import { devinConnection, devinBounded, type DevinConnection } from "./connection";
 import type { DevinRuntimeHost } from "./host";
+import { acpSelectValues } from "#src/acp/config-options";
 
 /** Devin's own `default` is the provider default. Callers store that as an empty string. */
 const PROVIDER_DEFAULT_EFFORT = "default";
@@ -20,17 +21,12 @@ export type DevinEffortRead =
 /** Values of the current `thought_level` select, in CLI order, without `default`. */
 export function devinEffortValues(config: readonly SessionConfigOption[]): string[] {
   const effort = config.find((entry) => entry.category === "thought_level");
-  if (effort?.type !== "select") return [];
   const values: string[] = [];
-  for (const entry of effort.options) {
-    const choices = "value" in entry ? [entry] : entry.options;
-    for (const choice of choices) {
-      const value = choice.value;
-      if (!value || value === PROVIDER_DEFAULT_EFFORT || values.includes(value)) continue;
-      if (value.length > EFFORT_VALUE_MAX_LENGTH) continue;
-      if (values.length >= EFFORT_VALUE_LIMIT) return values;
-      values.push(value);
-    }
+  for (const value of acpSelectValues(effort)) {
+    if (!value || value === PROVIDER_DEFAULT_EFFORT || values.includes(value)) continue;
+    if (value.length > EFFORT_VALUE_MAX_LENGTH) continue;
+    if (values.length >= EFFORT_VALUE_LIMIT) return values;
+    values.push(value);
   }
   return values;
 }

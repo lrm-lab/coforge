@@ -9,6 +9,7 @@ import {
   type CommandCodeConnection,
 } from "./connection";
 import type { CommandCodeRuntimeHost } from "./host";
+import { acpSelectValues } from "#src/acp/config-options";
 
 /** Command Code's own `default` is the provider default. Callers store that as an empty string. */
 const PROVIDER_DEFAULT_EFFORT = "default";
@@ -30,29 +31,19 @@ export type CommandCodeEffortRead =
 /** Values of the current `thought_level` select, in CLI order, without `default`. */
 export function commandCodeEffortValues(config: readonly SessionConfigOption[]): string[] {
   const effort = config.find((entry) => entry.category === "thought_level");
-  if (effort?.type !== "select") return [];
   const values: string[] = [];
-  for (const entry of effort.options) {
-    const choices = "value" in entry ? [entry] : entry.options;
-    for (const choice of choices) {
-      const value = choice.value;
-      if (!value || value === PROVIDER_DEFAULT_EFFORT || values.includes(value)) continue;
-      if (value.length > EFFORT_VALUE_MAX_LENGTH) continue;
-      if (values.length >= EFFORT_VALUE_LIMIT) return values;
-      values.push(value);
-    }
+  for (const value of acpSelectValues(effort)) {
+    if (!value || value === PROVIDER_DEFAULT_EFFORT || values.includes(value)) continue;
+    if (value.length > EFFORT_VALUE_MAX_LENGTH) continue;
+    if (values.length >= EFFORT_VALUE_LIMIT) return values;
+    values.push(value);
   }
   return values;
 }
 
 function modelListed(config: readonly SessionConfigOption[], modelId: string): boolean {
   const option = config.find((entry) => entry.id === "model" || entry.category === "model");
-  if (option?.type !== "select") return false;
-  return option.options.some((entry) =>
-    "value" in entry
-      ? entry.value === modelId
-      : entry.options.some((choice) => choice.value === modelId),
-  );
+  return acpSelectValues(option).includes(modelId);
 }
 
 function failureCode(error: unknown): CommandCodeEffortFailureCode {

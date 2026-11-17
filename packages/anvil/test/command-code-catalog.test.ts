@@ -266,7 +266,7 @@ test("Command Code fails the session when the returned effort option lacks the c
   const cwd = await mkdtemp(join(tmpdir(), "anvil-command-code-model-"));
   try {
     await expect(openSession(cwd, {}, { model: "other-model", reasoning: "high" })).rejects.toThrow(
-      "Command Code effort selection is unavailable",
+      "Command Code does not offer effort high for this model",
     );
   } finally {
     await rm(cwd, { recursive: true, force: true });

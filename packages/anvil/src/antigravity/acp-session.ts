@@ -1,11 +1,11 @@
-import type { InitializeResponse, SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { InitializeResponse } from "@agentclientprotocol/sdk";
 import { RequestError } from "@agentclientprotocol/sdk";
 import { getLogger } from "@logtape/logtape";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { RuntimeLoginRequiredError, RuntimeModelNotFoundError } from "#src/contract";
+import { RuntimeLoginRequiredError } from "#src/contract";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
-import { acpConfigOptions, acpSelectValues } from "#src/acp/config-options";
-import { acpBounded, acpProcess, type AcpConnection } from "#src/acp/connection";
+import { acpApplyRuntimeConfig, acpConfigOptions } from "#src/acp/config-options";
+import { acpBounded, acpProcess } from "#src/acp/connection";
 import type { AcpRuntimeProfile, AcpSessionProfile } from "#src/acp/profile";
 import { AcpSession } from "#src/acp/session";
 import { asRecord, nonEmptyString } from "#src/json-record";
@@ -96,43 +96,6 @@ export async function createAntigravityAcpSession(
     await session.dispose();
     throw error;
   }
-}
-
-async function applyRuntimeConfig(
-  transport: AcpConnection,
-  sessionId: string,
-  initial: SessionConfigOption[],
-  runtime: AgentSessionOptions["runtime"],
-  timeoutMs: number,
-): Promise<void> {
-  let config = initial;
-  const apply = async (option: SessionConfigOption, value: string) => {
-    if (option.currentValue === value) return;
-    config = acpConfigOptions(
-      await acpBounded(
-        transport.connection.agent.request("session/set_config_option", {
-          sessionId,
-          configId: option.id,
-          value,
-        }),
-        timeoutMs,
-        "agy acp session/set_config_option timed out",
-      ),
-    );
-  };
-  const model = runtime?.model;
-  if (model && model !== "default") {
-    const option = config.find((entry) => entry.category === "model");
-    if (!option || !acpSelectValues(option).includes(model))
-      throw new RuntimeModelNotFoundError(model);
-    await apply(option, model);
-  }
-  const reasoning = runtime?.reasoning;
-  const effort = config.find((entry) => entry.category === "thought_level");
-  if (!reasoning || !effort) return;
-  if (!acpSelectValues(effort).includes(reasoning))
-    throw new Error(`agy acp does not offer thought_level ${reasoning} for this model`);
-  await apply(effort, reasoning);
 }
 
 function antigravitySessionProfile(
@@ -226,12 +189,16 @@ function antigravitySessionProfile(
           "agy acp session/set_mode timed out",
         );
       else logAutomaticModeUnavailable(initialized, modeIds);
-      await applyRuntimeConfig(
-        transport,
-        opened,
+      await acpApplyRuntimeConfig(
+        {
+          transport,
+          sessionId: opened,
+          timeoutMs,
+          timedOut: "agy acp session/set_config_option timed out",
+          label: "agy acp",
+        },
         acpConfigOptions(state),
         options.runtime,
-        timeoutMs,
       );
       return { sessionId: opened, resumable: resuming && !replaced, replacedSessionId: replaced };
     },

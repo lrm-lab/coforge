@@ -1,6 +1,7 @@
 import type { InitializeResponse, SessionConfigOption } from "@agentclientprotocol/sdk";
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
+import { acpConfigOptions, acpSelectValues } from "#src/acp/config-options";
 import { acpBounded, acpProcess, type AcpConnection } from "#src/acp/connection";
 import type { AcpRuntimeProfile, AcpSessionProfile } from "#src/acp/profile";
 import { AcpSession } from "#src/acp/session";
@@ -151,7 +152,7 @@ function cursorSessionProfile(
             "cursor-agent acp session/load timed out",
           );
           opened = sessionId;
-          configOptions = readConfigOptions(loaded);
+          configOptions = acpConfigOptions(loaded);
           models = readModels(loaded);
         } catch (error) {
           const missing =
@@ -176,7 +177,7 @@ function cursorSessionProfile(
         });
         opened = nonEmptyString(asRecord(state)?.sessionId);
         if (!opened) throw new Error("cursor-agent acp did not create a session");
-        configOptions = readConfigOptions(state);
+        configOptions = acpConfigOptions(state);
         models = readModels(state);
       }
       await applyRuntimeConfig(
@@ -222,13 +223,6 @@ function cursorSessionProfile(
   };
 }
 
-/** A session `set_config_option` response carries the option set after the change; `session/new`
- * and `session/load` return the same list. */
-function readConfigOptions(response: unknown): SessionConfigOption[] {
-  const config = asRecord(response)?.configOptions;
-  return Array.isArray(config) ? (config as SessionConfigOption[]) : [];
-}
-
 /** The `models.availableModels` list `session/new`/`session/load` returns — composite ids the
  * server accepts verbatim on `session/set_config_option`. */
 function readModels(response: unknown): unknown[] {
@@ -272,7 +266,7 @@ async function applyRuntimeConfig(
     throw new Error(
       "Cursor exposes no model configuration; upgrade cursor-agent to 2026.10.22 or newer",
     );
-  if (!optionOffers(option, composite)) throw new RuntimeModelNotFoundError(model);
+  if (!acpSelectValues(option).includes(composite)) throw new RuntimeModelNotFoundError(model);
   const configured = await acpBounded(
     transport.connection.agent.request("session/set_config_option", {
       sessionId,
@@ -282,18 +276,7 @@ async function applyRuntimeConfig(
     timeoutMs,
     "cursor-agent acp session/set_config_option timed out",
   );
-  const next = readConfigOptions(configured);
+  const next = acpConfigOptions(configured);
   if (!next.some((entry) => entry.id === option.id && entry.currentValue === composite))
     throw new Error("Cursor did not apply the model selection");
-}
-
-function optionOffers(option: SessionConfigOption | undefined, value: string): boolean {
-  return (
-    option?.type === "select" &&
-    option.options.some((entry) =>
-      "value" in entry
-        ? entry.value === value
-        : entry.options.some((child) => child.value === value),
-    )
-  );
 }

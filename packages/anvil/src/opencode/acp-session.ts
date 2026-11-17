@@ -1,11 +1,11 @@
 import type { InitializeResponse, SessionConfigOption } from "@agentclientprotocol/sdk";
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { AgentSession, AgentSessionOptions } from "@coforge/agent";
-import { acpBounded, acpProcess, type AcpConnection } from "#src/acp/connection";
+import { acpApplyRuntimeConfig, acpConfigOptions } from "#src/acp/config-options";
+import { acpBounded, acpProcess } from "#src/acp/connection";
 import type { AcpRuntimeProfile, AcpSessionProfile } from "#src/acp/profile";
 import { AcpSession } from "#src/acp/session";
 import { asRecord, nonEmptyString } from "#src/json-record";
-import { RuntimeModelNotFoundError } from "#src/contract";
 import type { OpenCodeAcpRuntimeHost } from "./acp-host";
 import { OpenCodeAcpTurnEvents } from "./acp-update-events";
 import { OPENCODE_CONFIG_CONTENT_ENV, type OpenCodeInstructions } from "./instructions";
@@ -122,7 +122,7 @@ function openCodeSessionProfile(
       const resuming = sessionId !== undefined && options.sessionMode !== "create";
       let opened: string | undefined;
       let replaced: string | undefined;
-      let configOptions: unknown[] = [];
+      let configOptions: SessionConfigOption[] = [];
       if (resuming) {
         try {
           const loaded = await acpBounded(
@@ -135,7 +135,7 @@ function openCodeSessionProfile(
             "opencode acp session/load timed out",
           );
           opened = sessionId;
-          configOptions = readConfigOptions(loaded);
+          configOptions = acpConfigOptions(loaded);
         } catch (error) {
           const missing =
             error instanceof RequestError &&
@@ -153,9 +153,21 @@ function openCodeSessionProfile(
         );
         opened = nonEmptyString(asRecord(state)?.sessionId);
         if (!opened) throw new Error("opencode acp did not create a session");
-        configOptions = readConfigOptions(state);
+        configOptions = acpConfigOptions(state);
       }
-      await applyRuntimeConfig(transport, options, opened, configOptions, timeoutMs);
+      await acpApplyRuntimeConfig(
+        {
+          transport,
+          sessionId: opened,
+          timeoutMs,
+          timedOut: "opencode acp session/set_config_option timed out",
+          label: "OpenCode",
+          missingModel:
+            "OpenCode exposes no model configuration; upgrade opencode to 2.1.0 or newer",
+        },
+        configOptions,
+        options.runtime,
+      );
       return { sessionId: opened, resumable: resuming && !replaced, replacedSessionId: replaced };
     },
     turn: () => new OpenCodeAcpTurnEvents(host),
@@ -168,71 +180,4 @@ function openCodeSessionProfile(
       await instructions.remove();
     },
   };
-}
-
-/** A session `set_config_option` response carries the option set after the change. */
-function readConfigOptions(response: unknown): SessionConfigOption[] {
-  const config = asRecord(response)?.configOptions;
-  return Array.isArray(config) ? (config as SessionConfigOption[]) : [];
-}
-
-function optionOffers(option: SessionConfigOption | undefined, value: string): boolean {
-  return (
-    option?.type === "select" &&
-    option.options.some((entry) =>
-      "value" in entry
-        ? entry.value === value
-        : entry.options.some((child) => child.value === value),
-    )
-  );
-}
-
-/** Applies `runtime.model` through the `model` select, then `runtime.reasoning` through the
- * `thought_level` select a model switch publishes. `session/new` and `session/load` both
- * return the select list. */
-async function applyRuntimeConfig(
-  transport: AcpConnection,
-  options: AgentSessionOptions,
-  sessionId: string,
-  initial: unknown[],
-  timeoutMs: number,
-): Promise<void> {
-  const model = options.runtime?.model;
-  const reasoning = options.runtime?.reasoning;
-  if ((!model || model === "default") && !reasoning) return;
-  let config = initial as SessionConfigOption[];
-  const select = async (id: string, value: string) => {
-    const option = config.find((entry) => entry.id === id || entry.category === id);
-    if (!optionOffers(option, value)) {
-      if (id === "model") throw new RuntimeModelNotFoundError(value);
-      throw new Error(`OpenCode ${id} selection is unavailable`);
-    }
-    const configured = await acpBounded(
-      transport.connection.agent.request("session/set_config_option", {
-        sessionId,
-        configId: option!.id,
-        value,
-      }),
-      timeoutMs,
-      "opencode acp session/set_config_option timed out",
-    );
-    config = readConfigOptions(configured);
-    if (!config.some((entry) => entry.id === option!.id && entry.currentValue === value))
-      throw new Error(`OpenCode did not apply ${id}`);
-  };
-  if (model && model !== "default") {
-    // opencode publishes its options on `session/new`/`session/load` itself — a missing `model`
-    // select means a CLI without the config surface, so fail instead of waiting for options
-    // that never arrive.
-    if (!config.some((entry) => entry.id === "model" || entry.category === "model"))
-      throw new Error(
-        "OpenCode exposes no model configuration; upgrade opencode to 2.1.0 or newer",
-      );
-    await select("model", model);
-  }
-  if (!reasoning) return;
-  const effort = config.find((entry) => entry.category === "thought_level");
-  // No effort option after the model applies leaves that model's own default; a present option
-  // that lacks the value fails the launch (the stored selection no longer exists).
-  if (effort) await select(effort.id, reasoning);
 }

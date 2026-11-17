@@ -24,6 +24,7 @@ import { STOP_REASON_FAILURE_MESSAGES } from "./stop-reasons";
 import { KiroTurnSteering } from "./session-steering";
 import { scrubRuntimeErrorText } from "#src/runtime-error-text";
 import type { KiroRuntimeHost, KiroProviderOptions } from "./host";
+import { acpSelectValues } from "#src/acp/config-options";
 
 export class KiroProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.KIRO;
@@ -195,14 +196,7 @@ class KiroSession implements AgentSession {
     const sessionId = this.#identity.sessionId;
     const select = async (id: string, value: string) => {
       const option = config.find((option) => option.id === id);
-      if (
-        option?.type !== "select" ||
-        !option.options.some((entry) =>
-          "value" in entry
-            ? entry.value === value
-            : entry.options.some((child) => child.value === value),
-        )
-      )
+      if (!acpSelectValues(option).includes(value))
         throw new Error(`Kiro ${id} selection is unavailable`);
       const configured = await bounded(
         agent.request("session/set_config_option", { sessionId, configId: id, value }),

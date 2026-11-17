@@ -12,6 +12,7 @@ import {
   type CommandCodeConnection,
 } from "./connection";
 import type { CommandCodeRuntimeHost } from "./host";
+import { acpSelectEntries } from "#src/acp/config-options";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.COMMAND_CODE]);
 
@@ -56,7 +57,7 @@ export async function discoverCommandCodeCatalog(
     );
     const option = config.find((entry) => entry.category === "model");
     if (option?.type !== "select") throw new Error("Command Code model catalog unavailable");
-    const entries = option.options.flatMap((entry) => ("value" in entry ? [entry] : entry.options));
+    const entries = acpSelectEntries(option);
     const models = entries.flatMap((entry) => {
       if (!entry.value) return [];
       return [

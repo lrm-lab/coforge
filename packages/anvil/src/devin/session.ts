@@ -8,12 +8,12 @@ import type {
   AgentSessionOptions,
   AgentTurnProcessWindow,
 } from "@coforge/agent";
-import { RuntimeModelNotFoundError } from "#src/contract";
 import { asRecord } from "#src/json-record";
 import type { AcpSessionProfile } from "#src/acp/profile";
+import { acpApplyRuntimeConfig } from "#src/acp/config-options";
 import { AcpSession } from "#src/acp/session";
 import type { AcpConnection } from "#src/acp/connection";
-import { devinConnection, DEVIN_ACP_TIMEOUT_MS, devinBounded } from "./connection";
+import { DEVIN_PROFILE, devinConnection, DEVIN_ACP_TIMEOUT_MS, devinBounded } from "./connection";
 import { DevinTurnEvents } from "./update-events";
 import type { DevinProviderOptions } from "./host";
 import { createDevinRuleFile, type DevinRuleFile } from "./rules";
@@ -114,45 +114,21 @@ export class DevinSession implements AgentSession {
     sessionId: string,
     initial: SessionConfigOption[],
   ) {
-    const model = this.options.runtime?.model;
-    const reasoning = this.options.runtime?.reasoning;
-    if (!model && !reasoning) return;
-    let config = initial;
-    const select = async (category: string, value: string) => {
-      const option = config.find((entry) => entry.category === category);
-      const id = option?.id ?? category;
-      const available =
-        option?.type === "select" &&
-        option.options.some((entry) =>
-          "value" in entry
-            ? entry.value === value
-            : entry.options.some((child) => child.value === value),
-        );
-      if (!available) {
-        if (category === "model") throw new RuntimeModelNotFoundError(value);
-        throw new Error(`Devin ${category} selection is unavailable`);
-      }
-      const configured = await devinBounded(
-        transport.connection.agent.request("session/set_config_option", {
-          sessionId,
-          configId: id,
-          value,
-        }),
-        this.#timeoutMs,
-      );
-      config = configured.configOptions;
-      if (!config.some((entry) => entry.id === id && entry.currentValue === value))
-        throw new Error(`Devin did not apply ${id}`);
-    };
-    if (model) {
-      config = await transport.waitForConfig(sessionId, config, "model", this.#timeoutMs);
-      await select("model", model);
-    }
-    // Effort options depend on the model that was just selected. When the returned option does
-    // not exist, the model's own default stays. A present option that lacks the value fails.
-    if (!reasoning) return;
-    if (config.some((entry) => entry.category === "thought_level"))
-      await select("thought_level", reasoning);
+    const runtime = this.options.runtime;
+    const config = runtime?.model
+      ? await transport.waitForConfig(sessionId, initial, "model", this.#timeoutMs)
+      : initial;
+    await acpApplyRuntimeConfig(
+      {
+        transport,
+        sessionId,
+        timeoutMs: this.#timeoutMs,
+        timedOut: DEVIN_PROFILE.messages.timedOut,
+        label: "Devin",
+      },
+      config,
+      runtime,
+    );
   }
 
   async open() {

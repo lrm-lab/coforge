@@ -8,6 +8,7 @@ import { catalogErrorMessage, within } from "#src/catalog-discovery";
 import { scrubStderrHint } from "#src/stderr-hint";
 import { devinConnection, devinBounded, type DevinConnection } from "./connection";
 import type { DevinRuntimeHost } from "./host";
+import { acpSelectEntries } from "#src/acp/config-options";
 
 const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.DEVIN]);
 
@@ -57,7 +58,7 @@ export async function discoverDevinCatalog(
     );
     const option = config.find((entry) => entry.category === "model");
     if (option?.type !== "select") throw new Error("Devin model catalog unavailable");
-    const entries = option.options.flatMap((entry) => ("value" in entry ? [entry] : entry.options));
+    const entries = acpSelectEntries(option);
     const models = entries.flatMap((entry) => {
       if (!entry.value) return [];
       return [
