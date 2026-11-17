@@ -8,6 +8,7 @@ import { createHash, randomBytes } from "node:crypto";
 export type Person = {
   sub: string;
   email?: string;
+  email_verified?: boolean;
   /** The email the person types to sign in, when it is not the `email` the profile reports (an
    * account made with a phone number can sign in with an email its profile does not report). */
   signInEmail?: string;
@@ -17,6 +18,7 @@ export type Person = {
   /** The mainland China mobile number (eleven digits, no country code) the person signs in with
    * by code, and the profile reports. */
   phone?: string;
+  phone_number_verified?: boolean;
   name?: string;
   nickname?: string;
   refused?: true;
@@ -41,7 +43,7 @@ export type SentCode = {
   channel: "sms" | "email";
   destination: string;
   code: string;
-  purpose: "login" | "reset_password";
+  purpose: "login" | "reset_password" | "bind_phone" | "bind_email";
 };
 
 /** The `sub` the fake gives the person a code sign-in makes for `destination` (`+86<phone>` or
@@ -180,15 +182,59 @@ export function startFakeAuthing<Key extends string>(input: {
             ? "login"
             : body?.channel === "CHANNEL_RESET_PASSWORD"
               ? "reset_password"
-              : undefined;
+              : body?.channel === "CHANNEL_BIND_PHONE"
+                ? "bind_phone"
+                : body?.channel === "CHANNEL_BIND_EMAIL"
+                  ? "bind_email"
+                  : undefined;
         if (request.headers.get("x-authing-app-id") !== appId || !purpose)
           return refusal(400, "invalid request");
+        if (purpose === "bind_phone" || purpose === "bind_email") {
+          const token = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
+          if (!token || !accessTokens.has(token)) return refusal(401, "unauthorized");
+        }
         if (url.pathname === "/api/v3/send-sms") {
           if (!body?.phoneNumber || body.phoneCountryCode !== "+86")
             return refusal(400, "invalid phone");
           return send("sms", `${body.phoneCountryCode}${body.phoneNumber}`, purpose);
         }
         return body?.email ? send("email", body.email, purpose) : refusal(400, "invalid email");
+      }
+      if (
+        (url.pathname === "/api/v3/bind-phone" || url.pathname === "/api/v3/bind-email") &&
+        request.method === "POST"
+      ) {
+        if (request.headers.get("x-authing-app-id") !== appId) return refusal(401, "invalid app");
+        const token = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
+        const entry = token ? accessTokens.get(token) : undefined;
+        if (!entry) return refusal(401, "unauthorized");
+        const body = (await request.json().catch(() => null)) as {
+          passCode?: string;
+          phoneNumber?: string;
+          phoneCountryCode?: string;
+          email?: string;
+        } | null;
+        if (url.pathname === "/api/v3/bind-phone") {
+          if (!body?.phoneNumber || body.phoneCountryCode !== "+86" || !body.passCode) {
+            return refusal(400, "invalid request");
+          }
+          const dest = `${body.phoneCountryCode}${body.phoneNumber}`;
+          if (codes.get(`bind_phone:${dest}`) !== body.passCode) {
+            return refusal(400, "wrong or expired code");
+          }
+          codes.delete(`bind_phone:${dest}`);
+          entry.profile.phone = body.phoneNumber;
+          entry.profile.phone_number_verified = true;
+          return Response.json({ statusCode: 200, message: "ok" });
+        }
+        if (!body?.email || !body.passCode) return refusal(400, "invalid request");
+        if (codes.get(`bind_email:${body.email}`) !== body.passCode) {
+          return refusal(400, "wrong or expired code");
+        }
+        codes.delete(`bind_email:${body.email}`);
+        entry.profile.email = body.email;
+        entry.profile.email_verified = true;
+        return Response.json({ statusCode: 200, message: "ok" });
       }
       if (url.pathname === "/api/v3/verify-reset-password-request" && request.method === "POST") {
         const body = (await request.json().catch(() => null)) as {
