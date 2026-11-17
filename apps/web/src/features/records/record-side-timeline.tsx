@@ -31,6 +31,7 @@ export const RecordSideTimeline = memo(function RecordSideTimeline({
   threadStates,
   viewerName,
   viewerAvatarUrl,
+  assistantAvatarUrl,
   busy,
   sendOfferActive,
   countdownUntil,
@@ -53,6 +54,8 @@ export const RecordSideTimeline = memo(function RecordSideTimeline({
   threadStates: ReturnType<typeof commentThreadStates>;
   viewerName: string;
   viewerAvatarUrl: string | null | undefined;
+  /** The viewer's weekly report assistant's picture, once its status has loaded. */
+  assistantAvatarUrl: string | undefined;
   busy: boolean;
   sendOfferActive: boolean | undefined;
   countdownUntil: Date | null | undefined;
@@ -102,7 +105,11 @@ export const RecordSideTimeline = memo(function RecordSideTimeline({
                   size="xs"
                   name={authorName}
                   alt={authorName}
-                  src={comment.author?.avatarUrl}
+                  src={
+                    comment.authorType === "assistant"
+                      ? assistantAvatarUrl
+                      : comment.author?.avatarUrl
+                  }
                 />
                 <span className="text-sm font-medium text-primary">{authorName}</span>
                 <span className="ml-auto text-xs text-tertiary">
@@ -202,8 +209,7 @@ export const RecordSideTimeline = memo(function RecordSideTimeline({
                 size="xs"
                 alt={authorName}
                 name={authorName}
-                // The assistant has no cartoon person (initial only); the viewer's face is theirs.
-                src={message.author === "assistant" ? undefined : viewerAvatarUrl}
+                src={message.author === "assistant" ? assistantAvatarUrl : viewerAvatarUrl}
               />
               <span className="text-sm font-medium text-primary">{authorName}</span>
               <span className="ml-auto text-xs text-tertiary">

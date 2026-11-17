@@ -8,8 +8,11 @@ import {
 } from "#src/server/agents/owner-agent-name.server";
 import type { Locale } from "#src/paraglide/runtime";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
+import type { AgentMascot } from "#src/features/agents/agent-mascot";
 
 export const WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME = "周报助手";
+
+export const WEEKLY_REPORT_AGENT_MASCOT = "black" satisfies AgentMascot;
 
 /** The name members see: 「李健的周报助手」 / "Ada's Weekly Report Assistant", the owner's name
  * cut to fit an Agent's display name. A blank person name keeps the generic label. */
@@ -228,6 +231,7 @@ export async function ensureWeeklyReportAssistant(
             ownerId: input.userId,
             name: agentName,
             displayName: await assistantLabelForUser(tx, input.userId),
+            avatarMascot: WEEKLY_REPORT_AGENT_MASCOT,
             description: "",
             visibility: AGENT_VISIBILITY.PRIVATE,
             ...(computerId ? { computerId } : {}),

@@ -2,6 +2,7 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import { AGENT_VISIBILITY } from "#src/features/agents/agent-visibility";
+import { WEEKLY_REPORT_AGENT_MASCOT } from "./weekly-report-assistant.server";
 
 export const WEEKLY_REPORT_COLLECTOR_DISPLAY_NAME_PREFIX = "采集 · ";
 
@@ -126,6 +127,7 @@ export async function ensureCollector(
             computerId: input.computerId,
             name: agentName,
             displayName: weeklyReportCollectorDisplayName(label),
+            avatarMascot: WEEKLY_REPORT_AGENT_MASCOT,
             description: "",
             // A Collector works on its owning User's own records and should not appear
             // to the rest of the Workspace at all.

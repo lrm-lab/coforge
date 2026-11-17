@@ -12,6 +12,7 @@ import {
 } from "#src/server/records/weekly-report-assistant.server";
 import { openWeeklyReportAssistantChat } from "#src/server/records/weekly-report-assistant-chat.server";
 import { readableRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
+import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { looksLikeMemberReportRuleIntent } from "./weekly-highlight-extract";
 
 // The Records side chat's server functions: the viewer's weekly report assistant, the chat's
@@ -34,7 +35,7 @@ async function readWeeklyReportAssistantStatus(
   });
   const agent = await db.agent.findUnique({
     where: { id_workspaceId: { id: assistant.agentId, workspaceId } },
-    select: { ownerId: true, computerId: true, runtimeConfig: true },
+    select: { ownerId: true, computerId: true, runtimeConfig: true, avatarMascot: true },
   });
   if (!agent || agent.ownerId !== userId) throw new AppError("ACCESS_DENIED");
   const runtimeConfig = normalizeAgentRuntimeConfig(agent.runtimeConfig);
@@ -42,6 +43,7 @@ async function readWeeklyReportAssistantStatus(
     assistantId: assistant.id,
     agentId: assistant.agentId,
     displayName: WEEKLY_REPORT_ASSISTANT_DISPLAY_NAME,
+    avatarUrl: agentAvatarUrl(assistant.agentId, agent.avatarMascot),
     computerConfigured: Boolean(agent.computerId),
     runtimeConfigured: runtimeConfig
       ? runtimeConfig.runtime !== "coforge" ||
@@ -52,6 +54,12 @@ async function readWeeklyReportAssistantStatus(
 }
 
 const normalizeAgentRuntimeConfig = (value: unknown) => readableRuntimeConfig(value);
+
+export function assistantReady(
+  status: Awaited<ReturnType<typeof readWeeklyReportAssistantStatus>> | null,
+) {
+  return Boolean(status?.computerConfigured && status.runtimeConfigured);
+}
 
 export const addRecordComment = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])

@@ -314,6 +314,7 @@ test("ensureWeeklyReportAssistant creates one assistant per User in a Workspace"
     ownerId: "user-1",
     name: weeklyReportAssistantAgentName("user-1"),
     displayName: "李健的周报助手",
+    avatarMascot: "black",
     visibility: "private",
     runtimeConfig: {
       runtime: "coforge",

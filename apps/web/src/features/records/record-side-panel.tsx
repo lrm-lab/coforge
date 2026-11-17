@@ -40,6 +40,7 @@ import {
   ensureWeeklyReportAssistantChatSessions,
   dismissWeeklyFormatSend,
   loadWeeklyReportAssistantMessages,
+  assistantReady,
   loadWeeklyReportAssistantStatus,
   postWeeklyReportAssistantRequest,
 } from "./records-side-chat.functions";
@@ -73,12 +74,6 @@ import { useRecordSideChatSessions, type ChatSessionRow } from "./use-record-sid
 export type { RecordSideSurface };
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
-
-function assistantReady(
-  status: Awaited<ReturnType<typeof loadWeeklyReportAssistantStatus>> | null,
-) {
-  return Boolean(status?.computerConfigured && status.runtimeConfigured);
-}
 
 export function RecordSidePanel({
   subjectType,
@@ -767,6 +762,7 @@ export function RecordSidePanel({
             threadStates={threadStates}
             viewerName={viewerName}
             viewerAvatarUrl={viewer.avatarUrl}
+            assistantAvatarUrl={assistantStatus?.avatarUrl}
             busy={busy}
             sendOfferActive={sendOfferActive}
             countdownUntil={countdownUntil}
