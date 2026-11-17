@@ -30,7 +30,7 @@ export function ActivityFlowHint() {
     <div
       aria-hidden
       data-activity-flow-hint
-      className="mb-2 flex h-8 shrink-0 items-center gap-3 rounded-full bg-primary px-2.5 text-xs text-tertiary shadow-xs ring-1 ring-secondary ring-inset"
+      className="flex h-8 shrink-0 items-center gap-3 rounded-full bg-primary px-2.5 text-xs text-tertiary shadow-xs ring-1 ring-secondary ring-inset"
     >
       {typing ? (
         <Keys keys={["Esc"]} label={m.activity_flow_back()} />
