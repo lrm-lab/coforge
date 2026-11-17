@@ -9,7 +9,7 @@ import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { cx } from "#src/utils/cx";
 import { ChannelTitle, channelGlyph } from "./channel-name";
-import { channelMentionShown, channelPreviewLine } from "./channel-preview-line";
+import { channelPreviewLine } from "./channel-preview-line";
 import { isPrivateChannel, type ChannelVisibility } from "./channel-visibility";
 import type { ChatSection } from "./chat-section.schemas";
 import { collageLayout } from "./collage-layout";
@@ -22,7 +22,13 @@ import { previewText } from "./preview-line";
 import { notificationLevelOf, type ChannelNotificationLevel } from "./notification-levels";
 import type { ListedDirect } from "./sidebar-rows";
 import { useLiveChannelRow, useLiveDirectRow } from "./sidebar-lists";
+import {
+  channelHasAnyUnread,
+  directHasAnyUnread,
+  sidebarRowIndicators,
+} from "./sidebar-unread-state";
 import { useUnreadCount } from "./unread-store";
+import { useHasConversationDraft } from "./use-drafts";
 
 export type DirectoryChannel = {
   id: string;
@@ -43,6 +49,9 @@ export type DirectoryChannel = {
   members: readonly GroupAvatarMember[];
   /** The viewer is @mentioned in this channel. */
   mentioned: boolean;
+  markedUnread?: boolean;
+  unreadThreadCount?: number;
+  threadMentioned?: boolean;
 };
 
 /** A DM row as the directory shows it: its row, the name it goes by, and its live Agent when it is
@@ -89,8 +98,24 @@ export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
   menu: DirectoryRowMenu;
 }) {
   const unreadCount = useUnreadCount(channel.id);
-  // The channel's last message, or none (the row then shows its name only).
-  const lastMessage = useLiveChannelRow(channel.id)?.lastMessage;
+  const live = useLiveChannelRow(channel.id);
+  const lastMessage = live?.lastMessage;
+  const mentioned = (live ?? channel).mentioned;
+  const markedUnread = (live ?? channel).markedUnread;
+  const unreadThreadCount = channel.joined ? ((live ?? channel).unreadThreadCount ?? 0) : 0;
+  const threadMentioned = (live ?? channel).threadMentioned;
+  const hasDraft = useHasConversationDraft(channel.id);
+  const indicators = sidebarRowIndicators({
+    kind: "channel",
+    joined: channel.joined,
+    muted: channel.muted,
+    unreadCount,
+    unreadThreadCount,
+    mentioned,
+    threadMentioned,
+    markedUnread,
+  });
+  const hasUnread = channelHasAnyUnread({ unreadCount, unreadThreadCount, markedUnread });
   const time = useLastMessageTime(lastMessage?.createdAt);
   const locked = isPrivateChannel(channel);
   // Its members' faces when it has some, else its `#` or, private, its lock; a private channel
@@ -103,6 +128,7 @@ export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
         kind: "channel",
         ...channel,
         muted: channel.muted === true,
+        hasUnread,
         notificationLevel: notificationLevelOf(channel),
       }}
       {...menu}
@@ -112,8 +138,14 @@ export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
         current={current}
         card
         pinned={channel.pinned}
-        muted={!channel.joined || channel.muted}
+        bold={indicators.bold}
+        unjoined={!channel.joined}
+        muted={channel.muted}
+        subduedCapsule={indicators.subduedCapsule}
         unreadCount={unreadCount}
+        unreadThreadCount={unreadThreadCount}
+        showManualDot={indicators.showManualDot}
+        hasDraft={hasDraft}
         label={locked ? m.channel_private_name({ name: channel.name }) : `#${channel.name}`}
         lastMessage={{
           time,
@@ -124,7 +156,7 @@ export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
                 youLabel: m.conversation_you(),
               })
             : null,
-          mentioned: channelMentionShown({ mentioned: channel.mentioned }),
+          mentioned: indicators.showMention,
         }}
         icon={
           faces ? (
@@ -170,10 +202,19 @@ export const DirectDirectoryRow = memo(function DirectDirectoryRow({
 }: DirectEntry & { current: boolean; menu: DirectoryRowMenu }) {
   const unreadCount = useUnreadCount(conversationId);
   const live = useLiveDirectRow(conversationId);
+  const markedUnread = live?.markedUnread;
+  const hasDraft = useHasConversationDraft(conversationId);
+  const indicators = sidebarRowIndicators({
+    kind: "direct",
+    muted,
+    unreadCount,
+    markedUnread,
+  });
+  const hasUnread = directHasAnyUnread({ unreadCount, markedUnread });
   const time = useLastMessageTime(live?.lastMessageAt);
   return (
     <ConversationRowMenu
-      target={{ kind: "direct", conversationId, pinned, muted: muted === true }}
+      target={{ kind: "direct", conversationId, pinned, muted: muted === true, hasUnread }}
       {...menu}
     >
       <ConversationRow
@@ -181,8 +222,12 @@ export const DirectDirectoryRow = memo(function DirectDirectoryRow({
         current={current}
         card
         pinned={pinned}
+        bold={indicators.bold}
         muted={muted}
+        subduedCapsule={indicators.subduedCapsule}
         unreadCount={unreadCount}
+        showManualDot={indicators.showManualDot}
+        hasDraft={hasDraft}
         label={self ? m.conversation_dm_self_name({ name }) : name}
         lastMessage={{
           time,

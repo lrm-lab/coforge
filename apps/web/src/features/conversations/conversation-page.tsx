@@ -33,7 +33,7 @@ import {
   PeopleDirectConversationHeader,
   type PeopleDirectConversationView,
 } from "./people-direct-conversation";
-import { useReopenClosedOnOpen } from "./sidebar-lists";
+import { useClearSidebarTopLevelUnread, useReopenClosedOnOpen } from "./sidebar-lists";
 import { useStandaloneThread } from "./standalone-thread";
 import { useChannelConversation, useDirectConversation } from "./use-conversation-data";
 import { useChannelMentionables } from "./use-channel-mentionables";
@@ -360,6 +360,7 @@ function ConversationPageMain({
   // what its row counts (`rowReadEnd`). A thread shown alone leaves the conversation out of view,
   // so it stays unread.
   const markSeen = useMarkConversationSeen();
+  const clearSidebarTopLevelUnread = useClearSidebarTopLevelUnread();
   const threadAlone = useStandaloneThread() !== null;
   // The tab title names the conversation, with " - Thread" while a thread is open (as Raft's). A
   // conversation hosted in Activity leaves the title alone: Activity is the page, and a row being
@@ -375,7 +376,8 @@ function ConversationPageMain({
   useEffect(() => {
     if (threadAlone) return;
     markSeen(unreadKey, readEnd);
-  }, [markSeen, unreadKey, readEnd, threadAlone]);
+    if (isMember) clearSidebarTopLevelUnread(unreadKey);
+  }, [markSeen, clearSidebarTopLevelUnread, isMember, unreadKey, readEnd, threadAlone]);
   // A conversation opened from Activity is read here, not by its row (task #358), so its first
   // read in each visit refreshes Activity's lists, and so does reading to the latest. Not every
   // message that arrives while it is open: that would refetch Activity's whole list per message.

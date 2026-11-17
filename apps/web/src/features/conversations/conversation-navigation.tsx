@@ -35,6 +35,7 @@ import { UnreadStoreContext } from "./unread-store";
 import {
   useApplyChannelSignal,
   useApplyConversationActivity,
+  useApplyMarkedEvent,
   useListReadPosition,
   useRefreshSidebar,
   useSavesRetrying,
@@ -71,6 +72,12 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   const shellShowsList = useContext(ChatListShownContext);
   const router = useRouter();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const openThreadRootId = useRouterState({
+    select: (state) => {
+      const raw = (state.location.search as { threadRootId?: unknown }).threadRootId;
+      return typeof raw === "string" && raw.length > 0 ? raw : undefined;
+    },
+  });
   const [browsing, setBrowsing] = useState(false);
   const [creating, setCreating] = useState(false);
   const create = useServerFn(createPublicChannel);
@@ -116,6 +123,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   const readPosition = useListReadPosition();
   const applyChannelSignal = useApplyChannelSignal();
   const applyConversationActivity = useApplyConversationActivity();
+  const applyMarkedEvent = useApplyMarkedEvent();
   const knownAgentIds = useMemo(() => new Set(agents.map((agent) => agent.id)), [agents]);
   // One re-read of the Agents at a time.
   const rosterRefresh = useRef<Promise<void> | undefined>(undefined);
@@ -125,6 +133,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
     channels: visibleChannels,
     // The open channel's or DM's own events must not bump its badge: they are being read now.
     openConversationId: channel?.channelId ?? openDm?.dmId,
+    openThreadRootId,
     listedConversationIds,
     // A message brought a closed chat back, or a DM the list has not read yet: re-read that one
     // list, not the page (a burst is read once).
@@ -142,6 +151,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
     },
     // A message in a chat the sidebar lists: its row is written from the event, not re-read.
     onConversationActivity: applyConversationActivity,
+    onConversationMarked: applyMarkedEvent,
     // A channel was created, changed or is gone: applied from the event, not re-read.
     onChannelSignal: applyChannelSignal,
     // The viewer joined, left, closed, muted or pinned a chat elsewhere: only the lists named
