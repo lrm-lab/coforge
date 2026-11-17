@@ -1,5 +1,4 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { taskConversationsGate } from "./task-conversations-gate.server";
 import { TaskConversations } from "./task-conversations.server";
 import type { AgentTaskPrincipal } from "./task-principal.server";
 
@@ -18,7 +17,6 @@ export async function resolveTaskAttachmentTarget(
 ) {
   const match = TASK_TARGET.exec(target);
   if (!match) return null;
-  if (!(await taskConversationsGate(db, principal)())) return null;
   return new TaskConversations({ db, reader: "agent", dependencies: {} }).open(principal, {
     target: match[1]!.replace(/^dm:/, ""),
     number: Number(match[2]),

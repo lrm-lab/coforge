@@ -99,7 +99,6 @@ test("A claim answers every selector, naming why a refused one failed and who ho
     const result = await byAgent({
       operation: "claim",
       numbers: [open, held, closed, done, reserved, 999],
-      messageId: "deadbeef",
     });
     const conflict = (
       type: "user" | "agent",
@@ -117,7 +116,7 @@ test("A claim answers every selector, naming why a refused one failed and who ho
       observedAt: expect.stringMatching(ISO),
     });
     expect(result.claims).toEqual([
-      { number: open, messageId: created.tasks[0]!.messageId!, success: true },
+      { number: open, success: true },
       {
         number: held,
         success: false,
@@ -133,19 +132,11 @@ test("A claim answers every selector, naming why a refused one failed and who ho
         conflict: conflict("user", bob.username, "todo", false),
       },
       { number: 999, success: false, reason: "task not found" },
-      { messageId: "deadbeef", success: false, reason: "message not found" },
     ]);
     expect(Date.parse(result.claims![1]!.conflict!.observedAt)).toBeGreaterThanOrEqual(
       before - 1000,
     );
     expect(result.tasks.map((task) => task.number)).toEqual([open]);
-
-    // A refused Task named by its message still answers with its number.
-    const doneMessage = created.tasks[3]!.messageId!;
-    const byMessage = await byAgent({ operation: "claim", messageId: doneMessage });
-    expect(byMessage.claims).toEqual([
-      { messageId: doneMessage, number: done, success: false, reason: "task is done" },
-    ]);
 
     // One refused selector is still an answer, not an error; the browser's seam turns it into one.
     await db.agent.update({ where: { id: holder.id }, data: { deletedAt: new Date() } });

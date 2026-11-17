@@ -30,11 +30,9 @@ import { TaskDetailMenu, taskMenuButton } from "./task-detail-dialog";
 import { statusMatches, taskMatches, type FilterableTask } from "./task-filters";
 import type { TaskBoardView } from "./task-board-search";
 import type { OverviewTaskCommand } from "./task-overview-collection";
-import type { TaskRelations } from "./task-relation-edits";
 import { TaskToolbar } from "./task-toolbar";
 import { TaskWorkflow, type TaskControls } from "./task-workflow";
 import { useCanSetAnyTaskStatus } from "./task-board-authority";
-import { useTaskConversationsOn } from "./use-task-conversations-on";
 import { TaskCardSkeleton } from "./tasks-pending";
 import type { FinishedColumn, FinishedTasks } from "./use-finished-tasks";
 
@@ -164,9 +162,6 @@ export function TaskBoard<T extends BoardTask>({
   const onCreateTask = onCommand ? conversation?.onCreateTask : undefined;
   // A Workspace owner or admin sets any status; the board must offer exactly what the server takes.
   const canSetAnyStatus = useCanSetAnyTaskStatus();
-  // What a Task waits on and its tree show on its card only with Tasks v2 on; read once here, not
-  // per card.
-  const relationsOn = useTaskConversationsOn() === true;
   // The board sits inside its page: All tasks or a Project (with their header), or a conversation's
   // Tasks tab, which brings its own header.
   return (
@@ -268,7 +263,6 @@ export function TaskBoard<T extends BoardTask>({
                 task={task}
                 controls={controls}
                 list={layout === "list"}
-                relations={relationsOn ? task : undefined}
                 onOpenDetails={() => onOpenTask(task)}
                 renderTitle={renderTitle}
                 onCommand={onCommand ? (command) => onCommand(task, command) : undefined}
@@ -359,7 +353,6 @@ function BoardTaskCard<T extends BoardTask>({
   task,
   controls,
   list,
-  relations,
   onOpenDetails,
   renderTitle,
   onCommand,
@@ -369,7 +362,6 @@ function BoardTaskCard<T extends BoardTask>({
   task: T;
   controls: TaskControls;
   list: boolean;
-  relations?: TaskRelations;
   onOpenDetails: () => void;
   renderTitle?: (task: T, title: ReactNode) => ReactNode;
   onCommand?: (command: OverviewTaskCommand) => Promise<void>;
@@ -387,7 +379,6 @@ function BoardTaskCard<T extends BoardTask>({
     <TaskCard
       task={task}
       list={list}
-      relations={relations}
       onReach={onCommand && reach}
       renderTitle={(title) =>
         renderTitle ? (

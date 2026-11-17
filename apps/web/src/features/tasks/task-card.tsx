@@ -13,7 +13,7 @@ import { taskStepsProgressClass } from "./task-steps-progress";
 import { Folder, MessageChatCircle, Paperclip } from "@untitledui/icons";
 
 import type { FilterableTask } from "./task-filters";
-import { openBlockers, type TaskRelations } from "./task-relation-edits";
+import { openBlockers } from "./task-relation-edits";
 import { TaskLocator } from "./task-chip";
 import { TaskParentMark, TaskSubtaskMark, TaskBlockedMark } from "./task-relations";
 import { TaskCardLabels } from "./task-labels";
@@ -109,7 +109,6 @@ export function TaskCard({
   controls,
   menu,
   list,
-  relations,
   onReach,
 }: {
   task: TaskView;
@@ -126,17 +125,15 @@ export function TaskCard({
   controls: TaskControls;
   menu?: ReactNode;
   list: boolean;
-  /** What the task waits on, the Task it is part of and its sub-tasks' progress. */
-  relations?: TaskRelations;
   /** Someone is reaching for the card: a mouse came over it. Not a touch or a pen, which can
    * come down on a button with no hover first, and whose press must land on what it started on. */
   onReach?: () => void;
 }) {
   const onPointerEnter =
     onReach && ((event: PointerEvent) => event.pointerType === "mouse" && onReach());
-  const blocked = relations?.blocked ? <TaskBlockedMark blockedBy={relations.blockedBy} /> : null;
-  const parent = relations?.parent ? <TaskParentMark parent={relations.parent} /> : null;
-  const subtasks = relations?.subtasks ? <TaskSubtaskMark subtasks={relations.subtasks} /> : null;
+  const blocked = task.blocked ? <TaskBlockedMark blockedBy={task.blockedBy} /> : null;
+  const parent = task.parent ? <TaskParentMark parent={task.parent} /> : null;
+  const subtasks = task.subtasks ? <TaskSubtaskMark subtasks={task.subtasks} /> : null;
   // A phone's list row has no drag handle: the menu moves a task there.
   const handle =
     controls.handle && list ? (
@@ -213,9 +210,9 @@ export function TaskCard({
       </article>
     );
   }
-  // What still blocks it, named in a line of its own under the title (Tasks v2 only: `relations`).
-  const waitingOn = relations && openBlockers(relations.blockedBy).find((task) => !task.hidden);
-  const steps = relations?.subtasks;
+  // What still blocks it, named in a line of its own under the title.
+  const waitingOn = openBlockers(task.blockedBy).find((blocker) => !blocker.hidden);
+  const steps = task.subtasks;
   const [label, ...moreLabels] = task.labels ?? [];
   return (
     <article

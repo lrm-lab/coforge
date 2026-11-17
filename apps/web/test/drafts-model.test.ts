@@ -21,8 +21,6 @@ const homes = new Map<string, DraftHome>([
   ["dm-1", scout],
 ]);
 
-const withTasks = { taskDrafts: true };
-
 const channelDraft: DeviceDraft = {
   key: "k-channel",
   place: { conversationId: "chan-1", target: { kind: "conversation" } },
@@ -55,7 +53,7 @@ const elsewhereDraft: DeviceDraft = {
 };
 
 test("each draft becomes a row for the channel or DM it was written in, in the order given", () => {
-  expect(resolveDrafts([channelDraft, dmDraft, threadDraft, taskDraft], homes, withTasks)).toEqual([
+  expect(resolveDrafts([channelDraft, dmDraft, threadDraft, taskDraft], homes)).toEqual([
     {
       key: "k-channel",
       body: "in a channel",
@@ -97,34 +95,14 @@ test("a draft whose conversation is not in this Workspace is left out, and not c
     place: { conversationId: "other-board", target: { kind: "task", number: 1 } },
   };
   const drafts = [elsewhereDraft, channelDraft, taskElsewhere, taskDraft];
-  expect(resolveDrafts(drafts, homes, withTasks).map((row) => row.key)).toEqual([
-    "k-channel",
-    "k-task",
-  ]);
-  expect(countDrafts(drafts, homes, withTasks)).toBe(2);
-});
-
-test("Task discussion drafts are hidden and not counted while task conversations are off", () => {
-  const drafts = [channelDraft, taskDraft, threadDraft];
-  const withoutTasks = { taskDrafts: false };
-  expect(resolveDrafts(drafts, homes, withoutTasks).map((row) => row.key)).toEqual([
-    "k-channel",
-    "k-thread",
-  ]);
-  expect(countDrafts(drafts, homes, withoutTasks)).toBe(2);
-  expect(resolveDrafts(drafts, homes, withTasks).map((row) => row.key)).toEqual([
-    "k-channel",
-    "k-task",
-    "k-thread",
-  ]);
-  expect(countDrafts(drafts, homes, withTasks)).toBe(3);
+  expect(resolveDrafts(drafts, homes).map((row) => row.key)).toEqual(["k-channel", "k-task"]);
+  expect(countDrafts(drafts, homes)).toBe(2);
 });
 
 test("a row opens its channel or DM, with the thread or Task popup open where the draft was written", () => {
   const [channel, dm, thread, task] = resolveDrafts(
     [channelDraft, dmDraft, threadDraft, taskDraft],
     homes,
-    withTasks,
   );
   expect(draftRoute(channel!, "acme")).toEqual({
     to: "/w/$workspaceSlug/channel/$channelId",

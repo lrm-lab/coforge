@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import {
   browserSession,
@@ -25,9 +24,7 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-delete-undo");
 test("a Task deleted from its popup comes back with Undo", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `task-delete-undo-${process.pid}`);
-  const experiments = new PrismaExperimentsRepository(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
-  const before = (await experiments.read(workspaceId)).taskConversations;
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const channel = await db.conversation.create({
     data: {
@@ -38,7 +35,6 @@ test("a Task deleted from its popup comes back with Undo", async () => {
     },
   });
   try {
-    await experiments.write(workspaceId, "taskConversations", true);
     const title = `Check the sign-up flow ${tail}`;
     const created = await new TaskBoard(db).execute({ workspaceId, userId: DEV_BROWSER_USER.id }, {
       idempotencyKey: crypto.randomUUID(),
@@ -139,7 +135,6 @@ test("a Task deleted from its popup comes back with Undo", async () => {
   } finally {
     await browser("close").catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);
-    await experiments.write(workspaceId, "taskConversations", before).catch(() => undefined);
     await db.$disconnect();
   }
 }, 180_000);

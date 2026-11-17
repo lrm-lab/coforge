@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import {
   browserSession,
@@ -31,7 +30,6 @@ test("Escape leaves select mode and the Task popup one layer at a time", async (
     `escape-layers-${process.pid}`,
   );
   const board = new TaskBoard(db);
-  const experiments = new PrismaExperimentsRepository(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const as = { workspaceId, userId: DEV_BROWSER_USER.id };
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
@@ -49,7 +47,6 @@ test("Escape leaves select mode and the Task popup one layer at a time", async (
     include: { members: true },
   });
   const sender = channel.members.find((member) => member.userId === DEV_BROWSER_USER.id)!;
-  const before = (await experiments.read(workspaceId)).taskConversations;
   try {
     for (const sequence of [1, 2, 3])
       await db.message.create({
@@ -62,7 +59,6 @@ test("Escape leaves select mode and the Task popup one layer at a time", async (
         },
       });
     await db.conversation.update({ where: { id: channel.id }, data: { lastSequence: 3 } });
-    await experiments.write(workspaceId, "taskConversations", true);
     const task = (
       await board.execute(as, {
         idempotencyKey: crypto.randomUUID(),
@@ -122,7 +118,6 @@ test("Escape leaves select mode and the Task popup one layer at a time", async (
     expect(await evaluate<boolean>(selecting)).toBe(false);
   } finally {
     await browser("close").catch(() => undefined);
-    await experiments.write(workspaceId, "taskConversations", before).catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);
     await db.user.delete({ where: { id: peer.id } }).catch(() => undefined);
     await db.$disconnect();

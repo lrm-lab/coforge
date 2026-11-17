@@ -27,11 +27,7 @@ import {
 } from "#src/server/agents/agent-http-middleware.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
-import {
-  TASK_MESSAGE_SOURCE_REQUIRES_CONVERSATIONS,
-  TASK_V2_USE_CREATE,
-  TaskBoard,
-} from "#src/server/tasks/task-board.server";
+import { TASK_V2_USE_CREATE, TaskBoard } from "#src/server/tasks/task-board.server";
 import { AGENT_FACING_ERROR_IDS } from "#src/server/tasks/task-gates.server";
 import { taskComputerRefusal } from "#src/server/tasks/task-computer-gate.server";
 import { SourceMessageTaken } from "#src/server/tasks/task-conversation-creation.server";
@@ -186,15 +182,6 @@ export async function handleAgentTaskPost(
     return Response.json({ ...result, idempotencyKey: command.idempotencyKey });
   } catch (error) {
     if (error instanceof SourceMessageTaken) return agentErrorResponse(error);
-    if (error instanceof AppError && error.errorId === TASK_MESSAGE_SOURCE_REQUIRES_CONVERSATIONS)
-      return Response.json(
-        {
-          error:
-            "`--message-id` needs task conversations. With them off, run `coforge task convert --target <channel> --message-id <id>` to make this message a task; or ask a Workspace owner to turn task conversations on.",
-          code: "INVALID_INPUT",
-        },
-        { status: 400 },
-      );
     if (error instanceof AppError && error.errorId === TASK_V2_USE_CREATE)
       return Response.json(
         {

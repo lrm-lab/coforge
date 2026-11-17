@@ -18,7 +18,6 @@ import { TASK_RELATION_INVALID } from "./task-relation-graph.server";
 import { isTaskManager } from "./task-assignees.server";
 import { TASK_PRIORITY_DENIED, TASK_PRIORITY_INVALID } from "./task-priority.server";
 import { TASK_ASSIGN_REASON_INVALID } from "./task-assign-reason.server";
-import { TASK_RELATIONS_OFF, taskRelationsEnabled } from "./task-conversations-gate.server";
 import type { NoticeSubject, NoticeWriter } from "./task-notice-posting.server";
 import {
   assigneeMention,
@@ -52,7 +51,6 @@ export const AGENT_FACING_ERROR_IDS: ReadonlySet<string> = new Set([
   TASK_SUBTASKS_OPEN,
   TASK_RELATION_DENIED,
   TASK_RELATION_INVALID,
-  TASK_RELATIONS_OFF,
   TASK_PRIORITY_INVALID,
   TASK_PRIORITY_DENIED,
   // A handover sentence the board will not store: the CLI caller learns which rule it broke
@@ -139,13 +137,11 @@ export function subtasksOpenRefusal(
  */
 export async function assertMayEnter(
   tx: Transaction,
-  task: { id: string; number: number; status: string; conversationId: string; workspaceId: string },
+  task: { id: string; number: number; status: string; conversationId: string },
   to: TaskWriteStatus,
   manager: boolean,
 ) {
   if (manager || to === task.status) return;
-  // Without Tasks v2 nothing holds a Task back; the links already written wait for it.
-  if (!(await taskRelationsEnabled(tx, task.workspaceId))) return;
   if (to === "in_progress" || to === "in_review" || to === "done") {
     const open = await openBlockers(tx, task);
     if (open.length) throw blockedRefusal(task, open, `move it to ${to}`);
@@ -247,7 +243,6 @@ export async function noticeStatusFollowUps(
 ) {
   const wasFinished = isBlockerSatisfied(before.status);
   if (wasFinished === isBlockerSatisfied(after.status)) return;
-  if (!(await taskRelationsEnabled(tx, after.workspaceId))) return;
   const [waiting, parent] = await Promise.all([
     tx.task.findMany({
       where: {
@@ -326,10 +321,9 @@ export async function noticeSubtaskDeleted(
   tx: Transaction,
   notices: NoticeWriter,
   actor: Member,
-  task: { id: string; status: string; workspaceId: string },
+  task: { id: string; status: string },
 ) {
-  if (isBlockerSatisfied(task.status) || !(await taskRelationsEnabled(tx, task.workspaceId)))
-    return;
+  if (isBlockerSatisfied(task.status)) return;
   const parent = await parentFinishedBy(tx, task.id, actor, task.id);
   if (parent) await notices.prepare([parent.conversationId]);
   if (parent) await notifySubtasksFinished(notices, actor, parent, `deleted:${task.id}`);
@@ -367,12 +361,8 @@ export async function noticeReleased(
  * The unfinished Tasks that wait for `blockerId` alone: they have an owner and no other open
  * blocker, so losing this one frees them. Empty when the blocker is itself finished already.
  */
-export async function onlyWaitingFor(
-  tx: Transaction,
-  blocker: { id: string; workspaceId: string },
-) {
+export async function onlyWaitingFor(tx: Transaction, blocker: { id: string }) {
   const blockerId = blocker.id;
-  if (!(await taskRelationsEnabled(tx, blocker.workspaceId))) return [];
   return tx.task.findMany({
     where: {
       AND: [

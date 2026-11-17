@@ -7,7 +7,6 @@ import { peopleDirectKey } from "#src/features/conversations/direct-key";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import {
   browserSession,
@@ -40,7 +39,6 @@ test("a Project's Tasks tab lists its Tasks as a tree", async () => {
   const origin = proxy.origin;
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `project-tree-${process.pid}`);
-  const experiments = new PrismaExperimentsRepository(db);
   // Writes announce themselves, as a person's do, so the open page sees them live.
   const centrifugo = createCentrifugoServerApi();
   const board = new TaskBoard(db, {
@@ -77,9 +75,7 @@ test("a Project's Tasks tab lists its Tasks as a tree", async () => {
       members: { create: [{ userId: DEV_BROWSER_USER.id }, { userId: lin.id }] },
     },
   });
-  const before = (await experiments.read(workspaceId)).taskConversations;
   try {
-    await experiments.write(workspaceId, "taskConversations", true);
     const runIn =
       (conversationId: string, userId = DEV_BROWSER_USER.id) =>
       async (command: Record<string, unknown>) =>
@@ -337,7 +333,6 @@ test("a Project's Tasks tab lists its Tasks as a tree", async () => {
   } finally {
     await browser("close").catch(() => undefined);
     proxy.stop();
-    await experiments.write(workspaceId, "taskConversations", before).catch(() => undefined);
     await db.conversation
       .deleteMany({ where: { id: { in: [site.id, ops.id, closed.id, direct.id] } } })
       .catch(() => undefined);

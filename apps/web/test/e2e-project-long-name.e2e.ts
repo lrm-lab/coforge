@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import {
   browserSession,
@@ -29,7 +28,6 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/project-long-name");
 test("a long Project name truncates in a Task's popup and on its card", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `project-long-name-${process.pid}`);
-  const experiments = new PrismaExperimentsRepository(db);
   const board = new TaskBoard(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
@@ -46,9 +44,7 @@ test("a long Project name truncates in a Task's popup and on its card", async ()
       members: { create: [{ userId: DEV_BROWSER_USER.id }] },
     },
   });
-  const before = (await experiments.read(workspaceId)).taskConversations;
   try {
-    await experiments.write(workspaceId, "taskConversations", true);
     const title = `Benchmark the offline runtime ${tail}`;
     const { number } = (
       await board.execute({ workspaceId, userId: DEV_BROWSER_USER.id }, {
@@ -152,7 +148,6 @@ test("a long Project name truncates in a Task's popup and on its card", async ()
     }
   } finally {
     await browser("close").catch(() => undefined);
-    await experiments.write(workspaceId, "taskConversations", before).catch(() => {});
     await db.task.deleteMany({ where: { conversationId: channel.id } }).catch(() => {});
     await db.conversation.delete({ where: { id: channel.id } }).catch(() => {});
     await db.project.delete({ where: { id: project.id } }).catch(() => {});

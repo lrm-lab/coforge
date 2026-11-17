@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import {
   browserSession,
@@ -26,9 +25,7 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/thread-written-task-r
 test("a reply naming this channel's Task as `#channel:#N` shows its chip", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `thread-written-ref-${process.pid}`);
-  const experiments = new PrismaExperimentsRepository(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
-  const before = (await experiments.read(workspaceId)).taskConversations;
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const name = `e2e-written-ref-${tail}`;
   const channel = await db.conversation.create({
@@ -51,7 +48,6 @@ test("a reply naming this channel's Task as `#channel:#N` shows its chip", async
     where: { conversationId: channel.id, userId: DEV_BROWSER_USER.id },
   });
   try {
-    await experiments.write(workspaceId, "taskConversations", true);
     const made = await new TaskBoard(db).execute({ workspaceId, userId: DEV_BROWSER_USER.id }, {
       idempotencyKey: crypto.randomUUID(),
       conversationId: channel.id,
@@ -119,7 +115,6 @@ test("a reply naming this channel's Task as `#channel:#N` shows its chip", async
     await db.conversation
       .deleteMany({ where: { id: { in: [channel.id, other.id] } } })
       .catch(() => undefined);
-    await experiments.write(workspaceId, "taskConversations", before).catch(() => undefined);
     await db.$disconnect();
   }
 }, 180_000);

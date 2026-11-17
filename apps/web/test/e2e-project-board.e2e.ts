@@ -7,7 +7,6 @@ import { peopleDirectKey } from "#src/features/conversations/direct-key";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { Labels } from "#src/server/tasks/labels.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
@@ -100,9 +99,6 @@ test("a Project's board and All tasks show top-level Tasks as cards, the viewer'
     },
   });
   // A Task's comments are its own conversation's messages, which Tasks v2 makes.
-  const experiments = new PrismaExperimentsRepository(db);
-  const before = (await experiments.read(workspaceId)).taskConversations;
-  await experiments.write(workspaceId, "taskConversations", true);
   const centrifugo = createCentrifugoServerApi();
   const talk = new TaskConversations({
     db,
@@ -464,7 +460,6 @@ test("a Project's board and All tasks show top-level Tasks as cards, the viewer'
     }
   } finally {
     await browser("close").catch(() => undefined);
-    await experiments.write(workspaceId, "taskConversations", before).catch(() => {});
     await db.task.deleteMany({ where: { projectId: project.id } }).catch(() => {});
     await db.conversation.deleteMany({ where: { id: { in: [site.id, ops.id] } } }).catch(() => {});
     await db.task.deleteMany({ where: { conversationId: dm.id } }).catch(() => {});

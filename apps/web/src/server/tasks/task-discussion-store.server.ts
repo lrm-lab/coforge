@@ -41,14 +41,16 @@ export async function followTask(
   return count > 0;
 }
 
-/** The task's own conversation, made by the first message or notice that needs it. The caller
- * holds the board's lock. */
+/** The task's own conversation, made by the first message or notice that needs it. */
 export async function discussionOf(
   tx: Transaction,
   task: { id: string; discussionConversationId: string | null },
   workspaceId: string,
 ) {
   if (task.discussionConversationId) return task.discussionConversationId;
+  // The row lock on the task is what guarantees one conversation: a concurrent first use waits
+  // here and then reads the id the winner stored, instead of creating a second one.
+  await tx.$queryRaw`SELECT "id" FROM "tasks" WHERE "id" = ${task.id}::uuid FOR UPDATE`;
   const fresh = await tx.task.findUnique({
     where: { id: task.id, ...LIVE_TASK_WHERE },
     select: { discussionConversationId: true },

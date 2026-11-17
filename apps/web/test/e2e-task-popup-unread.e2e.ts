@@ -7,7 +7,6 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
 import {
@@ -29,9 +28,7 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-popup-unread");
 test("a Task popup's discussion opens on its first unread under a New messages divider", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `task-popup-unread-${process.pid}`);
-  const experiments = new PrismaExperimentsRepository(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
-  const before = (await experiments.read(workspaceId)).taskConversations;
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const agent = await db.agent.create({
     data: {
@@ -58,7 +55,6 @@ test("a Task popup's discussion opens on its first unread under a New messages d
   });
   const as = { workspaceId, userId: DEV_BROWSER_USER.id };
   try {
-    await experiments.write(workspaceId, "taskConversations", true);
     const created = await new TaskBoard(db).execute(as, {
       idempotencyKey: crypto.randomUUID(),
       conversationId: channel.id,
@@ -156,7 +152,6 @@ test("a Task popup's discussion opens on its first unread under a New messages d
     await browser("wait", "800");
     expect(await evaluate<boolean>(`${divider} != null`)).toBe(false);
   } finally {
-    await experiments.write(workspaceId, "taskConversations", before === true).catch(() => {});
     await browser("close").catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);
     await db.agent.deleteMany({ where: { id: agent.id } }).catch(() => undefined);

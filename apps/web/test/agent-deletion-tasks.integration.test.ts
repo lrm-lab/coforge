@@ -3,6 +3,7 @@ import { PrismaDirectConversationRepository } from "#src/server/db/repositories/
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { connectionString, deletionFor, setup } from "./helpers/agent-deletion-fixture";
 import { teardown } from "./helpers/workspace-teardown";
+import { legacyMessageTask } from "./fixtures/legacy-message-task";
 
 /**
  * Agent deletion and Tasks, against local PostgreSQL: a deleted Agent cannot be assigned a Task or
@@ -22,19 +23,15 @@ test.skipIf(!connectionString)(
       const principal = { workspaceId: workspace.id, userId: owner.id };
 
       // Control: while the Agent is live it is both assignable and a delivery recipient.
-      const before = await board.execute(principal, {
+      await board.execute(principal, {
         operation: "create",
         idempotencyKey: crypto.randomUUID(),
         conversationId: general.id,
         title: "Before delete",
         assignee: `@${agent.name}`,
       });
-      expect(before.assignmentReceipts).toMatchObject([{ assignee: `@${agent.name}` }]);
-      const beforeMessage = await db.message.findUniqueOrThrow({
-        where: { id: before.tasks[0]!.messageId! },
-        select: { deliveries: { select: { agentId: true } } },
-      });
-      expect(beforeMessage.deliveries.map((delivery) => delivery.agentId)).toContain(agent.id);
+      const deliveries = () => db.agentMessageDelivery.count({ where: { agentId: agent.id } });
+      expect(await deliveries()).toBeGreaterThan(0);
 
       await deletionFor(db, []).delete(
         { userId: owner.id, workspaceId: workspace.id, role: "owner" },
@@ -55,17 +52,14 @@ test.skipIf(!connectionString)(
 
       // An ordinary Task in the channel no longer creates a delivery row for the deleted Agent, so
       // nothing can wake it through the Task path.
-      const after = await board.execute(principal, {
+      const delivered = await deliveries();
+      await board.execute(principal, {
         operation: "create",
         idempotencyKey: crypto.randomUUID(),
         conversationId: general.id,
         title: "No delivery after delete",
       });
-      const afterMessage = await db.message.findUniqueOrThrow({
-        where: { id: after.tasks[0]!.messageId! },
-        select: { deliveries: { select: { agentId: true } } },
-      });
-      expect(afterMessage.deliveries.map((delivery) => delivery.agentId)).not.toContain(agent.id);
+      expect(await deliveries()).toBe(delivered);
     } finally {
       await teardown(db, workspace.id, [owner.id]);
     }
@@ -142,22 +136,27 @@ test.skipIf(!connectionString)(
       await db.conversationMember.create({
         data: { workspaceId: workspace.id, conversationId: general.id, agentId: reader.id },
       });
-      const created = await new TaskBoard(db).execute(
-        { workspaceId: workspace.id, userId: owner.id },
-        {
-          operation: "create",
-          idempotencyKey: crypto.randomUUID(),
-          conversationId: general.id,
-          title: "Half-done work",
-          assignee: `@${agent.name}`,
-        },
-      );
+      const [creator, holder] = await Promise.all([
+        db.conversationMember.findFirstOrThrow({
+          where: { conversationId: general.id, userId: owner.id },
+        }),
+        db.conversationMember.findFirstOrThrow({
+          where: { conversationId: general.id, agentId: agent.id },
+        }),
+      ]);
+      const { message } = await legacyMessageTask(db, {
+        conversationId: general.id,
+        workspaceId: workspace.id,
+        creatorMemberId: creator.id,
+        ownerMemberId: holder.id,
+        title: "Half-done work",
+      });
       const conversations = new PrismaDirectConversationRepository(db);
       // Read around the Task's message, so each read sees it whatever the reader's cursor.
       const taskLine = async () =>
         (
           await conversations.readMessages(workspace.id, reader.id, "#general", {
-            around: created.tasks[0]!.messageId!,
+            around: message.id,
           })
         ).find((message) => message.task)!.task;
       // The handle carries no "@", like every other handle an Agent reads.

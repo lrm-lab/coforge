@@ -150,23 +150,24 @@ test("a #channel reference is stored as a channel token on every send path, and 
       (await new PrismaWebPushSubscriptionStore(db).notificationForMessage(fromAgent.id))?.body,
     ).toBe("@helper: moving this to #product");
     // A Task converted from that message shows its title as text in the view Agents read.
-    const converted = await new TaskBoard(db).execute(
-      { workspaceId: workspace.id, agentId: helper.id },
+    const agentBoard = new TaskBoard(db, { reader: "agent" });
+    const converted = await agentBoard.execute(
+      { workspaceId: workspace.id, userId: user.id },
       {
         operation: "convert",
         idempotencyKey: crypto.randomUUID(),
-        target: "#general",
+        conversationId: general.id,
         messageId: fromAgent.id,
       },
     );
     expect(converted.tasks[0]?.title).toBe("moving this to #product");
     // A converted title carrying a mention token reads it back through the message's mention row.
-    const convertedHuman = await new TaskBoard(db).execute(
-      { workspaceId: workspace.id, agentId: helper.id },
+    const convertedHuman = await agentBoard.execute(
+      { workspaceId: workspace.id, userId: user.id },
       {
         operation: "convert",
         idempotencyKey: crypto.randomUUID(),
-        target: "#general",
+        conversationId: general.id,
         messageId: human.id,
       },
     );

@@ -7,7 +7,6 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
 import {
@@ -29,9 +28,7 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-popup-profile");
 test("a profile opened in a Task popup opens over the popup", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `task-popup-profile-${process.pid}`);
-  const experiments = new PrismaExperimentsRepository(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
-  const before = (await experiments.read(workspaceId)).taskConversations;
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const agent = await db.agent.create({
     data: {
@@ -57,7 +54,6 @@ test("a profile opened in a Task popup opens over the popup", async () => {
     },
   });
   try {
-    await experiments.write(workspaceId, "taskConversations", true);
     const created = await new TaskBoard(db).execute({ workspaceId, userId: DEV_BROWSER_USER.id }, {
       idempotencyKey: crypto.randomUUID(),
       conversationId: channel.id,
@@ -180,7 +176,6 @@ test("a profile opened in a Task popup opens over the popup", async () => {
     expect(await evaluate<boolean>(profileOnTop)).toBe(true);
     await shoot("phone");
   } finally {
-    await experiments.write(workspaceId, "taskConversations", before === true).catch(() => {});
     await browser("close").catch(() => undefined);
     await db.message
       .deleteMany({ where: { sender: { agentId: agent.id } } })

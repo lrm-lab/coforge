@@ -7,7 +7,6 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
 import {
@@ -29,9 +28,7 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-discussion-refer
 test("a Task discussion's references to the board's other Tasks show their titles", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `task-discussion-refs-${process.pid}`);
-  const experiments = new PrismaExperimentsRepository(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
-  const before = (await experiments.read(workspaceId)).taskConversations;
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const channel = await db.conversation.create({
     data: {
@@ -44,7 +41,6 @@ test("a Task discussion's references to the board's other Tasks show their title
   const as = { workspaceId, userId: DEV_BROWSER_USER.id };
   const board = new TaskBoard(db);
   try {
-    await experiments.write(workspaceId, "taskConversations", true);
     const created = await board.execute(as, {
       idempotencyKey: crypto.randomUUID(),
       conversationId: channel.id,
@@ -96,7 +92,6 @@ test("a Task discussion's references to the board's other Tasks show their title
     ).toBe(true);
     await browser("screenshot", join(artifacts, "desktop-reference.png"));
   } finally {
-    await experiments.write(workspaceId, "taskConversations", before === true).catch(() => {});
     await browser("close").catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);
     await db.$disconnect();

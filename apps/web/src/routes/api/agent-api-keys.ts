@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { taskConversationsEnabled } from "#src/server/tasks/task-conversations-gate.server";
 import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
 import { z } from "zod";
 import { authenticateDaemon, parseBody } from "#src/server/auth/daemon-request.server";
@@ -213,8 +212,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           computerId: principal.computerId,
           repository: new PrismaAgentApiKeyRepository(db),
         });
-        const [taskConversations, artifacts, agentContextView] = await Promise.all([
-          taskConversationsEnabled(db, { workspaceId: agent.workspaceId }),
+        const [artifacts, agentContextView] = await Promise.all([
           artifactsEnabled(db, agent.workspaceId),
           isFeatureEnabled("agentContextView", { workspaceId: agent.workspaceId }),
         ]);
@@ -229,7 +227,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           // The lookup above already requires `computerId: principal.computerId`.
           computer: agent.computer,
           apps: await agentLaunchApps(db, agent.workspaceId),
-          features: { taskConversations, artifacts, agentContextView },
+          features: { taskConversations: true, artifacts, agentContextView },
         });
         const assignedSkillPacks = agent.weeklyReportAssistant
           ? (["weekly-report"] as const)

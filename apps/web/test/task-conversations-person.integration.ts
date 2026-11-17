@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import {
   announceSpawnedTask,
   sentMessageSpawnsTask,
@@ -23,8 +22,6 @@ const run = (command: Record<string, unknown>) =>
     conversationId: channelId,
     ...command,
   } as Parameters<TaskBoard["execute"]>[1]);
-const experiment = (enabled: boolean) =>
-  new PrismaExperimentsRepository(db).write(workspaceId, "taskConversations", enabled);
 
 beforeAll(async () => {
   const users = await Promise.all(
@@ -65,7 +62,6 @@ beforeAll(async () => {
   });
   sourceId = source.id;
   await db.conversation.update({ where: { id: channelId }, data: { lastSequence: 100 } });
-  await experiment(true);
 });
 
 afterAll(async () => {
@@ -128,17 +124,6 @@ test("a message someone else is working on is taken, unless the person says alon
   expect(refusal.hint).toContain("--alongside");
   const beside = await run({ operation: "convert", messageId: sourceId, alongside: true });
   expect(beside.tasks[0]!.sourceMessageId).toBe(sourceId);
-});
-
-test("with the experiment off a message is turned into the task itself, as before", async () => {
-  await experiment(false);
-  try {
-    await expect(
-      run({ operation: "convert", messageId: sourceId, alongside: true }),
-    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
-  } finally {
-    await experiment(true);
-  }
 });
 
 test("send as task spawns a task from the sent message without a notice", async () => {

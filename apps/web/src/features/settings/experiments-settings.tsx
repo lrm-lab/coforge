@@ -9,7 +9,6 @@ import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-rea
 import { workspaceConversationChannel } from "#src/features/conversations/conversation-realtime";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
 import { decodeWorkspaceFeaturesChangedEvent } from "#src/features/workspaces/workspace-realtime";
-import { isAppError } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { AI_WORKBENCH_QUERY_KEY } from "./ai-workbench";
 import { getExperiments, setExperiment } from "./experiments.functions";
@@ -21,10 +20,6 @@ const EXPERIMENT_TEXT: Record<
     description: () => string;
   }
 > = {
-  taskConversations: {
-    name: () => m.experiments_task_conversations(),
-    description: () => m.experiments_task_conversations_description(),
-  },
   drafts: {
     name: () => m.experiments_drafts(),
     description: () => m.experiments_drafts_description(),
@@ -43,14 +38,6 @@ const EXPERIMENT_TEXT: Record<
   },
 };
 const EXPERIMENTS_QUERY_KEY = ["settings-experiments"];
-function saveErrorText(error: unknown) {
-  if (isAppError(error) && error.errorId === "computers-need-upgrade" && error.details)
-    return m.experiments_computers_need_upgrade({
-      computers: String(error.details.computers),
-      version: String(error.details.version),
-    });
-  return m.experiments_save_error();
-}
 type ExperimentsData = Awaited<ReturnType<typeof getExperiments>>;
 export function useWorkspaceExperiments() {
   const load = useServerFn(getExperiments);
@@ -137,7 +124,7 @@ export function ExperimentsSettings({
               </SettingsField>
               {failed && (
                 <p role="alert" className="text-sm text-error-primary">
-                  {saveErrorText(toggle.error)}
+                  {m.experiments_save_error()}
                 </p>
               )}
             </div>

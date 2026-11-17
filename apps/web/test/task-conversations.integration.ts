@@ -343,7 +343,6 @@ test("the route answers an Agent authenticated with its owner beside it", async 
     new Request(`http://x/?channel=${encodeURIComponent(ref.target)}&task_number=1`),
     agentTaskPrincipal(authenticated),
     conversations,
-    async () => true,
   );
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ taskRef: `#${channelName}:#1` });

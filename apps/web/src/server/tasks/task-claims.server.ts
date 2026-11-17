@@ -13,7 +13,6 @@ import {
 import { channelThreadRootWhere } from "#src/server/db/message-anchor.server";
 import { AppError } from "#src/lib/app-error";
 import { noticeActor, noticeText } from "./task-notices.server";
-import { createMessageTask } from "./sent-as-task.server";
 import { storedTaskStatus, taskMember, taskSelection, type SelectedTask } from "./task-view.server";
 import { taskViewOf } from "./task-relations.server";
 import { TASK_BLOCKED } from "./task-gates.server";
@@ -40,12 +39,9 @@ const MESSAGE_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE})$`, "i");
 /** Why a claim selector was refused, as its result row states it. */
 const CLAIM_REFUSAL = {
   taskNotFound: "task not found",
-  messageNotFound: "message not found",
-  ambiguousMessage: "message id matches more than one message",
   held: "already claimed",
   blocked: "blocked",
   changed: "the task changed while it was being claimed; read it again",
-  justDeleted: "this task was just deleted; whoever deleted it can undo it",
 } as const;
 
 /** What another member's hold on a Task leaves open. Illustrative, not a permission table. */
@@ -61,8 +57,6 @@ class ClaimRefused extends Error {
   constructor(
     readonly reason: string,
     readonly conflict?: TaskClaimConflict,
-    /** The refused Task's number, when the selector named its message rather than the number. */
-    readonly number?: number,
   ) {
     super(reason);
   }
@@ -94,9 +88,8 @@ function claimConflict(task: SelectedTask): TaskClaimConflict {
 export function refuseUnclaimed(result: TaskResult): void {
   const claims = result.claims ?? [];
   if (claims.some((claim) => claim.success)) return;
-  const notFound: string[] = [CLAIM_REFUSAL.taskNotFound, CLAIM_REFUSAL.messageNotFound];
   throw new AppError(
-    claims.every((claim) => notFound.includes(claim.reason ?? "")) ? "NOT_FOUND" : "CONFLICT",
+    claims.every((claim) => claim.reason === CLAIM_REFUSAL.taskNotFound) ? "NOT_FOUND" : "CONFLICT",
   );
 }
 
@@ -128,62 +121,16 @@ export async function findSourceMessage(
   return messages[0]!;
 }
 
-export async function convertOrClaim(
+async function claimTask(
   ports: TaskBoardPorts,
   conversation: ConversationRef,
   member: Member,
-  command: TaskCommand,
-  claim: boolean,
+  number: number,
 ) {
-  const { conversationId, workspaceId } = conversation;
+  const { conversationId } = conversation;
   const task = await withNotices(ports, conversation, async (tx, notices) => {
-    let existing = command.number
-      ? await findTaskByNumber(tx, conversationId, command.number)
-      : undefined;
-    let message: { id: string; body: string } | undefined;
-    if (!existing && command.messageId) {
-      message = await findSourceMessage(tx, conversationId, command.messageId).catch(
-        (error: unknown) => {
-          if (!claim || !(error instanceof AppError)) throw error;
-          throw new ClaimRefused(
-            error.code === "CONFLICT"
-              ? CLAIM_REFUSAL.ambiguousMessage
-              : CLAIM_REFUSAL.messageNotFound,
-          );
-        },
-      );
-      const marked = await tx.task.findFirst({
-        where: { messageId: message.id },
-        select: { ...taskSelection, deletedAt: true },
-      });
-      // task #512: a marked Task's message refuses a claim inside the undo window — whoever
-      // deleted it restores it; a claimer is not the restorer. Once the sweep removes the row
-      // the message claims into a new Task, the old one's messageId unique no longer in the way.
-      if (marked?.deletedAt)
-        throw new ClaimRefused(CLAIM_REFUSAL.justDeleted, undefined, marked.number);
-      existing = marked ?? undefined;
-    }
-    if (!existing) {
-      if (!message) {
-        if (claim) throw new ClaimRefused(CLAIM_REFUSAL.taskNotFound);
-        throw new AppError("NOT_FOUND");
-      }
-      existing = await createMessageTask(
-        tx,
-        { ...message, conversationId, workspaceId },
-        { ...member, id: memberId(member) },
-        command.priority,
-      );
-      const [quoted] = await notices.quote([existing]);
-      await notices.inConversation({
-        body: noticeText.converted(noticeActor(member).displayName, quoted!),
-        system: {
-          kind: "task.converted",
-          params: { actor: noticeActor(member), task: quoted! },
-        },
-      });
-    }
-    if (!claim) return existing;
+    const existing = await findTaskByNumber(tx, conversationId, number);
+    if (!existing) throw new ClaimRefused(CLAIM_REFUSAL.taskNotFound);
     if (
       existing.ownerMemberId === member.id &&
       existing.claimedAt !== null &&
@@ -199,9 +146,9 @@ export async function convertOrClaim(
       return existing;
     }
     if (existing.status === "done" || existing.status === "closed")
-      throw new ClaimRefused(`task is ${existing.status}`, undefined, existing.number);
+      throw new ClaimRefused(`task is ${existing.status}`);
     if (existing.ownerMemberId && existing.ownerMemberId !== member.id)
-      throw new ClaimRefused(CLAIM_REFUSAL.held, claimConflict(existing), existing.number);
+      throw new ClaimRefused(CLAIM_REFUSAL.held, claimConflict(existing));
     const { task: claimed } = await commitTaskChange(
       tx,
       member,
@@ -222,7 +169,7 @@ export async function convertOrClaim(
   });
   const view = await taskViewOf(ports.db, ports.reader, task);
   await signalTaskChange(ports, task, { view });
-  return { tasks: [view] };
+  return view;
 }
 
 export async function claimTasks(
@@ -231,43 +178,22 @@ export async function claimTasks(
   member: Member,
   command: TaskCommand,
 ): Promise<TaskResult> {
-  const selectors: Array<{ number?: number; messageId?: string }> = [
-    ...Array.from(
-      new Set([...(command.numbers ?? []), ...(command.number ? [command.number] : [])]),
-      (number) => ({ number }),
-    ),
-    ...Array.from(
-      new Set([...(command.messageIds ?? []), ...(command.messageId ? [command.messageId] : [])]),
-      (messageId) => ({ messageId }),
-    ),
-  ];
+  const numbers = new Set([
+    ...(command.numbers ?? []),
+    ...(command.number ? [command.number] : []),
+  ]);
   // Every selector gets its own result row: a refused claim is an answer, not an error.
   const tasks: TaskView[] = [];
   const claims: TaskClaimResult[] = [];
-  for (const selector of selectors) {
+  for (const number of numbers) {
     try {
-      const result = await convertOrClaim(
-        ports,
-        conversation,
-        member,
-        {
-          ...command,
-          numbers: undefined,
-          messageIds: undefined,
-          number: undefined,
-          messageId: undefined,
-          ...selector,
-        },
-        true,
-      );
-      const task = result.tasks[0]!;
+      const task = await claimTask(ports, conversation, member, number);
       tasks.push(task);
       claims.push({ number: task.number, messageId: task.messageId ?? undefined, success: true });
     } catch (error) {
       if (error instanceof ClaimRefused)
         claims.push({
-          ...selector,
-          ...(error.number !== undefined && { number: error.number }),
+          number,
           success: false,
           reason: error.reason,
           ...(error.conflict && { conflict: error.conflict }),
@@ -275,15 +201,14 @@ export async function claimTasks(
       // The Task waits for blockers: the status write refused it (a manager is not refused).
       else if (error instanceof AppError && error.errorId === TASK_BLOCKED)
         claims.push({
-          ...selector,
-          number: Number(error.details?.number),
+          number,
           success: false,
           reason: CLAIM_REFUSAL.blocked,
           blockedBy: JSON.parse(String(error.details?.blockedBy)) as TaskName[],
         });
       // The guarded write lost a race with another change to the same Task.
       else if (error instanceof AppError && error.code === "CONFLICT")
-        claims.push({ ...selector, success: false, reason: CLAIM_REFUSAL.changed });
+        claims.push({ number, success: false, reason: CLAIM_REFUSAL.changed });
       else throw error;
     }
   }

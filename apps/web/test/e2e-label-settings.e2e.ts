@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { LabelGroups } from "#src/server/tasks/label-groups.server";
 import { Labels } from "#src/server/tasks/labels.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
@@ -40,7 +39,6 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
   const other = browserSession(browserPath, `label-settings-other-${process.pid}`);
   const labels = new Labels(db);
   const board = new TaskBoard(db);
-  const experiments = new PrismaExperimentsRepository(db);
   const membership = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
     orderBy: { createdAt: "asc" },
@@ -57,13 +55,11 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
       members: { create: [{ userId: DEV_BROWSER_USER.id }] },
     },
   });
-  const before = (await experiments.read(workspaceId)).taskConversations;
   const made: string[] = [];
   /** The Workspace the member view is read in, made by this run and removed after it. */
   const seeded: { owner?: { id: string }; workspace?: { id: string; slug: string } } = {};
   let groupId: string | undefined;
   try {
-    await experiments.write(workspaceId, "taskConversations", true);
     const group = await new LabelGroups(db).create(workspaceId, DEV_BROWSER_USER.id, {
       name: name("Type"),
       selection: "multiple",
@@ -324,7 +320,6 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
       data: {
         slug: `e2e-labels-${tail}`,
         name: `Labels ${tail}`,
-        experiments: { taskConversations: true },
         members: {
           create: [
             { userId: seeded.owner.id, role: "owner" },
@@ -382,7 +377,6 @@ test("an owner manages the Workspace's labels on their own page; a member reads 
     await db.label.deleteMany({ where: { id: { in: made } } }).catch(() => undefined);
     if (groupId) await db.labelGroup.deleteMany({ where: { id: groupId } }).catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);
-    await experiments.write(workspaceId, "taskConversations", before).catch(() => undefined);
     await db.$disconnect();
   }
 }, 240_000);

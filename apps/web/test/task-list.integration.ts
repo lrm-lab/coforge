@@ -4,6 +4,7 @@ import type { TaskPrincipal, TaskView, TaskCommandWithout } from "@lrm/coforge-s
 import { PrismaClient } from "#src/generated/prisma/client";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { Labels } from "#src/server/tasks/labels.server";
+import { assignmentNotice } from "./fixtures/assignment-notice";
 
 const ISO = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 
@@ -76,8 +77,8 @@ test("An Agent's own Task list covers its channels and DMs and says what it leav
     });
     const reserved = reservedResult.tasks[0]!;
     // A person's assignment of an Agent is a direct instruction: "do it first", never a number.
-    expect(reservedResult.assignmentReceipts![0]!.content).toBe(
-      `📌 ${alice.displayName ?? alice.username} assigned #${reserved.number} "Reserved for the Agent" to @${agent.name} — do it first`,
+    expect((await assignmentNotice(db, reserved.id)).body).toBe(
+      `@${alice.username} assigned you task #${reserved.number}: Reserved for the Agent — do it first`,
     );
     const unassignedTask = (
       await run(asAlice, { operation: "create", conversationId: work.id, title: "Unassigned" })
@@ -89,10 +90,6 @@ test("An Agent's own Task list covers its channels and DMs and says what it leav
       assignee: `@${agent.name}`,
     });
     const started = startedResult.tasks[0]!;
-    // An Agent's own assignment names its queue place and what is immediately ahead (task #716).
-    expect(startedResult.assignmentReceipts![0]!.content).toBe(
-      `📌 ${agent.displayName ?? agent.name} assigned #${started.number} "Started by the Agent" to @${agent.name} — queue #2 (ahead: #${reserved.number})`,
-    );
     const finished = await selfAssigned(`#${work.channelName}`, "Finished");
     // A Task moves forward through the board, so Done is reached through In Review.
     for (const status of ["in_progress", "in_review", "done"] as const)
@@ -109,10 +106,6 @@ test("An Agent's own Task list covers its channels and DMs and says what it leav
       assignee: `@${agent.name}`,
     });
     const inDirect = inDirectResult.tasks[0]!;
-    // Ahead Tasks in another conversation are named by their channel (task #716).
-    expect(inDirectResult.assignmentReceipts![0]!.content).toBe(
-      `📌 ${agent.displayName ?? agent.name} assigned #${inDirect.number} "Direct work" to @${agent.name} — queue #3 (ahead: #${work.channelName}:#${reserved.number}, #${work.channelName}:#${started.number})`,
-    );
     const inArchived = await selfAssigned(`#${archived.channelName}`, "Archived work");
     await selfAssigned(`#${hidden.channelName}`, "Hidden work");
     await selfAssigned(`#${left.channelName}`, "Work in a channel the Agent left");

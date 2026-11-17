@@ -1,5 +1,4 @@
-/** The Tasks guidance for a Workspace with task conversations on: a task is a place people and
- * Agents talk in, not only a claim on a message. */
+/** The Tasks guidance: a task is a place people and Agents talk in, not only a claim on a message. */
 export const TASK_CONVERSATIONS_SECTION = `## Tasks have their own conversations
 A task has its own conversation, named by a ref: \`#channel:#7\` (or \`dm:@name:#7\`). ALWAYS quote the ref in the shell; an unquoted # starts a comment. Messages from it arrive with \`target=<ref>\`.
 Start with \`coforge task view '<ref>'\`. Reply with \`coforge task reply '<ref>'\` (body on stdin; \`--mention\`, \`--attachment-id\`). Read with \`coforge task read '<ref>' [--unread]\`. \`coforge task follow|unfollow '<ref>'\`; \`coforge task list --following\`. \`message send\` and \`message read\` do not take task refs.

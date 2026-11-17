@@ -221,7 +221,7 @@ export function TaskSection({
             }
           />
         </TaskProperty>
-        {relations.on && task.parent && (
+        {task.parent && (
           <TaskProperty
             label={m.tasks_parent()}
             labelInChip
@@ -235,7 +235,7 @@ export function TaskSection({
             />
           </TaskProperty>
         )}
-        {relations.on && openBlockers(task.blockedBy).length > 0 && (
+        {openBlockers(task.blockedBy).length > 0 && (
           <TaskProperty label={m.tasks_blocked_by()} labelInChip>
             <TaskBlockedByValue
               task={task}
@@ -248,61 +248,57 @@ export function TaskSection({
             />
           </TaskProperty>
         )}
-        {relations.on && relations.detail.blocking.length > 0 && (
+        {relations.detail.blocking.length > 0 && (
           <TaskProperty label={m.tasks_blocking()} labelInChip>
             <TaskBlockingValue blocking={relations.detail.blocking} onOpen={onOpenRelated} />
           </TaskProperty>
         )}
       </dl>
-      {relations.on && (
-        <>
-          <TaskPickerDialog
-            open={picker === "parent"}
-            onOpenChange={closePicker}
-            task={task}
-            rules={relations.parentRules}
-            label={m.tasks_pick_parent()}
-            parentsFor={currentMemberId}
-            disabled={pending}
-            onPick={(parent) => void relations.setParent(parent)}
-          />
-          <TaskPickerDialog
-            open={picker === "blocker"}
-            onOpenChange={closePicker}
-            task={task}
-            rules={relations.blockerRules}
-            label={m.tasks_pick_blocker()}
-            disabled={pending}
-            onPick={(blocker) => void relations.addBlocker(blocker)}
-          />
-          <CreateTaskDialog
-            open={picker === "new-subtask"}
-            onOpenChange={closePicker}
-            onCreate={async (draft, idempotencyKey, { more }) => {
-              const created = await relations.createSubtasks(draft, idempotencyKey);
-              // The new sub-task opens, as a Task made on the board does, unless the viewer keeps
-              // creating.
-              if (created && !more)
-                onOpenRelated?.({ hidden: false, number: created.number, channel: null });
-            }}
-            where={{ label: `#${task.number} ${task.title}`, subtask: true }}
-            members={members}
-            describeError={(cause) => {
-              const refusal = relationRefusal(cause);
-              return refusal && errorText(refusal);
-            }}
-          />
-          <SubtaskPickerDialog
-            open={picker === "subtask"}
-            onOpenChange={closePicker}
-            onNew={() => onPickerChange("new-subtask")}
-            task={task}
-            currentMemberId={currentMemberId}
-            disabled={pending}
-            onPick={(subtask) => void relations.adoptSubtask(subtask)}
-          />
-        </>
-      )}
+      <TaskPickerDialog
+        open={picker === "parent"}
+        onOpenChange={closePicker}
+        task={task}
+        rules={relations.parentRules}
+        label={m.tasks_pick_parent()}
+        parentsFor={currentMemberId}
+        disabled={pending}
+        onPick={(parent) => void relations.setParent(parent)}
+      />
+      <TaskPickerDialog
+        open={picker === "blocker"}
+        onOpenChange={closePicker}
+        task={task}
+        rules={relations.blockerRules}
+        label={m.tasks_pick_blocker()}
+        disabled={pending}
+        onPick={(blocker) => void relations.addBlocker(blocker)}
+      />
+      <CreateTaskDialog
+        open={picker === "new-subtask"}
+        onOpenChange={closePicker}
+        onCreate={async (draft, idempotencyKey, { more }) => {
+          const created = await relations.createSubtasks(draft, idempotencyKey);
+          // The new sub-task opens, as a Task made on the board does, unless the viewer keeps
+          // creating.
+          if (created && !more)
+            onOpenRelated?.({ hidden: false, number: created.number, channel: null });
+        }}
+        where={{ label: `#${task.number} ${task.title}`, subtask: true }}
+        members={members}
+        describeError={(cause) => {
+          const refusal = relationRefusal(cause);
+          return refusal && errorText(refusal);
+        }}
+      />
+      <SubtaskPickerDialog
+        open={picker === "subtask"}
+        onOpenChange={closePicker}
+        onNew={() => onPickerChange("new-subtask")}
+        task={task}
+        currentMemberId={currentMemberId}
+        disabled={pending}
+        onPick={(subtask) => void relations.adoptSubtask(subtask)}
+      />
       {error && (
         <p role="alert" className="text-sm text-error-primary">
           {errorText(error.kind, error.subject)}

@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import {
   browserSession,
@@ -33,7 +32,6 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
   // Sub-tasks are Tasks v2, part of the Workspace's `taskConversations` experiment.
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `project-tasks-${process.pid}`);
-  const experiments = new PrismaExperimentsRepository(db);
   const board = new TaskBoard(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
@@ -56,9 +54,7 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
       members: { create: [{ userId: DEV_BROWSER_USER.id }] },
     },
   });
-  const before = (await experiments.read(workspaceId)).taskConversations;
   try {
-    await experiments.write(workspaceId, "taskConversations", true);
     const run = (command: Record<string, unknown>) =>
       board.execute({ workspaceId, userId: DEV_BROWSER_USER.id }, {
         idempotencyKey: crypto.randomUUID(),
@@ -224,7 +220,6 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
     expect(await projectOf(lone)).toBe(home.slug);
   } finally {
     await browser("close").catch(() => undefined);
-    await experiments.write(workspaceId, "taskConversations", before).catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);
     await db.project
       .deleteMany({ where: { id: { in: [home.id, other.id] } } })

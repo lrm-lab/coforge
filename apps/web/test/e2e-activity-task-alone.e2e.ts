@@ -7,7 +7,6 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
 import {
@@ -29,9 +28,7 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-task-alone")
 test("a Task card on Activity opens the Task's popup, not its channel's chat", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `activity-task-${process.pid}`);
-  const experiments = new PrismaExperimentsRepository(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
-  const before = (await experiments.read(workspaceId)).taskConversations;
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const agent = await db.agent.create({
     data: {
@@ -59,7 +56,6 @@ test("a Task card on Activity opens the Task's popup, not its channel's chat", a
   // A message of the channel's own: its chat must not open behind the popup.
   const chatLine = `Channel chat line ${tail}`;
   try {
-    await experiments.write(workspaceId, "taskConversations", true);
     const me = await db.conversationMember.findFirstOrThrow({
       where: { conversationId: channel.id, userId: DEV_BROWSER_USER.id },
     });
@@ -177,7 +173,6 @@ test("a Task card on Activity opens the Task's popup, not its channel's chat", a
     await browser("wait", "300");
     await browser("screenshot", join(artifacts, "phone-dark.png"));
   } finally {
-    await experiments.write(workspaceId, "taskConversations", before === true).catch(() => {});
     await browser("close").catch(() => undefined);
     await db.message
       .deleteMany({ where: { sender: { agentId: agent.id } } })

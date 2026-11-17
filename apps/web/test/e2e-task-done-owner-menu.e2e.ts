@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import {
   browserSession,
@@ -25,9 +24,7 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-done-owner-menu"
 test("a Done Task's owner menu has no Unassigned", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `done-owner-${process.pid}`);
-  const experiments = new PrismaExperimentsRepository(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
-  const before = (await experiments.read(workspaceId)).taskConversations;
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const agent = await db.agent.create({
     data: {
@@ -53,7 +50,6 @@ test("a Done Task's owner menu has no Unassigned", async () => {
     },
   });
   try {
-    await experiments.write(workspaceId, "taskConversations", true);
     const board = new TaskBoard(db);
     const run = (command: Record<string, unknown>) =>
       board.execute({ workspaceId, userId: DEV_BROWSER_USER.id }, {
@@ -104,7 +100,6 @@ test("a Done Task's owner menu has no Unassigned", async () => {
     expect((await menuOptions(open, "phone-todo"))[0]).toBe("Unassigned");
     expect(await menuOptions(finished, "phone")).not.toContain("Unassigned");
   } finally {
-    await experiments.write(workspaceId, "taskConversations", before === true).catch(() => {});
     await browser("close").catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);
     await db.agent.deleteMany({ where: { id: agent.id } }).catch(() => undefined);

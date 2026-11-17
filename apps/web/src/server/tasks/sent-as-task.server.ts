@@ -1,93 +1,9 @@
 import type { TaskPriorityLevel } from "@lrm/coforge-sdk/internal";
-import type { Prisma } from "#src/generated/prisma/client";
-import { AppError } from "#src/lib/app-error";
-import type {
-  SentMessage,
-  SentMessageHook,
-} from "#src/server/conversations/sent-message-hook.server";
+import type { SentMessageHook } from "#src/server/conversations/sent-message-hook.server";
 import { sentMessageSpawnsTask } from "./sent-as-conversation-task.server";
-import { taskConversationsEnabled } from "./task-conversations-gate.server";
-import { creationChanges, historyRows } from "./task-history.server";
-import { taskSelection } from "./task-view.server";
 
-/**
- * Makes an existing top-level message a Task: the conversation's next number, the message's body
- * as its title, and its creation in the history. The caller's transaction holds the conversation
- * lock, so numbers stay in order.
- */
-export async function createMessageTask(
-  tx: Prisma.TransactionClient,
-  message: { id: string; conversationId: string; workspaceId: string; body: string },
-  creator: {
-    id: string;
-    agentId: string | null;
-    user?: { username: string } | null;
-    agent?: { name: string } | null;
-  },
-  priority?: TaskPriorityLevel,
-) {
-  const allocated = await tx.$queryRaw<Array<{ number: number }>>`
-    UPDATE "conversations"
-    SET "nextTaskNumber" = "nextTaskNumber" + 1
-    WHERE "id" = ${message.conversationId}::uuid
-    RETURNING "nextTaskNumber" - 1 AS "number"
-  `;
-  if (allocated[0]?.number === undefined) throw new AppError("NOT_FOUND");
-  const task = await tx.task.create({
-    data: {
-      // The Task's id is its own — `messageId` names the message the Task started from. A
-      // reclaimed message's prior Task kept `task.id === message.id`, and a fresh task.id keeps
-      // that old Task's references and realtime keys off the new one (task #507).
-      id: Bun.randomUUIDv7(),
-      messageId: message.id,
-      conversationId: message.conversationId,
-      workspaceId: message.workspaceId,
-      number: allocated[0].number,
-      title: message.body.slice(0, 8_000),
-      creatorMemberId: creator.id,
-      priority: priority ?? "none",
-    },
-    select: taskSelection,
-  });
-  await tx.taskHistoryEvent.createMany({
-    data: historyRows(task.id, creator, creationChanges(task), 0),
-  });
-  return task;
-}
-
-/**
- * "Send as task" from the composer: the message being sent is a Task from the moment it exists, with
- * every upload it carries, as Raft's composer sends it (`/v2/messages` with `asTask`). Only a
- * top-level message can be a Task, as `convert` holds. The caller announces it once the send has
- * committed (`TaskBoard.announceSentTask`).
- */
-export async function sentMessageBecomesTask(
-  tx: Prisma.TransactionClient,
-  message: SentMessage,
-  priority?: TaskPriorityLevel,
-) {
-  if (message.threadRootId) throw new AppError("INVALID_INPUT");
-  const creator = await tx.conversationMember.findUniqueOrThrow({
-    where: { id: message.senderMemberId },
-    select: {
-      id: true,
-      agentId: true,
-      user: { select: { username: true } },
-      agent: { select: { name: true } },
-    },
-  });
-  await createMessageTask(tx, message, creator, priority);
-}
-
-/** The hook a person's "send as task" runs: the message becomes the task, or, where the Workspace
- * has task conversations, is the source of a task made beside it. */
-export async function sentAsTaskHook(
-  db: Parameters<typeof taskConversationsEnabled>[0],
-  workspaceId: string,
-  priority?: TaskPriorityLevel,
-): Promise<SentMessageHook> {
-  const hook = (await taskConversationsEnabled(db, { workspaceId }))
-    ? sentMessageSpawnsTask
-    : sentMessageBecomesTask;
-  return (tx, message) => hook(tx, message, priority);
-}
+/** The hook a person's "send as task" runs: the message is the source of a task made beside it. */
+export const sentAsTaskHook =
+  (priority?: TaskPriorityLevel): SentMessageHook =>
+  (tx, message) =>
+    sentMessageSpawnsTask(tx, message, priority);

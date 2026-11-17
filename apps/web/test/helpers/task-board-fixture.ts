@@ -5,8 +5,7 @@ import { TaskBoard } from "#src/server/tasks/task-board.server";
 /**
  * The Workspace `tasks.integration.ts` runs its TaskBoard against, on local PostgreSQL: Alice and
  * Bob, an Agent on an attached Computer, a channel the three are in with one ordinary message of
- * Alice's to convert, a board that records what it announces, and Alice's direct conversation
- * with the Agent holding one attachment. The caller runs `cleanup` when it is done.
+ * Alice's to convert, and a board. The caller runs `cleanup` when it is done.
  */
 export async function taskBoardFixture() {
   const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
@@ -68,19 +67,11 @@ export async function taskBoardFixture() {
       body: "Convert this message",
     },
   });
-  const realtime: Array<{
-    messageId: string;
-    publicationId?: string;
-    senderUserId?: string;
-  }> = [];
-  const board = new TaskBoard(db, {
-    realtime: {
-      async memberChanged() {},
-      async messageAvailable(event) {
-        realtime.push(event);
-      },
-    },
+  await db.conversation.update({
+    where: { id: channel.id },
+    data: { lastSequence: ordinary.sequence },
   });
+  const board = new TaskBoard(db);
   const command = {
     operation: "create" as const,
     idempotencyKey: crypto.randomUUID(),
@@ -94,43 +85,5 @@ export async function taskBoardFixture() {
     await db.user.deleteMany({ where: { id: { in: [alice.id, bob.id] } } });
     await db.$disconnect();
   };
-  try {
-    // Alice's direct conversation with the Agent, holding one uploaded attachment.
-    const direct = await db.conversation.create({
-      data: {
-        workspaceId: workspace.id,
-        directKey: [alice.id, agent.id].sort().join(":"),
-        members: { create: [{ userId: alice.id }, { agentId: agent.id }] },
-      },
-    });
-    const attachment = await db.attachment.create({
-      data: {
-        workspaceId: workspace.id,
-        conversationId: direct.id,
-        uploaderId: alice.id,
-        objectKey: `tasks/${suffix}`,
-        fileName: "task.txt",
-        contentType: "text/plain",
-        sizeBytes: 4,
-      },
-    });
-    return {
-      db,
-      alice,
-      bob,
-      workspace,
-      agent,
-      channel,
-      ordinary,
-      realtime,
-      board,
-      command,
-      direct,
-      attachment,
-      cleanup,
-    };
-  } catch (error) {
-    await cleanup();
-    throw error;
-  }
+  return { db, alice, bob, workspace, agent, channel, ordinary, board, command, cleanup };
 }

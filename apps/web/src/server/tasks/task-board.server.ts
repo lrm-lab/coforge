@@ -4,16 +4,8 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import type { ConversationTaskSubset } from "#src/features/tasks/conversation-task-subset";
 import type { TaskCommand, TaskPrincipal, TaskResult } from "@lrm/coforge-sdk/internal";
-import { createTasks } from "./task-creation.server";
-import { announceSentMessageTask } from "./task-sent-message.server";
 import { announceSpawnedTask } from "./sent-as-conversation-task.server";
 import { createConversationTasks } from "./task-conversation-creation.server";
-import {
-  relationsOffRefusal,
-  taskConversationsEnabled,
-  taskRelationsEnabled,
-  withExperimentRead,
-} from "./task-conversations-gate.server";
 import { assignTask, unassignTask } from "./task-assignment.server";
 import {
   amendTask,
@@ -22,7 +14,7 @@ import {
   taskHistory,
   updateTaskStatus,
 } from "./task-amendments.server";
-import { claimTasks, convertOrClaim, unclaimTask } from "./task-claims.server";
+import { claimTasks, unclaimTask } from "./task-claims.server";
 import { validateTaskCommand } from "./task-command-validation.server";
 import { listConversationTasks, listOwnTasks, showTask } from "./task-list.server";
 import { recordResourceReceipt } from "./task-resource-receipt.server";
@@ -40,12 +32,8 @@ import {
   type FinishedTaskWindow,
 } from "./task-overview.server";
 
-/** The refusal of `claim --message-id` and `convert` once task conversations are on. */
+/** The refusal of `claim --message-id` and an Agent's `convert`: a task is made with `create`. */
 export const TASK_V2_USE_CREATE = "task_v2_use_create";
-
-/** `create --message-id` with task conversations off: the CLI tells the caller what to do next. */
-export const TASK_MESSAGE_SOURCE_REQUIRES_CONVERSATIONS =
-  "task_message_source_requires_conversations";
 
 /** The Task commands a reader who is not a member of a readable channel may run. */
 const READ_ONLY_TASK_OPERATIONS: ReadonlySet<TaskCommand["operation"]> = new Set([
@@ -156,30 +144,14 @@ export class TaskBoard {
     return conversation.conversationId;
   }
 
-  /** Run one command; the Workspace's experiment is read once for all of it (`withExperimentRead`). */
-  execute(
+  async execute(
     principal: TaskPrincipal,
     command: TaskCommand,
     /** An already-resolved acting scope (the Agent freshness gate resolves it once and passes it
      * down); absent, the command resolves its own. */
     presolvedScope?: Awaited<ReturnType<typeof resolveTaskScope>>,
   ): Promise<TaskResult> {
-    return withExperimentRead(() => this.run(principal, command, presolvedScope));
-  }
-
-  private async run(
-    principal: TaskPrincipal,
-    command: TaskCommand,
-    presolvedScope?: Awaited<ReturnType<typeof resolveTaskScope>>,
-  ): Promise<TaskResult> {
     validateTaskCommand(command);
-    if (
-      (command.blockedBy !== undefined ||
-        command.parent !== undefined ||
-        command.ready !== undefined) &&
-      !(await taskRelationsEnabled(this.db, principal.workspaceId))
-    )
-      throw relationsOffRefusal();
     if (principal.agentId) {
       const user = await workspaceAssistantUser(this.db, principal.workspaceId, principal.agentId);
       if (user) {
@@ -228,32 +200,18 @@ export class TaskBoard {
       return showTask(this.ports, scope.workspaceId, scope.conversationId, command);
     const member = scope.member!;
     const ports = this.ports;
-    // The Workspace's task-conversations experiment decides for everyone in it: a person or an
-    // Agent makes a task with `create` (naming its source message), never by turning a message
-    // into one.
-    const conversations =
-      (command.operation === "create" ||
-        command.operation === "convert" ||
-        command.operation === "claim") &&
-      (await taskConversationsEnabled(this.db, principal));
-    if (command.operation === "create") {
-      if (conversations) return createConversationTasks(ports, scope, member, principal, command);
-      // Naming a source message needs task conversations.
-      if (command.messageId !== undefined || command.alongside !== undefined)
-        throw new AppError("INVALID_INPUT", {
-          errorId: TASK_MESSAGE_SOURCE_REQUIRES_CONVERSATIONS,
-        });
-      return createTasks(ports, scope, member, principal, command);
-    }
-    if (conversations) {
-      // A person's "make this message a task" creates one beside it; an Agent is told to `create`.
-      if (command.operation === "convert" && principal.userId)
-        return createConversationTasks(ports, scope, member, principal, command);
-      if (command.operation === "convert" || command.messageId || command.messageIds)
-        throw new AppError("CONFLICT", { errorId: TASK_V2_USE_CREATE });
-    } else if (command.alongside !== undefined) throw new AppError("INVALID_INPUT");
-    if (command.operation === "convert")
-      return convertOrClaim(ports, scope, member, command, false);
+    // A person or an Agent makes a task with `create` (naming its source message), never by
+    // turning a message into one.
+    if (command.operation === "create")
+      return createConversationTasks(ports, scope, member, principal, command);
+    // A person's "make this message a task" creates one beside it; an Agent is told to `create`.
+    if (command.operation === "convert" && principal.userId)
+      return createConversationTasks(ports, scope, member, principal, command);
+    if (
+      command.operation === "convert" ||
+      (command.operation === "claim" && (command.messageId || command.messageIds))
+    )
+      throw new AppError("CONFLICT", { errorId: TASK_V2_USE_CREATE });
     if (command.operation === "claim") return claimTasks(ports, scope, member, command);
     if (command.operation === "unclaim")
       return unclaimTask(ports, scope.conversationId, member, command);
@@ -272,7 +230,6 @@ export class TaskBoard {
 
   /** Announce the Task a send made ("Send as Task"); as on Raft, no notice is posted. */
   async announceSentTask(conversation: ConversationRef, messageId: string) {
-    if (await announceSpawnedTask(this.ports, conversation, messageId)) return;
-    return announceSentMessageTask(this.ports, conversation, messageId);
+    await announceSpawnedTask(this.ports, conversation, messageId);
   }
 }

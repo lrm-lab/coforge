@@ -263,7 +263,7 @@ export const sendPublicChannelMessage = createServerFn({ method: "POST" })
       ...input,
       workspaceId,
       userId,
-      withinSend: asTask ? await sentAsTaskHook(db, workspaceId, taskPriority) : undefined,
+      withinSend: asTask ? sentAsTaskHook(taskPriority) : undefined,
     });
     if (asTask)
       await announceSentTask(db, { conversationId: data.channelId, workspaceId }, message.id);

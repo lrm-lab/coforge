@@ -7,6 +7,7 @@ import type {
 } from "#src/server/conversations/conversation-realtime.server";
 import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { legacyMessageTask } from "./fixtures/legacy-message-task";
 
 /**
  * An assignment receipt is a server notice: nobody counts it unread, so its signal goes only to
@@ -58,11 +59,23 @@ test.skipIf(!connectionString)(
       };
       const board = new TaskBoard(db, { realtime });
       const asAda = { workspaceId: workspace.id, userId: ada.id };
+      const adaSeat = await db.conversationMember.findFirstOrThrow({
+        where: { conversationId: general.id, userId: ada.id },
+      });
+      const legacyTask = async (title: string) =>
+        (
+          await legacyMessageTask(db, {
+            conversationId: general.id,
+            workspaceId: workspace.id,
+            creatorMemberId: adaSeat.id,
+            title,
+          })
+        ).task;
       await board.execute(asAda, {
-        operation: "create",
+        operation: "assign",
         idempotencyKey: crypto.randomUUID(),
         conversationId: general.id,
-        title: "Review the plan",
+        number: (await legacyTask("Review the plan")).number,
         assignee: `@${bob.username}`,
       });
       const receipt = await db.message.findFirstOrThrow({
@@ -100,18 +113,13 @@ test.skipIf(!connectionString)(
       await db.conversationMember.create({
         data: { conversationId: general.id, workspaceId: workspace.id, agentId: agent.id },
       });
-      const later = await board.execute(asAda, {
-        operation: "create",
-        idempotencyKey: crypto.randomUUID(),
-        conversationId: general.id,
-        title: "Draft the notes",
-      });
+      const later = await legacyTask("Draft the notes");
       const assign = (assignee: string) =>
         board.execute(asAda, {
           operation: "assign",
           idempotencyKey: crypto.randomUUID(),
           conversationId: general.id,
-          number: later.tasks[0]!.number,
+          number: later.number,
           assignee,
         });
       activity.length = 0;

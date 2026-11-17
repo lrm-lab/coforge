@@ -127,7 +127,7 @@ workspaceId]` Query its loader fills (`task-overview-collection.ts`,
 - A message row's part reads its one Task through `useNumberedTask` /
   `useMessageTask`, selectors over the collection's TanStack Store (`byId`,
   `byNumber`, `byMessage`, `bySource`, where an unchanged Task keeps its object), never from a list
-  passed down. Under task conversations a message's Task is the one made from it
+  passed down. A message's Task is the one made from it
   (`sourceMessageId`), which a message window reads by that message's sequence. They never read anything themselves, so a row adds no request.
   A body's task reference whose number the collection does not hold yet opens
   the Task on a press; it is the plain words only once a read
@@ -141,8 +141,7 @@ workspaceId]` Query its loader fills (`task-overview-collection.ts`,
   (`CreateTaskDialog`, laid out as the Task popup: where it goes, a To do title, owner and
   label chips, a description). One Task per dialog, which replaced several titles at once
   (Frank, 11-05). Its Project follows the conversation and is changed in the popup.
-- Blockers, parent and sub-tasks (Tasks v2, `useTaskConversationsOn() === true`; off or unknown:
-  no relation UI, no `show` read, no menu items, no card marks) show on every card from the Task's
+- Blockers, parent and sub-tasks show on every card from the Task's
   own view (`blockedBy`, `blocked`, `parent`, `subtasks`) and in the popup (`TaskSection`:
   `task-relation-lines.tsx`, with `use-task-relations.ts` for the `show` read of `blocking` and
   `subtree`, keyed by revision, and the commands). The pure rules are `task-relation-edits.ts`.

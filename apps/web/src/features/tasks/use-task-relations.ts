@@ -16,7 +16,6 @@ import {
 } from "./task-relation-edits";
 import type { TaskDraft } from "./task-draft";
 import { executeTask } from "./tasks.functions";
-import { useTaskConversationsOn } from "./use-task-conversations-on";
 import { useConversationTaskWrites } from "./use-conversation-tasks";
 
 /** A Task command as the popup issues it: the conversation comes from the Task. */
@@ -26,19 +25,15 @@ export type DetailCommand = TaskCommandWithout<"idempotencyKey" | "conversationI
 
 const NO_DETAIL: TaskDetailRelations = { blocking: [], subtree: [] };
 
-/**
- * Whether the popup offers a Task's dependencies and sub-tasks at all (the Workspace has Tasks v2
- * on; unknown counts as off, so nothing shows and nothing is read before it is known), and
- * whether this viewer may change them. Only an affordance: the server rechecks every write.
- */
+/** Whether this viewer may change a Task's dependencies and sub-tasks. Only an affordance: the
+ * server rechecks every write. */
 export function useTaskRelationAccess(
   task: Pick<TaskView, "owner" | "creator" | "blockedBy">,
   currentMemberId: string | null,
 ) {
-  const on = useTaskConversationsOn() === true;
   const manager = useCanSetAnyTaskStatus();
-  const canEdit = on && canEditTaskRelations(task, currentMemberId, manager);
-  return { on, canEdit, canAddBlocker: canEdit && canAddBlocker(task.blockedBy) };
+  const canEdit = canEditTaskRelations(task, currentMemberId, manager);
+  return { canEdit, canAddBlocker: canEdit && canAddBlocker(task.blockedBy) };
 }
 
 /**
@@ -47,7 +42,7 @@ export function useTaskRelationAccess(
  * finishing or a blocker's status changes announce a new copy of this Task (its progress and
  * blockers) without moving its revision.
  */
-export function useTaskShow(task: TaskView, enabled: boolean): TaskDetailRelations {
+export function useTaskShow(task: TaskView): TaskDetailRelations {
   const execute = useServerFn(executeTask);
   const { conversationId, number } = task;
   const detail = useQuery({
@@ -67,7 +62,6 @@ export function useTaskShow(task: TaskView, enabled: boolean): TaskDetailRelatio
       });
       return { blocking: result.blocking ?? [], subtree: result.subtree ?? [] };
     },
-    enabled,
     placeholderData: (previous) => previous,
   });
   return detail.data ?? NO_DETAIL;
@@ -94,7 +88,7 @@ export function useTaskRelations({
   const writeTasks = useConversationTaskWrites();
   const queryClient = useQueryClient();
   const { conversationId, number } = task;
-  const shown = useTaskShow(task, access.on);
+  const shown = useTaskShow(task);
   const blockerRules = useMemo(() => blockerPickerRules(task, shown), [task, shown]);
   const parentRules = useMemo(() => parentPickerRules(task, shown), [task, shown]);
 

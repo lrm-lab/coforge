@@ -1,5 +1,4 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { taskConversationsEnabled } from "./task-conversations-gate.server";
 import { loadTaskRelations, relationsOf } from "./task-relations.server";
 import type {
   DiscussionCounts,
@@ -20,8 +19,7 @@ export async function discussionCounts(
   workspaceId: string,
   tasks: readonly Pick<TaskViewSource, "id" | "messageId" | "discussionConversationId">[],
 ): Promise<Map<string, DiscussionCounts>> {
-  // Only a Workspace with task conversations has either to count.
-  if (!tasks.length || !(await taskConversationsEnabled(db, { workspaceId }))) return new Map();
+  if (!tasks.length) return new Map();
   const conversations = tasks.flatMap((task) =>
     task.discussionConversationId ? [task.discussionConversationId] : [],
   );

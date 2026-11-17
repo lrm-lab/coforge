@@ -234,7 +234,7 @@ export function TaskDetailDialog({
   // The discussion is there only with a thread; the sub-tasks only once there are some.
   const tabs: TaskDetailTab[] = [
     ...(thread ? (["discussion"] as const) : []),
-    ...(relations.on && task.subtasks ? (["subtasks"] as const) : []),
+    ...(task.subtasks ? (["subtasks"] as const) : []),
     "history",
   ];
   const current = tabs.includes(tab) ? tab : tabs[0];
@@ -266,44 +266,38 @@ export function TaskDetailDialog({
                   onBack={stepBack}
                   onOpenRelated={onOpenRelated}
                 />
-                {(relations.on || follow || canDelete) && (
-                  <Dropdown.Root>
-                    <ButtonUtility
-                      tooltip={m.tasks_more_actions({ number: String(task.number) })}
-                      icon={MoreHorizontal}
-                      size="sm"
-                      color="tertiary"
-                      className={PHONE_BAR_BUTTON}
-                    />
-                    <Dropdown.Popover placement="bottom end">
-                      <Dropdown.Menu
-                        onAction={(key) => {
-                          if (key === "delete") void deleteTask();
-                          else if (key === "parent" || key === "blocker" || key === "subtask")
-                            setPicker(key);
-                        }}
-                      >
-                        {relations.on && (
-                          <Dropdown.Section>
-                            {taskRelationMenuItems({
-                              canEdit: relations.canEdit,
-                              canAddBlocker: relations.canAddBlocker,
-                              hasParent: task.parent != null,
-                            })}
-                          </Dropdown.Section>
-                        )}
-                        {(follow || canDelete) && (
-                          <Dropdown.Section
-                            className={cn(relations.on && "border-t border-secondary pt-1")}
-                          >
-                            {follow && taskFollowMenuItem(follow)}
-                            {canDelete && taskDeleteMenuItem()}
-                          </Dropdown.Section>
-                        )}
-                      </Dropdown.Menu>
-                    </Dropdown.Popover>
-                  </Dropdown.Root>
-                )}
+                <Dropdown.Root>
+                  <ButtonUtility
+                    tooltip={m.tasks_more_actions({ number: String(task.number) })}
+                    icon={MoreHorizontal}
+                    size="sm"
+                    color="tertiary"
+                    className={PHONE_BAR_BUTTON}
+                  />
+                  <Dropdown.Popover placement="bottom end">
+                    <Dropdown.Menu
+                      onAction={(key) => {
+                        if (key === "delete") void deleteTask();
+                        else if (key === "parent" || key === "blocker" || key === "subtask")
+                          setPicker(key);
+                      }}
+                    >
+                      <Dropdown.Section>
+                        {taskRelationMenuItems({
+                          canEdit: relations.canEdit,
+                          canAddBlocker: relations.canAddBlocker,
+                          hasParent: task.parent != null,
+                        })}
+                      </Dropdown.Section>
+                      {(follow || canDelete) && (
+                        <Dropdown.Section className="border-t border-secondary pt-1">
+                          {follow && taskFollowMenuItem(follow)}
+                          {canDelete && taskDeleteMenuItem()}
+                        </Dropdown.Section>
+                      )}
+                    </Dropdown.Menu>
+                  </Dropdown.Popover>
+                </Dropdown.Root>
                 <ButtonUtility
                   icon={XClose}
                   size="sm"

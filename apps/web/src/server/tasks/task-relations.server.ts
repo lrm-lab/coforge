@@ -9,7 +9,6 @@ import {
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { BROWSER_MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/mentions.server";
 import type { Transaction } from "./task-board-ports.server";
-import { taskRelationsEnabled } from "./task-conversations-gate.server";
 import {
   emptyRelations,
   FINISHED_TASK_STATUSES,
@@ -126,18 +125,9 @@ export const NOT_BLOCKED_WHERE = notBlockedWhere();
 export async function loadTaskRelations(
   db: Client,
   reader: TaskReader,
-  all: ReadonlyArray<{ id: string; conversationId: string; workspaceId: string }>,
+  tasks: ReadonlyArray<{ id: string; conversationId: string }>,
 ): Promise<Map<string, TaskRelations>> {
   const relations = new Map<string, TaskRelations>();
-  // A Workspace without Tasks v2 reads no relations: its views are as they were before them.
-  const on = new Map(
-    await Promise.all(
-      [...new Set(all.map((task) => task.workspaceId))].map(
-        async (workspaceId) => [workspaceId, await taskRelationsEnabled(db, workspaceId)] as const,
-      ),
-    ),
-  );
-  const tasks = all.filter((task) => on.get(task.workspaceId));
   if (!tasks.length) return relations;
   const ids = tasks.map((task) => task.id);
   const conversationOf = new Map(tasks.map((task) => [task.id, task.conversationId]));
@@ -220,9 +210,8 @@ export async function parentTasksOf(db: Client, tasks: readonly { id: string }[]
  * decides their `blocked`), its parent (its progress) and its subtasks (their `parent`). A write
  * that changes what these read announces their new copies with its own.
  */
-export async function relatedTasks(db: Client, task: { id: string; workspaceId: string }) {
+export async function relatedTasks(db: Client, task: { id: string }) {
   const taskId = task.id;
-  if (!(await taskRelationsEnabled(db, task.workspaceId))) return [];
   return db.task.findMany({
     where: {
       OR: [
@@ -264,7 +253,6 @@ export async function showRelations(
   reader: TaskReader,
   task: { id: string; conversationId: string; workspaceId: string },
 ): Promise<{ blocking?: TaskLink[]; subtree?: TaskTreeNode[] }> {
-  if (!(await taskRelationsEnabled(db, task.workspaceId))) return {};
   const from = task.conversationId;
   const [dependents, parentLinks] = await Promise.all([
     db.taskDependency.findMany({

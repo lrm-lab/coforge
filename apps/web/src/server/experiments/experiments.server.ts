@@ -5,7 +5,6 @@ import type {
   FeatureFlagContext,
 } from "#src/server/feature-flags/feature-flags.server";
 export const EXPERIMENTS = {
-  taskConversations: { flag: null, defaultEnabled: false, reload: false },
   drafts: { flag: null, defaultEnabled: true, reload: false },
   artifacts: { flag: null, defaultEnabled: false, reload: false },
   aiWorkbench: { flag: null, defaultEnabled: true, reload: false },
@@ -29,9 +28,6 @@ export type ExperimentsRepository = {
   write(workspaceId: string, key: string, enabled: boolean): Promise<void>;
 };
 export const EXPERIMENT_KEYS = Object.keys(EXPERIMENTS) as [ExperimentKey, ...ExperimentKey[]];
-export type ExperimentPreconditions = Partial<
-  Record<ExperimentKey, (workspaceId: string) => Promise<void>>
->;
 export class Experiments {
   constructor(
     private readonly repository: ExperimentsRepository,
@@ -39,7 +35,6 @@ export class Experiments {
       flag: FeatureFlag,
       context: FeatureFlagContext,
     ) => Promise<boolean>,
-    private readonly beforeEnable: ExperimentPreconditions = {},
   ) {}
   private async offered(key: ExperimentKey, workspace: FeatureFlagContext) {
     const { flag } = EXPERIMENTS[key];
@@ -74,7 +69,6 @@ export class Experiments {
   ): Promise<ExperimentView> {
     assertCanManageWorkspaceSettings(actorRole);
     if (!(await this.offered(key, workspace))) throw new AppError("NOT_FOUND");
-    if (enabled) await this.beforeEnable[key]?.(workspace.workspaceId);
     await this.repository.write(workspace.workspaceId, key, enabled);
     return { key, enabled, reload: EXPERIMENTS[key].reload };
   }
