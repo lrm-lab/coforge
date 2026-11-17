@@ -56,7 +56,7 @@
   "device_verify_not_authorized": "You cannot approve this code. Ask the Agent's owner or a Workspace admin.",
   "device_verify_agent_not_external": "This Agent is not an external Agent.",
   "device_verify_agent_unavailable": "This Agent is unavailable or disabled.",
-  "device_verify_credential_limit": "This Agent already has the maximum of 10 active keys. Revoke one first.",
+  "device_verify_credential_limit": "This Agent already holds as many active keys as it can. Revoke one first.",
   "device_verify_external_target": "Connecting to @{agent} in {workspace}",
   "device_verify_external_machine": "Requesting machine (self-reported)",
   "device_verify_external_machine_label": "Machine",

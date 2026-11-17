@@ -56,7 +56,7 @@
   "device_verify_not_authorized": "你无权批准这个设备码，请联系该 Agent 的创建者或工作区管理员。",
   "device_verify_agent_not_external": "这个 Agent 不是外部 Agent。",
   "device_verify_agent_unavailable": "这个 Agent 不可用或已停用。",
-  "device_verify_credential_limit": "这个 Agent 的有效密钥已达到 10 把上限，请先吊销旧密钥。",
+  "device_verify_credential_limit": "这个 Agent 的有效密钥已达上限，请先吊销一把旧密钥。",
   "device_verify_external_target": "将接入 {workspace} 的 @{agent}",
   "device_verify_external_machine": "请求接入的机器（由该机器自报）",
   "device_verify_external_machine_label": "机器",
