@@ -16,6 +16,13 @@ const notices: SystemNoticeSource[] = [
     body: "",
     system: { kind: "channel.member_added", params: { actor: alice, members: [dax, alice] } },
   },
+  {
+    body: "",
+    system: {
+      kind: "channel.coordinator_changed",
+      params: { channelId: "c1", channelName: "team", actor: alice, next: dax },
+    },
+  },
   { body: "Plain text from before notices had kinds.", system: undefined },
 ];
 
