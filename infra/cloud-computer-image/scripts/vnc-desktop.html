@@ -36,6 +36,15 @@
     rfb.addEventListener("disconnect", () => {
       if (document.body.contains(msg)) msg.textContent = "桌面连接已断开";
     });
+    document.addEventListener("paste", (ev) => {
+      const text = ev.clipboardData?.getData("text/plain");
+      if (!text) return;
+      ev.preventDefault();
+      try {
+        rfb.clipboardPasteFrom(text);
+      } catch {
+      }
+    });
   </script>
 </body>
 </html>

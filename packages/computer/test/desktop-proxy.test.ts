@@ -119,6 +119,14 @@ describe("desktop route", () => {
     expect(html).not.toContain("msg.remove()");
   });
 
+  test("a focused paste sends the local plain text into the remote clipboard", () => {
+    const html = adaptDesktopHtml(oldPage);
+    expect(html).toContain('addEventListener("paste"');
+    expect(html).toContain('getData("text/plain")');
+    expect(html).toContain("clipboardPasteFrom(text)");
+    expect(html).toContain("preventDefault()");
+  });
+
   test("the page title becomes the requested name, and markup in it stays text", () => {
     const page = "<title>云电脑桌面</title><script>ok</script>";
     expect(withDesktopTitle(page, "小明")).toBe("<title>小明</title><script>ok</script>");

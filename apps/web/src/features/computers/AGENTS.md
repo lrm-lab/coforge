@@ -53,7 +53,9 @@ These rules apply to `src/features/computers/`.
   `<COFORGE_CLOUD_DESKTOP_ORIGIN>/desktop/<computer id>/` in its own window when that
   deployment variable is set, and opening it again brings that window forward.
   The Agent profile Computer row embeds `/desktop/<computer id>/<agent id>/` in-page
-  (thumbnail → overlay; see `agent-desktop-thumbnail.tsx`). That origin is the
+  (thumbnail → overlay; see `agent-desktop-thumbnail.tsx`). Focused plain-text paste on
+  that desktop page is forwarded into the remote clipboard by the host adapter
+  (`packages/computer` `host/desktop-page.ts`); files and images are not. That origin is the
   deployment site; Caddy confirms the signed-in owner before proxying to the Swarm
   host. The address carries no token. Without the variable the control is absent. Formatting a cloud computer removes its service and disk,
   then places the same computer again. The owner must type its name; the server

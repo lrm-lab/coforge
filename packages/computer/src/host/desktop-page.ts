@@ -45,7 +45,16 @@ const RELATIVE_PAGE_SCRIPT = `
       try {
         previous?.disconnect();
       } catch {
-        /* the new session already replaced it */
+      }
+    });
+    document.addEventListener("paste", (ev) => {
+      if (!rfb) return;
+      const text = ev.clipboardData?.getData("text/plain");
+      if (!text) return;
+      ev.preventDefault();
+      try {
+        rfb.clipboardPasteFrom(text);
+      } catch {
       }
     });
     connect();
