@@ -15,6 +15,7 @@ import { SubtaskPickerDialog } from "./task-subtask-picker";
 import { BARE_CHIP, TaskProperty } from "./task-property";
 import { openBlockers, relationRefusal, type VisibleTaskName } from "./task-relation-edits";
 import { TaskBlockedByValue, TaskBlockingValue, TaskParentValue } from "./task-relation-lines";
+import { TaskDueMenu } from "./task-due-menu";
 import { TaskPriorityMenu } from "./task-priority-menu";
 import { TaskProjectMenu } from "./task-project-menu";
 import { TaskLabelsField } from "./task-labels";
@@ -183,6 +184,24 @@ export function TaskSection({
                 operation: "update",
                 number: task.number,
                 priority,
+                expectedRevision: task.revision,
+              })
+            }
+          />
+        </TaskProperty>
+        <TaskProperty label={m.tasks_due()} className="[[data-layout=chips]_&]:order-2">
+          <TaskDueMenu
+            dueAt={task.dueAt}
+            dueHasTime={task.dueHasTime}
+            dueState={task.dueState}
+            disabled={pending}
+            placement="left top"
+            onSelect={(dueAt, dueHasTime) =>
+              void run({
+                operation: "amend",
+                number: task.number,
+                dueAt,
+                ...(dueAt !== null && dueHasTime !== undefined && { dueHasTime }),
                 expectedRevision: task.revision,
               })
             }

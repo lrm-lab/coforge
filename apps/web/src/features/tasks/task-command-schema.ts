@@ -66,6 +66,8 @@ const taskCommandFields = z
     attachmentId: z.uuid().optional(),
     status: z.enum(TASK_READ_STATUSES).optional(),
     priority: z.enum(TASK_PRIORITY_LEVELS).optional(),
+    dueAt: z.iso.datetime().nullable().optional(),
+    dueHasTime: z.boolean().optional(),
     expectedRevision: z.number().int().nonnegative().optional(),
   })
   .strict();

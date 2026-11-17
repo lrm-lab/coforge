@@ -206,6 +206,64 @@ function zonedDateTime(value: Date | string, timeZone: string | null | undefined
   );
 }
 
+/** `value` as the wall time a `datetime-local` field edits in `timeZone` (viewer preference,
+ * then the browser's): `YYYY-MM-DDTHH:mm`. */
+export function localDateTimeInput(value: Date | string, timeZone: string | null | undefined) {
+  const zoned = zonedDateTime(value, timeZone);
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${zoned.year}-${pad(zoned.month)}-${pad(zoned.day)}T${pad(zoned.hour)}:${pad(zoned.minute)}`;
+}
+
+/** `value` as a `date` field (`YYYY-MM-DD`) in `timeZone`. Date-only deadlines (`dueHasTime ===
+ * false`) store the end of that day (next day 00:00), so we step back 1 ms to recover the day. */
+export function localDateInput(
+  value: Date | string,
+  timeZone: string | null | undefined,
+  dueHasTime = true,
+): string {
+  const adjusted = dueHasTime ? value : new Date(new Date(value).getTime() - 1);
+  const zoned = zonedDateTime(adjusted, timeZone);
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${zoned.year}-${pad(zoned.month)}-${pad(zoned.day)}`;
+}
+
+/** The instant a date-only field (`YYYY-MM-DD`) names as the end of that day (next day 00:00)
+ * in `timeZone`. */
+export function instantFromLocalDate(value: string, timeZone: string | null | undefined): string {
+  return Temporal.PlainDate.from(value)
+    .add({ days: 1 })
+    .toZonedDateTime(resolveTimeZone(timeZone, browserTimeZone()))
+    .toInstant()
+    .toString();
+}
+
+/** Formats a Task's due date: calendar day only when `dueHasTime === false`, date + time otherwise. */
+export function formatTaskDueForDisplay(
+  value: Date | string,
+  dueHasTime: boolean | undefined,
+  timeZone: string | null | undefined,
+  locale = typeof navigator === "undefined" ? "en-US" : navigator.language,
+  timeFormat: TimeFormat | null = null,
+): string {
+  if (dueHasTime === false) {
+    return formatCalendarDate(new Date(new Date(value).getTime() - 1), timeZone, locale);
+  }
+  return formatDateForDisplay(value, timeZone, locale, timeFormat);
+}
+
+/** The instant a `datetime-local` field's wall time names in `timeZone` (viewer preference,
+ * then the browser's); a wall time a daylight-saving change skips or repeats resolves as
+ * `toZonedDateTime` resolves it. Throws on text that is not a date-time. */
+export function instantFromLocalDateTime(
+  value: string,
+  timeZone: string | null | undefined,
+): string {
+  return Temporal.PlainDateTime.from(value)
+    .toZonedDateTime(resolveTimeZone(timeZone, browserTimeZone()))
+    .toInstant()
+    .toString();
+}
+
 export function formatRelativeTime(
   value: Date | string,
   now = new Date(),

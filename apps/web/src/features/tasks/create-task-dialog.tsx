@@ -23,6 +23,7 @@ import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "./task-assignment";
 import { CreateTaskProperties } from "./create-task-properties";
 import { TaskDialogWhere } from "./task-dialog-where";
 import { CreateTaskPhoneBar } from "./create-task-phone-bar";
+import { cn } from "#src/lib/utils";
 import { TaskStatusIcon } from "./task-status-icon";
 import { useTaskAssignmentAccess } from "./use-task-assignment-access";
 import { useLastTaskProject } from "./use-last-task-project";
@@ -161,6 +162,10 @@ export function CreateTaskDialog({
       ...(draft.assignee && { assignee: draft.assignee }),
       ...(draft.labels.length > 0 && { labels: draft.labels }),
       priority,
+      ...(draft.dueAt && {
+        dueAt: draft.dueAt,
+        ...(draft.dueHasTime !== undefined && { dueHasTime: draft.dueHasTime }),
+      }),
       ...(offersProject && { project: project?.slug ?? null }),
     };
     const key = JSON.stringify(made);

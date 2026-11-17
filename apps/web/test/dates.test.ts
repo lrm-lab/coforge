@@ -3,6 +3,8 @@ import { describe, expect, test } from "bun:test";
 import {
   formatMonthDay,
   formatMonthDayTime,
+  instantFromLocalDateTime,
+  localDateTimeInput,
   resolveTimeZone,
   startOfDay,
   validateTimeZone,
@@ -71,5 +73,38 @@ describe("month and day", () => {
       });
     expect(twoDigit("en", "12h")).toBe("Oct 29, 08:06 AM");
     expect(twoDigit("zh-CN", "24h")).toBe("10月29日 08:06");
+  });
+});
+
+describe("datetime-local field values", () => {
+  test("an instant reads as wall time in the named zone and back to the same instant", () => {
+    const iso = "2026-11-20T09:30:00.000Z";
+    // 09:30 UTC is 17:30 in Shanghai; the field edits that wall time, not the host's.
+    const wall = localDateTimeInput(iso, "Asia/Shanghai");
+    expect(wall).toBe("2026-11-20T17:30");
+    expect(instantFromLocalDateTime(wall, "Asia/Shanghai")).toBe("2026-11-20T09:30:00Z");
+    expect(localDateTimeInput(iso, "UTC")).toBe("2026-11-20T09:30");
+    expect(instantFromLocalDateTime("2026-11-20T09:30", "UTC")).toBe("2026-11-20T09:30:00Z");
+  });
+
+  test("a wall time a daylight-saving change repeats resolves to one instant", () => {
+    // New York falls back at 02:00 on 2026-11-01: 01:30 happens twice; `compatible` picks one.
+    const instant = instantFromLocalDateTime("2026-11-01T01:30", "America/New_York");
+    expect(instant).toBe("2026-11-01T05:30:00Z");
+  });
+
+  test("text that is not a date-time throws", () => {
+    expect(() => instantFromLocalDateTime("", "UTC")).toThrow();
+    expect(() => instantFromLocalDateTime("friday", "UTC")).toThrow();
+  });
+
+  test("date-only deadlines resolve to end-of-day in the named zone and format without time", async () => {
+    const { formatTaskDueForDisplay, instantFromLocalDate, localDateInput } =
+      await import("../src/lib/dates");
+    const instant = instantFromLocalDate("2026-11-20", "Asia/Shanghai");
+    expect(instant).toBe("2026-11-20T16:00:00Z");
+    expect(localDateInput(instant, "Asia/Shanghai", false)).toBe("2026-11-20");
+    expect(formatTaskDueForDisplay(instant, false, "Asia/Shanghai", "zh-CN")).toBe("2026.11.20");
+    expect(formatTaskDueForDisplay(instant, false, "Asia/Shanghai", "en-US")).toBe("Nov 20, 2026");
   });
 });

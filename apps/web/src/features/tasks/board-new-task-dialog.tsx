@@ -109,6 +109,10 @@ export function BoardNewTaskDialog({
             ...(draft.description && { description: draft.description }),
             project: draft.project ?? null,
             priority: draft.priority,
+            ...(draft.dueAt && {
+              dueAt: draft.dueAt,
+              ...(draft.dueHasTime !== undefined && { dueHasTime: draft.dueHasTime }),
+            }),
             ...(draft.labels && { labels: draft.labels }),
             ...(assignee(assignTo) && { assignee: assignee(assignTo) }),
             ...(column !== "todo" && { status: column }),
