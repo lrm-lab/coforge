@@ -48,3 +48,41 @@ test("memory refuses identity overrides, traversal, ambiguous flags and stale ve
   ])
     expect(() => parseMemoryArgs(args)).toThrow();
 });
+
+test("local listing preserves the archive filter and provides executable continuation and full-entry commands", async () => {
+  const requests: unknown[] = [];
+  const transport = {
+    memory: async (request: unknown) => {
+      requests.push(request);
+      return {
+        entries: [
+          {
+            key: "decision",
+            title: "Decision",
+            content: "preview",
+            source: "human",
+            applicability: "staging",
+            revision: "a".repeat(64),
+            status: "archived",
+            kind: "decision",
+            updatedAt: "2026-11-17T00:00:00Z",
+            path: "notes/knowledge/decision.md",
+          },
+        ],
+        incomplete: true,
+        nextOffset: 15,
+      };
+    },
+  } as unknown as MessageTransport;
+  const output = await run(["memory", "list", "--archived", "--offset", "10"], transport);
+  expect(requests).toEqual([{ operation: "list", archived: true, offset: 10 }]);
+  expect(output).toContain("coforge memory get --key decision");
+  expect(output).toContain("coforge memory list --archived --offset 15");
+  for (const args of [
+    ["list", "--query", "x"],
+    ["list", "--archived", "--archived"],
+    ["list", "--offset", "-1"],
+    ["search", "--query", "x", "--archived"],
+  ])
+    expect(() => parseMemoryArgs(args)).toThrow();
+});

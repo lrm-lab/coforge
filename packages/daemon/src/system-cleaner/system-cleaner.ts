@@ -1,3 +1,4 @@
+import { measureKnowledgeSize } from "#src/local-memory/knowledge-size";
 import { getLogger } from "@logtape/logtape";
 import { join } from "node:path";
 import type { AgentAppItem, MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
@@ -48,31 +49,28 @@ export type { DiskMeasurement, MemoryMeasurement } from "./system-cleaner-measur
 
 export type CleanerClock = ReminderClock;
 
-/** The owner Agent's App Inbox, as far as the cleaner uses it. */
 export type CleanerInbox = Readonly<{
   upsert(ownerAgentId: string, item: MintAppItem): Promise<AgentAppItem>;
   remove(ownerAgentId: string, itemId: string): Promise<boolean>;
 }>;
 
 export type SystemCleanerOptions = Readonly<{
-  /** The directory holding every Agent workspace: `<agentsDirectory>/<agentId>/MEMORY.md`. */
   agentsDirectory: string;
   inbox: CleanerInbox;
-  /** Tells a running, idle owner about `itemId`; never starts a stopped one. */
   wake(ownerAgentId: string, itemId: string): Promise<void>;
   clock?: CleanerClock;
   measurementTimeoutMs?: number;
   measureMemoryFile?(path: string): Promise<MemoryMeasurement>;
+  measureKnowledgeSize?(root: string): Promise<MemoryMeasurement>;
   measureDiskSpace?(path: string): Promise<DiskMeasurement>;
 }>;
 
-/** One owner's applied config; a new config replaces the whole object, so identity fences out a
- * period or measurement started under an older one. */
 type OwnerState = { readonly config: CleanerConfig; timer: unknown };
 type MemoryWakeReason = "first" | "cooldown_elapsed" | "grew";
 type DueHints = {
   memory?: MemoryWakeReason;
   activeContext?: MemoryWakeReason;
+  knowledge?: MemoryWakeReason;
   disk?: { availableBytes: number };
 };
 type PeriodFileRow = Readonly<{
@@ -81,6 +79,7 @@ type PeriodFileRow = Readonly<{
   bytes?: number;
   not_established?: string;
   due?: MemoryWakeReason;
+  incomplete?: boolean;
 }>;
 type PeriodDiskRow = Readonly<{
   available_bytes?: number;
@@ -90,19 +89,16 @@ type PeriodDiskRow = Readonly<{
   not_established?: string;
 }>;
 
-/**
- * The System Cleaner: per owner Agent, every configured interval it measures MEMORY.md,
- * notes/active-context.md and the disk holding the Agent workspaces, and marks a hint due. A due
- * hint is presented only when the owner goes from Working to Idle, as a transient App Inbox item,
- * and wakes only a running idle owner. An owner with no config has no cleaner. All state is
- * process-local.
- */
 export class SystemCleaner {
   readonly #states = new Map<string, OwnerState>();
   readonly #due = new Map<string, DueHints>();
+  readonly #memoryChanged = new Set<string>();
+  readonly #idleChecks = new Set<string>();
+  readonly #idleAgain = new Set<string>();
   readonly #fileHintPresented: Record<FileKind, Map<string, { atMs: number; bytes: number }>> = {
     memory: new Map(),
     activeContext: new Map(),
+    knowledge: new Map(),
   };
   readonly #cleanupTipAtMs = new Map<string, number>();
   readonly #diskTipAtMs = new Map<string, number>();
@@ -110,14 +106,10 @@ export class SystemCleaner {
   readonly #pending = new Set<Promise<void>>();
   readonly #clock: CleanerClock;
   readonly #measurementTimeoutMs: number;
-  readonly #measureMemoryFile: (path: string) => Promise<MemoryMeasurement>;
-  readonly #measureDiskSpace: (path: string) => Promise<DiskMeasurement>;
 
   constructor(private readonly options: SystemCleanerOptions) {
     this.#clock = options.clock ?? defaultClock;
     this.#measurementTimeoutMs = options.measurementTimeoutMs ?? DEFAULT_MEASUREMENT_TIMEOUT_MS;
-    this.#measureMemoryFile = options.measureMemoryFile ?? measureMemoryFile;
-    this.#measureDiskSpace = options.measureDiskSpace ?? measureDiskSpace;
   }
 
   applyConfig(raw: unknown): CleanerConfigResult {
@@ -132,7 +124,6 @@ export class SystemCleaner {
     return this.#apply(parsed);
   }
 
-  /** The cloud's authoritative config for exactly one owner; `null` means it has none. */
   replaceOwnerSnapshot(ownerAgentId: string, raw: unknown | null): CleanerConfigResult {
     if (!isSafePathScope(ownerAgentId))
       return { kind: "invalid", reason: "owner_agent_id_invalid" };
@@ -164,6 +155,8 @@ export class SystemCleaner {
     }
     this.#cancelTimer(existing);
     this.#dropItems(parsed.ownerAgentId);
+    this.#memoryChanged.delete(parsed.ownerAgentId);
+    this.#idleAgain.delete(parsed.ownerAgentId);
     const state: OwnerState = { config: parsed, timer: undefined };
     this.#states.set(parsed.ownerAgentId, state);
     if (parsed.enabled) this.#arm(state);
@@ -179,22 +172,41 @@ export class SystemCleaner {
     return { kind: "applied", activeSchedules: state.timer === undefined ? 0 : 1 };
   }
 
-  /** The owner just finished a turn: present whatever its last period marked due. */
-  onAgentWorkingToIdle(ownerAgentId: string): void {
-    const due = this.#due.get(ownerAgentId);
-    if (!due) return;
-    this.#due.delete(ownerAgentId);
-    const state = this.#states.get(ownerAgentId);
-    if (!state?.config.enabled) return;
-    this.#track(this.#presentDue(ownerAgentId, state, due), ownerAgentId);
+  onMemoryWrite(ownerAgentId: string): void {
+    if (this.#states.get(ownerAgentId)?.config.enabled) this.#memoryChanged.add(ownerAgentId);
   }
 
-  /** Cancels every schedule and drops every item: this process stops being the cleaner. */
+  onAgentWorkingToIdle(ownerAgentId: string): void {
+    const state = this.#states.get(ownerAgentId);
+    if (!state?.config.enabled) return;
+    if (this.#idleChecks.has(ownerAgentId)) {
+      this.#idleAgain.add(ownerAgentId);
+      return;
+    }
+    if (!this.#memoryChanged.has(ownerAgentId) && !this.#due.has(ownerAgentId)) return;
+    this.#idleChecks.add(ownerAgentId);
+    this.#track(
+      this.#checkAtIdle(ownerAgentId, state).finally(() => {
+        this.#idleChecks.delete(ownerAgentId);
+        if (this.#idleAgain.delete(ownerAgentId)) this.onAgentWorkingToIdle(ownerAgentId);
+      }),
+      ownerAgentId,
+    );
+  }
+
+  async #checkAtIdle(ownerAgentId: string, state: OwnerState): Promise<void> {
+    if (this.#memoryChanged.delete(ownerAgentId))
+      await Promise.all(FILE_KINDS.map((kind) => this.#checkFile(ownerAgentId, state, kind)));
+    if (!this.#isCurrent(state)) return;
+    const due = this.#due.get(ownerAgentId);
+    this.#due.delete(ownerAgentId);
+    if (due) await this.#presentDue(ownerAgentId, state, due);
+  }
+
   clear(): void {
     for (const ownerAgentId of this.#states.keys()) this.#removeOwner(ownerAgentId);
   }
 
-  /** Resolves once every measurement, presentation and drop already started has finished. */
   async settled(): Promise<void> {
     while (this.#pending.size) await Promise.all(this.#pending);
   }
@@ -207,6 +219,8 @@ export class SystemCleaner {
     this.#diskTipAtMs.delete(ownerAgentId);
     this.#diskLowTipped.delete(ownerAgentId);
     this.#due.delete(ownerAgentId);
+    this.#memoryChanged.delete(ownerAgentId);
+    this.#idleAgain.delete(ownerAgentId);
   }
 
   #markDue(ownerAgentId: string, hints: DueHints): void {
@@ -217,8 +231,7 @@ export class SystemCleaner {
     const due = this.#due.get(ownerAgentId);
     if (!due) return;
     delete due[kind];
-    if (due.memory === undefined && due.activeContext === undefined && due.disk === undefined)
-      this.#due.delete(ownerAgentId);
+    if (Object.values(due).every((value) => value === undefined)) this.#due.delete(ownerAgentId);
   }
 
   #track(work: Promise<unknown>, ownerAgentId: string): void {
@@ -249,7 +262,6 @@ export class SystemCleaner {
     state.timer = undefined;
   }
 
-  /** Only an enabled config is ever armed, and a new config replaces its state. */
   async #runPeriod(state: OwnerState): Promise<void> {
     const { ownerAgentId } = state.config;
     if (this.#states.get(ownerAgentId) !== state) return;
@@ -258,7 +270,7 @@ export class SystemCleaner {
       Promise.all(FILE_KINDS.map((kind) => this.#checkFile(ownerAgentId, state, kind))),
       this.#checkDisk(ownerAgentId, state),
     ]);
-    if (!this.#isCurrent(ownerAgentId, state)) return;
+    if (!this.#isCurrent(state)) return;
     logger.info("System Cleaner period measured", {
       event: "system_cleaner:period",
       agent_id: ownerAgentId,
@@ -268,8 +280,8 @@ export class SystemCleaner {
     });
   }
 
-  #isCurrent(ownerAgentId: string, state: OwnerState): boolean {
-    return this.#states.get(ownerAgentId) === state;
+  #isCurrent(state: OwnerState): boolean {
+    return this.#states.get(state.config.ownerAgentId) === state;
   }
 
   #filePath(ownerAgentId: string, kind: FileKind): string {
@@ -278,11 +290,18 @@ export class SystemCleaner {
 
   #measureFile(ownerAgentId: string, relativePath: string): Promise<MemoryMeasurement> {
     return withMeasurementTimeout(this.#clock, this.#measurementTimeoutMs, () =>
-      this.#measureMemoryFile(join(this.options.agentsDirectory, ownerAgentId, relativePath)),
+      relativePath === "notes/knowledge"
+        ? (this.options.measureKnowledgeSize ?? measureKnowledgeSize)(
+            join(this.options.agentsDirectory, ownerAgentId),
+          )
+        : (this.options.measureMemoryFile ?? measureMemoryFile)(
+            join(this.options.agentsDirectory, ownerAgentId, relativePath),
+          ),
     );
   }
 
   #fileThreshold(state: OwnerState, kind: FileKind): number {
+    if (kind === "knowledge") return Math.max(128 * 1024, state.config.thresholdBytes * 8);
     return kind === "memory"
       ? state.config.thresholdBytes
       : state.config.activeContextThresholdBytes;
@@ -295,12 +314,13 @@ export class SystemCleaner {
   ): Promise<PeriodFileRow | undefined> {
     const hint = FILE_HINTS[kind];
     const thresholdBytes = this.#fileThreshold(state, kind);
+    const measurement = await this.#measureFile(ownerAgentId, hint.path);
     const row: PeriodFileRow = {
+      ...(measurement.kind === "measured" && measurement.incomplete ? { incomplete: true } : {}),
       file: this.#filePath(ownerAgentId, kind),
       threshold_bytes: thresholdBytes,
     };
-    const measurement = await this.#measureFile(ownerAgentId, hint.path);
-    if (!this.#isCurrent(ownerAgentId, state)) return undefined;
+    if (!this.#isCurrent(state)) return undefined;
     if (measurement.kind === "not_established" || measurement.bytes <= thresholdBytes) {
       this.#clearDue(ownerAgentId, kind);
       this.#dropItems(ownerAgentId, hint.notificationClass);
@@ -327,7 +347,7 @@ export class SystemCleaner {
 
   async #checkDisk(ownerAgentId: string, state: OwnerState): Promise<PeriodDiskRow | undefined> {
     const measurement = await withMeasurementTimeout(this.#clock, this.#measurementTimeoutMs, () =>
-      this.#measureDiskSpace(this.options.agentsDirectory),
+      (this.options.measureDiskSpace ?? measureDiskSpace)(this.options.agentsDirectory),
     );
     if (this.#states.get(ownerAgentId) !== state) return undefined;
     if (measurement.kind === "not_established") return { not_established: measurement.reason };
@@ -362,7 +382,7 @@ export class SystemCleaner {
     for (const kind of FILE_KINDS) {
       if (due[kind] === undefined) continue;
       const result = await this.#presentFileHint(ownerAgentId, state, kind);
-      if (!this.#isCurrent(ownerAgentId, state)) return;
+      if (!this.#isCurrent(state)) return;
       if (result) {
         minted.push(result.item);
         presentedFiles.push({
@@ -390,7 +410,7 @@ export class SystemCleaner {
             ? CLEANUP_TIP_SUMMARY
             : `Only ${formatBytes(due.disk.availableBytes)} of disk space is left. ${CLEANUP_TIP_SUMMARY}`,
       });
-      if (!this.#isCurrent(ownerAgentId, state)) return;
+      if (!this.#isCurrent(state)) return;
       if (tip) {
         minted.push(tip);
         this.#cleanupTipAtMs.set(ownerAgentId, nowMs);
@@ -410,12 +430,12 @@ export class SystemCleaner {
       })),
       memory_wake_reason: due.memory,
       active_context_wake_reason: due.activeContext,
+      knowledge_wake_reason: due.knowledge,
       disk_low: due.disk !== undefined,
     });
     await this.options.wake(ownerAgentId, first.itemId);
   }
 
-  /** Remeasures first: the Agent may have trimmed the file during the turn. */
   async #presentFileHint(
     ownerAgentId: string,
     state: OwnerState,
@@ -423,7 +443,7 @@ export class SystemCleaner {
   ): Promise<{ item: AgentAppItem; bytes: number; thresholdBytes: number } | undefined> {
     const hint = FILE_HINTS[kind];
     const measurement = await this.#measureFile(ownerAgentId, hint.path);
-    if (!this.#isCurrent(ownerAgentId, state)) return undefined;
+    if (!this.#isCurrent(state)) return undefined;
     const { intervalMs, revision } = state.config;
     const thresholdBytes = this.#fileThreshold(state, kind);
     if (measurement.kind === "not_established" || measurement.bytes <= thresholdBytes) {
@@ -438,12 +458,18 @@ export class SystemCleaner {
       });
       return undefined;
     }
+    if (!this.#fileWakeReason(kind, ownerAgentId, measurement.bytes)) return undefined;
     const item = await this.#mint(ownerAgentId, {
       appId: SYSTEM_CLEANER_APP_ID,
       notificationClass: hint.notificationClass,
       sourceRef: { kind: hint.sourceKind, id: ownerAgentId, revision: String(revision) },
-      title: `${hint.label} has grown to ${formatBytes(measurement.bytes)} (limit ${formatBytes(thresholdBytes)}); next check in ${formatInterval(intervalMs)}`,
-      summary: `${hint.guidance} ${raiseLimitAction(hint, thresholdBytes)}`,
+      title: measurement.incomplete
+        ? `${hint.label} inspection reached its file limit; continue in bounded batches`
+        : `${hint.label} has grown to ${formatBytes(measurement.bytes)} (limit ${formatBytes(thresholdBytes)}); next check in ${formatInterval(intervalMs)}`,
+      summary:
+        kind === "knowledge"
+          ? hint.guidance
+          : `${hint.guidance} ${raiseLimitAction(hint, thresholdBytes)}`,
     });
     if (!item) return undefined;
     this.#fileHintPresented[kind].set(ownerAgentId, {
@@ -467,7 +493,6 @@ export class SystemCleaner {
     }
   }
 
-  /** Drops the owner's items of one class, or of all of them. */
   #dropItems(ownerAgentId: string, notificationClass?: string): void {
     for (const kind of FILE_KINDS)
       if (

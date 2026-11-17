@@ -17,6 +17,12 @@ Rules for `src/system-cleaner/`. They extend `packages/daemon/AGENTS.md`.
   (`thresholdBytes` for MEMORY.md, `activeContextThresholdBytes` for the Active Context) and
   each with its own hint item, class and wording: what to trim differs between an index and a
   current state. Never share one limit or one item between them.
+- Successful local memory saves and archives request an inspection at the next idle boundary,
+  coalescing writes and repeated idle callbacks. Reads and failed writes request no inspection.
+- Active `notes/knowledge/` size has its own transient hint, excluding archived entries and history.
+  Its soft threshold is max(128 KiB, eight times MEMORY.md's configured threshold); inspect no more
+  than 512 directory entries, eight file prefixes at once, and report incomplete scans explicitly.
+  Incompleteness alone must not trigger a size hint without observed active bytes over the threshold.
 - A period only measures and marks a hint due, then logs one `system_cleaner:period` record with
   each file's bytes or `not_established` reason, its threshold and due mark, and the disk
   reading. Present it only from
@@ -31,7 +37,7 @@ Rules for `src/system-cleaner/`. They extend `packages/daemon/AGENTS.md`.
   forgets them along with every other piece of cleaner state.
 - Record a tip's timestamp only after its item was minted. A mint the inbox refuses is logged
   and dropped, never thrown.
-- A hint is the only signal that a file is over its limit: the cleaner never creates a reminder
+- A hint is the cleaner's signal that memory needs a bounded review: it never creates a reminder
   and never wakes an Agent just to tidy memory. Existing reminders belong to their owner.
 - The daemon never edits or deletes workspace files for a hint. The disk item points at the
   `workspace-cleanup` Agent Manual topic; keep that slug in step with

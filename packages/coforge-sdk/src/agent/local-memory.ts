@@ -5,6 +5,7 @@ export const MEMORY_KINDS = ["fact", "decision", "preference", "experience"] as 
 export type MemoryKind = (typeof MEMORY_KINDS)[number];
 export type LocalMemoryCommand =
   | { operation: "search"; query: string; offset?: number }
+  | { operation: "list"; offset?: number; archived?: boolean }
   | { operation: "get"; key: string }
   | { operation: "history"; key: string }
   | { operation: "archive"; key: string; revision: string }
@@ -91,17 +92,18 @@ export function decodeLocalMemoryCommand(value: unknown): LocalMemoryCommand {
   };
   const operation = text("operation", 20);
   const fields =
-    operation === "search"
-      ? ["query", "offset"]
-      : operation === "save"
-        ? ["key", "revision", "title", "content", "source", "kind", "applicability"]
-        : operation === "archive"
-          ? ["key", "revision"]
-          : ["key"];
+    operation === "list"
+      ? ["offset", "archived"]
+      : operation === "search"
+        ? ["query", "offset"]
+        : operation === "save"
+          ? ["key", "revision", "title", "content", "source", "kind", "applicability"]
+          : operation === "archive"
+            ? ["key", "revision"]
+            : ["key"];
   if (Object.keys(value).some((key) => key !== "operation" && !fields.includes(key)))
     throw new Error("invalid_memory_field");
-  if (operation === "search") {
-    const query = text("query", 500);
+  if (operation === "search" || operation === "list") {
     const offset = value.offset;
     if (
       offset !== undefined &&
@@ -111,7 +113,15 @@ export function decodeLocalMemoryCommand(value: unknown): LocalMemoryCommand {
         offset > 100_000)
     )
       throw new Error("invalid_memory_offset");
-    return { operation, query, ...(offset === undefined ? {} : { offset }) };
+    const pagination = offset === undefined ? {} : { offset };
+    if (operation === "search") return { operation, query: text("query", 500), ...pagination };
+    if (value.archived !== undefined && typeof value.archived !== "boolean")
+      throw new Error("invalid_memory_archived");
+    return {
+      operation,
+      ...pagination,
+      ...(value.archived === undefined ? {} : { archived: value.archived }),
+    };
   }
   const key = text("key", 80);
   if (!/^[a-z0-9][a-z0-9_-]*$/.test(key)) throw new Error("invalid_memory_key");

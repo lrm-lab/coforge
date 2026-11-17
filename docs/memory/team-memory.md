@@ -13,6 +13,13 @@ English terms and Chinese character pairs. A bounded summary accompanies fresh s
 that report compaction receive a smaller recovery block with the next real input. No extra model
 turn starts solely to maintain memory.
 
+When the existing System Cleaner is configured and enabled, successful local writes request a
+size check at the next idle boundary. Large active knowledge collections receive a bounded-review
+hint alongside the existing startup-file hints; archived knowledge and history stay retained.
+The [manual](../../apps/web/src/server/agents/manual/topics/memory.md) defines the limits, cooldown
+and five-entry maintenance batches. Startup excerpts link to paginated local listings and search;
+full evidence remains available by key.
+
 ## Workspace memory
 
 `coforge memory <operation> --scope team` uses the current Agent's authenticated workspace.

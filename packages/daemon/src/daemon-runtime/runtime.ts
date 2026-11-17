@@ -1304,13 +1304,11 @@ export class DaemonRuntime {
   get agentContext() {
     return this.#localQueries.context.bind(this.#localQueries);
   }
-  readonly #localMemory = new LocalMemoryRuntime(
+  readonly agentMemory = new LocalMemoryRuntime(
     (context, key) => this.#authorizedAgent(context, key),
     () => this.#connection,
-  );
-  get agentMemory() {
-    return this.#localMemory.execute.bind(this.#localMemory);
-  }
+    (id) => this.systemCleaner.onMemoryWrite(id),
+  ).execute;
   get computerUpdateNotice() {
     return this.#localQueries.computerUpdateNotice.bind(this.#localQueries);
   }

@@ -32,6 +32,10 @@ Each file has its own limit and its own item, because each is trimmed differentl
 - **`notes/active-context.md`** — this is the current state, not a log: overwrite it with the next
   step, the blocker and how far you got.
 
+Large active knowledge under `notes/knowledge/` has a separate bounded-review hint. Read
+`coforge manual get memory` and inspect at most five entries after your task. Archiving retains
+history; never delete important knowledge just to reduce its size.
+
 If a file really needs to be larger, raise the limit its item names:
 
 - `coforge app config --app system.cleaner` shows the current `threshold_bytes` (MEMORY.md),

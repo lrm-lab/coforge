@@ -158,12 +158,11 @@ describe("SystemCleaner MEMORY.md hint", () => {
         action: { kind: "run_command", commandId: "app.config" },
         title: "MEMORY.md has grown to 70.0 KiB (limit 64.0 KiB); next check in 1h",
         summary:
-          "Merge duplicates; move long text to notes. Write facts from their source, not context; stale needs evidence; a person's decision changes only when they change it. To allow more, double the limit (or pick a lower value) with coforge app config --app system.cleaner --set threshold_bytes=131072",
+          "At task end, merge duplicates; move details to notes with pointers. Keep sourced facts and people's decisions. See coforge manual get memory. To allow more, double the limit (or pick a lower value) with coforge app config --app system.cleaner --set threshold_bytes=131072",
       }),
     ]);
     expect(wakes).toEqual([{ agentId: OWNER, itemId: MEMORY_ITEM }]);
 
-    // Presented once: the next idle transition has nothing due.
     await idle();
     expect(wakes).toHaveLength(1);
   });
@@ -175,7 +174,7 @@ describe("SystemCleaner MEMORY.md hint", () => {
     await period();
     await idle();
     expect((await items()).find((item) => item.itemId === MEMORY_ITEM)?.summary).toBe(
-      "Merge duplicates; move long text to notes. Write facts from their source, not context; stale needs evidence; a person's decision changes only when they change it. To allow more, raise the limit to its maximum (or pick a lower value) with coforge app config --app system.cleaner --set threshold_bytes=1073741824",
+      "At task end, merge duplicates; move details to notes with pointers. Keep sourced facts and people's decisions. See coforge manual get memory. To allow more, raise the limit to its maximum (or pick a lower value) with coforge app config --app system.cleaner --set threshold_bytes=1073741824",
     );
 
     cleaner.applyConfig(config({ revision: 2, thresholdBytes: GIB }));
@@ -183,7 +182,7 @@ describe("SystemCleaner MEMORY.md hint", () => {
     await period();
     await idle();
     expect((await items()).find((item) => item.itemId === MEMORY_ITEM)?.summary).toBe(
-      "Merge duplicates; move long text to notes. Write facts from their source, not context; stale needs evidence; a person's decision changes only when they change it. The limit is at its maximum; view or lower it with coforge app config --app system.cleaner",
+      "At task end, merge duplicates; move details to notes with pointers. Keep sourced facts and people's decisions. See coforge manual get memory. The limit is at its maximum; view or lower it with coforge app config --app system.cleaner",
     );
   });
 
@@ -227,7 +226,6 @@ describe("SystemCleaner MEMORY.md hint", () => {
     await idle();
     expect(wakes).toHaveLength(1);
 
-    // Still over, not grown enough, within 24 hours: cooldown.
     measured.memory = 99 * KIB;
     await period();
     await idle();
@@ -238,7 +236,6 @@ describe("SystemCleaner MEMORY.md hint", () => {
     await idle();
     expect(wakes).toHaveLength(2);
 
-    // Not grown since the last hint: only the 24-hour cooldown brings it back.
     await period(DAY_MS - HOUR_MS);
     await idle();
     expect(wakes).toHaveLength(2);
@@ -274,6 +271,11 @@ describe("SystemCleaner period log", () => {
           not_established: "missing",
           threshold_bytes: 4 * KIB,
         },
+        {
+          file: join("/agents-root", OWNER, "notes", "knowledge"),
+          bytes: 0,
+          threshold_bytes: 512 * KIB,
+        },
       ],
       disk: { available_bytes: 200 * GIB, total_bytes: 500 * GIB, low: false },
     });
@@ -303,6 +305,11 @@ describe("SystemCleaner period log", () => {
           bytes: 5 * KIB,
           threshold_bytes: 4 * KIB,
           due: "first",
+        },
+        {
+          file: join("/agents-root", OWNER, "notes", "knowledge"),
+          bytes: 0,
+          threshold_bytes: 512 * KIB,
         },
       ],
       disk: { available_bytes: 10 * GIB, total_bytes: 500 * GIB, low: true, due: true },

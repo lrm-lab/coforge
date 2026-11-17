@@ -7,9 +7,14 @@ export class LocalMemoryRuntime {
   constructor(
     private readonly authorize: (context: string, key: string) => string,
     private readonly workspace: () => { workspaceRoot: string; workspaceId: string },
+    private readonly onWrite?: (agentId: string) => void,
   ) {}
 
-  execute(context: string, request: LocalMemoryCommand, key: string): Promise<LocalMemoryResult> {
+  execute = (
+    context: string,
+    request: LocalMemoryCommand,
+    key: string,
+  ): Promise<LocalMemoryResult> => {
     const agentId = this.authorize(context, key);
     const workspace = this.workspace();
     let store = this.#stores.get(agentId);
@@ -24,12 +29,19 @@ export class LocalMemoryRuntime {
     this.#stores.delete(agentId);
     this.#stores.set(agentId, store);
     store.active++;
-    return store.memory.execute(request).finally(() => {
-      store.active--;
-      for (const [id, candidate] of this.#stores) {
-        if (this.#stores.size <= 32) break;
-        if (candidate.active === 0) this.#stores.delete(id);
-      }
-    });
-  }
+    return store.memory
+      .execute(request)
+      .then((result) => {
+        if (request.operation === "save" || request.operation === "archive")
+          this.onWrite?.(agentId);
+        return result;
+      })
+      .finally(() => {
+        store.active--;
+        for (const [id, candidate] of this.#stores) {
+          if (this.#stores.size <= 32) break;
+          if (candidate.active === 0) this.#stores.delete(id);
+        }
+      });
+  };
 }
