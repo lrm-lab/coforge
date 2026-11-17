@@ -174,13 +174,23 @@ command -v gzip >/dev/null 2>&1 || {
 }
 fi
 if [ -z "$target" ]; then
-case "$(uname -s)-$(uname -m)" in
-  Linux-x86_64) target=linux-x64 ;;
-  Linux-aarch64|Linux-arm64) target=linux-arm64 ;;
-  Darwin-x86_64) target=darwin-x64 ;;
-  Darwin-arm64) target=darwin-arm64 ;;
-  *) echo "install.sh: unsupported platform" >&2; exit 1 ;;
-esac
+  sysctl_bin=/usr/sbin/sysctl
+  if [ "$test_mode" = "1" ] && [ -n "${COFORGE_INSTALLER_SYSCTL:-}" ]; then
+    sysctl_bin=$COFORGE_INSTALLER_SYSCTL
+  fi
+  case "$(uname -s)-$(uname -m)" in
+    Linux-x86_64) target=linux-x64 ;;
+    Linux-aarch64|Linux-arm64) target=linux-arm64 ;;
+    Darwin-x86_64)
+      if [ "$("$sysctl_bin" -in hw.optional.arm64 2>/dev/null || true)" = "1" ]; then
+        target=darwin-arm64
+      else
+        target=darwin-x64
+      fi
+      ;;
+    Darwin-arm64) target=darwin-arm64 ;;
+    *) echo "install.sh: unsupported platform" >&2; exit 1 ;;
+  esac
 fi
 case "$target" in
   linux-x64) platform='Linux x64' ;;
@@ -225,6 +235,10 @@ done_step() {
 }
 download_failed_status=75
 download_failure() {
+  case "$1" in
+    35) echo "install.sh: TLS handshake failed (curl exit code 35); check your firewall, VPN, or corporate TLS-inspection proxy" >&2 ;;
+    60) echo "install.sh: TLS certificate verification failed (curl exit code 60); if a corporate firewall or proxy intercepts HTTPS, trust its root CA or set CURL_CA_BUNDLE" >&2 ;;
+  esac
   if [ "$1" -ne 63 ] && { [ -n "$prepare_directory" ] || [ "$resolve_only" -eq 1 ]; }; then
     return "$download_failed_status"
   fi

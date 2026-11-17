@@ -96,11 +96,20 @@ if (-not ($feedUrl.StartsWith("https://") -or ($testMode -and $feedUrl.StartsWit
 
 $curlProto = if ($testMode -and $feedUrl.StartsWith("http://")) { "=http,https" } else { "=https" }
 if ([string]::IsNullOrEmpty($Target)) {
-  $architecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
+  # Interactive Windows PowerShell 5.1 loads PSReadLine, whose RuntimeInformation stub omits
+  # OSArchitecture ($null.ToString()). PROCESSOR_ARCHITEW6432 names the native OS architecture
+  # under WOW64; PROCESSOR_ARCHITECTURE names it in native processes.
+  $rawArchitecture = if (-not [string]::IsNullOrEmpty($env:PROCESSOR_ARCHITEW6432)) {
+    $env:PROCESSOR_ARCHITEW6432
+  } else {
+    [string]$env:PROCESSOR_ARCHITECTURE
+  }
+  $architecture = $rawArchitecture.Trim().ToLowerInvariant()
   $Target = switch ($architecture) {
+    "amd64" { "windows-x64" }
     "x64" { "windows-x64" }
     "arm64" { "windows-arm64" }
-    default { throw "install.ps1: unsupported Windows architecture: $architecture" }
+    default { throw "install.ps1: unsupported Windows architecture: $rawArchitecture" }
   }
 }
 $platform = switch -CaseSensitive ($Target) {
@@ -151,6 +160,14 @@ function Get-CoforgeObject([string]$Uri, [string]$OutFile, [long]$MaxBytes, [swi
   $curlExit = $LASTEXITCODE
   if ($curlExit -eq 63) {
     throw "install.ps1: download failed with curl exit code $curlExit"
+  }
+  if ($curlExit -in @(35, 60)) {
+    $tlsHint = if ($curlExit -eq 60) {
+      "TLS certificate verification failed; if a corporate firewall or proxy intercepts HTTPS, install its root CA in the Windows certificate store or set CURL_CA_BUNDLE"
+    } else {
+      "TLS handshake failed; check your firewall, VPN, or corporate TLS-inspection proxy"
+    }
+    Exit-CoforgeDownload "install.ps1: download failed with curl exit code $curlExit ($tlsHint)"
   }
   if ($curlExit -ne 0) {
     Exit-CoforgeDownload "install.ps1: download failed with curl exit code $curlExit"
