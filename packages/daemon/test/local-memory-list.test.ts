@@ -105,7 +105,7 @@ test("a manually edited timestamp cannot stall a listing page and full reads kee
   const path = join(root, "notes/knowledge/fact.md");
   const lines = (await Bun.file(path).text()).split("\n");
   const header = JSON.parse(lines[1]!);
-  header.updatedAt = "2026-11-17" + " ".repeat(12_000);
+  header.updatedAt = "Tue, 17 Nov 2026 00:00:00 GMT" + " ".repeat(12_000);
   lines[1] = JSON.stringify(header);
   await Bun.write(path, lines.join("\n"));
   const listed = await memory.execute({ operation: "list" });

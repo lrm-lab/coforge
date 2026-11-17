@@ -50,7 +50,7 @@ export const FILE_HINTS: Readonly<Record<FileKind, FileHint>> = {
     label: "notes/knowledge/",
     thresholdKey: "threshold_bytes",
     guidance:
-      "After your task, inspect at most 5 entries with coforge memory list. Merge verified duplicates, archive only confirmed obsolete facts; keep sources, important decisions and history. Never delete for size alone. See coforge manual get memory.",
+      "After your task, inspect at most 5 entries within 2 minutes with coforge memory list. Merge verified duplicates, archive only confirmed obsolete facts; keep sources, important decisions and history. Never delete for size alone. See coforge manual get memory.",
     notificationClass: SYSTEM_CLEANER_CLASSES.knowledge.notificationClass,
     sourceKind: SYSTEM_CLEANER_CLASSES.knowledge.sourceKind,
     maximumBytes: CLEANER_CONFIG_BOUNDS.thresholdBytes.max * 8,
