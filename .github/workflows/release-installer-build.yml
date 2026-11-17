@@ -172,7 +172,7 @@ jobs:
           fi
 
       - name: Add the Rust target
-        run: mise exec rust -- rustup target add "${{ matrix.rust_target }}"
+        run: ../../scripts/ci/retry.sh 5 10 -- mise exec rust -- rustup target add "${{ matrix.rust_target }}"
 
       - name: Install the musl C compiler for ring
         if: startsWith(matrix.release_target, 'linux')

@@ -92,7 +92,7 @@ jobs:
           install: false
 
       - name: Install toolchain
-        run: mise install
+        run: scripts/ci/retry.sh 5 10 -- mise install
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -100,8 +100,8 @@ jobs:
       # The version the list was measured with; Chrome and its system libraries come with it.
       - name: Install agent-browser and Chrome
         run: |
-          npm install --global agent-browser@0.41.2
-          agent-browser install --with-deps
+          scripts/ci/retry.sh 5 10 -- npm install --global agent-browser@0.41.2
+          scripts/ci/retry.sh 5 10 -- agent-browser install --with-deps
 
       - name: Run the shard
         shell: bash

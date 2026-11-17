@@ -79,7 +79,14 @@ test("the aggregate gate executes even after failure and rejects missing, skippe
 
 test("CI validates every pull request and every push to main; a newer PR update replaces a stale run, and every push runs to completion", () => {
   // A push to main, a maintainer's or a merged PR's, is validated afterwards; docs/release/github-actions.md.
-  expect(Object.keys(ci.on).sort()).toEqual(["pull_request", "push", "workflow_call"]);
+  // workflow_dispatch runs full coverage on a chosen ref so a workflow change can be
+  // exercised on its branch before it reaches main (task #38).
+  expect(Object.keys(ci.on).sort()).toEqual([
+    "pull_request",
+    "push",
+    "workflow_call",
+    "workflow_dispatch",
+  ]);
   expect(ci.on.push.branches).toEqual(["main"]);
   expect(ci.on.pull_request).toBeNull();
   // A shared group keeps one pending run and cancels the rest even without cancel-in-progress
@@ -171,22 +178,54 @@ test("a push to main starts no deployment or publication", async () => {
     const triggers = Object.keys(workflow.on).filter((trigger) => trigger !== "workflow_call");
     // Exemptions: cdn-certificates.yml also runs on a schedule. It is scheduled certificate
     // maintenance, not a deployment (approved by Frank 2026-10-23). web-integration.yml runs the
-    // Web integration suites daily, web-e2e.yml the listed browser e2es (task #438); neither
-    // deploys or publishes anything.
-    const scheduled = ["cdn-certificates.yml", "web-integration.yml", "web-e2e.yml"].includes(file);
+    // Web integration suites daily, web-e2e.yml the listed browser e2es (task #438);
+    // cargo-advisories.yml runs the RustSec advisory checks daily and files an issue on
+    // failure (task #38); none deploys or publishes anything.
+    const scheduled = [
+      "cdn-certificates.yml",
+      "web-integration.yml",
+      "web-e2e.yml",
+      "cargo-advisories.yml",
+    ].includes(file);
     // release-installer-build.yml is callable only: it has no trigger of its own.
     const callableOnly = file === "release-installer-build.yml";
     // perf-check.yml observes deploy completions and can be re-run by hand;
-    // it deploys and publishes nothing itself.
+    // it deploys and publishes nothing itself. infra-rerun.yml reruns a failed
+    // run's jobs once when only infrastructure steps failed (task #38).
     const postDeployCheck = file === "perf-check.yml";
+    const infraRerun = file === "infra-rerun.yml";
     const expected = callableOnly
       ? []
       : scheduled
         ? ["schedule", "workflow_dispatch"]
-        : postDeployCheck
+        : postDeployCheck || infraRerun
           ? ["workflow_run", "workflow_dispatch"]
           : ["workflow_dispatch"];
     expect(triggers, file).toEqual(expected);
+    if (infraRerun) {
+      const on = workflow.on;
+      const run = on.workflow_run;
+      // Validation and deploy workflows only: --failed re-runs just the jobs that
+      // failed, so a publish job that never reached its publish step is safe to
+      // retry; one-off and notes workflows have a person watching their runs.
+      expect([...(run.workflows ?? [])].sort(), file).toEqual([
+        "Build Caddy image",
+        "CI",
+        "Deploy Web (production)",
+        "Deploy Web (staging)",
+        "Post-deploy performance check",
+        "Publish Computer (production)",
+        "Publish Computer (staging)",
+        "Publish docs site (production)",
+        "Publish installer (production)",
+        "Publish installer (staging)",
+        "Renew CDN certificates",
+        "Web browser e2e",
+        "Web integration",
+      ]);
+      expect(run.types, file).toEqual(["completed"]);
+      expect(on.workflow_dispatch.inputs.run_id.required, file).toBe(true);
+    }
     if (postDeployCheck) {
       const on = workflow.on;
       const run = on.workflow_run;

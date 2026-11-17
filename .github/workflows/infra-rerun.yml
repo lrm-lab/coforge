@@ -1,0 +1,57 @@
+name: Rerun infrastructure failures
+
+# Whole runs went red on GitHub 504s, TLS timeouts and registry hiccups
+# (task #38). When a watched run fails and every failed step is an
+# infrastructure step — tool downloads, registry logins, browser installs —
+# this reruns its failed jobs once. A real check failure keeps its own step
+# name, so mixed runs are left alone, and run_attempt caps it at one rerun.
+on:
+  workflow_run:
+    workflows:
+      - CI
+      - Web integration
+      - Web browser e2e
+      - Post-deploy performance check
+      - Renew CDN certificates
+      - Deploy Web (staging)
+      - Deploy Web (production)
+      - Build Caddy image
+      - Publish Computer (staging)
+      - Publish Computer (production)
+      - Publish installer (staging)
+      - Publish installer (production)
+      - Publish docs site (production)
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Actions run id to evaluate"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infra-rerun-${{ github.event.workflow_run.id || inputs.run_id || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  rerun:
+    name: Rerun once on infrastructure failure
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Rerun failed jobs when only infrastructure steps failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id || inputs.run_id }}
+        run: bash scripts/ci/infra-rerun.sh "$RUN_ID"

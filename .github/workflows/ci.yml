@@ -22,6 +22,9 @@ on:
       deploy:
         description: Whether the Web track selected Web checks, so the caller builds and deploys the image
         value: ${{ jobs.changes.outputs.deploy }}
+  # Manual runs do full coverage (no push base to diff from) and publish nothing;
+  # they exist so a workflow change can be exercised on its branch (task #38).
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -126,8 +129,9 @@ jobs:
           version: "2026.9.2"
           install: false
 
-      - name: Install toolchain
-        run: mise install
+      - &toolchain
+        name: Install toolchain
+        run: scripts/ci/retry.sh 5 10 -- mise install
 
       # Every Linux job below repeats this step as *bun-cache; elsewhere a cold install is faster.
       - &bun-cache
@@ -160,8 +164,7 @@ jobs:
 
       - *setup-mise
 
-      - name: Install toolchain
-        run: mise install
+      - *toolchain
 
       - *bun-cache
 
@@ -187,8 +190,7 @@ jobs:
 
       - *setup-mise
 
-      - name: Install toolchain
-        run: mise install
+      - *toolchain
 
       - *bun-cache
 
@@ -227,8 +229,7 @@ jobs:
 
       - *setup-mise
 
-      - name: Install toolchain
-        run: mise install
+      - *toolchain
 
       - *bun-cache
 
@@ -251,8 +252,7 @@ jobs:
     steps:
       - *checkout
       - *setup-mise
-      - name: Install toolchain
-        run: mise install
+      - *toolchain
       - &computer-install
         name: Install the Computer's dependencies
         run: bun install --frozen-lockfile --filter ./packages/computer
@@ -282,8 +282,7 @@ jobs:
 
       - *setup-mise
 
-      - name: Install toolchain
-        run: mise install
+      - *toolchain
 
       - *bun-cache
 
@@ -361,7 +360,9 @@ jobs:
 
   # The Rust installer crate (crates/installer/, its own toolchain in crates/installer/mise.toml): lint, test,
   # and release-build it on the native runner of each of its six release targets, and gate its
-  # dependency graph (licenses, bans, sources, RustSec advisories) once on linux-x64.
+  # dependency graph (licenses, bans, sources) once on linux-x64. The RustSec advisory checks run
+  # on a schedule in cargo-advisories.yml instead: advisory database updates must not turn every
+  # commit red (task #38).
   # Runner labels: https://docs.github.com/en/actions/reference/runners/github-hosted-runners
   installer-crate:
     name: Check installer ${{ matrix.release_target }}
@@ -439,7 +440,7 @@ jobs:
           install_args: ${{ matrix.tools }}
 
       - name: Add the Rust target
-        run: mise exec rust -- rustup target add "${{ matrix.rust_target }}"
+        run: ../../scripts/ci/retry.sh 5 10 -- mise exec rust -- rustup target add "${{ matrix.rust_target }}"
 
       - name: Install the musl C compiler for ring
         if: startsWith(matrix.release_target, 'linux')
@@ -482,13 +483,9 @@ jobs:
       - name: Sign, verify, and run the release binary
         run: bash ../../scripts/ci/check-installer-binary.sh "${{ matrix.release_target }}" "$BINARY"
 
-      - name: Check dependency licenses, bans, sources, and advisories
+      - name: Check dependency licenses, bans, and sources
         if: matrix.release_target == 'linux-x64'
-        run: mise exec -- cargo deny --locked check licenses bans sources advisories
-
-      - name: Audit dependencies against RustSec
-        if: matrix.release_target == 'linux-x64'
-        run: mise exec -- cargo audit --deny warnings --file ../../Cargo.lock
+        run: mise exec -- cargo deny --locked check licenses bans sources
 
       - name: Generate third-party notices
         if: matrix.release_target == 'linux-x64'

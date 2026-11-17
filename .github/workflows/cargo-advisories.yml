@@ -1,0 +1,72 @@
+name: Cargo advisories
+
+# RustSec advisory data moves on its own schedule: a freshly published advisory
+# must not turn every commit red while the database is being updated (task #38).
+# bans, licenses and sources still gate every commit in ci.yml; this job checks
+# the vulnerability databases once a day and files an issue when it fails.
+on:
+  schedule:
+    # 04:41 UTC, off the hour so it does not queue with every other scheduled run.
+    - cron: "41 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: cargo-advisories
+  cancel-in-progress: false
+
+jobs:
+  advisories:
+    name: RustSec advisories
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: crates/installer
+    env:
+      # `mise exec` would otherwise install every tool in crates/installer/mise.toml
+      # that is missing, including cargo-about, which this job does not use.
+      # https://mise.jdx.dev/configuration/settings.html#exec_auto_install
+      MISE_EXEC_AUTO_INSTALL: "false"
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      # From crates/installer/ mise also sees the root tools, so install only what this job uses.
+      - name: Install pinned Rust tools
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          version: "2026.9.2"
+          working_directory: crates/installer
+          install_args: rust cargo-deny github:rustsec/rustsec
+
+      - name: Check RustSec advisories
+        id: deny
+        run: ../../scripts/ci/retry.sh 5 10 -- mise exec -- cargo deny --locked check advisories
+
+      - name: Audit dependencies against RustSec
+        id: audit
+        run: ../../scripts/ci/retry.sh 5 10 -- mise exec -- cargo audit --deny warnings --file ../../Cargo.lock
+
+      # Only a failed check files an issue: an infrastructure failure earlier in
+      # the job just fails the run. One open issue collects repeat failures.
+      - name: File an issue for the failure
+        if: steps.deny.outcome == 'failure' || steps.audit.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          body="The scheduled RustSec advisory check failed. It may be a newly published advisory or an unreachable advisory database; the run log says which.
+
+          $RUN_URL"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --search 'Cargo advisory check failed in:title' --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "Still failing: $RUN_URL"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "Cargo advisory check failed" --body "$body"
+          fi

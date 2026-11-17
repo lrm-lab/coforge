@@ -119,7 +119,7 @@ jobs:
           install: "false"
 
       - name: Install toolchain
-        run: mise install bun
+        run: scripts/ci/retry.sh 5 10 -- mise install bun
 
       - name: Require the DNS-01 credentials
         env:
