@@ -1,25 +1,20 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { Artifacts } from "#src/server/artifacts/artifacts.server";
 import { StoredArtifactBlobs } from "#src/server/artifacts/artifact-blobs.server";
 import { ArtifactDocuments } from "#src/server/artifacts/artifact-documents.server";
-import { LocalFileStorage } from "#src/server/files/file-storage.server";
+import {
+  artifactDocumentsWorld,
+  type ArtifactDocumentsWorld,
+} from "./helpers/artifact-documents-world";
 
-/**
- * The artifact use cases the Agent API and the web page share (task #385): an Agent creates and
- * pushes manifests of files, and the web page reads the entry file's text, lists, and shows cards
- * of the artifacts a reader may read.
- */
 const connectionString = Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL must point to local PostgreSQL");
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 const handle = crypto.randomUUID().slice(0, 8);
 
-let root: string;
+let world: ArtifactDocumentsWorld;
 let blobs: StoredArtifactBlobs;
 let documents: ArtifactDocuments;
 let artifacts: Artifacts;
@@ -32,89 +27,20 @@ let channelId: string;
 let secretId: string;
 
 beforeAll(async () => {
-  root = await mkdtemp(join(tmpdir(), "artifact-documents-"));
-  const storage = new LocalFileStorage(root);
-  blobs = new StoredArtifactBlobs(db, async () => storage);
-  artifacts = new Artifacts(db, blobs, { enabled: async () => true });
-  documents = new ArtifactDocuments(db, artifacts, blobs);
-  alice = (await db.user.create({ data: { username: `ad-a-${handle}`, displayName: "Alice" } })).id;
-  bob = (await db.user.create({ data: { username: `ad-b-${handle}`, displayName: "Bob" } })).id;
-  workspaceId = (
-    await db.workspace.create({
-      data: {
-        slug: `ad-${handle}`,
-        name: "Docs",
-        members: {
-          create: [
-            { userId: alice, role: "owner" },
-            { userId: bob, role: "member" },
-          ],
-        },
-      },
-    })
-  ).id;
-  const newAgent = async (name: string) =>
-    (
-      await db.agent.create({
-        data: {
-          workspaceId,
-          name: `ad-${name}-${handle}`,
-          displayName: name,
-          ownerId: alice,
-          runtimeConfig: {},
-        },
-      })
-    ).id;
-  writer = await newAgent("writer");
-  helper = await newAgent("helper");
-  const channel = async (
-    name: string,
-    visibility: string,
-    members: ({ userId: string } | { agentId: string })[],
-  ) => {
-    const { id } = await db.conversation.create({
-      data: { workspaceId, channelName: `${name}-${handle}`, visibility },
-    });
-    await db.conversationMember.createMany({
-      data: members.map((member) => ({ conversationId: id, workspaceId, ...member })),
-    });
-    return id;
-  };
-  channelId = await channel("launch", "public", [
-    { userId: alice },
-    { userId: bob },
-    { agentId: writer },
-    { agentId: helper },
-  ]);
-  secretId = await channel("secret", "private", [{ userId: alice }, { agentId: writer }]);
+  world = await artifactDocumentsWorld(db, handle);
+  ({ blobs, documents, artifacts, workspaceId, alice, bob, writer, helper, channelId, secretId } =
+    world);
 });
 
 afterAll(async () => {
-  await db.workspace.delete({ where: { id: workspaceId } }).catch(() => undefined);
-  await db.user.deleteMany({ where: { id: { in: [alice, bob] } } });
+  await world.cleanup();
   await db.$disconnect();
-  await rm(root, { recursive: true, force: true });
 });
 
 const reading = (userId: string) => ({ workspaceId, actor: { userId } });
 const writing = (agentId: string) => ({ workspaceId, actor: { agentId } });
 
-/** Uploads each file's text for the Agent and names it as a manifest. */
-async function manifest(agentId: string, files: Record<string, string>, entryPath?: string) {
-  const named = await Promise.all(
-    Object.entries(files).map(async ([path, text]) => ({
-      path,
-      sha256: (
-        await blobs.upload({
-          workspaceId,
-          bytes: new TextEncoder().encode(text) as Uint8Array<ArrayBuffer>,
-          actor: { agentId },
-        })
-      ).sha256,
-    })),
-  );
-  return { files: named, ...(entryPath ? { entryPath } : {}) };
-}
+const manifest: ArtifactDocumentsWorld["manifest"] = (...input) => world.manifest(...input);
 
 test("a new artifact holds its files as version 1, named from its title, with a preview", async () => {
   const first = await documents.create(writing(writer), {
@@ -126,7 +52,6 @@ test("a new artifact holds its files as version 1, named from its title, with a 
   });
   expect(first).toMatchObject({ name: "launch-plan", title: "Launch plan", currentVersion: 1 });
   expect(first.preview).toBe("# Launch plan\n\nShip in May.\n\nRisks: none.");
-  // The same title again gets a free name of its own.
   const second = await documents.create(writing(writer), {
     conversationId: channelId,
     title: "Launch plan",
@@ -141,11 +66,8 @@ test("a new artifact holds its files as version 1, named from its title, with a 
     homeKey: `conversation:${channelId}`,
     entryPath: "plan.md",
   });
-  // A channel artifact; its kind comes from the home access the read already made (no new query).
   expect(loaded.artifact.homeKind).toBe("channel");
-  // Bob reads it but did not write it and is not an owner/admin: he cannot delete it.
   expect(loaded.canDelete).toBe(false);
-  // Alice owns the Workspace, so she can; so can the Agent that wrote it.
   expect((await documents.load(reading(alice), { artifactId: first.id })).canDelete).toBe(true);
   expect((await documents.load(writing(writer), { artifactId: first.id })).canDelete).toBe(true);
 });
@@ -160,7 +82,6 @@ test("the entry file gives the type: a web page's card line is its description, 
   expect(page.preview).toBe("Signups by day");
   expect(page.entryPath).toBe("index.html");
   expect(page).not.toHaveProperty("kind");
-  // A web page needs no description; its card line is then empty.
   const bare = await documents.create(writing(writer), {
     conversationId: channelId,
     title: "Bare page",
@@ -182,14 +103,11 @@ test("the viewer reads a body only for a document's entry; an Agent's read gets 
     title: "Viewer page",
     manifest: await manifest(writer, { "index.html": "<h1>Page</h1>" }),
   });
-  // The person's read of a web page carries no body: the sandbox serves it.
   const viewed = await documents.load(reading(bob), { artifactId: page.id }, { body: "markdown" });
   expect(viewed.text).toBe("");
-  // The Agent's read still gets the entry's text.
   expect((await documents.load(writing(writer), { artifactId: page.id })).text).toBe(
     "<h1>Page</h1>",
   );
-  // The home's kind comes once, on the artifact.
   expect(viewed).not.toHaveProperty("homeKind");
   expect(viewed.artifact.homeKind).toBe("channel");
 });
@@ -214,7 +132,6 @@ test("a push is a new version with its preview, and a clash with another Agent's
     "A\n\nb\n",
   );
   expect((await push(writer, 3, "A\n\nB\n")).status).toBe("nothing");
-  // The same file changed on both sides since version 2: refused, nothing merged inside it.
   await expect(push(helper, 2, "A\n\nZ\n")).rejects.toMatchObject({
     code: "CONFLICT",
     errorId: "artifact-base-moved",
@@ -233,18 +150,15 @@ test("an idempotent create replays the same artifact, and a different input with
       idempotencyKey,
     });
   const first = await make("# Idem\n\nOne.\n", key);
-  // The same key with the same inputs returns the same artifact, and adds no second version.
   const replay = await make("# Idem\n\nOne.\n", key);
   expect(replay.id).toBe(first.id);
   expect(replay.currentVersion).toBe(first.currentVersion);
   const loaded = await documents.load(reading(alice), { artifactId: first.id });
   expect(loaded.artifact.currentVersion).toBe(1);
   expect(loaded.text).toBe("# Idem\n\nOne.\n");
-  // The same key with different files (or title, or home) is a mistake, not a retry.
   await expect(make("# Idem\n\nTwo.\n", key)).rejects.toMatchObject({
     errorId: "artifact-idempotency-mismatch",
   });
-  // A fresh key makes a second artifact.
   const other = await make("# Idem\n\nOne.\n", crypto.randomUUID());
   expect(other.id).not.toBe(first.id);
 });
@@ -285,7 +199,6 @@ test("a push may name only bytes its publisher uploaded or the artifact already 
   });
   const loaded = await documents.load(reading(alice), { artifactId: hidden.id });
   const sha256 = loaded.files[0]!.sha256;
-  // The helper learned the hash somehow: naming it is answered as if the bytes were not there.
   expect(
     await artifacts.push({
       workspaceId,
@@ -296,7 +209,6 @@ test("a push may name only bytes its publisher uploaded or the artifact already 
       files: [{ path: "stolen.md", sha256 }],
     }),
   ).toEqual({ status: "missing", missing: [sha256] });
-  // Uploading those bytes itself grants them to it.
   await blobs.upload({
     workspaceId,
     bytes: new TextEncoder().encode("secret plan\n"),
@@ -394,7 +306,6 @@ test("with artifacts off, a push stores nothing", async () => {
 });
 
 test("a push refreshes the preview only when what it draws changed, and its tail runs beside the Agent's bookkeeping", async () => {
-  // A blob store that counts reads, to see whether the preview refresh ran at all.
   let reads = 0;
   const counting = new ArtifactDocuments(db, artifacts, {
     read: async (workspaceId, sha256) => {
@@ -414,7 +325,6 @@ test("a push refreshes the preview only when what it draws changed, and its tail
     seen.push(number);
   };
 
-  // A push that leaves the entry alone skips the preview refresh; bookkeeping still runs.
   reads = 0;
   const sidecar = await manifest(writer, { "tail-notes.txt": "notes" });
   const first = await counting.push(
@@ -431,7 +341,6 @@ test("a push refreshes the preview only when what it draws changed, and its tail
   expect(seen).toEqual([2]);
   expect(reads).toBe(0);
 
-  // A push that changes the entry refreshes the preview once; its replay books again only.
   reads = 0;
   const entry = await manifest(writer, { "tail.md": "# Tail\n\nNew body.\n" });
   const key = crypto.randomUUID();
