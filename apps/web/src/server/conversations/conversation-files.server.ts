@@ -4,7 +4,7 @@ import {
   attachmentView,
   ATTACHMENT_VIEW_SELECT,
 } from "#src/server/attachments/attachment-view.server";
-import { isInlineImage } from "#src/server/attachments/attachment-response.server";
+import { isDisplayableImageAttachment } from "#src/lib/inline-image";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
 
 export async function listConversationFiles(
@@ -41,7 +41,11 @@ export async function listConversationFiles(
         ...view,
         createdAt: attachment.createdAt.toISOString(),
         // A HEIC is drawn too, from its WebP icon.
-        inlineImage: isInlineImage(attachment.contentType) || view.iconUrl !== undefined,
+        inlineImage: isDisplayableImageAttachment({
+          contentType: attachment.contentType,
+          iconUrl: view.iconUrl,
+          previewUrl: view.previewUrl,
+        }),
         sender: attachment.uploader
           ? humanLabel(attachment.uploader)
           : attachment.uploaderAgent?.displayName || attachment.uploaderAgent?.name || "",

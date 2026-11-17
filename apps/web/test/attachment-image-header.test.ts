@@ -87,7 +87,11 @@ test("raster formats are checked against MIME, positive PostgreSQL dimensions an
   expect(imageDimensions(png, "image/png")).toBeNull();
   png.writeUInt32BE(0x80000000, 16);
   expect(imageDimensions(png, "image/png")).toBeNull();
-  expect(imageDimensions(Buffer.from('<svg width="12" height="6"/>'), "image/svg+xml")).toBeNull();
+  // An SVG's size is read from its own attributes now that the CDN draws it (task #131).
+  expect(imageDimensions(Buffer.from('<svg width="12" height="6"/>'), "image/svg+xml")).toEqual({
+    imageWidth: 12,
+    imageHeight: 6,
+  });
   expect(imageDimensions(phone, "application/octet-stream")).toBeNull();
   expect(imageDimensions(phone.subarray(0, 1000), "image/jpeg")).toBeNull();
   expect(imageDimensions(new Uint8Array(IMAGE_HEADER_MAX_BYTES + 1), "image/png")).toBeNull();

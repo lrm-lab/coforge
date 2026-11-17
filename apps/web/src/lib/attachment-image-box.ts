@@ -1,3 +1,5 @@
+import { isSvgImage } from "./inline-image";
+
 /**
  * The boxes an attachment image is shown in, in CSS pixels, and how a message lays several out.
  * The message and the Files list draw them; the server sizes each image variant to twice its
@@ -15,7 +17,11 @@ export const MESSAGE_GALLERY_MAX_WIDTH_PX = 360;
 /** The Files list's square (`size-10`). */
 export const FILE_ROW_IMAGE_PX = 40;
 
-type ImageSize = { imageWidth?: number | null; imageHeight?: number | null };
+type ImageSize = { imageWidth?: number | null; imageHeight?: number | null; contentType?: string };
+
+/** An SVG has no pixel size to keep: its width, height or viewBox give only its shape. */
+const isVector = (image: ImageSize) =>
+  image.contentType !== undefined && isSvgImage(image.contentType);
 
 /** A known size, or undefined when either side is missing or not positive. */
 function sizeOf({ imageWidth: width, imageHeight: height }: ImageSize) {
@@ -30,7 +36,10 @@ export function imageShape(image: ImageSize): "wide" | "tall" | "normal" {
   return ratio >= 2.2 ? "wide" : ratio <= 0.55 ? "tall" : "normal";
 }
 
-/** A lone image's box: its own ratio scaled into 360×288, or the 4:3 fallback. */
+/**
+ * A lone image's box: its own ratio scaled into 360×288, or the 4:3 fallback. A photo is never
+ * enlarged; an SVG grows to at least the fallback's width, so a 24px icon is not a speck.
+ */
 export function singleImageBox(image: ImageSize) {
   const size = sizeOf(image);
   if (!size)
@@ -38,7 +47,7 @@ export function singleImageBox(image: ImageSize) {
   const scale = Math.min(
     MESSAGE_IMAGE_MAX_WIDTH_PX / size.width,
     MESSAGE_IMAGE_MAX_HEIGHT_PX / size.height,
-    1,
+    isVector(image) ? Math.max(1, MESSAGE_IMAGE_FALLBACK_WIDTH_PX / size.width) : 1,
   );
   return {
     width: `min(${Math.max(1, Math.round(size.width * scale))}px, 100%)`,
@@ -51,14 +60,15 @@ export type GalleryRow = { index: number; fit: "cover" | "contain" }[];
 /**
  * Rows for two or more images, by index: a wide image takes a row of its own; the images between
  * wide ones run on in rows of up to three, or two and two when exactly four. A normal image fills
- * its cell; a wide or tall one is shown whole.
+ * its cell; a wide or tall one is shown whole, as is an SVG, whose edges are its drawing.
  */
 export function galleryRows(images: readonly ImageSize[]): GalleryRow[] {
   const rows: GalleryRow[] = [];
   const row = (indexes: number[]): GalleryRow =>
     indexes.map((index) => ({
       index,
-      fit: imageShape(images[index]!) === "normal" ? "cover" : "contain",
+      fit:
+        imageShape(images[index]!) === "normal" && !isVector(images[index]!) ? "cover" : "contain",
     }));
   let run: number[] = [];
   const flush = () => {

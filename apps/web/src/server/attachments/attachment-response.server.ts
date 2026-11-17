@@ -1,4 +1,4 @@
-import { isInlineImage } from "#src/lib/inline-image";
+import { isInlineImage, isSvgImage } from "#src/lib/inline-image";
 import {
   attachmentPreviewKind,
   isTextPreviewKind,
@@ -25,7 +25,7 @@ export function isDeliveryInlinePreview(attachment: {
   contentType: string;
 }): boolean {
   const { fileName, contentType } = attachment;
-  if (contentType === "application/pdf") return true;
+  if (contentType === "application/pdf" || isSvgImage(contentType)) return true;
   const kind = attachmentPreviewKind(fileName, contentType);
   return (
     (kind === "video" || kind === "audio") &&

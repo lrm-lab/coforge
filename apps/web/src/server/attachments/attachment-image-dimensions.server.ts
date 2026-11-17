@@ -1,6 +1,48 @@
 import { imageSize } from "image-size";
+import { isSvgImage } from "#src/lib/inline-image";
 import { isInlineImage } from "./attachment-response.server";
 import type { FileStorage } from "#src/server/files/file-storage.server";
+
+function isMeasurableImage(contentType: string): boolean {
+  return isInlineImage(contentType) || isSvgImage(contentType);
+}
+
+function parseSvgLength(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const match = /^\s*([0-9]+(?:\.[0-9]+)?)\s*(?:px)?\s*$/i.exec(raw);
+  if (!match) return null;
+  const n = Math.round(Number(match[1]));
+  return Number.isInteger(n) && n > 0 && n <= 2147483647 ? n : null;
+}
+
+function svgDimensions(bytes: Uint8Array): ImageDimensions | null {
+  const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  const tag = /<svg\b([^>]*)>/i.exec(text)?.[1];
+  if (!tag) return null;
+  const widthAttr = /\bwidth\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
+  const heightAttr = /\bheight\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
+  const w = parseSvgLength(widthAttr?.[1] ?? widthAttr?.[2]);
+  const h = parseSvgLength(heightAttr?.[1] ?? heightAttr?.[2]);
+  if (w !== null && h !== null) return { imageWidth: w, imageHeight: h };
+  const viewBoxAttr = /\bviewBox\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(tag);
+  const viewBoxRaw = (viewBoxAttr?.[1] ?? viewBoxAttr?.[2] ?? "").trim();
+  if (!viewBoxRaw) return null;
+  const parts = viewBoxRaw.split(/[\s,]+/).map(Number);
+  if (parts.length !== 4) return null;
+  const vw = Math.round(parts[2]!);
+  const vh = Math.round(parts[3]!);
+  if (
+    Number.isInteger(vw) &&
+    Number.isInteger(vh) &&
+    vw > 0 &&
+    vh > 0 &&
+    vw <= 2147483647 &&
+    vh <= 2147483647
+  ) {
+    return { imageWidth: vw, imageHeight: vh };
+  }
+  return null;
+}
 
 export const IMAGE_HEADER_MAX_BYTES = 256 * 1024;
 export const IMAGE_HEADER_TIMEOUT_MS = 1000;
@@ -13,7 +55,8 @@ export type StoredImageDimensionsResult =
 
 /** Metadata only: never decode pixels or turn an unrecognized upload into an image. */
 export function imageDimensions(bytes: Uint8Array, contentType: string): ImageDimensions | null {
-  if (!isInlineImage(contentType) || bytes.length > IMAGE_HEADER_MAX_BYTES) return null;
+  if (!isMeasurableImage(contentType) || bytes.length > IMAGE_HEADER_MAX_BYTES) return null;
+  if (isSvgImage(contentType)) return svgDimensions(bytes);
   try {
     // Some library readers use the backing ArrayBuffer rather than the view's bounds.
     // Give them an exact-length buffer so a short prefix cannot read bytes outside it.
@@ -94,7 +137,7 @@ function supportedJpegHeader(bytes: Uint8Array): boolean {
 }
 
 export async function readFileImageDimensions(file: Blob, contentType: string) {
-  if (!isInlineImage(contentType)) return null;
+  if (!isMeasurableImage(contentType)) return null;
   try {
     return imageDimensions(
       new Uint8Array(await file.slice(0, IMAGE_HEADER_MAX_BYTES).arrayBuffer()),
@@ -111,7 +154,8 @@ export async function readStoredImageDimensions(
   input: { objectKey: string; contentType: string; sizeBytes: number },
   options: { timeoutMs?: number } = {},
 ): Promise<ImageDimensions | null> {
-  if (!isInlineImage(input.contentType) || !storage.readPrefix || input.sizeBytes <= 0) return null;
+  if (!isMeasurableImage(input.contentType) || !storage.readPrefix || input.sizeBytes <= 0)
+    return null;
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -143,7 +187,7 @@ export async function readStoredImageDimensionsResult(
   input: { objectKey: string; contentType: string; sizeBytes: number },
   options: { timeoutMs?: number } = {},
 ): Promise<StoredImageDimensionsResult> {
-  if (!isInlineImage(input.contentType) || !storage.readPrefix || input.sizeBytes <= 0)
+  if (!isMeasurableImage(input.contentType) || !storage.readPrefix || input.sizeBytes <= 0)
     return { status: "failed", reason: "object_missing" };
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;

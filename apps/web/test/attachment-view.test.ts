@@ -196,3 +196,33 @@ test("an image OSS can resize gets three WebP tiers on its one signature", () =>
     "thumbnailUrl",
   );
 });
+
+test("SVG gets a signed previewUrl and dimensions without WebP tiers when delivery is configured", () => {
+  const signedSvg =
+    "https://files.coforge.cn/workspaces/w/attachments/a1/original?auth_key=1-0-0-3";
+  const delivery = {
+    signedUrl: () => ({
+      url: signedSvg,
+      expiresAt: new Date(0),
+    }),
+  };
+  const svgView = attachmentView(
+    { ...row, fileName: "icon.svg", contentType: "image/svg+xml", imageWidth: 24, imageHeight: 32 },
+    delivery,
+  );
+  expect(svgView).toEqual({
+    id: row.id,
+    fileName: "icon.svg",
+    contentType: "image/svg+xml",
+    sizeBytes: row.sizeBytes,
+    imageWidth: 24,
+    imageHeight: 32,
+    previewUrl: signedSvg,
+  });
+
+  const withoutDelivery = attachmentView(
+    { ...row, fileName: "icon.svg", contentType: "image/svg+xml", imageWidth: 24, imageHeight: 32 },
+    null,
+  );
+  expect(withoutDelivery).not.toHaveProperty("previewUrl");
+});

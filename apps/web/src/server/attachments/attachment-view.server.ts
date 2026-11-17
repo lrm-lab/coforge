@@ -1,4 +1,5 @@
 import { getFileDelivery, type FileDelivery } from "#src/server/files/file-delivery.server";
+import { isSvgImage } from "#src/lib/inline-image";
 import { isDeliveryInlinePreview, isInlineImage } from "./attachment-response.server";
 import { imageVariants, isResizableImage } from "./attachment-image-variants.server";
 import { errorType } from "#src/server/errors/error-type.server";
@@ -90,7 +91,7 @@ export function attachmentView(
     fileName: row.fileName,
     contentType: row.contentType,
     sizeBytes: row.sizeBytes,
-    ...(inlineImage &&
+    ...((inlineImage || isSvgImage(row.contentType)) &&
     imageWidth !== null &&
     imageHeight !== null &&
     Number.isInteger(imageWidth) &&
