@@ -1,15 +1,20 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { workspaceWithAgent } from "./agent-inbox-fixture";
 
-export async function seedScaleInbox(
-  db: PrismaClient,
-  suffix: string,
-  conversationCount: number,
-  messagesPerConversation: number,
-) {
+export type ScaleInboxShape = {
+  conversations: number;
+  messagesPerConversation: number;
+  threadsPerConversation: number;
+  repliesPerThread: number;
+};
+
+const BASE = new Date(Date.UTC(2026, 9, 1));
+
+export async function seedScaleInbox(db: PrismaClient, shape: ScaleInboxShape) {
+  const suffix = crypto.randomUUID();
   const { owner, workspace, agent } = await workspaceWithAgent(db, suffix);
   const conversations = await db.conversation.createManyAndReturn({
-    data: Array.from({ length: conversationCount }, (_, index) => ({
+    data: Array.from({ length: shape.conversations }, (_, index) => ({
       workspaceId: workspace.id,
       channelName: `bulk-${String(index).padStart(3, "0")}`,
     })),
@@ -27,35 +32,22 @@ export async function seedScaleInbox(
       workspaceId: workspace.id,
       agentId: agent.id,
       joinedAt: new Date(0),
-      // Half the conversations are read up to the middle, a quarter fully.
       agentReadThroughSequence:
-        index % 4 === 0 ? messagesPerConversation : index % 2 === 0 ? 250 : 0,
+        index % 4 === 0 ? shape.messagesPerConversation : index % 2 === 0 ? 250 : 0,
     })),
   });
   const humanOf = new Map(humans.map((member) => [member.conversationId, member.id]));
-  const base = Date.UTC(2026, 9, 1);
-  for (let start = 0; start < conversations.length; start += 20) {
-    await db.message.createMany({
-      data: conversations.slice(start, start + 20).flatMap((conversation, offset) =>
-        Array.from({ length: messagesPerConversation }, (_, index) => ({
-          conversationId: conversation.id,
-          workspaceId: workspace.id,
-          senderMemberId: humanOf.get(conversation.id)!,
-          body: `m${index}`,
-          sequence: index + 1,
-          // Each conversation's latest message is a different second.
-          createdAt: new Date(base + (start + offset) * 1000 + index),
-        })),
-      ),
-    });
-  }
+  await db.$executeRaw`
+    INSERT INTO messages (id, "conversationId", "workspaceId", "senderMemberId", body, sequence, "createdAt")
+    SELECT gen_random_uuid(), c.id, ${workspace.id}::uuid, c.human, 'm' || (g - 1), g,
+           ${BASE}::timestamptz + (c.ord - 1) * interval '1 second' + (g - 1) * interval '1 millisecond'
+    FROM unnest(${conversations.map((c) => c.id)}::uuid[], ${conversations.map((c) => humanOf.get(c.id)!)}::uuid[])
+         WITH ORDINALITY AS c(id, human, ord)
+    CROSS JOIN generate_series(1, ${shape.messagesPerConversation}) AS g`;
 
-  // Eight followed threads per conversation, three replies each; every other thread is read.
-  const threadsPerConversation = 8;
-  const repliesPerThread = 3;
   const roots = await db.message.findMany({
     where: {
-      sequence: { lte: threadsPerConversation },
+      sequence: { lte: shape.threadsPerConversation },
       conversationId: { in: conversations.map((c) => c.id) },
     },
     select: { id: true, conversationId: true, sequence: true },
@@ -80,20 +72,17 @@ export async function seedScaleInbox(
         readThroughSequence: 10_000,
       })),
   });
-  for (let start = 0; start < roots.length; start += 800) {
-    await db.message.createMany({
-      data: roots.slice(start, start + 800).flatMap((root) =>
-        Array.from({ length: repliesPerThread }, (_, index) => ({
-          conversationId: root.conversationId,
-          workspaceId: workspace.id,
-          senderMemberId: humanOf.get(root.conversationId)!,
-          body: `r${index}`,
-          threadRootId: root.id,
-          sequence: messagesPerConversation + (root.sequence - 1) * repliesPerThread + index + 1,
-          createdAt: new Date(base + 1_000_000 + root.sequence * 1000 + index),
-        })),
-      ),
-    });
-  }
-  return { workspace, agent, roots };
+  await db.$executeRaw`
+    INSERT INTO messages (id, "conversationId", "workspaceId", "senderMemberId", body, sequence, "threadRootId", "createdAt")
+    SELECT gen_random_uuid(), root."conversationId", root."workspaceId", root."senderMemberId", 'r' || (r - 1),
+           ${shape.messagesPerConversation} + (root.sequence - 1) * ${shape.repliesPerThread} + r, root.id,
+           ${BASE}::timestamptz + interval '1000 seconds' + root.sequence * interval '1 second' + (r - 1) * interval '1 millisecond'
+    FROM messages root
+    CROSS JOIN generate_series(1, ${shape.repliesPerThread}) AS r
+    WHERE root."workspaceId" = ${workspace.id}::uuid AND root."threadRootId" IS NULL
+      AND root.sequence <= ${shape.threadsPerConversation}`;
+  await db.$executeRawUnsafe(
+    `ANALYZE conversations, conversation_members, messages, thread_follows, thread_reads`,
+  );
+  return { workspace, agent, followedThreads: roots.length };
 }
