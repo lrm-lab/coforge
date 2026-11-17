@@ -2,7 +2,11 @@ import { channelVisibilitySchema } from "./channel-visibility";
 import { createServerFn } from "@tanstack/react-start";
 import { channelInput, channelScope } from "./channel-function-scope.server";
 import { z } from "zod";
-import { CHANNEL_NAME_PATTERN, TASK_PRIORITY_LEVELS } from "@lrm/coforge-sdk/internal";
+import {
+  CHANNEL_NAME_PATTERN,
+  MESSAGE_BODY_MAX_LENGTH,
+  TASK_PRIORITY_LEVELS,
+} from "@lrm/coforge-sdk/internal";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { AppError } from "#src/lib/app-error";
 import { humanLabel } from "#src/lib/human-label";
@@ -237,7 +241,7 @@ export const sendPublicChannelMessage = createServerFn({ method: "POST" })
   .validator(
     channelInput.extend({
       idempotencyKey: z.uuid(),
-      body: z.string().trim().min(1).max(8_000),
+      body: z.string().trim().min(1).max(MESSAGE_BODY_MAX_LENGTH),
       attachmentIds: attachmentIdsSchema,
       threadRootId: z.uuid().optional(),
       mentions: mentionSelectorsSchema,
