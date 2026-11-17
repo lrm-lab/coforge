@@ -477,6 +477,7 @@ export * from "./message-references";
 export * from "./utility-exports";
 export * from "./tool-display";
 export * from "./attachment-limits";
+export * from "./long-message";
 export * from "./mime-type";
 export * from "./json-record";
 export * from "./agent-environment";
