@@ -129,3 +129,4 @@ e2e-agent-description-no-tooltip.e2e.ts 15
 e2e-composer-enter-twice.e2e.ts 30
 e2e-account-settings-plain.e2e.ts 10
 e2e-report-section-gap.e2e.ts 11
+e2e-agent-reminders-list.e2e.ts 21
