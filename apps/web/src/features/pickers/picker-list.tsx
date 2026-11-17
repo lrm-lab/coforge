@@ -13,6 +13,7 @@ import { cn } from "#src/lib/utils";
  */
 export function PickerListRow({
   label,
+  title,
   description,
   leading,
   addon,
@@ -24,6 +25,8 @@ export function PickerListRow({
   "aria-label": ariaLabel,
 }: {
   label: string;
+  /** Rich content shown in place of `label` (a private channel's lock before its name). */
+  title?: ReactNode;
   /** A second, quieter line under the name. */
   description?: string;
   /** The face, drawn 20px square. */
@@ -69,7 +72,7 @@ export function PickerListRow({
                   disabled && "text-tertiary",
                 )}
               >
-                {label}
+                {title ?? label}
               </span>
               {shownDescription && (
                 <span id={descriptionId} className="block truncate text-xs text-tertiary">
