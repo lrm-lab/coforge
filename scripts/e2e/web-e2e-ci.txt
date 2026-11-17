@@ -1,7 +1,9 @@
 # The browser e2es CI must pass (.github/workflows/web-e2e.yml), one per line: file, then the seconds
-# one run took on a private stack, which scripts/e2e/run-web-e2e-ci.sh uses to balance the shards.
+# used by scripts/e2e/run-web-e2e-ci.sh to balance the shards. Temporary budgets are annotated.
 # Every browser e2e must be registered here or in web-e2e-ci-excluded.txt with a reason.
 # Files that drive ego-browser (a signed-in desktop browser) never belong here: CI has none.
+# e2e-task-backlog-compat.e2e.ts: 占位，待首轮 CI 实测替换；360 秒是 runner 上限，不是实测。
+e2e-task-backlog-compat.e2e.ts 360
 e2e-activity-open-cached.e2e.ts 117
 e2e-task-popup-esc.e2e.ts 47
 e2e-hover-popover-stuck.e2e.ts 43
