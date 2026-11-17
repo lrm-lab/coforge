@@ -10,7 +10,8 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
 import { isFinishedStatus } from "./finished-tasks";
-import { TaskLocator, taskMetaLabel } from "./task-chip";
+import { TaskLocator } from "./task-chip";
+import { taskMetaLabel } from "./task-meta-label";
 import { SubtaskProgressRing } from "./subtask-progress-ring";
 import { TaskOwnerAvatar } from "./task-owner";
 import { openBlockers, type TaskRelations, type VisibleTaskName } from "./task-relation-edits";

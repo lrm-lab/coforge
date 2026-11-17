@@ -14,15 +14,10 @@ import { TaskPriorityIcon } from "./task-priority-icon";
 import { TaskLabelChip } from "./task-label-chip";
 import { TaskOwnerAvatar, TaskPerson } from "./task-owner";
 import { TaskStatusIcon, statusLabel } from "./task-status-icon";
+import { taskMetaLabel } from "./task-meta-label";
 
 type ChipTask = Pick<TaskView, "number" | "title" | "status" | "owner"> &
   Partial<Pick<TaskView, "priority" | "labels">>;
-
-/** A Task's grey locator after its title, as text (a tooltip, a label): `#7`, or `#7 · #design`
- * for another channel's. */
-export function taskMetaLabel(task: { number: number; channel?: string | null }) {
-  return task.channel ? `#${task.number} · #${task.channel}` : `#${task.number}`;
-}
 
 /** The same locator drawn: `#7`, or `#7 ·` then another channel's group avatar and name, no `#`
  * (Frank, 11-10, task #74). A channel no one is in reads `#design`. */
