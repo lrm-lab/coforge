@@ -2,14 +2,14 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useHydrated } from "@tanstack/react-router";
 import type { TaskPriorityLevel } from "@lrm/coforge-sdk/internal";
 
-import { AlertCircle, Plus, UploadCloud02, XClose } from "@untitledui/icons";
+import { Plus, UploadCloud02 } from "@untitledui/icons";
 import { FileTrigger } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { localId, composerPlaceholder } from "./composer-behavior";
 import { ComposerField, focusDraftEnd } from "./composer-field";
 import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
+import { ComposerNotice } from "./composer-notice";
 import { ComposerAttachmentTray } from "./composer-attachment-tray";
 import { useComposerAttachments } from "./use-composer-attachments";
 import { useComposerPaste } from "./use-composer-paste";
@@ -402,22 +402,11 @@ export function MessageComposer({
         {unresolvedNotice}
       </p>
       {unresolvedNotice && (
-        <div className="flex items-start gap-2 px-2 text-sm text-tertiary">
-          <AlertCircle
-            aria-hidden="true"
-            className="mt-0.5 size-4 shrink-0 text-fg-warning-primary"
-          />
-          <p aria-hidden="true" className="min-w-0 flex-1">
-            {unresolvedNotice}
-          </p>
-          <ButtonUtility
-            icon={XClose}
-            size="xs"
-            color="tertiary"
-            tooltip={m.conversation_unresolved_mentions_dismiss()}
-            onClick={() => setUnresolved((report) => report && { ...report, handles: [] })}
-          />
-        </div>
+        <ComposerNotice
+          text={unresolvedNotice}
+          dismissLabel={m.conversation_unresolved_mentions_dismiss()}
+          onDismiss={() => setUnresolved((report) => report && { ...report, handles: [] })}
+        />
       )}
       {unpinned && (
         <UnpinnedMentionHint
