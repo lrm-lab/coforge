@@ -1,4 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, test } from "bun:test";
 
@@ -69,5 +71,26 @@ describe("Web image workspace closure", () => {
     expect(
       [...reachable].filter((directory) => directory !== "." && !copied.has(directory)),
     ).toEqual([]);
+  });
+
+  test("the build stage copies every file the Web source embeds from outside its copied trees", async () => {
+    const root = fileURLToPath(new URL("../../", import.meta.url));
+    const dockerfile = await Bun.file(join(root, "apps/web/Dockerfile")).text();
+    const buildStage = dockerfile.slice(0, dockerfile.indexOf(" AS migrate"));
+    const copies = [...buildStage.matchAll(/^\s*COPY\s+(.+?)\s+\S+\s*$/gm)].flatMap((match) =>
+      match[1]!.split(/\s+/),
+    );
+    const covered = (path: string) =>
+      copies.some((copy) => path === copy || path.startsWith(`${copy}/`));
+
+    const embedded: string[] = [];
+    const sources = new Bun.Glob("apps/web/src/**/*.{ts,tsx}");
+    for await (const file of sources.scan({ cwd: root })) {
+      const text = await readFile(join(root, file), "utf8");
+      for (const match of text.matchAll(/from\s+"(\.{1,2}\/[^"]+)\?raw"/g))
+        embedded.push(relative(root, join(root, dirname(file), match[1]!)));
+    }
+    expect(embedded.length).toBeGreaterThan(0);
+    expect(embedded.filter((path) => !covered(path))).toEqual([]);
   });
 });
