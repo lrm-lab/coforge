@@ -38,7 +38,7 @@ const tree = await buildReleaseTree(
     version: manifest.version,
     commit,
     buildDate,
-    artifacts: { [TARGET]: { computer: new Uint8Array(computer) } },
+    artifacts: { [TARGET]: { computer: new Uint8Array(computer), cli: new TextEncoder().encode("unused standalone cli") } },
     photonWasm,
   },
   feedDirectory,

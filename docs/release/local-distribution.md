@@ -8,9 +8,13 @@ latest                                       plain text, one version string, e.g
 <version>/manifest.json                      unsigned JSON: schema_version, version, commit, buildDate, platforms, photonWasm
 <version>/<target>/coforge-computer.gz       gzip transport copy
 <version>/<target>/coforge-computer.sha256   bare lowercase hex SHA-256 of that platform's coforge-computer, nothing else
+<version>/<target>/coforge.gz                gzip of the standalone Agent CLI (`coforge.exe` expands on Windows targets)
+<version>/<target>/coforge.sha256            bare lowercase hex SHA-256 of that platform's standalone coforge
 <version>/photon_rs_bg.wasm                  Pi's image-resize WASM, one platform-independent object per version
 computer/install.sh
 computer/install.ps1
+cli/install.sh
+cli/install.ps1
 ```
 
 Manifests record the uncompressed artifact identity and required
@@ -98,6 +102,30 @@ mirrors how Claude Code ships updates. The darwin executables are also
 code-signed with the Computer's own certificate so that macOS privacy grants survive
 upgrades; that operating-system signature is separate from this integrity model (see
 [Implementation status](implementation-status.md)).
+
+## Standalone Agent CLI
+
+Every version also publishes the Agent CLI as its own executable, compiled from
+`packages/coforge/src/cli.ts` for every release target, so an external Agent on
+a machine with no Computer or Daemon installs only the CLI. The top-level
+`cli` manifest field maps each target to the same identity shape as `computer`:
+`{ binary, size, checksum, gzip: { binary: "coforge.gz", size, checksum } }`,
+where `binary` is `coforge` (`coforge.exe` on Windows). It is a top-level field,
+additive to `schema_version: 2`, because the updater and `coforge-installer`
+accept only `computer` inside `platforms[target]`. The Computer's own
+`__agent-cli` entry point is unchanged, and the Computer updater never reads
+`cli`.
+
+`scripts/release/cli-install.sh` and `cli-install.ps1` are the CLI-only
+bootstrap, served at `<server>/cli/install.sh` and `<server>/cli/install.ps1`
+like the Computer scripts (same per-deployment feed substitution, same 503 when
+the feed is unset). They resolve `latest` or `--version <v>`, check the sidecar
+against the manifest's `cli` checksum and the expanded binary against both, then
+install `coforge` atomically into `${COFORGE_BIN_DIR:-$HOME/.local/bin}`
+(`%LOCALAPPDATA%\CoForge\bin` on Windows, added to the user PATH). They never
+touch the Computer install root, services or launchers, and a rerun upgrades in
+place. Darwin CLI executables keep Bun's valid ad-hoc signature; only the
+Computer carries the long-lived signing identity.
 
 The top-level `photonWasm: { file, size, checksum }` manifest field is
 additive to `schema_version: 2`: an older updater that has never heard of it

@@ -118,8 +118,24 @@ test("published unified Computer runs management, Daemon, and Agent modes from o
   const outputDirectory = join(directory, "artifacts");
   try {
     const executable = compileHostComputer("https://releases-staging.coforge.cn", outputDirectory);
-    expect(await readdir(outputDirectory)).toEqual([basename(executable)]);
+    expect((await readdir(outputDirectory)).sort()).toEqual(
+      [basename(executable), basename(executable).replace("-coforge-computer", "-coforge")].sort(),
+    );
     expectValidMacOsSignature(executable);
+
+    const standalone = Bun.spawnSync(
+      [executable.replace("-coforge-computer", "-coforge"), "--version"],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    expect(standalone.exitCode).toBe(0);
+    expect(standalone.stdout.toString()).toBe("9.8.7-rc.6\n");
+    expect(standalone.stderr.toString()).toBe("");
+    const standaloneUsage = Bun.spawnSync(
+      [executable.replace("-coforge-computer", "-coforge"), "--help"],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    expect(standaloneUsage.exitCode).toBe(0);
+    expect(standaloneUsage.stdout.toString()).toStartWith("coforge <command>");
 
     const management = Bun.spawnSync([executable, "--cli-version"], {
       env: { ...Bun.env, COFORGE_COMPUTER_VERSION: "0.0.0-wrong" },

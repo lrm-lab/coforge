@@ -43,7 +43,10 @@ async function publishTargets(
       ...deps,
       compile: (async (input) => {
         received.push({ target: input.target, sign: input.sign });
-        return { computer: Buffer.from(`#!/bin/sh\n# ${input.target}\n`) };
+        return {
+          computer: Buffer.from(`#!/bin/sh\n# ${input.target}\n`),
+          cli: Buffer.from(`#!/bin/sh\n# cli ${input.target}\n`),
+        };
       }) as CompileFn,
       resolvePhotonWasm: async () => new Uint8Array(Buffer.from("#wasm-fixture\n")),
       credentials: CREDENTIALS,

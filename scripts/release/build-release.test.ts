@@ -69,13 +69,16 @@ const ALL_TARGETS = [
  * sidecar" bug pass the consistency test further down - only distinct bytes make that a real
  * check. `argumentLog` is where a computer "binary" records the arguments it was invoked with;
  * tests that never execute a binary can pass "/dev/null". */
-function fixtureArtifacts(argumentLog: string): Record<string, { computer: Uint8Array }> {
-  const artifacts: Record<string, { computer: Uint8Array }> = {};
+function fixtureArtifacts(
+  argumentLog: string,
+): Record<string, { computer: Uint8Array; cli: Uint8Array }> {
+  const artifacts: Record<string, { computer: Uint8Array; cli: Uint8Array }> = {};
   for (const target of ALL_TARGETS) {
     artifacts[target] = {
       computer: Buffer.from(
         `#!/bin/sh\n# release target: ${target}\nprintf '%s\\n' "$@" > "${argumentLog}"\n`,
       ),
+      cli: Buffer.from(`#!/bin/sh\n# standalone cli for ${target}\n`),
     };
   }
   return artifacts;
@@ -224,6 +227,8 @@ test("buildReleaseTree writes the full <version>/ tree and never a latest pointe
       ...ALL_TARGETS.flatMap((target) => [
         `${inputs.version}/${target}/coforge-computer.gz`,
         `${inputs.version}/${target}/coforge-computer.sha256`,
+        `${inputs.version}/${target}/coforge.gz`,
+        `${inputs.version}/${target}/coforge.sha256`,
       ]),
     ].sort(),
   );
@@ -284,6 +289,34 @@ test("every target's sidecar checksum matches the manifest's checksum, and both 
       stat(join(outputDirectory, version, target, "coforge-daemon.gz")),
     ).rejects.toThrow();
   }
+});
+
+test("every target publishes a standalone cli whose gzip, sidecar and manifest identity agree", async () => {
+  const outputDirectory = await tempDir("coforge-release-tree-");
+  const inputs = releaseInputs();
+  const { version } = await buildReleaseTree(inputs, outputDirectory);
+  const manifest = JSON.parse(
+    await readFile(join(outputDirectory, version, "manifest.json"), "utf8"),
+  );
+
+  expect(Object.keys(manifest.cli).sort()).toEqual([...ALL_TARGETS].sort());
+  for (const target of ALL_TARGETS) {
+    const gzip = await readFile(join(outputDirectory, version, target, "coforge.gz"));
+    const expanded = Buffer.from(Bun.gunzipSync(gzip));
+    const sidecar = (
+      await readFile(join(outputDirectory, version, target, "coforge.sha256"), "utf8")
+    ).trim();
+    expect(expanded.equals(Buffer.from(inputs.artifacts[target]!.cli))).toBe(true);
+    expect(sidecar).toBe(sha256hex(expanded));
+    expect(manifest.cli[target]).toEqual({
+      binary: target.startsWith("windows-") ? "coforge.exe" : "coforge",
+      size: expanded.byteLength,
+      checksum: sha256hex(expanded),
+      gzip: { binary: "coforge.gz", size: gzip.byteLength, checksum: sha256hex(gzip) },
+    });
+    expect(Object.keys(manifest.platforms[target])).toEqual(["computer"]);
+  }
+  expect(ReleaseManifestSchema.safeParse(manifest).success).toBe(true);
 });
 
 test("buildReleaseTree produces deterministic gzip bytes", async () => {

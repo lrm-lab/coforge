@@ -37,7 +37,7 @@ export type ReleaseInputs = {
   version: string;
   commit: string;
   buildDate: string; // ISO 8601
-  artifacts: Record<string, { computer: Uint8Array }>;
+  artifacts: Record<string, { computer: Uint8Array; cli: Uint8Array }>;
   /** Pi's image-resize WASM (`@silvia-odwyer/photon-node`'s `photon_rs_bg.wasm`), published once
    * per version as a platform-independent sidecar next to the per-platform binaries - see
    * docs/release/local-distribution.md. Resolved from the installed dependency by
@@ -76,6 +76,7 @@ export async function buildReleaseTree(
   await mkdir(versionDirectory, { recursive: true });
 
   const platforms: Record<string, { computer: PlatformArtifact }> = {};
+  const cli: Record<string, PlatformArtifact> = {};
   const files: string[] = [];
 
   for (const target of targets.sort()) {
@@ -96,6 +97,15 @@ export async function buildReleaseTree(
       },
     };
 
+    const cliName = cliBinaryName(target);
+    const cliIdentity = artifactIdentity(artifact.cli);
+    const compressedCli = Bun.gzipSync(Buffer.from(artifact.cli), { level: 9 });
+    cli[target] = {
+      binary: cliName,
+      ...cliIdentity,
+      gzip: { binary: "coforge.gz", ...artifactIdentity(compressedCli) },
+    };
+
     const targetDirectory = join(versionDirectory, target);
     await mkdir(targetDirectory, { recursive: true });
     await writeFile(join(targetDirectory, "coforge-computer.gz"), compressedComputer);
@@ -103,9 +113,13 @@ export async function buildReleaseTree(
       join(targetDirectory, "coforge-computer.sha256"),
       `${computerIdentity.checksum}\n`,
     );
+    await writeFile(join(targetDirectory, "coforge.gz"), compressedCli);
+    await writeFile(join(targetDirectory, "coforge.sha256"), `${cliIdentity.checksum}\n`);
     files.push(
       `${inputs.version}/${target}/coforge-computer.gz`,
       `${inputs.version}/${target}/coforge-computer.sha256`,
+      `${inputs.version}/${target}/coforge.gz`,
+      `${inputs.version}/${target}/coforge.sha256`,
     );
   }
 
@@ -116,16 +130,13 @@ export async function buildReleaseTree(
   await writeFile(join(versionDirectory, "photon_rs_bg.wasm"), inputs.photonWasm);
   files.push(`${inputs.version}/photon_rs_bg.wasm`);
 
-  // schema_version, version, commit, buildDate, platforms, photonWasm - the shape
-  // packages/computer/src/updater.ts's ReleaseManifest type and #assertManifest actually check,
-  // not a hand-guessed one. schema_version stays 2: photonWasm is an additive top-level field an
-  // older updater simply never reads, not a breaking format change.
   const manifest = {
     schema_version: 2 as const,
     version: inputs.version,
     commit: inputs.commit,
     buildDate: inputs.buildDate,
     platforms,
+    cli,
     photonWasm: { file: "photon_rs_bg.wasm", ...photonWasmIdentity },
   };
   await writeFile(
@@ -135,6 +146,10 @@ export async function buildReleaseTree(
   files.push(`${inputs.version}/manifest.json`);
 
   return { version: inputs.version, files: files.sort() };
+}
+
+function cliBinaryName(target: string): string {
+  return target.startsWith("windows-") ? "coforge.exe" : "coforge";
 }
 
 function artifactIdentity(bytes: Uint8Array): ArtifactIdentity {

@@ -102,10 +102,11 @@ export async function withdrawStagingRelease(
     previous.photonWasm.size,
   );
   await movePointer({ ...context, version: input.restoreVersion });
-  const keys = DEFAULT_TARGETS.flatMap((target) => [
-    `${manifest.version}/${target}/coforge-computer.gz`,
-    `${manifest.version}/${target}/coforge-computer.sha256`,
-  ]);
+  const objectNames = ["coforge-computer.gz", "coforge-computer.sha256"];
+  if ("cli" in manifest) objectNames.push("coforge.gz", "coforge.sha256");
+  const keys = DEFAULT_TARGETS.flatMap((target) =>
+    objectNames.map((name) => `${manifest.version}/${target}/${name}`),
+  );
   keys.push(`${manifest.version}/photon_rs_bg.wasm`, manifestKey);
   const deleted: string[] = [];
   for (const key of keys) {

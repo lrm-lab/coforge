@@ -8,6 +8,7 @@ import {
   resolveBunCompileTarget,
   type ReleaseTarget,
 } from "../../../scripts/release/compile-targets";
+import { buildCliExecutable } from "../../coforge/scripts/build-executable";
 import { buildComputerExecutable } from "./build-executable";
 
 export type CompileTargetOptions = {
@@ -23,19 +24,27 @@ export type CompileTargetOptions = {
   sign?: (executable: string) => Promise<void>;
 };
 
-export type CompiledArtifacts = { computer: Uint8Array };
+export type CompiledArtifacts = { computer: Uint8Array; cli: Uint8Array };
 
-/** Cross-compiles the unified release binary for one target (test/release-executable.test.ts). */
 export async function compileTargetArtifacts(
   options: CompileTargetOptions,
 ): Promise<CompiledArtifacts> {
-  const path = await buildComputerExecutable({
+  const target = resolveBunCompileTarget(options.target) as Bun.Build.CompileTarget;
+  const computerPath = await buildComputerExecutable({
     version: options.version,
     feedUrl: options.feedUrl,
     outfile: join(options.outputDirectory, `${options.target}-coforge-computer`),
-    target: resolveBunCompileTarget(options.target) as Bun.Build.CompileTarget,
+    target,
+  });
+  const cliPath = await buildCliExecutable({
+    version: options.version,
+    outfile: join(options.outputDirectory, `${options.target}-coforge`),
+    target,
   });
   // Signing rewrites the file, so it comes before the bytes are read.
-  if (isDarwinTarget(options.target)) await options.sign?.(path);
-  return { computer: new Uint8Array(await Bun.file(path).arrayBuffer()) };
+  if (isDarwinTarget(options.target)) await options.sign?.(computerPath);
+  return {
+    computer: new Uint8Array(await Bun.file(computerPath).arrayBuffer()),
+    cli: new Uint8Array(await Bun.file(cliPath).arrayBuffer()),
+  };
 }

@@ -51,7 +51,9 @@ export function isNonLocalizedRequest(request: Request): boolean {
     // both breaks the documented URL and turns a `curl | sh` pipeline's error case into an
     // 18 KB HTML not-found page instead of plain text.
     pathname === "/computer/install.sh" ||
-    pathname === "/computer/install.ps1"
+    pathname === "/computer/install.ps1" ||
+    pathname === "/cli/install.sh" ||
+    pathname === "/cli/install.ps1"
   );
 }
 

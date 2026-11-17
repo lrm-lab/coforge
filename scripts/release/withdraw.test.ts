@@ -11,13 +11,17 @@ import { withdrawStagingRelease } from "./withdraw";
 afterEach(stopFakeOssServers);
 const sha = (text: string) => new Bun.CryptoHasher("sha256").update(text).digest("hex");
 
-function published(version: string) {
+function published(version: string, withCli = false) {
   const objects: Record<string, string> = {};
   const platforms = Object.fromEntries(
     DEFAULT_TARGETS.map((target) => {
       const bytes = version + target;
       objects[version + "/" + target + "/coforge-computer.gz"] = bytes;
       objects[version + "/" + target + "/coforge-computer.sha256"] = sha(bytes) + "\n";
+      if (withCli) {
+        objects[version + "/" + target + "/coforge.gz"] = bytes;
+        objects[version + "/" + target + "/coforge.sha256"] = sha(bytes) + "\n";
+      }
       return [
         target,
         {
@@ -39,6 +43,7 @@ function published(version: string) {
     commit: "a".repeat(40),
     buildDate: "2026-10-18T00:00:00Z",
     platforms,
+    ...(withCli ? { cli: {} } : {}),
     photonWasm: { file: "photon_rs_bg.wasm", size: wasm.length, checksum: sha(wasm) },
   });
   objects[version + "/manifest.json"] = manifest;
@@ -80,6 +85,28 @@ test("withdrawal restores and verifies latest before deleting only the selected 
   expect(fake.calls.filter((call) => call.method === "DELETE").at(-1)?.key).toBe(
     withdrawn + "/manifest.json",
   );
+});
+
+test("withdrawing a release that published the standalone cli deletes its cli objects too", async () => {
+  const wrong = published(withdrawn, true),
+    previous = published(restored);
+  const fake = startFakeOssServer({
+    previousLatest: withdrawn + "\n",
+    preexistingObjects: { ...wrong.objects, ...previous.objects },
+  });
+  const connection = fixtureConnection(fake);
+  const client = await createOssClient(connection, CREDENTIALS);
+  const result = await withdrawStagingRelease(
+    {
+      version: withdrawn,
+      manifestSha256: wrong.manifestSha256,
+      restoreVersion: restored,
+      restoreManifestSha256: previous.manifestSha256,
+    },
+    { client, connection },
+  );
+  expect(result.deleted).toHaveLength(26);
+  for (const key of Object.keys(wrong.objects)) expect(fake.peek(key)).toBeUndefined();
 });
 
 test("withdrawal rejects either unpinned manifest before any mutation", async () => {

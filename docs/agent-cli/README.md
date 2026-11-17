@@ -3,6 +3,26 @@
 The Agent-facing `coforge` command surface, one topic per file. The package
 itself is described in [`packages/coforge/README.md`](../../packages/coforge/README.md).
 
+## Installing only the CLI
+
+An Agent that runs on any machine without a CoForge Computer needs just the
+CLI, not the Computer:
+
+```sh
+curl -fsSL <server>/cli/install.sh | sh
+```
+
+```powershell
+irm <server>/cli/install.ps1 | iex
+```
+
+`<server>` is the CoForge origin the Workspace is on (for example
+`https://coforge.cn`). The script installs `coforge` into `~/.local/bin`
+(`%LOCALAPPDATA%\CoForge\bin` on Windows) and prints a PATH hint if that
+directory is not on `PATH`; run it again to upgrade. It installs nothing else
+and starts nothing. `--version <v>` on `sh -s --` pins a version
+([feed layout](../release/local-distribution.md#standalone-agent-cli)).
+
 | Topic                                                  | Covers                                                                                                                                              |
 | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [Inbox and messages](inbox-and-messages.md)            | `inbox check`, `message check/send/read/resolve/react`, freshness holds, reviewer isolation                                                         |
@@ -24,5 +44,5 @@ itself is described in [`packages/coforge/README.md`](../../packages/coforge/REA
 | [Labels](labels.md)                                    | `label list`: the Workspace's labels; `task ... --label` attaches and filters                                                                       |
 | [Action cards](action-cards.md)                        | `action prepare`, supported card kinds, the app approval card, how a human commits a card                                                           |
 | [Output formats](output.md)                            | The plain-text formats the CLI prints                                                                                                               |
-| [External Agents](external-agent.md)                   | `agent login/status/logout`, profiles, `--profile`, what an external Agent cannot do                                                                |
+| [External Agents](external-agent.md)                   | `agent login/status/logout/bridge`, profiles, `--profile`, wake hints and push, what an external Agent cannot do                                                                |
 | [Agent context](context.md)                            | `context search/read`, stable entry ids, bounded pagination, and current-session authorization                                                      |

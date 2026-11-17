@@ -23,6 +23,8 @@ import { Route as ApiJwksRouteImport } from './routes/api/jwks'
 import { Route as ApiMeRouteImport } from './routes/api/me'
 import { Route as AuthGithubRouteImport } from './routes/auth/github'
 import { Route as AuthLogoutRouteImport } from './routes/auth/logout'
+import { Route as CliInstallDotps1RouteImport } from './routes/cli.install[.]ps1'
+import { Route as CliInstallDotshRouteImport } from './routes/cli.install[.]sh'
 import { Route as ComputerInstallDotps1RouteImport } from './routes/computer.install[.]ps1'
 import { Route as ComputerInstallDotshRouteImport } from './routes/computer.install[.]sh'
 import { Route as JoinTokenRouteImport } from './routes/join.$token'
@@ -269,6 +271,16 @@ const AuthGithubRoute = AuthGithubRouteImport.update({
 const AuthLogoutRoute = AuthLogoutRouteImport.update({
   id: '/auth/logout',
   path: '/auth/logout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CliInstallDotps1Route = CliInstallDotps1RouteImport.update({
+  id: '/cli/install.ps1',
+  path: '/cli/install.ps1',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CliInstallDotshRoute = CliInstallDotshRouteImport.update({
+  id: '/cli/install.sh',
+  path: '/cli/install.sh',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ComputerInstallDotps1Route = ComputerInstallDotps1RouteImport.update({
@@ -1275,6 +1287,8 @@ export interface FileRoutesByFullPath {
   '/api/me': typeof ApiMeRouteWithChildren
   '/auth/github': typeof AuthGithubRouteWithChildren
   '/auth/logout': typeof AuthLogoutRoute
+  '/cli/install.ps1': typeof CliInstallDotps1Route
+  '/cli/install.sh': typeof CliInstallDotshRoute
   '/computer/install.ps1': typeof ComputerInstallDotps1Route
   '/computer/install.sh': typeof ComputerInstallDotshRoute
   '/join/$token': typeof JoinTokenRoute
@@ -1465,6 +1479,8 @@ export interface FileRoutesByTo {
   '/api/me': typeof ApiMeRouteWithChildren
   '/auth/github': typeof AuthGithubRouteWithChildren
   '/auth/logout': typeof AuthLogoutRoute
+  '/cli/install.ps1': typeof CliInstallDotps1Route
+  '/cli/install.sh': typeof CliInstallDotshRoute
   '/computer/install.ps1': typeof ComputerInstallDotps1Route
   '/computer/install.sh': typeof ComputerInstallDotshRoute
   '/join/$token': typeof JoinTokenRoute
@@ -1654,6 +1670,8 @@ export interface FileRoutesById {
   '/api/me': typeof ApiMeRouteWithChildren
   '/auth/github': typeof AuthGithubRouteWithChildren
   '/auth/logout': typeof AuthLogoutRoute
+  '/cli/install.ps1': typeof CliInstallDotps1Route
+  '/cli/install.sh': typeof CliInstallDotshRoute
   '/computer/install.ps1': typeof ComputerInstallDotps1Route
   '/computer/install.sh': typeof ComputerInstallDotshRoute
   '/join/$token': typeof JoinTokenRoute
@@ -1848,6 +1866,8 @@ export interface FileRouteTypes {
     | '/api/me'
     | '/auth/github'
     | '/auth/logout'
+    | '/cli/install.ps1'
+    | '/cli/install.sh'
     | '/computer/install.ps1'
     | '/computer/install.sh'
     | '/join/$token'
@@ -2038,6 +2058,8 @@ export interface FileRouteTypes {
     | '/api/me'
     | '/auth/github'
     | '/auth/logout'
+    | '/cli/install.ps1'
+    | '/cli/install.sh'
     | '/computer/install.ps1'
     | '/computer/install.sh'
     | '/join/$token'
@@ -2226,6 +2248,8 @@ export interface FileRouteTypes {
     | '/api/me'
     | '/auth/github'
     | '/auth/logout'
+    | '/cli/install.ps1'
+    | '/cli/install.sh'
     | '/computer/install.ps1'
     | '/computer/install.sh'
     | '/join/$token'
@@ -2419,6 +2443,8 @@ export interface RootRouteChildren {
   ApiMeRoute: typeof ApiMeRouteWithChildren
   AuthGithubRoute: typeof AuthGithubRouteWithChildren
   AuthLogoutRoute: typeof AuthLogoutRoute
+  CliInstallDotps1Route: typeof CliInstallDotps1Route
+  CliInstallDotshRoute: typeof CliInstallDotshRoute
   ComputerInstallDotps1Route: typeof ComputerInstallDotps1Route
   ComputerInstallDotshRoute: typeof ComputerInstallDotshRoute
   JoinTokenRoute: typeof JoinTokenRoute
@@ -2647,6 +2673,20 @@ declare module '@tanstack/react-router' {
       path: '/auth/logout'
       fullPath: '/auth/logout'
       preLoaderRoute: typeof AuthLogoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cli/install.ps1': {
+      id: '/cli/install.ps1'
+      path: '/cli/install.ps1'
+      fullPath: '/cli/install.ps1'
+      preLoaderRoute: typeof CliInstallDotps1RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cli/install.sh': {
+      id: '/cli/install.sh'
+      path: '/cli/install.sh'
+      fullPath: '/cli/install.sh'
+      preLoaderRoute: typeof CliInstallDotshRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/computer/install.ps1': {
@@ -4146,6 +4186,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMeRoute: ApiMeRouteWithChildren,
   AuthGithubRoute: AuthGithubRouteWithChildren,
   AuthLogoutRoute: AuthLogoutRoute,
+  CliInstallDotps1Route: CliInstallDotps1Route,
+  CliInstallDotshRoute: CliInstallDotshRoute,
   ComputerInstallDotps1Route: ComputerInstallDotps1Route,
   ComputerInstallDotshRoute: ComputerInstallDotshRoute,
   JoinTokenRoute: JoinTokenRoute,

@@ -180,6 +180,12 @@ test("documentation skips application checks, while shared and unknown inputs fa
     "release",
     "web",
   ]);
+  expect(selectChecks(["scripts/release/cli-install.sh"], "changes")).toEqual(["release", "web"]);
+  expect(selectChecks(["scripts/release/cli-install.ps1"], "changes")).toEqual([
+    "release",
+    "web",
+    "windows-installer",
+  ]);
   for (const path of [
     "crates/installer/src/fetch.rs",
     "Cargo.lock",

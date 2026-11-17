@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 
 import { isNonLocalizedRequest } from "#src/server";
 import {
+  cliInstallPs1Handler,
+  cliInstallShHandler,
   installPs1Handler,
   installShHandler,
   isValidReleaseFeedUrl,
@@ -143,6 +145,54 @@ test("the anchor lines this server rewrites still exist verbatim in both scripts
   // Guards the substitution against a script edit that lands without touching this file.
   const sh = await sourceOf("install.sh");
   const ps1 = await sourceOf("install.ps1");
+  expect(sh.split(`default_feed_url="${PRODUCTION_FEED_URL}"`).length - 1).toBe(1);
+  expect(ps1.split(`$defaultFeedUrl = "${PRODUCTION_FEED_URL}"`).length - 1).toBe(1);
+});
+
+test("the CLI-only installer paths bypass Paraglide localization, as exact paths", () => {
+  expect(isNonLocalizedRequest(new Request("http://localhost/cli/install.sh"))).toBe(true);
+  expect(isNonLocalizedRequest(new Request("http://localhost/cli/install.ps1"))).toBe(true);
+  expect(isNonLocalizedRequest(new Request("http://localhost/cli/install.shX"))).toBe(false);
+  expect(isNonLocalizedRequest(new Request("http://localhost/cli/other"))).toBe(false);
+});
+
+test("the CLI-only scripts are served as their own bytes with only the feed line rewritten", async () => {
+  const cases = [
+    [cliInstallShHandler, "cli-install.sh", "#!/bin/sh", "default_feed_url=", '"'],
+    [cliInstallPs1Handler, "cli-install.ps1", "", "$defaultFeedUrl = ", '"'],
+  ] as const;
+  for (const [handler, name, prefix, assignment] of cases) {
+    const response = handler(STAGING);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(response.headers.get("cache-control")).toBe("no-cache");
+    const body = await response.text();
+    expect(body.startsWith(prefix)).toBe(true);
+    expect(body).toBe(
+      (await sourceOf(name)).replace(
+        `${assignment}"${PRODUCTION_FEED_URL}"`,
+        `${assignment}"${STAGING.COFORGE_RELEASE_FEED_URL}"`,
+      ),
+    );
+    expect(body).not.toContain(PRODUCTION_FEED_URL);
+  }
+});
+
+test("the CLI-only scripts fail closed with 503 when the feed is unset or unusable", async () => {
+  for (const environment of [{}, { COFORGE_RELEASE_FEED_URL: "http://a.cn" }]) {
+    for (const handler of [cliInstallShHandler, cliInstallPs1Handler]) {
+      const response = handler(environment);
+      expect(response.status).toBe(503);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      const body = await response.text();
+      expect(body.split("\n").every((line) => line === "" || line.startsWith("#"))).toBe(true);
+    }
+  }
+});
+
+test("each CLI-only script carries its feed anchor exactly once", async () => {
+  const sh = await sourceOf("cli-install.sh");
+  const ps1 = await sourceOf("cli-install.ps1");
   expect(sh.split(`default_feed_url="${PRODUCTION_FEED_URL}"`).length - 1).toBe(1);
   expect(ps1.split(`$defaultFeedUrl = "${PRODUCTION_FEED_URL}"`).length - 1).toBe(1);
 });

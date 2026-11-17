@@ -9,6 +9,9 @@ host, `bun run build`) only call it, so a new inlined value goes there and reach
 import only relative paths and `#src/`: CI's native jobs run the release build from an install
 of this workspace alone, with no root `node_modules`.
 
+`compile-release.ts` also builds the standalone `coforge` CLI beside the Computer, through
+`packages/coforge/scripts/build-executable.ts`; it is a separate artifact, not a Computer mode.
+
 `scripts/installer-contract.ts` (outside `src/`, never bundled) generates
 `crates/installer/contract/`, the cross-language contract with the Rust installer:
 a JSON Schema (draft 2020-12, via `z.toJSONSchema()`) per JSON shape plus a golden instance of every file. Change the TypeScript owner and regenerate. The generator lists which module owns each file. This package is its source

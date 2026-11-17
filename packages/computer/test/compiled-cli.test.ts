@@ -69,6 +69,7 @@ test("single-file installation provides management and Agent CLI without a Daemo
       artifacts: {
         [target]: {
           computer: new Uint8Array(await Bun.file(executable).arrayBuffer()),
+          cli: new Uint8Array(await Bun.file(executable).arrayBuffer()),
         },
       },
     },

@@ -16,26 +16,31 @@ param(
   [switch]$Lint
 )
 
-$tokens = $null
-$errors = $null
-[System.Management.Automation.Language.Parser]::ParseFile(
-  "scripts/release/install.ps1", [ref]$tokens, [ref]$errors) | Out-Null
-if ($errors) {
-  $errors | Out-String | Write-Error
-  exit 1
+$scripts = @("scripts/release/install.ps1", "scripts/release/cli-install.ps1")
+
+foreach ($script in $scripts) {
+  $tokens = $null
+  $errors = $null
+  [System.Management.Automation.Language.Parser]::ParseFile($script, [ref]$tokens, [ref]$errors) | Out-Null
+  if ($errors) {
+    $errors | Out-String | Write-Error
+    exit 1
+  }
 }
 
 if ($Lint) {
   Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -SkipPublisherCheck
-  # PSAvoidUsingWriteHost targets reusable functions, whose output a caller may want to
-  # capture. This is a bootstrap script run as `irm ... | iex`, where the pipeline carries
-  # the expression's value: Write-Output would make progress text the result of that
-  # expression. Write-Host is the correct call here, so the rule is excluded rather than
-  # worked around.
-  $findings = Invoke-ScriptAnalyzer -Path "scripts/release/install.ps1" `
-    -Severity Warning, Error -ExcludeRule PSAvoidUsingWriteHost
-  if ($findings) {
-    $findings | Format-Table -AutoSize | Out-String | Write-Error
-    exit 1
+  foreach ($script in $scripts) {
+    # PSAvoidUsingWriteHost targets reusable functions, whose output a caller may want to
+    # capture. These are bootstrap scripts run as `irm ... | iex`, where the pipeline carries
+    # the expression's value: Write-Output would make progress text the result of that
+    # expression. Write-Host is the correct call here, so the rule is excluded rather than
+    # worked around.
+    $findings = Invoke-ScriptAnalyzer -Path $script `
+      -Severity Warning, Error -ExcludeRule PSAvoidUsingWriteHost
+    if ($findings) {
+      $findings | Format-Table -AutoSize | Out-String | Write-Error
+      exit 1
+    }
   }
 }

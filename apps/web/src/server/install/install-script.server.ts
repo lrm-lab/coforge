@@ -1,11 +1,13 @@
 import installShSource from "../../../../../scripts/release/install.sh?raw";
 import installPs1Source from "../../../../../scripts/release/install.ps1?raw";
+import cliInstallShSource from "../../../../../scripts/release/cli-install.sh?raw";
+import cliInstallPs1Source from "../../../../../scripts/release/cli-install.ps1?raw";
 import { textResponse } from "#src/server/http/text-response.server";
 
 /**
  * Serves the two bootstrap installer scripts (`curl ... | sh`, `irm ... | iex`) at
- * `/computer/install.sh` and `/computer/install.ps1`, with one line rewritten: the release feed
- * the script downloads from.
+ * `/computer/install.sh` and `/computer/install.ps1`, and the CLI-only pair at `/cli/install.sh`
+ * and `/cli/install.ps1`, with one line rewritten: the release feed the script downloads from.
  *
  * `docs/release/local-feed-hosting.md`: each deployment serves its own pair of
  * entry points routed to the release feed that deployment trusts, because a `curl ... | sh` taken
@@ -125,4 +127,12 @@ export function installShHandler(environment?: Record<string, string | undefined
 
 export function installPs1Handler(environment?: Record<string, string | undefined>): Response {
   return installScriptResponse(installPs1Source, PS1_DEFAULT_FEED_LINE, environment);
+}
+
+export function cliInstallShHandler(environment?: Record<string, string | undefined>): Response {
+  return installScriptResponse(cliInstallShSource, SH_DEFAULT_FEED_LINE, environment);
+}
+
+export function cliInstallPs1Handler(environment?: Record<string, string | undefined>): Response {
+  return installScriptResponse(cliInstallPs1Source, PS1_DEFAULT_FEED_LINE, environment);
 }

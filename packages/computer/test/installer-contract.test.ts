@@ -47,7 +47,12 @@ test("the release build writes a manifest the contract schema accepts", async ()
         version: "0.2.0",
         commit: "0123456789abcdef0123456789abcdef01234567",
         buildDate: "2026-09-29T00:00:00.000Z",
-        artifacts: { "linux-x64": { computer: new TextEncoder().encode("computer") } },
+        artifacts: {
+          "linux-x64": {
+            computer: new TextEncoder().encode("computer"),
+            cli: new TextEncoder().encode("cli"),
+          },
+        },
         photonWasm: new TextEncoder().encode("wasm"),
       },
       directory,

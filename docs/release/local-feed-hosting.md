@@ -17,7 +17,12 @@ that is the same in every environment:
 ```text
 https://coforge.cn/computer/install.sh                 https://coforge.cn/computer/install.ps1
 https://staging.coforge.cn/computer/install.sh         https://staging.coforge.cn/computer/install.ps1
+https://coforge.cn/cli/install.sh                      https://coforge.cn/cli/install.ps1
+https://staging.coforge.cn/cli/install.sh              https://staging.coforge.cn/cli/install.ps1
 ```
+
+The `/cli/` pair installs only the standalone Agent CLI, from the same feed
+([distribution model](local-distribution.md#standalone-agent-cli)).
 
 Each deployment serves its own pair and routes them to the release feed that
 deployment trusts, because a `curl … | sh` taken from staging must install the

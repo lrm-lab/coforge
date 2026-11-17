@@ -27,11 +27,12 @@ export async function tempDir(prefix: string): Promise<string> {
 // here. Compilation is stubbed, so the extra target costs nothing.
 export const TEST_TARGETS = ["linux-x64", "linux-arm64", "windows-x64"];
 
-export function fixtureArtifacts(): Record<string, { computer: Uint8Array }> {
-  const artifacts: Record<string, { computer: Uint8Array }> = {};
+export function fixtureArtifacts(): Record<string, { computer: Uint8Array; cli: Uint8Array }> {
+  const artifacts: Record<string, { computer: Uint8Array; cli: Uint8Array }> = {};
   for (const target of TEST_TARGETS) {
     artifacts[target] = {
       computer: Buffer.from(`#!/bin/sh\n# unified computer for ${target}\n`),
+      cli: Buffer.from(`#!/bin/sh\n# standalone cli for ${target}\n`),
     };
   }
   return artifacts;

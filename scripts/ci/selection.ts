@@ -126,6 +126,10 @@ export function selectChecks(paths: string[], track: "changes" | "web" | "local"
       affected = ["computer", "release", "web", "windows-installer"];
     } else if (path === "scripts/release/install.sh") {
       affected = ["computer", "release", "web"];
+    } else if (path === "scripts/release/cli-install.sh") {
+      affected = ["release", "web"];
+    } else if (path === "scripts/release/cli-install.ps1") {
+      affected = ["release", "web", "windows-installer"];
     } else if (path.startsWith("apps/web/")) {
       affected = ["web"];
     } else if (
