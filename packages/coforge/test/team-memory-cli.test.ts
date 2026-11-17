@@ -72,3 +72,44 @@ test("a history preview explains how to read one full revision", async () => {
       parseArgs(["memory", "get", "--scope", "team", "--id", id, "--revision", revision]),
     ).toThrow();
 });
+
+test("team memory discovers projects and explicitly controls optional project and protection", () => {
+  expect(
+    parseArgs(["memory", "projects", "--scope", "team", "--query", "CoForge", "--offset", "20"]),
+  ).toMatchObject({ request: { operation: "projects", query: "CoForge", offset: 20 } });
+  expect(
+    parseArgs([
+      "memory",
+      "project-create",
+      "--scope",
+      "team",
+      "--name",
+      "CoForge",
+      "--slug",
+      "coforge",
+    ]),
+  ).toMatchObject({ request: { operation: "project-create", description: "" } });
+  expect(
+    parseArgs([
+      "memory",
+      "create",
+      "--scope",
+      "team",
+      "--requestId",
+      "00000000-0000-4000-8000-000000000001",
+      "--title",
+      "Decision",
+      "--content",
+      "Confirmed",
+      "--source",
+      "Owner",
+      "--projectId",
+      "none",
+      "--pinned",
+      "true",
+    ]),
+  ).toMatchObject({ request: { projectId: null, pinned: true } });
+  expect(() =>
+    parseArgs(["memory", "list", "--scope", "team", "--projectId", "not-a-project"]),
+  ).toThrow();
+});

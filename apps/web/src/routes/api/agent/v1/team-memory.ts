@@ -8,7 +8,11 @@ export const Route = createFileRoute("/api/agent/v1/team-memory")({
     middleware: [agentAuthMiddleware],
     handlers: {
       POST: ({ request, context: { principal, db } }) =>
-        handleTeamMemory(request, principal, teamMemory(db)),
+        handleTeamMemory(
+          request,
+          { workspaceId: principal.workspaceId, agentId: principal.agentId },
+          teamMemory(db),
+        ),
     },
   },
 });

@@ -31,12 +31,21 @@ export function parseTeamMemoryArgs(args: readonly string[]): TeamMemoryInvocati
       ? Number(value)
       : key === "sources"
         ? JSON.parse(value)
-        : value;
+        : key === "pinned"
+          ? value === "true"
+            ? true
+            : value === "false"
+              ? false
+              : value
+          : key === "projectId" && value === "none"
+            ? null
+            : value;
   }
   if (["prepare", "create", "update", "merge"].includes(String(row.operation))) {
     row.kind ??= "fact";
     row.applicability ??= "";
   }
+  if (row.operation === "project-create") row.description ??= "";
   return { command: "memory", scope: "team", request: decodeTeamMemoryCommand(row), json };
 }
 export async function runTeamMemoryCommand(
@@ -49,7 +58,10 @@ export async function runTeamMemoryCommand(
   return [
     ...result.entries.map(
       (entry) =>
-        `${entry.title} [${entry.id}]\n${entry.content}\nSource: ${entry.source}\nApplies to: ${entry.applicability || "unspecified"}\nRevision: ${entry.revision}\nState: ${entry.status}\nAuthor: ${entry.authorAgentId}${entry.change ? `\nChanged by: ${entry.change.actorAgentId} (${entry.change.operation})\nReason: ${entry.change.reason}\nMerged from: ${JSON.stringify(entry.change.mergedFrom)}` : ""}`,
+        `${entry.title} [${entry.id}]\n${entry.content}\nSource: ${entry.source}\nApplies to: ${entry.applicability || "unspecified"}\nRevision: ${entry.revision}\nState: ${entry.status}\nAuthor: ${entry.authorAgentId ?? entry.authorUserId}${entry.change ? `\nChanged by: ${entry.change.actorAgentId ?? entry.change.actorUserId} (${entry.change.operation})\nReason: ${entry.change.reason}\nMerged from: ${JSON.stringify(entry.change.mergedFrom)}` : ""}`,
+    ),
+    ...(result.projects ?? []).map(
+      (project) => `${project.name} [${project.id}] (${project.slug})\n${project.description}`,
     ),
     ...(invocation.request.operation === "history"
       ? result.entries.map(

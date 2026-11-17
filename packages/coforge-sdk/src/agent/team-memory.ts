@@ -8,15 +8,19 @@ export type TeamMemoryDraft = {
   source: string;
   kind: MemoryKind;
   applicability: string;
+  projectId?: string | null;
+  pinned?: boolean;
 };
 export type TeamMemoryHead = TeamMemoryDraft & {
   id: string;
   revision: number;
   status: "active" | "archived";
-  authorAgentId: string;
+  authorAgentId: string | null;
+  authorUserId?: string | null;
   updatedAt: string;
   change?: {
-    actorAgentId: string;
+    actorAgentId: string | null;
+    actorUserId?: string | null;
     operation: string;
     reason: string;
     mergedFrom: { id: string; revision: number }[];
@@ -35,16 +39,21 @@ export type TeamMemoryWrite = { requestId: string; reviewToken?: string } & (
   | { operation: "archive" | "delete"; id: string; revision: number; reason: string }
   | { operation: "restore"; id: string; revision: number; fromRevision: number; reason: string }
 );
+export type TeamMemoryCatalogCommand =
+  | { operation: "projects"; query?: string; offset?: number }
+  | { operation: "project-create"; name: string; slug: string; description: string };
 export type TeamMemoryCommand =
+  | TeamMemoryCatalogCommand
   | ({ operation: "prepare" } & TeamMemoryDraft)
-  | { operation: "search"; query: string; offset?: number }
-  | { operation: "list"; offset?: number; archived?: boolean }
+  | { operation: "search"; query: string; offset?: number; projectId?: string; archived?: boolean }
+  | { operation: "list"; offset?: number; archived?: boolean; projectId?: string }
   | { operation: "get"; id: string; revision?: number }
   | { operation: "history"; id: string; offset?: number }
   | TeamMemoryWrite;
 export type TeamMemoryResult = {
   status: "ok" | "review_required" | "deleted";
   entries: TeamMemoryHead[];
+  projects?: { id: string; name: string; slug: string; description: string }[];
   reviewRevision?: number;
   reviewToken?: string;
   nextOffset?: number;
@@ -82,12 +91,34 @@ export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {
     return item;
   };
   const operation = string("operation", 20);
-  const draftKeys = ["title", "content", "source", "kind", "applicability"];
+  if (operation === "projects" || operation === "project-create") {
+    const keys =
+      operation === "projects"
+        ? ["operation", "query", "offset"]
+        : ["operation", "name", "slug", "description"];
+    if (Object.keys(value).some((key) => !keys.includes(key)))
+      throw new Error("invalid_memory_field");
+    if (operation === "projects")
+      return {
+        operation,
+        ...(value.query === undefined ? {} : { query: string("query", 200, true) }),
+        offset: number("offset", 0),
+      };
+    const slug = string("slug", 100);
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new Error("invalid_memory_slug");
+    return {
+      operation,
+      slug,
+      name: string("name", 100),
+      description: string("description", 2000, true),
+    };
+  }
+  const draftKeys = ["title", "content", "source", "kind", "applicability", "projectId", "pinned"];
   const readKeys =
     operation === "search"
-      ? ["query", "offset"]
+      ? ["query", "offset", "projectId", "archived"]
       : operation === "list"
-        ? ["offset", "archived"]
+        ? ["offset", "archived", "projectId"]
         : operation === "get"
           ? ["id", "revision"]
           : ["id", "offset"];
@@ -109,12 +140,29 @@ export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {
         : writeKeys),
   ]);
   if (Object.keys(value).some((key) => !allowed.has(key))) throw new Error("invalid_memory_field");
+  const project =
+    value.projectId === undefined
+      ? {}
+      : { projectId: value.projectId === null && hasDraft ? null : uuid("projectId") };
+  if (value.archived !== undefined && typeof value.archived !== "boolean")
+    throw new Error("invalid_memory_archived");
   if (operation === "search")
-    return { operation, query: string("query", 500), offset: number("offset", 0) };
+    return {
+      ...(value.archived === undefined ? {} : { archived: value.archived }),
+      operation,
+      query: string("query", 500),
+      offset: number("offset", 0),
+      ...(project.projectId ? { projectId: project.projectId } : {}),
+    };
   if (operation === "list") {
     if (value.archived !== undefined && typeof value.archived !== "boolean")
       throw new Error("invalid_memory_archived");
-    return { operation, offset: number("offset", 0), archived: value.archived === true };
+    return {
+      operation,
+      offset: number("offset", 0),
+      archived: value.archived === true,
+      ...(project.projectId ? { projectId: project.projectId } : {}),
+    };
   }
   if (operation === "get") {
     const revision = value.revision === undefined ? undefined : number("revision");
@@ -126,7 +174,11 @@ export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {
   if (hasDraft) {
     const kind = string("kind", 20);
     if (!MEMORY_KINDS.includes(kind as MemoryKind)) throw new Error("invalid_memory_kind");
+    if (value.pinned !== undefined && typeof value.pinned !== "boolean")
+      throw new Error("invalid_memory_pinned");
     draft = {
+      ...project,
+      ...(value.pinned === undefined ? {} : { pinned: value.pinned }),
       title: string("title", 200),
       content: string("content", 16_000),
       source: string("source"),
@@ -195,8 +247,14 @@ export function decodeTeamMemoryResult(value: unknown): TeamMemoryResult {
       !isRecord(entry) ||
       typeof entry.id !== "string" ||
       !UUID.test(entry.id) ||
-      typeof entry.authorAgentId !== "string" ||
-      !UUID.test(entry.authorAgentId) ||
+      !(
+        (typeof entry.authorAgentId === "string" &&
+          UUID.test(entry.authorAgentId) &&
+          (entry.authorUserId === undefined || entry.authorUserId === null)) ||
+        (entry.authorAgentId === null &&
+          typeof entry.authorUserId === "string" &&
+          UUID.test(entry.authorUserId))
+      ) ||
       !Number.isSafeInteger(entry.revision) ||
       Number(entry.revision) < 1 ||
       !["active", "archived"].includes(String(entry.status)) ||
@@ -211,8 +269,28 @@ export function decodeTeamMemoryResult(value: unknown): TeamMemoryResult {
       source: entry.source,
       kind: entry.kind,
       applicability: entry.applicability,
+      projectId: entry.projectId,
+      pinned: entry.pinned,
     });
   }
+  if (
+    value.projects !== undefined &&
+    (!Array.isArray(value.projects) ||
+      value.projects.length > 20 ||
+      value.projects.some(
+        (p) =>
+          !isRecord(p) ||
+          typeof p.id !== "string" ||
+          !UUID.test(p.id) ||
+          typeof p.name !== "string" ||
+          p.name.length > 100 ||
+          typeof p.slug !== "string" ||
+          p.slug.length > 100 ||
+          typeof p.description !== "string" ||
+          p.description.length > 2000,
+      ))
+  )
+    throw new Error("invalid_memory_projects");
   for (const key of ["reviewRevision", "nextOffset"])
     if (value[key] !== undefined && (!Number.isSafeInteger(value[key]) || Number(value[key]) < 0))
       throw new Error("invalid_memory_response");
