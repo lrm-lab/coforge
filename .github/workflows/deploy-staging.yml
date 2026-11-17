@@ -160,6 +160,35 @@ jobs:
           chmod 600 "$ssh_dir/key"
           echo "SSH_DIR=$ssh_dir" >> "$GITHUB_ENV"
 
+      - name: Ensure desktop tunnel public key on the ECS
+        env:
+          STAGING_DESKTOP_TUNNEL_PUBLIC_KEY: ${{ vars.STAGING_DESKTOP_TUNNEL_PUBLIC_KEY }}
+          DEPLOY_SSH_HOST: ${{ vars.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
+        run: |
+          if [ -z "${STAGING_DESKTOP_TUNNEL_PUBLIC_KEY}" ]; then
+            echo "STAGING_DESKTOP_TUNNEL_PUBLIC_KEY unset; skipping tunnel key install"
+            exit 0
+          fi
+          case "$STAGING_DESKTOP_TUNNEL_PUBLIC_KEY" in
+            ssh-ed25519\ *|ssh-rsa\ *) ;;
+            *)
+              echo "STAGING_DESKTOP_TUNNEL_PUBLIC_KEY must be an OpenSSH public key line" >&2
+              exit 1
+              ;;
+          esac
+          ssh -i "$SSH_DIR/key" \
+            -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
+            -o BatchMode=yes \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=8 \
+            "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
+            "pubkey=\$(cat); mkdir -p ~/.ssh && chmod 700 ~/.ssh &&
+             touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys &&
+             grep -qxF \"\$pubkey\" ~/.ssh/authorized_keys || echo \"\$pubkey\" >> ~/.ssh/authorized_keys &&
+             echo tunnel-key-ready" \
+            <<<"$STAGING_DESKTOP_TUNNEL_PUBLIC_KEY"
+
       - name: Log in to the image registry
         env:
           GHCR_TOKEN: ${{ github.token }}
