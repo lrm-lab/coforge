@@ -4,19 +4,15 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
  * Task #452: a message sent with "Send as task" shows its Task in the channel stream, its number,
- * status and owner, and the badge opens the Task, with the Workspace's task-conversations
- * experiment off (the message is the Task) and on (the Task is made from the message, as
- * production's Workspace has it). It shows at once (the Task announced) and after a reload (the
- * message window's read).
+ * status and owner, and the badge opens the Task (made from the message). It shows at once (the
+ * Task announced) and after a reload (the message window's read).
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the server started as it
- * is. Each run seeds its
- * own Workspace, so switching the experiment touches no other test. Screenshots are written under
+ * is. Each run seeds its own Workspace. Screenshots are written under
  * `.amp/e2e/send-as-task-stream/`.
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
@@ -34,7 +30,7 @@ const centrifugoApiKey = Bun.env.COFORGE_CENTRIFUGO_API_KEY;
 if (!centrifugoApiKey) throw new Error("COFORGE_CENTRIFUGO_API_KEY is required");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/send-as-task-stream");
 
-test("a message sent as a Task shows its Task in the stream, with task conversations off and on", async () => {
+test("a message sent as a Task shows its Task in the stream", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `send-as-task-stream-${process.pid}`;
   async function browser(...args: string[]) {
@@ -100,7 +96,6 @@ test("a message sent as a Task shows its Task in the stream, with task conversat
   // send makes under task conversations reaches the page only as its announcement.
   const proxy = sameOriginProxy(origin!, centrifugoOrigin!);
   const channelPath = `${proxy.origin}/en/w/${workspace.slug}/channel/${channel.id}`;
-  const experiments = new PrismaExperimentsRepository(db);
   /** Waits until Centrifugo has a client on the Workspace's conversation channel: this run's own
    * Workspace, so the only one is this page (https://centrifugal.dev/docs/server/server_api#channels). */
   const workspaceChannelSubscribed = async () => {
@@ -122,78 +117,69 @@ test("a message sent as a Task shows its Task in the stream, with task conversat
   try {
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
-    for (const on of [false, true]) {
-      await experiments.write(workspace.id, "taskConversations", on);
-      const mode = on ? "on" : "off";
-      const body = `Ship the release notes (${mode}) ${suffix}`;
-      await browser("open", channelPath);
-      const composer = 'textarea[placeholder^="Message #"]';
-      await waitFor(`document.querySelector(${JSON.stringify(composer)}) !== null`, 60_000);
-      // The Task's announcement rides the Workspace channel; a page that sends before it has
-      // subscribed would only see the Task on its next read.
-      await workspaceChannelSubscribed();
-      await browser("fill", composer, body);
-      // "Send as task" arms the send and offers the Task's priority first (task #12): the chip
-      // shows the device's remembered pick; choosing one here names the Task's priority.
-      await browser("press", "Meta+Shift+Enter");
-      await waitFor(`document.querySelector('button[aria-label^="Change priority:"]') !== null`);
-      await browser("click", 'button[aria-label^="Change priority:"]');
-      await browser("find", "role", "menuitemradio", "click", "--name", "High");
-      await waitFor(
-        `document.querySelector('button[aria-label="Change priority: High"]') !== null`,
-      );
-      // Picking from the menu leaves focus on its trigger; the composer takes it back for Enter.
-      await browser("click", composer);
-      await browser("press", "Enter");
+    const body = `Ship the release notes ${suffix}`;
+    await browser("open", channelPath);
+    const composer = 'textarea[placeholder^="Message #"]';
+    await waitFor(`document.querySelector(${JSON.stringify(composer)}) !== null`, 60_000);
+    // The Task's announcement rides the Workspace channel; a page that sends before it has
+    // subscribed would only see the Task on its next read.
+    await workspaceChannelSubscribed();
+    await browser("fill", composer, body);
+    // "Send as task" arms the send and offers the Task's priority first (task #12): the chip
+    // shows the device's remembered pick; choosing one here names the Task's priority.
+    await browser("press", "Meta+Shift+Enter");
+    await waitFor(`document.querySelector('button[aria-label^="Change priority:"]') !== null`);
+    await browser("click", 'button[aria-label^="Change priority:"]');
+    await browser("find", "role", "menuitemradio", "click", "--name", "High");
+    await waitFor(`document.querySelector('button[aria-label="Change priority: High"]') !== null`);
+    // Picking from the menu leaves focus on its trigger; the composer takes it back for Enter.
+    await browser("click", composer);
+    await browser("press", "Enter");
 
-      const task = await (async () => {
-        for (let attempt = 0; attempt < 100; attempt += 1) {
-          const found = await db.task.findFirst({
-            where: { conversationId: channel.id, title: { contains: `(${mode})` } },
-            select: { number: true, messageId: true, sourceMessageId: true, priority: true },
-          });
-          if (found) return found;
-          await Bun.sleep(200);
-        }
-        throw new Error(`no Task was made with the experiment ${mode}`);
-      })();
-      // Off, the message is the Task; on, the Task is made from it and has no message (a server
-      // without the flag offered would take the first path both times).
-      if (on) {
-        expect(task.messageId).toBeNull();
-        expect(task.sourceMessageId).not.toBeNull();
-      } else expect(task.messageId).not.toBeNull();
-      // The send named its priority through the armed send's chip.
-      expect(task.priority).toBe("high");
+    const task = await (async () => {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const found = await db.task.findFirst({
+          where: { conversationId: channel.id, title: { contains: body } },
+          select: { number: true, messageId: true, sourceMessageId: true, priority: true },
+        });
+        if (found) return found;
+        await Bun.sleep(200);
+      }
+      throw new Error("no Task was made");
+    })();
+    // The Task is made from the message and has no message of its own.
+    expect(task.messageId).toBeNull();
+    expect(task.sourceMessageId).not.toBeNull();
+    // The send named its priority through the armed send's chip.
+    expect(task.priority).toBe("high");
 
-      // The chip under the message shows its Task's number (task #13 moved the title to the
-      // peek): still proof the badge is this Task's.
-      const parts = [`#${task.number}`];
-      const shows = `(() => { const text = ${badgeOf(body)}?.textContent ?? ""; return ${JSON.stringify(parts)}.every((part) => text.includes(part)); })()`;
-      // At once, from the announced Task.
-      await waitFor(shows);
-      await browser("screenshot", join(artifacts, `stream-${mode}.png`));
-      // As on Raft, no "task created" notice is posted beside the message.
-      expect(
-        await db.message.count({ where: { conversationId: channel.id, senderMemberId: null } }),
-      ).toBe(0);
-      expect(await eval_(`document.body.textContent.includes("new task created")`)).toBe(false);
-      // After a reload, from the message window's read.
-      await browser("open", channelPath);
-      await waitFor(shows, 60_000);
+    // The chip under the message shows its Task's number (task #13 moved the title to the
+    // peek): still proof the badge is this Task's.
+    const parts = [`#${task.number}`];
+    const shows = `(() => { const text = ${badgeOf(body)}?.textContent ?? ""; return ${JSON.stringify(parts)}.every((part) => text.includes(part)); })()`;
+    // At once, from the announced Task.
+    await waitFor(shows);
+    await browser("screenshot", join(artifacts, "stream.png"));
+    // As on Raft, no "task created" notice is posted beside the message.
+    expect(
+      await db.message.count({ where: { conversationId: channel.id, senderMemberId: null } }),
+    ).toBe(0);
+    expect(await eval_(`document.body.textContent.includes("new task created")`)).toBe(false);
+    // After a reload, from the message window's read.
+    await browser("open", channelPath);
+    await waitFor(shows, 60_000);
 
-      // The badge opens the Task's popup.
-      // The chip under the message is the control (task #449): a real click on it.
-      await browser("click", `[data-message-task="${task.number}"] [data-task-status]`);
-      await waitFor(`new URL(location.href).searchParams.get("task") === "${task.number}"`);
-      await waitFor(
-        `[...document.querySelectorAll('[role="dialog"]')].some((dialog) => dialog.textContent.includes(${JSON.stringify(`(${mode})`)}))`,
-      );
-      await browser("screenshot", join(artifacts, `popup-${mode}.png`));
-      expect(await eval_(`new URL(location.href).searchParams.get("task")`)).toBe(
-        String(task.number),
-      );
-    }
+    // The badge opens the Task's popup.
+    // The chip under the message is the control (task #449): a real click on it.
+    await browser("click", `[data-message-task="${task.number}"] [data-task-status]`);
+    await waitFor(`new URL(location.href).searchParams.get("task") === "${task.number}"`);
+    await waitFor(
+      `[...document.querySelectorAll('[role="dialog"]')].some((dialog) => dialog.textContent.includes(${JSON.stringify(body)}))`,
+    );
+    await browser("screenshot", join(artifacts, "popup.png"));
+    expect(await eval_(`new URL(location.href).searchParams.get("task")`)).toBe(
+      String(task.number),
+    );
   } finally {
     await db.workspace.delete({ where: { id: workspace.id } }).catch(() => {});
     await browser("close").catch(() => undefined);

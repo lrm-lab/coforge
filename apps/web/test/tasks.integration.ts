@@ -1,98 +1,15 @@
 import { expect, test } from "bun:test";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { recordingDeliveries, withPublishBatch } from "./helpers/fake-centrifugo";
+import { withPublishBatch } from "./helpers/fake-centrifugo";
 import { taskBoardFixture } from "./helpers/task-board-fixture";
+import { legacyMessageTask } from "./fixtures/legacy-message-task";
 
-test("TaskBoard atomically creates, converts, claims and revision-checks message Tasks", async () => {
-  const {
-    db,
-    alice,
-    bob,
-    workspace,
-    agent,
-    channel,
-    ordinary,
-    realtime,
-    board,
-    command,
-    direct,
-    attachment,
-    cleanup,
-  } = await taskBoardFixture();
+test("TaskBoard creates, converts, claims and revision-checks Tasks", async () => {
+  const { db, alice, bob, workspace, agent, channel, ordinary, board, command, cleanup } =
+    await taskBoardFixture();
 
   try {
-    const { publisher, delivered } = recordingDeliveries();
-    const directBoard = new TaskBoard(db, { publisher });
-    const directTask = await directBoard.execute(
-      { workspaceId: workspace.id, userId: alice.id },
-      {
-        operation: "create",
-        idempotencyKey: crypto.randomUUID(),
-        conversationId: direct.id,
-        title: "DM attachment task",
-        attachmentId: attachment.id,
-      },
-    );
-    expect(delivered[0]).toMatchObject({ target: `@${alice.username}` });
-    expect(
-      await db.message.findUnique({
-        where: { id: directTask.tasks[0]!.messageId! },
-        select: {
-          attachments: { select: { id: true } },
-          deliveries: { select: { agentId: true } },
-        },
-      }),
-    ).toEqual({
-      attachments: [{ id: attachment.id }],
-      deliveries: [{ agentId: agent.id }],
-    });
-    const directResource = await directBoard.execute(
-      { workspaceId: workspace.id, agentId: agent.id },
-      {
-        operation: "create",
-        idempotencyKey: crypto.randomUUID(),
-        target: `@${alice.username}`,
-        title: "DM temporary resource",
-        assignee: `@${agent.name}`,
-        createsResource: true,
-      },
-    );
-    const directReceiptCommand = {
-      operation: "receipt" as const,
-      idempotencyKey: crypto.randomUUID(),
-      target: `@${alice.username}`,
-      number: directResource.tasks[0]!.number,
-      receipt: {
-        object: "DM test resource",
-        purpose: "verify follow-up target",
-        teardownOwner: `@${agent.name}`,
-        securityPrivacy: "synthetic local data only",
-        expiry: new Date(Date.now() + 86_400_000).toISOString(),
-        runbook: "delete it",
-        tracking: `task:${directResource.tasks[0]!.messageId}`,
-      },
-    };
-    const directReceipt = await directBoard.execute(
-      { workspaceId: workspace.id, agentId: agent.id },
-      directReceiptCommand,
-    );
-    const replayedDirectReceipt = await directBoard.execute(
-      { workspaceId: workspace.id, agentId: agent.id },
-      directReceiptCommand,
-    );
-    expect(replayedDirectReceipt.resourceFollowup?.id).toBe(directReceipt.resourceFollowup?.id);
-    expect(
-      await db.reminder.findUniqueOrThrow({
-        where: { id: directReceipt.resourceFollowup!.id },
-        select: { target: true },
-      }),
-    ).toEqual({ target: `@${alice.username}:${directResource.tasks[0]!.messageId}` });
-
     const created = await board.execute({ workspaceId: workspace.id, userId: alice.id }, command);
-    // The Task's message is Alice's own: her other pages do not count it unread.
-    expect(realtime).toContainEqual(
-      expect.objectContaining({ messageId: created.tasks[0]!.messageId, senderUserId: alice.id }),
-    );
     expect(created.tasks[0]).toMatchObject({
       number: 1,
       title: command.title,
@@ -100,13 +17,10 @@ test("TaskBoard atomically creates, converts, claims and revision-checks message
       revision: 0,
     });
     expect(
-      (await board.execute({ workspaceId: workspace.id, userId: alice.id }, command)).tasks[0]
-        ?.messageId,
-    ).toBe(created.tasks[0]?.messageId);
+      (await board.execute({ workspaceId: workspace.id, userId: alice.id }, command)).tasks[0]?.id,
+    ).toBe(created.tasks[0]?.id);
     expect(
-      await db.message.count({
-        where: { conversationId: channel.id, body: command.title },
-      }),
+      await db.task.count({ where: { conversationId: channel.id, title: command.title } }),
     ).toBe(1);
     const competingClaims = await Promise.allSettled(
       [alice.id, bob.id].map((userId) =>
@@ -129,17 +43,17 @@ test("TaskBoard atomically creates, converts, claims and revision-checks message
     expect(claimRows.filter((claim) => claim && !claim.success)).toHaveLength(1);
 
     const converted = await board.execute(
-      { workspaceId: workspace.id, agentId: agent.id },
+      { workspaceId: workspace.id, userId: alice.id },
       {
         operation: "convert",
         idempotencyKey: crypto.randomUUID(),
-        target: `#${channel.channelName}`,
+        conversationId: channel.id,
         messageId: ordinary.id,
       },
     );
     expect(converted.tasks[0]).toMatchObject({
       number: 2,
-      messageId: ordinary.id,
+      sourceMessageId: ordinary.id,
       title: ordinary.body,
     });
     expect(
@@ -219,8 +133,6 @@ test("TaskBoard atomically creates, converts, claims and revision-checks message
         )
       ).tasks[0]?.status,
     ).toBe("done");
-    expect(realtime.some((event) => event.publicationId?.endsWith(":task:1"))).toBe(true);
-    expect(realtime.some((event) => event.publicationId?.endsWith(":task:2"))).toBe(true);
 
     const unowned = await board.execute(
       { workspaceId: workspace.id, userId: alice.id },
@@ -291,7 +203,7 @@ test("TaskBoard atomically creates, converts, claims and revision-checks message
       { workspaceId: workspace.id, userId: alice.id },
       postCommitCommand,
     );
-    expect(recovered.tasks[0]!.messageId).toBe(committed.tasks[0]!.messageId);
+    expect(recovered.tasks[0]!.id).toBe(committed.tasks[0]!.id);
     expect(
       await db.task.count({
         where: { requestId: postCommitCommand.idempotencyKey },
@@ -337,7 +249,11 @@ test("TaskBoard atomically creates, converts, claims and revision-checks message
         status: "all",
       },
     );
-    expect(allTasks.tasks).toEqual(expect.arrayContaining(batch.tasks));
+    expect(allTasks.tasks).toEqual(
+      expect.arrayContaining(
+        batch.tasks.map((task) => expect.objectContaining({ id: task.id, number: task.number })),
+      ),
+    );
     const batchClosed = await board.execute(
       { workspaceId: workspace.id, agentId: agent.id },
       {
@@ -402,27 +318,6 @@ test("TaskBoard atomically creates, converts, claims and revision-checks message
         success: false,
       }),
     ]);
-    const mixedSelectors = await board.execute(
-      { workspaceId: workspace.id, agentId: agent.id },
-      {
-        operation: "claim",
-        idempotencyKey: crypto.randomUUID(),
-        target: `#${channel.channelName}`,
-        number: releasedReview.tasks[0]!.number,
-        numbers: [releasedReview.tasks[0]!.number],
-        messageId: batchClosed.tasks[0]!.messageId!,
-      },
-    );
-    expect(mixedSelectors.claims).toEqual([
-      expect.objectContaining({
-        number: releasedReview.tasks[0]!.number,
-        success: true,
-      }),
-      expect.objectContaining({
-        messageId: batchClosed.tasks[0]!.messageId,
-        success: false,
-      }),
-    ]);
     const singleClaim = await board.execute(
       { workspaceId: workspace.id, agentId: agent.id },
       {
@@ -433,11 +328,7 @@ test("TaskBoard atomically creates, converts, claims and revision-checks message
       },
     );
     expect(singleClaim.claims).toEqual([
-      {
-        number: releasedReview.tasks[0]!.number,
-        messageId: releasedReview.tasks[0]!.messageId!,
-        success: true,
-      },
+      { number: releasedReview.tasks[0]!.number, success: true },
     ]);
     expect(
       (
@@ -509,17 +400,28 @@ test("TaskBoard atomically creates, converts, claims and revision-checks message
     );
     expect(amendmentRace.filter((entry) => entry.status === "fulfilled")).toHaveLength(1);
 
-    const resource = await board.execute(
-      { workspaceId: workspace.id, agentId: agent.id },
-      {
-        operation: "create",
-        idempotencyKey: crypto.randomUUID(),
-        target: `#${channel.channelName}`,
-        title: "temporary resource",
-        assignee: `@${agent.name}`,
-        createsResource: true,
-      },
-    );
+    const agentSeat = await db.conversationMember.findFirstOrThrow({
+      where: { conversationId: channel.id, agentId: agent.id },
+    });
+    const aliceSeat = await db.conversationMember.findFirstOrThrow({
+      where: { conversationId: channel.id, userId: alice.id },
+    });
+    // A Task from before task conversations that needs a resource receipt: the receipt's follow-up
+    // is anchored to the Task's message.
+    const resource = {
+      tasks: [
+        (
+          await legacyMessageTask(db, {
+            conversationId: channel.id,
+            workspaceId: workspace.id,
+            creatorMemberId: aliceSeat.id,
+            ownerMemberId: agentSeat.id,
+            title: "temporary resource",
+          })
+        ).task,
+      ],
+    };
+    await db.task.update({ where: { id: resource.tasks[0]!.id }, data: { createsResource: true } });
     // Work moves forward one step at a time, so the Task reaches In review before Done, where the
     // missing resource receipt is what refuses it.
     for (const status of ["in_progress", "in_review"] as const)

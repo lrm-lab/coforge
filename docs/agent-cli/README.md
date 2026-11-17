@@ -28,7 +28,7 @@ and starts nothing. `--version <v>` on `sh -s --` pins a version
 | [Inbox and messages](inbox-and-messages.md)            | `inbox check`, `message check/send/read/resolve/react`, freshness holds, reviewer isolation                                                         |
 | [Mentions](mentions.md)                                | @mentions a send reached no one with, `mention pending/notify/add`, and `mention delivery`                                                          |
 | [Channels](channels.md)                                | `channel` subcommands, membership and admin authority, target grammar                                                                               |
-| [Task conversations](task-conversations.md)            | A task's own conversation: `task view/reply/read/follow/unfollow`, `list --following`, refs, the Workspace switch                                   |
+| [Task conversations](task-conversations.md)            | A task's own conversation: `task view/reply/read/follow/unfollow`, `list --following`, refs                                                         |
 | [Attachments](attachments.md)                          | `attachment upload/view/comments`, size limits, direct presigned upload                                                                             |
 | [Weekly report](weekly-report.md)                      | Weekly-report discovery, collection and submission through private chat                                                                             |
 | [Agent Apps](apps.md)                                  | `app list/invoke/token`: apps, manifest actions, app token; `app config`                                                                            |
@@ -44,5 +44,5 @@ and starts nothing. `--version <v>` on `sh -s --` pins a version
 | [Labels](labels.md)                                    | `label list`: the Workspace's labels; `task ... --label` attaches and filters                                                                       |
 | [Action cards](action-cards.md)                        | `action prepare`, supported card kinds, the app approval card, how a human commits a card                                                           |
 | [Output formats](output.md)                            | The plain-text formats the CLI prints                                                                                                               |
-| [External Agents](external-agent.md)                   | `agent login/status/logout/bridge`, profiles, `--profile`, wake hints and push, what an external Agent cannot do                                                                |
+| [External Agents](external-agent.md)                   | `agent login/status/logout/bridge`, profiles, `--profile`, wake hints and push, what an external Agent cannot do                                    |
 | [Agent context](context.md)                            | `context search/read`, stable entry ids, bounded pagination, and current-session authorization                                                      |

@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { Labels } from "#src/server/tasks/labels.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import {
@@ -27,9 +26,7 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/message-task-pill");
 test("a message's Task shows as the chip its words name Tasks with, its details in the peek", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `message-task-pill-${process.pid}`);
-  const experiments = new PrismaExperimentsRepository(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
-  const before = (await experiments.read(workspaceId)).taskConversations;
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const channel = await db.conversation.create({
     data: {
@@ -50,7 +47,6 @@ test("a message's Task shows as the chip its words name Tasks with, its details 
       ...command,
     } as Parameters<TaskBoard["execute"]>[1]);
   try {
-    await experiments.write(workspaceId, "taskConversations", true);
     const message = await db.message.create({
       data: {
         workspaceId,
@@ -162,9 +158,6 @@ test("a message's Task shows as the chip its words name Tasks with, its details 
       }
     }
   } finally {
-    await experiments
-      .write(workspaceId, "taskConversations", before === true)
-      .catch(() => undefined);
     await browser("close").catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);
     await db.label

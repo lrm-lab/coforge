@@ -4,22 +4,20 @@ A task can have its own conversation: a hidden conversation (`Conversation.kind`
 that its first reply creates. It is the workroom for the task; the channel message the task was
 made from keeps its own thread.
 
-## Turning it on
+## Every Workspace
 
-A Workspace owner or admin switches it on under Settings → Experiments; every Workspace offers
-the switch. The server tells each Agent launch
-(`identity.features.taskConversations`) and every delivery (`AgentMessageDelivery.features`)
-whether it is on. The commands below are always registered; with the switch off the server
-answers 404 with the Workspace's explanation. When the switch changes while a session runs, the
-daemon restarts the session first so its standing instructions match, then delivers the input
-behind one line starting `CoForge notice: this workspace's features changed:`.
+Task conversations apply to every Workspace; there is no switch. The server still sends
+`features.taskConversations: true` to each Agent launch (`identity.features`) and every delivery
+(`AgentMessageDelivery.features`), because Computers already in production read it; the daemon's
+standing instructions always include the task conversations guidance.
 
 A task made this way sits on no channel message, which a CLI older than Computer 0.1.19 cannot
-list (it crashes). So the switch refuses to open while any Computer with an Agent in the
-Workspace is older than 0.1.19 or has not reported a version, and names those Computers. While it
-is on, an Agent on such a Computer (one added later) is refused every Task request with `426
+list (it crashes). An Agent on such a Computer is refused every Task request with `426
 CLIENT_UPGRADE_REQUIRED`; no task data is sent to it. The minimum is
 `TASK_CONVERSATIONS_MIN_COMPUTER_VERSION`.
+
+A task from before task conversations has no conversation until someone opens, replies to or
+follows it; the first of those makes it. Its source message's thread stays where it was.
 
 ## A task's ref
 

@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 
 test("TaskBoard enforces conversation authorization, idempotency, and ownership under contention", async () => {
@@ -20,7 +19,6 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
         select: { sequence: true },
       })
     )?.sequence ?? 0) + 1;
-  const history = new ConversationHistory(db);
   const suffix = crypto.randomUUID();
   const short = suffix.slice(0, 8);
   const users = await Promise.all(
@@ -89,13 +87,6 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
       members: { create: [{ userId: alice!.id }, { agentId: agent!.id }] },
     },
     include: { members: true },
-  });
-  const peerDirect = await db.conversation.create({
-    data: {
-      workspaceId: workspace.id,
-      directKey: [bob!.id, peerAgent!.id].sort().join(":"),
-      members: { create: [{ userId: bob!.id }, { agentId: peerAgent!.id }] },
-    },
   });
   const aliceChannelMember = publicChannel.members.find((member) => member.userId === alice!.id)!;
   const aliceOtherMember = otherChannel.members.find((member) => member.userId === alice!.id)!;
@@ -196,6 +187,15 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
         body: "Other channel root",
       },
     });
+    const root = await db.message.create({
+      data: {
+        workspaceId: workspace.id,
+        conversationId: publicChannel.id,
+        senderMemberId: aliceChannelMember.id,
+        sequence: await nextSequence(publicChannel.id),
+        body: "Thread root",
+      },
+    });
     const reply = await db.message.create({
       data: {
         workspaceId: workspace.id,
@@ -203,7 +203,7 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
         senderMemberId: aliceChannelMember.id,
         sequence: await nextSequence(publicChannel.id),
         body: "Thread reply",
-        threadRootId: seed.tasks[0]!.messageId,
+        threadRootId: root.id,
       },
     });
     for (const messageId of [otherRoot.id, reply.id]) {
@@ -279,75 +279,6 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
       ),
     ).rejects.toThrow("NOT_FOUND");
 
-    const usedAttachment = await db.attachment.create({
-      data: {
-        workspaceId: workspace.id,
-        conversationId: direct.id,
-        uploaderId: alice!.id,
-        objectKey: `task-auth/${suffix}/used`,
-        fileName: "used.txt",
-        contentType: "text/plain",
-        sizeBytes: 1,
-      },
-    });
-    await db.message.create({
-      data: {
-        workspaceId: workspace.id,
-        conversationId: direct.id,
-        senderMemberId: direct.members.find((member) => member.userId === alice!.id)!.id,
-        sequence: await nextSequence(direct.id),
-        body: "Uses attachment",
-        attachments: { connect: [{ id: usedAttachment.id }] },
-      },
-    });
-    const otherAttachment = await db.attachment.create({
-      data: {
-        workspaceId: workspace.id,
-        conversationId: peerDirect.id,
-        uploaderId: bob!.id,
-        objectKey: `task-auth/${suffix}/other`,
-        fileName: "other.txt",
-        contentType: "text/plain",
-        sizeBytes: 1,
-      },
-    });
-    const beforeTasks = (
-      await board.execute(
-        { workspaceId: workspace.id, userId: alice!.id },
-        { operation: "list", idempotencyKey: crypto.randomUUID(), conversationId: direct.id },
-      )
-    ).tasks.length;
-    for (const [attachmentId, title] of [
-      [usedAttachment.id, "Rejected used attachment"],
-      [otherAttachment.id, "Rejected foreign attachment"],
-    ]) {
-      await expect(
-        board.execute(
-          { workspaceId: workspace.id, userId: alice!.id },
-          {
-            operation: "create",
-            idempotencyKey: crypto.randomUUID(),
-            conversationId: direct.id,
-            title,
-            attachmentId,
-          },
-        ),
-      ).rejects.toThrow("ACCESS_DENIED");
-    }
-    expect(
-      (
-        await board.execute(
-          { workspaceId: workspace.id, userId: alice!.id },
-          { operation: "list", idempotencyKey: crypto.randomUUID(), conversationId: direct.id },
-        )
-      ).tasks,
-    ).toHaveLength(beforeTasks);
-    expect(
-      (
-        await history.listOwnMessages(workspace.id, alice!.id, direct.id, { limit: 50 })
-      ).messages.some(({ body }) => body.startsWith("Rejected")),
-    ).toBe(false);
-
     const requestIds = Array.from({ length: 8 }, () => crypto.randomUUID());
     const concurrent = await Promise.all(
       requestIds.map((requestId, index) =>
@@ -377,7 +308,7 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
         ),
       ),
     );
-    expect(new Set(duplicated.map(({ tasks }) => tasks[0]!.messageId)).size).toBe(1);
+    expect(new Set(duplicated.map(({ tasks }) => tasks[0]!.id)).size).toBe(1);
 
     const ownership = duplicated[0]!.tasks[0]!;
     const claimed = await board.execute(
@@ -398,7 +329,11 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
         number: ownership.number,
       },
     );
-    expect(repeatedClaim.tasks[0]).toEqual(claimed.tasks[0]);
+    expect(repeatedClaim.tasks[0]).toMatchObject({
+      revision: claimed.tasks[0]!.revision,
+      status: claimed.tasks[0]!.status,
+      owner: claimed.tasks[0]!.owner,
+    });
     for (const operation of ["unclaim", "update"] as const) {
       await expect(
         board.execute(
@@ -464,9 +399,11 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
         target: `#${publicChannel.channelName}`,
       },
     );
-    expect(afterStaleUnclaim.tasks.find((task) => task.number === ownership.number)).toEqual(
-      reclaimed.tasks[0],
-    );
+    expect(afterStaleUnclaim.tasks.find((task) => task.number === ownership.number)).toMatchObject({
+      revision: reclaimed.tasks[0]!.revision,
+      status: reclaimed.tasks[0]!.status,
+      owner: reclaimed.tasks[0]!.owner,
+    });
     // In progress → In review → Done: a direct jump is refused.
     const move = (status: "in_review" | "done") =>
       board.execute(

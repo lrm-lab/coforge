@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import {
   browserSession,
@@ -30,7 +29,6 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `task-esc-${process.pid}`);
   const board = new TaskBoard(db);
-  const experiments = new PrismaExperimentsRepository(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const as = { workspaceId, userId: DEV_BROWSER_USER.id };
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
@@ -56,9 +54,7 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
       members: { create: [{ userId: DEV_BROWSER_USER.id }] },
     },
   });
-  const before = (await experiments.read(workspaceId)).taskConversations;
   try {
-    await experiments.write(workspaceId, "taskConversations", true);
     const run = (command: Record<string, unknown>) =>
       board.execute(as, {
         idempotencyKey: crypto.randomUUID(),
@@ -231,7 +227,6 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
     }
   } finally {
     await browser("close").catch(() => undefined);
-    await experiments.write(workspaceId, "taskConversations", before).catch(() => undefined);
     await db.conversation
       .deleteMany({ where: { id: { in: [channel.id, other.id] } } })
       .catch(() => undefined);

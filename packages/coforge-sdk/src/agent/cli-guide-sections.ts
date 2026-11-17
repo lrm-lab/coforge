@@ -51,7 +51,7 @@ ${
 If a failed send says \`Retryable: yes\`, run its next action; else \`Draft saved: yes\` means unknown delivery: do not resend or poll. Say something was sent only after its command returned success with the message or attachment id.${isExternal ? "" : " `system.reminder` delivers due reminders as App items — a notice names the reminder's title, and `coforge inbox check` lists them first. After a wake, `coforge reminder list` shows what fired while you were away."}`;
 
   const execution = `## Work
-Answer ordinary questions freely; untracked DM needs no Task. Before implementing a shared channel request, claim its original top-level message with \`coforge task claim --target '<channel>' --message-id <root-message-id>\` (or \`--number <n>\`). Only a successful claimant implements; others may analyze or review in its thread. A failed claim blocks conflicting work. Work: in_review; done after human approval.
+Answer ordinary questions freely; untracked DM needs no Task. Before implementing a shared channel request, make a task from its original top-level message with \`coforge task create --target '<channel>' --message-id <root-message-id> --title '<title>' --priority <level>\` (or claim an existing one with \`coforge task claim --target '<channel>' --number <n>\`). Only a successful claimant implements; others may analyze or review in its thread. A failed claim blocks conflicting work. Work: in_review; done after human approval.
 ${isExternal ? "" : (options.cloudSkillsGuidance ?? "")}When a person must decide, post \`coforge action prepare\` with a \`choice\` (one question) or \`questions\` (up to four) card instead of listing options in chat; see \`coforge manual get action-cards\`. If it fails, say so plainly; never swap in another card type.
 ${isExternal ? "" : "Local memory: save decisions/corrections with sources. Use current context first; before re-asking: `coforge memory search --query Q`. Team --scope team. Reference only. `coforge manual get memory`\n"}**Complete ALL your work before stopping.** Finish multi-step work, report results, then run \`coforge task list --mine\` and pick up your unfinished tasks.`;
 
@@ -59,7 +59,7 @@ ${isExternal ? "" : "Local memory: save decisions/corrections with sources. Use 
 A person's instruction — a DM, an @handle, a person in a task — comes before anything queued.
 Then work "Your queue" in \`coforge task list --mine\` top to bottom; a higher-priority unfinished task of yours goes before anything new.
 A task no person is pressing does not interrupt work in hand unless it outranks it or is \`urgent\`. Questions and reviews are answered as they arrive.
-Give every task you create a priority with \`--priority\` (required on \`task create\` and \`task convert\`): \`urgent\` the product is broken, a person is stuck, or a safety issue; \`high\` it blocks someone else or is an error a person can see; \`medium\` a normal feature or fix; \`low\` it can wait. Always pick one of the four.`;
+Give every task you create a priority with \`--priority\` (required on \`task create\`): \`urgent\` the product is broken, a person is stuck, or a safety issue; \`high\` it blocks someone else or is an error a person can see; \`medium\` a normal feature or fix; \`low\` it can wait. Always pick one of the four.`;
 
   const cloudDesktopRule =
     !isExternal && options.capabilities?.cloudDesktop

@@ -139,7 +139,9 @@ test.skipIf(!connectionString)(
         );
         expect(result.tasks.map((task) => task.number)).toEqual([4001, 4002, 4003, 4004]);
       }
-      const reads = taskReads.filter(({ query }) => query.includes('"public"."tasks"."status"'));
+      const reads = taskReads.filter(({ query }) =>
+        query.includes('"public"."tasks"."createsResource"'),
+      );
       expect(reads).toHaveLength(2);
 
       for (const { query, params } of reads) {

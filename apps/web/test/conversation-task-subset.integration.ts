@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
+import { legacyMessageTask } from "./fixtures/legacy-message-task";
 
 const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
 if (!connectionString)
@@ -65,6 +66,25 @@ async function fixture() {
       conversationId: channel.id,
       ...command,
     } as Parameters<TaskBoard["execute"]>[1]);
+  /** Tasks from before task conversations: each is a message in the channel. */
+  const legacyTasks = async (titles: string[]) => {
+    const creator = await db.conversationMember.findFirstOrThrow({
+      where: { conversationId: channel.id, userId: alice!.id },
+    });
+    const tasks = [];
+    for (const title of titles)
+      tasks.push(
+        (
+          await legacyMessageTask(db, {
+            conversationId: channel.id,
+            workspaceId: workspace.id,
+            creatorMemberId: creator.id,
+            title,
+          })
+        ).task,
+      );
+    return tasks;
+  };
   return {
     alice: alice!,
     bob: bob!,
@@ -75,6 +95,7 @@ async function fixture() {
     board,
     as,
     run,
+    legacyTasks,
   };
 }
 
@@ -85,9 +106,8 @@ async function fixture() {
  * predicate is written against.
  */
 test("a conversation's Tasks are read by status, message window and number, never all at once", async () => {
-  const { alice, channel, board, as, run } = await fixture();
-  const titles = ["One", "Two", "Three", "Four", "Five"];
-  const created = (await run({ operation: "create", titles })).tasks;
+  const { alice, channel, board, as, run, legacyTasks } = await fixture();
+  const created = await legacyTasks(["One", "Two", "Three", "Four", "Five"]);
   const byTitle = (title: string) => created.find((task) => task.title === title)!;
   await run({ operation: "update", number: byTitle("Two").number, status: "closed" });
   await run({ operation: "claim", number: byTitle("Four").number });
@@ -154,9 +174,8 @@ test("a conversation's Tasks are read as `list` allows: a channel's by any Works
 // from the message just sent (`sourceMessageId`). A message window reads it by that message's
 // sequence, so the message shows its Task; a Task made from a thread reply has no stream row.
 test("a message window reads the Tasks made from its top-level messages, by their sequence", async () => {
-  const { alice, channel, board, as, run } = await fixture();
-  const created = (await run({ operation: "create", titles: ["Sourced", "From a reply", "Own"] }))
-    .tasks;
+  const { alice, channel, board, as, legacyTasks } = await fixture();
+  const created = await legacyTasks(["Sourced", "From a reply", "Own"]);
   const [sourced, fromReply] = created;
   const messages = await db.message.findMany({
     where: { id: { in: created.map((task) => task.messageId!) } },

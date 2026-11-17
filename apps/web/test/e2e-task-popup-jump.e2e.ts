@@ -7,7 +7,6 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
@@ -30,11 +29,9 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-popup-jump");
 test("a discussion that fits again drops Back to bottom", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `task-popup-jump-${process.pid}`);
-  const experiments = new PrismaExperimentsRepository(db);
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);
   const { origin } = proxy;
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
-  const before = (await experiments.read(workspaceId)).taskConversations;
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const agent = await db.agent.create({
     data: {
@@ -60,7 +57,6 @@ test("a discussion that fits again drops Back to bottom", async () => {
     },
   });
   try {
-    await experiments.write(workspaceId, "taskConversations", true);
     const created = await new TaskBoard(db).execute({ workspaceId, userId: DEV_BROWSER_USER.id }, {
       idempotencyKey: crypto.randomUUID(),
       conversationId: channel.id,
@@ -111,7 +107,6 @@ test("a discussion that fits again drops Back to bottom", async () => {
     await browser("wait", "--fn", `${backToBottom} === null`);
     await browser("screenshot", join(artifacts, "fits.png"));
   } finally {
-    await experiments.write(workspaceId, "taskConversations", before === true).catch(() => {});
     await browser("close").catch(() => undefined);
     proxy.stop();
     await db.message

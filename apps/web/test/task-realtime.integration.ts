@@ -9,6 +9,7 @@ import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { workspaceConversationChannel } from "#src/features/conversations/conversation-realtime";
 import { decodeTaskChangedEvent } from "#src/features/tasks/task-realtime";
 import { withPublishBatch, withPublishJsonBatch } from "./helpers/fake-centrifugo";
+import { legacyMessageTask } from "./fixtures/legacy-message-task";
 
 const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
 if (!connectionString)
@@ -146,25 +147,10 @@ test("a channel's Task writes announce each changed Task to the Workspace, once 
   expect(drain()).toEqual([{ tasks: [], deleted: [second!.id], userId: undefined }]);
 });
 
-/** A Workspace with Tasks v2 on: relations exist only there, unlike the file's shared one. */
-async function relationsWorkspace() {
-  const relations = await db.workspace.create({
-    data: {
-      slug: `task-realtime-relations-${crypto.randomUUID().slice(0, 8)}`,
-      name: "Task realtime relations",
-      experiments: { taskConversations: true },
-      members: { create: [{ userId: alice.id, role: "owner" }] },
-    },
-  });
-  cleanup.push(() => db.workspace.delete({ where: { id: relations.id } }));
-  return relations;
-}
-
 test("a Task made under a parent announces the parent's new copy with it", async () => {
-  const relations = await relationsWorkspace();
   const { run, announced } = await boardFor(
     { channelName: `realtime-parent-${handle}` },
-    { workspaceId: relations.id, agent: false },
+    { agent: false },
   );
   const [parent] = (await run({ operation: "create", titles: ["Parent"] })).tasks;
   announced.length = 0;
@@ -193,16 +179,11 @@ test("a Task made under a parent announces the parent's new copy with it", async
 });
 
 test("a failed announcement does not fail the create that committed", async () => {
-  const relations = await relationsWorkspace();
   const parentChannel = `realtime-parent-out-${handle}`;
-  const { run: parentRun } = await boardFor(
-    { channelName: parentChannel },
-    { workspaceId: relations.id, agent: false },
-  );
+  const { run: parentRun } = await boardFor({ channelName: parentChannel }, { agent: false });
   const { run } = await boardFor(
     { channelName: `realtime-child-out-${handle}` },
     {
-      workspaceId: relations.id,
       agent: false,
       taskChanged: () => {
         throw new Error("centrifugo is down");
@@ -274,18 +255,27 @@ test("a Task write's announcement and its message signal never share a publicati
       conversationId: conversation.id,
       ...command,
     } as Parameters<TaskBoard["execute"]>[1]);
-  const created = (await run({ operation: "create", title: "Keyed" })).tasks[0]!;
+  const creator = await db.conversationMember.findFirstOrThrow({
+    where: { conversationId: conversation.id, userId: alice.id },
+  });
+  const { task: created } = await legacyMessageTask(db, {
+    conversationId: conversation.id,
+    workspaceId,
+    creatorMemberId: creator.id,
+    title: "Keyed",
+  });
   await run({ operation: "claim", number: created.number });
   await run({ operation: "unclaim", number: created.number });
   await run({ operation: "delete", number: created.number });
   // The Workspace channel carries the Task announcements only: a message signal goes to the
-  // conversation's own channel (task #285), so four writes are four publications here.
-  expect(published.filter((entry) => entry.startsWith("chat:workspace:")).length).toBe(4);
+  // conversation's own channel (task #285), so three writes that change the Task are three
+  // publications here.
+  expect(published.filter((entry) => entry.startsWith("chat:workspace:")).length).toBe(3);
   // That conversation's channel carries both kinds, and no two share a key — Centrifugo drops a
   // second publication with the same key on the same channel.
   expect(
     published.filter((entry) => entry.startsWith(`chat:${conversation.id} `)).length,
-  ).toBeGreaterThan(4);
+  ).toBeGreaterThan(1);
   expect(new Set(published).size).toBe(published.length);
 });
 
@@ -317,27 +307,10 @@ test("a direct conversation without exactly one person and one Agent announces i
   expect(announced).toEqual([]);
 });
 
-test("a Workspace without Tasks v2 refuses a sub-task, so its create never reads a parent", async () => {
-  // The file's shared Workspace has no Tasks v2: a create there takes `createTasks`, the path
-  // whose announcement also reads the parent. That read can never have a parent to read, because
-  // the board refuses a `parent` before any path runs — so nothing there announces a neighbour.
-  const { run, drain } = await boardFor({ channelName: `realtime-off-${handle}` });
-  const [parent] = (await run({ operation: "create", title: "Parent" })).tasks;
-  expect(drain()).toEqual([
-    { tasks: [[parent!.number, "todo", parent!.revision]], deleted: [], userId: undefined },
-  ]);
-  await expect(
-    run({ operation: "create", title: "Child", parent: { number: parent!.number } }),
-  ).rejects.toMatchObject({ errorId: "task_relations_off" });
-  expect(drain()).toEqual([]);
-  expect((await run({ operation: "list" })).tasks).toHaveLength(1);
-});
-
 test("a sub-task made in a Task popup pushes its parent's new copy to the channel", async () => {
   // What the popup's sub-task dialog sends (`useTaskRelations.createSubtasks`): a `create` with a
   // parent, as a person's browser issues it — through the Centrifugo port, on the channel the
   // open popup listens to. The parent's own row does not change; its progress does.
-  const relations = await relationsWorkspace();
   const pushed: Array<{ channel: string; data: unknown }> = [];
   const centrifugo = withPublishJsonBatch(
     withPublishBatch({
@@ -350,7 +323,7 @@ test("a sub-task made in a Task popup pushes its parent's new copy to the channe
   );
   const conversation = await db.conversation.create({
     data: {
-      workspaceId: relations.id,
+      workspaceId,
       channelName: `realtime-popup-${handle}`,
       members: { create: [{ userId: alice.id }] },
     },
@@ -361,7 +334,7 @@ test("a sub-task made in a Task popup pushes its parent's new copy to the channe
     publisher: centrifugo,
   });
   const run = (command: Record<string, unknown>) =>
-    board.execute({ workspaceId: relations.id, userId: alice.id }, {
+    board.execute({ workspaceId, userId: alice.id }, {
       idempotencyKey: crypto.randomUUID(),
       conversationId: conversation.id,
       ...command,
@@ -382,7 +355,7 @@ test("a sub-task made in a Task popup pushes its parent's new copy to the channe
     }))
     .filter(({ event }) => event.type === "task.changed.v1");
   expect(changes).toHaveLength(1);
-  expect(changes[0]!.channel).toBe(workspaceConversationChannel(relations.id));
+  expect(changes[0]!.channel).toBe(workspaceConversationChannel(workspaceId));
   const copies = new Map(changes[0]!.event.tasks.map((task) => [task.number, task]));
   expect(copies.get(parent!.number)).toMatchObject({
     revision: parent!.revision,

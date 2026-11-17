@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 /**
@@ -36,9 +35,6 @@ test("a card shows its comments and files, and a quiet card shows neither", asyn
   });
   const discussion = await db.conversation.create({ data: { workspaceId, kind: "task_thread" } });
   // Counts belong to task conversations, so the Workspace has them on for this run.
-  const experiments = new PrismaExperimentsRepository(db);
-  const before = (await experiments.read(workspaceId)).taskConversations;
-  await experiments.write(workspaceId, "taskConversations", true);
   const shots = async (name: string) => {
     await browser("screenshot", join(artifacts, `${name}.png`));
     await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
@@ -100,7 +96,6 @@ test("a card shows its comments and files, and a quiet card shows neither", asyn
     }
   } finally {
     await browser("close").catch(() => undefined);
-    await experiments.write(workspaceId, "taskConversations", before).catch(() => undefined);
     await db.task.deleteMany({ where: { conversationId: channel.id } }).catch(() => undefined);
     await db.conversation
       .deleteMany({ where: { id: { in: [channel.id, discussion.id] } } })

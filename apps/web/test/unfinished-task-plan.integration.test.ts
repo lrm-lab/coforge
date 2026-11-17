@@ -119,7 +119,9 @@ test.skipIf(!connectionString)(
         { idempotencyKey: crypto.randomUUID(), operation: "list", mine: true },
       );
       expect(mine.tasks).toHaveLength(4);
-      const reads = taskReads.filter(({ query }) => query.includes('"public"."tasks"."status"'));
+      const reads = taskReads.filter(({ query }) =>
+        query.includes('"public"."tasks"."createsResource"'),
+      );
       expect(reads).toHaveLength(2);
 
       for (const { query, params } of reads) {

@@ -20,11 +20,6 @@ import type { AgentTaskPrincipal } from "./task-principal.server";
  */
 type Principal = AgentTaskPrincipal;
 
-/** Whether the Workspace has task conversations on (the `taskConversations` experiment). */
-export type TaskConversationsGate = () => Promise<boolean>;
-
-const OFF_MESSAGE =
-  "Task conversations are not turned on in this Workspace. A Workspace owner or admin can turn them on in Settings → Experiments.";
 type Service = Pick<
   TaskConversations,
   "view" | "read" | "reply" | "follow" | "unfollow" | "following"
@@ -49,16 +44,7 @@ const asRef = (body: { channel: string; task_number: number }) => ({
   number: body.task_number,
 });
 
-class TaskConversationsOff extends Error {}
-
-/** The Workspace's experiment decides; with it off the routes answer as if absent. */
-async function requireOn(gate: TaskConversationsGate) {
-  if (!(await gate())) throw new TaskConversationsOff();
-}
-
 function failure(error: unknown) {
-  if (error instanceof TaskConversationsOff)
-    return Response.json({ error: OFF_MESSAGE, code: "task_conversations_off" }, { status: 404 });
   if (error instanceof z.ZodError)
     return Response.json({ error: "invalid task request", code: "INVALID_INPUT" }, { status: 400 });
   if (error instanceof AppError)
@@ -75,14 +61,8 @@ function queryRef(request: Request) {
   });
 }
 
-export async function handleTaskViewGet(
-  request: Request,
-  principal: Principal,
-  service: Service,
-  gate: TaskConversationsGate,
-) {
+export async function handleTaskViewGet(request: Request, principal: Principal, service: Service) {
   try {
-    await requireOn(gate);
     const ref = queryRef(request);
     const limit = limitSchema.parse(new URL(request.url).searchParams.get("limit") ?? undefined);
     return Response.json(await service.view(principal, asRef(ref), { limit }));
@@ -99,14 +79,8 @@ const readQuerySchema = z.object({
   unread: z.enum(["true", "false"]).optional(),
 });
 
-export async function handleTaskReadGet(
-  request: Request,
-  principal: Principal,
-  service: Service,
-  gate: TaskConversationsGate,
-) {
+export async function handleTaskReadGet(request: Request, principal: Principal, service: Service) {
   try {
-    await requireOn(gate);
     const ref = queryRef(request);
     const query = new URL(request.url).searchParams;
     const page = readQuerySchema.parse(
@@ -128,13 +102,8 @@ export async function handleTaskReadGet(
   }
 }
 
-export async function handleTaskFollowingGet(
-  principal: Principal,
-  service: Service,
-  gate: TaskConversationsGate,
-) {
+export async function handleTaskFollowingGet(principal: Principal, service: Service) {
   try {
-    await requireOn(gate);
     return Response.json({ tasks: await service.following(principal) });
   } catch (error) {
     return failure(error);
@@ -145,10 +114,8 @@ export async function handleTaskReplyPost(
   request: Request,
   principal: Principal,
   service: Service,
-  gate: TaskConversationsGate,
 ) {
   try {
-    await requireOn(gate);
     const body = replySchema.parse(await readAgentJsonBody(request));
     return Response.json({
       ...(await service.reply(principal, asRef(body), {
@@ -168,10 +135,8 @@ export async function handleTaskFollowPost(
   request: Request,
   principal: Principal,
   service: Service,
-  gate: TaskConversationsGate,
 ) {
   try {
-    await requireOn(gate);
     const body = refSchema.parse(await readAgentJsonBody(request));
     return Response.json({ ok: true, ...(await service.follow(principal, asRef(body))) });
   } catch (error) {
@@ -183,10 +148,8 @@ export async function handleTaskUnfollowPost(
   request: Request,
   principal: Principal,
   service: Service,
-  gate: TaskConversationsGate,
 ) {
   try {
-    await requireOn(gate);
     const body = unfollowSchema.parse(await readAgentJsonBody(request));
     return Response.json({
       ok: true,
@@ -204,10 +167,7 @@ const idleNudgeSchema = z
   })
   .strict();
 
-/**
- * The idle task reminder. Tasks v2 off answers `send: false, reason: "disabled"`, not 404: a
- * Computer reads 404 as a server without the route and stops asking until it restarts.
- */
+/** The idle task reminder. */
 export async function handleTaskIdleNudgePost(
   request: Request,
   nudge: (input: AgentTaskIdleNudgeRequest) => Promise<AgentTaskIdleNudgeResponse>,

@@ -5,7 +5,6 @@ import {
   useCurrentWorkspaceId,
   useVisibleAgentDirectory,
 } from "#src/features/agents/workspace-agents-realtime";
-import { useTaskConversationsOn } from "#src/features/tasks/use-task-conversations-on";
 import { m } from "#src/paraglide/messages";
 import { subscribeComposerDrafts } from "./composer-draft";
 import { deviceDrafts, type DeviceDraft } from "./composer-drafts-index";
@@ -73,23 +72,17 @@ function useDraftHomes(): ReadonlyMap<string, DraftHome> {
 const NO_DRAFTS: DeviceDraft[] = [];
 
 /** The Workspace's drafts on this device, the most recently edited first, kept current as the
- * viewer types in any composer. Task discussion drafts are listed only while task conversations
- * are on. */
+ * viewer types in any composer. */
 export function useDraftRows(): DraftRow[] {
   const homes = useDraftHomes();
-  const taskDrafts = useTaskConversationsOn() === true;
   const drafts = useSyncExternalStore(subscribeComposerDrafts, deviceDrafts, () => NO_DRAFTS);
-  return useMemo(() => resolveDrafts(drafts, homes, { taskDrafts }), [drafts, homes, taskDrafts]);
+  return useMemo(() => resolveDrafts(drafts, homes), [drafts, homes]);
 }
 
 /** How many drafts the Workspace has. The snapshot is the number, so a keystroke renders the
  * reader only when the count moves. */
 export function useDraftCount(): number {
   const homes = useDraftHomes();
-  const taskDrafts = useTaskConversationsOn() === true;
-  const count = useCallback(
-    () => countDrafts(deviceDrafts(), homes, { taskDrafts }),
-    [homes, taskDrafts],
-  );
+  const count = useCallback(() => countDrafts(deviceDrafts(), homes), [homes]);
   return useSyncExternalStore(subscribeComposerDrafts, count, () => 0);
 }

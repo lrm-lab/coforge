@@ -1,5 +1,4 @@
 import { getDatabaseClient } from "#src/server/db/client.server";
-import { taskConversationsEnabled } from "#src/server/tasks/task-conversations-gate.server";
 import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
 import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 
@@ -16,12 +15,11 @@ export async function deliveryFeatures(
   const db = getDatabaseClient();
   if (!db) return undefined;
   try {
-    const [taskConversations, artifacts, agentContextView] = await Promise.all([
-      taskConversationsEnabled(db, { workspaceId }),
+    const [artifacts, agentContextView] = await Promise.all([
       artifactsEnabled(db, workspaceId),
       isFeatureEnabled("agentContextView", { workspaceId }),
     ]);
-    return { taskConversations, artifacts, agentContextView };
+    return { taskConversations: true, artifacts, agentContextView };
   } catch {
     return undefined;
   }

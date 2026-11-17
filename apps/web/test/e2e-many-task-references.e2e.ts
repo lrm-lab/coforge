@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import {
   browserSession,
@@ -26,9 +25,7 @@ const TASKS = 230;
 test("a window naming more than 200 Tasks shows each as its chip, the newest too", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `many-task-refs-${process.pid}`);
-  const experiments = new PrismaExperimentsRepository(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
-  const before = (await experiments.read(workspaceId)).taskConversations;
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const channel = await db.conversation.create({
     data: {
@@ -43,7 +40,6 @@ test("a window naming more than 200 Tasks shows each as its chip, the newest too
   });
   const board = new TaskBoard(db);
   try {
-    await experiments.write(workspaceId, "taskConversations", true);
     const numbers: number[] = [];
     for (let at = 0; at < TASKS; at += 50) {
       const made = await board.execute({ workspaceId, userId: DEV_BROWSER_USER.id }, {
@@ -100,7 +96,6 @@ test("a window naming more than 200 Tasks shows each as its chip, the newest too
   } finally {
     await browser("close").catch(() => undefined);
     await db.conversation.delete({ where: { id: channel.id } }).catch(() => undefined);
-    await experiments.write(workspaceId, "taskConversations", before).catch(() => undefined);
     await db.$disconnect();
   }
 }, 240_000);

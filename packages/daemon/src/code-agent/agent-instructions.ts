@@ -101,7 +101,7 @@ export function buildCoforgeAgentInstructions(context: CoforgeAgentPromptContext
   const guide = buildCoforgeCliGuideSections(context);
   const sections = [who, buildRuntimeContextSection(context), COMMUNICATION_STYLE];
   sections.push(...Object.values(guide));
-  if (context.identity?.features?.taskConversations) sections.push(TASK_CONVERSATIONS_SECTION);
+  sections.push(TASK_CONVERSATIONS_SECTION);
   const apps = buildAppsSection(context.identity?.apps ?? []);
   if (apps) sections.push(apps);
   if (context.identity?.systemKind === "workspace-assistant")

@@ -4,6 +4,7 @@ import { expect, test } from "bun:test";
 import { AppError } from "#src/lib/app-error";
 import { agentTaskPrincipal } from "#src/server/tasks/task-principal.server";
 import { taskAssignmentFixture } from "./helpers/task-assignment-fixture";
+import { assignmentNotice } from "./fixtures/assignment-notice";
 
 test("an admin Agent may reserve a Todo task for another Agent with one personal assignment receipt", async () => {
   const f = await taskAssignmentFixture("agent", "admin");
@@ -20,10 +21,9 @@ test("an admin Agent may reserve a Todo task for another Agent with one personal
       owner: { id: f.peerAgent.id },
     });
     const receipt = await f.db.message.findUniqueOrThrow({
-      where: { id: result.assignmentReceipts![0]!.messageId },
-      include: { mentions: true, deliveries: true },
+      where: { id: (await assignmentNotice(f.db, result.tasks[0]!.id)).id },
+      include: { deliveries: true },
     });
-    expect(receipt.mentions.map((row) => row.actorId)).toEqual([f.peerAgent.id]);
     expect(receipt.deliveries.map((row) => row.agentId)).toEqual([f.peerAgent.id]);
   } finally {
     await f.close();
@@ -500,10 +500,10 @@ test("an Agent's assignment manager role does not grant deletion or resource-rec
         ...f.command("user"),
         operation: "create",
         title: "Human-created resource",
-        createsResource: true,
         assignee: `@${f.peerAgent.name}`,
       })
-    ).tasks[0];
+    ).tasks[0]!;
+    await f.db.task.update({ where: { id: seed.id }, data: { createsResource: true } });
     await expect(
       f.board.execute(f.actor, { ...f.command(), operation: "delete", number: seed.number }),
     ).rejects.toMatchObject({ code: "ACCESS_DENIED" });

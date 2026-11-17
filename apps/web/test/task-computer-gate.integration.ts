@@ -1,14 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { isAppError } from "#src/lib/app-error";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
-import { Experiments } from "#src/server/experiments/experiments.server";
-import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
-import {
-  requireComputersForTaskConversations,
-  taskComputerRefusal,
-} from "#src/server/tasks/task-computer-gate.server";
+import { taskComputerRefusal } from "#src/server/tasks/task-computer-gate.server";
 
 const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("TASK_TEST_DATABASE_URL must point to local PostgreSQL");
@@ -16,7 +9,6 @@ const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 const suffix = crypto.randomUUID().slice(0, 8);
 let ownerId = "";
 let workspaceId = "";
-let slug = "";
 const computers: Record<string, string> = {};
 const agents: Record<string, string> = {};
 
@@ -25,9 +17,12 @@ beforeAll(async () => {
     data: { username: `tcg-owner-${suffix}`, displayName: "Owner" },
   });
   ownerId = owner.id;
-  slug = `task-computer-gate-${suffix}`;
   const workspace = await db.workspace.create({
-    data: { slug, name: "Gate", members: { create: { userId: owner.id, role: "owner" } } },
+    data: {
+      slug: `task-computer-gate-${suffix}`,
+      name: "Gate",
+      members: { create: { userId: owner.id, role: "owner" } },
+    },
   });
   workspaceId = workspace.id;
   for (const [key, version] of [
@@ -65,98 +60,23 @@ afterAll(async () => {
   await db.$disconnect();
 });
 
-const experiments = () =>
-  new Experiments(new PrismaExperimentsRepository(db), isFeatureEnabled, {
-    taskConversations: (id) => requireComputersForTaskConversations(db, id),
-  });
-const workspace = () => ({ workspaceId, workspaceSlug: slug });
-
-test("the switch refuses to open while a Computer with an Agent is older than 0.1.19, naming it", async () => {
-  const refused = await experiments()
-    .set(workspace(), "owner", "taskConversations", true)
-    .catch((error: unknown) => error);
-  expect(isAppError(refused)).toBe(true);
-  expect(refused).toMatchObject({
-    code: "CONFLICT",
-    errorId: "computers-need-upgrade",
-    details: { version: "0.1.19", computers: "Studio old" },
-  });
-  expect(await experiments().enabled("taskConversations", workspace())).toBe(false);
-  // Closing it is never refused.
-  await experiments().set(workspace(), "owner", "taskConversations", false);
-});
-
-test("a Computer with an unknown version counts as older", async () => {
-  await db.computer.update({ where: { id: computers.old }, data: { computerVersion: null } });
-  await expect(requireComputersForTaskConversations(db, workspaceId)).rejects.toMatchObject({
-    errorId: "computers-need-upgrade",
-  });
-});
-
-test("an Agent on an older Computer is refused every Task request while the switch is on", async () => {
-  await new PrismaExperimentsRepository(db).write(workspaceId, "taskConversations", true);
-  const refusal = await taskComputerRefusal(db, { workspaceId, agentId: agents.old });
+test("an Agent on a Computer older than 0.1.19 is refused every Task request", async () => {
+  const refusal = await taskComputerRefusal(db, { agentId: agents.old });
   expect(refusal?.status).toBe(426);
   expect(await refusal?.json()).toMatchObject({
     code: "CLIENT_UPGRADE_REQUIRED",
     retryable: false,
     error: expect.stringContaining("0.1.19"),
   });
-  expect(await taskComputerRefusal(db, { workspaceId, agentId: agents.new })).toBeUndefined();
+  expect(await taskComputerRefusal(db, { agentId: agents.new })).toBeUndefined();
 });
 
-test("with the switch off an older Computer's Agent works as before", async () => {
-  await new PrismaExperimentsRepository(db).write(workspaceId, "taskConversations", false);
-  expect(await taskComputerRefusal(db, { workspaceId, agentId: agents.old })).toBeUndefined();
+test("a Computer with an unknown version counts as older", async () => {
+  await db.computer.update({ where: { id: computers.old }, data: { computerVersion: null } });
+  expect((await taskComputerRefusal(db, { agentId: agents.old }))?.status).toBe(426);
 });
 
-test("once every Computer is current the switch opens", async () => {
+test("once the Computer is current its Agent is no longer refused", async () => {
   await db.computer.update({ where: { id: computers.old }, data: { computerVersion: "0.1.19" } });
-  const view = await experiments().set(workspace(), "owner", "taskConversations", true);
-  expect(view.enabled).toBe(true);
-});
-
-test("Computers that share a name are told apart by their owner", async () => {
-  const other = await db.user.create({
-    data: { username: `tcg-other-${suffix}`, displayName: "Li Jian" },
-  });
-  const twin = await db.computer.create({
-    data: {
-      ownerId: other.id,
-      machineId: crypto.randomUUID(),
-      name: `twin-${suffix}`,
-      displayName: "Cloud",
-      computerVersion: "0.1.18",
-    },
-  });
-  const mine = await db.computer.create({
-    data: {
-      ownerId,
-      machineId: crypto.randomUUID(),
-      name: `twin-b-${suffix}`,
-      displayName: "Cloud",
-      computerVersion: "0.1.18",
-    },
-  });
-  computers.twin = twin.id;
-  computers.mine = mine.id;
-  for (const id of [twin.id, mine.id])
-    await db.agent.create({
-      data: {
-        workspaceId,
-        ownerId,
-        name: `tcg-twin-${id.slice(-8)}-${suffix}`,
-        displayName: "twin",
-        computerId: id,
-        runtimeConfig: {},
-      },
-    });
-  const refused = await requireComputersForTaskConversations(db, workspaceId).catch(
-    (error: unknown) => error,
-  );
-  const names = String((refused as { details: { computers: string } }).details.computers);
-  expect(names).toContain("Cloud (Li Jian)");
-  expect(names).toContain("Cloud (Owner)");
-  await db.computer.deleteMany({ where: { id: { in: [twin.id, mine.id] } } });
-  await db.user.delete({ where: { id: other.id } });
+  expect(await taskComputerRefusal(db, { agentId: agents.old })).toBeUndefined();
 });

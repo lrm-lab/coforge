@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { handleAgentTaskPost } from "#src/routes/api/agent/v1/tasks";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { agentTaskPrincipal } from "#src/server/tasks/task-principal.server";
@@ -83,19 +82,7 @@ afterAll(async () => {
   await db.$disconnect();
 });
 
-const experiment = (enabled: boolean) =>
-  new PrismaExperimentsRepository(db).write(workspaceId, "taskConversations", enabled);
-
-test("with the experiment off a message is still claimed as a task, as before", async () => {
-  await experiment(false);
-  const claimed = await run("worker", { operation: "claim", messageId: sourceId });
-  expect(claimed.tasks[0]!.messageId).toBe(sourceId);
-  expect(claimed.tasks[0]!.id).not.toBe(sourceId);
-  await db.task.deleteMany({ where: { workspaceId } });
-});
-
-test("with it on, create makes a task with no message in the channel, followed by its creator", async () => {
-  await experiment(true);
+test("create makes a task with no message in the channel, followed by its creator", async () => {
   const before = await db.message.count({ where: { conversationId: channelId } });
   const created = await run("maker", {
     operation: "create",
@@ -205,7 +192,6 @@ test("a source message from another channel is not found", async () => {
 });
 
 test("the assignee's queue note reads the new task's links: a blocked task gets none", async () => {
-  await experiment(true);
   const blocker = await run("maker", { operation: "create", title: "Queue blocker" });
   const blocked = await run("maker", {
     operation: "create",
@@ -234,13 +220,8 @@ test("the assignee's queue note reads the new task's links: a blocked task gets 
   expect(queuedNotice.body).toMatch(/queue #\d+ \(ahead: #\d+/);
 });
 
-test("a person keeps the message-based flow, and a source needs the experiment", async () => {
+test("alongside needs a source message, and a create cannot create a resource", async () => {
   await db.workspaceMembership.updateMany({ where: { workspaceId }, data: { role: "owner" } });
-  await experiment(false);
-  await expect(
-    run("maker", { operation: "create", title: "x", messageId: sourceId }),
-  ).rejects.toMatchObject({ code: "INVALID_INPUT" });
-  await experiment(true);
   await expect(
     run("maker", { operation: "create", title: "x", alongside: true }),
   ).rejects.toMatchObject({ code: "INVALID_INPUT" });
@@ -264,7 +245,6 @@ const post = (principal: object, body: Record<string, unknown>) =>
   );
 
 test("over the Agent route: claim by message is a 409 pointing at create, never a 500", async () => {
-  await experiment(true);
   // The principal the Agent API authenticates names the owner beside the Agent.
   const principal = { ...as("worker"), userId: crypto.randomUUID() };
   for (const body of [
@@ -287,7 +267,6 @@ test("over the Agent route: claim by message is a 409 pointing at create, never 
 });
 
 test("over the Agent route: create names its source message whole or by its short id", async () => {
-  await experiment(true);
   const principal = { ...as("maker"), userId: crypto.randomUUID() };
   for (const messageId of [sourceId, sourceId.slice(0, 13)]) {
     const response = await post(principal, {
@@ -305,31 +284,19 @@ test("over the Agent route: create names its source message whole or by its shor
 });
 
 test("a message id that names no message is a not-found result, never a 500", async () => {
-  // Task conversations off, so the legacy claim path reads the id; and on, where create reads it.
-  for (const enabled of [false, true]) {
-    await experiment(enabled);
-    const worker = { ...as("worker"), userId: crypto.randomUUID() };
-    const claim = await post(worker, { operation: "claim", messageId: "not-a-message-id" });
-    expect(claim.status).toBe(enabled ? 409 : 200);
-    if (!enabled)
-      expect(await claim.json()).toMatchObject({
-        claims: [{ messageId: "not-a-message-id", success: false, reason: "message not found" }],
-      });
-    if (enabled) {
-      const maker = { ...as("maker"), userId: crypto.randomUUID() };
-      const create = await post(maker, {
-        operation: "create",
-        title: "t",
-        messageId: "not-a-message-id",
-      });
-      expect(create.status).toBe(404);
-    }
-  }
-  await experiment(true);
+  const worker = { ...as("worker"), userId: crypto.randomUUID() };
+  const claim = await post(worker, { operation: "claim", messageId: "not-a-message-id" });
+  expect(claim.status).toBe(409);
+  const maker = { ...as("maker"), userId: crypto.randomUUID() };
+  const create = await post(maker, {
+    operation: "create",
+    title: "t",
+    messageId: "not-a-message-id",
+  });
+  expect(create.status).toBe(404);
 });
 
 test("createConversationTasks files a Task under an explicit Project and defaults an Agent's to none", async () => {
-  await experiment(true);
   const project = await db.project.create({
     data: { workspaceId, name: "Conv project", slug: `conv-${suffix}` },
   });

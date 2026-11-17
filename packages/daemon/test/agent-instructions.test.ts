@@ -29,7 +29,7 @@ test("ordinary requests do not require task creation or per-turn memory bookkeep
   expect(instructions).toContain("Answer ordinary questions freely");
   expect(instructions).toContain("Before implementing a shared channel request");
   expect(instructions).toContain(
-    "coforge task claim --target '<channel>' --message-id <root-message-id>",
+    "coforge task create --target '<channel>' --message-id <root-message-id>",
   );
   expect(instructions).toContain("Only a successful claimant implements");
   expect(instructions).toContain("others may analyze or review in its thread");
@@ -172,8 +172,8 @@ test("provider-specific rules remain available once when supplied", () => {
   });
   expect(rendered.split("- This runtime uses PowerShell.")).toHaveLength(2);
 });
-test("the shared standing guidance stays within a 5200-byte budget", () => {
-  expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(5200);
+test("the shared standing guidance stays within a 7000-byte budget", () => {
+  expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(7000);
 });
 test("the standing guidance says what to work on next, in the queue the CLI now prints", () => {
   expect(instructions).toContain(

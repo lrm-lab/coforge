@@ -19,12 +19,12 @@ test("an experiment choice is stored per key on the Workspace, beside its other 
     const repository = new PrismaExperimentsRepository(db);
     expect(await repository.read(workspace.id)).toEqual({});
 
-    await repository.write(workspace.id, "taskConversations", true);
+    await repository.write(workspace.id, "drafts", true);
     await db.workspace.update({ where: { id: workspace.id }, data: { name: "Renamed" } });
     await repository.write(workspace.id, "other", false);
-    await repository.write(workspace.id, "taskConversations", false);
+    await repository.write(workspace.id, "drafts", false);
 
-    expect(await repository.read(workspace.id)).toEqual({ taskConversations: false, other: false });
+    expect(await repository.read(workspace.id)).toEqual({ drafts: false, other: false });
     expect((await db.workspace.findUniqueOrThrow({ where: { id: workspace.id } })).name).toBe(
       "Renamed",
     );

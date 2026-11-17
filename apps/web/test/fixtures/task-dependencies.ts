@@ -12,13 +12,9 @@ import type { TaskBoardDependencies } from "#src/server/tasks/task-board-ports.s
 
 /**
  * A Workspace with two people (one an owner), two Agents and two channels (and a private third),
- * and a board to drive. Task relations are part of Tasks v2, the `taskConversations` experiment:
- * on unless `tasksV2` is false.
+ * and a board to drive.
  */
-export async function setup({
-  tasksV2 = true,
-  dependencies,
-}: { tasksV2?: boolean; dependencies?: TaskBoardDependencies } = {}) {
+export async function setup({ dependencies }: { dependencies?: TaskBoardDependencies } = {}) {
   const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
   if (!connectionString)
     throw new Error("TASK_TEST_DATABASE_URL or DATABASE_URL must point to local PostgreSQL");
@@ -37,7 +33,6 @@ export async function setup({
     data: {
       slug: `task-dep-${handle}`,
       name: "Task dependencies",
-      experiments: tasksV2 ? { taskConversations: true } : {},
       members: {
         create: [{ userId: alice.id, role: "owner" }, { userId: bob.id }],
       },

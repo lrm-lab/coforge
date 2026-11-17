@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import {
   browserSession,
@@ -30,7 +29,6 @@ test("an existing Task is put under the open one, and one under another parent i
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `task-existing-${process.pid}`);
   const board = new TaskBoard(db);
-  const experiments = new PrismaExperimentsRepository(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const as = { workspaceId, userId: DEV_BROWSER_USER.id };
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
@@ -42,9 +40,7 @@ test("an existing Task is put under the open one, and one under another parent i
       members: { create: [{ userId: DEV_BROWSER_USER.id }] },
     },
   });
-  const before = (await experiments.read(workspaceId)).taskConversations;
   try {
-    await experiments.write(workspaceId, "taskConversations", true);
     const create = async (titles: string[], parent?: number) =>
       (
         await board.execute(as, {
@@ -208,7 +204,6 @@ test("an existing Task is put under the open one, and one under another parent i
     }
   } finally {
     await browser("close").catch(() => undefined);
-    await experiments.write(workspaceId, "taskConversations", before).catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => undefined);
     await db.$disconnect();
   }

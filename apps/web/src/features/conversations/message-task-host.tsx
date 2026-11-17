@@ -13,7 +13,6 @@ import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { m } from "#src/paraglide/messages";
 import { makeTaskFromMessage } from "#src/features/tasks/message-task.functions";
 import { TaskPriorityMenu } from "#src/features/tasks/task-priority-menu";
-import { useTaskConversationsOn } from "#src/features/tasks/use-task-conversations-on";
 import { useConversationTaskWrites } from "#src/features/tasks/use-conversation-tasks";
 import { useLastTaskPriority } from "#src/features/settings/last-task-priority";
 import { useOpenConversationTask } from "./open-conversation-thread";
@@ -30,8 +29,7 @@ type Taken = {
 
 const MakeTaskContext = createContext<MakeTask | null>(null);
 
-/** Makes a Task from a message; null where no conversation host is above, or where task
- * conversations are off (a message there does not become a Task's source). Stable. */
+/** Makes a Task from a message; null where no conversation host is above. Stable. */
 export function useMakeTaskFromMessage(): MakeTask | null {
   return useContext(MakeTaskContext);
 }
@@ -43,7 +41,6 @@ export function useMakeTaskFromMessage(): MakeTask | null {
  * from asks first: open that Task, or make this one anyway, beside it.
  */
 export function MessageTaskHost({ children }: { children: ReactNode }) {
-  const on = useTaskConversationsOn();
   const make = useServerFn(makeTaskFromMessage);
   const writeTasks = useConversationTaskWrites();
   const { openTask } = useOpenConversationTask();
@@ -113,7 +110,7 @@ export function MessageTaskHost({ children }: { children: ReactNode }) {
     }
   };
   return (
-    <MakeTaskContext value={on ? makeTask : null}>
+    <MakeTaskContext value={makeTask}>
       {children}
       {pending && (
         <ModalOverlay isOpen onOpenChange={(open) => !open && !making && setPending(null)}>

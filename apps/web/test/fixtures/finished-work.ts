@@ -109,7 +109,7 @@ export async function finishedWorkFixture() {
         })
       : null;
     const updatedAt = new Date(Date.now() - (state.daysAgo ?? 0) * 86_400_000);
-    await db.$executeRaw`UPDATE tasks SET status = ${state.status}, "ownerMemberId" = ${owner?.id ?? null}::uuid, "updatedAt" = ${updatedAt} WHERE "messageId" = ${row.messageId}::uuid`;
+    await db.$executeRaw`UPDATE tasks SET status = ${state.status}, "ownerMemberId" = ${owner?.id ?? null}::uuid, "updatedAt" = ${updatedAt} WHERE "id" = ${row.id}::uuid`;
     return row;
   }
 

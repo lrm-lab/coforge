@@ -3,7 +3,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { DirectConversations } from "#src/server/conversations/direct-conversations.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { devBrowserWorkspace } from "./helpers/browser-e2e";
 import { chromePath, launchHeadlessChrome, until } from "./helpers/headless-chrome";
@@ -71,9 +70,6 @@ test("every message box sends with Enter twice in a row, typed plainly or throug
     { agentId: agent.id },
   );
 
-  const experiments = new PrismaExperimentsRepository(db);
-  const taskConversationsBefore = (await experiments.read(workspaceId)).taskConversations;
-  await experiments.write(workspaceId, "taskConversations", true);
   const created = await new TaskBoard(db).execute({ workspaceId, userId: DEV_BROWSER_USER.id }, {
     idempotencyKey: crypto.randomUUID(),
     conversationId: channel.id,
@@ -251,9 +247,6 @@ test("every message box sends with Enter twice in a row, typed plainly or throug
     expect(Object.entries(results).filter(([, ok]) => !ok)).toEqual([]);
   } finally {
     await browser.close();
-    await experiments
-      .write(workspaceId, "taskConversations", taskConversationsBefore === true)
-      .catch(() => {});
     await db.conversation.deleteMany({ where: { id: { in: [channel.id, dmId] } } }).catch(() => {});
     await db.agentMessageDelivery.deleteMany({ where: { agentId: agent.id } }).catch(() => {});
     await db.agent.deleteMany({ where: { id: agent.id } }).catch(() => {});

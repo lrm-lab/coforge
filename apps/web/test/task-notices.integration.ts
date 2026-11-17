@@ -5,6 +5,7 @@ import type { ConversationRealtimeMessage } from "#src/server/conversations/conv
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { PrismaWebPushSubscriptionStore } from "#src/server/notifications/prisma-web-push-subscriptions.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import { legacyMessageTask } from "./fixtures/legacy-message-task";
 
 const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
 if (!connectionString)
@@ -126,10 +127,27 @@ async function channelFixture(name: string) {
     channel.members.find((member) =>
       by.userId ? member.userId === by.userId : member.agentId === by.agentId,
     )!.id;
+  /** Tasks from before task conversations (each a message in the channel), made by `by`. */
+  const legacyTasks = async (by: { userId: string }, titles: string[]) => {
+    const tasks = [];
+    for (const title of titles)
+      tasks.push(
+        (
+          await legacyMessageTask(db, {
+            conversationId: channel.id,
+            workspaceId,
+            creatorMemberId: memberId(by),
+            title,
+          })
+        ).task,
+      );
+    return tasks;
+  };
   return {
     channel,
     signaled,
     pushed,
+    legacyTasks,
     run,
     latestSequence,
     noticesAfter,
@@ -141,94 +159,14 @@ async function channelFixture(name: string) {
   };
 }
 
-test("creating Tasks posts one channel notice naming each of them", async () => {
-  const { run, latestSequence, noticesAfter, asAlice } = await channelFixture("created");
-  let mark = await latestSequence();
-  const shipTask = (await run(asAlice, { operation: "create", title: "Ship notices" })).tasks[0]!;
-  expect(await noticesAfter(mark)).toEqual([
-    { body: `📋 1 new task created: #${shipTask.number} "Ship notices"`, thread: null },
-  ]);
-
-  mark = await latestSequence();
-  const longTitle = `Write the ${"very ".repeat(30)}long plan`;
-  const [batchOne, batchTwo] = (
-    await run(asAlice, { operation: "create", titles: ["Batch one\nwith details", longTitle] })
-  ).tasks;
-  // A notice quotes only a title's first line, cut to 80 characters.
-  const cut = `${Array.from(longTitle).slice(0, 79).join("").trimEnd()}…`;
-  expect(await noticesAfter(mark)).toEqual([
-    {
-      body: `📋 2 new tasks created: #${batchOne!.number} "Batch one", #${batchTwo!.number} "${cut}"`,
-      thread: null,
-    },
-  ]);
-
-  // A fenced code block is not prose: the quote skips it whole, and a title with no prose left
-  // is named by its number alone.
-  mark = await latestSequence();
-  const [afterCode, onlyCode] = (
-    await run(asAlice, {
-      operation: "create",
-      titles: ["```ts\nconst plan = 1;\n```\nRun the plan", "```\nnpm test\n```"],
-    })
-  ).tasks;
-  expect(await noticesAfter(mark)).toEqual([
-    {
-      body: `📋 2 new tasks created: #${afterCode!.number} "Run the plan", #${onlyCode!.number}`,
-      thread: null,
-    },
-  ]);
-});
-
-test("a converted message's notices quote its first line with mentions read as @handles", async () => {
-  const { channel, run, latestSequence, noticesAfter, memberId, asAlice, asAgent } =
-    await channelFixture("converted");
-  const body = `<@agent:${agent.id}> please fix the login flow\n\nSteps:\n- open the page`;
-  const message = await db.message.create({
-    data: {
-      conversationId: channel.id,
-      workspaceId,
-      senderMemberId: memberId({ userId: bob.id }),
-      body,
-      sequence: (await latestSequence()) + 1,
-      mentions: {
-        create: {
-          memberId: memberId({ agentId: agent.id }),
-          workspaceId,
-          kind: "agent",
-          actorId: agent.id,
-          handle: agent.name,
-        },
-      },
-    },
-  });
-  const quoted = `"@${agent.name} please fix the login flow"`;
-
-  let mark = await latestSequence();
-  const converted = (await run(asAlice, { operation: "convert", messageId: message.id })).tasks[0]!;
-  // Converting it again changes nothing, so it posts nothing.
-  await run(asAlice, { operation: "convert", messageId: message.id });
-  expect(await noticesAfter(mark)).toEqual([
-    {
-      body: `📋 Alice An converted a message to task #${converted.number} ${quoted}`,
-      thread: null,
-    },
-  ]);
-
-  // Every later notice for that Task quotes the same clean title.
-  mark = await latestSequence();
-  await run(asAgent, { operation: "claim", number: converted.number });
-  expect(await noticesAfter(mark)).toEqual([
-    { body: `📌 ${agent.name} claimed #${converted.number} ${quoted}`, thread: message.id },
-  ]);
-});
-
 test("claims, moves and unassignment post in the Task's own thread", async () => {
-  const { run, latestSequence, noticesAfter, asAlice, asBob, asAgent } =
+  const { run, latestSequence, noticesAfter, legacyTasks, asAlice, asBob, asAgent } =
     await channelFixture("thread");
-  const [shipTask, docsTask, testsTask] = (
-    await run(asAlice, { operation: "create", titles: ["Ship notices", "Write docs", "Add tests"] })
-  ).tasks;
+  const [shipTask, docsTask, testsTask] = await legacyTasks({ userId: alice.id }, [
+    "Ship notices",
+    "Write docs",
+    "Add tests",
+  ]);
   const inThread = (task: typeof shipTask, body: string) => ({ body, thread: task!.messageId });
 
   // Claiming an unassigned Todo Task moves it to In Progress and says so once, as a claim.
@@ -309,53 +247,47 @@ test("only the assignment receipt is delivered and pushed; no notice reaches a b
     latestSequence,
     noticesAfter,
     allNotices,
+    legacyTasks,
     asAlice,
     asAgent,
   } = await channelFixture("receipts");
+  const [startedTask, reservedTask] = await legacyTasks({ userId: alice.id }, [
+    "Started by me",
+    "Reserved",
+  ]);
 
-  // Created assigned to oneself, a Task starts at once. Its receipt is still the one assignment
-  // notice (no claim line), in the Task's own thread.
+  // Assigned to oneself, a Task's receipt is the one assignment notice, in the Task's own thread.
   let mark = await latestSequence();
   const started = await run(asAgent, {
-    operation: "create",
-    title: "Started by me",
+    operation: "assign",
+    number: startedTask!.number,
     assignee: `@${agent.name}`,
   });
-  const startedTask = started.tasks[0]!;
-  const startedLine = `📌 Notice Agent assigned #${startedTask.number} "Started by me" to @${agent.name}`;
+  const startedLine = `📌 Notice Agent assigned #${startedTask!.number} "Started by me" to @${agent.name}`;
   expect(await noticesAfter(mark)).toEqual([
-    { body: `📋 1 new task created: #${startedTask.number} "Started by me"`, thread: null },
     // An Agent's own assignment carries its queue note (task #716); earlier tests leave the
     // Agent other queued Tasks, so the position is not pinned here.
-    { body: expect.stringContaining(startedLine), thread: startedTask.messageId },
+    { body: expect.stringContaining(startedLine), thread: startedTask!.messageId },
   ]);
   expect(started.assignmentReceipts).toEqual([
-    expect.objectContaining({
-      state: "started",
-      content: expect.stringContaining(startedLine),
-    }),
+    expect.objectContaining({ content: expect.stringContaining(startedLine) }),
   ]);
 
-  // Reserved for someone else, it is the same assignment notice. The assignee reads as its
-  // resolved `@handle` however the caller wrote it.
+  // Reserved for someone else, it is the same assignment notice.
   mark = await latestSequence();
   const reserved = await run(asAlice, {
-    operation: "create",
-    title: "Reserved",
-    assignee: agent.name,
+    operation: "assign",
+    number: reservedTask!.number,
+    assignee: `@${agent.name}`,
   });
-  const reservedTask = reserved.tasks[0]!;
-  const assignLine = `📌 Alice An assigned #${reservedTask.number} "Reserved" to @${agent.name} — do it first`;
-  expect(await noticesAfter(mark)).toEqual([
-    { body: `📋 1 new task created: #${reservedTask.number} "Reserved"`, thread: null },
-    { body: assignLine, thread: reservedTask.messageId },
-  ]);
+  const assignLine = `📌 Alice An assigned #${reservedTask!.number} "Reserved" to @${agent.name} — do it first`;
+  expect(await noticesAfter(mark)).toEqual([{ body: assignLine, thread: reservedTask!.messageId }]);
   expect(reserved.assignmentReceipts).toEqual([
     expect.objectContaining({ state: "assigned", content: assignLine }),
   ]);
 
-  await run(asAlice, { operation: "update", number: reservedTask.number, status: "closed" });
-  await run(asAlice, { operation: "unassign", number: reservedTask.number });
+  await run(asAlice, { operation: "update", number: reservedTask!.number, status: "closed" });
+  await run(asAlice, { operation: "unassign", number: reservedTask!.number });
 
   const receiptIds = [started, reserved].map((result) => result.assignmentReceipts![0]!.messageId);
   const notices = await allNotices();
@@ -382,7 +314,12 @@ test("only the assignment receipt is delivered and pushed; no notice reaches a b
 });
 
 test("an assignment receipt mentions its assignee: a muted human assignee is still pushed, and an Agent assignee reads it as its mention", async () => {
-  const { channel, run, memberId, asAlice } = await channelFixture("muted-assignee");
+  const { channel, run, memberId, legacyTasks, asAlice } = await channelFixture("muted-assignee");
+  const [first, second, third] = await legacyTasks({ userId: alice.id }, [
+    "Review the plan",
+    "Second",
+    "For the Agent",
+  ]);
   await db.conversationMember.update({
     where: { id: memberId({ userId: bob.id }) },
     data: { channelMuted: true },
@@ -395,13 +332,13 @@ test("an assignment receipt mentions its assignee: a muted human assignee is sti
   const push = new PrismaWebPushSubscriptionStore(db);
 
   const created = await run(asAlice, {
-    operation: "create",
-    title: "Review the plan",
+    operation: "assign",
+    number: first!.number,
     assignee: `@${bob.username}`,
   });
   const assigned = await run(asAlice, {
     operation: "assign",
-    number: (await run(asAlice, { operation: "create", title: "Second" })).tasks[0]!.number,
+    number: second!.number,
     assignee: `@${bob.username}`,
   });
   for (const [result, task] of [
@@ -433,8 +370,8 @@ test("an assignment receipt mentions its assignee: a muted human assignee is sti
   // at the Task's thread, which the Agent now follows, and so does the Task's author, as a first
   // reply enrolls them.
   const forAgent = await run(asAlice, {
-    operation: "create",
-    title: "For the Agent",
+    operation: "assign",
+    number: third!.number,
     assignee: `@${agent.name}`,
   });
   const agentReceipt = forAgent.assignmentReceipts![0]!;

@@ -200,7 +200,7 @@ test("authorized launch HTTP response contains decrypted explicit env only, no-s
       computerVersion: "0.1.0-dev.40",
       computerHostname: "workstation-7",
     },
-    features: { taskConversations: false, artifacts: false, agentContextView: false },
+    features: { taskConversations: true, artifacts: false, agentContextView: false },
   });
   expect(JSON.stringify(payload)).not.toContain(runtimeConfig.environment!.ciphertext);
   const queried = lookups;

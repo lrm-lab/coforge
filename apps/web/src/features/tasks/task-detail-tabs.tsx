@@ -127,7 +127,7 @@ export function TaskSubtasksPage({
   /** Puts an existing Task of the conversation under this one (task #505). */
   onOpen?: (task: VisibleTaskName) => void;
 }) {
-  const { subtree } = useTaskShow(task, true);
+  const { subtree } = useTaskShow(task);
   const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set());
   return (
     <div className="flex flex-col gap-2 px-2.5 py-3 sm:px-4.5">

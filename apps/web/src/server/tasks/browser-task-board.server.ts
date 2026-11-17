@@ -16,7 +16,7 @@ export function browserTaskBoard(db: Database) {
 }
 
 /**
- * Announces the Task a person's send made of its message (`sentMessageBecomesTask`). The Task
+ * Announces the Task a person's send made of its message (`sentMessageSpawnsTask`). The Task
  * committed with the message, so a failed announcement fails nothing: open pages catch up on
  * their next read, as with any missed realtime event.
  */

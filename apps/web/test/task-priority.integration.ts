@@ -10,112 +10,91 @@ import { setup } from "./fixtures/task-dependencies";
  */
 
 test("a task starts at none, takes a priority on create and update, and records the change", async () => {
-  for (const tasksV2 of [true, false]) {
-    const { db, run, make, show, refusal, channel } = await setup({ tasksV2 });
-    try {
-      const [plain] = await make("bob", 1);
-      expect((await show(plain!)).tasks[0]!.priority).toBe("none");
+  const { db, run, make, show, refusal, channel } = await setup();
+  try {
+    const [plain] = await make("bob", 1);
+    expect((await show(plain!)).tasks[0]!.priority).toBe("none");
 
-      const [urgent] = await make("bob", 1, { priority: "urgent" });
-      expect((await show(urgent!)).tasks[0]!.priority).toBe("urgent");
+    const [urgent] = await make("bob", 1, { priority: "urgent" });
+    expect((await show(urgent!)).tasks[0]!.priority).toBe("urgent");
 
-      // `update` with only a priority changes nothing else; the revision moves once.
-      const before = (await show(plain!)).tasks[0]!;
-      const [raised] = (await run("bob", { operation: "update", number: plain!, priority: "high" }))
-        .tasks;
-      expect(raised).toMatchObject({ priority: "high", status: before.status });
-      expect(raised!.revision).toBe(before.revision + 1);
-      if (tasksV2) {
-        const taskConversationId = (
-          await db.task.findUniqueOrThrow({
-            where: { conversationId_number: { conversationId: channel.id, number: plain! } },
-            select: { discussionConversationId: true },
-          })
-        ).discussionConversationId;
-        expect(taskConversationId).toBeTruthy();
-        const raisedNotices = await db.systemMessage.findMany({
-          where: { conversationId: taskConversationId!, kind: "task.priority_changed" },
-          orderBy: { message: { sequence: "asc" } },
-        });
-        expect(raisedNotices).toHaveLength(1);
-      }
+    // `update` with only a priority changes nothing else; the revision moves once.
+    const before = (await show(plain!)).tasks[0]!;
+    const [raised] = (await run("bob", { operation: "update", number: plain!, priority: "high" }))
+      .tasks;
+    expect(raised).toMatchObject({ priority: "high", status: before.status });
+    expect(raised!.revision).toBe(before.revision + 1);
+    const taskConversationId = (
+      await db.task.findUniqueOrThrow({
+        where: { conversationId_number: { conversationId: channel.id, number: plain! } },
+        select: { discussionConversationId: true },
+      })
+    ).discussionConversationId!;
+    const raisedNotices = await db.systemMessage.findMany({
+      where: { conversationId: taskConversationId, kind: "task.priority_changed" },
+      orderBy: { message: { sequence: "asc" } },
+    });
+    expect(raisedNotices).toHaveLength(1);
 
-      // The same priority again writes nothing.
-      const [again] = (await run("bob", { operation: "update", number: plain!, priority: "high" }))
-        .tasks;
-      expect(again!.revision).toBe(raised!.revision);
-      if (tasksV2) {
-        const taskConversationId = (
-          await db.task.findUniqueOrThrow({
-            where: { conversationId_number: { conversationId: channel.id, number: plain! } },
-            select: { discussionConversationId: true },
-          })
-        ).discussionConversationId!;
-        expect(
-          await db.systemMessage.count({
-            where: { conversationId: taskConversationId, kind: "task.priority_changed" },
-          }),
-        ).toBe(1);
-      }
+    // The same priority again writes nothing.
+    const [again] = (await run("bob", { operation: "update", number: plain!, priority: "high" }))
+      .tasks;
+    expect(again!.revision).toBe(raised!.revision);
+    expect(
+      await db.systemMessage.count({
+        where: { conversationId: taskConversationId, kind: "task.priority_changed" },
+      }),
+    ).toBe(1);
 
-      // With a status, both change in one write.
-      await run("bob", { operation: "claim", number: plain! });
-      const [both] = (
-        await run("bob", {
-          operation: "update",
-          number: plain!,
-          status: "in_review",
-          priority: "low",
-        })
-      ).tasks;
-      expect(both).toMatchObject({ status: "in_review", priority: "low" });
-      if (tasksV2) {
-        const taskConversationId = (
-          await db.task.findUniqueOrThrow({
-            where: { conversationId_number: { conversationId: channel.id, number: plain! } },
-            select: { discussionConversationId: true },
-          })
-        ).discussionConversationId!;
-        expect(
-          await db.systemMessage.count({
-            where: { conversationId: taskConversationId, kind: "task.priority_changed" },
-          }),
-        ).toBe(2);
-      }
+    // With a status, both change in one write.
+    await run("bob", { operation: "claim", number: plain! });
+    const [both] = (
+      await run("bob", {
+        operation: "update",
+        number: plain!,
+        status: "in_review",
+        priority: "low",
+      })
+    ).tasks;
+    expect(both).toMatchObject({ status: "in_review", priority: "low" });
+    expect(
+      await db.systemMessage.count({
+        where: { conversationId: taskConversationId, kind: "task.priority_changed" },
+      }),
+    ).toBe(2);
 
-      const history = await run("bob", { operation: "history", number: plain! });
-      expect(
-        history
-          .history!.filter((event) => event.eventType === "priority_changed")
-          .map((event) => event.payload),
-      ).toEqual([
-        { from: "none", to: "high" },
-        { from: "high", to: "low" },
-      ]);
-      const created = await run("bob", { operation: "history", number: urgent! });
-      expect(
-        created
-          .history!.filter((event) => event.eventType === "priority_changed")
-          .map((e) => e.payload),
-      ).toEqual([{ from: "none", to: "urgent" }]);
+    const history = await run("bob", { operation: "history", number: plain! });
+    expect(
+      history
+        .history!.filter((event) => event.eventType === "priority_changed")
+        .map((event) => event.payload),
+    ).toEqual([
+      { from: "none", to: "high" },
+      { from: "high", to: "low" },
+    ]);
+    const created = await run("bob", { operation: "history", number: urgent! });
+    expect(
+      created
+        .history!.filter((event) => event.eventType === "priority_changed")
+        .map((e) => e.payload),
+    ).toEqual([{ from: "none", to: "urgent" }]);
 
-      // An unknown level, or an update with neither status nor priority, is refused.
-      expect(
-        (
-          await refusal(
-            run("bob", { operation: "update", number: plain!, priority: "asap" as "high" }),
-          )
-        ).code,
-      ).toBe("INVALID_INPUT");
-      expect((await refusal(run("bob", { operation: "update", number: plain! }))).code).toBe(
-        "INVALID_INPUT",
-      );
-      expect((await refusal(make("bob", 1, { priority: "soon" as "high" }))).code).toBe(
-        "INVALID_INPUT",
-      );
-    } finally {
-      await db.$disconnect();
-    }
+    // An unknown level, or an update with neither status nor priority, is refused.
+    expect(
+      (
+        await refusal(
+          run("bob", { operation: "update", number: plain!, priority: "asap" as "high" }),
+        )
+      ).code,
+    ).toBe("INVALID_INPUT");
+    expect((await refusal(run("bob", { operation: "update", number: plain! }))).code).toBe(
+      "INVALID_INPUT",
+    );
+    expect((await refusal(make("bob", 1, { priority: "soon" as "high" }))).code).toBe(
+      "INVALID_INPUT",
+    );
+  } finally {
+    await db.$disconnect();
   }
 });
 
@@ -170,80 +149,78 @@ test("an Agent that is a Workspace admin sets any task's priority", async () => 
 });
 
 test("create and convert take a level, never none; a missing one still lands none (task #12)", async () => {
-  for (const tasksV2 of [true, false]) {
-    const { db, run, make, show, refusal, channel, principals } = await setup({ tasksV2 });
-    try {
-      // `none` is a stored value, never a choice: create, update and convert all refuse it,
-      // and the refusal names the four levels an Agent can act on.
-      const refused = await refusal(make("bob", 1, { priority: "none" as TaskPriorityLevel }));
-      expect(refused.code).toBe("INVALID_INPUT");
-      expect(refused.errorId).toBe("task_priority_invalid");
-      expect(refused.hint).toContain("urgent");
+  const { db, run, make, show, refusal, channel, principals } = await setup();
+  try {
+    // `none` is a stored value, never a choice: create, update and convert all refuse it,
+    // and the refusal names the four levels an Agent can act on.
+    const refused = await refusal(make("bob", 1, { priority: "none" as TaskPriorityLevel }));
+    expect(refused.code).toBe("INVALID_INPUT");
+    expect(refused.errorId).toBe("task_priority_invalid");
+    expect(refused.hint).toContain("urgent");
 
-      const [plain] = await make("bob", 1);
-      expect((await show(plain!)).tasks[0]!.priority).toBe("none");
-      expect(
-        (
-          await refusal(
-            run("bob", {
-              operation: "update",
-              number: plain!,
-              priority: "none" as TaskPriorityLevel,
-            }),
-          )
-        ).code,
-      ).toBe("INVALID_INPUT");
+    const [plain] = await make("bob", 1);
+    expect((await show(plain!)).tasks[0]!.priority).toBe("none");
+    expect(
+      (
+        await refusal(
+          run("bob", {
+            operation: "update",
+            number: plain!,
+            priority: "none" as TaskPriorityLevel,
+          }),
+        )
+      ).code,
+    ).toBe("INVALID_INPUT");
 
-      // A message to convert, sent by Bob. Sequences come from the conversation's own counter,
-      // as a send allocates them — a hand-picked number would collide with the next notice.
-      const sender = await db.conversationMember.findFirstOrThrow({
-        where: { conversationId: channel.id, userId: principals.bob.userId },
+    // A message to convert, sent by Bob. Sequences come from the conversation's own counter,
+    // as a send allocates them — a hand-picked number would collide with the next notice.
+    const sender = await db.conversationMember.findFirstOrThrow({
+      where: { conversationId: channel.id, userId: principals.bob.userId },
+    });
+    const sourceMessage = async () => {
+      const [row] = await db.$queryRaw<Array<{ sequence: number }>>`
+        UPDATE "conversations"
+        SET "lastSequence" = "lastSequence" + 1
+        WHERE "id" = ${channel.id}::uuid
+        RETURNING "lastSequence" AS "sequence"
+      `;
+      return db.message.create({
+        data: {
+          conversationId: channel.id,
+          workspaceId: channel.workspaceId,
+          senderMemberId: sender.id,
+          body: `convert me ${crypto.randomUUID().slice(0, 8)}`,
+          sequence: row!.sequence,
+        },
       });
-      const sourceMessage = async () => {
-        const [row] = await db.$queryRaw<Array<{ sequence: number }>>`
-          UPDATE "conversations"
-          SET "lastSequence" = "lastSequence" + 1
-          WHERE "id" = ${channel.id}::uuid
-          RETURNING "lastSequence" AS "sequence"
-        `;
-        return db.message.create({
-          data: {
-            conversationId: channel.id,
-            workspaceId: channel.workspaceId,
-            senderMemberId: sender.id,
-            body: `convert me ${crypto.randomUUID().slice(0, 8)}`,
-            sequence: row!.sequence,
-          },
-        });
-      };
-      const source = await sourceMessage();
-      // Phase one of the rollout: a command that never names a priority is still accepted and
-      // lands `none` (old Computers), while an explicit `none` is refused above.
-      const [convertedPlain] = (await run("bob", { operation: "convert", messageId: source.id }))
-        .tasks;
-      expect((await show(convertedPlain!.number)).tasks[0]!.priority).toBe("none");
+    };
+    const source = await sourceMessage();
+    // Phase one of the rollout: a command that never names a priority is still accepted and
+    // lands `none` (old Computers), while an explicit `none` is refused above.
+    const [convertedPlain] = (await run("bob", { operation: "convert", messageId: source.id }))
+      .tasks;
+    expect((await show(convertedPlain!.number)).tasks[0]!.priority).toBe("none");
 
-      const second = await sourceMessage();
-      const [converted] = (
-        await run("bob", { operation: "convert", messageId: second.id, priority: "high" })
-      ).tasks;
-      expect((await show(converted!.number)).tasks[0]!.priority).toBe("high");
+    const second = await sourceMessage();
+    const [converted] = (
+      await run("bob", { operation: "convert", messageId: second.id, priority: "high" })
+    ).tasks;
+    expect((await show(converted!.number)).tasks[0]!.priority).toBe("high");
 
-      const third = await sourceMessage();
-      expect(
-        (
-          await refusal(
-            run("bob", {
-              operation: "convert",
-              messageId: third.id,
-              priority: "none" as TaskPriorityLevel,
-            }),
-          )
-        ).code,
-      ).toBe("INVALID_INPUT");
-    } finally {
-      await db.$disconnect();
-    }
+    const third = await sourceMessage();
+    expect(
+      (
+        await refusal(
+          run("bob", {
+            operation: "convert",
+            messageId: third.id,
+            priority: "none" as TaskPriorityLevel,
+          }),
+        )
+      ).code,
+    ).toBe("INVALID_INPUT");
+  } finally {
+    await db.$disconnect();
   }
 });
 

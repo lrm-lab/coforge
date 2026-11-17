@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import {
   browserSession,
@@ -24,9 +23,7 @@ const artifacts = join(import.meta.dir, "../../../.amp/e2e/avatars-everywhere");
 test("names carry their faces", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `avatars-everywhere-${process.pid}`);
-  const experiments = new PrismaExperimentsRepository(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
-  const before = (await experiments.read(workspaceId)).taskConversations;
   const tail = `${process.pid}-${Date.now()}`.slice(-5);
   const agent = await db.agent.create({
     data: {
@@ -53,7 +50,6 @@ test("names carry their faces", async () => {
   });
   const cleanup: string[] = [channel.id];
   try {
-    await experiments.write(workspaceId, "taskConversations", true);
     const board = new TaskBoard(db);
     const run = (command: Record<string, unknown>) =>
       board.execute({ workspaceId, userId: DEV_BROWSER_USER.id }, {
@@ -315,7 +311,6 @@ test("names carry their faces", async () => {
     await browser("close").catch(() => undefined);
     await db.conversation.deleteMany({ where: { id: { in: cleanup } } }).catch(() => undefined);
     await db.agent.deleteMany({ where: { id: agent.id } }).catch(() => undefined);
-    await experiments.write(workspaceId, "taskConversations", before).catch(() => undefined);
     await db.$disconnect();
   }
 }, 180_000);

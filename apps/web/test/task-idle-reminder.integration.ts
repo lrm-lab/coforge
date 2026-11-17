@@ -12,8 +12,8 @@ import { setup } from "./fixtures/task-dependencies";
 
 const HOUR = 3_600_000;
 
-async function world(options: { tasksV2?: boolean } = {}) {
-  const fixture = await setup(options);
+async function world() {
+  const fixture = await setup();
   const { db, principals, channel, one } = fixture;
   // `hours` from the real time of the call, so a reminder is recorded after what came before it.
   const at = (hours: number) => new Date(Date.now() + hours * HOUR);
@@ -27,23 +27,6 @@ async function world(options: { tasksV2?: boolean } = {}) {
   const ref = (number: number) => `#${channel.channelName}:#${number}`;
   return { ...fixture, nudge, reply, assign, ref, at };
 }
-
-test("with Tasks v2 off nothing is sent", async () => {
-  const { db, make, assign, nudge } = await world({ tasksV2: false });
-  try {
-    const [task] = await make("alice", 1);
-    await assign(task!);
-    expect(await nudge()).toEqual({
-      send: false,
-      reason: "disabled",
-      items: [],
-      backlog: [],
-      text: "",
-    });
-  } finally {
-    await db.$disconnect();
-  }
-});
 
 test("an Agent with no open Task gets no_open_tasks, even in a fresh session", async () => {
   const { db, make, assign, run, nudge } = await world();

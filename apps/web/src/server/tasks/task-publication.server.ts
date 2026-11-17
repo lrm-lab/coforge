@@ -27,7 +27,7 @@ import { groupBy, taskViewsOf } from "./task-relations.server";
 import type { TaskBoardPorts } from "./task-board-ports.server";
 
 /** Push a committed message to every Agent it was delivered to. Failures never surface. */
-export async function publishDeliveries(
+async function publishDeliveries(
   ports: TaskBoardPorts,
   message: {
     id: string;

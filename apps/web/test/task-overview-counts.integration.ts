@@ -1,11 +1,9 @@
 import { expect, test } from "bun:test";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { finishedWorkFixture } from "./fixtures/finished-work";
 
 test("TaskBoard overview and project rows carry discussion reply and file counts", async () => {
   const f = await finishedWorkFixture();
   try {
-    await new PrismaExperimentsRepository(f.db).write(f.workspace.id, "taskConversations", true);
     const creator = await f.db.conversationMember.findFirstOrThrow({
       where: { conversationId: f.channel.id, userId: f.viewer.id },
     });

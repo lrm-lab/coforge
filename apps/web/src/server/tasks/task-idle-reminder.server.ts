@@ -7,7 +7,6 @@ import type {
 } from "@lrm/coforge-sdk/agent";
 import { AppError } from "#src/lib/app-error";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { taskConversationsEnabled } from "./task-conversations-gate.server";
 import { readIdleTaskFacts, type IdleTaskFacts } from "./task-idle-reminder-facts.server";
 import { byPriority } from "./task-priority.server";
 import { ownTaskQueue, queueActionable } from "./task-queue.server";
@@ -105,7 +104,6 @@ export async function idleNudge(
   input: AgentTaskIdleNudgeRequest,
   now = new Date(),
 ): Promise<AgentTaskIdleNudgeResponse> {
-  if (!(await taskConversationsEnabled(db, principal))) return skip("disabled");
   const agent = await db.agent.findFirst({
     where: { id: principal.agentId, workspaceId: principal.workspaceId },
     select: { name: true },

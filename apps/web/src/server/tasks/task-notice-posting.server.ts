@@ -2,7 +2,6 @@ import type { Prisma } from "#src/generated/prisma/client";
 import { announceMessageBestEffort } from "#src/server/conversations/conversation-activity.server";
 import { hostMessageId } from "./task-view.server";
 import { postTaskNotice } from "./task-conversations.server";
-import { taskRelationsEnabled } from "./task-conversations-gate.server";
 import { followTask } from "./task-discussion-store.server";
 import { enrollThreadReplyFollowers } from "#src/server/conversations/channel-threads.server";
 import {
@@ -119,11 +118,10 @@ export async function withNotices<T>(
 ): Promise<T> {
   const posted: PostedNotice[] = [];
   const addressed: PostedNotice[] = [];
-  // In a Workspace with Tasks v2 on, a Task write can wake a Task in another conversation, so every
-  // Task write takes the Workspace's lock before any conversation lock (see `AGENTS.md`).
-  const lockedWorkspace = await taskRelationsEnabled(ports.db, conversation.workspaceId);
   const result = await ports.db.$transaction(async (tx) => {
-    if (lockedWorkspace) await lockWorkspaceTaskWrites(tx, conversation.workspaceId);
+    // A Task write can wake a Task in another conversation, so every Task write takes the
+    // Workspace's lock before any conversation lock (see `AGENTS.md`).
+    await lockWorkspaceTaskWrites(tx, conversation.workspaceId);
     await lockConversation(tx, conversation.conversationId);
     const writers = new Map<string, NoticeWriter>();
     /** The writer of another conversation of the Workspace, which it locks the first time. */
