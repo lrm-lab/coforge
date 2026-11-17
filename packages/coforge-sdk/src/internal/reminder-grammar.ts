@@ -45,19 +45,18 @@ export function parseReminderRecurrence(value: string): ReminderRecurrence | und
  */
 export const DEFAULT_REMINDER_TIMEZONE = "Asia/Shanghai";
 
-/** Whether `value` contains ASCII control characters (excluding `\t`, `\n`, `\r`). */
-export function hasControlCharacter(value: string): boolean {
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    if (
-      (code >= 0x00 && code <= 0x08) ||
-      code === 0x0b ||
-      code === 0x0c ||
-      (code >= 0x0e && code <= 0x1f) ||
-      code === 0x7f
-    ) {
-      return true;
-    }
-  }
-  return false;
+export function positive(value: number | undefined, field: string): number | undefined {
+  if (value !== undefined && (!Number.isSafeInteger(value) || value < 1 || value > 0xffffffff))
+    throw new Error(`invalid ${field}`);
+  return value;
+}
+
+export function instant(value: string | undefined, field: string): string | undefined {
+  if (
+    value !== undefined &&
+    (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) ||
+      !Number.isFinite(Date.parse(value)))
+  )
+    throw new Error(`invalid ${field}`);
+  return value;
 }

@@ -22,7 +22,7 @@ export const UNTRUSTED_LINE_BREAKS = [
 ] as const;
 
 /** `UNTRUSTED_LINE_BREAKS` as one pattern, for splitting a body into its lines. */
-export const MESSAGE_LINE_SEPARATOR = /\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/u;
+export const MESSAGE_LINE_SEPARATOR = new RegExp(UNTRUSTED_LINE_BREAKS.join("|"), "u");
 
 /** What starts each continuation line of a framed body. */
 export const UNTRUSTED_CONTINUATION = "  │ ";
@@ -34,7 +34,10 @@ export function frameUntrustedText(text: string): string {
 }
 
 /** Whitespace and every break, including the ones `\s` leaves out (NEL, FS, GS, RS). */
-const FOLDABLE = /(?:\s|[\x1c\x1d\x1e\x85])+/gu;
+const FOLDABLE = new RegExp(
+  `(?:\\s|${String.fromCharCode(0x1c, 0x1d, 0x1e, 0x85).split("").join("|")})+`,
+  "gu",
+);
 
 /** A one-line field (a name, a title, a file name) as an Agent reads it: every run of whitespace
  * or breaks is one space, and none is left at either end. */

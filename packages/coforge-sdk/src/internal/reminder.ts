@@ -1,7 +1,8 @@
 import type { ReminderJob } from "./reminder-job";
 export type { ReminderJob } from "./reminder-job";
 import { RPC_METHODS } from "./rpc-methods";
-import { hasControlCharacter, RECURRENCE } from "./reminder-grammar";
+import { hasControlCharacter } from "./control-characters";
+import { instant, positive, RECURRENCE } from "./reminder-grammar";
 import { SEAL_OWNER_MAX_CHARS, SEAL_UNTIL_MAX_CHARS, sealText } from "./reminder-seal-text";
 import { isScopeId } from "./scope-id";
 import { boundedPayload } from "./codec";
@@ -170,20 +171,6 @@ export function isValidReminderStatusFilter(value: string): boolean {
 
 function bounded(bytes: Uint8Array) {
   return boundedPayload(bytes, MAX_BYTES, "Reminder");
-}
-function positive(value: number | undefined, field: string): number | undefined {
-  if (value !== undefined && (!Number.isSafeInteger(value) || value < 1 || value > 0xffffffff))
-    throw new Error(`invalid ${field}`);
-  return value;
-}
-function instant(value: string | undefined, field: string): string | undefined {
-  if (
-    value !== undefined &&
-    (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) ||
-      !Number.isFinite(Date.parse(value)))
-  )
-    throw new Error(`invalid ${field}`);
-  return value;
 }
 function identity(value: ReminderIdentity): void {
   if ([value.workspaceId, value.computerId, value.agentId].some((v) => !isScopeId(v)))

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hasControlCharacter } from "../internal/control-characters";
 
 import { AGENT_NAME_MAX_LENGTH, AGENT_NAME_PATTERN } from "#src/internal/agent-name";
 import { CHANNEL_NAME_PATTERN } from "#src/internal/channel-references";
@@ -98,7 +99,7 @@ const pageFillSelectorSchema = z
   .trim()
   .min(1)
   .max(300)
-  .refine((value) => !/[\u0000-\u001F\u007F]/.test(value), "control characters");
+  .refine((value) => !hasControlCharacter(value), "control characters");
 
 const pageFillFieldSchema = z.object({
   id: z

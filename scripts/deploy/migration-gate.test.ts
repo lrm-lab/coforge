@@ -164,8 +164,8 @@ describe("run_migrations", () => {
       writeFileSync(join(dir, ".migrate/migration-safety/migrate-deploy.sh"), "exit 0\n");
     const script = `
       source ${join(import.meta.dir, "deploy-secrets.sh")}
-      compose() { local cmd="\${@: -1}"; (cd "${dir}" && sh -c "\$cmd"); }
-      if run_migrations; then echo ok; else echo "failed: \$migration_failure"; fi`;
+      compose() { local cmd="\${@: -1}"; (cd "${dir}" && sh -c "$cmd"); }
+      if run_migrations; then echo ok; else echo "failed: $migration_failure"; fi`;
     const out = Bun.spawnSync(["bash", "-c", script]);
     rmSync(dir, { recursive: true, force: true });
     return out.stdout.toString().trim();

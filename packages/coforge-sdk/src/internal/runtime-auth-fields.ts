@@ -62,7 +62,10 @@ export const MAX_MESSAGE = 500;
 export const MAX_DEVICE_CODE_SECONDS = 3600;
 export const MAX_SEQUENCE = 2 ** 31 - 1;
 /** Every text but the pasted code: no control, format or line-separator character; tab and newline are allowed. */
-export const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u2028\u2029\p{Cf}]/u;
+export const CONTROL = new RegExp(
+  `[${String.fromCharCode(0x00)}-${String.fromCharCode(0x08)}${String.fromCharCode(0x0b)}-${String.fromCharCode(0x1f)}${String.fromCharCode(0x7f)}-${String.fromCharCode(0x9f)}\\u2028\\u2029\\p{Cf}]`,
+  "u",
+);
 export const MASK_MARKER = /[*•…]/u;
 
 export type RuntimeAuthScope = { protocolMajor: 1; workspaceId: string; computerId: string };

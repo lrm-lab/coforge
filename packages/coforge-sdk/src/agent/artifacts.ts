@@ -1,4 +1,5 @@
 import { isRecord } from "#src/internal/json-record";
+import { hasControlCharacter } from "#src/internal/control-characters";
 import {
   ARTIFACT_COMMENT_IMAGES_MAX,
   isAnchorShape,
@@ -253,7 +254,9 @@ export function artifactPathValid(path: string): boolean {
         segment.length > 0 &&
         segment !== "." &&
         segment !== ".." &&
-        !/[\\:\u0000-\u001f\u007f]/.test(segment),
+        !segment.includes("\\") &&
+        !segment.includes(":") &&
+        !hasControlCharacter(segment),
     );
 }
 

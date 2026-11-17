@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { TOOL_ALIASES, TOOL_LABELS, canonicalToolName, toolActivityLabel } from "./tool-display";
+import { TOOL_ALIASES, canonicalToolName, toolActivityLabel } from "./tool-display";
 
 test("a known canonical tool resolves through its aliases to the same label", () => {
   for (const name of ["read", "Read", "ReadFile", "file_read", "read_file"])
