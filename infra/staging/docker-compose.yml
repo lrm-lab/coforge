@@ -108,9 +108,12 @@ services:
       # Web-page artifacts' sandbox origin (task #544): the dedicated domain's staging name;
       # Caddy routes it to web like the app and 301s the interim coforge.cn subdomain.
       COFORGE_ARTIFACT_SANDBOX_ORIGIN: https://staging.coforgeusercontent.com
-      # Site origin so Open desktop and page-fill go through Caddy forward_auth
-      # (owner only). The Swarm :6090 proxy is not a browser entry point.
-      COFORGE_CLOUD_DESKTOP_ORIGIN: https://staging.coforge.cn
+      # Staging Swarm host is on the Lenovo intranet; the staging Web ECS cannot
+      # reach 10.110.158.143:6090, so Open desktop and page-fill open that
+      # address directly (intranet clients only). Production keeps the site
+      # origin + Caddy forward_auth path. Restore https://staging.coforge.cn
+      # here only after ECS → Swarm :6090 is reachable.
+      COFORGE_CLOUD_DESKTOP_ORIGIN: http://10.110.158.143:6090
       # SHA-256 of the release-catalog publish token (docs/release/release-notes.md). Not a
       # secret: the plaintext token lives only in the GitHub repository secret
       # COFORGE_RELEASE_CATALOG_TOKEN_STAGING; without this value every publish answers 503.
