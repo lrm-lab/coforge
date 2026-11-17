@@ -74,6 +74,7 @@ import { Route as WWorkspaceSlugActivityRouteImport } from './routes/w.$workspac
 import { Route as WWorkspaceSlugAppReviewRouteImport } from './routes/w.$workspaceSlug/app-review'
 import { Route as WWorkspaceSlugMeRouteImport } from './routes/w.$workspaceSlug/me'
 import { Route as WWorkspaceSlugMembersRouteImport } from './routes/w.$workspaceSlug/members'
+import { Route as WWorkspaceSlugMemoryRouteImport } from './routes/w.$workspaceSlug/memory'
 import { Route as WWorkspaceSlugPiChatRouteImport } from './routes/w.$workspaceSlug/pi-chat'
 import { Route as WWorkspaceSlugRecordsRouteImport } from './routes/w.$workspaceSlug/records'
 import { Route as WWorkspaceSlugSearchRouteImport } from './routes/w.$workspaceSlug/search'
@@ -544,6 +545,11 @@ const WWorkspaceSlugMeRoute = WWorkspaceSlugMeRouteImport.update({
 const WWorkspaceSlugMembersRoute = WWorkspaceSlugMembersRouteImport.update({
   id: '/members',
   path: '/members',
+  getParentRoute: () => WWorkspaceSlugRoute,
+} as any)
+const WWorkspaceSlugMemoryRoute = WWorkspaceSlugMemoryRouteImport.update({
+  id: '/memory',
+  path: '/memory',
   getParentRoute: () => WWorkspaceSlugRoute,
 } as any)
 const WWorkspaceSlugPiChatRoute = WWorkspaceSlugPiChatRouteImport.update({
@@ -1375,6 +1381,7 @@ export interface FileRoutesByFullPath {
   '/w/$workspaceSlug/app-review': typeof WWorkspaceSlugAppReviewRoute
   '/w/$workspaceSlug/me': typeof WWorkspaceSlugMeRoute
   '/w/$workspaceSlug/members': typeof WWorkspaceSlugMembersRoute
+  '/w/$workspaceSlug/memory': typeof WWorkspaceSlugMemoryRoute
   '/w/$workspaceSlug/pi-chat': typeof WWorkspaceSlugPiChatRoute
   '/w/$workspaceSlug/records': typeof WWorkspaceSlugRecordsRouteWithChildren
   '/w/$workspaceSlug/search': typeof WWorkspaceSlugSearchRoute
@@ -1573,6 +1580,7 @@ export interface FileRoutesByTo {
   '/w/$workspaceSlug/app-review': typeof WWorkspaceSlugAppReviewRoute
   '/w/$workspaceSlug/me': typeof WWorkspaceSlugMeRoute
   '/w/$workspaceSlug/members': typeof WWorkspaceSlugMembersRoute
+  '/w/$workspaceSlug/memory': typeof WWorkspaceSlugMemoryRoute
   '/w/$workspaceSlug/pi-chat': typeof WWorkspaceSlugPiChatRoute
   '/w/$workspaceSlug/search': typeof WWorkspaceSlugSearchRoute
   '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRoute
@@ -1772,6 +1780,7 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/app-review': typeof WWorkspaceSlugAppReviewRoute
   '/w/$workspaceSlug/me': typeof WWorkspaceSlugMeRoute
   '/w/$workspaceSlug/members': typeof WWorkspaceSlugMembersRoute
+  '/w/$workspaceSlug/memory': typeof WWorkspaceSlugMemoryRoute
   '/w/$workspaceSlug/pi-chat': typeof WWorkspaceSlugPiChatRoute
   '/w/$workspaceSlug/records': typeof WWorkspaceSlugRecordsRouteWithChildren
   '/w/$workspaceSlug/search': typeof WWorkspaceSlugSearchRoute
@@ -1972,6 +1981,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/app-review'
     | '/w/$workspaceSlug/me'
     | '/w/$workspaceSlug/members'
+    | '/w/$workspaceSlug/memory'
     | '/w/$workspaceSlug/pi-chat'
     | '/w/$workspaceSlug/records'
     | '/w/$workspaceSlug/search'
@@ -2170,6 +2180,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/app-review'
     | '/w/$workspaceSlug/me'
     | '/w/$workspaceSlug/members'
+    | '/w/$workspaceSlug/memory'
     | '/w/$workspaceSlug/pi-chat'
     | '/w/$workspaceSlug/search'
     | '/w/$workspaceSlug/settings'
@@ -2368,6 +2379,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/app-review'
     | '/w/$workspaceSlug/me'
     | '/w/$workspaceSlug/members'
+    | '/w/$workspaceSlug/memory'
     | '/w/$workspaceSlug/pi-chat'
     | '/w/$workspaceSlug/records'
     | '/w/$workspaceSlug/search'
@@ -3111,6 +3123,13 @@ declare module '@tanstack/react-router' {
       path: '/members'
       fullPath: '/w/$workspaceSlug/members'
       preLoaderRoute: typeof WWorkspaceSlugMembersRouteImport
+      parentRoute: typeof WWorkspaceSlugRoute
+    }
+    '/w/$workspaceSlug/memory': {
+      id: '/w/$workspaceSlug/memory'
+      path: '/memory'
+      fullPath: '/w/$workspaceSlug/memory'
+      preLoaderRoute: typeof WWorkspaceSlugMemoryRouteImport
       parentRoute: typeof WWorkspaceSlugRoute
     }
     '/w/$workspaceSlug/pi-chat': {
@@ -4161,6 +4180,7 @@ interface WWorkspaceSlugRouteChildren {
   WWorkspaceSlugAppReviewRoute: typeof WWorkspaceSlugAppReviewRoute
   WWorkspaceSlugMeRoute: typeof WWorkspaceSlugMeRoute
   WWorkspaceSlugMembersRoute: typeof WWorkspaceSlugMembersRoute
+  WWorkspaceSlugMemoryRoute: typeof WWorkspaceSlugMemoryRoute
   WWorkspaceSlugPiChatRoute: typeof WWorkspaceSlugPiChatRoute
   WWorkspaceSlugRecordsRoute: typeof WWorkspaceSlugRecordsRouteWithChildren
   WWorkspaceSlugSearchRoute: typeof WWorkspaceSlugSearchRoute
@@ -4183,6 +4203,7 @@ const WWorkspaceSlugRouteChildren: WWorkspaceSlugRouteChildren = {
   WWorkspaceSlugAppReviewRoute: WWorkspaceSlugAppReviewRoute,
   WWorkspaceSlugMeRoute: WWorkspaceSlugMeRoute,
   WWorkspaceSlugMembersRoute: WWorkspaceSlugMembersRoute,
+  WWorkspaceSlugMemoryRoute: WWorkspaceSlugMemoryRoute,
   WWorkspaceSlugPiChatRoute: WWorkspaceSlugPiChatRoute,
   WWorkspaceSlugRecordsRoute: WWorkspaceSlugRecordsRouteWithChildren,
   WWorkspaceSlugSearchRoute: WWorkspaceSlugSearchRoute,

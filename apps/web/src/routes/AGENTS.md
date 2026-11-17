@@ -6,7 +6,7 @@ These rules apply to `src/routes/`.
   styles, `HeadContent`, and `Scripts`.
 - Every app page lives under `/w/$workspaceSlug` (`w.$workspaceSlug.tsx` owns
   `AppShell` and renders `Outlet`), with these page names: `channel/$channelId`,
-  `saved`, `activity`, `tasks`, `search`, `members`, `agent/$agentId`,
+  `saved`, `activity`, `tasks`, `search`, `memory`, `members`, `agent/$agentId`,
   `computers`, `computer/$computerId`, `settings`, `app-review` (platform operators), `pi-chat`, plus `projects` and
   `records`; a direct message is `dm/$dmId`, by its conversation id. Pathless layouts (`_chat`, `_computers`) share chrome between
   pages without adding a URL segment. Old page names are not redirected; a Workspace's former

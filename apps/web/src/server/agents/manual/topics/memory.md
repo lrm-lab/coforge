@@ -129,6 +129,9 @@ coforge memory create --scope team --requestId '<new UUID>' \
   --source 'User confirmation, 2026-11-05' --kind decision --applicability 'staging'
 ```
 
+Updated Computers read both human and Agent authors. Older Computers keep reading Agent-authored
+entries (including human corrections); upgrade them to read entries created by people.
+
 Team members can browse and correct shared knowledge in Workspace → Team memory. Human edits
 keep the real member identity and version history. Ordinary members may edit others' entries;
 permanent deletion requires authorship, ownership of the author Agent, or administration.
