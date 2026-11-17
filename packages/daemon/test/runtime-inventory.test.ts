@@ -523,37 +523,35 @@ describe("external Code Agent inventory", () => {
       },
       {
         provider: "claude-code",
-        models: [
-          ...(
-            [
-              ["opus", "Claude Opus", FULL_EFFORTS],
-              ["fable", "Claude Fable", FULL_EFFORTS],
-              ["sonnet", "Claude Sonnet", FULL_EFFORTS],
-              ["haiku", "Claude Haiku"],
-              ["claude-opus-5-5", "Claude Opus 5.5", FULL_EFFORTS],
-              ["claude-opus-5", "Claude Opus 5", FULL_EFFORTS],
-              ["claude-opus-4-8", "Claude Opus 4.8", FULL_EFFORTS],
-              ["claude-opus-4-7", "Claude Opus 4.7", FULL_EFFORTS],
-              ["claude-opus-4-6", "Claude Opus 4.6", FULL_EFFORTS],
-              ["claude-fable-5-2", "Claude Fable 5.2", FULL_EFFORTS],
-              ["claude-fable-5-1", "Claude Fable 5.1", FULL_EFFORTS],
-              ["claude-fable-5", "Claude Fable 5", FULL_EFFORTS],
-              ["claude-sonnet-5-5", "Claude Sonnet 5.5", FULL_EFFORTS],
-              ["claude-sonnet-5", "Claude Sonnet 5", FULL_EFFORTS],
-              ["claude-sonnet-4-6", "Claude Sonnet 4.6", FULL_EFFORTS],
-              ["claude-haiku-5-5", "Claude Haiku 5.5", FULL_EFFORTS],
-              ["claude-haiku-4-5", "Claude Haiku 4.5"],
-            ] as const
-          ).map(([id, displayName, efforts]) => ({
-            id,
-            displayName,
-            description: "",
-            modelProvider: "",
-            reasoningEfforts: efforts ? efforts.slice() : [],
-            defaultReasoning: efforts ? "medium" : "",
-            recommended: false,
-          })),
-        ],
+        models: (
+          [
+            ["opus", "Claude Opus", FULL_EFFORTS],
+            ["fable", "Claude Fable", FULL_EFFORTS],
+            ["sonnet", "Claude Sonnet", FULL_EFFORTS],
+            ["haiku", "Claude Haiku"],
+            ["claude-opus-5-5", "Claude Opus 5.5", FULL_EFFORTS],
+            ["claude-opus-5", "Claude Opus 5", FULL_EFFORTS],
+            ["claude-opus-4-8", "Claude Opus 4.8", FULL_EFFORTS],
+            ["claude-opus-4-7", "Claude Opus 4.7", FULL_EFFORTS],
+            ["claude-opus-4-6", "Claude Opus 4.6", FULL_EFFORTS],
+            ["claude-fable-5-2", "Claude Fable 5.2", FULL_EFFORTS],
+            ["claude-fable-5-1", "Claude Fable 5.1", FULL_EFFORTS],
+            ["claude-fable-5", "Claude Fable 5", FULL_EFFORTS],
+            ["claude-sonnet-5-5", "Claude Sonnet 5.5", FULL_EFFORTS],
+            ["claude-sonnet-5", "Claude Sonnet 5", FULL_EFFORTS],
+            ["claude-sonnet-4-6", "Claude Sonnet 4.6", FULL_EFFORTS],
+            ["claude-haiku-5-5", "Claude Haiku 5.5", FULL_EFFORTS],
+            ["claude-haiku-4-5", "Claude Haiku 4.5"],
+          ] as const
+        ).map(([id, displayName, efforts]) => ({
+          id,
+          displayName,
+          description: "",
+          modelProvider: "",
+          reasoningEfforts: efforts ? efforts.slice() : [],
+          defaultReasoning: efforts ? "medium" : "",
+          recommended: false,
+        })),
       },
     ]);
   });
