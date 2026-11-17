@@ -152,6 +152,7 @@ test.skipIf(!connectionString)(
             type: "dm.marked.v1",
             ...ids,
             unreadCount: 1,
+            markedUnread: true,
             readThroughSequence: last.sequence,
           },
         },
