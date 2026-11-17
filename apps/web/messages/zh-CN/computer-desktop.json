@@ -3,6 +3,5 @@
   "computer_desktop_wake": "唤醒桌面",
   "computer_desktop_minimize": "最小化桌面",
   "computer_desktop_sleep": "睡眠桌面",
-  "computer_desktop_sleeping_in": "{seconds} 秒后睡眠",
   "computer_desktop_offline": "电脑离线时无法打开桌面"
 }

@@ -21,10 +21,6 @@ import {
   type EmbeddedDesktopPhase,
 } from "./embedded-desktop-session";
 
-/**
- * Agent profile Computer row: sleeping monitor thumbnail → same-page near-fullscreen
- * overlay on wake; collapse keeps the stream in the thumbnail until idle sleep.
- */
 export function AgentDesktopThumbnail({
   computerId,
   agentId,
@@ -49,9 +45,6 @@ export function AgentDesktopThumbnail({
     staleTime: 60_000,
   });
   const [phase, setPhase] = useState<EmbeddedDesktopPhase>("sleeping");
-  const [secondsLeft, setSecondsLeft] = useState(() =>
-    Math.ceil(EMBEDDED_DESKTOP_IDLE_SLEEP_MS / 1000),
-  );
   const slotRef = useRef<HTMLDivElement>(null);
   const [miniBox, setMiniBox] = useState<DOMRect | null>(null);
 
@@ -83,22 +76,11 @@ export function AgentDesktopThumbnail({
   }, [phase]);
 
   useEffect(() => {
-    if (!embeddedDesktopIdleCountdownActive(phase)) {
-      setSecondsLeft(Math.ceil(EMBEDDED_DESKTOP_IDLE_SLEEP_MS / 1000));
-      return;
-    }
-    const started = Date.now();
-    const tick = () => {
-      const left = Math.max(
-        0,
-        Math.ceil((EMBEDDED_DESKTOP_IDLE_SLEEP_MS - (Date.now() - started)) / 1000),
-      );
-      setSecondsLeft(left);
-      if (left === 0) setPhase((p) => reduceEmbeddedDesktop(p, "idleExpired"));
-    };
-    tick();
-    const id = window.setInterval(tick, 250);
-    return () => window.clearInterval(id);
+    if (!embeddedDesktopIdleCountdownActive(phase)) return;
+    const id = window.setTimeout(() => {
+      setPhase((p) => reduceEmbeddedDesktop(p, "idleExpired"));
+    }, EMBEDDED_DESKTOP_IDLE_SLEEP_MS);
+    return () => window.clearTimeout(id);
   }, [phase]);
 
   useEffect(() => {
@@ -160,7 +142,6 @@ export function AgentDesktopThumbnail({
               url={url}
               title={title}
               miniBox={miniBox}
-              secondsLeft={secondsLeft}
               onCollapse={() => setPhase((p) => reduceEmbeddedDesktop(p, "collapse"))}
               onWake={() => setPhase((p) => reduceEmbeddedDesktop(p, "wake"))}
               onSleep={() => setPhase((p) => reduceEmbeddedDesktop(p, "sleep"))}
@@ -177,7 +158,6 @@ function DesktopStreamSurface({
   url,
   title,
   miniBox,
-  secondsLeft,
   onCollapse,
   onWake,
   onSleep,
@@ -186,7 +166,6 @@ function DesktopStreamSurface({
   url: string;
   title: string;
   miniBox: DOMRect | null;
-  secondsLeft: number;
   onCollapse: () => void;
   onWake: () => void;
   onSleep: () => void;
@@ -257,12 +236,8 @@ function DesktopStreamSurface({
               color="tertiary"
               aria-label={m.computer_desktop_wake()}
               onPress={onWake}
-              className="absolute inset-0 h-full w-full flex-col items-stretch justify-start rounded-none p-1 before:rounded-none"
-            >
-              <span className="rounded bg-primary/90 px-1 py-0.5 text-xs font-medium text-primary">
-                {m.computer_desktop_sleeping_in({ seconds: secondsLeft })}
-              </span>
-            </Button>
+              className="absolute inset-0 h-full w-full rounded-none p-0 before:rounded-none"
+            />
           ) : null}
         </div>
       </div>
