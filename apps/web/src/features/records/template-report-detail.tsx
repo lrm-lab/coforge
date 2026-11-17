@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { DotsHorizontal, MessageChatCircle as Message, Trash01 as Trash } from "@untitledui/icons";
+import { DotsHorizontal, Trash01 as Trash } from "@untitledui/icons";
 
+import { SideChatIcon } from "./side-chat-icon";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
@@ -390,7 +391,7 @@ export function TemplateReportDetail({
               <ButtonUtility
                 size="sm"
                 color="tertiary"
-                icon={Message}
+                icon={SideChatIcon}
                 aria-label={m.records_side_chat()}
                 onClick={() => setSideOpen(true)}
               />

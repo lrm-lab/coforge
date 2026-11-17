@@ -3,7 +3,6 @@ import {
   DotsHorizontal,
   Download01 as Download,
   Heart,
-  MessageChatCircle as Message,
   Trash01 as Trash,
 } from "@untitledui/icons";
 
@@ -15,6 +14,7 @@ import { ActorName } from "#src/features/avatars/actor-name";
 import { messageSlots } from "#src/lib/message-slots";
 import { m } from "#src/paraglide/messages";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
+import { SideChatIcon } from "./side-chat-icon";
 import { formatWeeklyReportCompletedAt, type ReportBodyRestoreView } from "./records-content";
 import { BackToRecords, RecordsKeyPointReturnBack } from "./records-layout";
 import type { ReportSubject } from "./record-subject";
@@ -155,7 +155,7 @@ export function ReportDetailHeader({
           <ButtonUtility
             size="sm"
             color="tertiary"
-            icon={Message}
+            icon={SideChatIcon}
             aria-label={m.records_side_chat()}
             onClick={onOpenSide}
           />
