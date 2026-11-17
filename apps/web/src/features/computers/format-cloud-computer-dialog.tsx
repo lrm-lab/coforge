@@ -81,6 +81,7 @@ export function FormatCloudComputerDialog({
                     {m.computer_format_dialog_title({ name })}
                   </Heading>
                   <ButtonUtility
+                    data-dialog-close
                     aria-label={m.controls_close()}
                     icon={X}
                     size="sm"

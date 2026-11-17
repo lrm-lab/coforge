@@ -120,11 +120,11 @@ test("a dialog's field stays inside the visual viewport the keyboard leaves", as
     const before = await boxes();
     expect(before.focused).toBe(true);
     expect(before.overlay).toEqual([0, 844]);
-    // A confirmation sits mid-screen, not on the bottom edge (task #21).
-    expect(Math.abs((before.dialog[0] + before.dialog[1]) / 2 - 422)).toBeLessThan(40);
 
     // The dialog has finished its entrance before it is photographed.
     await browser("wait", "--fn", `document.getAnimations().length === 0`);
+    // A confirmation is a sheet on the bottom edge (task #137; mid-screen since task #21).
+    expect(Math.abs((await boxes()).dialog[1] - 844)).toBeLessThan(2);
     await browser("screenshot", join(artifacts, "keyboard-down.png"));
     // Keyboard up: React Aria and the overlay both follow `visualViewport`'s resize and scroll.
     await browser(

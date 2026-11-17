@@ -90,6 +90,7 @@ export function AgentDeleteDialog({
                     {m.agent_delete_dialog_title()}
                   </Heading>
                   <ButtonUtility
+                    data-dialog-close
                     aria-label={m.controls_close()}
                     icon={X}
                     size="sm"

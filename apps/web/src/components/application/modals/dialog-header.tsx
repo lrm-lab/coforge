@@ -33,6 +33,7 @@ export function DialogHeader({
       {onClose && (
         <ButtonUtility
           type="button"
+          data-dialog-close
           aria-label={m.controls_close()}
           icon={X}
           size="sm"

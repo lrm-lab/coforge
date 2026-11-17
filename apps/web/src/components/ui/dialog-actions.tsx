@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { Button, type Props as ButtonProps } from "#src/components/base/buttons/button";
+import { useConfirmationSheet } from "#src/components/ui/modal";
 import { useMediaQuery } from "#src/hooks/use-media-query";
 import { cx } from "#src/utils/cx";
 
@@ -28,7 +29,12 @@ export function DialogActions({
   children: ReactNode;
 }) {
   return (
-    <div className={cx("flex flex-wrap items-center justify-end gap-2", className)}>{children}</div>
+    <div
+      data-dialog-actions
+      className={cx("flex flex-wrap items-center justify-end gap-2", className)}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -40,20 +46,33 @@ type RowButtonProps<K extends keyof ButtonProps> = ButtonProps extends infer P
     : never
   : never;
 
-/** The row's Cancel or Close: borderless, as Raft's ghost button. */
+/** The row's Cancel or Close: borderless, as Raft's ghost button; outlined in a confirmation's
+ * phone sheet, where it stacks full width under the action and must read as a button too. */
 export function DialogCancel(props: RowButtonProps<"size" | "color">) {
   const size = useDialogControlSize();
+  const color = useConfirmationSheet() ? "secondary" : "tertiary";
   // Narrowed per variant: Button is overloaded for links and buttons, not for their union.
   return "href" in props ? (
-    <Button {...props} size={size} color="tertiary" />
+    <Button {...props} size={size} color={color} />
   ) : (
-    <Button {...props} size={size} color="tertiary" />
+    <Button {...props} size={size} color={color} />
   );
 }
 
-/** The row's action, primary unless the caller picks another colour. */
-export function DialogAction({ color = "primary", ...props }: RowButtonProps<"size">) {
+/** The row's action, primary unless the caller picks another colour. In a confirmation's phone
+ * sheet a red action is filled, the one thing to press at the bottom of the screen, unless
+ * `outlinedInSheet` keeps it outlined beside another filled action (a row keeps one). */
+export function DialogAction({
+  color: chosen = "primary",
+  outlinedInSheet = false,
+  ...props
+}: RowButtonProps<"size"> & { outlinedInSheet?: boolean }) {
   const size = useDialogControlSize();
+  const sheet = useConfirmationSheet();
+  const color =
+    sheet && !outlinedInSheet && chosen === "secondary-destructive"
+      ? "primary-destructive"
+      : chosen;
   return "href" in props ? (
     <Button {...props} size={size} color={color} />
   ) : (

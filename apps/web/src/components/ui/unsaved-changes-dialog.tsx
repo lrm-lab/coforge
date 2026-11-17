@@ -53,6 +53,7 @@ export function UnsavedChangesDialog({
             <DialogAction
               autoFocus={!onSave}
               color="secondary-destructive"
+              outlinedInSheet={Boolean(onSave)}
               isDisabled={saving}
               onPress={onDiscard}
             >

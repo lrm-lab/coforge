@@ -12,15 +12,15 @@ import {
 } from "./helpers/browser-e2e";
 
 /**
- * The confirmation that asks for the Agent's username before archiving it sits mid-screen on a
- * phone, like the other confirmations (task #21, found by QA on staging). Opt-in like the other
+ * The confirmation that asks for the Agent's username before archiving it is a sheet along a
+ * phone's bottom edge, like the other confirmations (task #137; mid-screen since task #21). Opt-in like the other
  * browser E2Es; the Agent is seeded per run and removed after it. Screenshots go under
- * `.amp/e2e/archive-agent-centered/`.
+ * `.amp/e2e/archive-agent-sheet/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/archive-agent-centered");
+const artifacts = join(import.meta.dir, "../../../.amp/e2e/archive-agent-sheet");
 
-test("the archive Agent confirmation is centered on a phone", async () => {
+test("the archive Agent confirmation is a bottom sheet on a phone", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `archive-agent-${process.pid}`);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
@@ -56,8 +56,8 @@ test("the archive Agent confirmation is centered on a phone", async () => {
     await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
     await browser("wait", "300");
     await browser("screenshot", join(artifacts, "phone-dark.png"));
-    // Mid-screen, a little above the middle; a bottom sheet would end at the screen's edge.
-    expect(Math.abs((box.top + box.bottom) / 2 - 422)).toBeLessThan(40);
+    // Its lower edge on the screen's (844 tall).
+    expect(Math.abs(box.bottom - 844)).toBeLessThan(2);
   } finally {
     await browser("close").catch(() => undefined);
     await db.agent.deleteMany({ where: { id: agent.id } }).catch(() => undefined);

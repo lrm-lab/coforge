@@ -2,7 +2,8 @@ import { useState, type ReactNode } from "react";
 import { Heading, Popover, Text, type PopoverProps } from "react-aria-components";
 
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
-import { Dialog, DialogTrigger } from "#src/components/ui/modal";
+import { Dialog, DialogTrigger, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
@@ -55,6 +56,7 @@ export function Popconfirm({
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, guard] = useSubmitGuard();
+  const phone = !useBreakpoint("sm");
   // A popover that is open when the change stops applying closes with it, and must not come back
   // when it applies again.
   if (isDisabled && open) setOpen(false);
@@ -68,6 +70,60 @@ export function Popconfirm({
     }, POPOVER_EXIT_SETTLE_MS);
   }
 
+  const content = (
+    <Dialog className="outline-none">
+      {({ close }) => (
+        <div className="flex flex-col gap-3 p-4 max-sm:gap-4 max-sm:px-6 max-sm:pt-8 max-sm:pb-6">
+          <div className="flex flex-col gap-1">
+            <Heading
+              slot="title"
+              className="text-sm font-semibold text-primary wrap-anywhere max-sm:text-lg"
+            >
+              {title}
+            </Heading>
+            {description && (
+              <Text slot="description" className="text-sm text-tertiary wrap-anywhere">
+                {description}
+              </Text>
+            )}
+          </div>
+          {error && (
+            <p role="alert" className="text-sm text-error-primary">
+              {error}
+            </p>
+          )}
+          <DialogActions>
+            <DialogCancel isDisabled={pending} onPress={close}>
+              {cancelLabel ?? m.controls_cancel()}
+            </DialogCancel>
+            {/* Enter confirms, as in every dialog (task #101). */}
+            <DialogAction
+              autoFocus
+              color={tone === "final" ? "primary" : "secondary-destructive"}
+              isLoading={pending}
+              showTextWhileLoading
+              onPress={() => {
+                if (pending) return;
+                setError(null);
+                void guard(async () => {
+                  try {
+                    await onConfirm();
+                    setOpen(false);
+                    focusFallbackOnceSettled();
+                  } catch (cause) {
+                    setError(typeof errorMessage === "string" ? errorMessage : errorMessage(cause));
+                  }
+                });
+              }}
+            >
+              {pending && pendingLabel ? pendingLabel : confirmLabel}
+            </DialogAction>
+          </DialogActions>
+        </div>
+      )}
+    </Dialog>
+  );
+
   return (
     <DialogTrigger
       isOpen={open}
@@ -79,65 +135,24 @@ export function Popconfirm({
       }}
     >
       {children}
-      <Popover
-        placement={placement}
-        offset={6}
-        className={cx(
-          "w-72 max-w-[calc(100vw-1rem)] origin-(--trigger-anchor-point) rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none will-change-transform",
-          POPOVER_MOTION,
-        )}
-      >
-        <Dialog className="outline-none">
-          {({ close }) => (
-            <div className="flex flex-col gap-3 p-4">
-              <div className="flex flex-col gap-1">
-                <Heading slot="title" className="text-sm font-semibold text-primary wrap-anywhere">
-                  {title}
-                </Heading>
-                {description && (
-                  <Text slot="description" className="text-sm text-tertiary wrap-anywhere">
-                    {description}
-                  </Text>
-                )}
-              </div>
-              {error && (
-                <p role="alert" className="text-sm text-error-primary">
-                  {error}
-                </p>
-              )}
-              <DialogActions>
-                <DialogCancel isDisabled={pending} onPress={close}>
-                  {cancelLabel ?? m.controls_cancel()}
-                </DialogCancel>
-                {/* Enter confirms, as in every dialog (task #101). */}
-                <DialogAction
-                  autoFocus
-                  color={tone === "final" ? "primary" : "secondary-destructive"}
-                  isLoading={pending}
-                  showTextWhileLoading
-                  onPress={() => {
-                    if (pending) return;
-                    setError(null);
-                    void guard(async () => {
-                      try {
-                        await onConfirm();
-                        setOpen(false);
-                        focusFallbackOnceSettled();
-                      } catch (cause) {
-                        setError(
-                          typeof errorMessage === "string" ? errorMessage : errorMessage(cause),
-                        );
-                      }
-                    });
-                  }}
-                >
-                  {pending && pendingLabel ? pendingLabel : confirmLabel}
-                </DialogAction>
-              </DialogActions>
-            </div>
+      {/* On a phone, a sheet along the bottom edge like every confirmation (task #137); a popover
+          anchored to a button the thumb just left reads as part of the page there. */}
+      {phone ? (
+        <ModalOverlay confirmation isDismissable={!pending}>
+          <Modal className="w-full">{content}</Modal>
+        </ModalOverlay>
+      ) : (
+        <Popover
+          placement={placement}
+          offset={6}
+          className={cx(
+            "w-72 max-w-[calc(100vw-1rem)] origin-(--trigger-anchor-point) rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none will-change-transform",
+            POPOVER_MOTION,
           )}
-        </Dialog>
-      </Popover>
+        >
+          {content}
+        </Popover>
+      )}
     </DialogTrigger>
   );
 }
