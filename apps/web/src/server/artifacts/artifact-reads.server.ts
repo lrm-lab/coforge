@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import type { ArtifactEntryFacts } from "#src/features/artifacts/artifact-entry-facts";
 import { artifactIdsInBody } from "#src/features/artifacts/artifact-link";
 import { artifactKindOfPath } from "#src/features/artifacts/artifact-path-kind";
 import { AppError } from "#src/lib/app-error";
@@ -70,6 +71,7 @@ const CARD_SELECT = {
   access: true,
   currentVersion: true,
   preview: true,
+  entryFacts: true,
   authorAgentId: true,
   updatedAt: true,
 } as const;
@@ -84,15 +86,17 @@ function card(
     access: string;
     currentVersion: number;
     preview: string;
+    entryFacts: Prisma.JsonValue;
     authorAgentId: string | null;
     updatedAt: Date;
   },
   canChange: boolean,
   homeKey: string | null = artifactTier(row) === "workspace" ? "workspace" : row.homeKey,
 ) {
-  const { authorAgentId, ...shown } = row;
+  const { authorAgentId, entryFacts, ...shown } = row;
   return {
     ...shown,
+    entryFacts: entryFacts as ArtifactEntryFacts | null,
     homeKey,
     entryKind: artifactKindOfPath(row.entryPath),
     access: artifactTier(row),

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { PrismaClient } from "#src/generated/prisma/client";
+import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { AppError, isAppError } from "#src/lib/app-error";
 import { nameToSlug } from "#src/lib/slug";
 import { errorType } from "#src/server/errors/error-type.server";
@@ -11,6 +11,7 @@ import {
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
 import { artifactOpenableKind } from "#src/features/artifacts/artifact-path-kind";
 import { ARTIFACT_TITLE_MAX } from "#src/features/artifacts/artifact-title-limit";
+import { artifactEntryFacts } from "./artifact-entry-facts.server";
 import { ARTIFACT_ENTRY_READ_LIMIT } from "./artifact-files.server";
 import { planManifestCreate, type FileManifest } from "./artifact-manifest.server";
 import type { Artifacts } from "./artifacts.server";
@@ -64,7 +65,7 @@ export class ArtifactDocuments {
           : attempt <= SEQUENTIAL_NAMES
             ? `${base}-${attempt}`
             : `${base}-${crypto.randomUUID().slice(0, 6)}`;
-      let previewed = false;
+      let refreshed = false;
       try {
         const created = await this.artifacts.create({
           workspaceId: scope.workspaceId,
@@ -86,11 +87,11 @@ export class ArtifactDocuments {
                 : `${input.idempotencyKey}:v1`,
           },
           beforeAnnounce: async (artifactId) => {
-            previewed = true;
-            await this.#refreshPreview(scope, artifactId);
+            refreshed = true;
+            await this.#refreshCardOrWarn(scope, artifactId);
           },
         });
-        if (!previewed) await this.#refreshPreview(scope, created.id);
+        if (!refreshed) await this.#refreshCardOrWarn(scope, created.id);
         return (
           await this.artifacts.reads.cards({ ...reader(scope), artifactIds: [created.id] })
         )[0]!;
@@ -167,7 +168,7 @@ export class ArtifactDocuments {
       ...settings,
       beforeAnnounce: async (created) => {
         await Promise.all([
-          created.previewStale ? this.#refreshPreview(scope, input.artifactId) : undefined,
+          created.cardStale ? this.#refreshCardOrWarn(scope, input.artifactId) : undefined,
           options?.afterSave?.(created)?.catch((error: unknown) => {
             tailError = { error };
           }),
@@ -212,12 +213,16 @@ export class ArtifactDocuments {
     return this.artifacts.reads.cards({ ...reader(scope), artifactIds });
   }
 
-  async #refreshPreview(scope: { workspaceId: string }, artifactId: string) {
+  refreshCard(workspaceId: string, artifactId: string) {
+    return refreshCard(this.db, this.blobs, workspaceId, artifactId);
+  }
+
+  async #refreshCardOrWarn(scope: { workspaceId: string }, artifactId: string) {
     try {
-      await refreshPreview(this.db, this.blobs, scope.workspaceId, artifactId);
+      await this.refreshCard(scope.workspaceId, artifactId);
     } catch (error) {
       console.warn(
-        JSON.stringify({ event: "artifacts:preview_failed", error_type: errorType(error) }),
+        JSON.stringify({ event: "artifacts:card_failed", error_type: errorType(error) }),
       );
     }
   }
@@ -255,7 +260,7 @@ function artifactPreview(text: string): string {
     .trim();
 }
 
-async function refreshPreview(
+async function refreshCard(
   db: PrismaClient,
   blobs: Pick<StoredArtifactBlobs, "read">,
   workspaceId: string,
@@ -266,36 +271,38 @@ async function refreshPreview(
     select: { currentVersion: true, entryPath: true, description: true },
   });
   if (!artifact || artifact.currentVersion <= 0) return;
-  const kind = artifactOpenableKind(artifact.entryPath);
-  if (kind === "html") {
-    await db.artifact.updateMany({
-      where: { id: artifactId, currentVersion: artifact.currentVersion },
-      data: { preview: artifactPreview(artifact.description) },
-    });
-    return;
-  }
-  if (kind !== "markdown") {
-    await db.artifact.updateMany({
-      where: { id: artifactId, currentVersion: artifact.currentVersion },
-      data: { preview: "" },
-    });
-    return;
-  }
-  const file = await db.artifactFile.findFirst({
-    where: {
-      artifactId,
-      path: artifact.entryPath,
-      kind: "text",
-      version: { number: artifact.currentVersion },
-    },
-    select: { sha256: true, sizeBytes: true },
-  });
-  const bytes =
-    file && file.sizeBytes <= ARTIFACT_ENTRY_READ_LIMIT
-      ? await blobs.read(workspaceId, file.sha256)
-      : null;
+  const card =
+    artifactOpenableKind(artifact.entryPath) === "html"
+      ? { preview: artifactPreview(artifact.description), entryFacts: null }
+      : await entryCard(db, blobs, workspaceId, artifactId, artifact);
   await db.artifact.updateMany({
     where: { id: artifactId, currentVersion: artifact.currentVersion },
-    data: { preview: bytes ? artifactPreview(new TextDecoder().decode(bytes)) : "" },
+    data: { preview: card.preview, entryFacts: card.entryFacts ?? Prisma.DbNull },
   });
+}
+
+async function entryCard(
+  db: PrismaClient,
+  blobs: Pick<StoredArtifactBlobs, "read">,
+  workspaceId: string,
+  artifactId: string,
+  artifact: { entryPath: string; currentVersion: number },
+) {
+  const file = await db.artifactFile.findFirst({
+    where: { artifactId, path: artifact.entryPath, version: { number: artifact.currentVersion } },
+    select: { sha256: true, sizeBytes: true, kind: true },
+  });
+  if (!file) return { preview: "", entryFacts: null };
+  const read = () => blobs.read(workspaceId, file.sha256);
+  if (artifactOpenableKind(artifact.entryPath) !== "markdown")
+    return {
+      preview: "",
+      entryFacts: await artifactEntryFacts(artifact.entryPath, file.sizeBytes, read),
+    };
+  const text =
+    file.kind === "text" && file.sizeBytes <= ARTIFACT_ENTRY_READ_LIMIT ? await read() : null;
+  return {
+    preview: text ? artifactPreview(new TextDecoder().decode(text)) : "",
+    entryFacts: null,
+  };
 }

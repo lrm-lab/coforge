@@ -118,6 +118,36 @@ test("an artifact whose entry is a PDF, a CSV or an image opens as that file", a
       `(() => { const img = ${card(`Logo ${tail}`)}?.querySelector('img[data-artifact-kind="image"]'); return !!img && img.complete && img.naturalWidth > 0; })()`,
     );
     await browser("screenshot", join(shots, "93-gallery-kinds.png"));
+
+    const roster = await make(`Roster ${tail}`, "roster.csv", "name,team\nAlice,Ops\nBob,Web\n");
+    const sender = await db.conversationMember.findFirstOrThrow({
+      where: { conversationId: channel.id, agentId: agent.id },
+      select: { id: true },
+    });
+    const link = (id: string) => `${webOrigin}/w/${workspace.slug}/artifacts/${id}`;
+    await db.message.create({
+      data: {
+        conversationId: channel.id,
+        workspaceId,
+        senderMemberId: sender.id,
+        body: `Files: ${link(paper.id)} ${link(roster.id)} ${link(logo.id)}`,
+        sequence: 1,
+      },
+    });
+    await browser("open", `${webOrigin}/zh-CN/w/${workspace.slug}/channel/${channel.id}`);
+    await waitFor(
+      `${pageHydrated} && document.querySelectorAll("[data-artifact-facts]").length === 3`,
+    );
+    const titles = [`Paper ${tail}`, `Roster ${tail}`, `Logo ${tail}`];
+    const facts = await evaluate<string[]>(
+      `[${titles.map(card).join(",")}].map((card) => card?.querySelector("[data-artifact-facts]")?.textContent ?? null)`,
+    );
+    expect(facts).toEqual([
+      "共 1 页",
+      "2 行 × 2 列 · name、team",
+      `${new TextEncoder().encode(SVG).length} B`,
+    ]);
+    await browser("screenshot", join(shots, "94-chat-card-facts.png"));
   } finally {
     await experiments.write(workspaceId, "artifacts", before);
     await db.conversation.delete({ where: { id: channel.id } }).catch(() => undefined);

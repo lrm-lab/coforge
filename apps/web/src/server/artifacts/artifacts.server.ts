@@ -144,7 +144,7 @@ export class Artifacts {
     description?: string;
     files?: readonly ArtifactFileInput[];
     deletedPaths?: readonly string[];
-    beforeAnnounce?: (saved: { number: number; previewStale: boolean }) => Promise<unknown>;
+    beforeAnnounce?: (saved: { number: number; cardStale: boolean }) => Promise<unknown>;
   }): Promise<
     | {
         status: "created";
@@ -152,7 +152,7 @@ export class Artifacts {
         number: number;
         merged: string[];
         mergedSettings: ArtifactSettingName[];
-        previewStale: boolean;
+        cardStale: boolean;
       }
     | { status: "replayed"; versionId: string; number: number }
     | { status: "nothing"; titleChanged?: { from: string } }
@@ -303,14 +303,12 @@ export class Artifacts {
           const settingsChanged = ARTIFACT_SETTINGS.some(
             (name) => settings.result[name] !== currentSettings[name],
           );
-          const newKind = artifactOpenableKind(settings.result.entryPath);
-          const previewStale =
-            newKind !== artifactOpenableKind(currentSettings.entryPath) ||
-            (newKind === "markdown" &&
-              (settings.result.entryPath !== currentSettings.entryPath ||
-                result.get(settings.result.entryPath)?.sha256 !==
-                  currentFiles.get(currentSettings.entryPath)?.sha256)) ||
-            (newKind === "html" && settings.result.description !== currentSettings.description);
+          const cardStale =
+            settings.result.entryPath !== currentSettings.entryPath ||
+            (artifactOpenableKind(settings.result.entryPath) === "html"
+              ? settings.result.description !== currentSettings.description
+              : result.get(settings.result.entryPath)?.sha256 !==
+                currentFiles.get(currentSettings.entryPath)?.sha256);
           const filesChanged =
             deleted.length > 0 ||
             added.some(
@@ -356,7 +354,7 @@ export class Artifacts {
             number: version.number,
             merged,
             mergedSettings: settings.merged,
-            previewStale,
+            cardStale,
           } as const;
         }),
     );

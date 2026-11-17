@@ -9,6 +9,7 @@ import { loadArtifactMarks } from "./artifact-gallery.functions";
 import { CardBadges } from "./artifact-gallery-card";
 import { useScopeOf } from "./artifact-scope";
 import { MarkdownPreview } from "./artifact-preview";
+import { entryFactsLine } from "./artifact-entry-facts";
 import { artifactIdsInBody, bodyWithArtifactTitles } from "./artifact-link";
 import { ArtifactEditedLine, ArtifactIcon, kindLabel, useArtifactTime } from "./artifact-parts";
 import {
@@ -119,6 +120,7 @@ export function ArtifactCardFace({
   const time = useArtifactTime();
   const title = card.title || m.doc_untitled();
   const kind = kindLabel(card.entryPath);
+  const facts = entryFactsLine(card.entryKind, card.entryFacts);
   const scope = useScopeOf()({
     link: link === true,
     access: card.access,
@@ -148,6 +150,11 @@ export function ArtifactCardFace({
             />
           )}
         </p>
+        {facts && (
+          <p data-artifact-facts className="mt-0.5 truncate text-xs text-tertiary tabular-nums">
+            {facts}
+          </p>
+        )}
         {card.preview && (
           <div className="mt-0.5 line-clamp-2 text-sm text-tertiary">
             <MarkdownPreview markdown={card.preview} />

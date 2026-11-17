@@ -42,6 +42,8 @@ RUN bun build apps/web/scripts/backfill-message-references.ts \
   --target bun --outfile apps/web/.ops/backfill-message-references.js
 RUN bun build apps/web/scripts/backfill-artifact-comment-mentions.ts \
   --target bun --outfile apps/web/.ops/backfill-artifact-comment-mentions.js
+RUN bun build apps/web/scripts/backfill-artifact-entry-facts.ts --external proxy-agent \
+  --target bun --outfile apps/web/.ops/backfill-artifact-entry-facts.js
 
 # The migration toolchain only: the schema and migrations it applies join it in the final stage.
 FROM oven/bun:1.4.4-alpine@sha256:4cf82f5686b196504fe119db3fcd9185b191f82ece82c40680e597228ec6070a AS migrate

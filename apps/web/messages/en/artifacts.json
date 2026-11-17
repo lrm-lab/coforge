@@ -15,6 +15,49 @@
   "doc_kind_video": "Video",
   "doc_kind_other": "File",
   "doc_card_label": "{kind}: {title}",
+  "doc_facts_pages": [
+    {
+      "declarations": ["input count", "input shown", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{shown} page",
+        "countPlural=other": "{shown} pages"
+      }
+    }
+  ],
+  "doc_facts_lines": [
+    {
+      "declarations": ["input count", "input shown", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{shown} line",
+        "countPlural=other": "{shown} lines"
+      }
+    }
+  ],
+  "doc_facts_rows": [
+    {
+      "declarations": ["input count", "input shown", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{shown} row",
+        "countPlural=other": "{shown} rows"
+      }
+    }
+  ],
+  "doc_facts_columns": [
+    {
+      "declarations": ["input count", "input shown", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{shown} column",
+        "countPlural=other": "{shown} columns"
+      }
+    }
+  ],
+  "doc_facts_table": "{rows} × {columns}",
+  "doc_facts_name_separator": ", ",
+  "doc_facts_pixels": "{width} × {height} px",
   "doc_pane_label": "Artifact",
   "doc_load_failed": "It may have been deleted, or you can't see it.",
   "doc_close": "Close",

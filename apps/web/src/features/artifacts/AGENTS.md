@@ -38,7 +38,9 @@ These rules apply to `src/features/artifacts/`. They extend
   open tab counts as viewing even in the background.
 - Scope names come from `useScopeLabels`; the Workspace scope is named by the Workspace
   (`av_vis_workspace` takes it), never a generic "everyone". A card's stored `preview` is a Markdown
-  excerpt: render it with `MarkdownPreview`, clamped by its caller.
+  excerpt: render it with `MarkdownPreview`, clamped by its caller. Its stored `entryFacts` (null for
+  Markdown and HTML) is written by the server and turned into the card's one line by
+  `entryFactsLine`; the line falls back to the size when the type's own fact is missing.
 - `ConversationShareDialog` arranges its target and composer panes through a `ShareLayout`; the
   artifact send dialog supplies the two-pane one.
 - The comments panel (`artifact-comment-panel.tsx`) and the files panel are one `panel` state and

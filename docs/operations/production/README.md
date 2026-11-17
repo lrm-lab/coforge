@@ -151,6 +151,14 @@ After the release that adds `artifact_comment_mentions`, run once in the Web con
 resumable with `--from-id`): `bun .ops/backfill-artifact-comment-mentions.js --dry-run`, then `--apply`
 (`--batch-size <n>`, default 500; `--from-id` resumes the comment pass, reviews always rerun). It covers comments and review bodies, locks each comment while it reads it, and follows no one. Until it runs, old comments show no mention items or @ badges.
 
+## Backfill of artifact entry facts
+
+After the release that adds `artifacts.entryFacts`, run once in the Web container (idempotent,
+resumable with `--from-id`): `bun .ops/backfill-artifact-entry-facts.js --dry-run`, then `--apply`
+(`--batch-size <n>`, default 200). It reads the entry file of each artifact whose entry is not
+Markdown or HTML and keeps its PDF pages, text lines, CSV rows and columns, image pixels or size. Until
+it runs, older artifacts' chat cards show no facts line; their next push fills it.
+
 ## Failed concurrent index build
 
 `artifact_follows_userId_following_idx` is built `CONCURRENTLY` and its migration uses `IF NOT EXISTS`,
