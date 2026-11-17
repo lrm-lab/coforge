@@ -1,0 +1,28 @@
+[Unit]
+Description=CoForge staging desktop SSH reverse tunnel (ECS loopback :16090 → local :6090)
+Documentation=https://github.com/lrm-lab/coforge/blob/main/docs/operations/cloud-swarm/staging-desktop-tunnel.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jian40
+Group=jian40
+# Dedicated key only — never the GitHub DEPLOY_SSH_KEY.
+Environment=IDENTITY=/home/jian40/.coforge-host/staging-desktop-tunnel
+Environment=SSH_USER=deploy
+Environment=SSH_HOST=101.200.210.144
+ExecStart=/usr/bin/ssh -N \
+  -o BatchMode=yes \
+  -o ExitOnForwardFailure=yes \
+  -o ServerAliveInterval=15 \
+  -o ServerAliveCountMax=3 \
+  -o StrictHostKeyChecking=accept-new \
+  -i ${IDENTITY} \
+  -R 127.0.0.1:16090:127.0.0.1:6090 \
+  ${SSH_USER}@${SSH_HOST}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

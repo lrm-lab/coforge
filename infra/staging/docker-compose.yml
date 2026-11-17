@@ -33,9 +33,14 @@ services:
       COFORGE_CADDYFILE_SHA256: ${COFORGE_CADDYFILE_SHA256:?deploy script writes .env}
       ALIDNS_ACCESS_KEY_ID: ${ALIDNS_ACCESS_KEY_ID:?deploy script reads alidns_access_key_id}
       ALIDNS_ACCESS_KEY_SECRET: ${ALIDNS_ACCESS_KEY_SECRET:?deploy script reads alidns_access_key_secret}
-      # Internal address of the Swarm desktop proxy. Caddy reaches it after the
-      # web app allows the signed-in computer owner. Not a public listener.
-      COFORGE_DESKTOP_UPSTREAM: 10.110.158.143:6090
+      # Swarm host is on the Lenovo intranet; the ECS cannot dial it. The Swarm
+      # manager keeps an SSH reverse tunnel that listens on the ECS loopback
+      # only (127.0.0.1:16090 → manager :6090). Caddy is in a container, so it
+      # reaches that listener through host.docker.internal (see extra_hosts).
+      # Do not bind the remote side of the tunnel on 0.0.0.0 — that would expose
+      # the desktop proxy without forward_auth.
+      # docs/operations/cloud-swarm/staging-desktop-tunnel.md
+      COFORGE_DESKTOP_UPSTREAM: host.docker.internal:16090
       # Shared with the Swarm host (`COFORGE_CLUSTER_TOKEN`). Caddy sets it on
       # the upstream request after forward_auth; the host rejects callers that
       # omit it. Same plaintext as COFORGE_CLOUD_CLUSTER_TOKEN on this host.
@@ -43,6 +48,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -108,12 +115,10 @@ services:
       # Web-page artifacts' sandbox origin (task #544): the dedicated domain's staging name;
       # Caddy routes it to web like the app and 301s the interim coforge.cn subdomain.
       COFORGE_ARTIFACT_SANDBOX_ORIGIN: https://staging.coforgeusercontent.com
-      # Staging Swarm host is on the Lenovo intranet; the staging Web ECS cannot
-      # reach 10.110.158.143:6090, so Open desktop and page-fill open that
-      # address directly (intranet clients only). Production keeps the site
-      # origin + Caddy forward_auth path. Restore https://staging.coforge.cn
-      # here only after ECS → Swarm :6090 is reachable.
-      COFORGE_CLOUD_DESKTOP_ORIGIN: http://10.110.158.143:6090
+      # Site origin so Open desktop and page-fill go through Caddy forward_auth
+      # (owner only). The Swarm :6090 proxy is reached from this ECS only via
+      # the reverse tunnel documented in staging-desktop-tunnel.md.
+      COFORGE_CLOUD_DESKTOP_ORIGIN: https://staging.coforge.cn
       # SHA-256 of the release-catalog publish token (docs/release/release-notes.md). Not a
       # secret: the plaintext token lives only in the GitHub repository secret
       # COFORGE_RELEASE_CATALOG_TOKEN_STAGING; without this value every publish answers 503.
