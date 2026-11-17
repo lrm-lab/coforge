@@ -12,9 +12,10 @@ on:
 permissions:
   contents: read
 
-# A manual run queues behind a running one instead of cancelling it.
+# Runs on different refs run in parallel; a repeat trigger on the same ref queues
+# behind the running one instead of cancelling it.
 concurrency:
-  group: web-integration
+  group: web-integration-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
