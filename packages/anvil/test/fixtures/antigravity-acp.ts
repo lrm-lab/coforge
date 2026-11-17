@@ -128,6 +128,7 @@ let cancelHeld: (() => void) | undefined;
 for await (const line of console) {
   const request = JSON.parse(line);
   if (log) await appendFile(log, `${JSON.stringify(request)}\n`);
+  if (!request.method) continue;
   const reply = (result: unknown) => write({ jsonrpc: "2.0", id: request.id, result });
   const fail = (code: number, message: string) =>
     write({ jsonrpc: "2.0", id: request.id, error: { code, message } });
@@ -270,6 +271,54 @@ for await (const line of console) {
           });
           reply({ stopReason: "end_turn" });
         });
+        break;
+      }
+      if (text === "permission-after-turn") {
+        reply({ stopReason: "end_turn" });
+        setTimeout(() => {
+          const ask = (id: string, targetSessionId: string) =>
+            write({
+              jsonrpc: "2.0",
+              id,
+              method: "session/request_permission",
+              params: {
+                sessionId: targetSessionId,
+                toolCall: { toolCallId: `${id}-call`, title: "Run command" },
+                options: [
+                  { optionId: "allow", name: "Allow", kind: "allow_once" },
+                  { optionId: "deny", name: "Deny", kind: "reject_once" },
+                ],
+              },
+            });
+          ask("perm-other", "another-session");
+          ask("perm-own", currentSessionId);
+        }, 20);
+        break;
+      }
+      if (text === "permission-on-interrupt") {
+        update({
+          sessionUpdate: "agent_message_chunk",
+          content: { type: "text", text: "working" },
+        });
+        hold(() => {});
+        cancelHeld = () => {
+          cancelHeld = undefined;
+          heldReply = undefined;
+          write({
+            jsonrpc: "2.0",
+            id: "perm-interrupting",
+            method: "session/request_permission",
+            params: {
+              sessionId: currentSessionId,
+              toolCall: { toolCallId: "interrupt-call", title: "Run command" },
+              options: [
+                { optionId: "allow", name: "Allow", kind: "allow_once" },
+                { optionId: "deny", name: "Deny", kind: "reject_once" },
+              ],
+            },
+          });
+          setTimeout(() => reply({ stopReason: "cancelled" }), 20);
+        };
         break;
       }
       if (text === "slow") {
