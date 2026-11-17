@@ -301,6 +301,11 @@ configs:
       {
         "$$schema": "https://flagd.dev/schema/v0/flags.json",
         "flags": {
+          "agentContextView": {
+            "state": "ENABLED",
+            "variants": { "on": true, "off": false },
+            "defaultVariant": "off"
+          }
         }
       }
 
