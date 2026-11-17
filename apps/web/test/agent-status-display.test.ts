@@ -204,3 +204,21 @@ test("a live Agent held on its credential reads as the stop, still online, with 
   expect(view.label).toBe("Runtime not signed in");
   expect(view.recovery).toBe("retry");
 });
+
+/** The three runtime refusals the daemon tells apart (task #418; `launch-failure.test.ts` pins the
+ * sentences): a refused Agent's Computer is still online, so the display is the `error` activity
+ * carrying that sentence, and the profile's banner reads it as `Error: <sentence>`. */
+test("each runtime refusal reaches the error banner as its own sentence", () => {
+  const sentences = [
+    "The configured runtime is marked private on this Computer, and is not shared with this Agent's owner.",
+    "Kiro is not installed on this Computer. Install Kiro, then start the Agent again.",
+    "Kiro is not usable on this Computer. Check its status in Computer settings, then start the Agent again.",
+  ];
+  for (const detail of sentences) {
+    const view = agentDisplay(
+      display({ activityKind: "error", detailKind: "runtime_error", detail, stopReason: null }),
+    );
+    expect(view.label).toBe(`Error: ${detail}`);
+    expect(view.alert).toBeUndefined();
+  }
+});
