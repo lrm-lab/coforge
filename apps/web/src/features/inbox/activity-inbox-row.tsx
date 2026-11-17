@@ -1,15 +1,22 @@
 import { channelGlyph, ChannelTitle } from "#src/features/conversations/channel-name";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { ActorName } from "#src/features/avatars/actor-name";
+import {
+  ActivityDoneCheck,
+  ActivityMentionBadge,
+  ActivityRowTime,
+  ActivityRowTitle,
+  ActivityUnreadCount,
+  ActivityUnreadDot,
+  NARROW_HIDDEN,
+} from "./activity-row-parts";
 import { memo } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { BellOff01, Check, Hash01, Mail01 } from "@untitledui/icons";
 import { Link as AriaLink } from "react-aria-components";
 
 import { Badge } from "#src/components/base/badges/badges";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { ClockTime, RelativeTime } from "#src/components/ui/relative-time";
 import { collageLayout } from "#src/features/conversations/collage-layout";
 import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { MessagePreview } from "#src/features/conversations/message-preview";
@@ -27,24 +34,17 @@ import { activityChatLink, activityOpenTarget } from "./activity-open-target";
 import { activityRowPlace } from "./activity-row-place";
 import type { ActivityItemActions } from "./use-activity-item-actions";
 
-/** An Activity row's item: a hairline divides it from the row above, from the text column on (past
- * the gutter, the 2.375rem face and the 0.75rem gap). */
 export const ACTIVITY_ROW_ITEM_CLASS =
   "group relative before:pointer-events-none before:absolute before:top-0 before:right-0 before:left-[calc(var(--page-gutter)+3.125rem)] before:border-t before:border-secondary first:before:hidden";
 
-/** An Activity row's link: the face and the two text lines, on the page's inset. */
 export const ACTIVITY_ROW_LINK_CLASS =
   "flex items-center gap-3 px-page py-3 outline-focus-ring transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2";
 
-/** A message's text rendered as inline Markdown, or its first attachment's name. */
 function Preview({ message }: { message: ActivityInboxItem["latest"] }) {
-  // A system notice and an action card read in the viewer's language, not as their stored
-  // English body.
   if (message.system) return <>{systemNoticeText(message)}</>;
   const cardText = actionCardPreviewText(message.card);
   if (cardText) return <>{cardText}</>;
   if (message.body) return <MessagePreview body={message.body} mentions={message.mentions} />;
-  // A forward sent without a note previews as what it forwards.
   if (message.forwarded?.[0])
     return <>{m.message_forward_preview({ text: message.forwarded[0].sourceBody })}</>;
   return <>{message.attachments[0]?.fileName ?? ""}</>;
@@ -64,13 +64,9 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   filter: ActivityInboxFilter;
   actions: ActivityItemActions;
   viewerId: string;
-  /** This row stands for the conversation open beside the list. */
   current: boolean;
-  /** The list's one tab stop: the keyboard's selected row, which the arrow keys move. */
   tabStop: boolean;
-  /** Opens the row's conversation on the page. */
   onOpen: (target: HostedConversationTarget) => void;
-  /** The row sits under its day's heading: it shows the time of day, not how long ago. */
   clock?: boolean;
 }) {
   const router = useRouter();
@@ -79,20 +75,8 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   const link = activityChatLink(workspaceSlug, target);
   const href = router.buildLocation(link).publicHref;
   const unread = item.unreadCount > 0;
-  // Gives way to the Done check wherever the check shows (hover, focus, the open row); a touch
-  // screen has no check, so the time stays.
-  const timeClass = cn(
-    "ml-auto shrink-0 pl-2 text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 not-any-pointer-coarse:group-focus-within:opacity-0",
-    current && "not-any-pointer-coarse:opacity-0",
-  );
-  const time = clock ? (
-    <ClockTime value={item.latest.createdAt} plain seconds={false} className={timeClass} />
-  ) : (
-    <RelativeTime value={item.latest.createdAt} plain className={timeClass} />
-  );
+  const time = <ActivityRowTime value={item.latest.createdAt} clock={clock} current={current} />;
   const { place, thread, task } = item;
-  // A channel goes by its name; a DM, and a thread in one, by who is on the other side, whether an
-  // Agent or a member.
   const title =
     place.kind === "channel"
       ? place.channelName
@@ -104,7 +88,6 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
     rowPlace?.kind === "attachment" ? (
       m.activity_inbox_attachment_comment({ fileName: rowPlace.fileName })
     ) : rowPlace && place.kind === "channel" ? (
-      // Its name, no `#` (task #55): the row's mark is already the channel's group avatar.
       <ChannelTitle
         name={title}
         visibility={place.visibility}
@@ -114,7 +97,6 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
     ) : (
       rowPlace && `@${title}`
     );
-  // A person or an Agent is named with their face; the server's own notices have none (task #521).
   const { latest } = item;
   const sender =
     latest.senderKind === "system" ? (
@@ -143,18 +125,11 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
       data-activity-row={item.key}
       className={cn(ACTIVITY_ROW_ITEM_CLASS, "select-none [-webkit-touch-callout:none]")}
     >
-      {/* The row is a React Aria link so the context menu (`MenuTrigger trigger="contextMenu"`)
-          can use it as its trigger; `render` hands the element to TanStack's `Link`, which owns
-          navigation. Opening a row reads it, like opening the conversation does. */}
       <Dropdown.Root trigger="contextMenu">
         <AriaLink
           href={href}
           aria-current={current ? "true" : undefined}
           onPress={(event) => {
-            // A conversation or thread opened on the page is read by its pane, after the pane has
-            // found where its unread messages start (task #358): read from here first, it would
-            // have none. A Task's popup, a mention's own read state and the row already open (its
-            // pane does not open again) still read from here.
             const readByPane = !current && !item.task && !item.mentionAction && !isModified(event);
             if (unread && !readByPane) actions.read(item);
           }}
@@ -165,9 +140,6 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
                 {...link}
                 tabIndex={tabStop ? 0 : -1}
                 onClick={(event) => {
-                  // A plain click (or Enter) opens the row on the page, so neither `Link` nor
-                  // React Aria navigates; a modified or middle click still opens Chat. React
-                  // Aria's handler still runs: it ends a keyboard press.
                   if (event.button === 0 && !isModified(event)) {
                     event.preventDefault();
                     onOpen(target);
@@ -181,7 +153,6 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
           }
           className={cn(
             ACTIVITY_ROW_LINK_CLASS,
-            // The row's own hover, kept while the pointer is on its Done check (a sibling).
             current
               ? "bg-chat-selected-bg"
               : "group-hover:bg-primary_hover focus-visible:bg-primary_hover",
@@ -190,35 +161,19 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
           <ActivityItemIcon item={item} />
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="flex min-w-0 items-center gap-2">
-              {/* Linear's row (Frank, 11-09): an unread row has one mark, this dot; a read row
-                  fades a step instead of the unread one going bold. */}
-              {unread && (
-                <span
-                  aria-hidden="true"
-                  className="size-1.5 shrink-0 rounded-full bg-brand-solid"
-                />
-              )}
-              <span
-                className={cn(
-                  // A list dragged narrow keeps a few letters of the title beside its (shortened) marks.
-                  "min-w-10 truncate text-md",
-                  unread ? "text-primary" : "text-tertiary",
-                )}
-              >
+              {unread && <ActivityUnreadDot />}
+              <ActivityRowTitle unread={unread}>
                 {task ? (
                   task.title
                 ) : thread ? (
                   <Preview message={thread.root} />
                 ) : place.kind === "channel" ? (
-                  // A private channel goes by a lock before its name, as in Chat (task #375).
                   <ChannelTitle name={title} visibility={place.visibility} hash={false} />
                 ) : (
                   title
                 )}
-              </span>
+              </ActivityRowTitle>
               <ActivityItemBadges item={item} filter={filter} />
-              {/* Gives way to the Done check wherever the check shows (hover, focus, the open
-                  row); a touch screen has no check, so the time stays. */}
               {time}
             </span>
             <span className={cn("truncate text-sm", unread ? "text-secondary" : "text-quaternary")}>
@@ -230,8 +185,6 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
         <Dropdown.Popover placement="bottom start">
           <Dropdown.Menu aria-label={m.activity_inbox_menu_label()} onAction={handleAction}>
             {unread ? (
-              // Keyed by id: React Aria refuses an item whose id changes in place, which happens
-              // when a read or unread lands while the menu is still closing.
               <Dropdown.Item
                 key="read"
                 id="read"
@@ -265,30 +218,11 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
           </Dropdown.Menu>
         </Dropdown.Popover>
       </Dropdown.Root>
-      <ButtonUtility
-        icon={Check}
-        size="xs"
-        color="secondary"
-        tooltip={m.activity_inbox_done()}
-        tooltipShortcut="E"
-        aria-label={m.activity_inbox_done()}
-        tabIndex={tabStop ? 0 : -1}
-        onClick={() => actions.done(item)}
-        className={cn(
-          "absolute top-1/2 right-[calc(var(--page-gutter)-0.25rem)] -translate-y-1/2 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 any-pointer-coarse:hidden",
-          current ? "opacity-100" : "opacity-0",
-        )}
-      />
+      <ActivityDoneCheck tabStop={tabStop} current={current} onDone={() => actions.done(item)} />
     </li>
   );
 });
 
-/**
- * A row's mark, the size of Chat's message avatar: the peer's face for a DM and a thread in one,
- * with Chat's avatar components (the row is named by that peer too); a channel's group avatar (its
- * members' collage, as on the Chat sidebar's row); otherwise, for a channel with no members, a
- * muted square with `#`.
- */
 export function ActivityItemIcon({ item }: { item: ActivityInboxItem }) {
   const { place } = item;
   if (place.kind === "direct")
@@ -323,12 +257,6 @@ export function ActivityItemIcon({ item }: { item: ActivityInboxItem }) {
   );
 }
 
-/* In a list column dragged narrow (`activity-list` under 22rem) the marks keep their sign and
- * number: "@" for "@you", "9" for "9 new", a Task without its owner. */
-const NARROW_SR_ONLY = "@max-[22rem]/activity-list:sr-only";
-const NARROW_HIDDEN = "@max-[22rem]/activity-list:hidden";
-
-/** The marks after a row's title: its Task, an unread mention, and how many messages are new. */
 function ActivityItemBadges({
   item,
   filter,
@@ -350,7 +278,6 @@ function ActivityItemBadges({
         <Badge type="color" size="sm" color={taskStatusColor(task.status).badge}>
           #{task.number}
           {task.ownerName ? (
-            // The owner's face stands in for the "@" the name used to start with (task #521).
             <span className={cn(NARROW_HIDDEN, "ml-1")}>
               <ActorName
                 actor={{
@@ -366,25 +293,12 @@ function ActivityItemBadges({
         </Badge>
       )}
       {task?.ownerDeleted && <DeletedAgentBadge />}
-      {showMention && (
-        <Badge type="color" size="sm" color="brand">
-          @<span className={NARROW_SR_ONLY}>{m.activity_inbox_mention_badge()}</span>
-        </Badge>
-      )}
-      {item.unreadCount > 0 && (
-        // A quiet grey number, as Linear's counts are: the dot already says "unread".
-        <span
-          className="text-xs whitespace-nowrap text-tertiary tabular-nums"
-          aria-label={m.activity_inbox_new({ count: item.unreadCount })}
-        >
-          {item.unreadCount > 99 ? "99+" : item.unreadCount}
-        </span>
-      )}
+      {showMention && <ActivityMentionBadge />}
+      {item.unreadCount > 0 && <ActivityUnreadCount count={item.unreadCount} />}
     </span>
   );
 }
 
-/** A click or press with a modifier key, which opens the row in Chat rather than on the page. */
 function isModified(event: {
   metaKey: boolean;
   ctrlKey: boolean;
