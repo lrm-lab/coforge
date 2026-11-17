@@ -46,9 +46,10 @@ test("unit identity is stable for the state root and Workspace, and differs acro
   expect(commands).toEqual([]);
 });
 
-test("unit puts the Workspace child in a mixed-kill user-manager scope", () => {
+test("unit puts the Workspace child in a mixed-kill user-manager scope with OOMPolicy=continue", () => {
   const unit = workspaceUnit(config);
   expect(unit).toContain("KillMode=mixed");
+  expect(unit).toContain("OOMPolicy=continue");
   expect(unit).toContain("Restart=on-failure");
   expect(unit).toContain(`RestartSec=${WORKSPACE_RELAUNCH_SECONDS}s`);
   expect(unit).toContain("SendSIGKILL=yes");

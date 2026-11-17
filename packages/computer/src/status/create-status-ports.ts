@@ -16,6 +16,7 @@ import {
   detachedPid,
   systemdPresent,
 } from "@lrm/coforge-daemon";
+import { readSupervisorOomPolicy } from "@lrm/coforge-daemon/src/daemon-host/external-supervisor";
 import {
   currentMachine,
   resolveServiceDefinition,
@@ -136,6 +137,10 @@ export function createStatusPorts(input: CreateStatusPortsInput): StatusPorts {
       const file = Bun.file(path);
       return { path, expected: contents, onDisk: (await file.exists()) ? await file.text() : null };
     },
+    readExternalSupervisor:
+      input.platform === "linux"
+        ? () => readSupervisorOomPolicy(input.stateDirectory)
+        : async () => null,
     async probeDaemonSnapshot(): Promise<DaemonSnapshotProbe> {
       const launcher = new LocalDaemonLauncher({
         executablePath: activeBinaryPath,

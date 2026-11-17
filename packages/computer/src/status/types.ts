@@ -33,6 +33,12 @@ export type ServiceDefinitionStatus =
   | { state: "matches" | "missing" | "differs"; path: string }
   | { state: "unreadable"; error: string };
 
+export type ExternalSupervisorStatus = {
+  unit: string;
+  scope: "user" | "system";
+  oomPolicy: string | null;
+};
+
 export type SupervisorStatus = {
   label: string;
   loaded: boolean;
@@ -44,6 +50,8 @@ export type SupervisorStatus = {
   detached?: true;
   /** Absent where the platform manager keeps no service file (Windows Task Scheduler). */
   serviceDefinition?: ServiceDefinitionStatus;
+  /** Recorded and loaded external systemd supervisor unit on Linux, with its OOMPolicy. */
+  externalSupervisor?: ExternalSupervisorStatus;
 };
 
 export type PendingRequest =
@@ -209,6 +217,7 @@ export interface StatusPorts {
     expected: string;
     onDisk: string | null;
   } | null>;
+  readExternalSupervisor?(): Promise<ExternalSupervisorStatus | null>;
   probeDaemonSnapshot(): Promise<DaemonSnapshotProbe>;
   loadBindings(): Promise<BindingsLoad>;
   listWorkspaceAgents: {

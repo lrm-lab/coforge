@@ -226,6 +226,41 @@ export async function inspectSupervisor(
   };
 }
 
+export type SupervisorOomPolicyView = {
+  unit: string;
+  scope: SupervisorScope;
+  oomPolicy: string | null;
+};
+
+/** Reads `OOMPolicy` for a loaded recorded external systemd unit, or null when absent/unloaded. */
+export async function readSupervisorOomPolicy(
+  stateDirectory: string,
+  deps: { systemctl?: SystemctlRunner } = {},
+): Promise<SupervisorOomPolicyView | null> {
+  const record = await readSupervisorRecord(stateDirectory);
+  if (!record) return null;
+  const runner = deps.systemctl ?? runSystemctl;
+  const show = await runner(record.scope, [
+    "show",
+    "-p",
+    "LoadState",
+    "-p",
+    "OOMPolicy",
+    record.unit,
+  ]);
+  if (show.code !== 0) return null;
+  const properties = new Map(
+    show.stdout
+      .split("\n")
+      .map((line) => line.split(/=(.*)/su))
+      .filter((parts): parts is [string, string, string] => parts.length >= 2)
+      .map(([key, value]) => [key, value.trim()] as const),
+  );
+  if (properties.get("LoadState") !== "loaded") return null;
+  const oomPolicy = properties.get("OOMPolicy")?.toLowerCase() || null;
+  return { unit: record.unit, scope: record.scope, oomPolicy };
+}
+
 export function describeSupervisorUnreachable(record: SupervisorRecord, detail: string): string {
   const hint =
     record.scope === "user"

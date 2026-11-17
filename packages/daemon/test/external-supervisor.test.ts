@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -9,6 +9,7 @@ import {
   externalSupervisorOptIn,
   inspectSupervisor,
   parseSystemdUnitFromCgroup,
+  readSupervisorOomPolicy,
   readSupervisorRecord,
   writeSupervisorRecord,
   type SystemctlRunner,
@@ -167,4 +168,47 @@ test("the unreachable message names the unit and refuses a second service", () =
   expect(text).toContain("user scope");
   expect(text).toContain("XDG_RUNTIME_DIR");
   expect(text).toContain("Not starting a second service beside the unit");
+});
+
+test("readSupervisorOomPolicy reports OOMPolicy for a loaded recorded unit and null otherwise", async () => {
+  const emptyDir = await mkdtemp(join(tmpdir(), "supervisor-"));
+  const dir = await recordFor();
+  try {
+    expect(await readSupervisorOomPolicy(emptyDir, { systemctl: runner({}) })).toBeNull();
+
+    expect(
+      await readSupervisorOomPolicy(dir, {
+        systemctl: runner({
+          "show -p LoadState -p OOMPolicy coforge-daemon.service": {
+            code: 0,
+            stdout: "LoadState=loaded\nOOMPolicy=stop\n",
+          },
+        }),
+      }),
+    ).toEqual({
+      unit: "coforge-daemon.service",
+      scope: "user",
+      oomPolicy: "stop",
+    });
+
+    expect(
+      await readSupervisorOomPolicy(dir, {
+        systemctl: runner({
+          "show -p LoadState -p OOMPolicy coforge-daemon.service": {
+            code: 0,
+            stdout: "LoadState=not-found\nOOMPolicy=stop\n",
+          },
+        }),
+      }),
+    ).toBeNull();
+
+    expect(
+      await readSupervisorOomPolicy(dir, {
+        systemctl: async () => ({ code: null, stdout: "", stderr: "spawn systemctl ENOENT" }),
+      }),
+    ).toBeNull();
+  } finally {
+    await rm(emptyDir, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true });
+  }
 });

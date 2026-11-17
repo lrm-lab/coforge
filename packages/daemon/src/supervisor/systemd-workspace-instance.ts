@@ -132,6 +132,7 @@ ${config.supervisorSocketPath ? `Environment="COFORGE_SUPERVISOR_SOCKET=${escape
 Restart=on-failure
 RestartSec=${WORKSPACE_RELAUNCH_SECONDS}s
 KillMode=mixed
+OOMPolicy=continue
 SendSIGKILL=yes
 TimeoutStopSec=10s
 

@@ -18,6 +18,7 @@ test("systemd user unit dispatches the daemon through the unified executable", (
   expect(unit).toContain("WantedBy=default.target");
   expect(unit).toContain("Restart=on-failure");
   expect(unit).toContain("KillMode=mixed");
+  expect(unit).toContain("OOMPolicy=continue");
   expect(unit).toContain(
     "ExecStart=/home/alice/.local/share/coforge/active/coforge-computer __daemon --socket /run/user/501/coforge/daemon.sock",
   );

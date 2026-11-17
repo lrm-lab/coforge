@@ -233,6 +233,7 @@ ${runtimeHomeDirectory ? `Environment=HOME=${systemdEscape(runtimeHomeDirectory)
 Restart=on-failure
 RestartSec=2
 KillMode=mixed
+OOMPolicy=continue
 
 [Install]
 WantedBy=default.target

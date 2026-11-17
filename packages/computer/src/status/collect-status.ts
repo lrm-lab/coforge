@@ -83,8 +83,11 @@ async function collectSupervisor(
   ports: StatusPorts,
   snapshot: DaemonSnapshotProbe,
 ): Promise<SupervisorStatus> {
-  const coordinator = await ports.probeCoordinator();
-  const serviceDefinition = await collectServiceDefinition(ports);
+  const [coordinator, serviceDefinition, externalSupervisor] = await Promise.all([
+    ports.probeCoordinator(),
+    collectServiceDefinition(ports),
+    ports.readExternalSupervisor ? ports.readExternalSupervisor().catch(() => null) : null,
+  ]);
   return {
     label: ports.coordinatorLabel,
     loaded: coordinator.loaded,
@@ -95,6 +98,7 @@ async function collectSupervisor(
       ? { reachable: true, runtimeCount: snapshot.runtimes.length }
       : { reachable: false, error: snapshot.error },
     ...(serviceDefinition ? { serviceDefinition } : {}),
+    ...(externalSupervisor ? { externalSupervisor } : {}),
   };
 }
 

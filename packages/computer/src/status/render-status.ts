@@ -73,6 +73,7 @@ function renderSupervisor(report: ComputerStatusReport): string[] {
           "  Run mode:              detached process (no systemd): it does not start at boot and is not restarted if it crashes",
         ]
       : []),
+    ...renderExternalSupervisor(supervisor),
     ...renderServiceDefinition(supervisor),
     `  PID:                   ${supervisor.pid ?? "-"}`,
     `  Socket:                ${terminalText(supervisor.socketPath)}`,
@@ -82,6 +83,21 @@ function renderSupervisor(report: ComputerStatusReport): string[] {
         : `unreachable (${terminalText(supervisor.rpc.error)})`
     }`,
     `  PATH source:           ${renderLoginShellPath(report.loginShellPath)}`,
+  ];
+}
+
+function renderExternalSupervisor(supervisor: ComputerStatusReport["supervisor"]): string[] {
+  const external = supervisor.externalSupervisor;
+  if (!external) return [];
+  const oom = external.oomPolicy
+    ? `, OOMPolicy=${terminalText(external.oomPolicy)}${
+        external.oomPolicy === "stop" || external.oomPolicy === "kill"
+          ? " — set OOMPolicy=continue"
+          : ""
+      }`
+    : "";
+  return [
+    `  External unit:         ${terminalText(external.unit)} (${external.scope} scope${oom})`,
   ];
 }
 

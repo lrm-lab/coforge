@@ -105,6 +105,14 @@ function checkSupervisor(status: ComputerStatusReport): DoctorCheck {
       detail: `local RPC is unreachable: ${status.supervisor.rpc.error}`,
     };
   }
+  const external = status.supervisor.externalSupervisor;
+  if (external && (external.oomPolicy === "stop" || external.oomPolicy === "kill")) {
+    return {
+      name: "supervisor",
+      ok: false,
+      detail: `external systemd unit ${external.unit} (${external.scope} scope) has OOMPolicy=${external.oomPolicy}; an Agent OOM kill can terminate the entire service`,
+    };
+  }
   // A Coordinator nobody registered with the platform manager is a way to run this Computer, not
   // a fault: the detached process a Linux machine without systemd starts, a container's
   // `foreground`, or someone's own supervisor (task #696, from the #417 acceptance). The detached
@@ -169,7 +177,15 @@ function checkLocks(status: ComputerStatusReport): DoctorCheck {
 
 function nextDoctorCommand(name: string, detail: string): string | undefined {
   if (name === "install") return "coforge-computer install";
-  if (name === "supervisor") return "coforge-computer restart --supervisor";
+  if (name === "supervisor") {
+    if (detail.includes("OOMPolicy=")) {
+      const reload = detail.includes("(user scope)")
+        ? "systemctl --user daemon-reload"
+        : "systemctl daemon-reload";
+      return `set OOMPolicy=continue under [Service] in the unit, then run ${reload} && coforge-computer restart --supervisor`;
+    }
+    return "coforge-computer restart --supervisor";
+  }
   if (name === "locks") {
     if (detail.startsWith("machine mutation lock is held")) return "coforge-computer status";
     return "coforge-computer restart --supervisor";

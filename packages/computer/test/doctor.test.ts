@@ -7,6 +7,8 @@ import {
   renderDoctorHuman,
   renderDoctorJson,
 } from "#src/doctor/doctor-command";
+import { collectComputerStatus } from "#src/status/collect-status";
+import { renderStatusHuman } from "#src/status/render-status";
 import type { ComputerStatusReport } from "#src/status/types";
 
 const HEALTHY_REPORT: ComputerStatusReport = {
@@ -203,7 +205,12 @@ test("doctor accepts a Coordinator an external supervisor runs", () => {
   const report = createDoctorReport({
     ...HEALTHY_REPORT,
     platform: "linux",
-    supervisor: { ...HEALTHY_REPORT.supervisor, loaded: false, pid: 4821 },
+    supervisor: {
+      ...HEALTHY_REPORT.supervisor,
+      loaded: false,
+      pid: 4821,
+      externalSupervisor: { unit: "custom-coforge.service", scope: "user", oomPolicy: "continue" },
+    },
   });
 
   expect(report.ok).toBe(true);
@@ -212,6 +219,71 @@ test("doctor accepts a Coordinator an external supervisor runs", () => {
     ok: true,
     detail: "running outside the platform service manager (an external supervisor or foreground)",
   });
+});
+
+test.each(["stop", "kill"] as const)(
+  "doctor flags an external systemd unit with OOMPolicy=%s",
+  (oomPolicy) => {
+    const report = createDoctorReport({
+      ...HEALTHY_REPORT,
+      platform: "linux",
+      supervisor: {
+        ...HEALTHY_REPORT.supervisor,
+        loaded: false,
+        pid: 4821,
+        externalSupervisor: { unit: "custom-coforge.service", scope: "user", oomPolicy },
+      },
+    });
+
+    expect(report.ok).toBe(false);
+    expect(report.checks[1]).toEqual({
+      name: "supervisor",
+      ok: false,
+      detail: `external systemd unit custom-coforge.service (user scope) has OOMPolicy=${oomPolicy}; an Agent OOM kill can terminate the entire service`,
+    });
+    expect(renderDoctorHuman(report).join("\n")).toContain("OOMPolicy=continue");
+  },
+);
+
+test("collectComputerStatus and renderStatusHuman surface external systemd OOMPolicy", async () => {
+  const status = await collectComputerStatus({
+    now: () => new Date("2026-01-01T00:00:00.000Z"),
+    platform: "linux",
+    releaseFeedUrl: "https://releases.coforge.cn/",
+    socketPath: "/home/user/.coforge/daemon/daemon.sock",
+    activeBinaryPath: "/home/user/.coforge/computer/install/active/coforge-computer",
+    coordinatorLabel: "coforge-daemon.service",
+    readActiveInstall: async () => ({ kind: "present", current: "1.4.2", previous: null }),
+    readLoginShellPath: () => ({ state: "imported", shell: "/bin/bash", entryCount: 4 }),
+    locateBinaryOnPath: async () => "/home/user/.local/bin/coforge-computer",
+    resolveRealPath: async () =>
+      "/home/user/.coforge/computer/install/versions/1.4.2/coforge-computer",
+    probeCoordinator: async () => ({ loaded: false, pid: null }),
+    readServiceDefinition: async () => null,
+    readExternalSupervisor: async () => ({
+      unit: "custom-coforge.service",
+      scope: "system",
+      oomPolicy: "stop",
+    }),
+    probeDaemonSnapshot: async () => ({ reachable: true, runtimes: [] }),
+    loadBindings: async () => ({ ok: true, bindings: [] }),
+    listWorkspaceAgents: { supported: false, list: async () => [] },
+    probeMachineMutationLock: () => "free",
+    readSupervisorLockOwner: async () => 4821,
+    listLeftoverUpgradeJobs: { supported: false, list: async () => [] },
+    readWorkspaceHealth: async () => ({ status: "ok" }),
+    readCloudConnection: async () => null,
+    readWorkspaceSlugs: async () => new Map(),
+  });
+
+  expect(status.supervisor.externalSupervisor).toEqual({
+    unit: "custom-coforge.service",
+    scope: "system",
+    oomPolicy: "stop",
+  });
+  expect(renderStatusHuman(status).join("\n")).toContain(
+    "External unit:         custom-coforge.service (system scope, OOMPolicy=stop — set OOMPolicy=continue)",
+  );
 });
 
 test("doctor still reports a loaded service whose RPC does not answer", () => {
