@@ -106,18 +106,20 @@ export function ExternalAgentAccessSection({
         <ExternalConnectionState setup={setup} displayName={displayName} timeZone={timeZone} />
         {connected && steps ? (
           <div>
-            <button
-              type="button"
+            <Button
+              size="sm"
+              color="link-gray"
               aria-expanded={stepsOpen}
-              className="flex items-center gap-1 text-xs font-medium text-tertiary hover:text-secondary"
-              onClick={() => setStepsOpen((open) => !open)}
+              iconTrailing={
+                <ChevronDown
+                  aria-hidden="true"
+                  className={cx("size-3.5 transition-transform", stepsOpen && "rotate-180")}
+                />
+              }
+              onPress={() => setStepsOpen((open) => !open)}
             >
               {m.external_agent_how_it_connects()}
-              <ChevronDown
-                aria-hidden="true"
-                className={cx("size-3.5 transition-transform", stepsOpen && "rotate-180")}
-              />
-            </button>
+            </Button>
             <Fold open={stepsOpen}>
               <div className="pt-3">{steps}</div>
             </Fold>
