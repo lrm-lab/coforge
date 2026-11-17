@@ -22,14 +22,19 @@ export type ForwardPorts = {
 export function forwardAgentRequest(
   ports: ForwardPorts,
   what: string,
-  { method, path, body }: { method?: string; path: string; body?: string },
+  {
+    method,
+    path,
+    body,
+    headers,
+  }: { method?: string; path: string; body?: string; headers?: Record<string, string> },
   agentApiKey: string,
 ): Promise<Response> {
   ports.assertConnected();
   return agentHttpFetch(ports.endpoint(what, path), {
     decompress: false,
     method,
-    headers: agentHeaders(ports.keys(agentApiKey), body !== undefined),
+    headers: { ...headers, ...agentHeaders(ports.keys(agentApiKey), body !== undefined) },
     ...(body === undefined ? {} : { body }),
   });
 }
