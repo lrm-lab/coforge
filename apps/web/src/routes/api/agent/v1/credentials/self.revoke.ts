@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { errorResponse } from "#src/server/agents/agent-http-error.server";
 import { PrismaExternalAgentCredentialRepository } from "#src/server/db/repositories/external-agent-credential.repositories.server";
+import { syncExternalPresenceBestEffort } from "#src/server/agents/external-agent-presence-publish.server";
 import {
   isExternalAgentPrincipal,
   revokeSelfExternalCredential,
@@ -19,10 +20,11 @@ export const Route = createFileRoute("/api/agent/v1/credentials/self/revoke")({
             403,
             false,
           );
-        await revokeSelfExternalCredential(
+        const revoked = await revokeSelfExternalCredential(
           new PrismaExternalAgentCredentialRepository(db),
           principal,
         );
+        if (revoked) await syncExternalPresenceBestEffort(db, principal);
         return Response.json({ state: "revoked" });
       },
     },

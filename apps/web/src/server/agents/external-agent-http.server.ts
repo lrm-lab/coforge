@@ -6,6 +6,7 @@ import {
   authenticateExternalAgentKey,
   type ExternalAgentCredentialRepository,
   type ExternalAgentPrincipal,
+  type ExternalSeenNotifier,
 } from "./external-agent-credentials.server";
 
 const API_PREFIX = "/api/agent/v1/";
@@ -37,6 +38,7 @@ export function remindersUnsupportedForExternalAgents(feature: string): Response
 export async function authenticateExternalAgentRequest(
   request: Request,
   repository: Pick<ExternalAgentCredentialRepository, "findByHash" | "touch">,
+  onSeen?: ExternalSeenNotifier,
 ): Promise<{ principal: ExternalAgentPrincipal } | Response | undefined> {
   if (request.headers.has("x-coforge-agent-api-key")) return undefined;
   const authorization = request.headers.get("authorization");
@@ -44,7 +46,7 @@ export async function authenticateExternalAgentRequest(
   if (!apiKey.startsWith(EXTERNAL_AGENT_KEY_PREFIX)) return undefined;
   let principal: ExternalAgentPrincipal;
   try {
-    principal = await authenticateExternalAgentKey(apiKey, repository);
+    principal = await authenticateExternalAgentKey(apiKey, repository, Date.now, onSeen);
   } catch (error) {
     if (!(error instanceof ExternalCredentialError)) throw error;
     console.warn(JSON.stringify({ event: "external_agent.auth_failed", reason: error.reason }));

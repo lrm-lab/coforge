@@ -64,6 +64,7 @@ describe("what an external Agent key may call", () => {
     ["GET", "/push-webhook", "push-webhook"],
     ["PUT", "/push-webhook", "push-webhook"],
     ["DELETE", "/push-webhook", "push-webhook"],
+    ["POST", "/activity", "activity"],
   ])("%s %s is covered by %s", (method, path, feature) => {
     expect(externalAgentFeature(method, `${API}${path}`)).toBe(feature);
   });
@@ -84,6 +85,7 @@ describe("what an external Agent key may call", () => {
     ["PUT", "/messages"],
     ["POST", "/events"],
     ["GET", "/credentials/self/revoke"],
+    ["GET", "/activity"],
     ["GET", "/messages/a%2Fb/resolve"],
     ["GET", "/channels/a/b/c"],
     ["POST", "/wake-hints"],

@@ -138,6 +138,35 @@ test("lastUsedAt is written at most once every 30 seconds", async () => {
   expect(repository.touches).toBe(2);
 });
 
+test("being seen is reported only when the lastUsedAt write is due", async () => {
+  const repository = setup();
+  const { apiKey } = await mint(repository);
+  const start = Date.parse("2026-11-16T00:00:00Z");
+  const seen: { agent: unknown; at: number }[] = [];
+  const onSeen = async (agent: unknown, at: number) => {
+    seen.push({ agent, at });
+  };
+  await authenticateExternalAgentKey(apiKey, repository, () => start, onSeen);
+  await authenticateExternalAgentKey(apiKey, repository, () => start + 10_000, onSeen);
+  expect(seen).toEqual([{ agent: { workspaceId: WORKSPACE, agentId: AGENT }, at: start }]);
+  await authenticateExternalAgentKey(
+    apiKey,
+    repository,
+    () => start + EXTERNAL_LAST_USED_INTERVAL_MS,
+    onSeen,
+  );
+  expect(seen.map((entry) => entry.at)).toEqual([start, start + EXTERNAL_LAST_USED_INTERVAL_MS]);
+});
+
+test("a failing seen report does not fail the request", async () => {
+  const repository = setup();
+  const { apiKey } = await mint(repository);
+  const principal = await authenticateExternalAgentKey(apiKey, repository, Date.now, async () => {
+    throw new Error("redis down");
+  });
+  expect(principal.agentId).toBe(AGENT);
+});
+
 test("a failed lastUsedAt write does not fail the request", async () => {
   const repository = setup();
   const { apiKey } = await mint(repository);

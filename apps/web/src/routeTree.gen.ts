@@ -80,6 +80,7 @@ import { Route as WWorkspaceSlugSearchRouteImport } from './routes/w.$workspaceS
 import { Route as WWorkspaceSlugSettingsRouteImport } from './routes/w.$workspaceSlug/settings'
 import { Route as WWorkspaceSlugTasksRouteImport } from './routes/w.$workspaceSlug/tasks'
 import { Route as WWorkspaceSlugWorkspaceRouteImport } from './routes/w.$workspaceSlug/workspace'
+import { Route as ApiAgentV1ActivityRouteImport } from './routes/api/agent/v1/activity'
 import { Route as ApiAgentV1ArtifactsRouteImport } from './routes/api/agent/v1/artifacts'
 import { Route as ApiAgentV1ChannelsRouteImport } from './routes/api/agent/v1/channels'
 import { Route as ApiAgentV1ContextRouteImport } from './routes/api/agent/v1/context'
@@ -569,6 +570,11 @@ const WWorkspaceSlugWorkspaceRoute = WWorkspaceSlugWorkspaceRouteImport.update({
   id: '/workspace',
   path: '/workspace',
   getParentRoute: () => WWorkspaceSlugRoute,
+} as any)
+const ApiAgentV1ActivityRoute = ApiAgentV1ActivityRouteImport.update({
+  id: '/api/agent/v1/activity',
+  path: '/api/agent/v1/activity',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAgentV1ArtifactsRoute = ApiAgentV1ArtifactsRouteImport.update({
   id: '/api/agent/v1/artifacts',
@@ -1342,6 +1348,7 @@ export interface FileRoutesByFullPath {
   '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRoute
   '/w/$workspaceSlug/tasks': typeof WWorkspaceSlugTasksRoute
   '/w/$workspaceSlug/workspace': typeof WWorkspaceSlugWorkspaceRoute
+  '/api/agent/v1/activity': typeof ApiAgentV1ActivityRoute
   '/api/agent/v1/artifacts': typeof ApiAgentV1ArtifactsRoute
   '/api/agent/v1/channels': typeof ApiAgentV1ChannelsRoute
   '/api/agent/v1/context': typeof ApiAgentV1ContextRoute
@@ -1533,6 +1540,7 @@ export interface FileRoutesByTo {
   '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRoute
   '/w/$workspaceSlug/tasks': typeof WWorkspaceSlugTasksRoute
   '/w/$workspaceSlug/workspace': typeof WWorkspaceSlugWorkspaceRoute
+  '/api/agent/v1/activity': typeof ApiAgentV1ActivityRoute
   '/api/agent/v1/artifacts': typeof ApiAgentV1ArtifactsRoute
   '/api/agent/v1/channels': typeof ApiAgentV1ChannelsRoute
   '/api/agent/v1/context': typeof ApiAgentV1ContextRoute
@@ -1727,6 +1735,7 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/settings': typeof WWorkspaceSlugSettingsRoute
   '/w/$workspaceSlug/tasks': typeof WWorkspaceSlugTasksRoute
   '/w/$workspaceSlug/workspace': typeof WWorkspaceSlugWorkspaceRoute
+  '/api/agent/v1/activity': typeof ApiAgentV1ActivityRoute
   '/api/agent/v1/artifacts': typeof ApiAgentV1ArtifactsRoute
   '/api/agent/v1/channels': typeof ApiAgentV1ChannelsRoute
   '/api/agent/v1/context': typeof ApiAgentV1ContextRoute
@@ -1921,6 +1930,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/settings'
     | '/w/$workspaceSlug/tasks'
     | '/w/$workspaceSlug/workspace'
+    | '/api/agent/v1/activity'
     | '/api/agent/v1/artifacts'
     | '/api/agent/v1/channels'
     | '/api/agent/v1/context'
@@ -2112,6 +2122,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/settings'
     | '/w/$workspaceSlug/tasks'
     | '/w/$workspaceSlug/workspace'
+    | '/api/agent/v1/activity'
     | '/api/agent/v1/artifacts'
     | '/api/agent/v1/channels'
     | '/api/agent/v1/context'
@@ -2305,6 +2316,7 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/settings'
     | '/w/$workspaceSlug/tasks'
     | '/w/$workspaceSlug/workspace'
+    | '/api/agent/v1/activity'
     | '/api/agent/v1/artifacts'
     | '/api/agent/v1/channels'
     | '/api/agent/v1/context'
@@ -2484,6 +2496,7 @@ export interface RootRouteChildren {
   AppsShareTokenRoute: typeof AppsShareTokenRoute
   ComputersAttachSessionIdRoute: typeof ComputersAttachSessionIdRoute
   OidcDotwellKnownOpenidConfigurationRoute: typeof OidcDotwellKnownOpenidConfigurationRoute
+  ApiAgentV1ActivityRoute: typeof ApiAgentV1ActivityRoute
   ApiAgentV1ArtifactsRoute: typeof ApiAgentV1ArtifactsRoute
   ApiAgentV1ChannelsRoute: typeof ApiAgentV1ChannelsRoute
   ApiAgentV1ContextRoute: typeof ApiAgentV1ContextRoute
@@ -3073,6 +3086,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/w/$workspaceSlug/workspace'
       preLoaderRoute: typeof WWorkspaceSlugWorkspaceRouteImport
       parentRoute: typeof WWorkspaceSlugRoute
+    }
+    '/api/agent/v1/activity': {
+      id: '/api/agent/v1/activity'
+      path: '/api/agent/v1/activity'
+      fullPath: '/api/agent/v1/activity'
+      preLoaderRoute: typeof ApiAgentV1ActivityRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/agent/v1/artifacts': {
       id: '/api/agent/v1/artifacts'
@@ -4230,6 +4250,7 @@ const rootRouteChildren: RootRouteChildren = {
   ComputersAttachSessionIdRoute: ComputersAttachSessionIdRoute,
   OidcDotwellKnownOpenidConfigurationRoute:
     OidcDotwellKnownOpenidConfigurationRoute,
+  ApiAgentV1ActivityRoute: ApiAgentV1ActivityRoute,
   ApiAgentV1ArtifactsRoute: ApiAgentV1ArtifactsRoute,
   ApiAgentV1ChannelsRoute: ApiAgentV1ChannelsRoute,
   ApiAgentV1ContextRoute: ApiAgentV1ContextRoute,
@@ -4356,13 +4377,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

@@ -84,6 +84,10 @@ export class AgentDeletion {
     private readonly announce: (
       notice: MembershipNoticeRef & { workspaceId: string; conversationId: string },
     ) => Promise<void> = async () => {},
+    private readonly externalDeleted: (agent: {
+      workspaceId: string;
+      agentId: string;
+    }) => Promise<void> = async () => {},
   ) {}
 
   async delete(
@@ -91,11 +95,13 @@ export class AgentDeletion {
     agentId: string,
   ): Promise<AgentDeletionOutcome> {
     assertCanDeleteAgents(principal.role);
+    let external = false;
     const result = await this.runtimeLock.run(agentId, async () => {
       const agent = await this.agents.getById(agentId);
       if (!agent || agent.workspaceId !== principal.workspaceId) throw new AppError("NOT_FOUND");
       // An app's bot is archived only by revoking its grant.
       assertNotAppBot(agent);
+      external = agent.hosting === "external";
       const outcome = await this.store.delete({
         agentId: agent.id,
         workspaceId: agent.workspaceId,
@@ -108,6 +114,7 @@ export class AgentDeletion {
     });
     // Outside the runtime lock: a slow browser signal must never hold up the Agent's runtime.
     if (result.outcome === "deleted") {
+      if (external) await this.externalDeleted({ workspaceId: principal.workspaceId, agentId });
       await announceMemberChanged(this.realtime, {
         workspaceId: principal.workspaceId,
         conversationIds: result.leftChannelIds,

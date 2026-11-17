@@ -81,7 +81,7 @@ export function parseAgentDisplaySnapshot(data: unknown): AgentDisplaySnapshot {
   if (
     item.protocolMajor !== 1 ||
     !nonempty(item.workspaceId) ||
-    !nonempty(item.computerId) ||
+    typeof item.computerId !== "string" ||
     !nonempty(item.agentId) ||
     !Number.isSafeInteger(item.revision) ||
     (item.revision as number) < 1 ||

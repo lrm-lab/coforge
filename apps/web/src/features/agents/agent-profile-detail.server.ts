@@ -13,7 +13,7 @@ import {
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { PrismaExternalAgentCredentialRepository } from "#src/server/db/repositories/external-agent-credential.repositories.server";
 import {
-  externalPresenceDisplay,
+  externalDisplays,
   externalSetups,
 } from "#src/server/agents/external-agent-presence.server";
 import { userRuntimeUsage } from "#src/server/computers/runtime-usage-composition.server";
@@ -79,34 +79,40 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
   // unavailability degrades to "unknown" (`undefined`), never a false "offline".
   const runtimeConfig = readableRuntimeConfig(result.runtimeConfig);
   const { computer } = result;
-  const [computerOnline, usage, externalCredentials, workspace, externalSetup] = await Promise.all([
-    computer
-      ? getComputerStatusCache()
-          .get({ workspaceId, computerId: computer.id })
-          .catch(() => undefined)
-      : undefined,
-    // The Agent's own Computer + runtime as the Computer page offers its usage (decided by
-    // `RuntimeUsageAccess`): the usage popover's gate and CLI-version header share this lookup.
-    computer && runtimeConfig
-      ? userRuntimeUsage(db).usageOffer(
-          { userId: user.id, workspaceId },
-          { computerId: computer.id, provider: runtimeConfig.runtime },
-        )
-      : undefined,
-    result.hosting === "external" && (ownedByCurrentUser || canManageAgentRole)
-      ? new PrismaExternalAgentCredentialRepository(db)
-          .list(agentId)
-          .then((rows) => rows.filter((row) => !row.revokedAt))
-      : undefined,
-    result.hosting === "external"
-      ? db.workspace.findUnique({ where: { id: workspaceId }, select: { slug: true } })
-      : undefined,
-    result.hosting === "external"
-      ? externalSetups(new PrismaExternalAgentCredentialRepository(db), [agentId]).then((setups) =>
-          setups.get(agentId),
-        )
-      : undefined,
-  ]);
+  const [computerOnline, usage, externalCredentials, workspace, externalSetup, externalDisplay] =
+    await Promise.all([
+      computer
+        ? getComputerStatusCache()
+            .get({ workspaceId, computerId: computer.id })
+            .catch(() => undefined)
+        : undefined,
+      // The Agent's own Computer + runtime as the Computer page offers its usage (decided by
+      // `RuntimeUsageAccess`): the usage popover's gate and CLI-version header share this lookup.
+      computer && runtimeConfig
+        ? userRuntimeUsage(db).usageOffer(
+            { userId: user.id, workspaceId },
+            { computerId: computer.id, provider: runtimeConfig.runtime },
+          )
+        : undefined,
+      result.hosting === "external" && (ownedByCurrentUser || canManageAgentRole)
+        ? new PrismaExternalAgentCredentialRepository(db)
+            .list(agentId)
+            .then((rows) => rows.filter((row) => !row.revokedAt))
+        : undefined,
+      result.hosting === "external"
+        ? db.workspace.findUnique({ where: { id: workspaceId }, select: { slug: true } })
+        : undefined,
+      result.hosting === "external"
+        ? externalSetups(new PrismaExternalAgentCredentialRepository(db), [agentId]).then(
+            (setups) => setups.get(agentId),
+          )
+        : undefined,
+      result.hosting === "external"
+        ? externalDisplays(getAgentDisplay(), workspaceId, [agentId]).then((displays) =>
+            displays.get(agentId),
+          )
+        : undefined,
+    ]);
   return {
     ...result,
     // The Creator row renders the same identity the rest of the product does (avatar image +
@@ -138,9 +144,7 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
     canChangeVisibility,
     runtimeUsageVisible: usage?.offered ?? false,
     runtimeVersion: usage?.runtime?.version,
-    ...(externalSetup
-      ? { display: externalPresenceDisplay({ workspaceId, agentId }, externalSetup) }
-      : {}),
+    ...(externalDisplay ? { display: externalDisplay } : {}),
     externalCredentials: externalCredentials ?? [],
     externalSetup: externalSetup ?? null,
     workspaceSlug: workspace?.slug ?? null,

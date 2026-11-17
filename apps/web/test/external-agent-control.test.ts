@@ -62,7 +62,12 @@ describe("control of an external Agent", () => {
 
   test("stop records the intent and revokes every key as agent_stopped", async () => {
     const { db, writes } = fakeDb({ hosting: "external" });
-    expect(await handleExternalAgentControl(db, input("stop"), () => AT)).toBe(true);
+    const synced: unknown[] = [];
+    const syncPresence = async (_db: unknown, agent: unknown) => {
+      synced.push(agent);
+    };
+    expect(await handleExternalAgentControl(db, input("stop"), () => AT, syncPresence)).toBe(true);
+    expect(synced).toEqual([input("stop")]);
     expect(writes.find((write) => write.table === "agent")?.data).toEqual({ stoppedAt: AT });
     expect(writes.find((write) => write.table === "credential")?.data).toEqual({
       revokedAt: AT,
@@ -97,7 +102,10 @@ describe("control of an external Agent", () => {
     });
     expect(writes).toEqual([]);
     const admin = fakeDb({ hosting: "external" }, "admin");
-    expect(await handleExternalAgentControl(admin.db, input("stop", "stranger"))).toBe(true);
+    const noSync = async () => {};
+    expect(
+      await handleExternalAgentControl(admin.db, input("stop", "stranger"), undefined, noSync),
+    ).toBe(true);
   });
 
   test("a deleted Agent is not found", async () => {

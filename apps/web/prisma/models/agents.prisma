@@ -25,6 +25,9 @@ model Agent {
   /// Where the Agent runs: "managed" on a CoForge Computer, "external" on any machine that
   /// calls the Agent API with its own key (`ExternalAgentCredential`). Guarded by a CHECK.
   hosting                   String                     @default("managed")
+  /// Set by the first status an external Agent reports (`POST /api/agent/v1/activity`); from then on
+  /// its dot follows reports and hook events never move it. Null for every other Agent.
+  externalStatusReportedAt  DateTime?
   runtimeConfig             Json
   /// The per-Agent order of runtime config changes (runtime selection, environment, runtime
   /// credential): every such write raises it by one. A Daemon uses it to drop an out-of-date
@@ -165,7 +168,8 @@ model AgentActivity {
   id                      String    @id @default(uuid(7)) @db.Uuid
   workspaceId             String    @db.Uuid
   agentId                 String    @db.Uuid
-  computerId              String    @db.Uuid
+  /// Null for an external Agent's row, which has no Computer.
+  computerId              String?   @db.Uuid
   launchId                String
   conversationId          String?   @db.Uuid
   conversationTarget      String?
@@ -182,7 +186,7 @@ model AgentActivity {
   createdAt               DateTime  @default(now())
   agent                   Agent     @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
   workspace               Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  computer                Computer  @relation(fields: [computerId], references: [id], onDelete: Cascade)
+  computer                Computer? @relation(fields: [computerId], references: [id], onDelete: Cascade)
 
   @@unique([agentId, launchId, clientSeq])
   @@index([workspaceId, agentId, occurredAt(sort: Desc), clientSeq(sort: Desc)])

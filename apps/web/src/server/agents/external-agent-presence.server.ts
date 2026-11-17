@@ -1,4 +1,5 @@
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
+import type { AgentDisplay } from "./agent-display.server";
 import type {
   ExternalAgentCredentialRepository,
   ExternalPresenceRow,
@@ -33,22 +34,20 @@ export async function externalSetups(
   return new Map(agentIds.map((id) => [id, externalSetupFrom(rows.get(id), now)]));
 }
 
-export function externalPresenceDisplay(
-  scope: { workspaceId: string; agentId: string },
-  setup: ExternalSetup,
-): AgentDisplaySnapshot {
-  const online = setup.state === "online";
-  return {
-    protocolMajor: 1,
-    workspaceId: scope.workspaceId,
-    computerId: "",
-    agentId: scope.agentId,
-    revision: setup.lastSeenAt?.getTime() ?? 0,
-    activityKind: online ? "online" : "offline",
-    detailKind: "",
-    detail: "",
-    entries: [],
-    expiresAt:
-      online && setup.lastSeenAt ? setup.lastSeenAt.getTime() + EXTERNAL_ONLINE_WINDOW_MS : null,
-  };
+export async function externalDisplays(
+  display: Pick<AgentDisplay, "snapshotMany">,
+  workspaceId: string,
+  agentIds: readonly string[],
+): Promise<Map<string, AgentDisplaySnapshot>> {
+  if (agentIds.length === 0) return new Map();
+  const snapshots = await display
+    .snapshotMany(agentIds.map((agentId) => externalDisplayScope(workspaceId, agentId)))
+    .catch(() => []);
+  return new Map(
+    agentIds.flatMap((id, index) => (snapshots[index] ? [[id, snapshots[index]]] : [])),
+  );
+}
+
+export function externalDisplayScope(workspaceId: string, agentId: string) {
+  return { workspaceId, computerId: "", agentId };
 }

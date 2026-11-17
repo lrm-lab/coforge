@@ -130,8 +130,8 @@ See [sessions.md](./sessions.md).
   `agentStatusChannelFor`; never choose the shared or per-Agent channel inline.
   Activity in a private channel goes only to its people's own channels
   (`cachedActivityAudience`), and its `agent:display` keeps no words.
-- Computer lifecycle rows are the only Activity the server writes itself
-  (`computer-lifecycle-activity.server.ts`). A daemon's return row follows
+- Computer lifecycle rows and an external Agent's hook rows are the only Activity the server writes itself
+  (`computer-lifecycle-activity.server.ts`, `external-agent-activity.server.ts`). A daemon's return row follows
   the server's upgrade and restart records, then the previous version, never
   only its notice. One per daemon instance, none on reconnect; only a failed
   upgrade (error-level `computer_operation_failed`) carries a detail.

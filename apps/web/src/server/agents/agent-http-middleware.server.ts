@@ -13,6 +13,7 @@ import { authenticateAgentHttpRequest } from "./agent-api-http.server";
 import { authenticateAppBotRequest } from "#src/server/app-bots/app-bot-agent-api.server";
 import { createAppBots } from "#src/server/app-bots/app-bots-composition.server";
 import { authenticateExternalAgentRequest } from "./external-agent-http.server";
+import { externalSeenNoter } from "./external-agent-presence-publish.server";
 import { PrismaExternalAgentCredentialRepository } from "#src/server/db/repositories/external-agent-credential.repositories.server";
 import { handleWorkspaceAssistantCommand } from "./workspace-assistant-http.server";
 
@@ -113,6 +114,7 @@ export const agentAuthMiddleware = createMiddleware().server(async ({ next, requ
     const external = await authenticateExternalAgentRequest(
       request,
       new PrismaExternalAgentCredentialRepository(db),
+      externalSeenNoter(db),
     );
     if (external instanceof Response) return noStore(external);
     if (external) {

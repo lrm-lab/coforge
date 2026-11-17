@@ -1,4 +1,5 @@
 import type { PrismaClient as Database } from "#src/generated/prisma/client";
+import { syncExternalPresenceBestEffort } from "#src/server/agents/external-agent-presence-publish.server";
 import { AgentDeletion } from "#src/server/agents/agent-deletion.server";
 import { PrismaAgentDeletionStore } from "#src/server/db/repositories/agent-deletion.repositories.server";
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
@@ -38,6 +39,7 @@ export function agentDeletion(db: Database) {
     undefined,
     undefined,
     (notice) => announceMessageBestEffort(db, centrifugoRealtime(), notice),
+    (agent) => syncExternalPresenceBestEffort(db, agent),
   );
 }
 

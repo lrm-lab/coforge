@@ -45,7 +45,7 @@ function activityKind(activity: { detailKind: string; level: string }) {
   });
 }
 
-function activityRow(input: TrustedAgentActivity) {
+function activityRow(input: AgentActivity & { computerId: string | null }) {
   return {
     workspaceId: input.workspaceId,
     agentId: input.agentId,
@@ -305,7 +305,7 @@ export class AgentActivityRepository {
   }
 
   /** One insert for many rows; a row already stored (same Agent, launch, and sequence) is kept. */
-  async recordMany(inputs: readonly TrustedAgentActivity[]) {
+  async recordMany(inputs: readonly (AgentActivity & { computerId: string | null })[]) {
     await this.db.agentActivity.createMany({
       data: inputs.map(activityRow),
       skipDuplicates: true,

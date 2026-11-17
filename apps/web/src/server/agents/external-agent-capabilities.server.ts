@@ -79,6 +79,7 @@ const ROUTES: readonly Route[] = [
   { feature: "reminders", methods: ["POST"], path: /^\/reminders$/ },
   { feature: "context", methods: ["GET"], path: /^\/context$/ },
   { feature: "credentials", methods: ["POST"], path: /^\/credentials\/self\/revoke$/ },
+  { feature: "activity", methods: ["POST"], path: /^\/activity$/ },
 ];
 
 export function externalAgentFeature(method: string, pathname: string): string | undefined {

@@ -226,3 +226,33 @@ describe("AgentDeletion", () => {
     expect(stops).toEqual([]);
   });
 });
+
+describe("deleting an external Agent", () => {
+  test("its presence is settled after the delete, and a managed Agent's is not", async () => {
+    const settled: unknown[] = [];
+    const build = (record: AgentRecord) =>
+      new AgentDeletion(
+        repositoryFor(record),
+        {
+          delete: async () => ({
+            outcome: "deleted",
+            membershipsLeft: 0,
+            leftChannelIds: [],
+            remindersCanceled: 0,
+          }),
+        },
+        { stop: async () => {} },
+        { run: async (_agentId, callback) => callback() },
+        undefined,
+        undefined,
+        undefined,
+        async (agent) => {
+          settled.push(agent);
+        },
+      );
+    await build(agent({ hosting: "external", computerId: undefined })).delete(owner, "agent-1");
+    expect(settled).toEqual([{ workspaceId: "workspace-1", agentId: "agent-1" }]);
+    await build(agent()).delete(owner, "agent-1");
+    expect(settled).toHaveLength(1);
+  });
+});

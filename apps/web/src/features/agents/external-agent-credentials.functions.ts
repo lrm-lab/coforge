@@ -4,6 +4,7 @@ import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import { AppError } from "#src/lib/app-error";
 import { externalAgentManagerAccess } from "#src/server/agents/external-agent-access.server";
+import { syncExternalPresenceBestEffort } from "#src/server/agents/external-agent-presence-publish.server";
 import {
   issueExternalAgentPageCredential,
   listExternalCredentials,
@@ -46,6 +47,7 @@ export const revokeExternalAgentCredential = createServerFn({ method: "POST" })
         actorUserId: user.id,
       },
     );
+    if (revoked) await syncExternalPresenceBestEffort(db, { workspaceId, agentId: data.agentId });
     return { revoked };
   });
 
@@ -55,10 +57,12 @@ export const createExternalAgentPageCredential = createServerFn({ method: "POST"
   .handler(async ({ data, context: { user, db, workspaceId } }) => {
     declareNoStore();
     await managedExternalAgent(db, { userId: user.id, workspaceId, agentId: data.agentId });
-    return issueExternalAgentPageCredential({
+    const issued = await issueExternalAgentPageCredential({
       repository: new PrismaExternalAgentCredentialRepository(db),
       agentId: data.agentId,
       workspaceId,
       actorUserId: user.id,
     });
+    await syncExternalPresenceBestEffort(db, { workspaceId, agentId: data.agentId });
+    return issued;
   });

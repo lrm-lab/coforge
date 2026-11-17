@@ -72,6 +72,11 @@ export function isExternalAgentPrincipal(principal: {
   return "external" in principal && principal.external === true;
 }
 
+export type ExternalSeenNotifier = (
+  agent: { workspaceId: string; agentId: string },
+  seenAtMs: number,
+) => Promise<void>;
+
 export class ExternalCredentialError extends Error {
   constructor(readonly reason: ExternalCredentialAuthFailure) {
     super("invalid external Agent credential");
@@ -191,6 +196,7 @@ export async function authenticateExternalAgentKey(
   apiKey: string,
   repository: Pick<ExternalAgentCredentialRepository, "findByHash" | "touch">,
   now: () => number = Date.now,
+  onSeen?: ExternalSeenNotifier,
 ): Promise<ExternalAgentPrincipal> {
   if (!EXTERNAL_AGENT_KEY.test(apiKey)) throw new ExternalCredentialError("key_not_found");
   const actual = Buffer.from(hashExternalAgentKey(apiKey));
@@ -205,10 +211,14 @@ export async function authenticateExternalAgentKey(
     throw new ExternalCredentialError("agent_unavailable");
   const at = now();
   const lastUsed = record.lastUsedAt?.getTime();
-  if (lastUsed === undefined || at - lastUsed >= EXTERNAL_LAST_USED_INTERVAL_MS)
+  if (lastUsed === undefined || at - lastUsed >= EXTERNAL_LAST_USED_INTERVAL_MS) {
     await repository
       .touch(record.id, new Date(at), new Date(at - EXTERNAL_LAST_USED_INTERVAL_MS))
       .catch(() => {});
+    await onSeen?.({ workspaceId: record.workspaceId, agentId: record.agentId }, at).catch(
+      () => {},
+    );
+  }
   return {
     external: true,
     userId: agent.ownerId,

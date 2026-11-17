@@ -3,6 +3,7 @@ import { AppError } from "#src/lib/app-error";
 import { settlePendingNotLaunched } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import { revokeExternalCredentialsOf } from "#src/server/db/repositories/external-agent-credential.repositories.server";
 import { externalAgentManagerAccess } from "./external-agent-access.server";
+import { syncExternalPresenceBestEffort } from "./external-agent-presence-publish.server";
 import { auditExternalCredential } from "./external-agent-credentials.server";
 
 export type ExternalAgentControlAction =
@@ -21,6 +22,7 @@ export async function handleExternalAgentControl(
     action: ExternalAgentControlAction;
   },
   now: () => Date = () => new Date(),
+  syncPresence: typeof syncExternalPresenceBestEffort = syncExternalPresenceBestEffort,
 ): Promise<boolean> {
   const agent = await db.agent.findFirst({
     where: { id: input.agentId, workspaceId: input.workspaceId },
@@ -49,6 +51,7 @@ export async function handleExternalAgentControl(
         count: revoked.count,
         actorUserId: input.userId,
       });
+    await syncPresence(db, input);
     return true;
   }
   if (input.action === "stop" || (input.action === "start" && stopped)) {

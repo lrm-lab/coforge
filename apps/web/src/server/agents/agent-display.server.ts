@@ -2,6 +2,7 @@ import { openRedisClient } from "#src/server/redis-client.server";
 import { redisUrlFor } from "#src/server/redis-url.server";
 import type {
   AgentActivity,
+  AgentActivityKind,
   AgentContextUsage,
   AgentServiceTier,
   AgentStatus,
@@ -22,6 +23,7 @@ import {
   SNAPSHOT_MANY,
   SWEEP_STALE,
 } from "./agent-display-lua";
+import { OBSERVE_EXTERNAL_PRESENCE, OBSERVE_EXTERNAL_STATUS } from "./agent-display-lua-external";
 import { workspaceRedisKey } from "#src/server/redis-keys.server";
 import { activityKindForObservation, LIVENESS_ONLY_DETAIL_KINDS } from "./agent-activity-kind";
 
@@ -89,6 +91,20 @@ export interface AgentDisplay {
   /** Ends the reason a credential hold left on a live Agent (`errorReason`, the failure's) once
    * the Daemon reports the credential works again; undefined when nothing changed. */
   endHeldStop(scope: Scope, errorReason: string): Promise<AgentDisplaySnapshot | undefined>;
+  observeExternalPresence(
+    scope: Scope,
+    args: { seenAtMs: number; windowMs: number },
+  ): Promise<AgentDisplaySnapshot | undefined>;
+  observeExternalStatus(
+    scope: Scope,
+    args: {
+      kind: AgentActivityKind;
+      detail: string;
+      occurredAtMs: number;
+      reported: boolean;
+      windowMs: number;
+    },
+  ): Promise<AgentDisplaySnapshot | undefined>;
   snapshot(scope: Scope): Promise<AgentDisplaySnapshot>;
   /** Many snapshots in one round trip (a Workspace's Agent list); same value per scope as
    * `snapshot`, in the scopes' order. */
@@ -175,6 +191,29 @@ export class RedisAgentDisplay implements AgentDisplay {
 
   async endHeldStop(scope: Scope, errorReason: string) {
     return this.execute(END_HELD_STOP, scope, [errorReason]);
+  }
+
+  async observeExternalPresence(scope: Scope, args: { seenAtMs: number; windowMs: number }) {
+    return this.execute(OBSERVE_EXTERNAL_PRESENCE, scope, [args.seenAtMs, args.windowMs]);
+  }
+
+  async observeExternalStatus(
+    scope: Scope,
+    args: {
+      kind: AgentActivityKind;
+      detail: string;
+      occurredAtMs: number;
+      reported: boolean;
+      windowMs: number;
+    },
+  ) {
+    return this.execute(OBSERVE_EXTERNAL_STATUS, scope, [
+      args.kind,
+      args.detail,
+      args.occurredAtMs,
+      args.reported ? "1" : "0",
+      args.windowMs,
+    ]);
   }
 
   async snapshot(scope: Scope) {
