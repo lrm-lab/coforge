@@ -59,9 +59,11 @@ export class RedisComputerCapabilityLease {
     return this.redis.send("EVAL", [RECORD_NEWER, "1", key, JSON.stringify(value), TTL_SECONDS]);
   }
 
-  async supports(workspaceId: string, computerId: string) {
+  async supports(workspaceId: string, computerId: string, workerInstanceId?: string) {
+    const value = this.read(await this.redis.get(this.key(workspaceId, computerId)));
     return (
-      this.read(await this.redis.get(this.key(workspaceId, computerId)))?.state === "supported"
+      value?.state === "supported" &&
+      (workerInstanceId === undefined || value.workerInstanceId === workerInstanceId)
     );
   }
 

@@ -7,12 +7,13 @@ const logger = getLogger(["coforge", "daemon", "agent-control"]);
 
 export function isPermanentSessionReportRejection(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
-  const value = error as { code?: unknown; category?: unknown; message?: unknown };
+  const value = error as { code?: unknown; category?: unknown };
   const code = typeof value.code === "number" ? value.code : Number(value.code);
-  if (code !== 403) return false;
-  if (value.category === "session_mismatch") return true;
-  const message = typeof value.message === "string" ? value.message : refusalText(error);
-  return /stale agent scope|agent session(?: snapshot)? scope is not authorized/i.test(message);
+  return (
+    (code === 409 && value.category === "superseded") ||
+    (code === 403 &&
+      (value.category === "session_mismatch" || value.category === "scope_unauthorized"))
+  );
 }
 
 /** Owns native Session bindings and reliable current-snapshot reporting. */

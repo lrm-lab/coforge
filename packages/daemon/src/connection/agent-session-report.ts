@@ -7,6 +7,7 @@ import {
   type AgentSessionReport,
 } from "@lrm/coforge-sdk/internal";
 import { retryTemporaryRpc } from "./temporary-rpc-retry";
+import { decodeAgentSessionRejection } from "@lrm/coforge-sdk/internal/agent-session-rejection";
 
 const logger = getLogger(["coforge", "daemon", "connection"]);
 
@@ -43,6 +44,6 @@ export async function reportAgentSessionWithRetry(
       error_message: refusalText(error).slice(0, 200),
       outcome: "failed",
     });
-    throw error;
+    throw decodeAgentSessionRejection(error);
   }
 }

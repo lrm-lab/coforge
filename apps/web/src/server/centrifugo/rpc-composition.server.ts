@@ -91,6 +91,7 @@ import { getAgentRuntimeLock } from "#src/server/agents/agent-runtime-lock.serve
 import { AgentControl } from "#src/server/agents/agent-control.server";
 import { getAgentControlSignal } from "#src/server/agents/agent-control-signal.server";
 import { getAgentControlAcceptedCapabilityLease } from "#src/server/agents/agent-control-accepted-capability.server";
+import { getAgentSessionRejectionCapabilityLease } from "#src/server/agents/agent-session-rejection-capability.server";
 import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
 import { createCentrifugoServerApi } from "./server-api.server";
 import {
@@ -280,7 +281,11 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
           results: getPiChatResults(),
           publish: (channel, bytes) => centrifugo.publish(channel, bytes),
         }),
-        [AGENT_SESSION_METHOD]: createAgentSessionMethod(sessions, sessionReceiver),
+        [AGENT_SESSION_METHOD]: createAgentSessionMethod(
+          sessions,
+          sessionReceiver,
+          getAgentSessionRejectionCapabilityLease(),
+        ),
         [AGENT_SESSION_INVALIDATE_METHOD]: createAgentSessionInvalidateMethod(sessionReceiver),
         ...agentReadingMethods({
           agents: controlStore,

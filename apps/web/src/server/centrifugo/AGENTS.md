@@ -5,6 +5,10 @@ mechanics only; domain rules stay in the owning `src/server/` module.
 
 - Receivers authenticate the connection claims before applying any
   conditional Session or control update.
+- Session report rejections use SDK application codes only for the worker that declared
+  `agent-session-rejection:v1` on ready. Other workers keep legacy 403/409 replies.
+  Centrifugo Error carries only code/message/temporary: restore category from the numeric code
+  at the daemon session RPC boundary, never by matching the error message.
 - `usage-snapshot-decode.server.ts` checks a usage snapshot field by field for the usage-scan and
   reset-credit results; `resetCreditsAvailable` passes only as a whole number from 0 to 999 and is
   otherwise left out, without rejecting the reading. The reset credit result stores the outcome

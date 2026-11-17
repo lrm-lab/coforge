@@ -85,6 +85,8 @@ test("a stale worker cannot overwrite a newer worker's capability state", async 
   await lease.record("w", "computer", ["legacy-capability:v1"], identity("new", 2));
   await lease.record("w", "computer", [], identity("old", 1));
   expect(await lease.supports("w", "computer")).toBeTrue();
+  expect(await lease.supports("w", "computer", "new")).toBeTrue();
+  expect(await lease.supports("w", "computer", "old")).toBeFalse();
 });
 
 test("a pre-fence supported value stays readable until a ready replaces it", async () => {
