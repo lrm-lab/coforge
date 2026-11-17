@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { teamMemory } from "#src/server/team-memory/composition.server";
-import type { TeamMemoryWrite } from "@lrm/coforge-sdk/agent";
+import { decodeTeamMemoryResult, type TeamMemoryWrite } from "@lrm/coforge-sdk/agent";
 import { Experiments } from "#src/server/experiments/experiments.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { handleTeamMemory } from "#src/server/team-memory/http.server";
@@ -137,9 +137,7 @@ test("disabling workspace memory blocks every operation and re-enabling preserve
     pending,
   ] as const;
   await db.workspace.update({ where: { id: workspaceId }, data: { experiments: {} } });
-  await expect(service().execute(actor(), { operation: "list" })).rejects.toThrow(
-    "memory_disabled",
-  );
+  expect((await service().execute(actor(), { operation: "list" })).status).toBe("ok");
   await settings.set(workspace, "owner", "teamMemory", false);
   try {
     for (const command of commands)
@@ -226,6 +224,29 @@ test("history previews stay within a response budget and full versions are read 
   await expect(
     service().execute(actor(), { operation: "get", id: entry.id, revision: 999 }),
   ).rejects.toThrow("memory_not_found");
+});
+
+test("history previews of whitespace-prefixed evidence pass the public response decoder", async () => {
+  const content = " \t\n\u3000\ufeff".repeat(200) + "Important evidence";
+  const source = "\u00a0\u202f\r\n".repeat(100) + "Confirmed source";
+  const entry = (
+    await write({
+      operation: "create",
+      ...draft("Indented evidence", content),
+      source,
+      requestId: crypto.randomUUID(),
+    })
+  ).entries[0]!;
+  const history = decodeTeamMemoryResult(
+    await service().execute(actor(), { operation: "history", id: entry.id }),
+  );
+  expect(history.entries[0]?.content).toBe("Important evidence");
+  expect(history.entries[0]?.source).toBe("Confirmed source");
+  const full = decodeTeamMemoryResult(
+    await service().execute(actor(), { operation: "get", id: entry.id, revision: 1 }),
+  );
+  expect(full.entries[0]?.content).toBe(content);
+  expect(full.entries[0]?.source).toBe(source);
 });
 
 test("merge is atomic and restore and permanent deletion affect current recall", async () => {

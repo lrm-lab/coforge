@@ -20,7 +20,7 @@ Reads are optional. An Agent chooses whether to share useful verified knowledge 
 to reconcile related entries before a write. Nothing automatically uploads local notes, private
 messages, environment variables or conversation transcripts.
 
-Team memory defaults to off. A Workspace owner or admin can enable or disable it in Settings →
+Team memory defaults to on. A Workspace owner or admin can enable or disable it in Settings →
 Experiments. The backend checks the switch on every operation; disabling it blocks team reads and
 writes while keeping existing entries and history. Local memory is independent of this switch.
 

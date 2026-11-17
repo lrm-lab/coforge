@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import { EXPERIMENTS } from "#src/server/experiments/experiments.server";
 import {
   teamMemoryTerms,
   type TeamMemoryCommand,
@@ -16,6 +17,8 @@ import {
 } from "#src/server/team-memory/memory";
 
 type Database = PrismaClient | Prisma.TransactionClient;
+const PREVIEW_WHITESPACE =
+  " \t\n\r\v\f\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
 type Row = TeamMemoryDraft & {
   id: string;
   workspaceId: string;
@@ -73,7 +76,8 @@ function fingerprint(command: TeamMemoryWrite): string {
 
 async function access(db: Database, actor: TeamMemoryActor, lock = false): Promise<boolean> {
   const rows = await db.$queryRaw<{ role: string; teamMemoryEnabled: boolean | null }[]>(Prisma.sql`
-    SELECT a."role", w.experiments->'teamMemory' = 'true'::jsonb AS "teamMemoryEnabled"
+    SELECT a."role", COALESCE(NULLIF(w.experiments->'teamMemory', 'null'::jsonb),
+      ${JSON.stringify(EXPERIMENTS.teamMemory.defaultEnabled)}::jsonb) = 'true'::jsonb AS "teamMemoryEnabled"
     FROM "agents" a JOIN "workspace_memberships" m
     ON m."workspaceId" = a."workspaceId" AND m."userId" = a."ownerId"
     JOIN "workspaces" w ON w.id = a."workspaceId"
@@ -171,8 +175,8 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
         const offset = command.offset ?? 0;
         const versions = await tx.$queryRaw<Version[]>`
           SELECT snapshot || jsonb_build_object(
-            'content', left(snapshot->>'content', 600),
-            'source', left(snapshot->>'source', 200)
+            'content', left(ltrim(snapshot->>'content', ${PREVIEW_WHITESPACE}), 600),
+            'source', left(ltrim(snapshot->>'source', ${PREVIEW_WHITESPACE}), 200)
           ) AS snapshot, actor_agent_id AS "actorAgentId", operation, left(reason, 200) AS reason, merged_from AS "mergedFrom"
           FROM team_memory_versions
           WHERE workspace_id = ${actor.workspaceId}::uuid AND entry_id = ${target.id}::uuid
