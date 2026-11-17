@@ -99,14 +99,15 @@ sudo systemctl enable --now coforge-host.service
 
 ## 桌面入口（SSH 反连隧道）
 
-Swarm 管理节点在内网，staging Web/Caddy 在外网 ECS，ECS 不能直连本机 `:6090`。管理节点向 ECS 维持 SSH reverse tunnel（ECS `127.0.0.1:16090` → 本机 `:6090`），Compose 里 `COFORGE_DESKTOP_UPSTREAM=host.docker.internal:16090`，`COFORGE_CLOUD_DESKTOP_ORIGIN=https://staging.coforge.cn`。步骤、密钥与 systemd 见 [staging desktop reverse tunnel](staging-desktop-tunnel.md)。隧道未起来时，官网 `/desktop` 会 502。
+Swarm 管理节点在内网，staging Web/Caddy 在外网 ECS，ECS 不能直连本机 `:6090`。管理节点向 ECS 维持 SSH reverse tunnel（ECS `127.0.0.1:16090` → 本机 `:6090`），ECS 上再用 private-IP 中继给 Compose Caddy；Compose 里 `COFORGE_DESKTOP_UPSTREAM=${COFORGE_DESKTOP_HOST_GATEWAY}:16090`，`COFORGE_CLOUD_DESKTOP_ORIGIN=https://staging.coforge.cn`。步骤、密钥与 systemd 见 [staging desktop reverse tunnel](staging-desktop-tunnel.md)。隧道或中继未起来时，官网 `/desktop` 会 502。
 
 ## 核对
 
 - `systemctl is-active coforge-host.service` 为 `active`，没有令牌或节点密钥错误。注销后这个状态不变。
-- `systemctl is-active coforge-staging-desktop-tunnel.service` 为 `active`（隧道）。
+- `systemctl --user is-active coforge-staging-desktop-tunnel.service` 为 `active`（隧道，Swarm 管理节点）。
+- ECS 上 `systemctl --user is-active coforge-staging-desktop-docker-relay.service` 为 `active`（private-IP 中继）。
 - 「云电脑服务」页的灯在心跳到达后变绿。心跳超过 90 秒未到则变回未连接。
 - 创建一个工作区后，`docker service ls` 出现 `coforge-<电脑编号>`，镜像是 `coforge-computer:staging`，副本为 `1/1`。
 - 容器里每个已挂载工作区有一个 `__workspace-daemon`，日志里有 `Daemon cloud connection established`。
 - 电脑页上 Cloud 在线。要使用它，还要在该工作区把 Agent 指派到这台电脑。
-- 「打开桌面」打开的是 `https://staging.coforge.cn/desktop/...`（经 Caddy；须隧道在线）。
+- 「打开桌面」打开的是 `https://staging.coforge.cn/desktop/...`（经 Caddy；须隧道与中继在线）。

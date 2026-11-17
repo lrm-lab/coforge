@@ -34,13 +34,13 @@ services:
       ALIDNS_ACCESS_KEY_ID: ${ALIDNS_ACCESS_KEY_ID:?deploy script reads alidns_access_key_id}
       ALIDNS_ACCESS_KEY_SECRET: ${ALIDNS_ACCESS_KEY_SECRET:?deploy script reads alidns_access_key_secret}
       # Swarm host is on the Lenovo intranet; the ECS cannot dial it. The Swarm
-      # manager keeps an SSH reverse tunnel that listens on the ECS loopback
-      # only (127.0.0.1:16090 → manager :6090). Caddy is in a container, so it
-      # reaches that listener through host.docker.internal (see extra_hosts).
-      # Do not bind the remote side of the tunnel on 0.0.0.0 — that would expose
-      # the desktop proxy without forward_auth.
+      # manager keeps an SSH reverse tunnel on the ECS loopback only
+      # (127.0.0.1:16090 → manager :6090). Compose containers cannot reach
+      # loopback or docker0 (host-gateway), so a host relay listens on the ECS
+      # private IP and write_deploy_env records that IP as
+      # COFORGE_DESKTOP_HOST_GATEWAY. Do not bind the tunnel on 0.0.0.0.
       # docs/operations/cloud-swarm/staging-desktop-tunnel.md
-      COFORGE_DESKTOP_UPSTREAM: host.docker.internal:16090
+      COFORGE_DESKTOP_UPSTREAM: ${COFORGE_DESKTOP_HOST_GATEWAY:?deploy writes ECS private IP}:16090
       # Shared with the Swarm host (`COFORGE_CLUSTER_TOKEN`). Caddy sets it on
       # the upstream request after forward_auth; the host rejects callers that
       # omit it. Same plaintext as COFORGE_CLOUD_CLUSTER_TOKEN on this host.
