@@ -45,6 +45,8 @@ export class LocalMemory {
         if (entry) {
           const preview = {
             ...entry,
+            updatedAt: new Date(entry.updatedAt).toISOString(),
+            applicability: entry.applicability.slice(0, 150),
             content: entry.content.trimStart().slice(0, 600),
             source: entry.source.trimStart().slice(0, 200),
           };
@@ -71,15 +73,16 @@ export class LocalMemory {
 
   private async get(key: string, revision?: string): Promise<LocalMemoryEntry> {
     const currentPath = `notes/knowledge/${key}.md`;
-    const current = revision ? await readMemoryFile(this.root, currentPath) : undefined;
+    const current = await readMemoryFile(this.root, currentPath);
     const path =
       revision && (!current || memoryRevision(current) !== revision)
         ? `notes/history/${key}/${revision}.md`
         : currentPath;
-    const text = await readMemoryFile(this.root, path);
+    const text = path === currentPath ? current : await readMemoryFile(this.root, path);
     if (text === undefined) throw new Error("memory_not_found");
     const entry = decodeMemoryRecord(text, path);
-    if (!entry || entry.key !== key) throw new Error("memory_invalid_file");
+    if (!entry || entry.key !== key || (revision !== undefined && entry.revision !== revision))
+      throw new Error("memory_invalid_file");
     return entry;
   }
 

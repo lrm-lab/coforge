@@ -1,6 +1,6 @@
 # Server modules
 
-- `server/team-memory/` — Agent-selected Workspace knowledge, revision review, version history and atomic reconciliation in PostgreSQL.
+- `server/team-memory/` — Workspace team knowledge, authenticated human corrections, revision review, version history and atomic reconciliation in PostgreSQL.
 
 The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENTS.md#module-map). Each line names a directory under `src/` and its single responsibility. Update it before adding or reorganizing a module.
 
