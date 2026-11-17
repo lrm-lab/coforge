@@ -304,12 +304,8 @@ fn posix_is_activated(
         match fs::symlink_metadata(&cli_link) {
             Err(error) if error.kind() == io::ErrorKind::NotFound => false,
             Err(_) => false,
-            Ok(metadata) if metadata.file_type().is_symlink() => {
-                let target = fs::read_link(&cli_link).ok();
-                // Our symlink must point at active/coforge; a symlink pointing elsewhere is foreign.
-                target.as_deref() == Some(cli_target.as_path())
-                    || target.is_some_and(|p| p != cli_target)
-            }
+            // Both our symlink and a foreign symlink count as settled so repair never loops.
+            Ok(metadata) if metadata.file_type().is_symlink() => true,
             Ok(_) => true,
         }
     };
