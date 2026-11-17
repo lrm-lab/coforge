@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { z } from "zod";
 
@@ -38,6 +38,7 @@ import { useArtifactComments, syncCommentsChange } from "./artifact-comment-quer
 import { createComposerHolds } from "./artifact-composer-holds";
 import { useCommentHandoff } from "./use-comment-handoff";
 import { useOpenFile } from "./use-open-file";
+import { useShownVersion } from "./use-shown-version";
 import { useCommentMode, type ArtifactPanelName } from "./use-comment-mode";
 import { ArtifactFilesPanel } from "./artifact-files-panel";
 import { ArtifactMarkdown } from "./artifact-markdown";
@@ -61,11 +62,7 @@ import { ArtifactUpdateBanner, ViewingVersionNotice } from "./artifact-update-ba
 import { artifactKindOfPath } from "./artifact-path-kind";
 import { PaneFrame } from "./artifact-parts";
 import { ArtifactUnavailable, LoadingBody, isGone } from "./artifact-page-states";
-import {
-  artifactDocumentQuery,
-  artifactHomeConversation,
-  refreshArtifact,
-} from "./artifact-queries";
+import { artifactHomeConversation, refreshArtifact } from "./artifact-queries";
 import {
   decodeArtifactAccessChangedEvent,
   decodeArtifactCommentsChangedEvent,
@@ -139,8 +136,11 @@ function ArtifactPageFor({
   const router = useRouter();
   const workspaceId = useCurrentWorkspaceId();
   const workspaceSlug = useWorkspaceSlug();
-  const read = useQuery(artifactDocumentQuery(artifactId));
-  const [pinnedState, setPinned] = useState<number | null>(version ?? null);
+  const { read, latest, pinned, pinnedRead, current, shownVersion, pin, unpin } = useShownVersion(
+    artifactId,
+    version,
+    arrival,
+  );
   const [incoming, setIncoming] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [sendingTo, setSendingTo] = useState(false);
@@ -154,18 +154,6 @@ function ArtifactPageFor({
   useEffect(() => {
     if (reviewId !== undefined) setPanel("comments");
   }, [reviewId, arrival]);
-  useEffect(() => {
-    setPinned(version ?? null);
-  }, [version, arrival]);
-  const latest = read.data?.artifact.currentVersion ?? 0;
-  const pinned = pinnedState !== null && latest > 0 && pinnedState > latest ? null : pinnedState;
-  const older = pinned !== null && pinned !== latest;
-  const pinnedRead = useQuery({
-    ...artifactDocumentQuery(artifactId, pinned ?? undefined),
-    enabled: older,
-  });
-  const current = older ? (pinnedRead.data ?? read.data) : read.data;
-  const shownVersion = older && pinnedRead.data ? pinned : latest;
 
   const homeKey = current?.artifact.homeKey;
   const homeId = homeKey ? artifactHomeConversation(homeKey) : undefined;
@@ -314,13 +302,13 @@ function ArtifactPageFor({
   };
   const viewLatest = () => {
     setIncoming(null);
-    setPinned(null);
+    unpin();
     openFile(null);
     void refreshArtifact(queryClient, artifactId, homeId ?? null);
   };
   const choose = (version: number) => {
     openFile(null);
-    setPinned(version === latest ? null : version);
+    pin(version);
   };
   const { onMoreAction, dialogs, following } = useArtifactActions({
     artifactId,
@@ -421,11 +409,11 @@ function ArtifactPageFor({
                         onView={viewLatest}
                       />
                     )}
-                    {older && (
+                    {pinned !== null && pinned !== latest && (
                       <ViewingVersionNotice
                         version={pinned}
                         failed={pinnedRead.isError}
-                        onBack={() => setPinned(null)}
+                        onBack={unpin}
                       />
                     )}
                     {!current ? (
