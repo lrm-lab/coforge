@@ -10,57 +10,21 @@
 // See docs/agents/git-hooks/limits.md.
 //
 // usage: bun scripts/ci/local-gate.ts   (from the repository root; exit 1 prints the fix)
-import { realpathSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { join } from "node:path";
+import { checkRepoHooksPath } from "../git-hooks/hooks-path";
+import {
+  downstreamWorkspaces,
+  lintFilesStrict,
+  runValidateEach,
+  runWorkspaceTypechecks,
+} from "./run-checks";
 import { selectChecks } from "./selection";
 
-const HOOKS_PATH = ".githooks";
 const checker = join(import.meta.dir, "range-checks.ts");
 
 function git(...args: string[]): { exitCode: number; stdout: string } {
   const result = Bun.spawnSync(["git", ...args], { stdout: "pipe", stderr: "ignore" });
   return { exitCode: result.exitCode, stdout: result.stdout.toString().trim() };
-}
-
-/** `path` with its symlinks resolved, as far as it exists. */
-function canonical(path: string): string {
-  try {
-    return realpathSync(path);
-  } catch {
-    const parent = dirname(path);
-    return parent === path ? path : join(canonical(parent), basename(path));
-  }
-}
-
-/** Whether the repository's hooks are installed: an error when no `core.hooksPath` is set, a
- * warning when it names the user's own hooks directory, which install-hooks-path.ts leaves alone
- * and so does this. A hooks path set by `-c` or `GIT_CONFIG_*` (a CoForge Agent's shim, which
- * forwards to the repository's configuration) is not the repository's choice, as there. Of the
- * rest, the last value git reads wins; git resolves it (`--type=path` expands `~`) relative to the
- * top of the work tree, so `.githooks/`, `./.githooks` or its absolute path all name
- * `.githooks`; symlinks are resolved on both sides (macOS's `/var` is `/private/var`). */
-function hooksStatus(top: string): { error?: string; warning?: string } {
-  const configured = git("config", "--type=path", "--show-scope", "--get-all", "core.hooksPath");
-  const values = (configured.exitCode === 0 ? configured.stdout : "")
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      const [scope, ...value] = line.split("\t");
-      return { scope, value: value.join("\t") };
-    })
-    .filter(({ scope }) => scope !== "command");
-  const effective = values.at(-1)?.value;
-  if (effective === undefined) {
-    const error =
-      "pre-commit hook not installed: run `bun install` (sets core.hooksPath=.githooks)";
-    return { error };
-  }
-  if (canonical(resolve(top, effective)) === canonical(resolve(top, HOOKS_PATH))) return {};
-  return {
-    warning:
-      `core.hooksPath is ${effective}, not .githooks: the repository's pre-commit and pre-push ` +
-      "run only if your hooks call them",
-  };
 }
 
 /** HEAD's merge base with the local origin/main and that ref, or null — reason already logged —
@@ -116,26 +80,21 @@ function contractChecksFail(top: string, range: { base: string }): boolean {
   }
   const paths = diff.stdout.split("\0").filter(Boolean);
   if (paths.length === 0) return false;
+  let failed = false;
   const selected = selectChecks(paths, "local");
-  if (selected.length === 0) return false;
-  console.log(`local gate: script-contract checks selected: ${selected.join(", ")}`);
-  const failed: string[] = [];
-  for (const name of selected) {
-    for (const script of [`test:${name}`, `check:${name}`]) {
-      const result = Bun.spawnSync([process.execPath, "run", script], {
-        cwd: top,
-        stdout: "inherit",
-        stderr: "inherit",
-      });
-      if (result.exitCode !== 0) {
-        failed.push(`${name} (${script})`);
-        break;
-      }
+  if (selected.length > 0) {
+    console.log(`local gate: script-contract checks selected: ${selected.join(", ")}`);
+    if (!runValidateEach(top, "scripts", selected)) {
+      console.error(`local gate: failed script-contract checks: ${selected.join(", ")}`);
+      failed = true;
     }
   }
-  if (failed.length === 0) return false;
-  console.error(`local gate: failed script-contract checks: ${failed.join(", ")}`);
-  return true;
+  if (!lintFilesStrict(top, paths)) failed = true;
+  const affectedWorkspaces = downstreamWorkspaces(top, paths);
+  if (affectedWorkspaces.length > 0 && !runWorkspaceTypechecks(top, affectedWorkspaces)) {
+    failed = true;
+  }
+  return failed;
 }
 
 function main(): number {
@@ -144,14 +103,13 @@ function main(): number {
   const location = git("rev-parse", "--is-inside-work-tree", "--show-toplevel");
   const [inside, top] = location.stdout.split("\n");
   if (location.exitCode !== 0 || inside !== "true" || !top) return 0;
-  const hooks = hooksStatus(top);
-  if (hooks.warning) console.warn(`local gate: ${hooks.warning}`);
-  if (hooks.error) console.error(`local gate: ${hooks.error}`);
+  const hooks = checkRepoHooksPath(top);
+  if (!hooks.ok) console.error(`local gate: ${hooks.error}`);
   const range = mergeBase();
   // Both judgements run even when the first fails, so one `bun run check` reports everything.
   const hardRules = range ? rangeFails(range) : false;
   const contracts = range ? contractChecksFail(top, range) : false;
-  return hooks.error || hardRules || contracts ? 1 : 0;
+  return !hooks.ok || hardRules || contracts ? 1 : 0;
 }
 
 if (import.meta.main) process.exit(main());

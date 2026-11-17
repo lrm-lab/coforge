@@ -101,6 +101,9 @@ jobs:
       - name: Check hard rules
         env: *plan
         run: bun scripts/ci/range-checks.ts --range "$BASE" "$HEAD" --authors-since "$BEFORE"
+      - name: Lint changed files
+        env: *plan
+        run: bash scripts/ci/lint-ci-range.sh
 
   infrastructure-contracts:
     name: Validate scripts
