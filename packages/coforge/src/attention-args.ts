@@ -14,6 +14,7 @@ export type InboxInvocation = {
 };
 export type ChannelInvocation = { command: "mute" | "unmute"; target: string };
 export type ThreadInvocation =
+  | { command: "thread-follow"; target: string }
   | { command: "thread-unfollow"; target: string; reason?: string }
   | { command: "thread-list" };
 
@@ -54,7 +55,39 @@ function parseMuteTarget(args: readonly string[], command: string): string {
   return target;
 }
 
+const FOLLOW_USAGE = "Usage: coforge thread follow [<thread>] [--target <thread>]";
 const UNFOLLOW_USAGE = "Usage: coforge thread unfollow --target <thread> [--reason <text>]";
+
+/** `thread follow [<#channel:message-id>] [--target <#channel:message-id>]`. */
+function parseFollowArgs(args: readonly string[]): ThreadInvocation {
+  let positional: string | undefined;
+  let flagged: string | undefined;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--target" && flagged === undefined && args[index + 1] !== undefined) {
+      flagged = args[index + 1]!.trim();
+      index += 1;
+    } else if (arg !== undefined && !arg.startsWith("--") && positional === undefined)
+      positional = arg.trim();
+    else throw new Error(FOLLOW_USAGE);
+  }
+  if (positional && flagged && positional !== flagged)
+    throw new CliError({
+      code: "INVALID_ARG",
+      message:
+        "Positional thread and --target must refer to the same thread when both are provided",
+      retryable: false,
+    });
+  const target = flagged || positional;
+  if (!target) throw new Error(FOLLOW_USAGE);
+  if (!THREAD_TARGET.test(target))
+    throw new CliError({
+      code: "INVALID_TARGET",
+      message: "Thread must be a thread target like '#channel:abcd1234'.",
+      retryable: false,
+    });
+  return { command: "thread-follow", target };
+}
 
 /** `thread unfollow --target <#channel:message-id> [--reason <text>]`. */
 function parseUnfollowArgs(args: readonly string[]): ThreadInvocation {
@@ -121,6 +154,7 @@ export function parseAttentionArgs(
 ): ChannelInvocation | ThreadInvocation | InboxInvocation | undefined {
   if (args[0] === "channel" && (args[1] === "mute" || args[1] === "unmute"))
     return { command: args[1], target: parseMuteTarget(args.slice(2), args[1]) };
+  if (args[0] === "thread" && args[1] === "follow") return parseFollowArgs(args.slice(2));
   if (args[0] === "thread" && args[1] === "unfollow") return parseUnfollowArgs(args.slice(2));
   if (args[0] === "thread" && args[1] === "list") {
     if (args.length > 2) throw new Error("Usage: coforge thread list");
@@ -136,5 +170,7 @@ export type AttentionInvocation = ChannelInvocation | ThreadInvocation;
 export function isAttentionInvocation(invocation: {
   command: string;
 }): invocation is AttentionInvocation {
-  return ["mute", "unmute", "thread-unfollow", "thread-list"].includes(invocation.command);
+  return ["mute", "unmute", "thread-follow", "thread-unfollow", "thread-list"].includes(
+    invocation.command,
+  );
 }

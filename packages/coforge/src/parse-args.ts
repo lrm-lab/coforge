@@ -209,6 +209,7 @@ export function parseArgs(
       const {
         target,
         sendDraft,
+        discardDraft,
         expectedDraftKey,
         continueAnyway,
         json,
@@ -227,6 +228,32 @@ export function parseArgs(
           outputMode,
         );
       refuseTaskRef("send", target, [], outputMode);
+      if (discardDraft && sendDraft)
+        throw withOutputMode(
+          new CliError({
+            code: "INVALID_ARG",
+            message: "--discard-draft cannot be combined with --send-draft.",
+            retryable: false,
+            draftSaved: false,
+            suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION,
+          }),
+          outputMode,
+        );
+      if (
+        discardDraft &&
+        (rawAttachmentIds.length > 0 || rawMentions.length > 0 || targetConfirmed)
+      )
+        throw withOutputMode(
+          new CliError({
+            code: "INVALID_ARG",
+            message:
+              "--discard-draft clears a saved draft and cannot be combined with --attachment-id, --mention, or --target-confirmed.",
+            retryable: false,
+            draftSaved: false,
+            suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION,
+          }),
+          outputMode,
+        );
       // Repeatable; duplicates collapse; the server caps the count.
       const attachmentIds = rawAttachmentIds.length ? [...new Set(rawAttachmentIds)] : undefined;
       if (attachmentIds?.some((id) => !UUID_PATTERN.test(id)))
@@ -263,11 +290,12 @@ export function parseArgs(
           }),
           outputMode,
         );
-      if (expectedDraftKey !== undefined && !sendDraft)
+      if (expectedDraftKey !== undefined && !sendDraft && !discardDraft)
         throw withOutputMode(
           new CliError({
             code: "EXPECTED_DRAFT_KEY_REQUIRES_SEND_DRAFT",
-            message: "--expected-draft-key can only be used together with --send-draft.",
+            message:
+              "--expected-draft-key can only be used together with --send-draft or --discard-draft.",
             retryable: false,
             draftSaved: false,
             suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION,
@@ -282,6 +310,7 @@ export function parseArgs(
           command: "send",
           target,
           ...(sendDraft ? { sendDraft: true } : {}),
+          ...(discardDraft ? { discardDraft: true } : {}),
           ...(expectedDraftKey !== undefined ? { expectedDraftKey } : {}),
           ...(continueAnyway ? { continueAnyway: true } : {}),
           ...(reviewerIsolation ? { freshnessContextMode: "withheld" as const } : {}),

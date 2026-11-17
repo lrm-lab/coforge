@@ -36,6 +36,18 @@ async function setChannelMuted(
   return formatChannelMute(target, command === "mute");
 }
 
+async function followThread(
+  follow: ((target: string, followed: boolean) => Promise<unknown>) | undefined,
+  { target }: { target: string },
+): Promise<string> {
+  if (!follow) throw new Error("Thread settings transport is unavailable");
+  await follow(target, true);
+  return [
+    `Followed ${target}. Replies in this thread will wake you.`,
+    `To stop following: coforge thread unfollow --target "${target}"`,
+  ].join("\n");
+}
+
 /**
  * `thread unfollow`: stops ordinary delivery for a thread, then says what brings it back. A
  * follow comes back through a reply from the Agent or a reply that mentions it.
@@ -80,6 +92,8 @@ export async function runAttention(
   transport: AttentionTransport,
   invocation: AttentionInvocation,
 ): Promise<string> {
+  if (invocation.command === "thread-follow")
+    return followThread(transport.setThreadFollowed?.bind(transport), invocation);
   if (invocation.command === "thread-unfollow")
     return unfollowThread(transport.setThreadFollowed?.bind(transport), invocation);
   if (invocation.command === "thread-list") {

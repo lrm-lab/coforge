@@ -1,17 +1,9 @@
 import {
-  agentApiRoutes,
-  decodeAgentAppErrorResponse,
-  decodeAppDeletedResponse,
-  decodeAppManagedResponse,
-  decodeAppOwnerTransferResponse,
-  decodeAppPublishRequestResponse,
-  decodeAppSecretRotationResponse,
-  decodeAppShareLinkCreatedResponse,
-  decodeAppShareLinkRevokedResponse,
-  decodeAppShareLinkStatusResponse,
+  createAgentApiClient,
+  type AgentApiExtendedClient,
   type AgentAppManagementRequest,
 } from "@lrm/coforge-sdk/agent";
-import { envelopeRequest, proxyEndpointOf } from "./proxy-request";
+import { createAppProxyAgentApiTransport } from "./sdk-proxy-transport";
 
 type Operation = AgentAppManagementRequest["operation"];
 type Body<Op extends Operation> = Omit<
@@ -19,41 +11,21 @@ type Body<Op extends Operation> = Omit<
   "operation"
 >;
 
-const DECODERS = {
-  rotate_secret: decodeAppSecretRotationResponse,
-  update: decodeAppManagedResponse,
-  logo_set: decodeAppManagedResponse,
-  logo_clear: decodeAppManagedResponse,
-  transfer_owner: decodeAppOwnerTransferResponse,
-  delete: decodeAppDeletedResponse,
-  share_link_create: decodeAppShareLinkCreatedResponse,
-  share_link_status: decodeAppShareLinkStatusResponse,
-  share_link_revoke: decodeAppShareLinkRevokedResponse,
-  request_publish: decodeAppPublishRequestResponse,
-  request_unpublish: decodeAppPublishRequestResponse,
-} as const satisfies Record<Operation, (value: unknown) => unknown>;
-
 /** `coforge app update|logo|clear-logo|transfer-owner|delete|share-link|...`'s requests, each one
  * operation of the daemon's local registration route. */
 export type AppManagementClient = {
-  call<Op extends Operation>(
-    operation: Op,
-    body: Body<Op>,
-  ): Promise<ReturnType<(typeof DECODERS)[Op]>>;
+  call: AgentApiExtendedClient["apps"]["management"]["execute"];
 };
 
 export function connectAppManagementClient(context: string, proxyUrl: string): AppManagementClient {
-  const route = agentApiRoutes.local.appRegistrations;
+  const client = createAgentApiClient(
+    createAppProxyAgentApiTransport(context, proxyUrl, (_route, input) => {
+      const op = (input as { operation?: string } | undefined)?.operation ?? "manage";
+      return `app-${op.replaceAll("_", "-")}`;
+    }),
+  );
   return {
-    call: (operation, body) =>
-      envelopeRequest(
-        proxyEndpointOf(proxyUrl),
-        context,
-        proxyUrl,
-        { method: route.method, path: route.path, body: { operation, ...body } },
-        DECODERS[operation] as (value: unknown) => never,
-        decodeAgentAppErrorResponse,
-        `app-${operation.replaceAll("_", "-")}`,
-      ),
+    call: <Op extends Operation>(operation: Op, body: Body<Op>) =>
+      client.apps.management.execute(operation, body),
   };
 }

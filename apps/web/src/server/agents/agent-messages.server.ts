@@ -377,6 +377,16 @@ export async function muteAgentChannel(
   await repository.setAgentChannelMuted(scope.workspaceId, scope.agentId, target, muted);
 }
 
+export async function followAgentThread(
+  repository: AgentMessageRepository,
+  scope: { workspaceId: string; agentId: string },
+  target: string,
+) {
+  if (!isChannelMessageTarget(target) || isChannelTarget(target))
+    throw new Error("follow requires a channel thread target");
+  await repository.setAgentThreadFollowed(scope.workspaceId, scope.agentId, target, true);
+}
+
 export async function unfollowAgentThread(
   repository: AgentMessageRepository,
   scope: { workspaceId: string; agentId: string },

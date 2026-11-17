@@ -21,7 +21,6 @@ import type {
   AgentEventsGetRequest,
   AgentEventsResponse,
   AgentChannelAttentionResponse,
-  AgentThreadAttentionResponse,
 } from "./messages";
 import type {
   AgentChannelInfoResponse,
@@ -42,6 +41,11 @@ import type {
   AgentManualSearchResponse,
 } from "./manual";
 import type { AgentLabelListResponse } from "./labels";
+import {
+  createUnwrappedExtendedResources,
+  type AgentApiExtendedClient,
+  type RawAgentApiExtendedClient,
+} from "./client-app-artifact-resources";
 import { createAgentApiRawClient } from "./client-resources";
 
 export { createAgentApiRawClient } from "./client-resources";
@@ -280,7 +284,6 @@ export type AgentApiClient = {
       request: { user?: string; agent?: string },
     ): Promise<AgentChannelRemoveMemberResponse>;
   };
-  threads: { unfollow(threadId: string): Promise<AgentThreadAttentionResponse> };
   attachments: {
     download(attachmentId: string): Promise<AgentAttachmentDownload>;
     upload(form: FormData): Promise<AgentAttachmentUploadResponse>;
@@ -293,7 +296,7 @@ export type AgentApiClient = {
       get(uploadId: string): Promise<AgentAttachmentUploadSessionView>;
     };
   };
-};
+} & AgentApiExtendedClient;
 
 export type AgentApiTransport = {
   request(route: unknown, input?: unknown): Promise<AgentApiResult<unknown>>;
@@ -367,7 +370,6 @@ export type RawAgentApiClient = {
       request: { user?: string; agent?: string },
     ): Promise<AgentApiResult<AgentChannelRemoveMemberResponse>>;
   };
-  threads: { unfollow(threadId: string): Promise<AgentApiResult<AgentThreadAttentionResponse>> };
   attachments: {
     download(attachmentId: string): Promise<AgentApiResult<AgentAttachmentDownload>>;
     upload(form: FormData): Promise<AgentApiResult<AgentAttachmentUploadResponse>>;
@@ -382,7 +384,7 @@ export type RawAgentApiClient = {
       get(uploadId: string): Promise<AgentApiResult<AgentAttachmentUploadSessionView>>;
     };
   };
-};
+} & RawAgentApiExtendedClient;
 
 export function createAgentApiClient(transport: AgentApiTransport): AgentApiClient {
   const rawClient = createAgentApiRawClient(transport);
@@ -448,9 +450,7 @@ export function createAgentApiClient(transport: AgentApiTransport): AgentApiClie
       removeMember: async (channelId, request) =>
         unwrap(await rawClient.channels.removeMember(channelId, request)),
     },
-    threads: {
-      unfollow: async (threadId) => unwrap(await rawClient.threads.unfollow(threadId)),
-    },
+    ...createUnwrappedExtendedResources(rawClient, unwrap),
     attachments: {
       download: async (attachmentId) => unwrap(await rawClient.attachments.download(attachmentId)),
       upload: async (form) => unwrap(await rawClient.attachments.upload(form)),

@@ -1,4 +1,5 @@
 export * from "./client";
+export * from "./client-app-artifact-resources";
 export * from "./routes";
 export * from "./types";
 export * from "./messages";

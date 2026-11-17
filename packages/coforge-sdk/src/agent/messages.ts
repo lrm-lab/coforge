@@ -157,5 +157,5 @@ export type AgentChannelAttentionResponse = {
 export type AgentThreadAttentionResponse = {
   idempotencyKey: string;
   target: string;
-  followed: false;
+  followed: boolean;
 };

@@ -1,10 +1,14 @@
 import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
-import { readMeta, writeMeta } from "./agent-state-db";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { AGENT_COMMAND_GUIDANCE, type AgentCommandGuidanceResponse } from "@lrm/coforge-sdk/agent";
+import { AgentStateDb, readMeta, writeMeta } from "./agent-state-db";
+import { escapePathIdentity } from "./path-scope";
 
-/** What the ledger remembers having shown the Agent: a sender's description (`sender`) or a
- * channel's role line (`channel`). */
-export type ContextObservationKind = "sender" | "channel";
+/** What the ledger remembers having shown the Agent: a sender's description (`sender`), a
+ * channel's role line (`channel`), or progressive CLI command guidance (`guidance`). */
+export type ContextObservationKind = "sender" | "channel" | "guidance";
 
 const GENERATION_KEY = "contextGeneration";
 
@@ -68,3 +72,57 @@ export class AgentContextLedger {
 }
 
 const revisionOf = (text: string) => createHash("sha256").update(text).digest("base64url");
+
+/**
+ * Evaluates or pre-satisfies (`--help`) progressive CLI command guidance for `agentId`.
+ * When the Agent's runtime reports compaction, claims `"guidance"` once per `contextGeneration`
+ * in `state.db`; otherwise returns an inline hint without SQLite elision.
+ */
+export function evaluateAgentCommandGuidance(input: {
+  stateDirectory: string;
+  hasExplicitStateDir?: boolean;
+  agentId: string;
+  operation: "check" | "satisfy";
+  command: string;
+  reportsCompaction?: (agentId: string) => boolean;
+}): AgentCommandGuidanceResponse {
+  const text = AGENT_COMMAND_GUIDANCE[input.command];
+  if (!text) return { ok: true, guidance: null };
+  if (input.reportsCompaction?.(input.agentId) === false) {
+    return input.operation === "satisfy"
+      ? { ok: true, guidance: null }
+      : { ok: true, guidance: text, mode: "inline" };
+  }
+  const hasStateDb =
+    Boolean(input.hasExplicitStateDir) ||
+    existsSync(
+      join(input.stateDirectory, "agent-state", escapePathIdentity(input.agentId), "state.db"),
+    );
+  if (!hasStateDb) {
+    return input.operation === "satisfy"
+      ? { ok: true, guidance: null }
+      : { ok: true, guidance: text, mode: "inline" };
+  }
+  const stateDb = AgentStateDb.open(input.stateDirectory, input.agentId);
+  try {
+    const ledger = new AgentContextLedger(stateDb.database);
+    const compacts =
+      input.reportsCompaction !== undefined
+        ? input.reportsCompaction(input.agentId)
+        : ledger.generation() > 0;
+    if (!compacts) {
+      return input.operation === "satisfy"
+        ? { ok: true, guidance: null }
+        : { ok: true, guidance: text, mode: "inline" };
+    }
+    const claimed = ledger.claim("guidance", input.command, text);
+    if (input.operation === "satisfy") return { ok: true, guidance: null };
+    return {
+      ok: true,
+      guidance: claimed ? text : null,
+      mode: "once_per_context",
+    };
+  } finally {
+    stateDb.close();
+  }
+}

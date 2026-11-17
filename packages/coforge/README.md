@@ -13,6 +13,8 @@ The command reference lives in [`docs/agent-cli/`](../../docs/agent-cli/README.m
 | `src/cli.ts`                                  | Entry point: dispatches `argv`, prints the result or a rendered `CliError`, sets the exit code |
 | `index.ts`                                    | Argument parsing, the `MessageTransport` port, and the commands that return a result to print  |
 | `src/local-client.ts`                         | The `MessageTransport` over the daemon's local Agent proxy                                     |
+| `src/sdk-proxy-transport.ts`                  | Adapts local proxy app and artifact contracts into `createAgentApiClient` transports           |
+| `src/command-guidance.ts`                     | Stateless progressive CLI guidance hints backed by the daemon's `AgentContextLedger`           |
 | `src/proc-commands.ts`, `src/proc-request.ts` | `coforge proc start                                                                            | list | logs | stop`: managed Agent background jobs over the daemon's local proxy |
 | `src/proxy-request.ts`                        | The preflight and the `{ ok: false, errorCode, error }` request every proxied call shares      |
 | `src/external/`                               | External Agents: profile store and selection, device-code login, direct server transport       |

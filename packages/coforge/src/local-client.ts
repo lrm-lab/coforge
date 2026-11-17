@@ -12,7 +12,6 @@ import {
   AGENT_SEND_LOCAL_DEADLINE_MS,
   decodeAgentMessageResponse,
   type ChannelCommand,
-  type MentionSelectorInput as MentionSelector,
   type TaskCommand,
   type TaskResult,
   type WorkspaceInfoResponse,
@@ -48,7 +47,11 @@ import type { MessageReadOptions } from "./message-read-args";
 import { refusalNextAction } from "./refusal-guidance";
 import { refuseCredentialSolicitationIfNeeded } from "./send-credential-gate";
 import { proxyHttpFailure, proxyTransportFailure } from "./local-proxy-failure";
-import { computerUpdateNoticeRequest, localAgentRequests } from "./local-agent-requests";
+import {
+  computerUpdateNoticeRequest,
+  localAgentRequests,
+  threadFollowRequest,
+} from "./local-agent-requests";
 import {
   envelopeRequest,
   operationFailedCode,
@@ -171,27 +174,16 @@ export function connectLocal(
     inboxList: (request: AgentInboxRequest) =>
       inboxListRequest(proxyEndpoint, context, proxyUrl, request),
     setChannelMuted: (target: string, muted: boolean) => call(muted ? "mute" : "unmute", target),
-    setThreadFollowed: (target: string, followed: boolean, reason?: string) => {
-      if (followed) throw new Error("Explicit thread follow is unavailable");
-      return call("thread-unfollow", target, undefined, { reason });
-    },
+    setThreadFollowed: (target: string, followed: boolean, reason?: string) =>
+      followed
+        ? threadFollowRequest(proxyEndpoint, context, proxyUrl, target)
+        : call("thread-unfollow", target, undefined, { reason }),
     check: (target?: string) => call("check", target),
     read: (target: string, options?: MessageReadOptions) =>
       call("read", target, undefined, options),
     search: (options: MessageSearchOptions) => call("search", options.target, undefined, options),
-    send: (
-      target: string,
-      body?: string,
-      options?: {
-        sendDraft?: boolean;
-        expectedDraftKey?: string;
-        continueAnyway?: boolean;
-        freshnessContextMode?: "withheld";
-        attachmentIds?: string[];
-        mentions?: MentionSelector[];
-        targetConfirmed?: boolean;
-      },
-    ) => call("send", target, body, options),
+    send: (target: string, body?: string, options?: LocalCallOptions) =>
+      call("send", target, body, options),
     continue: (continuationId: string, choice: "a" | "b" | "c" | "d", body?: string) =>
       call("continue", undefined, body, { continuationId, continuationChoice: choice }),
     resolve: (messageId: string) => call("resolve", undefined, undefined, { messageId }),

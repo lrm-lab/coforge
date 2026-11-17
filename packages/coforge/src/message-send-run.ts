@@ -35,6 +35,48 @@ export async function runMessageSend(
   readBody: () => Promise<string> = readPipedSendContent,
 ): Promise<unknown> {
   const outputMode = invocation.json ? "json" : "text";
+  if (invocation.discardDraft) {
+    if (await sendDraftStdinHasContent()) {
+      throw withOutputMode(
+        new CliError({
+          code: "DISCARD_DRAFT_STDIN_UNSUPPORTED",
+          message: "--discard-draft clears a saved draft and does not accept stdin.",
+          retryable: false,
+          draftSaved: false,
+          suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION,
+        }),
+        outputMode,
+      );
+    }
+    let discardedResult: {
+      discarded?: boolean;
+      clearedDraft?: boolean;
+      discardedDraftKey?: string;
+    };
+    try {
+      discardedResult = (await transport.send(invocation.target, undefined, {
+        discardDraft: true,
+        expectedDraftKey: invocation.expectedDraftKey,
+      })) as typeof discardedResult;
+    } catch (error) {
+      throw error instanceof CliError ? withOutputMode(error, outputMode) : error;
+    }
+    const discarded =
+      discardedResult?.discarded !== false && discardedResult?.clearedDraft !== false;
+    if (invocation.json) {
+      return JSON.stringify({
+        state: "discarded",
+        target: invocation.target,
+        discarded,
+        ...(discardedResult?.discardedDraftKey
+          ? { idempotencyKey: discardedResult.discardedDraftKey }
+          : {}),
+      });
+    }
+    return discarded
+      ? `Draft for ${invocation.target} discarded; nothing was sent.`
+      : `No saved draft for ${invocation.target}; nothing was sent.`;
+  }
   if (invocation.sendDraft && (await sendDraftStdinHasContent())) {
     throw withOutputMode(
       new CliError({

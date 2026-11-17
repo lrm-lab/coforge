@@ -4,6 +4,7 @@ import type { MessageSearchOptions } from "./message-search-args";
 /** Everything the local proxy `call` may add to its message request body. */
 export type LocalCallOptions = MessageSearchOptions & {
   sendDraft?: boolean;
+  discardDraft?: boolean;
   expectedDraftKey?: string;
   continueAnyway?: boolean;
   continuationId?: string;

@@ -32,6 +32,8 @@ test("a changed revision is shown again, and the kinds do not share ids", () => 
   expect(ledger.claim("sender", "x", "r2")).toBe(true);
   expect(ledger.claim("sender", "x", "r2")).toBe(false);
   expect(ledger.claim("channel", "x", "r2")).toBe(true);
+  expect(ledger.claim("guidance", "x", "r2")).toBe(true);
+  expect(ledger.claim("guidance", "x", "r2")).toBe(false);
 });
 
 test("a new context shows everything again", () => {

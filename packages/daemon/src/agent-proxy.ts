@@ -1,4 +1,8 @@
 import { badRequest, MAX_BODY_BYTES, readJsonBody } from "./agent-proxy-body";
+import {
+  createCollabProxyDispatcher,
+  type AgentProxyCloudForward,
+} from "./agent-proxy-collab-routes";
 import { guardDelivery } from "./agent-proxy-delivery";
 import { randomBytes } from "node:crypto";
 import { exactPath, pathParam } from "./agent-proxy-paths";
@@ -320,10 +324,19 @@ export function startAgentProxy(input: {
     get(agentId: string): string | undefined;
     set(agentId: string, agentApiKey: string): void;
   };
+  stateDirectory?: string;
+  reportsCompaction?: (agentId: string) => boolean;
+  cloudForward?: AgentProxyCloudForward;
   port?: number;
 }): AgentProxy {
   const contexts = new Map<string, TokenBinding>();
   const agentApiKeys = input.agentApiKeys ?? new Map<string, string>();
+  const collab = createCollabProxyDispatcher({
+    agentApiKeys,
+    stateDirectory: input.stateDirectory,
+    reportsCompaction: input.reportsCompaction,
+    cloudForward: input.cloudForward,
+  });
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: input.port ?? 0,
@@ -335,17 +348,16 @@ export function startAgentProxy(input: {
         method: request.method,
         path: requestUrl.pathname,
       });
+      const candidate = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
+      const token = candidate && LOCAL_PROXY_TOKEN.test(candidate) ? candidate : undefined;
+      const registered = token ? contexts.get(token) : undefined;
+      const direct = await collab.dispatchDirect(request, requestUrl, registered);
+      if (direct) return direct;
       const found = findProxyRoute(ROUTE_TABLE, request.method, requestUrl.pathname);
       if (!found) return new Response("not found", { status: 404 });
       const { route, param } = found;
-      const authorization = request.headers.get("authorization");
-      const candidate = authorization?.match(/^Bearer (.+)$/)?.[1];
-      const token = candidate && LOCAL_PROXY_TOKEN.test(candidate) ? candidate : undefined;
-      const registered = token ? contexts.get(token) : undefined;
       if (!registered) return new Response("unauthorized", { status: 401 });
-      const binding: TokenBinding = {
-        ...registered,
-      };
+      const binding: TokenBinding = { ...registered };
       const handler = input.runtime[route.handler] as
         | ((context: string, request: unknown, agentApiKey: string | undefined) => Promise<unknown>)
         | undefined;
@@ -367,6 +379,13 @@ export function startAgentProxy(input: {
             if (!isRecord(payload)) return badRequest();
             fields = payload;
             redact = fields.freshnessContextMode === "withheld";
+            if (
+              requestUrl.pathname === LOCAL_PROXY_ROUTES.messages.path &&
+              fields.operation === "send" &&
+              fields.discardDraft === true
+            ) {
+              return await collab.discardDraft(binding.agentId, fields);
+            }
           }
         }
         const parsed = parseRouteRequest(route.parse, {

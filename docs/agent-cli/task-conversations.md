@@ -24,6 +24,11 @@ follows it; the first of those makes it. Its source message's thread stays where
 `#channel:#7`, or `dm:@name:#7` on a direct board. Always quote it in a shell: an unquoted `#`
 starts a comment. Messages from the conversation arrive with `target=<ref>`.
 `message send` and `message read` do not take a ref; `attachment upload --target '<ref>'` does.
+All numbered `coforge task` board commands (`claim`, `unclaim`, `assign`, `unassign`, `update`,
+`amend`, `delete`, `restore`, `receipt`, `show`, `history`) also accept a quoted positional
+`'<ref>'` directly in place of `--target` + `--number` (for example,
+`coforge task claim '#coforge:#7'` or
+`coforge task assign '#coforge:#7' --assignee @bob --reason "Take over API wiring"`).
 
 ## Commands
 

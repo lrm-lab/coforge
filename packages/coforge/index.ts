@@ -58,7 +58,8 @@ export type MessageInvocation =
       command: "send";
       target: string;
       sendDraft?: boolean;
-      /** `--send-draft` only: refuse unless the draft still belongs to the send with this key. */
+      discardDraft?: boolean;
+      /** `--send-draft` / `--discard-draft` only: refuse unless the draft still belongs to this key. */
       expectedDraftKey?: string;
       continueAnyway?: boolean;
       freshnessContextMode?: "withheld";

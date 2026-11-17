@@ -23,6 +23,7 @@ import {
   parseTaskConversationArgs,
   type TaskConversationInvocation,
 } from "#src/task-conversation-args";
+import { resolveTaskRef } from "#src/task-ref";
 
 export type TaskInvocation = {
   command: "task";
@@ -165,6 +166,22 @@ const TASK_SWITCHES = new Set([
 
 const TASK_TARGET = /^(?:#[a-z0-9][a-z0-9_-]{0,31}|@[a-z0-9][a-z0-9_-]{0,63})$/;
 
+const TASK_REF_OPERATIONS = new Set<TaskOperation>([
+  "show",
+  "claim",
+  "unclaim",
+  "assign",
+  "unassign",
+  "update",
+  "amend",
+  "history",
+  "delete",
+  "restore",
+  "receipt",
+]);
+
+const boardToTarget = (board: string) => (board.startsWith("dm:") ? board.slice(3) : board);
+
 /** `task` and its arguments: a command on a task's own conversation, or a board operation. */
 export function parseTaskArgs(
   args: readonly string[],
@@ -176,9 +193,16 @@ export function parseTaskArgs(
     throw unknownCommandError(["task", ...args]);
   const allowed = TASK_FLAGS[operation];
   const repeatable = TASK_REPEATABLE_FLAGS[operation] ?? [];
+  const acceptsPositionalRef = TASK_REF_OPERATIONS.has(operation);
+  const positionalRefs: string[] = [];
   const values = new Map<string, string[]>();
   for (let index = 1; index < args.length; index += 1) {
     const name = args[index]!;
+    if (!name.startsWith("--") && acceptsPositionalRef) {
+      if (positionalRefs.length > 0 && operation !== "claim") throw new Error("Usage:");
+      positionalRefs.push(name);
+      continue;
+    }
     if (!allowed.includes(name)) throw new Error("Usage:");
     if (values.has(name) && !repeatable.includes(name)) throw new Error("Usage:");
     if (TASK_SWITCHES.has(name)) {
@@ -191,6 +215,31 @@ export function parseTaskArgs(
     index += 1;
   }
   const one = (flag: string) => values.get(flag)?.[0];
+
+  if (positionalRefs.length > 0) {
+    if (operation === "claim") {
+      const parsed = positionalRefs.map((ref) => resolveTaskRef(ref, undefined, undefined));
+      const firstBoard = parsed[0]!.board;
+      if (parsed.some((item) => item.board !== firstBoard))
+        throw invalidTaskArg("Positional task refs on `task claim` must name the same board");
+      const refTarget = boardToTarget(firstBoard);
+      const flaggedTarget = one("--target");
+      if (flaggedTarget !== undefined && boardToTarget(flaggedTarget) !== refTarget)
+        throw invalidTaskArg(
+          `The ref ${parsed[0]!.ref} and --target name different boards; give one of them.`,
+        );
+      values.set("--target", [refTarget]);
+      const combinedNumbers = [
+        ...parsed.map((item) => String(item.number)),
+        ...(values.get("--number") ?? []),
+      ];
+      values.set("--number", [...new Set(combinedNumbers)]);
+    } else {
+      const resolved = resolveTaskRef(positionalRefs[0], one("--target"), one("--number"));
+      values.set("--target", [boardToTarget(resolved.board)]);
+      values.set("--number", [String(resolved.number)]);
+    }
+  }
 
   const mine = values.has("--mine");
   const target = one("--target");

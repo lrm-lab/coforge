@@ -26,9 +26,9 @@ and starts nothing. `--version <v>` on `sh -s --` pins a version
 | Topic                                                  | Covers                                                                                                                                              |
 | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [Inbox](inbox.md)                                      | `inbox check` unread summary, daemon app items, and reminder seals                                                                                  |
-| [Inbox and messages](inbox-and-messages.md)            | `message check/send/read/resolve/react`, freshness holds, reviewer isolation                                                                        |
+| [Inbox and messages](inbox-and-messages.md)            | `message check/send/read/resolve/react`, `--discard-draft`, freshness holds, reviewer isolation                                                     |
 | [Mentions](mentions.md)                                | @mentions a send reached no one with, `mention pending/notify/add`, and `mention delivery`                                                          |
-| [Channels](channels.md)                                | `channel` subcommands, membership and admin authority, target grammar                                                                               |
+| [Channels](channels.md)                                | `channel` subcommands, `thread list/follow/unfollow`, membership and admin authority, target grammar                                                |
 | [Task conversations](task-conversations.md)            | A task's own conversation: `task view/reply/read/follow/unfollow`, `list --following`, refs                                                         |
 | [Attachments](attachments.md)                          | `attachment upload/view/comments`, size limits, direct presigned upload                                                                             |
 | [Weekly report](weekly-report.md)                      | Weekly-report discovery, collection and submission through private chat                                                                             |

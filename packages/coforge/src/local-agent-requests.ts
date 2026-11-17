@@ -8,9 +8,12 @@ import {
   agentApiRoutes,
   decodeAgentVersionResponse,
   decodeAgentContextQueryResponse,
+  type AgentCommandGuidanceRequest,
+  type AgentCommandGuidanceResponse,
   type AgentContextReadRequest,
   type AgentContextSearchRequest,
   type AgentContextQueryResponse,
+  type AgentThreadAttentionResponse,
   type AgentVersionResponse,
 } from "@lrm/coforge-sdk/agent";
 
@@ -117,6 +120,67 @@ export function contextRequests(
   };
 }
 
+export async function threadFollowRequest(
+  proxyEndpoint: (path: string) => URL,
+  context: string,
+  proxyUrl: string,
+  target: string,
+): Promise<AgentThreadAttentionResponse> {
+  requireProxySetup("thread-follow", context, proxyUrl);
+  let response: Response;
+  try {
+    response = await fetch(proxyEndpoint(agentApiRoutes.proxy.threadFollow.path(target)), {
+      method: agentApiRoutes.proxy.threadFollow.method,
+      headers: { authorization: `Bearer ${context}`, "content-type": "application/json" },
+      body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    throw new CliError({
+      code: "THREAD_FOLLOW_FAILED",
+      message: "agent proxy request failed (network or timeout)",
+      retryable: true,
+    });
+  }
+  if (!response.ok) {
+    throw proxyHttpFailure(
+      "thread-follow",
+      response.status,
+      await readProxyErrorBody(response),
+      target,
+    );
+  }
+  return (await response.json()) as AgentThreadAttentionResponse;
+}
+
+export async function commandGuidanceRequest(
+  proxyEndpoint: (path: string) => URL,
+  context: string,
+  proxyUrl: string,
+  request: AgentCommandGuidanceRequest,
+): Promise<AgentCommandGuidanceResponse> {
+  requireProxySetup("guidance", context, proxyUrl);
+  try {
+    const response = await fetch(proxyEndpoint(agentApiRoutes.proxy.guidance.path), {
+      method: agentApiRoutes.proxy.guidance.method,
+      headers: { authorization: `Bearer ${context}`, "content-type": "application/json" },
+      body: JSON.stringify(request),
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) return { ok: true, guidance: null };
+    const body = (await response.json().catch(() => undefined)) as
+      | Partial<AgentCommandGuidanceResponse>
+      | undefined;
+    return {
+      ok: true,
+      guidance: typeof body?.guidance === "string" ? body.guidance : null,
+      ...(body?.mode ? { mode: body.mode } : {}),
+    };
+  } catch {
+    return { ok: true, guidance: null };
+  }
+}
+
 export function localAgentRequests(
   proxyEndpoint: (path: string) => URL,
   context: string,
@@ -124,6 +188,8 @@ export function localAgentRequests(
 ) {
   return {
     version: () => versionRequest(proxyEndpoint, context, proxyUrl),
+    commandGuidance: (request: AgentCommandGuidanceRequest) =>
+      commandGuidanceRequest(proxyEndpoint, context, proxyUrl, request),
     ...contextRequests(proxyEndpoint, context, proxyUrl),
     ...teamMemoryRequests(proxyEndpoint, context, proxyUrl),
     ...memoryRequests(proxyEndpoint, context, proxyUrl),

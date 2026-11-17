@@ -45,9 +45,17 @@ yet:
   who may answer, and who must be a member of the conversation; there is no default owner),
   `other?` (`{ enabled?, label? }`; on by default: a final row that is itself an input, submitted
   as `_other` with the person's text fenced in the delivery; `enabled: false` removes it),
+  `expiresInMinutes?` (1 to 43200 minutes; defaults to 30 days),
   `draftHint?`. The person clicks an option or types in the other row. An executed
   choice reads back as `[action card: executed; choice=<id>]` (`_other` for their own answer).
   The asking Agent is told who answered and what they chose.
+- **`questions`**: `prompt?` (optional card title, ≤200 chars), `questions` (1–4 items, each with
+  unique `id` matching `^[a-z][a-z0-9_]{0,31}$`, `prompt`, `select?: "one" | "many"` defaulting to
+  `"one"`, `options` of `{id, label, description?, recommended?}`, and optional `other?`),
+  `to` (required: the person asked), `expiresInMinutes?` (1 to 43200 minutes), `draftHint?`.
+  Lets the person answer multiple single- or multi-select questions in one submit (skipping any
+  subset as long as at least one question is answered), waking the preparing Agent with the
+  per-question answers.
 - **`channel:add_member`**: `channel` (handle or UUID), `humans?`,
   `agents?` (at least one of the two non-empty), `draftHint?`.
 - **`app:register`**: `name`, `clientKey?`, `redirectUrls?`, `homepageUrl?`, `description?`,

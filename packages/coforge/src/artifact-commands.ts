@@ -1,15 +1,15 @@
 import { writeFile } from "node:fs/promises";
 import {
-  agentApiRoutes,
   artifactOperationTraits,
+  createAgentApiClient,
   type AgentArtifactRequest,
 } from "@lrm/coforge-sdk/agent";
 import { shellWord } from "#src/artifact-directory";
-import { artifactNetworkFailure, artifactRefusal, type ArtifactCall } from "#src/artifact-failure";
+import type { ArtifactCall } from "#src/artifact-failure";
 import { CliError, withOutputMode } from "#src/cli-error";
 import { invalidArgument } from "#src/command-help/index";
 import { optional, parseFlags, type FlagSpec } from "#src/artifact-flags";
-import { requireProxySetup } from "#src/proxy-request";
+import { createArtifactProxyAgentApiTransport } from "#src/sdk-proxy-transport";
 import {
   parseDirectoryArgs,
   type ArtifactDirectoryInvocation,
@@ -231,8 +231,6 @@ export async function artifactRequest(
   proxyUrl: string,
   request: AgentArtifactRequest,
 ): Promise<unknown> {
-  requireProxySetup("artifact", context, proxyUrl);
-  const route = agentApiRoutes.proxy.artifacts;
   const traits = artifactOperationTraits(request.operation);
   const writes = !traits.repeatable;
   const artifact = artifactOf(request);
@@ -242,20 +240,10 @@ export async function artifactRequest(
     ...(writes ? { mayHaveLanded: mayHaveLanded(request) } : {}),
     ...(artifact !== undefined && traits.gatedByComments ? { unseenArtifact: artifact } : {}),
   };
-  let response: Response;
-  try {
-    response = await fetch(proxyEndpoint(route.path), {
-      method: route.method,
-      headers: { authorization: `Bearer ${context}`, "content-type": "application/json" },
-      body: JSON.stringify(request),
-      // A push may wait behind others' pushes of the artifact, under the server's row lock.
-      signal: AbortSignal.timeout(30_000),
-    });
-  } catch {
-    throw artifactNetworkFailure("agent artifact request failed (network or timeout)", call);
-  }
-  if (response.ok) return response.json();
-  throw await artifactRefusal(response, call);
+  const client = createAgentApiClient(
+    createArtifactProxyAgentApiTransport(proxyEndpoint, context, proxyUrl, call),
+  );
+  return client.artifacts.execute(request);
 }
 
 const artifactOf = (request: AgentArtifactRequest) =>

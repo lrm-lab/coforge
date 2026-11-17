@@ -103,7 +103,7 @@ export function connectExternal(
   }
 
   async function send(target: string, body?: string, options?: SendOptions): Promise<unknown> {
-    if (options?.sendDraft || options?.expectedDraftKey)
+    if (options?.sendDraft || options?.discardDraft || options?.expectedDraftKey)
       throw daemonOnlyError(
         "Message drafts live in the Computer's daemon; send the message body on stdin.",
       );

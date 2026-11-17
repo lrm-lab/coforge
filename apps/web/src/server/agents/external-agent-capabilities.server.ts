@@ -19,7 +19,11 @@ const ROUTES: readonly Route[] = [
     path: new RegExp(`^/messages/${ID}/reactions$`),
   },
   { feature: "threads", methods: ["GET"], path: /^\/threads$/ },
-  { feature: "threads", methods: ["POST"], path: new RegExp(`^/threads/${ID}/unfollow$`) },
+  {
+    feature: "threads",
+    methods: ["POST"],
+    path: new RegExp(`^/threads/${ID}/(follow|unfollow)$`),
+  },
   { feature: "channels", methods: ["POST"], path: /^\/channels$/ },
   { feature: "channels", methods: ["GET", "PATCH"], path: new RegExp(`^/channels/${ID}$`) },
   {

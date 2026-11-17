@@ -5,6 +5,8 @@ import type {
   AgentAppConfigResponse,
   AgentAttachmentCommentsRequest,
   AgentAttachmentCommentsResponse,
+  AgentCommandGuidanceRequest,
+  AgentCommandGuidanceResponse,
   AgentManualGetResponse,
   AgentManualSearchResponse,
   AgentMentionDeliveryResponse,
@@ -74,6 +76,7 @@ export type MessageTransport = LabelTransport &
       body?: string,
       options?: {
         sendDraft?: boolean;
+        discardDraft?: boolean;
         expectedDraftKey?: string;
         continueAnyway?: boolean;
         freshnessContextMode?: "withheld";
@@ -161,4 +164,5 @@ export type MessageTransport = LabelTransport &
     procStart?(request: AgentProcStartRequest): Promise<AgentProcStartResponse>;
     procLogs?(request: AgentProcLogsRequest): Promise<AgentProcLogsResponse>;
     procStop?(request: AgentProcStopRequest): Promise<AgentProcStopResponse>;
+    commandGuidance?(request: AgentCommandGuidanceRequest): Promise<AgentCommandGuidanceResponse>;
   };

@@ -182,6 +182,7 @@ import { Route as ApiAgentV1CredentialsSelfRevokeRouteImport } from './routes/ap
 import { Route as ApiAgentV1MessagesMessageIdMentionDeliveriesRouteImport } from './routes/api/agent/v1/messages_.$messageId.mention-deliveries'
 import { Route as ApiAgentV1MessagesMessageIdReactionsRouteImport } from './routes/api/agent/v1/messages_.$messageId.reactions'
 import { Route as ApiAgentV1MessagesMessageIdResolveRouteImport } from './routes/api/agent/v1/messages_.$messageId.resolve'
+import { Route as ApiAgentV1ThreadsThreadFollowRouteImport } from './routes/api/agent/v1/threads_.$thread.follow'
 import { Route as ApiAgentV1ThreadsThreadUnfollowRouteImport } from './routes/api/agent/v1/threads_.$thread.unfollow'
 import { Route as ApiWorkspacesWorkspaceIdAppsAppKeyLogoRouteImport } from './routes/api/workspaces/$workspaceId/apps/$appKey/logo'
 import { Route as ApiWorkspacesWorkspaceIdUsersUserIdAvatarRouteImport } from './routes/api/workspaces/$workspaceId/users/$userId/avatar'
@@ -1150,6 +1151,12 @@ const ApiAgentV1MessagesMessageIdResolveRoute =
     path: '/api/agent/v1/messages/$messageId/resolve',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAgentV1ThreadsThreadFollowRoute =
+  ApiAgentV1ThreadsThreadFollowRouteImport.update({
+    id: '/api/agent/v1/threads_/$thread/follow',
+    path: '/api/agent/v1/threads/$thread/follow',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAgentV1ThreadsThreadUnfollowRoute =
   ApiAgentV1ThreadsThreadUnfollowRouteImport.update({
     id: '/api/agent/v1/threads_/$thread/unfollow',
@@ -1449,6 +1456,7 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/messages/$messageId/mention-deliveries': typeof ApiAgentV1MessagesMessageIdMentionDeliveriesRoute
   '/api/agent/v1/messages/$messageId/reactions': typeof ApiAgentV1MessagesMessageIdReactionsRoute
   '/api/agent/v1/messages/$messageId/resolve': typeof ApiAgentV1MessagesMessageIdResolveRoute
+  '/api/agent/v1/threads/$thread/follow': typeof ApiAgentV1ThreadsThreadFollowRoute
   '/api/agent/v1/threads/$thread/unfollow': typeof ApiAgentV1ThreadsThreadUnfollowRoute
   '/api/workspaces/$workspaceId/apps/$appKey/logo': typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   '/api/workspaces/$workspaceId/users/$userId/avatar': typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
@@ -1640,6 +1648,7 @@ export interface FileRoutesByTo {
   '/api/agent/v1/messages/$messageId/mention-deliveries': typeof ApiAgentV1MessagesMessageIdMentionDeliveriesRoute
   '/api/agent/v1/messages/$messageId/reactions': typeof ApiAgentV1MessagesMessageIdReactionsRoute
   '/api/agent/v1/messages/$messageId/resolve': typeof ApiAgentV1MessagesMessageIdResolveRoute
+  '/api/agent/v1/threads/$thread/follow': typeof ApiAgentV1ThreadsThreadFollowRoute
   '/api/agent/v1/threads/$thread/unfollow': typeof ApiAgentV1ThreadsThreadUnfollowRoute
   '/api/workspaces/$workspaceId/apps/$appKey/logo': typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   '/api/workspaces/$workspaceId/users/$userId/avatar': typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
@@ -1836,6 +1845,7 @@ export interface FileRoutesById {
   '/api/agent/v1/messages_/$messageId/mention-deliveries': typeof ApiAgentV1MessagesMessageIdMentionDeliveriesRoute
   '/api/agent/v1/messages_/$messageId/reactions': typeof ApiAgentV1MessagesMessageIdReactionsRoute
   '/api/agent/v1/messages_/$messageId/resolve': typeof ApiAgentV1MessagesMessageIdResolveRoute
+  '/api/agent/v1/threads_/$thread/follow': typeof ApiAgentV1ThreadsThreadFollowRoute
   '/api/agent/v1/threads_/$thread/unfollow': typeof ApiAgentV1ThreadsThreadUnfollowRoute
   '/api/workspaces/$workspaceId/apps/$appKey/logo': typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   '/api/workspaces/$workspaceId/users/$userId/avatar': typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
@@ -2031,6 +2041,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/messages/$messageId/mention-deliveries'
     | '/api/agent/v1/messages/$messageId/reactions'
     | '/api/agent/v1/messages/$messageId/resolve'
+    | '/api/agent/v1/threads/$thread/follow'
     | '/api/agent/v1/threads/$thread/unfollow'
     | '/api/workspaces/$workspaceId/apps/$appKey/logo'
     | '/api/workspaces/$workspaceId/users/$userId/avatar'
@@ -2222,6 +2233,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/messages/$messageId/mention-deliveries'
     | '/api/agent/v1/messages/$messageId/reactions'
     | '/api/agent/v1/messages/$messageId/resolve'
+    | '/api/agent/v1/threads/$thread/follow'
     | '/api/agent/v1/threads/$thread/unfollow'
     | '/api/workspaces/$workspaceId/apps/$appKey/logo'
     | '/api/workspaces/$workspaceId/users/$userId/avatar'
@@ -2417,6 +2429,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/messages_/$messageId/mention-deliveries'
     | '/api/agent/v1/messages_/$messageId/reactions'
     | '/api/agent/v1/messages_/$messageId/resolve'
+    | '/api/agent/v1/threads_/$thread/follow'
     | '/api/agent/v1/threads_/$thread/unfollow'
     | '/api/workspaces/$workspaceId/apps/$appKey/logo'
     | '/api/workspaces/$workspaceId/users/$userId/avatar'
@@ -2568,6 +2581,7 @@ export interface RootRouteChildren {
   ApiAgentV1MessagesMessageIdMentionDeliveriesRoute: typeof ApiAgentV1MessagesMessageIdMentionDeliveriesRoute
   ApiAgentV1MessagesMessageIdReactionsRoute: typeof ApiAgentV1MessagesMessageIdReactionsRoute
   ApiAgentV1MessagesMessageIdResolveRoute: typeof ApiAgentV1MessagesMessageIdResolveRoute
+  ApiAgentV1ThreadsThreadFollowRoute: typeof ApiAgentV1ThreadsThreadFollowRoute
   ApiAgentV1ThreadsThreadUnfollowRoute: typeof ApiAgentV1ThreadsThreadUnfollowRoute
   ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute: typeof ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute
   ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute: typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
@@ -3801,6 +3815,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentV1MessagesMessageIdResolveRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agent/v1/threads_/$thread/follow': {
+      id: '/api/agent/v1/threads_/$thread/follow'
+      path: '/api/agent/v1/threads/$thread/follow'
+      fullPath: '/api/agent/v1/threads/$thread/follow'
+      preLoaderRoute: typeof ApiAgentV1ThreadsThreadFollowRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agent/v1/threads_/$thread/unfollow': {
       id: '/api/agent/v1/threads_/$thread/unfollow'
       path: '/api/agent/v1/threads/$thread/unfollow'
@@ -4340,6 +4361,7 @@ const rootRouteChildren: RootRouteChildren = {
     ApiAgentV1MessagesMessageIdReactionsRoute,
   ApiAgentV1MessagesMessageIdResolveRoute:
     ApiAgentV1MessagesMessageIdResolveRoute,
+  ApiAgentV1ThreadsThreadFollowRoute: ApiAgentV1ThreadsThreadFollowRoute,
   ApiAgentV1ThreadsThreadUnfollowRoute: ApiAgentV1ThreadsThreadUnfollowRoute,
   ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute:
     ApiWorkspacesWorkspaceIdAppsAppKeyLogoRoute,

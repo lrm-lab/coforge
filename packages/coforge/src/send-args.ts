@@ -14,6 +14,7 @@ const SEND_USAGE =
 export type MessageSendFlags = {
   target?: string;
   sendDraft: boolean;
+  discardDraft: boolean;
   expectedDraftKey?: string;
   continueAnyway: boolean;
   json: boolean;
@@ -33,6 +34,7 @@ export function parseMessageSendArgs(
 ): MessageSendFlags {
   const flags: MessageSendFlags = {
     sendDraft: false,
+    discardDraft: false,
     continueAnyway: false,
     json: false,
     reviewerIsolation,
@@ -44,6 +46,7 @@ export function parseMessageSendArgs(
     const argument = args[index]!;
     if (argument === "--target" && args[index + 1]) flags.target = args[++index]!;
     else if (argument === "--send-draft") flags.sendDraft = true;
+    else if (argument === "--discard-draft") flags.discardDraft = true;
     else if (argument === "--expected-draft-key" && args[index + 1])
       flags.expectedDraftKey = args[++index]!;
     else if (argument === "--anyway") flags.continueAnyway = true;

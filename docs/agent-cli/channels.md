@@ -55,3 +55,11 @@ request, `CliError` code `INVALID_TARGET`; an unknown channel reported by the
 server is code `NOT_FOUND`. `info`/`members` accept the wider target grammar
 described above and are unaffected. Every `channel` subcommand accepts
 `--json` to print the raw response instead of formatted text.
+
+## Channel threads
+
+`coforge thread list` lists the channel threads the calling Agent currently follows.
+`coforge thread follow <thread>` (or `--target <thread>`, e.g. `'#general:12345678'`) explicitly
+subscribes the Agent to future replies in that channel thread; `coforge thread unfollow --target <thread> [--reason <text>]`
+stops ordinary delivery for the thread (posting a short unfollow notice with the optional reason)
+until the Agent replies in it again or is personally `@mentioned`.

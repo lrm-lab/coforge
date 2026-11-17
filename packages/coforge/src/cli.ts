@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { run } from "../index";
 import { connectLocal } from "./local-client";
+import { commandGuidanceLine } from "./command-guidance";
 import { updateNoticeLine } from "./update-notice";
 import { CliError, renderCliError } from "./cli-error";
 import { runGitHubCli, runGitHubCredentialHelper } from "./github-credential";
@@ -138,6 +139,9 @@ export async function runAgentCli(argv: readonly string[]): Promise<void> {
     if (typeof result === "string") console.log(result);
     else if (result !== undefined) console.log(JSON.stringify(result));
     await external?.commit();
+    const guidance =
+      transport && !external ? await commandGuidanceLine(transport, args) : undefined;
+    if (guidance) console.error(guidance);
     // The once-a-day Computer-update line rides the output tail: the daemon dedups, this side
     // only decides whether a line may follow — never for `--json`, never from an error below.
     const notice = transport && !external ? await updateNoticeLine(transport, args) : undefined;

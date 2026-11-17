@@ -38,6 +38,11 @@ const TASK_CONVERSATION_ROUTES = {
 } as const;
 const TASK_IDLE_NUDGE_ROUTE = { method: "POST", path: "/api/agent/v1/tasks/idle-nudge" } as const;
 const THREAD_LIST_ROUTE = { method: "GET", path: "/api/agent/v1/threads" } as const;
+const THREAD_FOLLOW_ROUTE = {
+  method: "POST",
+  path: (threadId: string) => `/api/agent/v1/threads/${encodeURIComponent(threadId)}/follow`,
+} as const;
+const GUIDANCE_ROUTE = { method: "POST", path: "/api/agent/v1/guidance" } as const;
 const ARTIFACTS_ROUTE = {
   method: "POST",
   path: "/api/agent/v1/artifacts",
@@ -183,6 +188,8 @@ export const agentApiRoutes = {
     taskConversations: TASK_CONVERSATION_ROUTES,
     taskIdleNudge: TASK_IDLE_NUDGE_ROUTE,
     threadList: THREAD_LIST_ROUTE,
+    threadFollow: THREAD_FOLLOW_ROUTE,
+    guidance: GUIDANCE_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
     labels: LABELS_ROUTE,
     labelWrite: LABEL_WRITE_ROUTE,
@@ -229,6 +236,8 @@ export const agentApiRoutes = {
     taskConversations: TASK_CONVERSATION_ROUTES,
     taskIdleNudge: TASK_IDLE_NUDGE_ROUTE,
     threadList: THREAD_LIST_ROUTE,
+    threadFollow: THREAD_FOLLOW_ROUTE,
+    guidance: GUIDANCE_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
     labels: LABELS_ROUTE,
     labelWrite: LABEL_WRITE_ROUTE,
@@ -318,6 +327,7 @@ export const agentApiRoutes = {
       },
     },
     threads: {
+      follow: THREAD_FOLLOW_ROUTE,
       unfollow: {
         method: "POST",
         path: (threadId: string) =>
@@ -350,6 +360,8 @@ export const agentApiRoutes = {
     taskConversations: TASK_CONVERSATION_ROUTES,
     taskIdleNudge: TASK_IDLE_NUDGE_ROUTE,
     threadList: THREAD_LIST_ROUTE,
+    threadFollow: THREAD_FOLLOW_ROUTE,
+    guidance: GUIDANCE_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
     labels: LABELS_ROUTE,
     labelWrite: LABEL_WRITE_ROUTE,

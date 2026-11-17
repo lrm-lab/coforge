@@ -1,14 +1,10 @@
 import {
-  agentApiRoutes,
-  decodeAgentAppErrorResponse,
-  decodeAppOwnedListResponse,
-  decodeAppRegistrationStatusResponse,
-  decodeAppSecretRotationResponse,
+  createAgentApiClient,
   type AppOwnedListResponse,
   type AppRegistrationStatusResponse,
   type AppSecretRotationResponse,
 } from "@lrm/coforge-sdk/agent";
-import { envelopeRequest, proxyEndpointOf } from "./proxy-request";
+import { createAppProxyAgentApiTransport } from "./sdk-proxy-transport";
 
 /** `coforge app status|list --owned|rotate-secret`'s requests, through the daemon's local proxy. */
 export type AppRegistrationClient = {
@@ -21,34 +17,17 @@ export function connectAppRegistrationClient(
   context: string,
   proxyUrl: string,
 ): AppRegistrationClient {
-  const route = agentApiRoutes.local.appRegistrations;
-  const call = <T>(
-    body: Record<string, string>,
-    decode: (value: unknown) => T,
-    operation: string,
-  ) =>
-    envelopeRequest(
-      proxyEndpointOf(proxyUrl),
-      context,
-      proxyUrl,
-      { method: route.method, path: route.path, body },
-      decode,
-      decodeAgentAppErrorResponse,
-      operation,
-    );
+  const client = createAgentApiClient(
+    createAppProxyAgentApiTransport(context, proxyUrl, (_route, input) => {
+      const op = (input as { operation?: string } | undefined)?.operation;
+      if (op === "register_status") return "app-status";
+      if (op === "owned_list") return "app-list";
+      return "app-rotate-secret";
+    }),
+  );
   return {
-    status: (selector) =>
-      call(
-        { operation: "register_status", ...selector },
-        decodeAppRegistrationStatusResponse,
-        "app-status",
-      ),
-    owned: () => call({ operation: "owned_list" }, decodeAppOwnedListResponse, "app-list"),
-    rotateSecret: (clientKey) =>
-      call(
-        { operation: "rotate_secret", clientKey },
-        decodeAppSecretRotationResponse,
-        "app-rotate-secret",
-      ),
+    status: (selector) => client.apps.registrations.status(selector),
+    owned: () => client.apps.registrations.owned(),
+    rotateSecret: (clientKey) => client.apps.registrations.rotateSecret(clientKey),
   };
 }

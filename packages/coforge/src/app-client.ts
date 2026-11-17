@@ -1,14 +1,11 @@
 import {
   agentApiRoutes,
-  decodeAgentAppErrorResponse,
-  decodeAgentAppListResponse,
-  decodeAgentAppMarketplaceResponse,
-  decodeAgentAppTokenResponse,
+  createAgentApiClient,
   type AgentAppListResponse,
   type AgentAppMarketplaceResponse,
   type AgentAppTokenResponse,
 } from "@lrm/coforge-sdk/agent";
-import { envelopeRequest } from "./proxy-request";
+import { createAppProxyAgentApiTransport } from "./sdk-proxy-transport";
 
 /** `coforge app list|token|marketplace`'s requests, through the daemon's local proxy. */
 export type AppClient = {
@@ -18,56 +15,19 @@ export type AppClient = {
 };
 
 export function connectAppClient(context: string, proxyUrl: string): AppClient {
-  const endpoint = (path: string) => {
-    const url = new URL(proxyUrl);
-    url.pathname = path;
-    url.search = "";
-    return url;
-  };
-  const { list, token, marketplace } = agentApiRoutes.local.apps;
+  const { list, marketplace } = agentApiRoutes.local.apps;
+  const client = createAgentApiClient(
+    createAppProxyAgentApiTransport(context, proxyUrl, (route) => {
+      if (route.path === list.path) return "app-list";
+      if (route.path === marketplace.path) return "app-marketplace";
+      return "app-token";
+    }),
+  );
   return {
-    appList: () =>
-      envelopeRequest(
-        endpoint,
-        context,
-        proxyUrl,
-        list,
-        decodeAgentAppListResponse,
-        decodeAgentAppErrorResponse,
-        "app-list",
-      ),
-    appMarketplace: (query, limit) =>
-      envelopeRequest(
-        endpoint,
-        context,
-        proxyUrl,
-        {
-          method: marketplace.method,
-          path: marketplace.path,
-          query: {
-            ...(query === undefined ? {} : { query }),
-            ...(limit === undefined ? {} : { limit: String(limit) }),
-          },
-        },
-        decodeAgentAppMarketplaceResponse,
-        decodeAgentAppErrorResponse,
-        "app-marketplace",
-      ),
+    appList: () => client.apps.list(),
+    appMarketplace: (query, limit) => client.apps.marketplace({ query, limit }),
     // No idempotency key: asking again is harmless, since a waiting request (and its card) is
     // never made twice.
-    appToken: (appKey, target, scopes) =>
-      envelopeRequest(
-        endpoint,
-        context,
-        proxyUrl,
-        {
-          method: token.method,
-          path: token.path(appKey),
-          body: { ...(target ? { target } : {}), ...(scopes ? { scopes } : {}) },
-        },
-        decodeAgentAppTokenResponse,
-        decodeAgentAppErrorResponse,
-        "app-token",
-      ),
+    appToken: (appKey, target, scopes) => client.apps.token(appKey, { target, scopes }),
   };
 }

@@ -1,3 +1,4 @@
+import { createRawExtendedResources } from "./client-app-artifact-resources";
 import { agentApiRoutes, workspaceInfoRoute } from "./routes";
 import type { AgentActionPrepareResponse } from "./action-cards";
 import type {
@@ -8,7 +9,6 @@ import type {
   AgentReactionResponse,
   AgentEventsResponse,
   AgentChannelAttentionResponse,
-  AgentThreadAttentionResponse,
 } from "./messages";
 import type {
   AgentChannelInfoResponse,
@@ -109,12 +109,7 @@ export function createAgentApiRawClient(transport: AgentApiTransport): RawAgentA
           request,
         ) as Promise<AgentApiResult<AgentChannelRemoveMemberResponse>>,
     },
-    threads: {
-      unfollow: (threadId) =>
-        transport.request(agentApiRoutes.cloud.threads.unfollow.path(threadId)) as Promise<
-          AgentApiResult<AgentThreadAttentionResponse>
-        >,
-    },
+    ...createRawExtendedResources(transport),
     attachments: {
       download: (attachmentId) =>
         transport.request(agentApiRoutes.cloud.attachments.path(attachmentId)) as Promise<
