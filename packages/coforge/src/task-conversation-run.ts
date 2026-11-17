@@ -7,7 +7,12 @@ import {
 } from "@lrm/coforge-sdk/agent";
 import { isRecord } from "@lrm/coforge-sdk/internal";
 import { CliError, withOutputMode } from "./cli-error";
+import {
+  convertLongMessageToAttachment,
+  formatLongMessageConvertedSuffix,
+} from "./long-message-attachment";
 import { formatReadWindow, type ReadWindowResponse } from "./message-read-format";
+import type { MessageTransport } from "./message-transport";
 import type { TaskConversationInvocation } from "./task-conversation-args";
 import {
   formatTaskFollow,
@@ -19,6 +24,7 @@ import { readPipedSendContent, refuseForeignStdinFile } from "./send-stdin";
 
 export type TaskConversationTransport = {
   taskConversation?(request: AgentTaskConversationRequest): Promise<unknown>;
+  upload?: MessageTransport["upload"];
 };
 
 const HEREDOC_DELIMITER = "COFORGE_MESSAGE";
@@ -60,6 +66,7 @@ async function runReply(
   send: (request: AgentTaskConversationRequest) => Promise<unknown>,
   invocation: Extract<TaskConversationInvocation, { op: "reply" }>,
   readBody: () => Promise<string>,
+  upload?: MessageTransport["upload"],
 ): Promise<string> {
   const { task, json, mentions, attachmentIds } = invocation;
   const outputMode = json ? "json" : "text";
@@ -81,13 +88,6 @@ async function runReply(
         retryable: false,
         outputMode,
       });
-    if (content.length > 50_000)
-      throw new CliError({
-        code: "INVALID_ARG",
-        message: `The reply is at most 50000 characters; got ${content.length}.`,
-        retryable: false,
-        outputMode,
-      });
     const absent = mentions?.find((mention) => !content.includes(`@${mention.name}`));
     if (absent)
       throw new CliError({
@@ -96,19 +96,34 @@ async function runReply(
         retryable: false,
         outputMode,
       });
+    const converted = await convertLongMessageToAttachment({
+      body: content,
+      target: task.ref,
+      existingAttachmentIds: attachmentIds,
+      upload,
+      outputMode,
+    });
     const body = {
       channel: task.board,
       task_number: task.number,
-      content,
+      content: converted.body,
       idempotencyKey: crypto.randomUUID(),
       ...(mentions ? { mentions } : {}),
-      ...(attachmentIds ? { attachmentIds } : {}),
+      ...(converted.attachmentIds ? { attachmentIds: converted.attachmentIds } : {}),
     };
     const reply = decoded(
       decodeAgentTaskReplyResponse,
       await sendReply(send, { route: "reply", body }),
     );
-    return json ? JSON.stringify({ ok: true, data: reply }) : formatTaskReply(task.ref, reply);
+    return json
+      ? JSON.stringify({
+          ok: true,
+          data: reply,
+          ...(converted.convertedAttachmentId
+            ? { convertedToAttachmentId: converted.convertedAttachmentId }
+            : {}),
+        })
+      : `${formatTaskReply(task.ref, reply)}${formatLongMessageConvertedSuffix(converted.convertedAttachmentId)}`;
   } catch (error) {
     throw error instanceof CliError && json ? withOutputMode(error, "json") : error;
   }
@@ -126,7 +141,8 @@ export async function runTaskConversation(
     return formatTaskFollowing(
       decoded(decodeAgentTaskFollowingResponse, await send({ route: "following" })),
     );
-  if (invocation.op === "reply") return runReply(send, invocation, readBody);
+  if (invocation.op === "reply")
+    return runReply(send, invocation, readBody, transport.upload?.bind(transport));
   const { task } = invocation;
   const ref = { channel: task.board, task_number: String(task.number) };
   switch (invocation.op) {

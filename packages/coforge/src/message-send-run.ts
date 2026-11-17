@@ -6,6 +6,10 @@ import {
   withOutputMode,
 } from "#src/cli-error";
 import {
+  convertLongMessageToAttachment,
+  formatLongMessageConvertedSuffix,
+} from "#src/long-message-attachment";
+import {
   formatSendCommitted,
   formatSendSuccess,
   type PendingMentionAction,
@@ -28,6 +32,7 @@ import type { MessageInvocation } from "../index";
 export async function runMessageSend(
   invocation: Extract<MessageInvocation, { command: "send" }>,
   transport: MessageTransport,
+  readBody: () => Promise<string> = readPipedSendContent,
 ): Promise<unknown> {
   const outputMode = invocation.json ? "json" : "text";
   if (invocation.sendDraft && (await sendDraftStdinHasContent())) {
@@ -57,7 +62,7 @@ export async function runMessageSend(
       ],
       { draftSaved: false, suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION, outputMode },
     );
-  const body = invocation.sendDraft ? undefined : await readPipedSendContent();
+  const body = invocation.sendDraft ? undefined : await readBody();
   // With `--send-draft`, the body (and thus content presence) is only known to the daemon, which
   // already re-sends the draft's own saved mentions when no explicit override is given.
   if (invocation.mentions?.length && body !== undefined) {
@@ -75,14 +80,30 @@ export async function runMessageSend(
           outputMode,
         );
   }
+  const converted =
+    body !== undefined
+      ? await convertLongMessageToAttachment({
+          body,
+          target: invocation.target,
+          existingAttachmentIds: invocation.attachmentIds,
+          upload: transport.upload,
+          outputMode,
+          draftSaved: false,
+          suggestedNextAction: NO_MESSAGE_SENT_NEXT_ACTION,
+        })
+      : {
+          body: undefined,
+          attachmentIds: invocation.attachmentIds,
+          convertedAttachmentId: undefined,
+        };
   let result: unknown;
   try {
-    result = await transport.send(invocation.target, body, {
+    result = await transport.send(invocation.target, converted.body, {
       sendDraft: invocation.sendDraft,
       expectedDraftKey: invocation.expectedDraftKey,
       continueAnyway: invocation.continueAnyway,
       freshnessContextMode: invocation.freshnessContextMode,
-      attachmentIds: invocation.attachmentIds,
+      attachmentIds: converted.attachmentIds,
       mentions: invocation.mentions,
       targetConfirmed: invocation.targetConfirmed,
     });
@@ -120,8 +141,11 @@ export async function runMessageSend(
           idempotencyKey: result.idempotencyKey,
           reconciliation: true,
           receiptComplete: false,
+          ...(converted.convertedAttachmentId
+            ? { convertedToAttachmentId: converted.convertedAttachmentId }
+            : {}),
         })
-      : formatSendCommitted(invocation.target, result.messageId);
+      : `${formatSendCommitted(invocation.target, result.messageId)}${formatLongMessageConvertedSuffix(converted.convertedAttachmentId)}`;
   const sent = result as {
     messageId?: string;
     recentUnread?: AgentMessageRecord[];
@@ -138,8 +162,11 @@ export async function runMessageSend(
       messageId: sent.messageId,
       recentUnread: sent.recentUnread ?? [],
       ...(sent.joinedChannel ? { joinedChannel: sent.joinedChannel } : {}),
+      ...(converted.convertedAttachmentId
+        ? { convertedToAttachmentId: converted.convertedAttachmentId }
+        : {}),
     });
   }
   if (undelivered) throw undelivered;
-  return formatSendSuccess(invocation.target, sent, sent.recentUnread);
+  return `${formatSendSuccess(invocation.target, sent, sent.recentUnread)}${formatLongMessageConvertedSuffix(converted.convertedAttachmentId)}`;
 }
