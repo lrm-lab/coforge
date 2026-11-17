@@ -163,13 +163,14 @@ export class LocalMemory {
         try {
           const text = await this.#index.read(path);
           const entry = text ? decodeMemoryRecord(text, path) : undefined;
-          if (!entry) {
+          if (!entry || path !== `notes/knowledge/${entry.key}.md`) {
             incomplete = true;
             return undefined;
           }
           if (entry.status !== (archived ? "archived" : "active")) return undefined;
           return {
             ...entry,
+            updatedAt: new Date(entry.updatedAt).toISOString(),
             content: entry.content.slice(0, 600),
             source: entry.source.slice(0, 200),
             applicability: entry.applicability.slice(0, 150),

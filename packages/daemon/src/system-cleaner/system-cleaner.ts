@@ -155,8 +155,13 @@ export class SystemCleaner {
     }
     this.#cancelTimer(existing);
     this.#dropItems(parsed.ownerAgentId);
-    this.#memoryChanged.delete(parsed.ownerAgentId);
-    this.#idleAgain.delete(parsed.ownerAgentId);
+    if (!parsed.enabled) {
+      this.#memoryChanged.delete(parsed.ownerAgentId);
+      this.#idleAgain.delete(parsed.ownerAgentId);
+    } else if (this.#idleChecks.has(parsed.ownerAgentId)) {
+      this.#memoryChanged.add(parsed.ownerAgentId);
+      this.#idleAgain.add(parsed.ownerAgentId);
+    }
     const state: OwnerState = { config: parsed, timer: undefined };
     this.#states.set(parsed.ownerAgentId, state);
     if (parsed.enabled) this.#arm(state);
@@ -494,21 +499,14 @@ export class SystemCleaner {
   }
 
   #dropItems(ownerAgentId: string, notificationClass?: string): void {
-    for (const kind of FILE_KINDS)
-      if (
-        notificationClass === undefined ||
-        notificationClass === FILE_HINTS[kind].notificationClass
-      )
-        this.#fileHintPresented[kind].delete(ownerAgentId);
-    for (const kind of notificationClass === undefined
-      ? [
-          ...FILE_KINDS.map((file) => FILE_HINTS[file].notificationClass),
-          DISK_HINT.notificationClass,
-        ]
-      : [notificationClass])
+    for (const kind of [...FILE_KINDS, "disk"] as const) {
+      const itemClass = SYSTEM_CLEANER_CLASSES[kind].notificationClass;
+      if (notificationClass !== undefined && notificationClass !== itemClass) continue;
+      if (kind !== "disk") this.#fileHintPresented[kind].delete(ownerAgentId);
       this.#track(
-        this.options.inbox.remove(ownerAgentId, systemCleanerItemId(kind, ownerAgentId)),
+        this.options.inbox.remove(ownerAgentId, systemCleanerItemId(itemClass, ownerAgentId)),
         ownerAgentId,
       );
+    }
   }
 }

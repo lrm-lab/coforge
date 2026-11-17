@@ -87,3 +87,38 @@ test("multibyte listing previews fit one response budget and pagination never sk
   }
   expect(seen).toEqual(Array.from({ length: 8 }, (_, i) => `fact-${i}`));
 });
+
+test("a manually edited timestamp cannot stall a listing page and full reads keep the original", async () => {
+  const root = await mkdtemp(join(tmpdir(), "coforge-memory-list-edited-time-"));
+  roots.push(root);
+  const memory = new LocalMemory(root);
+  await memory.execute({
+    operation: "save",
+    key: "fact",
+    revision: "new",
+    title: "Fact",
+    content: "Confirmed",
+    source: "human",
+    applicability: "staging",
+    kind: "fact",
+  });
+  const path = join(root, "notes/knowledge/fact.md");
+  const lines = (await Bun.file(path).text()).split("\n");
+  const header = JSON.parse(lines[1]!);
+  header.updatedAt = "2026-11-17" + " ".repeat(12_000);
+  lines[1] = JSON.stringify(header);
+  await Bun.write(path, lines.join("\n"));
+  const listed = await memory.execute({ operation: "list" });
+  expect(listed.entries).toHaveLength(1);
+  expect(listed.nextOffset).toBeUndefined();
+  expect(listed.entries[0]?.updatedAt).toBe("2026-11-17T00:00:00.000Z");
+  expect((await memory.execute({ operation: "get", key: "fact" })).entries[0]?.updatedAt).toBe(
+    header.updatedAt,
+  );
+  header.key = "other";
+  lines[1] = JSON.stringify(header);
+  await Bun.write(path, lines.join("\n"));
+  const mismatched = await memory.execute({ operation: "list" });
+  expect(mismatched.entries).toHaveLength(0);
+  expect(mismatched.incomplete).toBe(true);
+});
