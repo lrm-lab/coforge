@@ -109,6 +109,15 @@
      (task #212). The dark values are re-pointed under `.dark-mode` below. */
   --color-image-frame: oklch(0.9642 0 0);
   --color-image-frame-border: oklch(0.1813 0.005 17.62 / 0.149);
+
+  /* Conversation and Activity unread capsule + subdued muted/mention pills (task #135).
+     Re-pointed under `.dark-mode` below so components never carry `dark:` overrides. */
+  --color-unread-capsule: var(--color-neutral-950);
+  --color-unread-capsule-fg: var(--color-white);
+  --color-unread-capsule-divider: oklch(1 0 0 / 0.34);
+  --color-unread-capsule-muted: oklch(0.15 0.01 260 / 0.09);
+  --color-unread-capsule-muted-fg: var(--color-text-tertiary);
+  --color-unread-capsule-muted-divider: oklch(0.15 0.01 260 / 0.24);
 }
 
 /* Light-mode values from the design spec's Color page (docs/design/color-palette.md): the
@@ -226,6 +235,12 @@
     --color-avatar-more: var(--color-sidebar-accent);
     --color-avatar-more-fg: var(--color-sidebar-accent-fg);
     --color-avatar-add-fg: var(--color-nav-fg);
+    --color-unread-capsule: var(--color-neutral-600);
+    --color-unread-capsule-fg: var(--color-white);
+    --color-unread-capsule-divider: oklch(1 0 0 / 0.36);
+    --color-unread-capsule-muted: oklch(1 0 0 / 0.13);
+    --color-unread-capsule-muted-fg: var(--color-neutral-300);
+    --color-unread-capsule-muted-divider: oklch(1 0 0 / 0.28);
   }
 }
 

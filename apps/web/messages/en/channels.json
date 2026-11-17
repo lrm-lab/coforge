@@ -153,6 +153,17 @@
   "channel_settings_visibility_error": "Could not change the channel. Try again.",
   "channel_settings_visibility_denied": "Only Workspace owners and admins in this channel can change this.",
   "channel_mention_accessible": "{channel}, you were mentioned",
+  "channel_marked_unread_accessible": "{channel}, unread",
+  "channel_unread_threads_accessible": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} unread thread",
+        "countPlural=other": "{count} unread threads"
+      }
+    }
+  ],
   "channel_archived_toast": "Archived #{name}",
   "channel_left_toast": "Left #{name}",
   "channel_general_hidden_toast": "Hid #general",

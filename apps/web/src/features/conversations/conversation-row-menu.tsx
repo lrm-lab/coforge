@@ -4,6 +4,7 @@ import {
   BellOff01,
   Folder,
   MessageChatSquare,
+  MessageCheckSquare,
   Pin01,
   Plus,
   XClose,
@@ -15,6 +16,7 @@ import { UNDO_TOAST_MS, useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
 import type { PinRef } from "./pinned-conversations";
 import { useSidebarActions } from "./sidebar-lists";
+import { useMarkConversationSeen } from "./unread-store";
 import type { ChatSection } from "./chat-section.schemas";
 import { ChatSectionDialog } from "./chat-section-dialog";
 import {
@@ -29,6 +31,7 @@ import {
 } from "./conversation-row-menu-model";
 
 function itemIcon(item: ConversationRowMenuItem) {
+  if (item.id === "mark-read") return MessageCheckSquare;
   if (item.id === "mark-unread") return MessageChatSquare;
   if (item.id === "pin") return Pin01;
   // The icon shows what choosing it does: a muted row offers the bell back.
@@ -37,6 +40,7 @@ function itemIcon(item: ConversationRowMenuItem) {
 }
 
 function itemLabel(item: ConversationRowMenuItem): string {
+  if (item.id === "mark-read") return m.conversation_menu_mark_read();
   if (item.id === "mark-unread") return m.conversation_menu_mark_unread();
   if (item.id === "pin")
     return item.pinned ? m.conversation_menu_unpin() : m.conversation_menu_pin();
@@ -54,9 +58,16 @@ export type ConversationRowMenuTarget =
       joined: boolean;
       pinned: boolean;
       muted: boolean;
+      hasUnread?: boolean;
       notificationLevel: ChannelNotificationLevel;
     }
-  | { kind: "direct"; conversationId: string; pinned: boolean; muted: boolean };
+  | {
+      kind: "direct";
+      conversationId: string;
+      pinned: boolean;
+      muted: boolean;
+      hasUnread?: boolean;
+    };
 
 /**
  * The list item around a conversation row: the row's link is the trigger of a React Aria context
@@ -87,7 +98,9 @@ export function ConversationRowMenu({
   const [creating, setCreating] = useState(false);
   const toast = useAppToast();
   const actions = useSidebarActions();
+  const markSeen = useMarkConversationSeen();
   const items = conversationRowMenuItems(target);
+  const conversationId = target.kind === "channel" ? target.id : target.conversationId;
   const row: PinRef =
     target.kind === "channel"
       ? { kind: "channel", channelId: target.id }
@@ -135,6 +148,10 @@ export function ConversationRowMenu({
       });
     };
     const run = {
+      "mark-read": () => {
+        markSeen(conversationId);
+        return actions.markRead(row);
+      },
       "mark-unread": () => actions.markUnread(row),
       pin: () => actions.setPinned(row, !target.pinned),
       mute: () => actions.setMuted(row, !target.muted),

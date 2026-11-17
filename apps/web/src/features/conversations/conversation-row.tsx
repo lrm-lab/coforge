@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Link as AriaLink } from "react-aria-components";
-import { BellOff01 } from "@untitledui/icons";
+import { BellOff01, Edit03 } from "@untitledui/icons";
 
-import { UnreadBadge } from "#src/components/ui/unread-marker";
+import { UnreadCapsule, UnreadDot } from "#src/components/ui/unread-marker";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
 import { MentionBadge } from "./mention-badge";
@@ -12,20 +12,36 @@ import { conversationRoute, type ConversationTarget } from "./last-conversation"
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { createRowHover, RowHoverContext } from "./row-hover";
 
-/** The row's accessible name: the conversation it names, plus its unread count when it has one,
- * and the mention when its "@" badge shows. A DM row's time and preview stay visible but are not
- * part of the name, so a read DM is named by `label` alone, as an unread one is. */
-function rowLabel(
-  unreadCount: number | undefined,
-  label: string,
-  mentioned: boolean | undefined,
-): string | undefined {
-  if (mentioned)
-    return unreadCount
+/** The row's accessible name: the conversation it names, plus its unread count, unread followed
+ * threads, "@" mention and unsent draft when present. A DM row's time and preview stay visible
+ * without entering the accessible name, so a read DM is named by `label` alone. */
+function rowLabel(options: {
+  label: string;
+  unreadCount?: number;
+  unreadThreadCount?: number;
+  mentioned?: boolean;
+  showManualDot?: boolean;
+  hasDraft?: boolean;
+}): string | undefined {
+  const { label, unreadCount, unreadThreadCount, mentioned, showManualDot, hasDraft } = options;
+  let base: string | undefined;
+  if (mentioned) {
+    base = unreadCount
       ? m.channel_unread_mention_accessible({ channel: label, count: unreadCount })
       : m.channel_mention_accessible({ channel: label });
-  if (!unreadCount) return undefined;
-  return m.channel_unread_accessible({ channel: label, count: unreadCount });
+  } else if (unreadCount) {
+    base = m.channel_unread_accessible({ channel: label, count: unreadCount });
+  } else if (showManualDot) {
+    base = m.channel_marked_unread_accessible({ channel: label });
+  } else if (unreadThreadCount || hasDraft) {
+    base = label;
+  }
+  if (!base) return undefined;
+  const parts = [base];
+  if (unreadThreadCount)
+    parts.push(m.channel_unread_threads_accessible({ count: unreadThreadCount }));
+  if (hasDraft) parts.push(m.conversation_has_draft_accessible());
+  return parts.join(", ");
 }
 
 /** A conversation row's second layout: the last message's time beside the name, and its sender-
@@ -60,14 +76,9 @@ function MutedIcon() {
   );
 }
 
-/** A muted row's unread count is a quiet gray number, not the near-black badge. */
-function UnreadCount({ count, muted }: { count: number; muted?: boolean }) {
-  if (!muted) return <UnreadBadge count={count} />;
-  return (
-    <span aria-hidden="true" className="shrink-0 text-xs tabular-nums text-tertiary">
-      {count > 99 ? "99+" : count}
-    </span>
-  );
+/** Beside a row's name when an unsent draft exists on this device. */
+function DraftIcon() {
+  return <Edit03 aria-hidden="true" className="size-3.5 shrink-0 text-tertiary" />;
 }
 
 export function ConversationRow({
@@ -76,8 +87,14 @@ export function ConversationRow({
   card,
   pinned,
   icon,
+  bold,
+  unjoined,
   muted,
+  subduedCapsule,
   unreadCount,
+  unreadThreadCount,
+  showManualDot,
+  hasDraft,
   count,
   label,
   lastMessage,
@@ -91,8 +108,16 @@ export function ConversationRow({
    * darker than an unpinned row's, until it is selected or muted. */
   pinned?: boolean;
   icon: ReactNode;
+  /** Unread and audible (`sidebarRowIndicators`): darker, semibold title. */
+  bold?: boolean;
+  /** Unjoined channel: dimmed and never bold, without rendering the muted bell. */
+  unjoined?: boolean;
   muted?: boolean;
+  subduedCapsule?: boolean;
   unreadCount?: number;
+  unreadThreadCount?: number;
+  showManualDot?: boolean;
+  hasDraft?: boolean;
   /** A plain total shown at the row's end (the Saved entry's bookmark count), not an unread
    * signal: muted, and absent at zero. `label` is how the row's accessible name says it. */
   count?: { value: number; label: string };
@@ -113,6 +138,11 @@ export function ConversationRow({
       link.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
   }, [current, listVisible]);
   const route = conversationRoute(target, workspaceSlug);
+  const dimmed = Boolean(muted || unjoined);
+  const subdued = subduedCapsule ?? dimmed;
+  const hasCapsule = (unreadCount ?? 0) > 0 || (unreadThreadCount ?? 0) > 0;
+  const hasManualDot = Boolean(showManualDot && !hasCapsule);
+  const hasSecondLineBadges = Boolean(lastMessage?.mentioned || hasCapsule || hasManualDot);
   return (
     // The row is a React Aria link so the conversation menu's `MenuTrigger trigger="contextMenu"`
     // can use it as its trigger; `render` hands the element to TanStack's `Link`, which owns
@@ -126,8 +156,14 @@ export function ConversationRow({
       // Lets the section list measure its bottom space from a bordered card's avatar.
       data-row-card={card || undefined}
       aria-label={
-        rowLabel(unreadCount, label, lastMessage?.mentioned) ??
-        (count ? `${label}, ${count.label}` : lastMessage ? label : undefined)
+        rowLabel({
+          label,
+          unreadCount,
+          unreadThreadCount,
+          mentioned: lastMessage?.mentioned,
+          showManualDot: hasManualDot,
+          hasDraft,
+        }) ?? (count ? `${label}, ${count.label}` : lastMessage ? label : undefined)
       }
       // On mobile the list is a separate pane; choosing a row reveals the conversation even when
       // the URL is unchanged (re-opening the channel already in the address bar), which the
@@ -156,24 +192,29 @@ export function ConversationRow({
       {lastMessage ? (
         <span className="flex min-w-0 flex-1 flex-col justify-center">
           <span className="flex min-w-0 items-center gap-2">
-            {/* The muted icon follows the name, as Raft's; the time keeps the end of the line. */}
+            {/* Name -> Muted bell -> Draft icon, as Raft's; the time keeps the end of the line. */}
             <span className="flex min-w-0 flex-1 items-center gap-1">
               <span
                 className={cx(
-                  "min-w-0 truncate text-sm font-medium",
-                  current
-                    ? "text-brand-secondary"
-                    : muted
-                      ? "text-tertiary"
-                      : pinned
-                        ? "text-sidebar-fg"
-                        : "text-secondary",
-                  muted && "font-normal",
+                  "min-w-0 truncate text-sm",
+                  dimmed
+                    ? "font-normal text-tertiary"
+                    : bold
+                      ? "font-semibold text-primary"
+                      : cx(
+                          "font-medium",
+                          current
+                            ? "text-brand-secondary"
+                            : pinned
+                              ? "text-sidebar-fg"
+                              : "text-secondary",
+                        ),
                 )}
               >
                 {children}
               </span>
               {muted ? <MutedIcon /> : null}
+              {hasDraft ? <DraftIcon /> : null}
             </span>
             {lastMessage.time ? (
               <span className="shrink-0 text-xs text-quaternary tabular-nums">
@@ -181,17 +222,31 @@ export function ConversationRow({
               </span>
             ) : null}
           </span>
-          {lastMessage.preview || unreadCount || lastMessage.mentioned ? (
-            <span className="flex min-w-0 items-center gap-2">
+          {lastMessage.preview || hasSecondLineBadges ? (
+            <span className="flex min-w-0 items-center gap-1.5">
               {lastMessage.preview ? (
-                <span className="min-w-0 flex-1 truncate text-sm text-tertiary">
+                <span
+                  className={cx(
+                    "min-w-0 flex-1 truncate text-sm",
+                    dimmed ? "text-quaternary" : bold ? "text-secondary" : "text-tertiary",
+                  )}
+                >
                   {lastMessage.preview}
                 </span>
               ) : (
                 <span className="flex-1" />
               )}
-              {lastMessage.mentioned ? <MentionBadge /> : null}
-              {unreadCount ? <UnreadCount count={unreadCount} muted={muted} /> : null}
+              {hasSecondLineBadges ? (
+                <span className="inline-flex shrink-0 items-center gap-1">
+                  {lastMessage.mentioned ? <MentionBadge /> : null}
+                  <UnreadCapsule
+                    unreadCount={unreadCount}
+                    unreadThreadCount={unreadThreadCount}
+                    subdued={subdued}
+                  />
+                  {hasManualDot ? <UnreadDot subdued={subdued} /> : null}
+                </span>
+              ) : null}
             </span>
           ) : null}
         </span>
@@ -201,16 +256,23 @@ export function ConversationRow({
             className={cx(
               // The section titles' size, weight and colour, so Saved reads as one of them.
               "min-w-0 truncate text-sm font-medium",
-              current ? "text-brand-secondary" : muted ? "text-tertiary" : "text-primary",
-              muted && "font-normal",
+              current ? "text-brand-secondary" : dimmed ? "text-tertiary" : "text-primary",
+              dimmed && "font-normal",
             )}
           >
             {children}
           </span>
           {muted ? <MutedIcon /> : null}
+          {hasDraft ? <DraftIcon /> : null}
         </span>
       )}
-      {!lastMessage && unreadCount ? <UnreadCount count={unreadCount} muted={muted} /> : null}
+      {!lastMessage && hasCapsule ? (
+        <UnreadCapsule
+          unreadCount={unreadCount}
+          unreadThreadCount={unreadThreadCount}
+          subdued={subdued}
+        />
+      ) : null}
       {count ? (
         <span aria-hidden="true" className="shrink-0 text-xs text-quaternary tabular-nums">
           {count.value}

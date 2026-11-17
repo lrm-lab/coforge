@@ -151,6 +151,16 @@
   "channel_settings_visibility_error": "更改失败，请重试。",
   "channel_settings_visibility_denied": "只有在这个群聊里的工作区所有者和管理员可以更改。",
   "channel_mention_accessible": "{channel}，有人提到了你",
+  "channel_marked_unread_accessible": "{channel}，未读",
+  "channel_unread_threads_accessible": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "{count} 个未读话题"
+      }
+    }
+  ],
   "channel_archived_toast": "已归档 #{name}",
   "channel_left_toast": "已退出 #{name}",
   "channel_general_hidden_toast": "已隐藏 #general",
