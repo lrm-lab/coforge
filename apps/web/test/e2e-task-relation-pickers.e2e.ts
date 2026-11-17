@@ -9,6 +9,7 @@ import { TaskBoard } from "#src/server/tasks/task-board.server";
 import {
   browserSession,
   devBrowserWorkspace,
+  elementAtRest,
   localBrowserE2e,
   pageHydrated,
 } from "./helpers/browser-e2e";
@@ -183,7 +184,14 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
       // A new Task names its priority (task #12); a phone's menu comes up as a sheet. The
       // popup underneath has its own priority button, so scope to the sub-task dialog.
       const subtaskDialog = '[role="dialog"][aria-label="New sub-task"]';
-      await browser("click", `${subtaskDialog} button[aria-label="Change priority: No priority"]`);
+      const priority = `${subtaskDialog} button[aria-label="Change priority: No priority"]`;
+      // The sub-task dialog zooms in; a press aimed before it settles lands beside the button.
+      await browser(
+        "wait",
+        "--fn",
+        elementAtRest(`document.querySelector(${JSON.stringify(priority)})`),
+      );
+      await browser("click", priority);
       await browser(
         "wait",
         "--fn",

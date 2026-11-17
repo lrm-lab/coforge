@@ -8,6 +8,7 @@ import { TaskBoard } from "#src/server/tasks/task-board.server";
 import {
   browserSession,
   devBrowserWorkspace,
+  elementAtRest,
   localBrowserE2e,
   pageHydrated,
 } from "./helpers/browser-e2e";
@@ -48,10 +49,10 @@ test("Backlog read compatibility stays invisible until data exists and never off
     await browser("screenshot", join(artifacts, `${name}-dark.png`));
     await evaluate('document.documentElement.classList.remove("dark-mode") ?? true');
   };
-  /** Clicks a dialog's menu trigger and waits for its menu. A CI run once clicked and never saw
-   * the menu (44010304748); until that is explained, a timeout keeps what the page did around
-   * the click: which elements took the press and focus, every menu added or removed, the
-   * trigger's state, and a screenshot. */
+  /** Clicks a dialog's menu trigger once it holds still ({@link elementAtRest}) and waits for its
+   * menu. A timeout keeps what the page did around the click: which elements took the press and
+   * focus, every menu added or removed, the trigger's state, and a screenshot; that record is how
+   * the missed press under the zooming dialog was found. */
   const openMenu = async (trigger: string, name: string) => {
     await evaluate(`(() => {
       const log = [];
@@ -72,6 +73,7 @@ test("Backlog read compatibility stays invisible until data exists and never off
       window.__menuProbe = log;
       return true;
     })()`);
+    await waitFor(elementAtRest(`document.querySelector(${JSON.stringify(trigger)})`));
     await browser("click", trigger);
     try {
       await waitFor("document.querySelector('[role=\"menu\"]') !== null");
