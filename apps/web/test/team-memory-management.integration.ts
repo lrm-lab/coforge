@@ -3,6 +3,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { teamMemory } from "#src/server/team-memory/composition.server";
 import { decodeTeamMemoryResult, type TeamMemoryWrite } from "@lrm/coforge-sdk/agent";
+import { handleTeamMemory } from "#src/server/team-memory/http.server";
 import type { TeamMemoryActor } from "#src/server/team-memory/memory";
 
 const url = Bun.env.TEAM_MEMORY_TEST_DATABASE_URL;
@@ -196,6 +197,8 @@ test("optional projects are scoped to the workspace and deleting a project retai
   expect(
     (await service().execute(actor(), { operation: "get", id: entry.id })).entries[0]?.projectId,
   ).toBeNull();
+  const duplicate = await create(entry.title, "A correction from an old client");
+  expect(duplicate.id).toBe(entry.id);
 });
 
 test("project discovery is paginated and creation reuses an exact existing project", async () => {
@@ -230,4 +233,55 @@ test("project discovery is paginated and creation reuses an exact existing proje
       })
     ).projects,
   ).toHaveLength(4);
+});
+
+test("legacy Computers keep reading Agent knowledge while upgraded Computers also see human entries", async () => {
+  const entry = (
+    await write(
+      {
+        operation: "create",
+        ...draft("Human rollout", "Confirmed by a person"),
+        requestId: crypto.randomUUID(),
+      },
+      { workspaceId, userId },
+    )
+  ).entries[0]!;
+  const request = (headers: Record<string, string> = {}) =>
+    new Request("https://example.com/api/agent/v1/team-memory", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ operation: "search", query: "Human rollout" }),
+    });
+  const legacy = await handleTeamMemory(request(), actor(), service());
+  expect(legacy.status).toBe(200);
+  expect(
+    decodeTeamMemoryResult(await legacy.json()).entries.some((item) => item.id === entry.id),
+  ).toBe(false);
+  const modern = await handleTeamMemory(
+    request({ "x-coforge-memory-authors": "2" }),
+    actor(),
+    service(),
+  );
+  expect(
+    decodeTeamMemoryResult(await modern.json()).entries.some((item) => item.id === entry.id),
+  ).toBe(true);
+  const direct = await handleTeamMemory(
+    new Request("https://example.com", {
+      method: "POST",
+      body: JSON.stringify({ operation: "get", id: entry.id }),
+    }),
+    actor(),
+    service(),
+  );
+  expect(direct.status).toBe(426);
+  const known = await create("Legacy rollout", "The original Agent knowledge");
+  const oldRead = await handleTeamMemory(
+    new Request("https://example.com", {
+      method: "POST",
+      body: JSON.stringify({ operation: "get", id: known.id }),
+    }),
+    actor(),
+    service(),
+  );
+  expect(decodeTeamMemoryResult(await oldRead.json()).entries[0]?.id).toBe(known.id);
 });

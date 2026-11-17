@@ -36,6 +36,8 @@ async function readTarget(db: Database, actor: TeamMemoryActor, id: string): Pro
     where: { workspaceId: actor.workspaceId, id, status: { not: "deleted" } },
   });
   if (!row) throw new TeamMemoryError("not_found");
+  if (actor.agentId && actor.includeHumanAuthors === false && !row.authorAgentId)
+    throw new TeamMemoryError("upgrade_required");
   return row as Row;
 }
 
@@ -46,6 +48,7 @@ async function search(
   offset = 0,
   projectId?: string,
   archived = false,
+  includeHumanAuthors = true,
 ): Promise<Row[]> {
   const terms = teamMemoryTerms(query);
   if (!terms.length) return [];
@@ -59,6 +62,7 @@ async function search(
       revision, author_agent_id AS "authorAgentId", author_user_id AS "authorUserId", project_id AS "projectId", pinned, updated_at AS "updatedAt"
     FROM team_memory_entries WHERE workspace_id = ${workspaceId}::uuid AND status = ${archived ? "archived" : "active"}
     AND (${Prisma.join(matches, " OR ")})
+    ${includeHumanAuthors ? Prisma.empty : Prisma.sql`AND author_agent_id IS NOT NULL`}
     ${projectId ? Prisma.sql`AND project_id = ${projectId}::uuid` : Prisma.empty}
     ORDER BY (${Prisma.join(ranks, " + ")}) DESC, updated_at DESC, id ASC LIMIT 11 OFFSET ${offset}`);
 }
@@ -102,6 +106,7 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
               command.offset,
               command.projectId,
               command.archived,
+              !(actor.agentId && actor.includeHumanAuthors === false),
             ),
             command.offset ?? 0,
             true,
@@ -109,7 +114,7 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
         if (command.operation === "list")
           return page(
             await tx.$queryRaw<Row[]>(
-              Prisma.sql`SELECT id, workspace_id AS "workspaceId", title, left(content,600) AS content, left(source,200) AS source, kind, applicability, status, revision, author_agent_id AS "authorAgentId", author_user_id AS "authorUserId", project_id AS "projectId", pinned, updated_at AS "updatedAt" FROM team_memory_entries WHERE workspace_id = ${actor.workspaceId}::uuid AND status = ${command.archived ? "archived" : "active"} ${command.projectId ? Prisma.sql`AND project_id = ${command.projectId}::uuid` : Prisma.empty} ORDER BY updated_at DESC, id ASC LIMIT 11 OFFSET ${command.offset ?? 0}`,
+              Prisma.sql`SELECT id, workspace_id AS "workspaceId", title, left(content,600) AS content, left(source,200) AS source, kind, applicability, status, revision, author_agent_id AS "authorAgentId", author_user_id AS "authorUserId", project_id AS "projectId", pinned, updated_at AS "updatedAt" FROM team_memory_entries WHERE workspace_id = ${actor.workspaceId}::uuid AND status = ${command.archived ? "archived" : "active"} ${actor.agentId && actor.includeHumanAuthors === false ? Prisma.sql`AND author_agent_id IS NOT NULL` : Prisma.empty} ${command.projectId ? Prisma.sql`AND project_id = ${command.projectId}::uuid` : Prisma.empty} ORDER BY updated_at DESC, id ASC LIMIT 11 OFFSET ${command.offset ?? 0}`,
             ),
             command.offset ?? 0,
             true,
@@ -164,7 +169,15 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
   ): Promise<TeamMemoryResult> {
     const [state, rows] = await Promise.all([
       db.teamMemoryState.findUnique({ where: { workspaceId: actor.workspaceId } }),
-      search(db, actor.workspaceId, query),
+      search(
+        db,
+        actor.workspaceId,
+        query,
+        0,
+        undefined,
+        false,
+        !(actor.agentId && actor.includeHumanAuthors === false),
+      ),
     ]);
     const related = page(rows, 0, true);
     return { ...related, status: "ok", reviewRevision: state?.revision ?? 0 };
@@ -250,6 +263,20 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
                   },
                 })) as Row | null)
               : await readTarget(tx, actor, command.id);
+          if (
+            actor.agentId &&
+            actor.includeHumanAuthors === false &&
+            target &&
+            !target.authorAgentId
+          )
+            throw new TeamMemoryError("upgrade_required");
+          if (
+            target &&
+            command.operation === "create" &&
+            command.projectId !== undefined &&
+            command.projectId !== (target.projectId ?? null)
+          )
+            throw new TeamMemoryError("conflict");
           const sources =
             command.operation === "merge"
               ? ((await tx.teamMemoryEntry.findMany({
