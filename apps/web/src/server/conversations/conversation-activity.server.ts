@@ -1,6 +1,7 @@
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type { ConversationActivityEvent } from "#src/features/conversations/conversation-activity-event";
+import { noticeExternalInbox } from "#src/server/agents/external-inbox-landing.server";
 import { BROWSER_MESSAGE_MENTIONS_SELECT, browserMessageMention } from "./mentions.server";
 import { previewNoticeOf } from "#src/features/conversations/preview-line";
 import { ACTION_CARD_PREVIEW_SELECT, previewCardFieldOf } from "./action-card-preview.server";
@@ -65,6 +66,7 @@ export async function announceMessage(
   message: ConversationRealtimeMessage,
 ): Promise<void> {
   await realtime.messageAvailable(message);
+  void noticeExternalInbox(db, message);
   if (!realtime.conversationActivity) {
     unannounced("port_without_activity", message);
     return;

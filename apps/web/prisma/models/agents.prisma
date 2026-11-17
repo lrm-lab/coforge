@@ -65,6 +65,7 @@ model Agent {
   deliveries                AgentMessageDelivery[]
   apiKeys                   AgentApiKey[]
   externalCredentials       ExternalAgentCredential[]
+  externalPushWebhooks      ExternalAgentPushWebhook[]
   activity                  AgentActivity[]
   manualEvents              AgentManualEvent[]
   reminders                 Reminder[]

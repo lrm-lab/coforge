@@ -1,0 +1,130 @@
+import { expect, test } from "bun:test";
+import type { WakeHint } from "@lrm/coforge-sdk/agent";
+import {
+  MAX_WAKE_STREAMS_PER_CREDENTIAL,
+  WakeStreamLimit,
+  openWakeStream,
+} from "#src/server/agents/external-wake-stream.server";
+
+const hint = (seq: number, over: Partial<WakeHint> = {}): WakeHint => ({
+  target: "#general",
+  channelId: "c1",
+  channelType: "channel",
+  pendingCount: seq,
+  firstPendingMsgId: "m1",
+  latestMsgId: `m${seq}`,
+  latestSeq: String(seq),
+  latestSenderName: "ada",
+  latestSenderType: "human",
+  flags: [],
+  ...over,
+});
+
+type Frame = { event: string; data: unknown };
+
+function frames(text: string): Frame[] {
+  return text
+    .split("\n\n")
+    .filter(Boolean)
+    .map((block) => {
+      const lines = block.split("\n");
+      return {
+        event: lines.find((l) => l.startsWith("event: "))!.slice(7),
+        data: JSON.parse(lines.find((l) => l.startsWith("data: "))!.slice(6)),
+      };
+    });
+}
+
+function harness(initial: WakeHint[]) {
+  let current = initial;
+  let listener: (() => void) | undefined;
+  let alive = true;
+  let unsubscribed = 0;
+  let released = 0;
+  const stream = openWakeStream(
+    {
+      listHints: async () => current,
+      subscribe: (fn) => {
+        listener = fn;
+        return () => {
+          unsubscribed++;
+          listener = undefined;
+        };
+      },
+      revalidate: async () => alive,
+      release: () => {
+        released++;
+      },
+      heartbeatMs: 20,
+      debounceMs: 1,
+    },
+    new AbortController().signal,
+  );
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  const read = async () => frames(decoder.decode((await reader.read()).value));
+  return {
+    read,
+    cancel: () => reader.cancel(),
+    set: (hints: WakeHint[]) => {
+      current = hints;
+      listener?.();
+    },
+    revoke: () => {
+      alive = false;
+    },
+    done: async () => (await reader.read()).done,
+    get unsubscribed() {
+      return unsubscribed;
+    },
+    get released() {
+      return released;
+    },
+  };
+}
+
+test("a connection first sends the current hints", async () => {
+  const h = harness([hint(2)]);
+  expect(await h.read()).toEqual([{ event: "hints", data: { hints: [hint(2)] } }]);
+  await h.cancel();
+});
+
+test("a conversation that gains unread sends one hint event, an unchanged one none", async () => {
+  const h = harness([hint(2)]);
+  await h.read();
+  h.set([hint(2)]);
+  h.set([hint(3)]);
+  const next = await h.read();
+  expect(next[0]).toEqual({ event: "hint", data: hint(3) });
+  await h.cancel();
+});
+
+test("a heartbeat is sent and the stream closes once the credential is revoked", async () => {
+  const h = harness([]);
+  await h.read();
+  expect((await h.read())[0]!.event).toBe("heartbeat");
+  h.revoke();
+  expect(await h.done()).toBe(true);
+  expect(h.unsubscribed).toBe(1);
+  expect(h.released).toBe(1);
+});
+
+test("cancelling releases the listener and the slot once", async () => {
+  const h = harness([]);
+  await h.read();
+  await h.cancel();
+  expect(h.unsubscribed).toBe(1);
+  expect(h.released).toBe(1);
+});
+
+test("a credential holds at most the capped number of streams", () => {
+  const limit = new WakeStreamLimit();
+  const releases = Array.from({ length: MAX_WAKE_STREAMS_PER_CREDENTIAL }, () =>
+    limit.acquire("c"),
+  );
+  expect(releases.every((release) => release !== undefined)).toBe(true);
+  expect(limit.acquire("c")).toBeUndefined();
+  expect(limit.acquire("other")).toBeDefined();
+  releases[0]!();
+  expect(limit.acquire("c")).toBeDefined();
+});

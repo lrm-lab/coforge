@@ -99,6 +99,18 @@ test("resolves at most a few distinct addresses, in the resolver's order", async
   );
 });
 
+test("a Retry-After the endpoint answers with is returned, and nothing else of the response", async () => {
+  const egress = new OutboundEgress({
+    resolve: public4,
+    fetch: async () =>
+      new Response("secret body", { status: 503, headers: { "retry-after": "120" } }),
+  });
+  expect(await egress.sendToAny("https://hooks.example/x", { method: "POST" }, 5_000)).toEqual({
+    status: 503,
+    retryAfter: "120",
+  });
+});
+
 test("a request is pinned to the checked address, verified against the real hostname", async () => {
   const seen: { url: string; init: BunFetchRequestInit }[] = [];
   const egress = new OutboundEgress({

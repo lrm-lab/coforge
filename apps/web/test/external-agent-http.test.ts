@@ -59,6 +59,11 @@ describe("what an external Agent key may call", () => {
     ["POST", "/reminders", "reminders"],
     ["GET", "/context", "context"],
     ["POST", "/credentials/self/revoke", "credentials"],
+    ["GET", "/wake-hints", "wake-hints"],
+    ["GET", "/wake-hints/stream", "wake-hints"],
+    ["GET", "/push-webhook", "push-webhook"],
+    ["PUT", "/push-webhook", "push-webhook"],
+    ["DELETE", "/push-webhook", "push-webhook"],
   ])("%s %s is covered by %s", (method, path, feature) => {
     expect(externalAgentFeature(method, `${API}${path}`)).toBe(feature);
   });
@@ -81,6 +86,9 @@ describe("what an external Agent key may call", () => {
     ["GET", "/credentials/self/revoke"],
     ["GET", "/messages/a%2Fb/resolve"],
     ["GET", "/channels/a/b/c"],
+    ["POST", "/wake-hints"],
+    ["POST", "/push-webhook"],
+    ["GET", "/wake-hints/other"],
     ["POST", "/new-route-nobody-listed"],
     ["GET", ""],
   ])("%s %s is refused", (method, path) => {

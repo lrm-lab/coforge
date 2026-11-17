@@ -11,7 +11,17 @@ import {
 } from "#src/server/feature-flags/feature-flags.server";
 import { onServerShutdown } from "#src/server/runtime/server-lifecycle.server";
 import type { AppNotificationEvent } from "./app-notification-event";
-import { deliverAppNotifications, fanOutAppNotificationEvents } from "./event-worker.server";
+import {
+  deliverAppNotifications,
+  deliverExternalInboxNotices,
+  fanOutAppNotificationEvents,
+} from "./event-worker.server";
+import {
+  EXTERNAL_INBOX_NOTICE_QUEUE,
+  EXTERNAL_INBOX_NOTICE_QUEUE_OPTIONS,
+  type ExternalInboxNoticeJob,
+} from "#src/server/agents/external-inbox-notice-queue.server";
+import { anyExternalPushWebhook } from "#src/server/db/repositories/external-agent-push-webhook.repositories.server";
 import {
   APP_NOTIFICATION_DELIVERY_QUEUE,
   APP_NOTIFICATION_EVENT_QUEUE,
@@ -75,6 +85,7 @@ export function startAppNotificationQueue(
       await boss.start();
       await boss.createQueue(APP_NOTIFICATION_EVENT_QUEUE, EVENT_QUEUE_OPTIONS);
       await boss.createQueue(APP_NOTIFICATION_DELIVERY_QUEUE, DELIVERY_QUEUE_OPTIONS);
+      await boss.createQueue(EXTERNAL_INBOX_NOTICE_QUEUE, EXTERNAL_INBOX_NOTICE_QUEUE_OPTIONS);
       const polling = { pollingIntervalSeconds: APP_NOTIFICATION_POLLING_INTERVAL_SECONDS };
       await boss.work<AppNotificationEvent>(APP_NOTIFICATION_EVENT_QUEUE, polling, (jobs) =>
         fanOutAppNotificationEvents(boss, jobs),
@@ -83,6 +94,9 @@ export function startAppNotificationQueue(
         APP_NOTIFICATION_DELIVERY_QUEUE,
         polling,
         deliverAppNotifications,
+      );
+      await boss.work<ExternalInboxNoticeJob>(EXTERNAL_INBOX_NOTICE_QUEUE, polling, (jobs) =>
+        deliverExternalInboxNotices(boss, jobs),
       );
     } catch (error) {
       await boss.stop({ graceful: false }).catch(() => {});
@@ -133,12 +147,6 @@ function registerShutdown(): void {
   onServerShutdown(shutdownAppNotifications);
 }
 
-/**
- * Starts the queue unless it runs, when pg-boss already ran on this database (jobs left pending
- * by a restart must drain) or the flag file defines `app-notifications` (an event may be recorded
- * at any moment, and recording needs the queue). A deployment whose flag file never defines the
- * flag gets no `pgboss` schema. Reports whether the queue runs afterwards.
- */
 export async function startAppNotificationQueueIfNeeded(
   db: DatabaseScope,
   connectionString: string,
@@ -146,7 +154,8 @@ export async function startAppNotificationQueueIfNeeded(
   if (running) return true;
   const needed =
     isFeatureDefined("app-notifications") ||
-    (await new PrismaAppNotificationQueueSchema(db).exists());
+    (await new PrismaAppNotificationQueueSchema(db).exists()) ||
+    (await anyExternalPushWebhook(db));
   if (!needed) return false;
   await startAppNotificationQueue(connectionString);
   return true;

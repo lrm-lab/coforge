@@ -23,6 +23,7 @@ Agent execution `run`/`event` data out of the messaging core.
 - [App registry](apps.md): The apps Workspaces register and their installations; built-in Agent Apps live in the SDK.
 - [Agents' app access](app-agent-access.md): Agents' grants for the apps installed in their Workspace, and their requests for approval.
 - [App bots](app-bots.md): an app's bot per installation, its grant state and generation, and its hashed keys.
+- [External Agent push webhooks](external-agent-push-webhooks.md): an external Agent's inbox notice endpoint, its sealed secret and delivery state.
 - [Agent inbound](app-agent-events.md): an app's grant, requests and events for one Agent, and the dedicated conversation they land in.
 - [Authorization codes and consents](oauth.md): What Login with CoForge's authorization endpoint stores: hashed authorization codes and remembered consents.
 - [Release catalog](release-catalog.md): The release catalog's notes table, kept apart from every CoForge domain table.

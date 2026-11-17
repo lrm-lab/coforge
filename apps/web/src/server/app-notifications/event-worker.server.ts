@@ -7,6 +7,8 @@ import {
   type AppNotificationDeliveryJob,
 } from "./app-notification-jobs";
 import { subscribersOf } from "./subscribers.server";
+import { createExternalInboxNoticeDelivery } from "#src/server/agents/external-inbox-notice-delivery-composition.server";
+import type { ExternalInboxNoticeJob } from "#src/server/agents/external-inbox-notice-queue.server";
 import { createWebhookDelivery } from "./webhook-delivery-composition.server";
 
 /**
@@ -37,4 +39,11 @@ export async function deliverAppNotifications(
   jobs: Job<AppNotificationDeliveryJob>[],
 ): Promise<void> {
   await createWebhookDelivery().handle(jobs);
+}
+
+export async function deliverExternalInboxNotices(
+  boss: Pick<PgBoss, "send">,
+  jobs: { data: ExternalInboxNoticeJob }[],
+): Promise<void> {
+  await createExternalInboxNoticeDelivery(boss).handle(jobs);
 }

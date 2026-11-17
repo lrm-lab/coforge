@@ -88,10 +88,12 @@ import { Route as ApiAgentV1LabelsRouteImport } from './routes/api/agent/v1/labe
 import { Route as ApiAgentV1ManualRouteImport } from './routes/api/agent/v1/manual'
 import { Route as ApiAgentV1MessagesRouteImport } from './routes/api/agent/v1/messages'
 import { Route as ApiAgentV1ProfileRouteImport } from './routes/api/agent/v1/profile'
+import { Route as ApiAgentV1PushWebhookRouteImport } from './routes/api/agent/v1/push-webhook'
 import { Route as ApiAgentV1RemindersRouteImport } from './routes/api/agent/v1/reminders'
 import { Route as ApiAgentV1TasksRouteImport } from './routes/api/agent/v1/tasks'
 import { Route as ApiAgentV1TeamMemoryRouteImport } from './routes/api/agent/v1/team-memory'
 import { Route as ApiAgentV1ThreadsRouteImport } from './routes/api/agent/v1/threads'
+import { Route as ApiAgentV1WakeHintsRouteImport } from './routes/api/agent/v1/wake-hints'
 import { Route as ApiAgentV1WeeklyReportCollectRouteImport } from './routes/api/agent/v1/weekly-report-collect'
 import { Route as ApiAgentV1WeeklyReportKeyPointsRouteImport } from './routes/api/agent/v1/weekly-report-key-points'
 import { Route as ApiAgentV1WeeklyReportMemoryRouteImport } from './routes/api/agent/v1/weekly-report-memory'
@@ -151,6 +153,7 @@ import { Route as ApiAgentV1TasksReplyRouteImport } from './routes/api/agent/v1/
 import { Route as ApiAgentV1TasksUnfollowRouteImport } from './routes/api/agent/v1/tasks_.unfollow'
 import { Route as ApiAgentV1TasksViewRouteImport } from './routes/api/agent/v1/tasks_.view'
 import { Route as ApiAgentV1UsersNameRouteImport } from './routes/api/agent/v1/users/$name'
+import { Route as ApiAgentV1WakeHintsStreamRouteImport } from './routes/api/agent/v1/wake-hints_.stream'
 import { Route as ApiAppsShareTokenLogoRouteImport } from './routes/api/apps/share/$token/logo'
 import { Route as ApiHostsJobsJobIdReportRouteImport } from './routes/api/hosts/jobs/$jobId/report'
 import { Route as ApiProjectsProjectIdRawSplatRouteImport } from './routes/api/projects.$projectId.raw.$'
@@ -607,6 +610,11 @@ const ApiAgentV1ProfileRoute = ApiAgentV1ProfileRouteImport.update({
   path: '/api/agent/v1/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAgentV1PushWebhookRoute = ApiAgentV1PushWebhookRouteImport.update({
+  id: '/api/agent/v1/push-webhook',
+  path: '/api/agent/v1/push-webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAgentV1RemindersRoute = ApiAgentV1RemindersRouteImport.update({
   id: '/api/agent/v1/reminders',
   path: '/api/agent/v1/reminders',
@@ -625,6 +633,11 @@ const ApiAgentV1TeamMemoryRoute = ApiAgentV1TeamMemoryRouteImport.update({
 const ApiAgentV1ThreadsRoute = ApiAgentV1ThreadsRouteImport.update({
   id: '/api/agent/v1/threads',
   path: '/api/agent/v1/threads',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAgentV1WakeHintsRoute = ApiAgentV1WakeHintsRouteImport.update({
+  id: '/api/agent/v1/wake-hints',
+  path: '/api/agent/v1/wake-hints',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAgentV1WeeklyReportCollectRoute =
@@ -965,6 +978,12 @@ const ApiAgentV1UsersNameRoute = ApiAgentV1UsersNameRouteImport.update({
   path: '/api/agent/v1/users/$name',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAgentV1WakeHintsStreamRoute =
+  ApiAgentV1WakeHintsStreamRouteImport.update({
+    id: '/api/agent/v1/wake-hints_/stream',
+    path: '/api/agent/v1/wake-hints/stream',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAppsShareTokenLogoRoute = ApiAppsShareTokenLogoRouteImport.update({
   id: '/api/apps/share/$token/logo',
   path: '/api/apps/share/$token/logo',
@@ -1319,10 +1338,12 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/manual': typeof ApiAgentV1ManualRoute
   '/api/agent/v1/messages': typeof ApiAgentV1MessagesRoute
   '/api/agent/v1/profile': typeof ApiAgentV1ProfileRoute
+  '/api/agent/v1/push-webhook': typeof ApiAgentV1PushWebhookRoute
   '/api/agent/v1/reminders': typeof ApiAgentV1RemindersRoute
   '/api/agent/v1/tasks': typeof ApiAgentV1TasksRoute
   '/api/agent/v1/team-memory': typeof ApiAgentV1TeamMemoryRoute
   '/api/agent/v1/threads': typeof ApiAgentV1ThreadsRoute
+  '/api/agent/v1/wake-hints': typeof ApiAgentV1WakeHintsRoute
   '/api/agent/v1/weekly-report-collect': typeof ApiAgentV1WeeklyReportCollectRoute
   '/api/agent/v1/weekly-report-key-points': typeof ApiAgentV1WeeklyReportKeyPointsRoute
   '/api/agent/v1/weekly-report-memory': typeof ApiAgentV1WeeklyReportMemoryRoute
@@ -1379,6 +1400,7 @@ export interface FileRoutesByFullPath {
   '/api/agent/v1/tasks/unfollow': typeof ApiAgentV1TasksUnfollowRoute
   '/api/agent/v1/tasks/view': typeof ApiAgentV1TasksViewRoute
   '/api/agent/v1/users/$name': typeof ApiAgentV1UsersNameRoute
+  '/api/agent/v1/wake-hints/stream': typeof ApiAgentV1WakeHintsStreamRoute
   '/api/apps/share/$token/logo': typeof ApiAppsShareTokenLogoRoute
   '/api/hosts/jobs/$jobId/report': typeof ApiHostsJobsJobIdReportRoute
   '/api/projects/$projectId/raw/$': typeof ApiProjectsProjectIdRawSplatRoute
@@ -1505,10 +1527,12 @@ export interface FileRoutesByTo {
   '/api/agent/v1/manual': typeof ApiAgentV1ManualRoute
   '/api/agent/v1/messages': typeof ApiAgentV1MessagesRoute
   '/api/agent/v1/profile': typeof ApiAgentV1ProfileRoute
+  '/api/agent/v1/push-webhook': typeof ApiAgentV1PushWebhookRoute
   '/api/agent/v1/reminders': typeof ApiAgentV1RemindersRoute
   '/api/agent/v1/tasks': typeof ApiAgentV1TasksRoute
   '/api/agent/v1/team-memory': typeof ApiAgentV1TeamMemoryRoute
   '/api/agent/v1/threads': typeof ApiAgentV1ThreadsRoute
+  '/api/agent/v1/wake-hints': typeof ApiAgentV1WakeHintsRoute
   '/api/agent/v1/weekly-report-collect': typeof ApiAgentV1WeeklyReportCollectRoute
   '/api/agent/v1/weekly-report-key-points': typeof ApiAgentV1WeeklyReportKeyPointsRoute
   '/api/agent/v1/weekly-report-memory': typeof ApiAgentV1WeeklyReportMemoryRoute
@@ -1564,6 +1588,7 @@ export interface FileRoutesByTo {
   '/api/agent/v1/tasks/unfollow': typeof ApiAgentV1TasksUnfollowRoute
   '/api/agent/v1/tasks/view': typeof ApiAgentV1TasksViewRoute
   '/api/agent/v1/users/$name': typeof ApiAgentV1UsersNameRoute
+  '/api/agent/v1/wake-hints/stream': typeof ApiAgentV1WakeHintsStreamRoute
   '/api/apps/share/$token/logo': typeof ApiAppsShareTokenLogoRoute
   '/api/hosts/jobs/$jobId/report': typeof ApiHostsJobsJobIdReportRoute
   '/api/projects/$projectId/raw/$': typeof ApiProjectsProjectIdRawSplatRoute
@@ -1694,10 +1719,12 @@ export interface FileRoutesById {
   '/api/agent/v1/manual': typeof ApiAgentV1ManualRoute
   '/api/agent/v1/messages': typeof ApiAgentV1MessagesRoute
   '/api/agent/v1/profile': typeof ApiAgentV1ProfileRoute
+  '/api/agent/v1/push-webhook': typeof ApiAgentV1PushWebhookRoute
   '/api/agent/v1/reminders': typeof ApiAgentV1RemindersRoute
   '/api/agent/v1/tasks': typeof ApiAgentV1TasksRoute
   '/api/agent/v1/team-memory': typeof ApiAgentV1TeamMemoryRoute
   '/api/agent/v1/threads': typeof ApiAgentV1ThreadsRoute
+  '/api/agent/v1/wake-hints': typeof ApiAgentV1WakeHintsRoute
   '/api/agent/v1/weekly-report-collect': typeof ApiAgentV1WeeklyReportCollectRoute
   '/api/agent/v1/weekly-report-key-points': typeof ApiAgentV1WeeklyReportKeyPointsRoute
   '/api/agent/v1/weekly-report-memory': typeof ApiAgentV1WeeklyReportMemoryRoute
@@ -1754,6 +1781,7 @@ export interface FileRoutesById {
   '/api/agent/v1/tasks_/unfollow': typeof ApiAgentV1TasksUnfollowRoute
   '/api/agent/v1/tasks_/view': typeof ApiAgentV1TasksViewRoute
   '/api/agent/v1/users/$name': typeof ApiAgentV1UsersNameRoute
+  '/api/agent/v1/wake-hints_/stream': typeof ApiAgentV1WakeHintsStreamRoute
   '/api/apps/share/$token/logo': typeof ApiAppsShareTokenLogoRoute
   '/api/hosts/jobs/$jobId/report': typeof ApiHostsJobsJobIdReportRoute
   '/api/projects/$projectId/raw/$': typeof ApiProjectsProjectIdRawSplatRoute
@@ -1883,10 +1911,12 @@ export interface FileRouteTypes {
     | '/api/agent/v1/manual'
     | '/api/agent/v1/messages'
     | '/api/agent/v1/profile'
+    | '/api/agent/v1/push-webhook'
     | '/api/agent/v1/reminders'
     | '/api/agent/v1/tasks'
     | '/api/agent/v1/team-memory'
     | '/api/agent/v1/threads'
+    | '/api/agent/v1/wake-hints'
     | '/api/agent/v1/weekly-report-collect'
     | '/api/agent/v1/weekly-report-key-points'
     | '/api/agent/v1/weekly-report-memory'
@@ -1943,6 +1973,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/tasks/unfollow'
     | '/api/agent/v1/tasks/view'
     | '/api/agent/v1/users/$name'
+    | '/api/agent/v1/wake-hints/stream'
     | '/api/apps/share/$token/logo'
     | '/api/hosts/jobs/$jobId/report'
     | '/api/projects/$projectId/raw/$'
@@ -2069,10 +2100,12 @@ export interface FileRouteTypes {
     | '/api/agent/v1/manual'
     | '/api/agent/v1/messages'
     | '/api/agent/v1/profile'
+    | '/api/agent/v1/push-webhook'
     | '/api/agent/v1/reminders'
     | '/api/agent/v1/tasks'
     | '/api/agent/v1/team-memory'
     | '/api/agent/v1/threads'
+    | '/api/agent/v1/wake-hints'
     | '/api/agent/v1/weekly-report-collect'
     | '/api/agent/v1/weekly-report-key-points'
     | '/api/agent/v1/weekly-report-memory'
@@ -2128,6 +2161,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/tasks/unfollow'
     | '/api/agent/v1/tasks/view'
     | '/api/agent/v1/users/$name'
+    | '/api/agent/v1/wake-hints/stream'
     | '/api/apps/share/$token/logo'
     | '/api/hosts/jobs/$jobId/report'
     | '/api/projects/$projectId/raw/$'
@@ -2257,10 +2291,12 @@ export interface FileRouteTypes {
     | '/api/agent/v1/manual'
     | '/api/agent/v1/messages'
     | '/api/agent/v1/profile'
+    | '/api/agent/v1/push-webhook'
     | '/api/agent/v1/reminders'
     | '/api/agent/v1/tasks'
     | '/api/agent/v1/team-memory'
     | '/api/agent/v1/threads'
+    | '/api/agent/v1/wake-hints'
     | '/api/agent/v1/weekly-report-collect'
     | '/api/agent/v1/weekly-report-key-points'
     | '/api/agent/v1/weekly-report-memory'
@@ -2317,6 +2353,7 @@ export interface FileRouteTypes {
     | '/api/agent/v1/tasks_/unfollow'
     | '/api/agent/v1/tasks_/view'
     | '/api/agent/v1/users/$name'
+    | '/api/agent/v1/wake-hints_/stream'
     | '/api/apps/share/$token/logo'
     | '/api/hosts/jobs/$jobId/report'
     | '/api/projects/$projectId/raw/$'
@@ -2431,10 +2468,12 @@ export interface RootRouteChildren {
   ApiAgentV1ManualRoute: typeof ApiAgentV1ManualRoute
   ApiAgentV1MessagesRoute: typeof ApiAgentV1MessagesRoute
   ApiAgentV1ProfileRoute: typeof ApiAgentV1ProfileRoute
+  ApiAgentV1PushWebhookRoute: typeof ApiAgentV1PushWebhookRoute
   ApiAgentV1RemindersRoute: typeof ApiAgentV1RemindersRoute
   ApiAgentV1TasksRoute: typeof ApiAgentV1TasksRoute
   ApiAgentV1TeamMemoryRoute: typeof ApiAgentV1TeamMemoryRoute
   ApiAgentV1ThreadsRoute: typeof ApiAgentV1ThreadsRoute
+  ApiAgentV1WakeHintsRoute: typeof ApiAgentV1WakeHintsRoute
   ApiAgentV1WeeklyReportCollectRoute: typeof ApiAgentV1WeeklyReportCollectRoute
   ApiAgentV1WeeklyReportKeyPointsRoute: typeof ApiAgentV1WeeklyReportKeyPointsRoute
   ApiAgentV1WeeklyReportMemoryRoute: typeof ApiAgentV1WeeklyReportMemoryRoute
@@ -2475,6 +2514,7 @@ export interface RootRouteChildren {
   ApiAgentV1TasksUnfollowRoute: typeof ApiAgentV1TasksUnfollowRoute
   ApiAgentV1TasksViewRoute: typeof ApiAgentV1TasksViewRoute
   ApiAgentV1UsersNameRoute: typeof ApiAgentV1UsersNameRoute
+  ApiAgentV1WakeHintsStreamRoute: typeof ApiAgentV1WakeHintsStreamRoute
   ApiAppsShareTokenLogoRoute: typeof ApiAppsShareTokenLogoRoute
   ApiHostsJobsJobIdReportRoute: typeof ApiHostsJobsJobIdReportRoute
   ApiProjectsProjectIdRawSplatRoute: typeof ApiProjectsProjectIdRawSplatRoute
@@ -3064,6 +3104,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentV1ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agent/v1/push-webhook': {
+      id: '/api/agent/v1/push-webhook'
+      path: '/api/agent/v1/push-webhook'
+      fullPath: '/api/agent/v1/push-webhook'
+      preLoaderRoute: typeof ApiAgentV1PushWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agent/v1/reminders': {
       id: '/api/agent/v1/reminders'
       path: '/api/agent/v1/reminders'
@@ -3090,6 +3137,13 @@ declare module '@tanstack/react-router' {
       path: '/api/agent/v1/threads'
       fullPath: '/api/agent/v1/threads'
       preLoaderRoute: typeof ApiAgentV1ThreadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/wake-hints': {
+      id: '/api/agent/v1/wake-hints'
+      path: '/api/agent/v1/wake-hints'
+      fullPath: '/api/agent/v1/wake-hints'
+      preLoaderRoute: typeof ApiAgentV1WakeHintsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/agent/v1/weekly-report-collect': {
@@ -3503,6 +3557,13 @@ declare module '@tanstack/react-router' {
       path: '/api/agent/v1/users/$name'
       fullPath: '/api/agent/v1/users/$name'
       preLoaderRoute: typeof ApiAgentV1UsersNameRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/wake-hints_/stream': {
+      id: '/api/agent/v1/wake-hints_/stream'
+      path: '/api/agent/v1/wake-hints/stream'
+      fullPath: '/api/agent/v1/wake-hints/stream'
+      preLoaderRoute: typeof ApiAgentV1WakeHintsStreamRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/apps/share/$token/logo': {
@@ -4137,10 +4198,12 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentV1ManualRoute: ApiAgentV1ManualRoute,
   ApiAgentV1MessagesRoute: ApiAgentV1MessagesRoute,
   ApiAgentV1ProfileRoute: ApiAgentV1ProfileRoute,
+  ApiAgentV1PushWebhookRoute: ApiAgentV1PushWebhookRoute,
   ApiAgentV1RemindersRoute: ApiAgentV1RemindersRoute,
   ApiAgentV1TasksRoute: ApiAgentV1TasksRoute,
   ApiAgentV1TeamMemoryRoute: ApiAgentV1TeamMemoryRoute,
   ApiAgentV1ThreadsRoute: ApiAgentV1ThreadsRoute,
+  ApiAgentV1WakeHintsRoute: ApiAgentV1WakeHintsRoute,
   ApiAgentV1WeeklyReportCollectRoute: ApiAgentV1WeeklyReportCollectRoute,
   ApiAgentV1WeeklyReportKeyPointsRoute: ApiAgentV1WeeklyReportKeyPointsRoute,
   ApiAgentV1WeeklyReportMemoryRoute: ApiAgentV1WeeklyReportMemoryRoute,
@@ -4194,6 +4257,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAgentV1TasksUnfollowRoute: ApiAgentV1TasksUnfollowRoute,
   ApiAgentV1TasksViewRoute: ApiAgentV1TasksViewRoute,
   ApiAgentV1UsersNameRoute: ApiAgentV1UsersNameRoute,
+  ApiAgentV1WakeHintsStreamRoute: ApiAgentV1WakeHintsStreamRoute,
   ApiAppsShareTokenLogoRoute: ApiAppsShareTokenLogoRoute,
   ApiHostsJobsJobIdReportRoute: ApiHostsJobsJobIdReportRoute,
   ApiProjectsProjectIdRawSplatRoute: ApiProjectsProjectIdRawSplatRoute,

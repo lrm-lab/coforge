@@ -75,6 +75,8 @@ export class EgressProxyConfiguredError extends Error {
   }
 }
 
+export type OutboundResult = { status: number; retryAfter?: string };
+
 export type OutboundTarget = { hostname: string; address: string; family: 4 | 6 };
 
 export type FetchOutboundRequest = (url: string, init: BunFetchRequestInit) => Promise<Response>;
@@ -155,7 +157,7 @@ export class OutboundEgress {
     request: { method: string; headers?: Record<string, string>; body?: BodyInit },
     target: OutboundTarget,
     timeoutMs: number,
-  ): Promise<{ status: number }> {
+  ): Promise<OutboundResult> {
     const endpoint = new URL(url);
     if (endpoint.hostname !== target.hostname) {
       throw new Error("outbound hostname changed after validation");
@@ -174,7 +176,8 @@ export class OutboundEgress {
       signal: AbortSignal.timeout(timeoutMs),
     });
     await response.body?.cancel();
-    return { status: response.status };
+    const retryAfter = response.headers.get("retry-after");
+    return { status: response.status, ...(retryAfter ? { retryAfter } : {}) };
   }
 
   /**
@@ -186,7 +189,7 @@ export class OutboundEgress {
     url: string,
     request: { method: string; headers?: Record<string, string>; body?: BodyInit },
     timeoutMs: number,
-  ): Promise<{ status: number }> {
+  ): Promise<OutboundResult> {
     const targets = await this.resolveTargets(url);
     const deadline = Date.now() + timeoutMs;
     let failure: unknown;

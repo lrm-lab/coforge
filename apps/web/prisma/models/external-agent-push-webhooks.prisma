@@ -1,0 +1,26 @@
+/// An external Agent's inbox notice webhook: one https endpoint per Agent, signed with a secret the
+/// Agent chose. `secretSealed` is the secret encrypted at rest and never read back. `revision` goes
+/// up on every PUT so a delivery attempt that outlived its endpoint writes nothing. `retryAt` and
+/// `retryNoticeId` hold the one notice waiting for its next attempt, so later inbox writes join it
+/// instead of queueing their own.
+model ExternalAgentPushWebhook {
+  agentId             String    @id @db.Uuid
+  workspaceId         String    @db.Uuid
+  url                 String
+  secretSealed        String
+  enabled             Boolean   @default(true)
+  /// endpoint_rejected | endpoint_invalid | agent_unavailable; null while enabled
+  disabledReason      String?
+  revision            Int       @default(1)
+  lastDeliveryAt      DateTime?
+  lastError           String?
+  consecutiveFailures Int       @default(0)
+  rejectionStreak     Int       @default(0)
+  retryAt             DateTime?
+  retryNoticeId       String?   @db.Uuid
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  agent               Agent     @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@map("external_agent_push_webhooks")
+}
