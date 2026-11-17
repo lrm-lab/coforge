@@ -7,19 +7,17 @@ const build = (identity?: Parameters<typeof buildCoforgeAgentInstructions>[0]["i
 
 test("the prompt always carries the task conversations block with the quoted-ref rule", () => {
   const prompt = build();
-  expect(prompt).toContain("Tasks have their own conversations");
-  expect(prompt).toContain("ALWAYS quote the ref");
-  expect(prompt).toContain("coforge task reply");
-  expect(prompt).toContain("coforge task read");
-  expect(prompt).toContain("coforge task list --following");
+  expect(prompt).toContain("## Tasks\n");
+  expect(prompt).toContain("ALWAYS quote refs (an unquoted # starts a shell comment)");
+  expect(prompt).toContain("coforge task view|read|reply|follow '<ref>'");
   expect(prompt).toContain("--message-id");
   expect(prompt).toContain("--alongside");
   expect(prompt).toContain("--blocked-by");
   expect(prompt).toContain("--parent");
   // A task belongs to a Project when its creator can tell which one; the manual's rule.
   expect(prompt).toContain("--project <slug>");
-  expect(prompt).toContain("coforge workspace info --projects");
-  expect(prompt).toContain("rather than guessing");
+  expect(prompt).toContain("workspace info --projects");
+  expect(prompt).toContain("else ask in the task");
 });
 
 test("the launch feature value does not change the prompt", () => {
