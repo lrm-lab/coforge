@@ -18,10 +18,13 @@ const offset = {
   left: "max(1rem, var(--spacing-safe-left))",
 };
 
-/** On a desktop the toasts sit in the bottom right, over a conversation's composer and its send
- * button: they start above a one-line composer, so the moment after an action (an Undo shown for
- * ten seconds) leaves the composer free to type and send in (Raft, task #507). */
+/** The toasts sit at the bottom and start above a one-line composer, so the moment after an action
+ * (an Undo shown for ten seconds) leaves the composer free to type and send in (Raft, task #507):
+ * in the bottom right on a desktop, centred on a phone (Frank, task #7). A phone's composer and its
+ * tab bar both stand on the home indicator's inset, so the phone's toasts are lifted from it too and
+ * keep the same gap above either with or without one. */
 const desktopOffset = { ...offset, bottom: "calc(max(1rem, var(--spacing-safe-bottom)) + 4.5rem)" };
+const phoneOffset = { ...offset, bottom: "calc(var(--spacing-safe-bottom) + 4.5rem)" };
 
 export function AppToastProvider({ children }: { children: React.ReactNode }) {
   const desktop = useBreakpoint("md");
@@ -30,12 +33,12 @@ export function AppToastProvider({ children }: { children: React.ReactNode }) {
     <>
       {children}
       <Toaster
-        position={desktop ? "bottom-right" : "top-center"}
+        position={desktop ? "bottom-right" : "bottom-center"}
         visibleToasts={3}
         hotkey={["F6"]}
         customAriaLabel={m.navigation_notifications()}
         offset={desktopOffset}
-        mobileOffset={offset}
+        mobileOffset={phoneOffset}
         style={toastStyle}
         icons={{
           success: <CheckCircle aria-hidden="true" className="size-4 text-success-primary" />,
