@@ -15,7 +15,6 @@ import type {
 } from "#src/server/conversations/conversation-realtime.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import { MEMORY_AGENT_ON } from "./helpers/default-memory-agent-fixture";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
 import {
   connectionString,
@@ -86,13 +85,10 @@ async function agentOf(
 }
 
 test.skipIf(!connectionString)(
-  "a person, an Agent and a card create a private channel its members alone read, without the memory Agent",
+  "a person, an Agent and a card create a private channel its members alone read",
   async () => {
     const fixture = await privateChannelFixture(connectionString!);
     const { db, ws, people, suffix, open } = fixture;
-    // The Memory Agent is opt-in per Workspace (task #6): this case is about private channels not
-    // getting it, so the Workspace is one that switched the experiment on.
-    await db.workspace.update({ where: { id: ws }, data: { experiments: MEMORY_AGENT_ON } });
     const { created, realtime } = recording();
     const channels = new PublicChannels(db, undefined, quietCentrifugo(), undefined, realtime, {
       purge: async () => {},
@@ -138,22 +134,10 @@ test.skipIf(!connectionString)(
       ]);
       expect(created.every(({ channel }) => channel.visibility === "private")).toBe(true);
 
-      // No memory Agent joined any of them; a public channel still gets one.
+      // No memory Agent is provisioned for either private or public channels.
       expect(await db.workspaceMemoryAgent.findUnique({ where: { workspaceId: ws } })).toBeNull();
-      const visible = (await channels.create(ws, people.insider, `by-all-${suffix}`)).id;
-      const memory = await db.workspaceMemoryAgent.findUniqueOrThrow({
-        where: { workspaceId: ws },
-      });
-      expect(
-        await db.conversationMember.count({
-          where: { agentId: memory.agentId, conversationId: { in: [visible] } },
-        }),
-      ).toBe(1);
-      expect(
-        await db.conversationMember.count({
-          where: { agentId: memory.agentId, conversationId: { not: visible } },
-        }),
-      ).toBe(0);
+      await channels.create(ws, people.insider, `by-all-${suffix}`);
+      expect(await db.workspaceMemoryAgent.findUnique({ where: { workspaceId: ws } })).toBeNull();
     } finally {
       await fixture.dispose();
     }

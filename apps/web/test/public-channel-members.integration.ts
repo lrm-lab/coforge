@@ -1,6 +1,4 @@
 import { expect, test } from "bun:test";
-import { MEMORY_AGENT_ON, defaultMemoryAgentId } from "./helpers/default-memory-agent-fixture";
-import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
@@ -39,7 +37,6 @@ test("channel members add humans and Agents; a Workspace member outside the chan
     data: {
       slug: `members-${suffix}`,
       name: "Channel membership",
-      experiments: MEMORY_AGENT_ON,
       members: {
         create: [
           { userId: owner.id, role: "owner" },
@@ -82,7 +79,6 @@ test("channel members add humans and Agents; a Workspace member outside the chan
 
     // A plain Workspace member creates the channel (Slack: any member can create a channel).
     const channel = await channels.create(workspace.id, channelMember.id, "roster");
-    const memoryId = await defaultMemoryAgentId(db, workspace.id);
     await channels.join(workspace.id, owner.id, channel.id);
 
     // A Workspace member who is NOT in the channel may still read it, but cannot add members.
@@ -95,19 +91,7 @@ test("channel members add humans and Agents; a Workspace member outside the chan
     expect(outsideView.humans.map((human) => human.id).sort()).toEqual(
       [channelMember.id, owner.id].sort(),
     );
-    expect(outsideView.agents).toEqual([
-      {
-        id: memoryId,
-        name: "memory",
-        displayName: "Memory",
-        description: "",
-        avatarUrl: agentAvatarUrl(memoryId),
-        computerId: null,
-        serverRole: "member",
-        channelRole: "member",
-        channelAdminBasis: undefined,
-      },
-    ]);
+    expect(outsideView.agents).toEqual([]);
     expect(outsideView.candidates.humans.map((human) => human.id).sort()).toEqual(
       [outsideMember.id, newcomer.id].sort(),
     );
@@ -154,9 +138,7 @@ test("channel members add humans and Agents; a Workspace member outside the chan
     expect(afterAdd.humans.map((human) => human.id).sort()).toEqual(
       [newcomer.id, owner.id, channelMember.id].sort(),
     );
-    expect(afterAdd.agents.map((candidate) => candidate.id).sort()).toEqual(
-      [agent.id, memoryId].sort(),
-    );
+    expect(afterAdd.agents.map((candidate) => candidate.id)).toEqual([agent.id]);
     expect(afterAdd.candidates.humans.map((human) => human.id)).toEqual([outsideMember.id]);
     expect(afterAdd.candidates.agents).toEqual([]);
 

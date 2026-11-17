@@ -5,7 +5,6 @@ import { PublicChannels } from "#src/server/conversations/public-channels.server
 import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { AgentChannelManagement } from "#src/server/conversations/agent-channel-management.server";
-import { MEMORY_AGENT_ON } from "./helpers/default-memory-agent-fixture";
 
 function enrollGeneral(db: PrismaClient, workspaceId: string) {
   return db.$transaction((tx) => enrollGeneralChannel(tx, workspaceId));
@@ -26,7 +25,6 @@ test("Agent channel management: authority, join/leave, archive, and add/remove m
     data: {
       slug: `manage-${suffix}`,
       name: "Channel management",
-      experiments: MEMORY_AGENT_ON,
       members: {
         create: [{ userId: owner.id, role: "owner" }, { userId: outsider.id }],
       },
@@ -123,12 +121,12 @@ test("Agent channel management: authority, join/leave, archive, and add/remove m
       archived: false,
       joined: true,
       muted: false,
-      memberCounts: { agents: 3, humans: 0 },
+      memberCounts: { agents: 2, humans: 0 },
     });
 
-    // Roster includes the Memory Agent, tagging the caller "self" and the creator "admin". `admin`'s
-    // basis is its own server role (`Agent.role`); `member`'s is the `channelRole` it got as
-    // #eng's creator — neither is #general, so both bases are reported.
+    // Roster tags the caller "self" and the creator "admin". `admin`'s basis is its own server
+    // role (`Agent.role`); `member`'s is the `channelRole` it got as #eng's creator — neither is
+    // #general, so both bases are reported.
     const roster = await manage.members(workspace.id, member.id, "#eng");
     expect(roster.agents.sort((a, b) => a.name.localeCompare(b.name))).toEqual([
       {
@@ -151,16 +149,6 @@ test("Agent channel management: authority, join/leave, archive, and add/remove m
         self: true,
         status: "unknown",
       },
-      {
-        name: "memory",
-        displayName: "Memory",
-        description: "",
-        serverRole: "member",
-        channelRole: "member",
-        channelAdminBasis: undefined,
-        self: false,
-        status: "unknown",
-      },
     ]);
 
     // Leave, then re-join: the row is soft-left and cleared, not deleted; membership count
@@ -171,7 +159,7 @@ test("Agent channel management: authority, join/leave, archive, and add/remove m
     const memberLeaveAgain = await manage.leave(workspace.id, member.id, "#eng");
     expect(memberLeaveAgain).toEqual({ target: "#eng", joined: false, wasMember: false });
     expect((await manage.info(workspace.id, member.id, "#eng")).joined).toBe(false);
-    expect((await manage.info(workspace.id, admin.id, "#eng")).memberCounts.agents).toBe(2);
+    expect((await manage.info(workspace.id, admin.id, "#eng")).memberCounts.agents).toBe(1);
     expect(
       await db.conversationMember.count({
         where: { agentId: member.id, conversation: { channelName: "eng" } },

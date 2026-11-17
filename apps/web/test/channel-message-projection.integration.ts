@@ -5,7 +5,6 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { RedisMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
-import { MEMORY_AGENT_ON, defaultMemoryAgentId } from "./helpers/default-memory-agent-fixture";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 // Pins the browser-facing shape of a channel message as `PublicChannels.open`, `updates` and
@@ -31,7 +30,6 @@ test("a channel message reaches the browser in one shape from open, updates and 
     data: {
       slug: `projection-${suffix}`,
       name: "Projection",
-      experiments: MEMORY_AGENT_ON,
       members: { create: [{ userId: alice.id }, { userId: bob.id }] },
     },
   });
@@ -282,14 +280,14 @@ test("a channel message reaches the browser in one shape from open, updates and 
       reactionVersion: 0,
       reactions: [],
       forwards: [],
-      // Both the picked Agent and default Memory Agent are channel members.
-      deliveries: [agent.id, await defaultMemoryAgentId(db, workspace.id)]
-        .sort()
-        .map((agentId) => ({
+      // Only the picked Agent is a channel member.
+      deliveries: [
+        {
           deliveryId: expect.any(String),
-          agentId,
+          agentId: agent.id,
           agent: { computerId: null },
-        })),
+        },
+      ],
       unresolvedMentionHandles: [],
       pendingMentionActions: [],
     });

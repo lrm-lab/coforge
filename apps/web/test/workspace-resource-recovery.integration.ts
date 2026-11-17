@@ -2,12 +2,10 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { createOwnedWorkspace } from "#src/server/db/repositories/workspace-slugs.repositories.server";
-import { PrismaAgentDeletionStore } from "#src/server/db/repositories/agent-deletion.repositories.server";
 import { WorkspaceAssistants } from "#src/server/agents/workspace-assistants.server";
 import { provisionWorkspaceEnrollment } from "#src/server/workspaces/enrollment.server";
 import { ensureWeeklyReportAssistant } from "#src/server/records/weekly-report-assistant.server";
 import { recoverWorkspaceResourcesOnOpen } from "#src/server/workspaces/resource-recovery.server";
-import { MEMORY_AGENT_ON } from "./helpers/default-memory-agent-fixture";
 
 test("an owner reopening a committed Workspace repairs failed provisioning without a second enrollment", async () => {
   const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
@@ -26,12 +24,6 @@ test("an owner reopening a committed Workspace repairs failed provisioning witho
       { id: true },
     );
     workspaceId = workspace.id;
-    // The Memory Agent is opt-in per Workspace (task #6): this Workspace switched it on, so its
-    // absence later is a failed enrollment the open repairs.
-    await db.workspace.update({
-      where: { id: workspaceId },
-      data: { experiments: MEMORY_AGENT_ON },
-    });
     const computer = await db.computer.create({
       data: {
         ownerId: owner.id,
@@ -62,7 +54,6 @@ test("an owner reopening a committed Workspace repairs failed provisioning witho
       recoverWorkspaceResourcesOnOpen(db, input),
     ]);
     const identities = async () => ({
-      memory: (await db.workspaceMemoryAgent.findUniqueOrThrow({ where: { workspaceId } })).agentId,
       platform: (
         await db.workspaceAssistantSession.findUniqueOrThrow({
           where: { workspaceId_userId: input },
@@ -73,32 +64,15 @@ test("an owner reopening a committed Workspace repairs failed provisioning witho
       ).agentId,
     });
     const repaired = await identities();
-    expect(new Set(Object.values(repaired)).size).toBe(3);
-    expect(await db.agent.count({ where: { workspaceId } })).toBe(3);
+    expect(new Set(Object.values(repaired)).size).toBe(2);
+    expect(await db.agent.count({ where: { workspaceId } })).toBe(2);
+    expect(await db.workspaceMemoryAgent.count({ where: { workspaceId } })).toBe(0);
     expect((await db.agent.findUniqueOrThrow({ where: { id: repaired.weekly } })).computerId).toBe(
       computer.id,
     );
     await recoverWorkspaceResourcesOnOpen(db, input);
     expect(await identities()).toEqual(repaired);
     expect(await db.workspaceMembership.count({ where: { userId: owner.id } })).toBe(1);
-    const archivedAt = new Date();
-    await db.agent.update({ where: { id: repaired.memory }, data: { deletedAt: archivedAt } });
-    await recoverWorkspaceResourcesOnOpen(db, input);
-    expect(await identities()).toEqual(repaired);
-    expect(
-      (await db.agent.findUniqueOrThrow({ where: { id: repaired.memory } })).deletedAt,
-    ).toEqual(archivedAt);
-    await db.agent.update({ where: { id: repaired.memory }, data: { deletedAt: null } });
-    const deleted = await new PrismaAgentDeletionStore(db).delete({
-      agentId: repaired.memory,
-      workspaceId,
-      deletedAt: new Date(),
-      deletedByUserId: owner.id,
-    });
-    expect(deleted.outcome).toBe("deleted");
-    await recoverWorkspaceResourcesOnOpen(db, input);
-    expect(await db.workspaceMemoryAgent.count({ where: { workspaceId } })).toBe(0);
-    expect(await db.agent.count({ where: { workspaceId } })).toBe(3);
   } finally {
     await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS ${fault} ON agents`);
     await db.$executeRawUnsafe(`DROP FUNCTION IF EXISTS ${fault}()`);
