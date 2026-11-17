@@ -120,6 +120,9 @@ describe("staging user file persistence", () => {
     expect(webBlock).toContain(
       "COFORGE_CLOUD_CLUSTER_TOKEN: ${COFORGE_CLOUD_CLUSTER_TOKEN:?staging cloud cluster token}",
     );
+    // Swarm host is intranet-only; staging ECS cannot reach :6090, so desktop
+    // opens that address directly until ECS → host is routable.
+    expect(webBlock).toContain("COFORGE_CLOUD_DESKTOP_ORIGIN: http://10.110.158.143:6090");
 
     const functions = await Bun.file(secretsScript).text();
     const directory = await mkdtemp(join(tmpdir(), "coforge-cluster-token-"));
