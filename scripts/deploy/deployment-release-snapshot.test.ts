@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { describe, expect, test } from "bun:test";
 import { parseRemoteOutputs } from "./deployment";
-import { registryImage, requiredSecretNames, timeoutShim } from "./deploy-test-support";
+import { ipShim, registryImage, requiredSecretNames, timeoutShim } from "./deploy-test-support";
 
 describe("Centrifugo configuration guard and release snapshot", () => {
   test("a Centrifugo configuration the pinned image rejects stops the deployment before anything is recreated", async () => {
@@ -27,6 +27,7 @@ describe("Centrifugo configuration guard and release snapshot", () => {
       const previous = `coforge/web@sha256:${"c".repeat(64)}`;
       const state = `CURRENT_WEB_IMAGE=${previous}\nPREVIOUS_WEB_IMAGE=\n`;
       await Bun.write(join(root, "state.env"), state);
+      await writeFile(join(root, "bin/ip"), ipShim(), { mode: 0o700 });
       await writeFile(
         join(root, "bin/docker"),
         `#!/bin/bash
@@ -99,6 +100,7 @@ exit 0
       const previous = `coforge/web@sha256:${"c".repeat(64)}`;
       const state = `CURRENT_WEB_IMAGE=${previous}\nPREVIOUS_WEB_IMAGE=\n`;
       await Bun.write(join(root, "state.env"), state);
+      await writeFile(join(root, "bin/ip"), ipShim(), { mode: 0o700 });
       await writeFile(
         join(root, "bin/docker"),
         `#!/bin/bash
@@ -172,6 +174,7 @@ exit 0
       const previous = `coforge/web@sha256:${"c".repeat(64)}`;
       const state = `CURRENT_WEB_IMAGE=${previous}\nPREVIOUS_WEB_IMAGE=\n`;
       await Bun.write(join(root, "state.env"), state);
+      await writeFile(join(root, "bin/ip"), ipShim(), { mode: 0o700 });
       await writeFile(
         join(root, "bin/docker"),
         `#!/bin/bash
@@ -258,6 +261,7 @@ exit 0
       const state = `CURRENT_WEB_IMAGE=${previous}\nPREVIOUS_WEB_IMAGE=\n`;
       await Bun.write(join(root, "state.env"), state);
       await writeFile(join(root, "bin/timeout"), timeoutShim(), { mode: 0o700 });
+      await writeFile(join(root, "bin/ip"), ipShim(), { mode: 0o700 });
       await writeFile(
         join(root, "bin/docker"),
         `#!/bin/bash
@@ -361,6 +365,7 @@ exit 0
       const state = `CURRENT_WEB_IMAGE=${previous}\nPREVIOUS_WEB_IMAGE=\n`;
       await Bun.write(join(root, "state.env"), state);
       await writeFile(join(root, "bin/timeout"), timeoutShim({ record: false }), { mode: 0o700 });
+      await writeFile(join(root, "bin/ip"), ipShim(), { mode: 0o700 });
       await writeFile(
         join(root, "bin/docker"),
         `#!/bin/bash

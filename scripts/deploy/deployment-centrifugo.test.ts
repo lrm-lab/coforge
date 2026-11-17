@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, test } from "bun:test";
-import { digest, readCompose, requiredSecretNames } from "./deploy-test-support";
+import { digest, ipShim, readCompose, requiredSecretNames } from "./deploy-test-support";
 
 const secretsScript = new URL("./deploy-secrets.sh", import.meta.url).pathname;
 
@@ -92,6 +92,8 @@ describe("Centrifugo secrets under a rootless Docker daemon", () => {
           "coforge_oidc_signing_jwks",
           "coforge_authing_webhook_secret",
         ];
+        await mkdir(join(root, "bin"));
+        await writeFile(join(root, "bin/ip"), ipShim(), { mode: 0o700 });
         for (const name of [...requiredSecretNames, ...datastore, ...optional])
           await writeFile(join(root, "secrets", name), `fixture-${name}`, { mode: 0o600 });
         const proc = Bun.spawn(
@@ -117,7 +119,11 @@ compose "\${@:2}"
             root,
             ...names,
           ],
-          { stdout: "pipe", stderr: "pipe" },
+          {
+            env: { ...Bun.env, PATH: `${join(root, "bin")}:${Bun.env.PATH}` },
+            stdout: "pipe",
+            stderr: "pipe",
+          },
         );
         const [stdout, stderr, code] = await Promise.all([
           new Response(proc.stdout).text(),

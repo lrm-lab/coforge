@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, test } from "bun:test";
-import { readCompose, registryImage } from "./deploy-test-support";
+import { ipShim, readCompose, registryImage } from "./deploy-test-support";
 
 const secretsScript = new URL("./deploy-secrets.sh", import.meta.url).pathname;
 
@@ -183,6 +183,8 @@ describe("write_deploy_env", () => {
       await writeFile(envPath, "STALE=value\n", { mode: 0o644 });
       await chmod(envPath, 0o644);
 
+      await mkdir(join(root, "bin"));
+      await writeFile(join(root, "bin/ip"), ipShim(), { mode: 0o700 });
       const fn = await Bun.file(secretsScript).text();
 
       const proc = Bun.spawn(
@@ -197,7 +199,11 @@ describe("write_deploy_env", () => {
             `write_deploy_env ${JSON.stringify(registryImage)}`,
           ].join("\n"),
         ],
-        { stdout: "pipe", stderr: "pipe" },
+        {
+          env: { ...Bun.env, PATH: `${join(root, "bin")}:${Bun.env.PATH}` },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
       );
       const [stderr, exitCode] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
       expect(exitCode, stderr).toBe(0);
@@ -241,6 +247,8 @@ describe("write_deploy_env", () => {
         await writeFile(join(secretsDir, name), value, { mode: 0o600 });
       }
 
+      await mkdir(join(root, "bin"));
+      await writeFile(join(root, "bin/ip"), ipShim(), { mode: 0o700 });
       const fn = await Bun.file(secretsScript).text();
 
       const proc = Bun.spawn(
@@ -255,7 +263,11 @@ describe("write_deploy_env", () => {
             `write_deploy_env ${JSON.stringify(registryImage)}`,
           ].join("\n"),
         ],
-        { stdout: "pipe", stderr: "pipe" },
+        {
+          env: { ...Bun.env, PATH: `${join(root, "bin")}:${Bun.env.PATH}` },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
       );
       const [stderr, exitCode] = await Promise.all([new Response(proc.stderr).text(), proc.exited]);
       expect(exitCode, stderr).toBe(0);

@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { describe, expect, test } from "bun:test";
 import { parseRemoteOutputs } from "./deployment";
-import { registryImage, requiredSecretNames, timeoutShim } from "./deploy-test-support";
+import { ipShim, registryImage, requiredSecretNames, timeoutShim } from "./deploy-test-support";
 
 describe("Web image pull under a deadline", () => {
   // The fixture's `timeout` stands in for a deadline that expired for the first STALLED_PULLS Web
@@ -85,6 +85,7 @@ exit 0
 `,
         { mode: 0o700 },
       );
+      await writeFile(join(root, "bin/ip"), ipShim(), { mode: 0o700 });
       const proc = Bun.spawn(
         [
           "bash",
@@ -250,6 +251,7 @@ describe("public readiness after the candidate starts", () => {
         `CURRENT_WEB_IMAGE=${previous}\nPREVIOUS_WEB_IMAGE=\n`,
       );
       await writeFile(join(root, "bin/timeout"), timeoutShim({ record: false }), { mode: 0o700 });
+      await writeFile(join(root, "bin/ip"), ipShim(), { mode: 0o700 });
       await writeFile(
         join(root, "bin/docker"),
         `#!/bin/bash
