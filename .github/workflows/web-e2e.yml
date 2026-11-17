@@ -9,6 +9,15 @@ on:
     # 19:47 UTC: off the hour, and half an hour after Web integration so the two do not queue.
     - cron: "47 19 * * *"
   workflow_dispatch:
+    inputs:
+      file:
+        description: "Run only this apps/web/test file (e.g. e2e-foo.e2e.ts), on one runner"
+        required: false
+        default: ""
+      repeat:
+        description: "With file: how many times in a row (1-99)"
+        required: false
+        default: "1"
 
 permissions:
   contents: read
@@ -30,7 +39,8 @@ jobs:
       # One shard's failure does not hide the other's.
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        # One file soaked on one runner, or the whole list in two shards.
+        shard: ${{ fromJSON(inputs.file && '[1]' || '[1, 2]') }}
 
     # The images staging runs, by digest; scripts/ci/web-integration-images.test.ts fails when
     # they drift apart. Centrifugo is started by the runner, not as a service: its proxies call the
@@ -95,6 +105,9 @@ jobs:
 
       - name: Run the shard
         shell: bash
+        env:
+          E2E_FILE: ${{ inputs.file }}
+          E2E_REPEAT: ${{ inputs.repeat }}
         run: ./scripts/e2e/run-web-e2e-ci.sh "${{ matrix.shard }}" 2
 
       - name: Summarize the shard

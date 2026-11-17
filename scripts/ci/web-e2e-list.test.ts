@@ -73,3 +73,36 @@ test("the runner splits the list into shards that together hold every file once"
   const longest = Math.max(...seconds.values());
   expect(Math.abs(load(first) - load(second))).toBeLessThanOrEqual(longest);
 });
+
+test("E2E_FILE soaks one file on shard 1, E2E_REPEAT times, and leaves the other shards empty", async () => {
+  const list = async (n: number, env: Record<string, string>) => {
+    const child = Bun.spawn(["bash", "scripts/e2e/run-web-e2e-ci.sh", String(n), "2", "--list"], {
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...process.env, ...env },
+    });
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    return { lines: stdout.split("\n").filter(Boolean), stderr, code };
+  };
+  const file = entries[0]![0]!;
+  const soak = await list(1, { E2E_FILE: file, E2E_REPEAT: "10" });
+  expect(soak.code).toBe(0);
+  expect(soak.lines).toEqual(Array.from({ length: 10 }, () => file));
+  const other = await list(2, { E2E_FILE: file, E2E_REPEAT: "10" });
+  expect(other.code).toBe(0);
+  expect(other.lines).toEqual([]);
+  for (const bad of [
+    { E2E_FILE: "../secrets.e2e.ts" },
+    { E2E_FILE: "no-such-file.e2e.ts" },
+    { E2E_FILE: file, E2E_REPEAT: "0" },
+    { E2E_FILE: file, E2E_REPEAT: "100" },
+  ]) {
+    const refused = await list(1, bad);
+    expect(refused.code, JSON.stringify(bad)).not.toBe(0);
+    expect(refused.lines, JSON.stringify(bad)).toEqual([]);
+  }
+});

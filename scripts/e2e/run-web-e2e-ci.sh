@@ -7,6 +7,11 @@
 #   scripts/e2e/run-web-e2e-ci.sh <shard> <shards>          e.g. 1 2
 #   scripts/e2e/run-web-e2e-ci.sh <shard> <shards> --list   only print that shard's files
 #
+# With E2E_FILE=<name>.e2e.ts (any file under apps/web/test, listed or not), shard 1 runs only that
+# file, E2E_REPEAT times (default 1), and the other shards run nothing: the soak a file needs on a
+# Linux runner before it may join the list (docs/release/web-e2e.md). Every run is counted; one
+# failure turns the run red.
+#
 # Shards are balanced by the seconds the list records (longest first, each to the lighter shard),
 # so both finish together. Every file runs once, in its own `bun test` process, with no retry: a
 # file that fails is a red run. Each file's output, the Web's and Centrifugo's logs and the
@@ -39,6 +44,19 @@ while IFS= read -r file; do files+=("$file"); done < <(
       load[best] += $2
       if (best == want) print $1
     }')
+if [ -n "${E2E_FILE:-}" ]; then
+  repeat=${E2E_REPEAT:-1}
+  [[ "$E2E_FILE" =~ ^[A-Za-z0-9._-]+\.e2e\.ts$ ]] && [ -f "$root/apps/web/test/$E2E_FILE" ] ||
+    { echo "E2E_FILE must name a file in apps/web/test: $E2E_FILE" >&2; exit 1; }
+  [[ "$repeat" =~ ^[1-9][0-9]?$ ]] || { echo "E2E_REPEAT must be 1-99: $repeat" >&2; exit 1; }
+  files=()
+  if [ "$shard" = 1 ]; then
+    for _ in $(seq 1 "$repeat"); do files+=("$E2E_FILE"); done
+  else
+    [ "${3:-}" = --list ] || echo "shard $shard of $shards: E2E_FILE runs on shard 1 only"
+    exit 0
+  fi
+fi
 [ ${#files[@]} -gt 0 ] || { echo "shard $shard of $shards has no files" >&2; exit 1; }
 # `--list` prints the shard's files and starts nothing (scripts/ci/web-e2e-list.test.ts).
 if [ "${3:-}" = --list ]; then
@@ -132,13 +150,18 @@ failed=()
 summary="$output/summary.md"
 printf '### Browser e2e shard %s of %s\n\n| File | Result | Seconds |\n| --- | --- | --- |\n' \
   "$shard" "$shards" > "$summary"
+run=0
 for file in "${files[@]}"; do
+  run=$((run + 1))
   start=$(date +%s)
   result=pass
+  # A repeated file keeps every run's output apart.
+  log="$output/logs/$file.log"
+  [ -n "${E2E_FILE:-}" ] && log="$output/logs/$file.$run.log"
   # A path, never a bare name: a bare name is a filter and runs nothing (docs/agents/testing.md).
-  timeout 360 bun test "./test/$file" > "$output/logs/$file.log" 2>&1 || result=fail
+  timeout 360 bun test "./test/$file" > "$log" 2>&1 || result=fail
   # A file that ran nothing is not a pass.
-  grep -qE '^ *[1-9][0-9]* pass' "$output/logs/$file.log" || result=fail
+  grep -qE '^ *[1-9][0-9]* pass' "$log" || result=fail
   seconds=$(( $(date +%s) - start ))
   printf '%s %s (%ss)\n' "$result" "$file" "$seconds"
   printf '| %s | %s | %s |\n' "$file" "$result" "$seconds" >> "$summary"
