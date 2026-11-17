@@ -10,11 +10,10 @@ import {
   activityInboxPageSchema,
   activityInboxReadAllSchema,
   activityItemDoneSchema,
+  activityItemReadSchema,
   activityMentionReadSchema,
 } from "./activity-inbox.schemas";
 
-/** One page of the viewer's Activity inbox, newest activity first, with the view's totals; the
- * first page with where it was read in the viewer's own channel. */
 export const loadActivityInbox = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(activityInboxPageSchema)
@@ -27,7 +26,6 @@ export const loadActivityInbox = createServerFn({ method: "GET" })
     return { ...page, streamPositions };
   });
 
-/** The pending choice cards the viewer may answer, for the Activity "waiting" section. */
 export const loadWaitingChoiceCards = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context }) => {
@@ -35,7 +33,6 @@ export const loadWaitingChoiceCards = createServerFn({ method: "GET" })
     return waitingChoiceCards(db, workspaceId, user.id);
   });
 
-/** Marks one item Done (and read) through the newest message the viewer saw in it. */
 export const markActivityItemDone = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(activityItemDoneSchema)
@@ -44,8 +41,14 @@ export const markActivityItemDone = createServerFn({ method: "POST" })
     await browserActivityInbox(db).markDone(workspaceId, user.id, data);
   });
 
-/** Marks everything the list holds Done, through when the viewer's list was loaded. Returns how
- * many items it took off and what Undo needs. */
+export const markActivityItemRead = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(activityItemReadSchema)
+  .handler(async ({ context, data }) => {
+    const { db, workspaceId, user } = context;
+    await browserActivityInbox(db).markArtifactRead(workspaceId, user.id, data);
+  });
+
 export const markActivityAllDone = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(activityInboxReadAllSchema)
@@ -56,7 +59,6 @@ export const markActivityAllDone = createServerFn({ method: "POST" })
     });
   });
 
-/** Takes back a Mark all done, where nothing newer has changed those rows since. */
 export const undoActivityDone = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(activityDoneUndoSchema)
@@ -65,8 +67,6 @@ export const undoActivityDone = createServerFn({ method: "POST" })
     await browserActivityInbox(db).undoDone(workspaceId, user.id, data);
   });
 
-/** Reads every joined conversation and listed thread up to when the viewer's list was loaded;
- * items stay listed. */
 export const markActivityInboxRead = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(activityInboxReadAllSchema)
@@ -77,8 +77,6 @@ export const markActivityInboxRead = createServerFn({ method: "POST" })
     });
   });
 
-/** Whether the viewer has unread activity, for the nav rail's Activity dot, with where it was read
- * in the viewer's own channel, which carries every message that lights it. */
 export const loadActivityNavAttention = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .handler(async ({ context }) => {
@@ -90,7 +88,6 @@ export const loadActivityNavAttention = createServerFn({ method: "GET" })
     return { ...data, streamPositions };
   });
 
-/** Reads or unreads a mention the viewer was notified of; it stays listed until Done. */
 export const setActivityMentionRead = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(activityMentionReadSchema)

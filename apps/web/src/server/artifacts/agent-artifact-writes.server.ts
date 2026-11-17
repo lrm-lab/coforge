@@ -7,6 +7,7 @@ import { reopenComment, resolveComment, resolvedNotice } from "./artifact-commen
 import { errorType } from "#src/server/errors/error-type.server";
 import { ArtifactNotices, NOBODY_TOLD, type NoticedArtifact } from "./artifact-notices.server";
 import type { ArtifactNoticePort } from "./artifact-notice-port.server";
+import { settleWrite } from "./artifact-activity-wake.server";
 import { announceArtifactComments, type ArtifactSignals } from "./artifact-signals.server";
 import { agentPrincipal } from "./artifact-comment-principal.server";
 
@@ -41,7 +42,7 @@ function followed(writes: Writes, principal: Principal, artifactId: string) {
 }
 
 export async function commentOnArtifact(writes: Writes, principal: Principal, input: CommentInput) {
-  const { artifact, comment } = await postComment(
+  const { artifact, comment, after } = await postComment(
     writes.db,
     writes.blobs,
     agentPrincipal(principal),
@@ -51,6 +52,7 @@ export async function commentOnArtifact(writes: Writes, principal: Principal, in
     change: "posted",
     commentIds: [comment.id],
   });
+  settleWrite(writes.db, writes.signals, after);
   const follow = await followed(writes, principal, artifact.id);
   const told = !("deleted" in comment)
     ? ((await noticesOf(writes)?.comment({
@@ -69,7 +71,7 @@ export async function commentOnArtifact(writes: Writes, principal: Principal, in
 }
 
 export async function reviewArtifact(writes: Writes, principal: Principal, input: ReviewInput) {
-  const { artifact, review, comments } = await postReview(
+  const { artifact, review, comments, after } = await postReview(
     writes.db,
     writes.blobs,
     principal,
@@ -79,6 +81,7 @@ export async function reviewArtifact(writes: Writes, principal: Principal, input
     change: "posted",
     commentIds: comments.map(({ id }) => id),
   });
+  settleWrite(writes.db, writes.signals, after);
   const follow = await followed(writes, principal, artifact.id);
   const told =
     (await noticesOf(writes)?.review({

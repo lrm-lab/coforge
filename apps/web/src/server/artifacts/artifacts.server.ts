@@ -32,6 +32,7 @@ import { createVersionedArtifact } from "./artifact-create.server";
 import { ArtifactReads } from "./artifact-reads.server";
 import { recordingRefusal, requireNoUnseenChangesOnPush } from "./artifact-comment-gate.server";
 import { lockComments } from "./artifact-comment-write.server";
+import { settleWrite } from "./artifact-activity-wake.server";
 import { announceVersion, type ArtifactSignals } from "./artifact-signals.server";
 import { ArtifactVisibility } from "./artifact-visibility.server";
 import { writeVersion } from "./artifact-version-write.server";
@@ -367,6 +368,11 @@ export class Artifacts {
         wide: artifactTier(live) === "workspace",
         artifactId: input.artifactId,
         number: saved.number,
+      });
+      settleWrite(this.db, this.signals, {
+        workspaceId: input.workspaceId,
+        artifact: live,
+        writerUserId: input.publisher.userId,
       });
     }
     return saved;

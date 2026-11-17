@@ -45,6 +45,8 @@ import { openedItemKey } from "./activity-open-target";
 import { ActivityTaskPopup } from "./activity-task-popup";
 import { useActivityItemActions } from "./use-activity-item-actions";
 import { ActivityInboxRow } from "./activity-inbox-row";
+import { ActivityArtifactRow } from "./activity-artifact-row";
+import { activityItemTime } from "./activity-item-time";
 import { useActivityDays } from "./activity-inbox-days";
 import { ActivityInboxTabs } from "./activity-inbox-tabs";
 import { ActivityInboxMoreMenu } from "./activity-inbox-more-menu";
@@ -55,13 +57,6 @@ import { WaitingChoiceRow } from "./waiting-choice-row";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
-/**
- * The Activity page: the viewer's items with activity past Done, newest first, the All view's
- * pinned conversations first. The list fills the page until a row is opened; the row's
- * conversation (for a thread or a reply, its thread alone) then opens, kept in the URL: from `lg` up
- * beside a narrowed list, and below it full-screen in place of the list, with a back arrow to the
- * list.
- */
 export function ActivityInboxView({
   filter,
   onFilterChange,
@@ -71,7 +66,6 @@ export function ActivityInboxView({
 }: {
   filter: ActivityInboxFilter;
   onFilterChange: (filter: ActivityInboxFilter) => void;
-  /** The conversation the URL has open, at its jump message and open thread. */
   opened: HostedConversationTarget | undefined;
   onOpen: (target: HostedConversationTarget) => void;
   onClose: () => void;
@@ -88,12 +82,10 @@ export function ActivityInboxView({
     project: projectDone,
   } = useActivityDoneProjection();
 
-  // Another view starts at its top, however it was switched to (a tab, "Show all", the address).
   const listScroll = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     listScroll.current?.scrollTo({ top: 0 });
   }, [filter]);
-  // Switching views keeps the current rows on screen until the next view has loaded.
   const query = useInfiniteQuery({
     ...activityInboxQuery(workspaceId, filter),
     placeholderData: keepPreviousData,
@@ -112,27 +104,21 @@ export function ActivityInboxView({
     },
     [filter, router, workspaceSlug],
   );
-  // Re-project pending Done rows after placeholder selection, which may reuse selected data.
   const projectedData = useMemo(
     () => (query.data ? projectDone(query.data) : undefined),
     [query.data, projectDone],
   );
 
-  // The choice cards waiting on the viewer head the All view, so a question is not buried by chat.
   const waitingQuery = useQuery({
     ...waitingChoiceCardsQuery(workspaceId),
     enabled: filter === "all",
   });
   const [allWaiting, setAllWaiting] = useState(false);
-  // A disabled query keeps its cached cards: the filter hides them on the other views.
   const waiting = (filter === "all" && waitingQuery.data) || [];
-  // Folded again once few enough wait that nothing was folded.
   const expandedWaiting = allWaiting && waiting.length > WAITING_SHOWN;
 
   const firstPage = projectedData?.pages[0];
   const pinned = useMemo(() => firstPage?.pinned ?? [], [firstPage]);
-  // Pages are read at different times from a list that moves: a first page read again can hold an
-  // item a later page still holds. It is shown once, and never again below Pinned.
   const listed = useMemo(() => {
     const seen = new Set(pinned.map((item) => item.key));
     return (projectedData?.pages ?? [])
@@ -140,7 +126,6 @@ export function ActivityInboxView({
       .filter((item) => !seen.has(item.key) && seen.add(item.key));
   }, [projectedData, pinned]);
   const { items, release } = useKeptOpenRow(filter, listed, opened);
-  // A row marked Done leaves the list at once, the one the pane shows included.
   const onDoneStarted = useCallback(
     (item: ActivityCompletionItem) => {
       release(item.key);
@@ -153,7 +138,6 @@ export function ActivityInboxView({
     () => openedItemKey([...pinned, ...items], opened),
     [pinned, items, opened],
   );
-  // A Task card opens its popup alone over the list (`taskAlone`); anything else, the pane.
   const taskAlone =
     opened?.taskAlone && opened.task !== undefined ? { ...opened, task: opened.task } : undefined;
   const pane = taskAlone ? undefined : opened;
@@ -163,7 +147,6 @@ export function ActivityInboxView({
     filter,
   });
 
-  // A failed change is shown in the toolbar with its retry until it succeeds or is dismissed.
   const [failure, setFailure] = useState<{ retry: () => void } | null>(null);
   const actions = useActivityItemActions({
     workspaceId,
@@ -173,7 +156,6 @@ export function ActivityInboxView({
     onDoneSettled: settleDone,
   });
 
-  // Reads only what the list showed: the server's own clock at the time it read the list.
   const loadedAt = firstPage?.loadedAt;
   const readAll = useCallback(() => {
     if (loadedAt === undefined) return;
@@ -186,8 +168,7 @@ export function ActivityInboxView({
     run();
   }, [markAllRead, loadedAt, refresh]);
 
-  const days = useActivityDays(items, (item) => item.latest.createdAt);
-  // The rows in the order they are laid out, which the keyboard walks.
+  const days = useActivityDays(items, activityItemTime);
   const rows = useMemo(() => [...pinned, ...days.flatMap((day) => day.items)], [pinned, days]);
   const { doneAll } = useActivityBulkActions({
     workspaceId,
@@ -197,12 +178,10 @@ export function ActivityInboxView({
     onDoneSettled: settleDone,
   });
   const shownWaiting = expandedWaiting ? waiting : waiting.slice(0, WAITING_SHOWN);
-  // Every row's key as laid out, the waiting cards first, which the keyboard's tab stop is one of.
   const rowKeys = [
     ...shownWaiting.map((card) => waitingRowKey(card.messageId)),
     ...rows.map((item) => item.key),
   ];
-  // The composer the open conversation hosts, which Enter and typing put the caret in.
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const listFlow = useActivityFlow({
     flowing: desktop && pane !== undefined,
@@ -230,34 +209,39 @@ export function ActivityInboxView({
         : undefined,
     [flowing, selectedDone, actOnSelected, paneProps.onKeyDown, focusSelected],
   );
-  // Not empty while the waiting cards are still being read: they may be all there is.
   const empty =
     items.length === 0 &&
     pinned.length === 0 &&
     waiting.length === 0 &&
     !(filter === "all" && waitingQuery.isPending);
-  const row = (item: ActivityInboxItem, clock = false) => (
-    <ActivityInboxRow
-      key={item.key}
-      item={item}
-      filter={filter}
-      actions={actions}
-      viewerId={user.id}
-      current={item.key === currentKey}
-      tabStop={item.key === tabStopKey}
-      onOpen={onOpen}
-      clock={clock}
-    />
-  );
-  // Waiting on you, Pinned, then the rest: each section that has rows, the rest headed only below
-  // another.
+  const row = (item: ActivityInboxItem, clock = false) =>
+    item.kind === "artifact" ? (
+      <ActivityArtifactRow
+        key={item.key}
+        item={item}
+        filter={filter}
+        actions={actions}
+        tabStop={item.key === tabStopKey}
+        clock={clock}
+      />
+    ) : (
+      <ActivityInboxRow
+        key={item.key}
+        item={item}
+        filter={filter}
+        actions={actions}
+        viewerId={user.id}
+        current={item.key === currentKey}
+        tabStop={item.key === tabStopKey}
+        onOpen={onOpen}
+        clock={clock}
+      />
+    );
   const sections: ActivitySection[] = [
     {
       key: "waiting",
       label: m.activity_inbox_waiting(),
       icon: MessageQuestionCircle,
-      // However many wait, they never push the conversations off the screen: the first few show,
-      // the rest behind "N more", and the heading says how many in all.
       count: waiting.length,
       rows: shownWaiting.map((card) => (
         <WaitingChoiceRow
@@ -269,7 +253,6 @@ export function ActivityInboxView({
         />
       )),
       footer: waiting.length > WAITING_SHOWN && (
-        // On the rows' text column, with room to tap.
         <div className="py-1.5 pl-[calc(var(--page-gutter)+3.125rem)]">
           <Button
             size="sm"
@@ -290,9 +273,6 @@ export function ActivityInboxView({
       icon: Pin01,
       rows: pinned.map((item) => row(item)),
     },
-    // The rest, a heading for each day (none before hydration, when no day can be named yet). The
-    // first day keeps the one undated list's key, so naming the days after hydration keeps its rows
-    // mounted: a row remounted between a press and its release gets no click (task #64).
     ...days.map((day, index) => ({
       key: index === 0 ? "days" : day.key,
       label: day.label ?? m.navigation_activity(),
@@ -303,9 +283,7 @@ export function ActivityInboxView({
   ].filter((section) => section.rows.length > 0);
 
   const activeCount = firstPage?.activeItemCount;
-  // The header's parts: the page header's from `lg` up, the tab home's below it.
   const activeCountMeta = activeCount !== undefined && (
-    // Gives way before the heading does when the column is narrow.
     <span
       data-activity-active-count
       className="min-w-0 truncate text-sm text-tertiary tabular-nums"
@@ -319,8 +297,6 @@ export function ActivityInboxView({
       onFilterChange={onFilterChange}
       onFilterIntent={prefetchFilter}
       counts={{
-        // The previous filter remains as placeholder data while the next filter loads;
-        // its counts must not be shown as if they belonged to the selected view.
         unread: query.isPlaceholderData ? undefined : firstPage?.unreadItemCount,
         mentions: query.isPlaceholderData ? undefined : firstPage?.unreadMentionItemCount,
       }}
@@ -328,8 +304,6 @@ export function ActivityInboxView({
   );
   const moreActions = !query.isPlaceholderData &&
     firstPage &&
-    // Both actions reach every row of the list, so Mentions, which shows only some of them,
-    // offers neither; the menu shows only while one has something to do.
     filter !== "mentions" &&
     (firstPage.unreadItemCount > 0 || (filter === "all" && items.length > 0)) && (
       <ActivityInboxMoreMenu
@@ -347,8 +321,6 @@ export function ActivityInboxView({
       {...headerProps}
       className={cn(
         "flex min-h-0 flex-col",
-        // Raft's list column beside the conversation at `lg`, as wide as its handle keeps it.
-        // Narrower, the conversation takes the page in its place; the list stays mounted.
         pane
           ? cn(
               "relative w-list-column shrink-0",
@@ -410,7 +382,6 @@ export function ActivityInboxView({
               )}
               <ol
                 aria-label={section.label}
-                // The one list before the days are named, for the e2e that checks it never shows.
                 data-undated={section.dated === false ? "" : undefined}
                 className="flex flex-col"
               >
@@ -435,7 +406,6 @@ export function ActivityInboxView({
       )}
     </div>
   );
-  // One tree at every width, so crossing `lg` keeps the list (and its scroll) mounted.
   return (
     <div className="flex h-full min-h-0 min-w-0">
       {list}
@@ -460,7 +430,6 @@ export function ActivityInboxView({
   );
 }
 
-/** The waiting cards shown before the rest fold behind "N more". */
 const WAITING_SHOWN = 3;
 
 type ActivitySection = {

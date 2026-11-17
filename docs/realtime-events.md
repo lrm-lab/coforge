@@ -11,7 +11,7 @@ omitted from the receiver column; it only routes each event to the feature files
 
 | Event | Publisher | Receivers |
 | --- | --- | --- |
-| `activity.changed.v1` | `server/tasks/task-publication.server.ts`, `server/conversations/conversation-realtime.server.ts` | `features/inbox/activity-inbox-queries.ts` |
+| `activity.changed.v1` | `server/tasks/task-publication.server.ts`, `server/conversations/conversation-realtime.server.ts`, `server/artifacts/artifact-activity-wake.server.ts` | `features/inbox/activity-inbox-queries.ts` |
 | `agent.changed.v1` | `server/agents/agent-visibility-realtime.server.ts` | `features/agents/agent-status-channel.ts` |
 | `agent.control.v1` | `server/agents/agent-control-events.server.ts` (via `agent-control-operations.server.ts`, `agent-control-receiver.server.ts`) | `features/agents/agent-status-realtime.ts`, `features/agents/agent-control-realtime.ts` |
 | `artifact.version.published.v1` | `server/artifacts/artifact-signals.server.ts` | `features/artifacts/artifact-realtime.ts` |

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { activityRowPlace } from "#src/features/inbox/activity-row-place";
-import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
+import type { ActivityConversationItem } from "#src/server/inbox/activity-inbox.server";
 
 const comment = {
   attachmentId: "file",
@@ -8,7 +8,7 @@ const comment = {
   threadRootId: null,
   sourceMessageId: "message",
 };
-const thread = { root: { id: "root" } } as unknown as ActivityInboxItem["thread"];
+const thread = { root: { id: "root" } } as unknown as ActivityConversationItem["thread"];
 
 test("a comment on a file names the file, though it starts no thread (QA on staging, task #269)", () => {
   expect(activityRowPlace({ attachmentComment: comment, thread: null, task: null })).toEqual({

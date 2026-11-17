@@ -33,10 +33,34 @@ import {
   prepareComments,
   reopenThreads,
   withCommentLock,
+  type CommentTx,
 } from "./artifact-comment-write.server";
+import {
+  commentMentions,
+  peopleMentionedIn,
+  reviewMentions,
+  writeMentions,
+} from "./artifact-comment-mention-rows.server";
+import type { AfterWrite } from "./artifact-activity-wake.server";
+import { startFollowing } from "./artifact-follows.server";
 import { idempotencyMismatch } from "./artifact-idempotency.server";
 
 type Principal = { workspaceId: string; agentId: string };
+
+async function afterWriteOf(
+  tx: CommentTx,
+  place: { workspaceId: string; artifact: CommentedArtifact },
+  principal: CommentPrincipal,
+  mentionedReaders: readonly string[],
+): Promise<AfterWrite> {
+  if (principal.kind === "person")
+    await startFollowing(tx, place.artifact.id, [{ userId: principal.userId }]);
+  return {
+    ...place,
+    writerUserId: principal.kind === "person" ? principal.userId : undefined,
+    alsoUserIds: mentionedReaders,
+  };
+}
 
 export async function postComment(
   db: PrismaClient,
@@ -59,7 +83,8 @@ export async function postComment(
   });
   if (earlier && earlier.requestHash !== requestHash) throw idempotencyMismatch();
   const images = earlier ? [] : await prepareImages(blobs, principal, draft.images ?? []);
-  const row = await gate.recording(db, artifact.id, () =>
+  const [people] = earlier ? [[]] : await peopleMentionedIn(db, workspaceId, [draft.body]);
+  const written = await gate.recording(db, artifact.id, () =>
     withCommentLock(db, artifact.id, async (tx) => {
       const replay = await tx.artifactComment.findFirst({
         where: { artifactId: artifact.id, ...author, idempotencyKey },
@@ -67,7 +92,7 @@ export async function postComment(
       });
       if (replay) {
         if (replay.requestHash !== requestHash) throw idempotencyMismatch();
-        return replay;
+        return { row: replay, after: undefined };
       }
       const [prepared] = await prepareComments(tx, artifact.id, [draft], {
         version: input.version,
@@ -92,10 +117,16 @@ export async function postComment(
         images: [images],
       });
       if (prepared!.rootId) await reopenThreads(tx, [prepared!.rootId]);
-      return inserted!;
+      const place = { workspaceId, artifact };
+      const readers = await writeMentions(tx, place, commentMentions([inserted!], [people ?? []]));
+      return { row: inserted!, after: await afterWriteOf(tx, place, principal, readers) };
     }),
   );
-  return { artifact, comment: await commentView(db, workspaceId, row) };
+  return {
+    artifact,
+    comment: await commentView(db, workspaceId, written.row),
+    after: written.after,
+  };
 }
 
 export async function postReview(
@@ -117,6 +148,12 @@ export async function postReview(
   if (!earlier)
     for (const comment of input.comments)
       images.push(await prepareImages(blobs, agentPrincipal(principal), comment.images ?? []));
+  const people = earlier
+    ? []
+    : await peopleMentionedIn(db, workspaceId, [
+        input.body ?? "",
+        ...input.comments.map((comment) => comment.body),
+      ]);
   const written = await recordingRefusal(db, { artifactId: artifact.id, agentId }, () =>
     withCommentLock(db, artifact.id, async (tx) => {
       const replay = await tx.artifactCommentReview.findFirst({
@@ -130,7 +167,7 @@ export async function postReview(
           orderBy: [...COMMENT_ORDER],
           select: COMMENT_SELECT,
         });
-        return { review: replay, rows };
+        return { review: replay, rows, after: undefined };
       }
       const prepared = await prepareComments(tx, artifact.id, input.comments, {
         version: input.version,
@@ -167,11 +204,18 @@ export async function postReview(
       await attachImages(tx, blobs, { workspaceId, artifactId: artifact.id, rows, images });
       const roots = new Set(prepared.flatMap((entry) => entry.rootId ?? []));
       if (roots.size) await reopenThreads(tx, [...roots]);
-      return { review, rows };
+      const place = { workspaceId, artifact };
+      const readers = await writeMentions(tx, place, reviewMentions(review, rows, people));
+      return {
+        review,
+        rows,
+        after: await afterWriteOf(tx, place, agentPrincipal(principal), readers),
+      };
     }),
   );
   return {
     artifact,
     ...(await reviewViews(db, workspaceId, written.review, written.rows)),
+    after: written.after,
   };
 }

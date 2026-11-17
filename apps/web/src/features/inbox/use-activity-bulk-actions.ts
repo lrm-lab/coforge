@@ -4,7 +4,6 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { useAppToast, UNDO_TOAST_MS } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
-import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
 import { markActivityAllDone, undoActivityDone } from "./activity-inbox.functions";
 import {
   cancelActivityInboxListReads,
@@ -12,10 +11,6 @@ import {
 } from "./activity-inbox-queries";
 import type { ActivityDoneUndo } from "./activity-inbox.schemas";
 
-/**
- * Mark all done, and the Undo it offers in a toast. It hides the rows at once, like one
- * row's Done, and the refresh afterwards puts them back if the server refused. The returned object is stable.
- */
 export function useActivityBulkActions({
   workspaceId,
   onChanged,
@@ -50,7 +45,6 @@ export function useActivityBulkActions({
         });
     }
 
-    /** The toast after a Mark all done that changed something, with the Undo that takes it back. */
     function offerUndo(done: { count: number; undo: ActivityDoneUndo | null }) {
       if (done.count === 0) return;
       const { undo } = done;
@@ -71,8 +65,7 @@ export function useActivityBulkActions({
     }
 
     return {
-      /** Everything the list holds up to `before`; `items` are the rows to hide meanwhile. */
-      doneAll: (before: number, items: readonly ActivityInboxItem[]) =>
+      doneAll: (before: number, items: readonly ActivityCompletionItem[]) =>
         run(async () => {
           await cancelActivityInboxListReads(queryClient, workspaceId);
           offerUndo(await doneAll({ data: { before } }));

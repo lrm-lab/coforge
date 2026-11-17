@@ -7,7 +7,9 @@ import {
 } from "#src/server/conversations/conversation-realtime.server";
 import { humanReadStates } from "#src/server/conversations/human-unread.server";
 import { readAfterStreamPositions } from "#src/server/conversations/chat-stream-positions.server";
-import { activityNavAttentionSql } from "./activity-inbox-page-sql.server";
+import { artifactUnreadKeysSql } from "#src/server/artifacts/artifact-activity.server";
+import { compareActivityOrder } from "./activity-inbox-order";
+import { NAV_UNREAD_KEY_LIMIT, activityNavAttentionSql } from "./activity-inbox-page-sql.server";
 
 export type ActivityNavAttention = {
   hasUnread: boolean;
@@ -22,13 +24,19 @@ export async function navHasUnread(
   workspaceId: string,
   userId: string,
 ): Promise<ActivityNavAttention> {
-  const [{ unreadCount, unreadKeys }] = await db.$queryRaw<
-    [{ unreadCount: number; unreadKeys: string[] }]
-  >(activityNavAttentionSql(workspaceId, userId));
+  const [conversations, artifacts] = await Promise.all([
+    db.$queryRaw<{ key: string; latestAt: Date; latestSequence: number }[]>(
+      activityNavAttentionSql(workspaceId, userId),
+    ),
+    db.$queryRaw<{ key: string; latestAt: Date }[]>(artifactUnreadKeysSql(workspaceId, userId)),
+  ]);
+  const unread = [...conversations, ...artifacts.map((row) => ({ ...row, latestSequence: 0 }))]
+    .sort(compareActivityOrder)
+    .slice(0, NAV_UNREAD_KEY_LIMIT);
   return {
-    hasUnread: unreadCount > 0,
-    unreadCount,
-    unreadKeys,
+    hasUnread: unread.length > 0,
+    unreadCount: unread.length,
+    unreadKeys: unread.map((row) => row.key),
   } satisfies ActivityNavAttention;
 }
 

@@ -10,6 +10,7 @@ import { claimMentionActions } from "#src/server/conversations/pending-mention-a
 import { recordingDeliveries } from "./helpers/fake-centrifugo";
 import { attachmentCommentsFixture } from "./helpers/attachment-comments-fixture";
 import { agentAttachmentMessagesFixture } from "./helpers/agent-attachment-messages-fixture";
+import { isConversation } from "./helpers/activity-inbox-fixture";
 
 /**
  * Attachment comment notifications: the uploader, prior commenters and @-mentioned members are
@@ -288,12 +289,16 @@ test("a recipient who lost source access is skipped, and the inbox stops listing
     expect(await pmaOf(f, third.id)).toEqual([]);
     const inbox = new ActivityInbox(f.db, {});
     const memberItems = await inbox.list(f.workspace.id, f.member.id, { filter: "all" });
-    expect(memberItems.items.every((candidate) => !candidate.attachmentComment)).toBe(true);
+    expect(
+      memberItems.items.filter(isConversation).every((candidate) => !candidate.attachmentComment),
+    ).toBe(true);
 
     // The inbox surfaces the first comment's notification to its recipient while they can
     // still read the source.
     const items = await inbox.list(f.workspace.id, f.owner.id, { filter: "all" });
-    const item = items.items.find((candidate) => candidate.attachmentComment);
+    const item = items.items
+      .filter(isConversation)
+      .find((candidate) => candidate.attachmentComment);
     expect(item).toMatchObject({
       key: `mention:${item!.mentionAction!.resolutionId}`,
       attachmentComment: {
@@ -318,7 +323,9 @@ test("a recipient who lost source access is skipped, and the inbox stops listing
       resolutionId: item!.mentionAction!.resolutionId,
     });
     const after = await inbox.list(f.workspace.id, f.owner.id, { filter: "all" });
-    expect(after.items.every((candidate) => !candidate.attachmentComment)).toBe(true);
+    expect(
+      after.items.filter(isConversation).every((candidate) => !candidate.attachmentComment),
+    ).toBe(true);
   } finally {
     await f.close();
   }
@@ -372,7 +379,9 @@ test("a comment on a DM attachment notifies the peer's inbox and the item opens 
     ]);
     const inbox = new ActivityInbox(f.db, {});
     const items = await inbox.list(f.workspace.id, f.owner.id, { filter: "all" });
-    const item = items.items.find((candidate) => candidate.attachmentComment);
+    const item = items.items
+      .filter(isConversation)
+      .find((candidate) => candidate.attachmentComment);
     expect(item).toMatchObject({
       place: { kind: "direct", conversationId: dm.id },
       attachmentComment: {
@@ -445,7 +454,7 @@ test("a comment living in the migrated source conversation still reads as an att
     });
     const inbox = new ActivityInbox(f.db, {});
     const items = await inbox.list(f.workspace.id, f.owner.id, { filter: "all" });
-    const item = items.items.find((candidate) => candidate.mentionAction);
+    const item = items.items.filter(isConversation).find((candidate) => candidate.mentionAction);
     expect(item?.latest.id).toBe(comment.id);
     expect(item?.attachmentComment).toMatchObject({
       attachmentId: f.attachment.id,
@@ -473,7 +482,9 @@ test("an Agent's comment notifies the human uploader and surfaces in their inbox
     // And it surfaces in the uploader's Activity inbox.
     const inbox = new ActivityInbox(f.db, {});
     const items = await inbox.list(f.workspace.id, f.owner.id, { filter: "all" });
-    const item = items.items.find((candidate) => candidate.attachmentComment);
+    const item = items.items
+      .filter(isConversation)
+      .find((candidate) => candidate.attachmentComment);
     expect(item).toMatchObject({
       attachmentComment: { attachmentId: f.attachment.id },
     });

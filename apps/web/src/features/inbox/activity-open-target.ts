@@ -3,22 +3,11 @@ import {
   type HostedConversationTarget,
 } from "#src/features/conversations/conversation-page-search";
 import type { WaitingChoiceCard } from "#src/server/conversations/waiting-choice-cards.server";
-import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
+import type {
+  ActivityConversationItem,
+  ActivityInboxItem,
+} from "#src/server/inbox/activity-inbox.server";
 
-/**
- * Where a card opens: its channel or direct conversation, at the message the stream lands on, and
- * for a thread its thread open, scrolled to the reply it opens at. On Activity a thread opens alone
- * (`threadAlone`), without the conversation around it; in Chat (`activityChatLink`, a modified
- * click) the same place opens the thread beside its root.
- *
- * A mention the viewer was notified of opens at that message, in its thread when it is a reply.
- * Any other item opens at its first unread message (a thread at its first unread reply), where the
- * pane draws its "New messages" divider (task #358). With nothing unread, an item that mentions the
- * viewer opens at its first mention, read or not (#1129), and any other at its newest message. A
- * Task's conversation opens as its popup alone, over Activity, not over its channel's chat
- * (`taskAlone`, Frank 11-04), its discussion at the same message. A comment on a file opens the
- * file's conversation at the message it rides on, with the file's review over it at the comment.
- */
 export function activityOpenTarget({
   place,
   thread,
@@ -28,9 +17,7 @@ export function activityOpenTarget({
   latest,
   mentionAction,
   attachmentComment,
-}: ActivityInboxItem): HostedConversationTarget {
-  // A read mention before newer unread messages must not pull the pane back to it, away from
-  // what is new.
+}: ActivityConversationItem): HostedConversationTarget {
   const anchor = mentionAction ? latest.id : (firstUnreadMessageId ?? firstMentionMessageId);
   if (task)
     return {
@@ -40,10 +27,6 @@ export function activityOpenTarget({
       taskAlone: true,
       messageId: anchor ?? latest.id,
     };
-  // A comment notification opens the file's own conversation, at the message the file rides on
-  // (the comment itself lives in a conversation the UI never shows), and the file's review at the
-  // comment: the comments list holds only top-level comments, so a reply is reached through the
-  // comment it answers. A file with no message opens the conversation plainly.
   if (attachmentComment)
     return {
       kind: place.kind === "channel" ? "channel" : "dm",
@@ -54,12 +37,9 @@ export function activityOpenTarget({
       attachmentId: attachmentComment.attachmentId,
       commentId: attachmentComment.threadRootId ?? latest.id,
     };
-  // A mention item is always a channel's, and never a thread item: its reply's thread is named by
-  // the mention itself.
   const kind = mentionAction || place.kind === "channel" ? "channel" : "dm";
   const rootId = mentionAction ? mentionAction.threadRootId : thread?.root.id;
   if (rootId) return threadAlone(kind, place.conversationId, rootId, anchor ?? undefined);
-  // Landing on the first unread, the pane draws its divider there at once (task #102).
   const unreadFrom = !mentionAction && firstUnreadMessageId ? firstUnreadMessageId : undefined;
   return {
     kind,
@@ -69,7 +49,6 @@ export function activityOpenTarget({
   };
 }
 
-/** A thread opened alone, scrolled to `replyId`. */
 function threadAlone(
   kind: "channel" | "dm",
   conversationId: string,
@@ -86,10 +65,6 @@ function threadAlone(
   };
 }
 
-/**
- * Where a waiting choice card opens, at the card, to be answered there: a Task's card in its popup
- * alone, a reply's in its thread alone, any other in its channel or direct conversation.
- */
 export function waitingChoiceTarget(card: WaitingChoiceCard): HostedConversationTarget {
   if (card.task)
     return {
@@ -105,7 +80,6 @@ export function waitingChoiceTarget(card: WaitingChoiceCard): HostedConversation
     : { kind, id: card.conversationId, messageId: card.messageId };
 }
 
-/** The target's place in Chat, as a TanStack `Link`'s options. */
 export function activityChatLink(workspaceSlug: string, target: HostedConversationTarget) {
   const search = target.threadRootId
     ? { threadRootId: target.threadRootId, message: target.messageId }
@@ -131,11 +105,6 @@ export function activityChatLink(workspaceSlug: string, target: HostedConversati
       };
 }
 
-/**
- * The card that stands for what the pane shows: the Task card of the open Task popup, the thread
- * card of the open thread, else the card of the open conversation itself. One card at most, so a
- * channel's card and its thread's card are never marked together.
- */
 export function openedItemKey(
   items: readonly ActivityInboxItem[],
   opened: HostedConversationTarget | undefined,
@@ -143,7 +112,7 @@ export function openedItemKey(
   if (!opened) return undefined;
   let conversationCard: string | undefined;
   for (const item of items) {
-    if (item.place.conversationId !== opened.id) continue;
+    if (item.kind !== "conversation" || item.place.conversationId !== opened.id) continue;
     const target = activityOpenTarget(item);
     if (target.kind !== opened.kind) continue;
     if (target.task !== undefined) {

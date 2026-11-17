@@ -49,7 +49,12 @@ import {
 import { homeConversationOf, homeLinkProps, type ArtifactHome } from "./artifact-home";
 import { useArtifactLinkSharing } from "./artifact-link-sharing";
 import { ArtifactHomeChip } from "./artifact-home-chip";
-import { ArtifactPresenceChip, useKeepViewing, useRecordOpen } from "./artifact-presence-chip";
+import {
+  ArtifactPresenceChip,
+  useKeepSeen,
+  useKeepViewing,
+  useRecordOpen,
+} from "./artifact-presence-chip";
 import { ArtifactSendDialog } from "./artifact-send-dialog";
 import { ArtifactUpdateBanner, ViewingVersionNotice } from "./artifact-update-banner";
 import { isWebPageEntry } from "./artifact-path-kind";
@@ -77,6 +82,9 @@ import { useArtifactVisibility } from "./use-artifact-visibility";
 type ArtifactPlace = {
   pane?: ArtifactPaneControls;
   reviewId?: string | undefined;
+  commentId?: string | undefined;
+  version?: number | undefined;
+  arrival?: string | undefined;
   onClearReview?: (() => void) | undefined;
 };
 
@@ -84,6 +92,9 @@ export function ArtifactPage({
   artifactId,
   pane,
   reviewId,
+  commentId,
+  version,
+  arrival,
   onClearReview,
 }: { artifactId: string } & ArtifactPlace) {
   if (!z.uuid().safeParse(artifactId).success)
@@ -100,6 +111,9 @@ export function ArtifactPage({
       artifactId={artifactId}
       pane={pane}
       reviewId={reviewId}
+      commentId={commentId}
+      version={version}
+      arrival={arrival}
       onClearReview={onClearReview}
     />
   );
@@ -109,6 +123,9 @@ function ArtifactPageFor({
   artifactId,
   pane,
   reviewId,
+  commentId,
+  version,
+  arrival,
   onClearReview,
 }: { artifactId: string } & ArtifactPlace) {
   const queryClient = useQueryClient();
@@ -117,7 +134,7 @@ function ArtifactPageFor({
   const workspaceId = useCurrentWorkspaceId();
   const workspaceSlug = useWorkspaceSlug();
   const read = useQuery(artifactDocumentQuery(artifactId));
-  const [pinned, setPinned] = useState<number | null>(null);
+  const [pinnedState, setPinned] = useState<number | null>(version ?? null);
   const [incoming, setIncoming] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [sendingTo, setSendingTo] = useState(false);
@@ -130,8 +147,12 @@ function ArtifactPageFor({
   const review = useReviewFilter(artifactId, reviewId, () => onClearReview?.());
   useEffect(() => {
     if (reviewId !== undefined) setPanel("comments");
-  }, [reviewId]);
+  }, [reviewId, arrival]);
+  useEffect(() => {
+    setPinned(version ?? null);
+  }, [version, arrival]);
   const latest = read.data?.artifact.currentVersion ?? 0;
+  const pinned = pinnedState !== null && latest > 0 && pinnedState > latest ? null : pinnedState;
   const older = pinned !== null && pinned !== latest;
   const pinnedRead = useQuery({
     ...artifactDocumentQuery(artifactId, pinned ?? undefined),
@@ -160,6 +181,8 @@ function ArtifactPageFor({
     narrowable: current?.artifact.narrowable === true,
   });
 
+  const keepSeen = useKeepSeen(artifactId);
+
   useRealtimeSubscription({
     channel:
       homeId === undefined || !workspaceId
@@ -172,8 +195,10 @@ function ArtifactPageFor({
     onPublication: ({ data }) => {
       const commentsChange = decodeArtifactCommentsChangedEvent(data);
       if (commentsChange) {
-        if (commentsChange.artifactId === artifactId)
+        if (commentsChange.artifactId === artifactId) {
           void syncCommentsChange(queryClient, commentsChange);
+          keepSeen();
+        }
         return;
       }
       const dataChange = decodeArtifactDataChangedEvent(data);
@@ -184,6 +209,7 @@ function ArtifactPageFor({
       const published = decodeArtifactVersionPublishedEvent(data);
       if (published?.artifactId === artifactId) {
         if (published.number > latest) setIncoming(published.number);
+        keepSeen();
         void refreshArtifact(queryClient, artifactId, homeId ?? null, { document: false });
         return;
       }
@@ -208,6 +234,11 @@ function ArtifactPageFor({
     (target) => commentsOpen && target.path === shownPath,
   );
   const [focus, postFocus, consumeFocus] = useCommentHandoff<string>(() => panel === "comments");
+  useEffect(() => {
+    if (commentId === undefined) return;
+    setPanel("comments");
+    postFocus(commentId);
+  }, [commentId, arrival, postFocus]);
   const list = useArtifactComments(artifactId, commentsOpen);
   const groups = useMemo(() => groupThreads(list.comments), [list.comments]);
   const publishPlaces = useCallback<ArtifactCommenting["publishPlaces"]>(

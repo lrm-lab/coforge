@@ -93,3 +93,35 @@ Comments on artifacts are written for Agents (the Agent API's `comments`, `comme
   draft version), the drafts are deleted, and Agents are notified once per review. A retry with the
   same key and ids returns the same review; the same key with other ids is a conflict.
 - A reply draft stores no path; the comment takes its parent's at send.
+
+## Activity
+
+- One Activity item per artifact the person follows and can read (`visibleToMemberSql`), in the one
+  `items` list beside conversations (`kind: "artifact"`). The state lives on the follow:
+  `followedAt` (a re-follow sets it again), `readAt`, `doneAt`. An event counts when it is at or after
+  `followedAt` and is not the person's own (their own comments and versions; an Agent they own is
+  another author). The item is listed while an event is newer than `doneAt`, and unread while one is
+  newer than `GREATEST(readAt, doneAt, openedAt)`. Mark read and Read all keep it listed without the
+  dot, Done and Done all remove it, and Undo restores the previous `readAt` and `doneAt`. Every
+  Activity write targets only the caller's own follow of an artifact they can read, with the item's
+  server time as its fence; it never writes `artifact_viewer_positions`. Opening sets `openedAt`; an
+  open, visible page keeps it moving as comments and versions arrive (`markArtifactSeen`, coalesced on the page: one in flight, one trailing, 3 s apart; it announces only when it cleared an unread state). Read-all and Done-all take only artifacts with an event at or before their bound, and Undo restores `readAt` only where it still equals the Done's time.
+- `artifact_comment_mentions` (person, artifact, and exactly one of a comment or a review, with
+  `mentionedAt`) is written in the write's transaction from the SDK resolver (`mentionHandles`;
+  person mentions, never the author; a review body's mentions belong to the review; an edit rewrites
+  the rows; a delete removes them) and is the only source of mention items, the Mentions view, the
+  gallery's @ badge and the wake. A mentioned reader follows in the same transaction, from the
+  mention (`followedAt` = the mention's time). Backfill of old comments and reviews:
+  `apps/web/scripts/backfill-artifact-comment-mentions.ts` (see the production README); it takes each
+  comment's row lock and resolves the locked body, so an edit never loses to it, and follows no one.
+- `artifact-activity.server.ts` is the one derivation behind the list and the nav dot: it starts
+  from the person's follows, filters with EXISTS before aggregating (the dot is EXISTS only), and
+  reads edits as a second range, not an `OR`; the page cut comes first and the page's rows alone get
+  their counts, latest event and preview.
+- A person who posts a comment, reply or review follows the artifact in that transaction. Every
+  write returns one `AfterWrite` (none for a replay or an edit that changed nothing, none for
+  version 1); `settleWrite` (`artifact-activity-wake.server.ts`) works out the audience once,
+  followers and mentioned readers except the writer, and publishes `activity.changed.v1` in batches of
+  50 off the request path (`ArtifactSignals.background`, detached in production, collected in tests);
+  a failure is logged and never fails the write. Opening, marking read and Done wake the person's own
+  other pages (`announceActivityAttention`); deleting a comment wakes the people its mentions told.

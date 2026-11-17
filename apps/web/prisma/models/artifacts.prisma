@@ -51,6 +51,7 @@ model Artifact {
   commentPositions ArtifactCommentPosition[]
   commentImages   ArtifactCommentImage[]
   commentDrafts   ArtifactCommentDraft[]
+  commentMentions ArtifactCommentMention[]
   follows         ArtifactFollow[]
   pageDocuments   ArtifactPageDocument[]
   pageAssets      ArtifactPageAsset[]
@@ -269,6 +270,7 @@ model ArtifactComment {
   replies           ArtifactComment[]      @relation("ArtifactCommentThread")
   review            ArtifactCommentReview? @relation(fields: [reviewId], references: [id], onDelete: Cascade)
   images            ArtifactCommentImage[]
+  mentions          ArtifactCommentMention[]
 
   /// A key is unique per artifact and author; a null author column never collides.
   @@unique([artifactId, authorAgentId, idempotencyKey])
@@ -299,6 +301,7 @@ model ArtifactCommentReview {
   createdAt      DateTime          @default(now())
   artifact       Artifact          @relation(fields: [artifactId], references: [id], onDelete: Cascade)
   comments       ArtifactComment[]
+  mentions       ArtifactCommentMention[]
 
   @@unique([artifactId, authorAgentId, idempotencyKey])
   @@unique([artifactId, authorUserId, idempotencyKey])
@@ -341,7 +344,9 @@ model ArtifactCommentDraft {
 /// `following` false and `unfollowedAt` set is a remembered choice, not an absence. The actor is
 /// exactly one of `userId` and `agentId` (`artifact_follows_actor_check`), with no foreign key: this
 /// module adds none to a table outside it; a null actor column never collides in the unique pairs.
-/// Goes with the artifact.
+/// `followedAt` is when the current following period began (a follow after an unfollow sets it
+/// again): a person's Activity item counts what happened from then on. `readAt` and `doneAt` are the
+/// person's read and Done marks on that item. Goes with the artifact.
 model ArtifactFollow {
   id           String    @id @default(uuid(7)) @db.Uuid
   artifactId   String    @db.Uuid
@@ -349,12 +354,16 @@ model ArtifactFollow {
   agentId      String?   @db.Uuid
   following    Boolean
   unfollowedAt DateTime?
+  followedAt   DateTime  @default(now())
+  readAt       DateTime?
+  doneAt       DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   artifact     Artifact  @relation(fields: [artifactId], references: [id], onDelete: Cascade)
 
   @@unique([artifactId, agentId])
   @@unique([artifactId, userId])
+  @@index([userId], map: "artifact_follows_userId_following_idx", where: raw("\"following\""))
   @@map("artifact_follows")
 }
 

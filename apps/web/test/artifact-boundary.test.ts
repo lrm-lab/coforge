@@ -8,6 +8,7 @@ const artifacts = resolve(web, "src/server/artifacts");
  * import (task #542). Everything else in the directory is internal — composition wires it, the
  * entries expose it. */
 const PUBLIC_ENTRIES = new Set([
+  "artifact-activity.server",
   "artifact-access.server",
   "artifact-blob-sweep.server",
   "artifact-composition.server",

@@ -12,6 +12,7 @@ import { readWindowThreads } from "#src/server/conversations/thread-summaries.se
 import { PrismaDirectConversationPreferences } from "#src/server/db/repositories/direct-conversation-preferences.repositories.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { ActivityInbox } from "#src/server/inbox/activity-inbox.server";
+import { isConversation } from "./helpers/activity-inbox-fixture";
 
 /**
  * Every list that shows a message's text without its card carries what an action card's line is
@@ -205,9 +206,10 @@ test("an action card's lists carry what its line is written from", async () => {
     const activity = await new ActivityInbox(db, {}).list(workspace.id, alice.id, {
       filter: "all",
     });
-    expect(activity.items.find((item) => item.place.conversationId === dmId)?.latest.card).toEqual(
-      dmCard,
-    );
+    expect(
+      activity.items.filter(isConversation).find((item) => item.place.conversationId === dmId)
+        ?.latest.card,
+    ).toEqual(dmCard);
   } finally {
     await db.workspace.delete({ where: { id: workspace.id } });
     await db.user.delete({ where: { id: alice.id } });

@@ -6,7 +6,7 @@ import { ActivityInbox } from "#src/server/inbox/activity-inbox.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 import { openPeopleDirectConversation } from "#src/server/conversations/user-direct-conversations.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
-import { database, kindOf, seed, cleanup } from "./helpers/activity-inbox-fixture";
+import { database, kindOf, seed, cleanup, isConversation } from "./helpers/activity-inbox-fixture";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
 /** Activity inbox against PostgreSQL; shared fixtures control exact sequences and cleanup. */
@@ -67,14 +67,16 @@ test("a thread counts only the unread replies past its read cursor, on any page"
 
     const inbox = new ActivityInbox(db, {});
     const firstPage = await inbox.list(workspace.id, alice.id, { filter: "all", limit: 1 });
-    expect(firstPage.items.map((item) => item.thread?.root.body)).toEqual(["newer"]);
+    expect(firstPage.items.filter(isConversation).map((item) => item.thread?.root.body)).toEqual([
+      "newer",
+    ]);
     const secondPage = await inbox.list(workspace.id, alice.id, {
       filter: "all",
       cursor: firstPage.nextCursor!,
       limit: 1,
     });
-    expect(secondPage.items).toHaveLength(1);
-    const [thread] = secondPage.items;
+    expect(secondPage.items.filter(isConversation)).toHaveLength(1);
+    const [thread] = secondPage.items.filter(isConversation);
     expect(thread!.thread?.root.body).toBe("older");
     expect(thread!.unreadCount).toBe(2);
     expect(thread!.firstUnreadMessageId).toBe(firstUnread.id);
@@ -119,30 +121,32 @@ test("direct messages and their threads are listed with the Agent they belong to
     const inbox = new ActivityInbox(db, {});
     let page = await inbox.list(workspace.id, alice.id, { filter: "all" });
     expect(
-      page.items.map((item) => [
-        kindOf(item),
-        item.place.kind === "direct" && item.place.peer.kind === "agent"
-          ? item.place.peer.agentId
-          : null,
-      ]),
+      page.items
+        .filter(isConversation)
+        .map((item) => [
+          kindOf(item),
+          item.place.kind === "direct" && item.place.peer.kind === "agent"
+            ? item.place.peer.agentId
+            : null,
+        ]),
     ).toEqual([
       ["thread", agent.id],
       ["direct", agent.id],
     ]);
-    const direct = page.items[1]!.place;
+    const direct = page.items.filter(isConversation)[1]!.place;
     expect(direct.kind === "direct" && direct.peer.displayName).toBe("Helper");
 
     // Pinned, the DM lists under Pinned with its Agent, and its thread stays among the items.
     await pin({ id: opened.senderMemberId, conversationId: opened.conversationId }, 0);
     page = await inbox.list(workspace.id, alice.id, { filter: "all" });
     expect(page.pinned.map((item) => item.place)).toEqual([direct]);
-    expect(page.items.map(kindOf)).toEqual(["thread"]);
+    expect(page.items.filter(isConversation).map(kindOf)).toEqual(["thread"]);
     await db.conversationPin.deleteMany({ where: { conversationId: opened.conversationId } });
 
     // A deleted Agent's conversation stays readable in Chat but leaves the inbox.
     await db.agent.update({ where: { id: agent.id }, data: { deletedAt: new Date() } });
     page = await inbox.list(workspace.id, alice.id, { filter: "all" });
-    expect(page.items).toEqual([]);
+    expect(page.items.filter(isConversation)).toEqual([]);
   } finally {
     await cleanup(db, suffix);
   }
@@ -209,12 +213,14 @@ test("direct messages between members, and a member's with themself, are listed 
     });
     const bobPeer = peopleAt(bob, "bob");
     expect(
-      page.items.map((item) => [
-        kindOf(item),
-        item.place.conversationId,
-        item.place.kind === "direct" ? item.place.peer : null,
-        item.unreadCount,
-      ]),
+      page.items
+        .filter(isConversation)
+        .map((item) => [
+          kindOf(item),
+          item.place.conversationId,
+          item.place.kind === "direct" ? item.place.peer : null,
+          item.unreadCount,
+        ]),
     ).toEqual([
       ["direct", withBob.conversationId, bobPeer, 1],
       ["direct", withSelf.conversationId, peopleAt(alice, "alice"), 0],
@@ -242,9 +248,9 @@ test("direct messages between members, and a member's with themself, are listed 
       throughSequence: reply.sequence,
     });
     expect(
-      (await inbox.list(workspace.id, alice.id, { filter: "all" })).items.map(
-        (item) => item.place.conversationId,
-      ),
+      (await inbox.list(workspace.id, alice.id, { filter: "all" })).items
+        .filter(isConversation)
+        .map((item) => item.place.conversationId),
     ).toEqual([withSelf.conversationId]);
     expect(await inbox.navAttention(workspace.id, alice.id)).toMatchObject({ hasUnread: false });
 
@@ -252,7 +258,9 @@ test("direct messages between members, and a member's with themself, are listed 
     const withCarol = await openPeopleDirectConversation(db, workspace.id, alice.id, carol.id);
     const carolWithAlice = await memberOf(withCarol.conversationId, carol.id);
     await post(withCarol.conversationId, carolWithAlice.id, "hi alice");
-    const [newest] = (await inbox.list(workspace.id, alice.id, { filter: "all" })).items;
+    const [newest] = (await inbox.list(workspace.id, alice.id, { filter: "all" })).items.filter(
+      isConversation,
+    );
     expect(newest!.place.kind === "direct" && newest!.place.peer.displayName).toBe(
       UNNAMED_PERSON_NAME,
     );
@@ -296,7 +304,7 @@ test("a person notified of a mention outside their channels finds it in Activity
       },
     });
     const mentionsOf = async () =>
-      (await inbox.list(workspace.id, bob.id, { filter: "mentions" })).items;
+      (await inbox.list(workspace.id, bob.id, { filter: "mentions" })).items.filter(isConversation);
     const countsOf = async () => {
       const { unreadItemCount, unreadMentionItemCount } = await inbox.list(workspace.id, bob.id, {
         filter: "all",
@@ -325,9 +333,9 @@ test("a person notified of a mention outside their channels finds it in Activity
     expect(await countsOf()).toEqual({ unreadItemCount: 1, unreadMentionItemCount: 1 });
     // Alice's own inbox never lists what she sent.
     expect(
-      (await inbox.list(workspace.id, alice.id, { filter: "all" })).items.some(
-        (entry) => entry.mentionAction,
-      ),
+      (await inbox.list(workspace.id, alice.id, { filter: "all" })).items
+        .filter(isConversation)
+        .some((entry) => entry.mentionAction),
     ).toBe(false);
 
     // Read and unread like any item: it stays listed either way.

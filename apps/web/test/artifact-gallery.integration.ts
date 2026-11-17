@@ -147,7 +147,7 @@ test("a page is stable and a cursor continues it, in both sorts", async () => {
   });
 });
 
-test("related to me: my Agents' artifacts, those I commented on or follow, not those that only mention me", async () => {
+test("related to me: my Agents' artifacts, those I commented on, follow or was mentioned in (a mention follows), not a near-miss handle", async () => {
   expect(await titles(f.alice, { related: true })).toEqual([
     "Alpha plan",
     "Beta notes",
@@ -173,7 +173,11 @@ test("related to me: my Agents' artifacts, those I commented on or follow, not t
     body: `not @${mentioned.username}x at all`,
     idempotencyKey: f.key(),
   });
-  expect(await titles(f.bob, { related: true })).toEqual(["Alpha plan", "Beta notes"]);
+  expect(await titles(f.bob, { related: true })).toEqual([
+    "Alpha plan",
+    "Beta notes",
+    "Delta report",
+  ]);
 });
 
 test("badges: updates since the last open, new comments by others, mentions", async () => {

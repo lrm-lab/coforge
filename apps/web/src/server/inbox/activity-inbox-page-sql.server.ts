@@ -13,34 +13,21 @@ import {
 import { taskItemRowsSql } from "./activity-inbox-task-items.server";
 import { commentNoticeRowsSql, mentionNoticeRowsSql } from "./activity-inbox-mentions.server";
 
-/**
- * One page of the Activity inbox as one statement. Every item is read once, cheaply: its newest
- * message, its Done and pin, and probes for whether anything in it is unread or mentions the
- * viewer. The database filters, orders and cuts the page from those, counts the tabs over all of
- * them, and only then counts the unread messages of the items on the page.
- *
- * Items are ordered newest activity first by `(latestAt, latestSequence, key)`, and a page starts
- * after a cursor in that order rather than at an offset: activity that moves an item between two
- * page reads neither repeats nor skips one.
- */
-
-/** A page row: an item with its unread count, or none when the page is empty, and the counts. */
 export type ActivityPageRow = {
   unreadItemCount: number;
   unreadMentionItemCount: number;
   activeItemCount: number;
-  /** Null on the one row of an empty page, which carries only the counts. */
   key: string | null;
   isPin: boolean;
   kind: "channel" | "direct";
   memberId: string | null;
-  conversationId: string;
+  conversationId: string | null;
   rootMessageId: string | null;
   channelName: string | null;
   visibility: string;
   directKey: string | null;
   agentId: string | null;
-  latestMessageId: string;
+  latestMessageId: string | null;
   latestSequence: number;
   latestAt: Date;
   pastDone: boolean;
@@ -61,14 +48,12 @@ export type ActivityPageRow = {
   firstUnreadMessageId: string | null;
 };
 
-/** Which listed items a view shows. The All view lists pinned conversations apart. */
 function viewSql(filter: ActivityInboxFilter) {
   if (filter === "unread") return Prisma.sql`items."hasUnread"`;
   if (filter === "mentions") return Prisma.sql`items."firstMentionMessageId" IS NOT NULL`;
   return Prisma.sql`items."pinOrder" IS NULL`;
 }
 
-/** The items after `cursor` in list order; every item when there is none. */
 function afterSql(cursor: ActivityInboxCursor | undefined) {
   if (!cursor) return Prisma.sql`TRUE`;
   return Prisma.sql`(items."latestAt", items."latestSequence", items."key" COLLATE "C")
@@ -124,7 +109,8 @@ export function activityPageSql(
     LEFT JOIN LATERAL (
       SELECT COUNT(*)::int AS "count", (ARRAY_AGG(m."id" ORDER BY m."sequence"))[1] AS "firstId"
       FROM "messages" m
-      WHERE listed."rootMessageId" IS NULL AND ${conversationUnreadMessageSql}
+      WHERE listed."rootMessageId" IS NULL
+        AND ${conversationUnreadMessageSql}
         -- A muted channel counts only the viewer's mentions; its row is listed for those alone.
         AND (cm."notificationLevel" <> 'muted' OR listed."channelName" IS NULL
           OR listed."taskBoardId" IS NOT NULL OR EXISTS (
@@ -146,47 +132,36 @@ export function activityPageSql(
       listed."latestAt" DESC, listed."latestSequence" DESC, listed."key" COLLATE "C" DESC`;
 }
 
-/** The item branches shared by the Activity page and the nav attention count. */
 export function activityItemsSql(workspaceId: string, userId: string) {
-  const branches = [
-    conversationItemRowsSql(workspaceId, userId),
-    threadItemRowsSql(workspaceId, userId),
-    taskItemRowsSql(workspaceId, userId),
-    mentionNoticeRowsSql(workspaceId, userId),
-    commentNoticeRowsSql(workspaceId, userId),
-  ].map((branch) => Prisma.sql`SELECT ${ITEM_COLUMNS} FROM (${branch}) branch`);
-  return Prisma.join(branches, " UNION ALL ");
+  return Prisma.join(
+    [
+      conversationItemRowsSql(workspaceId, userId),
+      threadItemRowsSql(workspaceId, userId),
+      taskItemRowsSql(workspaceId, userId),
+      mentionNoticeRowsSql(workspaceId, userId),
+      commentNoticeRowsSql(workspaceId, userId),
+    ].map((branch) => Prisma.sql`SELECT ${ITEM_COLUMNS} FROM (${branch}) branch`),
+    " UNION ALL ",
+  );
 }
 
-/** The All view's first page lists the viewer's pins apart from the page rows. */
 function pinsSql(filter: ActivityInboxFilter, cursor: ActivityInboxCursor | undefined) {
-  // The All view's first page lists the viewer's pins, which `items` already limits to the same
-  // activity-past-Done rule as every row (Raft's Activity: Done takes a row out until something
-  // new arrives), so a Done pin leaves Pinned with the rest and returns with new activity.
   return filter === "all" && !cursor
     ? Prisma.sql`UNION ALL
       SELECT TRUE AS "isPin", items.* FROM items WHERE items."pinOrder" IS NOT NULL`
     : Prisma.empty;
 }
 
-/** The capped nav count and the keys of the unread Activity items it counts. */
+export const NAV_UNREAD_KEY_LIMIT = 100;
+
 export function activityNavAttentionSql(workspaceId: string, userId: string) {
   return Prisma.sql`
     WITH items AS MATERIALIZED (
       ${activityItemsSql(workspaceId, userId)}
-    ), listed AS (
-      SELECT items."key", items."hasUnread", items."latestAt", items."latestSequence"
-      FROM items
-      WHERE items."pastDone" AND items."hasUnread"
-      ORDER BY items."latestAt" DESC, items."latestSequence" DESC, items."key" COLLATE "C" DESC
-      LIMIT 100
     )
-    SELECT
-      COUNT(*)::int AS "unreadCount",
-      COALESCE(
-        ARRAY_AGG(listed."key" ORDER BY listed."latestAt" DESC, listed."latestSequence" DESC,
-          listed."key" COLLATE "C" DESC),
-        ARRAY[]::text[]
-      ) AS "unreadKeys"
-    FROM listed`;
+    SELECT items."key", items."latestAt", items."latestSequence"
+    FROM items
+    WHERE items."pastDone" AND items."hasUnread"
+    ORDER BY items."latestAt" DESC, items."latestSequence" DESC, items."key" COLLATE "C" DESC
+    LIMIT ${NAV_UNREAD_KEY_LIMIT}`;
 }

@@ -28,7 +28,7 @@ import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { m } from "#src/paraglide/messages";
-import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
+import type { ActivityConversationItem } from "#src/server/inbox/activity-inbox.server";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
 import { activityChatLink, activityOpenTarget } from "./activity-open-target";
 import { activityRowPlace } from "./activity-row-place";
@@ -40,7 +40,7 @@ export const ACTIVITY_ROW_ITEM_CLASS =
 export const ACTIVITY_ROW_LINK_CLASS =
   "flex items-center gap-3 px-page py-3 outline-focus-ring transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2";
 
-function Preview({ message }: { message: ActivityInboxItem["latest"] }) {
+function Preview({ message }: { message: ActivityConversationItem["latest"] }) {
   if (message.system) return <>{systemNoticeText(message)}</>;
   const cardText = actionCardPreviewText(message.card);
   if (cardText) return <>{cardText}</>;
@@ -60,7 +60,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   onOpen,
   clock = false,
 }: {
-  item: ActivityInboxItem;
+  item: ActivityConversationItem;
   filter: ActivityInboxFilter;
   actions: ActivityItemActions;
   viewerId: string;
@@ -223,7 +223,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   );
 });
 
-export function ActivityItemIcon({ item }: { item: ActivityInboxItem }) {
+export function ActivityItemIcon({ item }: { item: ActivityConversationItem }) {
   const { place } = item;
   if (place.kind === "direct")
     return place.peer.kind === "agent" ? (
@@ -261,7 +261,7 @@ function ActivityItemBadges({
   item,
   filter,
 }: {
-  item: ActivityInboxItem;
+  item: ActivityConversationItem;
   filter: ActivityInboxFilter;
 }) {
   const task = item.thread?.task;

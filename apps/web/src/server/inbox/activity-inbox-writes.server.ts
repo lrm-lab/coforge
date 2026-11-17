@@ -1,7 +1,11 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
-import type { ActivityItemDone } from "#src/features/inbox/activity-inbox.schemas";
+import type {
+  ActivityArtifactMark,
+  ActivityItemDone,
+} from "#src/features/inbox/activity-inbox.schemas";
+import { doneArtifactsSql, readArtifactsSql } from "#src/server/artifacts/artifact-activity.server";
 import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import {
@@ -14,24 +18,11 @@ import {
 } from "#src/server/conversations/human-unread.server";
 import { announceActivityAttention, announceReadMoved } from "./activity-attention.server";
 
-/** What the Activity inbox's writes may announce: a moved read cursor, and where the inbox stands. */
 export type ActivityInboxRealtime = Pick<
   ConversationRealtime,
   "viewerChanged" | "viewerEventsChanged" | "activityChanged"
 >;
 
-/**
- * The Activity inbox's two clearing writes: Done on one item, and read-all. Both read through the
- * boundary they set and tell the person's other pages what they left behind. They live here rather
- * than in the read model so `activity-inbox.server.ts` keeps to listing and authorization.
- */
-
-/**
- * Marks one item Done through the newest message the viewer saw (`throughSequence`), and reads
- * it through the same message: a message that arrived after the viewer's render keeps the item
- * listed and unread. The boundary only moves forward and is clamped to the item's newest
- * message.
- */
 export async function markActivityDone(
   db: PrismaClient,
   realtime: ActivityInboxRealtime | undefined,
@@ -40,6 +31,16 @@ export async function markActivityDone(
   item: ActivityItemDone,
 ) {
   await requireWorkspaceMember(db, workspaceId, userId);
+  if (item.kind === "artifact") {
+    await db.$queryRaw(
+      doneArtifactsSql(workspaceId, userId, {
+        through: new Date(item.throughAt),
+        artifactId: item.artifactId,
+      }),
+    );
+    await announceActivityAttention(db, realtime, workspaceId, userId);
+    return;
+  }
   if (item.kind === "mention_action") {
     await db.pendingMentionAction.updateMany({
       where: { id: item.resolutionId, workspaceId, targetUserId: userId, dismissedAt: null },
@@ -79,12 +80,9 @@ export async function markActivityDone(
         )
       : markConversationDoneSql(member.id, boundary),
   );
-  // A conversation's Done reads it too, so its badge moves when the read cursor or a mark-unread
-  // marker moves (a thread's Done never touches the badge).
   const readMoved =
     member.readThroughSequence < boundary ||
     (member.unreadFromSequence !== null && member.unreadFromSequence <= boundary);
-  // A task's own conversation is hidden: it has no badge to move.
   const badgeMoved = !rootMessageId && readMoved && member.conversation.kind !== "task_thread";
   await announceReadMoved(
     db,
@@ -97,11 +95,23 @@ export async function markActivityDone(
   );
 }
 
-/**
- * Reads every joined conversation and every thread the inbox lists, through the newest message
- * posted at or before `before` (the list's `loadedAt`), in one transaction. Items stay listed;
- * only Done removes them.
- */
+export async function markActivityArtifactRead(
+  db: PrismaClient,
+  realtime: ActivityInboxRealtime | undefined,
+  workspaceId: string,
+  userId: string,
+  item: ActivityArtifactMark,
+) {
+  await requireWorkspaceMember(db, workspaceId, userId);
+  await db.$queryRaw(
+    readArtifactsSql(workspaceId, userId, {
+      through: new Date(item.throughAt),
+      artifactId: item.artifactId,
+    }),
+  );
+  await announceActivityAttention(db, realtime, workspaceId, userId);
+}
+
 export async function markActivityAllRead(
   db: PrismaClient,
   realtime: ActivityInboxRealtime | undefined,
@@ -128,6 +138,7 @@ export async function markActivityAllRead(
       markThreadsReadSql(workspaceId, followedChannelThreadsSql(workspaceId, userId), before),
     ),
     db.$executeRaw(markThreadsReadSql(workspaceId, directThreadsSql(workspaceId, userId), before)),
+    db.$queryRaw(readArtifactsSql(workspaceId, userId, { through: before })),
   ]);
   await announceReadMoved(
     db,

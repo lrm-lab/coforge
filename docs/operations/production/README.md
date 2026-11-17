@@ -145,6 +145,19 @@ are refreshed the same way ([wildcard certificate](../usercontent-certificate/RE
 | Secret | `ALIDNS_ACCESS_KEY_ID`, `ALIDNS_ACCESS_KEY_SECRET` | AccessKey of RAM user `coforge-production-usercontent-dns`; deploy writes `secrets/alidns_access_key_id` and `secrets/alidns_access_key_secret` |
 | Secret | `COFORGE_CLOUD_SERVICE_PASSWORD` | Settings → 云电脑服务 unlock password; deploy writes `secrets/coforge_cloud_service_password` |
 
+## Backfill of artifact comment mentions
+
+After the release that adds `artifact_comment_mentions`, run once in the Web container (idempotent,
+resumable with `--from-id`): `bun .ops/backfill-artifact-comment-mentions.js --dry-run`, then `--apply`
+(`--batch-size <n>`, default 500; `--from-id` resumes the comment pass, reviews always rerun). It covers comments and review bodies, locks each comment while it reads it, and follows no one. Until it runs, old comments show no mention items or @ badges.
+
+## Failed concurrent index build
+
+`artifact_follows_userId_following_idx` is built `CONCURRENTLY` and its migration uses `IF NOT EXISTS`,
+so a build that failed or was cancelled leaves an invalid index that a rerun silently skips. After the
+release, check `SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;`; if the index is
+listed, run `DROP INDEX CONCURRENTLY "artifact_follows_userId_following_idx";` and rerun the migration.
+
 ## Web-page artifacts' origins
 
 A web-page artifact is served only from its own origin, `a-<artifact uuid>.coforgeusercontent.com`

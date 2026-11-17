@@ -1,9 +1,13 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { actorNames } from "./artifact-actor-names.server";
+import { artifactUnreadKeysSql } from "./artifact-activity.server";
 import type { ArtifactViewing } from "./artifact-viewing.server";
 import type { ArtifactReads } from "./artifact-reads.server";
 
-type PositionsDb = Pick<PrismaClient, "artifactViewerPosition" | "user" | "agent" | "$executeRaw">;
+type PositionsDb = Pick<
+  PrismaClient,
+  "artifactViewerPosition" | "user" | "agent" | "$executeRaw" | "$queryRaw"
+>;
 
 type Place = { workspaceId: string; artifactId: string; userId: string };
 
@@ -28,6 +32,18 @@ export class ArtifactViewerPositions {
           "seenVersion" = GREATEST("artifact_viewer_positions"."seenVersion", EXCLUDED."seenVersion")`;
     await this.viewing.mark(artifact.id, input.userId);
     return this.#rosterOf(artifact, input);
+  }
+
+  async seen(input: Place): Promise<boolean> {
+    await this.reads.artifact(input.workspaceId, input.artifactId, { userId: input.userId });
+    const unread = await this.db.$queryRaw<unknown[]>(
+      artifactUnreadKeysSql(input.workspaceId, input.userId, input.artifactId),
+    );
+    await this.db.artifactViewerPosition.updateMany({
+      where: { artifactId: input.artifactId, userId: input.userId },
+      data: { openedAt: this.now() },
+    });
+    return unread.length > 0;
   }
 
   async heartbeat(input: Place) {

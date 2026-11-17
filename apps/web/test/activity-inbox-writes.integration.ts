@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { userConversationChannel } from "#src/features/conversations/conversation-realtime";
 import { ActivityInbox } from "#src/server/inbox/activity-inbox.server";
 import { browserActivityInbox } from "#src/server/inbox/browser-activity-inbox.server";
-import { cleanup, database, kindOf, seed } from "./helpers/activity-inbox-fixture";
+import { cleanup, database, kindOf, seed, isConversation } from "./helpers/activity-inbox-fixture";
 import { withPublishJsonBatch } from "./helpers/fake-centrifugo";
 
 /**
@@ -29,7 +29,7 @@ test("Done and read-all tell the person's other pages, so a second tab's dot cle
     // Reading the list is not a change: nothing is announced.
     expect(announced).toEqual([]);
 
-    const item = page.items.find((entry) => kindOf(entry) === "channel")!;
+    const item = page.items.filter(isConversation).find((entry) => kindOf(entry) === "channel")!;
     await inbox.markDone(workspace.id, alice.id, {
       kind: "conversation",
       conversationId: item.place.conversationId,

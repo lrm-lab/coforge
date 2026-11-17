@@ -1,10 +1,13 @@
 import { expect, test } from "bun:test";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import { ActivityInbox, type ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
+import {
+  ActivityInbox,
+  type ActivityConversationItem,
+} from "#src/server/inbox/activity-inbox.server";
 import { agentAvatarUrl } from "#src/features/agents/agent-mascot";
 import type { ChannelListMember } from "#src/server/conversations/channel-list-preview.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
-import { database, kindOf, seed, cleanup } from "./helpers/activity-inbox-fixture";
+import { database, kindOf, seed, cleanup, isConversation } from "./helpers/activity-inbox-fixture";
 
 /** Activity inbox against PostgreSQL; shared fixtures control exact sequences and cleanup. */
 test("lists joined conversations and followed threads with activity, newest first", async () => {
@@ -51,17 +54,15 @@ test("lists joined conversations and followed threads with activity, newest firs
     const page = await inbox.list(workspace.id, alice.id, { filter: "all" });
 
     expect(
-      page.items.map((item) => [
-        kindOf(item),
-        item.place.conversationId,
-        item.thread?.root.id ?? null,
-      ]),
+      page.items
+        .filter(isConversation)
+        .map((item) => [kindOf(item), item.place.conversationId, item.thread?.root.id ?? null]),
     ).toEqual([
       ["channel", quiet.conversation.id, null],
       ["thread", general.conversation.id, root.id],
       ["channel", general.conversation.id, null],
     ]);
-    const [, thread, channelItem] = page.items;
+    const [, thread, channelItem] = page.items.filter(isConversation);
     // Unread counts people's messages only, never the viewer's own or a system notice.
     expect(channelItem!.unreadCount).toBe(1);
     expect(channelItem!.latest.body).toBe("1 new task created: #1");
@@ -77,19 +78,23 @@ test("lists joined conversations and followed threads with activity, newest firs
     expect(page.nextCursor).toBe(null);
 
     const unread = await inbox.list(workspace.id, alice.id, { filter: "unread" });
-    expect(unread.items.map((item) => item.key)).toEqual(page.items.map((item) => item.key));
+    expect(unread.items.filter(isConversation).map((item) => item.key)).toEqual(
+      page.items.filter(isConversation).map((item) => item.key),
+    );
     const mentions = await inbox.list(workspace.id, alice.id, { filter: "mentions" });
-    expect(mentions.items.map((item) => item.key)).toEqual([thread!.key]);
+    expect(mentions.items.filter(isConversation).map((item) => item.key)).toEqual([thread!.key]);
 
     const firstPage = await inbox.list(workspace.id, alice.id, { filter: "all", limit: 2 });
-    expect(firstPage.items).toHaveLength(2);
+    expect(firstPage.items.filter(isConversation)).toHaveLength(2);
     expect(firstPage.nextCursor).not.toBe(null);
     const secondPage = await inbox.list(workspace.id, alice.id, {
       filter: "all",
       limit: 2,
       cursor: firstPage.nextCursor!,
     });
-    expect(secondPage.items.map((item) => item.key)).toEqual([channelItem!.key]);
+    expect(secondPage.items.filter(isConversation).map((item) => item.key)).toEqual([
+      channelItem!.key,
+    ]);
   } finally {
     await cleanup(db, suffix);
   }
@@ -141,9 +146,9 @@ test("the Unread and Mentions counts are items with unread and unread mentions, 
         inbox.list(workspace.id, alice.id, { filter }),
       ),
     );
-    expect(all!.items).toHaveLength(4);
-    expect(unread!.items).toHaveLength(2);
-    expect(mentions!.items).toHaveLength(2);
+    expect(all!.items.filter(isConversation)).toHaveLength(4);
+    expect(unread!.items.filter(isConversation)).toHaveLength(2);
+    expect(mentions!.items.filter(isConversation)).toHaveLength(2);
     for (const page of [all!, unread!, mentions!]) {
       expect(page.unreadItemCount).toBe(2);
       expect(page.unreadMentionItemCount).toBe(1);
@@ -202,9 +207,9 @@ test("a followed task thread whose owner Agent was deleted marks the owner delet
     });
     const inbox = new ActivityInbox(db, {});
     const taskOf = async () =>
-      (await inbox.list(workspace.id, alice.id, { filter: "all" })).items.find(
-        (item) => item.thread?.root.id === root.id,
-      )!.thread!.task;
+      (await inbox.list(workspace.id, alice.id, { filter: "all" })).items
+        .filter(isConversation)
+        .find((item) => item.thread?.root.id === root.id)!.thread!.task;
 
     expect(await taskOf()).toMatchObject({ ownerName: "Kiro", ownerDeleted: false });
     await db.agent.update({ where: { id: agent.id }, data: { deletedAt: new Date() } });
@@ -280,7 +285,7 @@ test("a channel's items carry the members its group avatar shows, as the Chat si
     await pin(pinned.aliceMember, 0);
 
     const page = await new ActivityInbox(db, {}).list(workspace.id, alice.id, { filter: "all" });
-    const membersOf = (item: ActivityInboxItem | undefined) =>
+    const membersOf = (item: ActivityConversationItem | undefined) =>
       item?.place.kind === "channel" ? item.place.members : undefined;
     const generalMembers: ChannelListMember[] = [
       {
@@ -302,10 +307,12 @@ test("a channel's items carry the members its group avatar shows, as the Chat si
         avatarUrl: agentAvatarUrl(agent.id, "pink"),
       },
     ];
-    const channelItem = page.items.find(
-      (item) => item.place.conversationId === general.conversation.id && !item.thread,
-    );
-    const threadItem = page.items.find((item) => item.thread?.root.id === root.id);
+    const channelItem = page.items
+      .filter(isConversation)
+      .find((item) => item.place.conversationId === general.conversation.id && !item.thread);
+    const threadItem = page.items
+      .filter(isConversation)
+      .find((item) => item.thread?.root.id === root.id);
     expect(membersOf(channelItem)).toEqual(generalMembers);
     // A channel thread's row shows its channel's avatar under the thread badge.
     expect(membersOf(threadItem)).toEqual(generalMembers);
@@ -404,12 +411,16 @@ test("the nav dot lights exactly while the inbox lists unread replies and messag
       throughSequence: doneReply.sequence,
     });
     const page = await inbox.list(workspace.id, alice.id, { filter: "all" });
-    expect(page.items.reduce((sum, item) => sum + item.unreadCount, 0)).toBe(7);
+    expect(page.items.filter(isConversation).reduce((sum, item) => sum + item.unreadCount, 0)).toBe(
+      7,
+    );
     expect(await inbox.navAttention(workspace.id, alice.id)).toMatchObject({ hasUnread: true });
 
     await inbox.markAllRead(workspace.id, alice.id, { before: new Date() });
     const allRead = await inbox.list(workspace.id, alice.id, { filter: "all" });
-    expect(allRead.items.reduce((sum, item) => sum + item.unreadCount, 0)).toBe(0);
+    expect(
+      allRead.items.filter(isConversation).reduce((sum, item) => sum + item.unreadCount, 0),
+    ).toBe(0);
     expect(await inbox.navAttention(workspace.id, alice.id)).toMatchObject({ hasUnread: false });
   } finally {
     await cleanup(db, suffix);

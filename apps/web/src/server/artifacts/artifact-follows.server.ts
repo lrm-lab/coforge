@@ -78,3 +78,23 @@ export async function followerIds(
   });
   return rows.flatMap((row) => (row.agentId ? [row.agentId] : []));
 }
+
+type PersonFollows = Pick<PrismaClient, "$executeRaw">;
+
+export async function startFollowing(
+  db: PersonFollows,
+  artifactId: string,
+  people: readonly { userId: string; at?: Date }[],
+): Promise<void> {
+  if (people.length === 0) return;
+  await db.$executeRaw`
+    INSERT INTO "artifact_follows" ("id", "artifactId", "userId", "following", "followedAt", "updatedAt")
+    SELECT gen_random_uuid(), ${artifactId}::uuid, wanted."userId", TRUE,
+      COALESCE(wanted."at", (now() AT TIME ZONE 'UTC')), COALESCE(wanted."at", (now() AT TIME ZONE 'UTC'))
+    FROM unnest(${people.map(({ userId }) => userId)}::uuid[], ${people.map(({ at }) => at?.toISOString() ?? null)}::timestamp[])
+      AS wanted("userId", "at")
+    ON CONFLICT ("artifactId", "userId") DO UPDATE
+    SET "following" = TRUE, "unfollowedAt" = NULL, "followedAt" = EXCLUDED."followedAt",
+      "updatedAt" = EXCLUDED."updatedAt"
+    WHERE NOT "artifact_follows"."following"`;
+}

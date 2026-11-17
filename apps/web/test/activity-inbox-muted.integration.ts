@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { ActivityInbox } from "#src/server/inbox/activity-inbox.server";
-import { cleanup, database, seed } from "./helpers/activity-inbox-fixture";
+import { cleanup, database, seed, isConversation } from "./helpers/activity-inbox-fixture";
 
 /**
  * A muted channel reaches Activity only through what involves the viewer: a mention of them or a
@@ -25,7 +25,7 @@ test("a muted channel's ordinary messages are not in Activity", async () => {
   try {
     const { general, post, list } = await fixture(db, suffix);
     await post(general.conversation.id, general.bobMember.id, "ordinary");
-    expect((await list()).items).toEqual([]);
+    expect((await list()).items.filter(isConversation)).toEqual([]);
   } finally {
     await cleanup(db, suffix);
   }
@@ -43,7 +43,7 @@ test("a mention lists a muted channel, counting and anchored on the mention only
     });
     await post(id, general.bobMember.id, "after");
 
-    const [item] = (await list()).items;
+    const [item] = (await list()).items.filter(isConversation);
     expect(item?.unreadCount).toBe(1);
     expect(item?.firstUnreadMessageId).toBe(mention.id);
     expect(item?.latest.id).toBe(mention.id);
@@ -69,7 +69,7 @@ test("a followed thread in a muted channel stays in Activity", async () => {
     });
     await post(id, general.bobMember.id, "reply", { threadRootId: root.id });
 
-    const items = (await list()).items;
+    const items = (await list()).items.filter(isConversation);
     expect(items).toHaveLength(1);
     expect(items[0]?.thread).toBeTruthy();
   } finally {
@@ -87,7 +87,7 @@ test("unmuting brings a channel's messages back", async () => {
       where: { id: general.aliceMember.id },
       data: { notificationLevel: "all" },
     });
-    const items = (await list()).items;
+    const items = (await list()).items.filter(isConversation);
     expect(items).toHaveLength(1);
     expect(items[0]?.unreadCount).toBe(1);
   } finally {

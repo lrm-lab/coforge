@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { ActivityInbox } from "#src/server/inbox/activity-inbox.server";
-import { database, kindOf, seed, cleanup } from "./helpers/activity-inbox-fixture";
+import { database, kindOf, seed, cleanup, isConversation } from "./helpers/activity-inbox-fixture";
 
 /** Activity inbox against PostgreSQL; shared fixtures control exact sequences and cleanup. */
 test("Done removes an item until newer activity arrives, and reads it", async () => {
@@ -29,7 +29,7 @@ test("Done removes an item until newer activity arrives, and reads it", async ()
     // A Done that saw an older message leaves the newer one listed.
     await inbox.markDone(workspace.id, alice.id, { ...channelRef, throughSequence: 1 });
     let page = await inbox.list(workspace.id, alice.id, { filter: "all" });
-    expect(page.items.map(kindOf)).toEqual(["thread", "channel"]);
+    expect(page.items.filter(isConversation).map(kindOf)).toEqual(["thread", "channel"]);
 
     await inbox.markDone(workspace.id, alice.id, {
       ...channelRef,
@@ -42,7 +42,7 @@ test("Done removes an item until newer activity arrives, and reads it", async ()
       throughSequence: reply.sequence,
     });
     page = await inbox.list(workspace.id, alice.id, { filter: "all" });
-    expect(page.items).toEqual([]);
+    expect(page.items.filter(isConversation)).toEqual([]);
     expect(page.activeItemCount).toBe(0);
     const member = await db.conversationMember.findUniqueOrThrow({
       where: { id: general.aliceMember.id },
@@ -52,15 +52,21 @@ test("Done removes an item until newer activity arrives, and reads it", async ()
 
     const next = await post(general.conversation.id, general.bobMember.id, "three");
     page = await inbox.list(workspace.id, alice.id, { filter: "all" });
-    expect(page.items.map((item) => [kindOf(item), item.latest.id, item.unreadCount])).toEqual([
-      ["channel", next.id, 1],
-    ]);
+    expect(
+      page.items
+        .filter(isConversation)
+        .map((item) => [kindOf(item), item.latest.id, item.unreadCount]),
+    ).toEqual([["channel", next.id, 1]]);
 
     const late = await post(general.conversation.id, general.bobMember.id, "late reply", {
       threadRootId: root.id,
     });
     page = await inbox.list(workspace.id, alice.id, { filter: "all" });
-    expect(page.items.map((item) => [kindOf(item), item.latest.id, item.unreadCount])).toEqual([
+    expect(
+      page.items
+        .filter(isConversation)
+        .map((item) => [kindOf(item), item.latest.id, item.unreadCount]),
+    ).toEqual([
       ["thread", late.id, 1],
       ["channel", next.id, 1],
     ]);
@@ -99,7 +105,9 @@ test("Done takes a pinned conversation out of Pinned like every row, until somet
     });
     let page = await inbox.list(workspace.id, alice.id, { filter: "all" });
     expect(page.pinned).toEqual([]);
-    expect(page.items.map((item) => item.place.conversationId)).toEqual([general.conversation.id]);
+    expect(page.items.filter(isConversation).map((item) => item.place.conversationId)).toEqual([
+      general.conversation.id,
+    ]);
     expect(page.activeItemCount).toBe(1);
 
     // Something new lists it again under Pinned, counting only the new message.
@@ -108,9 +116,13 @@ test("Done takes a pinned conversation out of Pinned like every row, until somet
     expect(page.pinned.map((item) => [item.key, item.latest.id, item.unreadCount])).toEqual([
       [`conversation:${quiet.conversation.id}`, fresh.id, 1],
     ]);
-    expect(page.items.map((item) => item.place.conversationId)).toEqual([general.conversation.id]);
+    expect(page.items.filter(isConversation).map((item) => item.place.conversationId)).toEqual([
+      general.conversation.id,
+    ]);
     // Each item says whether the viewer pinned it.
-    expect([...page.pinned, ...page.items].map((item) => item.pinned)).toEqual([true, false]);
+    expect(
+      [...page.pinned, ...page.items.filter(isConversation)].map((item) => item.pinned),
+    ).toEqual([true, false]);
     expect(page.activeItemCount).toBe(2);
   } finally {
     await cleanup(db, suffix);
@@ -168,7 +180,7 @@ test("Pinned follows the pin order and leaves a pinned channel's threads and the
     ]);
     expect(all.pinned[1]).toMatchObject({ unreadCount: 1, unreadMention: true });
     // The pinned channel's followed thread is an item of its own and stays in the list.
-    expect(all.items.map((item) => item.key)).toEqual([
+    expect(all.items.filter(isConversation).map((item) => item.key)).toEqual([
       `conversation:${calm.conversation.id}`,
       `thread:${root.id}`,
     ]);
@@ -190,16 +202,24 @@ test("Pinned follows the pin order and leaves a pinned channel's threads and the
       cursor: first.nextCursor!,
     });
     expect(second.pinned).toEqual([]);
-    expect(second.items.map((item) => item.key)).toEqual([`thread:${root.id}`]);
+    expect(second.items.filter(isConversation).map((item) => item.key)).toEqual([
+      `thread:${root.id}`,
+    ]);
     expect(second.nextCursor).toBe(null);
 
     // Unread and Mentions have no Pinned section: a pinned conversation lists among their items.
     const unread = await inbox.list(workspace.id, alice.id, { filter: "unread" });
     expect(unread.pinned).toEqual([]);
-    expect(unread.items.map((item) => item.place.conversationId)).toContain(quiet.conversation.id);
+    expect(unread.items.filter(isConversation).map((item) => item.place.conversationId)).toContain(
+      quiet.conversation.id,
+    );
     // A pinned conversation listed as an ordinary item still says it is pinned; a thread in a
     // pinned channel is not itself pinned.
-    expect(Object.fromEntries(unread.items.map((item) => [item.key, item.pinned]))).toMatchObject({
+    expect(
+      Object.fromEntries(
+        unread.items.filter(isConversation).map((item) => [item.key, item.pinned]),
+      ),
+    ).toMatchObject({
       [`conversation:${quiet.conversation.id}`]: true,
       [`conversation:${calm.conversation.id}`]: false,
       [`thread:${root.id}`]: false,
@@ -210,9 +230,12 @@ test("Pinned follows the pin order and leaves a pinned channel's threads and the
     expect([unread.activeItemCount, mentions.activeItemCount, second.activeItemCount]).toEqual([
       4, 4, 4,
     ]);
-    expect(mentions.items.map((item) => item.key).sort()).toEqual(
-      [`conversation:${general.conversation.id}`, `thread:${root.id}`].sort(),
-    );
+    expect(
+      mentions.items
+        .filter(isConversation)
+        .map((item) => item.key)
+        .sort(),
+    ).toEqual([`conversation:${general.conversation.id}`, `thread:${root.id}`].sort());
   } finally {
     await cleanup(db, suffix);
   }
@@ -253,12 +276,14 @@ test("Mark all read clears unread and keeps every item listed", async () => {
     });
     await inbox.markAllRead(workspace.id, alice.id, { before: shown });
     const page = await inbox.list(workspace.id, alice.id, { filter: "all" });
-    expect(page.items.map((item) => [kindOf(item), item.unreadCount])).toEqual([
+    expect(
+      page.items.filter(isConversation).map((item) => [kindOf(item), item.unreadCount]),
+    ).toEqual([
       ["thread", 1],
       ["channel", 0],
     ]);
     expect(page.unreadItemCount).toBe(1);
-    expect(page.items[0]!.firstUnreadMessageId).toBe(late.id);
+    expect(page.items.filter(isConversation)[0]!.firstUnreadMessageId).toBe(late.id);
     const member = await db.conversationMember.findUniqueOrThrow({
       where: { id: general.aliceMember.id },
     });
@@ -302,10 +327,12 @@ test("a thread counts only mentions in its own replies past its Done boundary", 
     const inbox = new ActivityInbox(db, {});
     const mentionState = async () =>
       Object.fromEntries(
-        (await inbox.list(workspace.id, alice.id, { filter: "all" })).items.map((item) => [
-          item.thread?.root.body ?? kindOf(item),
-          [item.firstMentionMessageId !== null, item.unreadMention],
-        ]),
+        (await inbox.list(workspace.id, alice.id, { filter: "all" })).items
+          .filter(isConversation)
+          .map((item) => [
+            item.thread?.root.body ?? kindOf(item),
+            [item.firstMentionMessageId !== null, item.unreadMention],
+          ]),
       );
     expect(await mentionState()).toEqual({
       mentioned: [true, true],
@@ -367,10 +394,9 @@ test("an item opens at its first mention past Done, read or not", async () => {
     await inbox.markAllRead(workspace.id, alice.id, { before: new Date(Date.UTC(2027, 0, 1)) });
     const firstMentions = async () =>
       Object.fromEntries(
-        (await inbox.list(workspace.id, alice.id, { filter: "mentions" })).items.map((item) => [
-          kindOf(item),
-          item.firstMentionMessageId,
-        ]),
+        (await inbox.list(workspace.id, alice.id, { filter: "mentions" })).items
+          .filter(isConversation)
+          .map((item) => [kindOf(item), item.firstMentionMessageId]),
       );
     // Everything is read, and the newest message mentions no one: the item still opens at the
     // first message that mentioned the viewer.
@@ -399,7 +425,9 @@ test("an item opens at its first mention past Done, read or not", async () => {
     });
     const all = await inbox.list(workspace.id, alice.id, { filter: "all" });
     expect(
-      Object.fromEntries(all.items.map((item) => [kindOf(item), item.firstMentionMessageId])),
+      Object.fromEntries(
+        all.items.filter(isConversation).map((item) => [kindOf(item), item.firstMentionMessageId]),
+      ),
     ).toEqual({ thread: null, channel: null });
   } finally {
     await cleanup(db, suffix);

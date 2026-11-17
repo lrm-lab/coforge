@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button as AriaButton, Dialog, DialogTrigger, Popover } from "react-aria-components";
 
@@ -9,9 +9,48 @@ import { m } from "#src/paraglide/messages";
 import { POPOVER_MOTION } from "#src/utils/popover-motion";
 import { cn } from "#src/lib/utils";
 import { artifactViewersQuery, type ArtifactViewers } from "./artifact-queries";
-import { keepArtifactViewing, openArtifact } from "./artifact-viewer.functions";
+import { keepArtifactViewing, markArtifactSeen, openArtifact } from "./artifact-viewer.functions";
 
 const HEARTBEAT_MS = 20_000;
+const SEEN_GAP_MS = 3_000;
+
+export function useKeepSeen(artifactId: string) {
+  const state = useRef({
+    running: false,
+    queued: false,
+    timer: undefined as ReturnType<typeof setTimeout> | undefined,
+  });
+  useEffect(() => {
+    const current = state.current;
+    return () => {
+      clearTimeout(current.timer);
+      current.running = false;
+      current.queued = false;
+    };
+  }, [artifactId]);
+  return useCallback(() => {
+    const current = state.current;
+    if (document.visibilityState !== "visible") return;
+    if (current.running) {
+      current.queued = true;
+      return;
+    }
+    const run = () => {
+      current.running = true;
+      void markArtifactSeen({ data: { artifactId } })
+        .catch(() => undefined)
+        .finally(() => {
+          current.timer = setTimeout(() => {
+            current.running = false;
+            if (!current.queued) return;
+            current.queued = false;
+            run();
+          }, SEEN_GAP_MS);
+        });
+    };
+    run();
+  }, [artifactId]);
+}
 
 export function useRecordOpen(artifactId: string, version: number): boolean {
   const queryClient = useQueryClient();

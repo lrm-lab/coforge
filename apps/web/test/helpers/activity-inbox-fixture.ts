@@ -1,6 +1,10 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
+import type {
+  ActivityArtifactItem,
+  ActivityConversationItem,
+  ActivityInboxItem,
+} from "#src/server/inbox/activity-inbox.server";
 
 export function database() {
   const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
@@ -9,8 +13,14 @@ export function database() {
   return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 }
 
+export const isConversation = (item: ActivityInboxItem): item is ActivityConversationItem =>
+  item.kind === "conversation";
+
+export const isArtifact = (item: ActivityInboxItem): item is ActivityArtifactItem =>
+  item.kind === "artifact";
+
 /** An item's kind as the page shows it: a thread card, or its conversation's own kind. */
-export function kindOf(item: ActivityInboxItem) {
+export function kindOf(item: ActivityConversationItem) {
   return item.thread ? "thread" : item.place.kind;
 }
 
