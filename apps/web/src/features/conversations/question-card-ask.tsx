@@ -63,6 +63,7 @@ export function QuestionAsk({
   const tallest = useRef({ width: 0, height: 0 });
   const otherRef = useRef<HTMLInputElement | null>(null);
   const turnTimer = useRef<number | undefined>(undefined);
+  const refocus = useRef(false);
   const size = useDialogControlSize();
   const coarse = useCoarsePointer();
   const question = questions[tab]!;
@@ -95,6 +96,14 @@ export function QuestionAsk({
       ?.scrollIntoView({ block: "nearest" });
   }, [tab, hi, kbd, otherRow]);
 
+  // The options are a new list on every question, so the focus a turn took off the old one goes
+  // onto the new one in the same commit: a key pressed right after a turn still reaches the card.
+  useLayoutEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    list()?.focus({ preventScroll: true });
+  }, [tab]);
+
   useEffect(() => {
     cardRef.current = rootRef.current?.closest<HTMLElement>("[data-question-card]") ?? null;
     return () => window.clearTimeout(turnTimer.current);
@@ -106,10 +115,9 @@ export function QuestionAsk({
 
   function turn(to: number) {
     window.clearTimeout(turnTimer.current);
-    const keep = rootRef.current?.contains(document.activeElement);
+    refocus.current = to !== tab && Boolean(rootRef.current?.contains(document.activeElement));
     setTab(to);
     setHi(firstPick({ questions, drafts }, to));
-    if (keep) requestAnimationFrame(() => list()?.focus({ preventScroll: true }));
   }
 
   async function submit(patch?: Record<string, Draft>) {
