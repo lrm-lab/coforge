@@ -18,7 +18,6 @@
     "pretest": "bun run build"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "1.4.0",
     "@coforge/agent": "workspace:*",
     "@logtape/file": "2.3.2",
     "@logtape/logtape": "2.3.2",
