@@ -134,6 +134,47 @@ test("a partial scan without observed active pressure does not ask to archive mo
   expect(s.wakes).toHaveLength(0);
 });
 
+test("an enabled configuration revision preserves a pending write inspection", async () => {
+  let reads = 0;
+  const s = await subject(true, async () => {
+    reads++;
+    return { kind: "measured", bytes: 1_000_000 };
+  });
+  await s.save("fact", "confirmed");
+  s.cleaner.applyConfig(config({ revision: 2, thresholdBytes: 12_000 }));
+  await s.idle();
+  expect(reads).toBe(2);
+  expect(s.wakes).toHaveLength(1);
+});
+
+test("an enabled revision takes over an inspection still running under the old revision", async () => {
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<MemoryMeasurement>();
+  let reads = 0;
+  const s = await subject(true, async () => {
+    if (++reads === 1) {
+      entered.resolve();
+      return release.promise;
+    }
+    return { kind: "measured", bytes: 1_000_000 };
+  });
+  await s.save("fact", "confirmed");
+  s.cleaner.onAgentWorkingToIdle(OWNER);
+  await entered.promise;
+  try {
+    s.cleaner.applyConfig(config({ revision: 2, thresholdBytes: 12_000 }));
+  } finally {
+    release.resolve({ kind: "measured", bytes: 1_000_000 });
+  }
+  await s.cleaner.settled();
+  expect(reads).toBe(3);
+  expect(s.wakes).toHaveLength(1);
+  expect(
+    (await s.inbox.list()).find((item) => item.notificationClass === "knowledge_size")?.sourceRef
+      .revision,
+  ).toBe("2");
+});
+
 test("read calls and failed writes do not request maintenance; disabled cleaner stays silent", async () => {
   const s = await subject(false);
   for (let i = 0; i < 12; i++) await s.save(`decision-${i}`);
