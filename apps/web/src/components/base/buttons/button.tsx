@@ -11,11 +11,8 @@ export const styles = sortCx({
     common: {
         root: [
             "group relative inline-flex h-max cursor-pointer items-center justify-center whitespace-nowrap outline-brand transition duration-100 ease-linear before:absolute focus-visible:outline-2 focus-visible:outline-offset-2",
-            // When button is used within `InputGroup`
             "in-data-input-wrapper:shadow-xs in-data-input-wrapper:focus:!z-50 in-data-input-wrapper:in-data-leading:-mr-px in-data-input-wrapper:in-data-leading:rounded-r-none in-data-input-wrapper:in-data-leading:before:rounded-r-none in-data-input-wrapper:in-data-trailing:-ml-px in-data-input-wrapper:in-data-trailing:rounded-l-none in-data-input-wrapper:in-data-trailing:before:rounded-l-none",
-            // Disabled styles
             "disabled:cursor-not-allowed disabled:opacity-50 in-data-input-wrapper:disabled:opacity-100",
-            // Same as `icon` but for SSR icons that cannot be passed to the client as functions.
             "*:data-icon:pointer-events-none *:data-icon:size-5 *:data-icon:shrink-0 *:data-icon:transition-inherit-all",
         ].join(" "),
         icon: "pointer-events-none size-5 shrink-0 transition-inherit-all",
@@ -57,116 +54,90 @@ export const styles = sortCx({
         primary: {
             root: [
                 "bg-brand-solid text-white shadow-xs-skeuomorphic ring-1 ring-transparent ring-inset hover:bg-brand-solid_hover data-loading:bg-brand-solid_hover",
-                // Inner border gradient
                 "before:absolute before:inset-px before:border before:border-white/12 before:mask-b-from-0%",
-                // Icon styles
                 "*:data-icon:text-white/60 hover:*:data-icon:text-white/70",
             ].join(" "),
         },
         secondary: {
             root: [
                 "bg-primary text-secondary shadow-xs-skeuomorphic ring-1 ring-primary ring-inset hover:bg-primary_hover hover:text-secondary_hover data-loading:bg-primary_hover",
-                // Icon styles
                 "*:data-icon:text-fg-quaternary hover:*:data-icon:text-fg-quaternary_hover",
             ].join(" "),
         },
         tertiary: {
             root: [
                 "text-tertiary hover:bg-primary_hover hover:text-tertiary_hover",
-                // Icon styles
                 "*:data-icon:text-fg-quaternary hover:*:data-icon:text-fg-quaternary_hover",
             ].join(" "),
         },
         "link-color": {
             root: [
                 "justify-normal rounded p-0! text-brand-secondary hover:text-brand-secondary_hover",
-                // Inner text underline
                 "*:data-text:underline *:data-text:decoration-transparent hover:*:data-text:decoration-fg-brand-secondary_alt",
-                // Icon styles
                 "*:data-icon:text-fg-brand-secondary_alt hover:*:data-icon:text-fg-brand-secondary_hover",
             ].join(" "),
         },
         "link-gray": {
             root: [
                 "justify-normal rounded p-0! text-tertiary hover:text-tertiary_hover",
-                // Inner text underline
                 "*:data-text:underline *:data-text:decoration-transparent hover:*:data-text:decoration-fg-quaternary",
-                // Icon styles
                 "*:data-icon:text-fg-quaternary hover:*:data-icon:text-fg-quaternary_hover",
             ].join(" "),
         },
         "primary-destructive": {
             root: [
                 "bg-error-solid text-white shadow-xs-skeuomorphic ring-1 ring-transparent outline-error ring-inset hover:bg-error-solid_hover data-loading:bg-error-solid_hover",
-                // Inner border gradient
                 "before:absolute before:inset-px before:border before:border-white/12 before:mask-b-from-0%",
-                // Icon styles
                 "*:data-icon:text-white/60 hover:*:data-icon:text-white/70",
             ].join(" "),
         },
         "secondary-destructive": {
             root: [
                 "bg-primary text-error-primary shadow-xs-skeuomorphic ring-1 ring-error_subtle outline-error ring-inset hover:bg-error-primary hover:text-error-primary_hover data-loading:bg-error-primary",
-                // Icon styles
                 "*:data-icon:text-fg-error-secondary hover:*:data-icon:text-fg-error-primary",
+            ].join(" "),
+        },
+        "secondary-warning": {
+            root: [
+                "bg-primary text-warning-strong shadow-xs-skeuomorphic ring-1 ring-warning_subtle outline-warning ring-inset hover:bg-warning-primary data-loading:bg-warning-primary",
+                "*:data-icon:text-fg-warning-secondary hover:*:data-icon:text-fg-warning-primary",
             ].join(" "),
         },
         "tertiary-destructive": {
             root: [
                 "text-error-primary outline-error hover:bg-error-primary hover:text-error-primary_hover",
-                // Icon styles
                 "*:data-icon:text-fg-error-secondary hover:*:data-icon:text-fg-error-primary",
             ].join(" "),
         },
         "link-destructive": {
             root: [
                 "justify-normal rounded p-0! text-error-primary outline-error hover:text-error-primary_hover",
-                // Inner text underline
                 "*:data-text:underline *:data-text:decoration-transparent *:data-text:underline-offset-2 hover:*:data-text:decoration-current",
-                // Icon styles
                 "*:data-icon:text-fg-error-secondary hover:*:data-icon:text-fg-error-primary",
             ].join(" "),
         },
     },
 });
 
-/**
- * Common props shared between button and anchor variants
- */
 export interface CommonProps {
-    /** Disables the button and shows a disabled state */
     isDisabled?: boolean;
-    /** Shows a loading spinner and disables the button */
     isLoading?: boolean;
-    /** The size variant of the button */
     size?: keyof typeof styles.sizes;
-    /** The color variant of the button */
     color?: keyof typeof styles.colors;
-    /** Icon component or element to show before the text */
     iconLeading?: FC<{ className?: string }> | ReactNode;
-    /** Icon component or element to show after the text */
     iconTrailing?: FC<{ className?: string }> | ReactNode;
-    /** Removes horizontal padding from the text content */
     noTextPadding?: boolean;
-    /** When true, keeps the text visible during loading state */
     showTextWhileLoading?: boolean;
 
     children?: ReactNode;
     className?: string;
 }
 
-/**
- * Props for the button variant (non-link)
- */
 export interface ButtonProps extends CommonProps, Omit<AriaButtonProps, "children" | "className"> {}
-/**
- * Props for the link variant (anchor tag)
- */
 interface LinkProps extends CommonProps, Omit<AriaLinkProps, "children" | "className"> {
     href: NonNullable<AriaLinkProps["href"]>;
 }
 
-/** Union type of button and link props */
 export type Props = ButtonProps | LinkProps;
 
 export const Button: {
@@ -192,13 +163,10 @@ export const Button: {
 
     noTextPadding = isLinkType || noTextPadding;
 
-    // The control looks busy the moment `loading` turns on (data-loading, pointer-events-none,
-    // isPending below); only the indicator itself waits, so a quick action never flashes one.
     const showLoadingIndicator = useLoadingVisible(Boolean(loading));
 
     const commonChildren = (
         <>
-            {/* Leading icon */}
             {isValidElement(IconLeading) && IconLeading}
             {isReactComponent(IconLeading) && <IconLeading data-icon="leading" className={styles.common.icon} />}
 
@@ -217,7 +185,6 @@ export const Button: {
                 </span>
             )}
 
-            {/* Trailing icon */}
             {isValidElement(IconTrailing) && IconTrailing}
             {isReactComponent(IconTrailing) && <IconTrailing data-icon="trailing" className={styles.common.icon} />}
         </>
@@ -234,9 +201,6 @@ export const Button: {
             styles.colors[color].root,
             isLinkType && styles.sizes[size].linkRoot,
             (loading || (href && (disabled || loading))) && "pointer-events-none",
-            // Hide everything except the loading icon (and text if `showTextWhileLoading` is
-            // true) once that icon is actually on screen. Until then the label stays put: the
-            // control already reads as busy, and blanking it early would look stalled.
             showLoadingIndicator && (showTextWhileLoading ? "[&>*:not([data-icon=loading]):not([data-text])]:hidden" : "[&>*:not([data-icon=loading])]:invisible"),
             className,
         ),

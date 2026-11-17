@@ -8,9 +8,12 @@ import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/di
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
 
-/** Confirms an irreversible change (a delete, removing a member, or rotating an app's secret); a
- * refusal stays in the dialog. Every such confirmation uses it. A change that can be undone (an
- * archive) asks with `tone="default"`: the primary button, not the red one. */
+const CONFIRM_COLORS = {
+  destructive: "secondary-destructive",
+  warning: "secondary-warning",
+  default: "primary",
+} as const;
+
 export function ConfirmDialog({
   open,
   onOpenChange,
@@ -28,24 +31,16 @@ export function ConfirmDialog({
   onOpenChange: (open: boolean) => void;
   title: string;
   description: string;
-  /** Appended after the description, for what the change will also do. */
   detail?: ReactNode;
-  /** Holds the confirm button while what `detail` reports is still unknown. */
   confirmDisabled?: boolean;
   confirmLabel: string;
-  /** What the confirm button says while the change runs ("Deleting…"); without it, `confirmLabel`. */
   pendingLabel?: string;
-  /** What a refusal says: one text, or one chosen by what was thrown. */
   errorMessage: string | ((cause: unknown) => string);
-  /** Performs the change; throws when it is refused. */
   onConfirm: () => Promise<void>;
-  /** "destructive" (red) for what cannot be undone; "default" for what can. */
-  tone?: "destructive" | "default";
+  tone?: "destructive" | "warning" | "default";
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, guard] = useSubmitGuard();
-  // Each opening starts clean: a refusal that landed after the dialog closed (a caller's trailing
-  // refresh) must not greet the next one.
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
@@ -98,11 +93,10 @@ export function ConfirmDialog({
                 <DialogCancel isDisabled={pending} onPress={close}>
                   {m.controls_cancel()}
                 </DialogCancel>
-                {/* The confirm takes the caret as the dialog opens: Enter confirms (Frank, task
-                    #101, a delete's included); Tab reaches Cancel. */}
                 <DialogAction
                   autoFocus
-                  color={tone === "destructive" ? "secondary-destructive" : "primary"}
+                  data-tone={tone}
+                  color={CONFIRM_COLORS[tone]}
                   isLoading={pending}
                   isDisabled={confirmDisabled}
                   showTextWhileLoading

@@ -15,19 +15,6 @@ import {
   pageHydrated,
 } from "./helpers/browser-e2e";
 
-/**
- * Who can open an artifact and how it widens: its home's readers read it and its page's way back
- * is that conversation; the who-can-see pill and the ⋯ "Who can see" submenu offer the home, the
- * Workspace and, where link sharing is available, anyone with the link; narrowing to the home
- * says who loses access first. An artifact of a private channel the viewer is not in is "Can't
- * open this" until its author Agent moves it to the Workspace, when it opens with the Workspace as
- * the way back. A member who neither owns the author Agent nor administers the Workspace sees who
- * can see it but cannot change it.
- *
- * Opt-in like the other browser E2Es: real local Web with the `artifacts` experiment switched
- * on per Workspace (it has no flag). Its texts carry the run's tail, since bytes are stored once
- * per Workspace by their hash. Screenshots go under `.amp/e2e/artifact-share/`.
- */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/artifact-share");
 
@@ -83,7 +70,6 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
       members: { create: [{ userId: lin.id }, { agentId: linAgent.id }] },
     },
   });
-  // A Workspace the viewer is only a member of, owned by Noor, whose artifact the viewer reads.
   const noor = await db.user.create({
     data: { username: `noor-${tail}`, displayName: "Noor Haddad" },
   });
@@ -120,7 +106,6 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
       files: { "plan.md": `Plan (run ${tail}).` },
     });
 
-    // From the home the viewer is in: the way back is the channel, and the pill names it.
     await browser("open", pageOf(plan.id));
     await browser("wait", "--fn", viewer);
     expect(
@@ -139,7 +124,6 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
     await shoot("1-pill-menu");
     await chrome.closeMenus();
 
-    // Widening to the Workspace needs no confirmation; the pill and the Workspace's readers follow.
     await chrome.chooseFromPill(everyone);
     await chrome.untilPillScope(everyone);
     expect((await db.artifact.findUniqueOrThrow({ where: { id: plan.id } })).access).toBe(
@@ -147,7 +131,6 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
     );
     await shoot("2-widened");
 
-    // Narrowing says who loses access, and changes nothing until confirmed.
     await chrome.chooseFromMore(`#e2e-share-${tail}`);
     await chrome.until(
       `/(\\d+ (person|people)) and (\\d+ Agents?) will lose access/.test(document.body.textContent)`,
@@ -160,6 +143,11 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
     expect(loss?.[2]).toBe(loss?.[1] === "1" ? "person" : "people");
     expect(loss?.[4]).toBe(loss?.[3] === "1" ? "Agent" : "Agents");
     expect(await chrome.dialogText()).toContain(`Move to #e2e-share-${tail}?`);
+    expect(
+      await evaluate<string | null>(
+        `[...document.querySelectorAll('[role="alertdialog"], [role="dialog"]')].at(-1)?.querySelector("button[data-tone]")?.dataset.tone ?? null`,
+      ),
+    ).toBe("warning");
     await shoot("3-narrowing");
     expect((await db.artifact.findUniqueOrThrow({ where: { id: plan.id } })).access).toBe(
       "workspace",
@@ -170,7 +158,6 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
       "workspace",
     );
 
-    // From a private channel the viewer is not in: not theirs to open.
     const leads = await linBot.create({
       conversationId: closed.id,
       title: "Leads",
@@ -183,8 +170,6 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
     );
     await shoot("2b-closed-home-unavailable");
 
-    // Moved to the Workspace by its author Agent (its owner reads it): it opens read only, and
-    // the way back is the Workspace.
     await services.visibility.moveToWorkspace({
       workspaceId,
       artifactId: leads.id,
@@ -209,8 +194,6 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
     ).toEqual([everyone, "Anyone with the link"]);
     await chrome.closeMenus();
 
-    // A member only, of an artifact they did not make: the pill says who can see it and changes
-    // nothing, and the ⋯ menu offers no Who can see and no Rename.
     await experiments.write(other.id, "artifacts", true);
     const noorChannel = await db.conversation.create({
       data: {
@@ -220,7 +203,6 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
         members: { create: [{ userId: noor.id }, { userId: DEV_BROWSER_USER.id }] },
       },
     });
-    // An Agent of Noor's makes it; the viewer neither owns that Agent nor administers the Workspace.
     const noorAgent = await db.agent.create({
       data: {
         workspaceId: other.id,
