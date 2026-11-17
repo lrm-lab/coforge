@@ -14,7 +14,14 @@ import { CodexRuntimeAuthAdapter } from "@lrm/coforge-anvil/codex";
 import { readCodexUsage } from "@lrm/coforge-anvil/codex";
 import { COFORGE_DAEMON_VERSION } from "#src/version";
 
-for (const mode of ["session", "catalog", "usage", "auth-server", "auth-cli"] as const) {
+for (const mode of [
+  "session",
+  "session-resume",
+  "catalog",
+  "usage",
+  "auth-server",
+  "auth-cli",
+] as const) {
   test(
     "Codex " + mode + " preserves its effective environment and initialization identity",
     async () => {
@@ -37,6 +44,7 @@ for (const mode of ["session", "catalog", "usage", "auth-server", "auth-cli"] as
         COFORGE_DAEMON_HOME: "stale-daemon",
       };
       const previous = Object.fromEntries(Object.keys(inherited).map((key) => [key, Bun.env[key]]));
+      const isSession = mode === "session" || mode === "session-resume";
       try {
         await mkdir(emptyPath);
         const quote = (value: string) => "'" + value.replaceAll("'", "'\\''") + "'";
@@ -49,13 +57,14 @@ for (const mode of ["session", "catalog", "usage", "auth-server", "auth-cli"] as
         // Neither the inherited PATH nor its only directory contains a codex executable.
         expect(Bun.which("codex", { PATH: emptyPath })).toBeNull();
         expect(inherited.PATH.split(delimiter)).not.toContain(root);
-        if (mode === "session") {
+        if (isSession) {
           const session = await new CodexProvider({
             host: codexRuntimeHost,
             command: [executable, "app-server"],
           }).createAgentSession({
             agentWorkspaceDirectory: root,
             instructions: "Fixture instructions",
+            sessionId: mode === "session-resume" ? "host-thread" : undefined,
             environment: {
               HOME: home,
               CODEX_HOME: inherited.CODEX_HOME,
@@ -119,14 +128,22 @@ for (const mode of ["session", "catalog", "usage", "auth-server", "auth-cli"] as
           CODEX_HOME: inherited.CODEX_HOME,
           FORCE_COLOR: "0",
           NO_COLOR: mode === "catalog" || mode === "usage" ? "base-color" : "1",
-          CODEX_HOST_SOURCE: mode === "session" ? "declared" : "inherited",
+          CODEX_HOST_SOURCE: isSession ? "declared" : "inherited",
           COFORGE_AGENT_PROXY_URL: null,
           COFORGE_DAEMON_HOME: null,
-          COFORGE_CURRENT_AGENT_ID: mode === "session" ? "trusted-agent" : null,
+          COFORGE_CURRENT_AGENT_ID: isSession ? "trusted-agent" : null,
         });
-        if (mode === "session") {
-          expect(observed.gitConfig).toContainEqual(["GIT_CONFIG_KEY_5", "core.hooksPath"]);
-          expect(observed.gitConfig).toContainEqual(["GIT_CONFIG_VALUE_5", join(root, "hooks")]);
+        if (isSession) {
+          const gitConfig = new Map<string, string>(observed.gitConfig);
+          const count = Number(observed.environment.GIT_CONFIG_COUNT);
+          expect(count).toBeGreaterThan(0);
+          for (let index = 0; index < count; index++) {
+            const key = `GIT_CONFIG_KEY_${index}`;
+            expect(gitConfig.get(key)).toBeString();
+            expect(gitConfig.get(`GIT_CONFIG_VALUE_${index}`)).toBeString();
+            expect(observed.shellPolicy.set[key]).toBe(gitConfig.get(key));
+          }
+          expect(observed.shellPolicy.ignore_default_excludes).toBe(false);
         }
         if (mode === "auth-cli") expect(observed.argv).toEqual(["login", "status"]);
         else

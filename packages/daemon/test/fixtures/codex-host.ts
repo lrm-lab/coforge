@@ -15,30 +15,37 @@ const environment = Object.fromEntries(
     "GIT_CONFIG_COUNT",
   ].map((key) => [key, Bun.env[key] ?? null]),
 );
-// Observe only the hook pair this fixture's explicit hooks-path plan owns.
-const gitConfig =
-  Bun.env.COFORGE_GIT_CONFIG_BASE_COUNT === "0"
-    ? [
-        ["GIT_CONFIG_KEY_5", Bun.env.GIT_CONFIG_KEY_5],
-        ["GIT_CONFIG_VALUE_5", Bun.env.GIT_CONFIG_VALUE_5],
-      ]
-    : [];
+const gitConfig = Array.from({ length: Number(Bun.env.GIT_CONFIG_COUNT ?? 0) }, (_, index) => [
+  [`GIT_CONFIG_KEY_${index}`, Bun.env[`GIT_CONFIG_KEY_${index}`]],
+  [`GIT_CONFIG_VALUE_${index}`, Bun.env[`GIT_CONFIG_VALUE_${index}`]],
+]).flat();
 if (process.argv.includes("status")) {
   await Bun.write(trace, JSON.stringify({ environment, gitConfig, argv: process.argv.slice(2) }));
   console.error("Logged in using ChatGPT");
 } else {
+  let initialize: unknown;
   for await (const line of readLines(Bun.stdin.stream())) {
     if (!line.trim()) continue;
     const request = JSON.parse(line);
-    if (request.method === "initialize")
-      await Bun.write(
-        trace,
-        JSON.stringify({ environment, gitConfig, initialize: request.params }),
-      );
+    if (request.method === "initialize") {
+      initialize = request.params;
+      await Bun.write(trace, JSON.stringify({ environment, gitConfig, initialize }));
+    }
     if (request.id === undefined) continue;
     let result: unknown = {};
     if (request.method === "skills/list") result = { data: [{ cwd: process.cwd(), errors: [] }] };
-    if (request.method === "thread/start") result = { thread: { id: "host-thread" } };
+    if (request.method === "thread/start" || request.method === "thread/resume") {
+      result = { thread: { id: "host-thread" } };
+      await Bun.write(
+        trace,
+        JSON.stringify({
+          environment,
+          gitConfig,
+          initialize,
+          shellPolicy: request.params.config.shell_environment_policy,
+        }),
+      );
+    }
     if (request.method === "model/list")
       result = { data: [{ model: "host-model" }], nextCursor: null };
     if (request.method === "account/read")

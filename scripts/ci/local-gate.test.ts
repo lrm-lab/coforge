@@ -147,6 +147,45 @@ test("outside a git work tree the gate does nothing", () => {
   });
 });
 
+test("a broken Git config fails the gate instead of looking like a non-checkout", () => {
+  installed();
+  repo.seed({ "README.md": "# Repo\n" });
+  const result = runGate({ ...local, GIT_CONFIG_COUNT: "1", GIT_CONFIG_VALUE_0: "fixture" });
+
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr).toContain("local gate:");
+  expect(result.stderr).toContain("git rev-parse");
+  expect(result.stderr).toContain("GIT_CONFIG_KEY_0");
+});
+
+test("a damaged checkout fails the gate instead of silently skipping its checks", () => {
+  repo.write({ ".git/HEAD": "invalid head\n" });
+  const result = runGate();
+
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr).toContain("git rev-parse");
+});
+
+test("a missing Git executable fails when the checkout still exists", () => {
+  const result = runGate({ ...local, PATH: join(repo.home, "no-executables") });
+
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr).toContain("local gate:");
+  expect(result.stderr).toContain("git");
+});
+
+test("a damaged origin/main reference is not treated as an unfetched reference", () => {
+  installed();
+  repo.seed({ "README.md": "# Repo\n" });
+  withOrigin();
+  repo.write({ ".git/refs/remotes/origin/main": "invalid\n" });
+  const result = runGate();
+
+  expect(result.exitCode).not.toBe(0);
+  expect(result.stderr).toContain("git rev-parse --verify");
+  expect(result.stdout).not.toContain("origin/main is unknown");
+});
+
 test("a hooks path set by -c or GIT_CONFIG_* (an Agent's shim) is not the repository's choice", () => {
   installed();
   repo.seed({ "README.md": "# Repo\n" });

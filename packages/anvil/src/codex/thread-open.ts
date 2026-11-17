@@ -29,11 +29,12 @@ export interface OpenedCodexThread {
 export async function openCodexThread(
   process: JsonlProcess,
   options: AgentSessionOptions,
+  environment: Readonly<Record<string, string>>,
   reasoningSummary?: string,
 ): Promise<OpenedCodexThread> {
   const sessionId = options.sessionId;
   const open = (resume?: string) =>
-    process.request(threadRequest(options, resume, reasoningSummary));
+    process.request(threadRequest(options, environment, resume, reasoningSummary));
   const log = { agent_id: options.agentId, runtime_id: options.runtimeId };
   // The resumed thread, or why it could not be: any error that is not a known one is thrown.
   const resume = (id: string) =>
@@ -146,6 +147,7 @@ async function nameThread(
 
 function threadRequest(
   options: AgentSessionOptions,
+  environment: Readonly<Record<string, string>>,
   sessionId?: string,
   reasoningSummary?: string,
 ) {
@@ -169,13 +171,15 @@ function threadRequest(
         // danger-full-access policy does not use workspace-write restrictions.
         "sandbox_workspace_write.network_access": true,
         allow_login_shell: false,
-        // The Agent's shell sees everything the session was launched with; the default
-        // exclusions still keep KEY/SECRET/TOKEN variables out. An include list once dropped
-        // XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS, which left `systemctl --user` with no
-        // user bus on Linux (Codex folds `filters`/`include_only` into an allowlist).
+        // An include allowlist once dropped XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS,
+        // leaving systemctl --user without its Linux session bus. Keep broad inheritance
+        // and default secret exclusions; restore only host-generated Git config keys.
         shell_environment_policy: {
           inherit: "all",
           ignore_default_excludes: false,
+          set: Object.fromEntries(
+            Object.entries(environment).filter(([name]) => /^GIT_CONFIG_KEY_\d+$/.test(name)),
+          ),
         },
       },
       ...(!sessionId ? { serviceName: "coforge_daemon" } : {}),

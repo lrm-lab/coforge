@@ -87,6 +87,7 @@ export class CodexProvider implements CodeAgentProvider {
       const { threadId, result, replacedSessionId, replacementWarning } = await openCodexThread(
         process,
         options,
+        environment,
         reasoningSummary,
       );
       const model = await codexAccountModel(process, result, options.runtime?.model, {

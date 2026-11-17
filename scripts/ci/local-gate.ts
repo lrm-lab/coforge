@@ -10,7 +10,8 @@
 // See docs/agents/git-hooks/limits.md.
 //
 // usage: bun scripts/ci/local-gate.ts   (from the repository root; exit 1 prints the fix)
-import { join } from "node:path";
+import { lstatSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { checkRepoHooksPath } from "../git-hooks/hooks-path";
 import {
   downstreamWorkspaces,
@@ -22,26 +23,46 @@ import { selectChecks } from "./selection";
 
 const checker = join(import.meta.dir, "range-checks.ts");
 
-function git(...args: string[]): { exitCode: number; stdout: string } {
-  const result = Bun.spawnSync(["git", ...args], { stdout: "pipe", stderr: "ignore" });
+function git(args: string[], allowedExitCodes = [0]): { exitCode: number; stdout: string } {
+  const result = Bun.spawnSync(["git", ...args], { stdout: "pipe", stderr: "pipe" });
+  const diagnostic = result.stderr.toString().trim();
+  if (!allowedExitCodes.includes(result.exitCode) || (result.exitCode !== 0 && diagnostic))
+    throw new Error(`git ${args.join(" ")} failed (exit ${result.exitCode}): ${diagnostic}`);
   return { exitCode: result.exitCode, stdout: result.stdout.toString().trim() };
+}
+
+function hasCheckout(): boolean {
+  if (Bun.env.GIT_DIR || Bun.env.GIT_WORK_TREE) return true;
+  let directory = process.cwd();
+  while (true) {
+    try {
+      lstatSync(join(directory, ".git"));
+      return true;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT" && code !== "ENOTDIR") throw error;
+    }
+    const parent = dirname(directory);
+    if (parent === directory) return false;
+    directory = parent;
+  }
 }
 
 /** HEAD's merge base with the local origin/main and that ref, or null — reason already logged —
  * when the unpushed range cannot be judged: no origin, unknown origin/main, or unrelated history. */
 function mergeBase(): { base: string; main: string } | null {
-  if (git("remote", "get-url", "origin").exitCode !== 0) {
+  if (!git(["remote"]).stdout.split("\n").includes("origin")) {
     console.log("local gate: no `origin` remote, so commits not yet on main were not checked.");
     return null;
   }
-  const main = git("rev-parse", "--verify", "-q", "origin/main^{commit}");
+  const main = git(["rev-parse", "--verify", "-q", "origin/main^{commit}"], [0, 1]);
   if (main.exitCode !== 0) {
     console.log(
       "local gate: origin/main is unknown; run `git fetch origin` to check unpushed commits.",
     );
     return null;
   }
-  const base = git("merge-base", main.stdout, "HEAD");
+  const base = git(["merge-base", main.stdout, "HEAD"], [0, 1]);
   if (base.exitCode !== 0) {
     console.log("local gate: HEAD shares no history with origin/main; the range was not checked.");
     return null;
@@ -70,14 +91,7 @@ function rangeFails(range: { base: string; main: string }): boolean {
  * in CI; that script needs jq, which is not a repository tool, so the gate runs the pair itself.
  * Every selected suite runs even after a failure, and the gate fails if any did. */
 function contractChecksFail(top: string, range: { base: string }): boolean {
-  const diff = git("diff", "--name-only", "--no-renames", "-z", range.base, "HEAD");
-  if (diff.exitCode !== 0) {
-    // A git error is not an empty diff: fail closed, as the hard rules do (task #595).
-    console.error(
-      `local gate: could not diff ${range.base}..HEAD; contract checks cannot be selected.`,
-    );
-    return true;
-  }
+  const diff = git(["diff", "--name-only", "--no-renames", "-z", range.base, "HEAD"]);
   const paths = diff.stdout.split("\0").filter(Boolean);
   if (paths.length === 0) return false;
   let failed = false;
@@ -100,9 +114,11 @@ function contractChecksFail(top: string, range: { base: string }): boolean {
 function main(): number {
   const ci = process.env.CI;
   if (ci && ci !== "false" && ci !== "0") return 0;
-  const location = git("rev-parse", "--is-inside-work-tree", "--show-toplevel");
+  if (!hasCheckout()) return 0;
+  const location = git(["rev-parse", "--is-inside-work-tree", "--show-toplevel"]);
   const [inside, top] = location.stdout.split("\n");
-  if (location.exitCode !== 0 || inside !== "true" || !top) return 0;
+  if (inside !== "true" || !top)
+    throw new Error("git rev-parse did not identify the checkout work tree");
   const hooks = checkRepoHooksPath(top);
   if (!hooks.ok) console.error(`local gate: ${hooks.error}`);
   const range = mergeBase();
@@ -112,4 +128,11 @@ function main(): number {
   return !hooks.ok || hardRules || contracts ? 1 : 0;
 }
 
-if (import.meta.main) process.exit(main());
+if (import.meta.main) {
+  try {
+    process.exit(main());
+  } catch (error) {
+    console.error(`local gate: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  }
+}

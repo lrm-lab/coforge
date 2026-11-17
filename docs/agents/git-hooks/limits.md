@@ -17,7 +17,9 @@ Part of [Git hooks](README.md): what the [hooks](README.md), the `mise run check
   (`scripts/ci/selection.ts`'s `local` track, the map CI's changes job uses) and runs each as
   `bun run test:<name>` then `bun run check:<name>`; a path that selects nothing adds only the
   diff and selection, a few milliseconds, and a diff that cannot be computed fails the gate
-  rather than passing silently. It changes no config, and does nothing when `CI` is
+  rather than passing silently. Git command failures also fail with their command and diagnostic;
+  a checkout marker is checked before Git runs, so an invalid Git environment or damaged checkout
+  cannot be mistaken for a build context without Git metadata. It changes no config, and does nothing when `CI` is
   set to anything but `false` or `0`, or outside a work tree. It is a convention, and
   `--no-verify` bypasses the hooks: only CI cannot be skipped.
 - A maintainer or an Agent may push directly to `main` (root `AGENTS.md`); CI validates a push only
