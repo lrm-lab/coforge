@@ -8,6 +8,11 @@ import { ACTION_CARD_PREVIEW_SELECT, previewCardFieldOf } from "./action-card-pr
 import { messagePreviewLine } from "./message-preview-line.server";
 import { browserSenderName } from "./sender-display.server";
 import {
+  channelThreadUnreadsForMembers,
+  isLegacyTaskThreadRoot,
+  type ChannelThreadUnreadSummary,
+} from "./channel-thread-unread.server";
+import {
   announceBestEffort,
   type ConversationRealtime,
   type ConversationRealtimeMessage,
@@ -24,12 +29,15 @@ import {
  * The viewer's own message is in the list: their other tabs and devices must move the row too, and
  * the page is what ignores it for the badge.
  */
+type ActivityRecipient = { userId: string; memberId?: string };
+
 async function activityRecipients(
   db: PrismaClient,
   message: ConversationRealtimeMessage,
-): Promise<string[]> {
-  if (message.directUserIds) return [...new Set(message.directUserIds)];
-  if (message.userId) return [message.userId];
+): Promise<ActivityRecipient[]> {
+  if (message.directUserIds)
+    return [...new Set(message.directUserIds)].map((userId) => ({ userId }));
+  if (message.userId) return [{ userId: message.userId }];
   if (message.threadRootId) {
     const followers = await db.threadFollow.findMany({
       where: {
@@ -37,15 +45,27 @@ async function activityRecipients(
         conversationId: message.conversationId,
         unfollowedAt: null,
       },
-      select: { member: { select: { userId: true } } },
+      select: { memberId: true, member: { select: { userId: true } } },
     });
-    return [...new Set(followers.flatMap((row) => (row.member.userId ? [row.member.userId] : [])))];
+    const byUser = new Map<string, ActivityRecipient>();
+    for (const row of followers) {
+      if (row.member.userId && !byUser.has(row.member.userId)) {
+        byUser.set(row.member.userId, { userId: row.member.userId, memberId: row.memberId });
+      }
+    }
+    return [...byUser.values()];
   }
   const members = await db.conversationMember.findMany({
     where: { conversationId: message.conversationId, leftAt: null, userId: { not: null } },
-    select: { userId: true },
+    select: { id: true, userId: true },
   });
-  return [...new Set(members.flatMap((row) => (row.userId ? [row.userId] : [])))];
+  const byUser = new Map<string, ActivityRecipient>();
+  for (const row of members) {
+    if (row.userId && !byUser.has(row.userId)) {
+      byUser.set(row.userId, { userId: row.userId, memberId: row.id });
+    }
+  }
+  return [...byUser.values()];
 }
 
 /**
@@ -126,13 +146,16 @@ export async function announceMessage(
     ...(stored.sender?.agentId ? { senderAgentId: stored.sender.agentId } : {}),
     ...(stored.threadRootId ? { threadRootId: stored.threadRootId } : {}),
   };
-  const userIds = await activityRecipients(db, {
+  const recipients = await activityRecipients(db, {
     ...message,
     threadRootId: stored.threadRootId ?? undefined,
   });
-  if (userIds.length === 0) return;
-  // A top-level message in a conversation someone muted still moves their row and its count, but
-  // tells their Activity dot to stay dark, as its read (`navHasUnreadSql`) does.
+  if (recipients.length === 0) return;
+  const userIds = recipients.map((recipient) => recipient.userId);
+  const mentionedUserIds = new Set(
+    stored.mentions.flatMap((mention) => (mention.kind === "user" ? [mention.actorId] : [])),
+  );
+  const senderUserId = stored.sender?.userId;
   const muted = stored.threadRootId
     ? new Set<string>()
     : new Set(
@@ -147,10 +170,50 @@ export async function announceMessage(
           })
         ).flatMap((member) => (member.userId ? [member.userId] : [])),
       );
-  const loud = userIds.filter((userId) => !muted.has(userId));
-  if (loud.length) await realtime.conversationActivity({ userIds: loud, event });
-  if (muted.size)
-    await realtime.conversationActivity({ userIds: [...muted], event: { ...event, muted: true } });
+  let threadUnreadsByMember: Map<string, ChannelThreadUnreadSummary> | undefined;
+  if (
+    stored.threadRootId &&
+    event.kind === "channel" &&
+    !(await isLegacyTaskThreadRoot(db, message.conversationId, stored.threadRootId))
+  ) {
+    const followerMemberIds = recipients.flatMap((r) => (r.memberId ? [r.memberId] : []));
+    threadUnreadsByMember = await channelThreadUnreadsForMembers(
+      db,
+      message.conversationId,
+      followerMemberIds,
+    );
+  }
+  const buckets = new Map<string, { userIds: string[]; event: ConversationActivityEvent }>();
+  for (const recipient of recipients) {
+    const isMuted = muted.has(recipient.userId);
+    const isMentioned =
+      event.kind === "channel" &&
+      mentionedUserIds.has(recipient.userId) &&
+      recipient.userId !== senderUserId;
+    const threadSummary =
+      recipient.memberId && threadUnreadsByMember
+        ? threadUnreadsByMember.get(recipient.memberId)
+        : undefined;
+    const bucketKey = `${isMuted ? 1 : 0}:${isMentioned ? 1 : 0}:${threadSummary ? threadSummary.unreadThreadCount : ""}:${threadSummary?.threadMentioned ? 1 : 0}`;
+    const existing = buckets.get(bucketKey);
+    if (existing) {
+      existing.userIds.push(recipient.userId);
+      continue;
+    }
+    buckets.set(bucketKey, {
+      userIds: [recipient.userId],
+      event: {
+        ...event,
+        ...(isMuted ? { muted: true as const } : {}),
+        ...(isMentioned ? { mentioned: true as const } : {}),
+        ...(threadSummary ? { unreadThreadCount: threadSummary.unreadThreadCount } : {}),
+        ...(threadSummary?.threadMentioned ? { threadMentioned: true as const } : {}),
+      },
+    });
+  }
+  for (const bucket of buckets.values()) {
+    await realtime.conversationActivity(bucket);
+  }
 }
 
 function unannounced(reason: string, message: ConversationRealtimeMessage) {

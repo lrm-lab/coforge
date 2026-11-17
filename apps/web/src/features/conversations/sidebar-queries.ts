@@ -8,10 +8,12 @@ import {
 } from "./channels.functions";
 import type { ChannelNotificationLevel } from "./notification-levels";
 import {
+  markPublicConversationAllRead,
   setPublicConversationHidden,
   setPublicConversationUnread,
 } from "./channel-sidebar-actions.functions";
 import {
+  markDirectConversationAllRead,
   setDirectConversationHidden,
   setDirectConversationMuted,
   setDirectConversationPinned,
@@ -58,6 +60,7 @@ export type SidebarApi = {
   setMuted: (target: PinRef, muted: boolean) => Promise<unknown>;
   setNotificationLevel: (channelId: string, level: ChannelNotificationLevel) => Promise<unknown>;
   markUnread: (target: PinRef) => Promise<unknown>;
+  markRead?: (target: PinRef) => Promise<unknown>;
   setHidden: (target: PinRef, hidden: boolean) => Promise<unknown>;
   arrange: (arrangement: Arrangement) => Promise<unknown>;
 };
@@ -83,6 +86,10 @@ export const serverSidebarApi: SidebarApi = {
       : setDirectConversationUnread({
           data: { conversationId: target.conversationId, unread: true },
         }),
+  markRead: (target) =>
+    target.kind === "channel"
+      ? markPublicConversationAllRead({ data: { channelId: target.channelId } })
+      : markDirectConversationAllRead({ data: { conversationId: target.conversationId } }),
   setHidden: (target, hidden) =>
     target.kind === "channel"
       ? setPublicConversationHidden({ data: { channelId: target.channelId, hidden } })

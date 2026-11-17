@@ -193,6 +193,7 @@ test.skipIf(!connectionString)(
             workspaceId: workspace.id,
             conversationId: team.id,
             unreadCount: 1,
+            markedUnread: true,
             // Marking unread leaves the read cursor where it was.
             readThroughSequence: last.sequence,
           },

@@ -53,8 +53,9 @@ import {
   threadFollowingAgents,
   unfollowAgentFromThread,
 } from "./channel-threads.server";
+import { markChannelAndThreadsRead } from "./channel-mark-all-read.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
-import { announceActivityAttention } from "#src/server/inbox/activity-attention.server";
+import { announceReadMoved } from "#src/server/inbox/activity-attention.server";
 import { toggleUserMessageReaction } from "./user-message-reactions.server";
 import { setChannelVisibility } from "./channel-visibility-change.server";
 
@@ -160,14 +161,14 @@ export class PublicChannels {
     return setUserHidden(this.ports, workspaceId, userId, channelId, hidden);
   }
 
-  setUserThreadFollowed(
+  async setUserThreadFollowed(
     workspaceId: string,
     userId: string,
     channelId: string,
     rootMessageId: string,
     followed: boolean,
   ) {
-    return setUserThreadFollowed(
+    const result = await setUserThreadFollowed(
       this.ports,
       workspaceId,
       userId,
@@ -175,6 +176,10 @@ export class PublicChannels {
       rootMessageId,
       followed,
     );
+    await announceReadMoved(this.db, this.realtime, workspaceId, userId, [
+      { conversationId: channelId, channel: true },
+    ]);
+    return result;
   }
 
   threadFollowingAgents(
@@ -218,9 +223,14 @@ export class PublicChannels {
       rootMessageId,
       throughSequence,
     );
-    // A thread read can clear the nav rail's Activity dot: tell the person's other pages where
-    // their Activity stands now, only on a real advance (task #496).
-    if (advanced) await announceActivityAttention(this.db, this.realtime, workspaceId, userId);
+    if (advanced)
+      await announceReadMoved(this.db, this.realtime, workspaceId, userId, [
+        { conversationId: channelId, channel: true },
+      ]);
+  }
+
+  markAllRead(workspaceId: string, userId: string, channelId: string) {
+    return markChannelAndThreadsRead(this.ports, workspaceId, userId, channelId);
   }
 
   names(workspaceId: string, userId: string) {

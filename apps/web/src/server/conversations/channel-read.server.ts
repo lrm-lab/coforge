@@ -22,11 +22,15 @@ export async function markPublicChannelRead(input: {
   await input.authorize();
   if (!Number.isSafeInteger(input.throughSequence) || input.throughSequence < 1)
     throw new AppError("INVALID_INPUT");
-  const state = await markHumanRead(input.db, {
-    conversationId: input.conversationId,
-    userId: input.userId,
-    throughSequence: input.throughSequence,
-  });
+  const state = await markHumanRead(
+    input.db,
+    {
+      conversationId: input.conversationId,
+      userId: input.userId,
+      throughSequence: input.throughSequence,
+    },
+    { channelThreads: true },
+  );
   if (state === undefined) return;
   const { memberId, readThroughAdvanced, ...viewerState } = state;
   await announceViewerEvent(input.realtime, {

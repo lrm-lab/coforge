@@ -25,6 +25,7 @@ import {
   announceActivityAttention,
   announceReadMoved,
 } from "#src/server/inbox/activity-attention.server";
+import { markDirectAndThreadsRead } from "./channel-mark-all-read.server";
 import { SendDirectMessage } from "./direct-message.server";
 import type { MessageRequestIdempotency } from "./message-request-idempotency.server";
 import { toggleUserMessageReaction } from "./user-message-reactions.server";
@@ -374,6 +375,11 @@ export class DirectConversations {
       throughSequence,
     );
     if (advanced) await announceActivityAttention(this.db, this.realtime, workspaceId, viewerId);
+  }
+
+  async markAllRead(workspaceId: string, viewerId: string, conversationId: string) {
+    await this.authorize(workspaceId, viewerId, conversationId);
+    await markDirectAndThreadsRead(this.db, this.realtime, workspaceId, viewerId, conversationId);
   }
 
   /** The viewer's own emoji reaction on a message; returns the message's fresh summaries and

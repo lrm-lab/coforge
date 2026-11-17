@@ -154,6 +154,7 @@ export class PrismaDirectConversationPreferences {
         orderBy: [{ conversation: { createdAt: "asc" } }, { conversationId: "asc" }],
         select: {
           notificationLevel: true,
+          unreadFromSequence: true,
           conversation: {
             select: {
               id: true,
@@ -240,19 +241,22 @@ export class PrismaDirectConversationPreferences {
     const profiles = new Map(people.map((person) => [person.id, person]));
     const lastMessages = await this.lastMessagePreviews(latest);
     return {
-      conversations: memberships.flatMap(({ conversation, notificationLevel }) => {
-        const peer = this.peerOf(workspaceId, conversation, peerIds, profiles);
-        return peer
-          ? [
-              {
-                conversationId: conversation.id,
-                peer,
-                muted: notificationLevel === "muted",
-                lastMessage: lastMessages.get(conversation.id) ?? null,
-              },
-            ]
-          : [];
-      }),
+      conversations: memberships.flatMap(
+        ({ conversation, notificationLevel, unreadFromSequence }) => {
+          const peer = this.peerOf(workspaceId, conversation, peerIds, profiles);
+          return peer
+            ? [
+                {
+                  conversationId: conversation.id,
+                  peer,
+                  muted: notificationLevel === "muted",
+                  ...(unreadFromSequence !== null ? { markedUnread: true as const } : {}),
+                  lastMessage: lastMessages.get(conversation.id) ?? null,
+                },
+              ]
+            : [];
+        },
+      ),
       pinned: pins,
       // Closed DMs, pinned or not: the sidebar keeps a pinned one listed (in Pinned).
       hidden: hidden.map((row) => row.conversationId),

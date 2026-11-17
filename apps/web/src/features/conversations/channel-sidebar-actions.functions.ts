@@ -24,6 +24,14 @@ export const setPublicConversationUnread = createServerFn({ method: "POST" })
     return channels.setUserUnread(workspaceId, userId, data.channelId, data.unread);
   });
 
+export const markPublicConversationAllRead = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(channelInput)
+  .handler(async ({ data, context }) => {
+    const { channels, workspaceId, userId } = channelScope(context);
+    await channels.markAllRead(workspaceId, userId, data.channelId);
+  });
+
 /** Closes (hides) the conversation for this member only, or brings it back (#122). */
 export const setPublicConversationHidden = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])

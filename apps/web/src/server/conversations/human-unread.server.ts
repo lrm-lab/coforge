@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
+import { channelThreadUnreadsForUserConversations } from "./channel-thread-unread.server";
 
 /**
  * A person's unread rule, their read and Done cursor writes, and where marking unread anchors,
@@ -34,7 +35,14 @@ export const ROW_MESSAGES_SQL = Prisma.sql`(m."threadRootId" IS NULL OR c."direc
 /** Where a person stands in one of their conversations: how many of the messages its row stands
  * for (`ROW_MESSAGES_SQL`) are unread for them (the badge, by the same rule `PublicChannels.list` counts every row's with), and
  * their read cursor (`readThroughSequence`), which a read-cursor move announces. */
-export type HumanReadState = { unreadCount: number; readThroughSequence: number };
+export type HumanReadState = {
+  unreadCount: number;
+  readThroughSequence: number;
+  markedUnread?: true;
+  mentioned?: true;
+  unreadThreadCount?: number;
+  threadMentioned?: true;
+};
 export type HumanReadAdvance = HumanReadState & { memberId: string; readThroughAdvanced: boolean };
 
 /** `HumanReadState` of one conversation the person `userId` is in; nothing unread and nothing read
@@ -60,34 +68,64 @@ export async function humanReadStates(
   conversationIds: readonly string[],
 ): Promise<Map<string, HumanReadState>> {
   if (conversationIds.length === 0) return new Map();
-  const rows = await db.$queryRaw<
-    { conversationId: string; count: number; readThroughSequence: number }[]
-  >`
-    SELECT cm."conversationId" AS "conversationId", unread."count" AS "count",
-      cm."readThroughSequence" AS "readThroughSequence"
-    FROM "conversation_members" cm
-    JOIN "conversations" c ON c."id" = cm."conversationId"
-    CROSS JOIN LATERAL (
-      -- Two counts, of which each row runs one, rather than one count under an OR: a channel's
-      -- keeps the \`(conversationId, threadRootId, sequence)\` range that skips its thread replies,
-      -- a DM's takes \`(conversationId, sequence)\` (\`ROW_MESSAGES_SQL\` says the same in one line).
-      SELECT CASE WHEN c."directKey" IS NULL THEN (
-        SELECT COUNT(*) FROM "messages" m
-        WHERE m."conversationId" = cm."conversationId" AND m."threadRootId" IS NULL
-          AND ${HUMAN_UNREAD_BASE_SQL}
-      ) ELSE (
-        SELECT COUNT(*) FROM "messages" m
-        WHERE m."conversationId" = cm."conversationId" AND ${HUMAN_UNREAD_BASE_SQL}
-      ) END::int AS "count"
-    ) unread
-    WHERE cm."userId" = ${userId}::uuid
-      AND cm."conversationId" = ANY(${[...conversationIds]}::uuid[])
-      AND cm."leftAt" IS NULL`;
+  const [rows, threadUnreads] = await Promise.all([
+    db.$queryRaw<
+      {
+        conversationId: string;
+        count: number;
+        readThroughSequence: number;
+        markedUnread: boolean;
+        mentioned: boolean;
+      }[]
+    >`
+      SELECT cm."conversationId" AS "conversationId", unread."count" AS "count",
+        cm."readThroughSequence" AS "readThroughSequence",
+        (cm."unreadFromSequence" IS NOT NULL) AS "markedUnread",
+        unread."mentioned" AS "mentioned"
+      FROM "conversation_members" cm
+      JOIN "conversations" c ON c."id" = cm."conversationId"
+      CROSS JOIN LATERAL (
+        SELECT CASE WHEN c."directKey" IS NULL THEN (
+          SELECT COUNT(*) FROM "messages" m
+          WHERE m."conversationId" = cm."conversationId" AND m."threadRootId" IS NULL
+            AND ${HUMAN_UNREAD_BASE_SQL}
+        ) ELSE (
+          SELECT COUNT(*) FROM "messages" m
+          WHERE m."conversationId" = cm."conversationId" AND ${HUMAN_UNREAD_BASE_SQL}
+        ) END::int AS "count",
+        CASE WHEN c."directKey" IS NULL THEN COALESCE((
+          SELECT BOOL_OR(EXISTS (
+            SELECT 1 FROM "message_mentions" mm
+            WHERE mm."messageId" = m."id" AND mm."memberId" = cm."id"
+            OFFSET 0
+          ))
+          FROM "messages" m
+          WHERE m."conversationId" = cm."conversationId" AND m."threadRootId" IS NULL
+            AND ${HUMAN_UNREAD_BASE_SQL}
+        ), FALSE) ELSE FALSE END AS "mentioned"
+      ) unread
+      WHERE cm."userId" = ${userId}::uuid
+        AND cm."conversationId" = ANY(${[...conversationIds]}::uuid[])
+        AND cm."leftAt" IS NULL`,
+    channelThreadUnreadsForUserConversations(db, userId, conversationIds),
+  ]);
   return new Map(
-    rows.map((row) => [
-      row.conversationId,
-      { unreadCount: row.count, readThroughSequence: row.readThroughSequence },
-    ]),
+    rows.map((row) => {
+      const threads = threadUnreads.get(row.conversationId);
+      return [
+        row.conversationId,
+        {
+          unreadCount: row.count,
+          readThroughSequence: row.readThroughSequence,
+          ...(row.markedUnread ? { markedUnread: true as const } : {}),
+          ...(row.mentioned ? { mentioned: true as const } : {}),
+          ...(threads && threads.unreadThreadCount > 0
+            ? { unreadThreadCount: threads.unreadThreadCount }
+            : {}),
+          ...(threads?.threadMentioned ? { threadMentioned: true as const } : {}),
+        },
+      ];
+    }),
   );
 }
 
@@ -97,10 +135,13 @@ export async function humanReadStates(
  * conversation. Reading past a mark-as-unread marker consumes it. Returns where the move left the
  * person (`HumanReadState`; nothing unread when it read through the newest message, else counted
  * after the commit), or undefined when nothing moved, so a caller announces only real moves.
+ * `channelThreads` adds a channel's followed-thread unreads to a read-through state: only a
+ * channel has them, so a DM or a Task's conversation skips the query.
  */
 export async function markHumanRead(
   db: PrismaClient,
   read: { conversationId: string; userId: string; throughSequence: number },
+  { channelThreads = false }: { channelThreads?: boolean } = {},
 ): Promise<HumanReadAdvance | undefined> {
   const { conversationId, userId } = read;
   const moved = await db.$transaction(async (tx) => {
@@ -147,9 +188,22 @@ export async function markHumanRead(
     };
   });
   if (!moved) return undefined;
-  // Through the newest message the cursor is at it, whether this read moved it or an earlier one.
   const state = moved.throughLatest
-    ? { unreadCount: 0, readThroughSequence: moved.boundary }
+    ? await (async () => {
+        const threads = channelThreads
+          ? (await channelThreadUnreadsForUserConversations(db, userId, [conversationId])).get(
+              conversationId,
+            )
+          : undefined;
+        return {
+          unreadCount: 0,
+          readThroughSequence: moved.boundary,
+          ...(threads && threads.unreadThreadCount > 0
+            ? { unreadThreadCount: threads.unreadThreadCount }
+            : {}),
+          ...(threads?.threadMentioned ? { threadMentioned: true as const } : {}),
+        };
+      })()
     : await humanReadState(db, conversationId, userId);
   return { memberId: moved.memberId, readThroughAdvanced: moved.readThroughAdvanced, ...state };
 }

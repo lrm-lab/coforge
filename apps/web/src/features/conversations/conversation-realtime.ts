@@ -292,8 +292,11 @@ const viewerEvent = z.discriminatedUnion("type", [
     type: z.enum(["channel.marked.v1", "dm.marked.v1"]),
     ...viewerEventIds,
     unreadCount: z.number().int().nonnegative(),
-    // Where the read cursor stands after the move, as Slack's `channel_marked` carries its `ts`.
     readThroughSequence: z.number().int().nonnegative(),
+    markedUnread: z.boolean().optional(),
+    mentioned: z.boolean().optional(),
+    unreadThreadCount: z.number().int().nonnegative().optional(),
+    threadMentioned: z.boolean().optional(),
   }),
   z.object({
     type: z.enum([

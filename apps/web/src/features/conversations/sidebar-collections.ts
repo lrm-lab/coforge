@@ -45,6 +45,10 @@ type SidebarFields = {
   hidden: boolean;
   muted?: boolean;
   notificationLevel?: ChannelNotificationLevel;
+  markedUnread?: boolean;
+  mentioned?: boolean;
+  unreadThreadCount?: number;
+  threadMentioned?: boolean;
 };
 
 /**
@@ -191,11 +195,29 @@ export function createSidebar(
     onMutate: (target) =>
       edit(target, (row) => {
         row.unreadCount = Math.max(1, row.unreadCount);
+        row.markedUnread = true;
       }),
     mutationFn: async (target, { transaction }) => {
       await api.markUnread(target);
       confirm(transaction);
       reread(target);
+    },
+  });
+
+  const markReadAtOnce = createOptimisticAction<PinRef>({
+    onMutate: (target) =>
+      edit(target, (row) => {
+        row.unreadCount = 0;
+        row.markedUnread = false;
+        if (target.kind === "channel") {
+          row.mentioned = false;
+          row.unreadThreadCount = 0;
+          row.threadMentioned = false;
+        }
+      }),
+    mutationFn: async (target, { transaction }) => {
+      await api.markRead?.(target);
+      confirm(transaction);
     },
   });
 
@@ -428,6 +450,12 @@ export function createSidebar(
       ),
     markUnread: (target: PinRef) =>
       saved(markUnreadAtOnce(target), () => api.markUnread(target), listOf(target)),
+    markRead: (target: PinRef) =>
+      saved(
+        markReadAtOnce(target),
+        () => api.markRead?.(target) ?? Promise.resolve(),
+        listOf(target),
+      ),
     close: (target: PinRef) => setHidden(target, true),
     reopen: (target: PinRef) => setHidden(target, false),
     arrange: (arrangement: Arrangement) =>

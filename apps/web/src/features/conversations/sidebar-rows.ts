@@ -26,6 +26,7 @@ export type DirectRow = {
   /** The viewer muted this DM: no pushes, but its unread count stays. Absent from a copy stored
    * before DMs carried it, which reads as audible until the list is read again. */
   muted?: boolean;
+  markedUnread?: boolean;
   unreadCount: number;
   /** When the DM's last message was sent (ISO), or `null` while the DM has no message yet. */
   lastMessageAt: string | null;
@@ -55,7 +56,7 @@ export function directRowsOf(
   const pins = new Map(preferences.pinned.map((pin) => [pin.conversationId, pin.sortOrder]));
   const hidden = new Set(preferences.hidden);
   return preferences.conversations.map(
-    ({ conversationId, peer, muted, lastMessage }, position) => ({
+    ({ conversationId, peer, muted, markedUnread, lastMessage }, position) => ({
       conversationId,
       position,
       peer,
@@ -63,6 +64,7 @@ export function directRowsOf(
       pinSortOrder: pins.get(conversationId) ?? null,
       hidden: hidden.has(conversationId),
       muted,
+      ...(markedUnread ? { markedUnread: true } : {}),
       unreadCount: unread[conversationId] ?? 0,
       lastMessageAt: lastMessage?.createdAt ?? null,
       lastMessagePreview: lastMessage?.preview ?? null,

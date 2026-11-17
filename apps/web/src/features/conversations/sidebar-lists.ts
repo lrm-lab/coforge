@@ -14,7 +14,13 @@ import {
   type Sidebar,
 } from "./sidebar-collections";
 import type { PinRef } from "./pinned-conversations";
-import { applyChannelSignalToLists, applyConversationActivityToRow } from "./sidebar-signals";
+import {
+  applyChannelSignalToLists,
+  applyConversationActivityToRow,
+  applyMarkedEventToSidebar,
+  clearSidebarTopLevelUnread,
+} from "./sidebar-signals";
+import type { MarkedEventUnreadPayload } from "./sidebar-unread-state";
 import { directListsOf, type DirectRow, type ListedDirect } from "./sidebar-rows";
 import { rowListenersOf, type ChangingRows } from "./sidebar-row-listeners";
 import { sidebarRefreshQueue, type ChatList } from "./conversation-unread";
@@ -312,11 +318,32 @@ export function useApplyConversationActivity() {
   const refresh = useRefreshSidebar();
   const viewerId = useViewerId();
   return useMemo(
-    () => (event: ConversationActivityEvent) => {
-      if (!applyConversationActivityToRow(sidebar, event, viewerId))
-        void refresh([event.kind === "channel" ? "channels" : "dms"]);
-    },
+    () =>
+      (
+        event: ConversationActivityEvent,
+        options?: { openConversationId?: string; openThreadRootId?: string },
+      ) => {
+        if (!applyConversationActivityToRow(sidebar, event, viewerId, options))
+          void refresh([event.kind === "channel" ? "channels" : "dms"]);
+      },
     [sidebar, refresh, viewerId],
+  );
+}
+
+export function useApplyMarkedEvent() {
+  const sidebar = useSidebar();
+  return useMemo(
+    () => (event: MarkedEventUnreadPayload, options: { openConversationId?: string }) =>
+      applyMarkedEventToSidebar(sidebar, event, options),
+    [sidebar],
+  );
+}
+
+export function useClearSidebarTopLevelUnread() {
+  const sidebar = useSidebar();
+  return useMemo(
+    () => (conversationId: string) => clearSidebarTopLevelUnread(sidebar, conversationId),
+    [sidebar],
   );
 }
 

@@ -10,6 +10,11 @@ import {
 import { countsOnRow, type ChatList } from "./conversation-unread";
 import type { Sidebar } from "./sidebar-collections";
 import type { ConversationActivityEvent } from "./conversation-activity-event";
+import {
+  applyActivityUnreadFields,
+  applyMarkedUnreadFields,
+  type MarkedEventUnreadPayload,
+} from "./sidebar-unread-state";
 
 type ChannelNamesRead = ChatListValue<"channelNames">;
 
@@ -64,16 +69,43 @@ export function applyConversationActivityToRow(
   sidebar: Sidebar | undefined,
   event: ConversationActivityEvent,
   viewerId: string | undefined,
+  options?: { openConversationId?: string; openThreadRootId?: string },
 ): boolean {
   if (!sidebar || sidebar.savesRetrying.count() > 0) return false;
   const id = event.conversationId;
   if (event.kind === "channel") {
     if (sidebar.channels.status !== "ready" || !sidebar.channels.has(id)) return false;
-    // A channel's row shows its newest top-level message, as its count counts those alone
-    // (`countsOnRow`); a reply stays with its thread.
-    if (!countsOnRow(event)) return true;
+    const current = sidebar.channels.get(id);
+    const isOwnMessage = viewerId !== undefined && event.senderUserId === viewerId;
+    const nextUnread = applyActivityUnreadFields(
+      {
+        mentioned: current?.mentioned === true,
+        unreadThreadCount: current?.unreadThreadCount ?? 0,
+        threadMentioned: current?.threadMentioned === true,
+      },
+      event,
+      {
+        isOpenChannel: options?.openConversationId === id,
+        openThreadRootId: options?.openThreadRootId,
+        isOwnMessage,
+      },
+    );
+    if (!countsOnRow(event)) {
+      if (
+        (current?.unreadThreadCount ?? 0) !== nextUnread.unreadThreadCount ||
+        Boolean(current?.threadMentioned) !== nextUnread.threadMentioned
+      ) {
+        sidebar.channels.utils.writeUpdate({
+          id,
+          unreadThreadCount: nextUnread.unreadThreadCount,
+          threadMentioned: nextUnread.threadMentioned,
+        });
+      }
+      return true;
+    }
     sidebar.channels.utils.writeUpdate({
       id,
+      mentioned: nextUnread.mentioned,
       lastMessage: {
         createdAt: event.createdAt,
         preview: event.preview,
@@ -82,7 +114,7 @@ export function applyConversationActivityToRow(
         sender: {
           kind: event.sender.kind,
           name: event.sender.name,
-          mine: viewerId !== undefined && event.senderUserId === viewerId,
+          mine: isOwnMessage,
         },
       },
     });
@@ -97,4 +129,66 @@ export function applyConversationActivityToRow(
     lastMessageCard: event.card ?? null,
   });
   return true;
+}
+
+export function applyMarkedEventToSidebar(
+  sidebar: Sidebar | undefined,
+  event: MarkedEventUnreadPayload,
+  options: { openConversationId?: string },
+): void {
+  if (!sidebar || sidebar.savesRetrying.count() > 0) return;
+  const id = event.conversationId;
+  const isOpen = options.openConversationId === id;
+  if (event.type === "channel.marked.v1") {
+    if (sidebar.channels.status !== "ready" || !sidebar.channels.has(id)) return;
+    const current = sidebar.channels.get(id);
+    const next = applyMarkedUnreadFields(
+      {
+        unreadCount: current?.unreadCount ?? 0,
+        mentioned: current?.mentioned === true,
+        markedUnread: current?.markedUnread === true,
+        unreadThreadCount: current?.unreadThreadCount ?? 0,
+        threadMentioned: current?.threadMentioned === true,
+      },
+      event,
+      { isOpenChannel: isOpen },
+    );
+    sidebar.channels.utils.writeUpdate({ id, ...next });
+    return;
+  }
+  if (sidebar.directs.status !== "ready" || !sidebar.directs.has(id)) return;
+  sidebar.directs.utils.writeUpdate({
+    conversationId: id,
+    unreadCount: isOpen ? 0 : event.unreadCount,
+    markedUnread: isOpen ? false : event.markedUnread === true,
+  });
+}
+
+export function clearSidebarTopLevelUnread(
+  sidebar: Sidebar | undefined,
+  conversationId: string,
+): void {
+  if (!sidebar || sidebar.savesRetrying.count() > 0) return;
+  if (sidebar.channels.status === "ready" && sidebar.channels.has(conversationId)) {
+    const current = sidebar.channels.get(conversationId);
+    if (current?.mentioned || current?.markedUnread || (current?.unreadCount ?? 0) > 0) {
+      sidebar.channels.utils.writeUpdate({
+        id: conversationId,
+        unreadCount: 0,
+        mentioned: false,
+        markedUnread: false,
+      });
+    }
+    return;
+  }
+  if (sidebar.directs.status === "ready" && sidebar.directs.has(conversationId)) {
+    const current = sidebar.directs.get(conversationId);
+    if (current?.markedUnread || (current?.unreadCount ?? 0) > 0) {
+      sidebar.directs.utils.writeUpdate({
+        conversationId,
+        unreadCount: 0,
+        markedUnread: false,
+      });
+    }
+  }
 }

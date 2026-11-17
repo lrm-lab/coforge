@@ -15,6 +15,7 @@ import { channelListPreviews } from "./channel-list-preview.server";
 import type { ChannelName } from "#src/features/conversations/channel-signals";
 import { channelListMembers } from "./channel-list-preview.server";
 import { channelInfoOf } from "./conversation-realtime.server";
+import { workspaceChannelThreadUnreads } from "./channel-thread-unread.server";
 import { HUMAN_UNREAD_BASE_SQL } from "./human-unread.server";
 
 /** The Workspace's channels as lists: every name the composer may reference, the viewer's Chat
@@ -128,9 +129,10 @@ export async function listChannels(
   // The channel previews need only the channel ids. A channel the viewer closed and did not pin
   // is listed only when a newer message reopens it, so the other channels' previews load in
   // parallel with the unread read, and the reopened closed ones are read after it.
-  const [channels, unread, previews] = await Promise.all([
+  const [channels, unread, threadUnreads, previews] = await Promise.all([
     channelRows,
     unreadRows,
+    workspaceChannelThreadUnreads(db, workspaceId, userId),
     channelRows.then((rows) =>
       channelListPreviews(
         db,
@@ -161,8 +163,7 @@ export async function listChannels(
       // or the row's `pinSortOrder` narrows to `number` and cannot hold "not pinned".
       const pin = member?.pins.at(0);
       const preview = previews.get(channel.id);
-      // A non-member (or soft-left viewer) sees no unread badge: the channel's history is
-      // readable, but nothing new is "for them" until they join.
+      const threadUnread = member ? threadUnreads.get(channel.id) : undefined;
       return {
         id: channel.id,
         name: channel.channelName!,
@@ -173,6 +174,11 @@ export async function listChannels(
         notificationLevel: readNotificationLevel(member?.notificationLevel),
         unreadCount: member ? (unreadByConversation.get(channel.id) ?? 0) : 0,
         mentioned: member ? mentionedConversations.has(channel.id) : false,
+        ...(member?.unreadFromSequence != null ? { markedUnread: true as boolean } : {}),
+        ...(threadUnread && threadUnread.unreadThreadCount > 0
+          ? { unreadThreadCount: threadUnread.unreadThreadCount }
+          : {}),
+        ...(threadUnread?.threadMentioned ? { threadMentioned: true as boolean } : {}),
         lastMessage: preview?.lastMessage ?? null,
         members: preview?.members ?? [],
         /// A closed chat disappears from this member's list only (see `hiddenAt` in the schema);
