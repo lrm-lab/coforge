@@ -125,7 +125,7 @@ export function PersonalMemoryPage({
     } catch {
       if (active.current === stamp) setError(m.memory_failed());
     } finally {
-      setBusy(false);
+      if (active.current === stamp) setBusy(false);
     }
   };
   return (
@@ -381,7 +381,7 @@ export function PersonalMemoryPage({
                       } catch {
                         if (active.current === stamp) setError(m.memory_failed());
                       } finally {
-                        setBusy(false);
+                        if (active.current === stamp) setBusy(false);
                       }
                     }}
                   >
