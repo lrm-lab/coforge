@@ -1,7 +1,7 @@
 import type { ReminderJob } from "./reminder-job";
 export type { ReminderJob } from "./reminder-job";
 import { RPC_METHODS } from "./rpc-methods";
-import { RECURRENCE } from "./reminder-grammar";
+import { hasControlCharacter, RECURRENCE } from "./reminder-grammar";
 import { SEAL_OWNER_MAX_CHARS, SEAL_UNTIL_MAX_CHARS, sealText } from "./reminder-seal-text";
 import { isScopeId } from "./scope-id";
 import { boundedPayload } from "./codec";
@@ -210,10 +210,7 @@ function fields<T extends ReminderOperationFields>(value: T, canonicalTarget = f
     !(canonicalTarget ? CANONICAL_TARGET : TARGET).test(value.target)
   )
     throw new Error("invalid reminder target");
-  if (
-    value.title !== undefined &&
-    (!value.title.trim() || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value.title))
-  )
+  if (value.title !== undefined && (!value.title.trim() || hasControlCharacter(value.title)))
     throw new Error("invalid reminder title");
   positive(value.delaySeconds, "reminder delay");
   positive(value.revision, "reminder revision");
