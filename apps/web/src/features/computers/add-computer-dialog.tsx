@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Cloud01 as Cloud, Monitor01 as Monitor } from "@untitledui/icons";
 
 import { StatusDot } from "#src/components/ui/status-dot";
@@ -34,6 +34,15 @@ export function AddComputerDialog({
     onOpenChange(false);
   }
 
+  // A step swaps the controls under focus (Next becomes a disabled Done), and focus left on a
+  // control that goes away falls to the page: Escape then misses the dialog. Each step starts with
+  // focus on the dialog, as it opened.
+  const dialogRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.contains(document.activeElement)) dialog.focus();
+  }, [step]);
+
   useEffect(() => {
     if (open) return;
     const timer = window.setTimeout(() => {
@@ -46,7 +55,7 @@ export function AddComputerDialog({
   return (
     <ModalOverlay isOpen={open} onOpenChange={onOpenChange}>
       <Modal className="w-[calc(100vw-2rem)] max-w-2xl">
-        <Dialog aria-describedby="add-computer-description">
+        <Dialog ref={dialogRef} aria-describedby="add-computer-description">
           {() => (
             <>
               <DialogHeader
