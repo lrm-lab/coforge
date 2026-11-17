@@ -18,6 +18,11 @@ import {
  * time; the day divider comes back for the message after the group. Every notice line, folded or
  * lone, is centred on a hairline with its time shown, and a phone never scrolls sideways.
  *
+ * That last check pins the regression behind task #790: a `<TooltipTrigger>` wrapper slipped
+ * between a notice row's flex line and its `min-w-0 flex-1` span, so a long notice grew the row
+ * past the stream and a phone scrolled the whole stream sideways. A run of pathologically long
+ * notices (one an unbreakable ASCII token far wider than 390px) must each stay one clipped line.
+ *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel and its
  * messages are seeded per run and removed after it. Screenshots (light folded and open, dark,
  * a phone) are written under `.amp/e2e/system-notice-fold/`.
@@ -26,6 +31,12 @@ const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/system-notice-fold");
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MINUTE_MS = 60_000;
+/** Notices wider than a phone; the ASCII token is what pushes the row sideways if the clip fails. */
+const LONG_NOTICES = [
+  "任务 #9001 “为保存的视图建立移动端列宽的自适应规则与回退策略” - in progress · glm-5-3-flash",
+  "system-notice-with-a-very-long-unbreakable-ascii-token-0123456789abcdef0123456789abcdef-end",
+  "成员 @jordan 加入了频道，并由 @dev-user 授予了查看已保存消息与任务看板的权限，此通知特意写得足够长以覆盖多行场景。",
+];
 
 test("a run of notices folds across days and each notice sits centred on a rule", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
@@ -92,6 +103,10 @@ test("a run of notices folds across days and each notice sits centred on a rule"
     kind: "task.claimed",
     params: { claimer: coder, task },
   });
+  // A message after the lone notice keeps it lone; then the long notices, a group of their own.
+  await post(later + 3 * MINUTE_MS, `Long notices next ${suffix}`);
+  for (const [index, body] of LONG_NOTICES.entries())
+    await post(later + (4 + index) * MINUTE_MS, body, { kind: "legacy_text", params: { body } });
   await db.conversation.update({ where: { id: channel.id }, data: { lastSequence: sequence } });
 
   const page = `${origin}/en/w/${workspace.slug}/channel/${channel.id}`;
@@ -179,6 +194,18 @@ test("a run of notices folds across days and each notice sits centred on a rule"
     await browser("set", "viewport", "390", "844");
     await open();
     await expand();
+    // Open the long notices' group too, and each of them is one clipped line.
+    await browser(
+      "eval",
+      `document.querySelectorAll('li[data-system-group] button[aria-expanded="false"]').forEach((button) => button.click())`,
+    );
+    const longRows = `[...document.querySelectorAll('[data-message="system"]')].filter((row) => ${JSON.stringify(LONG_NOTICES.map((body) => body.slice(0, 16)))}.some((start) => row.textContent.includes(start)))`;
+    await browser("wait", "--fn", `${longRows}.length >= ${LONG_NOTICES.length}`);
+    await browser("wait", "--fn", `${longRows}.every((row) => row.clientHeight <= 64)`);
+    const stream = `[...document.querySelectorAll("div")].find((e) => e.className.includes("overflow-y-auto"))`;
+    expect(
+      await evaluate<number>(`${stream}.scrollWidth - ${stream}.clientWidth`),
+    ).toBeLessThanOrEqual(1);
     expect(
       await evaluate<boolean>(
         `document.documentElement.scrollWidth <= document.documentElement.clientWidth`,
