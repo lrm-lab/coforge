@@ -10,6 +10,10 @@ Read [Antigravity ACP behavior](../../../../docs/agents/antigravity-acp.md) when
 - Auth is `agy_acp_server`'s own OAuth in `~/.gemini/antigravity-acp/`, never `agy` CLI's.
   `authenticate` (`oauth-personal`/`oauth-business`) launches the server's browser flow on a
   short-lived `agy acp` process — never the running Agent session — and `logout` clears it;
+  each confirms its result with the `session/new` probe on that same, already-warm process (an
+  abort during that probe is still a cancelled sign-in). A signed-in status carries
+  `session/new`'s `_meta.antigravity.tier.name` ("Google AI Ultra") as the account's
+  `planLabel`; agy exposes no account email, so there is no `maskedLabel`.
   `session/new` and `session/load` `-32000 "Authentication required"` are `runtime_login_required`,
   `-32800` is a cancelled sign-in. A Computer without a desktop (`canOpenBrowser`: Linux needs
   `DISPLAY`/`WAYLAND_DISPLAY`, `COFORGE_COMPUTER_CLOUD=1` never qualifies) signs in through

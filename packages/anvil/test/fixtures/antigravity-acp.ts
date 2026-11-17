@@ -182,6 +182,10 @@ for await (const line of console) {
         });
         break;
       }
+      if (Bun.env.AGY_ACP_FIXTURE_NEW_HANG) {
+        heldReply = () => {};
+        break;
+      }
       if (request.params.sessionId === "missing-session") {
         fail(-32002, "Session not found");
         break;
@@ -191,6 +195,9 @@ for await (const line of console) {
         sessionId: currentSessionId,
         configOptions,
         modes: { availableModes: modes },
+        _meta: {
+          antigravity: { tier: { name: "Google AI Ultra", id: "g1-ultra-tier", upgradeUri: "" } },
+        },
       });
       break;
     case "session/set_mode":

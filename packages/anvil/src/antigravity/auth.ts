@@ -13,6 +13,8 @@ import {
   type RuntimeAuthSecretSink,
   type RuntimeAuthStatus,
 } from "#src/contract";
+import { asRecord, nonEmptyString } from "#src/json-record";
+import { runtimeAuthAccount } from "#src/runtime-auth-status";
 import { ANTIGRAVITY_ACP_PROFILE } from "./acp-session";
 import { antigravityTerminalLogin } from "./auth-terminal";
 
@@ -27,6 +29,11 @@ const ANTIGRAVITY_AUTH_PROBE_TIMEOUT_MS = 30_000;
 
 export type AntigravityAuthMethod = "oauth-personal" | "oauth-business";
 const SUPPORTED_METHODS: readonly AntigravityAuthMethod[] = ["oauth-personal", "oauth-business"];
+
+function antigravityTierName(state: unknown): string | undefined {
+  const antigravity = asRecord(asRecord(asRecord(state)?._meta)?.antigravity);
+  return nonEmptyString(asRecord(antigravity?.tier)?.name);
+}
 
 const loggedOut: RuntimeAuthStatus = {
   provider: RUNTIME_PROVIDER.ANTIGRAVITY,
@@ -120,7 +127,8 @@ export class AntigravityRuntimeAuthAdapter implements RuntimeAuthAdapter {
         timeoutMs,
         "agy acp authenticate timed out",
       );
-      const authStatus = await this.readStatus({ workingDirectory: options.workingDirectory });
+      const authStatus = await this.#loggedIn(transport);
+      if (controller.signal.aborted || interaction.signal?.aborted) return { status: "cancelled" };
       if (authStatus.state === "logged_in") return { status: "logged_in", authStatus };
       return {
         status: "failed",
@@ -196,12 +204,12 @@ export class AntigravityRuntimeAuthAdapter implements RuntimeAuthAdapter {
         ANTIGRAVITY_AUTH_PROBE_TIMEOUT_MS,
         "agy acp session/new timed out",
       );
-      probed =
-        typeof (state as { sessionId?: unknown })?.sessionId === "string"
-          ? (state as { sessionId: string }).sessionId
-          : undefined;
-      // `session/new` cannot say which account signed in — `authMethods` are labels only.
-      return { provider: RUNTIME_PROVIDER.ANTIGRAVITY, state: "logged_in" };
+      probed = nonEmptyString(asRecord(state)?.sessionId);
+      return {
+        provider: RUNTIME_PROVIDER.ANTIGRAVITY,
+        state: "logged_in",
+        ...runtimeAuthAccount({ planLabel: antigravityTierName(state) }),
+      };
     } catch (error) {
       if (error instanceof RequestError && error.code === ANTIGRAVITY_AUTH_REQUIRED_CODE)
         return loggedOut;

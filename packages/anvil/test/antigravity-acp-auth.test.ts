@@ -47,21 +47,35 @@ test("a signed-out status read returns logged_out through session/new -32000", a
   }
 });
 
-test("a signed-in status read returns logged_in", async () => {
+test("a signed-in status read carries the account's Antigravity tier as its plan", async () => {
   const dir = await cwd();
   try {
     const adapter = new AntigravityRuntimeAuthAdapter(authHost(dir));
     const status = await adapter.readStatus({ workingDirectory: dir });
-    expect(status.state).toBe("logged_in");
+    expect(status).toEqual({
+      provider: "antigravity",
+      state: "logged_in",
+      account: { planLabel: "Google AI Ultra" },
+    });
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
 });
 
-test("a completed authenticate signs the status read in", async () => {
+test("a completed authenticate confirms the sign-in on the same agy process", async () => {
   const dir = await cwd();
   try {
-    const adapter = new AntigravityRuntimeAuthAdapter(authHost(dir));
+    let spawns = 0;
+    const host = authHost(dir);
+    const adapter = new AntigravityRuntimeAuthAdapter({
+      ...host,
+      processTreeSpawner: {
+        spawn: (...args) => {
+          spawns++;
+          return host.processTreeSpawner.spawn(...args);
+        },
+      },
+    });
     const events: string[] = [];
     const result = await adapter.startLogin(
       { workingDirectory: dir, antigravityMethodId: "oauth-business" },
@@ -70,8 +84,12 @@ test("a completed authenticate signs the status read in", async () => {
         prompt: async () => "",
       },
     );
-    expect(result.status).toBe("logged_in");
+    expect(result).toMatchObject({
+      status: "logged_in",
+      authStatus: { state: "logged_in", account: { planLabel: "Google AI Ultra" } },
+    });
     expect(events).toContain("info");
+    expect(spawns).toBe(1);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -88,6 +106,33 @@ test("a cancelled authenticate returns cancelled, never a failure", async () => 
       { onEvent: () => {}, prompt: async () => "" },
     );
     expect(result.status).toBe("cancelled");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a login aborted while its sign-in is being confirmed is cancelled", async () => {
+  const dir = await cwd();
+  try {
+    const adapter = new AntigravityRuntimeAuthAdapter(
+      authHost(dir, { AGY_ACP_FIXTURE_NEW_HANG: "1" }),
+    );
+    const abort = new AbortController();
+    const result = adapter.startLogin(
+      { workingDirectory: dir },
+      { onEvent: () => {}, prompt: async () => "", signal: abort.signal },
+    );
+    const log = join(dir, "rpc.jsonl");
+    while (
+      !(
+        await Bun.file(log)
+          .text()
+          .catch(() => "")
+      ).includes('"session/new"')
+    )
+      await Bun.sleep(10);
+    abort.abort();
+    expect(await result).toEqual({ status: "cancelled" });
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -168,7 +213,11 @@ test("a headless personal login runs agy acp --login and signs the status read i
     expect(prompts.length).toBeGreaterThan(0);
     expect(secrets).toContain("4/fixture-code");
     const status = await adapter.readStatus({ workingDirectory: dir });
-    expect(status.state).toBe("logged_in");
+    expect(status).toEqual({
+      provider: "antigravity",
+      state: "logged_in",
+      account: { planLabel: "Google AI Ultra" },
+    });
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -351,7 +400,11 @@ test("a logout the server did not act on is still_logged_in, never a false sign-
     const result = await adapter.logout({ workingDirectory: dir });
     expect(result).toEqual({ status: "failed", reason: "still_logged_in" });
     const status = await adapter.readStatus({ workingDirectory: dir });
-    expect(status.state).toBe("logged_in");
+    expect(status).toEqual({
+      provider: "antigravity",
+      state: "logged_in",
+      account: { planLabel: "Google AI Ultra" },
+    });
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
