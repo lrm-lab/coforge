@@ -1,4 +1,7 @@
 import {
+  decodeAgentMemoryRequest,
+  encodeAgentMemoryResult,
+  AGENT_MEMORY_RESULT_METHOD,
   decodeAgentSkillsListRequest,
   encodeAgentSkillsListResult,
   AGENT_SKILLS_LIST_RESULT_METHOD,
@@ -82,6 +85,7 @@ class DaemonQuery<Request extends Scope, Result> {
 
 /** All scoped request/reply query transports share the daemon's single WSS client. */
 export class DaemonQueries {
+  readonly memory;
   readonly skills;
   readonly files;
   readonly file;
@@ -91,6 +95,12 @@ export class DaemonQueries {
   readonly computerFilePull;
   readonly piChat;
   constructor(rpc: Rpc) {
+    this.memory = new DaemonQuery(
+      decodeAgentMemoryRequest,
+      encodeAgentMemoryResult,
+      AGENT_MEMORY_RESULT_METHOD,
+      rpc,
+    );
     this.skills = new DaemonQuery(
       decodeAgentSkillsListRequest,
       encodeAgentSkillsListResult,
@@ -151,6 +161,7 @@ export class DaemonQueries {
   receive(bytes: Uint8Array, scope: Scope) {
     return [
       this.piChat,
+      this.memory,
       this.skills,
       this.files,
       this.scan,

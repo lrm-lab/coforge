@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { parseArgs, run } from "../index";
-import { parseMemoryArgs } from "#src/memory-commands";
+import { parseMemoryArgs, runMemoryCommand } from "#src/memory-commands";
 import type { MessageTransport } from "#src/message-transport";
 
 test("memory save requires evidence, defaults to a new local entry, and passes its scope", async () => {
@@ -82,7 +82,17 @@ test("local listing preserves the archive filter and provides executable continu
     ["list", "--query", "x"],
     ["list", "--archived", "--archived"],
     ["list", "--offset", "-1"],
-    ["search", "--query", "x", "--archived"],
   ])
     expect(() => parseMemoryArgs(args)).toThrow();
+});
+
+test("personal memory search can explicitly include archives and keeps that filter in continuation", async () => {
+  const invocation = parseMemoryArgs(["search", "--query", "domain", "--archived"]);
+  expect(invocation).toMatchObject({
+    request: { operation: "search", query: "domain", archived: true },
+  });
+  const output = await runMemoryCommand(invocation, {
+    memory: async () => ({ entries: [], nextOffset: 128 }),
+  });
+  expect(output).toContain("--archived --offset 128");
 });

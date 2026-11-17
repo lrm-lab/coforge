@@ -1,3 +1,4 @@
+import { findPersonalMemoryAssignment } from "#src/server/agents/agent-memory-composition.server";
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
@@ -283,4 +284,42 @@ test("legacy Computers keep reading Agent knowledge while upgraded Computers als
     service(),
   );
   expect(decodeTeamMemoryResult(await oldRead.json()).entries[0]?.id).toBe(known.id);
+});
+
+test("personal memory assignment is owner-only even for a Workspace administrator", async () => {
+  const admin = await db.user.create({
+    data: { username: `memory-admin-${crypto.randomUUID()}`, displayName: "Administrator" },
+  });
+  const computer = await db.computer.create({
+    data: {
+      ownerId: userId,
+      machineId: `memory-${crypto.randomUUID()}`,
+      name: "Personal memory Computer",
+      workspaces: { create: { workspaceId } },
+    },
+  });
+  try {
+    await db.workspaceMembership.create({ data: { workspaceId, userId: admin.id, role: "admin" } });
+    await db.agent.update({ where: { id: agentId }, data: { computerId: computer.id } });
+    expect(
+      (await findPersonalMemoryAssignment(db, { workspaceId, userId }, agentId))?.computerId,
+    ).toBe(computer.id);
+    expect(
+      await findPersonalMemoryAssignment(db, { workspaceId, userId: admin.id }, agentId),
+    ).toBeUndefined();
+    await db.workspaceMembership.delete({ where: { workspaceId_userId: { workspaceId, userId } } });
+    expect(
+      await findPersonalMemoryAssignment(db, { workspaceId, userId }, agentId),
+    ).toBeUndefined();
+  } finally {
+    await db.workspaceMembership.upsert({
+      where: { workspaceId_userId: { workspaceId, userId } },
+      create: { workspaceId, userId, role: "owner" },
+      update: { role: "owner" },
+    });
+    await db.agent.update({ where: { id: agentId }, data: { computerId: null } });
+    await db.computer.delete({ where: { id: computer.id } });
+    await db.workspaceMembership.deleteMany({ where: { workspaceId, userId: admin.id } });
+    await db.user.delete({ where: { id: admin.id } });
+  }
 });

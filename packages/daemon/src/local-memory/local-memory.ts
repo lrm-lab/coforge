@@ -11,10 +11,10 @@ import {
   memoryRevision,
   memorySearchScore,
 } from "./memory-record";
+import { serializeMemoryWrite } from "./memory-write-lock";
 import { MemoryFileIndex } from "./memory-file-index";
 
 export class LocalMemory {
-  #write = Promise.resolve();
   readonly #index: MemoryFileIndex;
   constructor(private readonly root: string) {
     this.#index = new MemoryFileIndex(root);
@@ -24,37 +24,58 @@ export class LocalMemory {
     const command = decodeLocalMemoryCommand(input);
     if (command.operation === "list")
       return this.list(command.offset ?? 0, command.archived ?? false);
-    if (command.operation === "search") return this.search(command.query, command.offset ?? 0);
-    if (command.operation === "get") return { entries: [await this.get(command.key)] };
+    if (command.operation === "search")
+      return this.search(command.query, command.offset ?? 0, command.archived ?? false);
+    if (command.operation === "get")
+      return { entries: [await this.get(command.key, command.revision)] };
     if (command.operation === "history") {
       const files = await historyFiles(this.root, command.key);
+      const offset = command.offset ?? 0;
+      const selected = files.slice(offset, offset + 5);
+      const batch = await Promise.all(
+        selected.map(async (name) => {
+          const path = `notes/history/${command.key}/${name}`;
+          const text = await readMemoryFile(this.root, path);
+          return text ? decodeMemoryRecord(text, path) : undefined;
+        }),
+      );
       const entries: LocalMemoryEntry[] = [];
-      const selected = files.slice(-100);
-      for (let index = 0; index < selected.length; index += 8) {
-        const batch = await Promise.all(
-          selected.slice(index, index + 8).map(async (name) => {
-            const path = `notes/history/${command.key}/${name}`;
-            const text = await readMemoryFile(this.root, path);
-            return text ? decodeMemoryRecord(text, path) : undefined;
-          }),
-        );
-        entries.push(...batch.filter((entry): entry is LocalMemoryEntry => entry !== undefined));
+      let inspected = 0;
+      for (const entry of batch) {
+        if (entry) {
+          const preview = {
+            ...entry,
+            content: entry.content.trimStart().slice(0, 600),
+            source: entry.source.trimStart().slice(0, 200),
+          };
+          if (
+            Buffer.byteLength(
+              JSON.stringify({
+                entries: [...entries, preview],
+                nextOffset: offset + inspected + 1,
+              }),
+            ) > 12000
+          )
+            break;
+          entries.push(preview);
+        }
+        inspected++;
       }
       return {
-        entries: entries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
-        incomplete: files.length > 100,
+        entries,
+        ...(offset + inspected < files.length ? { nextOffset: offset + inspected } : {}),
       };
     }
-    const operation = this.#write.then(() => this.save(command));
-    this.#write = operation.then(
-      () => {},
-      () => {},
-    );
-    return operation;
+    return serializeMemoryWrite(this.root, () => this.save(command));
   }
 
-  private async get(key: string): Promise<LocalMemoryEntry> {
-    const path = `notes/knowledge/${key}.md`;
+  private async get(key: string, revision?: string): Promise<LocalMemoryEntry> {
+    const currentPath = `notes/knowledge/${key}.md`;
+    const current = revision ? await readMemoryFile(this.root, currentPath) : undefined;
+    const path =
+      revision && (!current || memoryRevision(current) !== revision)
+        ? `notes/history/${key}/${revision}.md`
+        : currentPath;
     const text = await readMemoryFile(this.root, path);
     if (text === undefined) throw new Error("memory_not_found");
     const entry = decodeMemoryRecord(text, path);
@@ -96,7 +117,11 @@ export class LocalMemory {
     return { entries: [decodeMemoryRecord(text, path)!] };
   }
 
-  private async search(query: string, offset: number): Promise<LocalMemoryResult> {
+  private async search(
+    query: string,
+    offset: number,
+    archived: boolean,
+  ): Promise<LocalMemoryResult> {
     const listed = await listMemoryFiles(this.root);
     const paths = listed.paths;
     let incomplete = listed.incomplete;
@@ -117,8 +142,12 @@ export class LocalMemory {
           });
           if (!text) return undefined;
           const saved = decodeMemoryRecord(text, path);
-          if (path.startsWith("notes/knowledge/") && (!saved || saved.status !== "active"))
+          if (
+            path.startsWith("notes/knowledge/") &&
+            (!saved || saved.status !== (archived ? "archived" : "active"))
+          )
             return undefined;
+          if (archived && !saved) return undefined;
           const { score, position } = memorySearchScore(
             saved ? `${saved.title}\n${saved.content}\n${saved.applicability}` : text,
             query,

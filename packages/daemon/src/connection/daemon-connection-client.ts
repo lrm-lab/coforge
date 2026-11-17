@@ -1,3 +1,4 @@
+import type { AgentMemoryRequest, AgentMemoryResult } from "@lrm/coforge-sdk/internal";
 import type { TeamMemoryCommand } from "@lrm/coforge-sdk/agent";
 import type { AgentApiConnectionClient } from "./agent-api-connection-client";
 import type { AgentArtifactCall } from "./agent-forwarded-routes";
@@ -147,6 +148,8 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   sendWorkspaceFileReadResult?(result: AgentWorkspaceFileReadResult): Promise<void>;
   onWorkspaceDelete?(callback: (request: AgentWorkspaceDeleteRequest) => Promise<void>): () => void;
   sendWorkspaceDeleteResult?(result: AgentWorkspaceDeleteResult): Promise<void>;
+  onAgentMemory?(callback: (request: AgentMemoryRequest) => Promise<void>): () => void;
+  sendAgentMemoryResult?(result: AgentMemoryResult): Promise<void>;
   onAgentContextView?(callback: (request: AgentContextViewRequest) => Promise<void>): () => void;
   postAgentContextViewResult?(
     result: AgentContextViewResult,

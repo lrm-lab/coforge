@@ -4,10 +4,10 @@ export const LOCAL_MEMORY_ROUTE = { method: "POST", path: "/api/agent/v1/local-m
 export const MEMORY_KINDS = ["fact", "decision", "preference", "experience"] as const;
 export type MemoryKind = (typeof MEMORY_KINDS)[number];
 export type LocalMemoryCommand =
-  | { operation: "search"; query: string; offset?: number }
+  | { operation: "search"; query: string; offset?: number; archived?: boolean }
   | { operation: "list"; offset?: number; archived?: boolean }
-  | { operation: "get"; key: string }
-  | { operation: "history"; key: string }
+  | { operation: "get"; key: string; revision?: string }
+  | { operation: "history"; key: string; offset?: number }
   | { operation: "archive"; key: string; revision: string }
   | {
       operation: "save";
@@ -95,12 +95,14 @@ export function decodeLocalMemoryCommand(value: unknown): LocalMemoryCommand {
     operation === "list"
       ? ["offset", "archived"]
       : operation === "search"
-        ? ["query", "offset"]
+        ? ["query", "offset", "archived"]
         : operation === "save"
           ? ["key", "revision", "title", "content", "source", "kind", "applicability"]
           : operation === "archive"
             ? ["key", "revision"]
-            : ["key"];
+            : operation === "get"
+              ? ["key", "revision"]
+              : ["key", "offset"];
   if (Object.keys(value).some((key) => key !== "operation" && !fields.includes(key)))
     throw new Error("invalid_memory_field");
   if (operation === "search" || operation === "list") {
@@ -114,7 +116,15 @@ export function decodeLocalMemoryCommand(value: unknown): LocalMemoryCommand {
     )
       throw new Error("invalid_memory_offset");
     const pagination = offset === undefined ? {} : { offset };
-    if (operation === "search") return { operation, query: text("query", 500), ...pagination };
+    if (value.archived !== undefined && typeof value.archived !== "boolean")
+      throw new Error("invalid_memory_archived");
+    if (operation === "search")
+      return {
+        operation,
+        query: text("query", 500),
+        ...pagination,
+        ...(value.archived === undefined ? {} : { archived: value.archived }),
+      };
     if (value.archived !== undefined && typeof value.archived !== "boolean")
       throw new Error("invalid_memory_archived");
     return {
@@ -125,7 +135,23 @@ export function decodeLocalMemoryCommand(value: unknown): LocalMemoryCommand {
   }
   const key = text("key", 80);
   if (!/^[a-z0-9][a-z0-9_-]*$/.test(key)) throw new Error("invalid_memory_key");
-  if (operation === "get" || operation === "history") return { operation, key };
+  if (operation === "history") {
+    const offset = value.offset ?? 0;
+    if (
+      typeof offset !== "number" ||
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      offset > 100000
+    )
+      throw new Error("invalid_memory_offset");
+    return { operation, key, offset };
+  }
+  if (operation === "get") {
+    if (value.revision === undefined) return { operation, key };
+    const revision = text("revision", 64);
+    if (!/^[a-f0-9]{64}$/.test(revision)) throw new Error("invalid_memory_revision");
+    return { operation, key, revision };
+  }
   const revision = text("revision", 64);
   if (revision !== "new" && !/^[a-f0-9]{64}$/.test(revision))
     throw new Error("invalid_memory_revision");
