@@ -95,7 +95,7 @@ export function CommentThreadView({
     <li
       data-comment-thread={thread.root.id}
       className={cn(
-        "overflow-hidden rounded-lg border bg-primary transition-shadow",
+        "overflow-hidden rounded-lg border bg-primary transition-[box-shadow,border-color] duration-500",
         context.flashId === thread.root.id
           ? "border-utility-yellow-300 ring-2 ring-utility-yellow-200"
           : "border-secondary",

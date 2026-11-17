@@ -4,17 +4,36 @@ import { CursorClick01, FlipBackward, FlipForward } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
 import type { FramePicker } from "./artifact-review-tools";
 
+type PillView = { picker: FramePicker | null; drafts: ReturnType<typeof useCommentDrafts> };
+
 export function ArtifactReviewPill({ picker }: { picker: FramePicker | null }) {
-  const drafts = useCommentDrafts();
+  const current = useCommentDrafts();
+  const live = picker !== null || current.drafts.length > 0 ? { picker, drafts: current } : null;
+  const [last, setLast] = useState<PillView | null>(live);
+  if (live && (last?.picker !== live.picker || last?.drafts !== live.drafts)) setLast(live);
+  const view = live ?? last;
+  if (!view) return null;
+  return <PillBar view={view} leaving={live === null} onLeft={() => setLast(null)} />;
+}
+
+function PillBar({
+  view: { picker, drafts },
+  leaving,
+  onLeft,
+}: {
+  view: PillView;
+  leaving: boolean;
+  onLeft: () => void;
+}) {
   const actions = useCommentDraftActions();
   const [discarding, setDiscarding] = useState(false);
   const count = drafts.drafts.length;
   const history = drafts.canUndo || drafts.canRedo || count > 0;
-  if (picker === null && count === 0) return null;
   const locked = drafts.busy;
   return (
     <>
@@ -22,7 +41,16 @@ export function ArtifactReviewPill({ picker }: { picker: FramePicker | null }) {
         role="group"
         aria-label={m.av_dr_tools()}
         data-comment-tools=""
-        className="absolute bottom-4 left-1/2 z-20 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-1 rounded-full border border-secondary bg-primary p-1 shadow-lg"
+        inert={leaving}
+        onAnimationEnd={(event) => {
+          if (leaving && event.target === event.currentTarget) onLeft();
+        }}
+        className={cn(
+          "absolute bottom-4 left-1/2 z-20 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-1 rounded-full border border-secondary bg-primary p-1 shadow-lg",
+          leaving
+            ? "animate-out fade-out slide-out-to-bottom-1 fill-mode-forwards motion-leave-sm"
+            : "animate-in fade-in slide-in-from-bottom-1 motion-enter-sm",
+        )}
       >
         {picker && (
           <Button

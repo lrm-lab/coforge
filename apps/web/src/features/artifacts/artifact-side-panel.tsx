@@ -40,7 +40,7 @@ export function ArtifactSidePanel({
         aria-label={label}
         style={drag > 0 ? { transform: `translateY(${drag}px)`, transition: "none" } : undefined}
         className={cn(
-          "flex w-[340px] shrink-0 flex-col border-l border-secondary bg-primary",
+          "flex w-[340px] shrink-0 flex-col border-l border-secondary bg-primary max-sm:motion-safe:transition-transform max-sm:motion-safe:motion-leave-lg",
           "max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-40 max-sm:h-[75dvh] max-sm:w-auto max-sm:rounded-t-2xl max-sm:border-t max-sm:border-l-0 max-sm:shadow-xl",
         )}
       >

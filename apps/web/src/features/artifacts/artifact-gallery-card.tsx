@@ -99,7 +99,7 @@ export function GalleryGridCard({
   const workspaceSlug = useWorkspaceSlug();
   const actorOf = useArtifactActor();
   return (
-    <article className="relative flex flex-col overflow-hidden rounded-xl border border-secondary bg-primary transition hover:border-primary has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-focus-ring">
+    <article className="relative flex flex-col overflow-hidden rounded-xl border border-secondary bg-primary transition-[border-color] duration-100 hover:border-primary has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-focus-ring">
       <div className="h-32 border-b border-secondary">
         <Preview card={card} />
       </div>

@@ -38,7 +38,7 @@ export function ArtifactCommentPopover({
       aria-label={m.av_cm_selection_label()}
       data-comment-popover=""
       style={{ top, left }}
-      className="absolute z-20 w-[22rem] max-w-[calc(100%-1rem)] rounded-xl border border-secondary bg-primary shadow-lg"
+      className="absolute z-20 w-[22rem] max-w-[calc(100%-1rem)] origin-top rounded-xl border border-secondary bg-primary shadow-lg animate-in fade-in zoom-in-[0.97] motion-enter-sm"
       onKeyDown={(event) => {
         if (event.key === "Escape" && !event.defaultPrevented) {
           event.stopPropagation();
