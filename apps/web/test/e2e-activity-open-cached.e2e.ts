@@ -166,7 +166,14 @@ test("a channel opened from Activity round after round shows each round's divide
         `[...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes("E2E open-rounds elsewhere")).querySelector("a").click()`,
       );
       await browser("wait", "--fn", inPane(elsewhere.ids[0]!));
-      if (pause) await browser("wait", String(pause));
+      // Gone stale without waiting it out: the page's clock moves ahead (Query's 30s `staleTime`
+      // and the router's read-ahead go by `Date.now()`). Round 3 then reads the same Server
+      // Functions it did after a real 32s wait (task #128). A reload (round 5) resets the clock.
+      if (pause)
+        await browser(
+          "eval",
+          `(() => { const now = Date.now.bind(Date); Date.now = () => now() + ${pause}; return true; })()`,
+        );
       await tab("Unread");
       const burst: string[] = [];
       for (const n of [1, 2, 3]) {
