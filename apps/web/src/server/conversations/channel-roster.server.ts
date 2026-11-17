@@ -223,6 +223,7 @@ export async function channelMembers(
             description: true,
             role: true,
             computerId: true,
+            hosting: true,
             avatarMascot: true,
             appBot: APP_BOT_LOGO_SELECT,
           },
@@ -334,6 +335,7 @@ export async function channelMembers(
         channelRole: row.channelRole,
         channelAdminBasis: deriveChannelAdminBasis(row.agent!.role, row.channelRole),
         computerId: row.agent!.computerId,
+        hosting: row.agent!.hosting,
       })),
     candidates: {
       humans: workspaceUsers

@@ -1,3 +1,4 @@
+import { externalPresenceOf } from "#src/server/agents/agent-user-info.server";
 import { agentChannelReader } from "#src/server/agents/workspace-assistant-authority.server";
 import type { Conversation, PrismaClient } from "#src/generated/prisma/client";
 import { isAppErrorCode } from "#src/lib/app-error";
@@ -99,7 +100,14 @@ export class AgentChannelManagement {
       const actor = await agentChannelReader(this.db, workspaceId, agentId);
       const { channel } = await this.targetChannel(workspaceId, actor, parentTarget);
       const raw = await this.channels.members(workspaceId, actor, channel.id);
-      return shapeAgentRoster(this.display, workspaceId, agentId, `#${channel.channelName}`, raw);
+      return shapeAgentRoster(
+        this.display,
+        workspaceId,
+        agentId,
+        `#${channel.channelName}`,
+        raw,
+        externalPresenceOf(this.db),
+      );
     }
     if (!USER_TARGET.test(parentTarget))
       throw new AgentChannelManagementError(400, "target must be a #channel or @user");

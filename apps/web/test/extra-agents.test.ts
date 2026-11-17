@@ -27,6 +27,7 @@ type Row = {
   avatarMascot: string | null;
   visibility: string;
   computerId: string | null;
+  hosting?: string;
 };
 
 const row = (id: string, overrides: Partial<Row> = {}): Row => ({
@@ -54,7 +55,7 @@ const display = (agentId: string): AgentDisplaySnapshot => ({
 
 type Scope = { workspaceId: string; computerId: string; agentId: string };
 
-function fakes(rows: Row[], busy: string[] = []) {
+function fakes(rows: Row[], busy: string[] = [], presence: unknown[] = []) {
   const findManyCalls: Prisma.AgentFindManyArgs[] = [];
   const scopeCalls: Array<readonly Scope[]> = [];
   const db = {
@@ -64,7 +65,8 @@ function fakes(rows: Row[], busy: string[] = []) {
         return rows;
       },
     },
-  } as unknown as Pick<PrismaClient, "agent">;
+    $queryRaw: async () => presence,
+  } as unknown as Pick<PrismaClient, "agent" | "$queryRaw">;
   const busyCalls: Array<{ workspaceId: string; now: number }> = [];
   const displays = {
     // The busy leases of the Workspace, as `AgentDisplay.busyScopes` answers.
@@ -81,6 +83,26 @@ function fakes(rows: Row[], busy: string[] = []) {
 }
 
 describe("listExtraAgents", () => {
+  test("an external Agent is online exactly while a live credential was used within two minutes", async () => {
+    const now = Date.parse("2026-11-17T12:00:00Z");
+    const rows = [
+      row("a1", { computerId: null, hosting: "external" }),
+      row("a2", { computerId: null, hosting: "external" }),
+      row("a3", { computerId: null, hosting: "external" }),
+    ];
+    const presence = [
+      { agentId: "a1", liveCount: 1, liveLastUsedAt: new Date(now - 60_000), lastUsedAt: null },
+      { agentId: "a2", liveCount: 1, liveLastUsedAt: new Date(now - 180_000), lastUsedAt: null },
+    ];
+    const { db, displays } = fakes(rows, [], presence);
+    const listed = await listExtraAgents(db, displays, WORKSPACE_ID, member, [], false, now);
+    expect(listed.map((agent) => agent.display?.activityKind)).toEqual([
+      "online",
+      "offline",
+      "offline",
+    ]);
+  });
+
   test("reads the Agents the Members directory lists for the viewer, except the viewer's own", async () => {
     const { db, displays, findManyCalls } = fakes([]);
     await listExtraAgents(db, displays, WORKSPACE_ID, member);

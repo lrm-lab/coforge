@@ -22,6 +22,18 @@ export function unsupportedForExternalAgents(feature: string): Response {
   );
 }
 
+export function remindersUnsupportedForExternalAgents(feature: string): Response {
+  return Response.json(
+    {
+      error: "This operation is not available to external Agents",
+      code: "reminders_unsupported_for_external_agents",
+      feature,
+      retryable: false,
+    },
+    { status: 409 },
+  );
+}
+
 export async function authenticateExternalAgentRequest(
   request: Request,
   repository: Pick<ExternalAgentCredentialRepository, "findByHash" | "touch">,

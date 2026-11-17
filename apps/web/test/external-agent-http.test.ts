@@ -111,6 +111,7 @@ async function externalFixture() {
     agentId: "agent-1",
     workspaceId: "workspace-1",
     approvedByUserId: null,
+    source: "device",
     machine: { machineName: "m", hostname: "h", os: "o", clientName: "c" },
   });
   if (!minted.ok) throw new Error("mint refused");

@@ -47,6 +47,9 @@ import {
   userOwnsLiveComputer,
 } from "#src/server/records/weekly-report-assistant.server";
 
+import { declareNoStore } from "#src/features/no-store-response.server";
+import { issueExternalAgentPageCredential } from "#src/server/agents/external-agent-credentials.server";
+import { PrismaExternalAgentCredentialRepository } from "#src/server/db/repositories/external-agent-credential.repositories.server";
 import { readAgentRoster } from "#src/server/agents/agent-roster.server";
 import { AgentEnvironment } from "#src/server/agents/agent-environment.server";
 
@@ -143,7 +146,14 @@ export const createExternalAgent = createServerFn({ method: "POST" })
     const role = await workspaceMemberRole(db, workspaceId, user.id);
     const created = await manageAgents(db).create({ userId: user.id, workspaceId, role }, data);
     await publishAgentDirectoryChanged(workspaceId, created.agent.id, "created");
-    return created;
+    declareNoStore();
+    const credential = await issueExternalAgentPageCredential({
+      repository: new PrismaExternalAgentCredentialRepository(db),
+      agentId: created.agent.id,
+      workspaceId,
+      actorUserId: user.id,
+    });
+    return { ...created, credential };
   });
 
 export const updateAgent = createServerFn({ method: "POST" })

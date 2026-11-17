@@ -3,11 +3,14 @@ import type {
   ExternalCredentialRecord,
   ExternalCredentialRevokeReason,
   ExternalCredentialSummary,
+  ExternalCredentialSource,
   ExternalMachine,
+  ExternalPresenceRow,
 } from "#src/server/agents/external-agent-credentials.server";
 
 type Row = Omit<ExternalCredentialRecord, "agent"> & {
-  machine: ExternalMachine;
+  source: ExternalCredentialSource;
+  machine: ExternalMachine | null;
   createdAt: Date;
   revokedReason: string | null;
 };
@@ -41,10 +44,18 @@ export class MemoryExternalAgentCredentials implements ExternalAgentCredentialRe
       return { ok: false as const, reason: "agent_unavailable" as const };
     if (agent.hosting !== "external")
       return { ok: false as const, reason: "agent_not_external" as const };
+    const replacing = input.source === "app";
     const live = [...this.rows.values()].filter(
-      (row) => row.agentId === input.agentId && !row.revokedAt,
+      (row) =>
+        row.agentId === input.agentId && !row.revokedAt && !(replacing && row.source === "app"),
     ).length;
     if (live >= input.maxLive) return { ok: false as const, reason: "credential_limit" as const };
+    if (replacing)
+      for (const row of this.rows.values())
+        if (row.agentId === input.agentId && row.source === "app" && !row.revokedAt) {
+          row.revokedAt = new Date();
+          row.revokedReason = "replaced";
+        }
     const id = `credential-${this.#next++}`;
     this.rows.set(input.keyHash, {
       id,
@@ -55,6 +66,7 @@ export class MemoryExternalAgentCredentials implements ExternalAgentCredentialRe
       revokedAt: null,
       revokedReason: null,
       createdAt: new Date(),
+      source: input.source,
       machine: input.machine,
     });
     return { ok: true as const, id };
@@ -82,27 +94,37 @@ export class MemoryExternalAgentCredentials implements ExternalAgentCredentialRe
     return true;
   }
 
-  async revokeAll(agentId: string, reason: ExternalCredentialRevokeReason, at: Date) {
-    let count = 0;
-    for (const row of this.rows.values())
-      if (row.agentId === agentId && !row.revokedAt) {
-        row.revokedAt = at;
-        row.revokedReason = reason;
-        count++;
-      }
-    return { count };
-  }
-
   async list(agentId: string): Promise<ExternalCredentialSummary[]> {
     return [...this.rows.values()]
       .filter((row) => row.agentId === agentId)
-      .map(({ id, machine, createdAt, lastUsedAt, revokedAt, revokedReason }) => ({
+      .map(({ id, source, machine, createdAt, lastUsedAt, revokedAt, revokedReason }) => ({
         id,
-        ...machine,
+        source,
+        machineName: machine?.machineName ?? null,
+        hostname: machine?.hostname ?? null,
+        os: machine?.os ?? null,
+        clientName: machine?.clientName ?? null,
         createdAt,
         lastUsedAt,
         revokedAt,
         revokedReason,
       }));
+  }
+
+  async presence(agentIds: readonly string[]): Promise<ExternalPresenceRow[]> {
+    return agentIds.flatMap((agentId) => {
+      const rows = [...this.rows.values()].filter((row) => row.agentId === agentId);
+      if (rows.length === 0) return [];
+      const latest = (candidates: Row[]) =>
+        candidates.reduce<Date | null>(
+          (best, row) =>
+            row.lastUsedAt && (!best || row.lastUsedAt > best) ? row.lastUsedAt : best,
+          null,
+        );
+      const live = rows.filter((row) => !row.revokedAt);
+      return [
+        { agentId, liveCount: live.length, liveLastUsedAt: latest(live), lastUsedAt: latest(rows) },
+      ];
+    });
   }
 }

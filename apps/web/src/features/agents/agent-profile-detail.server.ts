@@ -12,6 +12,10 @@ import {
 } from "#src/server/agents/agent-runtime-config.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { PrismaExternalAgentCredentialRepository } from "#src/server/db/repositories/external-agent-credential.repositories.server";
+import {
+  externalPresenceDisplay,
+  externalSetups,
+} from "#src/server/agents/external-agent-presence.server";
 import { userRuntimeUsage } from "#src/server/computers/runtime-usage-composition.server";
 import { isAdminLike, type WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 import { agentAvatarUrl, agentMascot } from "#src/features/agents/agent-mascot";
@@ -75,7 +79,7 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
   // unavailability degrades to "unknown" (`undefined`), never a false "offline".
   const runtimeConfig = readableRuntimeConfig(result.runtimeConfig);
   const { computer } = result;
-  const [computerOnline, usage, externalCredentials, workspace] = await Promise.all([
+  const [computerOnline, usage, externalCredentials, workspace, externalSetup] = await Promise.all([
     computer
       ? getComputerStatusCache()
           .get({ workspaceId, computerId: computer.id })
@@ -96,6 +100,11 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
       : undefined,
     result.hosting === "external"
       ? db.workspace.findUnique({ where: { id: workspaceId }, select: { slug: true } })
+      : undefined,
+    result.hosting === "external"
+      ? externalSetups(new PrismaExternalAgentCredentialRepository(db), [agentId]).then((setups) =>
+          setups.get(agentId),
+        )
       : undefined,
   ]);
   return {
@@ -129,7 +138,11 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
     canChangeVisibility,
     runtimeUsageVisible: usage?.offered ?? false,
     runtimeVersion: usage?.runtime?.version,
+    ...(externalSetup
+      ? { display: externalPresenceDisplay({ workspaceId, agentId }, externalSetup) }
+      : {}),
     externalCredentials: externalCredentials ?? [],
+    externalSetup: externalSetup ?? null,
     workspaceSlug: workspace?.slug ?? null,
     // Always the same shape (`online` present, possibly `undefined`) whether or not a Computer is
     // assigned, so callers never have to narrow a union between "has computer without online" and

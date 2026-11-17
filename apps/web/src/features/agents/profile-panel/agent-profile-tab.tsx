@@ -300,15 +300,18 @@ function AgentProfileTabBody({
       </section>
 
       {isExternal ? (
-        <ExternalAgentAccessSection
-          agentId={profile.id}
-          agentName={profile.name}
-          workspaceSlug={profile.workspaceSlug}
-          credentials={profile.externalCredentials}
-          canManage={canManage}
-          timeZone={timeZone}
-          onChanged={onRefreshExternal}
-        />
+        canManage && profile.externalSetup ? (
+          <ExternalAgentAccessSection
+            agentId={profile.id}
+            agentName={profile.name}
+            displayName={profile.displayName}
+            workspaceSlug={profile.workspaceSlug}
+            setup={profile.externalSetup}
+            credentials={profile.externalCredentials}
+            timeZone={timeZone}
+            onChanged={onRefreshExternal}
+          />
+        ) : null
       ) : (
         <section className="border-b border-secondary px-6 py-5">
           <div className="flex items-center gap-1.5">

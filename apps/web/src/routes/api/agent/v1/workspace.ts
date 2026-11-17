@@ -1,6 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { humanLabel } from "#src/lib/human-label";
-import { resolveAgentStatuses } from "#src/server/agents/agent-user-info.server";
+import {
+  externalPresenceOf,
+  resolveAgentStatuses,
+} from "#src/server/agents/agent-user-info.server";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { buildAgentRuntimeContext } from "#src/server/agents/agent-runtime-context.server";
 import { parseAgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
@@ -54,6 +57,7 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
                 description: true,
                 role: true,
                 computerId: true,
+                hosting: true,
                 stoppedAt: true,
               },
               orderBy: { name: "asc" },
@@ -101,7 +105,11 @@ export const Route = createFileRoute("/api/agent/v1/workspace")({
           listAgentWorkspaceChannels(db, principal.workspaceId, reader, serverRole),
           listWorkspaceComputers(db, principal.workspaceId),
         ]);
-        const resolvedAgentStatuses = await resolveAgentStatuses(principal.workspaceId, agents);
+        const resolvedAgentStatuses = await resolveAgentStatuses(
+          principal.workspaceId,
+          agents,
+          externalPresenceOf(db),
+        );
         const agentStatuses = agents.map((agent, index) => ({
           agent,
           ...resolvedAgentStatuses[index],

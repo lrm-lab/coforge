@@ -15,7 +15,10 @@ import {
   type ExternalAgentDeviceDeps,
   type ExternalAgentDeviceDirectory,
 } from "#src/server/auth/device-auth-external-agent.server";
-import { isExternalAgentKeyShape } from "#src/server/agents/external-agent-credentials.server";
+import {
+  isExternalAgentKeyShape,
+  MAX_LIVE_EXTERNAL_CREDENTIALS,
+} from "#src/server/agents/external-agent-credentials.server";
 import { MemoryExternalAgentCredentials } from "./helpers/memory-external-agent-credentials";
 
 type Row = DeviceAuthorizationRecord & { deviceHash: string; userHash: string };
@@ -473,17 +476,18 @@ describe("the token endpoint", () => {
     ).toEqual({ status: "error", error: "access_denied", coforgeCode: "agent_unavailable" });
   });
 
-  test("the eleventh live key is refused as credential_limit", async () => {
+  test("the fifty-first live key is refused as credential_limit", async () => {
     const { store } = memoryStore();
     const { credentials, external } = deps();
-    for (let index = 0; index < 10; index++)
+    for (let index = 0; index < MAX_LIVE_EXTERNAL_CREDENTIALS; index++)
       await credentials.mint({
         agentId: AGENT_ID,
         workspaceId: WORKSPACE_ID,
         approvedByUserId: null,
         keyHash: `hash-${index}`,
+        source: "device",
         machine: { machineName: "m", hostname: "h", os: "o", clientName: "c" },
-        maxLive: 10,
+        maxLive: MAX_LIVE_EXTERNAL_CREDENTIALS,
       });
     const grant = await approvedCode(store);
     expect(

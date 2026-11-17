@@ -3,6 +3,11 @@ import { agentMascot } from "#src/features/agents/agent-mascot";
 import { agentFaceUrl } from "#src/server/apps/app-logo.server";
 import { getAgentDisplay } from "#src/server/agents/agent-display.server";
 import { getAgentStatusCache } from "#src/server/agents/agent-status.server";
+import {
+  externalPresenceDisplay,
+  externalSetups,
+} from "#src/server/agents/external-agent-presence.server";
+import { readExternalPresence } from "#src/server/db/repositories/external-agent-credential.repositories.server";
 import { manageAgents } from "#src/server/agents/manage-agents-production.server";
 import { ACTIVE_AGENT_WHERE, ROSTER_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import {
@@ -42,11 +47,15 @@ export async function readAgentRoster(db: PrismaClient, userId: string, workspac
   // gets the same treatment: one round trip for the page. A display failure still never hides an
   // Agent profile — it leaves the rows without their display block, all of them together rather
   // than one at a time. The two reads touch different keys, so they go out together.
-  const [statusSnapshots, displaySnapshots] = await Promise.all([
+  const [statusSnapshots, displaySnapshots, externalPresence] = await Promise.all([
     statuses.snapshotMany(scopes),
     getAgentDisplay()
       .snapshotMany(scopes)
       .catch(() => []),
+    externalSetups(
+      { presence: (agentIds) => readExternalPresence(db, agentIds) },
+      agents.filter((agent) => agent.hosting === "external").map((agent) => agent.id),
+    ).catch(() => new Map()),
   ]);
   const statusByAgentId = new Map(
     scoped.map((agent, index) => [agent.id, statusSnapshots[index]] as const),
@@ -57,7 +66,10 @@ export async function readAgentRoster(db: PrismaClient, userId: string, workspac
   );
   return agents.map((agent) => {
     const status = statusByAgentId.get(agent.id);
-    const displaySnapshot = displayByAgentId.get(agent.id);
+    const externalSetup = externalPresence.get(agent.id);
+    const displaySnapshot = externalSetup
+      ? externalPresenceDisplay({ workspaceId, agentId: agent.id }, externalSetup)
+      : displayByAgentId.get(agent.id);
     const mascot = agentMascot(agent.id, agent.avatarMascot);
     return {
       ...agent,

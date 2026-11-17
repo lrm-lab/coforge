@@ -4,6 +4,8 @@ import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.ser
 import { AGENT_VISIBILITY, normalizeAgentVisibility } from "#src/features/agents/agent-visibility";
 import { HELD_AGENT_IDS_LIMIT, type ExtraAgent } from "#src/features/agents/extra-agent";
 import { ACTIVE_AGENT_WHERE, ROSTER_AGENT_WHERE } from "./active-agent.server";
+import { readExternalPresence } from "#src/server/db/repositories/external-agent-credential.repositories.server";
+import { externalPresenceDisplay, externalSetups } from "./external-agent-presence.server";
 import type { AgentDisplay } from "./agent-display.server";
 import {
   viewerCreatorId,
@@ -31,7 +33,7 @@ import {
 export const FULL_EXTRA_DISPLAY_LIMIT = 200;
 
 export async function listExtraAgents(
-  db: Pick<PrismaClient, "agent">,
+  db: Pick<PrismaClient, "agent" | "$queryRaw">,
   displays: Pick<AgentDisplay, "snapshotMany" | "busyScopes">,
   workspaceId: string,
   viewer: AgentVisibilityViewer,
@@ -58,10 +60,16 @@ export async function listExtraAgents(
       avatarMascot: true,
       visibility: true,
       computerId: true,
+      hosting: true,
       appBot: APP_BOT_LOGO_SELECT,
     },
     orderBy: { id: "asc" },
   });
+  const externalPresence = await externalSetups(
+    { presence: (agentIds) => readExternalPresence(db, agentIds) },
+    rows.filter((row) => row.hosting === "external").map((row) => row.id),
+    now,
+  ).catch(() => new Map());
   const busy = await displays.busyScopes(workspaceId, now).catch(() => []);
   const held = [...new Set(heldAgentIds)].slice(0, HELD_AGENT_IDS_LIMIT);
   const wanted = new Set([...busy.map((scope) => scope.agentId), ...held]);
@@ -93,7 +101,10 @@ export async function listExtraAgents(
   const displayById = new Map(scoped.map(({ row }, index) => [row.id, snapshots[index]] as const));
   return rows.map((row) => {
     const mascot = agentMascot(row.id, row.avatarMascot);
-    const display = displayById.get(row.id);
+    const externalSetup = externalPresence.get(row.id);
+    const display = externalSetup
+      ? externalPresenceDisplay({ workspaceId, agentId: row.id }, externalSetup)
+      : displayById.get(row.id);
     return {
       id: row.id,
       name: row.name,

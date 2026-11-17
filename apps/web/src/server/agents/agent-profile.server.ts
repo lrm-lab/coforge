@@ -15,6 +15,7 @@ import { AGENT_DISPLAY_NAME_MAX_LENGTH } from "#src/features/agents/agent.schema
 import {
   AGENT_NOT_VISIBLE,
   findWorkspaceUser,
+  externalPresenceOf,
   resolveAgentStatus,
   resolveAgentStatuses,
 } from "./agent-user-info.server";
@@ -63,10 +64,17 @@ export async function createdAgentsFor(
 ): Promise<AgentProfileCreatedAgent[]> {
   const owned = await db.agent.findMany({
     where: { workspaceId, ownerId, ...ACTIVE_AGENT_WHERE, ...visibleAgentWhere(viewer) },
-    select: { id: true, name: true, displayName: true, computerId: true, stoppedAt: true },
+    select: {
+      id: true,
+      name: true,
+      displayName: true,
+      computerId: true,
+      stoppedAt: true,
+      hosting: true,
+    },
     orderBy: { name: "asc" },
   });
-  const resolved = await resolveAgentStatuses(workspaceId, owned);
+  const resolved = await resolveAgentStatuses(workspaceId, owned, externalPresenceOf(db));
   return owned.map((agent, index) => ({
     name: agent.name,
     displayName: agent.displayName,
@@ -105,11 +113,16 @@ async function buildProfileView(
     };
   }
   const [{ status, availability }, creator] = await Promise.all([
-    resolveAgentStatus(principal.workspaceId, {
-      id: target.id,
-      computerId: target.computerId,
-      stoppedAt: target.stoppedAt,
-    }),
+    resolveAgentStatus(
+      principal.workspaceId,
+      {
+        id: target.id,
+        computerId: target.computerId,
+        stoppedAt: target.stoppedAt,
+        hosting: target.hosting,
+      },
+      externalPresenceOf(db),
+    ),
     creatorFor(db, target.ownerId),
   ]);
   return {

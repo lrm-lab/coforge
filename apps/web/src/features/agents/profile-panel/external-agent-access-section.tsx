@@ -1,151 +1,240 @@
 import { useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Plus, Trash01 } from "@untitledui/icons";
+import { ChevronDown, DotsHorizontal, Plus, RefreshCw01, Trash01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
+import { Fold } from "#src/components/ui/fold";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 import {
-  revokeAllExternalAgentCredentials,
+  createExternalAgentPageCredential,
   revokeExternalAgentCredential,
 } from "#src/features/agents/external-agent-credentials.functions";
-import { ExternalAgentCommandBox } from "#src/features/agents/external-agent-form";
+import {
+  ExternalAgentCredentialBlock,
+  ExternalAgentPromptBlock,
+  ExternalConnectionState,
+  type ExternalSetup,
+} from "#src/features/agents/external-agent-setup";
 import { SECTION_CAPTION_CLASS } from "./inline-edit-field";
 
 export type ExternalCredentialSummary = {
   id: string;
-  machineName: string;
-  hostname: string;
-  os: string;
-  clientName: string;
+  source: "device" | "app";
+  machineName: string | null;
+  hostname: string | null;
+  os: string | null;
   createdAt: Date | string;
   lastUsedAt: Date | string | null;
 };
 
+function credentialLabel(credential: ExternalCredentialSummary): string {
+  if (credential.source === "app") return m.external_agent_credential_from_page();
+  return credential.machineName || credential.hostname || m.external_agent_credential_from_login();
+}
+
 export function ExternalAgentAccessSection({
   agentId,
   agentName,
+  displayName,
   workspaceSlug,
+  setup,
   credentials,
-  canManage,
   timeZone,
   onChanged,
 }: {
   agentId: string;
   agentName: string;
+  displayName: string;
   workspaceSlug: string | null;
+  setup: ExternalSetup;
   credentials: readonly ExternalCredentialSummary[];
-  canManage: boolean;
   timeZone: string | null;
   onChanged?: () => Promise<void> | void;
 }) {
-  const revokeOne = useServerFn(revokeExternalAgentCredential);
-  const revokeAll = useServerFn(revokeAllExternalAgentCredentials);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [showConnect, setShowConnect] = useState(false);
+  const createCredential = useServerFn(createExternalAgentPageCredential);
+  const revoke = useServerFn(revokeExternalAgentCredential);
+  const [freshKey, setFreshKey] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const connected = setup.state === "online" || setup.state === "offline";
+  const [stepsOpen, setStepsOpen] = useState(!connected);
+  const pageCredential = credentials.find((credential) => credential.source === "app");
 
-  async function handleRevokeOne(credentialId: string) {
-    setBusyId(credentialId);
+  async function issue() {
+    const created = await createCredential({ data: { agentId } });
+    setFreshKey(created.key);
+    setStepsOpen(true);
+    await onChanged?.();
+  }
+
+  async function createFirst() {
+    setCreating(true);
     try {
-      await revokeOne({ data: { agentId, credentialId } });
-      await onChanged?.();
+      await issue();
     } finally {
-      setBusyId(null);
+      setCreating(false);
     }
   }
 
-  async function handleRevokeAll() {
-    setBusyId("all");
-    try {
-      await revokeAll({ data: { agentId } });
-      await onChanged?.();
-    } finally {
-      setBusyId(null);
-    }
-  }
+  const steps = workspaceSlug ? (
+    <div className="space-y-3">
+      <ExternalAgentPromptBlock workspaceSlug={workspaceSlug} agentName={agentName} />
+      {freshKey ? <ExternalAgentCredentialBlock credentialKey={freshKey} /> : null}
+      {!freshKey && !connected && !pageCredential ? (
+        <Button
+          type="button"
+          size="sm"
+          color="secondary"
+          iconLeading={Plus}
+          isLoading={creating}
+          onPress={() => void createFirst()}
+        >
+          {m.external_agent_credential_create()}
+        </Button>
+      ) : null}
+    </div>
+  ) : null;
 
   return (
-    <section className="border-b border-secondary px-6 py-5">
-      <p className={SECTION_CAPTION_CLASS}>{m.external_agent_access_section()}</p>
-      {credentials.length === 0 ? (
-        <p className="mt-3 text-sm text-tertiary">{m.external_agent_access_empty()}</p>
-      ) : (
-        <ul className="mt-3 space-y-2.5">
-          {credentials.map((credential) => {
-            const label = credential.machineName || credential.hostname || "—";
-            return (
+    <section className="border-b border-secondary px-6 py-5" data-testid="external-agent-setup">
+      <p className={SECTION_CAPTION_CLASS}>{m.external_agent_setup_section()}</p>
+      <div className="mt-3 space-y-3">
+        <ExternalConnectionState setup={setup} displayName={displayName} timeZone={timeZone} />
+        {connected && steps ? (
+          <div>
+            <button
+              type="button"
+              aria-expanded={stepsOpen}
+              className="flex items-center gap-1 text-xs font-medium text-tertiary hover:text-secondary"
+              onClick={() => setStepsOpen((open) => !open)}
+            >
+              {m.external_agent_how_it_connects()}
+              <ChevronDown
+                aria-hidden="true"
+                className={cx("size-3.5 transition-transform", stepsOpen && "rotate-180")}
+              />
+            </button>
+            <Fold open={stepsOpen}>
+              <div className="pt-3">{steps}</div>
+            </Fold>
+          </div>
+        ) : (
+          steps
+        )}
+      </div>
+
+      {credentials.length > 0 ? (
+        <div className="mt-5">
+          <p className={SECTION_CAPTION_CLASS}>{m.external_agent_credentials_section()}</p>
+          <ul className="mt-2 divide-y divide-secondary">
+            {credentials.map((credential) => (
               <li
                 key={credential.id}
-                className="flex items-start justify-between gap-3 rounded-lg border border-secondary bg-secondary_subtle px-3 py-2.5"
+                data-testid="external-agent-credential-row"
+                className="flex items-center justify-between gap-3 py-2.5"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-primary">{label}</p>
-                  <p className="mt-0.5 truncate text-xs text-tertiary">
-                    {[credential.os, credential.clientName].filter(Boolean).join(" · ") || "—"}
+                  <p className="truncate text-sm font-medium text-primary">
+                    {credentialLabel(credential)}
                   </p>
-                  <p className="mt-1 text-xs text-tertiary">
+                  <p className="mt-0.5 truncate text-xs text-tertiary">
+                    {m.external_agent_credential_created()}{" "}
+                    <RelativeTime value={credential.createdAt} timeZone={timeZone} />
+                    {" · "}
                     {credential.lastUsedAt ? (
                       <>
-                        {m.external_agent_access_last_used({ time: "" })}
+                        {m.external_agent_credential_last_used()}{" "}
                         <RelativeTime value={credential.lastUsedAt} timeZone={timeZone} />
                       </>
                     ) : (
-                      m.external_agent_access_never_used()
+                      m.external_agent_credential_not_used()
                     )}
                   </p>
                 </div>
-                {canManage ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    color="secondary"
-                    className="shrink-0"
-                    isDisabled={busyId !== null}
-                    isLoading={busyId === credential.id}
-                    onPress={() => void handleRevokeOne(credential.id)}
-                  >
-                    {m.external_agent_access_revoke()}
-                  </Button>
-                ) : null}
+                <CredentialMenu
+                  replaceable={credential === pageCredential}
+                  displayName={displayName}
+                  onReplace={issue}
+                  onRevoke={async () => {
+                    await revoke({ data: { agentId, credentialId: credential.id } });
+                    if (credential === pageCredential) setFreshKey(null);
+                    await onChanged?.();
+                  }}
+                />
               </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {canManage ? (
-        <div className="mt-3 space-y-3">
-          <div className="flex flex-wrap gap-2">
-            {workspaceSlug ? (
-              <Button
-                type="button"
-                size="sm"
-                color="secondary"
-                iconLeading={Plus}
-                onPress={() => setShowConnect((open) => !open)}
-              >
-                {m.external_agent_access_connect_another()}
-              </Button>
-            ) : null}
-            {credentials.length > 0 ? (
-              <Button
-                type="button"
-                size="sm"
-                color="secondary-destructive"
-                iconLeading={Trash01}
-                isDisabled={busyId !== null}
-                isLoading={busyId === "all"}
-                onPress={() => void handleRevokeAll()}
-              >
-                {m.external_agent_access_revoke_all()}
-              </Button>
-            ) : null}
-          </div>
-          {showConnect && workspaceSlug ? (
-            <ExternalAgentCommandBox workspaceSlug={workspaceSlug} agentName={agentName} />
-          ) : null}
+            ))}
+          </ul>
         </div>
       ) : null}
     </section>
+  );
+}
+
+function CredentialMenu({
+  replaceable,
+  displayName,
+  onReplace,
+  onRevoke,
+}: {
+  replaceable: boolean;
+  displayName: string;
+  onReplace: () => Promise<void>;
+  onRevoke: () => Promise<void>;
+}) {
+  const [confirming, setConfirming] = useState<"replace" | "revoke" | null>(null);
+  return (
+    <>
+      <Dropdown.Root>
+        <ButtonUtility
+          icon={DotsHorizontal}
+          size="sm"
+          color="tertiary"
+          className="shrink-0"
+          tooltip={m.external_agent_credential_actions()}
+        />
+        <Dropdown.Popover placement="bottom end" className="w-max max-w-[calc(100vw-1rem)]">
+          <Dropdown.Menu
+            aria-label={m.external_agent_credential_actions()}
+            onAction={(key) => setConfirming(key === "replace" ? "replace" : "revoke")}
+          >
+            {replaceable ? (
+              <Dropdown.Item
+                id="replace"
+                icon={RefreshCw01}
+                label={m.external_agent_credential_replace()}
+              />
+            ) : null}
+            <Dropdown.Item
+              id="revoke"
+              icon={Trash01}
+              label={m.external_agent_credential_revoke()}
+            />
+          </Dropdown.Menu>
+        </Dropdown.Popover>
+      </Dropdown.Root>
+      <ConfirmDialog
+        open={confirming === "replace"}
+        onOpenChange={(open) => setConfirming(open ? "replace" : null)}
+        tone="default"
+        title={m.external_agent_credential_replace_title()}
+        description={m.external_agent_credential_replace_body({ name: displayName })}
+        confirmLabel={m.external_agent_credential_replace()}
+        errorMessage={m.external_agent_credential_failed()}
+        onConfirm={onReplace}
+      />
+      <ConfirmDialog
+        open={confirming === "revoke"}
+        onOpenChange={(open) => setConfirming(open ? "revoke" : null)}
+        title={m.external_agent_credential_revoke_title()}
+        description={m.external_agent_credential_revoke_body()}
+        confirmLabel={m.external_agent_credential_revoke()}
+        errorMessage={m.external_agent_credential_failed()}
+        onConfirm={onRevoke}
+      />
+    </>
   );
 }

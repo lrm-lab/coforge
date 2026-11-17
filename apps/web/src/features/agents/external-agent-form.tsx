@@ -1,110 +1,29 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, Copy01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { TextArea } from "#src/components/base/textarea/textarea";
-import { StatusDot } from "#src/components/ui/status-dot";
+import { Popconfirm } from "#src/components/ui/popconfirm";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
 import { useCloseConversationList } from "#src/features/conversations/conversation-navigation";
 import { useRefreshSidebar } from "#src/features/conversations/sidebar-lists";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
-import { createExternalAgent } from "./agents.functions";
+import { createExternalAgent, deleteAgent } from "./agents.functions";
 import { agentCreateErrorMessage } from "./agent-form";
 import { AgentCreateFooter, AgentCreateForm } from "./agent-create-frame";
 import { finishedAgentUsername } from "./agent-username";
 import { AgentUsernameField } from "./agent-username-field";
 import { useRefreshAgentDirectory } from "./workspace-agents-realtime";
-
-export function externalAgentInstallCommand(): string {
-  const origin =
-    typeof window !== "undefined" && window.location.origin
-      ? window.location.origin
-      : "https://coforge.example";
-  return `curl -fsSL ${origin}/computer/install.sh | sh`;
-}
-
-export function externalAgentLoginCommand(workspaceSlug: string, agentName: string): string {
-  const origin =
-    typeof window !== "undefined" && window.location.origin
-      ? window.location.origin
-      : "https://coforge.example";
-  return `coforge agent login --server ${origin} --workspace ${workspaceSlug} --agent ${agentName}`;
-}
-
-export function ExternalAgentCommandBox({
-  workspaceSlug,
-  agentName,
-}: {
-  workspaceSlug: string;
-  agentName: string;
-}) {
-  const [copiedKey, setCopiedKey] = useState<"install" | "login" | null>(null);
-  const installCommand = externalAgentInstallCommand();
-  const loginCommand = externalAgentLoginCommand(workspaceSlug, agentName);
-
-  useEffect(() => {
-    if (!copiedKey) return;
-    const timer = window.setTimeout(() => setCopiedKey(null), 2000);
-    return () => window.clearTimeout(timer);
-  }, [copiedKey]);
-
-  async function copy(key: "install" | "login", text: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedKey(key);
-    } catch {
-      // Clipboard may be blocked; the command remains selectable.
-    }
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="rounded-lg border border-secondary bg-secondary_subtle p-3">
-        <p className="text-xs font-medium text-primary">{m.external_agent_install_label()}</p>
-        <pre className="mt-2 overflow-x-auto font-mono text-xs leading-relaxed break-all whitespace-pre-wrap text-primary select-all">
-          {installCommand}
-        </pre>
-        <div className="mt-2 flex justify-end">
-          <Button
-            type="button"
-            size="sm"
-            color="secondary"
-            iconLeading={copiedKey === "install" ? Check : Copy01}
-            onPress={() => void copy("install", installCommand)}
-          >
-            {copiedKey === "install"
-              ? m.external_agent_connect_copied()
-              : m.external_agent_connect_copy()}
-          </Button>
-        </div>
-      </div>
-
-      <div className="rounded-lg border border-secondary bg-secondary_subtle p-3">
-        <p className="text-xs font-medium text-primary">{m.external_agent_login_label()}</p>
-        <pre className="mt-2 overflow-x-auto font-mono text-xs leading-relaxed break-all whitespace-pre-wrap text-primary select-all">
-          {loginCommand}
-        </pre>
-        <div className="mt-2 flex justify-end">
-          <Button
-            type="button"
-            size="sm"
-            color="secondary"
-            iconLeading={copiedKey === "login" ? Check : Copy01}
-            onPress={() => void copy("login", loginCommand)}
-          >
-            {copiedKey === "login"
-              ? m.external_agent_connect_copied()
-              : m.external_agent_connect_copy()}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
+import {
+  ExternalAgentCredentialBlock,
+  ExternalAgentPromptBlock,
+  ExternalConnectionState,
+} from "./external-agent-setup";
+import { agentProfileQuery } from "./profile-panel/agent-profile-queries";
 
 export function ExternalAgentForm({
   onClose,
@@ -127,7 +46,12 @@ export function ExternalAgentForm({
   const workspaceSlug = useWorkspaceSlug();
   const [error, setError] = useState("");
   const [submitting, guard] = useSubmitGuard();
-  const [createdAgent, setCreatedAgent] = useState<{ id: string; name: string } | null>(null);
+  const [createdAgent, setCreatedAgent] = useState<{
+    id: string;
+    name: string;
+    displayName: string;
+    key: string;
+  } | null>(null);
 
   useEffect(() => {
     onSubmittingChange(submitting);
@@ -164,7 +88,12 @@ export function ExternalAgentForm({
           refreshDirectory().catch(() => undefined),
           refreshSidebar(["dms"]).catch(() => undefined),
         ]);
-        setCreatedAgent({ id: result.agent.id, name: result.agent.name });
+        setCreatedAgent({
+          id: result.agent.id,
+          name: result.agent.name,
+          displayName: result.agent.displayName || result.agent.name,
+          key: result.credential.key,
+        });
       } catch (caught) {
         setError(agentCreateErrorMessage(caught));
       }
@@ -185,29 +114,18 @@ export function ExternalAgentForm({
 
   if (createdAgent) {
     return (
-      <AgentCreateForm
-        footer={
-          <div className="flex items-center justify-end gap-3 border-t border-secondary px-6 py-4">
-            <Button type="button" size="md" onPress={() => void finish()}>
-              {m.external_agent_connect_done()}
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-4 px-6 pt-5 pb-4">
-          <div>
-            <h3 className="text-sm font-semibold text-primary">
-              {m.external_agent_connect_title()}
-            </h3>
-            <p className="mt-1 text-sm text-tertiary">{m.external_agent_connect_description()}</p>
-          </div>
-          <ExternalAgentCommandBox workspaceSlug={workspaceSlug} agentName={createdAgent.name} />
-          <div className="flex items-center gap-2 text-xs text-tertiary">
-            <StatusDot tone="idle" />
-            <span>{m.external_agent_connect_waiting()}</span>
-          </div>
-        </div>
-      </AgentCreateForm>
+      <ExternalAgentConnectStep
+        agent={createdAgent}
+        workspaceSlug={workspaceSlug}
+        onDone={() => void finish()}
+        onDiscarded={async () => {
+          await Promise.all([
+            refreshDirectory().catch(() => undefined),
+            refreshSidebar(["dms"]).catch(() => undefined),
+          ]);
+          onClose();
+        }}
+      />
     );
   }
 
@@ -237,6 +155,70 @@ export function ExternalAgentForm({
             {error}
           </p>
         ) : null}
+      </div>
+    </AgentCreateForm>
+  );
+}
+
+function ExternalAgentConnectStep({
+  agent,
+  workspaceSlug,
+  onDone,
+  onDiscarded,
+}: {
+  agent: { id: string; name: string; displayName: string; key: string };
+  workspaceSlug: string;
+  onDone: () => void;
+  onDiscarded: () => Promise<void>;
+}) {
+  const remove = useServerFn(deleteAgent);
+  const profile = useQuery({
+    ...agentProfileQuery(agent.id),
+    refetchInterval: (query) =>
+      query.state.data?.externalSetup?.state === "online" ? false : 3000,
+  });
+  const setup = profile.data?.externalSetup ?? { state: "waiting" as const, lastSeenAt: null };
+  const online = setup.state === "online";
+
+  return (
+    <AgentCreateForm
+      footer={
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-4 border-t border-secondary px-6 py-4">
+          <div className="min-w-0 basis-full sm:basis-auto sm:flex-1">
+            <ExternalConnectionState
+              setup={setup}
+              displayName={agent.displayName}
+              timeZone={null}
+            />
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-3">
+            {online ? null : (
+              <Popconfirm
+                title={m.external_agent_discard_title({ name: agent.displayName })}
+                description={m.external_agent_discard_body()}
+                confirmLabel={m.external_agent_discard()}
+                errorMessage={m.external_agent_discard_failed()}
+                placement="top end"
+                onConfirm={async () => {
+                  await remove({ data: { agentId: agent.id, confirmation: agent.name } });
+                  await onDiscarded();
+                }}
+              >
+                <Button type="button" size="md" color="secondary">
+                  {m.external_agent_cancel()}
+                </Button>
+              </Popconfirm>
+            )}
+            <Button type="button" size="md" onPress={onDone}>
+              {m.external_agent_connect_done()}
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <div className="space-y-3 px-6 pt-5 pb-4">
+        <ExternalAgentPromptBlock workspaceSlug={workspaceSlug} agentName={agent.name} />
+        <ExternalAgentCredentialBlock credentialKey={agent.key} />
       </div>
     </AgentCreateForm>
   );

@@ -1,3 +1,4 @@
+import type { ExternalSetup } from "#src/server/agents/external-agent-presence.server";
 import { expect, test } from "bun:test";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import {
@@ -194,4 +195,25 @@ test("a failed batched read falls back per Agent, so one unreadable display stay
     ],
   );
   expect(result).toEqual([{ status: "online" }, { status: "unknown" }]);
+});
+
+test("an external Agent reads online or offline from its presence and never touches the display", async () => {
+  const setups = new Map<string, ExternalSetup>([
+    ["agent-online", { state: "online", lastSeenAt: new Date() }],
+    ["agent-offline", { state: "disconnected", lastSeenAt: new Date() }],
+    ["agent-waiting", { state: "waiting", lastSeenAt: null }],
+  ]);
+  const result = await resolveAgentChannelStatuses(
+    {
+      snapshot: async () => Promise.reject(new Error("unreachable")),
+      snapshotMany: async () => Promise.reject(new Error("unreachable")),
+    },
+    [
+      { ...scope, agentId: "agent-online", computerId: null },
+      { ...scope, agentId: "agent-offline", computerId: null },
+      { ...scope, agentId: "agent-waiting", computerId: null },
+    ],
+    setups,
+  );
+  expect(result).toEqual([{ status: "online" }, { status: "offline" }, { status: "offline" }]);
 });

@@ -5,8 +5,8 @@ import { declareNoStore } from "#src/features/no-store-response.server";
 import { AppError } from "#src/lib/app-error";
 import { externalAgentManagerAccess } from "#src/server/agents/external-agent-access.server";
 import {
+  issueExternalAgentPageCredential,
   listExternalCredentials,
-  revokeAllExternalCredentials,
   revokeOneExternalCredential,
 } from "#src/server/agents/external-agent-credentials.server";
 import { PrismaExternalAgentCredentialRepository } from "#src/server/db/repositories/external-agent-credential.repositories.server";
@@ -32,18 +32,6 @@ export const listExternalAgentCredentials = createServerFn({ method: "GET" })
     return listExternalCredentials(new PrismaExternalAgentCredentialRepository(db), data.agentId);
   });
 
-export const revokeAllExternalAgentCredentials = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(agentIdInputSchema)
-  .handler(async ({ data, context: { user, db, workspaceId } }) => {
-    await managedExternalAgent(db, { userId: user.id, workspaceId, agentId: data.agentId });
-    const revoked = await revokeAllExternalCredentials(
-      new PrismaExternalAgentCredentialRepository(db),
-      { agentId: data.agentId, workspaceId, reason: "revoke_all", actorUserId: user.id },
-    );
-    return { revoked };
-  });
-
 export const revokeExternalAgentCredential = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
   .validator(credentialIdInputSchema)
@@ -59,4 +47,18 @@ export const revokeExternalAgentCredential = createServerFn({ method: "POST" })
       },
     );
     return { revoked };
+  });
+
+export const createExternalAgentPageCredential = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(agentIdInputSchema)
+  .handler(async ({ data, context: { user, db, workspaceId } }) => {
+    declareNoStore();
+    await managedExternalAgent(db, { userId: user.id, workspaceId, agentId: data.agentId });
+    return issueExternalAgentPageCredential({
+      repository: new PrismaExternalAgentCredentialRepository(db),
+      agentId: data.agentId,
+      workspaceId,
+      actorUserId: user.id,
+    });
   });

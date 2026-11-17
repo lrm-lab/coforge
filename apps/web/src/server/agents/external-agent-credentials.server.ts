@@ -1,17 +1,20 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import { AppError } from "#src/lib/app-error";
 
 export const EXTERNAL_AGENT_KEY_PREFIX = "sk_ext_";
 const EXTERNAL_AGENT_KEY = /^sk_ext_[A-Za-z0-9_-]{43}$/;
 
-export const MAX_LIVE_EXTERNAL_CREDENTIALS = 10;
-export const EXTERNAL_LAST_USED_INTERVAL_MS = 60 * 60 * 1000;
+export const MAX_LIVE_EXTERNAL_CREDENTIALS = 50;
+export const EXTERNAL_LAST_USED_INTERVAL_MS = 30 * 1000;
 
 export type ExternalCredentialRevokeReason =
   | "logout"
   | "revoked"
-  | "revoke_all"
   | "agent_deleted"
-  | "agent_stopped";
+  | "agent_stopped"
+  | "replaced";
+
+export type ExternalCredentialSource = "device" | "app";
 
 export type ExternalMachine = {
   machineName: string;
@@ -19,6 +22,8 @@ export type ExternalMachine = {
   os: string;
   clientName: string;
 };
+
+export type ExternalMachineSummary = { [Field in keyof ExternalMachine]: string | null };
 
 export type ExternalCredentialMintRefusal =
   | "agent_unavailable"
@@ -42,8 +47,9 @@ export type ExternalCredentialRecord = {
   };
 };
 
-export type ExternalCredentialSummary = ExternalMachine & {
+export type ExternalCredentialSummary = ExternalMachineSummary & {
   id: string;
+  source: ExternalCredentialSource;
   createdAt: Date;
   lastUsedAt: Date | null;
   revokedAt: Date | null;
@@ -79,7 +85,8 @@ export interface ExternalAgentCredentialRepository {
     workspaceId: string;
     approvedByUserId: string | null;
     keyHash: string;
-    machine: ExternalMachine;
+    source: ExternalCredentialSource;
+    machine: ExternalMachine | null;
     maxLive: number;
   }): Promise<{ ok: true; id: string } | { ok: false; reason: ExternalCredentialMintRefusal }>;
   findByHash(hash: string): Promise<ExternalCredentialRecord | undefined>;
@@ -90,13 +97,16 @@ export interface ExternalAgentCredentialRepository {
     at: Date,
     agentId?: string,
   ): Promise<boolean>;
-  revokeAll(
-    agentId: string,
-    reason: ExternalCredentialRevokeReason,
-    at: Date,
-  ): Promise<{ count: number }>;
   list(agentId: string): Promise<ExternalCredentialSummary[]>;
+  presence(agentIds: readonly string[]): Promise<ExternalPresenceRow[]>;
 }
+
+export type ExternalPresenceRow = {
+  agentId: string;
+  liveCount: number;
+  liveLastUsedAt: Date | null;
+  lastUsedAt: Date | null;
+};
 
 export function hashExternalAgentKey(value: string): string {
   return new Bun.CryptoHasher("sha256").update(value).digest("hex");
@@ -122,7 +132,8 @@ export async function mintExternalAgentCredential(input: {
   agentId: string;
   workspaceId: string;
   approvedByUserId: string | null;
-  machine: ExternalMachine;
+  source: ExternalCredentialSource;
+  machine: ExternalMachine | null;
 }): Promise<
   | { ok: true; credentialId: string; apiKey: string }
   | { ok: false; reason: ExternalCredentialMintRefusal }
@@ -133,6 +144,7 @@ export async function mintExternalAgentCredential(input: {
     workspaceId: input.workspaceId,
     approvedByUserId: input.approvedByUserId,
     keyHash: hashExternalAgentKey(apiKey),
+    source: input.source,
     machine: input.machine,
     maxLive: MAX_LIVE_EXTERNAL_CREDENTIALS,
   });
@@ -149,8 +161,30 @@ export async function mintExternalAgentCredential(input: {
     agentId: input.agentId,
     workspaceId: input.workspaceId,
     approvedByUserId: input.approvedByUserId,
+    source: input.source,
   });
   return { ok: true, credentialId: minted.id, apiKey };
+}
+
+export async function issueExternalAgentPageCredential(input: {
+  repository: ExternalAgentCredentialRepository;
+  agentId: string;
+  workspaceId: string;
+  actorUserId: string;
+}): Promise<{ credentialId: string; key: string }> {
+  const minted = await mintExternalAgentCredential({
+    repository: input.repository,
+    agentId: input.agentId,
+    workspaceId: input.workspaceId,
+    approvedByUserId: input.actorUserId,
+    source: "app",
+    machine: null,
+  });
+  if (!minted.ok)
+    throw minted.reason === "credential_limit"
+      ? new AppError("CONFLICT", { errorId: "credential_limit" })
+      : new AppError("NOT_FOUND");
+  return { credentialId: minted.credentialId, key: minted.apiKey };
 }
 
 export async function authenticateExternalAgentKey(
@@ -221,28 +255,6 @@ export async function revokeOneExternalCredential(
       actorUserId: input.actorUserId,
     });
   return revoked;
-}
-
-export async function revokeAllExternalCredentials(
-  repository: Pick<ExternalAgentCredentialRepository, "revokeAll">,
-  input: {
-    agentId: string;
-    workspaceId: string;
-    reason: ExternalCredentialRevokeReason;
-    actorUserId: string;
-  },
-  now: () => number = Date.now,
-): Promise<number> {
-  const { count } = await repository.revokeAll(input.agentId, input.reason, new Date(now()));
-  if (count > 0)
-    auditExternalCredential("credentials_revoked", {
-      agentId: input.agentId,
-      workspaceId: input.workspaceId,
-      reason: input.reason,
-      count,
-      actorUserId: input.actorUserId,
-    });
-  return count;
 }
 
 export function listExternalCredentials(

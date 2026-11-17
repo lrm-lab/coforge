@@ -3,6 +3,7 @@ import type { DatabaseScope } from "#src/server/db/transaction.server";
 import type {
   ExternalAgentCredentialRepository,
   ExternalCredentialRevokeReason,
+  ExternalPresenceRow,
 } from "#src/server/agents/external-agent-credentials.server";
 
 export function revokeExternalCredentialsOf(
@@ -15,6 +16,19 @@ export function revokeExternalCredentialsOf(
     where: { agentId, revokedAt: null },
     data: { revokedAt: at, revokedReason: reason },
   });
+}
+
+export async function readExternalPresence(
+  db: Pick<PrismaClient, "$queryRaw">,
+  agentIds: readonly string[],
+): Promise<ExternalPresenceRow[]> {
+  return db.$queryRaw<ExternalPresenceRow[]>`SELECT "agentId",
+      (COUNT(*) FILTER (WHERE "revokedAt" IS NULL))::int AS "liveCount",
+      MAX("lastUsedAt") FILTER (WHERE "revokedAt" IS NULL) AS "liveLastUsedAt",
+      MAX("lastUsedAt") AS "lastUsedAt"
+    FROM "external_agent_credentials"
+    WHERE "agentId" = ANY(${agentIds as string[]}::uuid[])
+    GROUP BY "agentId"`;
 }
 
 async function lockAgentRow(tx: Prisma.TransactionClient, agentId: string): Promise<void> {
@@ -35,16 +49,27 @@ export class PrismaExternalAgentCredentialRepository implements ExternalAgentCre
         return { ok: false as const, reason: "agent_unavailable" as const };
       if (agent.hosting !== "external")
         return { ok: false as const, reason: "agent_not_external" as const };
+      const replacing = input.source === "app";
       const live = await tx.externalAgentCredential.count({
-        where: { agentId: input.agentId, revokedAt: null },
+        where: {
+          agentId: input.agentId,
+          revokedAt: null,
+          ...(replacing ? { source: { not: "app" } } : {}),
+        },
       });
       if (live >= input.maxLive) return { ok: false as const, reason: "credential_limit" as const };
+      if (replacing)
+        await tx.externalAgentCredential.updateMany({
+          where: { agentId: input.agentId, source: "app", revokedAt: null },
+          data: { revokedAt: new Date(), revokedReason: "replaced" },
+        });
       const created = await tx.externalAgentCredential.create({
         data: {
           agentId: input.agentId,
           workspaceId: input.workspaceId,
           approvedByUserId: input.approvedByUserId,
           keyHash: input.keyHash,
+          source: input.source,
           ...input.machine,
         },
         select: { id: true },
@@ -89,16 +114,13 @@ export class PrismaExternalAgentCredentialRepository implements ExternalAgentCre
     return count === 1;
   }
 
-  revokeAll(agentId: string, reason: ExternalCredentialRevokeReason, at: Date) {
-    return revokeExternalCredentialsOf(this.db, agentId, reason, at);
-  }
-
-  list(agentId: string) {
-    return this.db.externalAgentCredential.findMany({
+  async list(agentId: string) {
+    const rows = await this.db.externalAgentCredential.findMany({
       where: { agentId },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       select: {
         id: true,
+        source: true,
         machineName: true,
         hostname: true,
         os: true,
@@ -109,5 +131,13 @@ export class PrismaExternalAgentCredentialRepository implements ExternalAgentCre
         revokedReason: true,
       },
     });
+    return rows.map((row) => ({
+      ...row,
+      source: row.source === "app" ? ("app" as const) : ("device" as const),
+    }));
+  }
+
+  presence(agentIds: readonly string[]) {
+    return readExternalPresence(this.db, agentIds);
   }
 }

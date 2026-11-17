@@ -1,4 +1,5 @@
 import type { AgentDisplay } from "./agent-display.server";
+import type { ExternalSetup } from "./external-agent-presence.server";
 
 export type AgentChannelStatus = {
   status: "online" | "offline" | "unknown";
@@ -41,6 +42,23 @@ export async function resolveAgentChannelStatus(
  * display must not blank out every other row's status. Only the failure path pays N reads.
  */
 export async function resolveAgentChannelStatuses(
+  display: Pick<AgentDisplay, "snapshot" | "snapshotMany">,
+  scopes: readonly Scope[],
+  external: ReadonlyMap<string, ExternalSetup> = new Map(),
+): Promise<AgentChannelStatus[]> {
+  const fromDisplay = scopes.filter((scope) => !external.has(scope.agentId));
+  const displayed = await resolveDisplayedStatuses(display, fromDisplay);
+  const displayedByAgentId = new Map(
+    fromDisplay.map((scope, index) => [scope.agentId, displayed[index]!] as const),
+  );
+  return scopes.map((scope) => {
+    const setup = external.get(scope.agentId);
+    if (setup) return { status: setup.state === "online" ? "online" : "offline" };
+    return displayedByAgentId.get(scope.agentId)!;
+  });
+}
+
+async function resolveDisplayedStatuses(
   display: Pick<AgentDisplay, "snapshot" | "snapshotMany">,
   scopes: readonly Scope[],
 ): Promise<AgentChannelStatus[]> {

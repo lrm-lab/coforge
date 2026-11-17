@@ -1,5 +1,7 @@
 import type { Conversation, PrismaClient } from "#src/generated/prisma/client";
 import { isMutedLevel } from "#src/server/conversations/notification-level.server";
+import { externalPresenceOf } from "#src/server/agents/agent-user-info.server";
+import { externalSetups } from "#src/server/agents/external-agent-presence.server";
 import { resolveAgentChannelStatuses } from "#src/server/agents/agent-channel-status.server";
 import { getAgentDisplay, type AgentDisplay } from "#src/server/agents/agent-display.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
@@ -130,6 +132,7 @@ export async function directConversationRoster(
           description: true,
           role: true,
           computerId: true,
+          hosting: true,
         },
       },
       user: { select: { id: true, username: true } },
@@ -145,14 +148,21 @@ export async function directConversationRoster(
     : [];
   const roleByUserId = new Map(roles.map((role) => [role.userId, role.role]));
   // DM entries omit channelRole/channelAdminBasis.
-  return shapeAgentRoster(display, workspaceId, callingAgentId, target, {
-    agents: agentRows.map((agent) => ({ ...agent, serverRole: agent.role })),
-    humans: humanRows.map((row) => ({
-      id: row.id,
-      username: row.username,
-      serverRole: roleByUserId.get(row.id) ?? "member",
-    })),
-  });
+  return shapeAgentRoster(
+    display,
+    workspaceId,
+    callingAgentId,
+    target,
+    {
+      agents: agentRows.map((agent) => ({ ...agent, serverRole: agent.role })),
+      humans: humanRows.map((row) => ({
+        id: row.id,
+        username: row.username,
+        serverRole: roleByUserId.get(row.id) ?? "member",
+      })),
+    },
+    externalPresenceOf(db),
+  );
 }
 
 /**
@@ -174,6 +184,7 @@ export async function shapeAgentRoster(
       channelRole?: string;
       channelAdminBasis?: ChannelAdminBasis;
       computerId: string | null;
+      hosting?: string;
     }>;
     humans: Array<{
       id: string;
@@ -183,10 +194,18 @@ export async function shapeAgentRoster(
       channelAdminBasis?: ChannelAdminBasis;
     }>;
   },
+  externalPresence?: Parameters<typeof externalSetups>[0],
 ): Promise<AgentChannelRoster> {
+  const external =
+    externalPresence &&
+    (await externalSetups(
+      externalPresence,
+      raw.agents.filter((agent) => agent.hosting === "external").map((agent) => agent.id),
+    ).catch(() => undefined));
   const statuses = await resolveAgentChannelStatuses(
     resolvedDisplay(display),
     raw.agents.map((agent) => ({ workspaceId, computerId: agent.computerId, agentId: agent.id })),
+    external,
   );
   const agents = raw.agents.map((agent, index) => ({
     name: agent.name,

@@ -183,6 +183,7 @@ export async function redeemExternalAgentGrant(
     agentId: grant.agentId,
     workspaceId: grant.workspaceId,
     approvedByUserId: record.userId,
+    source: "device",
     machine: {
       machineName: grant.machineName,
       hostname: grant.hostname,

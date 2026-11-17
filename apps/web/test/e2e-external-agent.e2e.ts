@@ -7,23 +7,17 @@ import {
   browserSession,
   devBrowserWorkspace,
   localBrowserE2e,
+  menuItemNamed,
   pageHydrated,
 } from "./helpers/browser-e2e";
 
-/**
- * Full external Agent flow: create via NewAgentDialog ("External"), start coforge-cli device
- * grant (with extra-long Agent & machine names for break-ui), approve on /oauth/verify, verify
- * /context + /events + reminder refusal, and revoke the key from the Agent's profile panel.
- * Captures light, dark, and phone screenshots under `.amp/e2e/external-agent/`.
- */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/external-agent");
 
-test("external Agent: create, device login, approve, message check and revoke", async () => {
+test("external Agent: page credential, browser-approved login, presence, revoke and replace", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `ext-agent-${process.pid}`);
   const tail = `${process.pid}-${Date.now()}`.slice(-8);
-  // Intentionally long names to verify wrapping/truncation (break-ui).
   const agentName = `ext-long-agent-name-${tail}`;
   const machineName = `build-server-very-long-machine-name-for-break-ui-check-${tail}`;
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
@@ -52,7 +46,6 @@ test("external Agent: create, device login, approve, message check and revoke", 
       `${pageHydrated} && [...document.querySelectorAll("button")].some((el) => el.textContent?.trim() === "New Agent")`,
     );
 
-    // 1. Open NewAgentDialog, select External, create, and shoot connect card (light, dark, phone).
     await browser("find", "role", "button", "click", "--name", "New Agent", "--exact");
     await browser(
       "wait",
@@ -66,11 +59,25 @@ test("external Agent: create, device login, approve, message check and revoke", 
     await browser(
       "wait",
       "--fn",
-      `document.body.innerText.includes("coforge agent login --server")`,
+      `document.querySelector('[data-testid="external-agent-credential"]') !== null`,
     );
-    await shots("1-connect-card");
+    const prompt = await evaluate<string>(
+      `document.querySelector('[data-testid="external-agent-prompt"]').textContent`,
+    );
+    expect(prompt).toContain(`${origin}/cli/install.sh`);
+    expect(prompt).toContain(`coforge agent login --server ${origin} --agent ${agentName}`);
+    const pageKey = await evaluate<string>(
+      `document.querySelector('[data-testid="external-agent-credential"]').textContent.trim()`,
+    );
+    expect(pageKey.startsWith("sk_ext_")).toBe(true);
+    expect(
+      await evaluate<string>(
+        `document.querySelector('[data-testid="external-agent-state"]').dataset.state`,
+      ),
+    ).toBe("waiting");
+    await shots("1-connect-waiting");
     await browser("set", "viewport", "390", "844");
-    await shoot("1-connect-card-phone");
+    await shoot("1-connect-waiting-phone");
     await browser("set", "viewport", "1280", "860");
 
     const agentRow = await db.agent.findFirst({
@@ -80,7 +87,44 @@ test("external Agent: create, device login, approve, message check and revoke", 
     expect(agentRow).not.toBeNull();
     createdAgentId = agentRow!.id;
 
-    // 2. Start device grant from external CLI client (form-urlencoded per RFC 8628).
+    const ctxRes = await fetch(`${origin}/api/agent/v1/context`, {
+      headers: { authorization: `Bearer ${pageKey}` },
+    });
+    expect(ctxRes.status).toBe(200);
+    const ctx = (await ctxRes.json()) as { prompt: { text: string } | null };
+    expect(ctx.prompt?.text).toContain("COFORGE_PROFILE");
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[data-testid="external-agent-state"]')?.dataset.state === "online"`,
+    );
+    await shots("2-connect-online");
+
+    const eventsRes = await fetch(`${origin}/api/agent/v1/events`, {
+      headers: { authorization: `Bearer ${pageKey}` },
+    });
+    expect(eventsRes.status).toBe(200);
+
+    const remRes = await fetch(`${origin}/api/agent/v1/reminders`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${pageKey}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        idempotencyKey: crypto.randomUUID(),
+        workspaceId,
+        computerId: "external",
+        agentId: createdAgentId,
+        operation: "schedule",
+        title: "test",
+        target: "#general",
+        messageId: crypto.randomUUID(),
+        fireAt: new Date(Date.now() + 60_000).toISOString(),
+      }),
+    });
+    expect(remRes.status).toBe(409);
+    expect(((await remRes.json()) as { code?: string }).code).toBe(
+      "reminders_unsupported_for_external_agents",
+    );
+
     const deviceResponse = await fetch(`${origin}/oauth/device`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -100,7 +144,6 @@ test("external Agent: create, device login, approve, message check and revoke", 
       user_code: string;
     };
 
-    // 3. Approve in /oauth/verify (shoot light, dark, phone).
     await browser("open", `${origin}/en/oauth/verify`);
     await browser("wait", "--fn", pageHydrated);
     await browser(
@@ -113,9 +156,9 @@ test("external Agent: create, device login, approve, message check and revoke", 
       "--fn",
       `document.body.innerText.includes(${JSON.stringify(machineName)})`,
     );
-    await shots("2-device-verify");
+    await shots("3-device-verify");
     await browser("set", "viewport", "390", "844");
-    await shoot("2-device-verify-phone");
+    await shoot("3-device-verify-phone");
     await browser("set", "viewport", "1280", "860");
     await browser("find", "role", "button", "click", "--name", "Approve");
     await browser(
@@ -124,7 +167,6 @@ test("external Agent: create, device login, approve, message check and revoke", 
       `document.body.innerText.includes(${JSON.stringify(machineName)}) === false`,
     );
 
-    // 4. Exchange device_code for sk_ext_ key and verify /context, /events, and reminder refusal.
     const tokenResponse = await fetch(`${origin}/oauth/token`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -135,42 +177,44 @@ test("external Agent: create, device login, approve, message check and revoke", 
       }),
     });
     expect(tokenResponse.status).toBe(200);
-    const issued = (await tokenResponse.json()) as { api_key: string };
-    expect(issued.api_key.startsWith("sk_ext_")).toBe(true);
+    const deviceKey = ((await tokenResponse.json()) as { api_key: string }).api_key;
+    expect(deviceKey.startsWith("sk_ext_")).toBe(true);
+    expect(
+      (
+        await fetch(`${origin}/api/agent/v1/context`, {
+          headers: { authorization: `Bearer ${deviceKey}` },
+        })
+      ).status,
+    ).toBe(200);
 
-    const ctxRes = await fetch(`${origin}/api/agent/v1/context`, {
-      headers: { authorization: `Bearer ${issued.api_key}` },
-    });
-    expect(ctxRes.status).toBe(200);
-    const ctx = (await ctxRes.json()) as { prompt: { text: string } | null };
-    expect(ctx.prompt?.text).toContain("COFORGE_PROFILE");
+    const chooseInRowMenu = async (rowText: string, item: string) => {
+      expect(
+        await evaluate<boolean>(
+          `(() => { const row = [...document.querySelectorAll('[data-testid="external-agent-credential-row"]')].find((el) => el.textContent?.includes(${JSON.stringify(rowText)})); row?.querySelector('button[aria-label="Credential actions"]')?.setAttribute("data-e2e-menu", ""); return Boolean(row); })()`,
+        ),
+      ).toBe(true);
+      await browser("click", "[data-e2e-menu]");
+      await browser("wait", "--fn", `Boolean(${menuItemNamed(item)})`);
+      await browser("find", "role", "menuitem", "click", "--name", item);
+    };
+    const confirmInDialog = async (label: string) => {
+      await browser(
+        "wait",
+        "--fn",
+        `document.querySelector('[role="alertdialog"], [role="dialog"]') !== null`,
+      );
+      expect(
+        await evaluate<boolean>(
+          `(() => { const button = [...document.querySelectorAll('[role="alertdialog"] button, [role="dialog"] button')].find((el) => el.textContent?.trim() === ${JSON.stringify(label)}); button?.setAttribute("data-e2e-confirm", ""); return Boolean(button); })()`,
+        ),
+      ).toBe(true);
+      await browser("click", "[data-e2e-confirm]");
+    };
+    const rowCount = () =>
+      evaluate<number>(
+        `document.querySelectorAll('[data-testid="external-agent-credential-row"]').length`,
+      );
 
-    const eventsRes = await fetch(`${origin}/api/agent/v1/events`, {
-      headers: { authorization: `Bearer ${issued.api_key}` },
-    });
-    expect(eventsRes.status).toBe(200);
-
-    const remRes = await fetch(`${origin}/api/agent/v1/reminders`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${issued.api_key}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        idempotencyKey: crypto.randomUUID(),
-        workspaceId,
-        computerId: "external",
-        agentId: createdAgentId,
-        operation: "schedule",
-        title: "test",
-        target: "#general",
-        messageId: crypto.randomUUID(),
-        fireAt: new Date(Date.now() + 60_000).toISOString(),
-      }),
-    });
-    expect(remRes.status).toBe(403);
-
-    // 5. Open Agent profile panel, shoot connected state, revoke, and shoot revoked state.
     await browser(
       "open",
       `${origin}/en/w/${workspace.slug}/members?profile=agent:${createdAgentId}`,
@@ -180,19 +224,48 @@ test("external Agent: create, device login, approve, message check and revoke", 
       "--fn",
       `${pageHydrated} && document.body.innerText.includes(${JSON.stringify(machineName)})`,
     );
-    await shots("3-profile-connected");
-    await browser("find", "role", "button", "click", "--name", "Revoke");
-    await browser("wait", "--fn", `document.body.innerText.includes("No machines connected yet.")`);
-    await shoot("4-profile-revoked");
+    expect(await rowCount()).toBe(2);
+    await shots("4-profile-online");
+    await browser("set", "viewport", "390", "844");
+    await shoot("4-profile-online-phone");
+    await browser("set", "viewport", "1280", "860");
 
-    const revokedCtx = await fetch(`${origin}/api/agent/v1/context`, {
-      headers: { authorization: `Bearer ${issued.api_key}` },
-    });
-    expect(revokedCtx.status).toBe(401);
+    await chooseInRowMenu(machineName, "Revoke");
+    await confirmInDialog("Revoke");
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelectorAll('[data-testid="external-agent-credential-row"]').length === 1`,
+    );
+    expect(
+      (
+        await fetch(`${origin}/api/agent/v1/context`, {
+          headers: { authorization: `Bearer ${deviceKey}` },
+        })
+      ).status,
+    ).toBe(401);
+
+    await chooseInRowMenu("Created on this page", "Create new credential");
+    await confirmInDialog("Create new credential");
+    await browser(
+      "wait",
+      "--fn",
+      `document.querySelector('[data-testid="external-agent-credential"]') !== null`,
+    );
+    const replacedKey = await evaluate<string>(
+      `document.querySelector('[data-testid="external-agent-credential"]').textContent.trim()`,
+    );
+    expect(replacedKey).not.toBe(pageKey);
+    expect(
+      (
+        await fetch(`${origin}/api/agent/v1/context`, {
+          headers: { authorization: `Bearer ${pageKey}` },
+        })
+      ).status,
+    ).toBe(401);
+    await shots("5-profile-replaced");
   } finally {
     await browser("close").catch(() => undefined);
-    // Look the Agent up by name too: a run that fails before `createdAgentId` is set still
-    // created it. Device grants don't cascade from the Agent, so delete them by `grant.agentId`.
     const agentIds = createdAgentId
       ? [createdAgentId]
       : (

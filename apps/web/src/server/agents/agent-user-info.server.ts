@@ -12,6 +12,8 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { humanLabel } from "#src/lib/human-label";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { getAgentDisplay } from "./agent-display.server";
+import { externalSetups, type ExternalSetup } from "./external-agent-presence.server";
+import { readExternalPresence } from "#src/server/db/repositories/external-agent-credential.repositories.server";
 import {
   agentVisibilityViewerForActor,
   canSeeAgent,
@@ -39,9 +41,10 @@ export const AGENT_NOT_VISIBLE = "agent-not-visible" as const;
  */
 export async function resolveAgentStatus(
   workspaceId: string,
-  agent: { id: string; computerId: string | null; stoppedAt: Date | null },
+  agent: ExternalAwareAgent,
+  external?: ExternalPresenceReader,
 ): Promise<{ status: AgentUserStatus; availability?: string }> {
-  const [only] = await resolveAgentStatuses(workspaceId, [agent]);
+  const [only] = await resolveAgentStatuses(workspaceId, [agent], external);
   return only;
 }
 
@@ -53,7 +56,44 @@ export async function resolveAgentStatus(
  */
 export async function resolveAgentStatuses(
   workspaceId: string,
-  agents: ReadonlyArray<{ id: string; computerId: string | null; stoppedAt: Date | null }>,
+  agents: ReadonlyArray<ExternalAwareAgent>,
+  external?: ExternalPresenceReader,
+): Promise<Array<{ status: AgentUserStatus; availability?: string }>> {
+  const externalIds = external
+    ? agents.filter((agent) => agent.hosting === "external").map((agent) => agent.id)
+    : [];
+  const setups = external
+    ? await externalSetups(external, externalIds).catch(() => new Map<string, ExternalSetup>())
+    : new Map<string, ExternalSetup>();
+  const fromDisplay = agents.filter((agent) => !setups.has(agent.id));
+  const displayed = await resolveDisplayedStatuses(workspaceId, fromDisplay);
+  const displayedById = new Map(
+    fromDisplay.map((agent, index) => [agent.id, displayed[index]!] as const),
+  );
+  return agents.map((agent) => {
+    const setup = setups.get(agent.id);
+    if (setup)
+      return { status: setup.state === "online" ? ("online" as const) : ("offline" as const) };
+    return displayedById.get(agent.id)!;
+  });
+}
+
+type ExternalAwareAgent = {
+  id: string;
+  computerId: string | null;
+  stoppedAt: Date | null;
+  hosting?: string;
+};
+
+export function externalPresenceOf(db: Pick<PrismaClient, "$queryRaw">): ExternalPresenceReader {
+  return { presence: (agentIds) => readExternalPresence(db, agentIds) };
+}
+
+type ExternalPresenceReader = Parameters<typeof externalSetups>[0];
+
+async function resolveDisplayedStatuses(
+  workspaceId: string,
+  agents: ReadonlyArray<ExternalAwareAgent>,
 ): Promise<Array<{ status: AgentUserStatus; availability?: string }>> {
   const scoped = agents.filter((agent) => agent.computerId);
   if (scoped.length === 0) return agents.map(() => ({ status: "unknown" as const }));
@@ -119,6 +159,7 @@ export type ResolvedWorkspaceUser =
       description: string;
       role: string | null;
       computerId: string | null;
+      hosting: string;
       computerName?: string;
       stoppedAt: Date | null;
       ownerId: string;
@@ -148,6 +189,7 @@ export async function findWorkspaceUser(
       description: true,
       role: true,
       computerId: true,
+      hosting: true,
       stoppedAt: true,
       ownerId: true,
       visibility: true,
@@ -166,6 +208,7 @@ export async function findWorkspaceUser(
       description: agent.description,
       role: agent.role,
       computerId: agent.computerId,
+      hosting: agent.hosting,
       stoppedAt: agent.stoppedAt,
       ownerId: agent.ownerId,
       ...(computerName ? { computerName } : {}),
@@ -280,11 +323,16 @@ export async function resolveAgentUserInfo(
     };
     return { status: 200, body: { ok: true, user, memberships } };
   }
-  const { status, availability } = await resolveAgentStatus(principal.workspaceId, {
-    id: target.id,
-    computerId: target.computerId,
-    stoppedAt: target.stoppedAt,
-  });
+  const { status, availability } = await resolveAgentStatus(
+    principal.workspaceId,
+    {
+      id: target.id,
+      computerId: target.computerId,
+      stoppedAt: target.stoppedAt,
+      hosting: target.hosting,
+    },
+    externalPresenceOf(db),
+  );
   const user: AgentUserInfo = {
     kind: "agent",
     id: target.id,

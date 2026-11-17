@@ -3,7 +3,7 @@ import type {
   AgentReminderOperationResponse,
 } from "@lrm/coforge-sdk/internal";
 import { ReminderRefusal } from "#src/server/reminders/reminders.server";
-import { unsupportedForExternalAgents } from "./external-agent-http.server";
+import { remindersUnsupportedForExternalAgents } from "./external-agent-http.server";
 
 export function externalAgentReminderAnswer(
   command: AgentReminderOperationRequest,
@@ -13,7 +13,7 @@ export function externalAgentReminderAnswer(
     command.operation === "update" ||
     command.operation === "snooze"
   )
-    return unsupportedForExternalAgents(`reminders.${command.operation}`);
+    return remindersUnsupportedForExternalAgents(`reminders.${command.operation}`);
   if (command.operation === "cancel") throw new ReminderRefusal("NOT_FOUND", "reminder not found");
   return {
     idempotencyKey: command.idempotencyKey,

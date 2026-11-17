@@ -99,22 +99,24 @@ model Agent {
   @@map("agents")
 }
 
-/// One key of an external Agent, minted for one machine by a device-code approval. Unlike
-/// `AgentApiKey` there is no Computer and an Agent holds one live key per machine.
+/// One key of an external Agent: a device-code approval mints one per machine (`source` device), the
+/// Agent's page mints at most one live (`app`, replaced on re-issue). Unlike `AgentApiKey` there is
+/// no Computer; `approvedByUserId` is the person who issued it, either way.
 model ExternalAgentCredential {
   id               String    @id @default(uuid(7)) @db.Uuid
   agentId          String    @db.Uuid
   workspaceId      String    @db.Uuid
   approvedByUserId String?   @db.Uuid
   keyHash          String    @unique
-  machineName      String
-  hostname         String
-  os               String
-  clientName       String
+  source           String    @default("device")
+  machineName      String?
+  hostname         String?
+  os               String?
+  clientName       String?
   createdAt        DateTime  @default(now())
   lastUsedAt       DateTime?
   revokedAt        DateTime?
-  /// logout | revoked (one key, by a manager) | revoke_all | agent_deleted | agent_stopped
+  /// logout | revoked (one key, by a manager) | agent_deleted | agent_stopped | replaced
   revokedReason    String?
   agent            Agent     @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
   approvedBy       User?     @relation("ExternalAgentCredentialApprover", fields: [approvedByUserId], references: [id], onDelete: SetNull)

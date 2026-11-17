@@ -46,10 +46,10 @@ describe("reminders for an external Agent", () => {
       principal,
       service,
     );
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(409);
     expect(await response.json()).toEqual({
       error: "This operation is not available to external Agents",
-      code: "unsupported_for_external_agents",
+      code: "reminders_unsupported_for_external_agents",
       feature: `reminders.${operation}`,
       retryable: false,
     });
