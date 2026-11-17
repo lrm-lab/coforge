@@ -341,12 +341,13 @@ test("a push diffs from the last successful run of its workflow, so superseded p
     run: string;
   }[];
   const base = steps.find((step) => step.id === "base")!;
-  expect(base.if).toBe("github.event_name == 'push'");
+  expect(base.if).toBe("github.event_name == 'push' || github.event_name == 'workflow_dispatch'");
   expect(base.env).toEqual({
     GH_TOKEN: "${{ github.token }}",
     REPOSITORY: "${{ github.repository }}",
     RUN_ID: "${{ github.run_id }}",
     BRANCH: "${{ github.ref_name }}",
+    EVENT: "${{ github.event_name }}",
   });
   expect(steps.find((step) => step.id === "select")!.env!.BASE).toBe(
     "${{ github.event.pull_request.base.sha || steps.base.outputs.sha }}",
@@ -368,17 +369,22 @@ esac
 `,
     );
     await chmod(join(dir, "gh"), 0o755);
-    const findBase = (lastSuccess: string) => {
-      const output = join(dir, `output-${lastSuccess || "none"}`);
+    const findBaseScript = new URL("./find-ci-base.sh", import.meta.url).pathname;
+    expect(base.run).toBe("bash scripts/ci/find-ci-base.sh");
+    const findBase = (lastSuccess: string, event = "push", branch = "main", cwd?: string) => {
+      const safeBranch = branch.replaceAll("/", "_");
+      const output = join(dir, `output-${event}-${safeBranch}-${lastSuccess || "none"}`);
       const runs = lastSuccess ? [{ id: 41, head_sha: lastSuccess }] : [];
-      const result = Bun.spawnSync(["bash", "-e", "-o", "pipefail", "-c", base.run], {
+      const result = Bun.spawnSync(["bash", findBaseScript], {
+        cwd,
         env: {
           ...Bun.env,
           PATH: `${dir}:${Bun.env.PATH}`,
           RUNS: JSON.stringify({ total_count: runs.length, workflow_runs: runs }),
           REPOSITORY: "lrm-lab/coforge",
           RUN_ID: "42",
-          BRANCH: "main",
+          BRANCH: branch,
+          EVENT: event,
           GITHUB_OUTPUT: output,
         },
       });
@@ -391,6 +397,25 @@ esac
     );
     // No successful run yet: an empty base makes the select step cover everything.
     expect(await findBase("")).toBe("sha=\n");
+
+    // workflow_dispatch on a branch uses the merge-base with origin/main.
+    const repoDir = join(dir, "repo");
+    const runGit = (...args: string[]) =>
+      Bun.spawnSync(["git", ...args], { cwd: repoDir, stdout: "pipe", stderr: "pipe" });
+    await mkdir(repoDir);
+    runGit("init", "-b", "main");
+    runGit("config", "user.name", "Test");
+    runGit("config", "user.email", "test@example.com");
+    await Bun.write(join(repoDir, "a.txt"), "1\n");
+    runGit("add", "a.txt");
+    runGit("commit", "-m", "base");
+    const mainSha = runGit("rev-parse", "HEAD").stdout.toString().trim();
+    runGit("update-ref", "refs/remotes/origin/main", mainSha);
+    runGit("checkout", "-b", "feat/x");
+    await Bun.write(join(repoDir, "b.txt"), "2\n");
+    runGit("add", "b.txt");
+    runGit("commit", "-m", "feat");
+    expect(await findBase("", "workflow_dispatch", "feat/x", repoDir)).toBe(`sha=${mainSha}\n`);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

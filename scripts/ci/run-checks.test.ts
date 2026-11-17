@@ -43,6 +43,7 @@ describe("local and CI command parity", () => {
     const localGate = readFileSync(join(repoRoot, "scripts/ci/local-gate.ts"), "utf8");
     expect(ciYml).toContain("scripts/ci/lint-ci-range.sh");
     expect(lintScript).toContain("scripts/ci/run-checks.ts --lint-range");
+    expect(lintScript).toContain("workflow_dispatch");
     expect(localGate).toContain("lintFilesStrict");
     expect(localGate).toContain("downstreamWorkspaces");
   });

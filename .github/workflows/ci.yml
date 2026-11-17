@@ -62,19 +62,14 @@ jobs:
           install_args: bun
       - name: Find the last successful run
         id: base
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
           BRANCH: ${{ github.ref_name }}
-        run: |
-          # A newer push cancels the running one, so diff from the head of CI's last successful
-          # push run: cancelled and failed pushes stay in scope until a run passes. No successful
-          # run yet: full coverage.
-          workflow="$(gh api "repos/$REPOSITORY/actions/runs/$RUN_ID" --jq .workflow_id)"
-          sha="$(gh api "repos/$REPOSITORY/actions/workflows/$workflow/runs?branch=$BRANCH&event=push&status=success&per_page=1" --jq '.workflow_runs[0].head_sha // ""')"
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          EVENT: ${{ github.event_name }}
+        run: bash scripts/ci/find-ci-base.sh
       - name: Select checks for changed files
         id: select
         env: &plan
