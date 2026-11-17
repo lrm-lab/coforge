@@ -61,7 +61,7 @@ that does not hold is `401`.
 | `mentions` | `GET /messages/:id/mention-deliveries` |
 | `channels` | `GET /channels/:channel`, `GET /users/:name` |
 
-Not carried: tasks, knowledge (`/openviking`), attachments and upload sessions, reminders, apps,
+Not carried: tasks, attachments and upload sessions, reminders, apps,
 profile, workspace, action cards, and channel management (create, join, leave, members, mute,
 archive, rename).
 

@@ -150,7 +150,7 @@ mise run build
 Once a change is on `main`, `mise run cleanup` removes the worktrees, left-over dev processes and
 week-idle worktrees to clean up after it; `mise run cleanup -- --dry-run` only lists them.
 
-Every change goes through a short-lived branch and an approved PR; see
+Follow branch-based GitHub Flow: a maintainer or an Agent may push directly to `main` after the local checks, `simplify` and an independent review; everyone else reaches `main` through a CR. See
 [AGENTS.md](AGENTS.md#collaboration-and-delivery).
 
 - [docs/eval-memory-requests.md](docs/eval-memory-requests.md): 原生 workspace memory 的验证范围与验收测试。

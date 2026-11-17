@@ -58,8 +58,8 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines.
 - A write that changes who is in a channel or whether it is private calls
   `channelPeopleChanged` once it commits: the live Activity audience remembers both
   per process and forgets them only on that signal (or its 30 s backstop).
-- A channel is created private by a person, an Agent or an action card alike;
-  the Workspace memory Agent joins only a public one. Only a Workspace owner or
+- A channel is created private by a person, an Agent or an action card alike.
+  Only a Workspace owner or
   admin who is an active member turns a channel private or public, never a
   channel admin as such, never `#general` or an archived channel
   (`setChannelVisibility`, `channel-visibility-change.server.ts`). Turned private,

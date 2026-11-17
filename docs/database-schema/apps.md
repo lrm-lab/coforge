@@ -66,16 +66,11 @@ does not. A logo that does not load falls back to the monogram.
 `app_installations` — an app installed in a Workspace: `appId` (cascade), `workspaceId` (cascade),
 `installedByUserId` (set null), `approvedGroups` (TEXT[], empty by default;
 `app_installations_approved_groups_check` limits the values to the four groups, the application keeps
-their order), `approvedRevision` (INTEGER, 0 before any approval), `approvedAt`, `approvedByUserId` (set null when the User is deleted), `setupCompletedRevision` (INTEGER, null until the app reports setup done) and `setupCompletedAt` (TIMESTAMP(3); null exactly when the revision is: `app_installations_setup_completion_check`), `agentAccess` (TEXT, `all` by default or `selected`; `app_installations_agent_access_check`; kept for rolling compatibility until a later release drops it — every installed app is usable by every Agent), `createdAt`, unique (`appId`,
+their order), `approvedRevision` (INTEGER, 0 before any approval), `approvedAt`, `approvedByUserId` (set null when the User is deleted), `setupCompletedRevision` (INTEGER, null until the app reports setup done) and `setupCompletedAt` (TIMESTAMP(3); null exactly when the revision is: `app_installations_setup_completion_check`), `createdAt`, unique (`appId`,
 `workspaceId`). The registering Workspace's row is made with the app; another Workspace's is made by a
 Marketplace install and deleted by an uninstall or an approved offline request, which also revoke the
 consents, authorization codes and Agent grants of that (app, Workspace). A Workspace's delete removes
 its apps and installations.
-
-`app_installation_agents` — kept for rolling compatibility until a later release drops it
-(migration `20261023140000_app_installation_agent_access`): `installationId` (cascade) and `agentId`
-(cascade, so deleting an Agent removes its row), primary key both. No code reads or writes it since
-the Selected Agents mode was removed (task #436).
 
 `app_installations.approvedEvents` (TEXT[], empty by default; `app_installations_approved_events_check`
 limits the values to the catalog) holds the notification events approved with `approvedGroups`, at the
@@ -85,13 +80,12 @@ same `approvedRevision`. A declaration that drops an event removes it from every
 ## Agent access scope
 
 Every Agent in the Workspace may use every installed app (Raft's behaviour); the per-installation
-Selected Agents mode was removed (task #436) and its columns stay only for rolling compatibility
-until a later release drops them. The rule is [Agents' app access](app-agent-access.md).
+Selected Agents mode was removed (task #436). The rule is [Agents' app access](app-agent-access.md).
 
 - Owners and admins (`manageApps`) change it in the app editor and the app detail; the change applies
   at once, on its own Server Function, and the last write wins (no revision guard). Members read the
   mode and the number of Agents. Registering an app starts at `all`, with no selection.
-- Switching revokes no grant. Selecting an Agent that is not a live Agent of the Workspace that is neither a system Agent (the per-member assistants) nor the Workspace Memory Agent (it gets no Apps section) is refused.
+- Switching revokes no grant. Selecting an Agent that is not a live Agent of the Workspace that is not a system Agent (the per-member assistants) is refused.
 
 ## Data permissions
 

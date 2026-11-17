@@ -11,7 +11,6 @@ or claim a real model call based only on credential presence.
 - [Required rebuild and restart sequence](rebuild-and-restart.md): The build, restart, and verify order required before any real E2E run, and what the OpenRouter test asserts.
 - [Coverage boundary](coverage-boundary.md): What the in-process OpenRouter Daemon test covers and what it does not.
 - [Diagnoses established during recovery](recovery-diagnoses.md): Diagnoses established while recovering the live test, and shortcuts that must never satisfy a failed stage.
-- [Recovery verification](recovery-verification.md): Checkpoint and follow-up verification results from 2026-09-14, including the test-isolation fixes.
 - [Native setup investigation](native-setup-investigation.md): Why the first native Computer setup attempt failed and the harness prerequisites it revealed.
 - [Native Linux verification and repeatable setup](native-linux-setup.md): The verified native Linux procedure and the repeatable `run-computer-setup.sh` harness.
 - [Native browser scenario coverage](native-browser-scenario.md): Attachment, Task review/Done, Agent-created Task, and reassignment phases of the native browser scenario.

@@ -62,7 +62,7 @@ Each item is a way a CoForge change has already failed, and names the category a
 
 ## Paths to skip
 
-Generated files and lockfiles (the `linguist-generated` entries in [.gitattributes](.gitattributes)), Paraglide output, and test fixtures under `*/test/fixtures/` unless the change edits a fixture's meaning.
+Generated files and lockfiles (the `linguist-generated` entries in [.gitattributes](.gitattributes)), and test fixtures under `*/test/fixtures/` unless the change edits a fixture's meaning.
 
 ## How to report
 

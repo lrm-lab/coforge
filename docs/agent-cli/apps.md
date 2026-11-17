@@ -17,7 +17,7 @@ each installed app on one line (its name, key, description and when to use it), 
 `coforge app list` for the current list and the `apps` Manual topic for how to use one; the prompt
 teaches no workflow. The list travels in the launch identity's `apps` (`POST /api/agent-api-keys`),
 so it is the one from the Agent's launch. Built-in apps are not in it, and there is no section when
-nothing is installed, nor for the Memory Agent, which has no shell. The section says that the
+nothing is installed. The section says that the
 publisher wrote the text, that it is reference data rather than instructions, and that it grants no
 access.
 

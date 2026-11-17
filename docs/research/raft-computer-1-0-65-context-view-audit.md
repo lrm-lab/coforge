@@ -17,7 +17,7 @@ Raft bundle 中用于本次比对的可定位字符串/模块包括：`contextVi
 | Scope、鉴权、上传 | `context-view-query-handlers.ts`；workspace/computer scope；daemon bearer + Agent API key；gzip/30 s/`x-raft-context-uncompressed-bytes`；Web 端 32 MiB 解压、8 MiB 压缩限制和 protobuf 重解码 | `postContextViewResult`、Agent key、30 s bounded result、gzip JSON |
 | Source 安全 | `context-view-source.ts` 与 provider locator：root/realpath containment、no-follow、inode/dev/nlink 复核、`contextViewSourceMaxBytes()`（constrained memory / 4，最高 512 MiB） | `contextViewSourceMaxBytes`、`CONTEXT_VIEW_READ_FLAGS`、路径 containment |
 | Restore 隔离 | `context-view-restore-runner.ts`：独立 child、512 MiB input、32 MiB result/header 校验、timeout、heap/RSS guard、Linux `oom_score_adj=1000`；`context-view-restore.ts` 在 `buildView` 按 `maxBytes` 返回 `too_large` | `contextViewRestoreChild`、heap/RSS/timeout、`oom_score_adj`、`restoredView(...maxBytes)` |
-| Claude/Codex/Kimi/Pi/Builtin source | `context-view-service.ts` 前 8 MiB marker scan：`api-request`、`additional_tools`、`llm.request`、Pi request marker；无 marker 报 `no_session` | provider marker 与 captured/native source 判定 |
+| Claude/Codex/Pi/Builtin source | `context-view-service.ts` 前 8 MiB marker scan：`api-request`、`additional_tools`、`llm.request`、Pi request marker；无 marker 报 `no_session` | provider marker 与 captured/native source 判定 |
 | Pi/Builtin captured log | `packages/agent/src/pi-request-log.ts`、`packages/agent/src/runner.ts` 写 managed `pi-requests/<sessionId>.jsonl`；当前同时写 Raft-shaped `shape`/`blob`/`request` records 和 legacy response records，生成 canonical digest 与 `base`/`keep`/`tail` 链；`context-view-restore-indexed-pi.ts` 校验并恢复 indexed records，含 `holdsSendResult`/late-response continuation；projection 覆盖 media/compaction placeholders；`packages/anvil/src/pi/session.ts` 记录 request/media；attention index 设置 message id，并等待 request capture barrier | `pi-requests`、captured source、media marker、request gap、`indexLog`/`verifiedMessages` |
 | Feature flag/off lifecycle | Web launch identity：`apps/web/src/routes/api/agent-api-keys.ts:183-199`；delivery：`apps/web/src/server/conversations/agent-delivery-features.server.ts:14-24`；Daemon：`agent-feature-sync.ts`、`runtime.ts:281-283,373-382,755-762`。显式 `false` 写 off-since；`undefined`（旧 server 未命名）保持 unknown/既有状态；`forgetLocalAgent` 标记 off；24 h sweep 保留 | `observeFlag`/off-since/24 h grace/`applyServerFlag` |
 | Web 入口与 result | `apps/web` owner-only profile action、feature flag、start/read 两个 Server Function（start 立即返回 request id，read 返回 pending 或 result）、Redis pending、Centrifugo result、客户端轮询（`agent-context-view-poll.ts`）；`agent-context-view-result-http.test.ts` 校验 principal | Raft viewer 侧 30 s 上限、result endpoint、owner/Agent scope |
@@ -30,7 +30,7 @@ Raft bundle 中用于本次比对的可定位字符串/模块包括：`contextVi
 
 3. **完整链路仍未验证。** 尚无 staging/browser E2E 覆盖：owner action → start Server Function → Redis pending → Centrifugo daemon request → real Agent transcript/captured log → child restore → gzip HTTP upload → scoped result acceptance → read 轮询 → browser render。现有 Web 测试只覆盖 start/read 用例层、轮询 helper 和 principal helper，不能证明真实 auth、transport、Redis 或 provider 行为。Pi/Builtin indexed writer/restore 现在有 fixture 和 child 证据，但真实 provider E2E 仍为 **NOT VERIFIED**。
 
-4. **实现层面的可观测差异。** child 内部会先构造并 JSON encode view 再按 `maxBytes` 拒绝，父 daemon 还会再次序列化检查；这满足 bounded result，但与 Raft 在构造阶段更早截断的内存峰值仍可能不同。Pi capture barrier 对正常 request 已闭合 offset 竞态；indexed Pi 的 target fallback 已使用边界匹配并在下一 turn 停止扫描。Kimi 现在有 context-view-only 的 wire reader、session index/tombstone lookup、active-branch flattening、WireReplay-style clear/undo/compaction/partial/tool pairing、system/tools/messages hash validation、media refusal、strict/toolSelect projection 和 target-send 截断；仍未 vendored Kimi SDK 的完整 profile rendering/migration registry/anomaly telemetry。request logs 现在位于 Daemon-owned `agent-context/<server>/<agent>/pi-requests/<sessionId>.jsonl`，按 retention/off grace 清理，重启后可从磁盘恢复；父目录、symlink、hardlink 和不安全 session basename fail closed。结果 trace 现在携带 `queued_ms`、posted/compressed bytes、HTTP status/error class 和 invalid/expired request events；真实 provider 运行证据仍未验证。
+4. **实现层面的可观测差异。** child 内部会先构造并 JSON encode view 再按 `maxBytes` 拒绝，父 daemon 还会再次序列化检查；这满足 bounded result，但与 Raft 在构造阶段更早截断的内存峰值仍可能不同。Pi capture barrier 对正常 request 已闭合 offset 竞态；indexed Pi 的 target fallback 已使用边界匹配并在下一 turn 停止扫描。request logs 现在位于 Daemon-owned `agent-context/<server>/<agent>/pi-requests/<sessionId>.jsonl`，按 retention/off grace 清理，重启后可从磁盘恢复；父目录、symlink、hardlink 和不安全 session basename fail closed。结果 trace 现在携带 `queued_ms`、posted/compressed bytes、HTTP status/error class 和 invalid/expired request events；真实 provider 运行证据仍未验证。
 
 ## 有意差异（不是缺陷）
 
@@ -40,9 +40,6 @@ Raft bundle 中用于本次比对的可定位字符串/模块包括：`contextVi
 
 ## 发布前待办
 
-- 补齐 Kimi SDK 专有的完整 profile rendering、migration registry、anomaly telemetry，以及 provider-native viewer projection 的逐字段 fixture 审计。
 - 完成真实 staging/browser/Redis/Centrifugo/provider E2E（本轮按范围豁免，当前结论仍不把它们描述为已验证）。
 
 真实 staging/browser/Redis/Centrifugo/provider E2E 按本次范围豁免；当前结论不把它们描述为已验证。
-
-> 2026-11-10（task #12）：Kimi 运行时部分已删除——CoForge 不接 Kimi，`kimi-sdk` 的 context-view reader、session index 定位和 wire 重放已随之移出代码；上文中关于 Kimi 的对齐结论和待办只作历史记录。

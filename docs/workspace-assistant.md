@@ -23,7 +23,6 @@ sign-in, creating a Workspace, joining by link; the one the personal Workspace's
 else Chinese. The name is set once and does not follow a later rename or language switch. A
 migration renamed every existing assistant still called `通用助手` the same way (English for
 an owner who saved English) and left other names alone.
-`WorkspaceAssistant.displayName` is no longer read and is dropped in a later release.
 
 ## Provisioning and upgrades
 

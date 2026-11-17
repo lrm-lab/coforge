@@ -13,5 +13,5 @@ These rules apply to `src/features/landing/`.
 - The headline and copy are text, so every language reads; a new language needs its copy checked
   at 1440 x 900 (the headline's two lines must not wrap) and 390 wide.
 - `landing-brand-panel.tsx` is the old dark hero other public pages still reuse (invite links,
-  through `features/auth/auth-split-layout.tsx`, and account settings); it keeps its Spell / Magic
-  UI motion components inside this directory.
+  through `features/auth/auth-split-layout.tsx`, and account settings); it keeps its Spell motion
+  components inside this directory.

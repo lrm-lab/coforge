@@ -11,7 +11,7 @@ import { expect, test } from "bun:test";
  * first. Two such values reached a review round in the Computer Agent sections before this gate.
  *
  * Colours: `text-[#101319]` and `text-[var(--x)]` match the same pattern, on purpose — a hardcoded
- * value is what `docs/design-tokens.md` section 6 asks product code not to write.
+ * value is what `docs/design-tokens.md` section 5 asks product code not to write.
  *
  * Geometry is deliberately out of scope, measured rather than asserted: of the 44 arbitrary size
  * values in product code (vendor Untitled directories excluded), 41 are mockup-measured geometry —
@@ -19,8 +19,8 @@ import { expect, test } from "bun:test";
  * them would carry a whitelist longer than the rule it guards.
  *
  * All of `features/landing` is exempt, not just its fluid `clamp()`: the public page is a visually
- * frozen layer with its own Base UI controls and its own isolated variables
- * (`docs/design-tokens.md` section 4), so it never took the product's typography scale. Keep the
+ * frozen layer with its own isolated variables (`features/landing/AGENTS.md`), so it never took
+ * the product's typography scale. Keep the
  * whole directory excluded rather than narrowing this to the lines that happen to use `clamp()`
  * today. */
 const SRC = fileURLToPath(new URL("..", import.meta.url));

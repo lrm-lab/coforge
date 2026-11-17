@@ -83,10 +83,8 @@ joining the invited Workspace is their way in. If they never join, they have a
 name and no membership; later sign-ins never make a Workspace for them, and they
 are offered "create your first Workspace" like anyone in none. Cloud Computer and assistant provisioning follow
 the commit; failures leave enrollment intact. When the owner opens the Workspace,
-`loadWorkspaceSwitcher` repairs missing Memory Agent and assistant identities and
-retries pending cloud provisioning through platform-assistant onboarding. Existing
-Memory Agent links, including archived identities, remain intact. A retained Memory
-Profile prevents reopening from recreating a deliberately deleted identity. Weekly
+`loadWorkspaceSwitcher` repairs missing assistant identities and
+retries pending cloud provisioning through platform-assistant onboarding. Weekly
 assistant binding retries accept only the owner's live default cloud Computer.
 A session whose user row is gone is sent to sign in again instead. The name follows the one rule for a person's name
 (`apps/web/src/features/profiles/person-name.ts`), which the profile's own name

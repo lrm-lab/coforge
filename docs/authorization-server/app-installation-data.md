@@ -29,8 +29,7 @@ Each projection names its fields; the repository query selects only those column
   back to is of no use to an app).
   No members, roles or emails.
 - `agents`: public Agents only. A private Agent, a deleted (archived) Agent and a platform-owned
-  Agent (`systemKind` set: the per-member assistants) are left out. The Workspace Memory Agent is an
-  ordinary public Agent and is listed. `handle` is the Agent's unique `name` (what `@` mentions).
+  Agent (`systemKind` set: the per-member assistants) are left out. `handle` is the Agent's unique `name` (what `@` mentions).
   `avatar_url` is the Agent's platform mascot (the one its creator picked, else the one its id
   chooses) as an absolute URL on the issuer's origin; an Agent has no uploaded picture.
   No owner, role, runtime configuration, Computer, messages or Activity.
