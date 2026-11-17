@@ -14,15 +14,15 @@ type SendProblem = "invalid_destination" | "rate_limited" | "send_failed";
  * first, then has `request` ask for the code; whatever went wrong goes to `setProblem`, and a code
  * on its way to `onSent`. A throw is `send_failed`.
  */
-export function useCodeSending({
+export function useCodeSending<Problem extends string = SendProblem>({
   destination,
   request,
   setProblem,
   onSent,
 }: {
   destination: string;
-  request: (destination: string) => Promise<{ ok: true } | { ok: false; problem: SendProblem }>;
-  setProblem: (problem: SendProblem | null) => void;
+  request: (destination: string) => Promise<{ ok: true } | { ok: false; problem: Problem }>;
+  setProblem: (problem: Problem | SendProblem | null) => void;
   onSent?: () => void;
 }) {
   const [sending, guard] = useSubmitGuard();
