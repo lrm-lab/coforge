@@ -5,11 +5,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 
-/**
- * A confirmation sits mid-screen on a phone, where other dialogs rise from the bottom edge
- * (Frank, 11-08, task #21). Opt-in like the other browser E2Es; the channel is seeded per run.
- * Screenshots go under `.amp/e2e/confirm-centered/`.
- */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
   throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
@@ -18,13 +13,13 @@ if (!browserPath) throw new Error("agent-browser is required");
 const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/confirm-centered");
+const artifacts = join(import.meta.dir, "../../../.amp/e2e/confirm-sheet");
 
-test("a confirmation is centered on a phone", async () => {
+test("a confirmation is a bottom sheet on a phone", async () => {
   const db = new PrismaClient({
     adapter: new PrismaPg({ connectionString: databaseUrl }),
   });
-  const session = `confirm-centered-${process.pid}`;
+  const session = `confirm-sheet-${process.pid}`;
   async function browser(...args: string[]) {
     const child = Bun.spawn([browserPath!, "--session", session, ...args], {
       stdout: "pipe",
@@ -38,8 +33,6 @@ test("a confirmation is centered on a phone", async () => {
     if (code !== 0) throw new Error(`Browser ${args[0]} failed: ${stderr}`);
     return stdout;
   }
-  /** Waits for `condition`, failing with its text rather than at the test timeout; a first page
-   * load compiles on the dev server, so it gets longer. */
   const waitFor = (condition: string, ms = 20_000) =>
     Promise.race([
       browser("wait", "--fn", condition),
@@ -115,12 +108,14 @@ test("a confirmation is centered on a phone", async () => {
     const raw = JSON.parse(
       await browser(
         "eval",
-        `JSON.stringify((() => { const r = [...document.querySelectorAll('[role="dialog"]')].at(-1).getBoundingClientRect(); return { top: r.top, bottom: r.bottom, height: innerHeight }; })())`,
+        `JSON.stringify((() => { const r = [...document.querySelectorAll('[role="dialog"]')].at(-1).getBoundingClientRect(); return { left: r.left, right: r.right, bottom: r.bottom, width: innerWidth, height: innerHeight }; })())`,
       ),
     );
     const box = (typeof raw === "string" ? JSON.parse(raw) : raw) as {
-      top: number;
+      left: number;
+      right: number;
       bottom: number;
+      width: number;
       height: number;
     };
     await browser("screenshot", join(artifacts, "phone.png"));
@@ -129,9 +124,9 @@ test("a confirmation is centered on a phone", async () => {
     await browser("wait", "300");
     await browser("screenshot", join(artifacts, "phone-dark.png"));
     await browser("eval", `document.documentElement.classList.remove("dark-mode")`);
-    // Mid-screen, a little above the true middle as the overlay leaves room for the home
-    // indicator; a bottom sheet would have its lower edge at the screen's.
-    expect(Math.abs((box.top + box.bottom) / 2 - box.height / 2)).toBeLessThan(40);
+    expect(Math.abs(box.bottom - box.height)).toBeLessThan(2);
+    expect(box.left).toBeLessThan(1);
+    expect(Math.abs(box.right - box.width)).toBeLessThan(1);
   } finally {
     await db.workspaceMembership
       .update({ where: ownMembership, data: { role: "owner" } })

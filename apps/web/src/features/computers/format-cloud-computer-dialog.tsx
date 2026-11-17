@@ -13,7 +13,6 @@ import {
   useDialogControlSize,
 } from "#src/components/ui/dialog-actions";
 
-/** Formats a cloud computer's disk only after the owner types its name. The server checks it again. */
 export function FormatCloudComputerDialog({
   open,
   onOpenChange,
@@ -65,7 +64,6 @@ export function FormatCloudComputerDialog({
         <Dialog className="text-left">
           {({ close }) => (
             <>
-              {/* A form, so Enter in the name field confirms once the name matches (task #101). */}
               <form
                 className="contents"
                 onSubmit={(event) => {
@@ -81,6 +79,7 @@ export function FormatCloudComputerDialog({
                     {m.computer_format_dialog_title({ name })}
                   </Heading>
                   <ButtonUtility
+                    data-dialog-close
                     aria-label={m.controls_close()}
                     icon={X}
                     size="sm"

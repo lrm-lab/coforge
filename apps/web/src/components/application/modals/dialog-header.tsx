@@ -6,7 +6,6 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
-/** Title row of a form dialog: heading, optional description, optional close control. */
 export function DialogHeader({
   title,
   description,
@@ -33,6 +32,7 @@ export function DialogHeader({
       {onClose && (
         <ButtonUtility
           type="button"
+          data-dialog-close
           aria-label={m.controls_close()}
           icon={X}
           size="sm"

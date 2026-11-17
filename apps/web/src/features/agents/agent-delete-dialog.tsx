@@ -15,23 +15,15 @@ import { m } from "#src/paraglide/messages";
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 
-/**
- * The Agent deletion confirmation. Deleting an Agent is destructive and irreversible
- * from the UI, so it is confirmed by typing the Agent's username — the same name-confirmed shape
- * `ProjectSettings` uses for a project — rather than a bare confirm dialog. The server re-checks
- * the typed name against the Agent's current row, so this is a real guard, not only UI gating.
- */
 export function AgentDeleteDialog({
   agentName,
   open,
   onOpenChange,
   onDelete,
 }: {
-  /** The Agent's `name` (its `@handle`), which is what the user must type to confirm. */
   agentName: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Performs the delete; throws when the server refuses it. */
   onDelete: (confirmation: string) => Promise<void>;
 }) {
   const controlSize = useDialogControlSize();
@@ -74,7 +66,6 @@ export function AgentDeleteDialog({
         <Dialog className="flex flex-col text-left" data-agent-delete-dialog>
           {({ close }) => (
             <>
-              {/* A form, so Enter in the name field confirms once the name matches (task #101). */}
               <form
                 className="contents"
                 onSubmit={(event) => {
@@ -90,6 +81,7 @@ export function AgentDeleteDialog({
                     {m.agent_delete_dialog_title()}
                   </Heading>
                   <ButtonUtility
+                    data-dialog-close
                     aria-label={m.controls_close()}
                     icon={X}
                     size="sm"
@@ -98,9 +90,6 @@ export function AgentDeleteDialog({
                     onClick={close}
                   />
                 </div>
-                {/* Only the middle scrolls: with the keyboard up the title and the buttons stay in
-                  view, so the confirmation can be typed and confirmed. Once it has scrolled, a rule
-                  under the title shows the text above continues rather than starting mid-sentence. */}
                 <div
                   className={`mt-4 min-h-0 flex-1 overflow-y-auto border-t pb-2 ${bodyScrolled ? "border-secondary" : "border-transparent"}`}
                   onScroll={(event) => setBodyScrolled(event.currentTarget.scrollTop > 0)}
@@ -154,7 +143,6 @@ export function AgentDeleteDialog({
   );
 }
 
-/** The confirmation line with the name to type in bold, so it reads at a glance as the string to copy. */
 function EmphasizedName({ text, name }: { text: string; name: string }) {
   const at = text.indexOf(name);
   if (at < 0) return text;

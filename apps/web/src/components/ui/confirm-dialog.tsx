@@ -68,6 +68,7 @@ export function ConfirmDialog({
                   {title}
                 </Heading>
                 <ButtonUtility
+                  data-dialog-close
                   aria-label={m.controls_close()}
                   icon={X}
                   size="sm"

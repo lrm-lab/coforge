@@ -5,17 +5,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 
-/**
- * Task #241: on a phone the on-screen keyboard shrinks only the visual viewport, so a dialog's
- * overlay follows the visual viewport (`components/ui/modal.tsx`) and the dialog with its
- * field stays above the keyboard. A browser here has no on-screen keyboard, so the test shrinks
- * `window.visualViewport` the way iOS Safari does (shorter, scrolled down by its offset) and checks
- * that the Agent archive dialog's overlay and its username field sit inside what is left.
- *
- * Opt-in like the other browser E2Es: real local Web (`COFORGE_DEV_SKIP_AUTH=1`) + `agent-browser`
- * against the dev database. It opens the dialog without confirming, so it changes nothing.
- * Screenshots are written under `.amp/e2e/modal-keyboard-viewport/`.
- */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
   throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
@@ -26,7 +15,6 @@ if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/modal-keyboard-viewport");
 
-/** The visual viewport with the keyboard up on a 390×844 phone: 400px tall, scrolled 100px down. */
 const KEYBOARD_VIEWPORT = { height: 400, offsetTop: 100 };
 
 test("a dialog's field stays inside the visual viewport the keyboard leaves", async () => {
@@ -48,7 +36,6 @@ test("a dialog's field stays inside the visual viewport the keyboard leaves", as
   async function evaluate<T>(expression: string): Promise<T> {
     return JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${expression})`))) as T;
   }
-  /** The dialog's overlay (its fixed ancestor), the dialog and its field, as top/bottom in px. */
   const boxes = () =>
     evaluate<{
       overlay: number[];
@@ -65,7 +52,6 @@ test("a dialog's field stays inside the visual viewport the keyboard leaves", as
         const { top, bottom } = element.getBoundingClientRect();
         return [Math.round(top), Math.round(bottom)];
       };
-      // The part of the field not clipped by the dialog's scrolling middle.
       const middle = field.closest("[data-dialog-body]").getBoundingClientRect();
       const fieldBox = field.getBoundingClientRect();
       const shown = [Math.round(Math.max(fieldBox.top, middle.top)), Math.round(Math.min(fieldBox.bottom, middle.bottom))];
@@ -80,7 +66,6 @@ test("a dialog's field stays inside the visual viewport the keyboard leaves", as
       orderBy: { createdAt: "asc" },
       include: { workspace: { select: { slug: true, id: true } } },
     });
-    // An Agent of this run's own, so the test needs nothing seeded: the viewer may archive it.
     const agent = await db.agent.create({
       data: {
         workspaceId: membership.workspace.id,
@@ -116,17 +101,13 @@ test("a dialog's field stays inside the visual viewport the keyboard leaves", as
       `document.activeElement === document.querySelector("[data-agent-delete-dialog] input")`,
     );
 
-    // Keyboard down: the overlay covers the screen, as before.
     const before = await boxes();
     expect(before.focused).toBe(true);
     expect(before.overlay).toEqual([0, 844]);
-    // A confirmation sits mid-screen, not on the bottom edge (task #21).
-    expect(Math.abs((before.dialog[0] + before.dialog[1]) / 2 - 422)).toBeLessThan(40);
 
-    // The dialog has finished its entrance before it is photographed.
     await browser("wait", "--fn", `document.getAnimations().length === 0`);
+    expect(Math.abs((await boxes()).dialog[1] - 844)).toBeLessThan(2);
     await browser("screenshot", join(artifacts, "keyboard-down.png"));
-    // Keyboard up: React Aria and the overlay both follow `visualViewport`'s resize and scroll.
     await browser(
       "eval",
       `(() => {
@@ -144,8 +125,6 @@ test("a dialog's field stays inside the visual viewport the keyboard leaves", as
       "--fn",
       `(() => { let o = document.querySelector("[data-agent-delete-dialog]"); while (getComputedStyle(o).position !== "fixed") o = o.parentElement; const box = o.getBoundingClientRect(); return Math.round(box.top) === ${top} && Math.round(box.bottom) === ${bottom}; })()`,
     );
-    // The dialog and the field it scrolls into view settle after the viewport moves: wait until
-    // both lie inside what the keyboard leaves and two reads in a row agree.
     await browser(
       "wait",
       "--fn",
@@ -169,12 +148,10 @@ test("a dialog's field stays inside the visual viewport the keyboard leaves", as
     expect(after.dialog[1]).toBeLessThanOrEqual(bottom);
     expect(after.field[0]).toBeGreaterThanOrEqual(top);
     expect(after.field[1]).toBeLessThanOrEqual(bottom);
-    // The whole field shows, and the button that confirms it stays in view below it.
     expect(after.field[1] - after.field[0]).toBeGreaterThanOrEqual(36);
     expect(after.confirm[0]).toBeGreaterThanOrEqual(after.field[1]);
     expect(after.confirm[1]).toBeLessThanOrEqual(bottom);
     expect(after.focused).toBe(true);
-    // The whole text fits above the keyboard: nothing scrolls under the title.
     const body = await evaluate<{ scrollTop: number; overflow: number }>(
       `(() => { const body = document.querySelector("[data-agent-delete-dialog] [data-dialog-body]"); return { scrollTop: body.scrollTop, overflow: body.scrollHeight - body.clientHeight }; })()`,
     );
