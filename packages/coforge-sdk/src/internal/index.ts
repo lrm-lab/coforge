@@ -331,6 +331,7 @@ export interface WorkspaceQueryTransport {
   getBySlug(request: WorkspaceQueryRequest): Promise<Workspace>;
 }
 
+export * from "./local-rpc-frame";
 export {
   DAEMON_HANDSHAKE_METHOD,
   WORKSPACE_CLOUD_CONNECTION_STATES,
@@ -338,9 +339,6 @@ export {
   decodeDaemonHandshakeResponse,
   encodeDaemonHandshakeRequest,
   encodeDaemonHandshakeResponse,
-  frameLocalRpc,
-  readLocalRpcFrame,
-  readLocalRpcFrames,
   DAEMON_RUNTIME_CONFIGURE_METHOD,
   LOCAL_RPC_PROTOCOL_MAJOR,
   LOCAL_RPC_METHODS,
