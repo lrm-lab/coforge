@@ -80,7 +80,13 @@ export function MembersStrip({
         {more > 0 && (
           <Tooltip title={m.channel_settings_members_more({ count: more })}>
             <TooltipTrigger className="shrink-0 rounded-full" onPress={onOpenMembers}>
-              <ActorAvatar presence={false} size="sm" alt="" initials={`+${more}`} />
+              <ActorAvatar
+                presence={false}
+                size="sm"
+                alt=""
+                initials={`+${more}`}
+                contentClassName="bg-avatar-more text-avatar-more-fg outline-none [&>span]:text-avatar-more-fg [&>span]:tabular-nums"
+              />
               <span className="sr-only">{m.channel_settings_members_more({ count: more })}</span>
             </TooltipTrigger>
           </Tooltip>
@@ -89,7 +95,7 @@ export function MembersStrip({
           <AvatarAddButton
             size="sm"
             // The member avatars' 38 × 38 circle (styles.css).
-            className="size-[2.375rem] rounded-full"
+            className="size-[2.375rem] rounded-full border-secondary text-avatar-add-fg"
             title={m.channel_settings_add_members()}
             onPress={onAddMembers}
           />
