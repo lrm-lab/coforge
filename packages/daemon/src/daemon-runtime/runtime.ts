@@ -172,6 +172,12 @@ import {
 } from "./runtime-services-composition";
 import { AgentOperations } from "./agent-operations";
 import { composeAgentControl } from "./agent-control-composition";
+import {
+  liveHoldCell,
+  withIdleNudge,
+  withLiveTransport,
+  withMutableTransport,
+} from "./runtime-accessors";
 import type { DaemonRuntimeLifecycle } from "./runtime-lifecycle";
 import { logComputerUpdateNoticeFailure } from "./agent-failure-logs";
 import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registration-notice";
@@ -448,21 +454,19 @@ export class DaemonRuntime {
     ) => RuntimeAuthAdapter = createRuntimeAuthAdapter,
     private readonly releaseChannel?: string,
   ) {
-    const runtime = this;
     this.#consumedSeqs = new AgentConsumedSeqStore(this.stateDirectory);
     this.#computerUpdateNotice = new ComputerUpdateNotice(
       this.stateDirectory,
       this.computerVersion,
     );
-    this.#activityPublisher = new AgentActivityPublisher<ActivityLaunch>({
-      currentLaunch: (agentId) => this.#currentActivityLaunches.get(agentId),
-      get transport() {
-        return runtime.#transport;
-      },
-      recordClientSeq: (agentId, clientSeq) =>
-        this.#agentProcessManager.recordClientSeq(agentId, clientSeq),
-      reconcileIdleTurn: this.#turn.reconcileIdleTurn,
-    });
+    this.#activityPublisher = new AgentActivityPublisher<ActivityLaunch>(
+      withLiveTransport(() => this.#transport, {
+        currentLaunch: (agentId) => this.#currentActivityLaunches.get(agentId),
+        recordClientSeq: (agentId, clientSeq) =>
+          this.#agentProcessManager.recordClientSeq(agentId, clientSeq),
+        reconcileIdleTurn: this.#turn.reconcileIdleTurn,
+      }),
+    );
     this.#connection = connection;
     this.#contextViewService = new AgentContextViewService({
       stateDirectory,
@@ -527,7 +531,7 @@ export class DaemonRuntime {
       runningMentionIdentity: (agentId, reported) => this.#reported.identity(agentId, reported),
     });
     this.agentRequests = assembleAgentRequests({
-      transport: () => runtime.#transport,
+      transport: () => this.#transport,
       connection,
       contexts: this.#contexts,
       authorizedAgent: (context, agentApiKey) => this.#authorizedAgent(context, agentApiKey),
@@ -602,8 +606,7 @@ export class DaemonRuntime {
   }
 
   #createObservationPorts(): RuntimeEventObservationPorts {
-    const runtime = this;
-    return {
+    return withIdleNudge(() => this.#launchCoordinator.idleNudge, {
       activityPublisher: this.#activityPublisher,
       deliveryGate: this.#deliveryGate,
       offlineResidency: this.#offlineResidency,
@@ -614,9 +617,6 @@ export class DaemonRuntime {
       mentionDeliveries: this.#mentionDeliveries,
       agentSessions: this.#agentSessions,
       systemCleaner: this.systemCleaner,
-      get idleNudge() {
-        return runtime.#launchCoordinator.idleNudge;
-      },
       configApply: this.#configApply,
       collectSkillAgents: this.#collectSkillAgents,
       fastModeWarned: this.#fastModeWarned,
@@ -625,14 +625,14 @@ export class DaemonRuntime {
       interruptedActivity: this.#drafts.interrupted,
       showQuietTurn: this.#turn.showQuietTurn,
       reconcileIdleTurn: this.#turn.reconcileIdleTurn,
-      wakeFinishedSubagents: (agentId) => runtime.#launchCoordinator.wakeFinishedSubagents(agentId),
+      wakeFinishedSubagents: (agentId) => this.#launchCoordinator.wakeFinishedSubagents(agentId),
       rememberUsage: (snapshot) => rememberUsage(this.#observedUsage, snapshot),
       releaseTurnEndHolds: this.#turn.releaseTurnEndHolds,
       isWorking: this.#turn.isWorking,
       drainAppInboxNotices: (agentId) => this.#inboxCoordinator.drainAppInboxNotices(agentId),
       failCollectorRunningSlots: (agentId, reason) =>
         this.#failCollectorRunningSlots(agentId, reason),
-    };
+    });
   }
 
   #createLaunchCustody(): AgentLaunchCustody {
@@ -948,19 +948,19 @@ export class DaemonRuntime {
     if (this.#stopping) return Promise.reject(new DaemonConnectionStoppedError());
     return this.#startup.start(connection);
   }
-  #replaceTransport = async (): Promise<unknown> => {
-    const runtime = this;
-    return replaceTransport({
-      get transport() {
-        return runtime.#transport;
-      },
-      set transport(value) {
-        runtime.#transport = value;
-      },
-      transportFactory: this.#transportFactory,
-      connection: this.#connection,
-    });
-  };
+  #replaceTransport = async (): Promise<unknown> =>
+    replaceTransport(
+      withMutableTransport(
+        () => this.#transport,
+        (value) => {
+          this.#transport = value;
+        },
+        {
+          transportFactory: this.#transportFactory,
+          connection: this.#connection,
+        },
+      ),
+    );
   #deleteWorkspace = (
     connection: DaemonConfig,
     request: Pick<AgentWorkspaceDeleteRequest, "agentId">,
@@ -1337,15 +1337,12 @@ export class DaemonRuntime {
     return context;
   }
   #runnerHoldCell() {
-    const runtime = this;
-    return {
-      get hold() {
-        return runtime.#runnerHold;
+    return liveHoldCell(
+      () => this.#runnerHold,
+      (value) => {
+        this.#runnerHold = value;
       },
-      set hold(value) {
-        runtime.#runnerHold = value;
-      },
-    };
+    );
   }
 
   holdRunners(reason: RunnerHoldReason): BusyAgentReport[] {
