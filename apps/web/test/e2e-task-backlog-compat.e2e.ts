@@ -48,6 +48,63 @@ test("Backlog read compatibility stays invisible until data exists and never off
     await browser("screenshot", join(artifacts, `${name}-dark.png`));
     await evaluate('document.documentElement.classList.remove("dark-mode") ?? true');
   };
+  /** Clicks a dialog's menu trigger and waits for its menu. A CI run once clicked and never saw
+   * the menu (44010304748); until that is explained, a timeout keeps what the page did around
+   * the click: which elements took the press and focus, every menu added or removed, the
+   * trigger's state, and a screenshot. */
+  const openMenu = async (trigger: string, name: string) => {
+    await evaluate(`(() => {
+      const log = [];
+      const t0 = performance.now();
+      const at = () => Math.round(performance.now() - t0);
+      const describe = (node) => node instanceof Element
+        ? node.tagName.toLowerCase() + (node.getAttribute("role") ? "[role=" + node.getAttribute("role") + "]" : "") + (node.getAttribute("aria-label") ? "[" + node.getAttribute("aria-label") + "]" : "")
+        : String(node);
+      for (const type of ["pointerdown", "pointerup", "click"])
+        document.addEventListener(type, (event) => log.push({ at: at(), type, target: describe(event.target), x: event.clientX, y: event.clientY }), true);
+      document.addEventListener("focusin", (event) => log.push({ at: at(), type: "focusin", target: describe(event.target) }), true);
+      new MutationObserver((records) => {
+        for (const record of records) {
+          for (const node of record.addedNodes) if (node instanceof Element && (node.matches('[role="menu"]') || node.querySelector('[role="menu"]'))) log.push({ at: at(), type: "menu-added" });
+          for (const node of record.removedNodes) if (node instanceof Element && (node.matches('[role="menu"]') || node.querySelector('[role="menu"]'))) log.push({ at: at(), type: "menu-removed" });
+        }
+      }).observe(document.body, { childList: true, subtree: true });
+      window.__menuProbe = log;
+      return true;
+    })()`);
+    await browser("click", trigger);
+    try {
+      await waitFor("document.querySelector('[role=\"menu\"]') !== null");
+    } catch (error) {
+      await browser("screenshot", join(artifacts, `${name}-timeout.png`)).catch(() => undefined);
+      const state = await evaluate(`(() => {
+        const button = document.querySelector(${JSON.stringify(trigger)});
+        const box = button?.getBoundingClientRect();
+        const hit = box && document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+        return JSON.stringify({
+          url: location.href,
+          events: window.__menuProbe,
+          trigger: button && {
+            connected: button.isConnected,
+            expanded: button.getAttribute("aria-expanded"),
+            disabled: button.disabled,
+            hydrated: Object.keys(button).some((key) => key.startsWith("__reactProps")),
+            box: box.toJSON(),
+            hitIsTrigger: hit === button || button.contains(hit),
+            hit: hit && hit.outerHTML.slice(0, 200),
+          },
+          active: document.activeElement && document.activeElement.outerHTML.slice(0, 200),
+          running: document.getAnimations().filter((a) => a.playState === "running").length,
+        });
+      })()`).catch((failure: unknown) => String(failure));
+      await Bun.write(join(artifacts, `${name}-timeout.json`), String(state)).catch(
+        () => undefined,
+      );
+      console.error(await browser("errors").catch((failure: unknown) => String(failure)));
+      console.error(`${name}: ${String(state)}`);
+      throw error;
+    }
+  };
   try {
     const create = (title: string) =>
       board.execute(
@@ -123,8 +180,10 @@ test("Backlog read compatibility stays invisible until data exists and never off
     await waitFor(
       `${pageHydrated} && document.querySelector('[role="dialog"] button[aria-label="Change status: Backlog"]') !== null`,
     );
-    await browser("click", '[role="dialog"] button[aria-label="Change status: Backlog"]');
-    await waitFor("document.querySelector('[role=\"menu\"]') !== null");
+    await openMenu(
+      '[role="dialog"] button[aria-label="Change status: Backlog"]',
+      "backlog-status-menu",
+    );
     expect(
       await evaluate(
         'Array.from(document.querySelectorAll(\'[role="menuitem"]\')).filter((row) => row.textContent.trim() === "Backlog").length <= 1',
@@ -138,8 +197,7 @@ test("Backlog read compatibility stays invisible until data exists and never off
     await waitFor(
       `${pageHydrated} && document.querySelector('[role="dialog"] button[aria-label="Change status: To do"]') !== null`,
     );
-    await browser("click", '[role="dialog"] button[aria-label="Change status: To do"]');
-    await waitFor("document.querySelector('[role=\"menu\"]') !== null");
+    await openMenu('[role="dialog"] button[aria-label="Change status: To do"]', "todo-status-menu");
     expect(
       await evaluate(
         'Array.from(document.querySelectorAll(\'[role="menuitem"]\')).some((row) => row.textContent.trim() === "Backlog")',
