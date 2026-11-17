@@ -49,7 +49,7 @@ export async function handleTeamMemory(
         { errorCode: error.message, error: error.message },
         {
           status:
-            error.code === "forbidden"
+            error.code === "forbidden" || error.code === "disabled"
               ? 403
               : error.code === "not_found"
                 ? 404

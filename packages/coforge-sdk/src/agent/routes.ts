@@ -1,4 +1,5 @@
 import { APP_REGISTRATION_REQUEST_MAX_BYTES } from "./app-management";
+import { TEAM_MEMORY_ROUTE } from "./team-memory";
 import { ARTIFACT_REQUEST_MAX_BYTES, ARTIFACT_UPLOAD_MAX_BYTES } from "./artifacts";
 const MENTION_DELIVERIES_ROUTE = {
   method: "GET",
@@ -223,6 +224,7 @@ export const agentApiRoutes = {
     appRegistrations: APP_REGISTRATION_LOCAL_ROUTE,
   },
   cloud: {
+    teamMemory: TEAM_MEMORY_ROUTE,
     workspace: { info: { method: "GET", path: "/api/agent/v1/workspace" } },
     manual: {
       get: { method: "GET", path: "/api/agent/v1/manual" },

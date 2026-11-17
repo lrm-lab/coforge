@@ -17,7 +17,7 @@ export interface TeamMemoryStore {
   write(actor: TeamMemoryActor, command: TeamMemoryWrite): Promise<TeamMemoryResult>;
 }
 export class TeamMemoryError extends Error {
-  constructor(readonly code: "forbidden" | "not_found" | "conflict" | "invalid") {
+  constructor(readonly code: "forbidden" | "not_found" | "conflict" | "invalid" | "disabled") {
     super(`memory_${code}`);
   }
 }

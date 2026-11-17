@@ -51,6 +51,12 @@ export async function runTeamMemoryCommand(
       (entry) =>
         `${entry.title} [${entry.id}]\n${entry.content}\nSource: ${entry.source}\nApplies to: ${entry.applicability || "unspecified"}\nRevision: ${entry.revision}\nState: ${entry.status}\nAuthor: ${entry.authorAgentId}${entry.change ? `\nChanged by: ${entry.change.actorAgentId} (${entry.change.operation})\nReason: ${entry.change.reason}\nMerged from: ${JSON.stringify(entry.change.mergedFrom)}` : ""}`,
     ),
+    ...(invocation.request.operation === "history"
+      ? result.entries.map(
+          (entry) =>
+            `Full version: coforge memory get --scope team --id ${entry.id} --revision ${entry.revision}`,
+        )
+      : []),
     ...(result.status === "review_required"
       ? [
           `Inspect related entries and get their full evidence. If this operation is appropriate, resubmit unchanged with --reviewToken ${result.reviewToken}. Otherwise choose another operation and review again.`,
