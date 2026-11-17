@@ -117,9 +117,10 @@ order helpers live beside it in `task-order.ts`.
   `ownTaskScope` beside it; change the two together.
 - The idle task reminder (`POST /api/agent/v1/tasks/idle-nudge`) lives in
   `task-idle-reminder.server.ts` (rules, text, recording) and `task-idle-reminder-facts.server.ts`
-  (what it reads, over `ownTaskScope`). Its memory is `task_idle_reminders`, written when it
-  answers `send: true`, for the listed Tasks only. In review counts as open unless the Agent put
-  it there itself; a Task with an open blocker or subtask is never stale. `why` is English.
+  (what it reads, over `ownTaskScope`: the Agent's assigned Tasks plus unassigned Todo/In Progress
+  Tasks it created). Its memory is `task_idle_reminders`, written when it answers `send: true`, for
+  the listed Tasks only. In review counts as open unless the Agent put it there itself; a Task with
+  an open blocker or subtask is never stale. `why` is English.
 - An assignee is bound by id wherever it was picked (the browser sends
   `user:<id>` or `agent:<id>`); a bare `@handle` (the Agent CLI) resolves
   within the conversation, and when a person and an Agent share the name the

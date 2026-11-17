@@ -37,6 +37,10 @@ export type IdleTaskFacts = {
   /** The newest assignment to this Agent, and whether it claimed the Task itself. */
   givenAt: Date | null;
   givenBySelf: boolean;
+  /** Created by this Agent with no current assignee (`ownerMemberId === null`). */
+  unassigned: boolean;
+  /** Unassigned and never assigned/claimed in history (split out via `task create` and left open). */
+  neverAssigned: boolean;
   /** The newest history event, conversation message or finished blocker; else the Task's creation. */
   lastActivityAt: Date;
   /** The newest history event, and the newest conversation message, by someone else. */
@@ -55,6 +59,7 @@ export type IdleTaskFacts = {
 };
 
 const OPEN_STATUSES = ["todo", "in_progress", "in_review"];
+const UNASSIGNED_CREATOR_STATUSES = ["todo", "in_progress"];
 
 const BOARD_SELECT = {
   ...NAMED_CONVERSATION_SELECT,
@@ -76,7 +81,8 @@ const latest = (dates: (Date | null | undefined)[]) =>
     null,
   );
 
-/** The open Tasks assigned to `agent`, in the conversations `task list --mine` reads. */
+/** The open Tasks assigned to `agent` (plus unassigned Todo/In Progress Tasks `agent` created),
+ * in the conversations `task list --mine` reads. */
 export async function readIdleTaskFacts(
   db: PrismaClient,
   agent: { workspaceId: string; agentId: string; name: string },
@@ -85,8 +91,14 @@ export async function readIdleTaskFacts(
     where: {
       workspaceId: agent.workspaceId,
       deletedAt: null,
-      owner: { agentId: agent.agentId },
-      status: { in: OPEN_STATUSES },
+      OR: [
+        { owner: { agentId: agent.agentId }, status: { in: OPEN_STATUSES } },
+        {
+          ownerMemberId: null,
+          creator: { agentId: agent.agentId },
+          status: { in: UNASSIGNED_CREATOR_STATUSES },
+        },
+      ],
       conversation: ownTaskScope({ agentId: agent.agentId }).conversations,
     },
     select: {
@@ -97,6 +109,7 @@ export async function readIdleTaskFacts(
       priority: true,
       dueAt: true,
       createdAt: true,
+      ownerMemberId: true,
       messageId: true,
       conversationId: true,
       discussionConversationId: true,
@@ -180,11 +193,16 @@ export async function readIdleTaskFacts(
 
   return tasks.map((task) => {
     const own = moves.filter((event) => event.taskId === task.id);
-    const given = own.find(
-      (event) =>
-        event.eventType === "assignee_changed" &&
-        field(event.payload, "assigneeId") === agent.agentId,
-    );
+    const unassigned = task.ownerMemberId === null;
+    const neverAssigned =
+      unassigned && !own.some((event) => event.eventType === "assignee_changed");
+    const given = unassigned
+      ? undefined
+      : own.find(
+          (event) =>
+            event.eventType === "assignee_changed" &&
+            field(event.payload, "assigneeId") === agent.agentId,
+        );
     const review = own.find(
       (event) => event.eventType === "status_changed" && field(event.payload, "to") === "in_review",
     );
@@ -217,6 +235,8 @@ export async function readIdleTaskFacts(
       createdAt: task.createdAt,
       givenAt: given?.createdAt ?? null,
       givenBySelf: given ? isSelf(given) : false,
+      unassigned,
+      neverAssigned,
       lastActivityAt:
         latest([task.createdAt, maxOf(lastEvents, task.id), replies.get(task.id), done?.at]) ??
         task.createdAt,

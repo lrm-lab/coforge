@@ -51,21 +51,30 @@ function reasonFor(
   // Others acted after the last reminder, or else after it was given (within the last day).
   const since = reminder?.remindedAt ?? later(task.givenAt ?? task.createdAt, dayAgo);
   const after = (date: Date | null) => date !== null && date > since;
+  const withUnassignedNote = (why: string) =>
+    task.unassigned ? `${why} (created by you with no assignee)` : why;
   if (task.givenAt && !task.givenBySelf && task.givenAt > newSince)
     return { reason: "newly_assigned", why: "newly assigned to you" };
+  if (task.unassigned && task.neverAssigned && task.createdAt > newSince)
+    return { reason: "newly_assigned", why: "created by you with no assignee" };
   if (input.freshSession && !task.ownReview)
-    return { reason: "new_session", why: "you started a new session" };
+    return { reason: "new_session", why: withUnassignedNote("you started a new session") };
   if (task.blockerDone && after(task.blockerDone.at))
     return {
       reason: "others_acted",
-      why: task.blockerDone.ref
-        ? `the task it waits for, ${task.blockerDone.ref}, is done`
-        : "the task it waits for is done",
+      why: withUnassignedNote(
+        task.blockerDone.ref
+          ? `the task it waits for, ${task.blockerDone.ref}, is done`
+          : "the task it waits for is done",
+      ),
     };
   if (after(task.othersRepliedAt))
-    return { reason: "others_acted", why: "someone else replied in its conversation" };
+    return {
+      reason: "others_acted",
+      why: withUnassignedNote("someone else replied in its conversation"),
+    };
   if (after(task.othersChangedAt))
-    return { reason: "others_acted", why: "someone else changed it" };
+    return { reason: "others_acted", why: withUnassignedNote("someone else changed it") };
   const quiet = now.getTime() - task.lastActivityAt.getTime() >= STALE_AFTER_MS;
   const staleAgain =
     !reminder?.staleRemindedAt ||
@@ -73,24 +82,43 @@ function reasonFor(
   // Never stale: work waiting on background tasks, its own review, a blocker or a subtask.
   const held =
     (input.backgroundTasks ?? 0) > 0 || task.ownReview || task.blocked || task.openSubtasks;
-  if (!held && quiet && staleAgain) return { reason: "stale", why: "no activity for 24 hours" };
+  if (!held && quiet && staleAgain)
+    return { reason: "stale", why: withUnassignedNote("no activity for 24 hours") };
   return null;
 }
 
 /** The reminder text an idle Agent is given, from the items and backlog it lists. A `#N`
  * prefix is the Task's place in the Agent's queue (task #716); an item without one waits
- * outside the queue — In Review or blocked — and is listed after it. */
-export function idleReminderText(items: AgentTaskIdleItem[], backlog: { ref: string }[]) {
+ * outside the queue — unassigned creator work, In Review or blocked — and is listed after it. */
+export function idleReminderText(
+  items: AgentTaskIdleItem[],
+  backlog: { ref: string }[],
+  unassignedSummary?: { hasUnassigned: boolean; hasActionableUnassigned: boolean },
+) {
   const queued = items.some((item) => item.queuePosition !== undefined);
+  const hasUnassigned =
+    unassignedSummary?.hasUnassigned ?? items.some((item) => item.why.includes("no assignee"));
+  const hasActionableUnassigned =
+    unassignedSummary?.hasActionableUnassigned ??
+    items.some(
+      (item) =>
+        item.why.includes("no assignee") &&
+        (item.status === "todo" || item.status === "in_progress"),
+    );
+  const guidance = queued
+    ? hasUnassigned
+      ? "Pick up the first queued task, claim or assign any unassigned task you created, or update a task's status if it is done or blocked. Read a task with `coforge task view '<ref>'`."
+      : "Pick up the first queued task, or update a task's status if it is done or blocked. Read a task with `coforge task view '<ref>'`."
+    : hasActionableUnassigned
+      ? "Claim or assign the unassigned tasks you created, or close them if no longer needed. Read a task with `coforge task view '<ref>'`."
+      : "None of these can start yet — each waits outside your queue. Read a task with `coforge task view '<ref>'`.";
   return [
     "[Idle task reminder] Your task queue first, then what waits on others:",
     ...items.map(
       (item) =>
         `- ${item.queuePosition === undefined ? "" : `#${item.queuePosition} `}${item.ref} [${item.status}] prio=${item.priority} "${item.title}" — ${item.why}`,
     ),
-    queued
-      ? "Pick up the first queued task, or update a task's status if it is done or blocked. Read a task with `coforge task view '<ref>'`."
-      : "None of these can start yet — each waits outside your queue. Read a task with `coforge task view '<ref>'`.",
+    guidance,
     ...(backlog.length > 0
       ? [`(${backlog.length} more: ${backlog.map((item) => item.ref).join(", ")})`]
       : []),
@@ -134,24 +162,24 @@ export async function idleNudge(
   });
   if (due.length === 0) return skip("no_change");
 
-  // The queue orders what can start now; what waits outside it (In Review, a blocker) is still
-  // due for a reminder and follows in the priority order it always had.
-  const { positions } = ownTaskQueue(tasks);
+  // The queue orders assigned work that can start now; actionable unassigned creator Tasks follow,
+  // then what waits on others (In Review, a blocker), each in shared priority-due-age order.
+  const { positions } = ownTaskQueue(tasks.filter((task) => !task.unassigned));
+  const toOrderable = <T extends { task: IdleTaskFacts }>(entry: T) => ({
+    ...entry,
+    id: entry.task.id,
+    priority: entry.task.priority,
+    dueAt: entry.task.dueAt,
+    createdAt: entry.task.createdAt,
+  });
   const ordered = [
     ...due
-      .filter((entry) => queueActionable(entry.task))
+      .filter((entry) => !entry.task.unassigned && queueActionable(entry.task))
       .sort((left, right) => positions.get(left.task.id)! - positions.get(right.task.id)!),
     ...byPriority(
-      due
-        .filter((entry) => !queueActionable(entry.task))
-        .map((entry) => ({
-          ...entry,
-          id: entry.task.id,
-          priority: entry.task.priority,
-          dueAt: entry.task.dueAt,
-          createdAt: entry.task.createdAt,
-        })),
+      due.filter((entry) => entry.task.unassigned && queueActionable(entry.task)).map(toOrderable),
     ),
+    ...byPriority(due.filter((entry) => !queueActionable(entry.task)).map(toOrderable)),
   ];
   const listed = ordered.slice(0, LISTED_ITEMS);
   const items = listed.map(({ task, reason, why }) => {
@@ -188,5 +216,13 @@ export async function idleNudge(
       }),
     ),
   );
-  return { send: true, items, backlog, text: idleReminderText(items, backlog) };
+  return {
+    send: true,
+    items,
+    backlog,
+    text: idleReminderText(items, backlog, {
+      hasUnassigned: listed.some(({ task }) => task.unassigned),
+      hasActionableUnassigned: listed.some(({ task }) => task.unassigned && queueActionable(task)),
+    }),
+  };
 }

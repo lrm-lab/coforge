@@ -362,3 +362,33 @@ test("a server-recorded change is nobody's, and a fresh session's send starts th
     await db.$disconnect();
   }
 });
+
+test("unassigned Todo Tasks created by the Agent surface once on idle and do not shift queued positions", async () => {
+  const { db, make, assign, nudge, ref } = await world();
+  try {
+    const [owned] = await make("alice", 1, { priority: "low" });
+    await assign(owned!);
+    const [unassigned] = await make("one", 1, { priority: "urgent" });
+    const sent = await nudge();
+    expect(sent.send).toBe(true);
+    expect(sent.items).toMatchObject([
+      {
+        ref: ref(owned!),
+        taskNumber: owned,
+        queuePosition: 1,
+        reason: "newly_assigned",
+      },
+      {
+        ref: ref(unassigned!),
+        taskNumber: unassigned,
+        reason: "newly_assigned",
+        why: "created by you with no assignee",
+      },
+    ]);
+    expect(sent.items[1]).not.toHaveProperty("queuePosition");
+    expect(sent.text).toContain("claim or assign");
+    expect(await nudge({}, 1.2)).toMatchObject({ send: false, reason: "no_change" });
+  } finally {
+    await db.$disconnect();
+  }
+});
