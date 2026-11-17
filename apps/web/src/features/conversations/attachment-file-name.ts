@@ -1,3 +1,5 @@
+import { isDisplayableImageAttachment } from "#src/lib/inline-image";
+
 /**
  * One derived filename for a message's attachments, as a lightweight list or jump index shows it:
  * the first (send order) plus a count of the rest, e.g. `photo.png (+2 more)`.
@@ -20,12 +22,19 @@ export function attachmentFileNameSummary(attachments: { fileName: string }[]): 
 export function attachmentMessageDisplayBody(message: {
   body: string;
   weeklyReportDisplayBody?: string;
-  attachments: { fileName: string; contentType: string }[];
+  attachments: {
+    fileName: string;
+    contentType: string;
+    previewUrl?: string;
+    thumbnailUrl?: string;
+    largeUrl?: string;
+    iconUrl?: string;
+  }[];
 }): string {
   if (
     !message.weeklyReportDisplayBody &&
     message.attachments.length > 0 &&
-    message.attachments.every((attachment) => attachment.contentType.startsWith("image/")) &&
+    message.attachments.every((attachment) => isDisplayableImageAttachment(attachment)) &&
     message.body === message.attachments[0]?.fileName
   )
     return "";

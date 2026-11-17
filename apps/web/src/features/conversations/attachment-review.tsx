@@ -5,6 +5,7 @@ import { Dialog, DialogTrigger, Modal, ModalOverlay } from "#src/components/ui/m
 import { Empty, EmptyTitle } from "#src/components/ui/empty";
 import { useAppToast } from "#src/components/ui/toast";
 import { copyText } from "#src/lib/clipboard";
+import { isDisplayableImageAttachment } from "#src/lib/inline-image";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { AnchorSurface, Anchoring } from "./attachment-anchoring";
@@ -170,7 +171,7 @@ export function AttachmentReviewDialog({
       : kind === "text"
         ? m.attachment_preview_copy()
         : null;
-  if (file.contentType.startsWith("image/"))
+  if (isDisplayableImageAttachment(file))
     return (
       <DialogTrigger isOpen={open} onOpenChange={(next) => onOpenChange(next)}>
         {children({ loading: false })}

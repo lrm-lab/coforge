@@ -12,6 +12,7 @@ import {
 } from "#src/components/base/progress-indicators/progress-indicators";
 import { FileTypeIcon } from "#src/features/files/file-type-icon";
 import { fileTypeLabel, formatFileSize } from "#src/features/files/file-meta";
+import { isImageType } from "#src/lib/inline-image";
 import { cx } from "#src/utils/cx";
 import { ATTACHMENT_MAX_BYTES } from "@lrm/coforge-sdk/internal";
 import {
@@ -144,8 +145,9 @@ export function AttachmentTile({
 }) {
   const { file, failure } = attachment;
   const uploading = stillUploading(attachment);
+  const isImage = isImageType(file.type);
   // A failed image is a card too: its thumbnail has no room to say why.
-  const thumbnail = file.type.startsWith("image/") && !failure;
+  const thumbnail = isImage && !failure;
   const retryable = failure !== undefined && retryableUploadFailure(failure);
   const [previewUrl, setPreviewUrl] = useState<string>();
   useEffect(() => {
@@ -231,7 +233,7 @@ export function AttachmentTile({
         <Dialog className="flex flex-col outline-none">
           {({ close }) => (
             <>
-              {file.type.startsWith("image/") && previewUrl && (
+              {isImage && previewUrl && (
                 <div className="flex justify-center rounded-t-xl bg-secondary p-3">
                   <LoadingImage
                     src={previewUrl}
@@ -242,7 +244,7 @@ export function AttachmentTile({
                 </div>
               )}
               <div className="flex items-center gap-3 p-3">
-                {!file.type.startsWith("image/") && (
+                {!isImage && (
                   <span className="flex size-10 shrink-0 items-center justify-center">
                     <FileTypeIcon
                       fileName={file.name}

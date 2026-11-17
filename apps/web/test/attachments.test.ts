@@ -415,8 +415,11 @@ test("only a video's name stored as a video or untyped bytes, or a PDF, previews
   expect(previews("CLIP.MP4", "application/octet-stream")).toBe(true);
   expect(previews("clip.webm", "video/webm")).toBe(true);
   expect(previews("doc.pdf", "application/pdf")).toBe(true);
+  expect(previews("icon.svg", "image/svg+xml")).toBe(true);
   expect(previews("clip.mp4", "text/html")).toBe(false);
-  expect(previews("clip.mp4", "image/svg+xml")).toBe(false);
+  // An SVG goes by its type, whatever its name: the CDN draws it in an <img> (task #131).
+  expect(previews("clip.mp4", "image/svg+xml")).toBe(true);
+  expect(previews("clip.mp4", "application/zip")).toBe(false);
   expect(previews("notes.txt", "video/mp4")).toBe(false);
   expect(previews("clip.mov", "video/quicktime")).toBe(false);
 });

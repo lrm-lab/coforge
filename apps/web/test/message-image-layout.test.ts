@@ -79,6 +79,23 @@ test("five with a wide one in the middle go two, the wide one alone, then two", 
   expect(rows.map((row) => row.map((cell) => cell.index))).toEqual([[0, 1], [2], [3, 4]]);
 });
 
+test("an SVG has no pixel size: a 24px icon grows to 176, a banner still fits 360 (task #131)", () => {
+  const svg = (width: number, height: number) => ({
+    ...size(width, height),
+    contentType: "image/svg+xml",
+  });
+  expect(singleImageBox(svg(24, 24)).width).toBe("min(176px, 100%)");
+  expect(singleImageBox(svg(800, 400)).width).toBe("min(360px, 100%)");
+  // A photo of the same size is never enlarged.
+  expect(singleImageBox(size(24, 24)).width).toBe("min(24px, 100%)");
+  // In a grid an SVG is shown whole, a photo of the same shape fills its cell.
+  expect(
+    galleryRows([svg(300, 300), size(300, 300)])
+      .flat()
+      .map((cell) => cell.fit),
+  ).toEqual(["contain", "cover"]);
+});
+
 test("the lightbox steps one image at a time and stops at the ends instead of wrapping", () => {
   expect(lightboxStepTarget(0, -1, 5)).toBeUndefined();
   expect(lightboxStepTarget(0, 1, 5)).toBe(1);

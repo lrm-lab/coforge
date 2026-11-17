@@ -1,4 +1,5 @@
 import { getFileExtension } from "#src/features/files/file-meta";
+import { isImageType } from "#src/lib/inline-image";
 
 /**
  * Which preview an attachment supports. Pure decision, kept out of the component so the rule that
@@ -232,7 +233,7 @@ export function takesComments(
   file: StoredFile,
   applicationOrigin: string | undefined = globalThis.location?.origin,
 ): boolean {
-  if (file.contentType.startsWith("image/")) return true;
+  if (isImageType(file.contentType)) return true;
   if (getFileExtension(file.fileName) === "pdf" || file.contentType === "application/pdf")
     return false;
   return previewKindFor(file, applicationOrigin) !== null;

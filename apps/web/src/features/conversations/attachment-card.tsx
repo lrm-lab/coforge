@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useState, type CSSProperties } from "react";
 import { Download01 } from "@untitledui/icons";
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
 import { Button } from "#src/components/base/buttons/button";
+import { isDisplayableImageAttachment } from "#src/lib/inline-image";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { attachmentPreviewKind, previewKindFor } from "./attachment-preview-kind";
@@ -29,7 +30,7 @@ export function attachmentUrl(attachment: { id: string }) {
 
 type Attachment = MessageView["attachments"][number];
 
-const isImage = (attachment: Attachment) => attachment.contentType.startsWith("image/");
+const isImage = (attachment: Attachment) => isDisplayableImageAttachment(attachment);
 /** A video or audio file plays in the message; without a delivery URL to stream from, only one
  * small enough to read whole (`MEDIA_PREVIEW_MAX_BYTES`), else it is a file card. */
 function playsInline(attachment: Attachment) {
