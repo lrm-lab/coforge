@@ -1,3 +1,4 @@
+import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
 import { isRecord } from "@lrm/coforge-sdk/internal";
 import type { FetchLike } from "./device-client";
 import { invalidCredentialError } from "./refusal";
@@ -8,7 +9,7 @@ export const ACTIVITY_INGEST_SCHEMA = "coforge-agent-activity-ingest.v1";
 export const DEFAULT_ACTIVITY_DRAIN_LIMIT = 50;
 export const ACTIVITY_DRAIN_INTERVAL_MS = 2_000;
 
-const INGEST_PATH = "/api/agent/v1/activity";
+const INGEST_PATH = agentApiRoutes.external.activity.path;
 const DRAIN_TIMEOUT_MS = 3_000;
 const FORWARD_TIMEOUT_MS = 10_000;
 const FORWARD_BATCH = 100;

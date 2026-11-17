@@ -1,4 +1,9 @@
-import { decodeWakeHint, decodeWakeHints, type WakeHint } from "@lrm/coforge-sdk/agent";
+import {
+  agentApiRoutes,
+  decodeWakeHint,
+  decodeWakeHints,
+  type WakeHint,
+} from "@lrm/coforge-sdk/agent";
 import { CliError } from "../cli-error";
 import {
   ACTIVITY_DRAIN_INTERVAL_MS,
@@ -43,8 +48,8 @@ const BACKOFF_BASE_MS = 1_000;
 const BACKOFF_CAP_MS = 30_000;
 const STREAM_SILENCE_MS = 75_000;
 const WAKE_POST_TIMEOUT_MS = 5_000;
-const STREAM_PATH = "/api/agent/v1/wake-hints/stream";
-const POLL_PATH = "/api/agent/v1/wake-hints";
+const STREAM_PATH = agentApiRoutes.external.wakeHintsStream.path;
+const POLL_PATH = agentApiRoutes.external.wakeHints.path;
 
 const invalidArg = (message: string) =>
   new CliError({ code: "INVALID_ARG", message, retryable: false });

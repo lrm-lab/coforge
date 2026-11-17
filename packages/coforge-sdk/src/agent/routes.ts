@@ -352,6 +352,16 @@ export const agentApiRoutes = {
       path: "/api/agent/v1/workspace",
     },
   },
+  external: {
+    wakeHints: { method: "GET", path: "/api/agent/v1/wake-hints" },
+    wakeHintsStream: { method: "GET", path: "/api/agent/v1/wake-hints/stream" },
+    pushWebhook: {
+      get: { method: "GET", path: "/api/agent/v1/push-webhook" },
+      put: { method: "PUT", path: "/api/agent/v1/push-webhook" },
+      remove: { method: "DELETE", path: "/api/agent/v1/push-webhook" },
+    },
+    activity: { method: "POST", path: "/api/agent/v1/activity" },
+  },
   manual: {
     get: {
       key: "manualGet",
