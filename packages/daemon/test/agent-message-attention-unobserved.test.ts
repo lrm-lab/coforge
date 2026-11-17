@@ -88,6 +88,6 @@ test("a batch whose retries ran out reports each delivery it was still holding, 
     agent_id: "agent-1",
     delivery_id: "delivery-spent",
     attempts: IMPORTANT_UNREAD_RETRY_DELAYS_MS.length + 1,
-    reason: "exhausted",
+    reason: "unread",
   });
 });

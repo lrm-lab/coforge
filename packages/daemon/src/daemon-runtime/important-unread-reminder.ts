@@ -3,6 +3,7 @@ import { getLogger } from "@logtape/logtape";
 import { inboxPreviewLimit } from "./inbox-preview";
 import type { ImportantUnreadNoticeStore } from "#src/persistence/important-unread-notice-store";
 import {
+  type ImportantUnreadAttemptOutcome,
   type ImportantUnreadDelivery,
   ImportantUnreadNotices,
   type ImportantUnreadNotice,
@@ -53,7 +54,7 @@ export type ImportantUnreadReminderPorts = Readonly<{
 }>;
 
 /** Why a delivery the loop took in will never be shown to the model. */
-export type UnobservedReason = "superseded" | "read_before_attempt" | "exhausted";
+export type UnobservedReason = "superseded" | "read_before_attempt" | "rejected" | "unread";
 
 /**
  * The loop around one Agent's unread state: fold deliveries in, write the notice when it is due,
@@ -147,10 +148,9 @@ export class ImportantUnreadReminder {
     for (const notice of this.store.list()) this.notices.restore(notice);
   }
 
-  /** Writes every notice whose schedule says it is due, and reports the ones that ran out. A retry
-   * the session refuses keeps its schedule and is nobody's rejection here: the sweep is not the
-   * delivery that asked for it. Returns how many Agents had a notice pending, so the sweep driving
-   * this can log the tick it took. */
+  /** Writes every notice whose schedule says it is due, and reports the ones that ran out. A
+   * refusal here is nobody's rejection: the sweep is not the delivery that asked for it. Returns
+   * how many Agents had a notice pending, so the sweep driving this can log the tick it took. */
   flushDue(): number {
     const agents = this.notices.agents();
     for (const agentId of agents)
@@ -170,8 +170,7 @@ export class ImportantUnreadReminder {
         return verdict.then(
           () => this.#acceptAttempt(agentId, session),
           (error: unknown) => {
-            // Refused: nothing is recorded as written, so the schedule keeps its retry, and the
-            // caller that asked for this attempt hears about the refusal.
+            this.#recordAttempt(agentId, "rejected");
             throw error;
           },
         );
@@ -187,10 +186,14 @@ export class ImportantUnreadReminder {
   #acceptAttempt(agentId: string, session: unknown): void {
     this.#unshown.delete(agentId);
     if (session !== undefined) this.#writtenTo.set(agentId, session);
-    const written = this.notices.recordWritten(agentId, this.now());
-    if (written) this.store.save(written);
-    const notice = this.notices.pending(agentId);
-    if (notice) this.#reportIfSpent(agentId, notice);
+    this.#recordAttempt(agentId, "accepted");
+  }
+
+  #recordAttempt(agentId: string, outcome: ImportantUnreadAttemptOutcome): void {
+    const attempted = this.notices.recordAttempt(agentId, outcome, this.now());
+    if (!attempted) return;
+    this.store.save(attempted);
+    this.#reportIfSpent(agentId, attempted);
   }
 
   #reportIfSpent(agentId: string, notice: ImportantUnreadNotice): void {
@@ -202,15 +205,13 @@ export class ImportantUnreadReminder {
     const key = `${agentId} ${spent.key}`;
     if (this.#reported.has(key)) return;
     this.#reported.add(key);
-    // Every retry was written and the Agent still has not read: this is the loudest form of a
-    // delivery the model never took in, and it is dropped here, so it is said out loud too.
     this.#warnUnobserved(
       agentId,
       (this.#batches.get(agentId) ?? []).flatMap((delivery) =>
         delivery.deliveryId === undefined ? [] : [delivery.deliveryId],
       ),
       spent.attempts,
-      "exhausted",
+      spent.lastAttempt === "rejected" ? "rejected" : "unread",
     );
     this.ports.report(agentId, spent);
   }

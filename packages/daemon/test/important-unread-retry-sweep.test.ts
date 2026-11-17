@@ -17,39 +17,72 @@ const warningsIn = (records: readonly { properties: Record<string, unknown> }[])
     .filter((record) => record.properties.event === "agent.inbox_notice.unobserved")
     .map((record) => record.properties);
 
-test("a notice the session refused is retried by the next sweep, as a whole notice", async () => {
+test("a refused notice waits its delay and is retried as a whole notice", async () => {
   let refusals = 1;
   const loop = unreadLoop({ refuse: () => refusals-- > 0 });
   const sweep = new ImportantUnreadSweep({ flushDue: () => loop.reminder.flushDue() });
   const message = { ...delivery("refused"), target: "@agent-1", sequence: 2 };
-  // The first attempt is the delivery's own, and it fails: a delivery nobody was told about is not
-  // one the daemon acknowledges.
   await expect(loop.index.receive(message)).rejects.toThrow();
   expect(loop.notices).toHaveLength(0);
-  // Nothing was recorded as written, so the retry is due at once — a refusal schedules nothing.
-  expect(loop.records.get("agent-1")).toMatchObject({ attempts: 0 });
+  expect(loop.records.get("agent-1")).toMatchObject({
+    attempts: 1,
+    lastAttempt: "rejected",
+    nextAttemptAtMs: loop.clock.nowMs + IMPORTANT_UNREAD_RETRY_DELAYS_MS[0],
+  });
+  sweep.sweep();
+  await settled();
+  expect(loop.loopNotices).toHaveLength(0);
+  loop.clock.nowMs += IMPORTANT_UNREAD_RETRY_DELAYS_MS[0];
   sweep.sweep();
   await settled();
   expect(loop.loopNotices).toHaveLength(1);
-  // The retry is the composed notice naming what is unread, not the standing "Still waiting"
-  // pointer a batch with nothing to say falls back to.
   expect(loop.loopNotices[0]).toStartWith("[CoForge inbox notice:");
   expect(loop.loopNotices[0]).toContain("@agent-1 1 new message");
   expect(loop.loopNotices[0]).not.toContain("Still waiting");
   expect(loop.records.get("agent-1")).toMatchObject({
-    attempts: 1,
-    nextAttemptAtMs: loop.clock.nowMs + IMPORTANT_UNREAD_RETRY_DELAYS_MS[0],
+    attempts: 2,
+    lastAttempt: "accepted",
+    nextAttemptAtMs: loop.clock.nowMs + IMPORTANT_UNREAD_RETRY_DELAYS_MS[1],
   });
-  // The write above scheduled the next attempt, and a tick before it is due writes nothing: the
-  // state machine decides the moment, the sweep only looks.
-  sweep.sweep();
-  await settled();
-  expect(loop.loopNotices).toHaveLength(1);
-  loop.clock.nowMs += IMPORTANT_UNREAD_RETRY_DELAYS_MS[0];
-  sweep.sweep();
-  await settled();
-  expect(loop.loopNotices).toHaveLength(2);
-  expect(loop.records.get("agent-1")).toMatchObject({ attempts: 2 });
+});
+
+test("a session that refuses every attempt is tried on the 1/5/15 schedule, then exhausted with one warning", async () => {
+  const sweepEvery = 30_000;
+  const { result, records } = await captureDaemonLogs(async () => {
+    let attempts = 0;
+    const loop = unreadLoop({
+      refuse: () => {
+        attempts += 1;
+        return true;
+      },
+    });
+    const sweep = new ImportantUnreadSweep({ flushDue: () => loop.reminder.flushDue() });
+    const start = loop.clock.nowMs;
+    await expect(
+      loop.index.receive({ ...delivery("always-refused"), target: "@agent-1", sequence: 2 }),
+    ).rejects.toThrow();
+    const attemptedAt = [0];
+    const total = IMPORTANT_UNREAD_RETRY_DELAYS_MS.reduce((sum, delay) => sum + delay, 0);
+    while (loop.clock.nowMs - start < total + 2 * sweepEvery) {
+      loop.clock.nowMs += sweepEvery;
+      const before = attempts;
+      sweep.sweep();
+      await settled();
+      if (attempts > before) attemptedAt.push(loop.clock.nowMs - start);
+    }
+    return { loop, attemptedAt };
+  });
+  expect(result.attemptedAt).toEqual([0, 60_000, 6 * 60_000, 21 * 60_000]);
+  expect(result.loop.loopNotices).toHaveLength(0);
+  expect(result.loop.reported).toEqual(["agent-1"]);
+  const warnings = warningsIn(records);
+  expect(warnings).toHaveLength(1);
+  expect(warnings[0]).toMatchObject({
+    agent_id: "agent-1",
+    delivery_id: "delivery-always-refused",
+    attempts: IMPORTANT_UNREAD_RETRY_DELAYS_MS.length + 1,
+    reason: "rejected",
+  });
 });
 
 test("a batch written on every attempt and never read ends as exhausted, with one warning", async () => {
@@ -79,7 +112,7 @@ test("a batch written on every attempt and never read ends as exhausted, with on
     agent_id: "agent-1",
     delivery_id: "delivery-never-read",
     attempts: IMPORTANT_UNREAD_RETRY_DELAYS_MS.length + 1,
-    reason: "exhausted",
+    reason: "unread",
   });
 });
 

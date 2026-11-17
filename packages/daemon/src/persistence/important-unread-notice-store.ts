@@ -132,6 +132,9 @@ function readNotice(
     highestSequence,
     conversations,
     attempts,
+    ...(value.lastAttempt === "accepted" || value.lastAttempt === "rejected"
+      ? { lastAttempt: value.lastAttempt }
+      : {}),
     ...(millis(value.writtenAtMs) ? { writtenAtMs: value.writtenAtMs as number } : {}),
     ...(millis(value.nextAttemptAtMs) ? { nextAttemptAtMs: value.nextAttemptAtMs as number } : {}),
   };

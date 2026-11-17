@@ -25,12 +25,14 @@ export type ImportantUnreadNotice = Readonly<{
   key: string;
   highestSequence: number;
   conversations: readonly UnreadNoticeConversation[];
-  /** How many times this batch's notice has been written into the Agent's process. */
   attempts: number;
+  lastAttempt?: ImportantUnreadAttemptOutcome;
   writtenAtMs?: number;
   /** When the next attempt is due; undefined while nothing is waiting to be retried. */
   nextAttemptAtMs?: number;
 }>;
+
+export type ImportantUnreadAttemptOutcome = "accepted" | "rejected";
 
 /** How long to wait before each retry; past them the state is left for the watchdog's owner. */
 export const IMPORTANT_UNREAD_RETRY_DELAYS_MS = [60_000, 5 * 60_000, 15 * 60_000] as const;
@@ -72,7 +74,6 @@ export class ImportantUnreadNotices {
       key: `seq:${highestSequence}`,
       highestSequence,
       conversations: merge(current?.conversations ?? [], delivery),
-      // A new thing to say: its own attempts start from zero, and no earlier schedule stands.
       attempts: 0,
     };
     this.#notices.set(delivery.agentId, next);
@@ -92,21 +93,24 @@ export class ImportantUnreadNotices {
     return notice.nextAttemptAtMs === undefined || notice.nextAttemptAtMs <= nowMs;
   }
 
-  /** Records one write of this batch's notice and schedules the next attempt, if any is left. */
-  recordWritten(agentId: string, nowMs = Date.now()): ImportantUnreadNotice | undefined {
+  recordAttempt(
+    agentId: string,
+    outcome: ImportantUnreadAttemptOutcome,
+    nowMs = Date.now(),
+  ): ImportantUnreadNotice | undefined {
     const notice = this.#notices.get(agentId);
     if (!notice) return undefined;
     const attempts = notice.attempts + 1;
-    // One write plus one per delay: the last write schedules nothing.
     const delay = IMPORTANT_UNREAD_RETRY_DELAYS_MS[attempts - 1];
-    // The previous schedule is gone whatever happens: a spent retry must not leave a due time
-    // behind, which is what would make a finished batch look like it is still waiting.
     const { nextAttemptAtMs: previousSchedule, ...rest } = notice;
     void previousSchedule;
-    const next: ImportantUnreadNotice =
-      delay === undefined
-        ? { ...rest, attempts, writtenAtMs: nowMs }
-        : { ...rest, attempts, writtenAtMs: nowMs, nextAttemptAtMs: nowMs + delay };
+    const next: ImportantUnreadNotice = {
+      ...rest,
+      attempts,
+      lastAttempt: outcome,
+      ...(outcome === "accepted" ? { writtenAtMs: nowMs } : {}),
+      ...(delay === undefined ? {} : { nextAttemptAtMs: nowMs + delay }),
+    };
     this.#notices.set(agentId, next);
     return next;
   }

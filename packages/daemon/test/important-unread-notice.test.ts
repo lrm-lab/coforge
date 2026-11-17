@@ -28,7 +28,7 @@ test("a delivery is due at once, and a written batch stands until another arrive
   const first = notices.observe(mention);
   expect(first).toMatchObject({ key: "seq:10", attempts: 0 });
   expect(notices.dueForWrite("agent-a", 1_000)).toBe(true);
-  notices.recordWritten("agent-a", 1_000);
+  notices.recordAttempt("agent-a", "accepted", 1_000);
   // Another conversation's sequence can be behind this one, and it is still something to say: it
   // joins the batch and the batch is due at once, whatever its place in the order.
   const joined = notices.observe({ ...mention, sequence: 9 });
@@ -55,7 +55,7 @@ test("retries are bounded, and exhaust after the last delay", () => {
   let now = 1_000_000;
   for (const [index, delay] of IMPORTANT_UNREAD_RETRY_DELAYS_MS.entries()) {
     expect(notices.dueForWrite("agent-a", now)).toBe(true);
-    const written = notices.recordWritten("agent-a", now);
+    const written = notices.recordAttempt("agent-a", "accepted", now);
     expect(written?.attempts).toBe(index + 1);
     expect(written?.nextAttemptAtMs).toBe(now + delay);
     expect(notices.dueForWrite("agent-a", now + delay - 1)).toBe(false);
@@ -63,7 +63,7 @@ test("retries are bounded, and exhaust after the last delay", () => {
     now += delay;
   }
   // The write that used the last delay schedules nothing more: the watchdog owns it from here.
-  const last = notices.recordWritten("agent-a", now);
+  const last = notices.recordAttempt("agent-a", "accepted", now);
   expect(last?.attempts).toBe(IMPORTANT_UNREAD_RETRY_DELAYS_MS.length + 1);
   expect(last?.nextAttemptAtMs).toBeUndefined();
   expect(notices.dueForWrite("agent-a", now)).toBe(false);
