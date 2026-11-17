@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package coforge.rpc.v1;
+
+message AgentMemoryRequest {
+  uint32 protocol_major = 1;
+  string message_type = 2;
+  string request_id = 3;
+  string workspace_id = 4;
+  string computer_id = 5;
+  string agent_id = 6;
+  string command_json = 7;
+}
+
+message AgentMemoryResult {
+  uint32 protocol_major = 1;
+  string message_type = 2;
+  string request_id = 3;
+  string workspace_id = 4;
+  string computer_id = 5;
+  string agent_id = 6;
+  string status = 7;
+  string result_json = 8;
+  string error = 9;
+}

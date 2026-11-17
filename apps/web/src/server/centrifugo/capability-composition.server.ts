@@ -1,3 +1,4 @@
+import { getAgentMemoryCapabilityLease } from "./agent-memory-results.server";
 import { getAgentMigrationCapabilityLease } from "#src/server/agent-migrations/agent-migration-capability.server";
 import { getAppRegistrationNoticeCapabilityLease } from "#src/server/apps/app-registration-notice-capability.server";
 import { getReminderCapabilityLease } from "#src/server/reminders/reminder-capability.server";
@@ -25,6 +26,7 @@ export function daemonCapabilityLeases() {
   const reminderLease = getReminderCapabilityLease();
   const leases = [
     reminderLease,
+    getAgentMemoryCapabilityLease(),
     getAgentMigrationCapabilityLease(),
     getAppConfigCapabilityLease(),
     getAppRegistrationNoticeCapabilityLease(),

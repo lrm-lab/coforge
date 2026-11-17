@@ -47,6 +47,7 @@ export const RPC_METHODS = {
   daemonMachineMemoryStatus: "daemon:v1:machine:memory_status",
   daemonEffortRead: "daemon:v1:provider:effort_read",
   daemonEffortReadResult: "daemon:v1:provider:effort_read_result",
+  daemonAgentMemoryResult: "daemon:v1:agent_memory:result",
   daemonAgentContextView: "daemon:v1:agent_context:view",
   daemonAgentContextViewResult: "daemon:v1:agent_context:view_result",
   agentContextViewAvailability: "agent:v1:context:availability",

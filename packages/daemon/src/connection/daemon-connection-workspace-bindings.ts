@@ -4,6 +4,8 @@ import type { DaemonQueries } from "./daemon-queries";
 /** Exposes the query transport seams shared by the cloud connection and its handlers. */
 export abstract class DaemonConnectionWorkspaceBindings implements Pick<
   DaemonConnectionClient,
+  | "onAgentMemory"
+  | "sendAgentMemoryResult"
   | "onSkillsList"
   | "sendSkillsListResult"
   | "onWorkspaceFilesList"
@@ -21,6 +23,13 @@ export abstract class DaemonConnectionWorkspaceBindings implements Pick<
   | "sendPiChatFrame"
 > {
   protected abstract get daemonQueries(): DaemonQueries;
+
+  get onAgentMemory() {
+    return this.daemonQueries.memory.onRequest;
+  }
+  get sendAgentMemoryResult() {
+    return this.daemonQueries.memory.sendResult;
+  }
 
   get onSkillsList() {
     return this.daemonQueries.skills.onRequest;
