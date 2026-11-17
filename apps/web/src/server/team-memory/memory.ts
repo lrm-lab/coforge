@@ -1,6 +1,7 @@
 import {
   decodeTeamMemoryCommand,
   type TeamMemoryCommand,
+  type TeamMemoryMaintenanceCommand,
   type TeamMemoryCatalogCommand,
   type TeamMemoryDraft,
   type TeamMemoryHead,
@@ -9,14 +10,18 @@ import {
 } from "@lrm/coforge-sdk/agent";
 
 export type TeamMemoryActor = { workspaceId: string } & (
-  | { agentId: string; userId?: never; includeHumanAuthors?: boolean }
+  | { agentId: string; userId?: never; includeHumanAuthors?: boolean; includeMaintenance?: boolean }
   | { userId: string; agentId?: never }
 );
 export interface TeamMemoryStore {
+  beginMaintenance?(actor: TeamMemoryActor): Promise<TeamMemoryResult>;
   catalog?(actor: TeamMemoryActor, command: TeamMemoryCatalogCommand): Promise<TeamMemoryResult>;
   read(
     actor: TeamMemoryActor,
-    command: Exclude<TeamMemoryCommand, TeamMemoryWrite | TeamMemoryCatalogCommand>,
+    command: Exclude<
+      TeamMemoryCommand,
+      TeamMemoryWrite | TeamMemoryCatalogCommand | TeamMemoryMaintenanceCommand
+    >,
   ): Promise<TeamMemoryResult>;
   review(actor: TeamMemoryActor, command: TeamMemoryWrite): Promise<TeamMemoryResult>;
   write(actor: TeamMemoryActor, command: TeamMemoryWrite): Promise<TeamMemoryResult>;
@@ -39,6 +44,10 @@ export class TeamMemory {
   constructor(private readonly store: TeamMemoryStore) {}
   execute(actor: TeamMemoryActor, input: TeamMemoryCommand): Promise<TeamMemoryResult> {
     const command = decodeTeamMemoryCommand(input);
+    if (command.operation === "maintenance") {
+      if (!this.store.beginMaintenance) throw new TeamMemoryError("invalid");
+      return this.store.beginMaintenance(actor);
+    }
     if (command.operation === "projects" || command.operation === "project-create") {
       if (!this.store.catalog) throw new TeamMemoryError("invalid");
       return this.store.catalog(actor, command);

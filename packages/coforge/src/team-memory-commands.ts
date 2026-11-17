@@ -60,6 +60,16 @@ export async function runTeamMemoryCommand(
       (entry) =>
         `${entry.title} [${entry.id}]\n${entry.content}\nSource: ${entry.source}\nApplies to: ${entry.applicability || "unspecified"}\nRevision: ${entry.revision}\nState: ${entry.status}\nAuthor: ${entry.authorAgentId ?? entry.authorUserId}${entry.change ? `\nChanged by: ${entry.change.actorAgentId ?? entry.change.actorUserId} (${entry.change.operation})\nReason: ${entry.change.reason}\nMerged from: ${JSON.stringify(entry.change.mergedFrom)}` : ""}`,
     ),
+    ...(result.maintenanceHint
+      ? [
+          `After completing the person's task, run coforge memory maintenance --scope team for this Project. Inspect full evidence for at most 5 entries within 2 minutes. Preserve sources and important decisions; stop for new work. Never delete, unpin, or merge different scopes. See coforge manual get memory.`,
+        ]
+      : []),
+    ...(result.maintenance
+      ? [
+          `Maintenance batch: ${result.maintenance.remaining} entry changes remaining; expires at ${result.maintenance.expiresAt}. Read full candidates before editing. Use --maintenanceToken ${result.maintenance.token} on every update, merge or archive, together with the normal reviewToken. This budget cannot permanently delete, touch protected memory or move Projects.`,
+        ]
+      : []),
     ...(result.projects ?? []).map(
       (project) => `${project.name} [${project.id}] (${project.slug})\n${project.description}`,
     ),

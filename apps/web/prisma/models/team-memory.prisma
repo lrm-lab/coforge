@@ -32,6 +32,7 @@ model TeamMemoryEntry {
   @@unique([workspaceId, dedupKey])
   @@index([workspaceId, status, updatedAt])
   @@index([workspaceId, projectId, status, updatedAt])
+  @@index([workspaceId, projectId, updatedAt, id], where: { status: "active", pinned: false }, map: "team_memory_maintenance_candidates_idx")
   @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
   @@map("team_memory_entries")
 }
@@ -87,4 +88,17 @@ model TeamMemoryUserReceipt {
   @@id([workspaceId, userId, requestId])
   @@index([workspaceId, userId, reviewExpiresAt])
   @@map("team_memory_user_receipts")
+}
+
+model TeamMemoryMaintenance {
+  workspaceId String @id @map("workspace_id") @db.Uuid
+  agentId String @map("agent_id") @db.Uuid
+  projectId String? @map("project_id") @db.Uuid
+  suggestedAt DateTime @map("suggested_at")
+  token String? @db.Uuid
+  expiresAt DateTime? @map("expires_at")
+  remaining Int @default(0)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("team_memory_maintenance")
 }

@@ -207,7 +207,7 @@ export abstract class DaemonConnectionAgentHttp extends DaemonConnectionWorkspac
       {
         ...TEAM_MEMORY_ROUTE,
         body: JSON.stringify(request),
-        headers: { "x-coforge-memory-authors": "2" },
+        headers: { "x-coforge-memory-authors": "2", "x-coforge-memory-maintenance": "1" },
       },
       agentApiKey,
     );
