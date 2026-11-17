@@ -27,7 +27,8 @@ import { FileBindingStore } from "#src/supervisor/binding-store";
 import type { WorkspaceCloudConnectionReport } from "#src/supervisor/workspace-start-outcome";
 import { runRunnerCommand } from "./runner-command";
 import { runControlCommand } from "./control-command";
-export { DaemonCommandRejectedError } from "./daemon-command-rejected-error";
+import { DaemonCommandRejectedError } from "./daemon-command-rejected-error";
+export { DaemonCommandRejectedError };
 
 /** A Workspace configuration the Daemon took; `lifecycleUnderWay` when its start was still under
  * way at the Coordinator's deadline and finishes behind the answer. */
@@ -179,7 +180,11 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
       const started = await this.#handshake(input);
       if (started) return started;
     } catch (error) {
-      if (error instanceof Error && error.message.includes("server does not match")) throw error;
+      if (
+        error instanceof DaemonCommandRejectedError ||
+        (error instanceof Error && error.message.includes("server does not match"))
+      )
+        throw error;
       throw new Error("coforge-daemon did not accept the local handshake", { cause: error });
     }
     return this.#waitForHandshake(input);
@@ -400,11 +405,18 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
       if (responseEnvelope.method !== LOCAL_RPC_METHODS.CONFIGURE)
         throw new Error("coforge-daemon returned an invalid configure response");
       const configured = decodeDaemonRuntimeConfigureResponse(responseEnvelope.payload);
-      const accepted =
-        configured.protocolMajor === 1 &&
-        configured.requestId === configureId &&
-        configured.accepted;
-      if (!accepted) throw new Error("coforge-daemon did not accept configuration");
+      if (configured.protocolMajor !== 1 || configured.requestId !== configureId)
+        throw new Error("coforge-daemon returned an invalid configure response");
+      if (!configured.accepted) {
+        throw new DaemonCommandRejectedError(
+          "configure",
+          configured.error
+            ? `coforge-daemon did not accept configuration: ${configured.error}`
+            : "coforge-daemon did not accept configuration",
+          configured.errorCode,
+          config.workspaceId,
+        );
+      }
       return configured.lifecycleUnderWay ? { lifecycleUnderWay: true } : {};
     } finally {
       connection.close();

@@ -6,17 +6,19 @@ import {
   decodeDaemonCommandRequest,
   decodeDaemonHandshakeRequest,
   decodeDaemonHoldRequest,
+  decodeDaemonRuntimeConfigureRequest,
   decodeLocalRpcRequest,
   encodeDaemonCommandResponse,
   encodeDaemonHandshakeResponse,
   encodeDaemonHoldResponse,
+  encodeDaemonRuntimeConfigureResponse,
   encodeLocalRpcResponse,
   LOCAL_RPC_METHODS,
   LocalRpcFrameTooLargeError,
   MAX_LOCAL_RPC_FRAME_BYTES,
   readLocalRpcFrame,
 } from "@lrm/coforge-sdk/internal";
-import { LocalDaemonLauncher } from "#src/daemon-host/launcher";
+import { DaemonCommandRejectedError, LocalDaemonLauncher } from "#src/daemon-host/launcher";
 
 const operations = [
   {
@@ -217,4 +219,61 @@ test("connectToLocalDaemon rejects immediately when a peer sends an oversized fr
     listener.stop(true);
     await rm(socketPath, { force: true });
   }
+});
+
+test("ensureStarted surfaces structured error and errorCode from a refused CONFIGURE response", async () => {
+  const launcher = new LocalDaemonLauncher({
+    executablePath: "/unused",
+    socketPath: "/unused.sock",
+    serverUrl: "https://coforge.test",
+    connect: async () => ({
+      async request(frame) {
+        const envelope = decodeLocalRpcRequest(readLocalRpcFrame(frame)!);
+        if (envelope.method === LOCAL_RPC_METHODS.HANDSHAKE) {
+          const handshake = decodeDaemonHandshakeRequest(envelope.payload);
+          return encodeLocalRpcResponse({
+            method: LOCAL_RPC_METHODS.HANDSHAKE,
+            payload: encodeDaemonHandshakeResponse({
+              protocolMajor: 1,
+              requestId: handshake.requestId,
+              accepted: true,
+              daemonId: "fixture-daemon",
+              serverUrl: "https://coforge.test",
+            }),
+          });
+        }
+        const configure = decodeDaemonRuntimeConfigureRequest(envelope.payload);
+        return encodeLocalRpcResponse({
+          method: LOCAL_RPC_METHODS.CONFIGURE,
+          payload: encodeDaemonRuntimeConfigureResponse({
+            protocolMajor: 1,
+            requestId: configure.requestId,
+            accepted: false,
+            error: "Workspace workspace-1 is parked after credential revocation",
+            errorCode: "credential_revoked",
+          }),
+        });
+      },
+      close() {},
+    }),
+  });
+
+  const error = await launcher
+    .ensureStarted({
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      workspaceRoot: "/workspace",
+      daemonApiKey: "fixture-key",
+    })
+    .catch((reason: unknown) => reason);
+
+  expect(error).toBeInstanceOf(DaemonCommandRejectedError);
+  expect(error).toMatchObject({
+    operation: "configure",
+    code: "credential_revoked",
+    workspaceId: "workspace-1",
+  });
+  expect((error as Error).message).toContain(
+    "Workspace workspace-1 is parked after credential revocation",
+  );
 });

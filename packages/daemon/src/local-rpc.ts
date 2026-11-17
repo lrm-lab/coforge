@@ -316,9 +316,19 @@ class LocalRpcDispatcher {
 
   /** Rejects requests addressed to a server other than the one this daemon build embeds. */
   #assertOwnServer(expectedServerUrl: string, what: string): void {
-    this.input.configStore?.assertExpectedServer?.(expectedServerUrl);
-    if (new URL(expectedServerUrl).origin !== new URL(this.#serverUrl).origin)
-      throw new Error(`Daemon ${what} server does not match this daemon build`);
+    try {
+      this.input.configStore?.assertExpectedServer?.(expectedServerUrl);
+      if (new URL(expectedServerUrl).origin !== new URL(this.#serverUrl).origin) {
+        throw Object.assign(new Error(`Daemon ${what} server does not match this daemon build`), {
+          code: "server_mismatch",
+        });
+      }
+    } catch (error) {
+      if (error instanceof Error && stringField(error, "code") === undefined) {
+        Object.assign(error, { code: "server_mismatch" });
+      }
+      throw error;
+    }
   }
 
   async #lifecycle(method: string, payload: Uint8Array): Promise<Uint8Array> {

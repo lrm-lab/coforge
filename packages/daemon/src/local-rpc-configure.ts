@@ -1,6 +1,8 @@
+import { getLogger } from "@logtape/logtape";
 import {
   decodeDaemonRuntimeConfigureRequest,
   encodeDaemonRuntimeConfigureResponse,
+  thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import {
@@ -11,6 +13,8 @@ import {
 import type { DaemonConfigStore } from "#src/persistence/daemon-config";
 import { WorkspaceLifecycleSupersededError } from "#src/supervisor/lifecycle-superseded-error";
 import type { DaemonStarted } from "#src/daemon-host/launcher";
+
+const logger = getLogger(["coforge", "daemon", "local-rpc"]);
 
 export async function handleLocalRpcConfigure(
   payload: Uint8Array,
@@ -30,22 +34,59 @@ export async function handleLocalRpcConfigure(
 ): Promise<Uint8Array> {
   const request = decodeDaemonRuntimeConfigureRequest(payload);
   input.assertOwnServer(request.expectedServerUrl, "request");
-  if (request.serverHttpUrl) input.assertOwnServer(request.serverHttpUrl, "configuration");
-  const valid =
+  const fieldsValid =
     request.protocolMajor === 1 &&
+    request.requestId.length > 0 &&
     [request.workspaceId, request.computerId, request.workspaceRoot, request.daemonApiKey].every(
       Boolean,
-    ) &&
-    (await input.validateCredential(request.daemonApiKey));
-  const adopted = valid
-    ? await adoptConfiguration(input, request, { loginSetup: request.loginSetup })
-    : undefined;
-  return encodeDaemonRuntimeConfigureResponse({
-    protocolMajor: 1,
-    requestId: request.requestId,
-    accepted: valid,
-    ...(adopted?.lifecycleUnderWay ? { lifecycleUnderWay: true } : {}),
-  });
+    );
+  if (!fieldsValid) {
+    return encodeDaemonRuntimeConfigureResponse({
+      protocolMajor: 1,
+      requestId: request.requestId,
+      accepted: false,
+      error: "invalid daemon configure request",
+      errorCode: "invalid_request",
+    });
+  }
+  try {
+    if (request.serverHttpUrl) input.assertOwnServer(request.serverHttpUrl, "configuration");
+    if (!(await input.validateCredential(request.daemonApiKey))) {
+      logger.warn("Local daemon configuration was refused", {
+        event: "daemon.local_rpc.configure_refused",
+        error_code: "invalid_credential",
+        error_message: "daemon credential was rejected",
+      });
+      return encodeDaemonRuntimeConfigureResponse({
+        protocolMajor: 1,
+        requestId: request.requestId,
+        accepted: false,
+        error: "daemon credential was rejected",
+        errorCode: "invalid_credential",
+      });
+    }
+    const adopted = await adoptConfiguration(input, request, { loginSetup: request.loginSetup });
+    return encodeDaemonRuntimeConfigureResponse({
+      protocolMajor: 1,
+      requestId: request.requestId,
+      accepted: true,
+      ...(adopted?.lifecycleUnderWay ? { lifecycleUnderWay: true } : {}),
+    });
+  } catch (error) {
+    const code = errorCodeOf(error);
+    logger.warn("Local daemon configuration was refused", {
+      event: "daemon.local_rpc.configure_refused",
+      error_code: code,
+      error_message: thrownMessage(error),
+    });
+    return encodeDaemonRuntimeConfigureResponse({
+      protocolMajor: 1,
+      requestId: request.requestId,
+      accepted: false,
+      error: thrownMessage(error),
+      ...(code ? { errorCode: code } : {}),
+    });
+  }
 }
 
 /**
@@ -113,4 +154,9 @@ async function adoptConfiguration(
     }
     throw error;
   }
+}
+
+function errorCodeOf(error: unknown): string | undefined {
+  const value = (error as Record<string, unknown> | null | undefined)?.code;
+  return typeof value === "string" ? value : undefined;
 }

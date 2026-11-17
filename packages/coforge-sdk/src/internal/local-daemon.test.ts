@@ -184,6 +184,28 @@ test("a configure answered while its start is still under way round trips that",
   ).toEqual(response);
 });
 
+test("a refused configure round trips error and errorCode and omits them when absent", () => {
+  const refused = {
+    protocolMajor: 1,
+    requestId: "request-2",
+    accepted: false,
+    error: "Workspace workspace-1 was deleted in CoForge.",
+    errorCode: "workspace_deleted",
+  };
+  expect(
+    decodeDaemonRuntimeConfigureResponse(encodeDaemonRuntimeConfigureResponse(refused)),
+  ).toEqual(refused);
+
+  const accepted = {
+    protocolMajor: 1,
+    requestId: "request-3",
+    accepted: true,
+  };
+  expect(
+    decodeDaemonRuntimeConfigureResponse(encodeDaemonRuntimeConfigureResponse(accepted)),
+  ).toEqual(accepted);
+});
+
 describe("bounded local RPC frame size", () => {
   test("accepts a payload right at MAX_LOCAL_RPC_FRAME_BYTES and rejects 1 byte above on encode", () => {
     expect(MAX_LOCAL_RPC_FRAME_BYTES).toBe(4 * 1024 * 1024);

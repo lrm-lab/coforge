@@ -7,6 +7,7 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import type { DaemonLauncher } from "@lrm/coforge-daemon";
 import type { WorkspaceLookup } from "#src/workspace/lookup";
+import { ensureDaemonConfigured } from "#src/daemon-client/index";
 import { planComputerIdentity } from "./computer-identity-plan";
 
 export type ComputerPlatformName = "darwin" | "linux" | "win32";
@@ -304,21 +305,16 @@ export class ComputerSetup {
       // configuration advertises this registration as usable.
       // The Coordinator answers by its deadline: the configuration is taken even when the
       // Workspace is still starting, so the registration below is still saved.
-      const started = await setupStep(
-        "SETUP_DAEMON_START_FAILED",
-        "The Daemon could not be started.",
-        () =>
-          launcher.ensureStarted({
-            workspaceId: response.workspaceId,
-            computerId: response.computerId,
-            workspaceRoot: this.options.workspaceRoot,
-            daemonApiKey: response.daemonApiKey,
-            serverHttpUrl: serverUrl,
-            // A login-style setup retires the login it used; a one-shot attach leaves no login
-            // to retire, so this flag goes unset there (task #417).
-            loginSetup: !input.oneShot,
-          }),
-      );
+      const started = await ensureDaemonConfigured(launcher, {
+        workspaceId: response.workspaceId,
+        computerId: response.computerId,
+        workspaceRoot: this.options.workspaceRoot,
+        daemonApiKey: response.daemonApiKey,
+        serverHttpUrl: serverUrl,
+        // A login-style setup retires the login it used; a one-shot attach leaves no login
+        // to retire, so this flag goes unset there (task #417).
+        loginSetup: !input.oneShot,
+      });
       daemonStillStarting = started?.lifecycleUnderWay === true;
       const registration = registeredRegistration;
       configPath = await setupStep(
@@ -405,19 +401,14 @@ export class ComputerSetup {
         "SETUP_ALREADY_ATTACHED_UNREACHABLE",
         `Could not verify this computer's existing attachment to '${registration.slug}'.`,
       );
-    const started = await setupStep(
-      "SETUP_DAEMON_START_FAILED",
-      "The Daemon could not be started.",
-      () =>
-        launcher.ensureStarted({
-          workspaceId: registration.id,
-          computerId: registration.computerId!,
-          workspaceRoot: this.options.workspaceRoot,
-          daemonApiKey: key,
-          serverHttpUrl: serverUrl,
-          loginSetup: false,
-        }),
-    );
+    const started = await ensureDaemonConfigured(launcher, {
+      workspaceId: registration.id,
+      computerId: registration.computerId!,
+      workspaceRoot: this.options.workspaceRoot,
+      daemonApiKey: key,
+      serverHttpUrl: serverUrl,
+      loginSetup: false,
+    });
     const configPath = await setupStep(
       "SETUP_CONFIG_WRITE_FAILED",
       "Could not save the Workspace configuration.",

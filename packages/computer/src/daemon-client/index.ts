@@ -4,6 +4,9 @@ import {
   workspaceParkedDescription,
   workspaceParkedRecovery,
   type DaemonCommandRunner,
+  type DaemonLauncher,
+  type DaemonStarted,
+  type DaemonWorkspaceConfig,
 } from "@lrm/coforge-daemon";
 import type { Logger } from "@logtape/logtape";
 import type { ComputerConfig } from "#src/local-config";
@@ -14,7 +17,7 @@ import {
   type DaemonConnectRejectionReason,
   type ManagedRuntimeIdentity,
 } from "@lrm/coforge-sdk/internal";
-import { CliError } from "#src/errors";
+import { CliError, redactDiagnosticText, setupError } from "#src/errors";
 import { terminalText } from "#src/terminal-output";
 import { unsettledWorkspaceLine } from "./workspace-report-line";
 import { formatLogindSessionRisk } from "#src/logind-session-risk";
@@ -270,4 +273,39 @@ function parkedWorkspaceError(
     workspaceParkedRecovery(reason, workspace),
     { cause: error },
   );
+}
+
+/**
+ * Starts or reuses the Daemon for `config` during `setup`/`attach`, surfacing structured
+ * `daemon-runtime:configure` refusal reasons (`error` and `errorCode`) rather than collapsing them
+ * into a bare daemon-start failure.
+ */
+export async function ensureDaemonConfigured(
+  launcher: DaemonLauncher,
+  config: DaemonWorkspaceConfig,
+): Promise<DaemonStarted> {
+  try {
+    return await launcher.ensureStarted(config);
+  } catch (error) {
+    if (error instanceof CliError) throw error;
+    if (error instanceof DaemonCommandRejectedError) {
+      const stripped = error.message
+        .replace(/^coforge-daemon did not accept configuration:\s*/i, "")
+        .trim();
+      const reason = redactDiagnosticText(stripped || error.message);
+      const codeSuffix = error.code && !reason.includes(error.code) ? ` (${error.code})` : "";
+      throw setupError(
+        "SETUP_DAEMON_START_FAILED",
+        `The Daemon could not be started: ${reason}${codeSuffix}`,
+        "daemon-start",
+        error,
+      );
+    }
+    throw setupError(
+      "SETUP_DAEMON_START_FAILED",
+      "The Daemon could not be started.",
+      "daemon-start",
+      error,
+    );
+  }
 }

@@ -239,6 +239,9 @@ export type DaemonRuntimeConfigureResponse = {
   accepted: boolean;
   /** Taken, but the Workspace's start was still under way when the Coordinator answered. */
   lifecycleUnderWay?: boolean;
+  /** Set only when `accepted` is false. Local process boundary only, never the cloud wire. */
+  error?: string;
+  errorCode?: string;
 };
 export type DaemonCommandRequest = {
   protocolMajor: number;
@@ -368,6 +371,8 @@ export function decodeDaemonRuntimeConfigureResponse(
     requestId: v.requestId,
     accepted: v.accepted,
     ...(v.lifecycleUnderWay ? { lifecycleUnderWay: true } : {}),
+    ...(v.error ? { error: v.error } : {}),
+    ...(v.errorCode ? { errorCode: v.errorCode } : {}),
   };
 }
 
