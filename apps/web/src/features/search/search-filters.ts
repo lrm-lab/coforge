@@ -107,6 +107,29 @@ export function toggleScope(
   return withScope(filters, [...current.filter((item) => item !== opposite), target], senderKind);
 }
 
+/**
+ * Applies a selection change from the Scope menu (`"any"` plus `SEARCH_SCOPES`): picking `"any"`
+ * clears all scopes, and picking `humans` or `agents` swaps the opposite kind off.
+ */
+export function selectScope(
+  filters: SearchFilters,
+  nextKeys: Iterable<unknown>,
+  senderKind: SenderKind | undefined,
+): SearchFilters {
+  const previous = filters.scope?.length ? filters.scope : ["any"];
+  const next = [...nextKeys].map(String);
+  const added = next.find((key) => !previous.includes(key));
+  if (added === "any") return withScope(filters, [], senderKind);
+  if (added && (SEARCH_SCOPES as readonly string[]).includes(added)) {
+    return toggleScope(filters, added as SearchScope, senderKind);
+  }
+  return withScope(
+    filters,
+    next.filter((key) => key !== "any"),
+    senderKind,
+  );
+}
+
 const DAY_MS = 86_400_000;
 
 /**

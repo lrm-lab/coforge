@@ -145,33 +145,33 @@ export function SearchDialog({
         >
           <div onKeyDown={onKeyDown} className="flex max-h-[inherit] h-full min-h-0 flex-col">
             <div
-              className="flex flex-col gap-3 border-b border-secondary px-4 pt-3.5 pb-3"
+              className="flex items-center gap-3 border-b border-secondary px-4 py-3"
               onCompositionStart={() => setComposing(true)}
               onCompositionEnd={() => setComposing(false)}
             >
-              <div className="flex items-center gap-3">
-                <SearchLg aria-hidden="true" className="size-5 shrink-0 text-fg-brand-primary" />
-                <AriaInput
-                  type="search"
-                  aria-label={m.search_title()}
-                  placeholder={m.search_placeholder()}
-                  maxLength={SEARCH_QUERY_MAX_LENGTH}
-                  ref={box}
-                  value={text}
-                  onChange={(event) => setText(event.target.value)}
-                  className="w-full min-w-0 bg-transparent text-lg text-primary caret-fg-brand-primary outline-hidden placeholder:text-placeholder [&::-webkit-search-cancel-button]:appearance-none"
-                />
-                {/* A phone has no Esc and no backdrop to tap: the dialog fills the screen. */}
-                <ButtonUtility
-                  icon={XClose}
-                  size="sm"
-                  color="tertiary"
-                  className="sm:hidden"
-                  tooltip={m.controls_close()}
-                  aria-label={m.controls_close()}
-                  onClick={onClose}
-                />
-              </div>
+              <SearchLg aria-hidden="true" className="size-5 shrink-0 text-fg-brand-primary" />
+              <AriaInput
+                type="search"
+                aria-label={m.search_title()}
+                placeholder={m.search_placeholder()}
+                maxLength={SEARCH_QUERY_MAX_LENGTH}
+                ref={box}
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                className="w-full min-w-0 bg-transparent text-lg text-primary caret-fg-brand-primary outline-hidden placeholder:text-placeholder [&::-webkit-search-cancel-button]:appearance-none"
+              />
+              {/* A phone has no Esc and no backdrop to tap: the dialog fills the screen. */}
+              <ButtonUtility
+                icon={XClose}
+                size="sm"
+                color="tertiary"
+                className="sm:hidden"
+                tooltip={m.controls_close()}
+                aria-label={m.controls_close()}
+                onClick={onClose}
+              />
+            </div>
+            <div className="border-b border-secondary px-4 py-2.5">
               <SearchFilterBar
                 workspaceId={workspaceId}
                 filters={filters}

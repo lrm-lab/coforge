@@ -5,6 +5,7 @@ import {
   hasActiveFilter,
   messageSearchParams,
   parseScope,
+  selectScope,
   toggleScope,
   withScope,
   withSender,
@@ -62,6 +63,27 @@ test("toggling a scope chip switches between Humans and Agents while preserving 
   const clearedAgents = toggleScope(switchedToAgents, "agents", undefined);
   expect(clearedAgents.scope).toEqual(["mentioned"]);
   expect(toggleScope(clearedAgents, "mentioned", undefined).scope).toBeUndefined();
+});
+
+test("selecting in the Scope menu clears on All and swaps Humans/Agents", () => {
+  const fromAll = selectScope({}, ["any", "mentioned"], undefined);
+  expect(fromAll.scope).toEqual(["mentioned"]);
+
+  const withHumans = selectScope(fromAll, ["mentioned", "humans"], undefined);
+  expect(withHumans.scope).toEqual(["mentioned", "humans"]);
+
+  const swappedToAgents = selectScope(
+    { ...withHumans, senderId: "ada" },
+    ["mentioned", "humans", "agents"],
+    "user",
+  );
+  expect(swappedToAgents).toEqual({
+    senderId: undefined,
+    scope: ["mentioned", "agents"],
+  });
+
+  const backToAll = selectScope(swappedToAgents, ["mentioned", "agents", "any"], undefined);
+  expect(backToAll.scope).toBeUndefined();
 });
 
 test("filters narrow on their own; the sort order does not", () => {

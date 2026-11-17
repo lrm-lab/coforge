@@ -1,7 +1,15 @@
-import { memo, type ReactNode, useMemo } from "react";
+import { type FC, memo, type ReactNode, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, XClose } from "@untitledui/icons";
-import { Button as AriaButton, ToggleButton as AriaToggleButton } from "react-aria-components";
+import {
+  AtSign,
+  Calendar,
+  ChevronDown,
+  Hash02,
+  SwitchVertical02,
+  UserCircle,
+  XClose,
+} from "@untitledui/icons";
+import { Button as AriaButton } from "react-aria-components";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { channelLabel } from "#src/features/conversations/channel-visibility";
@@ -17,7 +25,8 @@ import {
   isSearchRange,
   SEARCH_RANGES,
   SEARCH_SCOPES,
-  toggleScope,
+  selectScope,
+  withScope,
   withSender,
   type SearchFilters,
   type SearchRange,
@@ -41,10 +50,10 @@ const SCOPE_LABEL: Record<SearchScope, () => string> = {
 };
 
 const INACTIVE_CHIP_CLASS =
-  "relative inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-lg px-2.5 text-xs font-medium text-secondary ring-1 ring-secondary ring-inset outline-focus-ring transition-colors duration-100 ease-linear hover:bg-primary_hover hover:text-primary focus-visible:outline-2 focus-visible:-outline-offset-2 max-sm:h-9 max-sm:px-3 max-sm:after:absolute max-sm:after:inset-x-0 max-sm:after:-inset-y-1";
+  "relative inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-secondary ring-1 ring-secondary ring-inset outline-focus-ring transition-colors duration-100 ease-linear hover:bg-primary_hover hover:text-primary focus-visible:outline-2 focus-visible:-outline-offset-2 max-sm:h-9 max-sm:px-3 max-sm:after:absolute max-sm:after:inset-x-0 max-sm:after:-inset-y-1";
 
 const ACTIVE_SHELL_CLASS =
-  "inline-flex h-7 shrink-0 items-center rounded-lg bg-(--color-reference-bg) text-(--color-reference-text) ring-1 ring-(--color-reference-text)/35 ring-inset max-sm:h-9";
+  "inline-flex h-8 shrink-0 items-center rounded-lg bg-(--color-reference-bg) text-(--color-reference-text) ring-1 ring-(--color-reference-text)/35 ring-inset max-sm:h-9";
 
 const ACTIVE_TRIGGER_CLASS =
   "relative inline-flex h-full cursor-pointer items-center gap-1.5 rounded-l-lg pl-2.5 pr-0.5 text-xs font-medium outline-focus-ring transition-colors duration-100 ease-linear hover:bg-(--color-reference-text)/10 focus-visible:outline-2 focus-visible:-outline-offset-2 max-sm:pl-3 max-sm:pr-0.5 max-sm:after:absolute max-sm:after:inset-x-0 max-sm:after:-inset-y-1";
@@ -77,10 +86,9 @@ function useFilterNames(workspaceId: string, filters: SearchFilters) {
 }
 
 /**
- * The inline filter capsules directly under the search box: From, Channel, Time, the three Scope
- * toggles (`@ Me`, `Humans`, `Agents`), and Sort. Active capsules highlight in reference violet
- * and expose an inline `×` button to clear in one tap while keeping the main label pressable to
- * switch values. Wraps on wide screens and scrolls horizontally on phones.
+ * The five search filter controls directly below the search input: four narrowing filters on the
+ * left (`From`, `Scope`, `Channel`, `Any time`) and `Sort` (`Relevant` / `Recent`) right-aligned.
+ * Wraps cleanly on wide screens and scrolls horizontally on phones.
  */
 export const SearchFilterBar = memo(function SearchFilterBar({
   workspaceId,
@@ -141,6 +149,11 @@ export const SearchFilterBar = memo(function SearchFilterBar({
     ...(sender.kind === "agent" ? { agentId: sender.id } : { userId: sender.id }),
   };
 
+  const scopeActive = Boolean(filters.scope?.length);
+  const scopeSummary = scopeActive
+    ? filters.scope!.map((scope) => SCOPE_LABEL[scope]()).join(", ")
+    : undefined;
+
   const channelActive = filters.channelId !== undefined;
   const channelName = channel?.name ?? m.search_channel();
   const channelFace: PickerFace | undefined = channel?.members?.length
@@ -158,7 +171,7 @@ export const SearchFilterBar = memo(function SearchFilterBar({
     <div
       role="group"
       aria-label={m.search_filters()}
-      className="flex flex-wrap items-center gap-1.5 max-sm:-mx-4 max-sm:-my-1 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:px-4 max-sm:py-1 max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden"
+      className="flex flex-wrap items-center gap-2 max-sm:-mx-4 max-sm:-my-1 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:px-4 max-sm:py-1 max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden"
     >
       <FilterChipShell
         active={senderActive}
@@ -182,11 +195,43 @@ export const SearchFilterBar = memo(function SearchFilterBar({
             <FilterTriggerButton
               active={senderActive}
               ariaLabel={sender ? m.search_from_named({ name: sender.label }) : m.search_from()}
+              icon={senderFace ? undefined : UserCircle}
               face={senderFace}
               label={senderActive ? senderLabel : m.search_from()}
             />
           }
         />
+      </FilterChipShell>
+
+      <FilterChipShell
+        active={scopeActive}
+        clearLabel={scopeSummary ? m.search_chip_remove({ name: scopeSummary }) : ""}
+        onClear={() => onChange(withScope(filters, [], sender?.kind))}
+      >
+        <Dropdown.Root>
+          <FilterTriggerButton
+            active={scopeActive}
+            ariaLabel={scopeSummary ? `${m.search_scope()}: ${scopeSummary}` : m.search_scope()}
+            icon={scopeSummary?.startsWith("@") ? undefined : AtSign}
+            label={scopeSummary ?? m.search_scope()}
+          />
+          <Dropdown.Popover placement="bottom start" className="w-44">
+            <Dropdown.Menu
+              aria-label={m.search_scope()}
+              selectionMode="multiple"
+              shouldCloseOnSelect={false}
+              selectedKeys={filters.scope?.length ? filters.scope : [ANY]}
+              onSelectionChange={(keys) => {
+                if (keys !== "all") onChange(selectScope(filters, keys, sender?.kind));
+              }}
+            >
+              <Dropdown.Item id={ANY} label={m.search_scope_all()} />
+              {SEARCH_SCOPES.map((scope) => (
+                <Dropdown.Item key={scope} id={scope} label={SCOPE_LABEL[scope]()} />
+              ))}
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown.Root>
       </FilterChipShell>
 
       <FilterChipShell
@@ -208,6 +253,8 @@ export const SearchFilterBar = memo(function SearchFilterBar({
               ariaLabel={
                 channel ? `${m.search_channel()}: ${channelLabel(channel)}` : m.search_channel()
               }
+              // A chosen channel wears its GroupAvatar (or bare name when empty), never a `#` glyph.
+              icon={channelActive ? undefined : Hash02}
               face={channelFace}
               label={channelActive ? channelName : m.search_channel()}
             />
@@ -223,8 +270,9 @@ export const SearchFilterBar = memo(function SearchFilterBar({
         <Dropdown.Root>
           <FilterTriggerButton
             active={rangeLabel !== undefined}
-            ariaLabel={rangeLabel ? `${m.search_time()}: ${rangeLabel}` : m.search_time()}
-            label={rangeLabel ?? m.search_time()}
+            ariaLabel={`${m.search_time()}: ${rangeLabel ?? m.search_time_any()}`}
+            icon={Calendar}
+            label={rangeLabel ?? m.search_time_any()}
           />
           <Dropdown.Popover placement="bottom start" className="w-44">
             <Dropdown.Menu
@@ -245,56 +293,38 @@ export const SearchFilterBar = memo(function SearchFilterBar({
         </Dropdown.Root>
       </FilterChipShell>
 
-      {SEARCH_SCOPES.map((scope) => {
-        const active = Boolean(filters.scope?.includes(scope));
-        const label = SCOPE_LABEL[scope]();
-        return (
-          <AriaToggleButton
-            key={scope}
-            isSelected={active}
-            onChange={() => onChange(toggleScope(filters, scope, sender?.kind))}
-            className={cx(
-              "relative inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-lg text-xs font-medium ring-1 ring-inset outline-focus-ring transition-colors duration-100 ease-linear focus-visible:outline-2 focus-visible:-outline-offset-2 max-sm:h-9 max-sm:after:absolute max-sm:after:inset-x-0 max-sm:after:-inset-y-1",
-              active
-                ? "bg-(--color-reference-bg) pl-2.5 pr-2 text-(--color-reference-text) ring-(--color-reference-text)/35 hover:bg-(--color-reference-bg) max-sm:pl-3 max-sm:pr-2.5"
-                : "px-2.5 text-secondary ring-secondary hover:bg-primary_hover hover:text-primary max-sm:px-3",
-            )}
-          >
-            <span>{label}</span>
-            {active && <XClose aria-hidden="true" className="size-3 shrink-0 opacity-80" />}
-          </AriaToggleButton>
-        );
-      })}
-
-      <FilterChipShell
-        active={recentSort}
-        clearLabel={m.search_chip_remove({ name: m.search_sort_recent() })}
-        onClear={() => onChange({ ...filters, sort: undefined })}
-      >
-        <Dropdown.Root>
-          <FilterTriggerButton
-            active={recentSort}
-            ariaLabel={
-              recentSort ? m.search_sort_named({ order: m.search_sort_recent() }) : m.search_sort()
-            }
-            label={recentSort ? m.search_sort_recent() : m.search_sort()}
-          />
-          <Dropdown.Popover placement="bottom end" className="w-40">
-            <Dropdown.Menu
-              aria-label={m.search_sort()}
-              selectionMode="single"
-              disallowEmptySelection
-              selectedKeys={[filters.sort ?? "relevance"]}
-              onAction={(key) =>
-                onChange({ ...filters, sort: key === "recent" ? "recent" : undefined })
-              }
-            >
-              <Dropdown.Item id="relevance" label={m.search_sort_relevant()} />
-              <Dropdown.Item id="recent" label={m.search_sort_recent()} />
-            </Dropdown.Menu>
-          </Dropdown.Popover>
-        </Dropdown.Root>
-      </FilterChipShell>
+      <div className="shrink-0 sm:ml-auto">
+        <FilterChipShell
+          active={recentSort}
+          clearLabel={m.search_chip_remove({ name: m.search_sort_recent() })}
+          onClear={() => onChange({ ...filters, sort: undefined })}
+        >
+          <Dropdown.Root>
+            <FilterTriggerButton
+              active={recentSort}
+              ariaLabel={m.search_sort_named({
+                order: recentSort ? m.search_sort_recent() : m.search_sort_relevant(),
+              })}
+              icon={SwitchVertical02}
+              label={recentSort ? m.search_sort_recent() : m.search_sort_relevant()}
+            />
+            <Dropdown.Popover placement="bottom end" className="w-40">
+              <Dropdown.Menu
+                aria-label={m.search_sort()}
+                selectionMode="single"
+                disallowEmptySelection
+                selectedKeys={[filters.sort ?? "relevance"]}
+                onAction={(key) =>
+                  onChange({ ...filters, sort: key === "recent" ? "recent" : undefined })
+                }
+              >
+                <Dropdown.Item id="relevance" label={m.search_sort_relevant()} />
+                <Dropdown.Item id="recent" label={m.search_sort_recent()} />
+              </Dropdown.Menu>
+            </Dropdown.Popover>
+          </Dropdown.Root>
+        </FilterChipShell>
+      </div>
     </div>
   );
 });
@@ -310,13 +340,16 @@ function FilterChipShell({
   onClear: () => void;
   children: ReactNode;
 }) {
-  if (!active) return <>{children}</>;
   return (
-    <div className={ACTIVE_SHELL_CLASS}>
+    <div
+      className={cx("inline-flex shrink-0 items-center rounded-lg", active && ACTIVE_SHELL_CLASS)}
+    >
       {children}
-      <AriaButton aria-label={clearLabel} onPress={onClear} className={ACTIVE_CLEAR_CLASS}>
-        <XClose aria-hidden="true" className="size-3 shrink-0" />
-      </AriaButton>
+      {active && (
+        <AriaButton aria-label={clearLabel} onPress={onClear} className={ACTIVE_CLEAR_CLASS}>
+          <XClose aria-hidden="true" className="size-3 shrink-0" />
+        </AriaButton>
+      )}
     </div>
   );
 }
@@ -324,11 +357,13 @@ function FilterChipShell({
 function FilterTriggerButton({
   active,
   ariaLabel,
+  icon: Icon,
   face,
   label,
 }: {
   active: boolean;
   ariaLabel: string;
+  icon?: FC<{ className?: string }>;
   face?: PickerFace;
   label: string;
 }) {
@@ -340,7 +375,19 @@ function FilterTriggerButton({
         face && "pl-1.5 max-sm:pl-2",
       )}
     >
-      {face && <Face face={face} />}
+      {face ? (
+        <Face face={face} />
+      ) : (
+        Icon && (
+          <Icon
+            aria-hidden="true"
+            className={cx(
+              "size-3.5 shrink-0",
+              active ? "text-(--color-reference-text)" : "text-fg-quaternary",
+            )}
+          />
+        )
+      )}
       <span className={cx("whitespace-nowrap", active && "max-w-36 truncate")}>{label}</span>
       {!active && (
         <ChevronDown aria-hidden="true" className="size-3.5 shrink-0 text-fg-quaternary" />
