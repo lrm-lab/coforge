@@ -199,7 +199,7 @@
   "records_side_chat_placeholder_busy": "Wait until the weekly report assistant finishes",
   "records_weekly_ai_setup_title": "Set up your weekly report assistant",
   "records_weekly_ai_setup_description": "Choose a Computer and Runtime before asking the weekly report assistant to analyze or write reports.",
-  "records_weekly_ai_setup_action": "Open weekly report assistant configuration",
+  "records_weekly_ai_setup_action": "Set up",
   "records_weekly_ai_setup_dismiss": "Not now",
   "records_weekly_ai_request_failed": "The weekly report assistant request failed. Please try again.",
   "records_tabs_from_dimensions_empty": "No template dimensions yet. Create a template with dimensions in Weekly report settings, then reload this page.",

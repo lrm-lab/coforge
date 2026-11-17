@@ -54,7 +54,6 @@ export const RecordSideTimeline = memo(function RecordSideTimeline({
   threadStates: ReturnType<typeof commentThreadStates>;
   viewerName: string;
   viewerAvatarUrl: string | null | undefined;
-  /** The viewer's weekly report assistant's picture, once its status has loaded. */
   assistantAvatarUrl: string | undefined;
   busy: boolean;
   sendOfferActive: boolean | undefined;
@@ -111,8 +110,10 @@ export const RecordSideTimeline = memo(function RecordSideTimeline({
                       : comment.author?.avatarUrl
                   }
                 />
-                <span className="text-sm font-medium text-primary">{authorName}</span>
-                <span className="ml-auto text-xs text-tertiary">
+                <span className="min-w-0 truncate text-sm font-medium text-primary">
+                  {authorName}
+                </span>
+                <span className="ml-auto shrink-0 whitespace-nowrap text-xs text-tertiary">
                   {new Date(comment.createdAt).toLocaleString()}
                 </span>
               </div>
@@ -211,8 +212,10 @@ export const RecordSideTimeline = memo(function RecordSideTimeline({
                 name={authorName}
                 src={message.author === "assistant" ? assistantAvatarUrl : viewerAvatarUrl}
               />
-              <span className="text-sm font-medium text-primary">{authorName}</span>
-              <span className="ml-auto text-xs text-tertiary">
+              <span className="min-w-0 truncate text-sm font-medium text-primary">
+                {authorName}
+              </span>
+              <span className="ml-auto shrink-0 whitespace-nowrap text-xs text-tertiary">
                 {new Date(message.createdAt).toLocaleString()}
               </span>
             </div>

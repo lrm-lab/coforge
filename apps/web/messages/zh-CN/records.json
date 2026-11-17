@@ -199,7 +199,7 @@
   "records_side_chat_placeholder_busy": "周报助手处理完成后再发送",
   "records_weekly_ai_setup_title": "配置周报助手",
   "records_weekly_ai_setup_description": "请先选择 Computer 和 Runtime，才能让周报助手分析或编写周报。",
-  "records_weekly_ai_setup_action": "打开周报助手配置",
+  "records_weekly_ai_setup_action": "去配置",
   "records_weekly_ai_setup_dismiss": "暂不配置",
   "records_weekly_ai_request_failed": "周报助手请求失败，请稍后重试。",
   "records_tabs_from_dimensions_empty": "还没有模板维度。请先在「周报设置」中创建模板并添加维度，再刷新本页。",
