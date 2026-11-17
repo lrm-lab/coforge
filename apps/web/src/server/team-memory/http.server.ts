@@ -40,7 +40,10 @@ export async function handleTeamMemory(
   memory: TeamMemory,
 ): Promise<Response> {
   try {
-    return Response.json(await memory.execute(actor, await readCommand(request)), {
+    const caller = actor.agentId
+      ? { ...actor, includeHumanAuthors: request.headers.get("x-coforge-memory-authors") === "2" }
+      : actor;
+    return Response.json(await memory.execute(caller, await readCommand(request)), {
       headers: { "cache-control": "no-store" },
     });
   } catch (error) {
@@ -49,13 +52,15 @@ export async function handleTeamMemory(
         { errorCode: error.message, error: error.message },
         {
           status:
-            error.code === "forbidden" || error.code === "disabled"
-              ? 403
-              : error.code === "not_found"
-                ? 404
-                : error.code === "conflict"
-                  ? 409
-                  : 400,
+            error.code === "upgrade_required"
+              ? 426
+              : error.code === "forbidden" || error.code === "disabled"
+                ? 403
+                : error.code === "not_found"
+                  ? 404
+                  : error.code === "conflict"
+                    ? 409
+                    : 400,
           headers: { "cache-control": "no-store" },
         },
       );

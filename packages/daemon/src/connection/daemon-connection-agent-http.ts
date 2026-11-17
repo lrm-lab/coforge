@@ -204,7 +204,11 @@ export abstract class DaemonConnectionAgentHttp extends DaemonConnectionWorkspac
     return forwardAgentRequest(
       this.forwardPorts(),
       "Team memory",
-      { ...TEAM_MEMORY_ROUTE, body: JSON.stringify(request) },
+      {
+        ...TEAM_MEMORY_ROUTE,
+        body: JSON.stringify(request),
+        headers: { "x-coforge-memory-authors": "2" },
+      },
       agentApiKey,
     );
   }

@@ -9,7 +9,7 @@ import {
 } from "@lrm/coforge-sdk/agent";
 
 export type TeamMemoryActor = { workspaceId: string } & (
-  | { agentId: string; userId?: never }
+  | { agentId: string; userId?: never; includeHumanAuthors?: boolean }
   | { userId: string; agentId?: never }
 );
 export interface TeamMemoryStore {
@@ -22,7 +22,15 @@ export interface TeamMemoryStore {
   write(actor: TeamMemoryActor, command: TeamMemoryWrite): Promise<TeamMemoryResult>;
 }
 export class TeamMemoryError extends Error {
-  constructor(readonly code: "forbidden" | "not_found" | "conflict" | "invalid" | "disabled") {
+  constructor(
+    readonly code:
+      | "forbidden"
+      | "not_found"
+      | "conflict"
+      | "invalid"
+      | "disabled"
+      | "upgrade_required",
+  ) {
     super(`memory_${code}`);
   }
 }
@@ -49,7 +57,6 @@ export function teamMemoryDedup(draft: TeamMemoryDraft): string {
         draft.content.trim().normalize("NFKC"),
         draft.applicability.trim().normalize("NFKC"),
         draft.kind,
-        ...(draft.projectId ? [draft.projectId] : []),
       ]),
     )
     .digest("hex");
