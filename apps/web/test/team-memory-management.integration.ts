@@ -12,7 +12,7 @@ if (!url)
     "TEAM_MEMORY_TEST_DATABASE_URL must name a disposable migrated PostgreSQL database",
   );
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) });
-let workspaceId: string, otherWorkspaceId: string, userId: string, agentId: string, peerId: string;
+let workspaceId: string, otherWorkspaceId: string, userId: string, agentId: string;
 beforeAll(async () => {
   userId = (
     await db.user.create({
@@ -50,7 +50,6 @@ beforeAll(async () => {
       },
     });
   agentId = (await make("developer")).id;
-  peerId = (await make("reviewer")).id;
 });
 afterAll(async () => {
   if (workspaceId) await db.workspace.delete({ where: { id: workspaceId } });

@@ -19,6 +19,7 @@ The module map of `src/features/`, split out of [`apps/web/AGENTS.md`](../../AGE
 - `features/install/` — Computer install command text.
 - `features/integrations/` — Settings → Integrations GitHub view and functions.
 - `features/landing/` — the public homepage.
+- `features/memory/` — Workspace team memory browsing, project filters, human corrections, archival and version recovery through authenticated server functions.
 - `features/notifications/` — browser push lifecycle and in-page notifications.
 - `features/onboarding/` — the first-sign-in setup wizard (`onboarding-wizard.tsx` and its four `onboarding-*-step.tsx`, the pure `onboarding-wizard-plan.ts`, `person-role.ts` for the closed role set; rules in `docs/design/onboarding-wizard.md`).
 - `features/panel-tabs/` — each member's saved panel tab order.
