@@ -20,6 +20,7 @@ type HintRow = {
   latestSenderName: string | null;
   latestSenderType: WakeHintSenderType;
   mentioned: boolean;
+  outsideMention: boolean;
 };
 
 type HintDb = Pick<
@@ -51,7 +52,8 @@ export async function listWakeHints(
       (array_agg(CASE WHEN "senderUsername" IS NOT NULL THEN 'human'
                       WHEN "senderAgentName" IS NOT NULL THEN 'agent'
                       ELSE 'system' END ORDER BY "sequence" DESC))[1] AS "latestSenderType",
-      bool_or("mentioned") AS "mentioned"
+      bool_or("mentioned") AS "mentioned",
+      bool_or("nonMemberMention") AS "outsideMention"
     FROM flagged
     GROUP BY "conversationId", "threadRootId"
     ORDER BY max("createdAt") DESC, "conversationId", "threadRootId"
@@ -80,6 +82,7 @@ export async function listWakeHints(
           : "dm";
     const flags: WakeHintFlag[] = [];
     if (row.mentioned) flags.push("mention");
+    if (row.outsideMention) flags.push("non_member_mention");
     if (channelType === "dm") flags.push("dm");
     if (row.threadRootId) flags.push("thread");
     if (channelType === "task") flags.push("task");

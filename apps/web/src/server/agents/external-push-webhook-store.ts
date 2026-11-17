@@ -19,6 +19,11 @@ export type PushWebhookRow = {
   rejectionStreak: number;
   retryAt: Date | null;
   retryNoticeId: string | null;
+  unauthorizedSince: Date | null;
+  disabledAt: Date | null;
+  nextProbeAt: Date | null;
+  probeAttempts: number | null;
+  probeStoppedAt: Date | null;
 };
 
 export type PushAgentState = {
@@ -35,8 +40,16 @@ export type PushAttemptUpdate = {
   rejectionStreak: number;
   retryAt: Date | null;
   retryNoticeId: string | null;
+  unauthorizedSince: Date | null;
+  disabledAt?: Date | null;
+  nextProbeAt?: Date | null;
+  probeAttempts?: number | null;
+  probeStoppedAt?: Date | null;
   disabledReason?: PushDisabledReason;
+  reenable?: true;
 };
+
+export type PushProbeSchedule = { agentId: string; nextProbeAt: Date };
 
 export interface PushWebhookStore {
   find(agentId: string): Promise<PushWebhookRow | undefined>;
@@ -51,4 +64,5 @@ export interface PushWebhookStore {
     agentId: string,
   ): Promise<{ row: PushWebhookRow; agent: PushAgentState } | undefined>;
   record(agentId: string, revision: number, update: PushAttemptUpdate): Promise<boolean>;
+  pendingProbes(): Promise<PushProbeSchedule[]>;
 }

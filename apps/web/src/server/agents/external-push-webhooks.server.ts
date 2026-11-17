@@ -5,7 +5,12 @@ import {
   type OutboundEgress,
 } from "#src/server/egress/outbound-egress.server";
 import { isStrongPushSecret, type PushWebhookSealer } from "./external-push-webhook-secret.server";
-import type { PushDisabledReason, PushWebhookStore } from "./external-push-webhook-store";
+import type { PushRecovery } from "./external-push-recovery.server";
+import type {
+  PushDisabledReason,
+  PushWebhookRow,
+  PushWebhookStore,
+} from "./external-push-webhook-store";
 
 export class PushWebhookRefusal extends Error {
   constructor(
@@ -25,6 +30,7 @@ export type PushWebhookView = {
   lastDeliveryAt: Date | null;
   lastError: string | null;
   consecutiveFailures: number;
+  recovery: PushRecovery | null;
 };
 
 export type ExternalPushWebhookDependencies = {
@@ -36,6 +42,16 @@ export type ExternalPushWebhookDependencies = {
 
 const invalidUrl = () =>
   new PushWebhookRefusal("invalid_url", 400, "url must be an https URL without credentials");
+
+function recoveryOf(row: PushWebhookRow): PushRecovery | null {
+  if (row.enabled) return null;
+  const probing = row.disabledReason === "endpoint_rejected" && row.nextProbeAt !== null;
+  return {
+    resumesOn: probing ? "probe_success" : "put",
+    nextProbeAt: probing ? row.nextProbeAt : null,
+    probeStoppedAt: row.probeStoppedAt,
+  };
+}
 
 export class ExternalPushWebhooks {
   constructor(
@@ -96,6 +112,7 @@ export class ExternalPushWebhooks {
       lastDeliveryAt: row.lastDeliveryAt,
       lastError: row.lastError,
       consecutiveFailures: row.consecutiveFailures,
+      recovery: recoveryOf(row),
     };
   }
 

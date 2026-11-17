@@ -21,6 +21,11 @@ const rowOf = (row: {
   rejectionStreak: number;
   retryAt: Date | null;
   retryNoticeId: string | null;
+  unauthorizedSince: Date | null;
+  disabledAt: Date | null;
+  nextProbeAt: Date | null;
+  probeAttempts: number | null;
+  probeStoppedAt: Date | null;
 }): PushWebhookRow => ({ ...row, disabledReason: row.disabledReason as PushDisabledReason | null });
 
 export class PrismaExternalPushWebhookStore implements PushWebhookStore {
@@ -40,6 +45,11 @@ export class PrismaExternalPushWebhookStore implements PushWebhookStore {
       rejectionStreak: 0,
       retryAt: null,
       retryNoticeId: null,
+      unauthorizedSince: null,
+      disabledAt: null,
+      nextProbeAt: null,
+      probeAttempts: null,
+      probeStoppedAt: null,
     };
     await this.db.externalAgentPushWebhook.upsert({
       where: { agentId: input.agentId },
@@ -71,12 +81,27 @@ export class PrismaExternalPushWebhookStore implements PushWebhookStore {
   }
 
   async record(agentId: string, revision: number, update: PushAttemptUpdate) {
-    const { disabledReason, ...rest } = update;
+    const { disabledReason, reenable, ...rest } = update;
+    const state = disabledReason
+      ? { enabled: false, disabledReason }
+      : reenable
+        ? { enabled: true, disabledReason: null }
+        : {};
     const { count } = await this.db.externalAgentPushWebhook.updateMany({
       where: { agentId, revision },
-      data: { ...rest, ...(disabledReason ? { enabled: false, disabledReason } : {}) },
+      data: { ...rest, ...state },
     });
     return count > 0;
+  }
+
+  async pendingProbes() {
+    const rows = await this.db.externalAgentPushWebhook.findMany({
+      where: { enabled: false, disabledReason: "endpoint_rejected", nextProbeAt: { not: null } },
+      select: { agentId: true, nextProbeAt: true },
+    });
+    return rows.flatMap((row) =>
+      row.nextProbeAt ? [{ agentId: row.agentId, nextProbeAt: row.nextProbeAt }] : [],
+    );
   }
 }
 

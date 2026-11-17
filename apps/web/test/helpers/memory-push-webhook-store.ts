@@ -36,6 +36,11 @@ export class MemoryPushWebhookStore implements PushWebhookStore {
       rejectionStreak: 0,
       retryAt: null,
       retryNoticeId: null,
+      unauthorizedSince: null,
+      disabledAt: null,
+      nextProbeAt: null,
+      probeAttempts: null,
+      probeStoppedAt: null,
     });
   }
 
@@ -52,16 +57,27 @@ export class MemoryPushWebhookStore implements PushWebhookStore {
   async record(agentId: string, revision: number, update: PushAttemptUpdate) {
     const row = this.rows.get(agentId);
     if (!row || row.revision !== revision) return false;
+    const { disabledReason, reenable, ...rest } = update;
     this.rows.set(agentId, {
       ...row,
+      ...Object.fromEntries(Object.entries(rest).filter(([, value]) => value !== undefined)),
       lastError: update.lastError,
       consecutiveFailures: update.consecutiveFailures,
       rejectionStreak: update.rejectionStreak,
       retryAt: update.retryAt,
       retryNoticeId: update.retryNoticeId,
       lastDeliveryAt: update.lastDeliveryAt ?? row.lastDeliveryAt,
-      ...(update.disabledReason ? { enabled: false, disabledReason: update.disabledReason } : {}),
+      ...(disabledReason ? { enabled: false, disabledReason } : {}),
+      ...(reenable ? { enabled: true, disabledReason: null } : {}),
     });
     return true;
+  }
+
+  async pendingProbes() {
+    return [...this.rows.values()].flatMap((row) =>
+      !row.enabled && row.disabledReason === "endpoint_rejected" && row.nextProbeAt
+        ? [{ agentId: row.agentId, nextProbeAt: row.nextProbeAt }]
+        : [],
+    );
   }
 }

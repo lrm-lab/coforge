@@ -1,6 +1,6 @@
 import { isRecord } from "../internal";
 
-export const WAKE_HINT_FLAGS = ["mention", "dm", "thread", "task"] as const;
+export const WAKE_HINT_FLAGS = ["mention", "non_member_mention", "dm", "thread", "task"] as const;
 export type WakeHintFlag = (typeof WAKE_HINT_FLAGS)[number];
 
 export const WAKE_HINT_CHANNEL_TYPES = ["channel", "dm", "task", "attachment"] as const;

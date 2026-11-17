@@ -93,6 +93,92 @@ describe("wake hints", () => {
   });
 });
 
+describe("a mention from outside the channel", () => {
+  test("wakes the Agent with the non_member_mention flag and shows only that channel", async () => {
+    const { f, agentId, scope } = await world();
+    const outside = await db.conversation.create({
+      data: {
+        workspaceId: f.workspaceId,
+        channelName: `town-${f.suffix}`,
+        members: { create: [{ userId: f.people.owner.id }] },
+      },
+    });
+    const sender = await db.conversationMember.findFirstOrThrow({
+      where: { conversationId: outside.id, userId: f.people.owner.id },
+    });
+    const message = await db.message.create({
+      data: {
+        workspaceId: f.workspaceId,
+        conversationId: outside.id,
+        senderMemberId: sender.id,
+        sequence: 1,
+        body: `@${f.key} look`,
+      },
+    });
+    const privateChannel = await db.conversation.create({
+      data: {
+        workspaceId: f.workspaceId,
+        channelName: `vault-${f.suffix}`,
+        visibility: "private",
+        members: { create: [{ userId: f.people.owner.id }] },
+      },
+    });
+    const secretSender = await db.conversationMember.findFirstOrThrow({
+      where: { conversationId: privateChannel.id, userId: f.people.owner.id },
+    });
+    const secret = await db.message.create({
+      data: {
+        workspaceId: f.workspaceId,
+        conversationId: privateChannel.id,
+        senderMemberId: secretSender.id,
+        sequence: 1,
+        body: `@${f.key} hidden`,
+      },
+    });
+    for (const [msg, conversation, member] of [
+      [message, outside, sender],
+      [secret, privateChannel, secretSender],
+    ] as const) {
+      await db.agentMessageDelivery.create({
+        data: {
+          messageId: msg.id,
+          agentId,
+          workspaceId: f.workspaceId,
+          conversationId: conversation.id,
+          sequence: 1,
+        },
+      });
+      await db.pendingMentionAction.create({
+        data: {
+          messageId: msg.id,
+          conversationId: conversation.id,
+          workspaceId: f.workspaceId,
+          senderMemberId: member.id,
+          targetAgentId: agentId,
+          targetHandle: f.key,
+          notifiedAt: new Date(),
+          expiresAt: new Date(Date.now() + 86_400_000),
+        },
+      });
+    }
+    const hints = await listWakeHints(db, scope);
+    expect(hints).toHaveLength(1);
+    expect(hints[0]).toMatchObject({
+      target: `#town-${f.suffix}`,
+      channelId: outside.id,
+      pendingCount: 1,
+    });
+    expect(hints[0]!.flags).toEqual(["mention", "non_member_mention"]);
+  });
+
+  test("a member's mention never carries the flag", async () => {
+    const { f, scope, post } = await world();
+    await post(`@${f.key} hi`);
+    const [hint] = await listWakeHints(db, scope);
+    expect(hint!.flags).not.toContain("non_member_mention");
+  });
+});
+
 describe("the landing lookup", () => {
   test("finds a live external Agent that is a member, flags a ready webhook, skips others", async () => {
     const { f, agentId, post, channel } = await world();
@@ -130,6 +216,7 @@ describe("the landing lookup", () => {
       rejectionStreak: 0,
       retryAt: new Date(Date.now() + 60_000),
       retryNoticeId: crypto.randomUUID(),
+      unauthorizedSince: null,
     });
     await noticeExternalInbox(db, { conversationId: channel.id, messageId: message.id }, deps);
     expect(enqueued).toEqual([agentId]);
@@ -139,6 +226,7 @@ describe("the landing lookup", () => {
       rejectionStreak: 0,
       retryAt: null,
       retryNoticeId: null,
+      unauthorizedSince: null,
       disabledReason: "endpoint_rejected",
     });
     await noticeExternalInbox(db, { conversationId: channel.id, messageId: message.id }, deps);
@@ -156,6 +244,9 @@ describe("the push webhook store", () => {
       url: "https://a.example/x",
       secretSealed: "s1",
     });
+    const probesOf = async () =>
+      (await store.pendingProbes()).filter((probe) => probe.agentId === agentId);
+    expect(await probesOf()).toEqual([]);
     const first = (await store.find(agentId))!;
     expect(first).toMatchObject({ revision: 1, enabled: true });
     expect(
@@ -165,13 +256,39 @@ describe("the push webhook store", () => {
         rejectionStreak: 3,
         retryAt: null,
         retryNoticeId: null,
+        unauthorizedSince: null,
         disabledReason: "endpoint_rejected",
+        disabledAt: new Date("2026-11-17T00:00:00Z"),
+        nextProbeAt: new Date("2026-11-17T01:00:00Z"),
+        probeAttempts: 0,
       }),
     ).toBe(true);
     expect(await store.find(agentId)).toMatchObject({
       enabled: false,
       disabledReason: "endpoint_rejected",
+      probeAttempts: 0,
     });
+    expect(await probesOf()).toEqual([{ agentId, nextProbeAt: new Date("2026-11-17T01:00:00Z") }]);
+    expect(
+      await store.record(agentId, 1, {
+        lastError: null,
+        consecutiveFailures: 0,
+        rejectionStreak: 0,
+        retryAt: null,
+        retryNoticeId: null,
+        unauthorizedSince: null,
+        reenable: true,
+        disabledAt: null,
+        nextProbeAt: null,
+        probeAttempts: null,
+      }),
+    ).toBe(true);
+    expect(await store.find(agentId)).toMatchObject({
+      enabled: true,
+      disabledReason: null,
+      nextProbeAt: null,
+    });
+    expect(await probesOf()).toEqual([]);
     await store.save({
       agentId,
       workspaceId: f.workspaceId,
@@ -190,6 +307,7 @@ describe("the push webhook store", () => {
         lastError: null,
         consecutiveFailures: 9,
         rejectionStreak: 0,
+        unauthorizedSince: null,
         retryAt: null,
         retryNoticeId: null,
       }),

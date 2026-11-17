@@ -94,27 +94,83 @@ describe("a failed attempt is retried with the same notice id", () => {
 });
 
 describe("an endpoint that rejects", () => {
-  test.each([401, 404, 410])(
-    "three consecutive %i answers turn the webhook off",
-    async (status) => {
-      const { store, rescheduled, run } = await setup(() => ({ status }));
-      await run();
-      await run();
-      expect(store.rows.get("a1")).toMatchObject({ enabled: true, rejectionStreak: 2 });
-      await run();
-      expect(store.rows.get("a1")).toMatchObject({
-        enabled: false,
-        disabledReason: "endpoint_rejected",
-      });
-      expect(rescheduled).toHaveLength(2);
-    },
-  );
+  test.each([404, 410])("three consecutive %i answers turn the webhook off", async (status) => {
+    const { store, rescheduled, run } = await setup(() => ({ status }));
+    await run();
+    await run();
+    expect(store.rows.get("a1")).toMatchObject({ enabled: true, rejectionStreak: 2 });
+    await run();
+    expect(store.rows.get("a1")).toMatchObject({
+      enabled: false,
+      disabledReason: "endpoint_rejected",
+    });
+    expect(rescheduled).toHaveLength(2);
+  });
+
+  test("404 and 410 answers count together", async () => {
+    const answers = [404, 410, 404];
+    const { store, run } = await setup(() => ({ status: answers.shift()! }));
+    for (let i = 0; i < 3; i++) await run();
+    expect(store.rows.get("a1")).toMatchObject({ enabled: false });
+  });
 
   test("an answer in between resets the streak", async () => {
-    const answers = [401, 401, 500, 401, 401];
+    const answers = [404, 404, 500, 404, 404];
     const { store, run } = await setup(() => ({ status: answers.shift()! }));
     for (let i = 0; i < 5; i++) await run();
     expect(store.rows.get("a1")).toMatchObject({ enabled: true, rejectionStreak: 2 });
+  });
+
+  test("a 401 streak younger than 24 hours keeps retrying", async () => {
+    const { store, rescheduled, clock, run } = await setup(() => ({ status: 401 }));
+    for (let i = 0; i < 5; i++) {
+      await run();
+      clock.at = new Date(clock.at.getTime() + 60 * 60 * 1000);
+    }
+    expect(store.rows.get("a1")).toMatchObject({ enabled: true, rejectionStreak: 5 });
+    expect(rescheduled).toHaveLength(5);
+  });
+
+  test("three 401 answers turn it off once 24 hours passed since the first", async () => {
+    const { store, clock, run } = await setup(() => ({ status: 401 }));
+    await run();
+    clock.at = new Date(NOW.getTime() + 12 * 3600 * 1000);
+    await run();
+    clock.at = new Date(NOW.getTime() + 24 * 3600 * 1000);
+    await run();
+    expect(store.rows.get("a1")).toMatchObject({
+      enabled: false,
+      disabledReason: "endpoint_rejected",
+    });
+  });
+
+  test("two 401 answers a day apart are not enough", async () => {
+    const { store, clock, run } = await setup(() => ({ status: 401 }));
+    await run();
+    clock.at = new Date(NOW.getTime() + 25 * 3600 * 1000);
+    await run();
+    expect(store.rows.get("a1")).toMatchObject({ enabled: true, rejectionStreak: 2 });
+  });
+
+  test("any other answer ends a 401 streak, and a 404 starts its own", async () => {
+    const answers = [401, 401, 404, 401, 204, 401];
+    const { store, clock, run } = await setup(() => ({ status: answers.shift()! }));
+    for (let i = 0; i < 6; i++) {
+      await run();
+      clock.at = new Date(clock.at.getTime() + 20 * 3600 * 1000);
+    }
+    expect(store.rows.get("a1")).toMatchObject({ enabled: true, rejectionStreak: 1 });
+  });
+
+  test("turning off starts the recovery probes one hour later", async () => {
+    const { store, probes, run } = await setup(() => ({ status: 404 }));
+    for (let i = 0; i < 3; i++) await run();
+    expect(store.rows.get("a1")).toMatchObject({
+      disabledAt: NOW,
+      nextProbeAt: new Date(NOW.getTime() + 3600 * 1000),
+      probeAttempts: 0,
+    });
+    expect(probes).toEqual([{ agentId: "a1", delaySeconds: 3600 }]);
   });
 });
 

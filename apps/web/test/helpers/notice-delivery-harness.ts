@@ -35,6 +35,10 @@ export async function setup(
   });
   const sent: Sent[] = [];
   const rescheduled: { agentId: string; noticeId: string; delaySeconds: number }[] = [];
+  const probes: { agentId: string; delaySeconds: number }[] = [];
+  const announced: string[] = [];
+  const clock = { at: NOW };
+  let ids = 0;
   const delivery = new ExternalInboxNoticeDelivery(store, {
     egress: {
       sendToAny: async (url, request) => {
@@ -49,12 +53,23 @@ export async function setup(
     reschedule: async (agentId, noticeId, delaySeconds) => {
       rescheduled.push({ agentId, noticeId, delaySeconds });
     },
-    now: () => NOW,
+    scheduleProbe: async (agentId, delaySeconds) => {
+      probes.push({ agentId, delaySeconds });
+    },
+    announce: async (agentId) => {
+      announced.push(agentId);
+    },
+    newId: () => `probe-${++ids}`,
+    now: () => clock.at,
   });
   return {
     store,
     sent,
     rescheduled,
+    probes,
+    announced,
+    clock,
     run: (noticeId = "n1") => delivery.deliver({ agentId: "a1", noticeId }),
+    probe: () => delivery.deliver({ agentId: "a1", probe: true }),
   };
 }

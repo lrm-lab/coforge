@@ -13,7 +13,7 @@ const REJECTING = new Set([401, 404, 410]);
 
 export type Outcome =
   | { kind: "delivered" }
-  | { kind: "rejected"; error: string }
+  | { kind: "rejected"; error: string; status: number }
   | { kind: "retry"; error: string; delaySeconds: number };
 
 function retryAfterSeconds(value: string | undefined, now: Date): number | undefined {
@@ -39,7 +39,7 @@ export function classify(result: OutboundResult, attempt: number, now: Date): Ou
   const { status } = result;
   if (status >= 200 && status < 300) return { kind: "delivered" };
   const error = `http_${status}`;
-  if (REJECTING.has(status)) return { kind: "rejected", error };
+  if (REJECTING.has(status)) return { kind: "rejected", error, status };
   const retryAfter = retryAfterSeconds(result.retryAfter, now);
   if (status === 429)
     return {

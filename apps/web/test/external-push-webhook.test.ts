@@ -53,6 +53,7 @@ describe("registering a push webhook", () => {
       lastDeliveryAt: null,
       lastError: null,
       consecutiveFailures: 0,
+      recovery: null,
     });
     const row = store.rows.get("a1")!;
     expect(row.secretSealed).not.toContain(SECRET);
@@ -128,6 +129,71 @@ describe("reading and removing it", () => {
     expect(await service.remove("a1")).toBe(true);
     expect(await service.get("a1")).toBeNull();
     expect(await service.remove("a1")).toBe(false);
+  });
+});
+
+describe("the recovery a disabled webhook reports", () => {
+  const rejected = {
+    enabled: false,
+    disabledReason: "endpoint_rejected" as const,
+    disabledAt: new Date("2026-11-16T00:00:00Z"),
+    nextProbeAt: new Date("2026-11-17T01:00:00Z"),
+    probeAttempts: 2,
+  };
+
+  async function registered(over: Partial<Parameters<MemoryPushWebhookStore["rows"]["set"]>[1]>) {
+    const { store, service } = setup();
+    await service.put(principal, { url: "https://hooks.example/a", secret: SECRET });
+    store.rows.set("a1", { ...store.rows.get("a1")!, ...over });
+    return service;
+  }
+
+  test("is null while push is on", async () => {
+    const { service } = setup();
+    const view = await service.put(principal, { url: "https://hooks.example/a", secret: SECRET });
+    expect(view.recovery).toBeNull();
+  });
+
+  test("names the next probe while probing", async () => {
+    const service = await registered(rejected);
+    expect((await service.get("a1"))!.recovery).toEqual({
+      resumesOn: "probe_success",
+      nextProbeAt: rejected.nextProbeAt,
+      probeStoppedAt: null,
+    });
+  });
+
+  test("says only a PUT resumes it once probing stopped", async () => {
+    const stoppedAt = new Date("2026-12-16T00:00:00Z");
+    const service = await registered({ ...rejected, nextProbeAt: null, probeStoppedAt: stoppedAt });
+    expect((await service.get("a1"))!.recovery).toEqual({
+      resumesOn: "put",
+      nextProbeAt: null,
+      probeStoppedAt: stoppedAt,
+    });
+  });
+
+  test("says only a PUT resumes it for a reason that is not probed", async () => {
+    const service = await registered({ enabled: false, disabledReason: "agent_unavailable" });
+    expect((await service.get("a1"))!.recovery).toEqual({
+      resumesOn: "put",
+      nextProbeAt: null,
+      probeStoppedAt: null,
+    });
+  });
+
+  test("a new PUT clears the probe state", async () => {
+    const { store, service } = setup();
+    await service.put(principal, { url: "https://hooks.example/a", secret: SECRET });
+    store.rows.set("a1", { ...store.rows.get("a1")!, ...rejected, probeStoppedAt: new Date() });
+    const view = await service.put(principal, { url: "https://hooks.example/a", secret: SECRET });
+    expect(view.recovery).toBeNull();
+    expect(store.rows.get("a1")).toMatchObject({
+      nextProbeAt: null,
+      probeAttempts: null,
+      probeStoppedAt: null,
+      disabledAt: null,
+    });
   });
 });
 

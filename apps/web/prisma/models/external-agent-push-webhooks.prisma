@@ -18,6 +18,16 @@ model ExternalAgentPushWebhook {
   rejectionStreak     Int       @default(0)
   retryAt             DateTime?
   retryNoticeId       String?   @db.Uuid
+  /// When the current run of 401 answers began; null while the last rejection was not a 401
+  unauthorizedSince   DateTime?
+  /// When push was last turned off
+  disabledAt          DateTime?
+  /// The next recovery probe of an endpoint_rejected webhook; null when none is planned
+  nextProbeAt         DateTime?
+  /// Probes sent since push was turned off
+  probeAttempts       Int?
+  /// When probing gave up after the recovery window; only a new PUT turns push on then
+  probeStoppedAt      DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   agent               Agent     @relation(fields: [agentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)

@@ -29,3 +29,8 @@ test("a malformed hint or flag is refused", () => {
   expect(() => decodeWakeHint({ ...hint, latestSeq: 7 })).toThrow("invalid wake hint");
   expect(() => decodeWakeHints({ hints: "x" })).toThrow("invalid wake hints");
 });
+
+test("the non-member mention flag decodes", () => {
+  const flagged = { ...hint, flags: ["mention", "non_member_mention"] };
+  expect(decodeWakeHint(flagged)).toEqual(flagged as WakeHint);
+});

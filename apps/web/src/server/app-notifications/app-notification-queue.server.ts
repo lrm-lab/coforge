@@ -21,6 +21,7 @@ import {
   EXTERNAL_INBOX_NOTICE_QUEUE_OPTIONS,
   type ExternalInboxNoticeJob,
 } from "#src/server/agents/external-inbox-notice-queue.server";
+import { resumeExternalPushProbes } from "#src/server/agents/external-inbox-notice-delivery-composition.server";
 import { anyExternalPushWebhook } from "#src/server/db/repositories/external-agent-push-webhook.repositories.server";
 import {
   APP_NOTIFICATION_DELIVERY_QUEUE,
@@ -97,6 +98,9 @@ export function startAppNotificationQueue(
       );
       await boss.work<ExternalInboxNoticeJob>(EXTERNAL_INBOX_NOTICE_QUEUE, polling, (jobs) =>
         deliverExternalInboxNotices(boss, jobs),
+      );
+      await resumeExternalPushProbes(boss).catch(() =>
+        console.error(JSON.stringify({ event: "app_notifications:probe_resume_failed" })),
       );
     } catch (error) {
       await boss.stop({ graceful: false }).catch(() => {});
