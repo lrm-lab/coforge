@@ -128,7 +128,7 @@ function NoticeSheet({ children }: { children: ReactNode }) {
       isDismissable
       className={({ isEntering, isExiting }) =>
         cn(
-          "fixed inset-0 z-50 flex items-end bg-overlay/70",
+          "fixed inset-0 z-50 flex items-end bg-modal-scrim/70",
           isEntering && "motion-enter animate-in fade-in",
           isExiting && "motion-leave animate-out fade-out",
         )
@@ -216,7 +216,7 @@ export function NotificationBell({
         </AriaPopover>
       ) : (
         <NoticeSheet>
-          <div className="flex max-h-[80dvh] flex-col overflow-hidden rounded-t-2xl bg-primary pb-safe-bottom">
+          <div className="flex max-h-[80dvh] flex-col overflow-hidden rounded-t-2xl bg-primary pb-safe-bottom ring-1 ring-modal-edge">
             <span
               aria-hidden="true"
               className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-quaternary"

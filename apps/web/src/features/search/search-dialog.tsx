@@ -121,7 +121,7 @@ export function SearchDialog({
       onOpenChange={(open) => !open && onClose()}
       className="bg-overlay/30 backdrop-blur-none max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px] sm:items-start sm:[--modal-pt:12vh] lg:animate-none"
     >
-      <Modal className="flex w-full flex-col max-sm:h-full max-sm:rounded-none sm:max-w-[40rem] lg:animate-none dark:bg-secondary dark:ring-1 dark:ring-secondary_alt">
+      <Modal className="flex w-full flex-col max-sm:h-full max-sm:rounded-none sm:max-w-[40rem] lg:animate-none dark:bg-secondary">
         <Dialog
           aria-label={m.search_title()}
           className="group/search min-h-0 flex-1 overflow-hidden"

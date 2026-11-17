@@ -185,7 +185,7 @@ export function MessageActionSheet({
       data-message-actions-popover
       className={(state) =>
         cn(
-          "fixed inset-0 z-50 flex min-h-dvh items-end justify-center bg-overlay/70 outline-hidden backdrop-blur-[6px]",
+          "fixed inset-0 z-50 flex min-h-dvh items-end justify-center bg-modal-scrim/70 outline-hidden backdrop-blur-[6px]",
           state.isEntering && "motion-enter animate-in fade-in",
           state.isExiting && "motion-leave animate-out fade-out",
         )
@@ -194,7 +194,7 @@ export function MessageActionSheet({
       <AriaModal
         className={(state) =>
           cn(
-            "w-full rounded-t-2xl bg-primary shadow-xl outline-hidden",
+            "w-full rounded-t-2xl bg-primary shadow-xl ring-1 ring-modal-edge outline-hidden",
             state.isEntering && "motion-enter-lg animate-in slide-in-from-bottom",
             state.isExiting && "motion-leave-lg animate-out slide-out-to-bottom",
           )

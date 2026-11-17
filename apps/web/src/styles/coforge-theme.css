@@ -54,6 +54,8 @@
   --color-avatar-more-fg: var(--color-brand-600);
   --color-avatar-add-fg: #777d8d;
 
+  --color-modal-scrim: var(--color-neutral-950);
+  --color-modal-edge: transparent;
   --color-image-frame: oklch(0.9642 0 0);
   --color-image-frame-border: oklch(0.1813 0.005 17.62 / 0.149);
 
@@ -97,6 +99,8 @@
   }
 
   .dark-mode {
+    --color-modal-scrim: var(--color-black);
+    --color-modal-edge: var(--color-border-primary);
     --color-image-frame: oklch(0.3161 0.0052 106.7);
     --color-image-frame-border: oklch(0.9843 0.004 106.47 / 0.102);
 
