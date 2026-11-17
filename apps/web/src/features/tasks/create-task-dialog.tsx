@@ -20,16 +20,10 @@ import { isImeComposing } from "#src/lib/ime";
 import { isApplePlatform } from "#src/lib/platform";
 import { m } from "#src/paraglide/messages";
 import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "./task-assignment";
-import { AssigneeMenu } from "./task-assignee-menu";
+import { CreateTaskProperties } from "./create-task-properties";
 import { TaskDialogWhere } from "./task-dialog-where";
-import { TaskLabelsField } from "./task-labels";
-import { TaskProjectMenu } from "./task-project-menu";
-import { TaskPriorityMenu } from "./task-priority-menu";
-import { cn } from "#src/lib/utils";
-import { BARE_CHIP, TaskProperty } from "./task-property";
 import { CreateTaskPhoneBar } from "./create-task-phone-bar";
 import { TaskStatusIcon } from "./task-status-icon";
-import { StatusPicker } from "./task-status-menu";
 import { useTaskAssignmentAccess } from "./use-task-assignment-access";
 import { useLastTaskProject } from "./use-last-task-project";
 import { draftLabels, useWorkspaceLabels } from "./workspace-labels";
@@ -319,69 +313,16 @@ export function CreateTaskDialog({
               {/* What else it starts with, under what it says, as the popup's chips. On a phone they
                   are one row that scrolls sideways at the page's foot, which the overlay keeps right
                   above the keyboard, so they are in reach while the title is typed. */}
-              <div
-                data-layout="create"
-                className="flex shrink-0 flex-wrap gap-2 px-4 pt-1 pb-5 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:overscroll-x-contain max-sm:border-t max-sm:border-secondary max-sm:py-2 max-sm:[scrollbar-width:none] sm:px-6"
-              >
-                {board && (
-                  <TaskProperty label={m.tasks_overview_status()}>
-                    <StatusPicker
-                      status={board.status}
-                      options={board.statuses}
-                      disabled={saving}
-                      onSelect={board.onStatusChange}
-                    />
-                  </TaskProperty>
-                )}
-                {assignable && (
-                  <TaskProperty label={m.tasks_overview_owner()}>
-                    <AssigneeMenu
-                      task={draftTask}
-                      members={assignable}
-                      disabled={saving}
-                      onSelect={(assignee) => change({ assignee: assignee ?? undefined })}
-                    />
-                  </TaskProperty>
-                )}
-                <TaskProperty label={m.tasks_priority()}>
-                  <TaskPriorityMenu
-                    priority={draft.priority}
-                    disabled={saving}
-                    onSelect={(priority) => change({ priority })}
-                  />
-                </TaskProperty>
-                {offersProject && (
-                  <TaskProperty label={m.tasks_project()}>
-                    <TaskProjectMenu
-                      task={draftTask}
-                      disabled={saving}
-                      lastUsed={lastProject}
-                      onSelect={(project) => change({ project })}
-                    />
-                  </TaskProperty>
-                )}
-                <TaskProperty
-                  label={m.tasks_labels()}
-                  // As in the popup: labels are chips of their own, not a name to truncate.
-                  className={cn(
-                    "[[data-layout=create]_&]:max-w-none",
-                    draft.labels.length > 0 && BARE_CHIP,
-                  )}
-                >
-                  <TaskLabelsField
-                    task={draftTask}
-                    disabled={saving}
-                    onChange={({ add = [], remove = [] }) =>
-                      change({
-                        labels: [
-                          ...draft.labels.filter((name) => !remove.includes(name)),
-                          ...add.filter((name) => !draft.labels.includes(name)),
-                        ],
-                      })
-                    }
-                  />
-                </TaskProperty>
-              </div>
+              <CreateTaskProperties
+                board={board}
+                assignable={assignable}
+                task={draftTask}
+                offersProject={offersProject}
+                lastUsed={lastProject}
+                draft={draft}
+                saving={saving}
+                onChange={change}
+              />
               {error && (
                 <p role="alert" className="shrink-0 px-4 pb-2 text-sm text-error-primary sm:px-6">
                   {error}
