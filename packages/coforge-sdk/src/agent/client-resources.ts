@@ -1,6 +1,5 @@
 import { createRawExtendedResources } from "./client-app-artifact-resources";
 import { agentApiRoutes, workspaceInfoRoute } from "./routes";
-import type { AgentActionPrepareResponse } from "./action-cards";
 import type {
   AgentHistoryResponse,
   AgentSearchResponse,
@@ -53,7 +52,6 @@ export function createAgentApiRawClient(transport: AgentApiTransport): RawAgentA
     tasks: taskResources(transport),
     reminders: reminderResources(transport),
     labels: labelResources(transport),
-    actions: actionResources(transport),
     messages: messageResources(transport),
     events: eventsResources(transport),
     manual: manualResources(transport),
@@ -153,6 +151,7 @@ function taskResources(transport: AgentApiTransport): RawAgentApiClient["tasks"]
     convert: execute("convert"),
     claim: execute("claim"),
     unclaim: execute("unclaim"),
+    assign: execute("assign"),
     update: execute("update"),
   };
 }
@@ -178,15 +177,6 @@ function labelResources(transport: AgentApiTransport): RawAgentApiClient["labels
     list: () =>
       transport.request(agentApiRoutes.cloud.labels) as Promise<
         AgentApiResult<AgentLabelListResponse>
-      >,
-  };
-}
-
-function actionResources(transport: AgentApiTransport): RawAgentApiClient["actions"] {
-  return {
-    prepare: (request) =>
-      transport.request(agentApiRoutes.cloud.actionPrepare, request) as Promise<
-        AgentApiResult<AgentActionPrepareResponse>
       >,
   };
 }

@@ -6,7 +6,6 @@ import type {
   AgentTaskResponse,
   DistributiveOmit,
 } from "./types";
-import type { AgentActionPrepareRequest, AgentActionPrepareResponse } from "./action-cards";
 import type {
   AgentMessagesReadRequest,
   AgentMessagesSearchRequest,
@@ -232,6 +231,7 @@ export type AgentApiClient = {
     convert(request: AgentTaskInput): Promise<AgentTaskResponse>;
     claim(request: AgentTaskInput): Promise<AgentTaskResponse>;
     unclaim(request: AgentTaskInput): Promise<AgentTaskResponse>;
+    assign(request: AgentTaskInput): Promise<AgentTaskResponse>;
     update(request: AgentTaskInput): Promise<AgentTaskResponse>;
   };
   reminders: {
@@ -244,9 +244,6 @@ export type AgentApiClient = {
   };
   labels: {
     list(): Promise<AgentLabelListResponse>;
-  };
-  actions: {
-    prepare(request: AgentActionPrepareRequest): Promise<AgentActionPrepareResponse>;
   };
   messages: {
     read(request: AgentMessagesReadRequest): Promise<AgentHistoryResponse>;
@@ -312,6 +309,7 @@ export type RawAgentApiClient = {
     convert(request: AgentTaskInput): Promise<AgentApiResult<AgentTaskResponse>>;
     claim(request: AgentTaskInput): Promise<AgentApiResult<AgentTaskResponse>>;
     unclaim(request: AgentTaskInput): Promise<AgentApiResult<AgentTaskResponse>>;
+    assign(request: AgentTaskInput): Promise<AgentApiResult<AgentTaskResponse>>;
     update(request: AgentTaskInput): Promise<AgentApiResult<AgentTaskResponse>>;
   };
   reminders: {
@@ -324,11 +322,6 @@ export type RawAgentApiClient = {
   };
   labels: {
     list(): Promise<AgentApiResult<AgentLabelListResponse>>;
-  };
-  actions: {
-    prepare(
-      request: AgentActionPrepareRequest,
-    ): Promise<AgentApiResult<AgentActionPrepareResponse>>;
   };
   messages: {
     read(request: AgentMessagesReadRequest): Promise<AgentApiResult<AgentHistoryResponse>>;
@@ -402,6 +395,7 @@ export function createAgentApiClient(transport: AgentApiTransport): AgentApiClie
       convert: async (request) => unwrap(await rawClient.tasks.convert(request)),
       claim: async (request) => unwrap(await rawClient.tasks.claim(request)),
       unclaim: async (request) => unwrap(await rawClient.tasks.unclaim(request)),
+      assign: async (request) => unwrap(await rawClient.tasks.assign(request)),
       update: async (request) => unwrap(await rawClient.tasks.update(request)),
     },
     reminders: {
@@ -414,9 +408,6 @@ export function createAgentApiClient(transport: AgentApiTransport): AgentApiClie
     },
     labels: {
       list: async () => unwrap(await rawClient.labels.list()),
-    },
-    actions: {
-      prepare: async (request) => unwrap(await rawClient.actions.prepare(request)),
     },
     messages: {
       read: async (request) => unwrap(await rawClient.messages.read(request)),

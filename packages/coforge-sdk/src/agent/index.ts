@@ -17,6 +17,7 @@ export * from "./app-marketplace";
 export * from "./mention-actions";
 export * from "./attachment-comments";
 export * from "./inbox-list";
+export * from "./inbox-actions";
 export * from "./thread-list";
 export * from "./labels";
 export * from "./task-conversations";

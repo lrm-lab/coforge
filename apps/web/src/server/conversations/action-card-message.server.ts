@@ -1,5 +1,9 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
-import type { ActionCardKind, ResolvedActionCardPayload } from "@lrm/coforge-sdk/agent";
+import {
+  CHOICE_ANYONE_TARGET,
+  type ActionCardKind,
+  type ResolvedActionCardPayload,
+} from "@lrm/coforge-sdk/agent";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import type { ActionCardTarget } from "./action-card-target.server";
 import { lockConversation } from "./conversation-lock.server";
@@ -113,8 +117,11 @@ async function announceToAskedPerson(
       where: { messageId },
       select: { kind: true, payload: true, workspaceId: true },
     });
-    const asked = card?.kind === "choice" ? (card.payload as { to?: string }).to : undefined;
-    if (card && asked)
+    const asked =
+      card && (card.kind === "choice" || card.kind === "questions")
+        ? (card.payload as { to?: string }).to
+        : undefined;
+    if (card && asked && asked !== CHOICE_ANYONE_TARGET)
       await realtime.activityChanged({ workspaceId: card.workspaceId, userId: asked });
   } catch {
     // PostgreSQL remains canonical; the list reads again when Activity next loads it.

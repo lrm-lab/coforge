@@ -1,12 +1,17 @@
 import type { TeamMemoryCommand, TeamMemoryResult } from "@lrm/coforge-sdk/agent";
 import type { ExternalSession } from "#src/external/profile-store";
 import type {
+  AgentActionWithdrawResponse,
   AgentAppConfigPatch,
   AgentAppConfigResponse,
   AgentAttachmentCommentsRequest,
   AgentAttachmentCommentsResponse,
   AgentCommandGuidanceRequest,
   AgentCommandGuidanceResponse,
+  AgentInboxDismissRequest,
+  AgentInboxDismissResponse,
+  AgentInboxReadRequest,
+  AgentInboxReadResponse,
   AgentManualGetResponse,
   AgentManualSearchResponse,
   AgentMentionDeliveryResponse,
@@ -105,6 +110,8 @@ export type MessageTransport = LabelTransport &
     /** Set when the commands run as an external Agent, straight against the server. */
     external?: ExternalSession;
     inboxList?: InboxTransport["inboxList"];
+    inboxRead?(request: AgentInboxReadRequest): Promise<AgentInboxReadResponse>;
+    inboxDismiss?(request: AgentInboxDismissRequest): Promise<AgentInboxDismissResponse>;
     setChannelMuted?(target: string, muted: boolean): Promise<unknown>;
     reminder?(request: ReminderTransportRequest): Promise<ReminderResponse>;
     setThreadFollowed?(target: string, followed: boolean): Promise<unknown>;
@@ -124,6 +131,7 @@ export type MessageTransport = LabelTransport &
      * the CLI itself. */
     githubCommitTrailers?(repository: string | null): Promise<string[]>;
     actionPrepare?(target: string, action: ActionCardAction): Promise<ActionPrepareResult>;
+    actionWithdraw?(messageId: string): Promise<AgentActionWithdrawResponse>;
     manualGet?(topic: string, intent: string, reason: string): Promise<AgentManualGetResponse>;
     manualSearch?(
       query: string,

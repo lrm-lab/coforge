@@ -21,6 +21,7 @@ import { pathParam } from "./agent-proxy-paths";
 import { decodePathParam } from "./agent-proxy-request-parsers";
 import { proxyFailureResponse } from "./agent-proxy-response";
 import type { TokenBinding } from "./agent-proxy-route";
+import type { AgentProxyRuntime } from "./agent-proxy-runtime";
 
 const LOCAL_PROXY_ROUTES = agentApiRoutes.proxy;
 const THREAD_FOLLOW_SUFFIX = "/follow";
@@ -40,12 +41,28 @@ export type AgentProxyCloudForward = {
  */
 export function createCollabProxyDispatcher(input: {
   agentApiKeys: { get(agentId: string): string | undefined };
+  runtime?: AgentProxyRuntime;
   stateDirectory?: string;
   reportsCompaction?: (agentId: string) => boolean;
   cloudForward?: AgentProxyCloudForward;
 }) {
-  const stateDirectory =
-    input.stateDirectory ?? daemonStartupOptions(process.argv.slice(2)).daemonStateDirectory;
+  let defaultStateDir: string | undefined;
+  let cachedConfigStore: { dir: string; store: DaemonConfigStore } | undefined;
+  let cachedCredStore: FileDaemonCredentialStore | undefined;
+
+  const resolveStateDir = () => {
+    if (input.stateDirectory) return input.stateDirectory;
+    const fromRuntime = input.runtime?.collab?.stateDirectory();
+    if (fromRuntime) return fromRuntime;
+    defaultStateDir ??= daemonStartupOptions(process.argv.slice(2)).daemonStateDirectory;
+    return defaultStateDir;
+  };
+
+  const authorize = (binding: TokenBinding): string | undefined => {
+    const apiKey = input.agentApiKeys.get(binding.agentId);
+    input.runtime?.collab?.authorize(binding.context, apiKey);
+    return apiKey;
+  };
 
   const resolveCloud = async (agentId: string) => {
     const agentApiKey = input.agentApiKeys.get(agentId);
@@ -56,24 +73,29 @@ export function createCollabProxyDispatcher(input: {
         ? { agentApiKey, serverHttpUrl: input.cloudForward.serverHttpUrl, daemonApiKey }
         : null;
     }
-    const cfg = await new DaemonConfigStore(stateDirectory, {
-      serverHttpUrl: Bun.env.COFORGE_DAEMON_SERVER_URL,
-    }).load();
+    const dir = resolveStateDir();
+    if (!cachedConfigStore || cachedConfigStore.dir !== dir) {
+      cachedConfigStore = {
+        dir,
+        store: new DaemonConfigStore(dir, {
+          serverHttpUrl: Bun.env.COFORGE_DAEMON_SERVER_URL,
+        }),
+      };
+    }
+    const cfg = await cachedConfigStore.store.load();
     if (!cfg?.serverHttpUrl) return null;
-    const daemonApiKey = await new FileDaemonCredentialStore().load(
-      cfg.workspaceId,
-      cfg.computerId,
-    );
+    cachedCredStore ??= new FileDaemonCredentialStore();
+    const daemonApiKey = await cachedCredStore.load(cfg.workspaceId, cfg.computerId);
     return daemonApiKey ? { agentApiKey, serverHttpUrl: cfg.serverHttpUrl, daemonApiKey } : null;
   };
 
-  const forwardCloudJson = async (
+  const forwardCloudData = async (
     agentId: string,
     method: "GET" | "POST",
     path: string,
     what: string,
     options: { query?: URLSearchParams; body?: unknown } = {},
-  ): Promise<Response> => {
+  ): Promise<unknown | Response> => {
     const cloud = await resolveCloud(agentId);
     if (!cloud) return new Response("not found", { status: 404 });
     const url = new URL(path, cloud.serverHttpUrl);
@@ -91,30 +113,49 @@ export function createCollabProxyDispatcher(input: {
       what,
     );
     await assertAgentResponseOk(res, what);
-    return Response.json(await readAgentResponseJson(res, what));
+    return readAgentResponseJson(res, what);
+  };
+
+  const forwardCloudJson = async (
+    agentId: string,
+    method: "GET" | "POST",
+    path: string,
+    what: string,
+    options: { query?: URLSearchParams; body?: unknown } = {},
+  ): Promise<Response> => {
+    const data = await forwardCloudData(agentId, method, path, what, options);
+    return data instanceof Response ? data : Response.json(data);
   };
 
   const discardDraft = async (
-    agentId: string,
+    binding: TokenBinding,
     payload: Record<string, unknown>,
   ): Promise<Response> => {
-    const target = typeof payload.target === "string" ? payload.target.trim() : "";
+    const rawTarget = typeof payload.target === "string" ? payload.target.trim() : "";
     const expected = payload.expectedDraftKey;
     if (
-      !target ||
+      !rawTarget ||
       payload.sendDraft === true ||
       payload.continueAnyway === true ||
       payload.content !== undefined ||
       (expected !== undefined && (typeof expected !== "string" || !expected.trim()))
     )
       return badRequest();
+    const apiKey = authorize(binding);
+    const target =
+      input.runtime?.collab && apiKey
+        ? await input.runtime.collab.canonicalizeTarget(binding.context, rawTarget, apiKey)
+        : rawTarget;
     const idempotencyKey =
       typeof payload.idempotencyKey === "string" && payload.idempotencyKey
         ? payload.idempotencyKey
         : crypto.randomUUID();
+    const stateDirectory = resolveStateDir();
     const hasDb =
-      Boolean(input.stateDirectory) ||
-      existsSync(join(stateDirectory, "agent-state", escapePathIdentity(agentId), "state.db"));
+      Boolean(input.stateDirectory || input.runtime?.collab) ||
+      existsSync(
+        join(stateDirectory, "agent-state", escapePathIdentity(binding.agentId), "state.db"),
+      );
     if (!hasDb) {
       return Response.json({
         idempotencyKey,
@@ -124,7 +165,7 @@ export function createCollabProxyDispatcher(input: {
         target,
       });
     }
-    const stateDb = AgentStateDb.open(stateDirectory, agentId);
+    const stateDb = AgentStateDb.open(stateDirectory, binding.agentId);
     try {
       const store = new AgentMessageDraftStore(stateDb);
       const lookup = await store.lookup(target);
@@ -173,6 +214,7 @@ export function createCollabProxyDispatcher(input: {
       if (thread instanceof Response) return thread;
       if (!isChannelMessageTarget(thread) || isChannelTarget(thread)) return badRequest();
       try {
+        authorize(registered);
         const parsed =
           request.headers.get("content-length") === "0"
             ? undefined
@@ -196,6 +238,121 @@ export function createCollabProxyDispatcher(input: {
       }
     }
     if (
+      request.method === LOCAL_PROXY_ROUTES.inboxRead.method &&
+      requestUrl.pathname === LOCAL_PROXY_ROUTES.inboxRead.path
+    ) {
+      if (!registered) return new Response("unauthorized", { status: 401 });
+      const query = Object.fromEntries(requestUrl.searchParams);
+      const target = query.target?.trim() ?? "";
+      if (!target) return badRequest();
+      const limit = query.limit === undefined ? undefined : Number(query.limit);
+      if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1 || limit > 100))
+        return badRequest();
+      const cursor = query.cursor?.trim() || undefined;
+      try {
+        const apiKey = authorize(registered);
+        if (
+          target !== "reminders" &&
+          !target.startsWith("reminder:") &&
+          input.runtime?.collab &&
+          apiKey
+        ) {
+          return Response.json(
+            await input.runtime.collab.readMessagesForInbox(
+              registered.context,
+              {
+                target,
+                ...(limit !== undefined ? { limit } : {}),
+                ...(cursor !== undefined ? { cursor } : {}),
+              },
+              apiKey,
+            ),
+          );
+        }
+        return await forwardCloudJson(
+          registered.agentId,
+          "GET",
+          agentApiRoutes.cloud.inboxRead.path,
+          "Agent inbox read",
+          { query: requestUrl.searchParams },
+        );
+      } catch (error) {
+        return proxyFailureResponse(error, {
+          method: request.method,
+          path: requestUrl.pathname,
+          routeFamily: "agent-api/inbox-read",
+          agentId: registered.agentId,
+        });
+      }
+    }
+    if (
+      request.method === LOCAL_PROXY_ROUTES.inboxDismiss.method &&
+      requestUrl.pathname === LOCAL_PROXY_ROUTES.inboxDismiss.path
+    ) {
+      if (!registered) return new Response("unauthorized", { status: 401 });
+      if (request.headers.get("content-type")?.toLowerCase() !== "application/json")
+        return new Response("unsupported media type", { status: 415 });
+      const body = await readJsonBody(request, MAX_BODY_BYTES);
+      if (body instanceof Response) return body;
+      if (!isRecord(body.payload)) return badRequest();
+      try {
+        const apiKey = authorize(registered);
+        const data = await forwardCloudData(
+          registered.agentId,
+          "POST",
+          agentApiRoutes.cloud.inboxDismiss.path,
+          "Agent inbox dismiss",
+          { body: body.payload },
+        );
+        if (data instanceof Response) return data;
+        if (apiKey && input.runtime?.collab && isRecord(data) && Array.isArray(data.targets)) {
+          await input.runtime.collab.settleDismissedTargets(
+            registered.context,
+            data.targets.filter((entry): entry is string => typeof entry === "string"),
+            apiKey,
+            typeof body.payload.target === "string" ? body.payload.target.trim() : undefined,
+          );
+        }
+        return Response.json(data);
+      } catch (error) {
+        return proxyFailureResponse(error, {
+          method: request.method,
+          path: requestUrl.pathname,
+          routeFamily: "agent-api/inbox-dismiss",
+          agentId: registered.agentId,
+        });
+      }
+    }
+    if (
+      request.method === LOCAL_PROXY_ROUTES.actionWithdraw.method &&
+      requestUrl.pathname === LOCAL_PROXY_ROUTES.actionWithdraw.path
+    ) {
+      if (!registered) return new Response("unauthorized", { status: 401 });
+      if (request.headers.get("content-type")?.toLowerCase() !== "application/json")
+        return new Response("unsupported media type", { status: 415 });
+      const body = await readJsonBody(request, MAX_BODY_BYTES);
+      if (body instanceof Response) return body;
+      if (!isRecord(body.payload) || typeof body.payload.messageId !== "string")
+        return badRequest();
+      try {
+        authorize(registered);
+        return await forwardCloudJson(
+          registered.agentId,
+          "POST",
+          agentApiRoutes.cloud.actionWithdraw.path,
+          "Agent action withdraw",
+          { body: { messageId: body.payload.messageId } },
+        );
+      } catch (error) {
+        return proxyFailureResponse(error, {
+          method: request.method,
+          path: requestUrl.pathname,
+          routeFamily: "agent-api/action-withdraw",
+          agentId: registered.agentId,
+        });
+      }
+    }
+    if (
       request.method === LOCAL_PROXY_ROUTES.guidance.method &&
       requestUrl.pathname === LOCAL_PROXY_ROUTES.guidance.path
     ) {
@@ -208,19 +365,33 @@ export function createCollabProxyDispatcher(input: {
       const op = body.payload.operation;
       const cmd = typeof body.payload.command === "string" ? body.payload.command.trim() : "";
       if ((op !== "check" && op !== "satisfy") || !cmd) return badRequest();
-      return Response.json(
-        evaluateAgentCommandGuidance({
-          stateDirectory,
-          hasExplicitStateDir: Boolean(input.stateDirectory),
+      try {
+        authorize(registered);
+        return Response.json(
+          evaluateAgentCommandGuidance({
+            stateDirectory: resolveStateDir(),
+            hasExplicitStateDir: Boolean(input.stateDirectory || input.runtime?.collab),
+            agentId: registered.agentId,
+            operation: op,
+            command: cmd,
+            reportsCompaction:
+              input.reportsCompaction ??
+              (input.runtime?.collab
+                ? (id) => input.runtime!.collab!.reportsCompaction(id)
+                : undefined),
+          }),
+        );
+      } catch (error) {
+        return proxyFailureResponse(error, {
+          method: request.method,
+          path: requestUrl.pathname,
+          routeFamily: "agent-api/guidance",
           agentId: registered.agentId,
-          operation: op,
-          command: cmd,
-          reportsCompaction: input.reportsCompaction,
-        }),
-      );
+        });
+      }
     }
     return undefined;
   };
 
-  return { dispatchDirect, discardDraft, forwardCloudJson, stateDirectory };
+  return { dispatchDirect, discardDraft, forwardCloudJson };
 }

@@ -1,17 +1,26 @@
 import { isAgentInboxView, AGENT_INBOX_VIEWS, type AgentInboxView } from "@lrm/coforge-sdk/agent";
 import { CliError } from "#src/cli-error";
 import {
+  parseInboxDismissArgs,
+  parseInboxReadArgs,
+  type InboxDismissInvocation,
+  type InboxReadInvocation,
+} from "#src/inbox-commands";
+import {
   isChannelTarget,
   MESSAGE_ANCHOR_SOURCE,
   UUID_LIKE_SOURCE,
 } from "@lrm/coforge-sdk/internal";
 
-export type InboxInvocation = {
-  command: "inbox-check";
-  json?: boolean;
-  view?: AgentInboxView;
-  before?: number;
-};
+export type InboxInvocation =
+  | {
+      command: "inbox-check";
+      json?: boolean;
+      view?: AgentInboxView;
+      before?: number;
+    }
+  | InboxReadInvocation
+  | InboxDismissInvocation;
 export type ChannelInvocation = { command: "mute" | "unmute"; target: string };
 export type ThreadInvocation =
   | { command: "thread-follow"; target: string }
@@ -161,6 +170,8 @@ export function parseAttentionArgs(
     return { command: "thread-list" };
   }
   if (args[0] === "inbox" && args[1] === "check") return parseInboxCheckArgs(args.slice(2));
+  if (args[0] === "inbox" && args[1] === "read") return parseInboxReadArgs(args.slice(2));
+  if (args[0] === "inbox" && args[1] === "dismiss") return parseInboxDismissArgs(args.slice(2));
   return undefined;
 }
 

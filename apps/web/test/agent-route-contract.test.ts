@@ -110,6 +110,10 @@ const NOT_SERVED_BY_WEB = new Map([
     "/api/agent/v1/proc/stop",
     "ProcJobManager stops local background jobs in the Daemon and never forwards the request to Web/backend",
   ],
+  [
+    "/api/agent/v1/guidance",
+    "evaluateAgentCommandGuidance answers it from the Agent's local context ledger in the Daemon and never forwards the request to Web/backend",
+  ],
 ]);
 
 /** Web routes the contract does not declare. Empty: every route served here is a contract member. */

@@ -33,12 +33,13 @@ export function actionCardSummary(action: ActionCardAction): string {
     // Numbered as the card numbers them, per question, so a reply of "1. 2" reads as the
     // first question's second option.
     const questions = action.questions
-      .map(
-        (question, index) =>
-          `${index + 1}. ${question.prompt} (${question.options
-            .map((option, optionIndex) => `${choiceNumber(optionIndex)}. ${option.label}`)
-            .join("; ")})`,
-      )
+      .map((question, index) => {
+        if (question.kind === "text" || question.options.length === 0)
+          return `${index + 1}. ${question.prompt} (free text)`;
+        return `${index + 1}. ${question.prompt} (${question.options
+          .map((option, optionIndex) => `${choiceNumber(optionIndex)}. ${option.label}`)
+          .join("; ")})`;
+      })
       .join("; ");
     return action.prompt ? `${action.prompt}: ${questions}` : questions;
   }

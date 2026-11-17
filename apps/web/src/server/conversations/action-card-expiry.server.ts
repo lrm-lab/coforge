@@ -1,3 +1,4 @@
+import { CHOICE_ANYONE_TARGET } from "@lrm/coforge-sdk/agent";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { onServerShutdown } from "#src/server/runtime/server-lifecycle.server";
@@ -71,9 +72,10 @@ async function deliverExpired(
   card: ExpiredCard,
 ) {
   const payload = card.payload as { prompt?: string; to?: string } | null;
-  const asked = payload?.to
-    ? await db.user.findUnique({ where: { id: payload.to }, select: { username: true } })
-    : undefined;
+  const asked =
+    payload?.to && payload.to !== CHOICE_ANYONE_TARGET
+      ? await db.user.findUnique({ where: { id: payload.to }, select: { username: true } })
+      : undefined;
   await wakeCardAuthor(db, publisher, card, "expired", (target) =>
     cardExpiredBody(asked ? cardPerson(asked.username) : undefined, {
       kind: card.kind,

@@ -74,13 +74,20 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
     syntax: "coforge channel unmute [<target>]",
   },
   inbox: {
-    syntax: "coforge inbox check [--view unread|mentions] [--before <n>] [--json]",
-    example: "coforge inbox check --view mentions",
+    syntax:
+      "coforge inbox check [--view unread|mentions] [--before <n>] [--json] | coforge inbox read --target <item> [--limit <n>] [--cursor <c>] [--json] | coforge inbox dismiss (--target <item> | --before <iso>) [--json]",
+    example: "coforge inbox read --target '#general' --limit 10",
+  },
+  "inbox read": {
+    syntax: "coforge inbox read --target <item> [--limit <n>] [--cursor <c>] [--json]",
+  },
+  "inbox dismiss": {
+    syntax: "coforge inbox dismiss (--target <item> | --before <iso>) [--json]",
   },
   thread: {
     syntax:
-      "coforge thread list | coforge thread unfollow --target '#channel:message-id' [--reason <text>]",
-    example: "coforge thread unfollow --target '#general:12345678'",
+      "coforge thread list | coforge thread follow <thread> | coforge thread unfollow --target '#channel:message-id' [--reason <text>]",
+    example: "coforge thread follow '#general:12345678'",
   },
   reminder: {
     syntax: "coforge reminder schedule|list|cancel|update|snooze|seal|unseal ...",
@@ -205,10 +212,14 @@ const COMMANDS: Readonly<Record<string, HelpEntry>> = {
     syntax: "coforge workspace info [--limit <n>] [--offset <n>] [--json]",
   },
   action: {
-    syntax: "coforge action prepare --target <target>",
+    syntax:
+      "coforge action prepare --target <target> | coforge action withdraw --message <id> [--json]",
   },
   "action prepare": {
     syntax: "coforge action prepare --target <target>",
+  },
+  "action withdraw": {
+    syntax: "coforge action withdraw --message <id> [--json]",
   },
   whoami: {
     syntax: "coforge whoami [--json | --prompt]",

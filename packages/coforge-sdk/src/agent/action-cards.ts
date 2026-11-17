@@ -170,15 +170,17 @@ export const CHOICE_DEADLINE_MAX_MINUTES = 30 * 24 * 60;
  * timestamp) counted from when the card is posted. Absent, the card waits the full 30 days. */
 const choiceDeadlineSchema = z.number().int().positive().max(CHOICE_DEADLINE_MAX_MINUTES);
 
+/** The open addressee of a channel or task `choice` / `questions` card: any member in it may answer. */
+export const CHOICE_ANYONE_TARGET = "anyone";
+
 export const choiceActionSchema = z.object({
   type: z.literal("choice"),
   prompt: z.string().trim().min(1).max(200),
-  options: z.array(choiceOptionSchema).min(2).max(8),
+  options: z.array(choiceOptionSchema).min(1).max(8),
   /** Deprecated and ignored: accepted only so older CLIs that still send it keep working. */
   allowFreeText: z.boolean().optional(),
-  /** The person the card asks: a handle (`@alice` or `alice`) or a UUID. The CLI requires it;
-   * the schema keeps it optional so a card from an older Computer (whose CLI has no such field
-   * and strips it) still parses, and the server asks that Agent's owner as it did before. */
+  /** The person the card asks (`@alice`, `alice`, UUID) or `"anyone"` in a channel/task.
+   * Optional in the schema so older Computers keep asking the Agent's owner. */
   to: idOrHandleSchema.optional(),
   /** An answer of the person's own, as a final row that is itself an input (Frank, #447). On
    * unless `enabled: false`; only cards made with this field offer it. */
@@ -198,15 +200,40 @@ const questionsOptionSchema = z.object({
   recommended: z.boolean().optional(),
 });
 
-/** One question on a `questions` card: its id names it inside the card, `select` defaults to a
- * single pick, and `other` offers the same own-answer row a choice card does. */
-const questionsQuestionSchema = z.object({
-  id: choiceOptionIdSchema,
-  prompt: z.string().trim().min(1).max(200),
-  select: z.enum(["one", "many"]).default("one"),
-  options: z.array(questionsOptionSchema).min(2).max(6),
-  other: choiceOtherSchema.optional(),
-});
+/** One question on a `questions` card: option list (`kind: "options"`, default, 1–6 options) or
+ * standalone free-text input (`kind: "text"`, no options, optional `placeholder`). */
+const questionsQuestionSchema = z
+  .object({
+    id: choiceOptionIdSchema,
+    kind: z.enum(["options", "text"]).optional(),
+    prompt: z.string().trim().min(1).max(200),
+    select: z.enum(["one", "many"]).default("one"),
+    options: z.array(questionsOptionSchema).max(6).default([]),
+    placeholder: z.string().trim().min(1).max(80).optional(),
+    other: choiceOtherSchema.optional(),
+  })
+  .superRefine((question, ctx) => {
+    if (question.kind === "text") {
+      if (question.options.length > 0)
+        ctx.addIssue({
+          code: "custom",
+          path: ["options"],
+          message: 'questions kind "text" cannot include options',
+        });
+      if (question.other?.enabled === false)
+        ctx.addIssue({
+          code: "custom",
+          path: ["other"],
+          message: 'questions kind "text" cannot disable free-text input',
+        });
+    } else if (question.options.length < 1) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["options"],
+        message: "questions option list must include at least 1 option",
+      });
+    }
+  });
 
 /**
  * Ask several questions on one card (Claude Code's AskUserQuestion): at most four, each
@@ -298,6 +325,14 @@ export function validateActionCardAction(action: ActionCardAction): string | nul
     if (new Set(questionIds).size !== questionIds.length)
       return "questions question ids must be unique";
     for (const question of action.questions) {
+      if (question.kind === "text") {
+        if (question.options.length > 0) return 'questions kind "text" cannot include options';
+        if (question.other?.enabled === false)
+          return 'questions kind "text" cannot disable free-text input';
+        continue;
+      }
+      if (question.options.length < 1)
+        return "questions option list must include at least 1 option";
       const optionIds = question.options.map((option) => option.id);
       if (new Set(optionIds).size !== optionIds.length)
         return "questions option ids must be unique per question";
@@ -381,12 +416,13 @@ export type ResolvedQuestionsPayload = {
   prompt?: string;
   questions: {
     id: string;
+    kind?: "options" | "text";
     prompt: string;
     select: "one" | "many";
     options: { id: string; label: string; description?: string; recommended?: true }[];
     other?: { label?: string };
   }[];
-  /** The asked person's user id; every questions card names one. */
+  /** The asked person's user id, or `"anyone"` in a channel/task conversation. */
   to: string;
   /** Same as `ResolvedChoicePayload.deadline`. */
   deadline?: string;

@@ -1,4 +1,5 @@
 import {
+  CHOICE_ANYONE_TARGET,
   CHOICE_OTHER_DEFAULT_LABEL,
   CHOICE_OTHER_OPTION_ID,
   CHOICE_OTHER_TEXT_MAX_LENGTH,
@@ -33,7 +34,8 @@ const USER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * rather than left impossible to answer. The fallback goes away when no supported Computer is
  * older than the release that added `to`. */
 export async function resolveChoicePayload(
-  db: Pick<PrismaClient, "user" | "conversationMember">,
+  db: Pick<PrismaClient, "user" | "conversationMember"> &
+    Partial<Pick<PrismaClient, "conversation">>,
   conversationId: string,
   action: ChoiceAction,
   legacyOwnerUserId?: string,
@@ -42,27 +44,42 @@ export async function resolveChoicePayload(
   if (!asked)
     throw new AppError("INVALID_INPUT", {
       errorId: "action_card_choice_to",
-      hint: "a choice card must name who it asks: set `to` to their handle or user id",
+      hint: "a choice card must name who it asks: set `to` to their handle, user id, or `anyone` in a channel",
     });
-  const handle = asked.replace(/^@/, "");
-  const user = await db.user.findFirst({
-    where: USER_ID.test(handle) ? { id: handle } : { username: handle },
-    select: { id: true },
-  });
-  if (!user)
-    throw new AppError("INVALID_INPUT", {
-      errorId: "action_card_choice_to",
-      hint: "the person to ask does not exist",
+  let resolvedTo: string;
+  if (asked === CHOICE_ANYONE_TARGET) {
+    const conv = await db.conversation?.findUnique({
+      where: { id: conversationId },
+      select: { directKey: true, kind: true },
     });
-  const member = await db.conversationMember.findFirst({
-    where: { conversationId, userId: user.id, leftAt: null },
-    select: { id: true },
-  });
-  if (!member)
-    throw new AppError("INVALID_INPUT", {
-      errorId: "action_card_choice_to",
-      hint: "the person to ask is not in this conversation",
+    if (conv && (conv.directKey !== null || (conv.kind != null && conv.kind !== "task_thread")))
+      throw new AppError("INVALID_INPUT", {
+        errorId: "action_card_choice_to",
+        hint: '`to: "anyone"` is only valid in a channel or task conversation; name the person in a direct message',
+      });
+    resolvedTo = CHOICE_ANYONE_TARGET;
+  } else {
+    const handle = asked.replace(/^@/, "");
+    const user = await db.user.findFirst({
+      where: USER_ID.test(handle) ? { id: handle } : { username: handle },
+      select: { id: true },
     });
+    if (!user)
+      throw new AppError("INVALID_INPUT", {
+        errorId: "action_card_choice_to",
+        hint: "the person to ask does not exist",
+      });
+    const member = await db.conversationMember.findFirst({
+      where: { conversationId, userId: user.id, leftAt: null },
+      select: { id: true },
+    });
+    if (!member)
+      throw new AppError("INVALID_INPUT", {
+        errorId: "action_card_choice_to",
+        hint: "the person to ask is not in this conversation",
+      });
+    resolvedTo = user.id;
+  }
   const recommended = action.options.filter((option) => option.recommended === true);
   if (recommended.length > 1)
     throw new AppError("INVALID_INPUT", {
@@ -82,7 +99,7 @@ export async function resolveChoicePayload(
     type: "choice",
     prompt: action.prompt,
     options,
-    to: user.id,
+    to: resolvedTo,
     ...deadlineIn(action.expiresInMinutes),
     ...(moved ? { warning: `Recommended option "${moved.label}" moved to first position.` } : {}),
     // On unless the Agent turned it off; only cards made with this field (or after it existed) get it.
@@ -100,8 +117,15 @@ export function choiceActionCardView(
   pending: boolean,
   userPerson: (userId: string) => ActionCardPersonRef | undefined,
 ): ActionCardView {
-  const person = payload.to ? userPerson(payload.to) : undefined;
-  const asked = person ? { ...person, isViewer: person.id === viewerUserId } : undefined;
+  const anyone = payload.to === CHOICE_ANYONE_TARGET;
+  const person = !anyone && payload.to ? userPerson(payload.to) : undefined;
+  const asked = anyone
+    ? base.state === "executed" || base.state === "cancelled"
+      ? base.committedBy
+      : undefined
+    : person
+      ? { ...person, isViewer: person.id === viewerUserId }
+      : undefined;
   return {
     ...base,
     ...(payload.deadline && base.state === "pending" ? { deadline: payload.deadline } : {}),
@@ -110,7 +134,7 @@ export function choiceActionCardView(
     options: payload.options,
     ...(asked ? { asked } : {}),
     ...(payload.other ? { other: payload.other } : {}),
-    canCommit: pending && payload.to === viewerUserId,
+    canCommit: pending && (anyone || payload.to === viewerUserId),
     result: card.result as { optionId: string; label: string; text?: string } | undefined,
   };
 }
@@ -132,7 +156,8 @@ export async function commitChoiceCard(
     "choice",
   );
   const payload = card.payload as ResolvedChoicePayload;
-  if (payload.to !== principal.actorUserId) throw new AppError("ACCESS_DENIED");
+  if (payload.to !== CHOICE_ANYONE_TARGET && payload.to !== principal.actorUserId)
+    throw new AppError("ACCESS_DENIED");
   const answer = choiceAnswer(payload, input);
   const updated = await db.actionCard.updateMany({
     where: { messageId: input.messageId, state: "pending" },

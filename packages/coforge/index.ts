@@ -140,6 +140,11 @@ export type WeeklyReportMemoryInvocation = {
 };
 
 export type ActionPrepareInvocation = { command: "action-prepare"; target: string };
+export type {
+  ActionWithdrawInvocation,
+  InboxDismissInvocation,
+  InboxReadInvocation,
+} from "#src/inbox-commands";
 
 export type { ActionPrepareResult };
 

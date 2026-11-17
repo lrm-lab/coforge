@@ -88,7 +88,7 @@ export function evaluateAgentCommandGuidance(input: {
 }): AgentCommandGuidanceResponse {
   const text = AGENT_COMMAND_GUIDANCE[input.command];
   if (!text) return { ok: true, guidance: null };
-  if (input.reportsCompaction?.(input.agentId) === false) {
+  if (input.reportsCompaction?.(input.agentId) !== true) {
     return input.operation === "satisfy"
       ? { ok: true, guidance: null }
       : { ok: true, guidance: text, mode: "inline" };
@@ -106,15 +106,6 @@ export function evaluateAgentCommandGuidance(input: {
   const stateDb = AgentStateDb.open(input.stateDirectory, input.agentId);
   try {
     const ledger = new AgentContextLedger(stateDb.database);
-    const compacts =
-      input.reportsCompaction !== undefined
-        ? input.reportsCompaction(input.agentId)
-        : ledger.generation() > 0;
-    if (!compacts) {
-      return input.operation === "satisfy"
-        ? { ok: true, guidance: null }
-        : { ok: true, guidance: text, mode: "inline" };
-    }
     const claimed = ledger.claim("guidance", input.command, text);
     if (input.operation === "satisfy") return { ok: true, guidance: null };
     return {

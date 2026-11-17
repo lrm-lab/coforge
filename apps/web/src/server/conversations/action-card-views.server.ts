@@ -1,4 +1,8 @@
-import { APP_GRANT_AGENT_CARD_KIND, type ResolvedActionCardPayload } from "@lrm/coforge-sdk/agent";
+import {
+  APP_GRANT_AGENT_CARD_KIND,
+  CHOICE_ANYONE_TARGET,
+  type ResolvedActionCardPayload,
+} from "@lrm/coforge-sdk/agent";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { humanLabel } from "#src/lib/human-label";
 import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.server";
@@ -95,7 +99,11 @@ export async function actionCardViews(
       channelIds.add(payload.channelId);
       for (const id of payload.humanIds ?? []) userIds.add(id);
       for (const id of payload.agentIds ?? []) agentIds.add(id);
-    } else if ((payload.type === "choice" || payload.type === "questions") && payload.to) {
+    } else if (
+      (payload.type === "choice" || payload.type === "questions") &&
+      payload.to &&
+      payload.to !== CHOICE_ANYONE_TARGET
+    ) {
       userIds.add(payload.to);
     }
     if (card.committedByUserId) userIds.add(card.committedByUserId);
@@ -188,7 +196,8 @@ export async function actionCardViews(
     const pending = state === "pending";
     // The asked person may cancel their choice/questions card (to ignore it), as `cancel` allows.
     const askedViewer =
-      (payload.type === "choice" || payload.type === "questions") && payload.to === viewerUserId;
+      (payload.type === "choice" || payload.type === "questions") &&
+      (payload.to === viewerUserId || payload.to === CHOICE_ANYONE_TARGET);
     const base: ActionCardViewBase = {
       messageId: card.messageId,
       state,

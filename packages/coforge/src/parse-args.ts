@@ -35,6 +35,7 @@ import { parseMentionArgs } from "#src/mention-args";
 import { parseTaskArgs, type TaskInvocation } from "#src/task-args";
 import { reviewerIsolationFromEnvironment } from "#src/reviewer-isolation";
 import type { TaskConversationInvocation } from "#src/task-conversation-args";
+import { parseActionWithdrawArgs, type ActionWithdrawInvocation } from "#src/inbox-commands";
 import {
   parseAttentionArgs,
   type ChannelInvocation,
@@ -89,6 +90,7 @@ export function parseArgs(
   | WeeklyReportKeyPointsInvocation
   | WeeklyReportMemoryInvocation
   | ActionPrepareInvocation
+  | ActionWithdrawInvocation
   | ManualInvocation
   | WhoamiInvocation
   | VersionInvocation
@@ -126,6 +128,7 @@ export function parseArgs(
   if (args[0] === "weekly-report-memory") return parseWeeklyReportMemoryArgs(args.slice(1));
   if (args[0] === "weekly-report") return parseWeeklyReportArgs(args.slice(1));
   if (args[0] === "action" && args[1] === "prepare") return parseActionPrepareArgs(args.slice(2));
+  if (args[0] === "action" && args[1] === "withdraw") return parseActionWithdrawArgs(args.slice(2));
   const attention = parseAttentionArgs(args);
   if (attention) return attention;
   if (args[0] === "channel" && args[1] !== undefined && args[1] !== "mute" && args[1] !== "unmute")

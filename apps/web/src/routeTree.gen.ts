@@ -135,6 +135,7 @@ import { Route as WWorkspaceSlugRecordsDashboardRouteImport } from './routes/w.$
 import { Route as WWorkspaceSlugRecordsSettingsRouteImport } from './routes/w.$workspaceSlug/records.settings'
 import { Route as WWorkspaceSlugRecordsStatsRouteImport } from './routes/w.$workspaceSlug/records.stats'
 import { Route as ApiAgentV1ActionsPrepareRouteImport } from './routes/api/agent/v1/actions/prepare'
+import { Route as ApiAgentV1ActionsWithdrawRouteImport } from './routes/api/agent/v1/actions/withdraw'
 import { Route as ApiAgentV1AppsIndexRouteImport } from './routes/api/agent/v1/apps/index'
 import { Route as ApiAgentV1AppsMarketplaceRouteImport } from './routes/api/agent/v1/apps/marketplace'
 import { Route as ApiAgentV1AttachmentUploadSessionsIndexRouteImport } from './routes/api/agent/v1/attachment-upload-sessions/index'
@@ -144,6 +145,8 @@ import { Route as ApiAgentV1AttachmentsAttachmentIdRouteImport } from './routes/
 import { Route as ApiAgentV1AttachmentsCapabilitiesRouteImport } from './routes/api/agent/v1/attachments/capabilities'
 import { Route as ApiAgentV1ChannelsChannelRouteImport } from './routes/api/agent/v1/channels_.$channel'
 import { Route as ApiAgentV1InboxConversationsRouteImport } from './routes/api/agent/v1/inbox.conversations'
+import { Route as ApiAgentV1InboxDismissRouteImport } from './routes/api/agent/v1/inbox.dismiss'
+import { Route as ApiAgentV1InboxReadRouteImport } from './routes/api/agent/v1/inbox.read'
 import { Route as ApiAgentV1ManualSearchRouteImport } from './routes/api/agent/v1/manual_.search'
 import { Route as ApiAgentV1MentionActionsExecuteRouteImport } from './routes/api/agent/v1/mention-actions_.execute'
 import { Route as ApiAgentV1MentionActionsPendingRouteImport } from './routes/api/agent/v1/mention-actions_.pending'
@@ -879,6 +882,12 @@ const ApiAgentV1ActionsPrepareRoute =
     path: '/api/agent/v1/actions/prepare',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAgentV1ActionsWithdrawRoute =
+  ApiAgentV1ActionsWithdrawRouteImport.update({
+    id: '/api/agent/v1/actions/withdraw',
+    path: '/api/agent/v1/actions/withdraw',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAgentV1AppsIndexRoute = ApiAgentV1AppsIndexRouteImport.update({
   id: '/api/agent/v1/apps/',
   path: '/api/agent/v1/apps/',
@@ -932,6 +941,16 @@ const ApiAgentV1InboxConversationsRoute =
     path: '/api/agent/v1/inbox/conversations',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiAgentV1InboxDismissRoute = ApiAgentV1InboxDismissRouteImport.update({
+  id: '/api/agent/v1/inbox/dismiss',
+  path: '/api/agent/v1/inbox/dismiss',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAgentV1InboxReadRoute = ApiAgentV1InboxReadRouteImport.update({
+  id: '/api/agent/v1/inbox/read',
+  path: '/api/agent/v1/inbox/read',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAgentV1ManualSearchRoute = ApiAgentV1ManualSearchRouteImport.update({
   id: '/api/agent/v1/manual_/search',
   path: '/api/agent/v1/manual/search',
@@ -1410,12 +1429,15 @@ export interface FileRoutesByFullPath {
   '/w/$workspaceSlug/projects/': typeof WWorkspaceSlugProjectsIndexRoute
   '/w/$workspaceSlug/records/': typeof WWorkspaceSlugRecordsIndexRoute
   '/api/agent/v1/actions/prepare': typeof ApiAgentV1ActionsPrepareRoute
+  '/api/agent/v1/actions/withdraw': typeof ApiAgentV1ActionsWithdrawRoute
   '/api/agent/v1/apps/marketplace': typeof ApiAgentV1AppsMarketplaceRoute
   '/api/agent/v1/attachment-upload-sessions/$uploadId': typeof ApiAgentV1AttachmentUploadSessionsUploadIdRouteWithChildren
   '/api/agent/v1/attachments/$attachmentId': typeof ApiAgentV1AttachmentsAttachmentIdRouteWithChildren
   '/api/agent/v1/attachments/capabilities': typeof ApiAgentV1AttachmentsCapabilitiesRoute
   '/api/agent/v1/channels/$channel': typeof ApiAgentV1ChannelsChannelRouteWithChildren
   '/api/agent/v1/inbox/conversations': typeof ApiAgentV1InboxConversationsRoute
+  '/api/agent/v1/inbox/dismiss': typeof ApiAgentV1InboxDismissRoute
+  '/api/agent/v1/inbox/read': typeof ApiAgentV1InboxReadRoute
   '/api/agent/v1/manual/search': typeof ApiAgentV1ManualSearchRoute
   '/api/agent/v1/mention-actions/execute': typeof ApiAgentV1MentionActionsExecuteRoute
   '/api/agent/v1/mention-actions/pending': typeof ApiAgentV1MentionActionsPendingRoute
@@ -1602,12 +1624,15 @@ export interface FileRoutesByTo {
   '/w/$workspaceSlug/projects': typeof WWorkspaceSlugProjectsIndexRoute
   '/w/$workspaceSlug/records': typeof WWorkspaceSlugRecordsIndexRoute
   '/api/agent/v1/actions/prepare': typeof ApiAgentV1ActionsPrepareRoute
+  '/api/agent/v1/actions/withdraw': typeof ApiAgentV1ActionsWithdrawRoute
   '/api/agent/v1/apps/marketplace': typeof ApiAgentV1AppsMarketplaceRoute
   '/api/agent/v1/attachment-upload-sessions/$uploadId': typeof ApiAgentV1AttachmentUploadSessionsUploadIdRouteWithChildren
   '/api/agent/v1/attachments/$attachmentId': typeof ApiAgentV1AttachmentsAttachmentIdRouteWithChildren
   '/api/agent/v1/attachments/capabilities': typeof ApiAgentV1AttachmentsCapabilitiesRoute
   '/api/agent/v1/channels/$channel': typeof ApiAgentV1ChannelsChannelRouteWithChildren
   '/api/agent/v1/inbox/conversations': typeof ApiAgentV1InboxConversationsRoute
+  '/api/agent/v1/inbox/dismiss': typeof ApiAgentV1InboxDismissRoute
+  '/api/agent/v1/inbox/read': typeof ApiAgentV1InboxReadRoute
   '/api/agent/v1/manual/search': typeof ApiAgentV1ManualSearchRoute
   '/api/agent/v1/mention-actions/execute': typeof ApiAgentV1MentionActionsExecuteRoute
   '/api/agent/v1/mention-actions/pending': typeof ApiAgentV1MentionActionsPendingRoute
@@ -1799,12 +1824,15 @@ export interface FileRoutesById {
   '/w/$workspaceSlug/projects/': typeof WWorkspaceSlugProjectsIndexRoute
   '/w/$workspaceSlug/records/': typeof WWorkspaceSlugRecordsIndexRoute
   '/api/agent/v1/actions/prepare': typeof ApiAgentV1ActionsPrepareRoute
+  '/api/agent/v1/actions/withdraw': typeof ApiAgentV1ActionsWithdrawRoute
   '/api/agent/v1/apps/marketplace': typeof ApiAgentV1AppsMarketplaceRoute
   '/api/agent/v1/attachment-upload-sessions/$uploadId': typeof ApiAgentV1AttachmentUploadSessionsUploadIdRouteWithChildren
   '/api/agent/v1/attachments/$attachmentId': typeof ApiAgentV1AttachmentsAttachmentIdRouteWithChildren
   '/api/agent/v1/attachments/capabilities': typeof ApiAgentV1AttachmentsCapabilitiesRoute
   '/api/agent/v1/channels_/$channel': typeof ApiAgentV1ChannelsChannelRouteWithChildren
   '/api/agent/v1/inbox/conversations': typeof ApiAgentV1InboxConversationsRoute
+  '/api/agent/v1/inbox/dismiss': typeof ApiAgentV1InboxDismissRoute
+  '/api/agent/v1/inbox/read': typeof ApiAgentV1InboxReadRoute
   '/api/agent/v1/manual_/search': typeof ApiAgentV1ManualSearchRoute
   '/api/agent/v1/mention-actions_/execute': typeof ApiAgentV1MentionActionsExecuteRoute
   '/api/agent/v1/mention-actions_/pending': typeof ApiAgentV1MentionActionsPendingRoute
@@ -1995,12 +2023,15 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/projects/'
     | '/w/$workspaceSlug/records/'
     | '/api/agent/v1/actions/prepare'
+    | '/api/agent/v1/actions/withdraw'
     | '/api/agent/v1/apps/marketplace'
     | '/api/agent/v1/attachment-upload-sessions/$uploadId'
     | '/api/agent/v1/attachments/$attachmentId'
     | '/api/agent/v1/attachments/capabilities'
     | '/api/agent/v1/channels/$channel'
     | '/api/agent/v1/inbox/conversations'
+    | '/api/agent/v1/inbox/dismiss'
+    | '/api/agent/v1/inbox/read'
     | '/api/agent/v1/manual/search'
     | '/api/agent/v1/mention-actions/execute'
     | '/api/agent/v1/mention-actions/pending'
@@ -2187,12 +2218,15 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/projects'
     | '/w/$workspaceSlug/records'
     | '/api/agent/v1/actions/prepare'
+    | '/api/agent/v1/actions/withdraw'
     | '/api/agent/v1/apps/marketplace'
     | '/api/agent/v1/attachment-upload-sessions/$uploadId'
     | '/api/agent/v1/attachments/$attachmentId'
     | '/api/agent/v1/attachments/capabilities'
     | '/api/agent/v1/channels/$channel'
     | '/api/agent/v1/inbox/conversations'
+    | '/api/agent/v1/inbox/dismiss'
+    | '/api/agent/v1/inbox/read'
     | '/api/agent/v1/manual/search'
     | '/api/agent/v1/mention-actions/execute'
     | '/api/agent/v1/mention-actions/pending'
@@ -2383,12 +2417,15 @@ export interface FileRouteTypes {
     | '/w/$workspaceSlug/projects/'
     | '/w/$workspaceSlug/records/'
     | '/api/agent/v1/actions/prepare'
+    | '/api/agent/v1/actions/withdraw'
     | '/api/agent/v1/apps/marketplace'
     | '/api/agent/v1/attachment-upload-sessions/$uploadId'
     | '/api/agent/v1/attachments/$attachmentId'
     | '/api/agent/v1/attachments/capabilities'
     | '/api/agent/v1/channels_/$channel'
     | '/api/agent/v1/inbox/conversations'
+    | '/api/agent/v1/inbox/dismiss'
+    | '/api/agent/v1/inbox/read'
     | '/api/agent/v1/manual_/search'
     | '/api/agent/v1/mention-actions_/execute'
     | '/api/agent/v1/mention-actions_/pending'
@@ -2548,12 +2585,15 @@ export interface RootRouteChildren {
   ApiWorkspacesWorkspaceIdIconRoute: typeof ApiWorkspacesWorkspaceIdIconRoute
   InternalComputerAgentContextRequestIdRoute: typeof InternalComputerAgentContextRequestIdRoute
   ApiAgentV1ActionsPrepareRoute: typeof ApiAgentV1ActionsPrepareRoute
+  ApiAgentV1ActionsWithdrawRoute: typeof ApiAgentV1ActionsWithdrawRoute
   ApiAgentV1AppsMarketplaceRoute: typeof ApiAgentV1AppsMarketplaceRoute
   ApiAgentV1AttachmentUploadSessionsUploadIdRoute: typeof ApiAgentV1AttachmentUploadSessionsUploadIdRouteWithChildren
   ApiAgentV1AttachmentsAttachmentIdRoute: typeof ApiAgentV1AttachmentsAttachmentIdRouteWithChildren
   ApiAgentV1AttachmentsCapabilitiesRoute: typeof ApiAgentV1AttachmentsCapabilitiesRoute
   ApiAgentV1ChannelsChannelRoute: typeof ApiAgentV1ChannelsChannelRouteWithChildren
   ApiAgentV1InboxConversationsRoute: typeof ApiAgentV1InboxConversationsRoute
+  ApiAgentV1InboxDismissRoute: typeof ApiAgentV1InboxDismissRoute
+  ApiAgentV1InboxReadRoute: typeof ApiAgentV1InboxReadRoute
   ApiAgentV1ManualSearchRoute: typeof ApiAgentV1ManualSearchRoute
   ApiAgentV1MentionActionsExecuteRoute: typeof ApiAgentV1MentionActionsExecuteRoute
   ApiAgentV1MentionActionsPendingRoute: typeof ApiAgentV1MentionActionsPendingRoute
@@ -3486,6 +3526,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAgentV1ActionsPrepareRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/agent/v1/actions/withdraw': {
+      id: '/api/agent/v1/actions/withdraw'
+      path: '/api/agent/v1/actions/withdraw'
+      fullPath: '/api/agent/v1/actions/withdraw'
+      preLoaderRoute: typeof ApiAgentV1ActionsWithdrawRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/agent/v1/apps/': {
       id: '/api/agent/v1/apps/'
       path: '/api/agent/v1/apps'
@@ -3547,6 +3594,20 @@ declare module '@tanstack/react-router' {
       path: '/api/agent/v1/inbox/conversations'
       fullPath: '/api/agent/v1/inbox/conversations'
       preLoaderRoute: typeof ApiAgentV1InboxConversationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/inbox/dismiss': {
+      id: '/api/agent/v1/inbox/dismiss'
+      path: '/api/agent/v1/inbox/dismiss'
+      fullPath: '/api/agent/v1/inbox/dismiss'
+      preLoaderRoute: typeof ApiAgentV1InboxDismissRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/v1/inbox/read': {
+      id: '/api/agent/v1/inbox/read'
+      path: '/api/agent/v1/inbox/read'
+      fullPath: '/api/agent/v1/inbox/read'
+      preLoaderRoute: typeof ApiAgentV1InboxReadRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/agent/v1/manual_/search': {
@@ -4320,6 +4381,7 @@ const rootRouteChildren: RootRouteChildren = {
   InternalComputerAgentContextRequestIdRoute:
     InternalComputerAgentContextRequestIdRoute,
   ApiAgentV1ActionsPrepareRoute: ApiAgentV1ActionsPrepareRoute,
+  ApiAgentV1ActionsWithdrawRoute: ApiAgentV1ActionsWithdrawRoute,
   ApiAgentV1AppsMarketplaceRoute: ApiAgentV1AppsMarketplaceRoute,
   ApiAgentV1AttachmentUploadSessionsUploadIdRoute:
     ApiAgentV1AttachmentUploadSessionsUploadIdRouteWithChildren,
@@ -4329,6 +4391,8 @@ const rootRouteChildren: RootRouteChildren = {
     ApiAgentV1AttachmentsCapabilitiesRoute,
   ApiAgentV1ChannelsChannelRoute: ApiAgentV1ChannelsChannelRouteWithChildren,
   ApiAgentV1InboxConversationsRoute: ApiAgentV1InboxConversationsRoute,
+  ApiAgentV1InboxDismissRoute: ApiAgentV1InboxDismissRoute,
+  ApiAgentV1InboxReadRoute: ApiAgentV1InboxReadRoute,
   ApiAgentV1ManualSearchRoute: ApiAgentV1ManualSearchRoute,
   ApiAgentV1MentionActionsExecuteRoute: ApiAgentV1MentionActionsExecuteRoute,
   ApiAgentV1MentionActionsPendingRoute: ApiAgentV1MentionActionsPendingRoute,

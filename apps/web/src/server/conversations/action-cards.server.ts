@@ -1,5 +1,6 @@
 import {
   actionCardActionSchema,
+  CHOICE_ANYONE_TARGET,
   deadlineMisuse,
   APP_GRANT_AGENT_CARD_KIND,
   validateActionCardAction,
@@ -41,17 +42,7 @@ import { isAdminLike } from "#src/server/workspaces/member-role.server";
 export type * from "./action-card-view.server";
 export type { ActionCardTargetRepository } from "./action-card-target.server";
 
-/**
- * A choice card from a Computer whose CLI predates `to`: its schema has no such field and zod
- * strips unknown keys, so the request arrives without one. The card asks the preparing Agent's
- * owner, as it did before `to` existed, and the prepare response (`warning`) says the Computer
- * should be upgraded — never the message body, which people see in previews, Activity and search.
- *
- * It cannot be narrowed by client version yet: an Agent request carries only its two API keys
- * (`agentHeaders`), no CLI or daemon version, and no Computer release containing `to` has been cut
- * to use as the cutoff. Gate it on the Computer's version once that release exists. Delete the
- * fallback when no supported Computer is older than it.
- */
+/** Legacy fallback warning when an older CLI omits `to` on a choice card (asks owner). */
 const LEGACY_CHOICE_WARNING =
   "This Agent's Computer is out of date: a choice card should name who it asks with `to`. Ask its owner to upgrade the Computer; this card asks the owner, as before.";
 
@@ -331,8 +322,9 @@ export class ActionCards {
     }
     if (card.state !== "pending") throw new AppError("CONFLICT");
     const payload = card.payload as { type?: string; to?: string };
-    const asked =
+    const rawAsked =
       payload.type === "choice" || payload.type === "questions" ? payload.to : undefined;
+    const asked = rawAsked === CHOICE_ANYONE_TARGET ? principal.actorUserId : rawAsked;
     const role = await safeWorkspaceRole(this.db, principal.workspaceId, principal.actorUserId);
     const canCancel =
       card.preparedByAgent.ownerId === principal.actorUserId ||

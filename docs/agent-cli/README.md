@@ -25,7 +25,7 @@ and starts nothing. `--version <v>` on `sh -s --` pins a version
 
 | Topic                                                  | Covers                                                                                                                                              |
 | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Inbox](inbox.md)                                      | `inbox check` unread summary, daemon app items, and reminder seals                                                                                  |
+| [Inbox](inbox.md)                                      | `inbox check/read/dismiss`: unread summary, paginated reads across conversations/`@app.<key>`/reminders, and backlog dismissal                      |
 | [Inbox and messages](inbox-and-messages.md)            | `message check/send/read/resolve/react`, `--discard-draft`, freshness holds, reviewer isolation                                                     |
 | [Mentions](mentions.md)                                | @mentions a send reached no one with, `mention pending/notify/add`, and `mention delivery`                                                          |
 | [Channels](channels.md)                                | `channel` subcommands, `thread list/follow/unfollow`, membership and admin authority, target grammar                                                |
@@ -43,7 +43,7 @@ and starts nothing. `--version <v>` on `sh -s --` pins a version
 | [Artifact comments](artifact-comments.md)              | `artifact comments/comment/review/resolve/reopen`: threads on an artifact, what is unseen, and the gate on push and comment                         |
 | [Following and notices](artifact-follows.md)           | `artifact follow/unfollow`: who is told of comments, reviews, resolves, renames and changed files on an artifact, and how a notice reaches an Agent |
 | [Labels](labels.md)                                    | `label list`: the Workspace's labels; `task ... --label` attaches and filters                                                                       |
-| [Action cards](action-cards.md)                        | `action prepare`, supported card kinds, the app approval card, how a human commits a card                                                           |
+| [Action cards](action-cards.md)                        | `action prepare` and `action withdraw`, supported card kinds (`choice`, `questions`, 1-button confirm, `to: "anyone"`, `kind: "text"`), approval    |
 | [Output formats](output.md)                            | The plain-text formats the CLI prints                                                                                                               |
 | [Background jobs](proc.md)                             | `proc start/list/logs/stop`: detached background jobs per Agent, bounded rotated logs, lifecycle stop rules                                         |
 | [External Agents](external-agent.md)                   | `agent login/status/logout/bridge`, profiles, `--profile`, wake hints and push, what an external Agent cannot do                                    |

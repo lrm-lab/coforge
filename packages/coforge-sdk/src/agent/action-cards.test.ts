@@ -392,16 +392,22 @@ describe("questionsActionSchema", () => {
     expect(validateActionCardAction(parsed)).toBeNull();
   });
 
-  test("refuses zero or five questions, and options outside two to six", () => {
+  test("refuses zero or five questions, and options outside one to six", () => {
     for (const questions of [[], Array(5).fill(multi.questions[0])]) {
       expect(actionCardActionSchema.safeParse({ ...multi, questions }).success).toBe(false);
     }
     expect(
       actionCardActionSchema.safeParse({
         ...multi,
-        questions: [{ ...multi.questions[0], options: [{ id: "a", label: "A" }] }],
+        questions: [{ ...multi.questions[0], options: [] }],
       }).success,
     ).toBe(false);
+    expect(
+      actionCardActionSchema.safeParse({
+        ...multi,
+        questions: [{ ...multi.questions[0], options: [{ id: "a", label: "A" }] }],
+      }).success,
+    ).toBe(true);
     expect(
       actionCardActionSchema.safeParse({
         ...multi,

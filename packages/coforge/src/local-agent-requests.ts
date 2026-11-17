@@ -1,5 +1,6 @@
 import { teamMemoryRequests } from "./team-memory-request";
 import { CliError } from "./cli-error";
+import { actionWithdrawRequest, inboxDismissRequest, inboxReadRequest } from "./inbox-commands";
 import { memoryRequests } from "./memory-request";
 import { procRequests } from "./proc-request";
 import { proxyHttpFailure } from "./local-proxy-failure";
@@ -13,6 +14,8 @@ import {
   type AgentContextReadRequest,
   type AgentContextSearchRequest,
   type AgentContextQueryResponse,
+  type AgentInboxDismissRequest,
+  type AgentInboxReadRequest,
   type AgentThreadAttentionResponse,
   type AgentVersionResponse,
 } from "@lrm/coforge-sdk/agent";
@@ -190,6 +193,12 @@ export function localAgentRequests(
     version: () => versionRequest(proxyEndpoint, context, proxyUrl),
     commandGuidance: (request: AgentCommandGuidanceRequest) =>
       commandGuidanceRequest(proxyEndpoint, context, proxyUrl, request),
+    inboxRead: (request: AgentInboxReadRequest) =>
+      inboxReadRequest(proxyEndpoint, context, proxyUrl, request),
+    inboxDismiss: (request: AgentInboxDismissRequest) =>
+      inboxDismissRequest(proxyEndpoint, context, proxyUrl, request),
+    actionWithdraw: (messageId: string) =>
+      actionWithdrawRequest(proxyEndpoint, context, proxyUrl, messageId),
     ...contextRequests(proxyEndpoint, context, proxyUrl),
     ...teamMemoryRequests(proxyEndpoint, context, proxyUrl),
     ...memoryRequests(proxyEndpoint, context, proxyUrl),

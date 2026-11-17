@@ -333,6 +333,7 @@ export function startAgentProxy(input: {
   const agentApiKeys = input.agentApiKeys ?? new Map<string, string>();
   const collab = createCollabProxyDispatcher({
     agentApiKeys,
+    runtime: input.runtime,
     stateDirectory: input.stateDirectory,
     reportsCompaction: input.reportsCompaction,
     cloudForward: input.cloudForward,
@@ -384,7 +385,7 @@ export function startAgentProxy(input: {
               fields.operation === "send" &&
               fields.discardDraft === true
             ) {
-              return await collab.discardDraft(binding.agentId, fields);
+              return await collab.discardDraft(binding, fields);
             }
           }
         }

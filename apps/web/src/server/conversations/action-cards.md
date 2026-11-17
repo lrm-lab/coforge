@@ -19,6 +19,9 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines; the rules are 
   it refuses `app:grant_agent`, which `AppGrantActionCards.deny` cancels after `AppAgentAccess.deny`.
   A re-cancel by the person who already cancelled it is a no-op (a retry can send it
   twice); a settle by anyone else, or on an executed card, is `CONFLICT`.
+  `withdrawActionCard` (`action-card-withdraw.server.ts`, `POST /api/agent/v1/actions/withdraw`) lets
+  the preparing Agent itself retract its own unanswered card (`committedByUserId: null`), idempotently
+  on retry, waking nobody.
 - A `choice`/`questions` card's three outcomes — answered, declined (the asked person's cancel
   only; anyone else's cancel, the Agent's owner's or an admin's withdrawal, wakes nobody), expired — each wake the preparing Agent with
   a system notice in one shape naming the asked person (`action-card-outcome-body.server.ts`
@@ -36,11 +39,13 @@ Moved out of [`AGENTS.md`](AGENTS.md) to keep it under 200 lines; the rules are 
 - A `desktop:takeover` card stores the Agent and computer ids so the browser can open that
   Agent's cloud desktop. Commit only marks that the person finished the step; opening the desktop
   does not go through the server.
-- A `choice` card stores the prompt, options, the user id of the one person it asks (`to`,
-  required from the CLI) and, unless the Agent turned it off, an `other` row that is itself an
-  input. Commit records `{ optionId, label }`, or `{ optionId: "_other", label, text }` for the
-  person's own answer (text capped and fenced for the Agent); only that person may commit it, and
-  the Agent is woken with who answered and what they chose. A request without `to` comes from
+- A `choice` or `questions` card stores the prompt, options (1–8 on `choice`, 1–6 per option
+  question on `questions`, or `kind: "text"` with no options and optional `placeholder` for a
+  standalone free-text question), the user id of the person it asks (`to`, or `"anyone"` in a
+  channel or task conversation so any member there may answer) and, unless the Agent turned it off,
+  an `other` row that is itself an input. Commit records `{ optionId, label }`, or `{ optionId: "_other", label, text }` for the
+  person's own answer (text capped and fenced for the Agent); only the asked person (or any authorized
+  member on `"anyone"`) may commit it, and the Agent is woken with who answered and what they chose. A request without `to` comes from
   a Computer whose CLI predates the field (its schema strips it): the server asks the Agent's
   owner, as before, and its prepare response carries a `warning` saying the Computer should be
   upgraded (never the message body, which people see in previews). Remove that fallback when no

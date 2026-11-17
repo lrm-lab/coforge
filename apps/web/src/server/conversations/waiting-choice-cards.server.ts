@@ -1,3 +1,4 @@
+import { CHOICE_ANYONE_TARGET } from "@lrm/coforge-sdk/agent";
 import { agentFaceUrl } from "#src/server/apps/app-logo.server";
 import type { ChannelVisibility } from "#src/features/conversations/channel-visibility";
 import type { PrismaClient } from "#src/generated/prisma/client";
@@ -49,9 +50,15 @@ export async function waitingChoiceCards(
       workspaceId,
       kind: { in: ["choice", "questions"] },
       state: "pending",
-      // A card past its expiry is no longer waiting, even before the sweep writes the state.
-      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-      payload: { path: ["to"], equals: userId },
+      AND: [
+        { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+        {
+          OR: [
+            { payload: { path: ["to"], equals: userId } },
+            { payload: { path: ["to"], equals: CHOICE_ANYONE_TARGET } },
+          ],
+        },
+      ],
       conversation: {
         AND: [
           readableConversationWhere(workspaceId, { userId }),

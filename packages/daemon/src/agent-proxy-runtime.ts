@@ -39,6 +39,8 @@ import type {
   AgentMentionExecuteResponse,
   AgentMentionPendingRequest,
   AgentInboxListResponse,
+  AgentInboxReadRequest,
+  AgentInboxReadResponse,
   AgentInboxRequest,
   AgentLabelListResponse,
   AgentLabelWriteRequest,
@@ -292,4 +294,23 @@ export type AgentProxyRuntime = {
     agentApiKey: string,
   ): Promise<WeeklyReportMemoryResult>;
   issueAgentContext?: (agentId: string, context?: string) => string;
+  collab?: AgentProxyCollabHooks;
+};
+
+export type AgentProxyCollabHooks = {
+  authorize(context: string, agentApiKey: string | undefined): string;
+  stateDirectory(): string;
+  reportsCompaction(agentId: string): boolean;
+  canonicalizeTarget(context: string, target: string, agentApiKey: string): Promise<string>;
+  readMessagesForInbox(
+    context: string,
+    request: AgentInboxReadRequest,
+    agentApiKey: string,
+  ): Promise<AgentInboxReadResponse>;
+  settleDismissedTargets(
+    context: string,
+    targets: readonly string[],
+    agentApiKey: string,
+    requestedTarget?: string,
+  ): Promise<void>;
 };

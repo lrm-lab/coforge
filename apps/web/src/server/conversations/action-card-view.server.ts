@@ -176,6 +176,7 @@ export type ActionCardView =
       prompt?: string;
       questions: {
         id: string;
+        kind?: "options" | "text";
         prompt: string;
         select: "one" | "many";
         options: { id: string; label: string; description?: string; recommended?: true }[];

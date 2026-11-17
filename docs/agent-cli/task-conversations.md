@@ -38,6 +38,7 @@ All numbered `coforge task` board commands (`claim`, `unclaim`, `assign`, `unass
 | `task reply <ref>` (body on stdin)                              | Posts in the conversation, creating it on the first reply. `--mention human:<uuid>:<handle>`, `--attachment-id <uuid>` repeat |
 | `task read <ref> [--before\|--after\|--around <id>] [--unread]` | Reads the conversation as `message read` does; `--unread` starts after your read position and moves it                        |
 | `task follow <ref>` / `task unfollow <ref> [--reason text]`     | Follow or stop following. The reason (at most 200 characters) appears in a notice in the conversation                         |
+| `task assign <ref> --assignee @who [--reason text]`             | Assigns the task and atomically posts the single-line handoff reason (≤200 chars) as a receipt notice in the task thread      |
 | `task list --following`                                         | The tasks you follow with their unread counts (not combinable with `--mine`, `--target`, `--target`, `--status`)             |
 | `task create --message-id <id> --priority <level> [--alongside] [--description]` | Links a new task to a channel message; `--priority` is required (`urgent`, `high`, `medium` or `low`); `--alongside` adds beside someone else's live task on it |
 

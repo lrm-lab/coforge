@@ -2,6 +2,8 @@ import * as appsWire from "./apps";
 import * as appMarketplaceWire from "./app-marketplace";
 import * as appManagementWire from "./app-management";
 import * as appRegistrationWire from "./app-registration";
+import * as inboxActionsWire from "./inbox-actions";
+import type { AgentActionPrepareRequest, AgentActionPrepareResponse } from "./action-cards";
 import type { AgentArtifactRequest } from "./artifacts";
 import type { AgentThreadAttentionResponse } from "./messages";
 import type { AgentApiResult, AgentApiTransport } from "./client";
@@ -49,6 +51,22 @@ const APP_MANAGEMENT_DECODERS = {
 } as const satisfies Record<AppManagementOp, (value: unknown) => unknown>;
 
 export type RawAgentApiExtendedClient = {
+  actions: {
+    prepare(
+      request: AgentActionPrepareRequest,
+    ): Promise<AgentApiResult<AgentActionPrepareResponse>>;
+    withdraw(
+      request: inboxActionsWire.AgentActionWithdrawRequest,
+    ): Promise<AgentApiResult<inboxActionsWire.AgentActionWithdrawResponse>>;
+  };
+  inbox: {
+    read(
+      request: inboxActionsWire.AgentInboxReadRequest,
+    ): Promise<AgentApiResult<inboxActionsWire.AgentInboxReadResponse>>;
+    dismiss(
+      request: inboxActionsWire.AgentInboxDismissRequest,
+    ): Promise<AgentApiResult<inboxActionsWire.AgentInboxDismissResponse>>;
+  };
   threads: {
     follow(threadId: string): Promise<AgentApiResult<AgentThreadAttentionResponse>>;
     unfollow(threadId: string): Promise<AgentApiResult<AgentThreadAttentionResponse>>;
@@ -85,6 +103,20 @@ export type RawAgentApiExtendedClient = {
 };
 
 export type AgentApiExtendedClient = {
+  actions: {
+    prepare(request: AgentActionPrepareRequest): Promise<AgentActionPrepareResponse>;
+    withdraw(
+      request: inboxActionsWire.AgentActionWithdrawRequest,
+    ): Promise<inboxActionsWire.AgentActionWithdrawResponse>;
+  };
+  inbox: {
+    read(
+      request: inboxActionsWire.AgentInboxReadRequest,
+    ): Promise<inboxActionsWire.AgentInboxReadResponse>;
+    dismiss(
+      request: inboxActionsWire.AgentInboxDismissRequest,
+    ): Promise<inboxActionsWire.AgentInboxDismissResponse>;
+  };
   threads: {
     follow(threadId: string): Promise<AgentThreadAttentionResponse>;
     unfollow(threadId: string): Promise<AgentThreadAttentionResponse>;
@@ -132,6 +164,33 @@ export function createRawExtendedResources(
   const { list, marketplace, token } = agentApiRoutes.local.apps;
   const registrationsRoute = agentApiRoutes.local.appRegistrations;
   return {
+    actions: {
+      prepare: (request) =>
+        transport.request(agentApiRoutes.cloud.actionPrepare, request) as Promise<
+          AgentApiResult<AgentActionPrepareResponse>
+        >,
+      withdraw: async (request) =>
+        decodeResult(
+          await transport.request(agentApiRoutes.cloud.actionWithdraw, request),
+          inboxActionsWire.decodeAgentActionWithdrawResponse,
+        ),
+    },
+    inbox: {
+      read: async (request) =>
+        decodeResult(
+          await transport.request(agentApiRoutes.cloud.inboxRead, {
+            target: request.target,
+            ...(request.limit === undefined ? {} : { limit: String(request.limit) }),
+            ...(request.cursor === undefined ? {} : { cursor: request.cursor }),
+          }),
+          inboxActionsWire.decodeAgentInboxReadResponse,
+        ),
+      dismiss: async (request) =>
+        decodeResult(
+          await transport.request(agentApiRoutes.cloud.inboxDismiss, request),
+          inboxActionsWire.decodeAgentInboxDismissResponse,
+        ),
+    },
     threads: {
       follow: (threadId) =>
         transport.request(agentApiRoutes.cloud.threads.follow.path(threadId)) as Promise<
@@ -206,6 +265,14 @@ export function createUnwrappedExtendedResources(
   unwrap: <T>(result: AgentApiResult<T>) => T,
 ): AgentApiExtendedClient {
   return {
+    actions: {
+      prepare: async (request) => unwrap(await raw.actions.prepare(request)),
+      withdraw: async (request) => unwrap(await raw.actions.withdraw(request)),
+    },
+    inbox: {
+      read: async (request) => unwrap(await raw.inbox.read(request)),
+      dismiss: async (request) => unwrap(await raw.inbox.dismiss(request)),
+    },
     threads: {
       follow: async (threadId) => unwrap(await raw.threads.follow(threadId)),
       unfollow: async (threadId) => unwrap(await raw.threads.unfollow(threadId)),

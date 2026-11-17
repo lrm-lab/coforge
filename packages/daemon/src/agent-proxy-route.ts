@@ -27,7 +27,10 @@ export type TokenBinding = {
 };
 export type JsonObject = Record<string, unknown>;
 export type BodyRead = "none" | "json" | "json-object";
-export type HandlerName = Exclude<keyof AgentProxyRuntime, "issueAgentContext" | "memoryFence">;
+export type HandlerName = Exclude<
+  keyof AgentProxyRuntime,
+  "issueAgentContext" | "memoryFence" | "collab"
+>;
 export type RuntimeHandler<K extends HandlerName> = NonNullable<AgentProxyRuntime[K]>;
 export type RequestOf<K extends HandlerName> = Parameters<RuntimeHandler<K>>[1];
 export type ResultOf<K extends HandlerName> = Awaited<ReturnType<RuntimeHandler<K>>>;

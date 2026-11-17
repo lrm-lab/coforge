@@ -1022,7 +1022,7 @@ test("parses a held draft retry", () => {
   );
 });
 
-test("parses --expected-draft-key only together with --send-draft", () => {
+test("parses --expected-draft-key only with draft flags", () => {
   expect(
     parseArgs([
       "message",
@@ -1036,7 +1036,7 @@ test("parses --expected-draft-key only together with --send-draft", () => {
   ).toEqual({ command: "send", target: "@ada", sendDraft: true, expectedDraftKey: "key-1" });
   expect(() =>
     parseArgs(["message", "send", "--expected-draft-key", "key-1", "--target", "@ada"]),
-  ).toThrow("--expected-draft-key can only be used together with --send-draft.");
+  ).toThrow(/--expected-draft-key can only be used together with --send-draft/);
   let refused: unknown;
   try {
     parseArgs(["message", "send", "--expected-draft-key", "key-1", "--target", "@ada"]);

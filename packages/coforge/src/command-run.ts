@@ -32,6 +32,7 @@ import {
   mentionDeliveryFailure,
 } from "#src/mention-format";
 import { runActionPrepare } from "#src/action-prepare-run";
+import { runActionWithdraw, runInboxDismiss, runInboxRead } from "#src/inbox-commands";
 import { formatReadWindow } from "#src/message-read-format";
 import {
   formatAttachmentDownloadSuccess,
@@ -238,11 +239,14 @@ export async function run(args: readonly string[], transport: MessageTransport):
     return `Memory ${result.status} (report ${result.reportId}).`;
   }
   if (invocation.command === "action-prepare") return runActionPrepare(transport, invocation);
+  if (invocation.command === "action-withdraw") return runActionWithdraw(transport, invocation);
   if (isAttentionInvocation(invocation)) return runAttention(transport, invocation);
   if (invocation.command === "task-conversation") return runTaskConversation(transport, invocation);
   if (invocation.command === "channel-manage") return runChannelCommand(transport, invocation);
   if (invocation.command === "label") return runLabelCommand(transport, invocation);
   if (invocation.command === "inbox-check") return runInboxCheck(transport, invocation);
+  if (invocation.command === "inbox-read") return runInboxRead(transport, invocation);
+  if (invocation.command === "inbox-dismiss") return runInboxDismiss(transport, invocation);
   if (invocation.command === "attachment-comments") {
     if (!transport.attachmentComments)
       throw new Error("Attachment comments transport is unavailable");

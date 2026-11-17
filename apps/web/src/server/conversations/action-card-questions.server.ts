@@ -1,4 +1,5 @@
 import {
+  CHOICE_ANYONE_TARGET,
   CHOICE_OTHER_DEFAULT_LABEL,
   CHOICE_OTHER_OPTION_ID,
   CHOICE_OTHER_TEXT_MAX_LENGTH,
@@ -29,7 +30,8 @@ const USER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * owner fallback as `choice` (see `resolveChoicePayload`). Each question's recommended option,
  * when not first already, moves first with a warning that names its question. */
 export async function resolveQuestionsPayload(
-  db: Pick<PrismaClient, "user" | "conversationMember">,
+  db: Pick<PrismaClient, "user" | "conversationMember"> &
+    Partial<Pick<PrismaClient, "conversation">>,
   conversationId: string,
   action: QuestionsAction,
   legacyOwnerUserId?: string,
@@ -38,29 +40,55 @@ export async function resolveQuestionsPayload(
   if (!asked)
     throw new AppError("INVALID_INPUT", {
       errorId: "action_card_questions_to",
-      hint: "a questions card must name who it asks: set `to` to their handle or user id",
+      hint: "a questions card must name who it asks: set `to` to their handle, user id, or `anyone` in a channel",
     });
-  const handle = asked.replace(/^@/, "");
-  const user = await db.user.findFirst({
-    where: USER_ID.test(handle) ? { id: handle } : { username: handle },
-    select: { id: true },
-  });
-  if (!user)
-    throw new AppError("INVALID_INPUT", {
-      errorId: "action_card_questions_to",
-      hint: "the person to ask does not exist",
+  let resolvedTo: string;
+  if (asked === CHOICE_ANYONE_TARGET) {
+    const conv = await db.conversation?.findUnique({
+      where: { id: conversationId },
+      select: { directKey: true, kind: true },
     });
-  const member = await db.conversationMember.findFirst({
-    where: { conversationId, userId: user.id, leftAt: null },
-    select: { id: true },
-  });
-  if (!member)
-    throw new AppError("INVALID_INPUT", {
-      errorId: "action_card_questions_to",
-      hint: "the person to ask is not in this conversation",
+    if (conv && (conv.directKey !== null || (conv.kind != null && conv.kind !== "task_thread")))
+      throw new AppError("INVALID_INPUT", {
+        errorId: "action_card_questions_to",
+        hint: '`to: "anyone"` is only valid in a channel or task conversation; name the person in a direct message',
+      });
+    resolvedTo = CHOICE_ANYONE_TARGET;
+  } else {
+    const handle = asked.replace(/^@/, "");
+    const user = await db.user.findFirst({
+      where: USER_ID.test(handle) ? { id: handle } : { username: handle },
+      select: { id: true },
     });
+    if (!user)
+      throw new AppError("INVALID_INPUT", {
+        errorId: "action_card_questions_to",
+        hint: "the person to ask does not exist",
+      });
+    const member = await db.conversationMember.findFirst({
+      where: { conversationId, userId: user.id, leftAt: null },
+      select: { id: true },
+    });
+    if (!member)
+      throw new AppError("INVALID_INPUT", {
+        errorId: "action_card_questions_to",
+        hint: "the person to ask is not in this conversation",
+      });
+    resolvedTo = user.id;
+  }
   const warnings: string[] = [];
   const questions = action.questions.map((question) => {
+    if (question.kind === "text") {
+      const label = question.placeholder ?? question.other?.label;
+      return {
+        id: question.id,
+        kind: "text" as const,
+        prompt: question.prompt,
+        select: "one" as const,
+        options: [],
+        other: label ? { label } : {},
+      };
+    }
     if (question.options.filter((option) => option.recommended === true).length > 1)
       throw new AppError("INVALID_INPUT", {
         errorId: "action_card_questions_recommended",
@@ -83,6 +111,7 @@ export async function resolveQuestionsPayload(
     }
     return {
       id: question.id,
+      ...(question.kind ? { kind: question.kind } : {}),
       prompt: question.prompt,
       select: question.select,
       options,
@@ -95,7 +124,7 @@ export async function resolveQuestionsPayload(
     type: "questions",
     ...(action.prompt ? { prompt: action.prompt } : {}),
     questions,
-    to: user.id,
+    to: resolvedTo,
     ...deadlineIn(action.expiresInMinutes),
     ...(warnings.length ? { warning: warnings.join(" ") } : {}),
   };
@@ -109,8 +138,15 @@ export function questionsActionCardView(
   pending: boolean,
   userPerson: (userId: string) => ActionCardPersonRef | undefined,
 ): ActionCardView {
-  const person = payload.to ? userPerson(payload.to) : undefined;
-  const asked = person ? { ...person, isViewer: person.id === viewerUserId } : undefined;
+  const anyone = payload.to === CHOICE_ANYONE_TARGET;
+  const person = !anyone && payload.to ? userPerson(payload.to) : undefined;
+  const asked = anyone
+    ? base.state === "executed" || base.state === "cancelled"
+      ? base.committedBy
+      : undefined
+    : person
+      ? { ...person, isViewer: person.id === viewerUserId }
+      : undefined;
   return {
     ...base,
     ...(payload.deadline && base.state === "pending" ? { deadline: payload.deadline } : {}),
@@ -118,7 +154,7 @@ export function questionsActionCardView(
     ...(payload.prompt ? { prompt: payload.prompt } : {}),
     questions: payload.questions,
     ...(asked ? { asked } : {}),
-    canCommit: pending && payload.to === viewerUserId,
+    canCommit: pending && (anyone || payload.to === viewerUserId),
     result: card.result as { answers: QuestionsAnswer[] } | undefined,
   };
 }
@@ -159,7 +195,8 @@ export async function commitQuestionsCard(
     "questions",
   );
   const payload = card.payload as ResolvedQuestionsPayload;
-  if (payload.to !== principal.actorUserId) throw new AppError("ACCESS_DENIED");
+  if (payload.to !== CHOICE_ANYONE_TARGET && payload.to !== principal.actorUserId)
+    throw new AppError("ACCESS_DENIED");
   const answers = questionsAnswers(payload, input.answers);
   const updated = await db.actionCard.updateMany({
     where: { messageId: input.messageId, state: "pending" },
@@ -199,11 +236,18 @@ function questionsAnswers(
     throw new AppError("INVALID_INPUT");
   const answers = payload.questions.map((question): QuestionsAnswer => {
     const answer = byId.get(question.id);
-    if (!answer || answer.selection.length === 0)
+    const normalizedSelection =
+      answer &&
+      question.kind === "text" &&
+      answer.selection.length === 0 &&
+      Boolean(answer.text?.trim())
+        ? [CHOICE_OTHER_OPTION_ID]
+        : (answer?.selection ?? []);
+    if (!answer || normalizedSelection.length === 0)
       return { questionId: question.id, prompt: question.prompt, selection: [], skipped: true };
-    if (question.select === "one" && answer.selection.length !== 1)
+    if (question.select === "one" && normalizedSelection.length !== 1)
       throw new AppError("INVALID_INPUT");
-    const selection = answer.selection.map((optionId): QuestionsAnswerOption => {
+    const selection = normalizedSelection.map((optionId): QuestionsAnswerOption => {
       if (optionId === CHOICE_OTHER_OPTION_ID) {
         // A stored payload omits `other` when the Agent turned it off.
         const other = question.other as { label?: string; enabled?: boolean } | undefined;

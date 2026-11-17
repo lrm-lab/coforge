@@ -28,6 +28,18 @@ const INBOX_LIST_ROUTE = {
   method: "GET",
   path: "/api/agent/v1/inbox/conversations",
 } as const;
+const INBOX_READ_ROUTE = {
+  method: "GET",
+  path: "/api/agent/v1/inbox/read",
+} as const;
+const INBOX_DISMISS_ROUTE = {
+  method: "POST",
+  path: "/api/agent/v1/inbox/dismiss",
+} as const;
+const ACTION_WITHDRAW_ROUTE = {
+  method: "POST",
+  path: "/api/agent/v1/actions/withdraw",
+} as const;
 const TASK_CONVERSATION_ROUTES = {
   view: { method: "GET", path: "/api/agent/v1/tasks/view" },
   read: { method: "GET", path: "/api/agent/v1/tasks/read" },
@@ -173,6 +185,7 @@ export const agentApiRoutes = {
     reminders: { method: "POST", path: "/api/agent/v1/reminders" },
     tasks: { method: "POST", path: "/api/agent/v1/tasks" },
     actionPrepare: { method: "POST", path: "/api/agent/v1/actions/prepare" },
+    actionWithdraw: ACTION_WITHDRAW_ROUTE,
     weeklyReports: { method: "POST", path: "/api/agent/v1/weekly-reports" },
     weeklyReportCollect: { method: "POST", path: "/api/agent/v1/weekly-report-collect" },
     weeklyReportKeyPoints: { method: "POST", path: "/api/agent/v1/weekly-report-key-points" },
@@ -191,6 +204,8 @@ export const agentApiRoutes = {
     threadFollow: THREAD_FOLLOW_ROUTE,
     guidance: GUIDANCE_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
+    inboxRead: INBOX_READ_ROUTE,
+    inboxDismiss: INBOX_DISMISS_ROUTE,
     labels: LABELS_ROUTE,
     labelWrite: LABEL_WRITE_ROUTE,
     artifacts: ARTIFACTS_ROUTE,
@@ -213,6 +228,7 @@ export const agentApiRoutes = {
     reminders: { method: "POST", path: "/api/agent/v1/reminders" },
     tasks: { method: "POST", path: "/api/agent/v1/tasks" },
     actionPrepare: { method: "POST", path: "/api/agent/v1/actions/prepare" },
+    actionWithdraw: ACTION_WITHDRAW_ROUTE,
     weeklyReports: { method: "POST", path: "/api/agent/v1/weekly-reports" },
     weeklyReportCollect: { method: "POST", path: "/api/agent/v1/weekly-report-collect" },
     weeklyReportKeyPoints: { method: "POST", path: "/api/agent/v1/weekly-report-key-points" },
@@ -239,6 +255,8 @@ export const agentApiRoutes = {
     threadFollow: THREAD_FOLLOW_ROUTE,
     guidance: GUIDANCE_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
+    inboxRead: INBOX_READ_ROUTE,
+    inboxDismiss: INBOX_DISMISS_ROUTE,
     labels: LABELS_ROUTE,
     labelWrite: LABEL_WRITE_ROUTE,
     artifacts: ARTIFACTS_ROUTE,
@@ -337,6 +355,11 @@ export const agentApiRoutes = {
     reminders: { method: "POST", path: "/api/agent/v1/reminders" },
     tasks: { method: "POST", path: "/api/agent/v1/tasks" },
     actionPrepare: { method: "POST", path: "/api/agent/v1/actions/prepare" },
+    actionWithdraw: ACTION_WITHDRAW_ROUTE,
+    actions: {
+      prepare: { method: "POST", path: "/api/agent/v1/actions/prepare" },
+      withdraw: ACTION_WITHDRAW_ROUTE,
+    },
     weeklyReports: { method: "POST", path: "/api/agent/v1/weekly-reports" },
     weeklyReportCollect: { method: "POST", path: "/api/agent/v1/weekly-report-collect" },
     weeklyReportKeyPoints: { method: "POST", path: "/api/agent/v1/weekly-report-key-points" },
@@ -363,6 +386,8 @@ export const agentApiRoutes = {
     threadFollow: THREAD_FOLLOW_ROUTE,
     guidance: GUIDANCE_ROUTE,
     inboxList: INBOX_LIST_ROUTE,
+    inboxRead: INBOX_READ_ROUTE,
+    inboxDismiss: INBOX_DISMISS_ROUTE,
     labels: LABELS_ROUTE,
     labelWrite: LABEL_WRITE_ROUTE,
     artifacts: ARTIFACTS_ROUTE,

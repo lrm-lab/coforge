@@ -39,10 +39,11 @@ yet:
 - **`desktop:takeover`**: `prompt?`, `draftHint?`. Posts a card with an Open desktop control for
   this Agent's cloud screen when `page:fill` cannot finish the step (OAuth, captcha, unknown
   selectors). Do not ask for secrets in chat.
-- **`choice`**: `prompt`, `options` (2–8 of `{id,label,recommended?}` with unique `id`s matching
-  `^[a-z][a-z0-9_]{0,31}$`; `recommended: true` marks the Agent's pick, at most one per question,
-  and prepare moves it first with a warning), `to` (required: the handle or user id of the person
-  who may answer, and who must be a member of the conversation; there is no default owner),
+- **`choice`**: `prompt`, `options` (1–8 of `{id,label,recommended?}` with unique `id`s matching
+  `^[a-z][a-z0-9_]{0,31}$`; a single option works as a 1-button confirm; `recommended: true` marks
+  the Agent's pick, at most one per question, and prepare moves it first with a warning), `to`
+  (required: the handle or user id of the person who may answer and is in the conversation, or
+  `"anyone"` in a channel or task conversation so any member there may answer),
   `other?` (`{ enabled?, label? }`; on by default: a final row that is itself an input, submitted
   as `_other` with the person's text fenced in the delivery; `enabled: false` removes it),
   `expiresInMinutes?` (1 to 43200 minutes; defaults to 30 days),
@@ -50,12 +51,14 @@ yet:
   choice reads back as `[action card: executed; choice=<id>]` (`_other` for their own answer).
   The asking Agent is told who answered and what they chose.
 - **`questions`**: `prompt?` (optional card title, ≤200 chars), `questions` (1–4 items, each with
-  unique `id` matching `^[a-z][a-z0-9_]{0,31}$`, `prompt`, `select?: "one" | "many"` defaulting to
-  `"one"`, `options` of `{id, label, description?, recommended?}`, and optional `other?`),
-  `to` (required: the person asked), `expiresInMinutes?` (1 to 43200 minutes), `draftHint?`.
-  Lets the person answer multiple single- or multi-select questions in one submit (skipping any
-  subset as long as at least one question is answered), waking the preparing Agent with the
-  per-question answers.
+  unique `id` matching `^[a-z][a-z0-9_]{0,31}$`, `prompt`, `kind?: "options" | "text"` defaulting
+  to `"options"`, `select?: "one" | "many"` defaulting to `"one"`, `options` of 1–6
+  `{id, label, description?, recommended?}` when `kind !== "text"`, `placeholder?` on standalone
+  `kind: "text"` free-text questions, and optional `other?`), `to` (required: the person asked, or
+  `"anyone"` in a channel or task conversation), `expiresInMinutes?` (1 to 43200 minutes),
+  `draftHint?`. Lets the person answer multiple single-select, multi-select, or free-text questions
+  in one submit (skipping any subset as long as at least one question is answered), waking the
+  preparing Agent with the per-question answers.
 - **`channel:add_member`**: `channel` (handle or UUID), `humans?`,
   `agents?` (at least one of the two non-empty), `draftHint?`.
 - **`app:register`**: `name`, `clientKey?`, `redirectUrls?`, `homepageUrl?`, `description?`,
@@ -110,8 +113,10 @@ coforge message read --target "#design" --around <message-id>
 
 Only `executed` means the resource now exists.
 
-Who may dismiss a waiting card: the Agent that prepared it (its owner), a Workspace owner or
-admin, and — on a `choice` or `questions` card — the person the card asks. A dismissed card is a
+Who may dismiss a waiting card: the preparing Agent itself via
+`coforge action withdraw --message <message-uuid> [--json]` (idempotent on retry, waking nobody),
+its human owner, a Workspace owner or admin, and — on a `choice` or `questions` card naming a
+specific person — that person. A card dismissed by the asked person is a
 decision, not a lost message (the Agent is woken when the asked person dismisses it): do not post the same question again; open a new card worded
 differently if a follow-up is truly needed. An `app:grant_agent` card has no dismiss here: it is
 denied through the app approval flow instead.
