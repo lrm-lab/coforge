@@ -1,5 +1,11 @@
 import { decodeWakeHint, decodeWakeHints, type WakeHint } from "@lrm/coforge-sdk/agent";
 import { CliError } from "../cli-error";
+import {
+  ACTIVITY_DRAIN_INTERVAL_MS,
+  ActivityPump,
+  DEFAULT_ACTIVITY_DRAIN_LIMIT,
+  activityDrainBeside,
+} from "./bridge-activity";
 import { acquireBridgeLock } from "./bridge-lock";
 import type { FetchLike } from "./device-client";
 import type { ProfileStore } from "./profile-store";
@@ -12,6 +18,9 @@ export type BridgeOptions = {
   expectedAgent?: string;
   wakeEndpoint?: URL;
   pollIntervalMs: number;
+  activityEndpoint?: URL;
+  activityDrainLimit: number;
+  channelToken?: string;
 };
 
 export type BridgeDeps = {
@@ -25,7 +34,7 @@ export type BridgeDeps = {
 };
 
 const USAGE =
-  "Usage: coforge agent bridge [--profile <slug>] [--expected-agent <agent-id>] [--json] [--once] [--wake-endpoint <http://127.0.0.1:port/path>] [--poll-interval-ms <n>]";
+  "Usage: coforge agent bridge [--profile <slug>] [--expected-agent <agent-id>] [--json] [--once] [--wake-endpoint <http://127.0.0.1:port/path>] [--poll-interval-ms <n>] [--activity-endpoint <http://127.0.0.1:port/path>] [--activity-drain-limit <n>]";
 
 const DEFAULT_POLL_INTERVAL_MS = 15_000;
 const BACKOFF_BASE_MS = 1_000;
@@ -44,22 +53,29 @@ function isLoopbackHost(hostname: string): boolean {
   return hostname === "localhost" || hostname === "[::1]" || LOOPBACK_V4.test(hostname);
 }
 
-function parseWakeEndpoint(value: string): URL {
+function parseLoopbackUrl(flag: string, value: string): URL {
   let url: URL;
   try {
     url = new URL(value);
   } catch {
-    throw invalidArg(`--wake-endpoint is not a URL. ${USAGE}`);
+    throw invalidArg(`${flag} is not a URL. ${USAGE}`);
   }
   if (url.protocol !== "http:" && url.protocol !== "https:")
-    throw invalidArg("--wake-endpoint must be an http:// or https:// URL.");
+    throw invalidArg(`${flag} must be an http:// or https:// URL.`);
   if (!isLoopbackHost(url.hostname))
     throw new CliError({
       code: "WAKE_ENDPOINT_NOT_LOOPBACK",
-      message: "--wake-endpoint must point at this machine (localhost, 127.x.x.x or [::1]).",
+      message: `${flag} must point at this machine (localhost, 127.x.x.x or [::1]).`,
       retryable: false,
     });
   return url;
+}
+
+function positiveInteger(flag: string, text: string): number {
+  const parsed = Number(text);
+  if (!/^\d+$/.test(text) || !Number.isSafeInteger(parsed) || parsed < 1)
+    throw invalidArg(`${flag} must be a positive integer.`);
+  return parsed;
 }
 
 export function parseBridgeArgs(
@@ -70,6 +86,7 @@ export function parseBridgeArgs(
     json: false,
     once: false,
     pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
+    activityDrainLimit: DEFAULT_ACTIVITY_DRAIN_LIMIT,
   };
   let expected = env.COFORGE_EXPECTED_AGENT_ID?.trim() || undefined;
   for (let index = 0; index < args.length; index++) {
@@ -86,16 +103,19 @@ export function parseBridgeArgs(
     if (flag === "--json") options.json = true;
     else if (flag === "--once") options.once = true;
     else if (flag === "--expected-agent") expected = value();
-    else if (flag === "--wake-endpoint") options.wakeEndpoint = parseWakeEndpoint(value());
-    else if (flag === "--poll-interval-ms") {
-      const text = value();
-      const parsed = Number(text);
-      if (!/^\d+$/.test(text) || !Number.isSafeInteger(parsed) || parsed < 1)
-        throw invalidArg("--poll-interval-ms must be a positive integer.");
-      options.pollIntervalMs = parsed;
-    } else throw invalidArg(`Unknown option ${arg}. ${USAGE}`);
+    else if (flag === "--wake-endpoint") options.wakeEndpoint = parseLoopbackUrl(flag, value());
+    else if (flag === "--activity-endpoint")
+      options.activityEndpoint = parseLoopbackUrl(flag, value());
+    else if (flag === "--poll-interval-ms") options.pollIntervalMs = positiveInteger(flag, value());
+    else if (flag === "--activity-drain-limit")
+      options.activityDrainLimit = positiveInteger(flag, value());
+    else throw invalidArg(`Unknown option ${arg}. ${USAGE}`);
   }
   if (expected) options.expectedAgent = expected;
+  if (!options.activityEndpoint && options.wakeEndpoint)
+    options.activityEndpoint = activityDrainBeside(options.wakeEndpoint);
+  const token = env.COFORGE_CHANNEL_TOKEN?.trim();
+  if (token) options.channelToken = token;
   return options;
 }
 
@@ -160,6 +180,9 @@ class Bridge {
   private readonly emitted = new Map<string, bigint>();
   private wakeFailed = false;
   private readonly random: () => number;
+  private readonly stop = new AbortController();
+  private readonly signal: AbortSignal;
+  private readonly pump?: ActivityPump;
 
   constructor(
     private readonly options: BridgeOptions,
@@ -167,6 +190,17 @@ class Bridge {
     private readonly deps: BridgeDeps,
   ) {
     this.random = deps.random ?? Math.random;
+    this.signal = AbortSignal.any([deps.signal, this.stop.signal]);
+    if (options.activityEndpoint)
+      this.pump = new ActivityPump(
+        {
+          endpoint: options.activityEndpoint,
+          limit: options.activityDrainLimit,
+          ...(options.channelToken ? { token: options.channelToken } : {}),
+        },
+        profile,
+        deps,
+      );
   }
 
   async run(): Promise<number> {
@@ -177,29 +211,52 @@ class Bridge {
         if (error instanceof CliError) throw error;
         await this.poll();
       }
+      await this.pump?.cycle(this.signal);
       return this.wakeFailed ? 1 : 0;
     }
+    const halt = (error: unknown) => {
+      this.stop.abort();
+      throw error;
+    };
+    const results = await Promise.allSettled([
+      this.receive().catch(halt),
+      this.pumpActivity().catch(halt),
+    ]);
+    const failed = results.find((result) => result.status === "rejected");
+    if (failed) throw failed.reason;
+    return 0;
+  }
+
+  private async pumpActivity(): Promise<void> {
+    if (!this.pump) return;
+    while (!this.signal.aborted) {
+      await this.pump.cycle(this.signal);
+      if (this.signal.aborted) break;
+      await this.deps.sleep(ACTIVITY_DRAIN_INTERVAL_MS);
+    }
+  }
+
+  private async receive(): Promise<void> {
     let failures = 0;
-    while (!this.deps.signal.aborted) {
+    while (!this.signal.aborted) {
       try {
         const received = await this.holdStream(false);
         failures = received ? 0 : failures + 1;
       } catch (error) {
         if (error instanceof CliError) throw error;
         failures += 1;
-        if (this.deps.signal.aborted) break;
+        if (this.signal.aborted) break;
         try {
           await this.poll();
         } catch (pollError) {
           if (pollError instanceof CliError) throw pollError;
         }
       }
-      if (this.deps.signal.aborted) break;
+      if (this.signal.aborted) break;
       const backoff = Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** Math.min(failures, 10));
       const delay = Math.min(backoff, this.options.pollIntervalMs);
       await this.deps.sleep(Math.round(delay * (0.8 + this.random() * 0.4)));
     }
-    return 0;
   }
 
   private request(path: string, signal: AbortSignal): Promise<Response> {
@@ -215,7 +272,7 @@ class Bridge {
   }
 
   private async poll(): Promise<void> {
-    const signal = AbortSignal.any([this.deps.signal, AbortSignal.timeout(10_000)]);
+    const signal = AbortSignal.any([this.signal, AbortSignal.timeout(10_000)]);
     const response = await this.request(POLL_PATH, signal);
     if (response.status === 401) throw invalidCredentialError();
     if (!response.ok) throw new StreamUnavailable(response.status);
@@ -225,7 +282,7 @@ class Bridge {
   private async holdStream(stopAfterSnapshot: boolean): Promise<boolean> {
     const session = new AbortController();
     const abort = () => session.abort();
-    this.deps.signal.addEventListener("abort", abort, { once: true });
+    this.signal.addEventListener("abort", abort, { once: true });
     let silence: ReturnType<typeof setTimeout> | undefined;
     const watch = () => {
       clearTimeout(silence);
@@ -271,7 +328,7 @@ class Bridge {
       }
     } finally {
       clearTimeout(silence);
-      this.deps.signal.removeEventListener("abort", abort);
+      this.signal.removeEventListener("abort", abort);
     }
   }
 

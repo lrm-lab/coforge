@@ -33,7 +33,7 @@ export const agentHelp: Readonly<Record<string, HelpEntry>> = {
   },
   "agent bridge": {
     syntax:
-      "coforge agent bridge [--profile <slug>] [--expected-agent <agent-id>] [--json] [--once] [--wake-endpoint <http://127.0.0.1:port/path>] [--poll-interval-ms <n>]",
+      "coforge agent bridge [--profile <slug>] [--expected-agent <agent-id>] [--json] [--once] [--wake-endpoint <http://127.0.0.1:port/path>] [--poll-interval-ms <n>] [--activity-endpoint <http://127.0.0.1:port/path>] [--activity-drain-limit <n>]",
     flags: [
       PROFILE_FLAG,
       "--expected-agent  refuse to run unless the profile is this Agent (default: COFORGE_EXPECTED_AGENT_ID)",
@@ -41,9 +41,11 @@ export const agentHelp: Readonly<Record<string, HelpEntry>> = {
       "--once  receive once and exit",
       "--wake-endpoint  POST each hint as JSON to this local URL (localhost only) instead of printing it",
       "--poll-interval-ms  how often to poll while the stream is down (default 15000)",
+      "--activity-endpoint  drain the runtime's activity from this local URL and forward it to the server (default: /activity/drain beside --wake-endpoint)",
+      "--activity-drain-limit  most events to drain at a time (default 50)",
     ],
     guidance:
-      "Needs an external profile. Holds the server's wake stream, reconnects with backoff and polls while it is down. A hint names a conversation with unread messages and never carries a body: read with `coforge message check`. The bridge never reads or acknowledges messages. One bridge per profile.",
+      "Needs an external profile. Holds the server's wake stream, reconnects with backoff and polls while it is down. A hint names a conversation with unread messages and never carries a body: read with `coforge message check`. The bridge never reads or acknowledges messages. With an activity endpoint it also forwards the runtime's status and hook events every 2 seconds. One bridge per profile.",
     example: "coforge agent bridge --profile acme-builder --json",
   },
 };
