@@ -25,8 +25,9 @@ import {
  * conversation full-screen in place of the list, a step in history that the header's back arrow
  * (past a thread opened in the conversation, after a reload, after leaving the page and coming
  * back with Back, and without the Navigation API) and the back gesture return from; a thread's
- * row opening its thread alone; and a link naming a conversation opening it full-screen, its back
- * arrow returning to the list.
+ * row opening its thread alone; a link naming a conversation opening it full-screen, its back
+ * arrow returning to the list; and the bottom tab bar (task #77), hidden on those inner pages,
+ * leading between the four tab homes, and absent on a desktop.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its peer and
  * its messages are seeded deterministically and reset on every run. Screenshots of the list
@@ -36,15 +37,50 @@ import {
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-inbox");
 
+const tabBar = `document.querySelector('nav[aria-label="Primary navigation"]')`;
+/** The tab the bar marks current, by its visible label. */
+const currentTab = `${tabBar}?.querySelector('a[aria-current="page"] span.truncate')?.textContent ?? null`;
+
 test("on a phone a row opens its conversation in place of the Activity list", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = `activity-inbox-phone-${process.pid}`;
   const { browser, evaluate } = browserSession(browserPath, session);
   /** The text of this test's rows (its channel's and its thread's), in page order. */
   const seededRows = `[...document.querySelectorAll(${rowItems})].map((row) => row.textContent).filter((text) => text.includes("e2e-activity-phone"))`;
+  const { workspaceId, workspace } = await devBrowserWorkspace(db);
+  const workspacePath = `/en/w/${workspace.slug}`;
+  const tail = `${process.pid}-${Date.now()}`;
+  const agent = await db.agent.create({
+    data: {
+      workspaceId,
+      name: `tabbar-${tail}`,
+      displayName: `Tab bar agent ${tail}`,
+      ownerId: DEV_BROWSER_USER.id,
+      runtimeConfig: {
+        runtime: "pi",
+        provider: { kind: "default" },
+        model: "",
+        modelProvider: "",
+        reasoning: "",
+      },
+    },
+  });
+  const settled = () =>
+    browser("wait", "--fn", `document.getAnimations().every((a) => a.playState !== "running")`);
+  /** Presses a tab by its label and waits for its page with it marked current. */
+  const pressTab = async (label: string, path: string) => {
+    await settled();
+    await browser(
+      "eval",
+      `[...${tabBar}.querySelectorAll("a")].find((a) => a.querySelector("span.truncate")?.textContent === ${JSON.stringify(label)}).click()`,
+    );
+    await browser(
+      "wait",
+      "--fn",
+      `location.pathname.endsWith(${JSON.stringify(path)}) && (${currentTab}) === ${JSON.stringify(label)}`,
+    );
+  };
   try {
-    const { workspaceId, workspace } = await devBrowserWorkspace(db);
-    const workspacePath = `/en/w/${workspace.slug}`;
     const { channelId, rootId, replyId, newestId } = await seedChannel(db, {
       workspaceId,
       key: "e2e-activity-inbox:phone-",
@@ -148,6 +184,8 @@ test("on a phone a row opens its conversation in place of the Activity list", as
     await browser("wait", "--fn", `${inPane(rootId)} && ${pageHydrated}`);
     // The list is hidden, not removed: crossing `lg` does not remount it.
     await browser("wait", "--fn", `${listHidden} === true`);
+    // An open conversation fills the screen without the tab bar.
+    expect(await evaluate<boolean>(`${tabBar} === null`)).toBe(true);
     await browser("screenshot", join(artifacts, "phone-open.png"));
     await browser("find", "role", "button", "click", "--name", "Back to activity");
     await browser(
@@ -155,8 +193,50 @@ test("on a phone a row opens its conversation in place of the Activity list", as
       "--fn",
       `location.pathname === ${JSON.stringify(`${workspacePath}/activity`)} && location.search === "" && ${listAlone} && ${seededRows}.length === 2`,
     );
+
+    // The phone's bottom tab bar (task #77): the open conversation above hid it, and the list
+    // brings it back with Activity marked current. Chats, Activity, Workspace and Me lead to each
+    // other, the current one marked.
+    expect(await evaluate<string | null>(currentTab)).toBe("Activity");
+    await pressTab("Chats", workspacePath);
+    await pressTab("Activity", "/activity");
+    await pressTab("Workspace", "/workspace");
+    await pressTab("Me", "/me");
+    await pressTab("Chats", workspacePath);
+    // An Agent's page from a link (its profile over Members) has no bar; closing it leaves
+    // Members, whose back arrow goes to the Workspace tab, Members' place.
+    const visibleBack = `[...document.querySelectorAll('button[aria-label="Back"]')].find((b) => b.checkVisibility())`;
+    await browser("open", `${origin}${workspacePath}/agent/${agent.id}`);
+    await browser(
+      "wait",
+      "--fn",
+      `${pageHydrated} && document.body.textContent.includes(${JSON.stringify(agent.displayName)}) && document.querySelector('button[aria-label="Close"]') != null`,
+    );
+    expect(await evaluate<boolean>(`${tabBar} === null`)).toBe(true);
+    await settled();
+    await browser("click", `button[aria-label="Close"]`);
+    await browser(
+      "wait",
+      "--fn",
+      `!location.search.includes("profile=") && ${visibleBack} != null`,
+    );
+    expect(await evaluate<boolean>(`${tabBar} === null`)).toBe(true);
+    await settled();
+    await browser("eval", `${visibleBack}.click()`);
+    await browser(
+      "wait",
+      "--fn",
+      `location.pathname.endsWith("/workspace") && (${currentTab}) === "Workspace"`,
+    );
+    // A desktop has the sidebar and no tab bar.
+    await browser("set", "viewport", "1440", "900");
+    await browser("open", `${origin}${workspacePath}`);
+    await browser("wait", "--fn", pageHydrated);
+    await settled();
+    expect(await evaluate<boolean>(`${tabBar} === null`)).toBe(true);
   } finally {
     await browser("close").catch(() => undefined);
+    await db.agent.deleteMany({ where: { id: agent.id } }).catch(() => undefined);
     await db.$disconnect();
   }
-}, 90_000);
+}, 150_000);
