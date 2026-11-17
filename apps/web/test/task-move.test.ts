@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { TaskStatus, TaskView } from "@lrm/coforge-sdk/internal";
+import type { TaskStatus, TaskWriteStatus, TaskView } from "@lrm/coforge-sdk/internal";
 import { getTaskMoveCommand, taskStatusOptions } from "#src/features/tasks/task-move";
 
 const task = (status: TaskStatus, owner: TaskView["owner"] = null): TaskView => ({
@@ -34,7 +34,7 @@ const owner = (memberId: string): NonNullable<TaskView["owner"]> => ({
   handle: memberId,
 });
 
-const update = (status: TaskStatus) => ({
+const update = (status: TaskWriteStatus) => ({
   operation: "update" as const,
   number: 7,
   status,
@@ -199,6 +199,6 @@ test("Backlog menus read an existing task without offering a Backlog write targe
   expect(taskStatusOptions(task("backlog"), "me")).toEqual(["backlog", "todo", "closed"]);
   expect(taskStatusOptions(task("todo"), "me", { canSetAnyStatus: true })).not.toContain("backlog");
   expect(
-    getTaskMoveCommand(task("todo"), "me", "backlog", { canSetAnyStatus: true }),
+    getTaskMoveCommand(task("todo"), "me", "backlog" as never, { canSetAnyStatus: true }),
   ).toBeUndefined();
 });

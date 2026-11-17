@@ -1,7 +1,7 @@
 import {
   isTaskRef,
   TASK_PRIORITY_LEVELS,
-  TASK_STATUSES,
+  TASK_WRITE_STATUSES,
   TASK_READ_STATUSES,
   taskAssignReasonProblem,
   type TaskCommand,
@@ -49,7 +49,9 @@ export function validateTaskCommand(command: TaskCommand) {
     command.status !== undefined &&
     command.status !== "all" &&
     !(
-      (command.operation === "list" ? TASK_READ_STATUSES : TASK_STATUSES) as readonly unknown[]
+      (command.operation === "list"
+        ? TASK_READ_STATUSES
+        : TASK_WRITE_STATUSES) as readonly unknown[]
     ).includes(command.status)
   )
     throw new AppError("INVALID_INPUT");

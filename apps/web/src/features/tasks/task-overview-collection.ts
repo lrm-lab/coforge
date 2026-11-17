@@ -5,7 +5,13 @@ import {
   queryCollectionOptions,
   UpdateOperationItemNotFoundError,
 } from "@tanstack/query-db-collection";
-import type { TaskCommand, TaskResult, TaskStatus, TaskView } from "@lrm/coforge-sdk/internal";
+import type {
+  TaskCommand,
+  TaskResult,
+  TaskStatus,
+  TaskView,
+  TaskCommandWithout,
+} from "@lrm/coforge-sdk/internal";
 
 import { createAnnouncedTasks } from "./announced-tasks";
 import { isFinishedStatus } from "./finished-tasks";
@@ -19,7 +25,7 @@ type Overview = Awaited<ReturnType<typeof loadTaskOverview>>;
 export type OverviewTaskRow = Overview["tasks"][number];
 
 /** A Task command as the page issues it: the conversation comes from the Task. */
-export type OverviewTaskCommand = Omit<TaskCommand, "idempotencyKey" | "conversationId"> & {
+export type OverviewTaskCommand = TaskCommandWithout<"idempotencyKey" | "conversationId"> & {
   number: number;
 };
 
@@ -54,7 +60,7 @@ export const taskOverviewQuery = (
 /** The status a command moves its Task to, when it moves it: shown before the server answers. */
 function statusAfter(command: OverviewTaskCommand): TaskStatus | undefined {
   if (command.operation === "claim") return "in_progress";
-  if (command.operation === "update" && command.status !== "all") return command.status;
+  if (command.operation === "update") return command.status;
   return undefined;
 }
 

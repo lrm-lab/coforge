@@ -1,6 +1,10 @@
 import { expect } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
-import type { TaskCommand, TaskPrincipal } from "@lrm/coforge-sdk/internal";
+import type {
+  TaskWriteCommand,
+  TaskPrincipal,
+  TaskCommandWithout,
+} from "@lrm/coforge-sdk/internal";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
@@ -116,7 +120,7 @@ export async function setup({
   // An Agent names its board by target; a person by conversation id.
   const run = (
     who: keyof typeof principals,
-    command: Omit<TaskCommand, "idempotencyKey" | "conversationId" | "target">,
+    command: TaskCommandWithout<"idempotencyKey" | "conversationId" | "target">,
     conversationId = channel.id,
   ) =>
     board.execute(principals[who], {
@@ -137,7 +141,7 @@ export async function setup({
   const make = async (
     who: keyof typeof principals,
     count: number,
-    extra: Partial<TaskCommand> = {},
+    extra: Partial<TaskWriteCommand> = {},
     conversationId = channel.id,
   ) =>
     (

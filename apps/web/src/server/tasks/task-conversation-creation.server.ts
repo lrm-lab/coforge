@@ -1,9 +1,9 @@
 import type {
-  TaskCommand,
+  TaskWriteCommand,
   TaskHistoryChange,
   TaskPrincipal,
   TaskPriorityLevel,
-  TaskStatus,
+  TaskWriteStatus,
 } from "@lrm/coforge-sdk/internal";
 import { taskStatusNeedsOwner } from "@lrm/coforge-sdk/internal";
 
@@ -89,7 +89,7 @@ export async function createConversationTasks(
   scope: { conversationId: string; workspaceId: string; channel: boolean },
   member: Member,
   _principal: TaskPrincipal,
-  command: TaskCommand,
+  command: TaskWriteCommand,
 ) {
   const convert = command.operation === "convert";
   if (convert && (!command.messageId || command.messageIds || command.title || command.titles))
@@ -132,7 +132,7 @@ export async function createConversationTasks(
       await assertCanAssignOther(tx, scope.workspaceId, member);
     // An initial status that needs a hand to hold it (task #61): to do and closed may be
     // nobody's, the rest may not.
-    const initial = command.status === "all" ? undefined : command.status;
+    const initial = command.status;
     if (initial && taskStatusNeedsOwner(initial) && !assignee)
       throw new AppError("CONFLICT", {
         hint: `a Task in ${initial} needs an owner; assign it or create it in todo`,
@@ -293,7 +293,7 @@ export async function insertConversationTask(
     priority?: TaskPriorityLevel;
     /** The status the new Task opens in; absent, the defaults (a self-assign starts in
      * progress, anything else waits in todo). */
-    status?: TaskStatus;
+    status?: TaskWriteStatus;
     assignee: Awaited<ReturnType<typeof assigneeMember>>;
     requestId: string;
     source: SourceMessage | null;

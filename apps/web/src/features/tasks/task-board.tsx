@@ -1,7 +1,7 @@
 import {
   TASK_READ_STATUSES,
-  TASK_STATUSES,
-  type TaskStatus,
+  TASK_WRITE_STATUSES,
+  type TaskWriteStatus,
   type TaskView,
 } from "@lrm/coforge-sdk/internal";
 
@@ -109,12 +109,12 @@ export function TaskBoard<T extends BoardTask>({
   const { statuses, filter, layout } = view;
   const availableStatuses = tasks.some((task) => task.status === "backlog")
     ? TASK_READ_STATUSES
-    : TASK_STATUSES;
+    : TASK_WRITE_STATUSES;
   const showTree = tree !== undefined;
   const [hiddenColumns, setColumnHidden] = useTaskHiddenColumns();
   const [createOpen, setCreateOpen] = useState(false);
   // The column the board's "New task" form was opened from.
-  const [creating, setCreating] = useState<TaskStatus | null>(null);
+  const [creating, setCreating] = useState<TaskWriteStatus | null>(null);
   const filtered =
     statuses.length > 0 ||
     filter.owners.length > 0 ||
@@ -251,7 +251,7 @@ export function TaskBoard<T extends BoardTask>({
             showMoveError={!conversation}
             adding={
               newTaskChoice && onCommand && canFile
-                ? { statuses: TASK_STATUSES.filter(canCreateIn), onAdd: setCreating }
+                ? { statuses: TASK_WRITE_STATUSES.filter(canCreateIn), onAdd: setCreating }
                 : undefined
             }
             currentMemberId={(task) => task.currentMemberId ?? null}

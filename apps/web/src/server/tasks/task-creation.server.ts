@@ -3,7 +3,7 @@ import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.ser
 import { channelActorOf } from "#src/server/conversations/channel-actor.server";
 import { userUploadedAttachmentWhere } from "#src/server/attachments/message-attachments.server";
 import { assertCanAssignOther } from "./task-assignment-authority.server";
-import type { TaskCommand, TaskHistoryChange, TaskPrincipal } from "@lrm/coforge-sdk/internal";
+import type { TaskWriteCommand, TaskHistoryChange, TaskPrincipal } from "@lrm/coforge-sdk/internal";
 import { taskStatusNeedsOwner } from "@lrm/coforge-sdk/internal";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { AppError } from "#src/lib/app-error";
@@ -44,7 +44,7 @@ export async function createTasks(
   },
   member: Member,
   principal: TaskPrincipal,
-  command: TaskCommand,
+  command: TaskWriteCommand,
 ) {
   const titles = (command.titles ?? [command.title!]).map((title) => title.trim());
   const requestIds = await Promise.all(
@@ -238,7 +238,7 @@ export async function createTasks(
     // An initial status the command named (task #61): the column a board form was opened from, or
     // an Agent's explicit pick. The defaults stay: a self-assign starts in progress, anything
     // else waits in todo — an explicit status only says where the new Task waits instead.
-    const initial = command.status === "all" ? undefined : command.status;
+    const initial = command.status;
     if (initial && taskStatusNeedsOwner(initial) && !assignee)
       throw new AppError("CONFLICT", {
         hint: `a Task in ${initial} needs an owner; assign it or create it in todo`,

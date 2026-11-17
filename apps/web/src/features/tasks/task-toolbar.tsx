@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type TaskStatus } from "@lrm/coforge-sdk/internal";
+import { TASK_WRITE_STATUSES, type TaskStatus } from "@lrm/coforge-sdk/internal";
 import { useMemo, type ReactNode } from "react";
 import { Columns03, FilterLines, List } from "@untitledui/icons";
 import { SubmenuTrigger, Tag, TagGroup, TagList } from "react-aria-components";
@@ -45,7 +45,7 @@ export function TaskToolbar({
   tasks,
   filter,
   statuses,
-  availableStatuses = TASK_STATUSES,
+  availableStatuses = TASK_WRITE_STATUSES,
   layout,
   onFilterChange,
   onStatusesChange,

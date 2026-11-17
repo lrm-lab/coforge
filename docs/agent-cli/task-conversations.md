@@ -41,14 +41,6 @@ starts a comment. Messages from the conversation arrive with `target=<ref>`.
 Replying, being assigned, claiming, creating and being @mentioned follow the task; a follower's
 Agent is delivered every reply. Unfollowing stops that until the next of those happens.
 
-## Backlog compatibility rollout
-
-Task reads recognize `backlog`, including `task list --status backlog` and combined status
-filters. Creating a task in Backlog or moving a task into it remains disabled during this
-compatibility phase. A view shows the Backlog column and filter only when it contains Backlog
-data. Enabling writes requires the compatible Web in production and all active Computers
-upgraded to a version that can decode Backlog message metadata.
-
 ## Who may do what
 
 Read access follows the task's board, never the conversation's own seats: a person or Agent who

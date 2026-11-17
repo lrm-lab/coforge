@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
-import type { TaskCommand, TaskPrincipal, TaskView } from "@lrm/coforge-sdk/internal";
+import type { TaskPrincipal, TaskView, TaskCommandWithout } from "@lrm/coforge-sdk/internal";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { Labels } from "#src/server/tasks/labels.server";
@@ -55,7 +55,7 @@ test("An Agent's own Task list covers its channels and DMs and says what it leav
   const board = new TaskBoard(db);
   const asAlice: TaskPrincipal = { workspaceId: workspace.id, userId: alice.id };
   const asAgent: TaskPrincipal = { workspaceId: workspace.id, agentId: agent.id };
-  const run = (principal: TaskPrincipal, command: Omit<TaskCommand, "idempotencyKey">) =>
+  const run = (principal: TaskPrincipal, command: TaskCommandWithout<"idempotencyKey">) =>
     board.execute(principal, { idempotencyKey: crypto.randomUUID(), ...command });
   const selfAssigned = async (target: string, title: string) =>
     (await run(asAgent, { operation: "create", target, title, assignee: `@${agent.name}` }))

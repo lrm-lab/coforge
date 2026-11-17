@@ -1,7 +1,7 @@
 import {
   isTaskRef,
   TASK_PRIORITY_LEVELS,
-  TASK_STATUSES,
+  TASK_WRITE_STATUSES,
   TASK_READ_STATUSES,
   type TaskRef,
 } from "@lrm/coforge-sdk/internal";
@@ -9,25 +9,27 @@ import { z } from "zod";
 
 import { PROJECT_SLUG_MAX_LENGTH } from "#src/features/projects/projects.schemas";
 
+const taskOperations = [
+  "list",
+  "show",
+  "create",
+  "convert",
+  "claim",
+  "unclaim",
+  "update",
+  "assign",
+  "unassign",
+  "amend",
+  "history",
+  "delete",
+  "restore",
+  "receipt",
+] as const;
+
 /** The shape of a Task command a person's page sends; the board validates what it means. */
-export const taskCommand = z
+const taskCommandFields = z
   .object({
-    operation: z.enum([
-      "list",
-      "show",
-      "create",
-      "convert",
-      "claim",
-      "unclaim",
-      "update",
-      "assign",
-      "unassign",
-      "amend",
-      "history",
-      "delete",
-      "restore",
-      "receipt",
-    ]),
+    operation: z.enum(taskOperations),
     idempotencyKey: z.uuid(),
     conversationId: z.uuid(),
     target: z.never().optional(),
@@ -66,11 +68,12 @@ export const taskCommand = z
     priority: z.enum(TASK_PRIORITY_LEVELS).optional(),
     expectedRevision: z.number().int().nonnegative().optional(),
   })
-  .strict()
-  .refine(
-    (command) =>
-      command.status === undefined ||
-      command.operation === "list" ||
-      (TASK_STATUSES as readonly string[]).includes(command.status),
-    { path: ["status"], message: "Task status is read-only" },
-  );
+  .strict();
+
+export const taskCommand = z.discriminatedUnion("operation", [
+  taskCommandFields.extend({ operation: z.literal("list") }),
+  taskCommandFields.extend({
+    operation: z.enum(taskOperations.filter((operation) => operation !== "list")),
+    status: z.enum(TASK_WRITE_STATUSES).optional(),
+  }),
+]);

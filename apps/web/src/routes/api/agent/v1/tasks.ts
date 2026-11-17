@@ -5,7 +5,7 @@ import {
   MAX_MESSAGE_SEQUENCE,
   SEEN_EXACT_SEQS_LIMIT,
   TASK_PRIORITY_LEVELS,
-  TASK_STATUSES,
+  TASK_WRITE_STATUSES,
   TASK_READ_STATUSES,
   type TaskPrincipal,
   type TaskResult,
@@ -86,7 +86,7 @@ const taskRefSchema = z
   })
   .strict();
 
-export const taskRequestSchema = z
+const taskRequestFields = z
   .object({
     operation: z.enum(taskOperations),
     idempotencyKey: z.string().min(1),
@@ -138,14 +138,15 @@ export const taskRequestSchema = z
     project: z.string().trim().min(1).max(PROJECT_SLUG_MAX_LENGTH).nullable().optional(),
     expectedRevision: z.number().int().nonnegative().optional(),
   })
-  .strict()
-  .refine(
-    (command) =>
-      command.status === undefined ||
-      command.operation === "list" ||
-      (TASK_STATUSES as readonly string[]).includes(command.status),
-    { path: ["status"], message: "Task status is read-only" },
-  );
+  .strict();
+
+export const taskRequestSchema = z.discriminatedUnion("operation", [
+  taskRequestFields.extend({ operation: z.literal("list") }),
+  taskRequestFields.extend({
+    operation: z.enum(taskOperations.filter((operation) => operation !== "list")),
+    status: z.enum(TASK_WRITE_STATUSES).optional(),
+  }),
+]);
 
 /** The raw HTTP adapter validates JSON shape; the board owns command invariants and authorization. */
 export async function handleAgentTaskPost(

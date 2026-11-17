@@ -4,7 +4,7 @@ import {
   taskStatusMoveAllowed,
   taskStatusNeedsOwner,
   taskPriorityRank,
-  type TaskCommand,
+  type TaskWriteCommand,
   type TaskHistoryChange,
   type TaskResult,
 } from "@lrm/coforge-sdk/internal";
@@ -50,13 +50,12 @@ export async function updateTaskStatus(
   ports: TaskBoardPorts,
   conversation: ConversationRef,
   member: Member,
-  command: TaskCommand,
+  command: TaskWriteCommand,
 ) {
   const { conversationId } = conversation;
   // A status, a priority, or both.
   const { status } = command;
-  if ((status === undefined && command.priority === undefined) || status === "all")
-    throw new AppError("INVALID_INPUT");
+  if (status === undefined && command.priority === undefined) throw new AppError("INVALID_INPUT");
   const task = await findTaskByNumber(ports.db, conversationId, command.number!);
   if (!task) throw new AppError("NOT_FOUND");
   assertExpectedRevision(task, command.expectedRevision);
@@ -155,7 +154,7 @@ export async function amendTask(
   ports: TaskBoardPorts,
   conversation: ConversationRef,
   member: Member,
-  command: TaskCommand,
+  command: TaskWriteCommand,
 ): Promise<TaskResult> {
   const { conversationId, workspaceId } = conversation;
   const relational = command.blockedBy !== undefined || command.parent !== undefined;
@@ -317,7 +316,7 @@ export async function amendTask(
 export async function taskHistory(
   ports: TaskBoardPorts,
   conversationId: string,
-  command: TaskCommand,
+  command: TaskWriteCommand,
 ): Promise<TaskResult> {
   const task = await ports.db.task.findFirst({
     where: {
@@ -345,7 +344,7 @@ export async function restoreTask(
   conversationId: string,
   workspaceId: string,
   member: Member,
-  command: TaskCommand,
+  command: TaskWriteCommand,
 ): Promise<TaskResult> {
   // The one read that looks past LIVE_TASK_WHERE: a restore names the marked row itself.
   const task = await ports.db.task.findFirst({
@@ -411,7 +410,7 @@ export async function deleteTask(
   conversationId: string,
   workspaceId: string,
   member: Member,
-  command: TaskCommand,
+  command: TaskWriteCommand,
 ): Promise<TaskResult> {
   const task = await ports.db.task.findFirst({
     where: {

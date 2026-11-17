@@ -44,7 +44,7 @@ test("unfinished reads include Backlog while ready excludes it and writes stay c
               conversationId: channel.id,
               idempotencyKey: crypto.randomUUID(),
               number: parked.number,
-              status: "backlog",
+              status: "backlog" as never,
             }),
           ).rejects.toMatchObject({ code: "INVALID_INPUT" });
           throw rollback;

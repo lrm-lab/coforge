@@ -2,7 +2,7 @@
 import type { AgentMessageRecord } from "./local-daemon";
 import { CHANNEL_NAME_PATTERN } from "./channel-references";
 
-import type { TaskStatus } from "./task-status";
+import type { TaskStatus, TaskWriteStatus } from "./task-status";
 export * from "./task-status";
 
 /** A Task's priority, highest first (Linear's five levels); `none` is the stored level of a
@@ -247,22 +247,38 @@ export type TaskHistoryEvent = {
   createdAt: string;
 } & TaskHistoryChange;
 
-export type TaskCommand = {
-  operation:
-    | "list"
-    | "show"
-    | "create"
-    | "convert"
-    | "claim"
-    | "unclaim"
-    | "update"
-    | "assign"
-    | "unassign"
-    | "amend"
-    | "history"
-    | "delete"
-    | "restore"
-    | "receipt";
+export type TaskOperation =
+  | "list"
+  | "show"
+  | "create"
+  | "convert"
+  | "claim"
+  | "unclaim"
+  | "update"
+  | "assign"
+  | "unassign"
+  | "amend"
+  | "history"
+  | "delete"
+  | "restore"
+  | "receipt";
+
+export type TaskCommand = TaskCommandFields &
+  (
+    | { operation: "list"; status?: TaskStatus | "all" }
+    | { operation: Exclude<TaskOperation, "list">; status?: TaskWriteStatus }
+  );
+export type TaskWriteCommand = Extract<TaskCommand, { operation: Exclude<TaskOperation, "list"> }>;
+
+type OmitCommandFields<Command, Keys extends PropertyKey> = Command extends unknown
+  ? Omit<Command, Keys>
+  : never;
+export type TaskCommandWithout<Keys extends keyof TaskCommand> = OmitCommandFields<
+  TaskCommand,
+  Keys
+>;
+
+type TaskCommandFields = {
   idempotencyKey: string;
   /** Browser callers identify the conversation; Agent callers use its public target. */
   conversationId?: string;
@@ -306,7 +322,6 @@ export type TaskCommand = {
   /** With task conversations, create a task beside someone else's live task on `messageId`. */
   alongside?: boolean;
   attachmentId?: string;
-  status?: TaskStatus | "all";
   /** `list`: several statuses at once (task #506); never with `status`. */
   statuses?: TaskStatus[];
   expectedRevision?: number;

@@ -1,4 +1,4 @@
-import { taskNameLabel, type TaskCommand, type TaskView } from "@lrm/coforge-sdk/internal";
+import { taskNameLabel, type TaskView, type TaskCommandWithout } from "@lrm/coforge-sdk/internal";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo } from "react";
@@ -20,7 +20,7 @@ import { useTaskConversationsOn } from "./use-task-conversations-on";
 import { useConversationTaskWrites } from "./use-conversation-tasks";
 
 /** A Task command as the popup issues it: the conversation comes from the Task. */
-export type DetailCommand = Omit<TaskCommand, "idempotencyKey" | "conversationId"> & {
+export type DetailCommand = TaskCommandWithout<"idempotencyKey" | "conversationId"> & {
   number: number;
 };
 

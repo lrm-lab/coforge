@@ -2,6 +2,21 @@ import { expect, test } from "bun:test";
 
 import { taskCommand } from "#src/features/tasks/task-command-schema";
 import { validateTaskCommand } from "#src/server/tasks/task-command-validation.server";
+import type { z } from "zod";
+
+type MustBeNever<Value extends never> = Value;
+export type BrowserWriteRejectsBacklog = MustBeNever<
+  Extract<
+    {
+      operation: "update";
+      status: "backlog";
+      number: number;
+      idempotencyKey: string;
+      conversationId: string;
+    },
+    z.input<typeof taskCommand>
+  >
+>;
 
 const amend = {
   operation: "amend",

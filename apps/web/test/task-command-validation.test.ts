@@ -40,11 +40,15 @@ const agent: TaskPrincipal = {
 const CONVERSATION_ID = "44444444-4444-4444-8444-444444444444";
 
 /** A person's command in one conversation, with the given fields over it. */
-const command = (fields: Partial<TaskCommand> & Pick<TaskCommand, "operation">): TaskCommand => ({
-  idempotencyKey: "request-1",
-  conversationId: CONVERSATION_ID,
-  ...fields,
-});
+const command = (
+  fields: Omit<Partial<TaskCommand>, "status"> &
+    Pick<TaskCommand, "operation"> & { status?: TaskStatus | "all" },
+): TaskCommand =>
+  ({
+    idempotencyKey: "request-1",
+    conversationId: CONVERSATION_ID,
+    ...fields,
+  }) as TaskCommand;
 
 const refused: [string, TaskCommand][] = [
   ["an unknown operation", command({ operation: "archive" as TaskCommand["operation"] })],
