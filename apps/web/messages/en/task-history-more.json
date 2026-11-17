@@ -11,5 +11,12 @@
   "tasks_priority_low": "Low",
   "tasks_priority_none": "None",
   "tasks_priority_unset": "No priority",
-  "tasks_change_priority": "Change priority"
+  "tasks_change_priority": "Change priority",
+  "tasks_history_due_changed": "Changed due date",
+  "tasks_due": "Due date",
+  "tasks_due_set": "Set due date",
+  "tasks_due_clear": "Clear due date",
+  "tasks_due_none": "No due date",
+  "tasks_due_overdue": "Overdue",
+  "tasks_due_soon": "Due soon"
 }

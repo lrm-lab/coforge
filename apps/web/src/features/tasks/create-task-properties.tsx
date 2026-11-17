@@ -9,6 +9,7 @@ import type { Mentionable } from "#src/features/conversations/mention-text";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { AssigneeMenu } from "./task-assignee-menu";
+import { TaskDueMenu } from "./task-due-menu";
 import { TaskLabelsField } from "./task-labels";
 import { TaskProjectMenu } from "./task-project-menu";
 import { TaskPriorityMenu } from "./task-priority-menu";
@@ -20,12 +21,14 @@ export type CreateTaskDraftPatch = {
   assignee?: string;
   labels?: string[];
   priority?: TaskPriorityLevel;
+  dueAt?: string;
+  dueHasTime?: boolean;
   project?: TaskProjectRef | null;
 };
 
 /**
  * What else a new Task starts with, as the chips under its description: its status on a board,
- * owner, priority, Project and labels — the properties the Task popup edits, in a form.
+ * owner, priority, due date, Project and labels — the properties the Task popup edits, in a form.
  */
 export function CreateTaskProperties({
   board,
@@ -50,6 +53,8 @@ export function CreateTaskProperties({
   draft: {
     labels: string[];
     priority: TaskPriorityLevel | undefined;
+    dueAt: string | undefined;
+    dueHasTime?: boolean;
   };
   saving: boolean;
   onChange: (patch: CreateTaskDraftPatch) => void;
@@ -84,6 +89,19 @@ export function CreateTaskProperties({
           priority={draft.priority}
           disabled={saving}
           onSelect={(priority) => onChange({ priority })}
+        />
+      </TaskProperty>
+      <TaskProperty label={m.tasks_due()}>
+        <TaskDueMenu
+          dueAt={draft.dueAt}
+          dueHasTime={draft.dueHasTime}
+          disabled={saving}
+          onSelect={(dueAt, dueHasTime) =>
+            onChange({
+              dueAt: dueAt ?? undefined,
+              dueHasTime: dueAt ? dueHasTime : undefined,
+            })
+          }
         />
       </TaskProperty>
       {offersProject && (

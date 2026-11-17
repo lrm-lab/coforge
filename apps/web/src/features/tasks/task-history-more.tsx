@@ -1,11 +1,15 @@
 import type { TaskHistoryEvent, TaskLabel, TaskPriority } from "@lrm/coforge-sdk/internal";
 
+import { formatDateForDisplay } from "#src/lib/dates";
+import { useTimeFormat } from "#src/lib/time-format-context";
+import { useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
+import { getLocale } from "#src/paraglide/runtime";
 
-/** History events added after the first timeline: labels, priority and Project changes. */
+/** History events added after the first timeline: labels, priority, Project and due changes. */
 export type LaterHistoryEvent = Extract<
   TaskHistoryEvent,
-  { eventType: "labels_changed" | "priority_changed" | "project_changed" }
+  { eventType: "labels_changed" | "priority_changed" | "project_changed" | "due_changed" }
 >;
 
 export function laterEventTitle(event: LaterHistoryEvent) {
@@ -16,6 +20,8 @@ export function laterEventTitle(event: LaterHistoryEvent) {
       return m.tasks_history_priority_changed();
     case "project_changed":
       return m.tasks_history_project_changed();
+    case "due_changed":
+      return m.tasks_history_due_changed();
   }
 }
 
@@ -39,6 +45,10 @@ const labelNames = (labels: readonly TaskLabel[]) => labels.map((label) => label
 
 export function LaterEventDetail({ event }: { event: LaterHistoryEvent }) {
   const detail = "mt-1 text-sm text-secondary break-words";
+  const timeZone = useTimeZone();
+  const timeFormat = useTimeFormat();
+  const dueText = (at: string | null) =>
+    at === null ? EMPTY_VALUE : formatDateForDisplay(at, timeZone, getLocale(), timeFormat);
   switch (event.eventType) {
     case "labels_changed": {
       const { added, removed } = event.payload;
@@ -73,6 +83,18 @@ export function LaterEventDetail({ event }: { event: LaterHistoryEvent }) {
             field: m.tasks_project(),
             from: from?.name ?? EMPTY_VALUE,
             to: to?.name ?? EMPTY_VALUE,
+          })}
+        </p>
+      );
+    }
+    case "due_changed": {
+      const { from, to } = event.payload;
+      return (
+        <p className={detail}>
+          {m.tasks_history_field_change({
+            field: m.tasks_due(),
+            from: dueText(from),
+            to: dueText(to),
           })}
         </p>
       );

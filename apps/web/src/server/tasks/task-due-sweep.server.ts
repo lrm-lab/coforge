@@ -1,4 +1,7 @@
-import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import {
+  centrifugoServerApiConfigured,
+  createCentrifugoServerApi,
+} from "#src/server/centrifugo/server-api.server";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { errorType } from "#src/server/errors/error-type.server";
 import { onServerShutdown } from "#src/server/runtime/server-lifecycle.server";
@@ -21,7 +24,10 @@ async function tick(): Promise<void> {
   ticking = true;
   try {
     const db = getDatabaseClient();
-    if (db) await sweepDueTasks(db, createCentrifugoServerApi(), new Date());
+    if (db) {
+      const centrifugo = centrifugoServerApiConfigured() ? createCentrifugoServerApi() : undefined;
+      await sweepDueTasks(db, centrifugo, new Date());
+    }
   } catch (error) {
     console.error(JSON.stringify({ event: "task.due_sweep_failed", error_type: errorType(error) }));
   } finally {

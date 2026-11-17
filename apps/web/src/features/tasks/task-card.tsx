@@ -7,10 +7,10 @@ import { ProjectImage } from "#src/features/projects/project-image";
 import { cn } from "#src/lib/utils";
 import { formatMonthDay } from "#src/lib/dates";
 import { useTimeZone } from "#src/lib/time-zone-context";
-import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
+import { m } from "#src/paraglide/messages";
+import { Calendar, Folder, MessageChatCircle, Paperclip } from "@untitledui/icons";
 import { taskStepsProgressClass } from "./task-steps-progress";
-import { Folder, MessageChatCircle, Paperclip } from "@untitledui/icons";
 
 import type { FilterableTask } from "./task-filters";
 import { openBlockers } from "./task-relation-edits";
@@ -30,6 +30,43 @@ function TaskCreatedAt({ at }: { at: string | Date }) {
   return (
     <span className="shrink-0 text-xs whitespace-nowrap text-tertiary tabular-nums">
       {formatMonthDay(at, timeZone, getLocale())}
+    </span>
+  );
+}
+
+/**
+ * A Task's due day at a card's foot, next to when it was made: overdue and due soon in their own
+ * colours (task #13). Nothing while the Task has no due date.
+ */
+function TaskDueAt({ task }: { task: TaskView }) {
+  const timeZone = useTimeZone();
+  if (!task.dueAt) return null;
+  const state = task.dueState;
+  return (
+    <span
+      role="img"
+      aria-label={
+        state === "overdue"
+          ? m.tasks_due_overdue()
+          : state === "due_soon"
+            ? m.tasks_due_soon()
+            : m.tasks_due()
+      }
+      className={cn(
+        "flex shrink-0 items-center gap-1 text-xs whitespace-nowrap tabular-nums",
+        state === "overdue"
+          ? "text-error-primary"
+          : state === "due_soon"
+            ? "text-warning-primary"
+            : "text-tertiary",
+      )}
+    >
+      <Calendar aria-hidden="true" className="size-3.5" />
+      {formatMonthDay(
+        task.dueHasTime === false ? new Date(Date.parse(task.dueAt) - 1) : task.dueAt,
+        timeZone,
+        getLocale(),
+      )}
     </span>
   );
 }
@@ -185,6 +222,11 @@ export function TaskCard({
                 {source && ` · ${source}`}
               </span>
             )}
+            {task.dueAt && (
+              <span className="ml-auto shrink-0">
+                <TaskDueAt task={task} />
+              </span>
+            )}
           </p>
         </div>
         {blocked}
@@ -205,6 +247,11 @@ export function TaskCard({
           </span>
         ) : null}
         {project && <ProjectPill project={project} className="hidden sm:inline-flex" />}
+        {task.dueAt && (
+          <span className="hidden shrink-0 sm:inline-flex">
+            <TaskDueAt task={task} />
+          </span>
+        )}
         <TaskOwnerAvatar owner={task.owner} />
         {tools}
       </article>
@@ -292,6 +339,7 @@ export function TaskCard({
             label={(count) => m.task_card_files({ count })}
           />
           <TaskCreatedAt at={task.createdAt} />
+          <TaskDueAt task={task} />
         </span>
       </div>
       {tools && (

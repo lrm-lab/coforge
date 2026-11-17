@@ -1,7 +1,8 @@
 import {
   TASK_WRITE_STATUSES,
   isTaskWriteStatus,
-  taskPriorityRank,
+  TASK_READ_STATUSES,
+  compareTaskOrder,
   type TaskStatus,
   type TaskWriteStatus,
   type TaskView,
@@ -28,7 +29,6 @@ import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { availableTaskStatuses } from "./task-filters";
 import type { DropState } from "./task-drop-target";
 import { HiddenColumn, TaskGroup, type PagedTaskGroup } from "./task-group";
 import { getTaskMoveCommand } from "./task-move";
@@ -54,7 +54,9 @@ export function useTaskLayout(layout: TaskLayout | undefined): TaskLayout {
 export function TaskWorkflow<T extends TaskView>({
   tasks,
   layout,
-  statuses = availableTaskStatuses(tasks),
+  statuses = tasks.some((task) => task.status === "backlog")
+    ? TASK_READ_STATUSES
+    : TASK_WRITE_STATUSES,
   currentMemberId,
   canSetAnyStatus = false,
   disabled,
@@ -120,9 +122,7 @@ export function TaskWorkflow<T extends TaskView>({
     }));
   }, [tasks, pending, statuses]);
   const ordered = (group: (typeof groups)[number]) =>
-    byPriority.has(group.status)
-      ? [...group.tasks].sort((a, b) => taskPriorityRank(a.priority) - taskPriorityRank(b.priority))
-      : group.tasks;
+    byPriority.has(group.status) ? [...group.tasks].sort(compareTaskOrder) : group.tasks;
 
   // Hiding applies to a board of several columns; a single-status view shows its column.
   const hides = layout === "board" && groups.length > 1 && hidden !== undefined;

@@ -10,6 +10,9 @@ export type TaskDraft = {
   labels?: string[];
   /** The new Task's priority, always one of the four levels the form offers (task #12). */
   priority?: TaskPriorityLevel;
+  /** The new Task's due instant, ISO; absent for none. */
+  dueAt?: string;
+  dueHasTime?: boolean;
   /** A Project by slug, or null for none; absent where the form offers no Project (a sub-task
    * takes its parent's). */
   project?: string | null;
@@ -22,6 +25,8 @@ export const emptyDraft = () => ({
   assignee: undefined as string | undefined,
   labels: [] as string[],
   priority: undefined as TaskPriorityLevel | undefined,
+  dueAt: undefined as string | undefined,
+  dueHasTime: undefined as boolean | undefined,
   /** Undefined until the viewer picks: a Project's board then starts at that Project. */
   project: undefined as TaskProjectRef | null | undefined,
 });

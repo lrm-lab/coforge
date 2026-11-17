@@ -1,4 +1,5 @@
 import {
+  TASK_READ_STATUSES,
   TASK_WRITE_STATUSES,
   type TaskWriteStatus,
   type TaskView,
@@ -26,12 +27,7 @@ import type { TaskDraft } from "./task-draft";
 import { isFinishedStatus, type FinishedStatus } from "./finished-tasks";
 import { TASK_TITLE_CLASS, TaskCard } from "./task-card";
 import { TaskDetailMenu, taskMenuButton } from "./task-detail-dialog";
-import {
-  availableTaskStatuses,
-  statusMatches,
-  taskMatches,
-  type FilterableTask,
-} from "./task-filters";
+import { statusMatches, taskMatches, type FilterableTask } from "./task-filters";
 import type { TaskBoardView } from "./task-board-search";
 import type { OverviewTaskCommand } from "./task-overview-collection";
 import { TaskToolbar } from "./task-toolbar";
@@ -113,7 +109,9 @@ export function TaskBoard<T extends BoardTask>({
   newTask?: { projectSlug?: string; onCreated: () => void };
 }) {
   const { statuses, filter, layout } = view;
-  const availableStatuses = availableTaskStatuses(tasks);
+  const availableStatuses = tasks.some((task) => task.status === "backlog")
+    ? TASK_READ_STATUSES
+    : TASK_WRITE_STATUSES;
   const showTree = tree !== undefined;
   const [hiddenColumns, setColumnHidden] = useTaskHiddenColumns();
   const [createOpen, setCreateOpen] = useState(false);
