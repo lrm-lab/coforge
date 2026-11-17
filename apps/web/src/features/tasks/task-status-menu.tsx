@@ -1,4 +1,9 @@
-import type { TaskStatus, TaskView } from "@lrm/coforge-sdk/internal";
+import {
+  isTaskWriteStatus,
+  type TaskWriteStatus,
+  type TaskStatus,
+  type TaskView,
+} from "@lrm/coforge-sdk/internal";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { m } from "#src/paraglide/messages";
@@ -17,7 +22,7 @@ export function StatusMenu({
   task: TaskView;
   currentMemberId: string | null;
   disabled: boolean;
-  onSelect: (status: TaskStatus) => void;
+  onSelect: (status: TaskWriteStatus) => void;
 }) {
   const options = taskStatusOptions(task, currentMemberId);
   if (options.length === 1) return <StatusText status={task.status} />;
@@ -47,7 +52,7 @@ export function StatusPicker({
   status: TaskStatus;
   options: readonly TaskStatus[];
   disabled: boolean;
-  onSelect: (status: TaskStatus) => void;
+  onSelect: (status: TaskWriteStatus) => void;
   itemLabel?: (status: TaskStatus) => string;
 }) {
   return (
@@ -65,7 +70,7 @@ export function StatusPicker({
           selectedKeys={[current]}
           onAction={(key) => {
             const status = options.find((option) => option === key);
-            if (status && status !== current) onSelect(status);
+            if (status && status !== current && isTaskWriteStatus(status)) onSelect(status);
           }}
         >
           {options.map((status) => (

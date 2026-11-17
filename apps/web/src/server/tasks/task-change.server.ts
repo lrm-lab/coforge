@@ -1,10 +1,10 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { historyRows, taskChanges } from "./task-history.server";
-import { storedTaskStatus, taskSelection, type SelectedTask } from "./task-view.server";
+import { taskSelection, type SelectedTask } from "./task-view.server";
 import { assertMayEnter } from "./task-gates.server";
 import { isTaskManager } from "./task-assignees.server";
-import type { TaskHistoryChange } from "@lrm/coforge-sdk/internal";
+import type { TaskHistoryChange, TaskWriteStatus } from "@lrm/coforge-sdk/internal";
 import type { Transaction, Member } from "./task-board-ports.server";
 
 /** The conversation's Task numbered `number`, read as `taskSelection`, or null. */
@@ -49,7 +49,7 @@ export async function commitTaskChange(
   actor: Member,
   before: SelectedTask,
   guard: Prisma.TaskWhereInput,
-  data: Prisma.TaskUncheckedUpdateManyInput,
+  data: Omit<Prisma.TaskUncheckedUpdateManyInput, "status"> & { status?: TaskWriteStatus },
   options: {
     /** Changes beyond the Task's own columns (its blockers, its parent), recorded after them. */
     relationChanges?: readonly TaskHistoryChange[];
@@ -62,7 +62,7 @@ export async function commitTaskChange(
     await assertMayEnter(
       tx,
       before,
-      storedTaskStatus(data.status),
+      data.status,
       options.manager ?? (await isTaskManager(tx, before.workspaceId, actor)),
     );
   const changed = await tx.task.updateMany({

@@ -1,7 +1,7 @@
 import { isSeenExactSeqs, MAX_MESSAGE_SEQUENCE } from "./freshness-decision";
 import {
   TASK_PRIORITY_LEVELS,
-  TASK_STATUSES,
+  TASK_WRITE_STATUSES,
   TASK_READ_STATUSES,
   type TaskCommand,
   type TaskResourceReceipt,
@@ -37,7 +37,7 @@ const operations = new Set<TaskCommand["operation"]>([
   "restore",
   "receipt",
 ]);
-const statuses = new Set<string>(TASK_STATUSES);
+const statuses = new Set<string>(TASK_WRITE_STATUSES);
 const readStatuses = new Set<string>(TASK_READ_STATUSES);
 const priorities = new Set<string>(TASK_PRIORITY_LEVELS);
 const modes = new Set(["inline", "withheld"]);
@@ -224,8 +224,7 @@ export function validateTaskRequest(value: TaskRequest): void {
       value.numbers === undefined &&
       !messages &&
       // A status, a priority, or both.
-      (value.status !== undefined || value.priority !== undefined) &&
-      value.status !== "all") ||
+      (value.status !== undefined || value.priority !== undefined)) ||
     (value.operation === "assign" &&
       value.number !== undefined &&
       value.numbers === undefined &&

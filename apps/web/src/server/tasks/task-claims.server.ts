@@ -210,7 +210,7 @@ export async function convertOrClaim(
       {
         ownerMemberId: memberId(member),
         claimedAt: new Date(),
-        status: existing.status === "todo" ? "in_progress" : existing.status,
+        ...(existing.status === "todo" && { status: "in_progress" as const }),
       },
     );
     // Claiming a Todo Task also moves it to In Progress; the claim notice says both.

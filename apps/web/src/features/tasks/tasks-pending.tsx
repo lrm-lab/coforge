@@ -1,4 +1,4 @@
-import { TASK_STATUSES, type TaskStatus } from "@lrm/coforge-sdk/internal";
+import { TASK_WRITE_STATUSES, type TaskStatus } from "@lrm/coforge-sdk/internal";
 import { FilterLines } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -88,7 +88,7 @@ function PendingGroups({ board, className }: { board: boolean; className?: strin
             : "flex flex-col gap-4"
         }
       >
-        {TASK_STATUSES.map((status) => (
+        {TASK_WRITE_STATUSES.map((status) => (
           <section
             key={status}
             aria-label={statusLabel(status)}

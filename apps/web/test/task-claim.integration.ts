@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
-import type { TaskCommand, TaskPrincipal, TaskStatus } from "@lrm/coforge-sdk/internal";
+import type { TaskPrincipal, TaskStatus, TaskCommandWithout } from "@lrm/coforge-sdk/internal";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { refuseUnclaimed } from "#src/server/tasks/task-claims.server";
@@ -59,9 +59,9 @@ test("A claim answers every selector, naming why a refused one failed and who ho
   const asAlice: TaskPrincipal = { workspaceId: workspace.id, userId: alice.id };
   const asClaimer: TaskPrincipal = { workspaceId: workspace.id, agentId: claimer.id };
   const asHolder: TaskPrincipal = { workspaceId: workspace.id, agentId: holder.id };
-  const run = (principal: TaskPrincipal, command: Omit<TaskCommand, "idempotencyKey">) =>
+  const run = (principal: TaskPrincipal, command: TaskCommandWithout<"idempotencyKey">) =>
     board.execute(principal, { idempotencyKey: crypto.randomUUID(), ...command });
-  const byAgent = (command: Omit<TaskCommand, "idempotencyKey" | "target">) =>
+  const byAgent = (command: TaskCommandWithout<"idempotencyKey" | "target">) =>
     run(asClaimer, { target, ...command });
 
   try {

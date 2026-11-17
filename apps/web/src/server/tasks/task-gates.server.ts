@@ -3,7 +3,7 @@ import {
   taskNameLabel,
   type TaskName,
   type TaskRef,
-  type TaskStatus,
+  type TaskWriteStatus,
 } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import type { SystemNoticeContent, SystemPerson } from "#src/features/conversations/system-notice";
@@ -123,7 +123,7 @@ export function blockedRefusal(task: { number: number }, open: readonly TaskName
 export function subtasksOpenRefusal(
   task: { number: number },
   open: readonly TaskName[],
-  to: TaskStatus,
+  to: TaskWriteStatus,
 ) {
   return new AppError("CONFLICT", {
     errorId: TASK_SUBTASKS_OPEN,
@@ -140,7 +140,7 @@ export function subtasksOpenRefusal(
 export async function assertMayEnter(
   tx: Transaction,
   task: { id: string; number: number; status: string; conversationId: string; workspaceId: string },
-  to: TaskStatus,
+  to: TaskWriteStatus,
   manager: boolean,
 ) {
   if (manager || to === task.status) return;

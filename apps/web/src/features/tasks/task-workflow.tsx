@@ -1,8 +1,10 @@
 import {
-  TASK_STATUSES,
+  TASK_WRITE_STATUSES,
+  isTaskWriteStatus,
   TASK_READ_STATUSES,
   taskPriorityRank,
   type TaskStatus,
+  type TaskWriteStatus,
   type TaskView,
 } from "@lrm/coforge-sdk/internal";
 import {
@@ -37,7 +39,7 @@ export type TaskMoveCommand = NonNullable<ReturnType<typeof getTaskMoveCommand>>
  * server allows, while the popup's status menu keeps to `STATUS_TRANSITIONS`. */
 export type TaskControls = {
   handle: ReactNode;
-  moves: { status: TaskStatus; onMove: () => void }[];
+  moves: { status: TaskWriteStatus; onMove: () => void }[];
 };
 
 export type { PagedTaskGroup };
@@ -52,7 +54,9 @@ export function useTaskLayout(layout: TaskLayout | undefined): TaskLayout {
 export function TaskWorkflow<T extends TaskView>({
   tasks,
   layout,
-  statuses = tasks.some((task) => task.status === "backlog") ? TASK_READ_STATUSES : TASK_STATUSES,
+  statuses = tasks.some((task) => task.status === "backlog")
+    ? TASK_READ_STATUSES
+    : TASK_WRITE_STATUSES,
   currentMemberId,
   canSetAnyStatus = false,
   disabled,
@@ -83,7 +87,7 @@ export function TaskWorkflow<T extends TaskView>({
    * refused move is not said twice. */
   showMoveError: boolean;
   /** Starts a new Task in a board column: the statuses that take one, and what opens the form. */
-  adding?: { statuses: readonly TaskStatus[]; onAdd: (status: TaskStatus) => void };
+  adding?: { statuses: readonly TaskWriteStatus[]; onAdd: (status: TaskWriteStatus) => void };
 }) {
   const id = useId();
   const [active, setActive] = useState<T>();
@@ -91,7 +95,7 @@ export function TaskWorkflow<T extends TaskView>({
   const [pending, setPending] = useState<{
     id: string;
     revision: number;
-    status: TaskStatus;
+    status: TaskWriteStatus;
   }>();
   // Columns the viewer ordered by priority, a view of the loaded cards only: the default order
   // is the server's and returns when it is switched off.
@@ -128,6 +132,7 @@ export function TaskWorkflow<T extends TaskView>({
   // `dropTargetClass`). Its own column stays idle.
   const dropState = (status: TaskStatus): DropState => {
     if (!active || status === active.status) return "idle";
+    if (!isTaskWriteStatus(status)) return "blocked";
     const open =
       !disabled &&
       !pending &&
@@ -137,7 +142,7 @@ export function TaskWorkflow<T extends TaskView>({
 
   const controls = (task: T): TaskControls => {
     if (disabled) return { handle: null, moves: [] };
-    const moves = TASK_STATUSES.filter((status) =>
+    const moves = TASK_WRITE_STATUSES.filter((status) =>
       getTaskMoveCommand(task, currentMemberId(task), status, { canSetAnyStatus }),
     ).map((status) => ({ status, onMove: () => void move(task, status) }));
     if (moves.length === 0) return { handle: null, moves };
@@ -147,6 +152,11 @@ export function TaskWorkflow<T extends TaskView>({
       moves: isPending ? [] : moves,
     };
   };
+
+  const add = (status: TaskStatus) =>
+    adding && isTaskWriteStatus(status) && adding.statuses.includes(status)
+      ? () => adding.onAdd(status)
+      : undefined;
 
   return (
     <DndContext
@@ -179,13 +189,11 @@ export function TaskWorkflow<T extends TaskView>({
             loaded={group.tasks.length}
             paged={paged?.[group.status]}
             board={layout === "board"}
-            compact={groups.length > TASK_STATUSES.length}
+            compact={groups.length > TASK_WRITE_STATUSES.length}
             dropState={dropState(group.status)}
             hidable={hides}
             onHide={hides && onHiddenChange ? () => onHiddenChange(group.status, true) : undefined}
-            onAdd={
-              adding?.statuses.includes(group.status) ? () => adding.onAdd(group.status) : undefined
-            }
+            onAdd={add(group.status)}
             onSortByPriority={(on) =>
               setByPriority((current) => {
                 const next = new Set(current);
@@ -256,7 +264,7 @@ export function TaskWorkflow<T extends TaskView>({
     </DndContext>
   );
 
-  async function move(task: T, status: TaskStatus) {
+  async function move(task: T, status: TaskWriteStatus) {
     if (disabled || saving.current) return;
     const command = getTaskMoveCommand(task, currentMemberId(task), status, { canSetAnyStatus });
     if (!command) return;
@@ -319,6 +327,6 @@ function DragHandle({ task, disabled }: { task: TaskView; disabled: boolean }) {
 // The status colours and labels live with the icon; the popup and timeline read them from here too.
 export { TASK_STATUS_COLOR, statusLabel, taskStatusColor } from "./task-status-icon";
 
-function parseTaskStatus(value: string | null): TaskStatus | undefined {
-  return TASK_STATUSES.find((status) => status === value);
+function parseTaskStatus(value: string | null): TaskWriteStatus | undefined {
+  return TASK_WRITE_STATUSES.find((status) => status === value);
 }

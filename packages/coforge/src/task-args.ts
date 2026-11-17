@@ -1,10 +1,10 @@
 import {
   TASK_PRIORITY_LEVELS,
-  TASK_STATUSES,
-  type TaskCommand,
+  TASK_WRITE_STATUSES,
+  isTaskWriteStatus,
   type TaskResourceReceipt,
   type TaskPriorityLevel,
-  type TaskStatus,
+  type TaskCommandWithout,
 } from "@lrm/coforge-sdk/internal";
 import { unknownCommandError } from "./command-help";
 import { parseTaskListStatus } from "./task-list-status-args";
@@ -25,7 +25,7 @@ import {
 
 export type TaskInvocation = {
   command: "task";
-  task: Omit<TaskCommand, "idempotencyKey">;
+  task: TaskCommandWithout<"idempotencyKey">;
   json?: boolean;
 };
 
@@ -210,13 +210,13 @@ export function parseTaskArgs(
       );
   }
 
-  const task: Omit<TaskCommand, "idempotencyKey"> = {
+  const task: TaskCommandWithout<"idempotencyKey"> = {
     operation,
     target,
     ...(peerKind ? { peerKind: peerKind as "human" | "agent" } : {}),
     ...(mine ? { mine: true } : {}),
   };
-  if (operation === "list") {
+  if (task.operation === "list") {
     const status = parseTaskListStatus(one("--status"));
     if ("message" in status) throw invalidTaskArg(status.message);
     Object.assign(task, status);
@@ -324,9 +324,11 @@ export function parseTaskArgs(
     // A label edit is an amendment; the server's update path moves status and priority only.
     if (addedLabels.length || removedLabels.length) task.operation = "amend";
     if (status !== undefined) {
-      if (!(TASK_STATUSES as readonly string[]).includes(status))
-        throw invalidTaskArg(`--status must be one of: ${TASK_STATUSES.join(", ")}; got ${status}`);
-      task.status = status as TaskStatus;
+      if (!isTaskWriteStatus(status))
+        throw invalidTaskArg(
+          `--status must be one of: ${TASK_WRITE_STATUSES.join(", ")}; got ${status}`,
+        );
+      task.status = status;
     }
   } else {
     task.number = taskNumber(one("--number"));

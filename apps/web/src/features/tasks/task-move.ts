@@ -3,6 +3,7 @@ import {
   taskStatusMoveAllowed,
   taskStatusNeedsOwner,
   type TaskStatus,
+  type TaskWriteStatus,
   type TaskView,
 } from "@lrm/coforge-sdk/internal";
 
@@ -11,7 +12,7 @@ export type TaskMoveCommand =
   | {
       operation: "update";
       number: number;
-      status: TaskStatus;
+      status: TaskWriteStatus;
       expectedRevision: number;
     };
 
@@ -24,7 +25,7 @@ export type TaskMoveCommand =
 export function getTaskMoveCommand(
   task: TaskView,
   currentMemberId: string | null,
-  nextStatus: TaskStatus,
+  nextStatus: TaskWriteStatus,
   { canSetAnyStatus = false }: { canSetAnyStatus?: boolean } = {},
 ): TaskMoveCommand | undefined {
   if (!currentMemberId || task.status === nextStatus) return undefined;
@@ -58,7 +59,13 @@ export function getTaskMoveCommand(
 }
 
 /** The status menu's order: forward first, then back for rework, then Closed. */
-const MENU_ORDER: readonly TaskStatus[] = ["todo", "in_progress", "in_review", "done", "closed"];
+const MENU_ORDER: readonly TaskWriteStatus[] = [
+  "todo",
+  "in_progress",
+  "in_review",
+  "done",
+  "closed",
+];
 
 /** The status menu's choices: the current status, then each move the viewer can make. */
 export function taskStatusOptions(

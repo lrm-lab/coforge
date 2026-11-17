@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
-import type { TaskCommand, TaskPrincipal } from "@lrm/coforge-sdk/internal";
+import type { TaskPrincipal, TaskCommandWithout } from "@lrm/coforge-sdk/internal";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { DeletedTaskSweep } from "#src/server/tasks/deleted-task-sweep.server";
@@ -50,7 +50,7 @@ test("a message whose Task was deleted can be claimed again", async () => {
   const target = `#${channel.channelName}`;
   const asAgent: TaskPrincipal = { workspaceId: workspace.id, agentId: agent.id };
   const asAlice: TaskPrincipal = { workspaceId: workspace.id, userId: alice.id };
-  const run = (principal: TaskPrincipal, command: Omit<TaskCommand, "idempotencyKey">) =>
+  const run = (principal: TaskPrincipal, command: TaskCommandWithout<"idempotencyKey">) =>
     board.execute(principal, { idempotencyKey: crypto.randomUUID(), ...command });
   try {
     const first = await run(asAgent, { operation: "claim", target, messageId: message.id });

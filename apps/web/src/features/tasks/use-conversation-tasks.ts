@@ -1,5 +1,5 @@
+import type { TaskCommandWithout } from "@lrm/coforge-sdk/internal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { TaskCommand } from "@lrm/coforge-sdk/internal";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
@@ -196,7 +196,7 @@ export function useConversationTasks(conversationId: string) {
 
   const command = useCallback(
     async (
-      input: Omit<TaskCommand, "idempotencyKey" | "conversationId"> & { idempotencyKey?: string },
+      input: TaskCommandWithout<"idempotencyKey" | "conversationId"> & { idempotencyKey?: string },
     ) => {
       setError("");
       try {

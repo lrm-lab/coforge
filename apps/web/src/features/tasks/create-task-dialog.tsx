@@ -1,4 +1,4 @@
-import type { TaskProjectRef, TaskStatus, TaskView } from "@lrm/coforge-sdk/internal";
+import type { TaskProjectRef, TaskWriteStatus, TaskView } from "@lrm/coforge-sdk/internal";
 import { ChevronRight, XClose } from "@untitledui/icons";
 import {
   useEffect,
@@ -76,9 +76,9 @@ export function CreateTaskDialog({
    * Project. */
   board?: {
     place: ReactNode;
-    status: TaskStatus;
-    statuses: readonly TaskStatus[];
-    onStatusChange: (status: TaskStatus) => void;
+    status: TaskWriteStatus;
+    statuses: readonly TaskWriteStatus[];
+    onStatusChange: (status: TaskWriteStatus) => void;
     project?: TaskProjectRef;
   };
 }) {
