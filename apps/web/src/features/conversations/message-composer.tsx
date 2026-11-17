@@ -10,6 +10,7 @@ import { localId, composerPlaceholder } from "./composer-behavior";
 import { ComposerField, focusDraftEnd } from "./composer-field";
 import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
 import { ComposerNotice } from "./composer-notice";
+import { useLongMessage } from "./use-long-message";
 import { ComposerAttachmentTray } from "./composer-attachment-tray";
 import { useComposerAttachments } from "./use-composer-attachments";
 import { useComposerPaste } from "./use-composer-paste";
@@ -255,11 +256,16 @@ export function MessageComposer({
   }, [quotedDraft]);
   const composerDisabled = !hydrated;
   const drop = useFileDrop(composerDisabled || uploading, (files) => void addFiles(files));
-  const paste = useComposerPaste(room, (files) => void addFiles(files));
+  const paste = useComposerPaste(
+    room,
+    (files) => void addFiles(files),
+    (text) => longMessage.pasted(text),
+  );
   const taskMode = !inThread && Boolean(canSendAsTask);
   const sendDisabled =
     composerDisabled || uploading || anyFailed || (!body.trim() && attachments.length === 0);
   const placeholder = composerPlaceholder(inThread, target);
+  const longMessage = useLongMessage({ body, setBody, addFiles, uploading, anyFailed, submit });
 
   function pinMention(mention: Mentionable) {
     setPins((current) => addMentionPin(current, mentionPinFor(mention)));
@@ -290,8 +296,9 @@ export function MessageComposer({
 
   /** Sends the draft: as a Task while the send menu (or an edited-back unsent Task) armed it. */
   function submit() {
-    if (sendDisabled) return;
-    const text = body.trim() || attachments[0]?.file.name || "";
+    if (sendDisabled || longMessage.divert()) return;
+    const text =
+      body.trim() || longMessage.emptyBody(attachments) || attachments[0]?.file.name || "";
     const sendAsTask = taskMode && asTask;
     // The remembered priority always names a level, so an armed send can never lack one.
     const sendPriority = sendAsTask ? taskPriority : undefined;

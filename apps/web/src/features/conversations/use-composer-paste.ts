@@ -1,5 +1,6 @@
 import type { ClipboardEvent } from "react";
 
+import { isLongMessage } from "@lrm/coforge-sdk/internal";
 import { useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
 import { filesFromPaste } from "./composer-behavior";
@@ -10,13 +11,25 @@ import { ensureInlineImage, imageFileFromUrl, imageUrlsFromPaste } from "./paste
  * shapes: real file bytes (Finder copies, screenshot tools), image URLs without bytes (copied
  * from a web page — fetched to a blob here), and non-inline rasters (e.g. TIFF — re-encoded to
  * PNG). A paste with nothing image-like now says so instead of staying silent, which used to
- * read as a broken send button. Plain-text pastes are still left to the browser.
+ * read as a broken send button. Plain-text pastes are still left to the browser, except one too
+ * long to send as a message, where the composer takes one: that goes to `onLongText` and never
+ * into the field (task #138).
  */
-export function useComposerPaste(room: number, onFiles: (files: File[]) => void) {
+export function useComposerPaste(
+  room: number,
+  onFiles: (files: File[]) => void,
+  onLongText?: (text: string) => void,
+) {
   const toast = useAppToast();
   return async function paste(event: ClipboardEvent<HTMLTextAreaElement>) {
     const clipboard = event.clipboardData;
     const files = filesFromPaste(clipboard);
+    const text = files.length > 0 || !onLongText ? "" : clipboard.getData("text/plain");
+    if (onLongText && isLongMessage(text)) {
+      event.preventDefault();
+      onLongText(text);
+      return;
+    }
     const urls = files.length > 0 ? [] : imageUrlsFromPaste(clipboard);
     if (files.length === 0 && urls.length === 0) return;
     event.preventDefault();

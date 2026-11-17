@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { MESSAGE_BODY_MAX_LENGTH } from "@lrm/coforge-sdk/internal";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import {
@@ -19,7 +20,7 @@ const taskRefSchema = z.object({
 
 const replySchema = taskRefSchema.extend({
   idempotencyKey: z.uuid(),
-  body: z.string().trim().min(1).max(8_000),
+  body: z.string().trim().min(1).max(MESSAGE_BODY_MAX_LENGTH),
   attachmentIds: attachmentIdsSchema.optional(),
   mentions: mentionSelectorsSchema,
 });

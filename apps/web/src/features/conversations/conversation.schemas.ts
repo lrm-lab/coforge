@@ -3,6 +3,7 @@ import {
   MENTION_HANDLE_PATTERN,
   MENTION_SELECTORS_MAX_LENGTH,
   MESSAGE_ANCHOR_SOURCE,
+  MESSAGE_BODY_MAX_LENGTH,
   TASK_PRIORITY_LEVELS,
   UUID_LIKE_SOURCE,
 } from "@lrm/coforge-sdk/internal";
@@ -89,8 +90,8 @@ export const conversationUpdatesCursorSchema = z.object({
 export const directConversationUpdatesInputSchema = directConversationInputSchema.extend(
   conversationUpdatesCursorSchema.shape,
 );
-/** The longest direct message body, in characters. */
-export const DIRECT_MESSAGE_MAX_LENGTH = 8_000;
+/** The longest direct message body, in characters: the one limit every message send shares. */
+export const DIRECT_MESSAGE_MAX_LENGTH = MESSAGE_BODY_MAX_LENGTH;
 export const sendConversationMessageInputSchema = directConversationInputSchema.extend({
   idempotencyKey: uuid,
   body: z.string().trim().min(1).max(DIRECT_MESSAGE_MAX_LENGTH),
