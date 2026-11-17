@@ -4,7 +4,8 @@ Behavior, compatibility and native verification: [`docs/agents/grok-acp.md`](../
 
 - One owned `grok agent --no-leader --always-approve stdio` ACP process per session, with
   `_meta.yoloMode` on new and load; a permission request still asked gets `allow_once` only for the
-  live session, else `cancelled`. Standing instructions replace Grok's system prompt as
+  live session (not disposed, failed, or interrupting, with matching `sessionId`, across and between
+  turns), else `cancelled`. Standing instructions replace Grok's system prompt as
   `_meta.systemPromptOverride` on new and load (not `rules`, which Grok ignores on load), so a
   resume runs the current ones. Keep native background tasks enabled. Resume requires `loadSession`.
 - Only a `session/load` failing with `-32603` and `data.code === "FS_NOT_FOUND"` is replaced with a
