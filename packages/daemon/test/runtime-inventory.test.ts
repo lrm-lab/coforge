@@ -452,7 +452,7 @@ describe("external Code Agent inventory", () => {
     const inventory = await discoverCodeAgentInventory({
       probe: probeFor({
         codex: { path: "/bin/codex", version: "codex-cli 0.151.0\n" },
-        claude: { path: "/bin/claude", version: "2.1.293 (Claude Code)\n" },
+        claude: { path: "/bin/claude", version: "2.1.321 (Claude Code)\n" },
         pi: { path: "/bin/pi", version: "0.9.1\n" },
       }),
       commands: {
@@ -475,8 +475,8 @@ describe("external Code Agent inventory", () => {
     const coforgeCatalog = inventory.catalogs.find((catalog) => catalog.provider === "coforge");
     expect(coforgeCatalog).toBeDefined();
     expect(coforgeCatalog?.models.length).toBeGreaterThan(0);
-    // Every direct-provider model plus the 94 OpenRouter entries still in the released catalog.
-    expect(coforgeCatalog?.models.length).toBeLessThanOrEqual(260);
+    // Every direct-provider model plus the OpenRouter entries still in the released catalog.
+    expect(coforgeCatalog?.models.length).toBeLessThanOrEqual(265);
     expect(new Set(coforgeCatalog?.models.map((model) => model.modelProvider))).toEqual(
       new Set([
         "deepseek",
@@ -535,6 +535,7 @@ describe("external Code Agent inventory", () => {
               ["claude-opus-4-8", "Claude Opus 4.8", FULL_EFFORTS],
               ["claude-opus-4-7", "Claude Opus 4.7", FULL_EFFORTS],
               ["claude-opus-4-6", "Claude Opus 4.6", FULL_EFFORTS],
+              ["claude-fable-5-2", "Claude Fable 5.2", FULL_EFFORTS],
               ["claude-fable-5-1", "Claude Fable 5.1", FULL_EFFORTS],
               ["claude-fable-5", "Claude Fable 5", FULL_EFFORTS],
               ["claude-sonnet-5-5", "Claude Sonnet 5.5", FULL_EFFORTS],

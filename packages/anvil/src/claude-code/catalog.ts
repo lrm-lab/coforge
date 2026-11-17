@@ -14,6 +14,7 @@ import { isVersionBelow } from "#src/version-gate";
 const CLAUDE_CODE_MODEL_MINIMUM_VERSION: Readonly<Record<string, string>> = {
   "claude-sonnet-5-5": "2.1.284",
   "claude-opus-5-5": "2.1.280",
+  "claude-fable-5-2": "2.1.321",
   "claude-fable-5-1": "2.1.257",
   "claude-haiku-5-5": "2.1.293",
 };
@@ -40,6 +41,7 @@ export function claudeStaticCatalog(claudeCodeVersion?: string): CodeAgentModelC
       claudeStaticModel("claude-opus-4-8", "Claude Opus 4.8", full),
       claudeStaticModel("claude-opus-4-7", "Claude Opus 4.7", full),
       claudeStaticModel("claude-opus-4-6", "Claude Opus 4.6", full),
+      claudeStaticModel("claude-fable-5-2", "Claude Fable 5.2", full),
       claudeStaticModel("claude-fable-5-1", "Claude Fable 5.1", full),
       claudeStaticModel("claude-fable-5", "Claude Fable 5", full),
       claudeStaticModel("claude-sonnet-5-5", "Claude Sonnet 5.5", full),
