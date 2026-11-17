@@ -278,7 +278,7 @@ function DangerDialog({
 }) {
   return (
     <ModalOverlay
-      centered
+      confirmation
       isOpen={open}
       isDismissable={!busy}
       onOpenChange={(next) => {

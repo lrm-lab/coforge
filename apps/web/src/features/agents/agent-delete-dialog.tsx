@@ -61,7 +61,7 @@ export function AgentDeleteDialog({
 
   return (
     <ModalOverlay
-      centered
+      confirmation
       isOpen={open}
       onOpenChange={(nextOpen: boolean) => {
         if (deleting) return;

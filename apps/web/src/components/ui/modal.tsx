@@ -23,12 +23,12 @@ import { cx } from "#src/utils/cx";
  */
 export function ModalOverlay({
   className,
-  centered,
+  confirmation,
   ...props
 }: Omit<ComponentProps<typeof OfficialModalOverlay>, "style"> & {
   /** A short question that interrupts (a confirmation) sits mid-screen on a phone too, where the
    * rest rise from the bottom edge. */
-  centered?: boolean;
+  confirmation?: boolean;
 }) {
   // A dialog inside a `DialogTrigger` gets its open state from the trigger, not from `isOpen`.
   const trigger = useContext(OverlayTriggerStateContext);
@@ -62,7 +62,7 @@ export function ModalOverlay({
           // Centered, a confirmation keeps the same 16px above and below: the taller bottom gap is
           // for a sheet rising from the edge, and with the keyboard up it would take the room the
           // dialog's text needs, scrolling its first lines under the title.
-          centered && "items-center max-sm:[--modal-pb:16px]",
+          confirmation && "items-center max-sm:[--modal-pb:16px]",
           typeof className === "function" ? className(state) : className,
         )
       }
