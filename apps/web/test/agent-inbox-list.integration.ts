@@ -1,7 +1,10 @@
-import { expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "#src/generated/prisma/client";
 import { listAgentInbox } from "#src/server/agents/agent-inbox-list.server";
 import { connection, workspaceWithAgent } from "./support/agent-inbox-fixture";
 import { seedScaleInbox } from "./support/agent-inbox-scale-seed";
+import { createMigratedScratchDatabase, type ScratchDatabase } from "./support/scratch-database";
 
 /**
  * What counts as unread: other people's top-level messages after the Agent's read position, in
@@ -200,33 +203,49 @@ test("a page that ends inside a run of equal activity times is extended to the e
   }
 });
 
-test("hundreds of conversations and hundreds of thousands of messages answer in one statement", async () => {
-  const db = connection();
-  const suffix = crypto.randomUUID();
-  const conversationCount = 400;
-  const messagesPerConversation = 500;
-  try {
-    const { workspace, agent, roots } = await seedScaleInbox(
-      db,
-      suffix,
-      conversationCount,
-      messagesPerConversation,
-    );
+describe("an inbox at scale, on a database of its own whose statistics are refreshed after the bulk load", () => {
+  let scratch: ScratchDatabase | undefined;
+  let db: PrismaClient;
+  const statements: string[] = [];
+  beforeAll(async () => {
+    const base = Bun.env.CHANNEL_TEST_DATABASE_URL;
+    if (!base) throw new Error("CHANNEL_TEST_DATABASE_URL must point to local PostgreSQL");
+    scratch = await createMigratedScratchDatabase(base, "inbox_scale");
+    const logging = new PrismaClient({
+      adapter: new PrismaPg({ connectionString: scratch.url }),
+      log: [{ emit: "event", level: "query" }],
+    });
+    logging.$on("query", (event) => statements.push(event.query));
+    db = logging;
+  }, 120_000);
+  afterAll(async () => {
+    await db?.$disconnect();
+    await scratch?.drop();
+  });
 
+  async function statementsFor(workspaceId: string, agentId: string) {
+    statements.length = 0;
     const started = performance.now();
-    const inbox = await listAgentInbox(db, workspace.id, agent.id);
-    const elapsedMs = performance.now() - started;
-    console.log(
-      `listAgentInbox: ${conversationCount} conversations, ${conversationCount * messagesPerConversation} messages, ${roots.length} followed threads in ${elapsedMs.toFixed(1)} ms`,
-    );
-    // 300 unread conversations, and half of the followed threads are unread.
-    expect(inbox.totals.conversations).toBe(300 + roots.length / 2);
-    expect(inbox.items.length).toBeGreaterThanOrEqual(50);
-    expect(inbox.hasMore).toBe(true);
-  } finally {
-    await db.$disconnect();
+    const inbox = await listAgentInbox(db, workspaceId, agentId);
+    return { inbox, elapsedMs: performance.now() - started, count: statements.length };
   }
-}, 120_000);
+
+  test("hundreds of conversations and hundreds of thousands of messages take as many statements as a few", async () => {
+    const shape = { messagesPerConversation: 500, threadsPerConversation: 8, repliesPerThread: 3 };
+    const large = await seedScaleInbox(db, { ...shape, conversations: 400 });
+    const small = await seedScaleInbox(db, { ...shape, conversations: 16 });
+    const few = await statementsFor(small.workspace.id, small.agent.id);
+    const many = await statementsFor(large.workspace.id, large.agent.id);
+    console.log(
+      `listAgentInbox: 400 conversations, 200000 messages, ${large.followedThreads} followed threads in ${many.elapsedMs.toFixed(1)} ms, ${many.count} statements`,
+    );
+    expect(few.inbox.hasMore).toBe(true);
+    expect(many.count).toBe(few.count);
+    expect(many.inbox.totals.conversations).toBe(300 + large.followedThreads / 2);
+    expect(many.inbox.items.length).toBeGreaterThanOrEqual(50);
+    expect(many.inbox.hasMore).toBe(true);
+  }, 120_000);
+});
 
 test("a channel's history from before the Agent joined is not unread", async () => {
   const db = connection();
