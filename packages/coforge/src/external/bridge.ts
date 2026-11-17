@@ -8,6 +8,7 @@ import {
 } from "./bridge-activity";
 import { acquireBridgeLock } from "./bridge-lock";
 import type { FetchLike } from "./device-client";
+import { isLoopbackHost } from "./loopback";
 import type { ProfileStore } from "./profile-store";
 import { invalidCredentialError } from "./refusal";
 import { serverUrlOf } from "./server-request";
@@ -46,12 +47,6 @@ const POLL_PATH = "/api/agent/v1/wake-hints";
 
 const invalidArg = (message: string) =>
   new CliError({ code: "INVALID_ARG", message, retryable: false });
-
-const LOOPBACK_V4 = /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
-
-function isLoopbackHost(hostname: string): boolean {
-  return hostname === "localhost" || hostname === "[::1]" || LOOPBACK_V4.test(hostname);
-}
 
 function parseLoopbackUrl(flag: string, value: string): URL {
   let url: URL;
