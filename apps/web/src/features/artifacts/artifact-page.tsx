@@ -16,7 +16,7 @@ import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
 import { deleteArtifact } from "./artifacts.functions";
 import { ArtifactDeleteConfirm } from "./artifact-delete-confirm";
-import { ArtifactFileView } from "./artifact-file-view";
+import { ArtifactFile, ArtifactFileView } from "./artifact-file-view";
 import { ArtifactCommentButton } from "./artifact-comment-button";
 import { ArtifactCommentPanel } from "./artifact-comment-panel";
 import { ArtifactDraftsProvider } from "./artifact-drafts-provider";
@@ -58,7 +58,7 @@ import {
 } from "./artifact-presence-chip";
 import { ArtifactSendDialog } from "./artifact-send-dialog";
 import { ArtifactUpdateBanner, ViewingVersionNotice } from "./artifact-update-banner";
-import { isWebPageEntry } from "./artifact-path-kind";
+import { artifactKindOfPath } from "./artifact-path-kind";
 import { PaneFrame } from "./artifact-parts";
 import { ArtifactUnavailable, LoadingBody, isGone } from "./artifact-page-states";
 import {
@@ -88,6 +88,11 @@ type ArtifactPlace = {
   arrival?: string | undefined;
   onClearReview?: (() => void) | undefined;
 };
+
+const shownEntry = (shown: {
+  artifact: { entryPath: string };
+  version: { entryPath: string } | null;
+}) => shown.version?.entryPath ?? shown.artifact.entryPath;
 
 export function ArtifactPage({
   artifactId,
@@ -222,8 +227,9 @@ function ArtifactPageFor({
   const opened = useRecordOpen(artifactId, latest);
   useKeepViewing(artifactId, latest > 0);
 
-  const entryPath = current?.artifact.entryPath;
-  const webPage = entryPath !== undefined && isWebPageEntry(entryPath);
+  const entryPath = current && shownEntry(current);
+  const entryKind = entryPath === undefined ? undefined : artifactKindOfPath(entryPath);
+  const webPage = entryKind === "html";
   const files = current?.files ?? [];
   const filePaths = useMemo(
     () => (current?.files ?? []).map((file) => file.path),
@@ -429,7 +435,7 @@ function ArtifactPageFor({
                         artifactId={artifactId}
                         version={shownVersion}
                         title={title}
-                        entryPath={current.artifact.entryPath}
+                        entryPath={shownEntry(current)}
                         path={openPath}
                         source={source}
                         finding={finding}
@@ -442,13 +448,19 @@ function ArtifactPageFor({
                         artifactId={artifactId}
                         version={shownVersion}
                         title={title}
-                        entryPath={current.artifact.entryPath}
-                        path={current.artifact.entryPath}
+                        entryPath={shownEntry(current)}
+                        path={shownEntry(current)}
                         finding={finding}
                         onFindingChange={setFinding}
                       />
+                    ) : entryKind === "markdown" ? (
+                      <ArtifactMarkdown path={shownEntry(current)} text={current.text} />
                     ) : (
-                      <ArtifactMarkdown path={current.artifact.entryPath} text={current.text} />
+                      <ArtifactFile
+                        artifactId={artifactId}
+                        version={shownVersion}
+                        path={shownEntry(current)}
+                      />
                     )}
                     {current && <ArtifactReviewPill picker={picker} />}
                   </div>
@@ -467,7 +479,7 @@ function ArtifactPageFor({
                     <ArtifactFilesPanel
                       artifactId={artifactId}
                       version={shownVersion}
-                      entryPath={current.artifact.entryPath}
+                      entryPath={shownEntry(current)}
                       files={files}
                       openPath={openPath}
                       onOpen={openFile}

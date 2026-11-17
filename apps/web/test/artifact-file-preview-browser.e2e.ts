@@ -9,6 +9,7 @@ import { PrismaExperimentsRepository } from "#src/server/experiments/experiments
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import { agentWrites } from "./helpers/artifact-agent-writes";
+import { PDF } from "./helpers/test-pdf";
 import {
   browserSession,
   devBrowserWorkspace,
@@ -21,19 +22,6 @@ const sandboxOrigin = Bun.env.COFORGE_ARTIFACT_SANDBOX_ORIGIN;
 if (!sandboxOrigin) throw new Error("COFORGE_ARTIFACT_SANDBOX_ORIGIN is required");
 const shots =
   Bun.env.COFORGE_E2E_SHOTS_DIR ?? join(import.meta.dir, "../../../.amp/e2e/artifact-file-preview");
-
-const PDF = `%PDF-1.4
-1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
-2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
-3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 200]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>endobj
-4 0 obj<</Length 44>>stream
-BT /F1 24 Tf 40 100 Td (HELLO PDF) Tj ET
-endstream
-endobj
-5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj
-trailer<</Root 1 0 R/Size 6>>
-%%EOF
-`;
 
 test("a non-entry page runs on the artifact's origin and a PDF shows from it", async () => {
   await installFeatureFlags(

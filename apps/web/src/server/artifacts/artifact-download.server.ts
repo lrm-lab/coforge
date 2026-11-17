@@ -25,10 +25,10 @@ type Request = {
 
 const attachment = (name: string) => `attachment; filename*=UTF-8''${encodeURIComponent(name)}`;
 
-const headers = (type: string, name: string) => ({
+const headers = (type: string, name: string, pinned = false) => ({
   "Content-Type": type,
   "Content-Disposition": attachment(name),
-  "Cache-Control": "private, no-store",
+  "Cache-Control": pinned ? "private, max-age=31536000, immutable" : "private, no-store",
   "X-Content-Type-Options": "nosniff",
 });
 
@@ -48,6 +48,7 @@ export async function artifactDownload(sources: Sources, input: Request): Promis
       headers: headers(
         artifactContentType(file.path, file.kind),
         file.path.slice(file.path.lastIndexOf("/") + 1),
+        input.version !== undefined,
       ),
     });
   }

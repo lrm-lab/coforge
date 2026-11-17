@@ -1,5 +1,3 @@
-/** What a file is, from its extension. An artifact's type is its entry file's kind: no column
- * holds it, and the client cannot choose it. */
 export type ArtifactPathKind =
   | "html"
   | "markdown"
@@ -26,16 +24,9 @@ export function artifactKindOfPath(path: string): ArtifactPathKind {
   return "other";
 }
 
-/** The kinds an artifact's entry file may open as: a document or a web page. */
 export type ArtifactOpenableKind = Extract<ArtifactPathKind, "markdown" | "html">;
 
-/** The page an artifact's entry file opens as — `"markdown"` or `"html"` — or null when the
- * entry opens as neither, which no artifact's entry may be (`requireOpenableEntry` refuses it). */
 export function artifactOpenableKind(path: string): ArtifactOpenableKind | null {
   const kind = artifactKindOfPath(path);
   return kind === "markdown" || kind === "html" ? kind : null;
 }
-
-/** Whether an artifact whose entry file is `entryPath` is a web page (an html entry); any other
- * artifact the page shows is a document. */
-export const isWebPageEntry = (entryPath: string) => artifactOpenableKind(entryPath) === "html";

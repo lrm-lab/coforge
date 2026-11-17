@@ -36,7 +36,7 @@ app.raft.build 的 Web 端（浏览器只读观察）。只做设计对照，不
 | --- | --- |
 | 多文件版本、按文件合并、`BASE_MOVED` | 已对齐 |
 | 可见范围：home 成员 / Workspace / 公开链接；Agent `move`、`delete` | 已对齐（撤销了 task #20 的"全员可读"） |
-| `unchanged`、`titleChanged`、`replayed`；入口可为任意文件（`entryKind`） | 已对齐 |
+| `unchanged`、`titleChanged`、`replayed`；入口可为任意文件（`entryKind`）：PDF、CSV、文本、图片作入口时查看页直接显示该文件，画廊卡片标出类型，图片入口显示缩略图 | 已对齐 |
 | 未读门槛：拒绝带内容、展示即已读、resolve 也受门槛 | 已对齐 |
 | 按 id、链接、页面源链接或精确标题引用；标题重名返回候选 | 已对齐 |
 | 关注与通知（含改名），通知走 `@app.system.artifacts` | 已对齐 |
@@ -58,7 +58,7 @@ app.raft.build 的 Web 端（浏览器只读观察）。只做设计对照，不
 
 ## 尚未对齐
 
-- **PDF 的页数**：文件面板不显示"n 页"（页数要读文件内容，列表不读）。
+- **卡片信息**：Raft 的卡片按入口类型显示一项信息（PDF 页数、文本行数、CSV 行×列、图片像素，其余显示大小）；CoForge 的卡片还没有。
 
 ## 有意差异
 

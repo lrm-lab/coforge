@@ -2,11 +2,6 @@ import type { productionArtifacts } from "#src/server/artifacts/artifact-composi
 
 type Services = ReturnType<typeof productionArtifacts>;
 
-/**
- * What an Agent does to an artifact, for the tests that need artifacts to exist: each file's text
- * is uploaded as the Agent and named in a manifest, as `coforge artifact push` does. A person
- * never writes an artifact, so there is no person's variant.
- */
 export function agentWrites(services: Services, workspaceId: string, agentId: string) {
   const scope = { workspaceId, actor: { agentId } };
   const manifest = async (files: Record<string, string>, entryPath?: string) => ({
@@ -25,7 +20,6 @@ export function agentWrites(services: Services, workspaceId: string, agentId: st
     ...(entryPath ? { entryPath } : {}),
   });
   return {
-    /** A new artifact of these files (version 1). */
     create: async (input: {
       conversationId: string;
       title: string;
@@ -36,13 +30,17 @@ export function agentWrites(services: Services, workspaceId: string, agentId: st
       const { files, entry, ...rest } = input;
       return services.documents.create(scope, { ...rest, manifest: await manifest(files, entry) });
     },
-    /** A push of these files over `baseVersion`. */
-    push: async (artifactId: string, baseVersion: number, files: Record<string, string>) =>
+    push: async (
+      artifactId: string,
+      baseVersion: number,
+      files: Record<string, string>,
+      entry?: string,
+    ) =>
       services.documents.push(scope, {
         artifactId,
         baseVersion,
         idempotencyKey: crypto.randomUUID(),
-        manifest: await manifest(files),
+        manifest: await manifest(files, entry),
       }),
   };
 }

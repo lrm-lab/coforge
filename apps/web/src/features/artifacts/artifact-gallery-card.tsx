@@ -8,8 +8,9 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { GallerySort } from "./artifact-gallery-model";
 import { GalleryCardVisibility } from "./artifact-gallery-visibility";
-import { ArtifactActor } from "./artifact-parts";
-import { isWebPageEntry } from "./artifact-path-kind";
+import { artifactDownloadUrl } from "./artifact-download-url";
+import { ArtifactActor, kindName } from "./artifact-parts";
+import { artifactKindOfPath, type ArtifactPathKind } from "./artifact-path-kind";
 import { MarkdownPreview } from "./artifact-preview";
 import { useArtifactActor } from "./artifact-queries";
 import { artifactPageRoute, galleryEntryState } from "./artifact-search";
@@ -40,15 +41,9 @@ export function CardBadges({
 }
 
 function Preview({ card }: { card: GalleryCard }) {
-  if (isWebPageEntry(card.entryPath))
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 bg-secondary text-fg-quaternary">
-        <Code01 aria-hidden="true" className="size-6" />
-        <span className="rounded-md bg-primary px-1.5 py-0.5 text-xs font-medium text-tertiary ring-1 ring-secondary ring-inset">
-          {m.ag_html_tag()}
-        </span>
-      </div>
-    );
+  const kind = artifactKindOfPath(card.entryPath);
+  if (kind === "image") return <ImagePreview card={card} />;
+  if (kind !== "markdown") return <KindTag kind={kind} />;
   return (
     <div
       className={cn(
@@ -58,6 +53,37 @@ function Preview({ card }: { card: GalleryCard }) {
     >
       <MarkdownPreview markdown={card.preview} />
     </div>
+  );
+}
+
+function KindTag({ kind }: { kind: ArtifactPathKind }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2 bg-secondary text-fg-quaternary">
+      {kind === "html" && <Code01 aria-hidden="true" className="size-6" />}
+      <span
+        data-artifact-kind={kind}
+        className="rounded-md bg-primary px-1.5 py-0.5 text-xs font-medium text-tertiary ring-1 ring-secondary ring-inset"
+      >
+        {kind === "html" ? m.ag_html_tag() : kindName(kind)}
+      </span>
+    </div>
+  );
+}
+
+function ImagePreview({ card }: { card: GalleryCard }) {
+  const workspaceSlug = useWorkspaceSlug();
+  return (
+    <img
+      src={artifactDownloadUrl(workspaceSlug, card.id, {
+        path: card.entryPath,
+        version: card.currentVersion,
+      })}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      data-artifact-kind="image"
+      className="size-full bg-secondary object-cover"
+    />
   );
 }
 

@@ -1,4 +1,12 @@
-import { Browser, File02 } from "@untitledui/icons";
+import {
+  Browser,
+  File02,
+  File04,
+  FileCode01,
+  Image01,
+  Table,
+  VideoRecorder,
+} from "@untitledui/icons";
 
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { lastMessageTime } from "#src/features/conversations/last-message-time";
@@ -8,10 +16,9 @@ import { useTimeZone } from "#src/lib/time-zone-context";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
-import { isWebPageEntry } from "./artifact-path-kind";
+import { artifactKindOfPath, type ArtifactPathKind } from "./artifact-path-kind";
 import type { ArtifactActorView } from "./artifact-queries";
 
-/** When a document changed, as a chat row reads it: today's clock time, else the day. */
 export function useArtifactTime() {
   const timeZone = useTimeZone();
   const timeFormat = useTimeFormat();
@@ -25,13 +32,32 @@ export function useArtifactTime() {
     });
 }
 
-/** The artifact's type in words, as its card and its row say it beside the title: its entry
- * file's, a web page (an html entry) or else a document. */
-export const kindLabel = (entryPath: string) =>
-  isWebPageEntry(entryPath) ? m.doc_kind_html() : m.doc_kind_markdown();
+const KIND_LABELS: Record<ArtifactPathKind, () => string> = {
+  html: m.doc_kind_html,
+  markdown: m.doc_kind_markdown,
+  text: m.doc_kind_text,
+  csv: m.doc_kind_csv,
+  image: m.doc_kind_image,
+  pdf: m.doc_kind_pdf,
+  video: m.doc_kind_video,
+  other: m.doc_kind_other,
+};
 
-/** An artifact's type as a gray tile, as its card, its row and its page lead with it: gray, so
- * the content keeps the color (Frank, 11-04). */
+export const kindName = (kind: ArtifactPathKind) => KIND_LABELS[kind]();
+
+export const kindLabel = (entryPath: string) => kindName(artifactKindOfPath(entryPath));
+
+const KIND_ICONS = {
+  html: Browser,
+  markdown: File02,
+  text: FileCode01,
+  csv: Table,
+  image: Image01,
+  pdf: File04,
+  video: VideoRecorder,
+  other: File04,
+} satisfies Record<ArtifactPathKind, unknown>;
+
 export function ArtifactIcon({
   entryPath,
   size = "md",
@@ -39,10 +65,12 @@ export function ArtifactIcon({
   entryPath: string;
   size?: "sm" | "md";
 }) {
-  const Icon = isWebPageEntry(entryPath) ? Browser : File02;
+  const kind = artifactKindOfPath(entryPath);
+  const Icon = KIND_ICONS[kind];
   return (
     <span
       aria-hidden="true"
+      data-artifact-kind={kind}
       className={cn(
         "flex shrink-0 items-center justify-center rounded-lg bg-secondary text-fg-tertiary ring-1 ring-secondary ring-inset",
         size === "md" ? "size-9" : "size-7",
@@ -53,7 +81,6 @@ export function ArtifactIcon({
   );
 }
 
-/** The version and who changed it last, when: the line under an artifact's title. */
 export function ArtifactEditedLine({
   actor,
   time,
@@ -69,7 +96,6 @@ export function ArtifactEditedLine({
   );
 }
 
-/** Who did it, as a small face and a name. */
 export function ArtifactActor({ actor }: { actor: ArtifactActorView | undefined }) {
   if (!actor) return null;
   return (
@@ -86,7 +112,6 @@ export function ArtifactActor({ actor }: { actor: ArtifactActorView | undefined 
   );
 }
 
-/** An artifact's pane beside the conversation; in full screen, the whole page; on a phone, over it. */
 export function PaneFrame({ full, children }: { full?: boolean; children: React.ReactNode }) {
   return (
     <section

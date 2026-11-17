@@ -43,7 +43,6 @@ export function ArtifactFileView({
 }) {
   const workspaceSlug = useWorkspaceSlug();
   const download = artifactDownloadUrl(workspaceSlug, artifactId, { path, version });
-  const framed = framedKind(path, entryPath, source);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-2 border-b border-secondary px-3 py-2">
@@ -55,14 +54,7 @@ export function ArtifactFileView({
           {m.av_menu_download()}
         </Button>
       </div>
-      {framed === "pdf" ? (
-        <ArtifactPdfFrame
-          key={`${version}:${path}`}
-          artifactId={artifactId}
-          version={version}
-          path={path}
-        />
-      ) : framed === "html" ? (
+      {framedKind(path, entryPath, source) === "html" ? (
         <ArtifactWebPage
           key={`${version}:${path}`}
           artifactId={artifactId}
@@ -74,10 +66,31 @@ export function ArtifactFileView({
           onFindingChange={onFindingChange}
         />
       ) : (
-        <FilePreview artifactId={artifactId} version={version} path={path} />
+        <ArtifactFile artifactId={artifactId} version={version} path={path} />
       )}
     </div>
   );
+}
+
+export function ArtifactFile({
+  artifactId,
+  version,
+  path,
+}: {
+  artifactId: string;
+  version: number;
+  path: string;
+}) {
+  if (artifactKindOfPath(path) === "pdf")
+    return (
+      <ArtifactPdfFrame
+        key={`${version}:${path}`}
+        artifactId={artifactId}
+        version={version}
+        path={path}
+      />
+    );
+  return <FilePreview artifactId={artifactId} version={version} path={path} />;
 }
 
 function FilePreview({

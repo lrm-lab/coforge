@@ -17,7 +17,7 @@ afterAll(() => f.cleanup());
 const download = (
   artifactId: string,
   userId: string,
-  extra: { path?: string; limit?: number } = {},
+  extra: { path?: string; version?: number; limit?: number } = {},
 ) =>
   artifactDownload(
     { reads: f.artifacts.reads, blobs: f.blobs, zipLimit: unlimited },
@@ -33,6 +33,14 @@ test("one file downloads as an attachment with its own bytes", async () => {
   expect(response.headers.get("content-disposition")).toContain("a.csv");
   expect(response.headers.get("x-content-type-options")).toBe("nosniff");
   expect(await response.text()).toBe("x,y\n1,2\n");
+});
+
+test("a file of a named version is cached for good, the latest one is not cached", async () => {
+  const artifact = await f.make("Cached", { "plan.md": "# Plan\n" });
+  const pinned = await download(artifact, f.bob, { path: "plan.md", version: 1 });
+  expect(pinned.headers.get("cache-control")).toBe("private, max-age=31536000, immutable");
+  const latest = await download(artifact, f.bob, { path: "plan.md" });
+  expect(latest.headers.get("cache-control")).toBe("private, no-store");
 });
 
 test("every file downloads as a zip named for the artifact, paths kept", async () => {
