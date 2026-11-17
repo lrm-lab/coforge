@@ -36,6 +36,8 @@ UI 改动必须列出本次改动受影响的 UI，并给出测试 Todo list，�
 
 ## Browser end-to-end tests
 
+**A new browser e2e covers a key user flow, nothing else** (Frank, 2026-11-17: "端到端测试不要什么都加"). The flows: signing in and onboarding, sending and reading messages, a Task moving through its statuses, publishing and sharing an artifact, connecting an Agent or a Computer, and notifications and realtime delivery. A single screen, a style, a spacing or one interaction is a unit test, an integration test or the layout sweep (`apps/web/scripts/ui-sweep.mjs`), never a new e2e; so is a bug fix, unless the bug is in one of those flows. A commit that adds an `.e2e.ts` names its flow in an `E2E-Flow: <flow>` trailer (`sign-in`, `messaging`, `task-flow`, `artifact-sharing`, `agent-connect` or `notifications`), and the `e2e-flow` hard rule refuses one without it ([Hard rules](git-hooks/hard-rules.md)). Changing an existing e2e needs no trailer.
+
 The browser e2es are opt-in and need a browser on the machine:
 [Browser end-to-end tests](browser-e2e.md) holds the runner, its environment traps, and the
 pre-merge sweep rule.
