@@ -120,9 +120,13 @@ describe("staging user file persistence", () => {
     expect(webBlock).toContain(
       "COFORGE_CLOUD_CLUSTER_TOKEN: ${COFORGE_CLOUD_CLUSTER_TOKEN:?staging cloud cluster token}",
     );
-    // Swarm host is intranet-only; staging ECS cannot reach :6090, so desktop
-    // opens that address directly until ECS → host is routable.
-    expect(webBlock).toContain("COFORGE_CLOUD_DESKTOP_ORIGIN: http://10.110.158.143:6090");
+    // Site origin; Caddy reaches intranet :6090 via the Swarm manager's reverse
+    // tunnel on the ECS loopback (host.docker.internal:16090).
+    expect(webBlock).toContain("COFORGE_CLOUD_DESKTOP_ORIGIN: https://staging.coforge.cn");
+    const caddyStart = compose.indexOf("\n  caddy:\n");
+    const caddyBlock = compose.slice(caddyStart, webStart);
+    expect(caddyBlock).toContain("COFORGE_DESKTOP_UPSTREAM: host.docker.internal:16090");
+    expect(caddyBlock).toContain("host.docker.internal:host-gateway");
 
     const functions = await Bun.file(secretsScript).text();
     const directory = await mkdtemp(join(tmpdir(), "coforge-cluster-token-"));
