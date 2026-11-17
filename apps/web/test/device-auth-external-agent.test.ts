@@ -202,10 +202,12 @@ describe("coforge-cli authorize", () => {
       kind: "external_agent",
       workspaceId: WORKSPACE_ID,
       agentId: AGENT_ID,
-      machineName: "laptop",
-      hostname: "mac.local",
-      os: "darwin",
-      clientName: "coforge 1.0",
+      machine: {
+        machineName: "laptop",
+        hostname: "mac.local",
+        os: "darwin",
+        clientName: "coforge 1.0",
+      },
     });
   });
 });

@@ -21,5 +21,4 @@ test("a stopped listener is released", () => {
   stop();
   externalInboxSignal.notify("agent-c");
   expect(calls).toBe(0);
-  expect(externalInboxSignal.listenerCount()).toBeGreaterThanOrEqual(0);
 });

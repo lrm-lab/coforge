@@ -1,18 +1,9 @@
-import { CliError } from "../cli-error";
+import { profileNotLoggedInError } from "./refusal";
 import type { AgentProfile, ProfileStore } from "./profile-store";
 
-/** Where an Agent API call goes and who it speaks as: the daemon's loopback proxy with the
- * launch's context token, or the server itself with an external Agent's key. */
 export type AgentTransportTarget =
   | { mode: "daemon"; socketPath: string; context: string; proxyUrl: string }
-  | {
-      mode: "external";
-      socketPath: string;
-      context: string;
-      proxyUrl: string;
-      profileSlug: string;
-      profile: AgentProfile;
-    };
+  | { mode: "external"; profileSlug: string; profile: AgentProfile };
 
 export async function resolveAgentTransport(
   env: Record<string, string | undefined>,
@@ -27,23 +18,20 @@ export async function resolveAgentTransport(
       proxyUrl: env.COFORGE_AGENT_PROXY_URL ?? "",
     };
   const profile = await store.readProfile(profileSlug);
-  if (!profile)
-    throw new CliError({
-      code: "PROFILE_NOT_LOGGED_IN",
-      message: `Profile "${profileSlug}" has no credential.`,
-      retryable: false,
-      suggestedNextAction: "Run `coforge agent login --server <url> --agent <id-or-name>` first.",
-    });
+  if (!profile) throw profileNotLoggedInError(profileSlug);
   if (env.COFORGE_AGENT_PROXY_URL || env.COFORGE_AGENT_CONTEXT)
     process.stderr.write(
       `Using external profile "${profileSlug}" (ignoring daemon proxy environment).\n`,
     );
-  return {
-    mode: "external",
-    socketPath: "",
-    context: profile.apiKey,
-    proxyUrl: profile.serverUrl,
-    profileSlug,
-    profile,
-  };
+  return { mode: "external", profileSlug, profile };
+}
+
+export function proxyConnectionOf(target: AgentTransportTarget): {
+  socketPath: string;
+  context: string;
+  proxyUrl: string;
+} {
+  return target.mode === "daemon"
+    ? target
+    : { socketPath: "", context: target.profile.apiKey, proxyUrl: target.profile.serverUrl };
 }

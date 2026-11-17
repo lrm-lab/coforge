@@ -2,6 +2,7 @@ import type { WakeHint } from "@lrm/coforge-sdk/agent";
 
 export const WAKE_HEARTBEAT_MS = 25_000;
 export const WAKE_REFRESH_DEBOUNCE_MS = 100;
+export const WAKE_SAFETY_REFRESH_MS = 3 * 60 * 1000;
 export const MAX_WAKE_STREAMS_PER_CREDENTIAL = 3;
 
 export class WakeStreamLimit {
@@ -28,6 +29,7 @@ export type WakeStreamDeps = {
   revalidate: () => Promise<boolean>;
   release: () => void;
   heartbeatMs?: number;
+  safetyRefreshMs?: number;
   debounceMs?: number;
 };
 
@@ -44,6 +46,8 @@ export function openWakeStream(
 ): ReadableStream<Uint8Array> {
   const heartbeatMs = deps.heartbeatMs ?? WAKE_HEARTBEAT_MS;
   const debounceMs = deps.debounceMs ?? WAKE_REFRESH_DEBOUNCE_MS;
+  const safetyRefreshMs = deps.safetyRefreshMs ?? WAKE_SAFETY_REFRESH_MS;
+  let lastRefreshAt = Date.now();
   const sent = new Map<string, bigint>();
   let controller!: ReadableStreamDefaultController<Uint8Array>;
   let closed = false;
@@ -83,6 +87,7 @@ export function openWakeStream(
     try {
       do {
         dirty = false;
+        lastRefreshAt = Date.now();
         const hints = await deps.listHints();
         if (closed) return;
         const fresh: WakeHint[] = [];
@@ -130,7 +135,7 @@ export function openWakeStream(
       return;
     }
     push("heartbeat", { at: new Date().toISOString() });
-    void refresh(false);
+    if (Date.now() - lastRefreshAt >= safetyRefreshMs) void refresh(false);
   };
 
   return new ReadableStream<Uint8Array>({

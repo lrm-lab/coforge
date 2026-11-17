@@ -25,7 +25,7 @@ export async function noticeExternalInbox(
   try {
     const agents = await db.$queryRaw<{ agentId: string; pushable: boolean }[]>`
       SELECT a."id"::text AS "agentId",
-        (w."agentId" IS NOT NULL AND w."enabled"
+        (w."agentId" IS NOT NULL AND w."disabledReason" IS NULL
           AND (w."retryAt" IS NULL OR w."retryAt" <= (now() AT TIME ZONE 'UTC'))) AS "pushable"
       FROM "conversations" c
       JOIN "agents" a ON a."workspaceId" = c."workspaceId" AND a."hosting" = 'external'
@@ -39,10 +39,14 @@ export async function noticeExternalInbox(
           SELECT 1 FROM "pending_mention_actions" p
           WHERE p."messageId" = ${message.messageId}::uuid AND p."targetAgentId" = a."id"
         ))`;
-    for (const { agentId, pushable } of agents) {
-      deps.notify(agentId);
-      if (pushable) await deps.enqueueNotice(agentId).catch(() => logFailure("enqueue"));
-    }
+    await Promise.all(
+      agents.map(({ agentId, pushable }) => {
+        deps.notify(agentId);
+        return pushable
+          ? deps.enqueueNotice(agentId).catch(() => logFailure("enqueue"))
+          : undefined;
+      }),
+    );
   } catch {
     logFailure("lookup");
   }

@@ -128,3 +128,34 @@ test("a credential holds at most the capped number of streams", () => {
   releases[0]!();
   expect(limit.acquire("c")).toBeDefined();
 });
+
+async function hintQueriesAfterBeats(safetyRefreshMs: number): Promise<number> {
+  let queries = 0;
+  const stream = openWakeStream(
+    {
+      listHints: async () => {
+        queries++;
+        return [];
+      },
+      subscribe: () => () => {},
+      revalidate: async () => true,
+      release: () => {},
+      heartbeatMs: 10,
+      safetyRefreshMs,
+    },
+    new AbortController().signal,
+  );
+  const reader = stream.getReader();
+  await reader.read();
+  for (let beat = 0; beat < 3; beat++) await reader.read();
+  await reader.cancel();
+  return queries;
+}
+
+test("heartbeats without a signal do not re-query the hints", async () => {
+  expect(await hintQueriesAfterBeats(60_000)).toBe(1);
+});
+
+test("a heartbeat past the safety interval re-queries the hints", async () => {
+  expect(await hintQueriesAfterBeats(15)).toBeGreaterThan(1);
+});

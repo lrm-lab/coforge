@@ -9,6 +9,7 @@ import {
   EXTERNAL_ACTIVITY_SCHEMA,
   parseExternalActivityIngest,
 } from "#src/server/agents/external-agent-activity-ingest.server";
+import { EXTERNAL_ONLINE_WINDOW_MS } from "#src/server/agents/external-agent-presence.server";
 import { handleExternalActivityPost } from "#src/server/agents/external-agent-activity-http.server";
 
 const NOW = Date.parse("2026-11-18T10:00:00Z");
@@ -62,7 +63,7 @@ function fixture(options: { reported?: boolean; failRecord?: boolean } = {}) {
           detailKind: "",
           detail: args.detail,
           entries: [],
-          expiresAt: args.kind === "offline" ? null : NOW + 120_000,
+          expiresAt: args.kind === "offline" ? null : NOW + EXTERNAL_ONLINE_WINDOW_MS,
         };
       },
     },
@@ -100,14 +101,14 @@ const report = (eventId: string, status: string, secondsAgo = 1, extra = {}) => 
 });
 
 describe("ingesting an external Agent's activity", () => {
-  test("applies reports in the order of their times, not of the list", async () => {
+  test("only the newest report of a request reaches the display, whatever the list order", async () => {
     const { ports, observed } = fixture();
     const result = await ingest(ports, [
       report("b", "online", 1),
       report("a", "working", 5, { detail: "tests" }),
     ]);
     expect(result).toEqual({ acceptedCount: 2, rejectedCount: 0 });
-    expect(observed.map((entry) => entry.kind)).toEqual(["working", "online"]);
+    expect(observed.map((entry) => entry.kind)).toEqual(["online"]);
     expect(observed.every((entry) => entry.reported)).toBe(true);
   });
 
@@ -155,7 +156,6 @@ describe("ingesting an external Agent's activity", () => {
       { eventId: "h2", occurredAt: at(2), hookEventName: "Stop" },
     ]);
     expect(guessing.observed.map((entry) => [entry.kind, entry.reported])).toEqual([
-      ["working", false],
       ["online", false],
     ]);
     expect(guessing.rows.map((row) => row.detailKind)).toEqual(["tool_started", "idle"]);

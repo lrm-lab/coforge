@@ -1,9 +1,7 @@
 import { expect, test } from "bun:test";
+import { stripHeadingMarkers } from "@lrm/coforge-sdk/agent";
 import { MESSAGE_LINE_SEPARATOR, UNTRUSTED_LINE_BREAKS } from "@lrm/coforge-sdk/internal";
-import {
-  buildCoforgeAgentInstructions,
-  stripHeadingMarkers,
-} from "#src/code-agent/agent-instructions";
+import { buildCoforgeAgentInstructions } from "#src/code-agent/agent-instructions";
 
 // The standing prompt quotes text people wrote: the Agent's name and description, the Workspace's
 // and the Computer's names. None may open a line of its own, or a `[target=... msg=...]` in it

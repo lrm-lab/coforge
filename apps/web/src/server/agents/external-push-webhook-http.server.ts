@@ -1,6 +1,6 @@
 import { errorResponse } from "./agent-http-error.server";
 import { isExternalAgentPrincipal } from "./external-agent-credentials.server";
-import { externalOnly } from "./external-wake-http.server";
+import { externalAgentsOnly } from "./external-agent-http.server";
 import { PushWebhookRefusal, type ExternalPushWebhooks } from "./external-push-webhooks.server";
 
 type Principal = { workspaceId: string; agentId: string };
@@ -10,7 +10,7 @@ export async function handlePushWebhook(
   principal: Principal,
   webhooks: Pick<ExternalPushWebhooks, "put" | "get" | "remove">,
 ): Promise<Response> {
-  if (!isExternalAgentPrincipal(principal)) return externalOnly();
+  if (!isExternalAgentPrincipal(principal)) return externalAgentsOnly();
   try {
     if (request.method === "PUT") {
       const body: unknown = await request.json().catch(() => undefined);

@@ -1,38 +1,41 @@
 import { utf8Decoder, utf8Encoder } from "@lrm/coforge-sdk/internal";
 
-export type PushWebhookSealer = {
-  seal(agentId: string, secret: string): Promise<string>;
-  open(agentId: string, sealed: string): Promise<string>;
-};
+export class InvalidSealedValueError extends Error {
+  constructor() {
+    super("invalid sealed value");
+    this.name = "InvalidSealedValueError";
+  }
+}
 
-const associatedData = (agentId: string) =>
-  utf8Encoder.encode(`external-push-webhook:v1:${agentId}`);
+export class SealedValues {
+  private readonly key: Promise<CryptoKey>;
 
-export function pushWebhookSealer(rawKey: Uint8Array<ArrayBuffer>): PushWebhookSealer {
-  const key = crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["encrypt", "decrypt"]);
-  return {
-    async seal(agentId, secret) {
-      const iv = crypto.getRandomValues(new Uint8Array(12));
-      const sealed = await crypto.subtle.encrypt(
-        { name: "AES-GCM", iv, additionalData: associatedData(agentId) },
-        await key,
-        utf8Encoder.encode(secret),
-      );
-      return `v1.${Buffer.from(iv).toString("base64url")}.${Buffer.from(sealed).toString("base64url")}`;
-    },
-    async open(agentId, sealed) {
-      const [version, iv, ciphertext, extra] = sealed.split(".");
-      if (version !== "v1" || !iv || !ciphertext || extra) throw new Error("invalid sealed secret");
-      const plain = await crypto.subtle.decrypt(
-        {
-          name: "AES-GCM",
-          iv: Buffer.from(iv, "base64url"),
-          additionalData: associatedData(agentId),
-        },
-        await key,
-        Buffer.from(ciphertext, "base64url"),
-      );
-      return utf8Decoder.decode(plain);
-    },
-  };
+  constructor(rawKey: Uint8Array<ArrayBuffer>) {
+    this.key = crypto.subtle.importKey("raw", rawKey, "AES-GCM", false, ["encrypt", "decrypt"]);
+  }
+
+  async seal(context: string, value: string): Promise<string> {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv, additionalData: utf8Encoder.encode(context) },
+      await this.key,
+      utf8Encoder.encode(value),
+    );
+    return `v1.${Buffer.from(iv).toString("base64url")}.${Buffer.from(encrypted).toString("base64url")}`;
+  }
+
+  async open(context: string, sealed: string): Promise<string> {
+    const [version, iv, ciphertext, extra] = sealed.split(".");
+    if (version !== "v1" || !iv || !ciphertext || extra) throw new InvalidSealedValueError();
+    const plain = await crypto.subtle.decrypt(
+      {
+        name: "AES-GCM",
+        iv: Buffer.from(iv, "base64url"),
+        additionalData: utf8Encoder.encode(context),
+      },
+      await this.key,
+      Buffer.from(ciphertext, "base64url"),
+    );
+    return utf8Decoder.decode(plain);
+  }
 }

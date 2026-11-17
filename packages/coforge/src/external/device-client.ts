@@ -134,8 +134,6 @@ export async function startDeviceGrant(
   };
 }
 
-/** One poll of the token endpoint. A terminal refusal throws; a network or 5xx failure is
- * `transient`, so the caller decides how long to keep trying. Response bodies are never echoed. */
 export async function pollDeviceToken(
   fetchFn: FetchLike,
   serverUrl: string,

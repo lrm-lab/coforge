@@ -1,7 +1,19 @@
-import { pushWebhookSealer, type PushWebhookSealer } from "#src/server/sealed-values.server";
+import { SealedValues } from "#src/server/sealed-values.server";
 import { readOptionalAgentRuntimeCredentialEncryptionKey } from "./agent-runtime-credentials.server";
 
-export { pushWebhookSealer, type PushWebhookSealer };
+export type PushWebhookSealer = {
+  seal(agentId: string, secret: string): Promise<string>;
+  open(agentId: string, sealed: string): Promise<string>;
+};
+
+export function pushWebhookSealer(rawKey: Uint8Array<ArrayBuffer>): PushWebhookSealer {
+  const sealed = new SealedValues(rawKey);
+  const context = (agentId: string) => `external-push-webhook:v1:${agentId}`;
+  return {
+    seal: (agentId, secret) => sealed.seal(context(agentId), secret),
+    open: (agentId, value) => sealed.open(context(agentId), value),
+  };
+}
 
 let memoized: Promise<PushWebhookSealer | undefined> | undefined;
 

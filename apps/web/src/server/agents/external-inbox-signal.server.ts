@@ -34,8 +34,4 @@ export const externalInboxSignal = {
   notify(agentId: string): void {
     cacheInvalidation(CHANNEL).notify(agentId);
   },
-
-  listenerCount(): number {
-    return [...listeners.values()].reduce((sum, set) => sum + set.size, 0);
-  },
 };

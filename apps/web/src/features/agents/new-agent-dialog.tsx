@@ -100,10 +100,7 @@ function NewAgentForms({
           value={kind}
           onChange={(next) => setChosen(next as AgentKind)}
           isDisabled={busy || submitting}
-          className={cx(
-            "mt-4 grid w-full gap-0.5 rounded-lg bg-secondary p-0.5",
-            availableKinds.length === 3 ? "grid-cols-3" : "grid-cols-2",
-          )}
+          className="mt-4 grid w-full auto-cols-fr grid-flow-col gap-0.5 rounded-lg bg-secondary p-0.5"
         >
           {availableKinds.map((option) => (
             <Radio

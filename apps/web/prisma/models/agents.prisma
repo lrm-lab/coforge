@@ -100,6 +100,7 @@ model Agent {
   @@index([workspaceId, ownerId])
   @@index([workspaceId, createdAt])
   @@index([computerId])
+  @@index([workspaceId], map: "agents_workspaceId_external_idx", where: raw("\"hosting\" = 'external'"))
   @@map("agents")
 }
 

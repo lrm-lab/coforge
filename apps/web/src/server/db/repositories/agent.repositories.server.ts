@@ -32,7 +32,6 @@ export type AgentRecord = {
   createdAt: Date;
   ownerId: string;
   computerId?: string;
-  /** Where the Agent runs (`Agent.hosting`): absent reads as managed. */
   hosting?: "managed" | "external";
   /** `undefined` when the stored row's config cannot be read — one bad row never fails a read
    * (the readers then show no runtime); only a write-path caller may treat it as required. */

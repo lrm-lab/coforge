@@ -1,4 +1,4 @@
-import type { AgentActivityKind } from "@lrm/coforge-sdk/internal";
+import { isRecord, type AgentActivityKind } from "@lrm/coforge-sdk/internal";
 
 export const EXTERNAL_ACTIVITY_SCHEMA = "coforge-agent-activity-ingest.v1";
 export const EXTERNAL_ACTIVITY_MAX_EVENTS = 100;
@@ -41,10 +41,6 @@ export type ExternalActivityEvent = {
 export type ExternalActivityParse =
   | { ok: true; events: ExternalActivityEvent[] }
   | { ok: false; code: ExternalActivityRefusalCode };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function codePoints(value: string): number {
   return [...value].length;

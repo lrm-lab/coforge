@@ -1,10 +1,13 @@
 import { collapseWhitespace } from "@lrm/coforge-anvil";
-import { COMMUNICATION_STYLE } from "@lrm/coforge-sdk/agent";
+import {
+  COMMUNICATION_STYLE,
+  sanitizeQuotedName,
+  stripHeadingMarkers,
+} from "@lrm/coforge-sdk/agent";
 import {
   AGENT_LAUNCH_APPS_SECTION_MAX_BYTES,
   type AgentLaunchApp,
 } from "@lrm/coforge-sdk/internal/agent-launch-apps";
-import { MESSAGE_LINE_SEPARATOR } from "@lrm/coforge-sdk/internal";
 import { WORKSPACE_ASSISTANT_INSTRUCTIONS } from "./workspace-assistant-instructions";
 import type { AgentLaunchFeatures } from "./agent-feature-types";
 import { TASK_CONVERSATIONS_SECTION } from "./task-conversations-guidance";
@@ -36,15 +39,6 @@ export type CoforgeAgentPromptContext = {
     cloudDesktop?: boolean;
   };
 };
-function sanitizeQuotedName(name: string): string {
-  return collapseWhitespace(name).replace(/"/g, "");
-}
-export function stripHeadingMarkers(text: string): string {
-  return text
-    .split(MESSAGE_LINE_SEPARATOR)
-    .map((line) => line.replace(/^#+/, ""))
-    .join("\n");
-}
 const APPS_SECTION_HEAD = `## Apps
 Apps installed in this Workspace when you launched, which accept a CoForge token for you. \`coforge app list\` shows the current list and your access; \`coforge manual get apps\` explains how to use one.`;
 const APPS_SECTION_TAIL =

@@ -10,14 +10,6 @@ export type AgentChannelStatus = {
 type Scope = { workspaceId: string; computerId: string | null; agentId: string };
 type Snapshot = Awaited<ReturnType<AgentDisplay["snapshot"]>>;
 
-/**
- * Best-effort live status for one Agent's `channel members` roster row: a lifecycle
- * (`online`/`offline`) and, when the Agent is doing something more specific than merely being
- * connected, an `activity` (`working`/`thinking`/`error`) with its `activityDetail`. `unknown`
- * only when the server truly has no data — the Agent has never had a Computer, or the display
- * snapshot itself could not be read (e.g. Redis unavailable) — never as a placeholder for
- * "didn't bother to check."
- */
 export async function resolveAgentChannelStatus(
   display: Pick<AgentDisplay, "snapshot">,
   scope: Scope,
@@ -36,25 +28,21 @@ export async function resolveAgentChannelStatus(
   }
 }
 
-/**
- * A whole roster's statuses, in `scopes` order, from one batched display read. The batched read
- * is all-or-nothing, so a failure falls back to one read per Agent: a single Agent's unreadable
- * display must not blank out every other row's status. Only the failure path pays N reads.
- */
 export async function resolveAgentChannelStatuses(
   display: Pick<AgentDisplay, "snapshot" | "snapshotMany">,
   scopes: readonly Scope[],
-  external: ReadonlyMap<string, ExternalSetup> = new Map(),
+  external:
+    | ReadonlyMap<string, ExternalSetup>
+    | Promise<ReadonlyMap<string, ExternalSetup> | undefined> = new Map(),
 ): Promise<AgentChannelStatus[]> {
-  const fromDisplay = scopes.filter((scope) => !external.has(scope.agentId));
-  const displayed = await resolveDisplayedStatuses(display, fromDisplay);
-  const displayedByAgentId = new Map(
-    fromDisplay.map((scope, index) => [scope.agentId, displayed[index]!] as const),
-  );
-  return scopes.map((scope) => {
-    const setup = external.get(scope.agentId);
+  const [setups, displayed] = await Promise.all([
+    external,
+    resolveDisplayedStatuses(display, scopes),
+  ]);
+  return scopes.map((scope, index) => {
+    const setup = setups?.get(scope.agentId);
     if (setup) return { status: setup.state === "online" ? "online" : "offline" };
-    return displayedByAgentId.get(scope.agentId)!;
+    return displayed[index]!;
   });
 }
 

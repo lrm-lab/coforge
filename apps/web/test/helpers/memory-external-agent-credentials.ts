@@ -20,6 +20,7 @@ export type MemoryAgent = {
   deletedAt: Date | null;
   stoppedAt: Date | null;
   hosting: string;
+  visibility: string;
 };
 
 export class MemoryExternalAgentCredentials implements ExternalAgentCredentialRepository {
@@ -34,6 +35,7 @@ export class MemoryExternalAgentCredentials implements ExternalAgentCredentialRe
       deletedAt: null,
       stoppedAt: null,
       hosting: "external",
+      visibility: "public",
       ...overrides,
     });
   }

@@ -18,6 +18,7 @@ import type { ExternalInboxNoticeJob } from "./external-inbox-notice-queue.serve
 import { PROBE_TEXT, UNAUTHORIZED_GRACE_MS, nextProbe } from "./external-push-recovery.server";
 import type { PushWebhookSealer } from "./external-push-webhook-secret.server";
 import type {
+  PushAgentState,
   PushAttemptUpdate,
   PushDisabledReason,
   PushWebhookRow,
@@ -37,10 +38,50 @@ export type NoticeDeliveryDependencies = {
   announce: (agentId: string) => Promise<void>;
   newId?: () => string;
   now?: () => Date;
-  timeoutMs?: number;
 };
 
 type Sent = Outcome | { kind: "invalid" } | { kind: "unreadable" };
+
+type AttemptRun = Pick<
+  PushWebhookRow,
+  "consecutiveFailures" | "rejectionStreak" | "unauthorizedSince"
+>;
+
+const CLEARED: PushAttemptUpdate = {
+  lastError: null,
+  consecutiveFailures: 0,
+  rejectionStreak: 0,
+  unauthorizedSince: null,
+  retryAt: null,
+  retryNoticeId: null,
+};
+
+const PUSH_ON: PushAttemptUpdate = {
+  ...CLEARED,
+  disabledReason: null,
+  disabledAt: null,
+  nextProbeAt: null,
+  probeAttempts: null,
+  probeStoppedAt: null,
+};
+
+function attempt(
+  lastError: string,
+  { consecutiveFailures, rejectionStreak, unauthorizedSince }: AttemptRun,
+  retry?: { retryAt: Date; retryNoticeId: string },
+): PushAttemptUpdate {
+  return {
+    lastError,
+    consecutiveFailures,
+    rejectionStreak,
+    unauthorizedSince,
+    retryAt: retry?.retryAt ?? null,
+    retryNoticeId: retry?.retryNoticeId ?? null,
+  };
+}
+
+const unavailable = (agent: PushAgentState) =>
+  agent.deletedAt !== null || agent.stoppedAt !== null || agent.hosting !== "external";
 
 export class ExternalInboxNoticeDelivery {
   private readonly now: () => Date;
@@ -59,26 +100,21 @@ export class ExternalInboxNoticeDelivery {
   async deliver(job: ExternalInboxNoticeJob): Promise<void> {
     if ("probe" in job) return this.probe(job.agentId);
     const target = await this.store.deliveryTarget(job.agentId);
-    if (!target || !target.row.enabled) return;
+    if (!target || target.row.disabledReason !== null) return;
     const { row, agent } = target;
     const at = this.now();
-    if (agent.deletedAt || agent.stoppedAt || agent.hosting !== "external") {
-      await this.disable(row, "agent_unavailable");
-      return;
-    }
-    if (row.retryAt && row.retryAt > at && row.retryNoticeId !== job.noticeId) return;
-    if (!isWebhookEndpoint(row.url)) {
-      await this.disable(row, "endpoint_invalid");
-      return;
-    }
-    const sealer = await this.deps.sealer();
+    const sealer = await this.prepare(
+      row,
+      agent,
+      !!row.retryAt && row.retryAt > at && row.retryNoticeId !== job.noticeId,
+    );
     if (!sealer) return;
     const hints = await this.deps.listHints({
       workspaceId: agent.workspaceId,
       agentId: row.agentId,
     });
     if (hints.length === 0) {
-      if (row.retryNoticeId) await this.store.record(row.agentId, row.revision, this.cleared());
+      if (row.retryNoticeId) await this.store.record(row.agentId, row.revision, CLEARED);
       return;
     }
     const noticeId = row.retryNoticeId ?? job.noticeId;
@@ -96,10 +132,7 @@ export class ExternalInboxNoticeDelivery {
       return;
     }
     if (sent.kind === "delivered") {
-      await this.store.record(row.agentId, row.revision, {
-        ...this.cleared(),
-        lastDeliveryAt: at,
-      });
+      await this.store.record(row.agentId, row.revision, { ...CLEARED, lastDeliveryAt: at });
       return;
     }
     await this.fail(row, noticeId, at, sent);
@@ -111,18 +144,9 @@ export class ExternalInboxNoticeDelivery {
     const { row, agent } = target;
     const at = this.now();
     const { disabledAt, nextProbeAt } = row;
-    if (row.enabled || row.disabledReason !== "endpoint_rejected" || !disabledAt || !nextProbeAt)
-      return;
+    if (row.disabledReason !== "endpoint_rejected" || !disabledAt || !nextProbeAt) return;
     if (nextProbeAt > at) return;
-    if (agent.deletedAt || agent.stoppedAt || agent.hosting !== "external") {
-      await this.disable(row, "agent_unavailable");
-      return;
-    }
-    if (!isWebhookEndpoint(row.url)) {
-      await this.disable(row, "endpoint_invalid");
-      return;
-    }
-    const sealer = await this.deps.sealer();
+    const sealer = await this.prepare(row, agent);
     if (!sealer) return;
     const noticeId = (this.deps.newId ?? (() => crypto.randomUUID()))();
     const sent = await this.send(sealer, row, { noticeId, at, text: PROBE_TEXT, hints: [] });
@@ -132,13 +156,8 @@ export class ExternalInboxNoticeDelivery {
     }
     if (sent.kind === "delivered") {
       const written = await this.store.record(row.agentId, row.revision, {
-        ...this.cleared(),
+        ...PUSH_ON,
         lastDeliveryAt: at,
-        reenable: true,
-        disabledAt: null,
-        nextProbeAt: null,
-        probeAttempts: null,
-        probeStoppedAt: null,
       });
       if (written) await this.deps.announce(row.agentId);
       return;
@@ -146,17 +165,29 @@ export class ExternalInboxNoticeDelivery {
     const attempts = (row.probeAttempts ?? 0) + 1;
     const next = nextProbe(disabledAt, attempts, at);
     const written = await this.store.record(row.agentId, row.revision, {
-      lastError: sent.kind === "unreadable" ? "secret_unreadable" : sent.error,
-      consecutiveFailures: row.consecutiveFailures,
-      rejectionStreak: row.rejectionStreak,
-      unauthorizedSince: row.unauthorizedSince,
-      retryAt: null,
-      retryNoticeId: null,
+      ...attempt(sent.kind === "unreadable" ? "secret_unreadable" : sent.error, row),
       probeAttempts: attempts,
       nextProbeAt: next?.at ?? null,
       ...(next ? {} : { probeStoppedAt: at }),
     });
     if (written && next) await this.deps.scheduleProbe(row.agentId, next.delaySeconds);
+  }
+
+  private async prepare(
+    row: PushWebhookRow,
+    agent: PushAgentState,
+    retryPending = false,
+  ): Promise<PushWebhookSealer | undefined> {
+    if (unavailable(agent)) {
+      await this.disable(row, "agent_unavailable");
+      return undefined;
+    }
+    if (retryPending) return undefined;
+    if (!isWebhookEndpoint(row.url)) {
+      await this.disable(row, "endpoint_invalid");
+      return undefined;
+    }
+    return this.deps.sealer();
   }
 
   private async send(
@@ -191,24 +222,13 @@ export class ExternalInboxNoticeDelivery {
           },
           body,
         },
-        this.deps.timeoutMs ?? WEBHOOK_REQUEST_TIMEOUT_MS,
+        WEBHOOK_REQUEST_TIMEOUT_MS,
       );
       return classify(result, row.consecutiveFailures, notice.at);
     } catch (error) {
       if (error instanceof UnsupportedEgressSchemeError) return { kind: "invalid" };
       return transient(error, row.consecutiveFailures);
     }
-  }
-
-  private cleared(): PushAttemptUpdate {
-    return {
-      lastError: null,
-      consecutiveFailures: 0,
-      rejectionStreak: 0,
-      unauthorizedSince: null,
-      retryAt: null,
-      retryNoticeId: null,
-    };
   }
 
   private async fail(
@@ -221,21 +241,19 @@ export class ExternalInboxNoticeDelivery {
     const unauthorized = rejected && outcome.status === 401;
     const continuing =
       rejected && row.rejectionStreak > 0 && (row.unauthorizedSince !== null) === unauthorized;
-    const streak = rejected ? (continuing ? row.rejectionStreak : 0) + 1 : 0;
-    const unauthorizedSince = unauthorized ? (continuing ? row.unauthorizedSince : at) : null;
-    const failures = row.consecutiveFailures + 1;
+    const run: AttemptRun = {
+      consecutiveFailures: row.consecutiveFailures + 1,
+      rejectionStreak: rejected ? (continuing ? row.rejectionStreak : 0) + 1 : 0,
+      unauthorizedSince: unauthorized ? (continuing ? row.unauthorizedSince : at) : null,
+    };
     const turnsOff =
-      streak >= REJECTION_LIMIT &&
-      (!unauthorizedSince || at.getTime() - unauthorizedSince.getTime() >= UNAUTHORIZED_GRACE_MS);
+      run.rejectionStreak >= REJECTION_LIMIT &&
+      (!run.unauthorizedSince ||
+        at.getTime() - run.unauthorizedSince.getTime() >= UNAUTHORIZED_GRACE_MS);
     if (rejected && turnsOff) {
       const first = nextProbe(at, 0, at);
       const written = await this.store.record(row.agentId, row.revision, {
-        lastError: outcome.error,
-        consecutiveFailures: failures,
-        rejectionStreak: streak,
-        unauthorizedSince,
-        retryAt: null,
-        retryNoticeId: null,
+        ...attempt(outcome.error, run),
         disabledReason: "endpoint_rejected",
         disabledAt: at,
         probeAttempts: 0,
@@ -246,25 +264,20 @@ export class ExternalInboxNoticeDelivery {
       return;
     }
     const delaySeconds = rejected ? REJECTED_DELAY_SECONDS : outcome.delaySeconds;
-    const written = await this.store.record(row.agentId, row.revision, {
-      lastError: outcome.error,
-      consecutiveFailures: failures,
-      rejectionStreak: streak,
-      unauthorizedSince,
-      retryAt: new Date(at.getTime() + delaySeconds * 1000),
-      retryNoticeId: noticeId,
-    });
+    const written = await this.store.record(
+      row.agentId,
+      row.revision,
+      attempt(outcome.error, run, {
+        retryAt: new Date(at.getTime() + delaySeconds * 1000),
+        retryNoticeId: noticeId,
+      }),
+    );
     if (written) await this.deps.reschedule(row.agentId, noticeId, delaySeconds);
   }
 
   private async disable(row: PushWebhookRow, reason: PushDisabledReason) {
     await this.store.record(row.agentId, row.revision, {
-      lastError: reason,
-      consecutiveFailures: row.consecutiveFailures,
-      rejectionStreak: row.rejectionStreak,
-      unauthorizedSince: row.unauthorizedSince,
-      retryAt: null,
-      retryNoticeId: null,
+      ...attempt(reason, row),
       disabledReason: reason,
       disabledAt: this.now(),
       nextProbeAt: null,

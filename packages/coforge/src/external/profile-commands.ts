@@ -1,29 +1,13 @@
 import { CliError } from "../cli-error";
 import { probeContext } from "./agent-context";
 import type { FetchLike } from "./device-client";
+import { selectedOrOnlyProfile } from "./profile-select";
 import type { ProfileStore } from "./profile-store";
 import { revokeSelf } from "./self-revoke";
 
 export type ProfileCommandDeps = { store: ProfileStore; fetch: FetchLike };
 
 export type StatusState = "usable" | "revoked" | "mismatch" | "missing" | "unverified";
-
-/** The profile a `status` or `logout` acts on: the selected one, else the only one on disk. */
-async function targetProfile(
-  store: ProfileStore,
-  selected: string | undefined,
-): Promise<string | undefined> {
-  if (selected !== undefined) return selected;
-  const all = await store.listProfiles();
-  if (all.length > 1)
-    throw new CliError({
-      code: "PROFILE_AMBIGUOUS",
-      message: `Several profiles exist (${all.join(", ")}).`,
-      retryable: false,
-      suggestedNextAction: "Pass --profile <slug> or set COFORGE_PROFILE.",
-    });
-  return all[0];
-}
 
 const STATUS_DETAIL: Record<StatusState, string> = {
   usable: "The server accepts this profile's key.",
@@ -45,7 +29,7 @@ export async function runAgentStatus(
       retryable: false,
     });
   const { store } = deps;
-  const slug = await targetProfile(store, selected);
+  const slug = await selectedOrOnlyProfile(store, selected);
   const profile = slug === undefined ? undefined : await store.readProfile(slug);
   let state: StatusState = "missing";
   if (profile) {
@@ -82,7 +66,7 @@ export async function runAgentLogout(
       retryable: false,
     });
   const { store } = deps;
-  const slug = await targetProfile(store, selected);
+  const slug = await selectedOrOnlyProfile(store, selected);
   if (slug === undefined) return "state: not_logged_in";
   let profile: Awaited<ReturnType<typeof store.readProfile>>;
   try {

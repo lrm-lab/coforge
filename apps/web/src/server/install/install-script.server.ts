@@ -6,8 +6,8 @@ import { textResponse } from "#src/server/http/text-response.server";
 
 /**
  * Serves the two bootstrap installer scripts (`curl ... | sh`, `irm ... | iex`) at
- * `/computer/install.sh` and `/computer/install.ps1`, and the CLI-only pair at `/cli/install.sh`
- * and `/cli/install.ps1`, with one line rewritten: the release feed the script downloads from.
+ * `/computer/install.sh` and `/computer/install.ps1`, with one line rewritten: the release feed
+ * the script downloads from.
  *
  * `docs/release/local-feed-hosting.md`: each deployment serves its own pair of
  * entry points routed to the release feed that deployment trusts, because a `curl ... | sh` taken

@@ -6,7 +6,6 @@ export type RevokeOutcome =
   | { state: "already_revoked" }
   | { state: "failed"; detail: string };
 
-/** `POST /credentials/self/revoke` with the key being retired; 401/403/404 mean it is already dead. */
 export async function revokeSelf(
   fetchFn: FetchLike,
   serverUrl: string,

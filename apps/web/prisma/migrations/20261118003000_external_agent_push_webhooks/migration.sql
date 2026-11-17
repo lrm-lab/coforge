@@ -5,7 +5,6 @@ CREATE TABLE "external_agent_push_webhooks" (
     "workspaceId" UUID NOT NULL,
     "url" TEXT NOT NULL,
     "secretSealed" TEXT NOT NULL,
-    "enabled" BOOLEAN NOT NULL DEFAULT true,
     "disabledReason" TEXT,
     "revision" INTEGER NOT NULL DEFAULT 1,
     "lastDeliveryAt" TIMESTAMP(3),

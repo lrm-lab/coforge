@@ -1,5 +1,5 @@
 import { CliError } from "../cli-error";
-import { isValidProfileSlug } from "./profile-store";
+import { isValidProfileSlug, type ProfileStore } from "./profile-store";
 
 export type ProfileSelection = { slug?: string; args: string[] };
 
@@ -12,10 +12,6 @@ function profileConflict(flag: string, env: string): CliError {
   });
 }
 
-/**
- * Takes the global `--profile <slug>` flag out of `args` (never past a `--`, which belongs to the
- * program an `app token --exec` runs) and settles it against `COFORGE_PROFILE`.
- */
 export function selectProfile(
   args: readonly string[],
   env: Record<string, string | undefined>,
@@ -50,4 +46,20 @@ export function selectProfile(
       retryable: false,
     });
   return { ...(slug === undefined ? {} : { slug }), args: [...kept, ...rest] };
+}
+
+export async function selectedOrOnlyProfile(
+  store: ProfileStore,
+  selected: string | undefined,
+): Promise<string | undefined> {
+  if (selected !== undefined) return selected;
+  const all = await store.listProfiles();
+  if (all.length > 1)
+    throw new CliError({
+      code: "PROFILE_AMBIGUOUS",
+      message: `Several profiles exist (${all.join(", ")}).`,
+      retryable: false,
+      suggestedNextAction: "Pass --profile <slug> or set COFORGE_PROFILE.",
+    });
+  return all[0];
 }

@@ -15,7 +15,6 @@ async function disabled(respond: () => { status: number } | Error) {
   const row = world.store.rows.get("a1")!;
   world.store.rows.set("a1", {
     ...row,
-    enabled: false,
     disabledReason: "endpoint_rejected",
     lastError: "http_404",
     rejectionStreak: 3,
@@ -48,7 +47,6 @@ describe("a recovery probe", () => {
     const { store, announced, probes, probe, clock } = await disabled(() => ({ status: 204 }));
     await probe();
     expect(store.rows.get("a1")).toMatchObject({
-      enabled: true,
       disabledReason: null,
       lastError: null,
       rejectionStreak: 0,
@@ -74,13 +72,19 @@ describe("a recovery probe", () => {
     }
     expect(gaps).toEqual([2, 4, 8, 16, 24, 24, 24, 24]);
     expect(probes.map((p) => p.delaySeconds / 3600)).toEqual(gaps);
-    expect(store.rows.get("a1")).toMatchObject({ enabled: false, probeAttempts: 8 });
+    expect(store.rows.get("a1")).toMatchObject({
+      disabledReason: "endpoint_rejected",
+      probeAttempts: 8,
+    });
   });
 
   test("an unreachable endpoint is just a failed probe", async () => {
     const { store, probe } = await disabled(() => new Error("refused"));
     await probe();
-    expect(store.rows.get("a1")).toMatchObject({ enabled: false, probeAttempts: 1 });
+    expect(store.rows.get("a1")).toMatchObject({
+      disabledReason: "endpoint_rejected",
+      probeAttempts: 1,
+    });
   });
 
   test("stops after 30 days and records when", async () => {
@@ -92,7 +96,7 @@ describe("a recovery probe", () => {
       await probe();
     }
     const row = store.rows.get("a1")!;
-    expect(row).toMatchObject({ enabled: false, nextProbeAt: null });
+    expect(row).toMatchObject({ disabledReason: "endpoint_rejected", nextProbeAt: null });
     expect(row.probeStoppedAt).toEqual(clock.at);
     expect(clock.at.getTime()).toBeLessThanOrEqual(end.getTime());
     expect(end.getTime() - clock.at.getTime()).toBeLessThan(24 * HOUR);
@@ -108,7 +112,7 @@ describe("a recovery probe", () => {
     expect(early.sent).toHaveLength(0);
 
     const enabled = await disabled(() => ({ status: 204 }));
-    enabled.store.rows.set("a1", { ...enabled.store.rows.get("a1")!, enabled: true });
+    enabled.store.rows.set("a1", { ...enabled.store.rows.get("a1")!, disabledReason: null });
     await enabled.probe();
     expect(enabled.sent).toHaveLength(0);
 
@@ -139,7 +143,7 @@ describe("a recovery probe", () => {
       return { status: 204 };
     });
     await probe();
-    expect(store.rows.get("a1")).toMatchObject({ enabled: false });
+    expect(store.rows.get("a1")).toMatchObject({ disabledReason: "endpoint_rejected" });
   });
 });
 

@@ -1,3 +1,4 @@
+import { bearerToken } from "#src/server/authorization-server/bearer-challenge.server";
 import { errorResponse } from "./agent-http-error.server";
 import { externalAgentFeature } from "./external-agent-capabilities.server";
 import {
@@ -11,29 +12,24 @@ import {
 
 const API_PREFIX = "/api/agent/v1/";
 
-export function unsupportedForExternalAgents(feature: string): Response {
+export function unsupportedForExternalAgents(
+  feature: string,
+  code = "unsupported_for_external_agents",
+  status = 403,
+): Response {
   return Response.json(
     {
       error: "This operation is not available to external Agents",
-      code: "unsupported_for_external_agents",
+      code,
       feature,
       retryable: false,
     },
-    { status: 403 },
+    { status },
   );
 }
 
-export function remindersUnsupportedForExternalAgents(feature: string): Response {
-  return Response.json(
-    {
-      error: "This operation is not available to external Agents",
-      code: "reminders_unsupported_for_external_agents",
-      feature,
-      retryable: false,
-    },
-    { status: 409 },
-  );
-}
+export const externalAgentsOnly = () =>
+  errorResponse("external_agents_only", "this operation is only for external Agents", 403, false);
 
 export async function authenticateExternalAgentRequest(
   request: Request,
@@ -41,8 +37,7 @@ export async function authenticateExternalAgentRequest(
   onSeen?: ExternalSeenNotifier,
 ): Promise<{ principal: ExternalAgentPrincipal } | Response | undefined> {
   if (request.headers.has("x-coforge-agent-api-key")) return undefined;
-  const authorization = request.headers.get("authorization");
-  const apiKey = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
+  const apiKey = bearerToken(request.headers.get("authorization") ?? "") ?? "";
   if (!apiKey.startsWith(EXTERNAL_AGENT_KEY_PREFIX)) return undefined;
   let principal: ExternalAgentPrincipal;
   try {

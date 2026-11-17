@@ -1,4 +1,5 @@
 import { CliError } from "../cli-error";
+import { isExternalCredential } from "../agent-credential";
 import { probeContext } from "./agent-context";
 import {
   pollDeviceToken,
@@ -7,6 +8,7 @@ import {
   type IssuedKey,
   type MachineIdentity,
 } from "./device-client";
+import { isLoopbackHost } from "./loopback";
 import {
   defaultProfileSlug,
   type AgentProfile,
@@ -39,7 +41,6 @@ function usage(): CliError {
   return new CliError({ code: "INVALID_ARG", message: LOGIN_USAGE, retryable: false });
 }
 
-/** A server is its origin; plain HTTP is only for a machine's own loopback. */
 export function normalizeServerUrl(value: string): string {
   let url: URL;
   try {
@@ -51,8 +52,7 @@ export function normalizeServerUrl(value: string): string {
       retryable: false,
     });
   }
-  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback))
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && isLoopbackHost(url.hostname)))
     throw new CliError({
       code: "INVALID_ARG",
       message: "--server must be an https:// URL.",
@@ -73,6 +73,10 @@ function parseValues(args: readonly string[], allowed: readonly string[]): Map<s
   return values;
 }
 
+function loginTarget(server: string, agent: string) {
+  return { server: normalizeServerUrl(server), agent: agent.replace(/^@/, "") };
+}
+
 export function parseAgentLoginArgs(args: readonly string[]): LoginInvocation {
   if (args[0] === "wait") {
     if (args.length > 1) throw usage();
@@ -84,18 +88,13 @@ export function parseAgentLoginArgs(args: readonly string[]): LoginInvocation {
     const workspace = values.get("--workspace");
     const agent = values.get("--agent");
     if (!server || !workspace || !agent) throw usage();
-    return {
-      mode: "start",
-      server: normalizeServerUrl(server),
-      workspace,
-      agent: agent.replace(/^@/, ""),
-    };
+    return { mode: "start", workspace, ...loginTarget(server, agent) };
   }
   const values = parseValues(args, ["--server", "--agent"]);
   const server = values.get("--server");
   const agent = values.get("--agent");
   if (!server || !agent) throw usage();
-  return { mode: "paste", server: normalizeServerUrl(server), agent: agent.replace(/^@/, "") };
+  return { mode: "paste", ...loginTarget(server, agent) };
 }
 
 function minutes(milliseconds: number): string {
@@ -194,15 +193,7 @@ async function finish(
   pending: PendingLogin,
   key: IssuedKey,
 ): Promise<void> {
-  await saveKey(deps, slug, {
-    serverUrl: pending.serverUrl,
-    workspaceId: key.workspaceId,
-    workspaceSlug: key.workspaceSlug,
-    agentId: key.agentId,
-    agentName: key.agentName,
-    credentialId: key.credentialId,
-    apiKey: key.apiKey,
-  });
+  await saveKey(deps, slug, { serverUrl: pending.serverUrl, ...key });
   await deps.store.removePending(slug);
 }
 
@@ -221,7 +212,7 @@ async function pasteLogin(
   deps: LoginDeps,
 ): Promise<void> {
   const apiKey = (await deps.readKey()).trim();
-  if (!apiKey.startsWith("sk_ext_"))
+  if (!isExternalCredential(apiKey))
     throw invalidKey("That is not an external Agent key (sk_ext_...).");
   const probe = await probeContext({ serverUrl: invocation.server, apiKey }, deps.fetch);
   if (probe.state === "unauthorized")
@@ -256,11 +247,6 @@ async function pasteLogin(
     credentialId: credential.id,
     apiKey,
   });
-}
-
-async function wait(deps: LoginDeps, slug: string, pending: PendingLogin): Promise<void> {
-  const key = await awaitKey(deps, slug, pending);
-  await finish(deps, slug, pending, key);
 }
 
 export async function runAgentLogin(
@@ -337,5 +323,5 @@ async function waitForPending(profileSlug: string | undefined, deps: LoginDeps):
   if (existing && !sameAgent(existing, pending.serverUrl, pending.workspace, pending.agent))
     throw alreadyExists(slug, existing);
   deps.stdout(`${pendingLines(pending, deps.now()).join("\n")}\nWaiting for approval...\n`);
-  await wait(deps, slug, pending);
+  await finish(deps, slug, pending, await awaitKey(deps, slug, pending));
 }

@@ -44,7 +44,7 @@ const invalidUrl = () =>
   new PushWebhookRefusal("invalid_url", 400, "url must be an https URL without credentials");
 
 function recoveryOf(row: PushWebhookRow): PushRecovery | null {
-  if (row.enabled) return null;
+  if (row.disabledReason === null) return null;
   const probing = row.disabledReason === "endpoint_rejected" && row.nextProbeAt !== null;
   return {
     resumesOn: probing ? "probe_success" : "put",
@@ -107,7 +107,7 @@ export class ExternalPushWebhooks {
     if (!row) return null;
     return {
       url: row.url,
-      enabled: row.enabled,
+      enabled: row.disabledReason === null,
       disabledReason: row.disabledReason,
       lastDeliveryAt: row.lastDeliveryAt,
       lastError: row.lastError,

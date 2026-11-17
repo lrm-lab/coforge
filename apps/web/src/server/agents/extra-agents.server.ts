@@ -4,7 +4,7 @@ import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.ser
 import { AGENT_VISIBILITY, normalizeAgentVisibility } from "#src/features/agents/agent-visibility";
 import { HELD_AGENT_IDS_LIMIT, type ExtraAgent } from "#src/features/agents/extra-agent";
 import { ACTIVE_AGENT_WHERE, ROSTER_AGENT_WHERE } from "./active-agent.server";
-import { externalDisplays } from "./external-agent-presence.server";
+import { agentDisplayScope } from "./external-agent-presence.server";
 import type { AgentDisplay } from "./agent-display.server";
 import {
   viewerCreatorId,
@@ -12,23 +12,6 @@ import {
   type AgentVisibilityViewer,
 } from "./agent-visibility.server";
 
-/**
- * Every Agent `viewer` may see beyond their own roster (`ManageAgents.list`): the Members
- * directory's rule (live roster Agents under `visibleAgentWhere`, an app's bot left out) minus the
- * Agents the viewer owns, so the two never disagree. The app shell keeps these live beside the
- * roster from the same status publications. Only the Agents that are busy now bring a display, and
- * so do the `heldAgentIds` the browser still shows busy (or lapsed), which comes back as their real,
- * idle snapshot and so clears; both are read in one batch and always intersected with the visible
- * rows, so the cost follows the busy Agents and the ids can never read what the viewer may not see.
- * A failed read leaves the rows without a display rather than failing the list, as `listAgents`
- * does, and the browser's next refresh asks again.
- *
- * `fullDisplays` is the first-paint and catch-up read: besides busy and held it also snapshots
- * every visible public Agent with a Computer, up to `FULL_EXTRA_DISPLAY_LIMIT` beyond them, so a
- * member sees an idle public Agent's real status instead of "unknown". Private Agents keep the
- * busy/held rule — their status floor already covers them, and the read does not widen what a
- * viewer may see. Steady-state reads leave it off.
- */
 export const FULL_EXTRA_DISPLAY_LIMIT = 200;
 
 export async function listExtraAgents(
@@ -64,11 +47,6 @@ export async function listExtraAgents(
     },
     orderBy: { id: "asc" },
   });
-  const externalDisplayById = await externalDisplays(
-    displays,
-    workspaceId,
-    rows.filter((row) => row.hosting === "external").map((row) => row.id),
-  );
   const busy = await displays.busyScopes(workspaceId, now).catch(() => []);
   const held = [...new Set(heldAgentIds)].slice(0, HELD_AGENT_IDS_LIMIT);
   const wanted = new Set([...busy.map((scope) => scope.agentId), ...held]);
@@ -86,21 +64,19 @@ export async function listExtraAgents(
       }
     }
   }
-  const scoped = rows.flatMap((row) =>
-    row.computerId && wanted.has(row.id) ? [{ row, computerId: row.computerId }] : [],
-  );
+  const scoped = rows.flatMap((row) => {
+    if (row.hosting !== "external" && !wanted.has(row.id)) return [];
+    const scope = agentDisplayScope(workspaceId, row);
+    return scope ? [{ row, scope }] : [];
+  });
   const snapshots =
     scoped.length === 0
       ? []
-      : await displays
-          .snapshotMany(
-            scoped.map(({ row, computerId }) => ({ workspaceId, computerId, agentId: row.id })),
-          )
-          .catch(() => []);
+      : await displays.snapshotMany(scoped.map(({ scope }) => scope)).catch(() => []);
   const displayById = new Map(scoped.map(({ row }, index) => [row.id, snapshots[index]] as const));
   return rows.map((row) => {
     const mascot = agentMascot(row.id, row.avatarMascot);
-    const display = externalDisplayById.get(row.id) ?? displayById.get(row.id);
+    const display = displayById.get(row.id);
     return {
       id: row.id,
       name: row.name,

@@ -1,6 +1,7 @@
-import { open, readFile, rm } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { CliError } from "../cli-error";
+import { createPrivateFile } from "../private-file";
 
 const LOCK_FILE = "bridge.lock";
 
@@ -25,9 +26,9 @@ export async function acquireBridgeLock(directory: string): Promise<() => Promis
   const path = join(directory, LOCK_FILE);
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const handle = await open(path, "wx", 0o600);
-      await handle.writeFile(`${process.pid}\n`);
-      await handle.close();
+      const file = await createPrivateFile(path);
+      await file.write(`${process.pid}\n`);
+      await file.close();
       return async () => {
         const holder = Number.parseInt(await readFile(path, "utf8").catch(() => ""), 10);
         if (holder === process.pid) await rm(path, { force: true });

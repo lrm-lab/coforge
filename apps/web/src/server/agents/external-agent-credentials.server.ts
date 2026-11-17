@@ -1,5 +1,5 @@
-import { randomBytes, timingSafeEqual } from "node:crypto";
 import { AppError } from "#src/lib/app-error";
+import { agentKeyHashMatches, generateAgentApiKey, hashAgentApiKey } from "./agent-api-key.server";
 
 export const EXTERNAL_AGENT_KEY_PREFIX = "sk_ext_";
 const EXTERNAL_AGENT_KEY = /^sk_ext_[A-Za-z0-9_-]{43}$/;
@@ -44,6 +44,7 @@ export type ExternalCredentialRecord = {
     deletedAt: Date | null;
     stoppedAt: Date | null;
     hosting: string;
+    visibility: string;
   };
 };
 
@@ -73,7 +74,7 @@ export function isExternalAgentPrincipal(principal: {
 }
 
 export type ExternalSeenNotifier = (
-  agent: { workspaceId: string; agentId: string },
+  agent: { workspaceId: string; agentId: string; visibility: string },
   seenAtMs: number,
 ) => Promise<void>;
 
@@ -113,12 +114,10 @@ export type ExternalPresenceRow = {
   lastUsedAt: Date | null;
 };
 
-export function hashExternalAgentKey(value: string): string {
-  return new Bun.CryptoHasher("sha256").update(value).digest("hex");
-}
+export const hashExternalAgentKey = hashAgentApiKey;
 
 export function generateExternalAgentKey(): string {
-  return `${EXTERNAL_AGENT_KEY_PREFIX}${randomBytes(32).toString("base64url")}`;
+  return generateAgentApiKey(EXTERNAL_AGENT_KEY_PREFIX);
 }
 
 export function isExternalAgentKeyShape(value: string): boolean {
@@ -199,11 +198,9 @@ export async function authenticateExternalAgentKey(
   onSeen?: ExternalSeenNotifier,
 ): Promise<ExternalAgentPrincipal> {
   if (!EXTERNAL_AGENT_KEY.test(apiKey)) throw new ExternalCredentialError("key_not_found");
-  const actual = Buffer.from(hashExternalAgentKey(apiKey));
-  const record = await repository.findByHash(actual.toString());
-  if (!record) throw new ExternalCredentialError("key_not_found");
-  const expected = Buffer.from(record.keyHash);
-  if (expected.length !== actual.length || !timingSafeEqual(expected, actual))
+  const actual = hashExternalAgentKey(apiKey);
+  const record = await repository.findByHash(actual);
+  if (!record || !agentKeyHashMatches(record.keyHash, actual))
     throw new ExternalCredentialError("key_not_found");
   if (record.revokedAt) throw new ExternalCredentialError("key_revoked");
   const { agent } = record;
@@ -215,9 +212,10 @@ export async function authenticateExternalAgentKey(
     await repository
       .touch(record.id, new Date(at), new Date(at - EXTERNAL_LAST_USED_INTERVAL_MS))
       .catch(() => {});
-    await onSeen?.({ workspaceId: record.workspaceId, agentId: record.agentId }, at).catch(
-      () => {},
-    );
+    void onSeen?.(
+      { workspaceId: record.workspaceId, agentId: record.agentId, visibility: agent.visibility },
+      at,
+    ).catch(() => {});
   }
   return {
     external: true,

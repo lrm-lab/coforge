@@ -12,7 +12,6 @@ const rowOf = (row: {
   workspaceId: string;
   url: string;
   secretSealed: string;
-  enabled: boolean;
   disabledReason: string | null;
   revision: number;
   lastDeliveryAt: Date | null;
@@ -38,7 +37,6 @@ export class PrismaExternalPushWebhookStore implements PushWebhookStore {
 
   async save(input: { agentId: string; workspaceId: string; url: string; secretSealed: string }) {
     const fresh = {
-      enabled: true,
       disabledReason: null,
       lastError: null,
       consecutiveFailures: 0,
@@ -81,22 +79,16 @@ export class PrismaExternalPushWebhookStore implements PushWebhookStore {
   }
 
   async record(agentId: string, revision: number, update: PushAttemptUpdate) {
-    const { disabledReason, reenable, ...rest } = update;
-    const state = disabledReason
-      ? { enabled: false, disabledReason }
-      : reenable
-        ? { enabled: true, disabledReason: null }
-        : {};
     const { count } = await this.db.externalAgentPushWebhook.updateMany({
       where: { agentId, revision },
-      data: { ...rest, ...state },
+      data: update,
     });
     return count > 0;
   }
 
   async pendingProbes() {
     const rows = await this.db.externalAgentPushWebhook.findMany({
-      where: { enabled: false, disabledReason: "endpoint_rejected", nextProbeAt: { not: null } },
+      where: { disabledReason: "endpoint_rejected", nextProbeAt: { not: null } },
       select: { agentId: true, nextProbeAt: true },
     });
     return rows.flatMap((row) =>

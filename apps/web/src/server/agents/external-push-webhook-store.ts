@@ -10,7 +10,6 @@ export type PushWebhookRow = {
   workspaceId: string;
   url: string;
   secretSealed: string;
-  enabled: boolean;
   disabledReason: PushDisabledReason | null;
   revision: number;
   lastDeliveryAt: Date | null;
@@ -45,8 +44,7 @@ export type PushAttemptUpdate = {
   nextProbeAt?: Date | null;
   probeAttempts?: number | null;
   probeStoppedAt?: Date | null;
-  disabledReason?: PushDisabledReason;
-  reenable?: true;
+  disabledReason?: PushDisabledReason | null;
 };
 
 export type PushProbeSchedule = { agentId: string; nextProbeAt: Date };

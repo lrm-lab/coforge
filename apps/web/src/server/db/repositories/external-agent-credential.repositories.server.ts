@@ -88,7 +88,15 @@ export class PrismaExternalAgentCredentialRepository implements ExternalAgentCre
           workspaceId: true,
           lastUsedAt: true,
           revokedAt: true,
-          agent: { select: { ownerId: true, deletedAt: true, stoppedAt: true, hosting: true } },
+          agent: {
+            select: {
+              ownerId: true,
+              deletedAt: true,
+              stoppedAt: true,
+              hosting: true,
+              visibility: true,
+            },
+          },
         },
       })) ?? undefined
     );

@@ -7,10 +7,11 @@ import {
   activityDrainBeside,
 } from "./bridge-activity";
 import { acquireBridgeLock } from "./bridge-lock";
-import type { FetchLike } from "./device-client";
 import { isLoopbackHost } from "./loopback";
+import type { FetchLike } from "./device-client";
 import type { ProfileStore } from "./profile-store";
-import { invalidCredentialError } from "./refusal";
+import { selectedOrOnlyProfile } from "./profile-select";
+import { invalidCredentialError, profileNotLoggedInError } from "./refusal";
 import { serverUrlOf } from "./server-request";
 
 export type BridgeOptions = {
@@ -126,37 +127,15 @@ export function describeHint(hint: WakeHint): string {
   return `${hint.target ?? hint.channelId}: ${hint.pendingCount} unread${flags}${sender}`;
 }
 
-async function resolveSlug(store: ProfileStore, selected: string | undefined): Promise<string> {
-  if (selected !== undefined) return selected;
-  const all = await store.listProfiles();
-  if (all.length === 1) return all[0]!;
-  throw new CliError({
-    code: all.length === 0 ? "PROFILE_NOT_LOGGED_IN" : "PROFILE_AMBIGUOUS",
-    message:
-      all.length === 0 ? "No Agent profile exists." : `Several profiles exist (${all.join(", ")}).`,
-    retryable: false,
-    suggestedNextAction:
-      all.length === 0
-        ? "Run `coforge agent login --server <url> --workspace <slug> --agent <name>` first."
-        : "Pass --profile <slug> or set COFORGE_PROFILE.",
-  });
-}
-
 export async function runBridge(
   options: BridgeOptions,
   selected: string | undefined,
   deps: BridgeDeps,
 ): Promise<number> {
-  const slug = await resolveSlug(deps.store, selected);
+  const slug = await selectedOrOnlyProfile(deps.store, selected);
+  if (slug === undefined) throw profileNotLoggedInError();
   const profile = await deps.store.readProfile(slug);
-  if (!profile)
-    throw new CliError({
-      code: "PROFILE_NOT_LOGGED_IN",
-      message: `Profile "${slug}" has no credential.`,
-      retryable: false,
-      suggestedNextAction:
-        "Run `coforge agent login --server <url> --workspace <slug> --agent <name>` first.",
-    });
+  if (!profile) throw profileNotLoggedInError(slug);
   if (options.expectedAgent && options.expectedAgent !== profile.agentId)
     throw new CliError({
       code: "AGENT_MISMATCH",

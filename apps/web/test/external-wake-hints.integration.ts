@@ -248,7 +248,7 @@ describe("the push webhook store", () => {
       (await store.pendingProbes()).filter((probe) => probe.agentId === agentId);
     expect(await probesOf()).toEqual([]);
     const first = (await store.find(agentId))!;
-    expect(first).toMatchObject({ revision: 1, enabled: true });
+    expect(first).toMatchObject({ revision: 1, disabledReason: null });
     expect(
       await store.record(agentId, 1, {
         lastError: "http_410",
@@ -264,7 +264,6 @@ describe("the push webhook store", () => {
       }),
     ).toBe(true);
     expect(await store.find(agentId)).toMatchObject({
-      enabled: false,
       disabledReason: "endpoint_rejected",
       probeAttempts: 0,
     });
@@ -277,14 +276,13 @@ describe("the push webhook store", () => {
         retryAt: null,
         retryNoticeId: null,
         unauthorizedSince: null,
-        reenable: true,
+        disabledReason: null,
         disabledAt: null,
         nextProbeAt: null,
         probeAttempts: null,
       }),
     ).toBe(true);
     expect(await store.find(agentId)).toMatchObject({
-      enabled: true,
       disabledReason: null,
       nextProbeAt: null,
     });
@@ -297,7 +295,6 @@ describe("the push webhook store", () => {
     });
     expect(await store.find(agentId)).toMatchObject({
       revision: 2,
-      enabled: true,
       disabledReason: null,
       consecutiveFailures: 0,
       url: "https://b.example/x",

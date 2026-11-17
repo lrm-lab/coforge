@@ -8,8 +8,6 @@ function unconfirmed(local: WhoamiResult, code: string, error: string): WhoamiRe
   return { ...local, serverConfirmed: false, serverErrorCode: code, serverError: error };
 }
 
-/** `coforge whoami` for an external Agent: the profile's own record, confirmed by the server's
- * `GET /context`; `--prompt` prints the operating guide the server holds for the Agent. */
 export async function runExternalWhoami(
   session: ExternalSession,
   invocation: WhoamiInvocation,

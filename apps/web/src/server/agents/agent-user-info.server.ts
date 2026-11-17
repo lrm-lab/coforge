@@ -28,17 +28,8 @@ export type AgentUserInfoOutcome =
   | { status: 200; body: AgentUserInfoResponse }
   | { status: 404; body: AgentUserInfoErrorBody };
 
-/** `findWorkspaceUser`'s distinct answer for a name that resolves to a real, private Agent the
- * viewer cannot see — never conflated with a name that matches nothing at all. */
 export const AGENT_NOT_VISIBLE = "agent-not-visible" as const;
 
-/**
- * Live status + a short `availability` reason, sourced the same way the Workspace Agents list
- * reads it (`agents.functions.ts#listAgents`): the Redis-backed Agent display projection
- * (`agent-display.server.ts`) reduced through `agentDisplay()`, the single online/offline
- * decision the rest of the product reads. An Agent with no assigned Computer, or
- * whose display snapshot cannot be read, is reported "unknown" rather than guessed as offline.
- */
 export async function resolveAgentStatus(
   workspaceId: string,
   agent: ExternalAwareAgent,
@@ -48,12 +39,6 @@ export async function resolveAgentStatus(
   return only;
 }
 
-/**
- * The same answer per Agent, for a list, read in one round trip: agent lists (the profile's created
- * Agents, the Agent API's workspace view) are the reason this exists, and a per-Agent display read
- * is one Redis transaction each. A display failure loses every row's live status together rather
- * than one at a time, and still reports "unknown" rather than guessing "offline".
- */
 export async function resolveAgentStatuses(
   workspaceId: string,
   agents: ReadonlyArray<ExternalAwareAgent>,
@@ -62,19 +47,17 @@ export async function resolveAgentStatuses(
   const externalIds = external
     ? agents.filter((agent) => agent.hosting === "external").map((agent) => agent.id)
     : [];
-  const setups = external
-    ? await externalSetups(external, externalIds).catch(() => new Map<string, ExternalSetup>())
-    : new Map<string, ExternalSetup>();
-  const fromDisplay = agents.filter((agent) => !setups.has(agent.id));
-  const displayed = await resolveDisplayedStatuses(workspaceId, fromDisplay);
-  const displayedById = new Map(
-    fromDisplay.map((agent, index) => [agent.id, displayed[index]!] as const),
-  );
-  return agents.map((agent) => {
+  const [setups, displayed] = await Promise.all([
+    external
+      ? externalSetups(external, externalIds).catch(() => new Map<string, ExternalSetup>())
+      : new Map<string, ExternalSetup>(),
+    resolveDisplayedStatuses(workspaceId, agents),
+  ]);
+  return agents.map((agent, index) => {
     const setup = setups.get(agent.id);
     if (setup)
       return { status: setup.state === "online" ? ("online" as const) : ("offline" as const) };
-    return displayedById.get(agent.id)!;
+    return displayed[index]!;
   });
 }
 
@@ -110,9 +93,6 @@ async function resolveDisplayedStatuses(
       scoped.map((agent, index) => [agent.id, snapshots[index]] as const),
     );
   } catch {
-    // The batched read failed as a whole, so fall back to one read per Agent: a single Agent's
-    // unreadable display must not blank out every other row's live status, which is the property
-    // the Agent API states and this change must not trade away. Only the failure path pays N reads.
     snapshotByAgentId = new Map(
       await Promise.all(
         scoped.map(async (agent) => {
@@ -130,7 +110,6 @@ async function resolveDisplayedStatuses(
   );
 }
 
-/** The single online/offline decision, from a display snapshot or its absence. */
 function statusFromDisplay(
   snapshot: Awaited<ReturnType<ReturnType<typeof getAgentDisplay>["snapshot"]>> | undefined,
   stopped: boolean,
@@ -141,7 +120,6 @@ function statusFromDisplay(
   return { status, ...(display.statusDetail ? { availability: display.statusDetail } : {}) };
 }
 
-/** The original single-Agent body, kept for the callers that read one Agent. */
 export type ResolvedWorkspaceUser =
   | {
       kind: "human";
@@ -165,15 +143,6 @@ export type ResolvedWorkspaceUser =
       ownerId: string;
     };
 
-/** Finds a human or Agent by Username in one Workspace. A new Agent cannot take a current
- * member's username (`PrismaAgentRepository.create`), so the two rarely share one; a member who
- * joins after such an Agent exists still can, and the Agent match wins first. Shared by
- * `user info` and `profile show`.
- *
- * A private Agent `viewer` cannot see answers the distinct `AGENT_NOT_VISIBLE`
- * sentinel, never conflated with `undefined` (a name that matches nothing at all) — the Web
- * profile panel and the Agent CLI both render the specific "not visible" explanation instead of a
- * generic "not found"; only the human/Agent's other details stay withheld. */
 export async function findWorkspaceUser(
   db: PrismaClient,
   workspaceId: string,
@@ -234,9 +203,6 @@ export async function findWorkspaceUser(
   };
 }
 
-/** Every channel the target currently belongs to (`leftAt: null`) that the caller's `reader` may
- * read too (`visibleChannelWhere`), as the reference client lists them: a private channel the
- * caller is not in stays out. */
 async function targetChannelMemberships(
   db: PrismaClient,
   workspaceId: string,
@@ -275,10 +241,6 @@ async function targetChannelMemberships(
   return memberships;
 }
 
-/** Resolves `GET /api/agent/v1/users/:name`.
- * Narrow, visible facts about one human or Agent in the caller's Workspace, plus every channel
- * the target belongs to. 404s as `user_not_found` when neither a
- * human nor an Agent of that name exists in the caller's Workspace. */
 export async function resolveAgentUserInfo(
   db: PrismaClient,
   principal: { workspaceId: string; agentId: string },
@@ -307,11 +269,12 @@ export async function resolveAgentUserInfo(
         error: `User not found or not visible: @${name}`,
       },
     };
-  const memberships = await targetChannelMemberships(db, principal.workspaceId, reader, {
+  const membershipsRead = targetChannelMemberships(db, principal.workspaceId, reader, {
     kind: target.kind,
     id: target.id,
   });
   if (target.kind === "human") {
+    const memberships = await membershipsRead;
     const user: AgentUserInfo = {
       kind: "human",
       id: target.id,
@@ -323,16 +286,19 @@ export async function resolveAgentUserInfo(
     };
     return { status: 200, body: { ok: true, user, memberships } };
   }
-  const { status, availability } = await resolveAgentStatus(
-    principal.workspaceId,
-    {
-      id: target.id,
-      computerId: target.computerId,
-      stoppedAt: target.stoppedAt,
-      hosting: target.hosting,
-    },
-    externalPresenceOf(db),
-  );
+  const [memberships, { status, availability }] = await Promise.all([
+    membershipsRead,
+    resolveAgentStatus(
+      principal.workspaceId,
+      {
+        id: target.id,
+        computerId: target.computerId,
+        stoppedAt: target.stoppedAt,
+        hosting: target.hosting,
+      },
+      externalPresenceOf(db),
+    ),
+  ]);
   const user: AgentUserInfo = {
     kind: "agent",
     id: target.id,

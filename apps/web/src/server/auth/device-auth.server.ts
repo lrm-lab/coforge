@@ -180,9 +180,6 @@ export async function pollDeviceToken(input: {
   // the row may be handed a token. The loser sees the same answer a replayed code gets.
   if (clientId === EXTERNAL_DEVICE_CLIENT_ID) {
     if (!input.external) return { status: "error", error: "invalid_grant" };
-    // What approval checked may have changed since (the approver lost the role, the Agent was
-    // stopped, its keys filled up): check it again before the code is spent, and end the grant
-    // instead of minting.
     const grant = readExternalAgentGrant(record.grant);
     const refusal =
       grant &&
@@ -192,7 +189,6 @@ export async function pollDeviceToken(input: {
         agentId: grant.agentId,
       }));
     if (refusal) {
-      // Spent rather than denied: `deny` only settles a pending grant, and this one was approved.
       await input.store.consume(record.id);
       return { status: "error", error: "access_denied", coforgeCode: refusal };
     }
@@ -221,8 +217,6 @@ export async function lookupUserCode(input: {
   store: DeviceAuthorizationStore;
   userCode: string;
   now?: () => number;
-  /** Who is looking: a coforge-cli code shows its Agent, Workspace and machine only to a person
-   * allowed to approve it; anyone else learns only that they cannot. */
   userId?: string;
   directory?: Pick<ExternalAgentDeviceDirectory, "identity" | "approvalRefusal">;
 }): Promise<UserCodeLookup> {

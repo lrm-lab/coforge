@@ -20,8 +20,6 @@ export function serverUrlOf(serverUrl: string, path: string): URL {
   return url;
 }
 
-/** One Agent API call straight to the server with the Agent's own key. A refusal becomes the CLI
- * error its answer stands for; the key never appears in an error. */
 export async function serverRequest(
   { serverUrl, apiKey }: ServerConnection,
   request: ServerRequest,

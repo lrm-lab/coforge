@@ -40,7 +40,7 @@ describe("a notice", () => {
 
   test("is not sent for a disabled registration", async () => {
     const { sent, store, run } = await setup(() => ({ status: 204 }));
-    store.rows.set("a1", { ...store.rows.get("a1")!, enabled: false });
+    store.rows.set("a1", { ...store.rows.get("a1")!, disabledReason: "endpoint_rejected" });
     await run();
     expect(sent).toHaveLength(0);
   });
@@ -61,7 +61,11 @@ describe("a failed attempt is retried with the same notice id", () => {
     await run("n7");
     expect(rescheduled).toEqual([{ agentId: "a1", noticeId: "n7", delaySeconds: delay }]);
     const row = store.rows.get("a1")!;
-    expect(row).toMatchObject({ enabled: true, consecutiveFailures: 1, retryNoticeId: "n7" });
+    expect(row).toMatchObject({
+      disabledReason: null,
+      consecutiveFailures: 1,
+      retryNoticeId: "n7",
+    });
     expect(row.retryAt).toEqual(new Date(NOW.getTime() + delay * 1000));
     expect(row.lastError).not.toBeNull();
   });
@@ -98,10 +102,9 @@ describe("an endpoint that rejects", () => {
     const { store, rescheduled, run } = await setup(() => ({ status }));
     await run();
     await run();
-    expect(store.rows.get("a1")).toMatchObject({ enabled: true, rejectionStreak: 2 });
+    expect(store.rows.get("a1")).toMatchObject({ disabledReason: null, rejectionStreak: 2 });
     await run();
     expect(store.rows.get("a1")).toMatchObject({
-      enabled: false,
       disabledReason: "endpoint_rejected",
     });
     expect(rescheduled).toHaveLength(2);
@@ -111,14 +114,14 @@ describe("an endpoint that rejects", () => {
     const answers = [404, 410, 404];
     const { store, run } = await setup(() => ({ status: answers.shift()! }));
     for (let i = 0; i < 3; i++) await run();
-    expect(store.rows.get("a1")).toMatchObject({ enabled: false });
+    expect(store.rows.get("a1")).toMatchObject({ disabledReason: "endpoint_rejected" });
   });
 
   test("an answer in between resets the streak", async () => {
     const answers = [404, 404, 500, 404, 404];
     const { store, run } = await setup(() => ({ status: answers.shift()! }));
     for (let i = 0; i < 5; i++) await run();
-    expect(store.rows.get("a1")).toMatchObject({ enabled: true, rejectionStreak: 2 });
+    expect(store.rows.get("a1")).toMatchObject({ disabledReason: null, rejectionStreak: 2 });
   });
 
   test("a 401 streak younger than 24 hours keeps retrying", async () => {
@@ -127,7 +130,7 @@ describe("an endpoint that rejects", () => {
       await run();
       clock.at = new Date(clock.at.getTime() + 60 * 60 * 1000);
     }
-    expect(store.rows.get("a1")).toMatchObject({ enabled: true, rejectionStreak: 5 });
+    expect(store.rows.get("a1")).toMatchObject({ disabledReason: null, rejectionStreak: 5 });
     expect(rescheduled).toHaveLength(5);
   });
 
@@ -139,7 +142,6 @@ describe("an endpoint that rejects", () => {
     clock.at = new Date(NOW.getTime() + 24 * 3600 * 1000);
     await run();
     expect(store.rows.get("a1")).toMatchObject({
-      enabled: false,
       disabledReason: "endpoint_rejected",
     });
   });
@@ -149,7 +151,7 @@ describe("an endpoint that rejects", () => {
     await run();
     clock.at = new Date(NOW.getTime() + 25 * 3600 * 1000);
     await run();
-    expect(store.rows.get("a1")).toMatchObject({ enabled: true, rejectionStreak: 2 });
+    expect(store.rows.get("a1")).toMatchObject({ disabledReason: null, rejectionStreak: 2 });
   });
 
   test("any other answer ends a 401 streak, and a 404 starts its own", async () => {
@@ -159,7 +161,7 @@ describe("an endpoint that rejects", () => {
       await run();
       clock.at = new Date(clock.at.getTime() + 20 * 3600 * 1000);
     }
-    expect(store.rows.get("a1")).toMatchObject({ enabled: true, rejectionStreak: 1 });
+    expect(store.rows.get("a1")).toMatchObject({ disabledReason: null, rejectionStreak: 1 });
   });
 
   test("turning off starts the recovery probes one hour later", async () => {
@@ -184,7 +186,6 @@ describe("a recipient that is gone", () => {
     await run();
     expect(sent).toHaveLength(0);
     expect(store.rows.get("a1")).toMatchObject({
-      enabled: false,
       disabledReason: "agent_unavailable",
     });
   });

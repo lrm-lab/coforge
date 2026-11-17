@@ -1,3 +1,4 @@
+import { isRecord } from "@lrm/coforge-sdk/internal";
 import type { FetchLike } from "./device-client";
 import { invalidCredentialError } from "./refusal";
 import { serverUrlOf } from "./server-request";
@@ -24,9 +25,6 @@ export function activityDrainBeside(wakeEndpoint: URL): URL {
 export type ActivitySource = { endpoint: URL; limit: number; token?: string };
 
 type Deps = { fetch: FetchLike; stderr: (text: string) => void };
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 export class ActivityPump {
   private pending: Record<string, unknown>[] = [];

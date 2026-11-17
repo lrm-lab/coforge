@@ -148,7 +148,9 @@ test("being seen is reported only when the lastUsedAt write is due", async () =>
   };
   await authenticateExternalAgentKey(apiKey, repository, () => start, onSeen);
   await authenticateExternalAgentKey(apiKey, repository, () => start + 10_000, onSeen);
-  expect(seen).toEqual([{ agent: { workspaceId: WORKSPACE, agentId: AGENT }, at: start }]);
+  expect(seen).toEqual([
+    { agent: { workspaceId: WORKSPACE, agentId: AGENT, visibility: "public" }, at: start },
+  ]);
   await authenticateExternalAgentKey(
     apiKey,
     repository,

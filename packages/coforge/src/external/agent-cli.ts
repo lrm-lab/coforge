@@ -15,7 +15,6 @@ export function isAgentSubcommand(args: readonly string[]): boolean {
   );
 }
 
-/** `coforge agent login|status|logout`: profile management, which never needs a profile to exist. */
 export async function runAgentSubcommand(
   args: readonly string[],
   profileSlug: string | undefined,

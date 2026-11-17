@@ -1,34 +1,19 @@
+import type { AgentContextResponse } from "@lrm/coforge-sdk/agent";
 import type { FetchLike } from "./device-client";
 import { serverUrlOf } from "./server-request";
 import type { AgentProfile } from "./profile-store";
 
-export type AgentContextView = {
-  agent: {
-    id: string;
-    name: string;
-    displayName: string;
-    description: string;
-    role: string;
-    external: boolean;
-  };
-  workspace: { id: string; slug: string; name: string };
-  credential: { id: string } | null;
-  capabilities: string[] | null;
-  prompt: { text: string } | null;
-};
-
 export type ContextProbe =
-  | { state: "ok"; context: AgentContextView }
+  | { state: "ok"; context: AgentContextResponse }
   | { state: "unauthorized" }
   | { state: "unreachable"; detail: string };
 
-function isContextView(value: unknown): value is AgentContextView {
+function isContextView(value: unknown): value is AgentContextResponse {
   if (!value || typeof value !== "object") return false;
-  const { agent, workspace } = value as Partial<AgentContextView>;
+  const { agent, workspace } = value as Partial<AgentContextResponse>;
   return typeof agent?.id === "string" && typeof workspace?.slug === "string";
 }
 
-/** `GET /context` with the profile's key: the server's own answer about who this key is. */
 export async function probeContext(
   profile: Pick<AgentProfile, "serverUrl" | "apiKey">,
   fetchFn: FetchLike = fetch,

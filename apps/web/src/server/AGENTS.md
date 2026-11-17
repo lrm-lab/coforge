@@ -33,6 +33,7 @@ The module map of `src/server/`, split out of [`apps/web/AGENTS.md`](../../AGENT
 - `server/db/` — the Prisma client, repositories (a DM's list preferences apart from its messages; the Agent attention rule in `agent-attention`), and the shared unique-violation check.
 - `server/errors/` — public error mapping and request error handling.
 - `server/canonical-hash.server.ts` — one value as key-sorted JSON and its SHA-256 (`payloadHash`): the hash a retried request is told apart by (an app event's payload, an artifact comment's request).
+- `server/sealed-values.server.ts` — AES-GCM `v1.<iv>.<ciphertext>` sealing of a secret at rest, bound to a caller-chosen context string (`SealedValues`): the one scheme GitHub secrets and external Agent push webhook secrets share.
 - `server/experiments/` — the experiments a Workspace's owner or admin switches in Settings: the catalog, the Workspace's stored choices, and the realtime signal that its features changed.
 - `server/feature-flags/` — whether a feature is on for a Workspace (`isFeatureEnabled`): the flag registry, and the flagd definition file the boot reads and installs as the OpenFeature provider (`COFORGE_FEATURE_FLAGS_FILE`).
 - `server/egress/` — outbound HTTP to an address a third party chose (Web Push endpoints, app webhooks): resolve, require every address public, then send pinned to the checked address, no redirect (`OutboundEgress`).

@@ -4,6 +4,8 @@ import { resolveActorServerRole } from "#src/server/conversations/channel-author
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
 import { externalAgentFeatures } from "./external-agent-capabilities.server";
 
+const EXTERNAL_FEATURES = externalAgentFeatures();
+
 export async function readAgentContext(
   db: PrismaClient,
   principal: { workspaceId: string; agentId: string; credentialId?: string; external?: true },
@@ -29,7 +31,7 @@ export async function readAgentContext(
     agent: resolvedAgent,
     workspace,
     credential: principal.credentialId ? { id: principal.credentialId } : null,
-    capabilities: principal.external ? externalAgentFeatures() : null,
+    capabilities: principal.external ? [...EXTERNAL_FEATURES] : null,
     prompt: principal.external
       ? { text: buildExternalAgentGuide({ agent: resolvedAgent, workspace }) }
       : null,

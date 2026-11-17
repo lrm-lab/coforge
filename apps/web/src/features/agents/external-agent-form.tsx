@@ -63,6 +63,13 @@ export function ExternalAgentForm({
     return () => onBusyChange(false);
   }, [createdAgent, onBusyChange]);
 
+  async function refreshLists() {
+    await Promise.all([
+      refreshDirectory().catch(() => undefined),
+      refreshSidebar(["dms"]).catch(() => undefined),
+    ]);
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -84,10 +91,7 @@ export function ExternalAgentForm({
             description,
           },
         });
-        await Promise.all([
-          refreshDirectory().catch(() => undefined),
-          refreshSidebar(["dms"]).catch(() => undefined),
-        ]);
+        await refreshLists();
         setCreatedAgent({
           id: result.agent.id,
           name: result.agent.name,
@@ -100,12 +104,8 @@ export function ExternalAgentForm({
     });
   }
 
-  async function finish() {
-    if (!createdAgent) {
-      onClose();
-      return;
-    }
-    if (await openDirect({ agentId: createdAgent.id }, { replace: conversationReplacesPage })) {
+  async function finish(agentId: string) {
+    if (await openDirect({ agentId }, { replace: conversationReplacesPage })) {
       closeList();
       if (conversationReplacesPage) return;
     }
@@ -117,12 +117,9 @@ export function ExternalAgentForm({
       <ExternalAgentConnectStep
         agent={createdAgent}
         workspaceSlug={workspaceSlug}
-        onDone={() => void finish()}
+        onDone={() => void finish(createdAgent.id)}
         onDiscarded={async () => {
-          await Promise.all([
-            refreshDirectory().catch(() => undefined),
-            refreshSidebar(["dms"]).catch(() => undefined),
-          ]);
+          await refreshLists();
           onClose();
         }}
       />

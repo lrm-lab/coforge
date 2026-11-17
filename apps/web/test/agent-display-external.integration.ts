@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { RedisClient } from "bun";
 import { RedisAgentDisplay } from "#src/server/agents/agent-display.server";
+import { EXTERNAL_ONLINE_WINDOW_MS } from "#src/server/agents/external-agent-presence.server";
 
 const redisServer = Bun.which("redis-server");
 if (!redisServer) throw new Error("redis-server is required for the external display suite");
@@ -9,7 +10,7 @@ let server: ReturnType<typeof Bun.spawn> | undefined;
 let redis: RedisClient;
 let now = 1_000_000_000;
 
-const WINDOW = 120_000;
+const WINDOW = EXTERNAL_ONLINE_WINDOW_MS;
 const scope = { workspaceId: "workspace-a", computerId: "", agentId: "agent-a" };
 
 const display = () => new RedisAgentDisplay(redis, () => now);

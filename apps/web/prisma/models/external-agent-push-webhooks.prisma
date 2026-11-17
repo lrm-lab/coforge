@@ -8,8 +8,7 @@ model ExternalAgentPushWebhook {
   workspaceId         String    @db.Uuid
   url                 String
   secretSealed        String
-  enabled             Boolean   @default(true)
-  /// endpoint_rejected | endpoint_invalid | agent_unavailable; null while enabled
+  /// endpoint_rejected | endpoint_invalid | agent_unavailable; null while push is on
   disabledReason      String?
   revision            Int       @default(1)
   lastDeliveryAt      DateTime?

@@ -16,11 +16,11 @@ function serverOrigin(): string {
     : "https://coforge.example";
 }
 
-export function externalAgentProfileSlug(workspaceSlug: string, agentName: string): string {
+function externalAgentProfileSlug(workspaceSlug: string, agentName: string): string {
   return `${workspaceSlug}-${agentName}`;
 }
 
-export function externalAgentPrompt(workspaceSlug: string, agentName: string): string {
+function externalAgentPrompt(workspaceSlug: string, agentName: string): string {
   const origin = serverOrigin();
   const profile = externalAgentProfileSlug(workspaceSlug, agentName);
   return m.external_agent_prompt({

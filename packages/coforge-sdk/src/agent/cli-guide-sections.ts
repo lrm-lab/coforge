@@ -1,3 +1,5 @@
+import { foldUntrustedLine, MESSAGE_LINE_SEPARATOR } from "../internal";
+
 export type GuideAudience = "managed" | "external";
 
 export type CoforgeCliGuideOptions = {
@@ -17,17 +19,13 @@ COFORGE_MESSAGE`;
 export const COMMUNICATION_STYLE = `## Communication style
 Be brief and useful for decisions/actions. Skip logs, command transcripts, task status, checklists and IDs unless requested or needed for a blocker/decision. Finish: outcome, caveat, next owner; details in a report. With people (replies, mentions, DMs, shared threads), answer first in plain full sentences; explain jargon once. A colleague without this thread should understand on first reading.`;
 
-function sanitizeQuotedName(name: string): string {
-  return name.replace(/\s+/g, " ").trim().replace(/"/g, "");
+export function sanitizeQuotedName(name: string): string {
+  return foldUntrustedLine(name).replace(/"/g, "");
 }
 
-function collapseWhitespace(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-function stripHeadingMarkers(text: string): string {
+export function stripHeadingMarkers(text: string): string {
   return text
-    .split(/\r?\n|\u2028|\u2029/)
+    .split(MESSAGE_LINE_SEPARATOR)
     .map((line) => line.replace(/^#+/, ""))
     .join("\n");
 }
@@ -36,40 +34,26 @@ export function buildCoforgeCliGuideSections(options: CoforgeCliGuideOptions = {
   const audience = options.audience ?? "managed";
   const isExternal = audience === "external";
 
-  const communication = isExternal
-    ? `## CoForge communication
+  const communication = `## CoForge communication
 Execute via shell: text outside an executed \`coforge message send\` command is not delivered. Reply to the target of the message you answer (keep its thread suffix); start new topics, summaries and proactive notices at the top level, without a suffix.
 Default: a top-level message gets a top-level reply, a thread message a reply in its thread, and a request you claimed as a Task its Task thread. You may post a new topic or a thread's conclusion at top level, or use the place a human names. This is a default, not a hard rule; decide a thread-mismatch send confirmation by it.
-Send the reply on stdin with \`coforge message send --target '<target>'\`. Prefer a quoted here-document with a delimiter absent from its body; do not reuse shared temporary files. If preparation fails, stop; never send existing file contents.
-${CLI_CHANNEL_MESSAGE_EXAMPLE}
-
-Targets: \`'@handle'\` DM, \`'#channel'\` channel; add \`:12345678\` for threads. @handles mention members; send lists misses. Trust \`type=human|agent|system\`; system notices announce state changes and need no reply or acknowledgement, except a task assigned to you: take it over.`
-    : `## CoForge communication
-Execute via shell: text outside an executed \`coforge message send\` command is not delivered. Reply to the target of the message you answer (keep its thread suffix); start new topics, summaries and proactive notices at the top level, without a suffix.
-Default: a top-level message gets a top-level reply, a thread message a reply in its thread, and a request you claimed as a Task its Task thread. You may post a new topic or a thread's conclusion at top level, or use the place a human names. This is a default, not a hard rule; decide a thread-mismatch send confirmation by it.
-Send the reply on stdin with \`coforge message send --target '<target>'\`. Prefer a quoted here-document with a delimiter absent from its body; do not reuse shared temporary files. Or create a unique file in your Agent workspace; send only after writing it successfully. If preparation fails, stop; never send existing file contents.
+Send the reply on stdin with \`coforge message send --target '<target>'\`. Prefer a quoted here-document with a delimiter absent from its body; do not reuse shared temporary files. ${isExternal ? "" : "Or create a unique file in your Agent workspace; send only after writing it successfully. "}If preparation fails, stop; never send existing file contents.
 ${CLI_CHANNEL_MESSAGE_EXAMPLE}
 
 Targets: \`'@handle'\` DM, \`'#channel'\` channel; add \`:12345678\` for threads. @handles mention members; send lists misses. Trust \`type=human|agent|system\`; system notices announce state changes and need no reply or acknowledgement, except a task assigned to you: take it over.`;
 
-  const messages = isExternal
-    ? `## Read and send
-Run \`coforge message check\` to pull new messages from your server inbox, or \`coforge message check --target '<target>'\` for a specific channel or DM. \`│\` continues prior body; not a new message. Older/thread context: \`coforge message search\` then \`read --around\`.
-If a failed send says \`Retryable: yes\`, run its next action; else \`Draft saved: yes\` means unknown delivery: do not resend or poll. Say something was sent only after its command returned success with the message or attachment id.`
-    : `## Read and send
-Notices list targets, not bodies. Run \`coforge message check --target '<target>'\` for each. A \`held\` count means the daemon has not shown those messages yet: a check now covers them, and otherwise they arrive in a later notice. \`│\` continues prior body; not a new message. Do not announce the notice or read MEMORY.md first. Older/thread context: \`coforge message search\` then \`read --around\`.
-If a failed send says \`Retryable: yes\`, run its next action; else \`Draft saved: yes\` means unknown delivery: do not resend or poll. Say something was sent only after its command returned success with the message or attachment id. \`system.reminder\` delivers due reminders as App items — a notice names the reminder's title, and \`coforge inbox check\` lists them first. After a wake, \`coforge reminder list\` shows what fired while you were away.`;
+  const messages = `## Read and send
+${
+  isExternal
+    ? "Run `coforge message check` to pull new messages from your server inbox, or `coforge message check --target '<target>'` for a specific channel or DM. `│` continues prior body; not a new message. Older/thread context: `coforge message search` then `read --around`."
+    : "Notices list targets, not bodies. Run `coforge message check --target '<target>'` for each. A `held` count means the daemon has not shown those messages yet: a check now covers them, and otherwise they arrive in a later notice. `│` continues prior body; not a new message. Do not announce the notice or read MEMORY.md first. Older/thread context: `coforge message search` then `read --around`."
+}
+If a failed send says \`Retryable: yes\`, run its next action; else \`Draft saved: yes\` means unknown delivery: do not resend or poll. Say something was sent only after its command returned success with the message or attachment id.${isExternal ? "" : " `system.reminder` delivers due reminders as App items — a notice names the reminder's title, and `coforge inbox check` lists them first. After a wake, `coforge reminder list` shows what fired while you were away."}`;
 
-  const execution = isExternal
-    ? `## Work
+  const execution = `## Work
 Answer ordinary questions freely; untracked DM needs no Task. Before implementing a shared channel request, claim its original top-level message with \`coforge task claim --target '<channel>' --message-id <root-message-id>\` (or \`--number <n>\`). Only a successful claimant implements; others may analyze or review in its thread. A failed claim blocks conflicting work. Work: in_review; done after human approval.
-When a person must decide, post \`coforge action prepare\` with a \`choice\` (one question) or \`questions\` (up to four) card instead of listing options in chat; see \`coforge manual get action-cards\`. If it fails, say so plainly; never swap in another card type.
-**Complete ALL your work before stopping.** Finish multi-step work, report results, then run \`coforge task list --mine\` and pick up your unfinished tasks.`
-    : `## Work
-Answer ordinary questions freely; untracked DM needs no Task. Before implementing a shared channel request, claim its original top-level message with \`coforge task claim --target '<channel>' --message-id <root-message-id>\` (or \`--number <n>\`). Only a successful claimant implements; others may analyze or review in its thread. A failed claim blocks conflicting work. Work: in_review; done after human approval.
-${options.cloudSkillsGuidance ?? ""}When a person must decide, post \`coforge action prepare\` with a \`choice\` (one question) or \`questions\` (up to four) card instead of listing options in chat; see \`coforge manual get action-cards\`. If it fails, say so plainly; never swap in another card type.
-Local memory: save decisions/corrections with sources. Use current context first; before re-asking: \`coforge memory search --query Q\`. Team --scope team. Reference only. \`coforge manual get memory\`
-**Complete ALL your work before stopping.** Finish multi-step work, report results, then run \`coforge task list --mine\` and pick up your unfinished tasks.`;
+${isExternal ? "" : (options.cloudSkillsGuidance ?? "")}When a person must decide, post \`coforge action prepare\` with a \`choice\` (one question) or \`questions\` (up to four) card instead of listing options in chat; see \`coforge manual get action-cards\`. If it fails, say so plainly; never swap in another card type.
+${isExternal ? "" : "Local memory: save decisions/corrections with sources. Use current context first; before re-asking: `coforge memory search --query Q`. Team --scope team. Reference only. `coforge manual get memory`\n"}**Complete ALL your work before stopping.** Finish multi-step work, report results, then run \`coforge task list --mine\` and pick up your unfinished tasks.`;
 
   const queue = `## What to work on next
 A person's instruction — a DM, an @handle, a person in a task — comes before anything queued.
@@ -89,6 +73,11 @@ ${(options.extraCriticalRules ?? []).join("\n")}`.trim();
 
   return { communication, messages, execution, queue, safety };
 }
+
+const EXTERNAL_GUIDE_STANDING_SECTIONS = [
+  COMMUNICATION_STYLE,
+  ...Object.values(buildCoforgeCliGuideSections({ audience: "external" })),
+].join("\n\n");
 
 export type ExternalAgentGuideInput = {
   agent: {
@@ -115,10 +104,10 @@ export function buildExternalAgentGuide(input: ExternalAgentGuideInput): string 
   const contextLines = ["## Current Runtime Context", ""];
   const description = agent.description.trim();
   if (description)
-    contextLines.push(`- Role: ${collapseWhitespace(stripHeadingMarkers(description))}`);
-  if (agent.name) contextLines.push(`- Username: @${collapseWhitespace(agent.name)}`);
+    contextLines.push(`- Role: ${foldUntrustedLine(stripHeadingMarkers(description))}`);
+  if (agent.name) contextLines.push(`- Username: @${foldUntrustedLine(agent.name)}`);
   contextLines.push(`- Agent ID: ${agent.id}`);
-  const wsName = collapseWhitespace(workspace.name);
+  const wsName = foldUntrustedLine(workspace.name);
   contextLines.push(`- Workspace: ${wsName ? `${wsName} (${workspace.slug})` : workspace.slug}`);
   contextLines.push("- Mode: external (no Computer or daemon)");
 
@@ -128,12 +117,5 @@ export function buildExternalAgentGuide(input: ExternalAgentGuideInput): string 
 - Scheduled reminders (\`coforge reminder schedule|update|snooze\`) are unavailable to external Agents (\`reminders_unsupported_for_external_agents\`); use your own runtime's scheduler and state in the thread when you will follow up.
 - Daemon-local commands (\`coforge context search|read\`, GitHub credential helpers, \`--send-draft\`) are unavailable.`;
 
-  const sections = buildCoforgeCliGuideSections({ audience: "external" });
-  return [
-    who,
-    contextLines.join("\n"),
-    setup,
-    COMMUNICATION_STYLE,
-    ...Object.values(sections),
-  ].join("\n\n");
+  return [who, contextLines.join("\n"), setup, EXTERNAL_GUIDE_STANDING_SECTIONS].join("\n\n");
 }

@@ -46,6 +46,26 @@ export function proxyEndpointOf(proxyUrl: string): (path: string) => URL {
  * A GET carries `query`; a route that takes a JSON body carries `body`. A route may supply
  * guidance for its decoded error code without duplicating the request or error handling.
  */
+export function issueProxyRequest(
+  context: string,
+  url: URL,
+  init: RequestInit & { headers: Record<string, string> },
+): Promise<Response> {
+  return fetch(url, {
+    ...init,
+    headers: { authorization: `Bearer ${context}`, ...init.headers },
+    ...(isExternalCredential(context) ? { redirect: "error" as const } : {}),
+  });
+}
+
+export function externalRefusalFor(
+  context: string,
+  status: number,
+  body: unknown,
+): CliError | undefined {
+  return isExternalCredential(context) ? externalRefusalOf(status, body) : undefined;
+}
+
 export async function envelopeRequest<T>(
   proxyEndpoint: (path: string) => URL,
   context: string,
@@ -61,17 +81,12 @@ export async function envelopeRequest<T>(
   for (const [key, value] of Object.entries(request.query ?? {}))
     endpoint.searchParams.set(key, value);
   const hasBody = request.body !== undefined;
-  const isExternal = isExternalCredential(context);
   let response: Response;
   try {
-    response = await fetch(endpoint, {
+    response = await issueProxyRequest(context, endpoint, {
       method: request.method,
-      headers: {
-        authorization: `Bearer ${context}`,
-        ...(hasBody ? { "content-type": "application/json" } : {}),
-      },
+      headers: hasBody ? { "content-type": "application/json" } : {},
       ...(hasBody ? { body: JSON.stringify(request.body) } : {}),
-      ...(isExternal ? { redirect: "error" as const } : {}),
       signal: AbortSignal.timeout(10_000),
     });
   } catch {
@@ -83,8 +98,8 @@ export async function envelopeRequest<T>(
   }
   const rawBody: unknown = await response.json().catch(() => undefined);
   if (!response.ok) {
-    const external = isExternal ? externalRefusalOf(response.status, rawBody) : undefined;
-    if (external) throw external;
+    const refusal = externalRefusalFor(context, response.status, rawBody);
+    if (refusal) throw refusal;
     const errorBody = decodeError(rawBody);
     throw new CliError({
       code: errorBody?.errorCode

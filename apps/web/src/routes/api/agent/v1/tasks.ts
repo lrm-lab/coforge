@@ -249,7 +249,6 @@ export const Route = createFileRoute("/api/agent/v1/tasks")({
             realtime: new CentrifugoConversationRealtime(createCentrifugoServerApi()),
           }),
           (command) => agentTaskBoardFreshness(db, agentTaskPrincipal(principal), command),
-          // An external Agent has no Computer whose version the rollout gate could read.
           isExternalAgentPrincipal(principal)
             ? undefined
             : {

@@ -67,7 +67,6 @@ describe("registering a push webhook", () => {
     const row = store.rows.get("a1")!;
     store.rows.set("a1", {
       ...row,
-      enabled: false,
       disabledReason: "endpoint_rejected",
       consecutiveFailures: 4,
     });
@@ -134,7 +133,6 @@ describe("reading and removing it", () => {
 
 describe("the recovery a disabled webhook reports", () => {
   const rejected = {
-    enabled: false,
     disabledReason: "endpoint_rejected" as const,
     disabledAt: new Date("2026-11-16T00:00:00Z"),
     nextProbeAt: new Date("2026-11-17T01:00:00Z"),
@@ -174,7 +172,7 @@ describe("the recovery a disabled webhook reports", () => {
   });
 
   test("says only a PUT resumes it for a reason that is not probed", async () => {
-    const service = await registered({ enabled: false, disabledReason: "agent_unavailable" });
+    const service = await registered({ disabledReason: "agent_unavailable" });
     expect((await service.get("a1"))!.recovery).toEqual({
       resumesOn: "put",
       nextProbeAt: null,

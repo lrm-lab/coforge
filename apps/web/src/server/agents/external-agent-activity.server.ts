@@ -38,43 +38,32 @@ function hookRow(
 ): ExternalActivityRow | undefined {
   const { hook, subagent } = event;
   if (!hook) return undefined;
-  const lineage = subagent
-    ? {
-        subagent: {
-          parentToolUseId: subagent.parentToolUseId,
-          ...(subagent.subagentType ? { subagentType: subagent.subagentType } : {}),
-        },
-      }
-    : {};
-  const starting = Boolean(hook.toolName) && !hook.name.startsWith("Post");
-  let entries: ActivityTrajectoryEntry[] = [];
-  let detailKind: string;
-  let detail = "";
-  if (subagent) {
-    detailKind = AGENT_ACTIVITY_DETAIL_KIND.SUBAGENT_ACTIVITY;
-    if (starting && hook.toolName)
-      entries = [
-        {
+  const toolStart: ActivityTrajectoryEntry | undefined =
+    hook.toolName && !hook.name.startsWith("Post")
+      ? {
           kind: "tool_start",
           toolName: hook.toolName,
           ...(hook.toolInput ? { toolInput: hook.toolInput } : {}),
           ...(hook.callId ? { callId: hook.callId } : {}),
-          ...lineage,
-        },
-      ];
-    else
+          ...(subagent
+            ? {
+                subagent: {
+                  parentToolUseId: subagent.parentToolUseId,
+                  ...(subagent.subagentType ? { subagentType: subagent.subagentType } : {}),
+                },
+              }
+            : {}),
+        }
+      : undefined;
+  const entries: ActivityTrajectoryEntry[] = toolStart ? [toolStart] : [];
+  let detailKind: string;
+  let detail = "";
+  if (subagent) {
+    detailKind = AGENT_ACTIVITY_DETAIL_KIND.SUBAGENT_ACTIVITY;
+    if (!toolStart)
       detail = `Subagent ${subagent.phase ?? hook.name}${subagent.subagentType ? ` (${subagent.subagentType})` : ""}`;
-  } else if (starting && hook.toolName) {
-    detailKind = AGENT_ACTIVITY_DETAIL_KIND.TOOL_STARTED;
-    entries = [
-      {
-        kind: "tool_start",
-        toolName: hook.toolName,
-        ...(hook.toolInput ? { toolInput: hook.toolInput } : {}),
-        ...(hook.callId ? { callId: hook.callId } : {}),
-      },
-    ];
-  } else if (hook.toolName) detailKind = AGENT_ACTIVITY_DETAIL_KIND.TOOL_END;
+  } else if (toolStart) detailKind = AGENT_ACTIVITY_DETAIL_KIND.TOOL_STARTED;
+  else if (hook.toolName) detailKind = AGENT_ACTIVITY_DETAIL_KIND.TOOL_END;
   else if (hook.name === "Stop") detailKind = AGENT_ACTIVITY_DETAIL_KIND.IDLE;
   else return undefined;
   const requestId = `external:${event.eventId ?? crypto.randomUUID()}`;
@@ -137,41 +126,38 @@ async function applyEvents(
   events: readonly ExternalActivityEvent[],
   now: number,
 ): Promise<void> {
-  const scope = externalDisplayScope(agent.workspaceId, agent.agentId);
-  let reported: boolean | undefined;
-  let latest: AgentDisplaySnapshot | undefined;
   const rows: ExternalActivityRow[] = [];
+  let newestReport: ExternalActivityEvent | undefined;
+  let newestGuess: ExternalActivityEvent | undefined;
   for (const event of events) {
     const row = hookRow(agent, event);
     if (row) rows.push(row);
     if (event.subagent) continue;
     if (event.report) {
-      if (reported !== true) {
-        await ports.statusReported.set(agent.agentId, new Date(now));
-        reported = true;
-      }
-      latest =
-        (await ports.display.observeExternalStatus(scope, {
-          kind: event.report.kind,
-          detail: event.report.detail,
-          occurredAtMs: event.occurredAtMs,
-          reported: true,
-          windowMs: EXTERNAL_ONLINE_WINDOW_MS,
-        })) ?? latest;
-      continue;
+      if (!newestReport || event.occurredAtMs > newestReport.occurredAtMs) newestReport = event;
+    } else if (event.hook && HOOK_DOT_GUESS[event.hook.name]) {
+      if (!newestGuess || event.occurredAtMs > newestGuess.occurredAtMs) newestGuess = event;
     }
-    const guess = event.hook ? HOOK_DOT_GUESS[event.hook.name] : undefined;
-    if (!guess) continue;
-    reported ??= await ports.statusReported.isSet(agent.agentId);
-    if (reported) continue;
-    latest =
-      (await ports.display.observeExternalStatus(scope, {
-        kind: guess,
-        detail: "",
-        occurredAtMs: event.occurredAtMs,
-        reported: false,
-        windowMs: EXTERNAL_ONLINE_WINDOW_MS,
-      })) ?? latest;
+  }
+  const scope = externalDisplayScope(agent.workspaceId, agent.agentId);
+  let latest: AgentDisplaySnapshot | undefined;
+  if (newestReport?.report) {
+    await ports.statusReported.set(agent.agentId, new Date(now));
+    latest = await ports.display.observeExternalStatus(scope, {
+      kind: newestReport.report.kind,
+      detail: newestReport.report.detail,
+      occurredAtMs: newestReport.occurredAtMs,
+      reported: true,
+      windowMs: EXTERNAL_ONLINE_WINDOW_MS,
+    });
+  } else if (newestGuess?.hook && !(await ports.statusReported.isSet(agent.agentId))) {
+    latest = await ports.display.observeExternalStatus(scope, {
+      kind: HOOK_DOT_GUESS[newestGuess.hook.name]!,
+      detail: "",
+      occurredAtMs: newestGuess.occurredAtMs,
+      reported: false,
+      windowMs: EXTERNAL_ONLINE_WINDOW_MS,
+    });
   }
   if (rows.length > 0) {
     await ports.record(rows);

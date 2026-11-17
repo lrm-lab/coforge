@@ -16,35 +16,24 @@ import {
   type ChannelVisibility,
 } from "#src/features/conversations/channel-visibility";
 
-// What an Agent reads about a channel or a direct message through `AgentChannelManagement`: its
-// info and its roster with each Agent's live status.
-
 type AgentDisplayPort = Pick<AgentDisplay, "snapshot" | "snapshotMany">;
 
 export type AgentChannelInfo = {
   id: string;
   name: string;
   description: string;
-  /** Who may read it (`CHANNEL_VISIBILITY`). */
   visibility: ChannelVisibility;
   archived: boolean;
   joined: boolean;
   muted: boolean;
   memberCounts: { agents: number; humans: number };
-  /**
-   * Stored channelRole, present only for an active acting member.
-   */
   channelRole?: string;
-  /** Present only when the acting Agent has channel-admin authority on this channel — either
-   * basis. */
   channelAdminBasis?: ChannelAdminBasis;
-  /** Every capability name; only the ones this Agent may currently invoke are `true`. */
   channelCapabilities: ChannelCapabilities;
 };
 
 export type AgentChannelRoster = {
   target: string;
-  // Channel roles apply to active #channel members; @user DM rosters omit them.
   agents: Array<{
     name: string;
     displayName: string;
@@ -65,8 +54,6 @@ export type AgentChannelRoster = {
   }>;
 };
 
-/** What `channel info` shows an Agent (or the Workspace assistant acting for a person) about a
- * channel. */
 export async function agentChannelInfo(
   db: PrismaClient,
   workspaceId: string,
@@ -108,9 +95,6 @@ async function countActiveMembers(db: PrismaClient, conversationId: string) {
   return { agents, humans };
 }
 
-/**
- * DM roster: query directly because PublicChannels.members requires a named channel.
- */
 export async function directConversationRoster(
   db: PrismaClient,
   display: AgentDisplayPort | undefined,
@@ -147,7 +131,6 @@ export async function directConversationRoster(
       })
     : [];
   const roleByUserId = new Map(roles.map((role) => [role.userId, role.role]));
-  // DM entries omit channelRole/channelAdminBasis.
   return shapeAgentRoster(
     display,
     workspaceId,
@@ -165,10 +148,6 @@ export async function directConversationRoster(
   );
 }
 
-/**
- * Shape shared channel/DM membership facts for the Agent: add self and live status/activity
- * via resolveAgentChannelStatuses; keep membership, roles and authority in shared data.
- */
 export async function shapeAgentRoster(
   display: AgentDisplayPort | undefined,
   workspaceId: string,
@@ -196,16 +175,15 @@ export async function shapeAgentRoster(
   },
   externalPresence?: Parameters<typeof externalSetups>[0],
 ): Promise<AgentChannelRoster> {
-  const external =
-    externalPresence &&
-    (await externalSetups(
-      externalPresence,
-      raw.agents.filter((agent) => agent.hosting === "external").map((agent) => agent.id),
-    ).catch(() => undefined));
   const statuses = await resolveAgentChannelStatuses(
     resolvedDisplay(display),
     raw.agents.map((agent) => ({ workspaceId, computerId: agent.computerId, agentId: agent.id })),
-    external,
+    externalPresence
+      ? externalSetups(
+          externalPresence,
+          raw.agents.filter((agent) => agent.hosting === "external").map((agent) => agent.id),
+        ).catch(() => undefined)
+      : undefined,
   );
   const agents = raw.agents.map((agent, index) => ({
     name: agent.name,
@@ -231,9 +209,6 @@ export async function shapeAgentRoster(
   };
 }
 
-/**
- * Construct AgentDisplay lazily so missing Redis becomes per-Agent unknown status, not a failed roster.
- */
 function resolvedDisplay(display: AgentDisplayPort | undefined): AgentDisplayPort {
   return (
     display ?? {

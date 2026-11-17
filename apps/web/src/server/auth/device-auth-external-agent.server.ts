@@ -7,10 +7,11 @@ import {
 
 export const EXTERNAL_DEVICE_CLIENT_ID = "coforge-cli";
 
-export type ExternalAgentGrant = ExternalMachine & {
+export type ExternalAgentGrant = {
   kind: "external_agent";
   workspaceId: string;
   agentId: string;
+  machine: ExternalMachine;
 };
 
 export type ExternalGrantDetails = {
@@ -84,8 +85,6 @@ export function parseExternalAuthorizeBody(
   return { workspace, agent, machine: { machineName, hostname, os, clientName } };
 }
 
-/** Before sign-in nothing may tell an Agent that does not exist from one that runs on a Computer:
- * both are the same refusal, so a Workspace slug and a guessed name reveal nothing. */
 export type ExternalGrantResolution = { ok: true; grant: ExternalAgentGrant } | { ok: false };
 
 export async function resolveExternalAgentGrant(
@@ -100,7 +99,7 @@ export async function resolveExternalAgentGrant(
       kind: "external_agent",
       workspaceId: found.workspaceId,
       agentId: found.agentId,
-      ...request.machine,
+      machine: request.machine,
     },
   };
 }
@@ -108,15 +107,22 @@ export async function resolveExternalAgentGrant(
 export function readExternalAgentGrant(value: unknown): ExternalAgentGrant | undefined {
   if (!value || typeof value !== "object") return undefined;
   const grant = value as Record<string, unknown>;
-  const text = (key: string) => (typeof grant[key] === "string" ? (grant[key] as string) : "");
+  const text = (source: Record<string, unknown>, key: string) =>
+    typeof source[key] === "string" ? (source[key] as string) : "";
+  const machine =
+    grant.machine && typeof grant.machine === "object"
+      ? (grant.machine as Record<string, unknown>)
+      : {};
   const read = {
     kind: grant.kind,
-    workspaceId: text("workspaceId"),
-    agentId: text("agentId"),
-    machineName: text("machineName"),
-    hostname: text("hostname"),
-    os: text("os"),
-    clientName: text("clientName"),
+    workspaceId: text(grant, "workspaceId"),
+    agentId: text(grant, "agentId"),
+    machine: {
+      machineName: text(machine, "machineName"),
+      hostname: text(machine, "hostname"),
+      os: text(machine, "os"),
+      clientName: text(machine, "clientName"),
+    },
   };
   if (read.kind !== "external_agent" || !read.workspaceId || !read.agentId) return undefined;
   return read as ExternalAgentGrant;
@@ -135,12 +141,7 @@ export async function externalGrantDetails(
     workspaceId: grant.workspaceId,
     agentId: grant.agentId,
     ...identity,
-    machine: {
-      machineName: grant.machineName,
-      hostname: grant.hostname,
-      os: grant.os,
-      clientName: grant.clientName,
-    },
+    machine: grant.machine,
   };
 }
 
@@ -184,12 +185,7 @@ export async function redeemExternalAgentGrant(
     workspaceId: grant.workspaceId,
     approvedByUserId: record.userId,
     source: "device",
-    machine: {
-      machineName: grant.machineName,
-      hostname: grant.hostname,
-      os: grant.os,
-      clientName: grant.clientName,
-    },
+    machine: grant.machine,
   });
   if (!minted.ok) return { status: "error", error: "access_denied", coforgeCode: minted.reason };
   return {

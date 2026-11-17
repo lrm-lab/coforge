@@ -4,7 +4,6 @@ export const UNSUPPORTED_CODE = "UNSUPPORTED_FOR_EXTERNAL_AGENTS";
 const SCHEDULER_ADVICE =
   "Use your own runtime's scheduler, and say in the thread when you will follow up.";
 
-/** The server's refusal of a route an external Agent may not use: `feature` names it. */
 export function unsupportedFeatureError(feature: string | undefined): CliError {
   const named = feature ? ` (${feature})` : "";
   return new CliError({
@@ -15,12 +14,21 @@ export function unsupportedFeatureError(feature: string | undefined): CliError {
   });
 }
 
-/** A command that needs the Computer's daemon, refused before any request is made. */
 export function daemonOnlyError(reason: string): CliError {
   return new CliError({ code: UNSUPPORTED_CODE, message: reason, retryable: false });
 }
 
-/** The credential the server rejected: revoked, replaced or never valid. */
+export function profileNotLoggedInError(slug?: string): CliError {
+  return new CliError({
+    code: "PROFILE_NOT_LOGGED_IN",
+    message:
+      slug === undefined ? "No Agent profile exists." : `Profile "${slug}" has no credential.`,
+    retryable: false,
+    suggestedNextAction:
+      "Run `coforge agent login --server <url> --agent <id-or-name>` and paste the credential from the Agent's page.",
+  });
+}
+
 export function invalidCredentialError(): CliError {
   return new CliError({
     code: "EXTERNAL_CREDENTIAL_INVALID",
@@ -30,13 +38,13 @@ export function invalidCredentialError(): CliError {
   });
 }
 
-/** The CLI error a server answer stands for when it is one of the external-Agent refusals. */
 export function externalRefusalOf(status: number, body: unknown): CliError | undefined {
   if (!body || typeof body !== "object") return undefined;
   const { code, feature } = body as { code?: unknown; feature?: unknown };
-  if (status === 403 && code === "unsupported_for_external_agents")
-    return unsupportedFeatureError(typeof feature === "string" ? feature : undefined);
-  if (status === 409 && code === "reminders_unsupported_for_external_agents")
+  if (
+    (status === 403 && code === "unsupported_for_external_agents") ||
+    (status === 409 && code === "reminders_unsupported_for_external_agents")
+  )
     return unsupportedFeatureError(typeof feature === "string" ? feature : undefined);
   if (status === 401 && code === "invalid_credential") return invalidCredentialError();
   return undefined;

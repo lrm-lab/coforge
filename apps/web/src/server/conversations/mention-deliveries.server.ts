@@ -68,8 +68,6 @@ export class MentionDeliveryIssuer {
         (mentions) => {
           const plan: MentionIssuePlan = { enveloped: [], wakes: [], notLaunched: [] };
           for (const mention of mentions) {
-            // An app's bot or an external Agent polls its own inbox: its mention stays pending,
-            // never launched.
             if (mention.agent.inboxPolled) continue;
             const identity = currentIdentity(mention.agent);
             if (identity) {

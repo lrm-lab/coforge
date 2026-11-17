@@ -1,12 +1,11 @@
-import { externalRefusalOf } from "./external/refusal";
 import { CliError, NO_MESSAGE_SENT_NEXT_ACTION, unknownDeliveryNextAction } from "./cli-error";
 import { proxyFailureCode } from "./proxy-failure-code";
-import { operationFailedCode, type AgentProxyErrorBody } from "./proxy-request";
+import { externalRefusalFor, operationFailedCode, type AgentProxyErrorBody } from "./proxy-request";
 import { refusalNextAction } from "./refusal-guidance";
 
 /** `idempotent`: asking again changes nothing (a read), so an upstream 5xx or a transport failure
  * is worth retrying. Off by default: most proxied operations have effects. */
-type ProxyFailureOptions = { idempotent?: boolean; external?: boolean };
+type ProxyFailureOptions = { idempotent?: boolean; context?: string };
 
 /**
  * Classifies a non-ok proxy response (or a network failure reaching the proxy) into a `CliError`.
@@ -20,9 +19,9 @@ export function proxyHttpFailure(
   status: number,
   body: { json?: AgentProxyErrorBody },
   target: string | undefined,
-  { idempotent = false, external = false }: ProxyFailureOptions = {},
+  { idempotent = false, context = "" }: ProxyFailureOptions = {},
 ): CliError {
-  const externalRefusal = external ? externalRefusalOf(status, body.json) : undefined;
+  const externalRefusal = externalRefusalFor(context, status, body.json);
   if (externalRefusal) return externalRefusal;
   const isSend = operation === "send";
   const proxy = body.json?.proxy;

@@ -39,7 +39,6 @@ export class PrismaExternalAgentDeviceDirectory implements ExternalAgentDeviceDi
     if (!access.ok) return "not_authorized" as const;
     if (access.agent.hosting !== "external") return "agent_not_external" as const;
     if (access.agent.deletedAt || access.agent.stoppedAt) return "agent_unavailable" as const;
-    // Refused at approval rather than after the code is spent, so nobody approves for nothing.
     const live = await this.db.externalAgentCredential.count({
       where: { agentId: input.agentId, revokedAt: null },
     });

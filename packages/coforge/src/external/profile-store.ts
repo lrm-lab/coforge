@@ -205,5 +205,4 @@ export function profileStore(env: Record<string, string | undefined>) {
 
 export type ProfileStore = ReturnType<typeof profileStore>;
 
-/** The profile an external Agent's command runs as. */
 export type ExternalSession = { slug: string; path: string; profile: AgentProfile };

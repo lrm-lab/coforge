@@ -1,5 +1,5 @@
 import { manualRequest } from "./manual-request";
-import { isAgentCredential, isExternalCredential } from "./agent-credential";
+import { isAgentCredential } from "./agent-credential";
 import {
   weeklyReportCollectRequest,
   weeklyReportKeyPointsRequest,
@@ -79,14 +79,13 @@ export function connectLocal(
   proxyUrl = Bun.env.COFORGE_AGENT_PROXY_URL ?? "",
   conversationTarget = Bun.env.COFORGE_AGENT_CONVERSATION_TARGET,
 ) {
-  const external = isExternalCredential(context);
   const httpFailure = (
     operation: string,
     status: number,
     body: Parameters<typeof proxyHttpFailure>[2],
     target: string | undefined,
     idempotent = false,
-  ) => proxyHttpFailure(operation, status, body, target, { idempotent, external });
+  ) => proxyHttpFailure(operation, status, body, target, { idempotent, context });
   const proxyEndpoint = (path: string) => {
     const endpoint = new URL(proxyUrl);
     endpoint.pathname = path;

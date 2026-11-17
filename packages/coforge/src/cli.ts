@@ -22,7 +22,7 @@ import { connectExternal } from "./external/direct-transport";
 import { selectProfile } from "./external/profile-select";
 import { profileStore } from "./external/profile-store";
 import { daemonOnlyError } from "./external/refusal";
-import { resolveAgentTransport } from "./external/resolve-transport";
+import { proxyConnectionOf, resolveAgentTransport } from "./external/resolve-transport";
 
 export async function runAgentCli(argv: readonly string[]): Promise<void> {
   let args = argv;
@@ -76,10 +76,10 @@ export async function runAgentCli(argv: readonly string[]): Promise<void> {
         process.stdout.write(`${help}\n`);
         return;
       }
-      const { context, proxyUrl } = target;
+      const { socketPath, context, proxyUrl } = proxyConnectionOf(target);
       const invocation = parseAppArgs(args.slice(1));
       if (isAppRegistrationInvocation(invocation)) {
-        const transport = connectLocal(target.socketPath, context, proxyUrl);
+        const transport = connectLocal(socketPath, context, proxyUrl);
         process.exitCode = await runAppRegistrationCommand(
           invocation,
           {
@@ -89,7 +89,7 @@ export async function runAgentCli(argv: readonly string[]): Promise<void> {
           { stdout: (text) => process.stdout.write(text) },
         );
       } else if (isAppManagementInvocation(invocation)) {
-        const transport = connectLocal(target.socketPath, context, proxyUrl);
+        const transport = connectLocal(socketPath, context, proxyUrl);
         process.exitCode = await runAppManagementCommand(
           invocation,
           {

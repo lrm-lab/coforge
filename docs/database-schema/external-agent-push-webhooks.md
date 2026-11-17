@@ -12,8 +12,7 @@ One row per external Agent that registered an endpoint.
 | `workspaceId` | UUID | |
 | `url` | TEXT | An https endpoint that resolved only to public addresses when saved and at every delivery. |
 | `secretSealed` | TEXT | The signing secret, AES-GCM sealed and bound to the Agent id (`v1.<iv>.<ciphertext>`). Never returned. |
-| `enabled` | BOOLEAN | Default true; a delivery stop sets it false, a new `PUT` true. |
-| `disabledReason` | TEXT | `endpoint_rejected`, `endpoint_invalid` or `agent_unavailable`; null while enabled (`external_agent_push_webhooks_disabledReason_check`). |
+| `disabledReason` | TEXT | `endpoint_rejected`, `endpoint_invalid` or `agent_unavailable`; null while push is on (`external_agent_push_webhooks_disabledReason_check`). |
 | `revision` | INTEGER | Starts at 1, goes up on every `PUT`; an attempt writes its outcome only while the row is still at the revision it read. |
 | `lastDeliveryAt` | TIMESTAMP | The last 2xx. |
 | `lastError` | TEXT | A short classifier (`http_503`, `timeout`, `network`), never anything the endpoint answered. |

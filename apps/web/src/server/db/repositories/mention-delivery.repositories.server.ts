@@ -35,7 +35,6 @@ export type MentionAgentState = {
   computerId: string | null;
   stoppedAt: Date | null;
   deletedAt: Date | null;
-  /** An app's bot or an external Agent: no daemon, its messages are read by its own poll. */
   inboxPolled: boolean;
   /** The Computer and launch of the persisted launch fence, if any. */
   launch: { computerId: string; launchId?: string } | null;

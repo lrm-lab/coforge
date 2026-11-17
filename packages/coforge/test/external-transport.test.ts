@@ -70,7 +70,11 @@ test("a profile ignores the daemon environment and targets the server with its k
     "p",
     home.store,
   );
-  expect(target).toMatchObject({ mode: "external", context: OLD_KEY, proxyUrl: SERVER });
+  expect(target).toMatchObject({
+    mode: "external",
+    profileSlug: "p",
+    profile: { apiKey: OLD_KEY, serverUrl: SERVER },
+  });
 });
 
 test("a profile that was never logged in is refused", async () => {

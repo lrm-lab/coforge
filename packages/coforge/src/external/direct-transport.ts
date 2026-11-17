@@ -25,13 +25,6 @@ function refuse(reason: string): () => Promise<never> {
   };
 }
 
-/**
- * The transport an external Agent's commands run on: the calls the server serves under the same
- * path go straight to it with the key (the shared local client with the server as its origin), the
- * daemon's own multiplexed routes are translated to the server's, and what only a daemon can answer
- * is refused here. `commit` stores the inbox cursor of the last `message check`; the caller runs it
- * once that command's output has been written.
- */
 export function connectExternal(
   session: ExternalSession,
   store: ProfileStore,

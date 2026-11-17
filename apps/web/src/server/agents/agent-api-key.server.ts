@@ -15,7 +15,6 @@ export type AgentApiKeyRecord = {
 
 const AGENT_API_KEY = /^sk_agent_[A-Za-z0-9_-]{43}$/;
 
-/** Why an Agent credential was refused; logged on the 401. Key material is never logged. */
 export type AgentApiKeyAuthFailure =
   | "key_not_found"
   | "key_revoked"
@@ -30,21 +29,13 @@ export class AgentApiKeyError extends Error {
   }
 }
 
-/** What minting supplies for `rotate`: the Prisma client generates the id and `createdAt`
- * from the schema defaults (`uuid(7)`, `now()`), keeping one id-generation path for the project. */
 export type AgentApiKeyMintInput = Omit<AgentApiKeyRecord, "id" | "createdAt">;
 
 export interface AgentApiKeyRepository {
-  /** Mints `record` under the Agent row lock, keeping the newest earlier active key valid
-   * (overlap rotation) and revoking anything older. */
   rotate(record: AgentApiKeyMintInput): Promise<void>;
   findByHash(hash: string): Promise<AgentApiKeyRecord | undefined>;
-  /** Revokes the Agent's other active keys older than `record`; a no-op when none exist. */
   revokeOlderKeys(record: AgentApiKeyRecord): Promise<void>;
-  /** Revokes exactly the key `id` names — a failed launch drops only its own mint. */
   revoke(id: string): Promise<void>;
-  /** Revokes the Agent's active keys minted at or before `record`'s epoch — a Stop ends the
-   * whole overlap window of its own launch while a racing newer mint survives. */
   revokeAll(record: AgentApiKeyRecord): Promise<void>;
 }
 
@@ -59,12 +50,16 @@ export function hashAgentApiKey(value: string): string {
   return new Bun.CryptoHasher("sha256").update(value).digest("hex");
 }
 
-/** A new key in the one Agent API key format. Callers store only `hashAgentApiKey` of it. */
-export function generateAgentApiKey(): string {
-  return `sk_agent_${randomBytes(32).toString("base64url")}`;
+export function generateAgentApiKey(prefix = "sk_agent_"): string {
+  return `${prefix}${randomBytes(32).toString("base64url")}`;
 }
 
-/** Whether `value` is shaped like an Agent API key (a daemon's or a bot's). */
+export function agentKeyHashMatches(expected: string, actual: string): boolean {
+  const left = Buffer.from(expected);
+  const right = Buffer.from(actual);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
 export function isAgentApiKeyShape(value: string): boolean {
   return AGENT_API_KEY.test(value);
 }
@@ -77,8 +72,6 @@ export function createAgentApiKey(input: {
   repository: AgentApiKeyRepository;
 }): Promise<string> {
   const apiKey = generateAgentApiKey();
-  // No explicit id or createdAt: the Prisma client generates them from the schema's
-  // defaults — API keys keep the project's one id-generation path end to end.
   return input.repository
     .rotate({
       apiKeyHash: hashAgentApiKey(apiKey),
@@ -98,21 +91,14 @@ export async function authenticateAgentApiKey(
   repository: AgentApiKeyRepository,
 ): Promise<AgentApiKeyRecord> {
   if (!AGENT_API_KEY.test(apiKey)) throw new AgentApiKeyError("key_not_found");
-  const actual = Buffer.from(hashAgentApiKey(apiKey));
-  const record = await repository.findByHash(actual.toString());
+  const actual = hashAgentApiKey(apiKey);
+  const record = await repository.findByHash(actual);
   if (!record) throw new AgentApiKeyError("key_not_found");
   if (record.revokedAt || record.disabledAt) throw new AgentApiKeyError("key_revoked");
-  const expected = Buffer.from(record.apiKeyHash);
-  if (expected.length !== actual.length || !timingSafeEqual(expected, actual))
-    throw new AgentApiKeyError("key_not_found");
+  if (!agentKeyHashMatches(record.apiKeyHash, actual)) throw new AgentApiKeyError("key_not_found");
   return record;
 }
 
-/** Overlap rotation settlement: the first successful authentication marks the key used and
- * retires every older key. The update is conditional on `record` being newer, so an older
- * key's own request cannot retire a newer one. Callers run it only after every scope check
- * has passed, so a refused request retires nothing, and only once per key — later requests
- * see `firstUsedAt` set and skip the write entirely. */
 export async function settleAgentApiKeyFirstUse(
   record: AgentApiKeyRecord,
   repository: AgentApiKeyRepository,
@@ -126,11 +112,9 @@ export async function findAgentApiKey(
   repository: AgentApiKeyRepository,
 ): Promise<AgentApiKeyRecord> {
   if (!AGENT_API_KEY.test(apiKey)) throw new Error("invalid Agent API key");
-  const actual = Buffer.from(hashAgentApiKey(apiKey));
-  const record = await repository.findByHash(actual.toString());
-  if (!record) throw new Error("invalid Agent API key");
-  const expected = Buffer.from(record.apiKeyHash);
-  if (expected.length !== actual.length || !timingSafeEqual(expected, actual))
+  const actual = hashAgentApiKey(apiKey);
+  const record = await repository.findByHash(actual);
+  if (!record || !agentKeyHashMatches(record.apiKeyHash, actual))
     throw new Error("invalid Agent API key");
   return record;
 }

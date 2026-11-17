@@ -13,7 +13,7 @@ import {
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { PrismaExternalAgentCredentialRepository } from "#src/server/db/repositories/external-agent-credential.repositories.server";
 import {
-  externalDisplays,
+  agentDisplayScope,
   externalSetups,
 } from "#src/server/agents/external-agent-presence.server";
 import { userRuntimeUsage } from "#src/server/computers/runtime-usage-composition.server";
@@ -22,17 +22,8 @@ import { agentAvatarUrl, agentMascot } from "#src/features/agents/agent-mascot";
 import { humanLabel } from "#src/lib/human-label";
 import { normalizeAgentVisibility } from "./agent-visibility";
 
-export /**
- * Backs `getAgentProfile`, the one seam the Members page and every conversation panel share:
- * identity, permissions, live display and runtime config summary. Activity history is not part
- * of it: the Activity tab reads its own feed (`getAgentActivityFeed`). Does not run
- * `listComputers`/`getUserPreferences` — those stay owned by the route loaders that actually need
- * a Computer picker or a User's time zone preference.
- */
-async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: string) {
+export async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: string) {
   const { user, db, workspaceId } = context;
-  // Fetched once, ahead of `AgentDetailQuery` so the source's visibility gate
-  // and `canManageAgentRole` below share this single membership lookup.
   const viewerMembership = await db.workspaceMembership.findUnique({
     where: { workspaceId_userId: { workspaceId, userId: user.id } },
     select: { role: true },
@@ -54,7 +45,6 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
   const result = await query.get(workspaceId, agentId, user.id);
   if (!result) return undefined;
   const ownedByCurrentUser = result.owner.id === user.id;
-  // A deleted Agent's profile is read-only: nothing on it acts on the Agent any more.
   const live = !result.deletedAt;
   const runtimeCredential = ownedByCurrentUser
     ? await (await runtimeCredentials(db)).summary({ workspaceId, userId: user.id }, agentId)
@@ -62,23 +52,13 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
   const canManageAgentRole = viewerMembership
     ? isAdminLike(viewerMembership.role as WorkspaceMemberRole)
     : false;
-  // `findAuthorized` above already required current Workspace membership, so every viewer who
-  // reaches this point holds the `controlAgentRuntime` capability (Restart/Reset session);
-  // `resetAgentWorkspace` (Full reset) is owner/admin only, same role check as agent-role
-  // management. Server-side authorization lives in AgentControl.execute(); this is UI gating.
   const canFullResetAgent = canManageAgentRole && live;
-  // `deleteAgents` is owner/admin only, the same gate as `createAgents`. The
-  // weekly-report assistant is provisioned by Records on demand, so it is never a delete target
-  // even for an owner/admin viewer. Server-side authorization lives in `AgentDeletion.delete()`.
   const canDeleteAgent = canManageAgentRole && live && !result.isWeeklyReportAssistant;
-  // The creator or a human Workspace owner/admin may change visibility; never an Agent
-  // (this seam is always reached by a human viewer) and never a plain member acting on someone
-  // else's Agent.
   const canChangeVisibility = live && (ownedByCurrentUser || canManageAgentRole);
-  // Best-effort: the Agent profile panel's Computer meta line ("Connected · v0.1.0-dev.35"). Redis
-  // unavailability degrades to "unknown" (`undefined`), never a false "offline".
   const runtimeConfig = readableRuntimeConfig(result.runtimeConfig);
   const { computer } = result;
+  const externalDisplayScope =
+    result.hosting === "external" ? agentDisplayScope(workspaceId, result) : undefined;
   const [computerOnline, usage, externalCredentials, workspace, externalSetup, externalDisplay] =
     await Promise.all([
       computer
@@ -86,8 +66,6 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
             .get({ workspaceId, computerId: computer.id })
             .catch(() => undefined)
         : undefined,
-      // The Agent's own Computer + runtime as the Computer page offers its usage (decided by
-      // `RuntimeUsageAccess`): the usage popover's gate and CLI-version header share this lookup.
       computer && runtimeConfig
         ? userRuntimeUsage(db).usageOffer(
             { userId: user.id, workspaceId },
@@ -107,16 +85,14 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
             (setups) => setups.get(agentId),
           )
         : undefined,
-      result.hosting === "external"
-        ? externalDisplays(getAgentDisplay(), workspaceId, [agentId]).then((displays) =>
-            displays.get(agentId),
-          )
+      externalDisplayScope
+        ? getAgentDisplay()
+            .snapshot(externalDisplayScope)
+            .catch(() => undefined)
         : undefined,
     ]);
   return {
     ...result,
-    // The Creator row renders the same identity the rest of the product does (avatar image +
-    // display name), so the owner's avatar URL is resolved here like every other person surface.
     owner: {
       ...result.owner,
       avatarUrl: workspaceUserAvatarUrl(
@@ -126,20 +102,14 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
       ),
     },
     mascot: agentMascot(result.id, result.avatarMascot),
-    // An app's bot wears its app's logo, never the mascot its id would choose: the
-    // profile header reads this, so the face it waits with is already the app's.
     avatarUrl: result.appBot?.logoUrl ?? agentAvatarUrl(result.id, result.avatarMascot ?? null),
     runtimeConfig: publicAgentRuntimeConfig(runtimeConfig),
-    // A stored config the read could not parse: the Agent's owner re-selects its runtime
-    // rather than seeing an empty section (task #517).
     runtimeConfigInvalid: result.runtimeConfig != null && !runtimeConfig,
     ownedByCurrentUser,
     runtimeCredential,
     canManageAgentRole,
     canFullResetAgent,
     canDeleteAgent,
-    // Fails closed the same way `canSeeAgent`/`visibleAgentWhere` do: anything but exactly
-    // `"public"` displays as private, since that is also how the authorization seam treats it.
     visibility: normalizeAgentVisibility(result.visibility),
     canChangeVisibility,
     runtimeUsageVisible: usage?.offered ?? false,
@@ -148,24 +118,17 @@ async function loadAgentProfileDetail(context: WorkspaceUserContext, agentId: st
     externalCredentials: externalCredentials ?? [],
     externalSetup: externalSetup ?? null,
     workspaceSlug: workspace?.slug ?? null,
-    // Always the same shape (`online` present, possibly `undefined`) whether or not a Computer is
-    // assigned, so callers never have to narrow a union between "has computer without online" and
-    // "has computer with online".
     computer: result.computer
       ? {
           ...result.computer,
           online: computerOnline,
-          // Only the Computer's owner may scan or delete the Agent's workspace on it.
           ownedByViewer: result.computer.ownerId === user.id,
         }
       : undefined,
-    // Who archived it, labelled the way the rest of the product names a person; absent when
-    // that was not recorded.
     deletedBy: result.deletedBy
       ? {
           id: result.deletedBy.id,
           label: humanLabel(result.deletedBy),
-          // The face drawn beside the name (task #521).
           avatarUrl: workspaceUserAvatarUrl(
             workspaceId,
             result.deletedBy.id,

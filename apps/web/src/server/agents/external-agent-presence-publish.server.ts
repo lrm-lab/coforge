@@ -18,12 +18,22 @@ export type ExternalDisplayPorts = {
 };
 
 export type ExternalAgentRef = { workspaceId: string; agentId: string };
+export type ExternalSeenAgent = ExternalAgentRef & { visibility?: string };
+
+let centrifugo: ReturnType<typeof createCentrifugoServerApi> | undefined;
+
+export function externalCentrifugo(): ReturnType<typeof createCentrifugoServerApi> {
+  centrifugo ??= createCentrifugoServerApi();
+  return centrifugo;
+}
 
 export async function publishExternalDisplay(
   ports: Pick<ExternalDisplayPorts, "publishJson" | "visibility">,
   snapshot: AgentDisplaySnapshot,
+  knownVisibility?: string,
 ): Promise<void> {
-  const visibility = await ports.visibility(snapshot.workspaceId, snapshot.agentId);
+  const visibility =
+    knownVisibility ?? (await ports.visibility(snapshot.workspaceId, snapshot.agentId));
   if (visibility === undefined) return;
   await publishAgentDisplay(
     ports.publishJson,
@@ -35,14 +45,14 @@ export async function publishExternalDisplay(
 
 export async function noteExternalSeen(
   ports: ExternalDisplayPorts,
-  agent: ExternalAgentRef,
+  agent: ExternalSeenAgent,
   seenAtMs: number,
 ): Promise<void> {
   const snapshot = await ports.display.observeExternalPresence(
     externalDisplayScope(agent.workspaceId, agent.agentId),
     { seenAtMs, windowMs: EXTERNAL_ONLINE_WINDOW_MS },
   );
-  if (snapshot) await publishExternalDisplay(ports, snapshot);
+  if (snapshot) await publishExternalDisplay(ports, snapshot, agent.visibility);
 }
 
 export async function syncExternalPresence(
@@ -57,10 +67,9 @@ export async function syncExternalPresence(
 export function productionExternalDisplayPorts(
   db: Pick<PrismaClient, "agent">,
 ): ExternalDisplayPorts {
-  const centrifugo = createCentrifugoServerApi();
   return {
     display: getAgentDisplay(),
-    publishJson: (channel, data) => centrifugo.publishJson(channel, data),
+    publishJson: (channel, data) => externalCentrifugo().publishJson(channel, data),
     visibility: async (workspaceId, agentId) => {
       const agent = await db.agent.findFirst({
         where: { id: agentId, workspaceId },
@@ -84,7 +93,7 @@ function logFailure(event: string, agent: ExternalAgentRef, cause: unknown): voi
 
 export function externalSeenNoter(
   db: Pick<PrismaClient, "agent">,
-): (agent: ExternalAgentRef, seenAtMs: number) => Promise<void> {
+): (agent: ExternalSeenAgent, seenAtMs: number) => Promise<void> {
   return async (agent, seenAtMs) => {
     try {
       await noteExternalSeen(productionExternalDisplayPorts(db), agent, seenAtMs);
