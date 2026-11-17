@@ -13,7 +13,7 @@ afterEach(() => {
   resetAgentServerFeaturesBroadcastForTest();
 });
 
-test("install skips the broadcast with one info log when Centrifugo is not configured", () => {
+test("install skips the broadcast with one info log when Centrifugo is not configured (startup config installs the broadcast without keeping a stop handle, so tests reset it)", () => {
   const info = spyOn(console, "info").mockImplementation(() => {});
   try {
     const stop = installAgentServerFeaturesBroadcast({});
