@@ -16,7 +16,11 @@ model TeamMemoryEntry {
   applicability String
   status String @default("active")
   revision Int @default(1)
-  authorAgentId String @map("author_agent_id") @db.Uuid
+  authorAgentId String? @map("author_agent_id") @db.Uuid
+  authorUserId String? @map("author_user_id") @db.Uuid
+  projectId String? @map("project_id") @db.Uuid
+  pinned Boolean @default(false)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   dedupKey String @map("dedup_key")
   searchText String @map("search_text")
   createdAt DateTime @default(now()) @map("created_at")
@@ -27,6 +31,7 @@ model TeamMemoryEntry {
   @@unique([workspaceId, id])
   @@unique([workspaceId, dedupKey])
   @@index([workspaceId, status, updatedAt])
+  @@index([workspaceId, projectId, status, updatedAt])
   @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
   @@map("team_memory_entries")
 }
@@ -36,7 +41,8 @@ model TeamMemoryVersion {
   entryId String @map("entry_id") @db.Uuid
   revision Int
   snapshot Json
-  actorAgentId String @map("actor_agent_id") @db.Uuid
+  actorAgentId String? @map("actor_agent_id") @db.Uuid
+  actorUserId String? @map("actor_user_id") @db.Uuid
   operation String
   reason String
   mergedFrom Json @map("merged_from")
@@ -63,4 +69,22 @@ model TeamMemoryReceipt {
   @@id([workspaceId, agentId, requestId])
   @@index([workspaceId, agentId, reviewExpiresAt])
   @@map("team_memory_receipts")
+}
+
+model TeamMemoryUserReceipt {
+  workspaceId String @map("workspace_id") @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  requestId String @map("request_id") @db.Uuid
+  reviewToken String? @map("review_token") @db.Uuid
+  reviewRevision Int @default(0) @map("review_revision")
+  reviewExpiresAt DateTime? @map("review_expires_at")
+  fingerprint String
+  entryId String? @map("entry_id") @db.Uuid
+  deleted Boolean @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, userId, requestId])
+  @@index([workspaceId, userId, reviewExpiresAt])
+  @@map("team_memory_user_receipts")
 }
