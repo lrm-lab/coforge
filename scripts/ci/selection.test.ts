@@ -240,33 +240,8 @@ test("documentation skips application checks, while shared and unknown inputs fa
   }
 });
 
-test("benchmark changes run the Web job, which checks and tests the benchmarks, and deploy nothing", async () => {
-  // The benchmarks import Web source and its generated client, so the Web job checks them after
-  // Web's own checks; they are not in the image, so the Web track does not select them.
-  for (const path of ["benchmark/skillsbench-collab/src/verify.ts", "benchmark/x/package.json"]) {
-    expect(selectChecks([path], "changes")).toEqual(["web"]);
-    expect(selectChecks([path], "web")).toEqual([]);
-  }
-  const ci = Bun.YAML.parse(await Bun.file(".github/workflows/ci.yml").text());
-  const steps = ci.jobs.web.steps as { run?: string; if?: string }[];
-  const runs = steps.map((step) => step.run?.trim());
-  const build = runs.findIndex((run) => run?.startsWith("mise run build:web"));
-  const benchmarks = runs.indexOf(
-    "bun run --filter './benchmark/*' check && bun run --filter './benchmark/*' --if-present test",
-  );
-  // The Web build generates the sources the benchmarks import (Prisma client, Paraglide messages).
-  expect(build).toBeGreaterThan(-1);
-  expect(benchmarks).toBeGreaterThan(build);
-  // The benchmarks run on the build machine, which the Web track does not start.
-  expect(steps[build]!.if).toBe("matrix.part == 'build'");
-  expect(steps[benchmarks]!.if).toBe("matrix.part == 'build'");
-  expect(ci.jobs.web.strategy.matrix.part).toBe(
-    `\${{ fromJSON(inputs.track == 'web' && '["1/3","2/3","3/3"]' || '["1/3","2/3","3/3","build"]') }}`,
-  );
-});
-
-test("Daemon and CLI changes run the Web job, whose tests and benchmarks import them, and deploy nothing", () => {
-  // apps/web/bunfig.toml preloads a Daemon test helper; Web tests and benchmarks import its source.
+test("Daemon and CLI changes run the Web job, whose tests import them, and deploy nothing", () => {
+  // apps/web/bunfig.toml preloads a Daemon test helper; Web tests import its source.
   expect(selectChecks(["packages/daemon/index.ts"], "changes")).toContain("web");
   expect(selectChecks(["packages/daemon/test/cli-temp-state.preload.ts"], "changes")).toContain(
     "web",

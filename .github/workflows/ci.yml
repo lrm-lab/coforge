@@ -300,11 +300,6 @@ jobs:
           mise run build:web
           mise run smoke:web
 
-      - name: Check and test benchmarks
-        # They import Web source and the sources the build generated.
-        if: matrix.part == 'build'
-        run: bun run --filter './benchmark/*' check && bun run --filter './benchmark/*' --if-present test
-
   windows-release:
     name: Test Windows ${{ matrix.runner == 'windows-latest' && 'x64' || 'arm64' }} executable
     needs: changes

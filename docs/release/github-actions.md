@@ -42,7 +42,7 @@ with three scopes selected by `scripts/ci/selection.ts`:
 - Pull requests and pushes to `main` validate changed modules and affected
   downstream consumers.
   Web-only changes run Web gates; Daemon changes also validate Computer, and
-  Web, whose tests and the benchmarks import Daemon source. CLI
+  Web, whose tests import Daemon source. CLI
   (`packages/coforge`) changes also run Web, whose type check compiles an e2e
   fixture that imports the CLI. The image has neither, so these changes never
   select a Web deployment.
@@ -60,9 +60,6 @@ with three scopes selected by `scripts/ci/selection.ts`:
   Web's frozen image install; lockfile changes still select full coverage.
   PowerShell installer changes run both PowerShell parsers and lint. Both
   installers are embedded in the Web image, so changing either also validates Web.
-  The benchmark packages import Web source, so the Web job also checks and tests
-  them (their `check`, then `--if-present test`) and a benchmark change runs the Web
-  job; benchmarks are not in the image, so they never select a Web deployment.
 - A dispatched Web deployment runs the complete Web track for its exact selected
   main commit: Web, protocol, CI-policy, and deploy-script gates, then builds and
   deploys the image.
@@ -138,7 +135,7 @@ Web and Daemon tests run one file at a time in one process, so their files are
 split across runners with `bun test --shard`
 ([Bun's parallel test runner](https://bun.com/docs/test/parallel)): three for
 Web, two for the Daemon. `bun test --parallel` is not used: it hung a Web worker.
-A fourth Web runner builds and smokes the package and checks the benchmarks.
+A fourth Web runner builds and smokes the package.
 
 The image job installs only Bun on the host; workspace dependencies are
 installed inside Docker. The image build uses no build cache, since other jobs

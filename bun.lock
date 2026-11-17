@@ -165,100 +165,6 @@
         "vite": "8.2.2",
       },
     },
-    "benchmark/evolbench-collab": {
-      "name": "@coforge/evolbench-collab-eval",
-      "version": "0.0.0",
-      "dependencies": {
-        "@coforge/agent": "workspace:*",
-        "@coforge/web": "workspace:*",
-        "@lrm/coforge-sdk": "workspace:*",
-        "@prisma/adapter-pg": "^7.10.0",
-        "@prisma/client": "^7.10.0",
-      },
-      "devDependencies": {
-        "@types/bun": "1.4.4",
-        "@types/node": "26.4.0",
-        "oxfmt": "0.65.0",
-        "oxlint": "1.80.0",
-        "typescript": "7.0.2",
-        "vite": "8.2.2",
-      },
-    },
-    "benchmark/harness": {
-      "name": "@coforge/eval-harness",
-      "version": "0.0.0",
-      "dependencies": {
-        "@coforge/agent": "workspace:*",
-        "@coforge/web": "workspace:*",
-        "@lrm/coforge-daemon": "workspace:*",
-        "@lrm/coforge-sdk": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/bun": "1.4.4",
-        "@types/node": "26.4.0",
-        "oxfmt": "0.65.0",
-        "oxlint": "1.80.0",
-        "typescript": "7.0.2",
-        "vite": "8.2.2",
-      },
-    },
-    "benchmark/longmemeval-collab": {
-      "name": "@coforge/longmemeval-collab-eval",
-      "version": "0.0.0",
-      "dependencies": {
-        "@coforge/eval-harness": "workspace:*",
-        "@coforge/web": "workspace:*",
-        "@lrm/coforge-sdk": "workspace:*",
-        "@prisma/adapter-pg": "^7.10.0",
-        "@prisma/client": "^7.10.0",
-      },
-      "devDependencies": {
-        "@types/bun": "1.4.4",
-        "@types/node": "26.4.0",
-        "oxfmt": "0.65.0",
-        "oxlint": "1.80.0",
-        "typescript": "7.0.2",
-        "vite": "8.2.2",
-      },
-    },
-    "benchmark/public-channel-memory": {
-      "name": "@coforge/public-channel-memory-eval",
-      "version": "0.0.0",
-      "dependencies": {
-        "@coforge/eval-harness": "workspace:*",
-        "@coforge/web": "workspace:*",
-        "@lrm/coforge-sdk": "workspace:*",
-        "@prisma/adapter-pg": "^7.10.0",
-        "@prisma/client": "^7.10.0",
-      },
-      "devDependencies": {
-        "@types/bun": "1.4.4",
-        "@types/node": "26.4.0",
-        "oxfmt": "0.65.0",
-        "oxlint": "1.80.0",
-        "typescript": "7.0.2",
-        "vite": "8.2.2",
-      },
-    },
-    "benchmark/skillsbench-collab": {
-      "name": "@coforge/skillsbench-collab-eval",
-      "version": "0.0.0",
-      "dependencies": {
-        "@coforge/eval-harness": "workspace:*",
-        "@coforge/web": "workspace:*",
-        "@lrm/coforge-sdk": "workspace:*",
-        "@prisma/adapter-pg": "^7.10.0",
-        "@prisma/client": "^7.10.0",
-      },
-      "devDependencies": {
-        "@types/bun": "1.4.4",
-        "@types/node": "26.4.0",
-        "oxfmt": "0.65.0",
-        "oxlint": "1.80.0",
-        "typescript": "7.0.2",
-        "vite": "8.2.2",
-      },
-    },
     "packages/agent": {
       "name": "@coforge/agent",
       "version": "0.1.0",
@@ -599,16 +505,6 @@
     "@coforge/computer": ["@coforge/computer@workspace:packages/computer"],
 
     "@coforge/docs": ["@coforge/docs@workspace:apps/docs"],
-
-    "@coforge/eval-harness": ["@coforge/eval-harness@workspace:benchmark/harness"],
-
-    "@coforge/evolbench-collab-eval": ["@coforge/evolbench-collab-eval@workspace:benchmark/evolbench-collab"],
-
-    "@coforge/longmemeval-collab-eval": ["@coforge/longmemeval-collab-eval@workspace:benchmark/longmemeval-collab"],
-
-    "@coforge/public-channel-memory-eval": ["@coforge/public-channel-memory-eval@workspace:benchmark/public-channel-memory"],
-
-    "@coforge/skillsbench-collab-eval": ["@coforge/skillsbench-collab-eval@workspace:benchmark/skillsbench-collab"],
 
     "@coforge/web": ["@coforge/web@workspace:apps/web"],
 

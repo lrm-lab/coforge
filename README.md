@@ -57,9 +57,6 @@ The architecture invariants every change must respect are in
 | [docs/app-marketplace.md](docs/app-marketplace.md) | App Marketplace: publish and offline review, installing a listed app, private share links, the platform operator who decides, and the first operator's grant |
 | [docs/feature-flags.md](docs/feature-flags.md) | Feature flags: turning a dark feature on per Workspace with a flagd definition file |
 | [docs/observability/](docs/observability/README.md) | Agent Activity, status, and observability baseline |
-| [docs/local-gemma-evaluation.md](docs/local-gemma-evaluation.md) | Local SWE evaluation, Gemma service management, Docker and token audits |
-| [benchmark/evolbench-collab/ops/swe-gemma/README.md](benchmark/evolbench-collab/ops/swe-gemma/README.md) | SWE Docker Task runtime and independent 20-worker evaluation pools |
-| [benchmark/harness/README.md](benchmark/harness/README.md) | Eval computer shared by the collaborative benchmarks |
 | [docs/agents/daemon-message-attention.md](docs/agents/daemon-message-attention.md) | Daemon message delivery, recovery and attention rules |
 | [docs/agents/daemon-mention-delivery.md](docs/agents/daemon-mention-delivery.md) | Daemon tracked @mention delivery: checks, settlement, wake, carry and idle rules |
 | [docs/runtime-sign-in.md](docs/runtime-sign-in.md) | Native runtime sign-in, Kiro enterprise login, and its limits |
@@ -156,4 +153,4 @@ week-idle worktrees to clean up after it; `mise run cleanup -- --dry-run` only l
 Every change goes through a short-lived branch and an approved PR; see
 [AGENTS.md](AGENTS.md#collaboration-and-delivery).
 
-- [docs/eval-memory-requests.md](docs/eval-memory-requests.md): Task 主动 @memory 的评测协议、IR 数据准备与冻结 test。
+- [docs/eval-memory-requests.md](docs/eval-memory-requests.md): 原生 workspace memory 的验证范围与验收测试。

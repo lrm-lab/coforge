@@ -1,2 +1,0 @@
-#!/bin/sh
-exec /opt/coforge-task/bin/bun /opt/coforge-task/coforge-cli.js "$@"

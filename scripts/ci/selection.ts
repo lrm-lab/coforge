@@ -128,9 +128,6 @@ export function selectChecks(paths: string[], track: "changes" | "web" | "local"
       affected = ["computer", "release", "web"];
     } else if (path.startsWith("apps/web/")) {
       affected = ["web"];
-    } else if (path.startsWith("benchmark/")) {
-      // The Web job checks the benchmarks, which import Web source; they are not in the image.
-      affected = track === "web" ? [] : ["web"];
     } else if (
       /^packages\/(computer|daemon)\/test\/.*\.test\.ts$/.test(path) ||
       Object.hasOwn(nativeTestJobs, path)
@@ -149,8 +146,7 @@ export function selectChecks(paths: string[], track: "changes" | "web" | "local"
       // The installer's tests take the Computer's machine mutation lock through this module.
       if (path === "packages/daemon/src/platform/process-lock.ts") affected.push("installer-crate");
       if (path.startsWith("packages/agent/")) affected.push("agent", "web");
-      // Web's tests and type check, and the benchmarks, import Daemon and CLI source; the image has
-      // neither.
+      // Web's tests and type check import Daemon and CLI source; the image has neither.
       if (/^packages\/(coforge|daemon)\//.test(path) && track !== "web") affected.push("web");
       if (path.startsWith("packages/coforge/")) affected.push("coforge");
     } else if (path.startsWith("scripts/release/")) {

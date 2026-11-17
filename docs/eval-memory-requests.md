@@ -1,9 +1,5 @@
 # Memory evaluation
 
-The former two-agent OpenViking/Memory Offer runners have been retired. Their dataset, adapter,
-grader and report utilities remain under `benchmark/`; historical scores describe that former
-configuration and do not measure native workspace memory.
-
 Native memory validation currently covers persistence, local recall/recovery, workspace isolation,
 current access checks, review-before-write, optimistic revisions, idempotency, atomic merge,
 version restoration, permanent entry deletion and legacy Agent retirement. See the
