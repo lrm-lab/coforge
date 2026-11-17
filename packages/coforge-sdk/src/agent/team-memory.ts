@@ -228,7 +228,7 @@ export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {
 export function teamMemoryTerms(query: string): string[] {
   const normalized = query.normalize("NFKC").toLowerCase();
   const terms = new Set(normalized.match(/[\p{L}\p{N}_.:/-]+/gu) ?? []);
-  for (const term of [...terms])
+  for (const term of Array.from(terms))
     if (/[\p{Script=Han}]/u.test(term))
       for (let index = 0; index < term.length - 1; index++) terms.add(term.slice(index, index + 2));
   return [...terms].slice(0, 24);
