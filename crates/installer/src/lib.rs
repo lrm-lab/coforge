@@ -26,6 +26,7 @@ pub mod paths;
 pub mod prepare;
 mod private_fs;
 pub mod processes;
+pub mod prune;
 pub mod receipts;
 pub mod recover;
 pub mod release_directory;

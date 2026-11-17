@@ -19,6 +19,7 @@ use crate::journal::Journal;
 use crate::lock::{BUSY_ERROR_CODE, LockError, MachineMutationLock};
 use crate::prepare::prepare_version;
 use crate::private_fs;
+use crate::prune::prune_best_effort;
 use crate::receipts::{Begin, ReceiptStore};
 use crate::service::{Registered, ServiceState};
 use crate::switch::Ports;
@@ -204,6 +205,7 @@ pub fn repair(
         match &definition {
             Ok(Some(Registered::Written)) => {}
             Ok(_) => {
+                prune_best_effort(&lock, ports.store, ports.processes, &[&target]);
                 return held(
                     &receipts,
                     &lock,
@@ -253,9 +255,14 @@ pub fn repair(
         &receipts,
         &lock,
         request_id,
-        ReceiptOutcome::Succeeded { version: target },
+        ReceiptOutcome::Succeeded {
+            version: target.clone(),
+        },
     ) {
-        Ok(receipt) => Outcome::Receipt(Box::new(receipt)),
+        Ok(receipt) => {
+            prune_best_effort(&lock, ports.store, ports.processes, &[&target]);
+            Outcome::Receipt(Box::new(receipt))
+        }
         Err(error) => Outcome::NoReceipt {
             exit: EXIT_UNRESOLVED,
             message: format!(

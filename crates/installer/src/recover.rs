@@ -19,6 +19,7 @@ use crate::journal::{Journal, Transaction};
 use crate::lifecycle::reported_service_definition;
 use crate::lock::{LockError, MachineMutationLock};
 use crate::processes::VerifiedCaller;
+use crate::prune::prune_best_effort;
 use crate::receipts::ReceiptStore;
 use crate::switch::{ActiveSwitch, Plan, Ports, Target, refusal_inside_service};
 
@@ -131,7 +132,11 @@ pub fn recover(
                         "{to} is active, but its receipt could not be written: {error}"
                     ));
                 }
-                return finish(&journal, &lock, to);
+                let outcome = finish(&journal, &lock, to.clone());
+                if matches!(outcome, RecoverOutcome::Recovered { .. }) {
+                    prune_best_effort(&lock, ports.store, ports.processes, &[&to]);
+                }
+                return outcome;
             }
             Err(error) if succeeded || transaction.from.is_none() => {
                 return unresolved(format!("recovery to {to} failed: {error}"));

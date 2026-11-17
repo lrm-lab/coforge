@@ -33,7 +33,9 @@ bootstrap (`install.sh` / `install.ps1`) fetches `coforge-installer` from the
 installer feed (`installer/latest`, gzip plus the `.sha256` sidecar check) and runs
 `coforge-installer install --version <v>`. The installer downloads, verifies, and
 installs the Computer from its own compiled-in feed under the machine mutation
-lock; see [Upgrade operations](upgrade-operations.md). Computer fetches the
+lock; see [Upgrade operations](upgrade-operations.md). Settled `install`, `upgrade`, `recover`,
+and `repair` runs prune inactive `versions/<v>/` directories under the mutation lock, keeping
+`active.current`, `active.previous` (for rollback), and any version with a live process. Computer fetches the
 installer through the same embedded scripts and then runs it. With the feed unreachable it runs
 the most recently used cached installer that still hashes to its directory name.
 

@@ -264,6 +264,16 @@ impl ProductExecutable {
     }
 }
 
+/// Whether `path` is `directory` or inside it, component by component, using the same Windows
+/// prefix, separator, and case normalization as [`ProductExecutable::matches`].
+pub(crate) fn path_is_within(path: &Path, directory: &Path) -> bool {
+    if cfg!(windows) {
+        Path::new(&windows_key(path)).starts_with(Path::new(&windows_key(directory)))
+    } else {
+        path.starts_with(directory)
+    }
+}
+
 /// The process that launched the installer and waits for it, checked to be its immediate parent.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VerifiedCaller {

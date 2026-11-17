@@ -20,6 +20,7 @@ use crate::contract::{
 use crate::journal::{Journal, Transaction};
 use crate::lock::{LockError, MachineMutationLock};
 use crate::processes::VerifiedCaller;
+use crate::prune::prune_best_effort;
 use crate::receipts::{Begin, ReceiptStore};
 use crate::switch::{ActiveSwitch, Plan, Ports, Target};
 use crate::update_error::UpdateError;
@@ -285,6 +286,12 @@ impl Run<'_, '_> {
         match self.record(outcome, runtimes) {
             Ok(receipt) => {
                 self.clear_journal();
+                prune_best_effort(
+                    self.lock,
+                    self.ports.store,
+                    self.ports.processes,
+                    &[&prepared.to],
+                );
                 Outcome::Receipt(Box::new(receipt))
             }
             Err(detail) => NoReceipt {

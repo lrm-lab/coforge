@@ -17,7 +17,10 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   differing `current/coforge-computer` and the `version` marker alone, a conservative choice (a
   renamed-over executable keeps its path on macOS, so such a process can still be found). The
   receipt fails `UPDATE_BUSY`.
-- Nothing prunes `versions/`; a pruning step must keep the previous version for rollback.
+- Inactive `versions/<v>/` directories are pruned under `&MachineMutationLock` after settled
+  `install`, `upgrade`, `recover`, and `repair` runs, keeping `active.current`, `active.previous`
+  (for rollback), the target version, and any version with a live process in `ProcessTable`;
+  best-effort removal failures warn without aborting an activated upgrade.
 
 ## Modules
 
@@ -122,6 +125,7 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   time, executable), enumeration, and the SIGTERM, SIGKILL, verify-dead escalation after the
   manager's stop. One `ProcessTable` adapter per OS in `src/processes/`; the caller is excluded.
 - `src/processes/`: the per-OS `ProcessTable` adapters (Linux `/proc`, macOS libproc, Windows Toolhelp), Unix signals, and a fake table that plays out exits, kills, zombies and pid reuse on the virtual clock. `proc_stat.rs` is compiled on every platform under test.
+- `src/prune.rs`: best-effort pruning of inactive `versions/<v>/` directories under the machine mutation lock, preserving `active.current`, `active.previous`, target, and running versions.
 - `src/lifecycle.rs`: the `ComputerLifecycle` port (protocol, status, and service-definition
   answers of a Computer executable), `reported_service_definition` (asks for the definition only
   when `protocol`'s `commands` lists it; `service_definition_if_listed` does so for a protocol
