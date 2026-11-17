@@ -35,7 +35,7 @@ describe("cli-guide-sections", () => {
     expect(combined).not.toContain("MEMORY.md");
     expect(combined).not.toContain("page:fill");
     expect(combined).toContain("coforge message check");
-    expect(combined).toContain("coforge task claim");
+    expect(combined).toContain("coforge task create --target");
     expect(combined).toContain("coforge task list --mine");
   });
 
