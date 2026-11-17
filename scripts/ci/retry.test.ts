@@ -17,6 +17,7 @@ const run = async (script: string, attempts: number) => {
     );
     return {
       code: result.exitCode,
+      stderr: result.stderr.toString(),
       count: Number((await readFile(counter, "utf8")).trim().split("\n").filter(Boolean).length),
     };
   } finally {
@@ -33,8 +34,12 @@ test("retry.sh succeeds once the command stops failing", async () => {
   expect(count).toBe(3);
 });
 
-test("retry.sh gives up after the attempt budget", async () => {
-  const { code, count } = await run('echo x >> "$COUNTER"; exit 1', 3);
-  expect(code).toBe(1);
+test("retry.sh gives up after the attempt budget and reports each exit code", async () => {
+  const { code, count, stderr } = await run(
+    'n=$(wc -l < "$COUNTER"); echo "$n" >> "$COUNTER"; exit $((n + 2))',
+    3,
+  );
+  expect(code).toBe(4);
   expect(count).toBe(3);
+  expect(stderr).toContain("exits: 2 3 4");
 });

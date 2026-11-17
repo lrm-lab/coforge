@@ -14,13 +14,9 @@ on:
       - Post-deploy performance check
       - Renew CDN certificates
       - Deploy Web (staging)
-      - Deploy Web (production)
       - Build Caddy image
       - Publish Computer (staging)
-      - Publish Computer (production)
       - Publish installer (staging)
-      - Publish installer (production)
-      - Publish docs site (production)
     types: [completed]
   workflow_dispatch:
     inputs:

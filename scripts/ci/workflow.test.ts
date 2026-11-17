@@ -205,19 +205,15 @@ test("a push to main starts no deployment or publication", async () => {
     if (infraRerun) {
       const on = workflow.on;
       const run = on.workflow_run;
-      // Validation and deploy workflows only: --failed re-runs just the jobs that
-      // failed, so a publish job that never reached its publish step is safe to
-      // retry; one-off and notes workflows have a person watching their runs.
+      // Validation and staging/maintenance workflows only: production releases
+      // are never auto-rerun so an operator rolling back or changing inputs is
+      // never raced.
       expect([...(run.workflows ?? [])].sort(), file).toEqual([
         "Build Caddy image",
         "CI",
-        "Deploy Web (production)",
         "Deploy Web (staging)",
         "Post-deploy performance check",
-        "Publish Computer (production)",
         "Publish Computer (staging)",
-        "Publish docs site (production)",
-        "Publish installer (production)",
         "Publish installer (staging)",
         "Renew CDN certificates",
         "Web browser e2e",
