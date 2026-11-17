@@ -44,10 +44,38 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
       const landed = await evaluate<boolean>(
         `(() => { const el = document.querySelector('${selector}'); const hit = document.elementFromPoint(${x}, ${y}); return Boolean(el && hit && (hit === el || el.contains(hit))); })()`,
       );
+      await note(`hover ${selector} at ${x},${y}: landed=${landed}`);
       if (landed) return;
       await browser("wait", "100");
     }
   }
+  /**
+   * What the page did while a tooltip was awaited, for the failure message: pointer events and
+   * their targets, keys, tooltips added and removed, focus, and the animations running at each
+   * hover (task #coforge-backend:#15: the Expand tooltip sometimes never opens after Cmd+B).
+   */
+  const recordPage = () =>
+    browser(
+      "eval",
+      `(() => {
+        const log = (window.__e2eTooltipLog = []);
+        const at = () => Math.round(performance.now());
+        const name = (el) => el instanceof Element ? (el.getAttribute("aria-label") || el.tagName.toLowerCase()) : String(el);
+        let lastMove = "";
+        for (const type of ["pointerover", "pointerout", "pointerdown", "keydown", "keyup", "focusin"])
+          document.addEventListener(type, (e) => log.push(at() + " " + type + " " + (e.key ?? "") + " " + (e.pointerType ?? "") + " " + name(e.target)), true);
+        document.addEventListener("pointermove", (e) => { const here = name(e.target); if (here !== lastMove) log.push(at() + " pointermove " + e.pointerType + " " + here); lastMove = here; }, true);
+        new MutationObserver((records) => { for (const r of records) { for (const n of r.addedNodes) if (n instanceof Element && (n.matches('[role="tooltip"]') || n.querySelector('[role="tooltip"]'))) log.push(at() + " tooltip+ " + n.textContent); for (const n of r.removedNodes) if (n instanceof Element && (n.matches('[role="tooltip"]') || n.querySelector('[role="tooltip"]'))) log.push(at() + " tooltip- " + n.textContent); } }).observe(document.body, { childList: true, subtree: true });
+        return true;
+      })()`,
+    );
+  const note = (line: string) =>
+    browser(
+      "eval",
+      `(window.__e2eTooltipLog ?? []).push(Math.round(performance.now()) + " -- " + ${JSON.stringify(line)} + " | running: " + document.getAnimations().filter((a) => a.playState === "running").map((a) => (a.animationName ?? a.transitionProperty ?? "?") + "@" + (a.effect?.target?.getAttribute?.("aria-label") ?? a.effect?.target?.tagName)).join(",") + " | active: " + (document.activeElement?.getAttribute("aria-label") ?? document.activeElement?.tagName))`,
+    );
+  const pageLog = async () =>
+    JSON.parse(await browser("eval", `(window.__e2eTooltipLog ?? []).join("\\n")`)) as string;
   /** Hovers until the button's tooltip opens and returns its text, read in the same page
    * evaluation that first sees it: a tooltip can close again before a second DOM read (a hover
    * end, another trigger's warmup, an unmount), so seeing it and reading it must be one
@@ -73,7 +101,7 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
       ) as string | null;
       if (shown !== null) return shown;
     }
-    throw new Error(`the ${selector} tooltip never opened`);
+    throw new Error(`the ${selector} tooltip never opened. What the page did:\n${await pageLog()}`);
   }
 
   try {
@@ -91,6 +119,7 @@ test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () =>
     expect(await collapsed()).toBe(false);
     const mac = await apple();
     const [press, label] = mac ? ["Meta+b", "⌘B"] : ["Control+b", "Ctrl+B"];
+    await recordPage();
 
     // The collapse button's tooltip names the shortcut.
     expect(await tooltipAfterHover(COLLAPSE, "Collapse sidebar")).toBe(`Collapse sidebar${label}`);
