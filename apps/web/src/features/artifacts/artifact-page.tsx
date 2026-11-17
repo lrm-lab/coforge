@@ -51,12 +51,7 @@ import {
 import { homeConversationOf, homeLinkProps, type ArtifactHome } from "./artifact-home";
 import { useArtifactLinkSharing } from "./artifact-link-sharing";
 import { ArtifactHomeChip } from "./artifact-home-chip";
-import {
-  ArtifactPresenceChip,
-  useKeepSeen,
-  useKeepViewing,
-  useRecordOpen,
-} from "./artifact-presence-chip";
+import { ArtifactPresenceChip, useKeepSeen, useRecordOpen } from "./artifact-presence-chip";
 import { ArtifactSendDialog } from "./artifact-send-dialog";
 import { ArtifactUpdateBanner, ViewingVersionNotice } from "./artifact-update-banner";
 import { artifactKindOfPath } from "./artifact-path-kind";
@@ -213,7 +208,6 @@ function ArtifactPageFor({
   });
 
   const opened = useRecordOpen(artifactId, latest);
-  useKeepViewing(artifactId, latest > 0);
 
   const entryPath = current && shownEntry(current);
   const entryKind = entryPath === undefined ? undefined : artifactKindOfPath(entryPath);
@@ -382,7 +376,11 @@ function ArtifactPageFor({
                             scope={visibility.current}
                           />
                         )}
-                        <ArtifactPresenceChip artifactId={artifactId} ready={opened} />
+                        <ArtifactPresenceChip
+                          workspaceId={workspaceId}
+                          artifactId={artifactId}
+                          ready={opened}
+                        />
                       </>
                     )
                   }

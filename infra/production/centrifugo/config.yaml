@@ -113,7 +113,9 @@ channel:
       history_ttl: 5m
       force_recovery: true
     # `presence:workspace:<workspace_id>`: who has a CoForge tab open in the Workspace
-    # (apps/web/src/features/workspaces/presence-channel.ts). Nothing is published here.
+    # (apps/web/src/features/workspaces/presence-channel.ts); `presence:artifact:<workspace_id>:
+    # <artifact_id>`: who has that artifact open, for whoever may read it
+    # (apps/web/src/features/artifacts/artifact-presence-channel.ts). Nothing is published here.
     - name: presence
       subscribe_proxy_enabled: true
       sub_refresh_proxy_enabled: true

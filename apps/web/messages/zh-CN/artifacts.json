@@ -139,7 +139,6 @@
   "av_vis_narrow_author_not_member": "它的作者是已不在该会话中的 Agent。请先把该 Agent 加回会话。",
   "av_vis_narrow_author_cannot_see": "它的作者已无法在那里查看它，因此无法移回。",
   "av_vis_narrow_link_off": "链接分享将关闭：{workspace} 之外的人和未登录的访客将无法再打开此链接。",
-  "av_viewing_count": "{count} 人在看",
   "av_presence_you": "你",
   "av_presence_now": "在看",
   "av_presence_saw": "看到 v{version}",

@@ -9,6 +9,8 @@ import { resolveActorServerRole } from "#src/server/conversations/channel-author
 import { fromCentrifugoProxy } from "#src/server/centrifugo/proxy-secret.server";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { errorType } from "#src/server/errors/error-type.server";
+import { isAppErrorCode } from "#src/lib/app-error";
+import { productionArtifactReads } from "#src/server/artifacts/artifact-composition.server";
 
 /**
  * Centrifugo's subscribe and sub-refresh proxies for the browser
@@ -19,7 +21,8 @@ import { errorType } from "#src/server/errors/error-type.server";
  *
  * Each channel is checked by the rule its token used to be issued under: a Workspace channel for
  * its members, a person's own channel for them alone, a conversation for whoever reads it
- * (`personConversationAccess`), a private Agent's channels for whoever may see it. A grant lasts
+ * (`personConversationAccess`), a private Agent's channels for whoever may see it, an artifact's
+ * presence for whoever may read the artifact. A grant lasts
  * `SUBSCRIPTION_LIFETIME_S`; Centrifugo then asks the sub-refresh proxy, which re-runs the same
  * check, so a lost grant ends within that time even if the immediate revocation
  * (`announceConversationsRevoked`) was missed.
@@ -45,6 +48,7 @@ export type BrowserSubscriptionAccess = {
   workspaceRole(workspaceId: string, userId: string): Promise<string | undefined>;
   /** Whether the person reads the conversation (`personConversationAccess`). */
   readsConversation(conversationId: string, userId: string): Promise<boolean>;
+  readsArtifact(workspaceId: string, artifactId: string, userId: string): Promise<boolean>;
   /** An Agent of this Workspace with what `canSeeAgent` needs, or undefined. */
   workspaceAgent(
     workspaceId: string,
@@ -85,6 +89,11 @@ const CHANNELS: {
         canSeeAgent({ kind: "user", userId: user, role }, agent)
       );
     },
+  },
+  {
+    pattern: new RegExp(`^presence:artifact:${UUID}:${UUID}$`),
+    allows: (access, user, [workspaceId, artifactId]) =>
+      access.readsArtifact(workspaceId!, artifactId!, user),
   },
   {
     // `chat:<conversation>`: one conversation's own channel.
@@ -139,6 +148,7 @@ export function browserSubscriptionAccess(
   db: PrismaClient,
   now: () => number = Date.now,
 ): BrowserSubscriptionAccess {
+  const artifactReads = productionArtifactReads(db);
   return {
     workspaceRole: reused(
       (workspaceId: string, userId: string) => resolveActorServerRole(db, workspaceId, { userId }),
@@ -146,6 +156,14 @@ export function browserSubscriptionAccess(
     ),
     readsConversation: async (conversationId, userId) =>
       (await personConversationAccess(db, userId, { id: conversationId })) === "read",
+    readsArtifact: (workspaceId, artifactId, userId) =>
+      artifactReads.artifact(workspaceId, artifactId, { userId }).then(
+        () => true,
+        (error: unknown) => {
+          if (isAppErrorCode(error, "NOT_FOUND", "ACCESS_DENIED")) return false;
+          throw error;
+        },
+      ),
     workspaceAgent: reused(
       async (workspaceId: string, agentId: string) =>
         (await db.agent.findFirst({

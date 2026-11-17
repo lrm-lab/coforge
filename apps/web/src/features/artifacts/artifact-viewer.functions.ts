@@ -5,6 +5,7 @@ import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { browserActivityInbox } from "#src/server/inbox/browser-activity-inbox.server";
 import { artifactInputs } from "./artifact-inputs";
+import { ARTIFACT_ROSTER_SIZE } from "./artifact-presence-channel";
 import { ARTIFACT_TITLE_MAX } from "./artifact-title-limit";
 
 const { id } = artifactInputs;
@@ -57,19 +58,18 @@ export const markArtifactSeen = createServerFn({ method: "POST" })
     return { seen: true as const };
   });
 
-export const keepArtifactViewing = createServerFn({ method: "POST" })
-  .middleware([workspaceUserMiddleware])
-  .validator(z.object({ artifactId: id }).strict())
-  .handler(async ({ context, data }) => {
-    await productionArtifacts(context.db).viewerPositions.heartbeat(placeOf(context, data));
-    return { viewing: true as const };
-  });
-
 export const loadArtifactViewers = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
-  .validator(z.object({ artifactId: id }).strict())
+  .validator(
+    z
+      .object({ artifactId: id, viewing: z.array(id).max(ARTIFACT_ROSTER_SIZE).optional() })
+      .strict(),
+  )
   .handler(({ context, data }) =>
-    productionArtifacts(context.db).viewerPositions.roster(placeOf(context, data)),
+    productionArtifacts(context.db).viewerPositions.roster({
+      ...placeOf(context, data),
+      viewing: data.viewing,
+    }),
   );
 
 export const loadArtifactFollowing = createServerFn({ method: "GET" })

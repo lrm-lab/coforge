@@ -1,7 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { ARTIFACT_ROSTER_SIZE } from "#src/features/artifacts/artifact-presence-channel";
 import { actorDirectory } from "./artifact-actor-names.server";
 import { artifactUnreadKeysSql } from "./artifact-activity.server";
-import type { ArtifactViewing } from "./artifact-viewing.server";
 import type { ArtifactReads } from "./artifact-reads.server";
 
 type PositionsDb = Pick<
@@ -15,7 +15,6 @@ export class ArtifactViewerPositions {
   constructor(
     private readonly db: PositionsDb,
     private readonly reads: Pick<ArtifactReads, "artifact">,
-    private readonly viewing: ArtifactViewing,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -30,8 +29,7 @@ export class ArtifactViewerPositions {
       ON CONFLICT ("artifactId", "userId") DO UPDATE
       SET "openedAt" = EXCLUDED."openedAt",
           "seenVersion" = GREATEST("artifact_viewer_positions"."seenVersion", EXCLUDED."seenVersion")`;
-    await this.viewing.mark(artifact.id, input.userId);
-    return this.#rosterOf(artifact, input);
+    return this.#rosterOf(artifact, input, []);
   }
 
   async seen(input: Place): Promise<boolean> {
@@ -46,42 +44,48 @@ export class ArtifactViewerPositions {
     return unread.length > 0;
   }
 
-  async heartbeat(input: Place) {
-    await this.reads.artifact(input.workspaceId, input.artifactId, { userId: input.userId });
-    await this.viewing.mark(input.artifactId, input.userId);
-  }
-
-  async roster(input: Place) {
+  async roster(input: Place & { viewing?: readonly string[] | undefined }) {
     const artifact = await this.reads.artifact(input.workspaceId, input.artifactId, {
       userId: input.userId,
     });
-    return this.#rosterOf(artifact, input);
+    return this.#rosterOf(artifact, input, input.viewing ?? []);
   }
 
-  async #rosterOf(artifact: { id: string; currentVersion: number }, input: Place) {
-    const [rows, nowIds] = await Promise.all([
+  async #rosterOf(
+    artifact: { id: string; currentVersion: number },
+    input: Place,
+    viewing: readonly string[],
+  ) {
+    const select = { userId: true, openedAt: true, seenVersion: true } as const;
+    const [latest, watching] = await Promise.all([
       this.db.artifactViewerPosition.findMany({
         where: { artifactId: artifact.id },
-        select: { userId: true, openedAt: true, seenVersion: true },
+        select,
         orderBy: { openedAt: "desc" },
-        take: 50,
+        take: ARTIFACT_ROSTER_SIZE,
       }),
-      this.viewing.now(artifact.id),
+      viewing.length
+        ? this.db.artifactViewerPosition.findMany({
+            where: { artifactId: artifact.id, userId: { in: [...viewing] } },
+            select,
+          })
+        : [],
     ]);
+    const rows = [
+      ...new Map([...latest, ...watching].map((row) => [row.userId, row])).values(),
+    ].sort((a, b) => b.openedAt.getTime() - a.openedAt.getTime());
     const { names, faces } = await actorDirectory(this.db, input.workspaceId, {
-      userIds: [...rows.map((row) => row.userId), ...nowIds],
+      userIds: rows.map((row) => row.userId),
       agentIds: [],
-    });
-    const named = (id: string) => ({
-      userId: id,
-      name: names.get(id) ?? "",
-      avatarUrl: faces.get(id) ?? null,
     });
     return {
       you: input.userId,
       currentVersion: artifact.currentVersion,
-      viewingNow: nowIds.map(named),
-      seen: rows.map((row) => ({ ...named(row.userId), ...row })),
+      seen: rows.map((row) => ({
+        ...row,
+        name: names.get(row.userId) ?? "",
+        avatarUrl: faces.get(row.userId) ?? null,
+      })),
       behind: rows.filter(
         (row) => row.userId !== input.userId && row.seenVersion < artifact.currentVersion,
       ).length,

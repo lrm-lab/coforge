@@ -141,7 +141,6 @@
   "av_vis_narrow_author_not_member": "Its author is an Agent that is no longer in that conversation. Add the Agent back first.",
   "av_vis_narrow_author_cannot_see": "Its author can no longer see it there, so it can't go back.",
   "av_vis_narrow_link_off": "Link sharing will turn off: people outside {workspace} and signed-out visitors can no longer open this link.",
-  "av_viewing_count": "{count} viewing",
   "av_presence_you": "You",
   "av_presence_now": "Viewing now",
   "av_presence_saw": "Saw v{version}",

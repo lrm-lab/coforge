@@ -9,11 +9,14 @@ import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { m } from "#src/paraglide/messages";
 import { POPOVER_MOTION } from "#src/utils/popover-motion";
 import { cn } from "#src/lib/utils";
+import { useChannelPresence, usePresentUsers } from "#src/features/realtime/channel-presence";
+import { ARTIFACT_ROSTER_SIZE, artifactPresenceChannel } from "./artifact-presence-channel";
 import { artifactViewersQuery, type ArtifactViewers } from "./artifact-queries";
-import { keepArtifactViewing, markArtifactSeen, openArtifact } from "./artifact-viewer.functions";
+import { loadArtifactViewers, markArtifactSeen, openArtifact } from "./artifact-viewer.functions";
 
-const HEARTBEAT_MS = 20_000;
 const SEEN_GAP_MS = 3_000;
+const STACK_FACES = 3;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function useKeepSeen(artifactId: string) {
   const state = useRef({
@@ -72,67 +75,82 @@ export function useRecordOpen(artifactId: string, version: number): boolean {
   return opened;
 }
 
-export function useKeepViewing(artifactId: string, active: boolean) {
+function useNameNewViewers(
+  artifactId: string,
+  roster: ArtifactViewers | undefined,
+  present: ReadonlySet<string> | undefined,
+) {
+  const queryClient = useQueryClient();
+  const named = new Set(roster?.seen.map((person) => person.userId));
+  const viewing = present
+    ? [...present]
+        .filter((userId) => UUID.test(userId))
+        .sort((a, b) => Number(b === roster?.you) - Number(a === roster?.you) || a.localeCompare(b))
+        .slice(0, ARTIFACT_ROSTER_SIZE)
+    : [];
+  const unnamed = roster ? viewing.filter((userId) => !named.has(userId)).join(" ") : "";
+  const viewingKey = viewing.join(" ");
   useEffect(() => {
-    if (!active) return;
-    const timer = setInterval(() => {
-      if (document.visibilityState === "visible")
-        void keepArtifactViewing({ data: { artifactId } }).catch(() => undefined);
-    }, HEARTBEAT_MS);
-    return () => clearInterval(timer);
-  }, [artifactId, active]);
+    if (!unnamed) return;
+    void loadArtifactViewers({ data: { artifactId, viewing: viewingKey.split(" ") } })
+      .then((fresh) => queryClient.setQueryData(artifactViewersQuery(artifactId).queryKey, fresh))
+      .catch(() => undefined);
+  }, [artifactId, unnamed, viewingKey, queryClient]);
 }
 
-function shapeRoster(roster: ArtifactViewers) {
-  const viewingNow = [...roster.viewingNow].sort(
-    (a, b) => Number(b.userId === roster.you) - Number(a.userId === roster.you),
-  );
-  const now = new Set(viewingNow.map((person) => person.userId));
+function shapeRoster(roster: ArtifactViewers, viewing: ReadonlySet<string>) {
+  const viewingNow = roster.seen
+    .filter((person) => viewing.has(person.userId))
+    .sort((a, b) => Number(b.userId === roster.you) - Number(a.userId === roster.you));
   return {
     ...roster,
     viewingNow,
-    others: roster.seen.filter((person) => !now.has(person.userId)),
+    others: roster.seen.filter((person) => !viewing.has(person.userId)),
   };
 }
 
 export function ArtifactPresenceChip({
+  workspaceId,
   artifactId,
   ready,
 }: {
+  workspaceId: string | undefined;
   artifactId: string;
   ready: boolean;
 }) {
-  const { data } = useQuery({
-    ...artifactViewersQuery(artifactId),
-    enabled: ready,
-    staleTime: HEARTBEAT_MS,
-    refetchInterval: HEARTBEAT_MS,
-    select: shapeRoster,
-  });
-  if (!data || (data.viewingNow.length === 0 && data.others.length === 0)) return null;
-  const faces = (data.viewingNow.length > 0 ? data.viewingNow : data.others).slice(0, 3);
+  const present = usePresentUsers(
+    useChannelPresence(
+      ready && workspaceId ? artifactPresenceChannel(workspaceId, artifactId) : undefined,
+    ),
+  );
+  const { data: roster } = useQuery({ ...artifactViewersQuery(artifactId), enabled: ready });
+  useNameNewViewers(artifactId, roster, present);
+  const data = roster && shapeRoster(roster, present ?? new Set([roster.you]));
+  if (!data) return null;
+  const me = data.viewingNow.find((person) => person.userId === data.you);
+  const othersViewing = data.viewingNow.filter((person) => person.userId !== data.you);
+  const shown = othersViewing.slice(0, me ? STACK_FACES - 1 : STACK_FACES);
+  const othersCount = present ? present.size - (present.has(data.you) ? 1 : 0) : 0;
   const nameOf = (person: { userId: string; name: string }) =>
     person.userId === data.you ? m.av_presence_you() : person.name;
   return (
     <DialogTrigger>
       <AriaButton
         aria-label={m.av_presence_label()}
-        className="flex shrink-0 items-center gap-1.5 rounded-lg px-1.5 py-1 text-xs text-tertiary outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
+        className="flex shrink-0 items-center rounded-lg px-1.5 py-1 outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
       >
-        <ActorAvatarStack>
-          {faces.map((person) => (
-            <PersonFace
+        <ActorAvatarStack more={Math.max(0, othersCount - shown.length)}>
+          {[...shown, ...(me ? [me] : [])].map((person) => (
+            <span
               key={person.userId}
-              person={person}
-              className={cn("size-5", AVATAR_STACK_RING.regular)}
-            />
+              data-viewer={person.userId}
+              className="flex animate-in fade-in zoom-in-95 motion-enter-sm"
+            >
+              <PersonFace person={person} className={cn("size-5", AVATAR_STACK_RING.regular)} />
+              <span className="sr-only">{nameOf(person)}</span>
+            </span>
           ))}
         </ActorAvatarStack>
-        {data.viewingNow.length > 0 && (
-          <span className="max-sm:sr-only">
-            {m.av_viewing_count({ count: data.viewingNow.length })}
-          </span>
-        )}
       </AriaButton>
       <Popover
         placement="bottom start"

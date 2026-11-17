@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { ArtifactPersonFollows } from "#src/server/artifacts/artifact-person-follows.server";
 import { ArtifactViewerPositions } from "#src/server/artifacts/artifact-viewer-positions.server";
-import { MemoryArtifactViewing } from "#src/server/artifacts/artifact-viewing.server";
 import { ArtifactPersonComments } from "#src/server/artifacts/artifact-person-comments.server";
 import { ArtifactCommentDrafts } from "#src/server/artifacts/artifact-comment-drafts.server";
 import type { ArtifactSignals } from "#src/server/artifacts/artifact-signals.server";
@@ -25,7 +24,7 @@ let signalsDown = false;
 beforeAll(async () => {
   f = await commentsFixture("aa");
   follows = new ArtifactPersonFollows(f.db, f.artifacts.reads);
-  positions = new ArtifactViewerPositions(f.db, f.artifacts.reads, new MemoryArtifactViewing());
+  positions = new ArtifactViewerPositions(f.db, f.artifacts.reads);
   const signals: ArtifactSignals = {
     publish: async (channel, event) => {
       if (signalsDown) throw new Error("realtime is down");

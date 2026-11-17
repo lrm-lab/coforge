@@ -23,6 +23,7 @@ import {
   workspaceConversationChannel,
 } from "#src/features/conversations/conversation-realtime";
 import { workspacePresenceChannel } from "#src/features/workspaces/presence-channel";
+import { artifactPresenceChannel } from "#src/features/artifacts/artifact-presence-channel";
 
 const ws = "11111111-1111-4111-8111-111111111111";
 const otherWs = "22222222-2222-4222-8222-222222222222";
@@ -31,9 +32,10 @@ const grace = "44444444-4444-4444-8444-444444444444";
 const conversation = "55555555-5555-4555-8555-555555555555";
 const privateAgent = "66666666-6666-4666-8666-666666666666";
 const publicAgent = "77777777-7777-4777-8777-777777777777";
+const artifact = "88888888-8888-4888-8888-888888888888";
 
-/** Ada is a member of `ws`, Grace its admin; Ada reads `conversation`; the private Agent is
- * Grace's. */
+/** Ada is a member of `ws`, Grace its admin; Ada reads `conversation` and `artifact`; the
+ * private Agent is Grace's. */
 const access: BrowserSubscriptionAccess = {
   workspaceRole: async (workspaceId, userId) =>
     workspaceId !== ws
@@ -45,6 +47,8 @@ const access: BrowserSubscriptionAccess = {
           : undefined,
   readsConversation: async (conversationId, userId) =>
     conversationId === conversation && userId === ada,
+  readsArtifact: async (workspaceId, artifactId, userId) =>
+    workspaceId === ws && artifactId === artifact && userId === ada,
   workspaceAgent: async (workspaceId, agentId) =>
     workspaceId !== ws
       ? undefined
@@ -71,6 +75,9 @@ test("each channel is held by the people its token used to be issued to", async 
     [ada, runtimeAuthChannel(grace), false],
     [ada, conversationRealtimeChannel(conversation), true],
     [grace, conversationRealtimeChannel(conversation), false],
+    [ada, artifactPresenceChannel(ws, artifact), true],
+    [grace, artifactPresenceChannel(ws, artifact), false],
+    [ada, artifactPresenceChannel(otherWs, artifact), false],
     // A private Agent: its creator and an admin see it, an ordinary member does not.
     [grace, agentStatusChannelForAgent(ws, privateAgent), true],
     [grace, agentActivityChannelForAgent(ws, privateAgent), true],

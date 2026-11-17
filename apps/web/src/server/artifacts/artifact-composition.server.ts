@@ -16,7 +16,7 @@ import { ArtifactPublicLinks } from "./artifact-public-links.server";
 import { publicPageLookup } from "./artifact-public-page.server";
 import { getAppRateLimits } from "#src/server/app-rate-limits/app-rate-limits-composition.server";
 import { artifactsEnabled, type ArtifactActor } from "./artifact-access.server";
-import type { ArtifactMessageCard } from "./artifact-reads.server";
+import { ArtifactReads, type ArtifactMessageCard } from "./artifact-reads.server";
 import { ArtifactShares } from "./artifact-shares.server";
 import { artifactDownload, artifactFilePreview } from "./artifact-download.server";
 import { ArtifactGallery } from "./artifact-gallery.server";
@@ -27,7 +27,6 @@ import { ArtifactPersonFollows } from "./artifact-person-follows.server";
 import { ArtifactRenames } from "./artifact-rename.server";
 import { ArtifactVersionHistory } from "./artifact-version-history.server";
 import { ArtifactViewerPositions } from "./artifact-viewer-positions.server";
-import { productionArtifactViewing } from "./artifact-viewing.server";
 import type { ArtifactNoticePort } from "./artifact-notice-port.server";
 import type { ArtifactAttachmentPort } from "./agent-artifact-save.server";
 import { AppError, isAppError } from "#src/lib/app-error";
@@ -37,6 +36,10 @@ export type { ArtifactMessageCard } from "./artifact-reads.server";
 
 export const productionArtifactSignals = () =>
   centrifugoArtifactSignals(() => createCentrifugoServerApi());
+
+export function productionArtifactReads(db: PrismaClient) {
+  return new ArtifactReads(db, (workspaceId) => artifactsEnabled(db, workspaceId));
+}
 
 export function productionArtifacts(db: PrismaClient) {
   const blobs = new StoredArtifactBlobs(db, getFileStorage);
@@ -81,7 +84,7 @@ export function productionArtifacts(db: PrismaClient) {
       place: { workspaceId: string; artifactId: string; userId: string },
     ) => commentImageUploadResponse(request, (bytes) => comments.uploadImage({ ...place, bytes })),
     versionHistory: new ArtifactVersionHistory(db, artifacts.reads),
-    viewerPositions: new ArtifactViewerPositions(db, artifacts.reads, productionArtifactViewing()),
+    viewerPositions: new ArtifactViewerPositions(db, artifacts.reads),
     download: (input: Parameters<typeof artifactDownload>[1]) =>
       artifactDownload(
         { reads: artifacts.reads, blobs, zipLimit: getAppRateLimits().artifactZip },

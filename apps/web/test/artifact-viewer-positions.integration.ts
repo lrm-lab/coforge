@@ -1,15 +1,13 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { MemoryArtifactViewing } from "#src/server/artifacts/artifact-viewing.server";
 import { ArtifactViewerPositions } from "#src/server/artifacts/artifact-viewer-positions.server";
 import { commentsFixture, type CommentsFixture } from "./helpers/artifact-comments-fixture";
 
 let f: CommentsFixture;
 let clock = 1_000_000;
-const viewing = new MemoryArtifactViewing(() => clock);
 let positions: ArtifactViewerPositions;
 beforeAll(async () => {
   f = await commentsFixture("vp");
-  positions = new ArtifactViewerPositions(f.db, f.artifacts.reads, viewing, () => new Date(clock));
+  positions = new ArtifactViewerPositions(f.db, f.artifacts.reads, () => new Date(clock));
 });
 afterAll(() => f.cleanup());
 
@@ -41,32 +39,58 @@ test("a person who cannot read the artifact records nothing", async () => {
   expect(await position(artifact, f.bob)).toBeNull();
 });
 
-test("the roster names who is viewing now and who has not seen the latest version", async () => {
+const roster = (artifactId: string, viewing?: string[]) =>
+  positions.roster({ workspaceId: f.workspaceId, artifactId, userId: f.alice, viewing });
+
+test("the roster names who opened it and who has not seen the latest version", async () => {
   const artifact = await f.make("Roster");
   await open(artifact, f.alice);
   await open(artifact, f.bob);
   await f.pushText(artifact, f.agents.writer, "two\n");
   await open(artifact, f.alice);
 
-  await positions.heartbeat({ workspaceId: f.workspaceId, artifactId: artifact, userId: f.alice });
-  const roster = await positions.roster({
-    workspaceId: f.workspaceId,
-    artifactId: artifact,
-    userId: f.alice,
-  });
-  expect(roster.currentVersion).toBe(2);
-  expect(roster.viewingNow.map((person) => person.name).sort()).toEqual(["Alice", "Bob"]);
-  expect(roster.seen.map(({ name, seenVersion }) => [name, seenVersion]).sort()).toEqual([
+  const read = await roster(artifact);
+  expect(read).not.toHaveProperty("viewingNow");
+  expect(read.currentVersion).toBe(2);
+  expect(read.seen.map(({ name, seenVersion }) => [name, seenVersion]).sort()).toEqual([
     ["Alice", 2],
     ["Bob", 1],
   ]);
-  expect(roster.behind).toBe(1);
+  expect(read.behind).toBe(1);
+});
 
-  clock += 120_000;
-  const later = await positions.roster({
-    workspaceId: f.workspaceId,
-    artifactId: artifact,
-    userId: f.alice,
+test("the people viewing now are named even past the fifty latest openers, strangers never", async () => {
+  const artifact = await f.make("Busy");
+  await open(artifact, f.bob);
+  clock += 1_000;
+  const crowd = await Promise.all(
+    Array.from({ length: 50 }, (_, index) =>
+      f.db.user.create({
+        data: {
+          username: `vp-crowd-${index}-${artifact.slice(0, 8)}`,
+          displayName: `Crowd ${index}`,
+        },
+      }),
+    ),
+  );
+  const stranger = crowd.pop()!;
+  await f.db.artifactViewerPosition.createMany({
+    data: [...crowd, { id: f.alice }].map((user) => ({
+      artifactId: artifact,
+      userId: user.id,
+      openedAt: new Date(clock),
+      seenVersion: 1,
+    })),
   });
-  expect(later.viewingNow).toEqual([]);
+  try {
+    expect((await roster(artifact)).seen.map((person) => person.userId)).not.toContain(f.bob);
+    const read = await roster(artifact, [f.bob, stranger.id]);
+    expect(read.seen.find((person) => person.userId === f.bob)).toMatchObject({ name: "Bob" });
+    expect(read.seen.map((person) => person.userId)).not.toContain(stranger.id);
+  } finally {
+    await f.db.artifactViewerPosition.deleteMany({ where: { artifactId: artifact } });
+    await f.db.user.deleteMany({
+      where: { id: { in: [...crowd, stranger].map((user) => user.id) } },
+    });
+  }
 });

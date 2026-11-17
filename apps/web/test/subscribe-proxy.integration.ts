@@ -46,6 +46,7 @@ const access: BrowserSubscriptionAccess = {
     workspaceId === WORKSPACE && agentId === AGENT
       ? { visibility: agentVisibility, ownerId: GRACE, systemKind: null }
       : undefined,
+  readsArtifact: async () => false,
   readsConversation: async (conversationId, userId) => {
     if (down) throw new Error("database unavailable");
     return conversationId === CONVERSATION && readers.has(userId);

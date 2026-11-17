@@ -32,7 +32,10 @@ These rules apply to `src/features/artifacts/`. They extend
   back link returns to the gallery when the viewer came from it (`galleryEntryState`), else to the
   home conversation or the Workspace home (`homeLinkProps`).
 - The open call records the viewer and answers with the roster, which seeds the viewers query; the
-  presence chip reads it only after that (`useRecordOpen`).
+  presence chip reads it only after that (`useRecordOpen`). Who is viewing now is the artifact's
+  Centrifugo presence channel (`artifactPresenceChannel`, join and leave, no polling); the roster is
+  read again, with the present people's ids, only when someone present is not named in it yet. An
+  open tab counts as viewing even in the background.
 - Scope names come from `useScopeLabels`; the Workspace scope is named by the Workspace
   (`av_vis_workspace` takes it), never a generic "everyone". A card's stored `preview` is a Markdown
   excerpt: render it with `MarkdownPreview`, clamped by its caller.

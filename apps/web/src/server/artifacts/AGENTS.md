@@ -180,9 +180,9 @@ The rules are in `docs/agent-cli/artifact-follows.md`. Their modules:
   with people commenting on the Web). New comments count in SQL from the opened time; only the
   unseen bodies are read, for the mention badge. A conversation's cards take one marks request.
 - `artifact-viewer-positions.server.ts` keeps `artifact_viewer_positions` (opened time, highest
-  version seen; no foreign key on a user) and the "viewing now" roster,
-  whose live part is `artifact-viewing.server.ts` (Redis sorted set, short TTL; a Memory twin in
-  tests). A person's `artifact_follows` row is `artifact-person-follows.server.ts`.
+  version seen; no foreign key on a user) and the roster: the latest openers plus the people the
+  page says are viewing (Centrifugo presence), never anyone without a row. A person's
+  `artifact_follows` row is `artifact-person-follows.server.ts`.
 - `artifact-rename.server.ts` renames under a row lock, also the current version's title, and
   tells Agent followers through `ArtifactNotices` (best effort). `artifact-version-history.server.ts`
   lists versions with what each changed.

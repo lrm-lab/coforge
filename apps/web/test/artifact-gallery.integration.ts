@@ -3,7 +3,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { ArtifactGallery } from "#src/server/artifacts/artifact-gallery.server";
 import { ArtifactViewerPositions } from "#src/server/artifacts/artifact-viewer-positions.server";
-import { MemoryArtifactViewing } from "#src/server/artifacts/artifact-viewing.server";
 import { commentsFixture, type CommentsFixture } from "./helpers/artifact-comments-fixture";
 
 let f: CommentsFixture;
@@ -17,12 +16,7 @@ let docsId: string;
 beforeAll(async () => {
   f = await commentsFixture("gl");
   gallery = new ArtifactGallery(f.db, async () => true, f.artifacts.reads);
-  positions = new ArtifactViewerPositions(
-    f.db,
-    f.artifacts.reads,
-    new MemoryArtifactViewing(),
-    now,
-  );
+  positions = new ArtifactViewerPositions(f.db, f.artifacts.reads, now);
   docsId = (
     await f.db.conversation.findFirstOrThrow({
       where: { workspaceId: f.workspaceId, channelName: f.docsChannel },
@@ -118,14 +112,13 @@ test("recently opened puts what the person opened first, newest first, never-ope
   expect(opened.artifacts[2]!.openedAt).toBeNull();
 });
 
-test("opening an artifact answers with the roster that already counts the opener as viewing", async () => {
+test("opening an artifact answers with the roster that already lists the opener", async () => {
   const roster = await positions.open({
     workspaceId: f.workspaceId,
     artifactId: ids.alpha!,
     userId: f.alice,
   });
   expect(roster.you).toBe(f.alice);
-  expect(roster.viewingNow.map((person) => person.userId)).toContain(f.alice);
   expect(roster.seen.map((person) => person.userId)).toContain(f.alice);
 });
 

@@ -2,7 +2,10 @@ import { expect, test } from "bun:test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { Centrifuge } from "centrifuge";
 import { PrismaClient } from "#src/generated/prisma/client";
+import { artifactPresenceChannel } from "#src/features/artifacts/artifact-presence-channel";
+import { issueBrowserRealtimeToken } from "#src/server/auth/browser-realtime-token.server";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
@@ -21,7 +24,8 @@ import {
  * The artifact viewer and gallery as Raft lays them out: the viewer owns the window (no sidebar)
  * and its header reads, left to right, back link, title, version, who can see, home conversation,
  * who is viewing, then find, copy link and more; the presence popover lists who is viewing now
- * (you first) and who looked before; the Workspace scope names the Workspace; the gallery's
+ * (you first) and who looked before, and someone opening or closing the artifact shows or leaves
+ * at once, without a reload; the Workspace scope names the Workspace; the gallery's
  * conversation filter opens with a "who can see" group that filters by visibility; the send dialog
  * counts what is selected and previews the artifact; a viewer reached from the gallery goes back to it.
  * Markdown artifacts only, so it needs no
@@ -31,6 +35,8 @@ import {
  * Screenshots go under `.amp/e2e/artifact-viewer-parity/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
+const centrifugo = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
+if (!centrifugo) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
 const shots = join(import.meta.dir, "../../../.amp/e2e/artifact-viewer-parity");
 
 test("the viewer's own window and header, its presence list, the gallery's visibility group, the send dialog", async () => {
@@ -82,6 +88,7 @@ test("the viewer's own window and header, its presence list, the gallery's visib
   const pageOf = (id: string) => `${origin}/en/w/${workspace.slug}/artifacts/${id}`;
   const left = (selector: string) =>
     `document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect().left ?? -1`;
+  let linPage: Centrifuge | undefined;
   try {
     await experiments.write(workspaceId, "artifacts", true);
     await mkdir(shots, { recursive: true });
@@ -134,6 +141,32 @@ test("the viewer's own window and header, its presence list, the gallery's visib
     expect(Object.values(x).every((value) => value >= 0)).toBe(true);
     expect(Object.values(x)).toEqual(Object.values(x).sort((a, b) => a - b));
     await shoot("1-viewer-header");
+
+    const viewingChip = `document.querySelector('${header} button[aria-label="Who is viewing"]')`;
+    const linViewing = `${viewingChip}?.querySelector('[data-viewer="${lin.id}"]') != null`;
+    await chrome.until(
+      `${viewingChip}?.querySelector('[data-viewer="${DEV_BROWSER_USER.id}"]') != null`,
+    );
+    expect(await evaluate<boolean>(linViewing)).toBe(false);
+    await services.viewerPositions.open({ workspaceId, artifactId: wide.id, userId: lin.id });
+    linPage = new Centrifuge(`${centrifugo.replace(/^http/, "ws")}/connection/websocket`, {
+      token: await issueBrowserRealtimeToken({ userId: lin.id, workspaceId }),
+      websocket: globalThis.WebSocket,
+    });
+    linPage.newSubscription(artifactPresenceChannel(workspaceId, wide.id)).subscribe();
+    linPage.connect();
+    await chrome.until(linViewing);
+    await chrome.press(viewingChip);
+    await chrome.until(text("Lin Xia"));
+    expect(
+      await evaluate<string[]>(
+        `[...document.querySelectorAll('[role="dialog"] li')].map((li) => li.textContent.trim())`,
+      ),
+    ).toContain("Lin XiaViewing now");
+    await shoot("1b-someone-opens");
+    await browser("press", "Escape");
+    linPage.disconnect();
+    await chrome.until(`!(${linViewing})`);
     await browser("open", pageOf(doc.id));
     await browser("wait", "--fn", ready, "--timeout", "30000");
 
@@ -195,6 +228,7 @@ test("the viewer's own window and header, its presence list, the gallery's visib
     expect(dialog).toContain("v1");
     await shoot("4-send-dialog");
   } finally {
+    linPage?.disconnect();
     await browser("close").catch(() => undefined);
     await db.artifact
       .deleteMany({ where: { homeKey: `conversation:${channel.id}` } })

@@ -59,3 +59,4 @@ These are not versioned events: they carry a status or presence payload on a ded
 | `agentstatus:<workspaceId>:<agentId>` | `server/agents/agent-visibility-realtime.server.ts` | a private Agent's status in `features/agents/agent-status-channel.ts` |
 | `agent:activity:<workspaceId>` | `server/agents/agent-activity*.server.ts` | Agent Activity pages |
 | `presence:workspace:<workspaceId>` | `server/centrifugo/` presence observer | Workspace presence lists |
+| `presence:artifact:<workspaceId>:<artifactId>` | nothing; Centrifugo's join and leave | who is viewing an artifact, `features/artifacts/artifact-presence-chip.tsx` |
