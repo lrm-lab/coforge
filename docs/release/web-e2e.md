@@ -22,14 +22,18 @@ logs, and the screenshots the tests wrote under `.amp/e2e/`.
 
 ## What is on the list
 
-A file goes on the list after it passes three clean runs in a row on a private stack built the
-same way. `scripts/ci/web-e2e-list.test.ts` checks that every listed file exists, and that none
-drives `ego-browser`, which operates a signed-in desktop browser and cannot run on a CI runner.
-Files that need something the run does not provide stay off it: a database reset
-(`e2e-agent-direct-message`, `e2e-agent-introduction`), OIDC (`e2e-oidc-*`), a provider key
-(`e2e-openrouter-live`), a managed environment (`agent-control`, `kiro-native`), an artifact
-sandbox origin (`e2e-artifact-page`, which needs `COFORGE_ARTIFACT_SANDBOX_ORIGIN`). Files that
-fail for other reasons are tracked in their own task until they are fixed and added.
+Every `.e2e.ts` under `apps/web/test` must be registered exactly once: either in
+`scripts/e2e/web-e2e-ci.txt` with the seconds used to balance shards, or in
+`scripts/e2e/web-e2e-ci-excluded.txt` with a non-empty reason. The exclusion file does not run
+anything; it makes the files omitted from the scheduled suite visible. Existing unregistered
+files are initially marked `待分拣` for a separate triage task. New files must be registered in
+the same change that adds them.
+
+`scripts/ci/web-e2e-list.test.ts` checks complete coverage, file existence, unique registration
+and exclusion reasons. It also refuses included files that drive `ego-browser`, which operates
+a signed-in desktop browser and cannot run on a CI runner. When moving a file into the CI list,
+remove its exclusion entry and record its measured runtime. Files needing capabilities the CI
+stack does not provide stay excluded with the specific reason.
 
 Two things differ between a local run and the runner:
 

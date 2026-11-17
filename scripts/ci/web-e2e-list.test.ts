@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { readdir } from "node:fs/promises";
 
 /**
  * scripts/e2e/web-e2e-ci.txt is the list of browser e2es the scheduled run must pass
@@ -11,7 +10,28 @@ const entries = (await Bun.file("scripts/e2e/web-e2e-ci.txt").text())
   .split("\n")
   .filter((line) => line.trim() !== "" && !line.trimStart().startsWith("#"))
   .map((line) => line.trim().split(/\s+/));
-const tests = new Set((await readdir("apps/web/test")).filter((name) => name.endsWith(".e2e.ts")));
+const tests = new Set<string>();
+for await (const file of new Bun.Glob("**/*.e2e.ts").scan({
+  cwd: "apps/web/test",
+  onlyFiles: true,
+}))
+  tests.add(file);
+
+test("every browser e2e is registered for CI or explicitly excluded with a reason", async () => {
+  const path = "scripts/e2e/web-e2e-ci-excluded.txt";
+  const excluded = Bun.file(path);
+  expect(await excluded.exists(), path).toBe(true);
+  const registered = new Set(entries.map(([file]) => file!));
+  for (const line of (await excluded.text()).split("\n")) {
+    if (!line.trim() || line.trimStart().startsWith("#")) continue;
+    const [file, ...reason] = line.trim().split(/\s+/);
+    expect(tests.has(file!), file).toBe(true);
+    expect(registered.has(file!), `${file} is registered more than once`).toBe(false);
+    expect(reason.join(" ").trim(), `${file} needs an exclusion reason`).not.toBe("");
+    registered.add(file!);
+  }
+  expect([...tests].filter((file) => !registered.has(file)).sort()).toEqual([]);
+});
 
 test("every listed browser e2e exists, once, with the seconds that balance the shards", () => {
   // Non-vacuity: the list is not empty.
