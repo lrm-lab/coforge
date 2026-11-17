@@ -12,6 +12,7 @@ const FAILURE_REASONS = {
   github_sign_in: "Authing did not complete the GitHub sign-in",
   send_code: "Authing did not send the verification code",
   password_reset: "Authing did not complete the password reset",
+  contact_bind: "Authing did not bind the contact",
   userinfo: "failed to fetch Authing user info",
   user_resolution: "failed to resolve user",
 } as const;

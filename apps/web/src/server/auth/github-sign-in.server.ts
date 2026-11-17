@@ -1,10 +1,12 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 
+import type { PrismaClient } from "#src/generated/prisma/client";
 import { readPrompt, safeReturnTo, type SignInError } from "#src/features/auth/return-to";
 import { createAuthingAuthentication, type AuthingConfig } from "./authing-authentication.server";
 import { signInThroughAuthing, type SignInUseCaseInput } from "./authing-sign-in.server";
 import { clearCookie, readCookie, serializeCookie } from "./browser-login.server";
 import type { GitHubSignInConfig } from "./config.server";
+import { stageGitHubContactBind, type ContactBindStore } from "./contact-binding.server";
 import { reportGitHubSignInRejected } from "./login-failure.server";
 import { readSignedValue, signValue } from "./signed-value.server";
 
@@ -25,7 +27,13 @@ const STATE_TTL_SECONDS = 10 * 60;
 /** GitHub's codes are 20 characters; anything long is not one. */
 const MAX_CODE_LENGTH = 256;
 
-type PendingSignIn = { state: string; returnTo?: string; prompt?: "login"; exp: number };
+type PendingSignIn = {
+  state: string;
+  returnTo?: string;
+  prompt?: "login";
+  bindUserId?: string;
+  exp: number;
+};
 
 /** Where to send the browser to authorize, and the cookie that remembers the way back. */
 export function startGitHubSignIn(input: {
@@ -38,6 +46,9 @@ export function startGitHubSignIn(input: {
   /** `"login"` when the sign-in page was asked to sign the person in afresh (`prompt=login`): the
    * way back to it keeps asking. */
   prompt?: "login" | undefined;
+  /** When set, the OAuth round-trip elevates this signed-in user for contact binding instead of
+   * creating a new login session. */
+  bindUserId?: string | undefined;
   now?: () => number;
 }): { location: string; cookie: string } {
   const state = randomBytes(32).toString("base64url");
@@ -45,6 +56,7 @@ export function startGitHubSignIn(input: {
     state,
     ...(input.returnTo ? { returnTo: input.returnTo } : {}),
     ...(input.prompt ? { prompt: input.prompt } : {}),
+    ...(input.bindUserId ? { bindUserId: input.bindUserId } : {}),
     exp: Math.floor((input.now ?? Date.now)() / 1000) + STATE_TTL_SECONDS,
   };
   const location = new URL(input.config.authorizeUrl);
@@ -77,6 +89,18 @@ export type GitHubSignInResult =
       error: SignInError;
       returnTo: string | undefined;
       prompt?: "login";
+    }
+  /** GitHub elevation for contact binding succeeded and staged a short-lived token in Redis. */
+  | {
+      status: "bind_staged";
+      bindToken: string;
+      returnTo: string | undefined;
+    }
+  /** GitHub elevation for contact binding failed; return to `returnTo` without changing session. */
+  | {
+      status: "bind_failed";
+      error: "github_denied" | "github_failed" | "identity_mismatch" | "unavailable";
+      returnTo: string | undefined;
     };
 
 /**
@@ -92,6 +116,9 @@ export async function completeGitHubSignIn(
     cookieHeader: string;
     config: GitHubSignInConfig;
     authingConfig: AuthingConfig;
+    currentUserId?: string | undefined;
+    contactBindStore?: ContactBindStore | undefined;
+    db?: PrismaClient | undefined;
   },
 ): Promise<GitHubSignInResult> {
   const now = input.now ?? Date.now;
@@ -119,15 +146,43 @@ export async function completeGitHubSignIn(
   const refusal = input.query.get("error");
   if (refusal) {
     reportGitHubSignInRejected(refusal === "access_denied" ? "denied" : "error");
-    return back(refusal === "access_denied" ? "github_denied" : "github_failed");
+    const error = refusal === "access_denied" ? "github_denied" : "github_failed";
+    return live.bindUserId ? { status: "bind_failed", error, returnTo } : back(error);
   }
   const code = input.query.get("code");
   if (!code || code.length > MAX_CODE_LENGTH) {
     reportGitHubSignInRejected("no_code");
-    return back("github_failed");
+    return live.bindUserId
+      ? { status: "bind_failed", error: "github_failed", returnTo }
+      : back("github_failed");
   }
 
   const authing = input.authing ?? createAuthingAuthentication(input.authingConfig);
+  if (live.bindUserId) {
+    if (!input.currentUserId || input.currentUserId !== live.bindUserId) {
+      return { status: "bind_failed", error: "identity_mismatch", returnTo };
+    }
+    if (!input.contactBindStore || !input.db) {
+      return { status: "bind_failed", error: "unavailable", returnTo };
+    }
+    const staged = await stageGitHubContactBind({
+      db: input.db,
+      store: input.contactBindStore,
+      userId: live.bindUserId,
+      code,
+      connection: input.config.connection,
+      authingConfig: input.authingConfig,
+      authing,
+    });
+    if (staged.status === "staged") {
+      return { status: "bind_staged", bindToken: staged.bindToken, returnTo };
+    }
+    return {
+      status: "bind_failed",
+      error: staged.status === "identity_mismatch" ? "identity_mismatch" : "github_failed",
+      returnTo,
+    };
+  }
   const result = await signInThroughAuthing({
     stage: "github_sign_in",
     authenticate: () => authing.signInWithGitHubCode({ code, connection: input.config.connection }),

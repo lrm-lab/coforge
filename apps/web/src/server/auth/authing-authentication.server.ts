@@ -94,48 +94,19 @@ export class InvalidCredentialsError extends SignInFailure {
   }
 }
 
-/** Authing refused a password reset: the verification code (`reset_code`), or the new password
- * (`password`, which its policy does not accept). A `SignInFailure` of its own step. */
-export class PasswordResetRefusedError extends SignInFailure {
-  readonly statusCode: number;
-  readonly refused: "reset_code" | "password";
+import {
+  CodeSendRefusedError,
+  CodeSendThrottledError,
+  ContactBindRefusedError,
+  PasswordResetRefusedError,
+} from "./authing-errors.server";
 
-  constructor(refused: "reset_code" | "password", statusCode: number, providerError?: string) {
-    super("password_reset", {
-      reason:
-        refused === "reset_code"
-          ? "Authing refused the verification code of a password reset"
-          : "Authing refused the new password",
-      providerError,
-    });
-    this.name = "PasswordResetRefusedError";
-    this.refused = refused;
-    this.statusCode = statusCode;
-  }
-}
-
-/** Authing refused to send a verification code (a destination it does not know, for a password
- * reset), as it answers a request it will not serve; not a failure on its side. A `SignInFailure`
- * of the send step. */
-export class CodeSendRefusedError extends SignInFailure {
-  constructor(status: number, providerError?: string) {
-    super("send_code", {
-      reason: "Authing refused to send the verification code",
-      status,
-      providerError,
-    });
-    this.name = "CodeSendRefusedError";
-  }
-}
-
-/** Authing would not send a verification code because it was asked too often (it allows one per
- * destination per minute). A `SignInFailure` of the send step. */
-export class CodeSendThrottledError extends SignInFailure {
-  constructor(providerError?: string) {
-    super("send_code", { reason: "Authing throttled the verification code", providerError });
-    this.name = "CodeSendThrottledError";
-  }
-}
+export {
+  CodeSendRefusedError,
+  CodeSendThrottledError,
+  ContactBindRefusedError,
+  PasswordResetRefusedError,
+};
 
 export type AuthingAuthentication = {
   /** Throws `InvalidCredentialsError` when Authing refused the credentials, `SignInFailure` when
@@ -169,6 +140,14 @@ export type AuthingAuthentication = {
    * (`CHANNEL_VERIFY_EMAIL_LINK`); the address is always the one the account already carries,
    * never one a caller supplies. Throws as `sendSignInCode`. */
   sendVerifyEmailLink(email: string): Promise<void>;
+  /** Has Authing send a contact-binding code using the short-lived user token. */
+  sendBindCode(input: { token: string; destination: CodeDestination }): Promise<void>;
+  /** Binds a verified phone or email using the short-lived user token. */
+  bindContact(input: {
+    token: string;
+    destination: CodeDestination;
+    passCode: string;
+  }): Promise<void>;
   /** Has Authing send the code that sets a new password, by SMS or email. As `sendSignInCode`,
    * and `CodeSendRefusedError` when Authing refused the request (it has no such account). */
   sendResetCode(destination: CodeDestination): Promise<void>;
@@ -231,10 +210,15 @@ async function postAuthing(
   config: AuthingConfig,
   path: string,
   body: Record<string, unknown>,
+  authorization?: string,
 ): Promise<{ ok: boolean; status: number; body: SignInResponse | null }> {
   const response = await fetch(`${config.appHost}/api/v3/${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-authing-app-id": config.appId },
+    headers: {
+      "content-type": "application/json",
+      "x-authing-app-id": config.appId,
+      ...(authorization ? { authorization: `Bearer ${authorization}` } : {}),
+    },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(SIGN_IN_TIMEOUT_MS),
   });
@@ -294,18 +278,25 @@ function destinationFields(destination: CodeDestination) {
 
 /** What a `send-email`/`send-sms` call is for: a sign-in or password-reset code, or the link that
  * verifies an email address. */
-type SendChannel = "CHANNEL_LOGIN" | "CHANNEL_RESET_PASSWORD" | "CHANNEL_VERIFY_EMAIL_LINK";
+type SendChannel =
+  | "CHANNEL_LOGIN"
+  | "CHANNEL_RESET_PASSWORD"
+  | "CHANNEL_VERIFY_EMAIL_LINK"
+  | "CHANNEL_BIND_PHONE"
+  | "CHANNEL_BIND_EMAIL";
 
 /** `POST /api/v3/send-sms` or `send-email` for one channel (what the code or link is for). */
 async function requestCodeSend(
   config: AuthingConfig,
   channel: SendChannel,
   destination: CodeDestination,
+  authorization?: string,
 ): Promise<void> {
   const { ok, status, body } = await postAuthing(
     config,
     destination.kind === "email" ? "send-email" : "send-sms",
     { channel, ...destinationFields(destination) },
+    authorization,
   );
   const statusCode = statusCodeOf(body);
   if (ok && statusCode === 200) return;
@@ -362,6 +353,30 @@ export function createAuthingAuthentication(config: AuthingConfig): AuthingAuthe
     },
     sendResetCode(destination) {
       return requestCodeSend(config, "CHANNEL_RESET_PASSWORD", destination);
+    },
+    sendBindCode({ token, destination }) {
+      return requestCodeSend(
+        config,
+        destination.kind === "email" ? "CHANNEL_BIND_EMAIL" : "CHANNEL_BIND_PHONE",
+        destination,
+        token,
+      );
+    },
+    async bindContact({ token, destination, passCode }) {
+      const path = destination.kind === "email" ? "bind-email" : "bind-phone";
+      const { ok, status, body } = await postAuthing(
+        config,
+        path,
+        { passCode, ...destinationFields(destination) },
+        token,
+      );
+      const statusCode = statusCodeOf(body);
+      if (ok && statusCode === 200) return;
+      const providerError = providerErrorOf(body);
+      if (isRefusal(status, statusCode)) {
+        throw new ContactBindRefusedError(statusCode, providerError);
+      }
+      throw new SignInFailure("contact_bind", { status, providerError });
     },
     async verifyResetCode({ destination, passCode }) {
       const payload = { ...destinationFields(destination), passCode };

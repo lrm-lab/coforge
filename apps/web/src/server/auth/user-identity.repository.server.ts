@@ -77,6 +77,33 @@ export class UserIdentityRepository {
     return true;
   }
 
+  /**
+   * Syncs the provider's latest contact fields (email/phone and their verified flags) onto an
+   * existing User after a contact-binding operation.
+   */
+  async syncContacts(
+    userId: string,
+    contacts: {
+      email?: string | null;
+      emailVerified?: boolean | undefined;
+      phone?: string | undefined;
+      phoneVerified?: boolean | undefined;
+    },
+  ) {
+    const email = contacts.email || undefined;
+    const phone = contacts.phone || undefined;
+    return this.db.user.update({
+      where: { id: userId },
+      data: {
+        ...(email ? { email } : {}),
+        ...(phone ? { phone } : {}),
+        ...(contacts.emailVerified !== undefined ? { emailVerified: contacts.emailVerified } : {}),
+        ...(contacts.phoneVerified !== undefined ? { phoneVerified: contacts.phoneVerified } : {}),
+      },
+      select: { id: true, email: true, phone: true, emailVerified: true, phoneVerified: true },
+    });
+  }
+
   private findIdentity(provider: string, providerSubject: string) {
     return this.db.userIdentity.findUnique({
       where: { provider_providerSubject: { provider, providerSubject } },

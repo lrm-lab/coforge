@@ -1,6 +1,10 @@
 import { initialDisplayName } from "#src/features/auth/name-prefill";
 import { e164Phone } from "#src/features/auth/code-destination";
-import type { AuthingAuthentication, AuthingTokens } from "./authing-authentication.server";
+import type {
+  AuthingAuthentication,
+  AuthingProfile,
+  AuthingTokens,
+} from "./authing-authentication.server";
 import { atSignInStage } from "./login-failure.server";
 import { readSignedValue as readSigned, signValue as sign } from "./signed-value.server";
 export type BrowserUser = {
@@ -43,6 +47,31 @@ const SESSION_TTL_SECONDS = 60 * 60 * 24 * 14;
 
 type SignedSession = BrowserUser & { exp: number; authTime?: number };
 
+/** Normalizes the email, E.164 phone, and verification flags from an Authing profile. */
+export function extractProfileContacts(profile: AuthingProfile): {
+  email: string | null;
+  phone: string | undefined;
+  emailVerified: boolean | undefined;
+  phoneVerified: boolean | undefined;
+} {
+  const email = profile.email?.trim().toLowerCase() || null;
+  // Only a number this platform can use is stored; a provider's foreign format is not one. Whether
+  // the provider verified it is recorded beside it, never assumed: a missing claim reads as
+  // unverified, and only a verified address may match a platform operator.
+  const phone = e164Phone(profile.phone_number ?? profile.phone ?? "") ?? undefined;
+  // A claim the provider does not answer is unknown, not "unverified": the account keeps null
+  // until it says something.
+  const emailVerified =
+    typeof profile.email_verified === "boolean" ? profile.email_verified : undefined;
+  const phoneVerified =
+    typeof profile.phone_number_verified === "boolean"
+      ? profile.phone_number_verified
+      : typeof profile.phone_verified === "boolean"
+        ? profile.phone_verified
+        : undefined;
+  return { email, phone, emailVerified, phoneVerified };
+}
+
 /**
  * Turns the tokens of a sign-in Authing completed into a CoForge session: reads the profile they
  * name, resolves (and on a first sign-in creates) the person, and signs the session cookie. The
@@ -70,21 +99,7 @@ export async function completeBrowserLogin(input: {
   const profile = await atSignInStage("userinfo", () =>
     input.authing.fetchUserInfo(tokens.accessToken),
   );
-  const email = profile.email?.trim().toLowerCase() || null;
-  // Only a number this platform can use is stored; a provider's foreign format is not one. Whether
-  // the provider verified it is recorded beside it, never assumed: a missing claim reads as
-  // unverified, and only a verified address may match a platform operator.
-  const phone = e164Phone(profile.phone_number ?? profile.phone ?? "") ?? undefined;
-  // A claim the provider does not answer is unknown, not "unverified": the account keeps null
-  // until it says something.
-  const emailVerified =
-    typeof profile.email_verified === "boolean" ? profile.email_verified : undefined;
-  const phoneVerified =
-    typeof profile.phone_number_verified === "boolean"
-      ? profile.phone_number_verified
-      : typeof profile.phone_verified === "boolean"
-        ? profile.phone_verified
-        : undefined;
+  const { email, phone, emailVerified, phoneVerified } = extractProfileContacts(profile);
   const { resolveUser } = input;
   const resolved = resolveUser
     ? await atSignInStage("user_resolution", () =>

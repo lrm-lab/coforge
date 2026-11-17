@@ -4,13 +4,16 @@ import {
   safeReturnTo,
   signInHref,
 } from "#src/features/auth/return-to";
+import { getDatabaseClient } from "#src/server/db/client.server";
 import { readGitHubSignInConfigOrNull, readSessionSecret } from "./config.server";
+import { contactBindCookie, contactBindStore } from "./contact-binding.server";
 import {
   completeGitHubSignIn,
   githubSignInEndingCookie,
   startGitHubSignIn,
 } from "./github-sign-in.server";
 import { redirect } from "./http.server";
+import { optionalBrowserUser } from "./require-user.server";
 import { signInRequestContext } from "./sign-in-request.server";
 import { publicOrigin } from "#src/server/http/public-origin.server";
 import { textResponse } from "#src/server/http/text-response.server";
@@ -25,6 +28,12 @@ function notFound(): Response {
   return textResponse("Not found", { status: 404, headers: noStore });
 }
 
+function appendQueryParam(path: string, key: string, value: string): string {
+  const url = new URL(path, "http://placeholder.local");
+  url.searchParams.set(key, value);
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
 export async function githubSignInStartHandler({
   request,
 }: {
@@ -35,6 +44,13 @@ export async function githubSignInStartHandler({
   const params = new URL(request.url).searchParams;
   const returnTo = safeReturnTo(params.get("returnTo"));
   const prompt = readPrompt(params.get("prompt"));
+  const bindMode = params.get("mode") === "bind";
+  let bindUserId: string | undefined;
+  if (bindMode) {
+    const user = await optionalBrowserUser(request.headers.get("cookie") ?? undefined);
+    if (!user) return redirect(signInHref(returnTo, { prompt }), {});
+    bindUserId = user.id;
+  }
   const sessionSecret = await readSessionSecret(process.env).catch(() => null);
   if (!sessionSecret) {
     return redirect(signInHref(returnTo, { prompt, error: "github_failed" }), {});
@@ -45,6 +61,7 @@ export async function githubSignInStartHandler({
     origin: publicOrigin(request),
     returnTo,
     prompt,
+    bindUserId,
   });
   return redirect(location, { "set-cookie": cookie });
 }
@@ -61,6 +78,7 @@ export async function githubSignInCallbackHandler({
   if (!signIn) {
     return redirect(signInHref(undefined, { error: "github_failed" }), { "set-cookie": ending });
   }
+  const currentUser = await optionalBrowserUser(request.headers.get("cookie") ?? undefined);
   const result = await completeGitHubSignIn({
     query: new URL(request.url).searchParams,
     cookieHeader: request.headers.get("cookie") ?? "",
@@ -69,7 +87,20 @@ export async function githubSignInCallbackHandler({
     sessionSecret: signIn.sessionSecret,
     secure,
     clientAddress,
+    currentUserId: currentUser?.id,
+    contactBindStore: contactBindStore(),
+    db: getDatabaseClient() ?? undefined,
   });
+  if (result.status === "bind_staged") {
+    return redirect(appendQueryParam(result.returnTo ?? "/", "bind", "1"), {
+      "set-cookie": [contactBindCookie(result.bindToken, secure), ending],
+    });
+  }
+  if (result.status === "bind_failed") {
+    return redirect(appendQueryParam(result.returnTo ?? "/", "bindError", result.error), {
+      "set-cookie": ending,
+    });
+  }
   if (result.status === "back") {
     return redirect(signInHref(result.returnTo, { prompt: result.prompt, error: result.error }), {
       "set-cookie": ending,
