@@ -3,6 +3,8 @@ import type { AgentConversationScope } from "@coforge/agent";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
 import { LaunchInboxes } from "./launch-inbox";
 import { DeliveryConsumptionWatch } from "./delivery-consumption-watch";
+import { scheduleUnrefTimer } from "./unref-timer";
+import { WakeLoopGuard } from "./wake-loop-guard";
 
 /**
  * How a provider's session accepts a delivery notice while a turn is already in progress.
@@ -82,8 +84,11 @@ export const AGENT_DELIVERY_MODE: Readonly<Record<RuntimeProvider, AgentDelivery
  */
 export class AgentDeliveryGate {
   readonly consumption = new DeliveryConsumptionWatch();
+  readonly wakeLoop = new WakeLoopGuard();
   readonly #mode = new Map<string, AgentDeliveryMode>();
   readonly #busy = new Set<string>();
+  readonly #wakeLoopHeld = new Set<string>();
+  readonly #wakeLoopTimers = new Map<string, () => void>();
   /** App-item ids held while busy (`DaemonRuntime#notifyAppItem`) — a separate,
    * app-inbox-owned notice, not an `AgentMessageDelivery`; kept apart from the held deliveries so
    * the two domains' storage never mixes. */
@@ -128,7 +133,7 @@ export class AgentDeliveryGate {
    * Empty when nothing was held or an explicit hold (`hold`) is still in effect. */
   idle(agentId: string): AgentMessageDelivery[] {
     this.#busy.delete(agentId);
-    if (this.#explicitHolds.has(agentId)) return [];
+    if (this.#explicitHolds.has(agentId) || this.#wakeLoopHeld.has(agentId)) return [];
     return this.#drain(agentId);
   }
 
@@ -142,10 +147,49 @@ export class AgentDeliveryGate {
     return this.#explicitHolds.get(agentId);
   }
 
+  /** Active WakeLoopGuard hold reason for `MentionDeliveryTracker`, when one is in force. */
+  wakeLoopHoldReason(agentId: string): "wake_loop_backoff" | "wake_loop_parked" | undefined {
+    if (!this.#wakeLoopHeld.has(agentId)) return undefined;
+    return this.#wakeLoopTimers.has(agentId) ? "wake_loop_backoff" : "wake_loop_parked";
+  }
+
   /** True when a delivery for this Agent must be held rather than notified immediately. */
   shouldHold(agentId: string): boolean {
-    if (this.#explicitHolds.has(agentId)) return true;
+    if (this.#explicitHolds.has(agentId) || this.#wakeLoopHeld.has(agentId)) return true;
     return this.#mode.get(agentId) === "queue_until_idle" && this.#busy.has(agentId);
+  }
+
+  /** Holds live wake deliveries during a WakeLoopGuard backoff or park window. */
+  holdForWakeLoop(
+    agentId: string,
+    backoffMs?: number,
+    onRelease?: (held: AgentMessageDelivery[]) => void,
+  ): void {
+    this.#wakeLoopTimers.get(agentId)?.();
+    this.#wakeLoopTimers.delete(agentId);
+    this.#wakeLoopHeld.add(agentId);
+    if (backoffMs === undefined) return;
+    this.#wakeLoopTimers.set(
+      agentId,
+      scheduleUnrefTimer(
+        async () => {
+          this.#wakeLoopTimers.delete(agentId);
+          this.#wakeLoopHeld.delete(agentId);
+          if (this.#busy.has(agentId) || this.#explicitHolds.has(agentId)) return;
+          onRelease?.(this.#drain(agentId));
+        },
+        Math.max(1, backoffMs),
+      ),
+    );
+  }
+
+  /** Ends a WakeLoopGuard hold when a new delivery key arrives, returning held deliveries. */
+  endWakeLoopHold(agentId: string): AgentMessageDelivery[] {
+    this.#wakeLoopTimers.get(agentId)?.();
+    this.#wakeLoopTimers.delete(agentId);
+    if (!this.#wakeLoopHeld.delete(agentId)) return [];
+    if (this.#busy.has(agentId) || this.#explicitHolds.has(agentId)) return [];
+    return this.#drain(agentId);
   }
 
   /**
@@ -304,6 +348,10 @@ export class AgentDeliveryGate {
   endHoldForNextLaunch(agentId: string): void {
     this.#busy.delete(agentId);
     this.#explicitHolds.delete(agentId);
+    this.#wakeLoopTimers.get(agentId)?.();
+    this.#wakeLoopTimers.delete(agentId);
+    this.#wakeLoopHeld.delete(agentId);
+    this.wakeLoop.clear(agentId);
   }
 
   /** Explicit Stop: discards this Agent's held deliveries, app items, and fallback notices along
@@ -311,6 +359,10 @@ export class AgentDeliveryGate {
   clearAgent(agentId: string): void {
     this.#mode.delete(agentId);
     this.#busy.delete(agentId);
+    this.#wakeLoopTimers.get(agentId)?.();
+    this.#wakeLoopTimers.delete(agentId);
+    this.#wakeLoopHeld.delete(agentId);
+    this.wakeLoop.clear(agentId);
     this.#drain(agentId);
     this.#heldAppItems.delete(agentId);
     this.#heldFallbackNotices.delete(agentId);

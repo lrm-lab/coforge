@@ -20,6 +20,7 @@ test("Codex answers an app-server request with method not found so the turn can 
     // The rejected request surfaces no runtime event of its own.
     expect(events.map((event) => event.type).filter((type) => type !== "session")).toEqual([
       "thinking-delta",
+      "text-delta",
       "completed",
     ]);
   } finally {

@@ -10,6 +10,7 @@ import type {
   SubagentWakeTracker,
 } from "#src/agent-runtime/subagent-progress-activity";
 import type { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
+import type { TurnEvidenceLedger } from "#src/agent-runtime/turn-evidence";
 import type { PublishedActivityLaunch } from "./agent-activity-publisher";
 import type { ReplyIntentTracker } from "./reply-intent-tracker";
 import type { ProviderProgress } from "./stalled-recovery";
@@ -26,6 +27,8 @@ export type ActivityLaunch = PublishedActivityLaunch & {
   timing?: LaunchPhaseTiming;
   /** The launch's open tool calls, and the outcome each one's end reports. */
   toolCalls?: ToolCallLedger;
+  /** Tracks assistant text and tool calls per turn so zero-evidence completions retry. */
+  turnEvidence?: TurnEvidenceLedger;
   /** The busy turn's silence clock: one visible stalled notice per turn. */
   stalled?: StalledTurnTracker;
   /** Reply intents this launch announced; a turn interrupt clears them. */

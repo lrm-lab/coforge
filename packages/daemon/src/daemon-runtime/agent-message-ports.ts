@@ -14,4 +14,5 @@ export type AgentMessageOperationsPorts = Readonly<{
   appItemsPending?(agentId: string): Promise<number>;
   readonly transport: Pick<DaemonConnectionClient, "agentMessage" | "reconcileAgentSend">;
   reportFreshnessHold(agentId: string, activity: HeldFreshnessActivity): void;
+  noteCoforgeWriteOrHold?(agentId: string): void;
 }>;

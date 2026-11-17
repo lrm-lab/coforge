@@ -163,11 +163,6 @@ async function handle(message: Message): Promise<void> {
       params: { threadId, turn: { id: turnId, status: "inProgress" } },
     });
     if (scenarios.has("server-request") || textInput(message.params) === "server-request") {
-      // Token usage keeps the turn from reading as empty without adding an event.
-      write({
-        method: "thread/tokenUsage/updated",
-        params: { threadId, turnId, tokenUsage: {} },
-      });
       // Numeric id: the client must echo it unchanged. The turn finishes only on that reply.
       write({
         id: 7,
@@ -191,7 +186,13 @@ async function handle(message: Message): Promise<void> {
     completeTurn(`turn-${turn}`, "interrupted");
     return;
   }
-  if (id === 7 && message.error?.code === -32601) completeTurn(`turn-${turn}`);
+  if (id === 7 && message.error?.code === -32601) {
+    write({
+      method: "item/agentMessage/delta",
+      params: { threadId, turnId: `turn-${turn}`, itemId: "m1", delta: "Done" },
+    });
+    completeTurn(`turn-${turn}`);
+  }
 }
 
 /** The model an opened thread reports, as Codex does, under `chatgpt`/`api-key`: the requested
@@ -231,6 +232,11 @@ function turnScenario(input: string | undefined, turnId: string): void {
   if (input === "plan-only") {
     // An item kind that maps to no runtime event.
     const item = { type: "plan", id: "p1", text: "" };
+    notify("item/started", { turnId, item });
+    notify("item/completed", { turnId, item });
+  }
+  if (input === "tool-only") {
+    const item = { type: "commandExecution", id: "cmd-1", command: "true", exitCode: 0 };
     notify("item/started", { turnId, item });
     notify("item/completed", { turnId, item });
   }

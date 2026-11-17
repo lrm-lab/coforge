@@ -157,6 +157,7 @@ export class AgentMessageOperations {
               idempotencyKey,
             }),
           );
+          this.#ports.noteCoforgeWriteOrHold?.(agentId);
           throw new AgentPreflightError(
             targetConfirmationRequiredMessage(target, latestThread.target),
             "THREAD_CONTEXT_TARGET_CONFIRMATION_REQUIRED",
@@ -232,6 +233,7 @@ export class AgentMessageOperations {
             },
           );
     const held = result.state === "held";
+    if (held || result.accepted) this.#ports.noteCoforgeWriteOrHold?.(agentId);
     const contextWasWithheld =
       request.freshnessContextMode === "withheld" || result.freshnessContextMode === "withheld";
     let continuation: AgentMessageContinuationOffer | undefined;

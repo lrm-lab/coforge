@@ -106,6 +106,8 @@ export function observeRuntimeEvent(
     return;
   }
   if (event.type === "activity" || event.type === "tool-start") {
+    if (event.type === "tool-start" && !event.conversation)
+      ports.deliveryGate?.wakeLoop?.noteToolCall(agentId);
     const activity = event.type === "activity" ? event.activity : toolStartActivity(event);
     if (
       event.type === "tool-start" ||
@@ -141,6 +143,7 @@ export function observeRuntimeEvent(
     return;
   }
   if (event.type === "tool-end") {
+    if (!event.conversation) ports.deliveryGate?.wakeLoop?.noteToolCall(agentId);
     const toolOutcome = launch.toolCalls?.finish(event);
     publish(
       agentId,
@@ -305,10 +308,26 @@ export function observeRuntimeEvent(
     return;
   }
   if (event.type !== "completed") return;
-  noteTurnFinished(agentId, event.status, event.conversation?.conversationId);
-  launch.lastTurnInterrupted = event.status === "interrupted";
+  let effectiveStatus = event.status;
+  if (!event.conversation) {
+    if (
+      typeof runtime.session.hasLiveTurn === "boolean" &&
+      (launch.backgroundTasks?.count ?? 0) === 0
+    ) {
+      const zeroEvidence = launch.turnEvidence?.finish(event.status);
+      if (zeroEvidence) {
+        observeRuntimeEvent(ports, agentId, launch, config, runtime, controlled, zeroEvidence);
+        effectiveStatus = "failed";
+      }
+    } else {
+      launch.turnEvidence?.reset();
+    }
+    ports.deliveryGate?.wakeLoop?.noteTurnCompleted(agentId, { status: effectiveStatus });
+  }
+  noteTurnFinished(agentId, effectiveStatus, event.conversation?.conversationId);
+  launch.lastTurnInterrupted = effectiveStatus === "interrupted";
   const collectorFailReason =
-    event.status === "failed"
+    effectiveStatus === "failed"
       ? (launch.crashDetail?.message ?? "Agent runtime failed.").slice(0, 2000)
       : undefined;
   ports.runtimeErrorHold.noteTurnEnd(agentId);
@@ -319,7 +338,7 @@ export function observeRuntimeEvent(
   });
   ports.phaseBookkeeping.closeSilently("review", agentId);
   ports.phaseBookkeeping.turnEnded(agentId);
-  const alreadyExplained = event.status === "failed" && launch.crashDetail !== undefined;
+  const alreadyExplained = effectiveStatus === "failed" && launch.crashDetail !== undefined;
   launch.crashDetail = undefined;
   if (controlled)
     void runtime.session
@@ -328,13 +347,13 @@ export function observeRuntimeEvent(
         if (identity) await ports.agentSessions.update(agentId, launch.launchId, identity);
       })
       .catch(() => {});
-  if (event.status === "completed") ports.showQuietTurn(agentId, launch, publish);
+  if (effectiveStatus === "completed") ports.showQuietTurn(agentId, launch, publish);
   else {
     if (!alreadyExplained)
       publish(
         agentId,
         launch,
-        event.status === "failed"
+        effectiveStatus === "failed"
           ? {
               ...ports.runtimeErrorActivity(agentId, "Agent runtime failed."),
               runtimeError: runtimeFailureDiagnostic("turn failure"),

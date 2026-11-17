@@ -25,6 +25,7 @@ function harness(
   let backgroundTasks = 0;
   let sessionId: string | undefined = "session-1";
   let freshSession = false;
+  let contextGeneration: number | undefined = 1;
   let now = Date.parse("2026-11-03T12:00:00Z");
   const ports: TaskIdleNudgePorts = {
     ask: async (agentId, request) => {
@@ -35,6 +36,7 @@ function harness(
     backgroundTasks: () => backgroundTasks,
     sessionId: () => sessionId,
     freshSession: () => freshSession,
+    contextGeneration: () => contextGeneration,
     deliver: async (agentId, text) => {
       delivered.push({ agentId, text });
       return true;
@@ -54,6 +56,7 @@ function harness(
       freshSession = fresh;
     },
     setFreshSession: (value: boolean) => (freshSession = value),
+    setContextGeneration: (value: number | undefined) => (contextGeneration = value),
     advance: (ms: number) => (now += ms),
   };
 }
@@ -159,6 +162,39 @@ test("a resumed session is not marked fresh, and background tasks are reported",
   h.nudge.maybeAsk("agent-a");
   await settle();
   expect(h.asks[0]?.request).toEqual({ backgroundTasks: 2 });
+});
+
+test("advancing contextGeneration on the same session re-arms freshSession once after compaction", async () => {
+  const h = harness();
+  h.setSession("session-2", false);
+  h.setContextGeneration(4);
+  h.nudge.maybeAsk("agent-a");
+  await settle();
+
+  // Context compaction advances AgentContextLedger.generation() on the same session.
+  h.setContextGeneration(5);
+  h.nudge.maybeAsk("agent-a");
+  await settle();
+  h.nudge.maybeAsk("agent-a");
+  await settle();
+
+  expect(h.asks.map((ask) => ask.request)).toEqual([{}, { freshSession: true }, {}]);
+});
+
+test("compaction during the first turn of a resumed session re-arms freshSession when launch context was noted", async () => {
+  const h = harness();
+  h.setSession("session-resumed", false);
+  h.setContextGeneration(7);
+  h.nudge.noteSessionContext("agent-a", "session-resumed", 7);
+
+  // Compaction completes mid-turn before the first idle check runs.
+  h.setContextGeneration(8);
+  h.nudge.maybeAsk("agent-a");
+  await settle();
+  h.nudge.maybeAsk("agent-a");
+  await settle();
+
+  expect(h.asks.map((ask) => ask.request)).toEqual([{ freshSession: true }, {}]);
 });
 
 test("an unanswered ask neither writes nor disables the route", async () => {

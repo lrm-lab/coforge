@@ -40,6 +40,8 @@ function reportsCompaction(provider: string): boolean {
 export class AgentContexts {
   /** Whether this Agent's adapter reports a finished compaction; absent before its first launch. */
   readonly #reportsCompaction = new Map<string, boolean>();
+  /** Monotonic fallback context counter when the adapter has no SQLite compaction ledger. */
+  readonly #memoryGenerations = new Map<string, number>();
 
   constructor(private readonly stateDb: (agentId: string) => AgentStateDb) {}
 
@@ -145,6 +147,18 @@ export class AgentContexts {
     return new AgentContextLedger(this.stateDb(agentId).database);
   }
 
+  /** Current context generation from `AgentContextLedger.generation()`, falling back to in-memory
+   * tracking when the runtime does not persist a compaction ledger. */
+  contextGeneration(agentId: string): number | undefined {
+    try {
+      const persisted = this.ledger(agentId)?.generation();
+      if (persisted !== undefined) return persisted;
+    } catch {
+      // Fall back to the in-memory generation counter when stateDb is unavailable.
+    }
+    return this.#memoryGenerations.get(agentId);
+  }
+
   /** Listeners told when an Agent's context starts over (a launch or a finished compaction), for
    * state that only the model's current context makes true. */
   readonly #newContextListeners = new Set<(agentId: string) => void>();
@@ -162,6 +176,7 @@ export class AgentContexts {
     // it: the two memory files arrive with the next fresh session instead (task #548). A launch
     // records the runtime whose adapter reports compactions; a compaction keeps it.
     if (runtime) this.#reportsCompaction.set(agentId, reportsCompaction(runtime));
+    this.#memoryGenerations.set(agentId, (this.#memoryGenerations.get(agentId) ?? 0) + 1);
     try {
       this.ledger(agentId)?.advance();
     } catch (error) {

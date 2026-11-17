@@ -47,16 +47,31 @@ export class CodexTurnSignals {
     this.#visibleText = false;
   }
 
-  /** Any item or token-usage notification of the live turn shows it ran, whatever it produced. */
+  /** Marks explicit non-silent turn work (e.g. phase or subagent activity). */
   markEvidence(): void {
     this.#evidence = true;
   }
 
-  /** Only answer text matters here, to tell a blank final answer from none. */
+  /** Tracks assistant text and tool/phase work so zero-evidence completions are caught. */
   observe(event: AgentRuntimeEvent): void {
-    if (event.type !== "text-delta" || this.#visibleText || !event.text) return;
-    this.#assistantText = true;
-    if (/\S/.test(event.text)) this.#visibleText = true;
+    if (event.type === "text-delta") {
+      if (!event.text) return;
+      this.#evidence = true;
+      this.#assistantText = true;
+      if (/\S/.test(event.text)) this.#visibleText = true;
+      return;
+    }
+    if (
+      event.type === "tool-start" ||
+      event.type === "tool-end" ||
+      event.type === "compaction-started" ||
+      event.type === "compaction-finished" ||
+      event.type === "review-started" ||
+      event.type === "review-finished" ||
+      event.type === "subagent-progress"
+    ) {
+      this.#evidence = true;
+    }
   }
 
   /** The error to report before the `completed` event of a turn that ended with `status`. */
@@ -83,10 +98,11 @@ export class CodexTurnSignals {
     return [
       {
         type: "error",
+        retryable: true,
         message: EMPTY_TURN_MESSAGE,
         occurredAt: eventTime(record),
         providerErrorClass: "CodexEmptyTurn",
-        providerErrorReason: "empty_turn",
+        providerErrorReason: "zero_evidence_turn_completed",
       },
     ];
   }

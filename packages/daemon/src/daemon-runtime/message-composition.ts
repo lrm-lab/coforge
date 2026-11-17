@@ -95,6 +95,7 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
       ports.deliveryGate.isBusy(agentId),
     blocked: (agentId) =>
       ports.deliveryGate.explicitHold(agentId) ??
+      ports.deliveryGate.wakeLoopHoldReason?.(agentId) ??
       (ports.deliveryGate.shouldHold(agentId) ? "queued_until_idle" : undefined),
   });
   messageAttention = new MessageAttention(
@@ -188,6 +189,8 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
           },
         ),
       ),
+    noteCoforgeWriteOrHold: (agentId) =>
+      ports.deliveryGate?.wakeLoop?.noteCoforgeWriteOrHold(agentId),
   });
   return { mentionDeliveries, messageAttention, inboxCoordinator, messageOperations };
 }

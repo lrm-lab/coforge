@@ -73,6 +73,34 @@ export class MentionDeliveryTracker {
     return undefined;
   }
 
+  /** Whether `deliver` will admit this mention as a new unconsumed live notice (not consumed,
+   * already notified, coalesced, or refused by identity). */
+  willProcessLive(message: TrackedMentionDelivery): boolean {
+    const kept = this.#entries.get(message.deliveryId);
+    if (kept?.carried && kept.message.agentId === message.agentId) {
+      return !this.ports.consumed(kept.message) && !this.ports.told(kept.message);
+    }
+    const running = this.ports.running(message.agentId);
+    if (!running || !namesLaunch(running, message.mentionDelivery)) return false;
+    if (this.#entries.get(message.deliveryId)) return false;
+    return !this.ports.consumed(message) && !this.ports.told(message);
+  }
+
+  /** Whether an exited Agent's `MentionCarry.hold` would keep this mention as unconsumed work. */
+  canHoldForRelaunch(message: TrackedMentionDelivery): boolean {
+    const existing = this.#entries.get(message.deliveryId);
+    if (existing) {
+      return (
+        existing.message.agentId === message.agentId &&
+        existing.message.messageId === message.messageId &&
+        existing.state !== "drained"
+      );
+    }
+    const remembered = this.ports.remembered?.(message.agentId);
+    if (!remembered || !namesLaunch(remembered, message.mentionDelivery)) return false;
+    return !this.ports.consumed(message);
+  }
+
   /**
    * Tells a tracked mention to the Agent's running session and settles what follows. The envelope
    * must name the running launch and session before anything else is asked, as the reference

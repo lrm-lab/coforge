@@ -334,7 +334,6 @@ export class CodexAgentSession implements AgentSession {
       (record.method.startsWith("item/") || record.method === "thread/tokenUsage/updated")
     ) {
       if (!this.#acceptsTurnItem(params)) return;
-      this.#signals.markEvidence();
       if (record.method === "thread/tokenUsage/updated") {
         const usage = codexContextUsage(params);
         if (usage) this.#emitAll([{ type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE, ...usage }]);
@@ -471,8 +470,12 @@ export class CodexAgentSession implements AgentSession {
           ...(failure.sessionRecovery ? { sessionRecovery: failure.sessionRecovery } : {}),
         });
       }
-      this.#emitAll(this.#signals.finish(record, status));
-      this.#emit({ type: "completed", status });
+      const signalErrors = this.#signals.finish(record, status);
+      this.#emitAll(signalErrors);
+      this.#emit({
+        type: "completed",
+        status: failure || signalErrors.length > 0 ? "failed" : status,
+      });
     }
   }
 

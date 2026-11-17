@@ -190,6 +190,7 @@ export class AgentLaunchCoordinator {
         const launchId = this.ports.currentActivityLaunches.get(agentId)?.launchId;
         return launchId !== undefined && this.#freshLaunches.has(launchId);
       },
+      contextGeneration: (agentId) => this.ports.contexts?.contextGeneration?.(agentId),
       deliver: async (agentId, text) => {
         const session = this.ports.agentProcessManager.session(agentId);
         if (!session?.notify) return false;
@@ -268,6 +269,11 @@ export class AgentLaunchCoordinator {
     this.ports.activityPublisher.forgetBusy(agentId);
     this.ports.phaseBookkeeping.dispose(agentId);
     this.ports.contexts.newContext(agentId, config.provider);
+    this.idleNudge.noteSessionContext(
+      agentId,
+      launch.launchId,
+      this.ports.contexts.contextGeneration(agentId),
+    );
     // This launch's delivery mode, read by AgentMessageAttentionIndex.receive via
     // #deliveryGate.shouldHold on every delivery for this Agent from now on.
     this.ports.deliveryGate.setProvider(agentId, config.provider);

@@ -10,9 +10,13 @@ import type { TrackedMentionDelivery } from "./mention-delivery-tracker";
  * tracked mention's envelope must name to be told to it. */
 export type RunningMentionIdentity = Readonly<{ launchId: string; sessionId: string }>;
 
-/** Why an Agent cannot be told a notice right now: an explicit delivery hold, or a busy runtime
- * that only takes notices between turns. */
-export type MentionDeliveryBlock = DeliveryHoldReason | "queued_until_idle";
+/** Why an Agent cannot be told a notice right now: an explicit delivery hold, a wake-loop guard,
+ * or a busy runtime that only takes notices between turns. */
+export type MentionDeliveryBlock =
+  | DeliveryHoldReason
+  | "queued_until_idle"
+  | "wake_loop_backoff"
+  | "wake_loop_parked";
 
 /** What the tracker needs from the rest of the runtime. */
 export type MentionDeliveryPorts = {

@@ -21,6 +21,7 @@ import { agentDeliveryRejection } from "./message-composition";
 import { startupTimeoutMs } from "#src/agent-runtime/agent-startup";
 import { WAKE_FAILURE_STREAK_CAP } from "./wake-launch";
 import { isTrackedMention, type MentionDeliveryTracker } from "./mention-delivery-tracker";
+import { deliveryWakeKey } from "./wake-loop-guard";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
@@ -60,7 +61,16 @@ export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): Agen
     hasRuntimeErrorHold: (agentId) => ports.deliveryGate.explicitHold(agentId) !== undefined,
     providerHeld: (agentId) => waitsOnProvider(ports.deliveryGate.explicitHold(agentId)),
     holdRuntimeErrorDelivery: (message) => ports.messageAttention().receive(message),
-    hasConsumed: (message) => ports.messageAttention().hasConsumed(message),
+    hasConsumed: (message) => {
+      const consumed = ports.messageAttention().hasConsumed(message);
+      if (!consumed) {
+        const key = deliveryWakeKey([message]);
+        if (key && ports.deliveryGate.wakeLoop?.noteDeliveryArrival(message.agentId, key)) {
+          ports.deliveryGate.endWakeLoopHold?.(message.agentId);
+        }
+      }
+      return consumed;
+    },
     logConsumed: (message) => ports.messageAttention().logDecision(message, "consumed"),
     acknowledge: (message) => ports.messageAttention().acknowledge(message),
     acknowledgeCustody: (message) => ports.launchCustody().acknowledge(message),
@@ -68,10 +78,15 @@ export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): Agen
     startPending: (agentId) => ports.agentControl().startPending(agentId),
     hasQueued: (agentId) => ports.deliveryGate.hasQueued(agentId),
     queueForNextLaunch: (agentId, m) => ports.deliveryGate.enqueue(agentId, m),
-    wakeBlockedUntil: (agentId) =>
-      ports.wakeLaunchFailures.isBlocked(agentId)
+    wakeBlockedUntil: (agentId) => {
+      const failureUntil = ports.wakeLaunchFailures.isBlocked(agentId)
         ? ports.wakeLaunchFailures.blockedUntil(agentId)
-        : undefined,
+        : undefined;
+      const loopUntil = ports.deliveryGate.wakeLoop?.backoffUntil(agentId);
+      if (failureUntil === undefined) return loopUntil;
+      if (loopUntil === undefined) return failureUntil;
+      return Math.max(failureUntil, loopUntil);
+    },
     giveUpWake: (agentId) => {
       // An Agent held for a credential a person must renew is waiting, not given up on: its hold
       // runs a probe of its own, so what it kept is delivered by that launch and must not be
@@ -119,9 +134,29 @@ export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): Agen
       );
     },
     whenCancelled: (agentId, hook) => ports.mentionDeliveries().whenCancelled(agentId, hook),
-    enqueueInputDelivery: (agentId, message) =>
-      ports.launchCustody().enqueueDelivery(agentId, message),
-    wakeAgent: (agentId, restart) => ports.wakeAgent(agentId, restart),
+    enqueueInputDelivery: (agentId, message) => {
+      if (ports.deliveryGate.wakeLoop?.isParked(agentId)) {
+        ports.deliveryGate.enqueue(agentId, message);
+        ports.launchCustody().acknowledge(message);
+        return Promise.resolve();
+      }
+      const key = deliveryWakeKey([message]);
+      if (key) ports.deliveryGate.wakeLoop?.noteWakeStarted(agentId, key);
+      return ports.launchCustody().enqueueDelivery(agentId, message);
+    },
+    wakeAgent: (agentId, restart) => {
+      const wakeLoop = ports.deliveryGate.wakeLoop;
+      if (wakeLoop?.isParked(agentId)) return Promise.resolve();
+      if (wakeLoop) {
+        const pending = [
+          ...(ports.deliveryGate.pending?.(agentId) ?? []),
+          ...(ports.mentionDeliveries().carry?.carriedMessages?.(agentId) ?? []),
+        ];
+        const key = deliveryWakeKey(pending);
+        if (key) wakeLoop.noteWakeStarted(agentId, key);
+      }
+      return ports.wakeAgent(agentId, restart);
+    },
     offline: {
       has: (agentId) => ports.offlineResidency().has(agentId),
       restate: (agentId) => ports.offlineResidency().restate(agentId),
@@ -134,8 +169,29 @@ export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): Agen
     refuseMention: (message, code) => void ports.mentionDeliveries().refuse(message, code),
     refuseKeptMention: (message, code) =>
       ports.mentionDeliveries().carry.refuseKeptOne(message, code),
-    keepMention: (message) =>
-      isTrackedMention(message) && ports.mentionDeliveries().carry.hold(message),
+    keepMention: (message) => {
+      if (!isTrackedMention(message)) return false;
+      const tracker = ports.mentionDeliveries();
+      const wakeLoop = ports.deliveryGate.wakeLoop;
+      const key = deliveryWakeKey([message]);
+      if (key && wakeLoop && tracker.canHoldForRelaunch?.(message) !== false) {
+        if (wakeLoop.noteDeliveryArrival(message.agentId, key)) {
+          ports.deliveryGate.endWakeLoopHold?.(message.agentId);
+        }
+        const admission = wakeLoop.admitWake(message.agentId, key);
+        if (admission.status === "parked") {
+          void tracker.refuse(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED);
+          return false;
+        }
+        if (
+          admission.status === "allow" &&
+          ports.deliveryGate.explicitHold(message.agentId) === undefined
+        ) {
+          wakeLoop.noteWakeStarted(message.agentId, key);
+        }
+      }
+      return tracker.carry.hold(message);
+    },
     hasKeptMentions: (agentId) => ports.mentionDeliveries().carry.hasCarried(agentId),
     refuseKeptMentions: (agentId, code) =>
       ports.mentionDeliveries().carry.refuseCarried(agentId, code),

@@ -43,7 +43,11 @@ Rules for one Workspace child's runtime in `src/daemon-runtime/`. They extend
   [config apply](../../../../docs/observability/agent-status-and-activity/config-apply.md).
 - `task-idle-nudge.ts` asks the cloud once when a turn leaves an Agent idle, and writes the
   answer as idle input: one ask per Agent at a time, 15 seconds, a 404 pauses asking for an hour
-  (the web and the Computer ship separately), and a fresh session is asked once per session.
+  (the web and the Computer ship separately), and `freshSession` is sent once per fresh session and
+  re-armed once whenever `AgentContextLedger.generation()` advances on compaction.
+- `wake-loop-guard.ts` tracks consecutive wakes on the same message/delivery key that complete with
+  zero tool calls and zero `coforge` message/task writes or holds: 60-second backoff at streak 2 and
+  parked at streak 3, resetting when a new delivery key arrives or real work happens.
 - `resumed-early-crash.ts` owns the stored-Session early-crash streak (Raft 1.0.63
   `noteResumedEarlyCrashClose`): a resume that exits silently inside 15 seconds counts, and the
   second consecutive close makes `runtime.ts` invalidate the Session (`repeated_early_crash`)

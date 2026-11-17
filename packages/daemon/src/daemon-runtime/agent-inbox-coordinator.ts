@@ -88,6 +88,10 @@ export class AgentInboxCoordinator {
 
   constructor(private readonly ports: AgentInboxCoordinatorPorts) {}
 
+  noteCoforgeWriteOrHold(agentId: string): void {
+    this.ports.deliveryGate?.wakeLoop?.noteCoforgeWriteOrHold(agentId);
+  }
+
   agentInbox(agentId: string): AgentInboxStateMachine {
     return agentInbox(this.#agentInboxes, (id) => this.ports.consumedSeqs.stateDb(id), agentId);
   }

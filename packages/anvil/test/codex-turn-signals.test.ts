@@ -34,33 +34,47 @@ async function turnEvents(input: string): Promise<AgentRuntimeEvent[]> {
 
 const started: AgentRuntimeEvent = { type: "thinking-delta", text: "" };
 const completed: AgentRuntimeEvent = { type: "completed", status: "completed" };
+const failed: AgentRuntimeEvent = { type: "completed", status: "failed" };
+const zeroEvidenceError: AgentRuntimeEvent = {
+  type: "error",
+  retryable: true,
+  message:
+    "Codex runtime returned an empty response. Please retry. (codex_zero_evidence_turn_completed)",
+  occurredAt: expect.any(String),
+  providerErrorClass: "CodexEmptyTurn",
+  providerErrorReason: "zero_evidence_turn_completed",
+};
 
-test("Codex reports a completed turn with no evidence as an empty turn", async () => {
-  expect(await turnEvents("empty")).toEqual([
-    started,
-    {
-      type: "error",
-      message:
-        "Codex runtime returned an empty response. Please retry. (codex_zero_evidence_turn_completed)",
-      occurredAt: expect.any(String),
-      providerErrorClass: "CodexEmptyTurn",
-      providerErrorReason: "empty_turn",
-    },
-    completed,
-  ]);
+test("Codex reports a completed turn with no assistant text or tool calls as retryable zero_evidence_turn_completed", async () => {
+  expect(await turnEvents("empty")).toEqual([started, zeroEvidenceError, failed]);
+  expect(await turnEvents("token-usage-only")).toEqual([started, zeroEvidenceError, failed]);
+  expect(await turnEvents("plan-only")).toEqual([started, zeroEvidenceError, failed]);
 });
 
-test("Codex does not report an empty turn that streamed text or token usage", async () => {
-  expect(await turnEvents("token-usage-only")).toEqual([started, completed]);
+test("Codex completes cleanly when a turn streams assistant text or executes a tool call", async () => {
   expect(await turnEvents("text")).toEqual([
     started,
     { type: "text-delta", text: "Done" },
     completed,
   ]);
-});
-
-test("Codex does not report an empty turn whose only activity is an item with no event", async () => {
-  expect(await turnEvents("plan-only")).toEqual([started, completed]);
+  expect(await turnEvents("tool-only")).toEqual([
+    started,
+    {
+      type: "tool-start",
+      id: "cmd-1",
+      name: "bash",
+      input: { command: "true" },
+      occurredAt: expect.any(String),
+    },
+    {
+      type: "tool-end",
+      id: "cmd-1",
+      isError: false,
+      exitCode: 0,
+      durationMs: undefined,
+    },
+    completed,
+  ]);
 });
 
 test("Codex does not add an error to an interrupted empty turn", async () => {

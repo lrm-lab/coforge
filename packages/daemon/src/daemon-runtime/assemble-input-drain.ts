@@ -12,8 +12,13 @@ import {
   deliverContextViewMessage,
   type ContextViewRuntimeDeps,
 } from "./context-view-runtime-wiring";
-import { isTrackedMention, type MentionDeliveryTracker } from "./mention-delivery-tracker";
+import {
+  isTrackedMention,
+  type MentionDeliveryTracker,
+  type TrackedMentionDelivery,
+} from "./mention-delivery-tracker";
 import type { agentActivityDrafts } from "./agent-activity-drafts";
+import { deliveryWakeKey } from "./wake-loop-guard";
 
 /** The runtime's collaborators the input drain acts through. Every one is a thunk: the drain is
  * built by a field initializer, before the collaborators it reads are. */
@@ -45,11 +50,67 @@ export function assembleInputDrain(ports: InputDrainCollaborators): AgentInputDr
       isLaunching: (agentId) => ports.agentLaunches().has(agentId),
       isStopping: (agentId) => ports.stopState().stopping(agentId),
       deliverMessage: (agentId, message) =>
-        deliverContextViewMessage(ports.contextView(), agentId, message, () =>
-          isTrackedMention(message)
+        deliverContextViewMessage(ports.contextView(), agentId, message, () => {
+          const gate = ports.deliveryGate();
+          const tracked = isTrackedMention(message);
+          const wakeKey = deliveryWakeKey([message]);
+          const attention = ports.messageAttention();
+          const willProcess = tracked
+            ? (ports.mentionDeliveries().willProcessLive?.(message) ?? true)
+            : !attention.hasConsumed(message) &&
+              !attention.wasNotified?.(message) &&
+              !(
+                message.target !== undefined &&
+                message.reason !== "card_event" &&
+                attention.seenExactSequences?.(agentId, message.target)?.includes(message.sequence)
+              );
+          let unparkedHeld: ReturnType<typeof gate.endWakeLoopHold> = [];
+          let unparkedCarried: TrackedMentionDelivery[] = [];
+          if (wakeKey && gate.wakeLoop && willProcess) {
+            if (gate.wakeLoop.noteDeliveryArrival(agentId, wakeKey)) {
+              unparkedHeld = gate.endWakeLoopHold(agentId);
+              unparkedCarried = ports.mentionDeliveries().carry.takeCarried(agentId);
+            }
+            const admission = gate.wakeLoop.admitWake(agentId, wakeKey);
+            if (admission.status === "backoff") {
+              gate.holdForWakeLoop(agentId, admission.remainingMs, (released) => {
+                const carried = ports.mentionDeliveries().carry.takeCarried(agentId);
+                if (!carried.length && !released.length) return;
+                const releasedKey = deliveryWakeKey([...carried, ...released]);
+                if (releasedKey) gate.wakeLoop.noteWakeStarted(agentId, releasedKey);
+                void (
+                  carried.length
+                    ? ports.mentionDeliveries().carry.tell(carried, released)
+                    : ports.messageAttention().flush(agentId, released)
+                ).catch(() => {});
+              });
+            } else if (admission.status === "parked") {
+              if (tracked) {
+                return ports
+                  .mentionDeliveries()
+                  .refuse(message, MENTION_DELIVERY_TERMINAL_CODES.DELIVERY_REJECTED);
+              }
+              gate.holdForWakeLoop(agentId);
+            } else if (!gate.shouldHold(agentId)) {
+              gate.wakeLoop.noteWakeStarted(agentId, wakeKey);
+            }
+          }
+          if ((unparkedCarried.length || unparkedHeld.length) && !tracked) {
+            return unparkedCarried.length
+              ? ports.mentionDeliveries().carry.tell(unparkedCarried, [...unparkedHeld, message])
+              : ports.messageAttention().flush(agentId, [...unparkedHeld, message]);
+          }
+          if (unparkedCarried.length || unparkedHeld.length) {
+            void (
+              unparkedCarried.length
+                ? ports.mentionDeliveries().carry.tell(unparkedCarried, unparkedHeld)
+                : ports.messageAttention().flush(agentId, unparkedHeld)
+            ).catch(() => {});
+          }
+          return tracked
             ? ports.mentionDeliveries().deliver(message)
-            : ports.messageAttention().receive(message),
-        ),
+            : ports.messageAttention().receive(message);
+        }),
       runStartup: async (
         agentId: string,
         session: AgentSession,

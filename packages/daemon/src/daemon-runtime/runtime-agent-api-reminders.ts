@@ -33,6 +33,16 @@ export type RuntimeAgentApiRemindersPorts = {
   inboxCoordinator: AgentInboxCoordinator;
 };
 
+const TASK_WRITE_OPERATIONS = new Set([
+  "create",
+  "claim",
+  "assign",
+  "unclaim",
+  "update",
+  "amend",
+  "delete",
+]);
+
 /** Dispatches one task command to the cloud task route over its HTTPS path. The body is the
  * plain command — the route derives its principal from the Agent API key, so no envelope travels. */
 export async function agentTask(
@@ -46,6 +56,7 @@ export async function agentTask(
   const transport = ports.transport();
   if (!transport.agentTask) throw new Error("daemon connection is not connected");
   if (!isAgentApiKey(agentApiKey)) throw new Error("Agent API key is missing");
+  const isWrite = TASK_WRITE_OPERATIONS.has(command.operation);
   if (command.target) {
     const result = await taskWriteWithFreshness(
       {
@@ -59,9 +70,14 @@ export async function agentTask(
       command.target,
       agentApiKey,
     );
-    if (result) return result;
+    if (result) {
+      if (isWrite) ports.inboxCoordinator.noteCoforgeWriteOrHold(agentId);
+      return result;
+    }
   }
-  return transport.agentTask({ ...command }, agentApiKey);
+  const result = await transport.agentTask({ ...command }, agentApiKey);
+  if (isWrite) ports.inboxCoordinator.noteCoforgeWriteOrHold(agentId);
+  return result;
 }
 
 export async function mintAppItem(

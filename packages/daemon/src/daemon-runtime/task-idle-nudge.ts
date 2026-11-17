@@ -33,6 +33,8 @@ export type TaskIdleNudgePorts = {
   sessionId(agentId: string): string | undefined;
   /** The current session is a new one, not a resume of an older session. */
   freshSession(agentId: string): boolean;
+  /** Current context generation (`AgentContextLedger.generation()`), advancing on compaction. */
+  contextGeneration?(agentId: string): number | undefined;
   /** Writes the reminder as idle input, the way a wake message is written. */
   deliver(agentId: string, text: string): Promise<boolean>;
   timeoutMs?: number;
@@ -56,10 +58,16 @@ export const IDLE_NUDGE_SKIPPED_LOG_INTERVAL_MS = 10 * 60_000;
  * daemon restarts; a fresh session is asked once per session, because the cloud reminds all open
  * Tasks there.
  */
+type SessionContextState = {
+  sessionId: string;
+  generation: number | undefined;
+  freshAsked: boolean;
+};
+
 export class TaskIdleNudge {
   readonly #inFlight = new Set<string>();
-  /** The session each Agent's fresh-session ask was made for. */
-  readonly #askedSessions = new Map<string, string>();
+  /** Per-Agent session and context generation baseline, re-arming `freshSession` on compaction. */
+  readonly #sessionContexts = new Map<string, SessionContextState>();
   /** When each Agent-and-reason decline was last logged, for the skipped throttle. */
   readonly #skippedLoggedAt = new Map<string, number>();
   /** When a 404 last said this server has no idle nudge; asking resumes after the retry window. */
@@ -67,17 +75,44 @@ export class TaskIdleNudge {
 
   constructor(private readonly ports: TaskIdleNudgePorts) {}
 
+  /** Records the session and initial context generation at launch so a compaction during the very
+   * first turn of a resumed session still registers as `contextFresh` when that turn goes idle. */
+  noteSessionContext(agentId: string, sessionId: string | undefined, generation?: number): void {
+    if (sessionId === undefined) {
+      this.#sessionContexts.delete(agentId);
+      return;
+    }
+    const prior = this.#sessionContexts.get(agentId);
+    if (prior?.sessionId === sessionId) return;
+    this.#sessionContexts.set(agentId, { sessionId, generation, freshAsked: false });
+  }
+
   /** Called where a turn ends or a process exits; never throws, never blocks that path. */
   maybeAsk(agentId: string): void {
     if (this.#inFlight.has(agentId)) return this.#skipped(agentId, "in_flight");
     if (!this.ports.idle(agentId)) return this.#skipped(agentId, "not_idle");
     if (this.#now() < this.#unsupportedUntil) return this.#skipped(agentId, "unsupported");
     const sessionId = this.ports.sessionId(agentId);
-    const fresh =
-      this.ports.freshSession(agentId) &&
+    const generation = this.ports.contextGeneration?.(agentId);
+    const prior = this.#sessionContexts.get(agentId);
+    const sameSession = sessionId !== undefined && prior?.sessionId === sessionId;
+    const contextFresh =
+      sameSession &&
+      prior.generation !== undefined &&
+      generation !== undefined &&
+      generation > prior.generation;
+    const sessionFresh =
       sessionId !== undefined &&
-      this.#askedSessions.get(agentId) !== sessionId;
-    if (fresh && sessionId !== undefined) this.#askedSessions.set(agentId, sessionId);
+      this.ports.freshSession(agentId) &&
+      (!sameSession || !prior.freshAsked);
+    const fresh = sessionFresh || contextFresh;
+    if (sessionId !== undefined) {
+      this.#sessionContexts.set(agentId, {
+        sessionId,
+        generation: generation ?? (sameSession ? prior.generation : undefined),
+        freshAsked: (sameSession ? prior.freshAsked : false) || sessionFresh,
+      });
+    }
     const backgroundTasks = this.ports.backgroundTasks(agentId);
     this.#inFlight.add(agentId);
     void this.#askWithReap(agentId, fresh, backgroundTasks).finally(() =>

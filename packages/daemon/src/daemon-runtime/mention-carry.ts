@@ -74,12 +74,15 @@ export class MentionCarry {
       // told to a process that has since gone has nobody left to settle it: the launch tells it.
       // Under a known-invalid credential a running process is told nothing: whatever state the
       // mention was in, it waits for the next launch.
-      if (existing.state !== "drained")
+      if (existing.state !== "drained") {
+        const block = this.ports.blocked(message.agentId);
         if (
-          this.ports.blocked(message.agentId) === "credential_invalid" ||
+          block === "credential_invalid" ||
+          block === "wake_loop_backoff" ||
           (existing.carried ? fromQueue : !existing.undelivered && !this.#running(message.agentId))
         )
           this.#keep(existing);
+      }
       return existing.state !== "drained";
     }
     const remembered = this.ports.remembered?.(message.agentId);
@@ -155,6 +158,10 @@ export class MentionCarry {
   /** Whether any mention is kept for the Agent's next launch. */
   hasCarried(agentId: string): boolean {
     return this.entries.carriedOf(agentId).length > 0;
+  }
+
+  carriedMessages(agentId: string): TrackedMentionDelivery[] {
+    return this.entries.carriedOf(agentId).map((entry) => entry.message);
   }
 
   /** No launch is coming after all: the mentions kept for it are refused with `code`. */

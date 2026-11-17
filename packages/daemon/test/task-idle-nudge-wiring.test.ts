@@ -122,3 +122,70 @@ test("DaemonRuntime asks after a completed turn and writes the idle reminder", a
     await harness.runtime.stop();
   }
 });
+
+test("DaemonRuntime re-arms freshSession on the idle transition after context compaction", async () => {
+  const requests: Array<Record<string, unknown>> = [];
+  const harness = await activityHarness(
+    {
+      computerId: "computer-idle-nudge-compact",
+      workspaceId: "workspace-idle-nudge-compact",
+      workspaceRoot: `/tmp/coforge-idle-nudge-compact-${crypto.randomUUID()}`,
+    },
+    undefined,
+    {
+      async agentTaskIdleNudge(request: Record<string, unknown>) {
+        requests.push(request);
+        return {
+          send: false,
+          items: [],
+          backlog: [],
+          text: "",
+        } satisfies AgentTaskIdleNudgeResponse;
+      },
+    },
+  );
+  try {
+    const session = harness.session as AgentSession & { hasLiveTurn: boolean };
+    Object.defineProperty(session, "hasLiveTurn", { value: false, writable: true });
+    session.sendMessage = async () => {
+      session.hasLiveTurn = true;
+    };
+    session.notify = async () => {
+      session.hasLiveTurn = true;
+    };
+
+    // Turn 1 of the fresh session consumes the initial freshSession ask.
+    await session.sendMessage("turn 1");
+    harness.emitEvent({ type: "text-delta", text: "first turn output" });
+    session.hasLiveTurn = false;
+    harness.emitEvent({ type: "completed", status: "completed" });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // Turn 2 without compaction sends {}.
+    await session.sendMessage("turn 2");
+    harness.emitEvent({ type: "text-delta", text: "second turn output" });
+    session.hasLiveTurn = false;
+    harness.emitEvent({ type: "completed", status: "completed" });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // Turn 3 compacts context on the same session: next idle re-arms freshSession once.
+    await session.sendMessage("turn 3");
+    harness.emitEvent({ type: "compaction-started" });
+    harness.emitEvent({ type: "compaction-finished" });
+    harness.emitEvent({ type: "text-delta", text: "post-compaction output" });
+    session.hasLiveTurn = false;
+    harness.emitEvent({ type: "completed", status: "completed" });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    // Turn 4 without another compaction sends {} again.
+    await session.sendMessage("turn 4");
+    harness.emitEvent({ type: "text-delta", text: "fourth turn output" });
+    session.hasLiveTurn = false;
+    harness.emitEvent({ type: "completed", status: "completed" });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(requests).toEqual([{ freshSession: true }, {}, { freshSession: true }, {}]);
+  } finally {
+    await harness.runtime.stop();
+  }
+});

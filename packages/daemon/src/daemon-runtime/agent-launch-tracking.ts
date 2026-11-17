@@ -5,6 +5,7 @@ import {
   SubagentWakeTracker,
 } from "#src/agent-runtime/subagent-progress-activity";
 import { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
+import { TurnEvidenceLedger } from "#src/agent-runtime/turn-evidence";
 import { AGENT_ACTIVITY_DETAIL_KIND } from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeConfig, AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
@@ -58,8 +59,13 @@ export function trackAgentLaunch(
     }
     return trajectory;
   };
+  const turnEvidence = new TurnEvidenceLedger();
+  launch.turnEvidence = turnEvidence;
   const trajectory = {
-    accept: (event: AgentRuntimeEvent) => trajectoryFor(event.conversation).accept(event),
+    accept: (event: AgentRuntimeEvent) => {
+      turnEvidence.observe(event);
+      trajectoryFor(event.conversation).accept(event);
+    },
     flush: () => {
       for (const item of trajectories.values()) item.flush();
     },

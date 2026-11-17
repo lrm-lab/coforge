@@ -154,6 +154,7 @@ export function isWorking(ports: RuntimeTurnPorts, agentId: string): boolean {
 export function releaseTurnEndHolds(ports: RuntimeTurnPorts, agentId: string): void {
   const held = ports.deliveryGate.idle(agentId);
   if (held.length) flushHeldDeliveries(ports, agentId, held);
+  if (!ports.deliveryGate.shouldHold(agentId)) ports.launchCustody.ensureInput(agentId);
   // Flush first: notifying marks busy synchronously, so app items re-hold for the next
   // turn rather than racing the notice that just started it.
   ports.inboxCoordinator.releaseHeldAppItems(agentId);
