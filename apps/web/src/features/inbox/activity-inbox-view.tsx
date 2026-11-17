@@ -47,7 +47,7 @@ import { useActivityItemActions } from "./use-activity-item-actions";
 import { ActivityInboxRow } from "./activity-inbox-row";
 import { ActivityArtifactRow } from "./activity-artifact-row";
 import { activityItemTime } from "./activity-item-time";
-import { useActivityDays } from "./activity-inbox-days";
+import { daySectionKey, useActivityDays } from "./activity-inbox-days";
 import { ActivityInboxTabs } from "./activity-inbox-tabs";
 import { ActivityInboxMoreMenu } from "./activity-inbox-more-menu";
 import { ActivityInboxLoadMore, ActivityInboxSectionHeading } from "./activity-inbox-list-parts";
@@ -274,7 +274,7 @@ export function ActivityInboxView({
       rows: pinned.map((item) => row(item)),
     },
     ...days.map((day, index) => ({
-      key: index === 0 ? "days" : day.key,
+      key: daySectionKey(index, day.key),
       label: day.label ?? m.navigation_activity(),
       heading: day.label,
       dated: day.label !== undefined,

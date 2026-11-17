@@ -9,6 +9,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { takesComments } from "./attachment-preview-kind";
 import { AttachmentCommentsPane } from "./attachment-comments";
+import { lightboxStepTarget } from "./image-lightbox-step";
 import { LoadingImage } from "./loading-image";
 import {
   ReviewCommentsColumn,
@@ -126,8 +127,8 @@ function LightboxContent({
     if (commentsOpen) showComments();
   }, [commentsOpen, image.id]);
   const step = (delta: -1 | 1) => {
-    const next = index + delta;
-    if (next >= 0 && next < images.length) onIndexChange?.(next);
+    const next = lightboxStepTarget(index, delta, images.length);
+    if (next !== undefined) onIndexChange?.(next);
   };
   // Left and right step through the images, except in a text field (the comment being written),
   // where they move the caret.

@@ -21,7 +21,10 @@ const NAMED_BLOCKERS = 3;
  * (`aria-level`). The names are in the label, not a description: React Aria's `TreeItem` takes no
  * `aria-describedby`.
  */
-export function rowLabel(task: ProjectTask, matched: boolean) {
+export function rowLabel(
+  task: Pick<ProjectTask, "number" | "title" | "status" | "blockedBy" | "subtasks">,
+  matched: boolean,
+) {
   const open = openBlockers(task.blockedBy);
   return [
     `#${task.number} ${task.title}`,

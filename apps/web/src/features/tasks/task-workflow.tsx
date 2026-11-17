@@ -1,7 +1,6 @@
 import {
   TASK_WRITE_STATUSES,
   isTaskWriteStatus,
-  TASK_READ_STATUSES,
   taskPriorityRank,
   type TaskStatus,
   type TaskWriteStatus,
@@ -29,6 +28,7 @@ import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
+import { availableTaskStatuses } from "./task-filters";
 import type { DropState } from "./task-drop-target";
 import { HiddenColumn, TaskGroup, type PagedTaskGroup } from "./task-group";
 import { getTaskMoveCommand } from "./task-move";
@@ -54,9 +54,7 @@ export function useTaskLayout(layout: TaskLayout | undefined): TaskLayout {
 export function TaskWorkflow<T extends TaskView>({
   tasks,
   layout,
-  statuses = tasks.some((task) => task.status === "backlog")
-    ? TASK_READ_STATUSES
-    : TASK_WRITE_STATUSES,
+  statuses = availableTaskStatuses(tasks),
   currentMemberId,
   canSetAnyStatus = false,
   disabled,

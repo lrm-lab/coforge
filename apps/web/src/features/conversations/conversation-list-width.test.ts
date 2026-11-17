@@ -95,4 +95,20 @@ describe("list column width", () => {
     expect(CONVERSATION_LIST_BOOT).toContain(COMMENTS.key);
     expect(CONVERSATION_LIST_BOOT).toContain(COMMENTS.property);
   });
+
+  test("each list starts at its default, which double-click resets to, inside its range", () => {
+    expect([CHAT.defaultWidth, LIST.defaultWidth]).toEqual([288, 380]);
+    for (const column of [CHAT, LIST, COMMENTS])
+      expect(clampListWidth(column, column.defaultWidth)).toBe(column.defaultWidth);
+    // A drag past either end holds at the end; far under the minimum does not hide the list.
+    expect(dragListWidth(CHAT, 288, 300, 300 + 40 - 288)).toBe(200);
+    expect(dragListWidth(LIST, 380, 300, 300 + 40 - 380)).toBe(288);
+    expect(dragListWidth(CHAT, 288, 300, 300 + 330 - 288)).toBe(330);
+  });
+
+  test("the Activity list's keys step by 16 from its default and jump to its ends", () => {
+    expect(keyListWidth(LIST, key("ArrowRight"), 380)).toBe(396);
+    expect(keyListWidth(LIST, key("ArrowLeft"), 290)).toBe(288);
+    expect(keyListWidth(LIST, key("ArrowRight"), 640)).toBe(640);
+  });
 });

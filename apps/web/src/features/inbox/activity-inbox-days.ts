@@ -27,12 +27,25 @@ export function useActivityDays<T>(items: T[], at: (item: T) => string | Date) {
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, []);
-  if (!hydrated) {
-    return render.zone
-      ? groupByDay(items, at, render.zone, render.renderedAt)
-      : [{ key: "all", label: undefined, items }];
-  }
+  if (!hydrated) return renderDays(items, at, render);
   return groupByDay(items, at, zone, now);
+}
+
+/** The days before hydration: from the render's zone and moment, or one undated group with none. */
+export function renderDays<T>(
+  items: T[],
+  at: (item: T) => string | Date,
+  render: { zone: string | undefined; renderedAt: number },
+) {
+  return render.zone
+    ? groupByDay(items, at, render.zone, render.renderedAt)
+    : [{ key: "all", label: undefined, items }];
+}
+
+/** A day section's React key. The first day's is fixed, so the section (and its rows) survives the
+ * list going from undated to named days at hydration (task #64); a later day is keyed by its date. */
+export function daySectionKey(index: number, dayKey: string) {
+  return index === 0 ? "days" : dayKey;
 }
 
 /**
