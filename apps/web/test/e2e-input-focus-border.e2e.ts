@@ -86,8 +86,10 @@ test("a focused text field's border is the theme's input-focus colour", async ()
       // The token is theme-scoped, so it is read on the themed page, not before it loads.
       const color = await evaluate<string>(tokenColor("--color-field-border-typing"));
       await browser("focus", 'input[type="search"]');
-      await waitFor(`${inputRing}.includes(${JSON.stringify(color)})`);
-      expect(await evaluate<string>(inputRing)).toContain(`${color} 0px 0px 0px 2px inset`);
+      // The ring eases in (a short transition): wait for its end value, not just its colour.
+      const ring = `${color} 0px 0px 0px 2px inset`;
+      await waitFor(`${inputRing}.includes(${JSON.stringify(ring)})`);
+      expect(await evaluate<string>(inputRing)).toContain(ring);
       await browser("screenshot", join(artifacts, `input-${theme}.png`));
 
       await browser("open", `${origin}${workspacePath}/channel/${channel.id}`);
@@ -96,11 +98,13 @@ test("a focused text field's border is the theme's input-focus colour", async ()
       );
       const typing = await evaluate<string>(tokenColor("--color-field-border-typing"));
       await browser("focus", "main form textarea");
-      await waitFor(`${composerFrame}.borderColor === ${JSON.stringify(typing)}`);
-      expect(await evaluate<string>(`${composerFrame}.borderColor`)).toBe(typing);
-      expect(await evaluate<string>(`${composerFrame}.boxShadow`)).toContain(
-        `${typing} 0px 0px 0px 1px inset`,
+      // The inset shadow eases in (`transition-shadow`) after the border colour is already set.
+      const inset = `${typing} 0px 0px 0px 1px inset`;
+      await waitFor(
+        `${composerFrame}.borderColor === ${JSON.stringify(typing)} && ${composerFrame}.boxShadow.includes(${JSON.stringify(inset)})`,
       );
+      expect(await evaluate<string>(`${composerFrame}.borderColor`)).toBe(typing);
+      expect(await evaluate<string>(`${composerFrame}.boxShadow`)).toContain(inset);
       await browser("screenshot", join(artifacts, `composer-${theme}.png`));
     }
   } finally {
