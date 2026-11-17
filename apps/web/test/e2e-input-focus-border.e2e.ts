@@ -56,9 +56,10 @@ test("a focused text field's border is the theme's input-focus colour", async ()
     return JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${expression})`))) as T;
   }
   const waitFor = (condition: string) => browser("wait", "--fn", condition);
-  /** The colour the focused field's border is drawn in: the shared Input's ring (an inset box
-   * shadow), or the composer's border. */
+  /** The colour the focused field's border is drawn in: the shared Input's or TextArea's ring (an
+   * inset box shadow), or the composer's border. */
   const inputRing = `getComputedStyle(document.querySelector('input[type="search"]').closest(".group\\\\/input")).boxShadow`;
+  const textAreaRing = `getComputedStyle(document.querySelector('[role="dialog"] textarea')).boxShadow`;
   const composerFrame = `getComputedStyle(document.querySelector("main form textarea").closest("form"))`;
   const setTheme = async (theme: "light" | "dark") => {
     await browser("eval", `localStorage.setItem("coforge-theme", "${theme}")`);
@@ -106,6 +107,14 @@ test("a focused text field's border is the theme's input-focus colour", async ()
       expect(await evaluate<string>(`${composerFrame}.borderColor`)).toBe(typing);
       expect(await evaluate<string>(`${composerFrame}.boxShadow`)).toContain(inset);
       await browser("screenshot", join(artifacts, `composer-${theme}.png`));
+
+      await browser("click", 'button[aria-label="Channel details and settings"]');
+      await waitFor(`document.querySelector('[role="dialog"] textarea:not([disabled])') !== null`);
+      await browser("focus", '[role="dialog"] textarea');
+      const textAreaInset = `${typing} 0px 0px 0px 2px inset`;
+      await waitFor(`${textAreaRing}.includes(${JSON.stringify(textAreaInset)})`);
+      expect(await evaluate<string>(textAreaRing)).toContain(textAreaInset);
+      await browser("screenshot", join(artifacts, `textarea-${theme}.png`));
     }
   } finally {
     await browser("eval", `localStorage.removeItem("coforge-theme")`).catch(() => undefined);

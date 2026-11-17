@@ -15,6 +15,13 @@ export const FIELD_STATES = {
   text: "text-field-text placeholder:text-field-placeholder",
   /** Being typed in (focused, or a select open). */
   typing: "ring-2 ring-field-border-typing forced-colors:outline-2",
+  /** Native `:focus` / `:focus-within` twin of `typing` (`[&:focus]` bypasses the React Aria
+   * Tailwind plugin's `[data-rac][data-focused]` rewrite, so focus before hydration or `.focus()`
+   * in an unfocused window shows the typing border immediately). */
+  focusTyping:
+    "[&:focus]:ring-2 [&:focus]:ring-field-border-typing forced-colors:[&:focus]:outline-2",
+  focusWithinTyping:
+    "[&:focus-within]:ring-2 [&:focus-within]:ring-field-border-typing forced-colors:[&:focus-within]:outline-2",
   /** Not available: the disabled fill, with lighter text and the not-allowed pointer, so the
    * fill is not the only sign (Raft, task #112). */
   disabled: "cursor-not-allowed bg-field-bg-disabled text-tertiary",
@@ -22,6 +29,10 @@ export const FIELD_STATES = {
   invalid: "ring-field-border-error",
   /** Holding a value that is wrong, and being typed in. */
   invalidTyping: "ring-2 ring-field-border-error forced-colors:outline-2",
+  focusInvalidTyping:
+    "[&:focus]:ring-2 [&:focus]:ring-field-border-error forced-colors:[&:focus]:outline-2",
+  focusWithinInvalidTyping:
+    "[&:focus-within]:ring-2 [&:focus-within]:ring-field-border-error forced-colors:[&:focus-within]:outline-2",
   /** A box drawn around a field whose own box is stripped (a composer), or around a plain
    * `<input>`: a real 1px border, the shadow and corners. */
   frame: "rounded-lg border border-field-border bg-primary shadow-xs",

@@ -13,7 +13,9 @@ import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { TextArea } from "#src/components/base/textarea/textarea";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
+import { submitOnModEnter } from "#src/components/ui/dialog-form-keys";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { useAppToast } from "#src/components/ui/toast";
 import type { ChipMention } from "#src/features/conversations/message-reference-chips";
@@ -315,6 +317,7 @@ export function CommentEditor({
   const [saving, setSaving] = useState(false);
   return (
     <form
+      onKeyDown={submitOnModEnter}
       className="flex flex-col gap-2"
       onSubmit={async (event) => {
         event.preventDefault();
@@ -327,23 +330,25 @@ export function CommentEditor({
         }
       }}
     >
-      <textarea
+      <TextArea
         autoFocus
+        size="sm"
         value={text}
         rows={3}
         maxLength={8000}
         aria-label={m.av_cm_edit()}
-        onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => {
+        isDisabled={saving}
+        onChange={setText}
+        textAreaClassName="resize-y p-2"
+        onTextAreaKeyDown={(event) => {
           if (event.key === "Escape") {
             event.stopPropagation();
             onCancel();
           }
         }}
-        className="w-full resize-y rounded-md border border-field-border bg-primary p-2 text-sm text-field-text outline-focus-ring focus-visible:outline-2"
       />
       <div className="flex justify-end gap-2">
-        <Button size="sm" color="secondary" onClick={onCancel}>
+        <Button type="button" size="sm" color="secondary" onClick={onCancel}>
           {m.av_cm_edit_cancel()}
         </Button>
         <Button

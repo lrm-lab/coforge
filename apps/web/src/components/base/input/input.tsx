@@ -99,6 +99,7 @@ export const InputBase = ({
                     "group/input relative flex w-full flex-row place-content-center place-items-center",
                     FIELD_STATES.box,
 
+                    !isDisabled && !isInvalid && FIELD_STATES.focusWithinTyping,
                     isFocusWithin && !isDisabled && FIELD_STATES.typing,
 
                     // Disabled state styles
@@ -106,6 +107,7 @@ export const InputBase = ({
 
                     // Invalid state styles, and being typed in while invalid
                     isInvalid && FIELD_STATES.invalid,
+                    isInvalid && !isDisabled && FIELD_STATES.focusWithinInvalidTyping,
                     isInvalid && isFocusWithin && FIELD_STATES.invalidTyping,
 
                     context?.wrapperClassName,

@@ -27,26 +27,30 @@ export const TextAreaBase = ({ className, size = "md", ...props }: TextAreaBaseP
                     "--resize-handle-bg-dark": getResizeHandleBg("#373A41"),
                 } as React.CSSProperties
             }
-            className={(state) =>
-                cx(
-                    "w-full scroll-py-3 autofill:rounded-lg autofill:text-primary focus:outline-hidden",
+            className={(state) => {
+                const resolvedClassName = typeof className === "function" ? className(state) : className;
+                const stripped = typeof resolvedClassName === "string" && /\bring-0\b/.test(resolvedClassName);
+                return cx(
+                    "w-full scroll-py-3 outline-hidden autofill:rounded-lg autofill:text-primary",
                     FIELD_STATES.box,
                     FIELD_STATES.text,
 
-                    size === "sm" && "p-3 text-sm",
+                    size === "sm" && "p-3 text-sm pointer-coarse:text-md",
                     size === "md" && "px-3.5 py-3 text-md",
 
                     // Resize handle
                     "[&::-webkit-resizer]:bg-(image:--resize-handle-bg) [&::-webkit-resizer]:bg-contain dark:[&::-webkit-resizer]:bg-(image:--resize-handle-bg-dark)",
 
+                    !stripped && !state.isDisabled && !state.isInvalid && FIELD_STATES.focusTyping,
                     state.isFocused && !state.isDisabled && FIELD_STATES.typing,
                     state.isDisabled && FIELD_STATES.disabled,
                     state.isInvalid && FIELD_STATES.invalid,
+                    !stripped && state.isInvalid && !state.isDisabled && FIELD_STATES.focusInvalidTyping,
                     state.isInvalid && state.isFocused && FIELD_STATES.invalidTyping,
 
-                    typeof className === "function" ? className(state) : className,
-                )
-            }
+                    resolvedClassName,
+                );
+            }}
         />
     );
 };
@@ -109,12 +113,13 @@ export const TextArea = ({
             {({ isInvalid, isRequired }) => (
                 <>
                     {label && (
-                        <Label isRequired={hideRequiredIndicator ? !hideRequiredIndicator : isRequired} tooltip={tooltip}>
+                        <Label isRequired={hideRequiredIndicator ? !hideRequiredIndicator : isRequired} isInvalid={isInvalid} tooltip={tooltip}>
                             {label}
                         </Label>
                     )}
 
                     <TextAreaBase
+                        autoFocus={props.autoFocus}
                         placeholder={placeholder}
                         className={textAreaClassName}
                         ref={textAreaRef}
