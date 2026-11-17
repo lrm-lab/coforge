@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 
+import { lightboxStepTarget } from "#src/features/conversations/image-lightbox-step";
 import { galleryRows, imageShape, singleImageBox } from "#src/lib/attachment-image-box";
 
 const size = (imageWidth: number, imageHeight: number) => ({ imageWidth, imageHeight });
@@ -58,4 +59,30 @@ test("a wide image takes its own row and splits the run around it; only normal o
     [{ index: 2, fit: "contain" }],
     [{ index: 3, fit: "cover" }],
   ]);
+});
+
+test("the gallery's photos: a 4:3 landscape fills 360×270, a long screenshot is a sliver", () => {
+  expect(singleImageBox(size(1200, 900)).width).toBe("min(360px, 100%)");
+  // 300×2000 is tall: 288 high, so 43px wide (286.7 tall).
+  expect(singleImageBox(size(300, 2000)).width).toBe("min(43px, 100%)");
+  expect(imageShape(size(300, 2000))).toBe("tall");
+});
+
+test("five with a wide one in the middle go two, the wide one alone, then two", () => {
+  const rows = galleryRows([
+    size(400, 300),
+    size(400, 300),
+    size(1000, 200),
+    size(400, 300),
+    size(100, 400),
+  ]);
+  expect(rows.map((row) => row.map((cell) => cell.index))).toEqual([[0, 1], [2], [3, 4]]);
+});
+
+test("the lightbox steps one image at a time and stops at the ends instead of wrapping", () => {
+  expect(lightboxStepTarget(0, -1, 5)).toBeUndefined();
+  expect(lightboxStepTarget(0, 1, 5)).toBe(1);
+  expect(lightboxStepTarget(2, -1, 5)).toBe(1);
+  expect(lightboxStepTarget(4, 1, 5)).toBeUndefined();
+  expect(lightboxStepTarget(4, -1, 5)).toBe(3);
 });

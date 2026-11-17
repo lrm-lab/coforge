@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
+import { isTaskWriteStatus } from "@lrm/coforge-sdk/internal";
 
 import {
   NO_LABEL,
   NO_OWNER,
   NO_PROJECT,
+  availableTaskStatuses,
   filterParam,
   labelOptions,
   ownerOptions,
@@ -24,6 +26,31 @@ const VIEWER = "user-viewer";
 
 test("a Backlog URL filter keeps its status", () => {
   expect(parseStatusParam("backlog,todo")).toEqual(["backlog", "todo"]);
+});
+
+// Backlog read compatibility: invisible until a Task is in it, never offered for writing.
+test("a board offers Backlog only once a Task is in it, and a Backlog pick keeps only those", () => {
+  expect(availableTaskStatuses([{ status: "todo" }, { status: "done" }])).toEqual([
+    "todo",
+    "in_progress",
+    "in_review",
+    "done",
+    "closed",
+  ]);
+  expect(availableTaskStatuses([{ status: "todo" }, { status: "backlog" }])).toEqual([
+    "backlog",
+    "todo",
+    "in_progress",
+    "in_review",
+    "done",
+    "closed",
+  ]);
+  const picked = parseStatusParam("backlog");
+  expect(statusMatches("backlog", picked)).toBe(true);
+  expect(statusMatches("todo", picked)).toBe(false);
+  // Its column has no "Add a task": only write statuses take one.
+  expect(isTaskWriteStatus("backlog")).toBe(false);
+  expect(isTaskWriteStatus("todo")).toBe(true);
 });
 const person = (id: string, name: string) => ({
   memberId: `m-${id}`,

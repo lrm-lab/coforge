@@ -29,3 +29,26 @@ test("a written section has no room; one only clicked into keeps its height", ()
   expect(open).toEqual([]);
   expect(empty).toEqual([{ from: work.nodeSize, to: work.nodeSize + blank.nodeSize }]);
 });
+
+test("typing under the first heading leaves only the unwritten section its box", () => {
+  const work = h(2, "Work Summary");
+  const written = p("Shipped the gap");
+  const next = h(2, "Next Steps");
+  const { open, empty } = sectionGaps(doc(work, written, next));
+  expect(open).toEqual([work.nodeSize + written.nodeSize + next.nodeSize]);
+  expect(empty).toEqual([]);
+});
+
+test("the editor's trailing empty paragraph makes the last section's room an empty one", () => {
+  const work = h(2, "Work Summary");
+  const blank = p();
+  const next = h(2, "Next Steps");
+  const trailing = p();
+  const { open, empty } = sectionGaps(doc(work, blank, next, trailing));
+  expect(open).toEqual([]);
+  const end = work.nodeSize + blank.nodeSize + next.nodeSize;
+  expect(empty).toEqual([
+    { from: work.nodeSize, to: work.nodeSize + blank.nodeSize },
+    { from: end, to: end + trailing.nodeSize },
+  ]);
+});

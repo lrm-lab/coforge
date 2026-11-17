@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { groupByDay } from "#src/features/inbox/activity-inbox-days";
+import { daySectionKey, groupByDay, renderDays } from "#src/features/inbox/activity-inbox-days";
 import { formatClockTime } from "#src/lib/dates";
 
 const now = Date.parse("2026-11-08T10:00:00Z");
@@ -87,4 +87,30 @@ test("today follows the render's moment, a minute either side of the viewer's mi
   const justAfter = Date.parse("2026-11-07T18:31:00Z");
   expect(groupByDay(items, at, "Asia/Kolkata", justBefore)[0]!.label).toBe("Today");
   expect(groupByDay(items, at, "Asia/Kolkata", justAfter)[0]!.label).toBe("Yesterday");
+});
+
+test("before hydration the server names the days from its own zone and moment (task #68)", () => {
+  const items = [
+    { id: "a", at: "2026-11-08T09:00:00Z" },
+    { id: "b", at: "2026-11-05T09:00:00Z" },
+  ];
+  const render = { zone: "UTC", renderedAt: now };
+  // The same groups the browser makes with that zone and clock: hydrating changes nothing.
+  expect(renderDays(items, at, render)).toEqual(groupByDay(items, at, "UTC", now));
+  expect(renderDays(items, at, render).every((group) => group.label !== undefined)).toBe(true);
+});
+
+test("with no zone known the list is one undated group, which hydration then names (task #64)", () => {
+  const items = [
+    { id: "a", at: "2026-11-08T09:00:00Z" },
+    { id: "b", at: "2026-11-05T09:00:00Z" },
+  ];
+  const [all, ...rest] = renderDays(items, at, { zone: undefined, renderedAt: now });
+  expect(rest).toEqual([]);
+  expect(all).toEqual({ key: "all", label: undefined, items });
+  // The first section keeps one key whether or not the days are named, so its rows are not
+  // remounted when the page hydrates; a later day is keyed by its date.
+  const named = groupByDay(items, at, "UTC", now);
+  expect(daySectionKey(0, all!.key)).toBe(daySectionKey(0, named[0]!.key));
+  expect(daySectionKey(1, named[1]!.key)).toBe("2026-11-05");
 });

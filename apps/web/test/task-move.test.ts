@@ -188,6 +188,17 @@ describe("taskStatusOptions", () => {
     expect(taskStatusOptions(task("todo"), null)).toEqual(["todo"]);
   });
 
+  test("Backlog shows once on a Backlog Task and is never a choice on any other", () => {
+    expect(
+      taskStatusOptions(task("backlog", owner("me")), "me").filter((s) => s === "backlog"),
+    ).toEqual(["backlog"]);
+    for (const status of ["todo", "in_progress", "in_review", "done", "closed"] as const)
+      expect(taskStatusOptions(task(status, owner("me")), "me")).not.toContain("backlog");
+    expect(
+      taskStatusOptions(task("todo", owner("me")), "me", { canSetAnyStatus: true }),
+    ).not.toContain("backlog");
+  });
+
   test("a manager's menu lists every other status", () => {
     expect(
       taskStatusOptions(task("closed", owner("other")), "me", { canSetAnyStatus: true }),

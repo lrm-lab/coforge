@@ -142,4 +142,37 @@ describe("matchSearchEntities", () => {
       "user-2",
     ]);
   });
+  test("people, Agents, channels and Computers sharing a word are listed in that order (task #95)", () => {
+    const channel: SearchEntity = {
+      kind: "channel",
+      id: "channel",
+      name: "e2e-lighthouse",
+      description: "Beacon",
+      archived: false,
+      visibility: "public",
+    };
+    const bot = { ...agent, id: "bot", name: "Lighthouse Bot", handle: "e2e-lighthouse-bot" };
+    const keeper = { ...agent, id: "keeper", name: "Lighthouse Keeper", handle: "keeper" };
+    const person: SearchEntity = {
+      kind: "person",
+      id: "person",
+      name: "Lighthouse Lee",
+      avatarUrl: null,
+      dmId: null,
+    };
+    const computer: SearchEntity = {
+      kind: "computer",
+      id: "computer",
+      name: "Lighthouse Mac",
+      hostname: "mac",
+      computerKind: "personal",
+    };
+    const all = [computer, channel, keeper, bot, person];
+    const ids = (query: string) => matchSearchEntities(all, query).map(({ id }) => id);
+    // Equal name matches list people, Agents, then Computers and channels by name match.
+    expect(ids("lighthouse")).toEqual(["person", "bot", "keeper", "computer", "channel"]);
+    expect(ids("#lighthouse")).toEqual(["channel"]);
+    expect(ids("@lighthouse")).toEqual(["person", "bot", "keeper"]);
+    expect(ids("mac")).toEqual(["computer"]);
+  });
 });
