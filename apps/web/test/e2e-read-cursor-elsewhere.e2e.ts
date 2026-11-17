@@ -66,7 +66,35 @@ function device(name: string) {
   async function until(condition: string, ms = 30_000) {
     const deadline = Date.now() + ms;
     while (!(await evaluate<boolean>(condition))) {
-      if (Date.now() > deadline) throw new Error(`${name}: timed out waiting for ${condition}`);
+      if (Date.now() > deadline) {
+        await run("screenshot", join(artifacts, `${name}-timeout.png`)).catch(() => undefined);
+        const state = await evaluate(`(() => {
+          const router = window.__TSR_ROUTER__;
+          return {
+            url: location.href,
+            condition: ${JSON.stringify(condition)},
+            hovered: [...document.querySelectorAll("a:hover")].map((a) => a.outerHTML),
+            queries: router.options.context.queryClient.getQueryCache().getAll()
+              .filter((q) => q.queryKey[0] === "conversation-open")
+              .map((q) => ({ key: q.queryKey, status: q.state.status,
+                fetching: q.state.fetchStatus, error: String(q.state.error) })),
+            matches: [...router.state.matches, ...router._cache.values()].map((m) => ({
+              id: m.id, status: m.status, error: String(m.error),
+            })),
+            links: [...document.querySelectorAll('a[href*="/channel/"]')].map((a) => ({
+              href: a.getAttribute("href"), hovered: a.matches(":hover"),
+              bounds: a.getBoundingClientRect().toJSON(),
+            })),
+          };
+        })()`).catch((error) => String(error));
+        await Bun.write(
+          join(artifacts, `${name}-timeout.json`),
+          JSON.stringify(state, null, 2),
+        ).catch(() => undefined);
+        console.error(await run("errors").catch((error) => String(error)));
+        console.error(JSON.stringify({ device: name, state }));
+        throw new Error(`${name}: timed out waiting for ${condition}`);
+      }
       await Bun.sleep(100);
     }
   }
