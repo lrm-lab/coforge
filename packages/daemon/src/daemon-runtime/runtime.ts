@@ -178,7 +178,6 @@ import { acceptAppRegistrationNotice } from "#src/agent-app-inbox/app-registrati
 
 export { USAGE_SCAN_READ_TIMEOUT_MS } from "./runtime-agent-flows";
 
-/** A daemon-owned resident runtime for one supervised Workspace. */
 export class DaemonRuntime {
   readonly #connection: DaemonConfig;
   readonly #drafts: ReturnType<typeof agentActivityDrafts>;
@@ -204,7 +203,6 @@ export class DaemonRuntime {
   readonly #localQueries: RuntimeLocalQueries;
   readonly #deliveryGate = new AgentDeliveryGate();
   readonly #wakeLaunchFailures = new LaunchFailureBackoff();
-  // Before the ports objects that reference them.
   readonly #turn = new RuntimeTurn(() => this.#turnPorts());
   #sendAgentStatus = (agentId: string, status: "active" | "inactive"): void =>
     sendAgentStatus(this.#statusReportPorts, agentId, status);
@@ -224,7 +222,7 @@ export class DaemonRuntime {
     wakeAgent: (agentId, restart) => this.#wakeAgent(agentId, restart),
     handleAgentMessage: (message) => this.handleAgentMessage(message),
   });
-  /** Agents whose in-flight launch is a message wake, which presents what waits as one notice. */
+
   readonly #wakeLaunches = new Set<string>();
   readonly #sync = new AgentFeatureSync({
     live: (agentId) => this.#runtimeRelease.canRestartForFreshConfig(agentId),
@@ -252,14 +250,14 @@ export class DaemonRuntime {
     wakeAgent: (agentId, restart) => this.#wakeAgent(agentId, restart),
     mentionDeliveries: () => this.#mentionDeliveries,
   });
-  /** Stops cold, idle, large-context runtimes; the next launch decides resume or fresh session. */
+
   readonly #coldIdleSweep = new ColdIdleSweep({
     agentIds: () => this.#agentProcessManager.runningAgentIds(),
     agent: (agentId) => this.#runtimeRelease.coldIdleAgent(agentId),
     provider: (provider) => this.#createProvider(provider),
     stop: (stop) => this.#runtimeRelease.stopColdIdle(stop),
   });
-  /** Applies a pushed Agent configuration when the Agent is next idle. */
+
   readonly #configApply = assembleAgentConfigApply({
     runtimeRelease: () => this.#runtimeRelease,
     processManager: () => this.#agentProcessManager,
@@ -274,14 +272,14 @@ export class DaemonRuntime {
     isStopping: (agentId) => this.#stopState.stopping(agentId),
     release: this.#runtimeRelease,
   });
-  /** Re-reads model catalogs whose on-disk key changed. */
+
   readonly #catalogFreshnessSweep = new CatalogFreshnessSweep({
     transport: () => (this.#startup.started && !this.#stopping ? this.#transport : undefined),
     recheck: (transport) => this.#codeAgentInventory.recheckCatalogs(transport),
   });
-  /** The OS version the ready report carries. */
+
   readonly #operatingSystem = new OperatingSystemInfo();
-  /** Reports this machine's disk and memory while the connection is up. */
+
   readonly #machineStatus = runtimeMachineStatus({
     connection: () => this.#connection,
     dataDirectory: () => this.stateDirectory,
@@ -292,9 +290,9 @@ export class DaemonRuntime {
     inputQueue: (agentId) => this.#inputDrain.get(agentId),
     hasQueuedDeliveries: (agentId) => this.#deliveryGate.hasQueued(agentId),
   });
-  /** The events of an Agent's life more than one module follows. */
+
   readonly #lifecycle = new AgentLifecycle();
-  /** Which Agents' provider credential is known invalid, and the files whose change ends it. */
+
   readonly #credentialHolds = assembleCredentialHolds({
     deliveryGate: this.#deliveryGate,
     lifecycle: this.#lifecycle,
@@ -321,13 +319,12 @@ export class DaemonRuntime {
       requestReminderSnapshot(this.#appInboxSyncPorts(), agentId, { reason }),
   });
   readonly #appConfigs: AgentAppConfigSync;
-  /** This Computer's Agent migration runs; absent when the transport cannot reach the route. */
+
   readonly #migrations: AgentMigrationRunner | undefined;
   readonly #inboxCoordinator: AgentInboxCoordinator;
   readonly #stopCoordinator: AgentStopCoordinator;
   readonly #launchCoordinator: AgentLaunchCoordinator;
-  /** Per-Agent MEMORY.md and disk hints. Inert until a cloud config for an Agent is applied to
-   * it (`applyConfig`/`replaceOwnerSnapshot`). */
+
   readonly systemCleaner: SystemCleaner;
   readonly #runtimeInstanceId = crypto.randomUUID();
   readonly #consumedSeqs: AgentConsumedSeqStore;
@@ -360,7 +357,7 @@ export class DaemonRuntime {
   readonly #stopState = new AgentStopRegistry();
   readonly #currentActivityLaunches = new Map<string, ActivityLaunch>();
   readonly #agentStatusSequences = new Map<string, number>();
-  /** The per-Agent offline record a runtime error leaves (`agent-offline-residency.ts`). */
+
   readonly #offlineResidency = new AgentOfflineResidency({
     endHoldForNextLaunch: (agentId) => this.#deliveryGate.endHoldForNextLaunch(agentId),
     forgetRuntimeErrorHold: (agentId) => this.#runtimeErrorHold.forget(agentId),
@@ -386,7 +383,7 @@ export class DaemonRuntime {
     startedAtMs: this.#startedAt,
   };
   readonly #observedUsage = new Map<RuntimeProvider, UsageSnapshot>();
-  /** Per-launch context-usage and service-tier readings (`agent-usage-report.ts`). */
+
   readonly #usageReport = assembleUsageReport(
     (agentId) => this.#stopState.sessionId(agentId),
     () => this.#env(),
@@ -395,7 +392,7 @@ export class DaemonRuntime {
     (message) => this.#transport.sendAgentContextUsage?.(message),
     (message) => this.#transport.sendAgentServiceTier?.(message),
   );
-  /** Agents warned once per launch that Fast mode was not applied. */
+
   readonly #fastModeWarned = new Set<string>();
   readonly #agentProxy?: AgentProxy;
   readonly #activityPublisher: AgentActivityPublisher<ActivityLaunch>;
@@ -405,9 +402,9 @@ export class DaemonRuntime {
     workspaceId: () => this.#connection.workspaceId,
     active: () => this.#startup.started,
   });
-  /** Runner-hold reason, or undefined when turns are admitted. */
+
   #runnerHold: RunnerHold | undefined;
-  /** Each phase's open state and stale watchdog — see `phase-bookkeeping.ts`. */
+
   readonly #memoryHooks = () => ({
     connection: this.#connection,
     inputDrain: this.#inputDrain,
@@ -421,16 +418,16 @@ export class DaemonRuntime {
     (agentId, detailKind, detail) => this.#activity(agentId, detailKind, "info", detail),
     (agentId) => this.#usageReport.lastContextUsage(agentId),
   );
-  /** Provider-event collaborators, assigned after construction. */
+
   readonly #observationPorts: RuntimeEventObservationPorts;
   readonly #codeAgentInventory: CodeAgentInventorySync;
   readonly #runtimeAuth: RuntimeAuthReporter;
   readonly #upgradeResults: UpgradeResultReporter;
-  /** Workspace connection state, assigned after collaborators exist. */
+
   readonly #startup: RuntimeStartup;
-  /** Closing flow, assigned after construction. */
+
   readonly #shutdown: RuntimeStop;
-  /** Cloud-facing Agent operations. */
+
   readonly #agentOperations: AgentOperations;
   readonly #workspaceQueries = new AgentWorkspaceQueries(
     (agentId) => this.#agentProcessManager.runtime(agentId)?.config.provider,
@@ -582,7 +579,6 @@ export class DaemonRuntime {
     const control = composeAgentControl({
       connection,
       runtimeInstanceId: this.#runtimeInstanceId,
-      // A process being stopped is not one a Start may adopt: it would rebind to what is dying.
       running: (agentId) =>
         !this.#stopState.isStopping(agentId) && this.#agentProcessManager.isRunning(agentId),
       session: (agentId) => this.#agentProcessManager.session(agentId),
@@ -603,7 +599,18 @@ export class DaemonRuntime {
     });
     this.#agentSessions = control.agentSessions;
     this.#agentControl = control.agentControl;
-    this.#observationPorts = {
+    this.#observationPorts = this.#createObservationPorts();
+    this.#launchCustody = this.#createLaunchCustody();
+    this.#stopCoordinator = this.#createStopCoordinator();
+    this.#launchCoordinator = this.#createLaunchCoordinator();
+    this.#startup = this.#createStartup();
+    this.#agentOperations = this.#createAgentOperations();
+    this.#shutdown = this.#createShutdown();
+  }
+
+  #createObservationPorts(): RuntimeEventObservationPorts {
+    const runtime = this;
+    return {
       activityPublisher: this.#activityPublisher,
       deliveryGate: this.#deliveryGate,
       offlineResidency: this.#offlineResidency,
@@ -633,7 +640,10 @@ export class DaemonRuntime {
       failCollectorRunningSlots: (agentId, reason) =>
         this.#failCollectorRunningSlots(agentId, reason),
     };
-    this.#launchCustody = new AgentLaunchCustody({
+  }
+
+  #createLaunchCustody(): AgentLaunchCustody {
+    return new AgentLaunchCustody({
       messageAttention: this.#messageAttention,
       deliveryGate: this.#deliveryGate,
       inputDrain: this.#inputDrain,
@@ -643,7 +653,10 @@ export class DaemonRuntime {
       releaseHeldAppItems: (agentId) => this.#inboxCoordinator.releaseHeldAppItems(agentId),
       releaseFallbackNotices: (agentId) => this.#inboxCoordinator.releaseFallbackNotices(agentId),
     });
-    this.#stopCoordinator = new AgentStopCoordinator({
+  }
+
+  #createStopCoordinator(): AgentStopCoordinator {
+    return new AgentStopCoordinator({
       agentLaunches: this.#agentLaunches,
       currentActivityLaunches: this.#currentActivityLaunches,
       inputDrain: this.#inputDrain,
@@ -662,7 +675,10 @@ export class DaemonRuntime {
       publishStopped: (agentId, launch) =>
         this.#activityPublisher.publish(agentId, launch, this.#drafts.stopped(agentId)),
     });
-    this.#launchCoordinator = new AgentLaunchCoordinator({
+  }
+
+  #createLaunchCoordinator(): AgentLaunchCoordinator {
+    return new AgentLaunchCoordinator({
       connection: this.#connection,
       transport: () => this.#transport,
       runtimeInstanceId: this.#runtimeInstanceId,
@@ -731,7 +747,10 @@ export class DaemonRuntime {
         void this.#wakeAgent(agentId, restart, request).catch(() => {});
       },
     });
-    this.#startup = new RuntimeStartup({
+  }
+
+  #createStartup(): RuntimeStartup {
+    return new RuntimeStartup({
       transport: () => this.#transport,
       replaceTransport: () => this.#replaceTransport(),
       credentials: this.#credentials,
@@ -801,7 +820,10 @@ export class DaemonRuntime {
       catalogFreshnessSweep: this.#catalogFreshnessSweep,
       machineStatus: this.#machineStatus,
     });
-    this.#agentOperations = new AgentOperations({
+  }
+
+  #createAgentOperations(): AgentOperations {
+    return new AgentOperations({
       connection: this.#connection,
       transport: () => this.#transport,
       assertRunning: () => this.#assertRunning(),
@@ -826,7 +848,10 @@ export class DaemonRuntime {
       stopCoordinator: this.#stopCoordinator,
       messageOperations: this.#messageOperations,
     });
-    this.#shutdown = new RuntimeStop({
+  }
+
+  #createShutdown(): RuntimeStop {
+    return new RuntimeStop({
       startup: this.#startup,
       coldIdleSweep: this.#coldIdleSweep,
       configApply: this.#configApply,
@@ -907,7 +932,6 @@ export class DaemonRuntime {
     );
   }
 
-  /** Spends a reset credit of the provider's account and reads its usage again. */
   consumeResetCredit(provider: RuntimeProvider, idempotencyKey: string) {
     return consumeResetCredit(
       {
@@ -1110,7 +1134,6 @@ export class DaemonRuntime {
     );
   }
 
-  /** Translates one coalesced provider event into cloud Activity, Session and usage updates. */
   #observeRuntimeEvent = launchEventObserver(() => ({
     currentLaunch: (id) => this.#currentActivityLaunches.get(id),
     observation: this.#observationPorts,
@@ -1156,8 +1179,6 @@ export class DaemonRuntime {
     return handleAgentStop(this.#controlIntentPorts(), intent);
   }
 
-  /** A pushed runtime configuration: applied when the Agent is next idle, never by cutting a
-   * turn short. */
   async handleAgentConfig(sync: AgentConfigSync): Promise<void> {
     this.#assertOwnIntent(sync);
     await this.#configApply.accept(sync);
@@ -1182,7 +1203,6 @@ export class DaemonRuntime {
     );
   }
 
-  /** Answers a liveness probe from current Agent activity without mutating runtime state. */
   async handleAgentActivityProbe(probe: AgentActivityProbe): Promise<void> {
     return this.#agentOperations.handleActivityProbe(probe);
   }
@@ -1191,8 +1211,6 @@ export class DaemonRuntime {
     return handleAgentMessage(this.#messageDeliveryPorts(), message);
   }
 
-  /** Sends a session report, and remembers the launch and session it names for tracked
-   * mentions. */
   async #reportAgentSession(report: AgentSessionReport): Promise<void> {
     await this.#transport.reportAgentSession?.(report);
     this.#reported.remember(report);
@@ -1236,7 +1254,6 @@ export class DaemonRuntime {
       this.#wakeLaunchFailures,
     );
 
-  /** Drops local state for channels an Agent can no longer read. */
   handleAgentInboxPurge(purge: AgentInboxPurge): void {
     return this.#agentOperations.handleInboxPurge(purge);
   }
@@ -1246,7 +1263,6 @@ export class DaemonRuntime {
     return this.#agentOperations.stopAgent(agentId);
   }
 
-  /** Forgets one ended launch's observation state without affecting another Agent. */
   #disposeLaunchObservations = (agentId: string): void => {
     disposeLaunchObservations(
       agentId,
@@ -1287,7 +1303,6 @@ export class DaemonRuntime {
     isWorking: this.#turn.isWorking,
   });
 
-  /** The Agent no longer lives on this Computer: its workspace was deleted or moved away. */
   #forgetLocalAgent = (agentId: string): void =>
     forgetAgent(
       agentId,
@@ -1338,7 +1353,6 @@ export class DaemonRuntime {
     );
   }
 
-  /** Dispatches one task command to the cloud task route over its HTTPS path. */
   async agentTask(context: string, command: TaskCommand, agentApiKey: string): Promise<TaskResult> {
     return agentTask(this.#agentApiRemindersPorts(), context, command, agentApiKey);
   }
@@ -1385,12 +1399,10 @@ export class DaemonRuntime {
     };
   }
 
-  /** Stops admitting new Agent turns and reports which Agents are still busy. */
   holdRunners(reason: RunnerHoldReason): BusyAgentReport[] {
     return holdRunners(this.#runnerHoldCell(), reason, this.#activityPublisher);
   }
 
-  /** Lifts the hold and resumes every delivery queued behind it, in arrival order. */
   releaseRunners(): BusyAgentReport[] {
     return releaseRunners(
       this.#runnerHoldCell(),
@@ -1406,12 +1418,10 @@ export class DaemonRuntime {
     return this.#runnerHold !== undefined;
   }
 
-  /** Agents whose last emitted Activity is a busy detail kind with no terminal kind since. */
   busyAgents(): BusyAgentReport[] {
     return this.#activityPublisher.busyAgents();
   }
 
-  /** Why this runtime's cloud connection last failed to connect, while it is not up. */
   cloudConnectFailure(): string | undefined {
     return this.#transport.connectFailure?.();
   }
