@@ -94,7 +94,7 @@ function ResetFields({
   const [again, setAgain] = useState("");
   const [problem, setProblem] = useState<Problem | null>(null);
   const [submitting, guard] = useSubmitGuard();
-  const codeSending = useCodeSending({
+  const codeSending = useCodeSending<Problem>({
     destination,
     request: (typed) => requestCode({ data: { destination: typed } }),
     setProblem,

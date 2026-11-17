@@ -40,7 +40,7 @@ export function CodeSignInForm({
   const [problem, setProblem] = useState<Problem | null>(null);
   const [submitting, guard] = useSubmitGuard();
   const art = useLoginArt();
-  const codeSending = useCodeSending({
+  const codeSending = useCodeSending<Problem>({
     destination,
     request: (typed) => send({ data: { destination: typed } }),
     setProblem,

@@ -26,7 +26,7 @@ export function CodeInput({
   onChange: (value: string) => void;
   isInvalid: boolean;
   className?: string;
-  size?: "md" | "lg";
+  size?: "sm" | "md" | "lg";
   /** The field names itself by its placeholder alone, as on the sign-in page. */
   hideLabel?: boolean;
 }) {
@@ -53,7 +53,7 @@ export function SendCodeRow({
   children,
 }: {
   codeSending: ReturnType<typeof useCodeSending>;
-  size?: "md" | "lg";
+  size?: "sm" | "md" | "lg";
   /** The field, which takes the row's width (`min-w-0 flex-1`). */
   children: ReactNode;
 }) {
