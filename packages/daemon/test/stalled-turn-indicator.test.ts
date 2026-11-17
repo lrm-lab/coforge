@@ -291,7 +291,7 @@ test("the same clock reported again only counts, and the count is what a finishe
     } finally {
       jest.useRealTimers();
     }
-  });
+  }, "debug");
   expect(clockLines(records, "agent_runtime:turn_stalled_armed")).toEqual([
     expect.objectContaining({ silence_started_at: 1_000 }),
   ]);
@@ -302,6 +302,36 @@ test("the same clock reported again only counts, and the count is what a finishe
   ]);
   expect(clockLines(records, "agent_runtime:turn_stalled_finished")).toEqual([
     expect.objectContaining({ rearms: 6, last_rearm_at: 61_000, fired: false }),
+  ]);
+});
+
+test("at info level a busy turn writes its start and its end, not every move", async () => {
+  const { records } = await captureDaemonLogs(async () => {
+    jest.useFakeTimers();
+    try {
+      jest.setSystemTime(1_000);
+      const tracker = new StalledTurnTracker(() => undefined, 600_000, Date.now, 1_200_000);
+      tracker.start("agent-a", { turnBusy: true, lastEventAtMs: 1_000, hasOpenToolCall: false });
+      // Every event of a busy turn moves the clock, switching between the tool and model windows.
+      for (let event = 1; event <= 300; event += 1) {
+        jest.setSystemTime(1_000 + event);
+        tracker.observe("agent-a", {
+          turnBusy: true,
+          lastEventAtMs: 1_000 + event,
+          hasOpenToolCall: event % 2 === 0,
+        });
+      }
+      tracker.finish("agent-a", "test_over");
+    } finally {
+      jest.useRealTimers();
+    }
+  }, "info");
+  expect(records.map((record) => record.properties.event)).toEqual([
+    "agent_runtime:turn_stalled_armed",
+    "agent_runtime:turn_stalled_finished",
+  ]);
+  expect(clockLines(records, "agent_runtime:turn_stalled_finished")).toEqual([
+    expect.objectContaining({ rearms: 300, last_rearm_at: 1_300 }),
   ]);
 });
 

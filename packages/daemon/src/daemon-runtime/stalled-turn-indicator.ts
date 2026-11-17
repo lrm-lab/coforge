@@ -288,9 +288,9 @@ export class StalledTurnTracker {
     this.#states.set(agentId, state);
     // A watchdog that never fires leaves no trace of itself, so a turn that was never watched and
     // a turn that was watched and never passed its window read the same in a real machine's log
-    // (task #41). One line when a clock begins, and one each time the clock moves for a reason a
-    // reader can act on — a new window, or a new start. Which of the two moved is in the line, and
-    // a turn's whole trail is `rearms` on its `finished` line.
+    // (task #41). One info line when a clock begins; each move after it is debug, because every
+    // event of a busy turn moves it (hundreds of lines a turn filled 92% of the log, task #54).
+    // A turn's whole trail is `rearms` and `last_rearm_at` on its `finished` line.
     const clock = {
       agent_id: agentId,
       stalled_window: window,
@@ -305,7 +305,7 @@ export class StalledTurnTracker {
         outcome: "armed",
       });
     else
-      logger.info("Agent runtime turn silence clock moved", {
+      logger.debug("Agent runtime turn silence clock moved", {
         event: "agent_runtime:turn_stalled_rearmed",
         ...clock,
         previous_started_at: current.startAtMs,
