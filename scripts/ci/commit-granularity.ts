@@ -23,6 +23,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { E2E_FLOW_FIX, stagedE2eFlowProblem } from "./e2e-flow";
+import { stagedUiEvidenceError } from "./ui-evidence";
 
 export const REVERT_EFFECT_FIX =
   "Add a `Revert-effect: <what reverting this commit would break>` trailer to the message (`none` for docs and tests only).";
@@ -250,6 +251,7 @@ async function checkMessageFile(path: string): Promise<number> {
   // Comments (# lines) are stripped by git before this hook runs on most setups,
   // but a hand-run or unusual editor may leave them; the trailer regex only looks
   // at real lines anyway.
+  const uiEvidenceError = stagedUiEvidenceError(message);
   const problems = [
     ...(hasConventionalTitle(message)
       ? []
@@ -260,6 +262,7 @@ async function checkMessageFile(path: string): Promise<number> {
     ...[stagedE2eFlowProblem(message)]
       .filter((problem) => problem !== undefined)
       .map((problem) => `commit-msg: ${problem}.\n${E2E_FLOW_FIX}`),
+    ...(uiEvidenceError ? [uiEvidenceError] : []),
   ];
   for (const problem of problems) console.error(problem);
   return problems.length === 0 ? 0 : 1;

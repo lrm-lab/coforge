@@ -8,6 +8,7 @@ These rules apply to `apps/web`, the TanStack Start Web/backend modular monolith
 - For list/detail pages and empty states apply sections 2.1–2.2 and 5.1, and run the checklist and acceptance checks in section 6. State why a different user task requires an exception before implementing one; do not treat existing pages as automatic exceptions.
 - Check every UI delivery against [the UI principles](../../docs/design/ui-principles.md), Frank's rules on type, copy, flatness, languages, device sizes and confirmations.
 - Read [the UI hard rules](../../docs/design/ui-hard-rules.md) when changing any UI: mockups, components and icons, rem sizes, semantic colors, how people are named, toasts versus inline feedback.
+- Follow [`ui-delivery`](../../.agents/skills/ui-delivery/SKILL.md) on every UI task: post mockups for jing/Frank confirmation before coding design changes, attach labeled same-size/same-data light + dark + `390px` phone screenshots, run `break-ui`, and include the `UI-Evidence:` section in `feat`/`fix` UI commit messages.
 - Do not apply marketing-page defaults from `design-taste-frontend` to the product workspace.
 - Keep supplemental explanations behind accessible, on-demand help when appropriate; keep essential constraints, errors, and risks visible. Help must work for keyboard and touch users.
 - Loading placeholders and local load errors belong to the feature whose content they represent (for example `features/agents/agents-pending.tsx`); routes select them, and `components/ui/skeleton.tsx` supplies decorative styling only.
