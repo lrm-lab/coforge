@@ -241,6 +241,7 @@ describe("an inbox at scale, on a database of its own whose statistics are refre
     );
     expect(few.inbox.hasMore).toBe(true);
     expect(many.count).toBe(few.count);
+    expect(many.count).toBeLessThanOrEqual(5);
     expect(many.inbox.totals.conversations).toBe(300 + large.followedThreads / 2);
     expect(many.inbox.items.length).toBeGreaterThanOrEqual(50);
     expect(many.inbox.hasMore).toBe(true);

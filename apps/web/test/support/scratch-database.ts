@@ -9,7 +9,12 @@ export async function createMigratedScratchDatabase(
 ): Promise<ScratchDatabase> {
   const admin = new pg.Pool({ connectionString: baseUrl, max: 1 });
   const name = `${prefix}_${crypto.randomUUID().replaceAll("-", "")}`;
-  await admin.query(`CREATE DATABASE "${name}"`);
+  try {
+    await admin.query(`CREATE DATABASE "${name}"`);
+  } catch (error) {
+    await admin.end();
+    throw error;
+  }
   const scratch = new URL(baseUrl);
   scratch.pathname = `/${name}`;
   const migrate = Bun.spawn([process.execPath, "x", "--bun", "prisma", "migrate", "deploy"], {
