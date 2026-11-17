@@ -17,8 +17,9 @@
  *   not an image), the composer now says so instead of staying silent.
  */
 
-/** Matches the server's inline-image whitelist in `attachment-response.server.ts`. */
-export const INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+import { INLINE_IMAGE_TYPES } from "#src/lib/inline-image";
+
+export { INLINE_IMAGE_TYPES };
 
 /**
  * The image URLs of a paste that carries an image but no file bytes (some web apps put only
