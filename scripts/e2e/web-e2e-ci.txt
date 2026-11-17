@@ -131,3 +131,5 @@ e2e-composer-enter-twice.e2e.ts 30
 e2e-account-settings-plain.e2e.ts 10
 e2e-report-section-gap.e2e.ts 11
 e2e-agent-reminders-list.e2e.ts 21
+# 占位，未实跑，待首轮 CI 实测替换
+e2e-external-agent.e2e.ts 20
