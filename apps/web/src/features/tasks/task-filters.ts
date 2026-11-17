@@ -1,4 +1,9 @@
-import { TASK_READ_STATUSES, type TaskMember, type TaskStatus } from "@lrm/coforge-sdk/internal";
+import {
+  TASK_READ_STATUSES,
+  TASK_WRITE_STATUSES,
+  type TaskMember,
+  type TaskStatus,
+} from "@lrm/coforge-sdk/internal";
 
 /**
  * A Task board's owner and Project filters, applied to the rows the board shows. Each takes
@@ -187,4 +192,9 @@ export function labelOptions(tasks: readonly FilterableTask[]): LabelOption[] {
   }
   const named = [...byId.values()].sort((left, right) => left.name.localeCompare(right.name));
   return [{ id: NO_LABEL, name: "", color: "gray", count: unlabelled }, ...named];
+}
+
+/** The statuses a board offers: Backlog only once a Task is in it, as it cannot be written. */
+export function availableTaskStatuses(tasks: readonly { status: TaskStatus }[]) {
+  return tasks.some((task) => task.status === "backlog") ? TASK_READ_STATUSES : TASK_WRITE_STATUSES;
 }

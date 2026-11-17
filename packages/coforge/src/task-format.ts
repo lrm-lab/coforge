@@ -7,7 +7,8 @@ import {
   type TaskStatus,
   type TaskView,
 } from "@lrm/coforge-sdk/internal";
-export { formatTaskAmended, formatTaskHistory } from "#src/task-history-format";
+import { formatTaskAmended, formatTaskHistory } from "#src/task-history-format";
+export { formatTaskAmended, formatTaskHistory };
 import { formatMessageLine, formatUtcTimestamp } from "#src/message-format";
 import { shortId } from "#src/short-id";
 import { fenceMessageBody } from "#src/message-body-format";
