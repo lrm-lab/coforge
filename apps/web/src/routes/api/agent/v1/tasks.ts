@@ -34,8 +34,7 @@ import { SourceMessageTaken } from "#src/server/tasks/task-conversation-creation
 import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "#src/features/tasks/task-assignment";
 import { readAgentJsonBody } from "#src/server/agents/agent-http-routes.server";
 import { isExternalAgentPrincipal } from "#src/server/agents/external-agent-credentials.server";
-import { teamMemory } from "#src/server/team-memory/composition.server";
-import { recallTaskMemory } from "#src/server/tasks/task-memory-recall.server";
+import { agentTaskMemoryRecall } from "#src/server/tasks/task-memory-recall.server";
 
 const taskOperations = [
   "list",
@@ -263,15 +262,7 @@ export const Route = createFileRoute("/api/agent/v1/tasks")({
                     })
                   )?.computerVersion ?? null,
               },
-          Bun.env.COFORGE_TEAM_MEMORY_RECALL === "true"
-            ? (task) =>
-                recallTaskMemory(task, (search) =>
-                  teamMemory(db).execute(
-                    { workspaceId: principal.workspaceId, agentId: principal.agentId },
-                    search,
-                  ),
-                )
-            : undefined,
+          agentTaskMemoryRecall(db, agentTaskPrincipal(principal)),
         ),
     },
   },

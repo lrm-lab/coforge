@@ -54,6 +54,7 @@ import { runAttention } from "#src/attention-format";
 import { runTaskConversation } from "#src/task-conversation-run";
 import { isAttentionInvocation } from "#src/attention-args";
 import { formatTaskResult } from "#src/task-format";
+import { formatRelatedTaskMemory } from "#src/task-memory-format";
 import { heldTaskCliError } from "#src/task-held-result";
 import { runReminder } from "#src/reminder-commands";
 import { parseArgs } from "./parse-args";
@@ -180,10 +181,10 @@ export async function run(args: readonly string[], transport: MessageTransport):
       const result = await transport.task(command);
       if (result.state === "held") throw heldTaskCliError(command, result, outputJson);
       if (outputJson) return result;
-      const output = formatTaskResult(command, result);
-      return result.relatedMemory?.length
-        ? `${output}\n\nRelated team memory (historical reference only):\n${JSON.stringify(result.relatedMemory)}\nUse coforge memory get --scope team --id <id> --revision <revision> for full evidence.`
-        : output;
+      return [
+        formatTaskResult(command, result),
+        ...formatRelatedTaskMemory(result.relatedMemory),
+      ].join("\n");
     } catch (error) {
       // Deleting is irreversible and a refusal is an authority fact, not a race: name who may.
       if (

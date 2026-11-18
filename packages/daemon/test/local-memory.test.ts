@@ -110,6 +110,30 @@ test("search returns the strongest match on the first page across a large notebo
   expect(updated.entries[0]?.content).toContain("withdrawn");
 });
 
+test("ranked search continuation makes every match in a completed scan available", async () => {
+  const { root, memory } = await subject();
+  await mkdir(join(root, "notes"));
+  await Promise.all(
+    Array.from({ length: 25 }, (_, i) =>
+      writeFile(join(root, `notes/decision-${i}.md`), "Production rollout approved"),
+    ),
+  );
+  const seen = new Set<string>();
+  let offset: number | undefined;
+  for (let page = 0; page < 3; page++) {
+    const result = await memory.execute({
+      operation: "search",
+      query: "Production rollout",
+      offset,
+    });
+    expect(result.entries.length).toBe(page < 2 ? 10 : 5);
+    for (const entry of result.entries) seen.add(entry.path);
+    offset = result.nextOffset;
+  }
+  expect(seen.size).toBe(25);
+  expect(offset).toBeUndefined();
+});
+
 test("archived facts leave recall and ordinary startup summaries, and remain inspectable", async () => {
   const { memory } = await subject();
   const first = (await memory.execute(purchased)).entries[0]!;

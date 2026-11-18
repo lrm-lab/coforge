@@ -1,10 +1,20 @@
 import type { TeamMemoryCommand, TeamMemoryResult } from "@lrm/coforge-sdk/agent";
 import type { TaskResult, TaskView } from "@lrm/coforge-sdk/internal";
+import type { PrismaClient } from "#src/generated/prisma/client";
+import { teamMemory } from "#src/server/team-memory/composition.server";
+import type { AgentTaskPrincipal } from "./task-principal.server";
 
 type Search = Extract<TeamMemoryCommand, { operation: "search" }>;
 type RecallTask = Pick<TaskView, "title" | "description"> & { project?: { id: string } | null };
 
 export const TASK_MEMORY_RECALL_MS = 400;
+
+export function agentTaskMemoryRecall(db: PrismaClient, principal: AgentTaskPrincipal) {
+  if (Bun.env.COFORGE_TEAM_MEMORY_RECALL !== "true") return undefined;
+  const memory = teamMemory(db);
+  return (task: RecallTask) =>
+    recallTaskMemory(task, (search) => memory.execute(principal, search));
+}
 
 export async function recallTaskMemory(
   task: RecallTask,
@@ -20,6 +30,7 @@ export async function recallTaskMemory(
         operation: "search",
         query,
         projectId: task.project?.id ?? null,
+        includeConflicts: true,
         ...(task.project ? { includeWorkspace: true } : {}),
       }),
       new Promise<undefined>((resolve) => {

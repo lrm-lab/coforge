@@ -3,7 +3,11 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { teamMemory } from "#src/server/team-memory/composition.server";
-import { decodeTeamMemoryResult, type TeamMemoryWrite } from "@lrm/coforge-sdk/agent";
+import {
+  decodeTeamMemoryResult,
+  type TeamMemoryWrite,
+  type TeamMemoryRelation,
+} from "@lrm/coforge-sdk/agent";
 import { handleTeamMemory } from "#src/server/team-memory/http.server";
 import type { TeamMemoryActor } from "#src/server/team-memory/memory";
 
@@ -167,6 +171,52 @@ test("structured evidence is accepted and returned only while Workspace-readable
     evidence,
   });
   await expect(service().execute(actor(), invalid)).rejects.toThrow("memory_forbidden");
+});
+
+test("task recall expands incoming conflicts and excludes different Projects", async () => {
+  const project = await db.project.create({
+    data: { workspaceId, name: "Recall scope", slug: "recall-scope" },
+  });
+  const other = await db.project.create({
+    data: { workspaceId, name: "Other project", slug: "other-recall-scope" },
+  });
+  const createScoped = async (
+    title: string,
+    content: string,
+    projectId: string,
+    relations?: TeamMemoryRelation[],
+  ) =>
+    (
+      await write({
+        operation: "create",
+        ...draft(title, content),
+        projectId,
+        requestId: crypto.randomUUID(),
+        relations,
+      })
+    ).entries[0]!;
+  const result = await createScoped("Quasar fingerprint", "Approved after testing", project.id);
+  const disagreement = await createScoped(
+    "Independent objection",
+    "Approval still pending",
+    project.id,
+    [{ kind: "conflicts_with", id: result.id, revision: result.revision }],
+  );
+  const foreign = await createScoped("Quasar fingerprint", "Other project", other.id);
+  const found = await service().execute(actor(), {
+    operation: "search",
+    projectId: project.id,
+    includeWorkspace: true,
+    includeConflicts: true,
+    query: "Quasar fingerprint",
+  });
+  expect(found.entries.map(({ id }) => id)).toEqual([result.id, disagreement.id]);
+  expect(found.entries[0]?.relations).toContainEqual({
+    kind: "conflicts_with",
+    id: disagreement.id,
+    revision: disagreement.revision,
+  });
+  expect(found.entries.map(({ id }) => id)).not.toContain(foreign.id);
 });
 
 test("members create and correct team memories with real human attribution", async () => {

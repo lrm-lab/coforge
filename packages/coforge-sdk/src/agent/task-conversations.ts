@@ -5,7 +5,13 @@
  * description of it serves both.
  */
 
-import { isRecord, type TaskPriority, type TaskProjectRef, type TaskStatus } from "../internal";
+import {
+  isRecord,
+  type TaskPriority,
+  type TaskProjectRef,
+  type TaskResult,
+  type TaskStatus,
+} from "../internal";
 import type { agentApiRoutes } from "./routes";
 
 export type AgentTaskConversationRoutes = typeof agentApiRoutes.cloud.taskConversations;
@@ -46,6 +52,7 @@ export type AgentTaskViewMessage = {
 /** Response for `GET /api/agent/v1/tasks/view`. */
 export type AgentTaskViewResponse = {
   taskRef: string;
+  relatedMemory?: TaskResult["relatedMemory"];
   task: {
     id: string;
     number: number;

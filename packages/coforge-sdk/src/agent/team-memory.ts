@@ -72,6 +72,7 @@ export type TeamMemoryCommand =
       archived?: boolean;
       includeSuperseded?: boolean;
       includeWorkspace?: boolean;
+      includeConflicts?: boolean;
     }
   | { operation: "list"; offset?: number; archived?: boolean; projectId?: string }
   | { operation: "get"; id: string; revision?: number }
@@ -224,7 +225,15 @@ export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {
   ];
   const readKeys =
     operation === "search"
-      ? ["query", "offset", "projectId", "archived", "includeSuperseded", "includeWorkspace"]
+      ? [
+          "query",
+          "offset",
+          "projectId",
+          "archived",
+          "includeSuperseded",
+          "includeWorkspace",
+          "includeConflicts",
+        ]
       : operation === "list"
         ? ["offset", "archived", "projectId"]
         : operation === "get"
@@ -262,6 +271,8 @@ export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {
     throw new Error("invalid_memory_archived");
   if (value.includeSuperseded !== undefined && typeof value.includeSuperseded !== "boolean")
     throw new Error("invalid_memory_includeSuperseded");
+  if (value.includeConflicts !== undefined && typeof value.includeConflicts !== "boolean")
+    throw new Error("invalid_memory_includeConflicts");
   if (
     value.includeWorkspace !== undefined &&
     (typeof value.includeWorkspace !== "boolean" || !project.projectId)
@@ -274,6 +285,7 @@ export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {
         ? {}
         : { includeSuperseded: value.includeSuperseded }),
       ...(value.includeWorkspace === undefined ? {} : { includeWorkspace: value.includeWorkspace }),
+      ...(value.includeConflicts === undefined ? {} : { includeConflicts: value.includeConflicts }),
       operation,
       query: string("query", 500),
       offset: number("offset", 0),

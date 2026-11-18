@@ -3,6 +3,7 @@ import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.se
 import { handleTaskViewGet } from "#src/server/tasks/task-conversation-routes.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
 import { agentTaskPrincipal } from "#src/server/tasks/task-principal.server";
+import { agentTaskMemoryRecall } from "#src/server/tasks/task-memory-recall.server";
 
 export const Route = createFileRoute("/api/agent/v1/tasks_/view")({
   server: {
@@ -13,6 +14,7 @@ export const Route = createFileRoute("/api/agent/v1/tasks_/view")({
           request,
           agentTaskPrincipal(principal),
           new TaskConversations({ db, reader: "agent", dependencies: {} }),
+          agentTaskMemoryRecall(db, agentTaskPrincipal(principal)),
         ),
     },
   },
