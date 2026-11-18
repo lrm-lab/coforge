@@ -211,12 +211,20 @@ test("a Project page lists its Tasks as a tree, and a Task's popup moves it betw
     );
     await shoot("desktop-project-picker");
     await evaluate(`(${option(other.name)}.click(), true)`);
-    await browser("wait", "--fn", `${dialog}.textContent.includes(${JSON.stringify(other.name)})`);
+    await browser(
+      "wait",
+      "--fn",
+      `${trigger}.getAttribute("aria-label").includes(${JSON.stringify(other.name)})`,
+    );
     expect(await projectOf(lone)).toBe(other.slug);
     await evaluate(`(${trigger}.click(), true)`);
     await browser("wait", "--fn", `${option(home.name)} != null`);
     await evaluate(`(${option(home.name)}.click(), true)`);
-    await browser("wait", "--fn", `${dialog}.textContent.includes(${JSON.stringify(home.name)})`);
+    await browser(
+      "wait",
+      "--fn",
+      `${trigger}.getAttribute("aria-label").includes(${JSON.stringify(home.name)})`,
+    );
     expect(await projectOf(lone)).toBe(home.slug);
   } finally {
     await browser("close").catch(() => undefined);
