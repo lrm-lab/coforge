@@ -340,9 +340,9 @@ test("Agent recovery codec rejects unsafe sequences and unread counts", () => {
         },
       ],
     }),
-  ).toThrow("sequence");
+  ).toThrow("invalid agent recovery context");
   expect(() => encodeAgentStartIntent({ ...base, unreadSummary: { "@alice": 2 ** 32 } })).toThrow(
-    "count",
+    "invalid agent recovery context",
   );
 });
 

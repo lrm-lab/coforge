@@ -313,3 +313,32 @@ test("a retired Memory Agent launch cannot become an ordinary full-tool Agent", 
   const legacy = new Uint8Array([...normal, 0xaa, 0x01, profile.length, ...profile]);
   expect(() => decodeAgentStartIntent(legacy)).toThrow("retired Memory Agent");
 });
+
+test("encoding refuses every recovery context the Daemon would refuse", () => {
+  const message = {
+    messageId: "message-1",
+    deliveryId: "delivery-1",
+    conversationId: "conversation-1",
+    sequence: 4,
+    target: "@ada",
+    latestSenderKind: "human" as const,
+    latestSenderHandle: "frank",
+    latestSenderDescription: "",
+    body: "status?",
+  };
+  const encode = (resumeMessages: (typeof message)[], unreadSummary = {}) =>
+    encodeAgentStartIntent({ ...base, resumeMessages, unreadSummary });
+  expect(() => encode([{ ...message, conversationId: "" }])).toThrow("recovery context");
+  expect(() => encode([{ ...message, latestSenderHandle: "" }])).toThrow("recovery context");
+  expect(() => encode([{ ...message, sequence: 0 }])).toThrow("recovery context");
+  expect(() => encode([message], { "@ada": 0 })).toThrow("recovery context");
+  expect(() =>
+    encode(
+      Array.from({ length: 101 }, (_, i) => ({
+        ...message,
+        messageId: `m${i}`,
+        deliveryId: `d${i}`,
+      })),
+    ),
+  ).toThrow("recovery context");
+});

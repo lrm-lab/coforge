@@ -1,13 +1,8 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { assertPositiveControlCounter, assertUint } from "./codec";
 import { safeUint64 } from "./agent-observation-codec";
-import { assertValidMessageSender, isValidMessageSender } from "./message-sender";
-import {
-  AGENT_START_MESSAGE_TYPE,
-  AGENT_STOP_MESSAGE_TYPE,
-  isRecoverableAgentTarget,
-  requireRuntimeProvider,
-} from "./index";
+import { assertAgentRecoveryContext } from "./agent-recovery-context";
+import { AGENT_START_MESSAGE_TYPE, AGENT_STOP_MESSAGE_TYPE, requireRuntimeProvider } from "./index";
 import type {
   AgentRecoveryMessage,
   AgentRuntimeProviderConfig,
@@ -76,35 +71,21 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
   const launchError = (reason: string) => new Error(`invalid Agent start ${reason}`);
   assertLaunchSize("context window", value.contextWindow, launchError);
   assertLaunchSize("maximum output", value.maxOutputTokens, launchError);
-  if ((value.resumeMessages?.length ?? 0) > 100)
-    throw new Error("Agent recovery resumeMessages exceeds 100");
   const recoveryMessages = [
     ...(value.wakeMessage ? [value.wakeMessage] : []),
     ...(value.resumeMessages ?? []),
   ];
-  if (
-    new Set(recoveryMessages.map(({ messageId }) => messageId)).size !== recoveryMessages.length ||
-    new Set(recoveryMessages.map(({ deliveryId }) => deliveryId)).size !== recoveryMessages.length
-  )
-    throw new Error("invalid agent recovery context");
-  if (
-    recoveryMessages.some((message) => !isRecoverableAgentTarget(message.target)) ||
-    Object.keys(value.unreadSummary ?? {}).some((target) => !isRecoverableAgentTarget(target))
-  )
-    throw new Error("invalid agent recovery context");
-  for (const message of recoveryMessages) {
-    if (!message.body) throw new Error("Agent recovery body is required");
-    assertUint(message.sequence, Number.MAX_SAFE_INTEGER, "Agent recovery sequence");
-    assertValidMessageSender(
-      message.latestSenderKind,
-      message.latestSenderHandle,
-      "Agent recovery message",
-    );
+  assertAgentRecoveryContext({
+    wakeMessage: value.wakeMessage,
+    resumeMessages: value.resumeMessages ?? [],
+    unreadSummary: Object.entries(value.unreadSummary ?? {}).map(([target, count]) => ({
+      target,
+      count,
+    })),
+  });
+  for (const message of recoveryMessages)
     if (message.createdAtMs !== undefined)
       assertUint(message.createdAtMs, Number.MAX_SAFE_INTEGER, "Agent recovery creation time");
-  }
-  for (const count of Object.values(value.unreadSummary ?? {}))
-    assertUint(count, 4294967295, "Agent unread count");
   const providerConfig = value.providerConfig
     ? parseAgentRuntimeProviderConfig(
         value.providerConfig.kind,
@@ -172,28 +153,11 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
     maxOutputTokens: launchSize(v.maxOutputTokens),
   };
   const recoveryMessages = [...(v.wakeMessage ? [v.wakeMessage] : []), ...v.resumeMessages];
-  const summaryTargets = new Set(v.unreadSummary.map(({ target }) => target));
-  const messageIds = new Set(recoveryMessages.map(({ messageId }) => messageId));
-  const deliveryIds = new Set(recoveryMessages.map(({ deliveryId }) => deliveryId));
-  if (
-    v.resumeMessages.length > 100 ||
-    recoveryMessages.some(
-      (message) =>
-        !message.messageId ||
-        !message.deliveryId ||
-        !message.conversationId ||
-        !message.body ||
-        !isRecoverableAgentTarget(message.target) ||
-        message.sequence < 1n ||
-        message.sequence > BigInt(Number.MAX_SAFE_INTEGER) ||
-        !isValidMessageSender(message.latestSenderKind, message.latestSenderHandle),
-    ) ||
-    messageIds.size !== recoveryMessages.length ||
-    deliveryIds.size !== recoveryMessages.length ||
-    v.unreadSummary.some((entry) => !isRecoverableAgentTarget(entry.target) || entry.count < 1) ||
-    summaryTargets.size !== v.unreadSummary.length
-  )
-    throw new Error("invalid agent recovery context");
+  assertAgentRecoveryContext({
+    wakeMessage: v.wakeMessage && { ...v.wakeMessage, sequence: Number(v.wakeMessage.sequence) },
+    resumeMessages: v.resumeMessages.map((m) => ({ ...m, sequence: Number(m.sequence) })),
+    unreadSummary: v.unreadSummary,
+  });
   if (v.sessionMode !== undefined && v.sessionMode !== "create" && v.sessionMode !== "resume")
     throw new Error("invalid Agent session mode");
   if (v.sessionMode === "resume" && !v.sessionId)
