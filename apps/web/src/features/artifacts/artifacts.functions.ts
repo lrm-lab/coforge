@@ -14,7 +14,7 @@ import { getMessageRequestIdempotency } from "#src/server/conversations/redis-me
 import { postUserMessage } from "#src/server/conversations/user-message-post.server";
 import { assertUserMayPost } from "#src/server/conversations/user-post-access.server";
 import { productionCloudComputers } from "#src/server/hosts/host-production.server";
-import { bestEffortMessageNotifier } from "#src/server/notifications/web-push-composition.server";
+import { messageAfterCommit } from "#src/server/conversations/message-after-commit.server";
 import { artifactInputs } from "./artifact-inputs";
 import { shareArtifactInputSchema } from "./artifact-share-input";
 
@@ -129,7 +129,7 @@ export const shareArtifact = createServerFn({ method: "POST" })
       idempotency: getMessageRequestIdempotency(),
       publisher,
       realtime: new CentrifugoConversationRealtime(publisher),
-      notifications: bestEffortMessageNotifier(db),
+      notifications: messageAfterCommit(db),
       prepareDirect: (workspace: string, userId: string, conversationId: string) =>
         new WorkspaceAssistants(db).prepareConversation(
           workspace,

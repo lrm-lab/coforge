@@ -36,7 +36,7 @@ import {
 } from "#src/server/conversations/message-request-idempotency.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
-import { bestEffortMessageNotifier } from "#src/server/notifications/web-push-composition.server";
+import { messageAfterCommit } from "#src/server/conversations/message-after-commit.server";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { AgentSendRejectedError } from "#src/server/conversations/agent-send-rejected-error.server";
 import { AGENT_DM_LIMIT_REASON } from "#src/server/conversations/agent-dm-limits.server";
@@ -309,7 +309,7 @@ export function agentMessagesPostDependencies(db: PrismaClient) {
       requestRecords,
       centrifugo,
       new CentrifugoConversationRealtime(centrifugo),
-      bestEffortMessageNotifier(db),
+      messageAfterCommit(db),
       new MentionDeliveryIssuer(new PrismaMentionDeliveryRepository(db)),
     ),
   };

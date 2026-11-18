@@ -9,7 +9,7 @@ import { MessageForwards } from "#src/server/conversations/message-forwards.serv
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { getFileStorage } from "#src/server/files/file-storage.server";
 import { productionCloudComputers } from "#src/server/hosts/host-production.server";
-import { bestEffortMessageNotifier } from "#src/server/notifications/web-push-composition.server";
+import { messageAfterCommit } from "#src/server/conversations/message-after-commit.server";
 import { forwardMessageInputSchema, forwardTargetsInputSchema } from "./message-forward";
 
 /**
@@ -29,7 +29,7 @@ export const forwardMessage = createServerFn({ method: "POST" })
       idempotency: getMessageRequestIdempotency(),
       centrifugo,
       realtime: new CentrifugoConversationRealtime(centrifugo),
-      notifications: bestEffortMessageNotifier(db),
+      notifications: messageAfterCommit(db),
       storage: getFileStorage,
       prepareDirect: (workspace, userId, conversationId) =>
         new WorkspaceAssistants(db).prepareConversation(

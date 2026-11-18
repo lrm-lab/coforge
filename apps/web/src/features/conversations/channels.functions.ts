@@ -26,7 +26,7 @@ import { conversationRealtimeChannel } from "./conversation-realtime";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { sentAsTaskHook } from "#src/server/tasks/sent-as-task.server";
 import { announceSentTask } from "#src/server/tasks/browser-task-board.server";
-import { bestEffortMessageNotifier } from "#src/server/notifications/web-push-composition.server";
+import { messageAfterCommit } from "#src/server/conversations/message-after-commit.server";
 import { browserMessageMention } from "#src/server/conversations/mentions.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 
@@ -260,7 +260,7 @@ export const sendPublicChannelMessage = createServerFn({ method: "POST" })
       db,
       undefined,
       centrifugo,
-      bestEffortMessageNotifier(db),
+      messageAfterCommit(db),
       new CentrifugoConversationRealtime(centrifugo),
     );
     const message = await channels.send({
