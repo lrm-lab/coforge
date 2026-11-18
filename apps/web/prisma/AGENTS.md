@@ -20,6 +20,4 @@ These rules apply to `apps/web/prisma/`. App-wide database rules are in
   `prisma migrate diff` compares statements, not whitespace.
 - A data migration that rewrites `agents."runtimeConfig"` matches the shape
   `agentRuntimeConfig()` writes: the runtime is under `runtime`, and `provider`
-  is an object. A migration that guessed a key matched no row and its test
-  passed on a hand-written shape (`20261118150000_split_legacy_antigravity_model_runtime_key`
-  corrects `20261118110000_…`); seed the test rows through that builder.
+  is an object. Seed the test rows through that builder.
