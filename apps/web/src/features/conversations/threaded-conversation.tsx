@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MessageSquare01 as MessageSquare } from "@untitledui/icons";
 
 import { cn } from "#src/lib/utils";
@@ -25,6 +25,7 @@ import {
 } from "./open-conversation-thread";
 import { ThreadPane } from "./thread-pane";
 import { TaskDiscussionPane } from "./task-discussion-pane";
+import { TaskEarlierDiscussion } from "./task-earlier-discussion";
 import { NO_THREADS } from "./thread-summary-model";
 import { useThreadTailSequence } from "./thread-queries";
 import { ThreadRootState, type ThreadRootLoad } from "./thread-root-state";
@@ -108,7 +109,11 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   // yet), shows that conversation, never a message's thread.
   const taskDiscussionId = openTask?.discussionConversationId ?? undefined;
   const ownDiscussion = Boolean(openTask && ownsDiscussion(openTask));
-  const openTaskMessageId = ownDiscussion ? undefined : (openTask?.messageId ?? undefined);
+  const [earlierOf, setEarlierOf] = useState<string>();
+  const earlier = ownDiscussion ? openTask?.earlierDiscussion : undefined;
+  const earlierOpen = Boolean(earlier && earlierOf === openTask?.id);
+  const openTaskMessageId =
+    ownDiscussion && !earlierOpen ? undefined : (openTask?.messageId ?? undefined);
   const { root: openTaskRoot, reads: taskRootReads } = useTaskPopupRoot(
     conversation,
     openTaskMessageId,
@@ -158,17 +163,40 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       currentMemberId={conversation.senderMemberId || null}
       thread={
         ownDiscussion
-          ? () => (
-              <TaskDiscussionPane
-                {...sidePaneProps}
-                jumpMessage={taskPopup?.landingMessageId}
-                {...popupProfile.openers}
-                conversationId={taskDiscussionId}
-                board={{ conversationId: conversation.conversationId, number: openTask.number }}
-                mentionables={conversation.mentionables}
-                emptyState={taskRepliesEmpty}
-              />
-            )
+          ? () => {
+              const own = earlierOpen ? (
+                openTaskRoot && (
+                  <ThreadPane
+                    {...threadPaneProps(openTaskRoot)}
+                    {...popupProfile.openers}
+                    inTaskPopup
+                    readOnlyNotice={<></>}
+                    emptyState={taskRepliesEmpty}
+                  />
+                )
+              ) : (
+                <TaskDiscussionPane
+                  {...sidePaneProps}
+                  jumpMessage={taskPopup?.landingMessageId}
+                  {...popupProfile.openers}
+                  conversationId={taskDiscussionId}
+                  board={{ conversationId: conversation.conversationId, number: openTask.number }}
+                  mentionables={conversation.mentionables}
+                  emptyState={taskRepliesEmpty}
+                />
+              );
+              return earlier ? (
+                <TaskEarlierDiscussion
+                  replyCount={earlier.replyCount}
+                  open={earlierOpen}
+                  onOpenChange={(open) => setEarlierOf(open ? openTask.id : undefined)}
+                >
+                  {own}
+                </TaskEarlierDiscussion>
+              ) : (
+                own
+              );
+            }
           : // A message's thread: its tab is there while the message is still being read, so the
             // popup does not open on another tab and jump back.
             openTaskMessageId === undefined

@@ -351,5 +351,16 @@
   ],
   "conversation_seen_undelivered_muted": "Muted the channel, missed this",
   "conversation_seen_undelivered_unfollowed": "Unfollowed the thread, missed this",
-  "conversation_long_message_note": "Full text in the attached file."
+  "conversation_long_message_note": "Full text in the attached file.",
+  "tasks_earlier_discussion": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=one": "{count} earlier reply in the channel's thread",
+        "countPlural=other": "{count} earlier replies in the channel's thread"
+      }
+    }
+  ],
+  "tasks_earlier_discussion_back": "Back to this task's discussion"
 }

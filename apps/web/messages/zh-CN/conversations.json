@@ -329,5 +329,15 @@
   "conversation_seen_undelivered": "{count} 个 Agent 没收到",
   "conversation_seen_undelivered_muted": "静音了频道，没收到这条",
   "conversation_seen_undelivered_unfollowed": "取消关注了讨论，没收到这条",
-  "conversation_long_message_note": "全文见附件。"
+  "conversation_long_message_note": "全文见附件。",
+  "tasks_earlier_discussion": [
+    {
+      "declarations": ["input count", "local countPlural = count: plural"],
+      "selectors": ["countPlural"],
+      "match": {
+        "countPlural=other": "频道 thread 里还有 {count} 条更早的讨论"
+      }
+    }
+  ],
+  "tasks_earlier_discussion_back": "返回任务讨论"
 }
