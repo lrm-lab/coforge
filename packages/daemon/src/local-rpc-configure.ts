@@ -74,6 +74,12 @@ export async function handleLocalRpcConfigure(
     });
   } catch (error) {
     const code = errorCodeOf(error);
+    if (
+      error instanceof WorkspaceLifecycleSupersededError ||
+      isTransientConfigureError(error, code)
+    ) {
+      throw error;
+    }
     logger.warn("Local daemon configuration was refused", {
       event: "daemon.local_rpc.configure_refused",
       error_code: code,
@@ -154,6 +160,23 @@ async function adoptConfiguration(
     }
     throw error;
   }
+}
+
+const TRANSIENT_CONFIGURE_ERROR_CODES = new Set([
+  "EAGAIN",
+  "EBUSY",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "ENOTCONN",
+  "EPIPE",
+  "ETIMEDOUT",
+  "TEMPORARY_FAILURE",
+]);
+
+function isTransientConfigureError(error: unknown, code: string | undefined): boolean {
+  if (code && TRANSIENT_CONFIGURE_ERROR_CODES.has(code)) return true;
+  const record = error as Record<string, unknown> | null | undefined;
+  return record?.temporary === true || record?.retryable === true;
 }
 
 function errorCodeOf(error: unknown): string | undefined {

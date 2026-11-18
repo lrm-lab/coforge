@@ -55,6 +55,7 @@ test.each(operations)(
       executablePath: "/unused",
       socketPath: "/unused.sock",
       serverUrl: "https://coforge.test",
+      timeoutMilliseconds: 0,
       connect: async () => {
         connections++;
         return {
@@ -276,4 +277,57 @@ test("ensureStarted surfaces structured error and errorCode from a refused CONFI
   expect((error as Error).message).toContain(
     "Workspace workspace-1 is parked after credential revocation",
   );
+});
+
+test("ensureStarted retries when CONFIGURE disconnects on a temporary failure", async () => {
+  let configureAttempts = 0;
+  const launcher = new LocalDaemonLauncher({
+    executablePath: "/unused",
+    socketPath: "/unused.sock",
+    serverUrl: "https://coforge.test",
+    timeoutMilliseconds: 2_000,
+    sleep: async () => {},
+    connect: async () => ({
+      async request(frame) {
+        const envelope = decodeLocalRpcRequest(readLocalRpcFrame(frame)!);
+        if (envelope.method === LOCAL_RPC_METHODS.HANDSHAKE) {
+          const handshake = decodeDaemonHandshakeRequest(envelope.payload);
+          return encodeLocalRpcResponse({
+            method: LOCAL_RPC_METHODS.HANDSHAKE,
+            payload: encodeDaemonHandshakeResponse({
+              protocolMajor: 1,
+              requestId: handshake.requestId,
+              accepted: true,
+              daemonId: "fixture-daemon",
+              serverUrl: "https://coforge.test",
+            }),
+          });
+        }
+        configureAttempts += 1;
+        if (configureAttempts === 1) {
+          throw new Error("local daemon socket closed");
+        }
+        const configure = decodeDaemonRuntimeConfigureRequest(envelope.payload);
+        return encodeLocalRpcResponse({
+          method: LOCAL_RPC_METHODS.CONFIGURE,
+          payload: encodeDaemonRuntimeConfigureResponse({
+            protocolMajor: 1,
+            requestId: configure.requestId,
+            accepted: true,
+          }),
+        });
+      },
+      close() {},
+    }),
+  });
+
+  await expect(
+    launcher.ensureStarted({
+      workspaceId: "workspace-1",
+      computerId: "computer-1",
+      workspaceRoot: "/workspace",
+      daemonApiKey: "fixture-key",
+    }),
+  ).resolves.toEqual({});
+  expect(configureAttempts).toBe(2);
 });
