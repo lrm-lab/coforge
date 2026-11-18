@@ -21,7 +21,7 @@ import { createAgentStopReasonRecorder } from "./agent-stop-reason.server";
 export const STARTUP_SWEEP_INTERVAL_MS = 30_000;
 export const STARTUP_SWEEP_BATCH_LIMIT = 50;
 export const STARTUP_SWEEP_BATCHES_PER_TICK = 4;
-const STARTUP_SWEEP_LOCK_TTL_MS = 120_000;
+export const STARTUP_SWEEP_LOCK_TTL_MS = 25_000;
 const STARTUP_SWEEP_LOCK_KEY = "coforge:agent-control:startup-sweep:lock";
 
 export interface AgentControlStartupSweepLock {

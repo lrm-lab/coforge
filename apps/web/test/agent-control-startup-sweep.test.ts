@@ -1,5 +1,13 @@
 import { expect, test } from "bun:test";
-import { AgentControlStartupSweep } from "#src/server/agents/agent-control-startup-sweep.server";
+import {
+  AgentControlStartupSweep,
+  STARTUP_SWEEP_INTERVAL_MS,
+  STARTUP_SWEEP_LOCK_TTL_MS,
+} from "#src/server/agents/agent-control-startup-sweep.server";
+
+test("the lock lease ends before the next tick so every instance keeps its cadence", () => {
+  expect(STARTUP_SWEEP_LOCK_TTL_MS).toBeLessThan(STARTUP_SWEEP_INTERVAL_MS);
+});
 
 function sweep(options: {
   pages: { ids: string[]; next?: { deadlineAtMs: number; id: string } }[];

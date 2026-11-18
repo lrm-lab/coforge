@@ -63,6 +63,7 @@ test("only starting Agents whose deadline has passed, or that never recorded one
   expect(found.has(legacy.id)).toBe(true);
   for (const agent of [future, completed, failed, deleted, never])
     expect(found.has(agent.id)).toBe(false);
+  for (const id of found) expect(await store.get(id)).toBeDefined();
 });
 
 test("an Agent whose owner left the Workspace or whose Computer is unlinked is never a candidate", async () => {
