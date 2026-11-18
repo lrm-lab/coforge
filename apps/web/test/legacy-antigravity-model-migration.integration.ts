@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import pg from "pg";
+import { agentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 import { dropScratchDatabase } from "./helpers/drop-scratch-database";
 
 const connectionString = Bun.env.MIGRATION_TEST_DATABASE_URL;
@@ -13,10 +14,21 @@ const migrations = readdirSync(migrationsDirectory, { withFileTypes: true })
   .filter((entry) => entry.isDirectory())
   .map((entry) => entry.name)
   .sort();
-const targetName = "20261118110000_split_legacy_antigravity_model_reasoning";
-const target = migrations.indexOf(targetName);
+const fixedName = "20261118150000_split_legacy_antigravity_model_runtime_key";
+const fixed = migrations.indexOf(fixedName);
+const firstName = "20261118110000_split_legacy_antigravity_model_reasoning";
+const first = migrations.indexOf(firstName);
 
-test("legacy antigravity model migration splits suffixed ids idempotently and leaves other rows intact", async () => {
+const antigravity = (model: string, reasoning = "") => ({
+  ...agentRuntimeConfig(
+    { provider: "antigravity", model: "gemini-3.8-flash", modelProvider: "", reasoning: "" },
+    { kind: "default" },
+  ),
+  model,
+  reasoning,
+});
+
+test("the shipped migration's condition matches no row this shape stores, and the fixed one splits them", async () => {
   const admin = new pg.Pool({ connectionString });
   const database = `agymodel_${crypto.randomUUID().replaceAll("-", "")}`;
   await admin.query(`CREATE DATABASE "${database}"`);
@@ -24,7 +36,8 @@ test("legacy antigravity model migration splits suffixed ids idempotently and le
   url.pathname = `/${database}`;
   const pool = new pg.Pool({ connectionString: url.href, max: 1 });
   try {
-    expect(target).toBeGreaterThan(0);
+    expect(first).toBeGreaterThan(0);
+    expect(fixed).toBeGreaterThan(first);
     const apply = async (names: readonly string[]) => {
       for (const name of names) {
         await pool.query(
@@ -32,17 +45,17 @@ test("legacy antigravity model migration splits suffixed ids idempotently and le
         );
       }
     };
-    await apply(migrations.slice(0, target));
+    await apply(migrations.slice(0, first));
 
     const workspaceId = crypto.randomUUID();
     const ownerId = crypto.randomUUID();
     const ids = {
       legacyMedium: crypto.randomUUID(),
       legacyHigh: crypto.randomUUID(),
-      alreadySplit: crypto.randomUUID(),
-      alreadyHasReasoning: crypto.randomUUID(),
+      catalogModel: crypto.randomUUID(),
+      userPickedReasoning: crypto.randomUUID(),
       unlistedSuffix: crypto.randomUUID(),
-      otherProvider: crypto.randomUUID(),
+      otherRuntime: crypto.randomUUID(),
     };
     await pool.query("SET session_replication_role = 'replica'");
     const insertAgent = (
@@ -57,50 +70,32 @@ test("legacy antigravity model migration splits suffixed ids idempotently and le
         [id, workspaceId, name, ownerId, JSON.stringify(runtimeConfig), revision],
       );
 
-    await insertAgent(ids.legacyMedium, "legacy-medium", {
-      provider: "antigravity",
-      model: "gemini-3.8-flash-medium",
-      modelProvider: "",
-      reasoning: "",
-    });
-    await insertAgent(ids.legacyHigh, "legacy-high", {
-      provider: "antigravity",
-      model: "gemini-3.1-pro-high",
-      modelProvider: "",
-      reasoning: "",
-    });
-    await insertAgent(ids.alreadySplit, "already-split", {
-      provider: "antigravity",
-      model: "gemini-4-hydrogen",
-      modelProvider: "",
-      reasoning: "medium",
-    });
-    await insertAgent(ids.alreadyHasReasoning, "has-reasoning", {
-      provider: "antigravity",
-      model: "gemini-3.8-flash-high",
-      modelProvider: "",
-      reasoning: "low",
-    });
-    await insertAgent(ids.unlistedSuffix, "unlisted-suffix", {
-      provider: "antigravity",
-      model: "custom-model-medium",
-      modelProvider: "",
-      reasoning: "",
-    });
-    await insertAgent(ids.otherProvider, "other-provider", {
-      provider: "codex",
-      model: "gemini-3.8-flash-medium",
-      modelProvider: "",
-      reasoning: "",
+    await insertAgent(ids.legacyMedium, "legacy-medium", antigravity("gemini-3.8-flash-medium"));
+    await insertAgent(ids.legacyHigh, "legacy-high", antigravity("gemini-3.1-pro-high"));
+    await insertAgent(ids.catalogModel, "catalog-model", antigravity("gpt-oss-120b-medium"));
+    await insertAgent(
+      ids.userPickedReasoning,
+      "picked-reasoning",
+      antigravity("gemini-3.8-flash-high", "low"),
+    );
+    await insertAgent(ids.unlistedSuffix, "unlisted-suffix", antigravity("custom-model-medium"));
+    await insertAgent(ids.otherRuntime, "other-runtime", {
+      ...antigravity("gemini-3.8-flash-medium"),
+      runtime: "codex",
     });
     await pool.query("SET session_replication_role = 'origin'");
 
-    await apply([targetName]);
-    await apply([targetName]);
+    const { rows: oldConditionHits } = await pool.query<{ id: string }>(
+      `SELECT "id" FROM "agents" WHERE "runtimeConfig"->>'provider' = 'antigravity'`,
+    );
+    expect(oldConditionHits).toHaveLength(0);
+
+    await apply([fixedName]);
+    await apply([fixedName]);
 
     const { rows } = await pool.query<{
       id: string;
-      runtimeConfig: { provider: string; model: string; reasoning: string };
+      runtimeConfig: { runtime: string; provider: unknown; model: string; reasoning: string };
       runtimeConfigRevision: number;
     }>(
       `SELECT "id", "runtimeConfig", "runtimeConfigRevision" FROM "agents" WHERE "workspaceId" = $1`,
@@ -109,35 +104,32 @@ test("legacy antigravity model migration splits suffixed ids idempotently and le
     const byId = new Map(rows.map((row) => [row.id, row]));
 
     expect(byId.get(ids.legacyMedium)).toMatchObject({
-      runtimeConfig: { provider: "antigravity", model: "gemini-3.8-flash", reasoning: "medium" },
+      runtimeConfig: {
+        runtime: "antigravity",
+        provider: { kind: "default" },
+        model: "gemini-3.8-flash",
+        reasoning: "medium",
+      },
       runtimeConfigRevision: 4,
     });
     expect(byId.get(ids.legacyHigh)).toMatchObject({
-      runtimeConfig: { provider: "antigravity", model: "gemini-3.1-pro", reasoning: "high" },
+      runtimeConfig: { model: "gemini-3.1-pro", reasoning: "high" },
       runtimeConfigRevision: 4,
     });
-    expect(byId.get(ids.alreadySplit)).toMatchObject({
-      runtimeConfig: { provider: "antigravity", model: "gemini-4-hydrogen", reasoning: "medium" },
+    expect(byId.get(ids.catalogModel)).toMatchObject({
+      runtimeConfig: { model: "gpt-oss-120b-medium", reasoning: "" },
       runtimeConfigRevision: 3,
     });
-    expect(byId.get(ids.alreadyHasReasoning)).toMatchObject({
-      runtimeConfig: {
-        provider: "antigravity",
-        model: "gemini-3.8-flash-high",
-        reasoning: "low",
-      },
+    expect(byId.get(ids.userPickedReasoning)).toMatchObject({
+      runtimeConfig: { model: "gemini-3.8-flash-high", reasoning: "low" },
       runtimeConfigRevision: 3,
     });
     expect(byId.get(ids.unlistedSuffix)).toMatchObject({
-      runtimeConfig: {
-        provider: "antigravity",
-        model: "custom-model-medium",
-        reasoning: "",
-      },
+      runtimeConfig: { model: "custom-model-medium", reasoning: "" },
       runtimeConfigRevision: 3,
     });
-    expect(byId.get(ids.otherProvider)).toMatchObject({
-      runtimeConfig: { provider: "codex", model: "gemini-3.8-flash-medium", reasoning: "" },
+    expect(byId.get(ids.otherRuntime)).toMatchObject({
+      runtimeConfig: { runtime: "codex", model: "gemini-3.8-flash-medium", reasoning: "" },
       runtimeConfigRevision: 3,
     });
   } finally {
