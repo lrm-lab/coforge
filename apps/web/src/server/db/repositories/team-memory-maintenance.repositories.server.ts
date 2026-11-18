@@ -2,7 +2,8 @@ import {
   TEAM_MEMORY_MAINTENANCE_COMMAND,
   TEAM_MEMORY_MAINTENANCE_GUIDANCE,
 } from "@lrm/coforge-sdk/agent";
-import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import { Prisma } from "#src/generated/prisma/client";
+import { inTransaction, type DatabaseScope } from "#src/server/db/transaction.server";
 import type { TeamMemoryHead, TeamMemoryResult, TeamMemoryWrite } from "@lrm/coforge-sdk/agent";
 import { TeamMemoryError, type TeamMemoryActor } from "#src/server/team-memory/memory";
 import { teamMemoryAccess } from "./team-memory-access.repositories.server";
@@ -98,11 +99,11 @@ export async function replayTeamMemoryMaintenanceHint(
 }
 
 export async function beginTeamMemoryMaintenance(
-  db: PrismaClient,
+  db: DatabaseScope,
   actor: TeamMemoryActor,
 ): Promise<TeamMemoryResult> {
   if (!actor.agentId) throw new TeamMemoryError("forbidden");
-  return db.$transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     await teamMemoryAccess(tx, actor, true);
     await tx.$queryRaw`SELECT revision FROM team_memory_states WHERE workspace_id = ${actor.workspaceId}::uuid FOR UPDATE`;
     const state = await tx.teamMemoryMaintenance.findUnique({

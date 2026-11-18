@@ -106,3 +106,31 @@ model TeamMemoryMaintenance {
 
   @@map("team_memory_maintenance")
 }
+
+model TeamMemorySuggestion {
+  id String @id @default(uuid(7)) @db.Uuid
+  workspaceId String @map("workspace_id") @db.Uuid
+  sourceKey String @map("source_key")
+  kind String
+  status String @default("pending")
+  payload Json
+  createdAt DateTime @default(now()) @map("created_at")
+  decidedAt DateTime? @map("decided_at")
+  decidedByUserId String? @map("decided_by_user_id") @db.Uuid
+  appliedEntryId String? @map("applied_entry_id") @db.Uuid
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, sourceKey])
+  @@index([workspaceId, status, createdAt, id])
+  @@map("team_memory_suggestions")
+}
+
+model TeamMemoryReviewScan {
+  workspaceId String @id @map("workspace_id") @db.Uuid
+  scannedAt DateTime @map("scanned_at")
+  cursorAt DateTime? @map("cursor_at")
+  cursorId String? @map("cursor_id") @db.Uuid
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("team_memory_review_scans")
+}

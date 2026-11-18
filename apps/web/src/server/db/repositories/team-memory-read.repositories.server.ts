@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import { inTransaction, type DatabaseScope } from "#src/server/db/transaction.server";
 import {
   teamMemoryTerms,
   type TeamMemoryCommand,
@@ -34,6 +35,11 @@ export async function readTarget(db: Database, actor: TeamMemoryActor, id: strin
 function effectiveSearchHeads(includeHumanAuthors: boolean) {
   return Prisma.sql`
       AND (candidate.effective_at IS NULL OR candidate.effective_at <= CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
+      AND NOT EXISTS (
+        SELECT 1 FROM team_memory_suggestions AS review
+        WHERE review.workspace_id = candidate.workspace_id
+          AND review.source_key = 'evidence:' || candidate.id::text || ':' || candidate.revision::text
+      )
       AND NOT EXISTS (
         SELECT 1 FROM team_memory_entries AS replacement
         WHERE replacement.workspace_id = candidate.workspace_id
@@ -165,7 +171,7 @@ export async function projectEvidence(
 }
 
 export class TeamMemoryReads {
-  constructor(private readonly db: PrismaClient) {}
+  constructor(private readonly db: DatabaseScope) {}
 
   async read(
     actor: TeamMemoryActor,
@@ -174,7 +180,8 @@ export class TeamMemoryReads {
       TeamMemoryWrite | TeamMemoryCatalogCommand | TeamMemoryMaintenanceCommand
     >,
   ): Promise<TeamMemoryResult> {
-    return this.db.$transaction(
+    return inTransaction(
+      this.db,
       async (tx) => {
         await access(tx, actor);
         if (command.operation === "prepare")

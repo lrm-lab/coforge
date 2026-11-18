@@ -1,6 +1,8 @@
 model Workspace {
   teamMemoryState TeamMemoryState?
   teamMemoryMaintenance TeamMemoryMaintenance?
+  teamMemorySuggestions TeamMemorySuggestion[]
+  teamMemoryReviewScan TeamMemoryReviewScan?
   teamMemoryEntries TeamMemoryEntry[]
   teamMemoryReceipts TeamMemoryReceipt[]
   teamMemoryUserReceipts TeamMemoryUserReceipt[]
