@@ -6,6 +6,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { ConversationSlot } from "#src/features/agents/profile-panel/profile-panel-slot";
 
+import { useReportChatListCrowd } from "./chat-list-crowd";
 import type { FocusedPanel } from "./conversation-focus-model";
 import { CONVERSATION_LIST_COLUMN } from "./conversation-list-width";
 import { localLayoutStorage } from "./local-layout-storage";
@@ -39,6 +40,7 @@ export function ConversationSplit({
   const splitRef = useRef<HTMLDivElement>(null);
   const [splitFits, setSplitFits] = useState(true);
   const [listCrowds, setListCrowds] = useState(false);
+  useReportChatListCrowd(Boolean(visibleSlot) && listCrowds && !threadAlone);
   const measureSplit = useCallback(() => {
     const element = splitRef.current;
     if (!element) return;
@@ -72,11 +74,7 @@ export function ConversationSplit({
   }, [measureSplit, splitShown]);
   if (!splitShown || threadAlone) {
     return (
-      <div
-        ref={splitRef}
-        data-crowd-list={visibleSlot && !threadAlone && listCrowds ? "" : undefined}
-        className="flex min-h-0 min-w-0 flex-1 flex-col"
-      >
+      <div ref={splitRef} className="flex min-h-0 min-w-0 flex-1 flex-col">
         {!threadAlone && (
           <div
             className={cn(
@@ -102,11 +100,7 @@ export function ConversationSplit({
     );
   }
   return (
-    <div
-      ref={splitRef}
-      data-crowd-list={visibleSlot && listCrowds ? "" : undefined}
-      className="flex min-h-0 min-w-0 flex-1"
-    >
+    <div ref={splitRef} className="flex min-h-0 min-w-0 flex-1">
       <Group
         id="conversation"
         orientation="horizontal"

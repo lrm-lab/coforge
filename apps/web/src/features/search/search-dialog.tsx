@@ -113,6 +113,7 @@ export function SearchDialog({
     setDeferred(false);
     setFilters(next);
   }, []);
+  const [inputFocused, setInputFocused] = useState(false);
   const searching = query || (hasActiveFilter(filters) && !deferred);
   return (
     <ModalOverlay
@@ -124,6 +125,7 @@ export function SearchDialog({
       <Modal className="flex w-full flex-col max-sm:h-full max-sm:rounded-none sm:max-w-[40rem] lg:animate-none dark:bg-secondary">
         <Dialog
           aria-label={m.search_title()}
+          data-input-focused={inputFocused ? "" : undefined}
           className="group/search min-h-0 flex-1 overflow-hidden"
         >
           <div onKeyDown={onKeyDown} className="flex max-h-[inherit] h-full min-h-0 flex-col">
@@ -142,6 +144,8 @@ export function SearchDialog({
                   ref={box}
                   value={text}
                   onChange={(event) => setText(event.target.value)}
+                  onFocus={() => setInputFocused(true)}
+                  onBlur={() => setInputFocused(false)}
                   className="w-full min-w-0 bg-transparent text-lg text-primary caret-fg-brand-primary outline-hidden placeholder:text-placeholder [&::-webkit-search-cancel-button]:appearance-none"
                 />
                 <ButtonUtility

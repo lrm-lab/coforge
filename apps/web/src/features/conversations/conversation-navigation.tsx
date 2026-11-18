@@ -11,6 +11,7 @@ import { ConnectionStatusPill } from "#src/features/realtime/connection-status-p
 import { SearchField } from "#src/features/search/search-field";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { ChatHeaderBusyAgents } from "./chat-header-busy-agents";
+import { ChatListCrowdContext } from "./chat-list-crowd";
 import { ConversationFocusContext, useConversationFocusState } from "./conversation-focus";
 import { ConversationListContext } from "./conversation-list-button";
 import { ConversationListResizeHandle } from "./conversation-list-resize-handle";
@@ -77,6 +78,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   });
   const [browsing, setBrowsing] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [listCrowded, setListCrowded] = useState(false);
   const slot = useRouterState({
     select: ({ location: { search } }) =>
       `${"threadRootId" in search ? search.threadRootId : ""}|${"profile" in search ? JSON.stringify(search.profile) : ""}`,
@@ -188,110 +190,116 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   return (
     <ConversationListContext value={listControls}>
       <ConversationFocusContext value={focus}>
-        <ConversationHostProvider channels={channelNames}>
-          <UnreadStoreContext value={unread.store}>
-            <main
-              data-panel-cards
-              data-chat-cards
-              data-focus={focus.focused}
-              className="group/chat flex h-full min-w-0 flex-col bg-primary lg:flex-row lg:gap-2 lg:bg-transparent"
-            >
-              <section
-                className={cx(
-                  "relative min-h-0 flex-1 flex-col lg:flex lg:flex-none lg:overflow-hidden lg:rounded-xl lg:bg-primary",
-                  LIST_COLUMN_CLASS,
-                  showList ? "flex" : "hidden",
-                  "lg:group-has-[[data-crowd-list]]/chat:hidden",
-                  "lg:group-data-[focus]/chat:hidden",
-                )}
+        <ChatListCrowdContext value={setListCrowded}>
+          <ConversationHostProvider channels={channelNames}>
+            <UnreadStoreContext value={unread.store}>
+              <main
+                data-panel-cards
+                data-chat-cards
+                data-focus={focus.focused}
+                data-crowd-list={listCrowded ? "" : undefined}
+                className="group/chat flex h-full min-w-0 flex-col bg-primary lg:flex-row lg:gap-2 lg:bg-transparent"
               >
-                {desktop ? (
-                  <PageHeader
-                    heading={m.navigation_chat()}
-                    meta={
-                      <>
-                        <ConnectionStatusPill whenConnected={<SavingChangesBadge />} />
-                        <ChatHeaderBusyAgents
-                          directs={directs}
-                          onConversationPage={Boolean(channel || openDm)}
-                        />
-                      </>
-                    }
-                    actions={<NewConversationMenu onCreateChannel={() => setCreating(true)} />}
-                  />
-                ) : (
-                  <>
-                    <TabHomeHeader
-                      title={m.navigation_chat_short()}
-                      meta={<ConnectionStatusPill whenConnected={<SavingChangesBadge />} />}
-                      agents={
-                        <ChatHeaderBusyAgents
-                          directs={directs}
-                          onConversationPage={Boolean(channel || openDm)}
-                        />
+                <section
+                  className={cx(
+                    "relative min-h-0 flex-1 flex-col lg:flex lg:flex-none lg:overflow-hidden lg:rounded-xl lg:bg-primary",
+                    LIST_COLUMN_CLASS,
+                    showList ? "flex" : "hidden",
+                    "lg:group-data-[crowd-list]/chat:hidden",
+                    "lg:group-data-[focus]/chat:hidden",
+                  )}
+                >
+                  {desktop ? (
+                    <PageHeader
+                      heading={m.navigation_chat()}
+                      meta={
+                        <>
+                          <ConnectionStatusPill whenConnected={<SavingChangesBadge />} />
+                          <ChatHeaderBusyAgents
+                            directs={directs}
+                            onConversationPage={Boolean(channel || openDm)}
+                          />
+                        </>
                       }
                       actions={<NewConversationMenu onCreateChannel={() => setCreating(true)} />}
                     />
-                    <div className="shrink-0 px-page py-2">
-                      <SearchField />
-                    </div>
-                  </>
-                )}
-                <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pt-3 pb-4">
-                  <ConversationDirectory
-                    channels={visibleChannels}
-                    agents={agents}
-                    directRows={directs.rows}
-                    viewerId={viewerId}
-                    selectedChannelId={channel?.channelId}
-                    selectedDmId={openDm?.dmId}
-                    selectedSaved={pathname === workspacePath(workspaceSlug, "/saved")}
-                    selectedDrafts={pathname === workspacePath(workspaceSlug, "/drafts")}
-                  />
+                  ) : (
+                    <>
+                      <TabHomeHeader
+                        title={m.navigation_chat_short()}
+                        meta={<ConnectionStatusPill whenConnected={<SavingChangesBadge />} />}
+                        agents={
+                          <ChatHeaderBusyAgents
+                            directs={directs}
+                            onConversationPage={Boolean(channel || openDm)}
+                          />
+                        }
+                        actions={<NewConversationMenu onCreateChannel={() => setCreating(true)} />}
+                      />
+                      <div className="shrink-0 px-page py-2">
+                        <SearchField />
+                      </div>
+                    </>
+                  )}
+                  <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pt-3 pb-4">
+                    <ConversationDirectory
+                      channels={visibleChannels}
+                      agents={agents}
+                      directRows={directs.rows}
+                      viewerId={viewerId}
+                      selectedChannelId={channel?.channelId}
+                      selectedDmId={openDm?.dmId}
+                      selectedSaved={pathname === workspacePath(workspaceSlug, "/saved")}
+                      selectedDrafts={pathname === workspacePath(workspaceSlug, "/drafts")}
+                    />
+                  </div>
+                  <ConversationListResizeHandle />
+                </section>
+                <div
+                  className={cx(
+                    "min-h-0 min-w-0 flex-1 flex-col lg:flex lg:overflow-hidden lg:rounded-xl lg:bg-primary",
+                    showList ? "hidden" : "flex",
+                  )}
+                >
+                  {children}
                 </div>
-                <ConversationListResizeHandle />
-              </section>
-              <div
-                className={cx(
-                  "min-h-0 min-w-0 flex-1 flex-col lg:flex lg:overflow-hidden lg:rounded-xl lg:bg-primary",
-                  showList ? "hidden" : "flex",
-                )}
-              >
-                {children}
-              </div>
-            </main>
-            {creating && (
-              <CreateChannelDialog
-                open={creating}
-                onOpenChange={setCreating}
-                memberPicker
-                minMembers={2}
-                offersPrivate
-                onCreate={async (name, memberUserIds, memberAgentIds, visibility) => {
-                  const created = await create({
-                    data: {
-                      name,
-                      visibility,
-                      userIds: memberUserIds ?? [],
-                      agentIds: memberAgentIds ?? [],
-                    },
-                  });
-                  const sidebarRefreshed = await refreshSidebar(["channels", "channelNames"]).then(
-                    () => true,
-                    () => false,
-                  );
-                  return { ...created, sidebarRefreshed };
-                }}
-                onOpenChannel={(channelId) =>
-                  router.navigate({
-                    to: "/w/$workspaceSlug/channel/$channelId",
-                    params: { workspaceSlug, channelId },
-                  })
-                }
-              />
-            )}
-          </UnreadStoreContext>
-        </ConversationHostProvider>
+              </main>
+              {creating && (
+                <CreateChannelDialog
+                  open={creating}
+                  onOpenChange={setCreating}
+                  memberPicker
+                  minMembers={2}
+                  offersPrivate
+                  onCreate={async (name, memberUserIds, memberAgentIds, visibility) => {
+                    const created = await create({
+                      data: {
+                        name,
+                        visibility,
+                        userIds: memberUserIds ?? [],
+                        agentIds: memberAgentIds ?? [],
+                      },
+                    });
+                    const sidebarRefreshed = await refreshSidebar([
+                      "channels",
+                      "channelNames",
+                    ]).then(
+                      () => true,
+                      () => false,
+                    );
+                    return { ...created, sidebarRefreshed };
+                  }}
+                  onOpenChannel={(channelId) =>
+                    router.navigate({
+                      to: "/w/$workspaceSlug/channel/$channelId",
+                      params: { workspaceSlug, channelId },
+                    })
+                  }
+                />
+              )}
+            </UnreadStoreContext>
+          </ConversationHostProvider>
+        </ChatListCrowdContext>
       </ConversationFocusContext>
     </ConversationListContext>
   );

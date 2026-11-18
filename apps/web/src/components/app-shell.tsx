@@ -396,11 +396,11 @@ function UserRow({
   workspaceSlug: string;
 }) {
   return (
-    <div className="group/user flex h-10 items-center rounded-lg transition-colors duration-100 ease-linear hover:bg-sidebar-item-active has-[[aria-expanded=true]]:bg-sidebar-item-active">
+    <div className="group/user flex h-10 items-center rounded-lg transition-colors duration-100 ease-linear hover:bg-sidebar-item-active has-[[aria-expanded=true]]:bg-sidebar-item-active has-[[aria-expanded=true]]:[--user-ring:var(--color-sidebar-item-active)]">
       <UserMenuCard {...menu} />
       <NotificationBell
         workspaceSlug={workspaceSlug}
-        badgeRing="ring-sidebar group-hover/user:ring-sidebar-item-active group-has-[[aria-expanded=true]]/user:ring-sidebar-item-active"
+        badgeRing="ring-[var(--user-ring,var(--color-sidebar))] group-hover/user:ring-sidebar-item-active"
       />
     </div>
   );
