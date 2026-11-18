@@ -1,4 +1,8 @@
-import { CHANNEL_NAME_PATTERN, type TaskRef } from "@lrm/coforge-sdk/internal";
+import {
+  CHANNEL_NAME_PATTERN,
+  type TaskRef,
+  type TaskResourceReceipt,
+} from "@lrm/coforge-sdk/internal";
 import { CliError } from "#src/cli-error";
 
 export function invalidTaskArg(message: string): CliError {
@@ -74,4 +78,52 @@ export function handleOption(raw: string, message: string): string {
   const handle = `@${value.slice(1).trim()}`;
   if (!value.startsWith("@") || !TASK_HANDLE.test(handle)) throw invalidTaskArg(message);
   return handle;
+}
+
+/** `--due`: a date or datetime, normalized to an ISO instant. A bare `YYYY-MM-DD` means the end
+ * of that local calendar day (next day 00:00:00) with `dueHasTime = false`; anything else parses
+ * as a datetime with `dueHasTime = true`. */
+export function dueAtOption(
+  value: string | undefined,
+): { dueAt: string; dueHasTime: boolean } | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) throw invalidTaskArg("--due must be a date or datetime");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const [year, month, day] = trimmed.split("-").map(Number);
+    const check = new Date(year!, month! - 1, day!);
+    if (check.getFullYear() !== year || check.getMonth() !== month! - 1 || check.getDate() !== day)
+      throw invalidTaskArg("--due must be a date or datetime, like 2026-11-20 or 2026-11-20T17:00");
+    const endOfDay = new Date(year!, month! - 1, day! + 1, 0, 0, 0, 0);
+    return { dueAt: endOfDay.toISOString(), dueHasTime: false };
+  }
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime()))
+    throw invalidTaskArg("--due must be a date or datetime, like 2026-11-20 or 2026-11-20T17:00");
+  return { dueAt: date.toISOString(), dueHasTime: true };
+}
+
+/** The seven resource-receipt fields, each required and nonblank. */
+export function taskReceiptArgs(one: (flag: string) => string | undefined): TaskResourceReceipt {
+  const required = (flag: string) => {
+    const value = one(flag)?.trim();
+    if (!value) throw invalidTaskArg(`${flag} is required and must be nonblank`);
+    return value;
+  };
+  const teardownOwner = handleOption(
+    required("--teardown-owner"),
+    "--teardown-owner must be an @agent handle",
+  );
+  const expiry = new Date(required("--expiry"));
+  if (!Number.isFinite(expiry.getTime()))
+    throw invalidTaskArg("--expiry must be an ISO-8601 timestamp");
+  return {
+    object: required("--object"),
+    purpose: required("--purpose"),
+    teardownOwner,
+    securityPrivacy: required("--security-privacy"),
+    expiry: expiry.toISOString(),
+    runbook: required("--runbook"),
+    tracking: required("--tracking"),
+  };
 }
