@@ -70,9 +70,10 @@ export type RuntimeErrorDeliveryHoldPorts = Readonly<{
  * the single owner of when a backoff ends.
  *
  * What the runtime does next ends them, per the reference behaviour cited at
- * `runtimeErrorRecoverySignal`. A turn end resets the fence's streak, so the fence trips only for
- * the same failure repeating with no turn end or output in between; a usage limit ending every
- * turn never trips it. A tripped fence takes the Agent offline: `runtime.ts` ends the process,
+ * `runtimeErrorRecoverySignal`. A turn end resets the fence's streak only when the turn showed
+ * progress (model output, a tool call or its output, or a finished review): the fence trips for
+ * the same failure repeating across turns that did nothing, and a compaction ending, or a turn
+ * that produced nothing, does not clear it. A tripped fence takes the Agent offline: `runtime.ts` ends the process,
  * and the hold is then cleared via the delivery queue's `clearAgent` and this hold's `forget`.
  */
 const logger = getLogger(["coforge", "daemon", "runtime"]);
@@ -82,6 +83,7 @@ export class RuntimeErrorDeliveryHold {
   readonly #backoff = new RuntimeErrorDeliveryBackoff();
   readonly #fence = new RuntimeErrorFingerprintFence();
   readonly #zeroEvidence = new RuntimeErrorFingerprintFence(ZERO_EVIDENCE_CRASH_STREAK_CAP);
+  readonly #turnProgress = new Set<string>();
   /** The one release timer per waiting Agent, and the provider whose failure it waits on (absent
    * when none was recorded, which a lifted limit cannot resolve). */
   readonly #releaseTimers = new Map<
@@ -260,6 +262,7 @@ export class RuntimeErrorDeliveryHold {
     if (signal === "output") this.#ports.credential?.modelOutput(agentId, turnStartedAtMs);
     const effects = RUNTIME_ERROR_RECOVERY_EFFECTS[signal];
     if (effects.resetsFence) {
+      this.#turnProgress.add(agentId);
       this.#fence.reset(agentId);
       classFence?.reset();
     }
@@ -293,7 +296,7 @@ export class RuntimeErrorDeliveryHold {
    * classified one (a rate limit, a provider connection or server error) has a real delay to
    * honour, and a successful turn with no output ends it no more than a failed one does. */
   noteTurnEnd(agentId: string): void {
-    this.#fence.reset(agentId);
+    if (this.#turnProgress.delete(agentId)) this.#fence.reset(agentId);
     if (this.#backoff.latestClass(agentId) === RUNTIME_ERROR_CLASS.RUNTIME)
       this.#endBackoff(agentId);
   }
@@ -306,6 +309,7 @@ export class RuntimeErrorDeliveryHold {
     this.#clearReleaseTimer(agentId);
     this.#backoff.reset(agentId);
     this.#fence.reset(agentId);
+    this.#turnProgress.delete(agentId);
     this.#ports.store?.clear(agentId);
   }
 

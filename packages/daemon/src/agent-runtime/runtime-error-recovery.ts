@@ -187,7 +187,12 @@ export class RuntimeErrorFingerprintFence {
 /** What one raw runtime event says about recovery from runtime errors: the main session's model
  * output (thinking, text, a tool call), side output (a tool's output, or a subagent's model
  * output), progress without output, or a finished phase (compaction, review). */
-export type RuntimeErrorRecoverySignal = "output" | "side_output" | "progress" | "phase_finished";
+export type RuntimeErrorRecoverySignal =
+  | "output"
+  | "side_output"
+  | "progress"
+  | "phase_finished"
+  | "review_finished";
 
 /** What each recovery signal does to an Agent's two streaks: whether it ends a delivery backoff
  * (releasing what it held), whether it ends one after a rate limit too, and whether it resets the
@@ -204,7 +209,8 @@ export const RUNTIME_ERROR_RECOVERY_EFFECTS: Readonly<
   output: { endsBackoff: true, endsRateLimitBackoff: true, resetsFence: true },
   side_output: { endsBackoff: true, endsRateLimitBackoff: false, resetsFence: true },
   progress: { endsBackoff: true, endsRateLimitBackoff: false, resetsFence: false },
-  phase_finished: { endsBackoff: false, endsRateLimitBackoff: false, resetsFence: true },
+  phase_finished: { endsBackoff: false, endsRateLimitBackoff: false, resetsFence: false },
+  review_finished: { endsBackoff: false, endsRateLimitBackoff: false, resetsFence: true },
 };
 
 /**
@@ -228,7 +234,9 @@ export function runtimeErrorRecoverySignal(
     case "subagent-progress":
       return "progress";
   }
-  return PHASE_EDGES.get(event.type)?.[1] === "finish" ? "phase_finished" : undefined;
+  const edge = PHASE_EDGES.get(event.type);
+  if (edge?.[1] !== "finish") return undefined;
+  return edge[0] === "review" ? "review_finished" : "phase_finished";
 }
 
 export const RUNTIME_ERROR_CLASS_FENCE_THRESHOLD = 5;

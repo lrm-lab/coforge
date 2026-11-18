@@ -189,14 +189,16 @@ test("ineligible errors and real progress reset the class fence, bare not found 
   ).toBe(1);
 });
 
-test.each(["output", "side_output", "progress", "phase_finished"] as const)(
+test.each(["output", "side_output", "progress", "phase_finished", "review_finished"] as const)(
   "class fence resets with the fingerprint progress predicate: %s",
   (signal) => {
     const fence = new RuntimeErrorClassFence();
     const error = classifyRuntimeErrorText("HTTP 404: missing");
     fence.note(error);
     if (RUNTIME_ERROR_RECOVERY_EFFECTS[signal].resetsFence) fence.reset();
-    expect(fence.note(error)?.attempts).toBe(signal === "progress" ? 2 : 1);
+    expect(fence.note(error)?.attempts).toBe(
+      signal === "progress" || signal === "phase_finished" ? 2 : 1,
+    );
   },
 );
 
