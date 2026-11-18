@@ -229,7 +229,7 @@ export function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: () =>
               width: { duration: 0.38, ease: RESIZE_EASE },
             }
       }
-      className="pointer-events-auto relative flex h-10 max-w-full touch-pan-y items-center overflow-hidden rounded-2xl border border-secondary bg-linear-to-b from-bg-primary to-bg-secondary shadow-(--toast-shadow)"
+      className="pointer-events-auto relative flex min-h-10 max-w-full touch-pan-y items-start overflow-hidden rounded-2xl border border-secondary bg-linear-to-b from-bg-primary to-bg-secondary shadow-(--toast-shadow)"
     >
       <span className="absolute top-[calc(0.5rem-1px)] left-[calc(0.5rem-1px)] size-6">
         <AnimatePresence initial={false}>
@@ -245,13 +245,13 @@ export function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: () =>
           </motion.span>
         </AnimatePresence>
       </span>
-      <div className="relative h-full min-w-0 flex-1">
+      <div className="relative min-w-0 flex-1">
         <AnimatePresence initial={false} mode="popLayout">
           <motion.div
             key={toast.revision}
             ref={lineRef}
             className={cx(
-              "flex h-full w-max max-w-[min(34.5rem,calc(100vw-2.5rem))] items-center gap-1 pl-[calc(2.5rem-1px)]",
+              "flex min-h-[calc(2.5rem-2px)] w-max max-w-[min(34.5rem,calc(100vw-2.5rem))] items-start gap-1 py-[calc(0.375rem-1px)] pl-[calc(2.5rem-1px)]",
               toast.action ? "pr-[calc(0.375rem-1px)]" : "pr-4",
             )}
             initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 5, filter: "blur(4px)" }}
@@ -265,7 +265,12 @@ export function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: () =>
               reduceMotion ? TOAST_FADE : { delay: 0.1, duration: 0.3, ease: SETTLE_EASE }
             }
           >
-            <span className="min-w-0 truncate text-sm font-medium text-primary">{toast.title}</span>
+            {/* Two lines at most: a narrow screen keeps the end of a title (often its point) instead of
+                cutting it to one line. Top-aligned with 6px + 4px so one line sits where it did when
+                the row was centred (less the 1px border), and the actions stay level with the first line. */}
+            <span className="line-clamp-2 min-w-0 py-1 text-sm font-medium [overflow-wrap:anywhere] text-primary">
+              {toast.title}
+            </span>
             {toast.action ? (
               <>
                 <AriaButton
