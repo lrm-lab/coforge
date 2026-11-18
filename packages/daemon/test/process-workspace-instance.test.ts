@@ -362,3 +362,92 @@ test("writeWorkspaceInstanceRecord writes the record and retires the legacy name
     await rm(cfg.root, { recursive: true, force: true });
   }
 });
+
+const FAST_STOP = { termGraceMs: 20, killConfirmMs: 100, pollMs: 2 };
+
+test("stop waits for the process to be gone after SIGKILL before dropping the record", async () => {
+  const cfg = await config();
+  try {
+    let killed = false;
+    let probesAfterKill = 0;
+    const signals: (string | undefined)[] = [];
+    const instance = new ProcessWorkspaceInstance(
+      cfg,
+      async () => ({ pid: 77 }),
+      () => {
+        if (!killed) return true;
+        probesAfterKill += 1;
+        return probesAfterKill < 4;
+      },
+      (_pid, signal) => {
+        signals.push(signal);
+        if (signal === "SIGKILL") killed = true;
+      },
+      FAST_STOP,
+    );
+    await instance.ensureStarted();
+    await instance.stop();
+    expect(signals).toEqual([undefined, "SIGKILL"]);
+    expect(probesAfterKill).toBeGreaterThanOrEqual(4);
+    expect(await instance.identity()).toBeNull();
+  } finally {
+    await rm(cfg.root, { recursive: true, force: true });
+  }
+});
+
+test("stop fails and keeps the record when the process survives SIGKILL", async () => {
+  const cfg = await config();
+  try {
+    await mkdir(cfg.stateDirectory, { recursive: true });
+    const journalPath = workspaceHealthJournalPath(cfg.stateDirectory);
+    await writeFile(
+      journalPath,
+      `${JSON.stringify({ schemaVersion: 1, live: true, crashes: [] })}\n`,
+      { mode: 0o600 },
+    );
+    const instance = new ProcessWorkspaceInstance(
+      cfg,
+      async () => ({ pid: 78 }),
+      () => true,
+      () => {},
+      FAST_STOP,
+    );
+    await instance.ensureStarted();
+    await expect(instance.stop()).rejects.toThrow("did not exit after SIGKILL");
+    expect(await instance.identity()).toMatchObject({ mainPid: 78, active: true });
+    expect(await new WorkspaceHealthJournal(journalPath).wasLeftRunning()).toBe(true);
+  } finally {
+    await rm(cfg.root, { recursive: true, force: true });
+  }
+});
+
+test("stop returns once a real SIGTERM-ignoring child is killed, and drops the record", async () => {
+  const cfg = await config();
+  try {
+    const instance = new ProcessWorkspaceInstance(
+      cfg,
+      async () => {
+        const child = Bun.spawn({
+          cmd: ["sh", "-c", "trap '' TERM; while :; do sleep 0.2; done"],
+          stdin: "ignore",
+          stdout: "ignore",
+          stderr: "ignore",
+        });
+        child.unref();
+        return { pid: child.pid };
+      },
+      undefined,
+      undefined,
+      { termGraceMs: 300, killConfirmMs: 5_000, pollMs: 20 },
+    );
+    await instance.ensureStarted();
+    await Bun.sleep(300);
+    const started = Date.now();
+    await instance.stop();
+    expect(Date.now() - started).toBeGreaterThanOrEqual(300);
+    expect(Date.now() - started).toBeLessThan(4_000);
+    expect(await instance.identity()).toBeNull();
+  } finally {
+    await rm(cfg.root, { recursive: true, force: true });
+  }
+});

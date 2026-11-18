@@ -20,6 +20,14 @@ export type ProcessProbe = (pid: number) => boolean;
 
 export type ProcessSignal = (pid: number, signal?: NodeJS.Signals) => void;
 
+export type ProcessStopTiming = { termGraceMs: number; killConfirmMs: number; pollMs: number };
+
+const DEFAULT_STOP_TIMING: ProcessStopTiming = {
+  termGraceMs: 10_000,
+  killConfirmMs: 5_000,
+  pollMs: 50,
+};
+
 export type InstanceRecord = { mainPid: number; invocationId: string };
 
 /** This record's name now that Linux without systemd shares it. */
@@ -45,6 +53,7 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
     private readonly spawnChild: ProcessWorkspaceSpawn = defaultSpawn,
     private readonly isAlive: ProcessProbe = defaultIsAlive,
     private readonly signalProcess: ProcessSignal = defaultSignal,
+    private readonly stopTiming: ProcessStopTiming = DEFAULT_STOP_TIMING,
   ) {
     validateWorkspaceEndpoint(config.daemonConnectionEndpoint);
     this.identityKey = new Bun.CryptoHasher("sha256")
@@ -112,14 +121,18 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
       }
-      const deadline = Date.now() + 10_000;
-      while (Date.now() < deadline && this.isAlive(current.mainPid)) await Bun.sleep(50);
+      await this.#waitForExit(current.mainPid, this.stopTiming.termGraceMs);
       if (this.isAlive(current.mainPid)) {
         try {
           this.signalProcess(current.mainPid, "SIGKILL");
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
         }
+        await this.#waitForExit(current.mainPid, this.stopTiming.killConfirmMs);
+        if (this.isAlive(current.mainPid))
+          throw new Error(
+            `Workspace ${this.config.workspaceId} process ${current.mainPid} did not exit after SIGKILL`,
+          );
       }
     }
     await rm(this.#recordPath, { force: true });
@@ -134,6 +147,11 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
         workspaceHealthJournalPath(this.config.stateDirectory),
       ).recordGracefulStop();
     }
+  }
+
+  async #waitForExit(pid: number, withinMs: number): Promise<void> {
+    const deadline = Date.now() + withinMs;
+    while (Date.now() < deadline && this.isAlive(pid)) await Bun.sleep(this.stopTiming.pollMs);
   }
 
   async identity(): Promise<NativeProcessIdentity | null> {
