@@ -1,4 +1,4 @@
-import { PersonalMemoryRecord } from "./personal-memory-record";
+import { PersonalMemoryRecord, PersonalMemoryVersionTime } from "./personal-memory-record";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { ArrowLeft, Plus } from "@untitledui/icons";
@@ -249,7 +249,7 @@ export function PersonalMemoryPage({
                 {responseError(list)}
               </p>
             )}
-            {list && !responseError(list) && !entries.length && (
+            {list && !responseError(list) && !entries.length && next === undefined && (
               <p className="px-5 py-8 text-sm text-tertiary">{m.memory_empty()}</p>
             )}
             <ul className="divide-y divide-secondary">
@@ -345,7 +345,7 @@ export function PersonalMemoryPage({
                     isDisabled={busy}
                     onPress={() => setEditing(true)}
                   >
-                    {m.memory_edit()}
+                    {entry.status === "archived" ? m.memory_restore() : m.memory_edit()}
                   </Button>
                   <Button
                     color="secondary"
@@ -396,6 +396,7 @@ export function PersonalMemoryPage({
                         key={version.revision}
                         className="flex flex-col gap-2 border-b border-secondary py-3"
                       >
+                        <PersonalMemoryVersionTime updatedAt={version.updatedAt} />
                         <p className="line-clamp-2 text-sm text-secondary">{version.content}</p>
                         <Button
                           color="link-gray"
@@ -467,7 +468,11 @@ export function PersonalMemoryPage({
                       onPress={() => {
                         setDrafts((previous) => ({
                           ...previous,
-                          [cacheKey]: { ...initial(historical), revision: entry.revision },
+                          [cacheKey]: {
+                            ...initial(historical),
+                            revision: entry.revision,
+                            restoring: true,
+                          },
                         }));
                         setEditing(true);
                       }}
