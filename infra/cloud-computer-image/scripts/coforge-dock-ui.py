@@ -20,7 +20,7 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gdk, GLib, Gtk
 
-from coforge_dock_policy import dock_hides_when_idle
+from coforge_dock_policy import dock_height_px, dock_hides_when_idle, dock_icon_px
 from coforge_x11 import (
     X11,
     activate_window,
@@ -31,7 +31,8 @@ from coforge_x11 import (
     window_covers_band,
 )
 
-DOCK_HEIGHT = 56
+DOCK_HEIGHT = dock_height_px()
+DOCK_ICON_PX = dock_icon_px()
 # A few pixels stay on-screen so the pointer can slide onto the dock.
 HIDE_PEEK = 4
 SHOW_EDGE_PX = 28
@@ -181,6 +182,7 @@ class CoforgeDock:
             button.set_relief(Gtk.ReliefStyle.NONE)
             button.get_style_context().add_class("coforge-dock-button")
             icon = Gtk.Image.new_from_icon_name(app["icon_name"], Gtk.IconSize.DIALOG)
+            icon.set_pixel_size(DOCK_ICON_PX)
             button.set_image(icon)
             button.set_tooltip_text(
                 f"{app['label']}\n单击：切换窗口\nShift+单击：新建\n右键：窗口列表"
@@ -208,7 +210,7 @@ class CoforgeDock:
         screen = Gdk.Screen.get_default()
         monitor = screen.get_primary_monitor()
         geometry = screen.get_monitor_geometry(monitor)
-        width = min(280, geometry.width)
+        width = min(320, geometry.width)
         x = geometry.x + (geometry.width - width) // 2
         return geometry, x, width
 

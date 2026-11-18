@@ -329,7 +329,12 @@ RUN mkdir -p /usr/local/lib/coforge /usr/local/share/coforge \
   && test -f /usr/local/lib/coforge/coforge_dock_policy.py \
   && grep -q 'def dock_hides_when_idle' /usr/local/lib/coforge/coforge_dock_policy.py \
   && grep -q 'return False' /usr/local/lib/coforge/coforge_dock_policy.py \
+  && grep -q 'def dock_height_px' /usr/local/lib/coforge/coforge_dock_policy.py \
   && grep -q 'coforge-desktop-phone-bar' /usr/local/share/coforge/vnc-desktop.html \
+  && grep -q 'coforge-desktop-keys' /usr/local/share/coforge/vnc-desktop.html \
+  && grep -q 'coforgeAttachPhoneGestures' /usr/local/share/coforge/vnc-desktop.html \
+  && grep -q 'coforge-desktop-keyboard-input' /usr/local/share/coforge/vnc-desktop.html \
+  && grep -q 'coforgeAttachPhoneKeyboard' /usr/local/share/coforge/vnc-desktop.html \
   && test -x /usr/local/bin/coforge-thunar \
   && grep -q 'coforge-dock-ui' /usr/local/share/coforge/vnc-xstartup \
   && grep -q 'coforge-dock-ui' /usr/local/share/coforge/vnc-agent-xstartup \
