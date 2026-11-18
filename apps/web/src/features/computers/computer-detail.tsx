@@ -165,6 +165,7 @@ export function ComputerDetail({
             onUpdateDisplayName={onUpdateDisplayName}
           />
         }
+        desktopTitle={label}
         showDesktop={isCloud && computer.ownedByCurrentUser}
         online={computer.online}
         restart={

@@ -1,11 +1,19 @@
+import { useEffect, useState } from "react";
 import { HotkeysProvider, useHotkeys } from "@tanstack/react-hotkeys";
-import { Minimize01 as Minimize, XClose as X } from "@untitledui/icons";
+import {
+  Minimize01 as Minimize,
+  SwitchHorizontal01 as Landscape,
+  SwitchVertical01 as Portrait,
+  XClose as X,
+} from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { useMediaQuery } from "#src/hooks/use-media-query";
 import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
+import { desktopLandscapeFrameStyle } from "./desktop-landscape";
 import type { EmbeddedDesktopPhase } from "./embedded-desktop-session";
 
 export function DesktopStreamSurface({
@@ -13,6 +21,7 @@ export function DesktopStreamSurface({
   url,
   title,
   miniBox,
+  allowMinimize = true,
   onCollapse,
   onWake,
   onSleep,
@@ -21,35 +30,57 @@ export function DesktopStreamSurface({
   url: string;
   title: string;
   miniBox: DOMRect | null;
+  allowMinimize?: boolean;
   onCollapse: () => void;
   onWake: () => void;
   onSleep: () => void;
 }) {
   const maximized = phase === "maximized";
-  const style =
-    maximized || !miniBox
-      ? undefined
-      : {
-          top: miniBox.top,
-          left: miniBox.left,
-          width: miniBox.width,
-          height: miniBox.height,
-        };
+  const phone = useMediaQuery("(max-width: 639px)", false);
+  const portrait = useMediaQuery("(orientation: portrait)", false);
+  const [landscape, setLandscape] = useState(false);
+
+  useEffect(() => {
+    if (!maximized) setLandscape(false);
+  }, [maximized]);
+
+  useEffect(() => {
+    if (landscape && (!portrait || !phone)) setLandscape(false);
+  }, [landscape, portrait, phone]);
+
+  const showLandscapeToggle = maximized && phone && (portrait || landscape);
+  const frameStyle =
+    maximized && landscape
+      ? desktopLandscapeFrameStyle()
+      : maximized || !miniBox
+        ? undefined
+        : {
+            top: miniBox.top,
+            left: miniBox.left,
+            width: miniBox.width,
+            height: miniBox.height,
+          };
 
   return (
     <HotkeysProvider scope="embedded-desktop" exclusive={{ allow: ["global"] }}>
-      <DesktopHotkeys maximized={maximized} onCollapse={onCollapse} onSleep={onSleep} />
+      <DesktopHotkeys
+        maximized={maximized}
+        onCollapse={allowMinimize ? onCollapse : onSleep}
+        onSleep={onSleep}
+      />
       <div
         className={cx(
           "overflow-hidden bg-primary",
           maximized
-            ? `fixed inset-0 ${OVERLAY_LAYER} flex flex-col safe-area-padding`
+            ? landscape
+              ? `${OVERLAY_LAYER} flex flex-col`
+              : `fixed inset-0 ${OVERLAY_LAYER} flex flex-col safe-area-padding`
             : cx(
                 `fixed ${OVERLAY_LAYER} rounded-md border border-secondary shadow-lg`,
                 !miniBox && "pointer-events-none invisible",
               ),
         )}
-        style={style}
+        style={frameStyle}
         role={maximized ? "dialog" : undefined}
         aria-modal={maximized ? true : undefined}
         aria-label={title}
@@ -58,14 +89,30 @@ export function DesktopStreamSurface({
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-secondary px-3 py-2">
             <p className="min-w-0 truncate text-sm font-medium text-primary">{title}</p>
             <div className="flex shrink-0 items-center gap-1">
-              <ButtonUtility
-                size="sm"
-                color="tertiary"
-                icon={Minimize}
-                tooltip={m.computer_desktop_minimize()}
-                aria-label={m.computer_desktop_minimize()}
-                onClick={onCollapse}
-              />
+              {showLandscapeToggle ? (
+                <ButtonUtility
+                  size="sm"
+                  color="tertiary"
+                  icon={landscape ? Portrait : Landscape}
+                  tooltip={
+                    landscape ? m.computer_desktop_portrait() : m.computer_desktop_landscape()
+                  }
+                  aria-label={
+                    landscape ? m.computer_desktop_portrait() : m.computer_desktop_landscape()
+                  }
+                  onClick={() => setLandscape((on) => !on)}
+                />
+              ) : null}
+              {allowMinimize ? (
+                <ButtonUtility
+                  size="sm"
+                  color="tertiary"
+                  icon={Minimize}
+                  tooltip={m.computer_desktop_minimize()}
+                  aria-label={m.computer_desktop_minimize()}
+                  onClick={onCollapse}
+                />
+              ) : null}
               <ButtonUtility
                 size="sm"
                 color="tertiary"

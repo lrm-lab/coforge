@@ -3,5 +3,7 @@
   "computer_desktop_wake": "Wake desktop",
   "computer_desktop_minimize": "Minimize desktop",
   "computer_desktop_sleep": "Sleep desktop",
+  "computer_desktop_landscape": "Landscape view",
+  "computer_desktop_portrait": "Portrait view",
   "computer_desktop_offline": "Desktop unavailable while offline"
 }

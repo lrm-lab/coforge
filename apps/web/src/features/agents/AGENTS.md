@@ -184,8 +184,10 @@ These rules apply to `src/features/agents/`.
   once, with no confirmation, and every failure stays inline at the top of the tab.
 - The Profile tab's computer row embeds that Agent's desktop for the cloud computer's owner only:
   a sleeping monitor thumbnail wakes into a same-page near-fullscreen overlay; minimize keeps the
-  stream in the thumbnail until an idle countdown sleeps it (disconnects the iframe). Offline leaves
-  the thumbnail disabled. Computer detail and `desktop:takeover` may still open a popup.
+  stream in the thumbnail until an idle countdown sleeps it (disconnects the iframe). Portrait phone
+  chrome can switch to Landscape view (and back); sleep or minimize clears it. Offline leaves
+  the thumbnail disabled. Computer detail and `desktop:takeover` use that overlay below `sm`, and
+  a popup on wider viewports.
 - The Skills tab displays Global/Workspace metadata only, never skill bodies
   or a claim that a running session has loaded each entry.
 - The Context usage row reads passive Agent display observations only: opening a
