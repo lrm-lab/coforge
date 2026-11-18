@@ -19,6 +19,14 @@ import { m } from "#src/paraglide/messages";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
 
+/**
+ * The Agent panel's `PaneHeader`: identity on the left of the title row, bordered icon buttons on
+ * the right — Message, Start-or-Stop, Restart/Reset, then a plain Close. On a narrow panel Message
+ * stays and the other two go in one menu (`AgentProfileActionsMenu`), so the name keeps the room.
+ * The tabs fill the second row; the status and error lines come below the band. Rendered once by
+ * the panel shell, not per tab. All four buttons use the official `ButtonUtility` with its
+ * `tooltip` prop.
+ */
 export function AgentProfileHeader({
   agent,
   mascot,
@@ -151,12 +159,12 @@ export function AgentProfileHeader({
     <>
       {header}
       {statusLine && (
-        <p className="px-5 pb-2 text-sm text-tertiary" role="status">
+        <p className="px-5 py-2 text-sm text-tertiary" role="status">
           {statusLine}
         </p>
       )}
       {submitError && (
-        <p role="alert" className="px-5 pb-2 text-sm text-error-primary">
+        <p role="alert" className="px-5 py-2 text-sm text-error-primary">
           {submitError}
         </p>
       )}
