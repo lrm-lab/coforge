@@ -44,7 +44,7 @@ export type AgentRuntimeConfig = {
   environment?: EncryptedAgentEnvironment;
 };
 
-const LEGACY_ANTIGRAVITY_EFFORT_MODELS: Readonly<
+export const LEGACY_ANTIGRAVITY_EFFORT_MODELS: Readonly<
   Record<string, { model: string; reasoning: string }>
 > = {
   "gemini-3.8-flash-high": { model: "gemini-3.8-flash", reasoning: "high" },
@@ -60,18 +60,11 @@ const LEGACY_ANTIGRAVITY_EFFORT_MODELS: Readonly<
   "gemini-3.1-pro-low": { model: "gemini-3.1-pro", reasoning: "low" },
 };
 
-function legacyAntigravitySuffix(
-  runtime: RuntimeProvider,
-  model: string,
-): { model: string; reasoning: string } | undefined {
-  return runtime === RUNTIME_PROVIDER.ANTIGRAVITY
+function legacyAntigravitySplit(runtime: RuntimeProvider, model: string) {
+  return runtime === RUNTIME_PROVIDER.ANTIGRAVITY &&
+    Object.hasOwn(LEGACY_ANTIGRAVITY_EFFORT_MODELS, model)
     ? LEGACY_ANTIGRAVITY_EFFORT_MODELS[model]
     : undefined;
-}
-
-function splitLegacyAntigravityModel(runtime: RuntimeProvider, model: string, reasoning: string) {
-  if (reasoning !== "") return { model, reasoning };
-  return legacyAntigravitySuffix(runtime, model) ?? { model, reasoning };
 }
 
 /** Refuses a runtime provider an Agent cannot be given (`runtimeProviderSelectionRefusal`). */
@@ -102,7 +95,7 @@ export function agentRuntimeConfig(
 ): AgentRuntimeConfig {
   // Sizes for a pick that does not read them are not kept (task #124).
   const sized = sizesApply(selection.provider, provider);
-  if (selection.reasoning === "" && legacyAntigravitySuffix(selection.provider, selection.model))
+  if (selection.reasoning === "" && legacyAntigravitySplit(selection.provider, selection.model))
     throw new AppError("INVALID_INPUT", { errorId: "antigravity-model-effort-suffix" });
   return {
     runtime: selection.provider,
@@ -142,13 +135,13 @@ export function parseAgentRuntimeConfig(value: unknown, agentId?: string): Agent
     (maxOutputTokens === undefined && Reflect.get(value, "maxOutputTokens") !== undefined)
   )
     throw new Error("invalid runtime config");
-  const split = splitLegacyAntigravityModel(runtime, model, reasoning);
+  const legacy = reasoning === "" ? legacyAntigravitySplit(runtime, model) : undefined;
   return {
     runtime,
     provider: parseProviderConfig(Reflect.get(value, "provider"), agentId),
-    model: split.model,
+    model: legacy?.model ?? model,
     modelProvider: modelProvider ?? "",
-    reasoning: split.reasoning,
+    reasoning: legacy?.reasoning ?? reasoning,
     ...(fastMode === true ? { fastMode: true } : {}),
     ...(contextWindow === undefined ? {} : { contextWindow }),
     ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
