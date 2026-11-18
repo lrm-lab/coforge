@@ -107,6 +107,16 @@ test("a stopped Agent keeps its real display kind and label, adding only a statu
   expect(view.statusDetail).toBeUndefined();
 });
 
+test("a stopped Agent no display has reached yet still says it is stopped", () => {
+  expect(agentDisplay(undefined, { stopped: true })).toMatchObject({
+    kind: "offline",
+    label: "Offline",
+    isOnline: false,
+    statusDetail: "Stopped — won't receive messages until restarted",
+  });
+  expect(agentDisplay(undefined).kind).toBe("unknown");
+});
+
 test("a stopped Agent reads in the provider's words, and ours where none were kept", () => {
   const stopped = { activityKind: "offline", stopReason: "billing_exhausted" } as const;
   const said = "Your credit balance is too low.";

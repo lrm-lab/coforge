@@ -8,6 +8,7 @@ import {
   type AgentControlStore,
 } from "./agent-control.server";
 import type { AgentRuntimeLock } from "./agent-runtime-lock.server";
+import type { AgentWakeBlockReason, AgentWakeBlockWriter } from "./agent-wake-block.server";
 import { agentStartIntent } from "./manage-agents.server";
 
 /** What the server did about one rejected delivery. */
@@ -43,6 +44,7 @@ export class AgentDeliveryRejections {
     private readonly conversations: AgentControlRecoveryReader,
     private readonly runtimeLock: AgentRuntimeLock,
     private readonly control: Pick<AgentControl, "recover">,
+    private readonly wakeBlocks?: AgentWakeBlockWriter,
   ) {}
 
   async receive(
@@ -58,7 +60,20 @@ export class AgentDeliveryRejections {
         return settledOutcome(agent) ?? (await this.#wake(agent));
       }));
     log("agent_delivery:rejected", scope, rejection, { outcome });
+    await this.#recordWakeBlock(scope, rejection, outcome);
     return outcome;
+  }
+
+  async #recordWakeBlock(
+    scope: { workspaceId: string; computerId: string },
+    rejection: AgentMessageDeliveryRejection,
+    outcome: AgentDeliveryRejectionOutcome,
+  ): Promise<void> {
+    const reason = wakeBlockReason(outcome);
+    if (!this.wakeBlocks || !reason) return;
+    await this.wakeBlocks.record(rejection.agentId, reason).catch((error: unknown) => {
+      log("agent_delivery:wake_block_write_failed", scope, rejection, { error: String(error) });
+    });
   }
 
   async #read(
@@ -107,6 +122,12 @@ function settledOutcome(
     case "settled":
       return undefined;
   }
+}
+
+function wakeBlockReason(outcome: AgentDeliveryRejectionOutcome): AgentWakeBlockReason | undefined {
+  return outcome === "stopped" || outcome === "start_failed" || outcome === "operation_in_flight"
+    ? outcome
+    : undefined;
 }
 
 function log(

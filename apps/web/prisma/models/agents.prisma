@@ -40,6 +40,9 @@ model Agent {
   /// Set when a user stopped this Agent: nothing may start or wake it except an
   /// explicit user Start, Restart, Reset session or Full reset. Independent of `controlState`.
   stoppedAt                 DateTime?
+  wakeBlockedReason         String?
+  wakeBlockedCount          Int                        @default(0)
+  wakeBlockedAt             DateTime?
   /// Archive: hide from directories, lists and wakes; retain read-only profile and history.
   /// Message.sender, Task.creator/owner and ActionCard.preparedByAgent restrict hard deletion,
   /// as leftAt does for channel membership.
