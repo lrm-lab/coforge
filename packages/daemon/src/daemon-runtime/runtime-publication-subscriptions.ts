@@ -4,6 +4,7 @@ import type {
   AgentInboxPurge,
   AgentMigrationCancel,
   AgentMessageDelivery,
+  AgentControlScope,
   AgentStartIntent,
   AgentStopIntent,
   AgentStaleRuntimeStop,
@@ -38,6 +39,7 @@ export type RuntimePublicationSubscriptionPorts = {
   workspaceId: string;
   computerId: string;
   startAgent: (intent: AgentStartIntent) => Promise<unknown>;
+  rejectedAgentStart: (scope: AgentControlScope) => Promise<unknown>;
   stopAgent: (intent: AgentStopIntent) => Promise<unknown>;
   staleRuntimeStop?: (intent: AgentStaleRuntimeStop) => Promise<unknown>;
   /** Optional so a runtime or test without config sync keeps working. */
@@ -113,6 +115,11 @@ export class RuntimePublicationSubscriptions {
           ),
         ),
       ),
+    );
+    subscribe(
+      transport.rejectedControl?.onStart((scope) => {
+        void this.ports.rejectedAgentStart(scope).catch(() => {});
+      }),
     );
     subscribe(
       transport.onAgentStop?.(

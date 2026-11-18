@@ -1,4 +1,5 @@
 import type {
+  AgentControlScope,
   AgentStartIntent,
   AgentStopIntent,
   AgentStaleRuntimeStop,
@@ -139,6 +140,7 @@ export type AgentControlIntentPorts = {
   started: boolean;
   stopping: boolean;
   controlStart(intent: AgentStartIntent): Promise<void>;
+  controlRejectStart(scope: AgentControlScope): Promise<void>;
   controlStop(
     intent: AgentStopIntent & { provider: RuntimeProvider; epoch: number },
   ): Promise<void>;
@@ -171,7 +173,7 @@ export type AgentControlIntentDeps = {
   stopping: boolean;
   agentControl: Pick<
     AgentControl,
-    "start" | "stop" | "managed" | "resetWorkspace" | "staleRuntimeStop"
+    "start" | "stop" | "rejectStart" | "managed" | "resetWorkspace" | "staleRuntimeStop"
   >;
   agentSessions: Pick<AgentSessions, "replay">;
   processes: Pick<AgentProcessManager, "runtime" | "pendingRelease">;
@@ -190,6 +192,7 @@ export function controlIntentPorts(deps: AgentControlIntentDeps): AgentControlIn
     started: deps.started,
     stopping: deps.stopping,
     controlStart: (intent) => deps.agentControl.start(intent),
+    controlRejectStart: (scope) => deps.agentControl.rejectStart(scope, START_INTENT_REJECTED),
     controlStop: (intent) => deps.agentControl.stop(intent),
     replaySession: (agentId) => deps.agentSessions.replay(agentId),
     runtime: (agentId) => deps.processes.runtime(agentId),
@@ -209,6 +212,16 @@ export function controlIntentPorts(deps: AgentControlIntentDeps): AgentControlIn
     staleRuntimeStop: (agentId, controlEpoch) =>
       deps.agentControl.staleRuntimeStop(agentId, controlEpoch),
   };
+}
+
+export const START_INTENT_REJECTED = "start_intent_rejected";
+
+export function handleRejectedAgentStart(
+  ports: AgentControlIntentPorts,
+  scope: AgentControlScope,
+): Promise<void> {
+  ports.assertOwnIntent({ ...scope, computerId: scope.computerId || ports.connection.computerId });
+  return ports.controlRejectStart(scope);
 }
 
 /** A server Start: fenced through AgentControl, or an unfenced launch when no control epoch came. */
@@ -349,3 +362,8 @@ export function canonicalAgentMessageTarget(
     ),
   );
 }
+
+export const controlPublications = (ports: () => AgentControlIntentPorts) => ({
+  staleRuntimeStop: (intent: AgentStaleRuntimeStop) => handleAgentStaleRuntimeStop(ports(), intent),
+  rejectedAgentStart: (scope: AgentControlScope) => handleRejectedAgentStart(ports(), scope),
+});

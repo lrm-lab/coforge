@@ -11,6 +11,7 @@ import { LAUNCH_FAILURE_REASON } from "./launch-failure";
 import type { AgentRuntimeRecord, AgentRuntimeState } from "./agent-runtime-state";
 import type { AgentSessions } from "./agent-session";
 import type { AgentControlContext, AgentControlRuntime } from "./agent-control-runtime";
+import { rejectStart } from "./agent-control-reject";
 import { nextSequence } from "./agent-control-sequence";
 import { ManagedLaunches } from "./agent-control-launch";
 import {
@@ -118,6 +119,10 @@ export class AgentControl {
       await this.#context.runtime.result(record.lastResult).catch(() => {});
       assertPhaseInvariants(this.#context, scope.agentId, record);
     });
+  }
+
+  rejectStart(scope: AgentControlScope, errorCode: string): Promise<void> {
+    return rejectStart(this.#context, scope, errorCode);
   }
 
   async #preemptLaunch(scope: AgentControlScope): Promise<void> {

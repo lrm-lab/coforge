@@ -19,7 +19,7 @@ import {
   launchEventObserver,
   handleAgentStart,
   handleAgentStop,
-  handleAgentStaleRuntimeStop,
+  controlPublications,
   controlIntentPorts,
   handleAgentTurnInterrupt,
   handleAgentWorkspaceReset,
@@ -739,8 +739,7 @@ export class DaemonRuntime {
       publications: {
         startAgent: (intent) => this.handleAgentStart(intent),
         stopAgent: (intent) => this.handleAgentStop(intent),
-        staleRuntimeStop: (intent) =>
-          handleAgentStaleRuntimeStop(this.#controlIntentPorts(), intent),
+        ...controlPublications(() => this.#controlIntentPorts()),
         applyAgentConfigSync: (sync) => this.handleAgentConfig(sync),
         interruptAgent: (intent) => this.handleAgentTurnInterrupt(intent),
         probeAgent: (probe) => this.handleAgentActivityProbe(probe),

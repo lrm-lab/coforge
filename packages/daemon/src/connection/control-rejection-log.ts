@@ -1,5 +1,11 @@
 import { getLogger } from "@logtape/logtape";
-import { diagnosticErrorCode, thrownMessage } from "@lrm/coforge-sdk/internal";
+import {
+  decodeAgentStartIntentScope,
+  diagnosticErrorCode,
+  thrownMessage,
+  type AgentControlScope,
+} from "@lrm/coforge-sdk/internal";
+import { ListenerSlot } from "./listener-slot";
 import { controlPayloadShape } from "./control-payload";
 
 const logger = getLogger(["coforge", "daemon", "connection"]);
@@ -8,6 +14,12 @@ type Ids = { workspaceId: string; computerId: string };
 type Rejection = { kind: string; error: unknown };
 
 export class RejectedControl {
+  readonly #start = new ListenerSlot<(scope: AgentControlScope) => void>();
+
+  onStart(callback: (scope: AgentControlScope) => void): () => void {
+    return this.#start.set(callback);
+  }
+
   decodeFirst(
     decoders: readonly { kind: string; decode: () => void }[],
     data: Uint8Array,
@@ -22,7 +34,15 @@ export class RejectedControl {
         rejections.push({ kind, error });
       }
     }
+    this.#answerStart(data);
     this.#refused(ids, data, rejections);
+  }
+
+  #answerStart(data: Uint8Array): void {
+    try {
+      const scope = decodeAgentStartIntentScope(data);
+      if (scope) this.#start.current?.(scope);
+    } catch {}
   }
 
   #refused(ids: Ids, data: Uint8Array, rejections: readonly Rejection[]): void {

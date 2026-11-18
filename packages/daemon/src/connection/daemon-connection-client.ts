@@ -1,4 +1,8 @@
-import type { AgentMemoryRequest, AgentMemoryResult } from "@lrm/coforge-sdk/internal";
+import type {
+  AgentControlScope,
+  AgentMemoryRequest,
+  AgentMemoryResult,
+} from "@lrm/coforge-sdk/internal";
 import type { TeamMemoryCommand } from "@lrm/coforge-sdk/agent";
 import type { AgentApiConnectionClient } from "./agent-api-connection-client";
 import type { AgentArtifactCall } from "./agent-forwarded-routes";
@@ -183,6 +187,9 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   agentControlAccepted?(): boolean;
   onConnectionRefused?(callback: (reason: DaemonConnectRejectionReason) => void): () => void;
   onAgentStart?(callback: (intent: AgentStartIntent) => void): () => void;
+  readonly rejectedControl?: {
+    onStart(callback: (scope: AgentControlScope) => void): () => void;
+  };
   onAgentStop?(callback: (intent: AgentStopIntent) => void): () => void;
   onAgentStaleRuntimeStop?(callback: (intent: AgentStaleRuntimeStop) => void): () => void;
   onAgentTurnInterrupt?(callback: (intent: AgentTurnInterruptIntent) => void): () => void;
