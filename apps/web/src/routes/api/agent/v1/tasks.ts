@@ -34,6 +34,8 @@ import { SourceMessageTaken } from "#src/server/tasks/task-conversation-creation
 import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "#src/features/tasks/task-assignment";
 import { readAgentJsonBody } from "#src/server/agents/agent-http-routes.server";
 import { isExternalAgentPrincipal } from "#src/server/agents/external-agent-credentials.server";
+import { teamMemory } from "#src/server/team-memory/composition.server";
+import { recallTaskMemory } from "#src/server/tasks/task-memory-recall.server";
 
 const taskOperations = [
   "list",
@@ -156,6 +158,7 @@ export async function handleAgentTaskPost(
   freshness?: Parameters<typeof executeAgentTaskWithFreshness>[0]["freshness"],
   /** Where a create/convert that names no priority is measured from (task #12's rollout gate). */
   client?: { computerId: string; computerVersion(): Promise<string | null> },
+  recall?: (task: TaskResult["tasks"][number]) => Promise<TaskResult["relatedMemory"]>,
 ): Promise<Response> {
   try {
     const command = taskRequestSchema.parse(await readAgentJsonBody(request));
@@ -180,7 +183,18 @@ export async function handleAgentTaskPost(
       );
     }
     const result = await executeAgentTaskWithFreshness({ board, freshness }, principal, command);
-    return Response.json({ ...result, idempotencyKey: command.idempotencyKey });
+    const relatedMemory =
+      recall &&
+      result.state !== "held" &&
+      result.tasks.length === 1 &&
+      (command.operation === "show" || command.operation === "claim")
+        ? await recall(result.tasks[0]!)
+        : undefined;
+    return Response.json({
+      ...result,
+      ...(relatedMemory?.length ? { relatedMemory } : {}),
+      idempotencyKey: command.idempotencyKey,
+    });
   } catch (error) {
     if (error instanceof SourceMessageTaken) return agentErrorResponse(error);
     if (error instanceof AppError && error.errorId === TASK_V2_USE_CREATE)
@@ -249,6 +263,15 @@ export const Route = createFileRoute("/api/agent/v1/tasks")({
                     })
                   )?.computerVersion ?? null,
               },
+          Bun.env.COFORGE_TEAM_MEMORY_RECALL === "true"
+            ? (task) =>
+                recallTaskMemory(task, (search) =>
+                  teamMemory(db).execute(
+                    { workspaceId: principal.workspaceId, agentId: principal.agentId },
+                    search,
+                  ),
+                )
+            : undefined,
         ),
     },
   },

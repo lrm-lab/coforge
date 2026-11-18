@@ -68,9 +68,10 @@ export type TeamMemoryCommand =
       operation: "search";
       query: string;
       offset?: number;
-      projectId?: string;
+      projectId?: string | null;
       archived?: boolean;
       includeSuperseded?: boolean;
+      includeWorkspace?: boolean;
     }
   | { operation: "list"; offset?: number; archived?: boolean; projectId?: string }
   | { operation: "get"; id: string; revision?: number }
@@ -223,7 +224,7 @@ export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {
   ];
   const readKeys =
     operation === "search"
-      ? ["query", "offset", "projectId", "archived", "includeSuperseded"]
+      ? ["query", "offset", "projectId", "archived", "includeSuperseded", "includeWorkspace"]
       : operation === "list"
         ? ["offset", "archived", "projectId"]
         : operation === "get"
@@ -251,21 +252,32 @@ export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {
   const project =
     value.projectId === undefined
       ? {}
-      : { projectId: value.projectId === null && hasDraft ? null : uuid("projectId") };
+      : {
+          projectId:
+            value.projectId === null && (hasDraft || operation === "search")
+              ? null
+              : uuid("projectId"),
+        };
   if (value.archived !== undefined && typeof value.archived !== "boolean")
     throw new Error("invalid_memory_archived");
   if (value.includeSuperseded !== undefined && typeof value.includeSuperseded !== "boolean")
     throw new Error("invalid_memory_includeSuperseded");
+  if (
+    value.includeWorkspace !== undefined &&
+    (typeof value.includeWorkspace !== "boolean" || !project.projectId)
+  )
+    throw new Error("invalid_memory_includeWorkspace");
   if (operation === "search")
     return {
       ...(value.archived === undefined ? {} : { archived: value.archived }),
       ...(value.includeSuperseded === undefined
         ? {}
         : { includeSuperseded: value.includeSuperseded }),
+      ...(value.includeWorkspace === undefined ? {} : { includeWorkspace: value.includeWorkspace }),
       operation,
       query: string("query", 500),
       offset: number("offset", 0),
-      ...(project.projectId ? { projectId: project.projectId } : {}),
+      ...project,
     };
   if (operation === "list") {
     if (value.archived !== undefined && typeof value.archived !== "boolean")
