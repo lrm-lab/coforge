@@ -4,6 +4,8 @@ import { Cloud01 as Cloud, Monitor01 as Monitor } from "@untitledui/icons";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { Spinner } from "#src/components/ui/spinner";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { cx } from "#src/utils/cx";
+import { PHONE_PAGE_HEADER, PhoneFormBar } from "#src/components/ui/phone-form-bar";
 import { m } from "#src/paraglide/messages";
 import { ComputerInstallCommand } from "./computer-install-command";
 import { CloudComputerStep } from "./cloud-computer-step";
@@ -50,11 +52,32 @@ export function AddComputerDialog({
   }, [open]);
 
   return (
-    <ModalOverlay isOpen={open} onOpenChange={onOpenChange}>
+    <ModalOverlay page isOpen={open} onOpenChange={onOpenChange}>
       <Modal className="w-[calc(100vw-2rem)] max-w-2xl">
         <Dialog ref={dialogRef} aria-describedby="add-computer-description">
           {() => (
             <>
+              <PhoneFormBar
+                heading={
+                  connectedComputerName ? m.computer_add_success_title() : m.computer_add_title()
+                }
+                pending={false}
+                {...(step === "choose"
+                  ? {
+                      onCancel: close,
+                      submitLabel: m.controls_next(),
+                      onSubmit: () => setStep(computerType === "local" ? "install" : "cloud"),
+                    }
+                  : step === "install"
+                    ? {
+                        cancelLabel: m.controls_back(),
+                        onCancel: () => setStep("choose"),
+                        submitLabel: m.computer_connect_done(),
+                        submitDisabled: !connectedComputerName,
+                        onSubmit: close,
+                      }
+                    : { cancelLabel: m.controls_back(), onCancel: () => setStep("choose") })}
+              />
               <DialogHeader
                 title={
                   connectedComputerName ? m.computer_add_success_title() : m.computer_add_title()
@@ -69,11 +92,11 @@ export function AddComputerDialog({
                   </span>
                 }
                 onClose={close}
-                className="sm:px-8 sm:pt-8"
+                className={cx("sm:px-8 sm:pt-8", PHONE_PAGE_HEADER)}
               />
 
               {step === "choose" ? (
-                <div className="grid gap-3 px-6 py-6 sm:grid-cols-2 sm:px-8">
+                <div className="grid gap-3 px-6 py-6 max-sm:px-4 max-sm:py-4 sm:grid-cols-2 sm:px-8">
                   <ComputerTypeOption
                     icon={Monitor}
                     label={m.computer_your_computer()}
@@ -97,6 +120,7 @@ export function AddComputerDialog({
                 />
               ) : (
                 <ComputerInstallCommand
+                  className="px-6 py-6 max-sm:px-4 max-sm:py-4 sm:px-8"
                   installOrigin={installOrigin}
                   workspaceSlug={workspaceSlug}
                   status={
@@ -120,7 +144,7 @@ export function AddComputerDialog({
               )}
 
               {step !== "cloud" && (
-                <DialogActions className="px-6 sm:px-8 pt-4 pb-6">
+                <DialogActions className="px-6 pt-4 pb-6 max-sm:hidden sm:px-8">
                   <DialogCancel onPress={step === "choose" ? close : () => setStep("choose")}>
                     {step === "choose" ? m.controls_cancel() : m.controls_back()}
                   </DialogCancel>
