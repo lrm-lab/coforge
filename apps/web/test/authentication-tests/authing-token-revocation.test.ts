@@ -5,6 +5,10 @@ import { signInThroughAuthing } from "#src/server/auth/authing-sign-in.server";
 
 const accessToken = "access-token-secret-9c1d";
 
+class RevocationRefusedInThisTest extends Error {
+  override name = "RevocationRefusedInThisTest";
+}
+
 function authingStub(options: { revokeToken?: AuthingAuthentication["revokeToken"] } = {}) {
   const revoked: string[] = [];
   const authing = {
@@ -94,7 +98,7 @@ test("a revocation that fails is logged without the token and does not fail the 
   try {
     const { authing } = authingStub({
       revokeToken: async () => {
-        throw new Error(`refused ${accessToken}`);
+        throw new RevocationRefusedInThisTest(`refused ${accessToken}`);
       },
     });
     const result = await signInThroughAuthing({
@@ -111,9 +115,11 @@ test("a revocation that fails is logged without the token and does not fail the 
       }),
     });
     expect(result.status).toBe("signed_in");
-    for (let wait = 0; wait < 100 && warnings.length === 0; wait++) await Bun.sleep(10);
-    expect(warnings.map((line) => JSON.parse(line))).toEqual([
-      { event: "auth.token_revocation_failed", errorType: "Error" },
+    const ownRevocationLines = () =>
+      warnings.filter((line) => line.includes(`"errorType":"RevocationRefusedInThisTest"`));
+    for (let wait = 0; wait < 100 && ownRevocationLines().length === 0; wait++) await Bun.sleep(10);
+    expect(ownRevocationLines().map((line) => JSON.parse(line))).toEqual([
+      { event: "auth.token_revocation_failed", errorType: "RevocationRefusedInThisTest" },
     ]);
     expect(warnings.join("\n")).not.toContain(accessToken);
   } finally {
