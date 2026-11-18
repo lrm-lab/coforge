@@ -174,7 +174,7 @@ test("an old task's notices and receipts go to its own conversation and never to
     where: { conversationId: stored.discussionConversationId! },
     select: { kind: true },
   });
-  expect(notices.length).toBe(2);
+  expect(notices).toEqual([{ kind: "task.assigned" }]);
 });
 
 test("an old task's unfollow notice goes to its own conversation, and with no word in it it posts nothing", async () => {

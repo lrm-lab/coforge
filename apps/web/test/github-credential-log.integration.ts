@@ -96,6 +96,15 @@ test("an Agent credential whose refresh GitHub revoked asks the person to reconn
     expect(code).toBe("ACCESS_DENIED");
     expect(logged).toEqual([
       {
+        event: "github.credentials_cleared",
+        userId: user.id,
+        site: "refresh",
+        reason: "bad_refresh_token",
+        expiresAt: expect.any(String),
+        refreshExpiresAt: expect.any(String),
+        updatedAt: expect.any(String),
+      },
+      {
         event: "github.credential_failed",
         userId: user.id,
         outcome: "reconnect",
@@ -108,17 +117,22 @@ test("an Agent credential whose refresh GitHub revoked asks the person to reconn
 });
 
 test("an Agent credential GitHub cannot refresh right now is temporarily unavailable, with GitHub's reason in the log", async () => {
-  for (const [answer, reason] of [
-    [() => Response.json({ error: "server_error", error_description: "private" }), "server_error"],
-    [() => new Response("upstream down", { status: 502 }), "http_502"],
+  for (const [answer, reason, uncertain] of [
+    [
+      () => Response.json({ error: "server_error", error_description: "private" }),
+      "server_error",
+      false,
+    ],
+    [() => new Response("upstream down", { status: 502 }), "http_502", true],
     // A 403/404 from the token endpoint is not a revoked authorization (that is `bad_refresh_token`),
     // so it clears nothing and asks no one to reconnect.
-    [() => new Response("private not found", { status: 404 }), "access_denied"],
+    [() => new Response("private not found", { status: 404 }), "access_denied", true],
     [
       () => {
         throw new TypeError("connection refused");
       },
       "network",
+      true,
     ],
   ] as const) {
     const { user, connection } = await expiredConnection(answer);
@@ -126,6 +140,17 @@ test("an Agent credential GitHub cannot refresh right now is temporarily unavail
       const { code, logged } = await credentialFailure(connection, user.id);
       expect(code).toBe("TEMPORARILY_UNAVAILABLE");
       expect(logged).toEqual([
+        ...(uncertain
+          ? [
+              {
+                event: "github.refresh_uncertain",
+                userId: user.id,
+                stage: "exchange",
+                reason,
+                at: expect.any(String),
+              },
+            ]
+          : []),
         { event: "github.credential_failed", userId: user.id, outcome: "unavailable", reason },
       ]);
       expect(JSON.stringify(logged)).not.toContain("private");
