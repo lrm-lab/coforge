@@ -1,4 +1,11 @@
+import {
+  TRAIL_ANCESTORS_MAX,
+  TRAIL_NAME_MAX,
+} from "#src/features/artifacts/artifact-page-annotations";
+
 export const ANNOTATE_DOM_SOURCE = String.raw`
+var TRAIL_NAME_MAX = ${TRAIL_NAME_MAX};
+var TRAIL_ANCESTORS_MAX = ${TRAIL_ANCESTORS_MAX};
 var ACCENT = "#7f56d9";
 var annotate = { picking: false, selecting: false, showMarks: false, revision: 0, marks: [], draft: null };
 var BADGE_SHADOW = "0 1px 3px rgba(0,0,0,.35)";
@@ -15,9 +22,10 @@ var relocateTimer = 0;
 var lastReported = null;
 var reportedSelection = false;
 var mutationObserver = null;
-var shield = null;
+var pickStart = null;
 var hoverBox = null;
 var hoverElement = null;
+var hoverFrame = 0;
 var lastPointer = null;
 function paintTarget(parent, target, strong) {
   var style = target.boxStyle(strong);
@@ -171,7 +179,7 @@ function setMarks(params) {
 }
 function setDraft(params) {
   annotate.draft = params && params.anchor && params.anchor.data ? params.anchor : null;
-  if (annotate.draft) {
+  if (annotate.draft && annotate.draft.type === "text") {
     var selection = window.getSelection();
     if (selection) selection.removeAllRanges();
     indexDirty = true;
@@ -202,47 +210,118 @@ function elementUnder(x, y) {
   for (var i = 0; i < stack.length; i++) if (stack[i] !== overlay) return stack[i] === document.documentElement && document.body ? document.body : stack[i];
   return null;
 }
-function hoverAt(x, y) {
-  lastPointer = { x: x, y: y };
-  hoverElement = elementUnder(x, y);
-  if (!hoverElement) return;
+function drawHover() {
+  hoverFrame = 0;
+  hoverElement = lastPointer && elementUnder(lastPointer.x, lastPointer.y);
+  if (!hoverElement) {
+    hideHover();
+    return;
+  }
   var rect = hoverElement.getBoundingClientRect();
   if (hoverBox) placeBox(hoverBox, rect);
   else hoverBox = paintBox(layer("pick-hover"), rect, "border-radius:3px;border:2px solid " + ACCENT + ";background:rgba(127,86,217,.12)");
 }
-function onPickScroll() {
-  if (lastPointer) hoverAt(lastPointer.x, lastPointer.y);
+function scheduleHover() {
+  if (lastPointer && !hoverFrame) hoverFrame = requestAnimationFrame(drawHover);
 }
-function startPicking() {
-  if (shield) return;
-  annotate.picking = true;
-  var parent = layer("pick");
-  shield = document.createElement("div");
-  shield.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;pointer-events:auto;cursor:crosshair;background:transparent;touch-action:none";
-  shield.addEventListener("pointermove", function (event) { hoverAt(event.clientX, event.clientY); });
-  shield.addEventListener("click", function (event) {
-    event.preventDefault();
-    event.stopPropagation();
-    var target = elementUnder(event.clientX, event.clientY);
-    var data = target && elementData(target);
-    stopPicking();
-    if (!data) {
-      post({ method: "coforge/notifications/annotate-cancelled", params: { reason: "unanchorable" } });
-      return;
-    }
-    post({ method: "coforge/notifications/annotate-selected", params: { type: "element", data: data, rect: boxOf(target.getBoundingClientRect()) } });
-  });
-  parent.appendChild(shield);
-  window.addEventListener("scroll", onPickScroll, true);
-}
-function stopPicking() {
-  annotate.picking = false;
-  if (shield) shield.remove();
-  shield = null;
+function hideHover() {
+  if (hoverFrame) cancelAnimationFrame(hoverFrame);
+  hoverFrame = 0;
   if (hoverBox) hoverBox.remove();
   hoverBox = null;
   hoverElement = null;
-  window.removeEventListener("scroll", onPickScroll, true);
+  lastPointer = null;
+}
+function stepName(element) {
+  var name = element.tagName.toLowerCase();
+  if (stableValue(element.id)) name += "#" + element.id;
+  else if (element.classList.length > 0) name += "." + element.classList[0];
+  return clip(name, TRAIL_NAME_MAX);
+}
+function ancestorsOf(element) {
+  var steps = [];
+  var node = element.parentElement;
+  while (node && node !== document.body && node !== document.documentElement && steps.length < TRAIL_ANCESTORS_MAX) {
+    var data = elementData(node);
+    if (data) steps.unshift({ name: stepName(node), data: data, rect: boxOf(node.getBoundingClientRect()) });
+    node = node.parentElement;
+  }
+  return steps;
+}
+function pickAt(x, y) {
+  var target = elementUnder(x, y);
+  var data = target && elementData(target);
+  if (!data) {
+    post({ method: "coforge/notifications/annotate-unanchorable" });
+    return;
+  }
+  post({ method: "coforge/notifications/annotate-selected", params: { type: "element", data: data, rect: boxOf(target.getBoundingClientRect()), name: stepName(target), point: { x: x, y: y }, path: ancestorsOf(target) } });
+}
+function onOverlay(event) {
+  return event.target === overlay;
+}
+function onPickMove(event) {
+  if (onOverlay(event) || event.buttons !== 0) {
+    hideHover();
+    return;
+  }
+  lastPointer = { x: event.clientX, y: event.clientY };
+  scheduleHover();
+}
+function onPickOut(event) {
+  if (!event.relatedTarget) hideHover();
+}
+function onPickDown(event) {
+  if (onOverlay(event)) return;
+  pickStart = event.isPrimary && event.button === 0 ? { x: event.clientX, y: event.clientY } : null;
+  event.stopImmediatePropagation();
+}
+function onPickSwallow(event) {
+  if (!onOverlay(event)) event.stopImmediatePropagation();
+}
+function onPickCancel(event) {
+  pickStart = null;
+  onPickSwallow(event);
+}
+function onPickClick(event) {
+  if (onOverlay(event)) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  var start = pickStart;
+  pickStart = null;
+  if (!start || Math.abs(event.clientX - start.x) > 4 || Math.abs(event.clientY - start.y) > 4) return;
+  var selection = window.getSelection();
+  if (selection && !selection.isCollapsed) return;
+  pickAt(event.clientX, event.clientY);
+}
+function onPickScroll() {
+  scheduleHover();
+}
+var PICK_LISTENERS = [
+  ["pointermove", onPickMove],
+  ["pointerout", onPickOut],
+  ["pointerdown", onPickDown],
+  ["pointerup", onPickSwallow],
+  ["pointercancel", onPickCancel],
+  ["touchstart", onPickSwallow],
+  ["touchend", onPickSwallow],
+  ["auxclick", onPickSwallow],
+  ["contextmenu", onPickSwallow],
+  ["mousedown", onPickSwallow],
+  ["mouseup", onPickSwallow],
+  ["dblclick", onPickSwallow],
+  ["click", onPickClick],
+  ["scroll", onPickScroll]
+];
+function startPicking() {
+  annotate.picking = true;
+  PICK_LISTENERS.forEach(function (entry) { window.addEventListener(entry[0], entry[1], true); });
+}
+function stopPicking() {
+  annotate.picking = false;
+  pickStart = null;
+  PICK_LISTENERS.forEach(function (entry) { window.removeEventListener(entry[0], entry[1], true); });
+  hideHover();
 }
 function clearReportedSelection() {
   if (!reportedSelection) return;
@@ -250,7 +329,7 @@ function clearReportedSelection() {
   post({ method: "coforge/notifications/annotate-unselected" });
 }
 function reportSelection() {
-  if (!annotate.selecting || annotate.picking) return;
+  if (!annotate.selecting) return;
   var selection = window.getSelection();
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed || !document.body) return clearReportedSelection();
   var range = selection.getRangeAt(0);
@@ -288,19 +367,14 @@ function annotateMessage(method, params) {
   }
 }
 function startAnnotations() {
-  document.addEventListener("pointerup", function () { setTimeout(reportSelection, 0); }, true);
-  document.addEventListener("keyup", function (event) {
+  window.addEventListener("pointerup", function () { setTimeout(reportSelection, 0); }, true);
+  window.addEventListener("keyup", function (event) {
     if (event.shiftKey || /^(Arrow|Home$|End$|Page)/.test(event.key) || ((event.ctrlKey || event.metaKey) && event.key === "a")) reportSelection();
   }, true);
   document.addEventListener("selectionchange", function () {
     var selection = window.getSelection();
     if (reportedSelection && (!selection || selection.isCollapsed)) clearReportedSelection();
   });
-  window.addEventListener("keydown", function (event) {
-    if (event.key !== "Escape" || !annotate.picking) return;
-    stopPicking();
-    post({ method: "coforge/notifications/annotate-cancelled" });
-  }, true);
   window.addEventListener("resize", scheduleRelocate);
   window.addEventListener("load", scheduleRelocate);
   document.addEventListener("DOMContentLoaded", relocate);

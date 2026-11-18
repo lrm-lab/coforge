@@ -165,7 +165,6 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
     switch (method) {
       case "ui/initialize":
         admit("ui/initialize");
-        annotations.handshake();
         return {
           protocolVersion: BRIDGE_PROTOCOL_VERSION,
           hostInfo: { name: "coforge", version: "1" },

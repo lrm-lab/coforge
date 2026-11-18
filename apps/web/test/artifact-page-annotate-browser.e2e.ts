@@ -6,10 +6,14 @@ import { annotatePage, onePage } from "./helpers/artifact-sandbox-site";
 import { until } from "./helpers/headless-chrome";
 
 /**
- * The page runtime's annotation layer in a real browser, over the real `createPageBridge`: it
- * builds a stable selector for the element a person picks (ids, data attributes, positions), offers
- * a text selection as a quote, draws marks in its own overlay and reports which it
- * found, scrolls to one on request, and ignores forged messages. Chrome only (`COFORGE_E2E_CHROME`);
+ * The page runtime's annotation layer in a real browser, over the real `createPageBridge`. While
+ * picking is on, one gesture tells the two apart: a click picks the element under it, with a stable
+ * selector (ids, data attributes, positions), the click point and the element's ancestors, and the
+ * page never sees that click. Picking stays on from click to click; with it off the page gets its
+ * clicks back, and a text selection is offered as a quote (headless Chrome does not drag-select in a
+ * cross-origin frame, so the browser flow e2e drags). The runtime draws marks in its own overlay, a click on a mark activates it rather
+ * than picking under it, it reports which marks it found, scrolls to one on request, and ignores
+ * forged messages. Chrome only (`COFORGE_E2E_CHROME`);
  * opt-in like every `.e2e.ts`:
  *   bun test ./test/artifact-page-annotate-browser.e2e.ts
  */
@@ -86,50 +90,75 @@ test("the runtime picks, selects, marks, focuses and ignores forged messages", a
   const shot = await tab.command<{ data: string }>("Page.captureScreenshot", { format: "png" });
   await Bun.write(join(outputs, "annotate-marks.png"), Buffer.from(shot.data, "base64"));
 
+  await setMode(true);
   const before = (await events()).length;
   await click({ x: rects.title!.right, y: rects.title!.top });
   expect(await waitEvent("activated", before)).toMatchObject({ id: "title" });
+  expect((await events()).slice(before).some((e) => e.kind === "selected")).toBe(false);
 
-  const pickSelector = async (key: string) => {
+  const pick = async (key: string) => {
     const from = (await events()).length;
-    await setMode(true);
-    await click(rects[key]!);
+    const at = { x: Math.round(rects[key]!.x), y: Math.round(rects[key]!.y) };
+    await click(at);
     const picked = await waitEvent("selected", from);
     expect(picked.anchor.type).toBe("element");
-    return picked.anchor.data;
+    expect(picked.point).toEqual(at);
+    return picked;
   };
-  expect(await pickSelector("title")).toEqual({ selector: "#title", quote: "Launch plan" });
-  expect(await pickSelector("intro")).toEqual({
+  const title = await pick("title");
+  expect(title.anchor.data).toEqual({ selector: "#title", quote: "Launch plan" });
+  expect(title.trail.map((step: { name: string }) => step.name)).toEqual(["main", "h1#title"]);
+  expect(title.trail.at(-1).anchor).toEqual(title.anchor);
+  expect((await pick("intro")).anchor.data).toEqual({
     selector: "body > main > p",
     quote: "Ship the beta on Friday. Pricing is open for review.",
   });
-  expect(await pickSelector("second")).toEqual({
-    selector: "#list > li:nth-of-type(2)",
-    quote: "Two",
-  });
-  expect(await pickSelector("buy")).toEqual({
+  const second = await pick("second");
+  expect(second.anchor.data).toEqual({ selector: "#list > li:nth-of-type(2)", quote: "Two" });
+  expect(
+    second.trail.map((step: { name: string; anchor: Annotation }) => [step.name, step.anchor.data]),
+  ).toEqual([
+    [
+      "main",
+      {
+        selector: "body > main",
+        quote:
+          "Launch plan Ship the beta on Friday. Pricing is open for review. One Two Three Buy now Odd id Far below the fold",
+      },
+    ],
+    ["ul#list", { selector: "#list", quote: "One Two Three" }],
+    ["li", { selector: "#list > li:nth-of-type(2)", quote: "Two" }],
+  ]);
+  expect((await pick("buy")).anchor.data).toEqual({
     selector: 'button[data-testid="buy"]',
     quote: "Buy now",
   });
-  expect(await pickSelector("odd")).toEqual({ selector: "body > main > span", quote: "Odd id" });
+  expect((await pick("odd")).anchor.data).toEqual({
+    selector: "body > main > span",
+    quote: "Odd id",
+  });
+  expect((await fromPage()).some((m) => m.pageClick)).toBe(false);
 
-  const beforeEscape = (await events()).length;
-  await setMode(true);
-  await mouse("mouseMoved", rects.intro!);
-  for (const type of ["keyDown", "keyUp"])
-    await tab.command("Input.dispatchKeyEvent", {
-      type,
-      key: "Escape",
-      code: "Escape",
-      windowsVirtualKeyCode: 27,
-    });
-  await waitEvent("cancelled", beforeEscape);
+  await setMode(false);
+  await click(rects.buy!);
+  await until(async () => (await fromPage()).some((m) => m.pageClick), 8000);
 
   const beforeText = (await events()).length;
   await click(rects.intro!, 3);
   const selected = await waitEvent("selected", beforeText);
   expect(selected.anchor.type).toBe("text");
   expect(selected.anchor.data.quote).toBe("Ship the beta on Friday. Pricing is open for review.");
+
+  const beforeElementDraft = (await events()).length;
+  await bridge(`setDraft({ type: "element", data: { selector: "#title" } })`);
+  await bridge(`setMarks([
+    { id: "far", anchor: { type: "element", data: { selector: "main > div:last-child" } }, count: 1, label: "far" },
+    { id: "title", anchor: { type: "element", data: { selector: "#title" } }, count: 1, label: "1 comment" },
+  ])`);
+  await waitEvent("found", beforeElementDraft);
+  expect((await events()).slice(beforeElementDraft).some((e) => e.kind === "unselected")).toBe(
+    false,
+  );
 
   const beforeDraft = (await events()).length;
   await bridge(`setDraft({ type: "text", data: { quote: "beta on Friday." } })`);

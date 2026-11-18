@@ -18,15 +18,20 @@ import {
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
 /**
- * People comment on an element and on a text selection inside an HTML artifact's page. A person
- * turns comment mode on, picks an element with a real mouse (the page is in a frame of its own
- * origin, so only trusted input reaches it), writes the comment, and the thread names the element
- * and is marked in the frame; a second person's comment appears there live; a new version without
- * the element shows the thread as changed. A page script that posts a forged "picked" message,
- * posted with comment mode off, and with it on but no click of the person, opens no composer; one
- * posted right after the person presses "pick element" does open it, showing the page's label, and
- * nothing is posted until the person sends. The test page posts its forgeries on command and then
- * a message the host visibly handles (its error banner), which proves the forgeries were handled.
+ * People comment on an element and on a text selection inside an HTML artifact's page with one
+ * gesture and no pick button. A person turns comment mode on; the element under the pointer is
+ * outlined, a real click on it (the page is in a frame of its own origin, so only trusted input
+ * reaches it) opens the composer at the click with the element's path, a step of the path widens
+ * the comment to that outer element and the arrow keys walk the path from an empty field. The
+ * thread names the element and is marked in the frame; a click elsewhere moves an empty composer to
+ * that element, focused, and Escape closes it and leaves nothing;
+ * a drag selects text and offers it; a click on a mark opens its thread; a second person's comment
+ * appears live; a new version without the element shows the thread as changed. A page script that
+ * posts a forged "picked" message, with comment mode off, and with it on but no click of the person,
+ * opens no composer; one posted right after a real click of the person does open it, showing the
+ * page's label, and nothing is posted until the person sends. The test page posts its forgeries on
+ * command and then a message the host visibly handles (its error banner), which proves the
+ * forgeries were handled.
  *
  * Opt-in like the other browser E2Es: the Web with the flag file that offers `artifacts`,
  * `COFORGE_ARTIFACT_SANDBOX_ORIGIN` on another host of the same server, `COFORGE_SESSION_SECRET`,
@@ -131,20 +136,17 @@ test("people comment on a page element and a text selection; marks show in the f
     );
     await handled();
   };
-  const pillPosition = () =>
-    evaluate<{ x: number; y: number }>(
-      `(() => { const r = document.querySelector("[data-pick-element]").getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
+  const pressAt = async (selector: string) => {
+    const at = await evaluate<{ x: number; y: number }>(
+      `(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) }; })()`,
     );
-  const pressPill = async () => {
-    const at = await pillPosition();
     await mouse("move", at.x, at.y);
     await mouse("down");
     await mouse("up");
   };
-  const picking = (on: boolean) =>
-    waitFor(
-      `document.querySelector("[data-pick-element]")?.getAttribute("aria-pressed") === "${on}" && window.__modeAcks.at(-1) === ${on}`,
-    );
+  const picking = (on: boolean) => waitFor(`window.__modeAcks.at(-1) === ${on}`);
+  const popoverText = `document.querySelector("[data-comment-popover]")?.textContent`;
+  const trailSteps = `[...document.querySelectorAll("[data-comment-popover] [data-trail-step]")].map((step) => step.textContent + (step.getAttribute("aria-current") ? "*" : "")).join(" ")`;
   const commentCount = () => db.artifactComment.count({ where: { artifactId: artifact.id } });
   const hasPopover = `document.querySelector("[data-comment-popover]") != null`;
   const statusOf = (id: string) =>
@@ -171,27 +173,24 @@ test("people comment on a page element and a text selection; marks show in the f
     expect(await evaluate<boolean>(hasPopover)).toBe(false);
 
     await click("button[aria-pressed]");
-    await waitFor(`document.querySelector("[data-comment-tools]") != null`);
     await picking(true);
     await forge("no-click-by-the-person");
     expect(await evaluate<boolean>(hasPopover)).toBe(false);
     expect(
       await evaluate<boolean>(`document.querySelector("[data-comment-selection]") != null`),
     ).toBe(false);
-    await shoot("20-comment-mode-html");
-
-    await pressPill();
-    await picking(false);
-    await pressPill();
-    await picking(true);
-    await forge("after-the-person-pressed-pick");
-    await waitFor(
-      `document.querySelector("[data-comment-popover]")?.textContent.includes("forged")`,
-    );
-    expect(await commentCount()).toBe(0);
-    expect(await evaluate<boolean>(`document.querySelector("[data-pick-element]").disabled`)).toBe(
+    expect(await evaluate<boolean>(`document.querySelector("[data-comment-tools]") == null`)).toBe(
       true,
     );
+    await shoot("20-comment-mode-html");
+
+    await pressAt("button[aria-pressed]");
+    await picking(false);
+    await pressAt("button[aria-pressed]");
+    await picking(true);
+    await forge("right-after-a-click-of-the-person");
+    await waitFor(`${popoverText}?.includes("forged")`);
+    expect(await commentCount()).toBe(0);
     await click("[data-comment-popover] button");
     await waitFor(`document.querySelector("[data-comment-popover]") == null`);
     expect(await commentCount()).toBe(0);
@@ -199,18 +198,42 @@ test("people comment on a page element and a text selection; marks show in the f
     await browser("find", "role", "button", "click", "--name", "Comment options");
     await browser("find", "role", "menuitem", "click", "--name", "All comments");
     await waitFor(`document.querySelector('aside[aria-label="Comments"]') != null`);
-    await pressPill();
-    await picking(true);
     const origin = await frameOrigin();
+    await mouse("move", origin.x + 60, origin.y + 230);
+    await mouse("down");
+    await mouse("up");
+    await waitFor(`${popoverText}?.includes("Buy now")`);
+    await mouse("move", origin.x + 300, origin.y + 152);
+    await mouse("down");
+    await mouse("up");
+    await waitFor(
+      `${popoverText}?.includes("Ship the beta") && !${popoverText}.includes("Buy now")`,
+    );
+    await browser("press", "Escape");
+    await waitFor(`document.querySelector("[data-comment-popover]") == null`);
+    expect(await commentCount()).toBe(0);
+
     await mouse("move", origin.x + 60, origin.y + 80);
     await shoot("23-element-picker-hover");
     await mouse("down");
     await mouse("up");
     await waitFor(hasPopover);
-    await waitFor(
-      `document.querySelector("[data-comment-popover]").textContent.includes("Launch plan")`,
-    );
+    await waitFor(`${trailSteps} === "main h1#title*"`);
+    await waitFor(`${popoverText}.includes("Launch plan")`);
+    await click('[data-comment-popover] [data-trail-step="0"]');
+    await waitFor(`${trailSteps} === "main* h1#title"`);
+    await waitFor(`${popoverText}.includes("Ship the beta on Friday")`);
+    await shoot("25-element-composer-widened");
+    await browser("focus", "[data-comment-popover] textarea");
+    await browser("press", "ArrowDown");
+    await waitFor(`${trailSteps} === "main h1#title*"`);
+    await browser("press", "ArrowUp");
+    await waitFor(`${trailSteps} === "main* h1#title"`);
+    await browser("press", "ArrowDown");
+    await waitFor(`${trailSteps} === "main h1#title*"`);
     await browser("fill", "[data-comment-popover] textarea", `Make the title shorter ${tail}`);
+    await browser("press", "ArrowUp");
+    expect(await evaluate<string>(trailSteps)).toBe("main h1#title*");
     await shoot("24-element-composer");
     await click('[data-comment-popover] button[type="submit"]');
     await waitFor(`document.querySelector("[data-comment-popover]") == null`);

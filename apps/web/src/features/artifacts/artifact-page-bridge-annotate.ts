@@ -6,16 +6,15 @@ import {
   clipAnchor,
   parseFoundIds,
   parsePicked,
-  type FrameRect,
-  type PickFailure,
   type PageAnnotationMode,
   type PageMark,
+  type PickedAnchor,
 } from "./artifact-page-annotations";
 
 export type PageAnnotationEvent =
-  | { kind: "selected"; anchor: CommentAnchor; rect: FrameRect }
+  | ({ kind: "selected" } & PickedAnchor)
   | { kind: "unselected" }
-  | { kind: "cancelled"; reason?: PickFailure }
+  | { kind: "unanchorable" }
   | { kind: "found"; revision: number; ids: string[] }
   | { kind: "activated"; id: string };
 
@@ -85,12 +84,6 @@ export function createAnnotationChannel(
     focus(id: string) {
       send({ method: "coforge/annotate/focus", params: { id } });
     },
-    handshake() {
-      if (mode.picking) {
-        mode = { ...mode, picking: false };
-        emit({ kind: "cancelled" });
-      }
-    },
     ready() {
       sendMode();
       if (marks.length > 0) sendMarks();
@@ -101,25 +94,17 @@ export function createAnnotationChannel(
         case "coforge/notifications/annotate-selected": {
           const picked = parsePicked(params);
           if (!picked) return;
-          if (picked.anchor.type === "element") {
-            if (!mode.picking || !userActive()) return;
-            mode = { ...mode, picking: false };
-          } else if (!mode.selecting || mode.picking) return;
+          const admitted =
+            picked.anchor.type === "element" ? mode.picking && userActive() : mode.selecting;
+          if (!admitted) return;
           emit({ kind: "selected", ...picked });
           return;
         }
         case "coforge/notifications/annotate-unselected":
           if (mode.selecting) emit({ kind: "unselected" });
           return;
-        case "coforge/notifications/annotate-cancelled":
-          if (mode.picking) {
-            mode = { ...mode, picking: false };
-            emit(
-              params.reason === "unanchorable"
-                ? { kind: "cancelled", reason: "unanchorable" }
-                : { kind: "cancelled" },
-            );
-          }
+        case "coforge/notifications/annotate-unanchorable":
+          if (mode.picking && userActive()) emit({ kind: "unanchorable" });
           return;
         case "coforge/notifications/annotate-found":
           if (params.revision === revision)

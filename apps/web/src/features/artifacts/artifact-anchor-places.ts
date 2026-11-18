@@ -20,10 +20,13 @@ export const NEUTRAL = { status: "neutral" } as const;
 
 export type DraftTarget = {
   rect: AffordanceRect;
+  at?: { x: number; y: number };
   highlight(on: boolean): void;
 };
 
-export type AnchorDraft = { anchor: CommentAnchor; target: DraftTarget };
+export type DraftTrail = { names: readonly string[]; at: number; step(index: number): AnchorDraft };
+
+export type AnchorDraft = { anchor: CommentAnchor; target: DraftTarget; trail?: DraftTrail };
 
 export type SurfaceAdapter<Index, Selection> = {
   build(root: Element): Index | null;

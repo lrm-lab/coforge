@@ -4,7 +4,6 @@ import { useArtifactCommenting } from "./artifact-commenting";
 import { DraftAffordance } from "./artifact-draft-affordance";
 import type { PageBridge, PageSuggestHandler } from "./artifact-page-bridge";
 import { PageSuggestion } from "./artifact-page-suggestion";
-import { useRegisterFramePicker } from "./artifact-review-tools";
 import { useAnchorDraft } from "./use-anchor-draft";
 import { useFrameMarks } from "./use-frame-marks";
 import { useFrameOffer } from "./use-frame-offer";
@@ -25,7 +24,7 @@ export function ArtifactFrameCommentLayer({
   const { version, commenting } = useArtifactCommenting();
   const key = commenting ? `${path}@${version}` : null;
   const composingRef = useRef(false);
-  const { picking, togglePicking, ...offers } = useFrameOffer({
+  const offers = useFrameOffer({
     bridge,
     frame,
     key,
@@ -34,9 +33,6 @@ export function ArtifactFrameCommentLayer({
   useFrameMarks({ bridge, composing: composingRef, path });
   const draft = useAnchorDraft({ key, frame: container, ...offers });
   composingRef.current = draft.composing !== null;
-  useRegisterFramePicker(
-    commenting ? { picking, disabled: draft.composing !== null, toggle: togglePicking } : null,
-  );
   return (
     <>
       {commenting && <DraftAffordance draft={draft} path={path} />}

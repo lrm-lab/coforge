@@ -10,6 +10,8 @@ export const ELEMENT_LABEL_MAX = 120;
 export const TEXT_QUOTE_MAX = 4000;
 export const TEXT_CONTEXT_MAX = 64;
 export const MARK_LABEL_MAX = 300;
+export const TRAIL_ANCESTORS_MAX = 8;
+export const TRAIL_NAME_MAX = 40;
 
 export type FrameRect = {
   top: number;
@@ -30,9 +32,16 @@ export type PageMark = {
   draft?: true;
 };
 
-export type PickFailure = "unanchorable";
+export type FramePoint = { x: number; y: number };
 
-export type PickedAnchor = { anchor: CommentAnchor; rect: FrameRect };
+export type TrailStep = { name: string; anchor: CommentAnchor; rect: FrameRect };
+
+export type PickedAnchor = {
+  anchor: CommentAnchor;
+  rect: FrameRect;
+  point?: FramePoint;
+  trail?: TrailStep[];
+};
 
 const noNul = (value: string) => !value.includes("\u0000");
 const text = (min: number, max: number) => z.string().min(min).max(max).refine(noNul);
@@ -49,16 +58,29 @@ const rect = z
   })
   .strict();
 
+const point = z.object({ x: coordinate, y: coordinate }).strict();
+
+const elementData = z
+  .object({
+    selector: text(1, ELEMENT_SELECTOR_MAX),
+    quote: text(1, ELEMENT_LABEL_MAX).optional(),
+  })
+  .strict();
+
+const BIDI_CONTROLS = /[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/;
+const stepName = text(1, TRAIL_NAME_MAX).refine((value) => !BIDI_CONTROLS.test(value));
+
 const element = z
   .object({
     type: z.literal("element"),
-    data: z
-      .object({
-        selector: text(1, ELEMENT_SELECTOR_MAX),
-        quote: text(1, ELEMENT_LABEL_MAX).optional(),
-      })
-      .strict(),
+    data: elementData,
     rect,
+    name: stepName.optional(),
+    point: point.optional(),
+    path: z
+      .array(z.object({ name: stepName, data: elementData, rect }).strict())
+      .max(TRAIL_ANCESTORS_MAX)
+      .optional(),
   })
   .strict();
 
@@ -81,8 +103,24 @@ const picked = z.discriminatedUnion("type", [element, quotation]);
 export function parsePicked(value: unknown): PickedAnchor | null {
   const parsed = picked.safeParse(value);
   if (!parsed.success) return null;
-  const { rect: box, ...anchor } = parsed.data;
-  return { anchor: anchor as CommentAnchor, rect: box };
+  if (parsed.data.type === "text") {
+    const { rect: box, ...anchor } = parsed.data;
+    return { anchor: anchor as CommentAnchor, rect: box };
+  }
+  const { rect: box, name, point: at, path, ...anchor } = parsed.data;
+  const ancestors: TrailStep[] = (path ?? []).map((step) => ({
+    name: step.name,
+    anchor: { type: "element", data: step.data },
+    rect: step.rect,
+  }));
+  return {
+    anchor: anchor as CommentAnchor,
+    rect: box,
+    ...(at ? { point: at } : {}),
+    ...(name
+      ? { trail: [...ancestors, { name, anchor: anchor as CommentAnchor, rect: box }] }
+      : {}),
+  };
 }
 
 export function parseFoundIds(value: unknown, known: ReadonlySet<string>): string[] {

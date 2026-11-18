@@ -15,7 +15,7 @@ import {
 
 export function DraftAffordance({ draft, path }: { draft: AnchorDraftState; path: string }) {
   const { artifactId, version } = useArtifactCommenting();
-  const { offer, composing, compose, close } = draft;
+  const { offer, composing, opened, compose, close, retarget } = draft;
   return (
     <>
       {offer && (
@@ -34,10 +34,13 @@ export function DraftAffordance({ draft, path }: { draft: AnchorDraftState; path
       )}
       {composing && (
         <ArtifactCommentPopover
+          key={opened}
           artifactId={artifactId}
           version={version}
           path={path}
           anchor={composing.draft.anchor}
+          trail={composing.draft.trail}
+          onRetarget={retarget}
           top={clampWithin(composing.top, composing.bounds.height, POPOVER_HEIGHT_PX)}
           left={clampWithin(composing.left, composing.bounds.width, POPOVER_WIDTH_PX)}
           onClose={close}

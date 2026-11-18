@@ -340,7 +340,7 @@
   "av_cm_select_line": "Select line {line}",
   "av_cm_page_tools": "Page comment tools",
   "av_cm_pick_failed": "Can't comment on that element. Try another, or select its text.",
-  "av_cm_pick_element": "Pick an element",
+  "av_cm_element_path": "Element path",
   "av_cm_mark_label": [
     {
       "declarations": ["input count", "local countPlural = count: plural"],

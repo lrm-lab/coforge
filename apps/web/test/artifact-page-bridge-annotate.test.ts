@@ -60,7 +60,7 @@ const text = (quote = "beta on Friday") => ({
 });
 
 describe("the annotation channel", () => {
-  test("a pick is accepted once, only while the host has a pick open and a person acted", async () => {
+  test("a pick is accepted each time a person acts while the host keeps picking on", async () => {
     let active = true;
     const { bridge, events, tell } = setup({ userActive: () => active });
     await tell("annotate-selected", element());
@@ -82,10 +82,58 @@ describe("the annotation channel", () => {
     ]);
 
     await tell("annotate-selected", element("#second"));
-    expect(events).toHaveLength(1);
+    expect(events).toHaveLength(2);
+
+    bridge.annotations.configure({ picking: false, selecting: true, showMarks: true });
+    await tell("annotate-selected", element("#third"));
+    expect(events).toHaveLength(2);
   });
 
-  test("a text selection is accepted only in comment mode and never as an element", async () => {
+  test("a pick carries the click point and the element's ancestors, outermost first, ending at the element", async () => {
+    const { bridge, events, tell } = setup();
+    bridge.annotations.configure({ picking: true, selecting: true, showMarks: true });
+    const OUTER = { top: 0, right: 600, bottom: 300, left: 0, width: 600, height: 300 };
+    await tell("annotate-selected", {
+      ...element("#card > h2", "Launch plan"),
+      name: "h2",
+      point: { x: 60, y: 20 },
+      path: [
+        { name: "section.hero", data: { selector: "section.hero" }, rect: OUTER },
+        {
+          name: "div#card",
+          data: { selector: "#card", quote: "Launch plan Ship it" },
+          rect: OUTER,
+        },
+      ],
+    });
+    expect(events).toEqual([
+      {
+        kind: "selected",
+        anchor: { type: "element", data: { selector: "#card > h2", quote: "Launch plan" } },
+        rect: RECT,
+        point: { x: 60, y: 20 },
+        trail: [
+          {
+            name: "section.hero",
+            anchor: { type: "element", data: { selector: "section.hero" } },
+            rect: OUTER,
+          },
+          {
+            name: "div#card",
+            anchor: { type: "element", data: { selector: "#card", quote: "Launch plan Ship it" } },
+            rect: OUTER,
+          },
+          {
+            name: "h2",
+            anchor: { type: "element", data: { selector: "#card > h2", quote: "Launch plan" } },
+            rect: RECT,
+          },
+        ],
+      },
+    ]);
+  });
+
+  test("a text selection is accepted in comment mode, picking or not, and never as an element", async () => {
     const { bridge, events, tell } = setup();
     await tell("annotate-selected", text());
     expect(events).toEqual([]);
@@ -93,6 +141,7 @@ describe("the annotation channel", () => {
     bridge.annotations.configure({ picking: false, selecting: true, showMarks: true });
     await tell("annotate-selected", element());
     expect(events).toEqual([]);
+    bridge.annotations.configure({ picking: true, selecting: true, showMarks: true });
     await tell("annotate-selected", text());
     expect(events).toEqual([
       {
@@ -116,6 +165,25 @@ describe("the annotation channel", () => {
       { ...element(), data: { selector: "p", extra: 1 } },
       { ...element(), rect: { ...RECT, width: Number.NaN } },
       { ...element(), rect: { top: 1 } },
+      { ...element(), name: "x".repeat(41) },
+      { ...element(), name: "" },
+      { ...element(), name: "li\u202Etpircs" },
+      { ...element(), path: [{ name: "div\u2066x", data: { selector: "div" }, rect: RECT }] },
+      { ...element(), point: { x: Number.NaN, y: 0 } },
+      { ...element(), point: { x: 1, y: 2, z: 3 } },
+      {
+        ...element(),
+        path: Array.from({ length: 9 }, () => ({
+          name: "div",
+          data: { selector: "div" },
+          rect: RECT,
+        })),
+      },
+      { ...element(), path: [{ name: "div", data: { selector: "div", extra: 1 }, rect: RECT }] },
+      { ...element(), path: [{ name: "div", data: { selector: "x".repeat(1001) }, rect: RECT }] },
+      { ...element(), path: [{ data: { selector: "div" }, rect: RECT }] },
+      { ...text(), point: { x: 1, y: 2 } },
+      { ...text(), path: [] },
       { ...text("q".repeat(4001)) },
       { ...text(), data: { quote: "ok", prefix: "p".repeat(65) } },
       { ...text(), data: { quote: "" } },
@@ -136,16 +204,25 @@ describe("the annotation channel", () => {
     expect(events).toEqual([]);
   });
 
-  test("cancelling and clearing a selection report only when they can apply", async () => {
-    const { bridge, events, tell } = setup();
-    await tell("annotate-cancelled", {});
+  test("a click the page cannot anchor and a cleared selection report only when they can apply", async () => {
+    let active = true;
+    const { bridge, events, tell } = setup({ userActive: () => active });
+    await tell("annotate-unanchorable", {});
     await tell("annotate-unselected", {});
     expect(events).toEqual([]);
 
     bridge.annotations.configure({ picking: true, selecting: true, showMarks: true });
-    await tell("annotate-cancelled", {});
-    expect(events).toEqual([{ kind: "cancelled" }]);
+    await tell("annotate-unanchorable", {});
+    await tell("annotate-unanchorable", {});
+    expect(events).toEqual([{ kind: "unanchorable" }, { kind: "unanchorable" }]);
+    active = false;
+    await tell("annotate-unanchorable", {});
+    expect(events).toHaveLength(2);
+    active = true;
+    events.length = 1;
     bridge.annotations.configure({ picking: false, selecting: true, showMarks: true });
+    await tell("annotate-unanchorable", {});
+    expect(events).toHaveLength(1);
     await tell("annotate-unselected", {});
     expect(events.at(-1)).toEqual({ kind: "unselected" });
     bridge.annotations.configure({ picking: false, selecting: false, showMarks: false });
@@ -216,7 +293,7 @@ describe("the annotation channel", () => {
     expect(params.marks).toHaveLength(MARKS_MAX);
   });
 
-  test("the frame's handshake closes a pick, and its ready replays the mode, marks and draft", async () => {
+  test("the frame's handshake keeps picking on, and its ready replays the mode, marks and draft", async () => {
     const { bridge, events, tell, sent, posted, frameWindow } = setup();
     bridge.annotations.configure({ picking: true, selecting: true, showMarks: true });
     bridge.annotations.setMarks([
@@ -230,30 +307,19 @@ describe("the annotation channel", () => {
       origin: ORIGIN,
       data: { jsonrpc: "2.0", id: 1, method: "ui/initialize", params: {} },
     });
-    expect(events).toEqual([{ kind: "cancelled" }]);
+    expect(events).toEqual([]);
     await bridge.handle({
       source: frameWindow as unknown as MessageEventSource,
       origin: ORIGIN,
       data: { jsonrpc: "2.0", method: "ui/notifications/initialized" },
     });
     expect(sent("coforge/annotate/mode").map((message) => message.params)).toEqual([
-      { picking: false, selecting: true, showMarks: true },
+      { picking: true, selecting: true, showMarks: true },
     ]);
     expect(sent("coforge/annotate/marks")).toHaveLength(1);
     expect(sent("coforge/annotate/draft")).toHaveLength(1);
     await tell("annotate-selected", element());
     expect(events).toHaveLength(1);
-  });
-
-  test("a pick the page could not anchor reports why, and only that reason", async () => {
-    const { bridge, events, tell } = setup();
-    bridge.annotations.configure({ picking: true, selecting: true, showMarks: true });
-    await tell("annotate-cancelled", { reason: "unanchorable" });
-    expect(events).toEqual([{ kind: "cancelled", reason: "unanchorable" }]);
-    bridge.annotations.configure({ picking: false, selecting: true, showMarks: true });
-    bridge.annotations.configure({ picking: true, selecting: true, showMarks: true });
-    await tell("annotate-cancelled", { reason: "<script>" });
-    expect(events.at(-1)).toEqual({ kind: "cancelled" });
   });
 
   test("marks sent to the frame are clipped to the limits an incoming anchor obeys", () => {
@@ -289,7 +355,7 @@ describe("the annotation channel", () => {
 
   test("the handshake and its ready notice are rate limited, so a page cannot replay without end", async () => {
     let clock = 0;
-    const { bridge, tell, sent, posted, frameWindow } = setup({ now: () => clock });
+    const { bridge, sent, posted, frameWindow } = setup({ now: () => clock });
     bridge.annotations.setMarks([
       { id: "c1", anchor: { type: "element", data: { selector: "h1" } }, count: 1, label: "L" },
     ]);
@@ -316,7 +382,6 @@ describe("the annotation channel", () => {
     clock = 61_000;
     await initialized();
     expect(sent("coforge/annotate/marks").length).toBe(31);
-    await tell("annotate-cancelled", {});
   });
 
   test("focus and draft messages carry only what the host chose", () => {

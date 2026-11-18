@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CursorClick01, FlipBackward, FlipForward } from "@untitledui/icons";
+import { FlipBackward, FlipForward } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -7,33 +7,31 @@ import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
-import type { FramePicker } from "./artifact-review-tools";
 
-type PillView = { picker: FramePicker | null; drafts: ReturnType<typeof useCommentDrafts> };
+type Drafts = ReturnType<typeof useCommentDrafts>;
 
-export function ArtifactReviewPill({ picker }: { picker: FramePicker | null }) {
+export function ArtifactReviewPill() {
   const current = useCommentDrafts();
-  const live = picker !== null || current.drafts.length > 0 ? { picker, drafts: current } : null;
-  const [last, setLast] = useState<PillView | null>(live);
-  if (live && (last?.picker !== live.picker || last?.drafts !== live.drafts)) setLast(live);
-  const view = live ?? last;
-  if (!view) return null;
-  return <PillBar view={view} leaving={live === null} onLeft={() => setLast(null)} />;
+  const live = current.canUndo || current.canRedo || current.drafts.length > 0 ? current : null;
+  const [last, setLast] = useState<Drafts | null>(live);
+  if (live && last !== live) setLast(live);
+  const drafts = live ?? last;
+  if (!drafts) return null;
+  return <PillBar drafts={drafts} leaving={live === null} onLeft={() => setLast(null)} />;
 }
 
 function PillBar({
-  view: { picker, drafts },
+  drafts,
   leaving,
   onLeft,
 }: {
-  view: PillView;
+  drafts: Drafts;
   leaving: boolean;
   onLeft: () => void;
 }) {
   const actions = useCommentDraftActions();
   const [discarding, setDiscarding] = useState(false);
   const count = drafts.drafts.length;
-  const history = drafts.canUndo || drafts.canRedo || count > 0;
   const locked = drafts.busy;
   return (
     <>
@@ -52,42 +50,24 @@ function PillBar({
             : "animate-in fade-in slide-in-from-bottom-1 motion-enter-sm",
         )}
       >
-        {picker && (
-          <Button
-            size="sm"
-            color={picker.picking ? "primary" : "secondary"}
-            iconLeading={CursorClick01}
-            aria-pressed={picker.picking}
-            isDisabled={picker.disabled}
-            data-pick-element=""
-            onPress={picker.toggle}
-          >
-            {m.av_cm_pick_element()}
-          </Button>
-        )}
-        {picker && history && <Divider />}
-        {history && (
-          <>
-            <ButtonUtility
-              icon={FlipBackward}
-              size="sm"
-              color="tertiary"
-              tooltip={m.av_dr_undo()}
-              isDisabled={!drafts.canUndo || locked}
-              data-draft-undo=""
-              onClick={actions.undo}
-            />
-            <ButtonUtility
-              icon={FlipForward}
-              size="sm"
-              color="tertiary"
-              tooltip={m.av_dr_redo()}
-              isDisabled={!drafts.canRedo || locked}
-              data-draft-redo=""
-              onClick={actions.redo}
-            />
-          </>
-        )}
+        <ButtonUtility
+          icon={FlipBackward}
+          size="sm"
+          color="tertiary"
+          tooltip={m.av_dr_undo()}
+          isDisabled={!drafts.canUndo || locked}
+          data-draft-undo=""
+          onClick={actions.undo}
+        />
+        <ButtonUtility
+          icon={FlipForward}
+          size="sm"
+          color="tertiary"
+          tooltip={m.av_dr_redo()}
+          isDisabled={!drafts.canRedo || locked}
+          data-draft-redo=""
+          onClick={actions.redo}
+        />
         {count > 0 && (
           <>
             <Divider />

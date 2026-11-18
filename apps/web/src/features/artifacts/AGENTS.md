@@ -86,25 +86,38 @@ These rules apply to `src/features/artifacts/`. They extend
 - Comments on an HTML page go through the bridge's annotation channel
   (`artifact-page-bridge-annotate.ts`); the host never touches the page's DOM. Host to frame:
   `coforge/annotate/mode`, `marks`, `focus`, `draft`. Frame to host:
-  `coforge/notifications/annotate-selected|unselected|cancelled|found|activated` (and an
+  `coforge/notifications/annotate-selected|unselected|unanchorable|found|activated` (and an
   `annotate-mode` acknowledgement the host ignores). The host keeps a gate as a filter: an `element`
-  anchor is accepted once, only while a pick is open and the viewer is active; a `text` anchor only
-  in comment mode and not while picking; `found` and `activated` name only ids the host sent, for the
-  current marks revision; `ui/initialize` closes a pick and `ui/notifications/initialized` replays
-  mode, marks and draft (both rate limited; a replay sends anchors clipped to the incoming limits).
+  anchor is accepted while picking is on and the viewer is active, each time; a `text` anchor in
+  comment mode; `unanchorable` only while picking and the viewer is active; `found` and `activated` name only ids the host
+  sent, for the current marks revision; `ui/notifications/initialized` replays mode, marks and draft
+  (rate limited with `ui/initialize`; a replay sends anchors clipped to the incoming limits).
   Everything arriving is validated again (`parsePicked`) with the anchor limits (selector 1000,
-  label 120, quote 4000, context 64).
+  label 120, quote 4000, context 64). An element pick may carry its click point and its ancestors
+  (at most 8, each an element anchor with a name of at most 40 characters and no bidi controls);
+  they travel beside the
+  anchor, never in `anchor.data`, so stored anchors and `sameAnchor` keep their shape.
+- One gesture, no pick button: picking is on for the whole of comment mode. The runtime listens on
+  the window in the capture phase instead of covering the page: a click (moved at most 4px, with no
+  text selected) picks the element under it; the page's own handlers never see the pointer, mouse,
+  touch, click or context-menu events (their defaults still run, so text selects and fields focus);
+  a drag selects text; a click on a mark goes to the mark. A nested frame, video or other element that swallows pointer events
+  cannot be picked into.
 - The boundary is the person, not the gate. The page controls its frame, so the host cannot tell the
-  runtime's pick from one the page forges (the activation gate only filters: picking starts on with
-  comment mode, so a page can time a forgery right after the person turns comment mode on or presses
-  "pick element"). A page can therefore choose what it
-  reports as picked or selected. What holds: the composer always shows the anchor's label or quote
-  (an element anchor with no label shows its selector, truncated) before the person sends, nothing
-  is posted without the person sending, a page cannot start picking, read comments, or send one,
-  and what the frame is sent is only ids, anchors, counts and labels built from its own text.
-- Host state for a frame: `use-frame-offer.ts` (comment mode starts with picking on; the pill
-  toggles it; text selection is offered when picking is off; an element pick composes at once
-  through the offer's `autoCompose`; a pick the page cannot anchor ends with a message),
+  runtime's pick from one the page forges (the activation gate only filters: picking is on for all
+  of comment mode, so a page can time a forgery right after any click of the person). A page can
+  therefore choose what it reports as picked or selected. What holds: the composer always shows the
+  anchor's label or quote (an element anchor with no label shows its selector, truncated) and the
+  path's names as text before the person sends, nothing is posted without the person sending, a page
+  cannot start picking, read comments, or send one, and what the frame is sent is only ids, anchors,
+  counts and labels built from its own text.
+- Host state for a frame: `use-frame-offer.ts` (picking and text selection follow comment mode; an
+  element pick composes at once through the offer's `autoCompose`, at the click point; the newest
+  gesture replaces an open composer only when it holds nothing (`holds`, in `useAnchorDraft`): an
+  element pick reopens it focused, a text selection closes it and offers the quote, which keeps a
+  double-click on a word working; a pick the page
+  cannot anchor shows a message; the pick's ancestors become the draft's `trail`, whose steps
+  retarget the open composer without moving it, from a path step or ↑/↓ in an empty field),
   `use-frame-marks.ts` (marks, found keyed by the revision the bridge echoes, places through
   `publishPlaces`, reveal; `activated` is ignored while a composer is open) and
   `artifact-frame-comment-layer.tsx`. Reports are provisional until the runtime reports after the
@@ -117,7 +130,8 @@ These rules apply to `src/features/artifacts/`. They extend
   state context (`useCommentDrafts`) from a stable actions context (`useCommentDraftActions`). The
   composer saves a draft; once one exists, saving is its primary action, and its save and send
   buttons sit in the composer box beside the image button. The review pill
-  (`artifact-review-pill.tsx`) is the one floating tool bar: pick (HTML), undo and redo (a 60-step
+  (`artifact-review-pill.tsx`) is the one floating tool bar, shown while there is a draft or a step
+  to undo or redo: undo and redo (a 60-step
   reducer, `artifact-draft-history.ts`, replaying server operations; drafts with images are not
   recorded; a step the server refuses for good is dropped with its toast, a transient failure keeps
   it; a restored draft keeps its creation time), discard all, send N. Mod+Z, Shift+Mod+Z and Mod+Y

@@ -235,4 +235,5 @@ const forge = (tag) => {
   parent.postMessage({ jsonrpc: "2.0", method: "coforge/notifications/error", params: { message: "forged:" + tag } }, "*");
 };
 addEventListener("message", (event) => { if (event.data && typeof event.data.forge === "string") forge(event.data.forge); });
+document.querySelector("button").addEventListener("click", () => post({ pageClick: true }));
 </script></body></html>`;
