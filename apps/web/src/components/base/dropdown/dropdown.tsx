@@ -27,23 +27,14 @@ import { ToggleBase } from "#src/components/base/toggle/toggle";
 import { POPOVER_MOTION } from "#src/utils/popover-motion";
 
 interface DropdownItemProps extends AriaMenuItemProps {
-    /** The label of the item to be displayed. */
     label?: string;
-    /** An addon to be displayed on the right side of the item. */
     addon?: string;
-    /** A count after the addon (a filter's matching items), in tabular figures. */
     count?: number;
-    /** If true, the item will not have any styles. */
     unstyled?: boolean;
-    /** An icon to be displayed on the left side of the item. */
     icon?: FC<{ className?: string }>;
-    /** Avatar URL to be displayed on the left side of the item. */
     avatarUrl?: string;
-    /** A picture drawn on the left side of the item, where the icon goes (a person's face, a Project's image). */
     leading?: ReactNode;
-    /** The selection indicator to be displayed on the item. */
     selectionIndicator?: "checkmark" | "checkbox" | "radio" | "toggle" | "none";
-    /** The item's own `role="menuitem"` element (React 19 passes `ref` as a prop). */
     ref?: Ref<HTMLDivElement>;
 }
 
@@ -120,7 +111,6 @@ const DropdownItem = ({ label, children, addon, count, icon: Icon, avatarUrl, le
                         {label || (typeof children === "function" ? children(state) : children)}
                     </span>
 
-                    {/* A long addon (an Agent's generated @handle) gives way to the label past half the row. */}
                     {addon && <span className="ml-1 max-w-1/2 shrink-0 truncate pr-1 text-xs font-medium text-quaternary">{addon}</span>}
 
                     {count !== undefined && <span className="ml-1 shrink-0 pr-1 text-xs font-medium text-quaternary tabular-nums">{count}</span>}
@@ -139,9 +129,6 @@ interface DropdownMenuProps<T extends object> extends AriaMenuProps<T> {}
 const DropdownMenu = <T extends object>(props: DropdownMenuProps<T>) => {
     return (
         <AriaMenu
-            // Esc closes a menu, as in Slack and Linear. React Aria's default has a menu with
-            // picks (labels, a picker's choices) clear them all on Esc and keep the key, so the
-            // menu stayed open and the picks were lost.
             escapeKeyBehavior="none"
             {...props}
             className={(state) =>
@@ -171,14 +158,9 @@ const DropdownPopover = (props: DropdownPopoverProps) => {
     );
 };
 
-/**
- * A submenu's popover: beside its item where the viewport is wide enough for two menus side by side
- * wherever the first one opens (md), and below the item on a narrower one, where neither side of a
- * menu may have room for a second and React Aria, unable to flip it, would leave it hanging off
- * screen. Below, it abuts its item, so a pointer moving down into it crosses no other item of the
- * menu (which would take focus and close it), the cross axis keeps it inside the viewport, and it
- * is never wider than the viewport.
- */
+const SUBMENU_OVERLAP_PX = 8;
+const SUBMENU_FIRST_ROW_ALIGN_PX = 4;
+
 const DropdownSubmenuPopover = ({
     className,
     ...props
@@ -188,7 +170,8 @@ const DropdownSubmenuPopover = ({
         <DropdownPopover
             {...props}
             placement={wide ? "end top" : "bottom start"}
-            offset={wide ? undefined : 0}
+            offset={wide ? -SUBMENU_OVERLAP_PX : 0}
+            crossOffset={wide ? -SUBMENU_FIRST_ROW_ALIGN_PX : 0}
             className={cx("max-w-[calc(100vw-1.5rem)]", className)}
         />
     );
