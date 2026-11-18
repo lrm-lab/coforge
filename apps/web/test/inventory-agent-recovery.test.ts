@@ -67,6 +67,8 @@ test("a stopped, deleted or migrating Agent has its failure cleared but is not s
   ]);
   await recoverAgentsAfterInventory(f.ports, [], [runtime("droid")]);
   expect(f.started).toEqual([]);
+  for (const id of ["stopped", "deleted", "moving"])
+    expect(f.byId.get(id)?.errorCode).toBeUndefined();
 });
 
 test("an Agent refused for an old runtime starts once the Computer reports the runtime usable", async () => {
@@ -110,8 +112,16 @@ test("a runtime that stays usable while launches keep failing starts the Agent o
   expect(f.byId.get("a")?.errorCode).toBe("runtime_version_too_old");
 });
 
-test("an Agent whose runtime was already usable before this report is left for a person to start", async () => {
-  const f = fleet([{ id: "a", provider: "droid", errorCode: "runtime_not_installed" }]);
+test("an Agent refused for an old runtime that was already usable before this report is left for a person to start", async () => {
+  const f = fleet([{ id: "a", provider: "droid", errorCode: "runtime_version_too_old" }]);
   await recoverAgentsAfterInventory(f.ports, [runtime("droid")], [runtime("droid")]);
   expect(f.started).toEqual([]);
+  expect(f.byId.get("a")?.errorCode).toBe("runtime_version_too_old");
+});
+
+test("an Agent that failed as not installed starts on the next report even if the runtime was already listed usable", async () => {
+  const f = fleet([{ id: "a", provider: "droid", errorCode: "runtime_not_installed" }]);
+  await recoverAgentsAfterInventory(f.ports, [runtime("droid")], [runtime("droid")]);
+  expect(f.started).toEqual(["a"]);
+  expect(f.byId.get("a")?.errorCode).toBeUndefined();
 });

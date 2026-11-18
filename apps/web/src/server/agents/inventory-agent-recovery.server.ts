@@ -15,7 +15,10 @@ export type InventoryAgentRecoveryPorts<Agent extends RecoverableAgent> = {
   start(agent: Agent): Promise<void>;
 };
 
-const RECOVERABLE_LAUNCH_FAILURES = ["runtime_not_installed", "runtime_version_too_old"] as const;
+const RECOVERABLE_LAUNCH_FAILURES = [
+  { errorCode: "runtime_not_installed", onlyWhenNewlyUsable: false },
+  { errorCode: "runtime_version_too_old", onlyWhenNewlyUsable: true },
+] as const;
 
 type ReportedRuntime = { provider: RuntimeProvider; unavailableCode?: string | null };
 
@@ -31,8 +34,8 @@ export async function recoverAgentsAfterInventory<Agent extends RecoverableAgent
 ): Promise<void> {
   const wasUsable = usable(before);
   for (const provider of usable(runtimes)) {
-    if (wasUsable.has(provider)) continue;
-    for (const errorCode of RECOVERABLE_LAUNCH_FAILURES) {
+    for (const { errorCode, onlyWhenNewlyUsable } of RECOVERABLE_LAUNCH_FAILURES) {
+      if (onlyWhenNewlyUsable && wasUsable.has(provider)) continue;
       for (const agentId of await ports.failedAgentIds(provider, errorCode)) {
         if (!(await ports.clearLaunchFailure(agentId, errorCode))) continue;
         const agent = await ports.agent(agentId);
