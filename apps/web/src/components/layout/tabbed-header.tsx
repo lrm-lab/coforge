@@ -13,16 +13,23 @@ export function TabbedHeader({
   actions,
   tabs,
   tabsStart,
+  soft,
   className = "px-4 md:px-6",
 }: {
   identity: ReactNode;
   actions?: ReactNode;
   tabs?: ReactNode;
   tabsStart?: boolean;
+  soft?: boolean;
   className?: string;
 }) {
   return (
-    <PaneHeader bar={tabs || null} barAlign={tabsStart ? "center" : "rule"} className={className}>
+    <PaneHeader
+      bar={tabs || null}
+      barAlign={tabsStart ? "center" : "rule"}
+      className={className}
+      soft={soft}
+    >
       <div className="flex min-w-0 flex-1 items-center gap-2 md:gap-3">{identity}</div>
       {actions && <div className="flex shrink-0 items-center">{actions}</div>}
     </PaneHeader>

@@ -44,6 +44,7 @@ export function ConversationTaskTabs({
       onSelect={(tab) => handlers[tab]?.()}
       onReorder={reorder}
       size="sm"
+      quiet
     />
   );
 }

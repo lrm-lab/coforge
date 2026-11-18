@@ -55,6 +55,7 @@ export function ReorderableTabStrip<T extends string>({
   onSelect,
   onReorder,
   size = "sm",
+  quiet = false,
   className,
   scrollRef,
   "aria-label": ariaLabel,
@@ -66,6 +67,8 @@ export function ReorderableTabStrip<T extends string>({
   onSelect: (tab: T) => void;
   onReorder: (order: T[]) => void;
   size?: "sm" | "md";
+  /** No underline or rule: unselected tabs sit at 60% opacity, the selected one at full. */
+  quiet?: boolean;
   className?: string;
   /** The caller's element that scrolls the strip sideways when its tabs do not fit; the selected
    * tab is kept in view inside it (`useActiveTabInView`). */
@@ -190,13 +193,19 @@ export function ReorderableTabStrip<T extends string>({
         {/* Layout-free: it only sees the tabs' keys first. */}
         <div className="contents" onKeyDownCapture={keyDown}>
           <Tabs ref={tabsRef} selectedKey={active} className={cx("w-max shrink-0", className)}>
-            <TabList type="underline" size={size} aria-label={ariaLabel}>
+            <TabList
+              type="underline"
+              size={size}
+              aria-label={ariaLabel}
+              className={quiet ? "before:hidden" : undefined}
+            >
               {shown.map((tab) => (
                 <SortableTab
                   key={tab}
                   id={tab}
                   meta={meta[tab]}
                   moving={moving?.tab === tab}
+                  quiet={quiet}
                   describedBy={instructions}
                   setElement={setElement}
                   onPressStart={() => (dragged.current = false)}
@@ -230,6 +239,7 @@ function SortableTab({
   id,
   meta,
   moving,
+  quiet,
   describedBy,
   setElement,
   onPressStart,
@@ -239,6 +249,7 @@ function SortableTab({
   meta: ReorderableTabMeta;
   /** Picked up from the keyboard. */
   moving: boolean;
+  quiet: boolean;
   describedBy: string;
   setElement: (id: string, node: HTMLElement | null) => void;
   onPressStart: () => void;
@@ -268,7 +279,10 @@ function SortableTab({
       onPress={onPress}
       data-dragging={isDragging || undefined}
       data-moving={moving || undefined}
-      className="shrink-0 select-none [-webkit-touch-callout:none] data-dragging:z-20 data-dragging:transition-none data-moving:rounded-md data-moving:bg-primary_hover"
+      className={cx(
+        "shrink-0 select-none [-webkit-touch-callout:none] data-dragging:z-20 data-dragging:transition-none data-moving:rounded-md data-moving:bg-primary_hover",
+        quiet && "border-transparent opacity-60 hover:opacity-100 aria-selected:opacity-100",
+      )}
       style={{
         transform: transform ? `translate3d(${transform.x}px, 0, 0)` : undefined,
         transition,

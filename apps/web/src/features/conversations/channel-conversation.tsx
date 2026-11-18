@@ -91,6 +91,7 @@ export function ChannelConversationHeader({
   return (
     <>
       <TabbedHeader
+        soft
         identity={
           <>
             <ConversationListButton />
