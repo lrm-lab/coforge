@@ -184,6 +184,26 @@ html[data-drag-cursor] [data-drop-blocked] * {
   cursor: not-allowed !important;
 }
 
+[data-ripple-key] {
+  cursor: pointer;
+}
+
+@keyframes drag-ripple-lift {
+  from {
+    transform: none;
+  }
+}
+@keyframes drag-ripple-grow-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+@keyframes drag-ripple-grow-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+
 @import "./styles/coforge-theme.css";
 
 @layer utilities {

@@ -5,16 +5,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 
-/**
- * Task #233: the Agent panel's tabs are reordered with the mouse and with the keyboard (Space picks
- * the focused tab up, the arrow keys move it, Space drops it, Escape puts it back), each step is
- * announced, and the order is saved for the member: after a reload the panel shows it and opens on
- * its first tab.
- *
- * Opt-in like the other browser E2Es: real local Web (`COFORGE_DEV_SKIP_AUTH=1`) + `agent-browser`
- * against the dev database, with an Agent in the dev user's Workspace. It puts back the member's
- * saved order. Screenshots are written under `.artifacts/e2e/agent-tab-reorder/`.
- */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
   throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
@@ -55,7 +45,6 @@ test("the Agent panel's tabs reorder by mouse and keyboard, and the order is kep
       "--fn",
       `JSON.stringify([...document.querySelectorAll('${TAB}')].map((tab) => tab.textContent.trim())) === ${JSON.stringify(JSON.stringify(order))}`,
     );
-  /** Waits for the strip's live region to say `text`. */
   const announced = (text: string) =>
     browser(
       "wait",
@@ -101,7 +90,6 @@ test("the Agent panel's tabs reorder by mouse and keyboard, and the order is kep
     await browser("wait", "--fn", `document.querySelectorAll('${TAB}').length > 2`);
     const start = await tabs();
 
-    // The mouse: the first tab dragged onto the third.
     const [fromX, y] = await centre(0);
     const [toX] = await centre(2);
     await browser("mouse", "move", String(fromX), String(y));
@@ -118,7 +106,15 @@ test("the Agent panel's tabs reorder by mouse and keyboard, and the order is kep
     await waitForTabs(dragged);
     await waitForSaved(dragged);
 
-    // The keyboard: Space picks the focused tab up, an arrow moves it, Escape puts it back.
+    const [awayX, awayY] = await centre(0);
+    await browser("mouse", "move", String(awayX), String(awayY));
+    await browser("mouse", "down");
+    for (let step = 1; step <= 6; step += 1)
+      await browser("mouse", "move", String(awayX + 40 * step), String(awayY + 40 * step));
+    await browser("mouse", "up");
+    await browser("wait", "--fn", `!document.documentElement.hasAttribute("data-drag-cursor")`);
+    expect(await tabs()).toEqual(dragged);
+
     await browser("focus", `${TAB}:nth-child(1)`);
     await browser("press", "Space");
     await announced(`Picked up ${dragged[0]}, position 1 of ${dragged.length}.`);
@@ -129,7 +125,6 @@ test("the Agent panel's tabs reorder by mouse and keyboard, and the order is kep
     await waitForTabs(dragged);
     await announced(`Cancelled. ${dragged[0]} is back at position 1 of ${dragged.length}.`);
 
-    // Space, End and Space move it to the end and keep it there; focus stays on it.
     await browser("press", "Space");
     await browser("press", "End");
     await browser("press", "Space");
@@ -139,7 +134,6 @@ test("the Agent panel's tabs reorder by mouse and keyboard, and the order is kep
     expect(await evaluate<string>(`document.activeElement.textContent.trim()`)).toBe(dragged[0]);
     await waitForSaved(keyed);
 
-    // A reload shows the order, open on its first tab.
     await browser(
       "open",
       `${origin}/en/w/${membership.workspace.slug}/members?profile=agent:${agent.id}`,
@@ -153,7 +147,6 @@ test("the Agent panel's tabs reorder by mouse and keyboard, and the order is kep
     );
     await browser("screenshot", join(artifacts, "reloaded.png"));
   } finally {
-    // The member's preferences as they were: their row back, or none if they had none.
     await (
       saved
         ? db.workspaceMemberPreference.update({

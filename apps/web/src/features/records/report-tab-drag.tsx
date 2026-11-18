@@ -1,84 +1,109 @@
-import { useCallback, useId, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useId, useRef, useState, type ReactNode } from "react";
 import {
   DndContext,
-  DragOverlay,
+  KeyboardSensor,
   MouseSensor,
   TouchSensor,
-  pointerWithin,
   useDraggable,
-  useDroppable,
   useSensor,
   useSensors,
   type Announcements,
+  type DragMoveEvent,
 } from "@dnd-kit/core";
-import { DROP_SETTLE } from "#src/lib/drop-animation";
 
+import {
+  DragRippleLine,
+  DragRippleOverlay,
+  rippleItemProps,
+  rippleListProps,
+  useDragRipple,
+  type DragRipple,
+} from "#src/components/ui/drag-ripple/drag-ripple";
 import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
-/** Screen-reader announcements for a tab drag; a tab's id is its name. */
 const TAB_DRAG_ANNOUNCEMENTS: Announcements = {
   onDragStart: ({ active }) => m.chat_drag_start({ name: String(active.id) }),
   onDragOver: ({ over }) => (over ? m.chat_drag_over({ name: String(over.id) }) : undefined),
-  onDragEnd: ({ over }) => (over ? m.chat_drag_end() : m.chat_drag_cancel()),
+  onDragEnd: () => m.chat_drag_end(),
   onDragCancel: () => m.chat_drag_cancel(),
 };
 
-/**
- * Drag-to-reorder for a report's page tabs ([dnd-kit](https://docs.dndkit.com)): a tab dropped on
- * another tab moves in front of it. The tab stays in place, dimmed, while an overlay follows the
- * pointer. A mouse drag starts after 6px of movement so a click still selects and a double click
- * still renames; a touch drag starts after a 250ms press so a swipe still scrolls the strip
- * ([sensors](https://docs.dndkit.com/api-documentation/sensors)), as in `ReorderableTabStrip`.
- */
+const TABS = "tabs";
+const RippleContext = createContext<DragRipple | null>(null);
+
 export function ReportTabDrag({
+  order,
   onMove,
+  className,
   children,
 }: {
-  onMove: (source: string, target: string) => void;
+  order: readonly string[];
+  onMove: (source: string, index: number) => void;
+  className?: string;
   children: ReactNode;
 }) {
   const [active, setActive] = useState<string | null>(null);
   useDocumentDragCursor(active !== null);
   const dndId = useId();
+  const ripple = useDragRipple({ axis: "x", amplitude: 8, signature: order.join("\n") });
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: ripple.keyboardCoordinates,
+      keyboardCodes: { start: ["Space"], end: ["Space", "Enter"], cancel: ["Escape"] },
+    }),
   );
+  const follow = ({ active: tab }: DragMoveEvent) =>
+    ripple.move(tab.rect.current.translated, [TABS]);
   return (
     <DndContext
       id={dndId}
       sensors={sensors}
-      collisionDetection={pointerWithin}
       accessibility={{ announcements: TAB_DRAG_ANNOUNCEMENTS }}
-      onDragStart={({ active: tab }) => setActive(String(tab.id))}
-      onDragCancel={() => setActive(null)}
-      onDragEnd={({ active: tab, over }) => {
+      onDragStart={({ active: tab }) => {
+        setActive(String(tab.id));
+        ripple.begin(TABS, String(tab.id));
+      }}
+      onDragMove={follow}
+      onDragCancel={() => {
+        ripple.end(false);
         setActive(null);
-        if (over) onMove(String(tab.id), String(over.id));
+      }}
+      onDragEnd={({ active: tab }) => {
+        const placed = ripple.end(true);
+        setActive(null);
+        if (placed) onMove(String(tab.id), placed.gap);
       }}
     >
-      {children}
-      <DragOverlay dropAnimation={DROP_SETTLE} className="pointer-events-none">
+      <RippleContext.Provider value={ripple}>
+        <div
+          {...rippleListProps(ripple, TABS)}
+          className={cn("relative flex shrink-0 items-center", className)}
+        >
+          {children}
+          <DragRippleLine ripple={ripple} list={TABS} className="text-primary" />
+        </div>
+      </RippleContext.Provider>
+      <DragRippleOverlay ripple={ripple}>
         {active ? (
           <div
             aria-hidden="true"
+            style={ripple.liftStyle}
             className="w-max rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary shadow-lg ring-1 ring-secondary"
           >
             {active}
           </div>
         ) : null}
-      </DragOverlay>
+      </DragRippleOverlay>
     </DndContext>
   );
 }
 
-/** What a draggable tab's own button needs: `pressStart` for its `onPressStart`, and `dragged()`,
- * true when the press now ending finished a drag of this tab. */
 export type ReportTabPress = { pressStart: () => void; dragged: () => boolean };
 
-/** One tab with its delete button: the drag source and the drop target for the tab `name`. */
 export function ReportTabDragItem({
   name,
   disabled,
@@ -90,18 +115,8 @@ export function ReportTabDragItem({
   className?: string;
   children: (press: ReportTabPress) => ReactNode;
 }) {
-  const { setNodeRef: setDragNode, listeners, isDragging } = useDraggable({ id: name, disabled });
-  const { setNodeRef: setDropNode } = useDroppable({ id: name });
-  const ref = useCallback(
-    (node: HTMLDivElement | null) => {
-      setDragNode(node);
-      setDropNode(node);
-    },
-    [setDragNode, setDropNode],
-  );
-  // Releasing a drag on its own tab is also a press on it (or a click on its delete button); that
-  // press is swallowed so a drop only reorders. The next press clears the flag: the tab's own
-  // `onPressStart` (keyboard and screen-reader presses too), or any mouse or touch press here.
+  const ripple = useContext(RippleContext);
+  const { setNodeRef, listeners, isDragging } = useDraggable({ id: name, disabled });
   const dragged = useRef(false);
   if (isDragging) dragged.current = true;
   const pressStart = () => {
@@ -109,9 +124,8 @@ export function ReportTabDragItem({
   };
   return (
     <div
-      ref={ref}
-      // The tab handles its own press events and stops them from bubbling, so the sensors listen
-      // in the capture phase instead.
+      ref={setNodeRef}
+      {...(ripple ? rippleItemProps(ripple, TABS, name) : undefined)}
       onMouseDownCapture={(event) => {
         pressStart();
         listeners?.onMouseDown?.(event);
@@ -120,17 +134,19 @@ export function ReportTabDragItem({
         pressStart();
         listeners?.onTouchStart?.(event);
       }}
+      onKeyDownCapture={(event) => {
+        if (!(event.target instanceof HTMLElement) || !event.target.matches("[data-report-tab]"))
+          return;
+        listeners?.onKeyDown?.(event);
+        if (event.defaultPrevented) event.stopPropagation();
+      }}
       onClickCapture={(event) => {
         if (!dragged.current || event.detail === 0) return;
         dragged.current = false;
         event.preventDefault();
         event.stopPropagation();
       }}
-      className={cn(
-        "select-none [-webkit-touch-callout:none]",
-        className,
-        isDragging && "opacity-50",
-      )}
+      className={cn("select-none [-webkit-touch-callout:none]", className)}
     >
       {children({ pressStart, dragged: () => dragged.current })}
     </div>

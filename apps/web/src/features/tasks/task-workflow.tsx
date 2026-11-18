@@ -19,15 +19,17 @@ import {
   useSensors,
   type CollisionDetection,
   type DragEndEvent,
+  type DropAnimationFunction,
 } from "@dnd-kit/core";
-import { DROP_SETTLE } from "#src/lib/drop-animation";
 import { useHydrated } from "@tanstack/react-router";
 import { DotsGrid as GripVertical } from "@untitledui/icons";
 import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { flyOverlay, liftFor } from "#src/components/ui/drag-ripple/drag-ripple";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { DropState } from "./task-drop-target";
@@ -36,8 +38,6 @@ import { getTaskMoveCommand } from "./task-move";
 
 export type TaskLayout = "board" | "list";
 export type TaskMoveCommand = NonNullable<ReturnType<typeof getTaskMoveCommand>>;
-/** The drag handle and the "Move to" choices a card's menu offers; both carry every move the
- * server allows, while the popup's status menu keeps to `STATUS_TRANSITIONS`. */
 export type TaskControls = {
   handle: ReactNode;
   moves: { status: TaskWriteStatus; onMove: () => void }[];
@@ -46,7 +46,6 @@ export type TaskControls = {
 export type { PagedTaskGroup };
 
 export function useTaskLayout(layout: TaskLayout | undefined): TaskLayout {
-  // Keep SSR and initial hydration identical (board); the viewport default applies once hydrated.
   const hydrated = useHydrated();
   const desktop = useBreakpoint("md");
   return layout ?? (!hydrated || desktop ? "board" : "list");
@@ -74,35 +73,38 @@ export function TaskWorkflow<T extends TaskView>({
   layout: TaskLayout;
   statuses?: readonly TaskStatus[];
   paged?: Partial<Record<TaskStatus, PagedTaskGroup>>;
-  /** Board columns the viewer hid: listed last, still drop targets; the list shows them all. */
   hidden?: ReadonlySet<TaskStatus>;
-  /** Hides or shows a board column; given, each column's menu offers "Hide column". */
   onHiddenChange?: (status: TaskStatus, hidden: boolean) => void;
   currentMemberId: (task: T) => string | null;
-  /** The viewer sets any Task status (a Workspace owner or admin), so the board offers every
-   * move the server accepts, not only the ordinary transitions. */
   canSetAnyStatus?: boolean;
   disabled?: boolean;
-  /** Disabled only until the commands arrive: the handles stand in place, inert (`TaskBoard`). */
   commandsPending?: boolean;
   onMove: (task: T, command: TaskMoveCommand) => Promise<void>;
   renderTask: (task: T, controls: TaskControls) => ReactNode;
-  /** False where the page already says a refused command failed (a conversation's board), so a
-   * refused move is not said twice. */
   showMoveError: boolean;
-  /** Starts a new Task in a board column: the statuses that take one, and what opens the form. */
   adding?: { statuses: readonly TaskWriteStatus[]; onAdd: (status: TaskWriteStatus) => void };
 }) {
   const id = useId();
   const [active, setActive] = useState<T>();
+  const [landing, setLanding] = useState<string>();
+  const reduced = usePrefersReducedMotion();
   useDocumentDragCursor(active !== undefined);
+  const dropAnimation: DropAnimationFunction = async ({
+    active: card,
+    dragOverlay,
+    transform,
+    draggableNodes,
+  }) => {
+    await new Promise(requestAnimationFrame);
+    const rect = draggableNodes.get(card.id)?.node.current?.getBoundingClientRect();
+    if (rect) await flyOverlay(dragOverlay, transform, { x: rect.left, y: rect.top });
+    setLanding(undefined);
+  };
   const [pending, setPending] = useState<{
     id: string;
     revision: number;
     status: TaskWriteStatus;
   }>();
-  // Columns the viewer ordered by priority, a view of the loaded cards only: the default order
-  // is the server's and returns when it is switched off.
   const [byPriority, setByPriority] = useState<ReadonlySet<TaskStatus>>(new Set());
   const saving = useRef(false);
   const [error, setError] = useState(false);
@@ -110,7 +112,6 @@ export function TaskWorkflow<T extends TaskView>({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor),
   );
-  // Drag-over re-renders the board constantly; only regroup when the inputs change.
   const groups = useMemo(() => {
     const displayedTasks = tasks.map((task) =>
       pending?.id === task.id && pending.revision === task.revision
@@ -125,13 +126,9 @@ export function TaskWorkflow<T extends TaskView>({
   const ordered = (group: (typeof groups)[number]) =>
     byPriority.has(group.status) ? [...group.tasks].sort(compareTaskOrder) : group.tasks;
 
-  // Hiding applies to a board of several columns; a single-status view shows its column.
   const hides = layout === "board" && groups.length > 1 && hidden !== undefined;
   const shownGroups = hides ? groups.filter((group) => !hidden.has(group.status)) : groups;
   const hiddenGroups = hides ? groups.filter((group) => hidden.has(group.status)) : [];
-  // While a card is carried, a column it can go to takes the drop and lights up; one it cannot
-  // says so before the drop (its contents fade, the pointer over it reads "not allowed",
-  // `dropTargetClass`). Its own column stays idle.
   const dropState = (status: TaskStatus): DropState => {
     if (!active || status === active.status) return "idle";
     if (!isTaskWriteStatus(status)) return "blocked";
@@ -166,7 +163,10 @@ export function TaskWorkflow<T extends TaskView>({
       sensors={sensors}
       collisionDetection={dropTarget}
       onDragStart={({ active: item }) => setActive(tasks.find((task) => task.id === item.id))}
-      onDragCancel={() => setActive(undefined)}
+      onDragCancel={() => {
+        if (!reduced) setLanding(active?.id);
+        setActive(undefined);
+      }}
       onDragEnd={(event) => void dropped(event)}
     >
       {error && showMoveError && (
@@ -211,7 +211,12 @@ export function TaskWorkflow<T extends TaskView>({
                 {ordered(group)
                   .slice(0, shown)
                   .map((task) => (
-                    <div key={task.id} data-task-drag-node aria-busy={pending?.id === task.id}>
+                    <div
+                      key={task.id}
+                      data-task-drag-node
+                      aria-busy={pending?.id === task.id}
+                      className={cn(landing === task.id && "opacity-0")}
+                    >
                       {renderTask(task, controls(task))}
                     </div>
                   ))}
@@ -239,16 +244,13 @@ export function TaskWorkflow<T extends TaskView>({
           </aside>
         )}
       </div>
-      {/* The overlay takes the dragged card's own box: a board card's, or a list row's, so it
-          stays under the pointer either way. dnd-kit leaves it hit-testable; it takes no pointer
-          events, so the pointer reads the column beneath it: "not allowed" over one it cannot go
-          to. */}
-      <DragOverlay dropAnimation={DROP_SETTLE} className="pointer-events-none">
+      <DragOverlay dropAnimation={reduced ? null : dropAnimation} className="pointer-events-none">
         {active ? (
           <div
+            style={reduced ? undefined : liftFor("y")}
             className={cn(
               "size-full overflow-hidden rounded-lg border border-secondary bg-primary shadow-lg",
-              layout === "list" ? "flex items-center gap-2 px-3" : "rotate-2 p-3",
+              layout === "list" ? "flex items-center gap-2 px-3" : "p-3",
             )}
           >
             <span className="text-xs font-medium text-tertiary tabular-nums">#{active.number}</span>
@@ -284,6 +286,7 @@ export function TaskWorkflow<T extends TaskView>({
   }
   async function dropped(event: DragEndEvent) {
     const task = active;
+    if (!reduced) setLanding(task?.id);
     setActive(undefined);
     if (!task || !event.over) return;
     const status = parseTaskStatus(String(event.over.id));
@@ -291,14 +294,9 @@ export function TaskWorkflow<T extends TaskView>({
   }
 }
 
-/** A pointer drag drops where the pointer is, not where the dragged card overlaps most; a
- * keyboard drag, which has no pointer, keeps dnd-kit's default and goes by overlap. */
 const dropTarget: CollisionDetection = (args) =>
   args.pointerCoordinates ? pointerWithin(args) : rectIntersection(args);
 
-/** The grip that picks a card up. The card around it is what is dragged, so its overlay starts
- * where the card stood; the grip registers it rather than the card registering itself, so a drag
- * moving between columns re-renders the grips, not each card's whole content. */
 function DragHandle({ task, disabled }: { task: TaskView; disabled: boolean }) {
   const { setNodeRef, setActivatorNodeRef, listeners, attributes } = useDraggable({
     id: task.id,
@@ -326,7 +324,6 @@ function DragHandle({ task, disabled }: { task: TaskView; disabled: boolean }) {
   );
 }
 
-// The status colours and labels live with the icon; the popup and timeline read them from here too.
 export { TASK_STATUS_COLOR, statusLabel, taskStatusColor } from "./task-status-icon";
 
 function parseTaskStatus(value: string | null): TaskWriteStatus | undefined {

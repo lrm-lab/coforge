@@ -53,16 +53,13 @@ export function ReportTabsEditor({
   editable?: boolean;
   editableTabs?: boolean;
   placeholder: string;
-  /** Bump to remount the active section editor (e.g. assistant insert). */
   contentRevision?: number;
-  /** Special tabs appended after content.tabs (e.g. Leader 要点提炼). */
   trailingTabs?: readonly { id: string; label: string }[];
   renderTrailingTab?: (id: string) => ReactNode;
   onChange: (content: ReportContent) => void;
   onActiveTabChange?: (name: string) => void;
   onBlur?: () => void;
   onUploadFile?: (file: File) => Promise<UploadResult | null>;
-  /** Wheel at the body edge turns pages, then the next person of this template. */
   readingTurn?: {
     reportId: string;
     previousReportId: string | null;
@@ -267,14 +264,12 @@ export function ReportTabsEditor({
     if (event.key === "Escape") setEditingTab(null);
   }
 
-  function moveTab(source: string, target: string) {
-    if (source === target) return;
+  function moveTab(source: string, index: number) {
     const entries = Object.entries(pages);
     const sourceEntry = entries.find(([name]) => name === source);
     if (!sourceEntry) return;
     const remaining = entries.filter(([name]) => name !== source);
-    const targetIndex = remaining.findIndex(([name]) => name === target);
-    remaining.splice(targetIndex, 0, sourceEntry);
+    remaining.splice(index, 0, sourceEntry);
     onChange({ tabs: Object.fromEntries(remaining) });
   }
 
@@ -312,21 +307,17 @@ export function ReportTabsEditor({
           active
             ? "bg-primary font-medium text-primary shadow-xs ring-1 ring-secondary"
             : "bg-primary text-tertiary ring-1 ring-transparent hover:text-secondary",
-          // A tab is not a link: no underline on hover (jing, task #106).
           "hover:*:data-text:decoration-transparent",
         )
       : cn(
           "rounded-none px-1 pb-2.5 pt-1 text-sm hover:*:data-text:decoration-transparent",
           active
             ? "border-b-2 border-brand-solid font-semibold text-primary"
-            : // At rest lighter than the open tab, in bold on hover (jing, task #106); `TabLabel`
-              // keeps the width.
-              "border-b-2 border-transparent font-medium text-tertiary hover:text-secondary hover:*:data-text:font-semibold",
+            : "border-b-2 border-transparent font-medium text-tertiary hover:text-secondary hover:*:data-text:font-semibold",
         );
 
   const chevronClass = cn("size-6 shrink-0 p-1 text-fg-quaternary", editableTabs ? "" : "mb-2");
 
-  /** A page tab and, on an editable report, its delete button; `press` wires a draggable tab. */
   const renderTab = (name: string, press?: ReportTabPress) => (
     <>
       {editingTab === name ? (
@@ -394,13 +385,12 @@ export function ReportTabsEditor({
         aria-label={m.records_template_dimension()}
         onScroll={updateTabOverflow}
         className={cn(
-          // Overflow is driven by chevrons only — never show a native scrollbar under the tabs.
           "scrollbar-hide flex min-w-0 flex-1 items-center overflow-x-auto overscroll-x-contain pt-0",
           readingTabs ? "gap-8 sm:gap-10" : "gap-2",
         )}
       >
         {editableTabs ? (
-          <ReportTabDrag onMove={moveTab}>
+          <ReportTabDrag order={tabNames} onMove={moveTab} className="gap-2">
             {tabNames.map((name) => (
               <ReportTabDragItem
                 key={name}
@@ -549,8 +539,6 @@ export function ReportTabsEditor({
   );
 }
 
-/** A tab's name, as wide as its bold form whatever its weight, so a tab set in bold on hover
- * does not push its neighbours along. */
 function TabLabel({ name }: { name: string }) {
   return (
     <span className="inline-grid">
