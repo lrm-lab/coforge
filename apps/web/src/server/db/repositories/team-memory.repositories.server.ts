@@ -2,6 +2,7 @@ import {
   beginTeamMemoryMaintenance,
   suggestTeamMemoryMaintenance,
   consumeTeamMemoryMaintenance,
+  replayTeamMemoryMaintenanceHint,
 } from "./team-memory-maintenance.repositories.server";
 import { teamMemoryCatalog } from "./team-memory-projects.repositories.server";
 import { memoryReceipts } from "./team-memory-receipts.repositories.server";
@@ -12,6 +13,7 @@ import {
   searchText,
   escapeLike,
   fingerprint,
+  PREVIEW_WHITESPACE,
   type Row,
   type Version,
 } from "./team-memory-projections.server";
@@ -35,8 +37,6 @@ import {
 } from "#src/server/team-memory/memory";
 
 type Database = PrismaClient | Prisma.TransactionClient;
-const PREVIEW_WHITESPACE =
-  " \t\n\r\v\f\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
 async function readTarget(db: Database, actor: TeamMemoryActor, id: string): Promise<Row> {
   const row = await db.teamMemoryEntry.findFirst({
     where: { workspaceId: actor.workspaceId, id, status: { not: "deleted" } },
@@ -201,22 +201,16 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
     return this.db.$transaction(
       async (tx) => {
         await access(tx, actor);
+        const receipts = memoryReceipts(tx, actor, command.requestId);
+        const existing = await receipts.get();
+        if (existing && existing.fingerprint !== hash) throw new TeamMemoryError("conflict");
+        if (existing?.entryId)
+          return this.replay(tx, actor, command, existing.entryId, existing.deleted);
         const query =
           "title" in command
             ? `${command.title} ${command.content} ${command.applicability}`
             : head(await readTarget(tx, actor, command.id)).title;
         const related = await this.prepare(tx, actor, query);
-        const receipts = memoryReceipts(tx, actor, command.requestId);
-        const existing = await receipts.get();
-        if (existing && existing.fingerprint !== hash) throw new TeamMemoryError("conflict");
-        if (existing?.entryId)
-          return existing.deleted
-            ? { status: "deleted", entries: [], replayed: true }
-            : {
-                status: "ok",
-                entries: [head(await readTarget(tx, actor, existing.entryId))],
-                replayed: true,
-              };
         const reviewToken = crypto.randomUUID();
         const data = {
           reviewToken,
@@ -229,6 +223,26 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
       },
       { isolationLevel: "RepeatableRead" },
     );
+  }
+
+  private async replay(
+    tx: Prisma.TransactionClient,
+    actor: TeamMemoryActor,
+    command: TeamMemoryWrite,
+    entryId: string,
+    deleted: boolean,
+  ): Promise<TeamMemoryResult> {
+    if (deleted) return { status: "deleted", entries: [], replayed: true };
+    const [entry, maintenanceHint] = await Promise.all([
+      readTarget(tx, actor, entryId),
+      replayTeamMemoryMaintenanceHint(tx, actor, command),
+    ]);
+    return {
+      status: "ok",
+      entries: [head(entry)],
+      replayed: true,
+      ...(maintenanceHint ? { maintenanceHint } : {}),
+    };
   }
 
   async write(actor: TeamMemoryActor, command: TeamMemoryWrite): Promise<TeamMemoryResult> {
@@ -248,15 +262,8 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
           const receipts = memoryReceipts(tx, actor, command.requestId);
           const receipt = await receipts.get();
           if (receipt && receipt.fingerprint !== hash) throw new TeamMemoryError("conflict");
-          if (receipt?.entryId) {
-            return receipt.deleted
-              ? { status: "deleted", entries: [], replayed: true }
-              : {
-                  status: "ok",
-                  entries: [head(await readTarget(tx, actor, receipt.entryId))],
-                  replayed: true,
-                };
-          }
+          if (receipt?.entryId)
+            return this.replay(tx, actor, command, receipt.entryId, receipt.deleted);
           if (
             !receipt ||
             receipt.reviewToken !== command.reviewToken ||
@@ -283,12 +290,6 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
             !target.authorAgentId
           )
             throw new TeamMemoryError("upgrade_required");
-          if (target && command.operation === "create") {
-            if (command.projectId !== undefined && command.projectId !== (target.projectId ?? null))
-              throw new TeamMemoryError("conflict");
-            await receipts.update({ entryId: target.id, reviewToken: null, reviewExpiresAt: null });
-            return { status: "ok", entries: [head(target)] };
-          }
           const sources =
             command.operation === "merge"
               ? ((await tx.teamMemoryEntry.findMany({
@@ -302,6 +303,12 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
               : [];
           if (command.maintenanceToken)
             await consumeTeamMemoryMaintenance(tx, actor, command, target, sources);
+          if (target && command.operation === "create") {
+            if (command.projectId !== undefined && command.projectId !== (target.projectId ?? null))
+              throw new TeamMemoryError("conflict");
+            await receipts.update({ entryId: target.id, reviewToken: null, reviewExpiresAt: null });
+            return { status: "ok", entries: [head(target)] };
+          }
           validateTeamMutation(
             actor,
             command,
@@ -453,7 +460,7 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
           });
           const maintenanceHint =
             !command.maintenanceToken && actor.agentId
-              ? await suggestTeamMemoryMaintenance(tx, actor, saved)
+              ? await suggestTeamMemoryMaintenance(tx, actor, saved, command.requestId)
               : undefined;
           return {
             status: "ok",
