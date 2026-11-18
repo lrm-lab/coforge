@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Cloud01, Link01, Monitor01 } from "@untitledui/icons";
 import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -88,6 +88,7 @@ function NewAgentForms({
   const [chosen, setChosen] = useState<AgentKind>();
   const [submitting, setSubmitting] = useState(false);
   const usernameDraft = useAgentUsernameDraft();
+  const heightRef = useDialogHeightTransition(chosen);
   if (cloud.isPending)
     return (
       <div className="flex min-h-0 flex-1 flex-col">
@@ -103,7 +104,7 @@ function NewAgentForms({
   const kind: AgentKind =
     chosen && availableKinds.some((option) => option.id === chosen) ? chosen : defaultKind;
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div ref={heightRef} className="flex min-h-0 flex-1 flex-col">
       <AgentCreateIntro
         illustration={kind}
         title={m.header_new_agent()}
@@ -294,4 +295,46 @@ function useAgentCreateCatalogs(defaultComputerId: string | undefined) {
     cached: (computerId: string) =>
       queryClient.getQueryData<RuntimeCatalog[]>(query(computerId).queryKey),
   };
+}
+
+const HEIGHT_TRANSITION = { duration: 200, easing: "cubic-bezier(0.23, 1, 0.32, 1)" };
+
+function useDialogHeightTransition(key: unknown) {
+  const ref = useRef<HTMLDivElement>(null);
+  const lastHeight = useRef<number>(undefined);
+  useLayoutEffect(() => {
+    const dialog = ref.current?.closest<HTMLElement>("[role=dialog]");
+    if (!dialog) return;
+    const from = lastHeight.current;
+    const to = dialog.getBoundingClientRect().height;
+    lastHeight.current = to;
+    const animate =
+      from !== undefined &&
+      Math.abs(from - to) > 1 &&
+      window.matchMedia("(min-width: 640px) and (prefers-reduced-motion: no-preference)").matches;
+    if (!animate) return;
+    const overflow = dialog.style.overflow;
+    dialog.style.overflow = "hidden";
+    const animation = dialog.animate(
+      [{ height: `${from}px` }, { height: `${to}px` }],
+      HEIGHT_TRANSITION,
+    );
+    const restore = () => {
+      dialog.style.overflow = overflow;
+    };
+    animation.onfinish = restore;
+    animation.oncancel = restore;
+    return () => animation.cancel();
+  }, [key]);
+  useLayoutEffect(() => {
+    const dialog = ref.current?.closest<HTMLElement>("[role=dialog]");
+    if (!dialog) return;
+    const observer = new ResizeObserver(() => {
+      if (dialog.getAnimations().length === 0)
+        lastHeight.current = dialog.getBoundingClientRect().height;
+    });
+    observer.observe(dialog);
+    return () => observer.disconnect();
+  }, []);
+  return ref;
 }
