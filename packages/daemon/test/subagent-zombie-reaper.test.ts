@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
 import {
   BACKGROUND_TASK_SILENT_MS,
+  BACKGROUND_TASK_START_SLACK_MS,
   OutstandingBackgroundTasks,
 } from "#src/agent-runtime/subagent-progress-activity";
+import { countLiveProcessDescendants } from "#src/agent-runtime/process-descendants";
 import { TaskIdleNudge } from "#src/daemon-runtime/task-idle-nudge";
 import { captureDaemonLogs } from "./log-capture";
 
@@ -116,4 +118,58 @@ test("TaskIdleNudge reaps zombie background tasks before asking so stale reminde
   await new Promise((resolve) => setTimeout(resolve, 10));
   expect(tasks.count).toBe(0);
   expect(asks).toEqual([{}]);
+});
+
+test("reapZombies ignores pre-existing MCP children, keeps unknown/recent children, and ignores sleep time", async () => {
+  let awakeMs = 1_000;
+  let procClockMs = 200_000;
+  let table: Array<{ pid: number; ppid: number; startedAtMs: number }> = [
+    { pid: 100, ppid: 1, startedAtMs: 10_000 },
+    { pid: 200, ppid: 100, startedAtMs: 15_000 },
+  ];
+
+  const tasks = new OutstandingBackgroundTasks({
+    clock: () => awakeMs,
+    processClock: () => procClockMs,
+    countLiveDescendants: (startedAfterMs) =>
+      countLiveProcessDescendants(100, {
+        startedAfterMs,
+        processTable: {
+          list: async () => table.map((e) => ({ ...e, command: "node" })),
+          resolutionMs: 1_000,
+        },
+      }),
+  });
+
+  tasks.observe({ type: "subagent-progress", phase: "started", taskId: "bg-1" });
+
+  // Sleeping 2 hours advances wall clock, not awakeClockMs: task is not silent and not reaped.
+  awakeMs += 30_000;
+  expect(await tasks.reapZombies()).toEqual([]);
+  expect(tasks.count).toBe(1);
+
+  // Advance awake time past 60m threshold:
+  awakeMs += BACKGROUND_TASK_SILENT_MS;
+
+  // Child with unknown startedAtMs keeps the task alive.
+  table.push({ pid: 201, ppid: 100, startedAtMs: 0 });
+  expect(await tasks.reapZombies()).toEqual([]);
+  expect(tasks.count).toBe(1);
+
+  // Child started within the 60s slack before task start keeps the task alive.
+  table = [
+    { pid: 100, ppid: 1, startedAtMs: 10_000 },
+    { pid: 200, ppid: 100, startedAtMs: 15_000 },
+    { pid: 202, ppid: 100, startedAtMs: 200_000 - BACKGROUND_TASK_START_SLACK_MS },
+  ];
+  expect(await tasks.reapZombies()).toEqual([]);
+  expect(tasks.count).toBe(1);
+
+  // Only pre-existing MCP child (started before taskStart - 60s) remains: reaps zombie task.
+  table = [
+    { pid: 100, ppid: 1, startedAtMs: 10_000 },
+    { pid: 200, ppid: 100, startedAtMs: 15_000 },
+  ];
+  expect(await tasks.reapZombies()).toEqual(["bg-1"]);
+  expect(tasks.count).toBe(0);
 });

@@ -1,4 +1,5 @@
 import { ActivityTrajectory } from "#src/agent-runtime/activity-trajectory";
+import { awakeClockMs } from "#src/platform/awake-clock";
 import { countLiveProcessDescendants } from "#src/agent-runtime/process-descendants";
 import {
   OutstandingBackgroundTasks,
@@ -100,7 +101,9 @@ export function trackAgentLaunch(
   launch.replyIntents = replyIntents;
   launch.backgroundTasks = new OutstandingBackgroundTasks({
     identity,
-    countLiveDescendants: () => countLiveProcessDescendants(runtime.session.processId),
+    clock: awakeClockMs,
+    countLiveDescendants: (startedAfterMs) =>
+      countLiveProcessDescendants(runtime.session.processId, { startedAfterMs }),
   });
   if (runtime.session.wakesAfterSubagents === true) launch.subagentWake = new SubagentWakeTracker();
   return { trajectory, progress, toolCalls, replyIntents };

@@ -49,5 +49,8 @@ export async function countLiveProcessDescendants(
   if (options.startedAfterMs === undefined) return descendants.length;
   const resolutionMs = processTable.resolutionMs ?? 1_000;
   const fenceMs = Math.floor(options.startedAfterMs / resolutionMs) * resolutionMs;
-  return descendants.filter((entry) => entry.startedAtMs >= fenceMs).length;
+  return descendants.filter(
+    (entry) =>
+      !Number.isFinite(entry.startedAtMs) || entry.startedAtMs <= 0 || entry.startedAtMs >= fenceMs,
+  ).length;
 }
