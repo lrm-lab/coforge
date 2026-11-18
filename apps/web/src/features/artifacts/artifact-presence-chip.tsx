@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button as AriaButton, Dialog, DialogTrigger, Popover } from "react-aria-components";
 
@@ -12,6 +12,7 @@ import { FLOATING_SURFACE_CLASS } from "#src/features/conversations/review-chrom
 import { cn } from "#src/lib/utils";
 import { useChannelPresence, usePresentUsers } from "#src/features/realtime/channel-presence";
 import { ARTIFACT_ROSTER_SIZE, artifactPresenceChannel } from "./artifact-presence-channel";
+import { presenceSummary } from "./artifact-presence-summary";
 import { artifactViewersQuery, type ArtifactViewers } from "./artifact-queries";
 import { loadArtifactViewers, markArtifactSeen, openArtifact } from "./artifact-viewer.functions";
 
@@ -132,6 +133,17 @@ export function ArtifactPresenceChip({
   const othersViewing = data.viewingNow.filter((person) => person.userId !== data.you);
   const shown = othersViewing.slice(0, me ? STACK_FACES - 1 : STACK_FACES);
   const othersCount = present ? present.size - (present.has(data.you) ? 1 : 0) : 0;
+  const summary = presenceSummary({
+    othersViewing: othersCount,
+    youViewing: present?.has(data.you) ?? true,
+    seenLatest: data.seenLatest,
+  }).map((part) =>
+    part.kind === "viewing"
+      ? m.av_presence_summary_viewing({ count: part.count })
+      : part.kind === "you"
+        ? m.av_presence_summary_you()
+        : m.av_presence_summary_saw_latest({ count: part.count }),
+  );
   const nameOf = (person: { userId: string; name: string }) =>
     person.userId === data.you ? m.av_presence_you() : person.name;
   return (
@@ -156,13 +168,26 @@ export function ArtifactPresenceChip({
       <Popover
         placement="bottom start"
         className={cn(
-          "w-64 origin-(--trigger-anchor-point)",
+          "flex w-64 origin-(--trigger-anchor-point) flex-col",
           FLOATING_SURFACE_CLASS,
           POPOVER_MOTION,
         )}
       >
-        <Dialog aria-label={m.av_presence_label()} className="p-2 outline-hidden">
-          <ul className="flex flex-col">
+        <Dialog
+          aria-label={m.av_presence_label()}
+          className="flex min-h-0 flex-col p-2 outline-hidden"
+        >
+          {summary.length > 0 && (
+            <p className="px-2 pt-1 pb-2 text-xs text-tertiary">
+              {summary.map((part, index) => (
+                <Fragment key={part}>
+                  {index > 0 && " · "}
+                  <span className="whitespace-nowrap">{part}</span>
+                </Fragment>
+              ))}
+            </p>
+          )}
+          <ul className="min-h-0 overflow-y-auto">
             {data.viewingNow.map((person) => (
               <PresenceRow
                 key={person.userId}
@@ -186,11 +211,6 @@ export function ArtifactPresenceChip({
               />
             ))}
           </ul>
-          {data.behind > 0 && (
-            <p className="mt-2 px-2 text-xs text-tertiary">
-              {m.av_presence_behind({ count: data.behind, version: data.currentVersion })}
-            </p>
-          )}
         </Dialog>
       </Popover>
     </DialogTrigger>
