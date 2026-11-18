@@ -221,6 +221,11 @@ export class AgentInboxCoordinator {
     await this.#notifyAppItemNotices(agentId, planAppItemNotices(fresh));
   }
 
+  wakeable(agentId: string): boolean {
+    const manager = this.ports.processManager;
+    return !!manager.session(agentId) || !!manager.restartConfig(agentId);
+  }
+
   async notifyAppItem(
     agentId: string,
     item: AgentAppItem | string,

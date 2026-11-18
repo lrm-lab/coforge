@@ -151,11 +151,11 @@ export async function reminder(
   );
 }
 
-export async function acceptReminderDue(
+export async function deliverReminderDue(
   ports: RuntimeAgentApiRemindersPorts,
   job: ReminderJob,
   late: boolean,
-): Promise<boolean> {
+): Promise<string> {
   const item = await (
     await ports.inboxCoordinator.appInbox(job.ownerAgentId)
   ).upsert({
@@ -165,12 +165,23 @@ export async function acceptReminderDue(
     title: reminderAppInboxPreview(job.title),
     summary: reminderAppInboxSummary(job, late),
   });
-  return ports.inboxCoordinator.notifyAppItem(job.ownerAgentId, item).catch((error: unknown) => {
+  return item.itemId;
+}
+
+export async function wakeReminderDue(
+  ports: RuntimeAgentApiRemindersPorts,
+  agentId: string,
+  itemId: string,
+): Promise<boolean> {
+  const coordinator = ports.inboxCoordinator;
+  const items = (await coordinator.appInbox(agentId)).list();
+  if (!items.some((item) => item.itemId === itemId)) return true;
+  if (!coordinator.wakeable(agentId)) return true;
+  return coordinator.notifyAppItem(agentId, itemId).catch((error: unknown) => {
     logger.warn("Reminder item was kept but its notice was not written", {
       event: "reminder.due_notice_failed",
-      agent_id: job.ownerAgentId,
-      reminder_id: job.reminderId,
-      reminder_version: job.version,
+      agent_id: agentId,
+      item_id: itemId,
       error,
     });
     return false;

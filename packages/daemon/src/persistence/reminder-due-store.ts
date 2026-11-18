@@ -1,4 +1,5 @@
-import { readdir } from "node:fs/promises";
+import { readdir, rename } from "node:fs/promises";
+import { getLogger } from "@logtape/logtape";
 import { join } from "node:path";
 import { REMINDER_DUE_MESSAGE_TYPE, type ReminderDue } from "@lrm/coforge-sdk/internal";
 import type {
@@ -9,6 +10,7 @@ import type {
 import { isSafePathScope } from "./path-scope";
 import { writePrivateJsonRecord } from "./private-json-record";
 
+const logger = getLogger(["coforge", "daemon", "reminder"]);
 const STATES: ReadonlySet<string> = new Set<ReminderDueRecordState>([
   "received",
   "acknowledged",
@@ -51,17 +53,48 @@ export class FileReminderDueStore implements ReminderDueStore {
   }
 
   async read(agentId: string): Promise<ReminderDueRecord[]> {
-    const file = Bun.file(this.#path(agentId));
+    const path = this.#path(agentId);
+    const file = Bun.file(path);
     if (!(await file.exists())) return [];
-    const value = JSON.parse(await file.text()) as { version?: unknown; occurrences?: unknown };
-    if (value.version !== 1 || !Array.isArray(value.occurrences))
-      throw new Error("reminder due records are corrupt");
-    return value.occurrences.map((entry) => this.#record(agentId, entry));
+    const text = await file.text();
+    try {
+      return this.#parse(agentId, text);
+    } catch (error) {
+      await this.#quarantine(agentId, path, error);
+      return [];
+    }
   }
 
   async write(agentId: string, records: readonly ReminderDueRecord[]): Promise<void> {
     const occurrences = records.map((record) => this.#record(agentId, record));
-    await writePrivateJsonRecord(this.#path(agentId), { version: 1, occurrences });
+    await writePrivateJsonRecord(
+      this.#path(agentId),
+      { version: 1, occurrences },
+      { durable: true },
+    );
+  }
+
+  #parse(agentId: string, text: string): ReminderDueRecord[] {
+    const value = JSON.parse(text) as { version?: unknown; occurrences?: unknown } | null;
+    if (value?.version !== 1 || !Array.isArray(value.occurrences))
+      throw new Error("reminder due records are corrupt");
+    return value.occurrences.map((entry) => this.#record(agentId, entry));
+  }
+
+  async #quarantine(agentId: string, path: string, error: unknown): Promise<void> {
+    const aside = `${path}.corrupt-${Date.now()}`;
+    let setAside = true;
+    try {
+      await rename(path, aside);
+    } catch {
+      setAside = false;
+    }
+    logger.error("Reminder due records were unreadable; this Agent starts from an empty record", {
+      event: "reminder.due_records_quarantined",
+      agent_id: agentId,
+      ...(setAside ? { quarantined_to: aside } : {}),
+      error,
+    });
   }
 
   #record(agentId: string, value: unknown): ReminderDueRecord {

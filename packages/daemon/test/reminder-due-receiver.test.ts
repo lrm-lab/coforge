@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -9,6 +9,8 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { ReminderDueReceiver } from "#src/agent-reminder/reminder-due-receiver";
 import { FileReminderDueStore } from "#src/persistence/reminder-due-store";
+import type { ReminderDueStore } from "#src/agent-reminder/reminder-due-record";
+import { ManualClock } from "./fixtures/system-cleaner-harness";
 
 const scope = {
   workspaceId: "019b0381-1111-7111-8111-111111111111",
@@ -43,36 +45,66 @@ afterEach(() => {
     rmSync(directory, { recursive: true, force: true });
 });
 
-function harness(options: { ack?: (request: ReminderDueAckRequest) => boolean } = {}) {
+type Wake = boolean | "reject" | "hang";
+
+const flush = async () => {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+  await Bun.sleep(1);
+};
+
+function harness(
+  options: {
+    ack?: (request: ReminderDueAckRequest) => boolean;
+    wakes?: Wake[];
+    store?: (store: FileReminderDueStore) => ReminderDueStore;
+  } = {},
+) {
   const directory = mkdtempSync(join(tmpdir(), "reminder-due-"));
   directories.push(directory);
-  const store = new FileReminderDueStore(directory, scope.workspaceId, scope.computerId);
-  const clock = { nowMs: FIRE_AT + 1_000 };
+  const files = new FileReminderDueStore(directory, scope.workspaceId, scope.computerId);
+  const store = options.store?.(files) ?? files;
+  const clock = new ManualClock();
+  clock.nowMs = FIRE_AT + 1_000;
   const acks: { request: ReminderDueAckRequest; persisted: string[] }[] = [];
   const delivered: { version: number; late: boolean }[] = [];
+  const wakes: string[] = [];
+  const wakeResults = [...(options.wakes ?? [])];
   let failDeliveries = 0;
   const build = () =>
     new ReminderDueReceiver(scope, store, {
       acknowledge: async (request) => {
-        const persisted = (await store.read(request.agentId)).map((record) => record.state);
+        const persisted = (await files.read(request.agentId)).map((record) => record.state);
         acks.push({ request, persisted });
         return options.ack ? options.ack(request) : true;
       },
       deliver: async (job, occurrence) => {
         if (failDeliveries-- > 0) throw new Error("app inbox write failed");
         delivered.push({ version: job.version, late: occurrence.late });
+        return `item-${job.version}`;
       },
-      now: () => clock.nowMs,
+      wake: async (wakeAgentId, itemId) => {
+        wakes.push(`${wakeAgentId}:${itemId}`);
+        const result = wakeResults.shift() ?? true;
+        if (result === "reject") throw new Error("notify rejected");
+        if (result === "hang") return new Promise<boolean>(() => {});
+        return result;
+      },
+      clock,
     });
   return {
     directory,
-    store,
+    store: files,
     clock,
+    advance: async (ms: number) => {
+      clock.advance(ms);
+      await flush();
+    },
     acks,
     delivered,
+    wakes,
     build,
     failNextDelivery: () => (failDeliveries = 1),
-    states: async () => (await store.read(agentId)).map((record) => record.state),
+    states: async () => (await files.read(agentId)).map((record) => record.state),
   };
 }
 
@@ -110,8 +142,12 @@ test("a lost ACK delivers nothing until the republished Due is acknowledged", as
       if (!reachable) throw new Error("connection closed");
       return true;
     },
-    deliver: async (job) => void h.delivered.push({ version: job.version, late: false }),
-    now: () => h.clock.nowMs,
+    deliver: async (job) => {
+      h.delivered.push({ version: job.version, late: false });
+      return "item";
+    },
+    wake: async () => true,
+    clock: h.clock,
   });
   await receiver.receive(due());
   expect(h.delivered).toHaveLength(0);
@@ -131,10 +167,23 @@ test("a daemon that stopped between the disk write and the ACK acknowledges and 
   expect(await h.states()).toEqual(["delivered"]);
 });
 
-test("an acknowledged Due whose delivery failed is delivered by the next restore, without another ACK", async () => {
+test("an acknowledged Due whose delivery failed is delivered a minute later, without another ACK", async () => {
   const h = harness();
   h.failNextDelivery();
-  await expect(h.build().receive(due())).rejects.toThrow("app inbox write failed");
+  const receiver = h.build();
+  await receiver.receive(due());
+  expect(await h.states()).toEqual(["acknowledged"]);
+  await h.advance(60_000);
+  await receiver.awaitIdle();
+  expect(h.acks).toHaveLength(1);
+  expect(h.delivered).toHaveLength(1);
+  expect(await h.states()).toEqual(["delivered"]);
+});
+
+test("an acknowledged Due whose delivery failed is still delivered by a restore after it expired", async () => {
+  const h = harness();
+  h.failNextDelivery();
+  await h.build().receive(due());
   expect(await h.states()).toEqual(["acknowledged"]);
   h.clock.nowMs = Date.parse(due().expiresAt) + 1;
   await h.build().restore();
@@ -184,15 +233,98 @@ test("a later occurrence of the same reminder is its own delivery, and the late 
   expect(await receiver.acknowledge(agentId, due().job.reminderId, 9)).toBe(false);
 });
 
-test("the store refuses a corrupt file and a record from another scope", async () => {
+test("an idle Agent whose wake is rejected is woken again a minute later, and only once", async () => {
+  const h = harness({ wakes: ["reject", true] });
+  await h.build().receive(due());
+  await flush();
+  expect(h.wakes).toHaveLength(1);
+  expect(await h.states()).toEqual(["delivered"]);
+  await h.advance(60_000);
+  expect(h.wakes).toEqual([`${agentId}:item-7`, `${agentId}:item-7`]);
+  await h.advance(60 * 60_000);
+  expect(h.wakes).toHaveLength(2);
+});
+
+test("a wake that keeps failing is retried at 1, 5 and 15 minutes and then left to the App Inbox", async () => {
+  const h = harness({ wakes: [false, false, "reject", false, true] });
+  await h.build().receive(due());
+  await flush();
+  for (const minutes of [1, 5, 15]) await h.advance(minutes * 60_000);
+  expect(h.wakes).toHaveLength(4);
+  await h.advance(24 * 60 * 60_000);
+  expect(h.wakes).toHaveLength(4);
+  expect(h.clock.pending()).toBe(0);
+});
+
+test("a wake still starting the Agent holds up neither the next Due nor the user's ack", async () => {
+  const h = harness({ wakes: ["hang"] });
+  const receiver = h.build();
+  await receiver.receive(due("4", 7));
+  await receiver.receive(due("5", 8));
+  expect(h.delivered).toHaveLength(2);
+  expect(await receiver.acknowledge(agentId, due().job.reminderId, 7)).toBe(true);
+  await receiver.awaitIdle();
+});
+
+test("a stopped receiver drops its pending retries", async () => {
+  const h = harness({ wakes: [false] });
+  const receiver = h.build();
+  await receiver.receive(due());
+  await flush();
+  expect(h.clock.pending()).toBe(1);
+  receiver.stop();
+  expect(h.clock.pending()).toBe(0);
+});
+
+test.each([
+  ["unreadable JSON", "{ not json"],
+  ["a corrupt record", JSON.stringify({ version: 1, occurrences: [{}] })],
+  [
+    "a record from another scope",
+    JSON.stringify({
+      version: 1,
+      occurrences: [{ state: "received", due: { ...due(), agentId: "x" } }],
+    }),
+  ],
+])("a record file with %s is set aside, and the Agent's next Due is delivered", async (_, text) => {
   const h = harness();
   const path = join(h.directory, "reminder-due", scope.workspaceId, agentId);
   mkdirSync(path, { recursive: true });
-  writeFileSync(join(path, "occurrences.json"), JSON.stringify({ version: 1, occurrences: [{}] }));
-  await expect(h.store.read(agentId)).rejects.toThrow("corrupt");
+  writeFileSync(join(path, "occurrences.json"), text);
+  expect(await h.store.read(agentId)).toEqual([]);
+  expect(readdirSync(path).filter((name) => name.includes(".corrupt-"))).toHaveLength(1);
+  await h.build().receive(due());
+  expect(h.delivered).toHaveLength(1);
+  expect(await h.states()).toEqual(["delivered"]);
+});
+
+test("the store still refuses to write a record for another scope", async () => {
+  const h = harness();
   const other = "019b0381-8888-7888-8888-888888888888";
   await expect(h.store.write(other, [{ state: "received", due: due() }])).rejects.toThrow(
     "another scope",
   );
-  expect(await h.store.agents()).toEqual([agentId]);
+});
+
+test("one Agent whose records cannot be read does not keep the others from being restored", async () => {
+  const broken = "019b0381-9999-7999-8999-999999999999";
+  let failing = true;
+  const h = harness({
+    store: (files) => ({
+      agents: () => files.agents(),
+      read: async (id) => {
+        if (id === broken && failing) throw new Error("EIO");
+        return files.read(id);
+      },
+      write: (id, records) => files.write(id, records),
+    }),
+  });
+  mkdirSync(join(h.directory, "reminder-due", scope.workspaceId, broken), { recursive: true });
+  await h.store.write(agentId, [{ state: "acknowledged", due: due() }]);
+  await h.build().restore();
+  expect(h.delivered).toHaveLength(1);
+  expect(h.clock.pending()).toBe(1);
+  failing = false;
+  await h.advance(60_000);
+  expect(h.clock.pending()).toBe(0);
 });

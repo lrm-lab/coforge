@@ -8,9 +8,16 @@ Rules for `src/agent-reminder/`. They extend `packages/daemon/AGENTS.md`.
 - One `ReminderDue` names one occurrence. The receiver writes it to the
   Agent's Due record before sending the Due ACK. It delivers only after the
   server accepts that ACK. A refused ACK ends the occurrence as `refused`.
-- Delivery means the `system.reminder` App Inbox item is stored. Waking the
-  Agent is best-effort: a refused, held or impossible notice leaves the item
-  for the next drain or launch. An Agent under a fenced Stop is not started.
+- Delivery means the `system.reminder` App Inbox item is stored. A failed
+  delivery is retried at 1, 5 and 15 minutes, then waits for the next
+  `restore()`.
+- The wake runs after the record says `delivered`, outside the Agent's
+  serial queue, so a slow start blocks no ack or later Due. A failed wake is
+  retried at 1, 5 and 15 minutes while the item is still in the inbox. An
+  Agent under a fenced Stop is neither started nor retried.
+- The Due record is written with fsync before its ACK. A record file that
+  cannot be read is moved aside as `*.corrupt-<ms>` and the Agent starts
+  empty; `restore()` handles each Agent on its own.
 - A repeated Due only repeats its ACK. On every connection, `restore()` ACKs
   `received` records again and delivers `acknowledged` ones.
 - Records go once `expiresAt` passes, except `acknowledged` ones, which the

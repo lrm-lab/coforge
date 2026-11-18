@@ -9,6 +9,7 @@ import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import { sessionSpy } from "./fixtures/session-spy";
+import { ManualClock } from "./fixtures/system-cleaner-harness";
 import {
   REMINDER_DUE_MESSAGE_TYPE,
   type ReminderDue,
@@ -197,6 +198,8 @@ describe("DaemonRuntime App Inbox notices", () => {
     let sessions = 0;
     let receiveDue!: (due: ReminderDue) => void;
     const acks: ReminderDueAckRequest[] = [];
+    const clock = new ManualClock();
+    clock.nowMs = Date.now();
     const runtime = new DaemonRuntime(
       connection,
       () => ({
@@ -233,6 +236,9 @@ describe("DaemonRuntime App Inbox notices", () => {
       undefined,
       emptyCodeAgentDiscovery,
       stateDirectory,
+      {},
+      undefined,
+      { clock },
     );
     try {
       await runtime.start(connection);
@@ -296,6 +302,8 @@ describe("DaemonRuntime App Inbox notices", () => {
         await Bun.sleep(10);
       }
       await Bun.sleep(10);
+      clock.advance(20 * 60_000);
+      await Bun.sleep(10);
       expect(acks).toHaveLength(1);
       expect(sessions).toBe(1);
       const context = runtime.issueAgentContext("agent-a");
@@ -305,6 +313,91 @@ describe("DaemonRuntime App Inbox notices", () => {
         operation: "check",
       });
       expect(inbox.entries.filter((entry) => entry.kind === "app")).toHaveLength(1);
+    } finally {
+      await runtime.stop();
+      await rm(stateDirectory, { recursive: true, force: true });
+    }
+  });
+  test("a running idle Agent whose reminder notice is rejected is told again a minute later", async () => {
+    const stateDirectory = join(tempRoot, `coforge-due-renotify-${crypto.randomUUID()}`);
+    const credentials = new InMemoryDaemonCredentialStore();
+    await credentials.save(connection.workspaceId, connection.computerId, "token-a");
+    let receiveDue!: (due: ReminderDue) => void;
+    const reminderNotices: string[] = [];
+    const clock = new ManualClock();
+    clock.nowMs = Date.now();
+    const runtime = new DaemonRuntime(
+      connection,
+      () => ({
+        provider: "pi",
+        createAgentSession: async () => ({
+          ...sessionSpy(),
+          notify: async (notice) => {
+            if (!/remind/i.test(notice)) return;
+            reminderNotices.push(notice);
+            if (reminderNotices.length === 1) throw new Error("notify rejected");
+          },
+        }),
+      }),
+      credentials,
+      {
+        create: () => ({
+          async start() {},
+          async ready() {},
+          async stop() {},
+          onReminderDue(callback) {
+            receiveDue = callback;
+            return () => undefined;
+          },
+          async acknowledgeReminderDue() {
+            return true;
+          },
+          async requestAgentApiKey() {
+            return `sk_agent_${"a".repeat(43)}`;
+          },
+          async revokeAgentApiKey() {},
+          async sendAgentDeliveryAck() {},
+        }),
+      },
+      undefined,
+      emptyCodeAgentDiscovery,
+      stateDirectory,
+      {},
+      undefined,
+      { clock },
+    );
+    try {
+      await runtime.start(connection);
+      await runtime.startAgent("agent-a", config);
+      const fireAt = new Date(clock.nowMs - 1000).toISOString();
+      receiveDue({
+        protocolMajor: 1,
+        workspaceId: connection.workspaceId,
+        computerId: connection.computerId,
+        agentId: "agent-a",
+        occurrenceId: crypto.randomUUID(),
+        job: {
+          reminderId: "123e4567-e89b-42d3-a456-426614174000",
+          ownerAgentId: "agent-a",
+          version: 1,
+          title: "Check the build",
+          target: "@frank",
+          messageId: "123e4567-e89b-42d3-a456-426614174001",
+          fireAt,
+        },
+        expiresAt: new Date(Date.parse(fireAt) + 7 * 24 * 60 * 60_000).toISOString(),
+        messageType: REMINDER_DUE_MESSAGE_TYPE,
+      });
+      const deadline = Date.now() + 5_000;
+      while (reminderNotices.length < 1 && Date.now() < deadline) await Bun.sleep(10);
+      await Bun.sleep(10);
+      expect(reminderNotices).toHaveLength(1);
+      clock.advance(60_000);
+      while (reminderNotices.length < 2 && Date.now() < deadline) await Bun.sleep(10);
+      expect(reminderNotices).toHaveLength(2);
+      clock.advance(60 * 60_000);
+      await Bun.sleep(10);
+      expect(reminderNotices).toHaveLength(2);
     } finally {
       await runtime.stop();
       await rm(stateDirectory, { recursive: true, force: true });

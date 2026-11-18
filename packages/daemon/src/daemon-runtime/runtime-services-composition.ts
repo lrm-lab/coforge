@@ -2,7 +2,6 @@ import type { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-
 import type { AgentMigrationRunner } from "#src/agent-migration/migration-runner";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { SystemCleaner, SystemCleanerOptions } from "#src/system-cleaner/system-cleaner";
-import type { ReminderJob } from "@lrm/coforge-sdk/internal";
 import type { DaemonConfig } from "./runtime";
 import type { runtimeEnvelope } from "./runtime-envelope";
 import type { CleanerInbox } from "#src/system-cleaner/system-cleaner";
@@ -14,6 +13,11 @@ import { FileReminderDueStore } from "#src/persistence/reminder-due-store";
 import { ReminderDueReceiver } from "#src/agent-reminder/reminder-due-receiver";
 import { ReminderAcknowledgementSync } from "#src/agent-reminder/reminder-acknowledgement-sync";
 import { sendReminderAcknowledgement } from "./runtime-reminder-acknowledgement";
+import {
+  deliverReminderDue,
+  wakeReminderDue,
+  type RuntimeAgentApiRemindersPorts,
+} from "./runtime-agent-api-reminders";
 import { SystemCleaner as Cleaner } from "#src/system-cleaner/system-cleaner";
 import { agentsDirectory, agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import {
@@ -39,8 +43,7 @@ export type RuntimeServicesPorts = {
   /** Whether the Agent is mid-turn: a busy one sees an item at its next idle drain. */
   isWorking(agentId: string): boolean;
   notifyAppItem(agentId: string, itemId: string): Promise<boolean>;
-  /** The reminder job that came due, delivered through the Agent's wake path. */
-  acceptReminderDue(job: ReminderJob, late: boolean): Promise<boolean>;
+  reminderInbox(): RuntimeAgentApiRemindersPorts;
   /** The cleaner's host-injected clock and measurements. */
   systemCleaner: Pick<SystemCleanerOptions, "clock" | "measureMemoryFile" | "measureDiskSpace">;
   stopAgent(agentId: string): Promise<void>;
@@ -91,7 +94,9 @@ export function composeRuntimeServices(ports: RuntimeServicesPorts): RuntimeServ
         if (!current.acknowledgeReminderDue) throw new Error("reminder due ACK is unavailable");
         return current.acknowledgeReminderDue(request);
       },
-      deliver: (job, occurrence) => ports.acceptReminderDue(job, occurrence.late),
+      deliver: (job, occurrence) => deliverReminderDue(ports.reminderInbox(), job, occurrence.late),
+      wake: (agentId, itemId) => wakeReminderDue(ports.reminderInbox(), agentId, itemId),
+      ...(ports.systemCleaner.clock ? { clock: ports.systemCleaner.clock } : {}),
       acknowledgeCloud: (request) => acknowledgementSync.enqueue(request),
     },
   );
