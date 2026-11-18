@@ -1,6 +1,4 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { RefreshCw01 } from "@untitledui/icons";
-import { Spinner } from "#src/components/ui/spinner";
 import {
   parseRuntimeProvider,
   RUNTIME_PROVIDER,
@@ -10,7 +8,6 @@ import {
 
 import { Button } from "#src/components/base/buttons/button";
 import { useDialogControlSize } from "#src/components/ui/dialog-actions";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { m } from "#src/paraglide/messages";
@@ -349,9 +346,14 @@ export function AgentRuntimeFields({
           <div className="relative min-w-0">
             <ModelComboBox
               label={m.agent_form_model()}
-              className="min-w-0 [&_[data-label]]:pr-8"
+              className="min-w-0"
               popoverClassName="min-w-(--trigger-width) w-max max-w-[min(36rem,calc(100vw-3rem))]"
               isDisabled={!options}
+              refresh={{
+                run: () => void catalogRefresh.refresh(),
+                busy: catalogRefresh.busy,
+                refreshing: catalogRefresh.refreshing,
+              }}
               choices={modelChoices}
               pinned={PINNED_MODEL_CHOICES}
               selectedKey={piConfigured && customModelActive ? CUSTOM_MODEL_KEY : modelKey}
@@ -376,16 +378,6 @@ export function AgentRuntimeFields({
                 );
               }}
             />
-            <div className="absolute top-0 right-0 flex h-5 items-center">
-              <ButtonUtility
-                icon={catalogRefresh.refreshing ? Spinner : RefreshCw01}
-                size="xs"
-                color="tertiary"
-                tooltip={m.agent_form_model_refresh()}
-                onClick={() => void catalogRefresh.refresh()}
-                isDisabled={catalogRefresh.busy || !options}
-              />
-            </div>
           </div>
           {catalogRefresh.note && (
             <RuntimeRefreshOutcome note={catalogRefresh.note} runtime={provider} />

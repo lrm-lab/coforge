@@ -1,14 +1,19 @@
 import { useContext, useEffect, useMemo, useRef, useState, type Key } from "react";
-import { ChevronDown } from "@untitledui/icons";
+import { ChevronDown, RefreshCw01 } from "@untitledui/icons";
 import { ComboBoxStateContext } from "react-aria-components";
 
 import { ComboBox } from "#src/components/base/select/combobox";
 import { SelectItem } from "#src/components/base/select/select-item";
 import { m } from "#src/paraglide/messages";
 import { useDialogControlSize } from "#src/components/ui/dialog-actions";
+import { Spinner } from "#src/components/ui/spinner";
 import { searchModelChoices, type ModelChoice } from "./model-search";
 
 const showEverything = () => true;
+
+const REFRESH_KEY = "\u0000refresh";
+
+export type ModelListRefresh = { run: () => void; busy: boolean; refreshing: boolean };
 
 function ListToggle({ searching }: { searching: boolean }) {
   const state = useContext(ComboBoxStateContext);
@@ -57,6 +62,7 @@ export function ModelComboBox({
   isDisabled,
   className,
   popoverClassName,
+  refresh,
 }: {
   label: string;
   choices: readonly ModelChoice[];
@@ -66,13 +72,17 @@ export function ModelComboBox({
   isDisabled?: boolean;
   className?: string;
   popoverClassName?: string;
+  refresh?: ModelListRefresh;
 }) {
   const controlSize = useDialogControlSize();
   const selectedLabel = choices.find((choice) => choice.id === selectedKey)?.label ?? "";
   const [query, setQuery] = useState<string | null>(null);
   const shown = useMemo(
-    () => searchModelChoices(choices, query ?? "", pinned).map(({ id, label }) => ({ id, label })),
-    [choices, query, pinned],
+    () => [
+      ...searchModelChoices(choices, query ?? "", pinned).map(({ id, label }) => ({ id, label })),
+      ...(refresh ? [{ id: REFRESH_KEY, label: m.agent_form_model_refresh() }] : []),
+    ],
+    [choices, query, pinned, refresh],
   );
   return (
     <ComboBox
@@ -91,19 +101,34 @@ export function ModelComboBox({
       selectedKey={selectedKey}
       onSelectionChange={(key: Key | null) => {
         setQuery(null);
+        if (key === REFRESH_KEY) {
+          refresh?.run();
+          return;
+        }
         if (key !== null && String(key) !== selectedKey) onSelectionChange(String(key));
       }}
       onFocus={(event) => {
         if (event.target instanceof HTMLInputElement) event.target.select();
       }}
     >
-      {(item) => (
-        <SelectItem
-          id={item.id}
-          label={item.label}
-          className="[&_[slot=label]]:whitespace-normal [&_[slot=label]]:wrap-break-word"
-        />
-      )}
+      {(item) =>
+        item.id === REFRESH_KEY ? (
+          <SelectItem
+            id={item.id}
+            label={item.label}
+            icon={refresh?.refreshing ? Spinner : RefreshCw01}
+            isDisabled={refresh?.busy}
+            selectionIndicator="none"
+            className="mt-1 border-t border-secondary pt-1 text-tertiary"
+          />
+        ) : (
+          <SelectItem
+            id={item.id}
+            label={item.label}
+            className="[&_[slot=label]]:whitespace-normal [&_[slot=label]]:wrap-break-word"
+          />
+        )
+      }
     </ComboBox>
   );
 }

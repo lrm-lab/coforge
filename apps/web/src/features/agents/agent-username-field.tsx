@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
-import { AtSign, RefreshCw05 } from "@untitledui/icons";
+import { AtSign, Dice5 } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import { useWorkspaceDirectory } from "#src/features/conversations/workspace-directory-query";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 
 import {
   availableAgentUsername,
@@ -76,10 +77,16 @@ export function AgentUsernameField({
         isInvalid={empty || isTaken}
         hint={empty ? m.agent_form_username_required() : isTaken ? m.agent_form_name_taken() : note}
         className="min-w-0"
+        inputClassName="pr-9"
       />
-      <div className="absolute top-0 right-0 flex h-5 items-center">
+      <div
+        className={cx(
+          "absolute top-6.5 right-1 flex items-center",
+          controlSize === "md" ? "h-10" : "h-9",
+        )}
+      >
         <ButtonUtility
-          icon={RefreshCw05}
+          icon={Dice5}
           size="xs"
           color="tertiary"
           tooltip={m.agent_form_username_suggest()}
