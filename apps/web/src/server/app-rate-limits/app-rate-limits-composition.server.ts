@@ -19,6 +19,7 @@ export const PUBLIC_ARTIFACT_LIMIT_PER_MINUTE = 120;
 /** The other files of public artifact pages (styles, scripts, images, fonts) a minute per client
  * IP: a page may be up to 200 files, and a reader opens several. */
 export const PUBLIC_ARTIFACT_FILE_LIMIT_PER_MINUTE = 2000;
+export const PUBLIC_ARTIFACT_PER_ARTIFACT_LIMIT_PER_MINUTE = 600;
 export const PUBLIC_ARTIFACT_MISS_LIMIT_PER_MINUTE = 20;
 export const PUBLIC_ARTIFACT_MISS_GLOBAL_WARN_PER_MINUTE = 300;
 export const ARTIFACT_AGENT_WRITE_LIMIT_PER_MINUTE = 60;
@@ -31,6 +32,7 @@ export type AppRateLimits = {
   installation: AppRateLimit;
   publicArtifact: AppRateLimit;
   publicArtifactFile: AppRateLimit;
+  publicArtifactPerArtifact: AppRateLimit;
   publicArtifactMiss: PeekableRateLimit;
   publicArtifactMissGlobal: AppRateLimit;
   artifactWrite: AppRateLimit;
@@ -78,6 +80,12 @@ function createAppRateLimits(redisUrl: string | undefined): AppRateLimits {
     publicArtifactFile: new RedisAppRateLimit(redis, {
       keyPrefix: "coforge:ratelimit:public-artifact-file:v1",
       limit: PUBLIC_ARTIFACT_FILE_LIMIT_PER_MINUTE,
+      windowMs: WINDOW_MS,
+      outageLog,
+    }),
+    publicArtifactPerArtifact: new RedisAppRateLimit(redis, {
+      keyPrefix: "coforge:ratelimit:public-artifact-per-artifact:v1",
+      limit: PUBLIC_ARTIFACT_PER_ARTIFACT_LIMIT_PER_MINUTE,
       windowMs: WINDOW_MS,
       outageLog,
     }),
@@ -130,6 +138,7 @@ function unconfiguredLimits(outageLog: RateLimitOutageLog): AppRateLimits {
     installation: limit,
     publicArtifact: limit,
     publicArtifactFile: limit,
+    publicArtifactPerArtifact: limit,
     publicArtifactMiss: NO_PEEKABLE_RATE_LIMIT,
     publicArtifactMissGlobal: limit,
     artifactWrite: limit,

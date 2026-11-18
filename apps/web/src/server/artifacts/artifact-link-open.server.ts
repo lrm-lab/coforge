@@ -1,3 +1,4 @@
+import type { AppRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
 import { AppError } from "#src/lib/app-error";
 import type { ArtifactPathKind } from "#src/features/artifacts/artifact-path-kind";
 import type { PublicArtifactMissGuard } from "./artifact-public-miss-guard.server";
@@ -9,6 +10,8 @@ export type LinkOpened = { title: string; kind: ArtifactPathKind; url: string };
 export class ArtifactLinkOpen {
   constructor(
     private readonly deps: {
+      perClient: AppRateLimit;
+      perArtifact: AppRateLimit;
       lookup(artifactId: string): Promise<LinkLookup>;
       guard: PublicArtifactMissGuard;
       origin: string | null;
@@ -16,16 +19,17 @@ export class ArtifactLinkOpen {
   ) {}
 
   async open(input: { artifactId: string; client: string | undefined }): Promise<LinkOpened> {
-    const { origin, guard, lookup } = this.deps;
+    const { origin, guard, lookup, perClient, perArtifact } = this.deps;
     if (!origin) throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "artifact-sandbox-off" });
+    const total = await perClient.admit(input.client ?? "unknown");
+    if (!total.allowed) throw rateLimited(total.retryAfterSeconds);
     const refusal = await guard.refusal(input.client);
-    if (refusal)
-      throw new AppError("RATE_LIMITED", {
-        hint: `try again in ${refusal.retryAfterSeconds} seconds`,
-      });
+    if (refusal) throw rateLimited(refusal.retryAfterSeconds);
     const { shared, page } = await lookup(input.artifactId);
     if (!shared) await guard.miss(input.client);
     if (!page) throw new AppError("NOT_FOUND");
+    const crowd = await perArtifact.admit(input.artifactId);
+    if (!crowd.allowed) throw rateLimited(crowd.retryAfterSeconds);
     return {
       title: page.title,
       kind: page.kind,
@@ -33,3 +37,6 @@ export class ArtifactLinkOpen {
     };
   }
 }
+
+const rateLimited = (retryAfterSeconds: number) =>
+  new AppError("RATE_LIMITED", { hint: `try again in ${retryAfterSeconds} seconds` });

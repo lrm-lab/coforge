@@ -34,8 +34,16 @@ function counter(limit: number): PeekableRateLimit {
   };
 }
 
-function opener(lookup: () => Promise<LinkLookup>, calls: string[] = []) {
+const open = (limit = 1_000_000) => ({ admit: counter(limit).admit });
+
+function opener(
+  lookup: () => Promise<LinkLookup>,
+  calls: string[] = [],
+  limits: { perClient?: number; perArtifact?: number } = {},
+) {
   return new ArtifactLinkOpen({
+    perClient: open(limits.perClient),
+    perArtifact: open(limits.perArtifact),
     lookup: async () => {
       calls.push("lookup");
       return lookup();
@@ -83,6 +91,8 @@ test("the guard answers before the lookup runs: the 21st miss of a client is RAT
 
 test("a deployment with no sandbox origin cannot open it", async () => {
   const service = new ArtifactLinkOpen({
+    perClient: open(),
+    perArtifact: open(),
     lookup: async () => SHARED,
     guard: new PublicArtifactMissGuard({
       perClient: counter(20),
@@ -94,4 +104,26 @@ test("a deployment with no sandbox origin cannot open it", async () => {
   await expect(service.open({ artifactId: A, client: "192.0.2.1" })).rejects.toMatchObject({
     code: "TEMPORARILY_UNAVAILABLE",
   });
+});
+
+test("a real shared artifact is still limited per client: the 121st open is RATE_LIMITED and queries nothing", async () => {
+  const calls: string[] = [];
+  const service = opener(async () => SHARED, calls, { perClient: 120 });
+  for (let i = 0; i < 120; i++) await service.open({ artifactId: A, client: "192.0.2.1" });
+  const before = calls.length;
+  await expect(service.open({ artifactId: A, client: "192.0.2.1" })).rejects.toMatchObject({
+    code: "RATE_LIMITED",
+  });
+  expect(calls.length).toBe(before);
+  expect(await service.open({ artifactId: A, client: "192.0.2.2" })).toBeTruthy();
+});
+
+test("one artifact's anonymous opens are capped across all clients, and another artifact is not", async () => {
+  const service = opener(async () => SHARED, [], { perArtifact: 600 });
+  for (let i = 0; i < 600; i++) await service.open({ artifactId: A, client: `192.0.2.${i % 200}` });
+  await expect(service.open({ artifactId: A, client: "198.51.100.1" })).rejects.toMatchObject({
+    code: "RATE_LIMITED",
+  });
+  const other = "22222222-2222-4222-8222-222222222222";
+  expect(await service.open({ artifactId: other, client: "198.51.100.1" })).toBeTruthy();
 });

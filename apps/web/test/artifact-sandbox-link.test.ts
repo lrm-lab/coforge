@@ -3,7 +3,10 @@ import { ArtifactSandbox } from "#src/server/artifacts/artifact-sandbox.server";
 import { MemoryTicketNonces } from "#src/server/artifacts/artifact-sandbox-nonces.server";
 import { PublicArtifactMissGuard } from "#src/server/artifacts/artifact-public-miss-guard.server";
 import type { LinkLookup, PublicPage } from "#src/server/artifacts/artifact-public-page.server";
-import type { PeekableRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
+import type {
+  AppRateLimit,
+  PeekableRateLimit,
+} from "#src/server/app-rate-limits/app-rate-limit.server";
 import { FRAME, subresource } from "./helpers/artifact-sandbox-open";
 
 const A = "11111111-1111-4111-8111-111111111111";
@@ -44,6 +47,7 @@ function counter(limit: number): PeekableRateLimit {
 function linkSandbox(
   linkPage: ((artifactId: string, path?: string) => Promise<LinkLookup>) | undefined,
   client: string | null = "192.0.2.1",
+  linkArtifactLimit: AppRateLimit | undefined = undefined,
   missGuard = new PublicArtifactMissGuard({
     perClient: counter(20),
     global: counter(300),
@@ -59,6 +63,7 @@ function linkSandbox(
     now: () => new Date("2026-11-19T08:00:00Z"),
     linkPage,
     missGuard,
+    linkArtifactLimit,
     publicClientAddress: () => client ?? undefined,
   });
 }
@@ -99,10 +104,10 @@ test("another client still opens a page after one client is refused", async () =
     global: counter(300),
     now: () => 0,
   });
-  const first = linkSandbox(async () => ABSENT, "192.0.2.1", guard);
+  const first = linkSandbox(async () => ABSENT, "192.0.2.1", undefined, guard);
   for (let i = 0; i < 21; i++) await first.serve(new Request(`${ORIGIN}/l`));
   expect((await first.serve(new Request(`${ORIGIN}/l`))).status).toBe(429);
-  const second = linkSandbox(async () => shared(found), "192.0.2.2", guard);
+  const second = linkSandbox(async () => shared(found), "192.0.2.2", undefined, guard);
   expect((await second.serve(new Request(`${ORIGIN}/l`))).status).toBe(302);
 });
 
@@ -115,7 +120,7 @@ test("the ticket path never consults the miss guard, so members are not counted"
       throw new Error("consulted");
     },
   } as unknown as PublicArtifactMissGuard;
-  const service = linkSandbox(async () => shared(found), "192.0.2.1", guard);
+  const service = linkSandbox(async () => shared(found), "192.0.2.1", undefined, guard);
   const bad = await service.serve(new Request(`${ORIGIN}/_coforge/open?ticket=nope`));
   expect(bad.status).toBe(404);
 });
@@ -137,4 +142,18 @@ test("a request with no client address is never counted, so unattributed visitor
   const service = linkSandbox(async () => ABSENT, null);
   for (let i = 0; i < 25; i++)
     expect((await service.serve(new Request(`${ORIGIN}/l`))).status).toBe(404);
+});
+
+test("one artifact's anonymous page opens are capped across clients; its files and other artifacts are not", async () => {
+  const limit: AppRateLimit = counter(3);
+  const service = (client: string) => linkSandbox(async () => shared(found), client, limit);
+  for (let i = 0; i < 3; i++)
+    expect((await service(`192.0.2.${i}`).serve(new Request(`${ORIGIN}/l`))).status).toBe(302);
+  const capped = await service("192.0.2.50").serve(new Request(`${ORIGIN}/l`));
+  expect(capped.status).toBe(429);
+  expect(capped.headers.get("retry-after")).toBe("30");
+  const file = await service("192.0.2.50").serve(
+    new Request(`${ORIGIN}/l/page/style.css`, { headers: subresource("style") }),
+  );
+  expect(file.status).not.toBe(429);
 });

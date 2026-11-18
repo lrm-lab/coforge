@@ -65,6 +65,7 @@ type SandboxDependencies = {
   publicPage?(token: string, path?: string): Promise<PublicPage | null>;
   linkPage?(artifactId: string, path?: string): Promise<LinkLookup>;
   missGuard?: PublicArtifactMissGuard;
+  linkArtifactLimit?: AppRateLimit;
   viewerName?: (workspaceId: string, userId: string) => Promise<string>;
   publicRateLimit?: AppRateLimit;
   publicFileRateLimit?: AppRateLimit;
@@ -341,6 +342,7 @@ export class ArtifactSandbox {
     request: Request,
     ref: PublicRef,
     path: string | undefined,
+    artifactId?: string,
   ): Promise<PublicPage | Response | null> {
     const client = (this.deps.publicClientAddress ?? clientAddress)(request);
     const guard = ref.guarded ? this.deps.missGuard : undefined;
@@ -352,6 +354,14 @@ export class ArtifactSandbox {
     }
     const { page, miss } = await ref.load(path);
     if (miss) await guard?.miss(client);
+    if (page && artifactId && ref.guarded) {
+      const crowd = await (this.deps.linkArtifactLimit ?? NO_RATE_LIMIT).admit(artifactId);
+      if (!crowd.allowed) {
+        const response = sandboxRefusal(429, "Too many requests.");
+        response.headers.set("Retry-After", String(crowd.retryAfterSeconds));
+        return response;
+      }
+    }
     return page;
   }
 
@@ -368,7 +378,12 @@ export class ArtifactSandbox {
       return sandboxRefusal(404, "Not found.");
     const refused = await this.admitPublic(request, use);
     if (refused) return refused;
-    const loaded = await this.loadPublic(request, ref, path);
+    const loaded = await this.loadPublic(
+      request,
+      ref,
+      path,
+      path === undefined ? host.artifactId : undefined,
+    );
     if (loaded instanceof Response) return loaded;
     const page = loaded;
     if (!page || page.artifactId !== host.artifactId) return sandboxRefusal(404, "Not found.");

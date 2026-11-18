@@ -174,6 +174,8 @@ function productionLinkMissGuard() {
 
 export function productionArtifactLinkOpen(db: PrismaClient) {
   return new ArtifactLinkOpen({
+    perClient: getAppRateLimits().publicArtifact,
+    perArtifact: getAppRateLimits().publicArtifactPerArtifact,
     lookup: linkPageLookup(db),
     guard: productionLinkMissGuard(),
     origin: artifactSandboxOrigin(),
@@ -197,6 +199,7 @@ export function productionArtifactSandbox(db: PrismaClient) {
     publicPage: publicPageLookup(db),
     linkPage: linkPageLookup(db),
     missGuard: productionLinkMissGuard(),
+    linkArtifactLimit: getAppRateLimits().publicArtifactPerArtifact,
   });
 }
 
