@@ -52,7 +52,6 @@ export type SentMessage = {
   sequence: number;
   body: string;
   createdAt: Date | string;
-  attachmentFileName?: string;
   /** The `@handle`s this send left as text because they name nobody the sender can see. */
   unresolvedMentionHandles?: readonly string[];
   /** Mentions of people outside the channel this send did not notify, for the sender to act on. */
@@ -80,7 +79,6 @@ export function MessageComposer({
   quotedDraft,
   onSend,
   canSendAsTask,
-  onSent,
   autoFocus = true,
   hostRef,
 }: {
@@ -114,8 +112,6 @@ export function MessageComposer({
   ) => Promise<SentMessage | void>;
   /** Whether a top-level send may go "As task" (thread composers never offer it). */
   canSendAsTask?: boolean;
-  /** A message of the current user's was accepted by the server. */
-  onSent?: (message: SentMessage) => void;
   /** Opening the conversation puts the caret here; false where the host keeps it (Activity). */
   autoFocus?: boolean;
   /** The host's ref this composer's field registers itself in (`ComposerHost.composerRef`). */
@@ -214,7 +210,6 @@ export function MessageComposer({
     draftKey,
     onSend,
     onSent: (message) => {
-      onSent?.(message);
       setUnresolved((current) =>
         current?.draftKey === draftKey && current.sequence > message.sequence
           ? current

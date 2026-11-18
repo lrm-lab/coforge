@@ -42,8 +42,7 @@ model Message {
   /// Serves workspace-wide top-level message scans with sequence ranges — the
   /// sidebar's unread counts and future inbox-style reads.
   @@index([workspaceId, threadRootId, sequence])
-  /// Serves a member's own top-level messages newest first (the own-messages jump index read on
-  /// every conversation open) and the `sender` foreign-key check when a member row is deleted.
+  /// Serves the `sender` foreign-key check when a member row is deleted.
   @@index([senderMemberId, threadRootId, sequence])
   /// Serves a member's messages newest first across threads: the viewer's recent @-mentions that
   /// score a channel's @-completion stop after their newest 50 mentioning messages.

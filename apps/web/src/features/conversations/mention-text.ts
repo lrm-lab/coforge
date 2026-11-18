@@ -20,8 +20,8 @@ export type MentionRef = {
 };
 
 /**
- * A function that rewrites a stored body's tokens for list/summary views (e.g. the own-messages
- * jump index, the thread previews) that show the stored body as plain text and would otherwise
+ * A function that rewrites a stored body's tokens for list/summary views (e.g. the thread
+ * previews) that show the stored body as plain text and would otherwise
  * leak the raw token: a mention token (`<@agent:uuid>` / `<@human:uuid>`) to its `@label` from the
  * given mentionables, a task token to `task #N`, and a channel token to `#name` — the current name
  * from `channelNames` (channel id → name) when listed, the stored one otherwise. A mention reads by

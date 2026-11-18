@@ -29,7 +29,6 @@ export function ConversationComposerFooter({
   channels,
   onSend,
   canSendAsTask,
-  onSent,
   quotedDraft,
   autoFocus,
   hostRef,
@@ -47,7 +46,6 @@ export function ConversationComposerFooter({
   channels?: ComposerProps["channels"];
   onSend: ComposerProps["onSend"];
   canSendAsTask?: boolean;
-  onSent: ComposerProps["onSent"];
   quotedDraft?: ComposerProps["quotedDraft"];
   autoFocus?: boolean;
   hostRef?: ComposerProps["hostRef"];
@@ -82,7 +80,6 @@ export function ConversationComposerFooter({
             channels={channels}
             onSend={onSend}
             canSendAsTask={canSendAsTask}
-            onSent={onSent}
             quotedDraft={quotedDraft}
             autoFocus={autoFocus}
             hostRef={hostRef}

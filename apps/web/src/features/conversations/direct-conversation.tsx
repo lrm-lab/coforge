@@ -222,7 +222,6 @@ export { ThreadedConversation } from "./threaded-conversation";
 export type {
   ConversationProps,
   DirectConversationView,
-  OwnMessageIndexEntry,
   TaskPopupControls,
   ThreadedConversationProps,
 } from "./conversation-types";

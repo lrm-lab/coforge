@@ -24,7 +24,7 @@ export function tellJumpFailure(toast: ReturnType<typeof useAppToast>, error: un
 
 /**
  * Every way the pane lands on one message — a `#message-` hash, the Saved view's `?message=`
- * param, the own-messages navigator's `showMessage` — plus the highlight the landed row keeps
+ * param — plus the highlight the landed row keeps
  * for a moment. The pane keeps the open position (oldest unread or latest) and bottom-follow;
  * this hook owns only the jump-to-message paths and what they share: the pending row a folded
  * system group owes a scroll, and the flash that marks where a jump landed.
@@ -51,7 +51,6 @@ export function useMessageJump({
   scrollToLatest: (behavior: ScrollBehavior) => void;
   bottomPin: ConversationBottomPin;
 }): {
-  showMessage: (messageId: string, options?: { opening?: boolean }) => Promise<void>;
   jumpHighlightId: string | undefined;
 } {
   const toast = useAppToast();
@@ -209,5 +208,5 @@ export function useMessageJump({
     onJumpMessageConsumed?.();
   }, [jumpMessage, onJumpMessageConsumed]);
 
-  return { showMessage, jumpHighlightId };
+  return { jumpHighlightId };
 }

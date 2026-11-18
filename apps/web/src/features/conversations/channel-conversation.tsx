@@ -19,13 +19,13 @@ import {
   type HeaderTabs,
 } from "./conversation-header-tabs";
 import type { SendOptions } from "./composer-outbox";
+import type { SentMessage } from "./message-composer";
 import { plainMentionsByHandle } from "./message-markdown";
 import { channelMentionOutsidersQuery, readsMentionOutsiders } from "./channel-page-reads";
 import { useChannelMentionables } from "./use-channel-mentionables";
 import {
   ThreadedConversation,
   type DirectConversationView,
-  type OwnMessageIndexEntry,
   type TaskPopupControls,
 } from "./direct-conversation";
 import type { ChannelSuggestion } from "./reference-completion";
@@ -173,7 +173,6 @@ export function ChannelConversation({
   onChanged,
   onLoadOlder,
   onLoadNewer,
-  onLoadOwnMessages,
   onLoadMessageAround,
   onShowLatest,
   onReadThread,
@@ -200,23 +199,13 @@ export function ChannelConversation({
     idempotencyKey: string,
     attachmentIds?: string[],
     options?: SendOptions,
-  ) => Promise<OwnMessageIndexEntry | void>;
+  ) => Promise<SentMessage | void>;
   onJoin: () => Promise<void>;
   /** Refreshes the page and the sidebar after the settings panel changed the channel. */
   onChanged: () => Promise<void>;
   onLoadOlder?: () => Promise<void>;
   /** Fetch the next page towards the live end once the bounded window pushed the tail out. */
   onLoadNewer?: () => Promise<void>;
-  onLoadOwnMessages?: (beforeSequence?: number) => Promise<{
-    messages: Array<{
-      id: string;
-      sequence: number;
-      body: string;
-      createdAt: Date | string;
-      attachmentFileName?: string;
-    }>;
-    hasOlder: boolean;
-  }>;
   onLoadMessageAround?: (messageId: string) => Promise<string>;
   onShowLatest?: () => Promise<void>;
   onReadThread?: (rootMessageId: string, throughSequence: number) => Promise<void>;
@@ -311,7 +300,6 @@ export function ChannelConversation({
       onSend={onSend}
       onLoadOlder={onLoadOlder}
       onLoadNewer={onLoadNewer}
-      onLoadOwnMessages={onLoadOwnMessages}
       onLoadMessageAround={onLoadMessageAround}
       onShowLatest={onShowLatest}
       onReadThread={onReadThread}

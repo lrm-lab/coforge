@@ -11,7 +11,7 @@ import type { SendOptions } from "./composer-outbox";
 import type { Mentionable } from "./mention-text";
 import type { ThreadSummary } from "./thread-summary-model";
 import type { ChipMention } from "./message-reference-chips";
-import type { OwnMessageIndexEntry } from "./own-messages-menu";
+import type { SentMessage } from "./message-composer";
 import type { ChannelSuggestion } from "./reference-completion";
 import type { ReadPositions } from "./conversation-pane-layout";
 
@@ -96,8 +96,6 @@ export type DirectConversationView = {
   }>;
 };
 
-export type { OwnMessageIndexEntry };
-
 export type ConversationProps = {
   conversation: DirectConversationView;
   agentStatus?: "active" | "inactive";
@@ -109,15 +107,11 @@ export type ConversationProps = {
     idempotencyKey: string,
     attachmentIds?: string[],
     options?: SendOptions,
-  ) => Promise<OwnMessageIndexEntry | void>;
+  ) => Promise<SentMessage | void>;
   onLoadOlder?: () => Promise<void>;
   /** Fetch the next page towards the live end once the bounded window's oldest page has pushed the
    * tail out of the loaded pages. */
   onLoadNewer?: () => Promise<void>;
-  onLoadOwnMessages?: (beforeSequence?: number) => Promise<{
-    messages: OwnMessageIndexEntry[];
-    hasOlder: boolean;
-  }>;
   onLoadMessageAround?: (messageId: string) => Promise<string>;
   onShowLatest?: () => Promise<void>;
   /** Whether the main stream's viewport is following its newest row. A full refetch may replace

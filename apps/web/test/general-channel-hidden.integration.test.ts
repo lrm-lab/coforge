@@ -6,7 +6,6 @@ import { PublicChannels } from "#src/server/conversations/public-channels.server
 import { getAgentChannel } from "#src/server/conversations/channel-access.server";
 import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
-import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
 import { AgentChannelManagement } from "#src/server/conversations/agent-channel-management.server";
 import { PrismaWorkspaceCatalogStore } from "#src/server/workspaces/catalog.server";
 import { PrismaAgentRepository } from "#src/server/db/repositories/agent.repositories.server";
@@ -203,11 +202,6 @@ test.skipIf(!connectionString)(
       expect(await errorOf(channels.members(workspace.id, { userId: owner.id }, general.id))).toBe(
         "NOT_FOUND",
       );
-      expect(
-        await errorOf(
-          new ConversationHistory(db).listOwnMessages(workspace.id, owner.id, general.id),
-        ),
-      ).toBe("NOT_FOUND");
       expect(
         await listUserSavedMessages(db, { workspaceId: workspace.id, userId: bob.id }),
       ).toEqual([]);

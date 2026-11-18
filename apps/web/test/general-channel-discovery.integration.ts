@@ -273,17 +273,6 @@ test("Workspace humans enrolled in general see one general channel; outsiders ca
     );
     expect(concurrentBobMessage?.senderMemberId).not.toBe(concurrentHistory.senderMemberId);
     const browserHistory = new ConversationHistory(db);
-    expect(
-      (await browserHistory.listOwnMessages(workspace.id, alice.id, engineering.id)).messages.map(
-        (message) => message.body,
-      ),
-    ).toEqual([
-      "Hello Bob",
-      "Muted ordinary message",
-      // Same stored-token contract as above.
-      `<@human:${bob.id}> please review this`,
-      "Concurrent A",
-    ]);
     // A jump lands on another member's message too (#740): for a channel, Workspace membership is
     // the whole access decision, so Bob opens the window around Alice's message and an outsider
     // is refused.
@@ -294,9 +283,6 @@ test("Workspace humans enrolled in general see one general channel; outsiders ca
     ).toBe(true);
     await expect(
       browserHistory.loadAround(workspace.id, outsider.id, engineering.id, saved.id),
-    ).rejects.toThrow("ACCESS_DENIED");
-    await expect(
-      browserHistory.listOwnMessages(workspace.id, outsider.id, engineering.id),
     ).rejects.toThrow("ACCESS_DENIED");
     const latestPage = await channels.open(workspace.id, alice.id, engineering.id, { limit: 2 });
     expect(latestPage.hasOlder).toBe(true);

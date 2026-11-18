@@ -9,7 +9,6 @@ import {
   directConversationInputSchema,
   directConversationPageInputSchema,
   directConversationUpdatesInputSchema,
-  ownMessageIndexInputSchema,
   readConversationThreadInputSchema,
   sendConversationMessageInputSchema,
   toggleMessageReactionInputSchema,
@@ -77,15 +76,6 @@ export const loadDirectConversationUpdates = createServerFn({ method: "GET" })
       data.afterReplySequence,
     );
     return attachViewerViews(db, workspaceId, user.id, messages);
-  });
-
-export const loadOwnConversationMessages = createServerFn({ method: "GET" })
-  .middleware([workspaceUserMiddleware])
-  .validator(ownMessageIndexInputSchema)
-  .handler(async ({ context: { user, db, workspaceId }, data }) => {
-    return new ConversationHistory(db).listOwnMessages(workspaceId, user.id, data.conversationId, {
-      beforeSequence: data.beforeSequence,
-    });
   });
 
 export const loadConversationAround = createServerFn({ method: "GET" })

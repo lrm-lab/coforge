@@ -30,7 +30,7 @@ let workspaceId: string;
 let workspaceSlug: string;
 let writerId: string;
 const history = `document.querySelector('[aria-label="Message history" i]')`;
-const position = `(() => { const h=${history}; return h && {distance:h.scrollHeight-h.scrollTop-h.clientHeight,top:h.scrollTop,height:h.scrollHeight,viewport:h.clientHeight,back:!!document.querySelector('button[aria-label="Back to bottom" i]')}; })()`;
+const position = `(() => { const h=${history}; return h && {distance:h.scrollHeight-h.scrollTop-h.clientHeight,top:h.scrollTop,height:h.scrollHeight,viewport:h.clientHeight,back:[...document.querySelectorAll('button')].some((b)=>/^jump to latest$/i.test(b.textContent.trim()))}; })()`;
 
 beforeAll(async () => {
   await mkdir(artifacts, { recursive: true });
@@ -333,7 +333,7 @@ for (const width of [1440, 390]) {
           await browser(
             "wait",
             "--fn",
-            `(() => { const h=${history}; const row=h.querySelector('li[data-message-id="${boundary.id}"]'); const rect=row.getBoundingClientRect(); return rect.bottom>h.getBoundingClientRect().top && rect.top<h.getBoundingClientRect().bottom && !!document.querySelector('button[aria-label="Back to bottom" i]'); })()`,
+            `(() => { const h=${history}; const row=h.querySelector('li[data-message-id="${boundary.id}"]'); const rect=row.getBoundingClientRect(); return rect.bottom>h.getBoundingClientRect().top && rect.top<h.getBoundingClientRect().bottom && [...document.querySelectorAll('button')].some((b)=>/^jump to latest$/i.test(b.textContent.trim())); })()`,
           );
           const jumped = await evaluate<{ distance: number; back: boolean }>(position);
           await Bun.write(join(artifacts, `${name}-jump.json`), JSON.stringify(jumped, null, 2));

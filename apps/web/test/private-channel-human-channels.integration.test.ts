@@ -62,7 +62,6 @@ test.skipIf(!connectionString)(
         ["members", (userId) => channels.members(ws, { userId }, closed.id)],
         ["thread", (userId) => history.loadThread(ws, userId, closed.id, closed.message.id)],
         ["around", (userId) => history.loadAround(ws, userId, closed.id, closed.message.id)],
-        ["own messages", (userId) => history.listOwnMessages(ws, userId, closed.id)],
         ["mute", (userId) => channels.setUserMuted(ws, userId, closed.id, true)],
         ["pin", (userId) => channels.setUserPinned(ws, userId, closed.id, true)],
         [

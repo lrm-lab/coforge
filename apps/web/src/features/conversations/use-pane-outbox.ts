@@ -13,19 +13,17 @@ export function usePaneOutbox({
   conversation,
   rootId,
   onSend,
-  onSent,
   onNewSend,
 }: {
   conversation: { conversationId: string; hasNewer?: boolean; messages: readonly { id: string }[] };
   rootId?: string;
   onSend: Parameters<typeof useMessageOutbox>[0]["onSend"];
-  onSent?: Parameters<typeof useMessageOutbox>[0]["onSent"];
   /** A new send started: the pane brings its latest messages into view. */
   onNewSend: () => void;
 }) {
   const outboxDraftKey =
     useComposerScope()?.draftKey ?? composerDraftKey(conversation.conversationId, rootId);
-  const outbox = useMessageOutbox({ draftKey: outboxDraftKey, onSend, onSent });
+  const outbox = useMessageOutbox({ draftKey: outboxDraftKey, onSend });
   const outboxEntries = useOutboxEntries(outboxDraftKey);
   const loadedMessageIds = useMemo(
     () => new Set(conversation.messages.map((message) => message.id)),

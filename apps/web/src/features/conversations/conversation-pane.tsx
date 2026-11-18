@@ -13,7 +13,6 @@ import { useLoadOlder } from "./use-load-older";
 import { streamState } from "./stream-state";
 import { ConversationComposerFooter } from "./conversation-composer-footer";
 import { ThreadPaneHeader } from "./thread-pane-header";
-import { makeReferenceBodyFormatter } from "./mention-text";
 import { dayLabel } from "./message-row";
 import { outboxContinuesRun } from "./conversation-pane-layout";
 import { useMessageExpansion } from "./use-message-expansion";
@@ -24,8 +23,6 @@ import { ComposerEdgeOverlay } from "./composer-edge-overlay";
 import { useComposerHost } from "./composer-host";
 import { ConversationMessageList } from "./conversation-message-list";
 import { NewerSentinel } from "./conversation-newer-sentinel";
-import { useOwnMessagesIndex } from "./own-messages-menu";
-import { useLoadedOwnMessages } from "./use-loaded-own-messages";
 import { isViewerMessage } from "./own-message";
 import { useConversationOpen } from "./use-conversation-open";
 import { useSystemMessageGroups } from "./use-system-message-groups";
@@ -56,7 +53,6 @@ export function ConversationPane({
   threadHeaderAction,
   onLoadOlder,
   onLoadNewer,
-  onLoadOwnMessages,
   onLoadMessageAround,
   onShowLatest,
   onFollowingLatestChange,
@@ -149,18 +145,6 @@ export function ConversationPane({
   );
   const isOwn = (message: { senderMemberId?: string | null }) =>
     isViewerMessage(message, conversation.senderMemberId);
-  // Only derived from the loaded page when no indexed own-message source is wired up.
-  const loadedOwnMessages = useLoadedOwnMessages(
-    conversation.messages,
-    conversation.senderMemberId,
-    onLoadOwnMessages,
-  );
-  const ownIndex = useOwnMessagesIndex({
-    conversationId: conversation.conversationId,
-    enabled: !root,
-    onLoad: onLoadOwnMessages,
-    fallback: loadedOwnMessages,
-  });
   // The viewer's messages the server has not confirmed yet (or failed to take), shown greyed at the
   // foot of the stream until the real message replaces them (see `composer-outbox.ts`). Only a new
   // send scrolls this pane to its latest messages.
@@ -168,7 +152,6 @@ export function ConversationPane({
     conversation,
     rootId: root?.id,
     onSend,
-    onSent: ownIndex.add,
     onNewSend: () => {
       if (root) {
         setFollowingLatest(true);
@@ -187,13 +170,6 @@ export function ConversationPane({
     dayLabel,
     dateLocale,
     timeZone,
-  );
-  // The own-messages index shows the stored body, which spells a mention as its raw
-  // `<@agent:uuid>` token. Resolve those to `@handle` the way the message list does, using the
-  // conversation's known mentionables. Applies to channels too (both render through here).
-  const formatIndexBody = useMemo(
-    () => makeReferenceBodyFormatter(conversation.mentionables ?? [], channelNames),
-    [conversation.mentionables, channelNames],
   );
   /** Message ids whose very long body the reader has opened in full. Kept here rather than in the
    * row: a row is skipped and laid out again as it leaves and re-enters the viewport, and an
@@ -233,7 +209,7 @@ export function ConversationPane({
     toggleGroup: toggleSystemGroup,
     revealGroupMessage: revealSystemMessage,
   } = useSystemMessageGroups(streamItems);
-  const { showMessage, jumpHighlightId } = useMessageJump({
+  const { jumpHighlightId } = useMessageJump({
     messages: conversation.messages,
     openedSystemMessages,
     revealSystemMessage,
@@ -244,20 +220,18 @@ export function ConversationPane({
     scrollToLatest,
     bottomPin,
   });
-  const { newMessageCount, newerSentinelRef, trackReadingPosition, showLatestMessages } =
-    useStreamPositioning({
-      reading,
-      conversation,
-      root,
-      openKey,
-      openBoundary,
-      isOwn,
-      jumpMessage,
-      messageListRef,
-      onLoadNewer,
-      onShowLatest,
-      onReadLatest,
-    });
+  const { newerSentinelRef, trackReadingPosition, showLatestMessages } = useStreamPositioning({
+    reading,
+    conversation,
+    root,
+    openKey,
+    openBoundary,
+    jumpMessage,
+    messageListRef,
+    onLoadNewer,
+    onShowLatest,
+    onReadLatest,
+  });
 
   // The cards a thread asks include its root's, shown above the replies.
   const cardMessages = useMemo(
@@ -390,14 +364,8 @@ export function ConversationPane({
             conversationId={conversation.conversationId}
             threadRootId={root?.id ?? null}
             overhead={composerHost.overhead}
-            navigation={{
-              index: ownIndex,
-              followingLatest,
-              newMessageCount,
-              onShowMessage: (messageId) => void showMessage(messageId),
-              onShowLatest: () => void showLatestMessages(),
-              formatBody: formatIndexBody,
-            }}
+            viewerId={conversation.viewerId}
+            onShowLatest={followingLatest ? undefined : () => void showLatestMessages()}
           />
         </div>
 
@@ -412,7 +380,6 @@ export function ConversationPane({
           channels={channels}
           onSend={onSend}
           canSendAsTask={canSendAsTask}
-          onSent={ownIndex.add}
           quotedDraft={quotedDraft}
           autoFocus={composerHost.autoFocus}
           hostRef={composerHost.composerRef}

@@ -23,11 +23,7 @@ import {
 import type { SendOptions } from "./composer-outbox";
 import type { Reactor } from "./message-reactions";
 import { useRefreshSidebarChannels } from "./sidebar-lists";
-import {
-  loadOwnConversationMessages,
-  markDirectThreadRead,
-  sendDirectConversationMessage,
-} from "./conversations.functions";
+import { markDirectThreadRead, sendDirectConversationMessage } from "./conversations.functions";
 import {
   toggleChannelMessageReactionVersioned,
   toggleDirectMessageReactionVersioned,
@@ -56,7 +52,6 @@ export function useChannelConversation(channelId: string) {
   const join = useServerFn(joinPublicChannel);
   const markRead = useServerFn(markPublicChannelThreadRead);
   const setThreadFollowed = useServerFn(setPublicChannelThreadFollowed);
-  const loadOwnMessages = useServerFn(loadOwnConversationMessages);
   const endReplyIntents = useEndReplyIntentsOnArrival();
   const page = useConversationQuery({
     onArrived: endReplyIntents,
@@ -140,10 +135,6 @@ export function useChannelConversation(channelId: string) {
         await setThreadFollowed({ data: { channelId, threadRootId, followed } });
         page.setThreadFollowed(threadRootId, followed);
       },
-      onLoadOwnMessages: (beforeSequence?: number) =>
-        loadOwnMessages({
-          data: { conversationId: conversation.conversationId, beforeSequence },
-        }),
       onLoadMessageAround: page.loadMessageAround,
       onShowLatest: page.showLatest,
       onFollowingLatestChange: page.setFollowingLatest,
@@ -162,7 +153,6 @@ export function useDirectConversation(conversationId: string) {
   const send = useServerFn(sendDirectConversationMessage);
   const toggleReaction = useServerFn(toggleDirectMessageReactionVersioned);
   const markRead = useServerFn(markDirectThreadRead);
-  const loadOwnMessages = useServerFn(loadOwnConversationMessages);
   const endReplyIntents = useEndReplyIntentsOnArrival();
   const page = useConversationQuery({
     onArrived: endReplyIntents,
@@ -214,8 +204,6 @@ export function useDirectConversation(conversationId: string) {
         await markRead({ data: { conversationId, threadRootId, throughSequence } });
         page.applyThreadRead(threadRootId, throughSequence);
       },
-      onLoadOwnMessages: (beforeSequence?: number) =>
-        loadOwnMessages({ data: { conversationId, beforeSequence } }),
       onLoadMessageAround: page.loadMessageAround,
       onShowLatest: page.showLatest,
       onFollowingLatestChange: page.setFollowingLatest,

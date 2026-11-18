@@ -27,8 +27,7 @@ export function TaskDiscussionPane({
   conversationId: known,
   board,
   mentionables,
-  // The host conversation's own-message index and jumps say nothing about this one.
-  onLoadOwnMessages: _ownMessages,
+  // The host conversation's jumps say nothing about this one.
   onLoadMessageAround: _around,
   ...pane
 }: Omit<PaneProps, "conversation" | "root" | "onSend" | "onLoadOlder" | "streamRead"> & {

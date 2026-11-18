@@ -58,14 +58,13 @@ export function useReadingPosition(
 }
 
 /** What moves the reader as a stream changes: its open position, staying at the latest, keeping
- * the row in view when a page loads, and counting what arrives while they read further up. */
+ * the row in view when a page loads. */
 export function useStreamPositioning({
   reading,
   conversation,
   root,
   openKey,
   openBoundary,
-  isOwn,
   jumpMessage,
   messageListRef,
   onLoadNewer,
@@ -77,7 +76,6 @@ export function useStreamPositioning({
   root: ConversationPaneProps["root"];
   openKey: string;
   openBoundary: ReturnType<typeof useConversationOpen>["boundary"];
-  isOwn: (message: { senderMemberId?: string | null }) => boolean;
   jumpMessage: ConversationPaneProps["jumpMessage"];
   messageListRef: RefObject<HTMLOListElement | null>;
   onLoadNewer: ConversationPaneProps["onLoadNewer"];
@@ -94,7 +92,6 @@ export function useStreamPositioning({
     scrollToLatest,
   } = reading;
   const toast = useAppToast();
-  const [newMessageCount, setNewMessageCount] = useState(0);
   const [, loadingNewerRef, setLoadingNewer] = useStateWithRef(false);
   /** The sentinel that loads the evicted tail when it approaches the viewport (the older one is
    * `OlderMessagesRow`). */
@@ -102,7 +99,6 @@ export function useStreamPositioning({
   /** The current `loadNewer`, so the sentinel's observer never calls a stale one. */
   const loadNewerRef = useRef<() => Promise<void>>(async () => {});
   const previousConversationIdRef = useRef<string | undefined>(undefined);
-  const previousLastSequenceRef = useRef<number | undefined>(undefined);
   const pendingLatestRef = useRef(false);
   // The row the reader is on during a newer-page fetch, refreshed as they scroll, and whether
   // that fetch started while they were following the latest. Applied once, when the fetch's own
@@ -117,17 +113,8 @@ export function useStreamPositioning({
     const changedConversation =
       previousConversationIdRef.current !== undefined &&
       previousConversationIdRef.current !== openKey;
-    const previousLastSequence = previousLastSequenceRef.current;
-    const receivedMessageCount =
-      previousLastSequence === undefined
-        ? 0
-        : conversation.messages.filter(
-            (message) => !isOwn(message) && message.sequence > previousLastSequence,
-          ).length;
     previousConversationIdRef.current = openKey;
-    previousLastSequenceRef.current = lastSequence;
     if (firstRender || changedConversation || followingLatestRef.current) {
-      setNewMessageCount(0);
       // Every ordinary conversation and thread opens on its oldest unread message. With nothing
       // unread (or no cursor), it opens at the latest. A message hash, task jump or search/Saved
       // jump still wins: the anchor and jump effects land there instead.
@@ -152,8 +139,6 @@ export function useStreamPositioning({
       scrollTwice(() => {
         if (followingLatestRef.current) scrollToLatest("instant");
       });
-    } else if (receivedMessageCount > 0) {
-      setNewMessageCount((count) => count + receivedMessageCount);
     }
     return undefined;
   }, [openKey, lastSequence]);
@@ -252,7 +237,6 @@ export function useStreamPositioning({
     // A newer page is about to change both ends of the list. Keep the snapshot on the row they
     // have scrolled to, not the row where the fetch started.
     if (loadingNewerRef.current) newerAnchorRef.current = captureScrollAnchor(history);
-    if (followingLatest) setNewMessageCount(0);
     // A genuine scroll transition into the latest run is the only signal that the user read
     // through it. Open positioning sets `followingLatest` directly and never passes through here.
     if (followingLatest && !wasFollowingLatest && !root) {
@@ -281,7 +265,6 @@ export function useStreamPositioning({
 
   async function showLatestMessages() {
     setFollowingLatest(true);
-    setNewMessageCount(0);
     if (conversation.hasNewer && onShowLatest) {
       pendingLatestRef.current = true;
       try {
@@ -296,5 +279,5 @@ export function useStreamPositioning({
     scrollToLatest("smooth");
   }
 
-  return { newMessageCount, newerSentinelRef, trackReadingPosition, showLatestMessages };
+  return { newerSentinelRef, trackReadingPosition, showLatestMessages };
 }

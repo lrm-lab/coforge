@@ -60,9 +60,6 @@ export const directConversationPageInputSchema = directConversationInputSchema.e
   conversationPageInputSchema,
 );
 const conversationHistoryInputSchema = z.object({ conversationId: uuid });
-export const ownMessageIndexInputSchema = conversationHistoryInputSchema.extend({
-  beforeSequence: z.number().int().positive().optional(),
-});
 /**
  * The message a link names: a whole id, or the short id an Agent sees (`xxxxxxxx` or
  * `xxxxxxxx-xxxx`). The read around it resolves a short one, and refuses it when more than one

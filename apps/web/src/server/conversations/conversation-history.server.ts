@@ -3,7 +3,6 @@ import { canReadChannel } from "./channel-read-access.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { taskDiscussionAccess, taskDiscussionBoardSelect } from "./task-discussion-access.server";
 import { AppError } from "#src/lib/app-error";
-import { attachmentFileNameSummary } from "#src/features/conversations/attachment-file-name";
 import { followedThreadRootIds, readWindowThreads } from "./thread-summaries.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import { findLinkedMessage } from "#src/server/db/message-anchor.server";
@@ -126,54 +125,6 @@ export class ConversationHistory {
     if (conversation.directKey !== null && viewerMemberId)
       return { viewerMemberId, activeMemberId, direct: true };
     throw new AppError("ACCESS_DENIED");
-  }
-
-  async listOwnMessages(
-    workspaceId: string,
-    userId: string,
-    conversationId: string,
-    page: { beforeSequence?: number; limit?: number } = {},
-  ) {
-    const { viewerMemberId } = await this.authorize(workspaceId, userId, conversationId);
-    // A viewer who never joined has sent nothing here.
-    if (!viewerMemberId) return { hasOlder: false, messages: [] };
-    const limit = clampPageLimit(page.limit ?? 20, 50);
-    const rows = await this.db.message.findMany({
-      where: {
-        conversationId,
-        threadRootId: null,
-        sequence: page.beforeSequence ? { lt: page.beforeSequence } : undefined,
-        // By the member row (one per user per conversation, kept after leaving), not a join
-        // through `sender.userId`: that walked the conversation's whole history backwards to find
-        // the viewer's rows; this is a range on `messages(senderMemberId, threadRootId, sequence)`.
-        senderMemberId: viewerMemberId,
-      },
-      orderBy: { sequence: "desc" },
-      take: limit + 1,
-      select: {
-        id: true,
-        sequence: true,
-        body: true,
-        createdAt: true,
-        attachments: {
-          select: { fileName: true },
-          orderBy: { position: "asc" as const },
-        },
-      },
-    });
-    return {
-      hasOlder: rows.length > limit,
-      messages: rows
-        .slice(0, limit)
-        .reverse()
-        .map((message) => ({
-          id: message.id,
-          sequence: message.sequence,
-          body: message.body,
-          createdAt: message.createdAt,
-          attachmentFileName: attachmentFileNameSummary(message.attachments),
-        })),
-    };
   }
 
   /**
