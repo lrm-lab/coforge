@@ -51,6 +51,7 @@ import {
 import { homeConversationOf, homeLinkProps, type ArtifactHome } from "./artifact-home";
 import { useArtifactLinkSharing } from "./artifact-link-sharing";
 import { ArtifactHomeChip } from "./artifact-home-chip";
+import { ArtifactOriginLink } from "./artifact-origin-link";
 import { ArtifactPresenceChip, useKeepSeen, useRecordOpen } from "./artifact-presence-chip";
 import { ArtifactSendDialog } from "./artifact-send-dialog";
 import { ArtifactUpdateBanner, ViewingVersionNotice } from "./artifact-update-banner";
@@ -367,14 +368,17 @@ function ArtifactPageFor({
                   current && (
                     <>
                       <VisibilityPill visibility={visibility} />
-                      <span className="contents @max-2xl/header:hidden">
-                        {home && (
+                      {home && (
+                        <span className="contents @max-2xl/header:hidden">
                           <ArtifactHomeChip
                             home={home}
                             homeName={homeName}
                             scope={visibility.current}
                           />
-                        )}
+                        </span>
+                      )}
+                      <ArtifactOriginLink origin={current.artifact.origin} nameOf={nameOf} />
+                      <span className="contents @max-2xl/header:hidden">
                         <ArtifactPresenceChip
                           workspaceId={workspaceId}
                           artifactId={artifactId}
