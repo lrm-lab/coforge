@@ -60,3 +60,28 @@ test("a delivery from a server that predates the switch carries none", () => {
     decodeAgentMessageDelivery(encodeAgentMessageDelivery(delivery())).features,
   ).toBeUndefined();
 });
+
+test("the message's notice kind and the server's task-discussion verdict ride the delivery", () => {
+  const decoded = decodeAgentMessageDelivery(
+    encodeAgentMessageDelivery({
+      ...delivery(),
+      noticeKind: "task.assigned_you",
+      taskDiscussion: true,
+    }),
+  );
+  expect(decoded.noticeKind).toBe("task.assigned_you");
+  expect(decoded.taskDiscussion).toBe(true);
+});
+
+test("an older server's delivery says nothing about either, and reads back without them", () => {
+  const decoded = decodeAgentMessageDelivery(encodeAgentMessageDelivery(delivery()));
+  // Absent, not false: a daemon that reads `false` would treat an old server's task delivery as
+  // ordinary channel traffic.
+  expect(decoded.noticeKind).toBeUndefined();
+  expect(decoded.taskDiscussion).toBeUndefined();
+  // The server can also say plainly that a delivery is not a task's.
+  expect(
+    decodeAgentMessageDelivery(encodeAgentMessageDelivery({ ...delivery(), taskDiscussion: false }))
+      .taskDiscussion,
+  ).toBe(false);
+});
