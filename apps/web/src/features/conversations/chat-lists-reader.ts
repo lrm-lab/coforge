@@ -1,4 +1,5 @@
 import { AppError } from "#src/lib/app-error";
+import { nextTask } from "#src/lib/next-task";
 import { workspaceSlugFromPath } from "#src/features/workspaces/workspace-url";
 import type { ChatListRead } from "./chat-list-reads";
 import { loadChatLists } from "./chat-lists.functions";
@@ -14,16 +15,6 @@ type Deferred = ReturnType<typeof Promise.withResolvers<unknown>>;
 type Batch = { workspace: string | undefined; lists: Map<ChatListRead, Deferred>; grew: boolean };
 
 const MAX_WAITS = 8;
-
-function nextTask(run: () => void) {
-  if (typeof MessageChannel === "undefined") return void setTimeout(run, 0);
-  const channel = new MessageChannel();
-  channel.port1.onmessage = () => {
-    channel.port1.close();
-    run();
-  };
-  channel.port2.postMessage(undefined);
-}
 
 const pageWorkspace = () =>
   typeof window === "undefined" ? undefined : workspaceSlugFromPath(window.location.pathname);
