@@ -87,6 +87,10 @@ EdgeScript：域名边界本身就是 fail-closed 的，一个域名请求另一
    配置不会生效）。注意 `default-src 'none'` 会拦截顶层音视频文档的媒体请求：将来
    修复视频 CORS（补 `Access-Control-Allow-Origin`）时必须同时加显式 `media-src`，
    且 sandbox 的 opaque origin 下 `'self'` 无效，要写域名或 `https:`。
+   生产 `files.coforge.cn` 已于 2026-11-18 生效（ConfigId `530696079349760`
+   [`Content-Security-Policy`]、`530696079349761` [`X-Content-Type-Options`]，均为
+   `set_resp_header` `add` / `duplicate=off`）；`curl -I` 实测签名 SVG（`image/svg+xml`）
+   与 PNG（`image/png`）均返回 `200 OK` 并携带上述两头。
 7. 启用 HTTPS 证书后强制 HTTPS；每个域名各自记录 certificate ID/expiry，不导出私钥。
    一张 `*.coforge.cn` 证书可以覆盖多个域名，但域名配置本身不得使用 wildcard。
 
