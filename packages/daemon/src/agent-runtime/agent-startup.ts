@@ -2,13 +2,6 @@ import { taskHint } from "#src/daemon-runtime/inbox-notice-text";
 import { AgentSessionRecoveryError, type AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import { AGENT_STARTUP_TIMEOUT_MS, startupTimeoutMs } from "@lrm/coforge-sdk/internal";
 
-export {
-  AGENT_STARTUP_TIMEOUT_MS,
-  SLOW_STARTUP_PROVIDERS,
-  SLOW_STARTUP_TIMEOUT_MS,
-  startupTimeoutMs,
-} from "@lrm/coforge-sdk/internal";
-
 /** The first turn when no real Message or explicit resume prompt is available. Standing
  * instructions already live in the provider's native system/developer prompt. `memoryInContext`:
  * the same turn carries all of MEMORY.md (a recycle briefing), so a fresh session is not told to

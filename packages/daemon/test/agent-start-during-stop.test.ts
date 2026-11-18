@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { DaemonRuntime, type DaemonConfig } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
-import { AGENT_STARTUP_TIMEOUT_MS } from "#src/agent-runtime/agent-startup";
+import { AGENT_STARTUP_TIMEOUT_MS } from "@lrm/coforge-sdk/internal";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import { captureDaemonLogs } from "./log-capture";
 

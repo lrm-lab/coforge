@@ -15,13 +15,9 @@ import {
   PROCESS_TREE_EXIT_GRACE_MS,
 } from "@lrm/coforge-anvil";
 import { kiroProvider } from "./fixtures/kiro-host";
-import {
-  AGENT_STARTUP_TIMEOUT_MS,
-  AgentStartup,
-  agentStartupInput,
-} from "#src/agent-runtime/agent-startup";
+import { AgentStartup, agentStartupInput } from "#src/agent-runtime/agent-startup";
 
-import type { AgentActivity } from "@lrm/coforge-sdk/internal";
+import { AGENT_STARTUP_TIMEOUT_MS, type AgentActivity } from "@lrm/coforge-sdk/internal";
 import { captureDaemonLogs } from "./log-capture";
 
 const workspaceRoot = join(realpathSync(tmpdir()), `coforge-startup-${crypto.randomUUID()}`);

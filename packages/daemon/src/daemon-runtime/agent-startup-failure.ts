@@ -1,4 +1,3 @@
-import { AGENT_STARTUP_TIMEOUT_MS } from "#src/agent-runtime/agent-startup";
 import { launchFailureLogFields } from "#src/agent-runtime/launch-failure";
 import { credentialInvalidReason } from "#src/agent-runtime/credential-invalid";
 import { classifyRuntimeErrorText } from "#src/agent-runtime/runtime-error-classification";
@@ -13,7 +12,7 @@ import type { ActivityLaunch } from "./activity-launch";
 import type { AgentLaunchCoordinatorPorts } from "./agent-launch-coordinator";
 import { agentActivityDrafts } from "./agent-activity-drafts";
 import { runtimeDisplayName } from "./session-invalidate-activity";
-import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
+import { AGENT_STARTUP_TIMEOUT_MS, diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 
 type AgentActivityDrafts = ReturnType<typeof agentActivityDrafts>;
