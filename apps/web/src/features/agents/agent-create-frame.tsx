@@ -129,13 +129,13 @@ export function AgentCreateIntro({
   onClose,
   children,
 }: {
-  illustration: keyof typeof AGENT_ILLUSTRATIONS;
+  illustration?: keyof typeof AGENT_ILLUSTRATIONS;
   title: string;
   description?: string;
   onClose?: () => void;
   children?: ReactNode;
 }) {
-  const Illustration = AGENT_ILLUSTRATIONS[illustration];
+  const Illustration = illustration ? AGENT_ILLUSTRATIONS[illustration] : undefined;
   const requestClose = useContext(AgentCreateGuardContext)?.requestClose ?? onClose;
   return (
     <div className="relative px-6 pt-6 text-center max-sm:px-4 max-sm:pt-4 max-sm:text-left">
@@ -150,7 +150,11 @@ export function AgentCreateIntro({
           className="absolute top-3 right-3 max-sm:hidden"
         />
       )}
-      <Illustration className="mx-auto h-16.5 w-26.5 max-sm:hidden" />
+      {Illustration ? (
+        <Illustration className="mx-auto h-16.5 w-26.5 max-sm:hidden" />
+      ) : (
+        <div className="mx-auto h-16.5 w-26.5 max-sm:hidden" />
+      )}
       <Heading slot="title" className="mt-3 text-lg font-semibold text-primary max-sm:sr-only">
         {title}
       </Heading>

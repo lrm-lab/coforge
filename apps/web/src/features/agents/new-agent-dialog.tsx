@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Cloud01, Link01, Monitor01 } from "@untitledui/icons";
 import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Heading, Radio, RadioGroup } from "react-aria-components";
+import { Radio, RadioGroup } from "react-aria-components";
 
 import {
   getComputerRuntimeCatalog,
@@ -11,7 +11,6 @@ import {
 import { useCloseConversationList } from "#src/features/conversations/conversation-navigation";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
 import { useRefreshSidebar } from "#src/features/conversations/sidebar-lists";
-import { Spinner } from "#src/components/ui/spinner";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import {
@@ -21,6 +20,11 @@ import {
   AgentCreateModal,
 } from "./agent-create-frame";
 import { LocalAgentForm } from "./agent-create-dialog";
+import {
+  FieldsPlaceholder,
+  PlaceholderBlock,
+  type PlaceholderRow,
+} from "./agent-create-placeholder";
 import type { RuntimeCatalog } from "./agent-runtime-fields";
 import { useCreateAgent } from "./use-create-agent";
 import { CloudAgentForm } from "./cloud-agent-form";
@@ -86,11 +90,12 @@ function NewAgentForms({
   const usernameDraft = useAgentUsernameDraft();
   if (cloud.isPending)
     return (
-      <Loading className="py-12">
-        <Heading slot="title" className="sr-only">
-          {m.header_new_agent()}
-        </Heading>
-      </Loading>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <AgentCreateIntro title={m.header_new_agent()} onClose={busy ? undefined : onClose}>
+          <PlaceholderBlock className="mt-4 h-9" />
+        </AgentCreateIntro>
+        <PendingForm onClose={onClose} rows={["field", "line"]} className="gap-3 px-6 pt-5 pb-2" />
+      </div>
     );
   const cloudComputer = cloud.data?.state === "none" ? undefined : cloud.data;
   const availableKinds = cloudComputer ? KINDS : KINDS.filter((option) => option.id !== "cloud");
@@ -186,26 +191,21 @@ function NewLocalAgent({
   const refreshSidebar = useRefreshSidebar({ throwOnError: false });
   const openDirect = useOpenDirectConversation();
   const closeList = useCloseConversationList();
+  if (computers.isError && !computers.data)
+    return (
+      <PendingForm onClose={onClose}>
+        <p role="alert" className="px-6 pt-5 text-sm text-error-primary">
+          {m.channel_members_computers_error()}
+        </p>
+      </PendingForm>
+    );
   if (!computers.data)
     return (
-      <AgentCreateForm
-        footer={
-          <AgentCreateFooter
-            onCancel={onClose}
-            submitLabel={m.agent_create_submit_chat()}
-            submitting={false}
-            submitDisabled
-          />
-        }
-      >
-        {computers.isError ? (
-          <p role="alert" className="px-6 pt-5 text-sm text-error-primary">
-            {m.channel_members_computers_error()}
-          </p>
-        ) : (
-          <Loading className="pt-5" />
-        )}
-      </AgentCreateForm>
+      <PendingForm
+        onClose={onClose}
+        rows={["field", "field", "area", "field", "field", "tall-card", "card"]}
+        className="gap-4 px-6 pt-5 pb-3"
+      />
     );
 
   return (
@@ -233,13 +233,30 @@ function NewLocalAgent({
   );
 }
 
-function Loading({ className, children }: { className: string; children?: ReactNode }) {
+function PendingForm({
+  onClose,
+  rows,
+  className = "",
+  children,
+}: {
+  onClose: () => void;
+  rows?: PlaceholderRow[];
+  className?: string;
+  children?: ReactNode;
+}) {
   return (
-    <div role="status" className={cx("flex justify-center px-6 text-tertiary", className)}>
-      {children}
-      <Spinner />
-      <span className="sr-only">{m.agent_env_loading()}</span>
-    </div>
+    <AgentCreateForm
+      footer={
+        <AgentCreateFooter
+          onCancel={onClose}
+          submitLabel={m.agent_create_submit_chat()}
+          submitting={false}
+          submitDisabled
+        />
+      }
+    >
+      {children ?? <FieldsPlaceholder rows={rows ?? []} className={className} />}
+    </AgentCreateForm>
   );
 }
 
