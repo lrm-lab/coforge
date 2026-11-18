@@ -11,32 +11,17 @@ import { resolveReminderAnchor } from "./reminder-anchor.repositories.server";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import {
   MAX_ACTIVE_REMINDERS,
-  DEFAULT_REMINDER_TIMEZONE,
   ReminderRefusal,
   nextOccurrence,
   type ReminderRepository,
   type StoredReminder,
 } from "#src/server/reminders/reminders.server";
 import { acknowledgeReminder } from "./reminder-acknowledgement.repository.server";
+import { resolveOwnerDefaultTimezone, summary } from "./reminder-timezone.repositories.server";
+
+export { summary };
 
 type Scope = { workspaceId: string; computerId: string; agentId: string; userId: string };
-type ReminderRow = Prisma.ReminderGetPayload<Record<string, never>>;
-
-export const summary = (row: ReminderRow): StoredReminder => ({
-  reminderId: row.id,
-  ownerAgentId: row.ownerAgentId,
-  computerId: row.computerId,
-  version: row.version,
-  title: row.title,
-  target: row.target,
-  messageId: row.messageId,
-  fireAt: row.fireAt.toISOString(),
-  status: row.status as StoredReminder["status"],
-  ...(row.repeat ? { repeat: row.repeat } : {}),
-  ...(row.timezone ? { timezone: row.timezone } : {}),
-  createdAt: row.createdAt.toISOString(),
-  ...(row.firedAt ? { firedAt: row.firedAt.toISOString() } : {}),
-});
 
 function encodeStored(scope: Scope, requestId: string, value: StoredReminder) {
   return encodeAgentReminderOperationResponse({
@@ -109,6 +94,10 @@ export async function recordOperation(
 
 export class PrismaReminderRepository implements ReminderRepository {
   constructor(private readonly db: PrismaClient) {}
+
+  defaultTimezone(scope: Scope, db: Pick<PrismaClient, "agent"> = this.db): Promise<string> {
+    return resolveOwnerDefaultTimezone(db, scope.agentId);
+  }
 
   async authorize(scope: Scope) {
     return Boolean(
@@ -287,7 +276,7 @@ export class PrismaReminderRepository implements ReminderRepository {
         }
         const zone =
           request.repeat && request.repeat !== "none"
-            ? (request.timezone ?? existing.timezone ?? DEFAULT_REMINDER_TIMEZONE)
+            ? (request.timezone ?? existing.timezone ?? (await this.defaultTimezone(scope, tx)))
             : request.timezone;
         const patch: Partial<
           Pick<StoredReminder, "title" | "fireAt" | "repeat" | "timezone" | "status">

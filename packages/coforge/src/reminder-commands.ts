@@ -5,7 +5,6 @@ import type {
   ReminderSummaryRecord,
 } from "@lrm/coforge-sdk/internal";
 import {
-  DEFAULT_REMINDER_TIMEZONE,
   decodeLocalReminderRequest,
   encodeLocalReminderRequest,
   isReminderId,
@@ -158,12 +157,6 @@ export function parseReminderArgs(args: readonly string[]): ReminderInvocation {
       request[field] = number;
     } else request[field] = value;
   }
-  if (
-    typeof request.repeat === "string" &&
-    request.repeat !== "none" &&
-    request.timezone === undefined
-  )
-    request.timezone = DEFAULT_REMINDER_TIMEZONE;
   validateReminderShape(request as ReminderInvocation);
   // The wire-level round trip below requires a full UUID for `reminderId` (the daemon and server
   // never see a bare prefix — it is resolved to a full ID before the real request goes out; see

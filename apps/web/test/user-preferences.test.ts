@@ -194,6 +194,7 @@ describe("user time zone preferences", () => {
     // A stored time format outside the known set reads as no choice, as the column's own read did.
     expect(await preferences.read("user-1")).toEqual({
       timeZone: "Asia/Tokyo",
+      observedTimeZone: null,
       timeFormat: null,
       language: null,
     });

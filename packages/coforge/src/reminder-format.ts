@@ -19,7 +19,9 @@ export function formatReminderRow(
   reminder: ReminderSummaryRecord,
   now: number = Date.now(),
 ): string {
-  const cadence = reminder.repeat ? `recurring · ${reminder.repeat}` : "one-time";
+  const cadence = reminder.repeat
+    ? `recurring · ${reminder.repeat}${reminder.timezone ? ` (${reminder.timezone})` : ""}`
+    : "one-time";
   const overdue =
     reminder.status === "scheduled" && Date.parse(reminder.fireAt) < now ? " [OVERDUE]" : "";
   return `#${shortId(reminder.reminderId)} [${reminder.status}] (${cadence}) next=${reminder.fireAt}${overdue} ${JSON.stringify(foldUntrustedLine(reminder.title))}`;

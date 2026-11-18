@@ -148,6 +148,7 @@ export const Route = createFileRoute("/w/$workspaceSlug")({
       // this ran: together the render's clock, so a list grouped by day is grouped before hydration
       // the same way the browser hydrates it (task #68).
       cookieTimeZone: loadCookieTimeZone() ?? null,
+      observedTimeZone: preferences.observedTimeZone ?? null,
       renderedAt: Date.now(),
       assumedPhone: loadAssumedPhone(),
       timeFormat: preferences.timeFormat,
@@ -170,6 +171,7 @@ function AppLayout() {
     agentStreamPositions,
     notifications,
     timeZone,
+    observedTimeZone,
     cookieTimeZone,
     renderedAt,
     assumedPhone,
@@ -200,7 +202,7 @@ function AppLayout() {
   }, [language]);
   const aiWorkbench = useAiWorkbenchEnabled(aiWorkbenchEnabled);
   useLastLocationMemory();
-  useTimeZoneCookie();
+  useTimeZoneCookie(observedTimeZone);
   useSidebarShortcut();
   const getRealtimeToken = useServerFn(getBrowserRealtimeConnectionToken);
   const getConnectionToken = useCallback(() => getRealtimeToken(), [getRealtimeToken]);

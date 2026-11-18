@@ -10,3 +10,7 @@ export const saveDateTimePreferencesInputSchema = z.object({
 export const saveLanguagePreferencesInputSchema = z.object({
   language: z.enum(["en", "zh-CN"]).nullable(),
 });
+
+export const recordObservedTimeZoneInputSchema = z.object({
+  timeZone: z.string().min(1).max(64),
+});

@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import {
+  recordObservedTimeZoneInputSchema,
   saveDateTimePreferencesInputSchema,
   saveLanguagePreferencesInputSchema,
 } from "./settings.schemas";
@@ -40,4 +41,14 @@ export const saveLanguagePreference = createServerFn({ method: "POST" })
   .validator(saveLanguagePreferencesInputSchema)
   .handler(({ data, context }) =>
     setLanguageAndRenameAssistants(requireDatabaseClient(), context.user.id, data.language),
+  );
+
+export const recordObservedTimeZone = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(recordObservedTimeZoneInputSchema)
+  .handler(({ data, context }) =>
+    new PrismaUserPreferencesRepository(requireDatabaseClient()).setObservedTimeZone(
+      context.user.id,
+      data.timeZone,
+    ),
   );

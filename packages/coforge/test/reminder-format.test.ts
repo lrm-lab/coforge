@@ -96,7 +96,7 @@ test("formats usable reminder lists, empty logs, and receipt acknowledgements", 
   });
   // The reference client's row: id8, status, cadence, next fire time, OVERDUE, quoted title.
   expect(output).toBe(
-    `#${reminderId.slice(0, 8)} [scheduled] (recurring · every:1d) next=2026-09-09T01:00:00Z [OVERDUE] "Deploy"`,
+    `#${reminderId.slice(0, 8)} [scheduled] (recurring · every:1d (Asia/Shanghai)) next=2026-09-09T01:00:00Z [OVERDUE] "Deploy"`,
   );
   expect(
     await run(["reminder", "log", "--id", reminderId], {

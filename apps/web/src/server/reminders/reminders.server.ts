@@ -60,6 +60,7 @@ export type StoredReminder = ReminderSummaryRecord & { computerId: string };
 export interface ReminderRepository {
   authorize(scope: Scope): Promise<boolean>;
   authorizeDaemon(scope: DaemonScope): Promise<{ userId: string } | undefined>;
+  defaultTimezone?(scope: Scope): Promise<string>;
   replay?(
     scope: Scope,
     requestId: string,
@@ -320,7 +321,11 @@ export class Reminders {
         request.target!,
         request.messageId!,
       );
-      const zone = request.repeat ? (request.timezone ?? DEFAULT_REMINDER_TIMEZONE) : undefined;
+      const zone = request.repeat
+        ? (request.timezone ??
+          (await this.repository.defaultTimezone?.(scope)) ??
+          DEFAULT_REMINDER_TIMEZONE)
+        : undefined;
       if (zone && !validTimezone(zone))
         throw new ReminderRefusal("INVALID_INPUT", "invalid IANA timezone");
       const now = this.now();
