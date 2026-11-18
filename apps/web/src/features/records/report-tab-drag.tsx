@@ -11,6 +11,7 @@ import {
   useSensors,
   type Announcements,
 } from "@dnd-kit/core";
+import { DROP_SETTLE } from "#src/lib/drop-animation";
 
 import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
 import { cn } from "#src/lib/utils";
@@ -59,7 +60,7 @@ export function ReportTabDrag({
       }}
     >
       {children}
-      <DragOverlay dropAnimation={null} className="pointer-events-none">
+      <DragOverlay dropAnimation={DROP_SETTLE} className="pointer-events-none">
         {active ? (
           <div
             aria-hidden="true"

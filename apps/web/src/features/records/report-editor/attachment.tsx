@@ -1,16 +1,14 @@
 "use client";
 
-/**
- * Simplified Attachment renderer for the report editor.
- * Renders images and file cards (no preview/download galleries).
- */
-
 import { useState } from "react";
 import { Trash01 as Trash2 } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 import { cn } from "#src/lib/utils";
 import { isAllowedFileCardHref } from "#src/features/records/report-editor/utils/file-cards";
 import { ReportImageZoom } from "#src/features/records/report-image-zoom";
+
+const REVEAL_ON_HOVER =
+  "pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 pointer-fine:group-focus-within:opacity-100";
 
 export type AttachmentInput = {
   kind: "url";
@@ -80,7 +78,11 @@ export function Attachment({
         {editable && onDelete ? (
           <AriaButton
             type="button"
-            className="absolute top-2 right-2 rounded-md bg-primary p-1 text-fg-quaternary opacity-0 shadow-sm transition-opacity group-hover:opacity-100 hover:text-fg-quaternary_hover"
+            className={cn(
+              "absolute top-2 right-2 rounded-md bg-primary p-1 text-fg-quaternary shadow-sm transition-opacity hover:text-fg-quaternary_hover",
+              REVEAL_ON_HOVER,
+              selected && "opacity-100!",
+            )}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -122,7 +124,11 @@ export function Attachment({
       {editable && onDelete ? (
         <AriaButton
           type="button"
-          className="rounded-md p-1 text-fg-quaternary opacity-0 transition-opacity group-hover:opacity-100 hover:bg-primary_hover hover:text-fg-quaternary_hover"
+          className={cn(
+            "rounded-md p-1 text-fg-quaternary transition-opacity hover:bg-primary_hover hover:text-fg-quaternary_hover",
+            REVEAL_ON_HOVER,
+            selected && "opacity-100!",
+          )}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();

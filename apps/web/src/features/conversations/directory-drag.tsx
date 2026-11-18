@@ -24,6 +24,7 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { DROP_SETTLE } from "#src/lib/drop-animation";
 import { ChevronRight, Pin01 } from "@untitledui/icons";
 import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
 import { m } from "#src/paraglide/messages";
@@ -399,7 +400,7 @@ export function DirectoryDragOverlay({
   const origin = active?.origin;
   return createPortal(
     <DragOverlay
-      dropAnimation={{ duration: 150, easing: "ease-out" }}
+      dropAnimation={DROP_SETTLE}
       // Overrides dnd-kit's own `top`/`left`; its transform (the pointer's travel) still applies.
       style={origin ? { top: origin.top, left: origin.left } : undefined}
       className="pointer-events-none"

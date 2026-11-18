@@ -20,6 +20,7 @@ import {
   type CollisionDetection,
   type DragEndEvent,
 } from "@dnd-kit/core";
+import { DROP_SETTLE } from "#src/lib/drop-animation";
 import { useHydrated } from "@tanstack/react-router";
 import { DotsGrid as GripVertical } from "@untitledui/icons";
 import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from "react";
@@ -242,7 +243,7 @@ export function TaskWorkflow<T extends TaskView>({
           stays under the pointer either way. dnd-kit leaves it hit-testable; it takes no pointer
           events, so the pointer reads the column beneath it: "not allowed" over one it cannot go
           to. */}
-      <DragOverlay dropAnimation={null} className="pointer-events-none">
+      <DragOverlay dropAnimation={DROP_SETTLE} className="pointer-events-none">
         {active ? (
           <div
             className={cn(
