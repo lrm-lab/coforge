@@ -34,7 +34,7 @@ export function NewMessagesPill({
       color={count > 0 ? "primary" : "secondary"}
       iconTrailing={ArrowDown}
       onClick={onShowLatest}
-      className="pointer-events-auto absolute bottom-full left-1/2 mb-2 -translate-x-1/2 rounded-full whitespace-nowrap shadow-md"
+      className="pointer-events-auto rounded-full whitespace-nowrap shadow-md"
     >
       {label}
     </Button>

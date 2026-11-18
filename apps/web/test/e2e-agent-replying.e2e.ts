@@ -143,6 +143,86 @@ test("on a phone the typing line and the jump-to-latest pill do not cover each o
   }
 }, 180_000);
 
+test("the jump-to-latest pill keeps its height above the composer, whatever the line below it says", async () => {
+  const name = `e2e-pill-gap-${suffix}`;
+  const channelId = await fx.createChannel(name);
+  for (let index = 1; index <= 40; index += 1)
+    await fx.send(channelId, DEV_BROWSER_USER.id, `Filler ${index} ${suffix}`);
+  await open(channelId);
+  await untilText(`Filler 40 ${suffix}`);
+  const pill = `[...document.querySelectorAll("button")].find((node) => node.textContent.trim() === "Jump to latest")`;
+  const history = `[...document.querySelectorAll("[data-conversation-pane] .overflow-y-auto")].find(
+    (node) => node.scrollHeight > node.clientHeight,
+  )`;
+  const geometry = `(() => {
+    const scroller = ${history};
+    const button = ${pill};
+    const line = [...document.querySelectorAll(".replying-line")].find(
+      (node) => node.textContent === ${JSON.stringify(typingSentence)},
+    );
+    const shown = Boolean(button?.checkVisibility());
+    const box = shown ? button.getBoundingClientRect() : null;
+    const rect = line?.getBoundingClientRect();
+    const row = line?.closest("[class*='grid-cols-']")?.getBoundingClientRect();
+    return {
+      pillVisible: shown,
+      gap: box && scroller ? Math.round(scroller.getBoundingClientRect().bottom - box.bottom) : null,
+      pill: box && { top: Math.round(box.top), bottom: Math.round(box.bottom), left: Math.round(box.left), right: Math.round(box.right) },
+      line: rect ? { top: Math.round(rect.top), bottom: Math.round(rect.bottom), left: Math.round(rect.left), right: Math.round(rect.right) } : null,
+      row: row && { left: Math.round(row.left), right: Math.round(row.right) },
+    };
+  })()`;
+  type Geometry = {
+    pillVisible: boolean;
+    gap: number | null;
+    pill: { top: number; bottom: number; left: number; right: number } | null;
+    line: { top: number; bottom: number; left: number; right: number } | null;
+    row: { left: number; right: number } | null;
+  };
+
+  await until(`(() => {
+    const scroller = ${history};
+    if (scroller) scroller.scrollTop = 0;
+    return Boolean(${pill}?.checkVisibility());
+  })()`);
+
+  const alone = await evaluate<Geometry>(geometry);
+  expect(alone.pillVisible).toBe(true);
+  expect(alone.gap).toBeGreaterThanOrEqual(0);
+  expect(alone.gap).toBeLessThanOrEqual(24);
+  await fx.screenshot("pill-alone.png");
+
+  const call = await announce(`#${name}`);
+  try {
+    await until(visible(typingSentence));
+    const withLine = await evaluate<Geometry>(geometry);
+    expect(withLine.line).not.toBeNull();
+    expect(withLine.gap).toBe(alone.gap!);
+    expect(withLine.pill).toEqual(alone.pill!);
+    const line = withLine.line!;
+    const jump = withLine.pill!;
+    const apart =
+      line.right <= jump.left ||
+      jump.right <= line.left ||
+      line.bottom <= jump.top ||
+      jump.bottom <= line.top;
+    expect(apart).toBe(true);
+    await fx.screenshot("pill-with-line.png");
+
+    await browser("eval", `${pill}.click()`);
+    await until(`!(${pill}?.checkVisibility())`);
+    const landed = await evaluate<Geometry>(geometry);
+    expect(landed.pillVisible).toBe(false);
+    expect(landed.line).toEqual(line);
+    const row = landed.row!;
+    expect(landed.line!.left - row.left).toBeLessThanOrEqual(24);
+    expect(row.right - landed.line!.right).toBeLessThanOrEqual(24);
+    await fx.screenshot("pill-gone-line-kept.png");
+  } finally {
+    await call.end();
+  }
+}, 180_000);
+
 test("with Live agent activity off neither line shows", async () => {
   await open(fx.joinedId);
   await untilText(`Thread root ${suffix}`);

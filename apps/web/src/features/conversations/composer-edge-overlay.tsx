@@ -25,23 +25,33 @@ export function ComposerEdgeOverlay({
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
       <div className={column ? MESSAGE_COLUMN_CLASS : undefined}>
-        <div className="relative flex items-end gap-2 px-4 md:px-6">
-          {onShowLatest && (
-            <NewMessagesPill
-              conversationId={conversationId}
-              rootId={threadRootId ?? undefined}
-              viewerId={viewerId}
-              unreadCount={unreadCount}
-              onlyNew={onlyNew}
-              onShowLatest={onShowLatest}
-            />
-          )}
+        <div
+          className={`grid items-end gap-2 px-4 md:px-6 ${
+            onShowLatest
+              ? "grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]"
+              : "grid-cols-[minmax(0,1fr)_auto]"
+          }`}
+        >
           <ReplyingAgentsLine
             conversationId={conversationId}
             threadRootId={threadRootId}
-            className="min-w-0 flex-1"
+            className="col-start-1 min-w-0"
           />
-          {overhead}
+          {onShowLatest && (
+            <div className="col-start-2 pointer-events-auto mb-2 justify-self-center">
+              <NewMessagesPill
+                conversationId={conversationId}
+                rootId={threadRootId ?? undefined}
+                viewerId={viewerId}
+                unreadCount={unreadCount}
+                onlyNew={onlyNew}
+                onShowLatest={onShowLatest}
+              />
+            </div>
+          )}
+          <div className={`${onShowLatest ? "col-start-3" : "col-start-2"} justify-self-end`}>
+            {overhead}
+          </div>
         </div>
       </div>
     </div>
