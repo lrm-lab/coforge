@@ -13,6 +13,7 @@ import { memoryError, memoryKind } from "./memory-copy";
 import { MemoryEditor, memoryDraft, type MemoryDraft } from "./memory-editor";
 import { MemoryHistory } from "./memory-history";
 import { MemoryProjectPicker } from "./memory-project-picker";
+import { MemoryProvenance } from "./memory-provenance";
 
 export type MemorySearch = {
   q: string;
@@ -20,6 +21,8 @@ export type MemorySearch = {
   offset: number;
   project?: string;
   id?: string;
+  review?: boolean;
+  after?: string;
 };
 type Response = Awaited<ReturnType<typeof memoryCommand>>;
 export function MemoryPage({
@@ -126,7 +129,7 @@ export function MemoryPage({
           {m.memory_new()}
         </Button>
       </header>
-      <MemoryScopeLinks />
+      <MemoryScopeLinks showReview={list.reviewEnabled && list.kind === "ready"} />
       {list.kind === "error" ? (
         <p role="alert" className="px-5 py-8 text-sm text-error-primary">
           {memoryError(list.error)}
@@ -254,6 +257,15 @@ export function MemoryPage({
                 projectName={names[draft.projectId ?? ""]}
                 onChange={(draft) => setDrafts((previous) => ({ ...previous, [key]: draft }))}
                 onSaved={saved}
+                onSuggested={
+                  list.reviewEnabled
+                    ? () => {
+                        if (activeSelection.current !== selection) return;
+                        setEditing(undefined);
+                        void updateSearch({ review: true, id: undefined, after: undefined });
+                      }
+                    : undefined
+                }
                 onCancel={() => {
                   setEditing(undefined);
                   if (selected === "new") void updateSearch({ id: undefined });
@@ -285,6 +297,10 @@ export function MemoryPage({
                       {names[entry.authorUserId ?? entry.authorAgentId ?? ""] ?? m.memory_unknown()}
                     </dd>
                   </dl>
+                  <MemoryProvenance
+                    entry={entry}
+                    links={detail?.kind === "ready" ? detail.evidenceLinks : undefined}
+                  />
                   {entry.pinned && (
                     <p className="text-sm text-secondary">{m.memory_pinned_label()}</p>
                   )}

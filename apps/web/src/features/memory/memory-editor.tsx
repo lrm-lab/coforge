@@ -8,6 +8,7 @@ import * as m from "#src/paraglide/messages";
 import { MemoryProjectPicker } from "./memory-project-picker";
 import { memoryCommand } from "./memory.functions";
 import { memoryError, memoryKind } from "./memory-copy";
+import { memorySuggestionCommand } from "./memory-suggestions.functions";
 
 export type MemoryDraft = TeamMemoryDraft & { revision: number; reason: string; requestId: string };
 export function memoryDraft(entry?: TeamMemoryHead): MemoryDraft {
@@ -31,6 +32,7 @@ export function MemoryEditor({
   onSaved,
   onCancel,
   projectName,
+  onSuggested,
 }: {
   entry?: TeamMemoryHead;
   draft: MemoryDraft;
@@ -38,6 +40,7 @@ export function MemoryEditor({
   onSaved: (entry: TeamMemoryHead) => Promise<void>;
   onCancel: () => void;
   projectName?: string;
+  onSuggested?: () => void;
 }) {
   const [projectPending, setProjectPending] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -46,28 +49,44 @@ export function MemoryEditor({
   const [comparisonProject, setComparisonProject] = useState<string>();
   const change = (patch: Partial<MemoryDraft>) =>
     onChange({ ...draft, ...patch, requestId: crypto.randomUUID() });
+  const draftValid =
+    !projectPending &&
+    !!draft.title.trim() &&
+    !!draft.content.trim() &&
+    !!draft.source.trim() &&
+    (!entry || !!draft.reason.trim());
+  const send = async (forReview: boolean) => {
+    if (!draftValid) return;
+    setBusy(true);
+    setError("");
+    try {
+      const { requestId, revision, reason, ...fields } = draft;
+      const command = entry
+        ? { operation: "update" as const, id: entry.id, requestId, revision, reason, ...fields }
+        : { operation: "create" as const, requestId, ...fields };
+      if (forReview) {
+        const result = await memorySuggestionCommand({
+          data: { operation: "submit", draft: command },
+        });
+        if (result.kind === "error") setError(memoryError(result.error));
+        if (result.kind === "queued") onSuggested?.();
+        return;
+      }
+      const result = await memoryCommand({ data: command });
+      if (result.kind === "error") setError(memoryError(result.error));
+      else if (result.result.entries[0]) await onSaved(result.result.entries[0]);
+    } catch {
+      setError(m.memory_failed());
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <form
       className="flex flex-col gap-5"
       onSubmit={async (event) => {
         event.preventDefault();
-        if (projectPending) return;
-        setBusy(true);
-        setError("");
-        try {
-          const { requestId, revision, reason, ...fields } = draft;
-          const result = await memoryCommand({
-            data: entry
-              ? { operation: "update", id: entry.id, requestId, revision, reason, ...fields }
-              : { operation: "create", requestId, ...fields },
-          });
-          if (result.kind === "error") setError(memoryError(result.error));
-          else if (result.result.entries[0]) await onSaved(result.result.entries[0]);
-        } catch {
-          setError(m.memory_failed());
-        } finally {
-          setBusy(false);
-        }
+        await send(false);
       }}
     >
       <MemoryFields draft={draft} busy={busy} onChange={change} />
@@ -161,20 +180,15 @@ export function MemoryEditor({
           </Button>
         </section>
       )}
-      <div className="flex gap-3">
-        <Button
-          type="submit"
-          isLoading={busy}
-          isDisabled={
-            projectPending ||
-            !draft.title.trim() ||
-            !draft.content.trim() ||
-            !draft.source.trim() ||
-            (!!entry && !draft.reason.trim())
-          }
-        >
+      <div className="flex flex-wrap gap-3">
+        <Button type="submit" isLoading={busy} isDisabled={!draftValid}>
           {m.memory_save()}
         </Button>
+        {onSuggested && (
+          <Button color="secondary" isDisabled={busy || !draftValid} onPress={() => send(true)}>
+            {m.memory_review_submit()}
+          </Button>
+        )}
         <Button color="secondary" isDisabled={busy} onPress={onCancel}>
           {m.memory_cancel()}
         </Button>
