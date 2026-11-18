@@ -12,10 +12,12 @@ import {
 } from "#src/features/agents/agent-turn-interrupt.functions";
 import { interruptAgentTurnOutcome } from "#src/features/agents/agent-turn-interrupt-poll";
 import type { AgentTurnInterruptOutcome } from "#src/server/agents/agent-turn-interrupt.server";
+import type { AgentWakeBlock } from "#src/server/agents/agent-wake-block.server";
 import type { AgentDiagnosticFacts } from "#src/features/agents/agent-diagnostics";
 import { m } from "#src/paraglide/messages";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
 import { AgentErrorBanner, type AgentRetry } from "./agent-error-banner";
+import { AgentWakeBlockNote } from "./agent-wake-block-note";
 
 type Outcome = AgentTurnInterruptOutcome;
 type Failure = Extract<Outcome, "needs_upgrade" | "offline" | "failed">;
@@ -37,25 +39,39 @@ export function AgentProfileStatus({
   onActivityTab,
   onViewLogs,
   retry,
+  wakeBlock,
 }: {
   agent: AgentDiagnosticFacts;
   display?: AgentDisplaySnapshot;
   onActivityTab: boolean;
   onViewLogs?: () => void;
   retry?: AgentRetry;
+  wakeBlock?: AgentWakeBlock | null;
 }) {
   const stalled = display?.detailKind === "runtime_stalled" && display.activityKind !== "offline";
-  if (stalled) return <StalledTurnStatus agentId={agent.id} />;
+  const note = wakeBlock ? <AgentWakeBlockNote block={wakeBlock} retry={retry} /> : null;
+  if (stalled)
+    return (
+      <>
+        <StalledTurnStatus agentId={agent.id} />
+        {note}
+      </>
+    );
   // A quota gone stops the Agent, so it is offline, yet someone still has to act on it.
-  return display?.activityKind === "error" || agentDisplay(display).alert ? (
-    <AgentErrorBanner
-      agent={agent}
-      display={display!}
-      onActivityTab={onActivityTab}
-      onViewLogs={onViewLogs}
-      retry={retry}
-    />
-  ) : null;
+  const alert = display?.activityKind === "error" || agentDisplay(display).alert;
+  if (!alert) return note;
+  return (
+    <>
+      <AgentErrorBanner
+        agent={agent}
+        display={display!}
+        onActivityTab={onActivityTab}
+        onViewLogs={onViewLogs}
+        retry={retry}
+      />
+      {note}
+    </>
+  );
 }
 
 /** Unmounting on recovery also discards feedback from the preceding stalled turn. */

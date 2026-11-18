@@ -56,6 +56,9 @@ export class PrismaAgentDetailSource implements AgentDetailSource {
           },
         },
         stoppedAt: true,
+        wakeBlockedReason: true,
+        wakeBlockedCount: true,
+        wakeBlockedAt: true,
         weeklyReportAssistant: { select: { id: true } },
         owner: {
           select: {

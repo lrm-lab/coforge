@@ -4,6 +4,7 @@ import type { AgentStatusCache } from "./agent-status.server";
 import type { AgentDisplay } from "./agent-display.server";
 import { appLogoUrl } from "#src/server/apps/app-logo.server";
 import { canDirectMessageAgent } from "./agent-visibility.server";
+import { agentWakeBlock } from "./agent-wake-block.server";
 import { agentControlRevision } from "./agent-control-types.server";
 
 type DetailComputer = {
@@ -48,6 +49,9 @@ type DetailAgent = {
   weeklyReportAssistant?: { id: string } | null;
   /** Set when a user stopped this Agent. */
   stoppedAt?: Date | null;
+  wakeBlockedReason?: string | null;
+  wakeBlockedCount?: number;
+  wakeBlockedAt?: Date | null;
   hosting?: string;
   /** Who can see this Agent; optional so a caller that has not started selecting it
    * yet still satisfies this type. */
@@ -163,6 +167,19 @@ export class AgentDetailQuery {
       runtimeConfig: agent.runtimeConfig,
       isWeeklyReportAssistant: Boolean(agent.weeklyReportAssistant),
       stopped: Boolean(agent.stoppedAt),
+      wakeBlock: agentWakeBlock(
+        {
+          wakeBlockedReason: agent.wakeBlockedReason ?? null,
+          wakeBlockedCount: agent.wakeBlockedCount ?? 0,
+          wakeBlockedAt: agent.wakeBlockedAt ?? null,
+        },
+        {
+          stopped: Boolean(agent.stoppedAt),
+          stoppedAt: agent.stoppedAt ?? null,
+          controlPhase: control?.phase,
+          now: Date.now(),
+        },
+      ),
       hosting: agent.hosting ?? "managed",
       visibility: agent.visibility,
       avatarMascot: agent.avatarMascot ?? null,

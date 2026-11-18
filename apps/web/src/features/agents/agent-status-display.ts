@@ -36,6 +36,15 @@ const NO_CAPTION: {
  * described by its real display kind, not overridden into looking offline early.
  */
 export function agentDisplay(display?: AgentDisplaySnapshot, options?: { stopped?: boolean }) {
+  if (!display && options?.stopped === true)
+    return {
+      kind: "offline" as const,
+      label: m.agent_status_offline(),
+      isOnline: false,
+      tone: "offline" as const,
+      pulse: false,
+      statusDetail: STOPPED_STATUS_DETAIL,
+    };
   if (!display)
     return {
       kind: "unknown" as const,

@@ -268,5 +268,8 @@
   "agent_error_banner_reset_session": "Reset session",
   "agent_error_banner_computer_offline": "Computer offline",
   "agent_control_runtime_config_invalid": "The runtime configuration is invalid; choose the runtime again.",
+  "agent_wake_block_stopped": "{count} messages are waiting: this Agent is stopped and needs a manual start.",
+  "agent_wake_block_start_failed": "{count} messages are waiting: its last start failed.",
+  "agent_wake_block_in_flight": "{count} messages are waiting while a start is still in progress.",
   "agent_profile_actions": "More actions"
 }

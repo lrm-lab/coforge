@@ -73,6 +73,7 @@ import {
   createMentionDeliveryTransitionMethod,
 } from "./rpc-handler.server";
 import { AgentDeliveryRejections } from "#src/server/agents/agent-delivery-rejection.server";
+import { PrismaAgentWakeBlocks } from "#src/server/agents/agent-wake-block.server";
 import { MentionDeliveryReports } from "#src/server/conversations/mention-deliveries.server";
 import { PrismaMentionDeliveryRepository } from "#src/server/db/repositories/mention-delivery.repositories.server";
 import { PublishAgentRuntimeControl } from "#src/server/agents/agent-runtime-control.server";
@@ -353,6 +354,7 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
             directConversations,
             getAgentRuntimeLock(),
             control,
+            new PrismaAgentWakeBlocks(db),
           ),
         ),
         [AGENT_MENTION_DELIVERY_TRANSITION_METHOD]:

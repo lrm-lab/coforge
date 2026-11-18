@@ -77,6 +77,7 @@ function fixture(options: { stoppedAt?: Date; deletedAt?: Date } = {}) {
   const lock = { run: async <T>(_id: string, work: () => Promise<T>) => work() };
   /** Runs while a rejection waits for the Agent's lock, after its unlocked first read. */
   let whileWaitingForLock = async () => {};
+  const recorded: { agentId: string; reason: string }[] = [];
   const rejections = new AgentDeliveryRejections(
     store,
     conversations,
@@ -87,6 +88,7 @@ function fixture(options: { stoppedAt?: Date; deletedAt?: Date } = {}) {
       },
     },
     control,
+    { record: async (agentId, reason) => void recorded.push({ agentId, reason }) },
   );
   let sequence = 0;
   return {
@@ -94,6 +96,7 @@ function fixture(options: { stoppedAt?: Date; deletedAt?: Date } = {}) {
     store,
     control,
     conversations,
+    recorded,
     /** How many times the Agent's control record has been read. */
     reads: () => reads,
     lock,
@@ -414,4 +417,24 @@ test("a transient failure stops retrying after 24 hours", async () => {
   agent.current().state!.failedAtMs = over24HoursAgo;
   await expect(agent.reject()).resolves.toBe("start_failed");
   expect(agent.starts).toHaveLength(1);
+});
+
+test("a rejection that leaves a stopped Agent alone records why its messages wait", async () => {
+  const agent = fixture({ stoppedAt: new Date() });
+  await expect(agent.reject()).resolves.toBe("stopped");
+  expect(agent.recorded).toEqual([{ agentId: "a", reason: "stopped" }]);
+});
+
+test("a rejection that wakes the Agent records no waiting messages", async () => {
+  const agent = fixture();
+  await expect(agent.reject()).resolves.toBe("woken");
+  expect(agent.recorded).toEqual([]);
+});
+
+test("a rejection held back by a failed Start records that reason", async () => {
+  const agent = fixture();
+  await agent.reject();
+  await agent.failLatestStart("runtime_private");
+  await expect(agent.reject()).resolves.toBe("start_failed");
+  expect(agent.recorded).toEqual([{ agentId: "a", reason: "start_failed" }]);
 });

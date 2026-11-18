@@ -297,6 +297,7 @@ export function AgentProfilePanel({
           onViewLogs={
             tabOrder.tabs.includes("activity") ? () => onTabChange("activity") : undefined
           }
+          wakeBlock={profile?.wakeBlock}
         />
       )}
       <AgentProfileTabs
