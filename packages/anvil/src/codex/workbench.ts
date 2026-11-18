@@ -255,7 +255,8 @@ export class CodexWorkbenchSession implements PiChatRuntime {
     const live = this.messages();
     if (!page.messages.length) return { ...page, messages: live };
     const ids = new Set(page.messages.map((row) => row.id));
-    const overlap = live.findLastIndex((row) => ids.has(row.id));
+    let overlap = live.length - 1;
+    while (overlap >= 0 && !ids.has(live[overlap]!.id)) overlap--;
     const committed = page.messages.map((row) => this.#messages.get(row.id) ?? row);
     const newer =
       overlap >= 0
