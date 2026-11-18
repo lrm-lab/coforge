@@ -112,6 +112,7 @@ import { RuntimeTurn } from "./runtime-turn-management";
 import { abandonLaunch, scheduleStartupFailure } from "./agent-startup-failure";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
 import { ColdIdleSweep } from "./cold-idle-sweep";
+import { RuntimeSweeps } from "./runtime-sweeps";
 import { ReminderSnapshotAsks, reminderAgentIds } from "./reminder-snapshot-asks";
 import { assembleAgentConfigApply } from "./agent-config-apply-assembly";
 import { stalledRecoverySweep } from "./stalled-recovery-sweep";
@@ -257,12 +258,25 @@ export class DaemonRuntime {
     mentionDeliveries: () => this.#mentionDeliveries,
   });
 
-  readonly #coldIdleSweep = new ColdIdleSweep({
-    agentIds: () => this.#agentProcessManager.runningAgentIds(),
-    agent: (agentId) => this.#runtimeRelease.coldIdleAgent(agentId),
-    provider: (provider) => this.#createProvider(provider),
-    stop: (stop) => this.#runtimeRelease.stopColdIdle(stop),
-  });
+  readonly #sweeps = new RuntimeSweeps([
+    new ColdIdleSweep({
+      agentIds: () => this.#agentProcessManager.runningAgentIds(),
+      agent: (agentId) => this.#runtimeRelease.coldIdleAgent(agentId),
+      provider: (provider) => this.#createProvider(provider),
+      stop: (stop) => this.#runtimeRelease.stopColdIdle(stop),
+    }),
+    stalledRecoverySweep({
+      agentIds: () => this.#agentProcessManager.runningAgentIds(),
+      hasQueuedDeliveries: (agentId) => this.#deliveryGate.hasQueued(agentId),
+      runnerHold: () => this.#runnerHold !== undefined,
+      isStopping: (agentId) => this.#stopState.stopping(agentId),
+      release: this.#runtimeRelease,
+    }),
+    new CatalogFreshnessSweep({
+      transport: () => (this.#startup.started && !this.#stopping ? this.#transport : undefined),
+      recheck: (transport) => this.#codeAgentInventory.recheckCatalogs(transport),
+    }),
+  ]);
 
   readonly #configApply = assembleAgentConfigApply({
     runtimeRelease: () => this.#runtimeRelease,
@@ -270,18 +284,6 @@ export class DaemonRuntime {
     agentLaunches: () => this.#agentLaunches,
     activityLaunches: () => this.#currentActivityLaunches,
     credentialHolds: () => this.#credentialHolds,
-  });
-  readonly #stalledRecoverySweep = stalledRecoverySweep({
-    agentIds: () => this.#agentProcessManager.runningAgentIds(),
-    hasQueuedDeliveries: (agentId) => this.#deliveryGate.hasQueued(agentId),
-    runnerHold: () => this.#runnerHold !== undefined,
-    isStopping: (agentId) => this.#stopState.stopping(agentId),
-    release: this.#runtimeRelease,
-  });
-
-  readonly #catalogFreshnessSweep = new CatalogFreshnessSweep({
-    transport: () => (this.#startup.started && !this.#stopping ? this.#transport : undefined),
-    recheck: (transport) => this.#codeAgentInventory.recheckCatalogs(transport),
   });
 
   readonly #operatingSystem = new OperatingSystemInfo();
@@ -510,6 +512,7 @@ export class DaemonRuntime {
     );
     const messages = composeMessages({
       connection,
+      sweeps: this.#sweeps,
       stateDirectory,
       transport: () => this.#transport,
       consumedSeqs: this.#consumedSeqs,
@@ -808,9 +811,7 @@ export class DaemonRuntime {
       reminderAgentIds: () => reminderAgentIds(this.#agentProcessManager, this.#agentLaunches),
       resyncAppConfigs: () => this.#resyncAppConfigs(),
       activityPublisher: this.#activityPublisher,
-      coldIdleSweep: this.#coldIdleSweep,
-      stalledRecoverySweep: this.#stalledRecoverySweep,
-      catalogFreshnessSweep: this.#catalogFreshnessSweep,
+      sweeps: this.#sweeps,
       machineStatus: this.#machineStatus,
       procJobs: this.#services.procJobs,
     });
@@ -847,10 +848,8 @@ export class DaemonRuntime {
   #createShutdown(): RuntimeStop {
     return new RuntimeStop({
       startup: this.#startup,
-      coldIdleSweep: this.#coldIdleSweep,
+      sweeps: this.#sweeps,
       configApply: this.#configApply,
-      stalledRecoverySweep: this.#stalledRecoverySweep,
-      catalogFreshnessSweep: this.#catalogFreshnessSweep,
       machineStatus: this.#machineStatus,
       activityPublisher: this.#activityPublisher,
       currentActivityLaunches: this.#currentActivityLaunches,

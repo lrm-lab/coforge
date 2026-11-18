@@ -10,10 +10,8 @@ const noop = () => {};
 const stopPorts = () =>
   ({
     startup: { close: async () => {}, unsubscribeAll: noop, abort: noop, pending: () => undefined },
-    coldIdleSweep: { stop: noop },
+    sweeps: { stop: noop },
     configApply: { dispose: noop },
-    stalledRecoverySweep: { stop: noop },
-    catalogFreshnessSweep: { stop: noop },
     machineStatus: { stop: noop },
     contextView: { stopMaintenance: noop },
     activityPublisher: { disable: noop },

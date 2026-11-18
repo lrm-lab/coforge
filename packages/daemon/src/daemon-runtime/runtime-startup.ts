@@ -35,9 +35,7 @@ import type { RuntimeAuthController } from "./runtime-auth-controller";
 import type { UpgradeResultReporter } from "./upgrade-result-reporter";
 import type { AgentActivityPublisher } from "./agent-activity-publisher";
 import type { ActivityLaunch } from "./activity-launch";
-import type { ColdIdleSweep } from "./cold-idle-sweep";
-import type { StalledRecoverySweep } from "./stalled-recovery-sweep";
-import type { CatalogFreshnessSweep } from "./catalog-freshness-sweep";
+import type { RuntimeSweeps } from "./runtime-sweeps";
 import type { runtimeMachineStatus } from "./machine-status-reporter";
 import type { ProcJobManager } from "#src/proc-jobs/proc-job-manager";
 import { readyCapabilities } from "./ready-capabilities";
@@ -124,9 +122,7 @@ export type RuntimeStartupPorts = {
   reminderAgentIds(): string[];
   resyncAppConfigs(): void;
   activityPublisher: Pick<AgentActivityPublisher<ActivityLaunch>, "enable">;
-  coldIdleSweep: Pick<ColdIdleSweep, "start">;
-  stalledRecoverySweep: Pick<StalledRecoverySweep<ActivityLaunch>, "start">;
-  catalogFreshnessSweep: Pick<CatalogFreshnessSweep, "start">;
+  sweeps: Pick<RuntimeSweeps, "start">;
   machineStatus: Pick<ReturnType<typeof runtimeMachineStatus>, "start">;
   procJobs?: Pick<ProcJobManager, "startSweep" | "purgeWorkspace">;
 };
@@ -382,9 +378,7 @@ export class RuntimeStartup {
         });
       this.#started = true;
       ports.activityPublisher.enable();
-      ports.coldIdleSweep.start();
-      ports.stalledRecoverySweep.start();
-      ports.catalogFreshnessSweep.start();
+      ports.sweeps.start();
       ports.machineStatus.start();
       ports.procJobs?.startSweep();
       // Kick off optional inventory before flushing buffered publications so immediate probes can

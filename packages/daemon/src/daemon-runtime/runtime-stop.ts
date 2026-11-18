@@ -31,10 +31,8 @@ const logger = getLogger(["coforge", "daemon", "runtime"]);
  * runtime's own, so it takes the same references the runtime reads. */
 export type RuntimeStopPorts = {
   startup: Pick<RuntimeStartup, "close" | "unsubscribeAll" | "abort" | "pending">;
-  coldIdleSweep: { stop(): void };
+  sweeps: { stop(): void };
   configApply: { dispose(): void };
-  stalledRecoverySweep: { stop(): void };
-  catalogFreshnessSweep: { stop(): void };
   machineStatus: { stop(): void };
   contextView: { stopMaintenance(): void };
   activityPublisher: Pick<AgentActivityPublisher<ActivityLaunch>, "disable">;
@@ -101,10 +99,8 @@ export class RuntimeStop {
     this.#stopping.abort();
     // Close every local capability synchronously before any shutdown await.
     const piChatClosed = ports.startup.close();
-    ports.coldIdleSweep.stop();
+    ports.sweeps.stop();
     ports.configApply.dispose();
-    ports.stalledRecoverySweep.stop();
-    ports.catalogFreshnessSweep.stop();
     ports.machineStatus.stop();
     ports.contextView.stopMaintenance();
     ports.activityPublisher.disable();
