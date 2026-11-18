@@ -15,7 +15,7 @@
 
 ## 给 Agent 起名
 
-- 凡是让人给 Agent 起名的地方（创建 Agent 的云端和本地电脑两个页签、接手本机会话，以及以后新加的入口），都只有一个名称输入框：`features/agents/agent-username-field.tsx` 的 `AgentUsernameField`，不另写输入框。所有入口一致：
+- 凡是让人给 Agent 起名的地方（创建 Agent 的云端、本地、外部页签、接手本机会话，以及以后新加的入口），都只有一个名称输入框：`features/agents/agent-username-field.tsx` 的 `AgentUsernameField`，不另写输入框。所有入口一致：
   - 标签是「用户名」，前面一个 `@` 图标，右上角是「换一个名称」按钮。
   - 默认值由 `randomAgentUsername()` 随机给一个，不取文件夹名、工具名或别的上下文。随机名会避开可见 Agent 已经用过的名字；20 个候选全被占用时，在后面加 `-2`、`-3`。
   - 输入时自动整理成合法格式（小写，空格变连字符，去掉其他字符），不用把规则写给人看。

@@ -109,7 +109,7 @@ test("only an Agent whose runtime reads them shows the model size fields", async
       "--fn",
       `${pageHydrated} && document.querySelector('[role="dialog"]') != null`,
     );
-    const localRadio = `[...document.querySelectorAll('[role="radio"]')].find((r) => r.textContent.trim() === "Local Computer")`;
+    const localRadio = `[...document.querySelectorAll('[role="radio"]')].find((r) => r.textContent.trim() === "Local")`;
     if (await evaluate<boolean>(`${localRadio} != null`)) await press(localRadio);
     await browser(
       "wait",
