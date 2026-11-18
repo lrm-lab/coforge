@@ -65,6 +65,43 @@ test("only starting Agents whose deadline has passed, or that never recorded one
     expect(found.has(agent.id)).toBe(false);
 });
 
+test("an Agent whose owner left the Workspace or whose Computer is unlinked is never a candidate", async () => {
+  const db = database();
+  const NOW = 2_000_000_000_000;
+  const leftBase = await seedWorkspace(db);
+  const left = await seedAgent(db, leftBase, "left", { phase: "starting", deadlineAtMs: NOW - 1 });
+  await db.workspaceMembership.delete({
+    where: {
+      workspaceId_userId: { workspaceId: leftBase.workspace.id, userId: leftBase.owner.id },
+    },
+  });
+  const unlinkedBase = await seedWorkspace(db);
+  const unlinked = await seedAgent(db, unlinkedBase, "unlinked", {
+    phase: "starting",
+    deadlineAtMs: NOW - 1,
+  });
+  await db.workspaceComputer.delete({
+    where: {
+      workspaceId_computerId: {
+        workspaceId: unlinkedBase.workspace.id,
+        computerId: unlinkedBase.computer.id,
+      },
+    },
+  });
+
+  const found = new Set<string>();
+  const store = new PrismaAgentControlStore(db);
+  let cursor: Awaited<ReturnType<typeof store.listStartupCandidates>>["next"];
+  do {
+    const page = await store.listStartupCandidates(NOW, 1000, cursor);
+    page.ids.forEach((id) => found.add(id));
+    cursor = page.next;
+  } while (cursor);
+
+  expect(found.has(left.id)).toBe(false);
+  expect(found.has(unlinked.id)).toBe(false);
+});
+
 test("a small batch walks every candidate exactly once through the cursor", async () => {
   const db = database();
   const base = await seedWorkspace(db);

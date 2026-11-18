@@ -73,3 +73,22 @@ test("one tick reads at most four batches however many candidates there are", as
   await f.instance.tick();
   expect(f.asked).toHaveLength(4);
 });
+
+test("the next tick resumes where the last one stopped and starts over after a full pass", async () => {
+  const f = sweep({
+    pages: [
+      { ids: ["a"], next: { deadlineAtMs: 1, id: "a" } },
+      { ids: ["b"], next: { deadlineAtMs: 2, id: "b" } },
+      { ids: ["c"], next: { deadlineAtMs: 3, id: "c" } },
+      { ids: ["d"], next: { deadlineAtMs: 4, id: "d" } },
+      { ids: ["e"] },
+    ],
+  });
+  await f.instance.tick();
+  expect(f.settled).toEqual(["a", "b", "c", "d"]);
+  await f.instance.tick();
+  expect(f.asked[4]!.after).toEqual({ deadlineAtMs: 4, id: "d" });
+  expect(f.settled).toEqual(["a", "b", "c", "d", "e"]);
+  await f.instance.tick();
+  expect(f.asked[5]!.after).toBeUndefined();
+});

@@ -20,6 +20,8 @@ test("the candidate query filters the starting phase and the cut-off in SQL and 
   expect(sql).toContain(`"controlState"->>'phase' = 'starting'`);
   expect(sql).toContain(`"controlState"->>'deadlineAtMs'`);
   expect(sql).toContain(`"deletedAt" IS NULL`);
+  expect(sql).toContain(`FROM workspace_memberships m`);
+  expect(sql).toContain(`FROM workspace_computers wc`);
   expect(sql).toContain("LIMIT");
   expect(values).toContain(50);
   expect(values).toContain(1_800_000_000_000);
