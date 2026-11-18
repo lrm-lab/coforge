@@ -53,7 +53,6 @@ type AgentCreateComputerOption = RuntimeSignInComputer & {
   }[];
 };
 
-/** The form starts on what the Computer can run, not on the runtime that needs an API key. */
 function preferredRuntime(computer: AgentCreateComputerOption | undefined) {
   const { providers } = runtimeOptionsFromRuntimes(computer?.runtimes ?? []);
   const provider = preferredRuntimeProvider(providers);
@@ -71,12 +70,6 @@ type LocalAgentFormOptions = {
   actionCardMessageId?: string;
 };
 
-/** The Agent-create form for an Agent on a connected Computer, the local half of the new-Agent
- * dialog. `defaults` prefills it; `computerLocked` mirrors an action card's `requiredComputer` by
- * disabling the Computer selector; `visibilityLocked` keeps the Agent public, for a caller that
- * adds it to a channel, and `joinsChannelName` says which channel that is. `nameNote` explains a
- * prefilled name. `onCreate` resolves once the caller has done what follows a create. `headless`
- * leaves out its illustrated head, for the new-Agent dialog, whose kind cards head it instead. */
 export function LocalAgentForm({
   computers,
   onCreate,
@@ -105,10 +98,7 @@ export function LocalAgentForm({
   const [initialComputerId] = useState(defaults?.computerId ?? computers[0]?.id ?? "");
   const [computerId, setComputerId] = useState(initialComputerId);
   const [isPrivate, setIsPrivate] = useState(false);
-  // A runtime, model or key picked away from the form's defaults is a change too (task #555).
   const [runtimeChanged, setRuntimeChanged] = useState(false);
-  // Signing a runtime in from the not-signed-in notice: the flow's dialog, and the runtimes this
-  // dialog has seen signed in since, whose stored report the Computer list may not have yet.
   const [signingIn, setSigningIn] = useState<RuntimeAuthProvider>();
   const [signedIn, setSignedIn] = useState<ReadonlySet<string>>(new Set());
   useRuntimeAuthSignals(computerId, {
@@ -205,7 +195,6 @@ export function LocalAgentForm({
           />
         }
       >
-        {/* One column, in the design's order: who it is, where it runs, then how it runs. */}
         <div className="flex flex-col gap-4 px-6 pt-5 pb-3">
           {joinsChannelName && (
             <p className="text-sm text-secondary">
@@ -244,7 +233,6 @@ export function LocalAgentForm({
               />
             ))}
           </Select>
-          {/* Three lines until more is written in: the field grows with what is typed. */}
           <TextArea
             label={m.agent_create_description()}
             name="description"
@@ -284,8 +272,6 @@ export function LocalAgentForm({
             isSelected={isPrivate}
             onChange={setIsPrivate}
           />
-          {/* A plain alert, not `HintText`: outside a field its "errorMessage" slot is not
-            one the enclosing Dialog offers, and rendering it crashes the page. */}
           {error && (
             <p role="alert" className="text-sm text-error-primary">
               {error}
@@ -293,7 +279,6 @@ export function LocalAgentForm({
           )}
         </div>
       </AgentCreateForm>
-      {/* Outside the form: a submit inside the sign-in flow must not reach the create form. */}
       {signingIn && computer && (
         <RuntimeSignInDialog
           computerId={computer.id}
@@ -307,8 +292,6 @@ export function LocalAgentForm({
   );
 }
 
-/** The local Agent-create form on its own, for callers that already know where the Agent goes: a
- * channel's Add members, a Computer's page, an `agent:create` action card. */
 export function AgentCreateDialog({
   open,
   onOpenChange,

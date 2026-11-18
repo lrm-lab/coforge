@@ -65,7 +65,6 @@ function NewAgentForms({
   onBusyChange,
 }: {
   open: boolean;
-  /** A conversation is opening: the dialog stays, and so does the kind. */
   busy: boolean;
   onClose: () => void;
   conversationReplacesPage: boolean;

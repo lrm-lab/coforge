@@ -16,19 +16,11 @@ import { useScrollEdges } from "#src/hooks/use-scroll-edges";
 import { cx } from "#src/utils/cx";
 import { AGENT_ILLUSTRATIONS } from "./agent-illustrations";
 
-/** What the frame's parts share: the form reports whether it holds edits, and the intro's close
- * button and the footer's Cancel close through `requestClose`, which asks first when it does. */
 const AgentCreateGuardContext = createContext<{
   setDirty: (dirty: boolean) => void;
   requestClose: () => void;
 } | null>(null);
 
-/** The new-Agent dialog's frame: a 400px card whose forms swap inside it, so choosing the other
- * kind of Agent never closes and reopens the dialog. It hangs from near the top of the screen, not
- * centred, so a form that grows or shrinks moves only its bottom edge. A form is an
- * `AgentCreateForm`: its intro and footer stay put and only its fields scroll. Closing with edits
- * in the form (Escape, a click outside, the close button, Cancel) asks first; a create that
- * succeeds closes through `onOpenChange` directly. */
 export function AgentCreateModal({
   open,
   onOpenChange,
@@ -37,7 +29,6 @@ export function AgentCreateModal({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** False while a create runs: the dialog stays until it settles. */
   dismissable?: boolean;
   children: ReactNode;
 }) {
@@ -71,7 +62,6 @@ export function AgentCreateModal({
   );
 }
 
-/** A form in the dialog: its intro and footer stay put and only its fields scroll. */
 export function AgentCreateForm({
   onSubmit,
   intro,
@@ -80,16 +70,12 @@ export function AgentCreateForm({
   children,
 }: {
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
-  /** Whether a choice the form holds in state, not in a text field, differs from its default. */
   changed?: boolean;
-  /** Absent where the dialog's head sits outside the form (the new-Agent dialog's kind cards). */
   intro?: ReactNode;
   footer: ReactNode;
   children: ReactNode;
 }) {
   const { ref, start: above, end: below } = useScrollEdges("y");
-  // The fields are uncontrolled or prefilled with a suggestion, so typing in any of them is the
-  // edit; once typed in, the form stays changed.
   const [typed, setTyped] = useState(false);
   const setDirty = useContext(AgentCreateGuardContext)?.setDirty;
   const dirty = typed || changed;
@@ -101,7 +87,6 @@ export function AgentCreateForm({
       className="flex min-h-0 flex-1 flex-col"
     >
       {intro && <div className="shrink-0">{intro}</div>}
-      {/* A divider on each side that hides more fields, so a cut-off form reads as one that scrolls. */}
       <div
         ref={ref}
         className={cx(
@@ -117,8 +102,6 @@ export function AgentCreateForm({
   );
 }
 
-/** The dialog's head, centred: the kind's illustration, the title, then a line on what this kind
- * of Agent is or, in the new-Agent dialog, the switch between kinds (`children`). */
 export function AgentCreateIntro({
   illustration,
   title,
@@ -161,7 +144,6 @@ export function AgentCreateIntro({
   );
 }
 
-/** Cancel and the create button side by side, each half the width. */
 export function AgentCreateFooter({
   onCancel,
   cancelDisabled,
@@ -176,10 +158,8 @@ export function AgentCreateFooter({
   submitDisabled?: boolean;
 }) {
   const controlSize = useDialogControlSize();
-  // While a create runs, Cancel stops it at once, as before; otherwise it asks about edits first.
   const guarded = useContext(AgentCreateGuardContext)?.requestClose;
   const requestClose = submitting || !guarded ? onCancel : guarded;
-  // Two equal halves, as in the design.
   return (
     <div className="grid grid-cols-2 gap-3 px-6 pt-4 pb-6">
       <Button
@@ -195,7 +175,6 @@ export function AgentCreateFooter({
         type="submit"
         color="primary"
         size={controlSize}
-        // Pending, not disabled, while it runs: focus stays on it, so Escape still reaches the dialog.
         isDisabled={submitDisabled}
         isLoading={submitting}
         showTextWhileLoading
