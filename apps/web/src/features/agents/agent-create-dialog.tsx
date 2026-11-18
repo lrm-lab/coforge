@@ -1,4 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Plus } from "@untitledui/icons";
+import { useRouter } from "@tanstack/react-router";
 import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import { parseRuntimeProvider, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
@@ -54,6 +56,8 @@ type AgentCreateComputerOption = RuntimeSignInComputer & {
   }[];
 };
 
+const ADD_COMPUTER_KEY = "\u0000add-computer";
+
 function preferredRuntime(computer: AgentCreateComputerOption | undefined) {
   const { providers } = runtimeOptionsFromRuntimes(computer?.runtimes ?? []);
   const provider = preferredRuntimeProvider(providers);
@@ -99,6 +103,7 @@ export function LocalAgentForm({
   const controlSize = useDialogControlSize();
   const [submitting, guard] = useSubmitGuard();
   const workspaceSlug = useWorkspaceSlug();
+  const router = useRouter();
   const [error, setError] = useState("");
   const [initialComputerId] = useState(defaults?.computerId ?? computers[0]?.id ?? "");
   const [computerId, setComputerId] = useState(initialComputerId);
@@ -227,6 +232,13 @@ export function LocalAgentForm({
             className="min-w-0"
             selectedKey={computerId}
             onSelectionChange={(key) => {
+              if (key === ADD_COMPUTER_KEY) {
+                onClose();
+                void router.navigate({
+                  href: localizeHref(workspacePath(workspaceSlug, "/computers?add=1")),
+                });
+                return;
+              }
               if (key !== null) setComputerId(String(key));
             }}
           >
@@ -247,6 +259,15 @@ export function LocalAgentForm({
                 }
               />
             ))}
+            {!computerLocked && (
+              <Select.Item
+                id={ADD_COMPUTER_KEY}
+                label={m.agent_create_add_computer()}
+                icon={Plus}
+                selectionIndicator="none"
+                className="mt-1 border-t border-secondary pt-1"
+              />
+            )}
           </Select>
           <TextArea
             label={m.agent_create_description()}
