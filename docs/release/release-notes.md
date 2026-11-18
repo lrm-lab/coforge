@@ -31,8 +31,12 @@ there is no editor page. Each publication needs both languages:
 
 Notes describe what changed since the previous production version. A dev
 build's notes therefore cover its whole release line so far, not just the
-builds since the previous dev build, and the production version that ships the
-line can reuse them unchanged. Start from the commits in that range:
+builds since the previous dev build. Someone upgrading from one dev build to
+the next would then see almost the same list each time, so a dev build's notes
+open with a first section, `## New in this build` (`## 这一版新增`), listing
+only what changed since the previous dev build, followed by the cumulative
+sections. The first dev build of a line has no such section. Start from the
+commits in that range:
 
 ```sh
 prod=$(curl -s https://releases.coforge.cn/latest)
@@ -122,7 +126,8 @@ gh workflow run release-notes.yml --repo lrm-lab/coforge \
 
 A production version promotes a staging candidate
 ([Staging to production](staging-to-production.md#local-computer-distribution)).
-Read the candidate's notes from the staging catalog and pass the same text to
+Read the candidate's notes from the staging catalog, delete its
+`## New in this build` (`## 这一版新增`) section, and pass the rest unchanged to
 `release-production.yml`:
 
 ```sh
