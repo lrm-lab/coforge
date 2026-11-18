@@ -191,6 +191,7 @@ export async function launchAgentProcess(
       agentId,
       launchId: launch.launchId,
       recycled: recycled !== undefined,
+      ...(recycled ? { recycledMemoryBlock: recycled.carriedMemoryBlock } : {}),
       sessionMode: reference.sessionMode,
       requestedSessionId,
       reportedSessionId: sessionIds.reportedSessionId(),
