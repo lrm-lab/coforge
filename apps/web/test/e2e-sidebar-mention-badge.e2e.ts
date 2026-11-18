@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { setupAgentReplying } from "./helpers/agent-replying-fixture";
 
 /**
@@ -34,7 +33,7 @@ test("a mention in another channel puts the @ badge on its sidebar row until tha
   await untilText(`Thread root ${suffix}`);
   await until(`(${mentionMark(mentioned)})?.shown === false`, 30_000);
 
-  await agentSends(`#${mentionedName}`, `<@human:${DEV_BROWSER_USER.id}> look at this ${suffix}`);
+  await agentSends(`#${mentionedName}`, `@dev-user look at this ${suffix}`);
   const rowState = await evaluate(`(() => {
   const link = ${rowOf(mentioned)};
   if (!link) return { found: false };
