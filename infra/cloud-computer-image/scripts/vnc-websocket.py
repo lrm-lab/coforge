@@ -226,6 +226,52 @@ def handle_inspect(conn: socket.socket, headers: dict, query: str, token: str, d
     send_http(conn, "200 OK", json.dumps(result).encode(), "application/json")
 
 
+def load_desktop_clipboard():
+    sibling = os.path.join(os.path.dirname(os.path.abspath(__file__)), "desktop_clipboard.py")
+    spec = importlib.util.spec_from_file_location("desktop_clipboard", sibling)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("desktop_clipboard.py is missing")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def handle_clipboard(
+    conn: socket.socket,
+    headers: dict,
+    query: str,
+    rest: bytes,
+    token: str,
+    display: str,
+    xauthority: str | None = None,
+) -> None:
+    """Put posted plain text on the X CLIPBOARD as UTF-8. The body is not logged."""
+    if not token_ok(request_token(headers, query), token):
+        send_http(conn, "401 Unauthorized", b"", "text/plain")
+        return
+    body = read_body(conn, headers, rest)
+    if body is None:
+        send_http(conn, "400 Bad Request", b"", "text/plain")
+        return
+    try:
+        text = body.decode("utf-8")
+    except UnicodeError:
+        send_http(conn, "400 Bad Request", b"", "text/plain")
+        return
+    module = load_desktop_clipboard()
+    try:
+        module.set_clipboard(display, text, xauthority=xauthority)
+    except module.ClipboardError as exc:
+        status = "400 Bad Request"
+        if exc.code == "clipboard_busy":
+            status = "409 Conflict"
+        elif exc.code == "too_large":
+            status = "413 Payload Too Large"
+        send_http(conn, status, json.dumps({"error": exc.code}).encode(), "application/json")
+        return
+    send_http(conn, "200 OK", b'{"ok":true}', "application/json")
+
+
 def handle_http(conn: socket.socket, expected_token: str) -> None:
     data = bytearray()
     while b"\r\n\r\n" not in data:
@@ -255,6 +301,21 @@ def handle_http(conn: socket.socket, expected_token: str) -> None:
             if found and found.get("display"):
                 display = found["display"]
         handle_fill(conn, headers, parsed.query, rest, expected_token, display)
+        return
+    if method == "POST" and (
+        parsed.path == "/clipboard" or (screen is not None and screen[1] == "clipboard")
+    ):
+        agent_id = screen[0] if screen is not None and screen[1] == "clipboard" else ""
+        display = os.environ.get("VNC_DISPLAY", ":1")
+        xauthority = None
+        if agent_id and SCREENS is not None:
+            found = SCREENS.lookup(agent_id)
+            if found and found.get("display"):
+                display = found["display"]
+                xauthority = found.get("xauthority")
+        handle_clipboard(
+            conn, headers, parsed.query, rest, expected_token, display, xauthority
+        )
         return
     if method == "GET" and (
         parsed.path == "/inspect" or (screen is not None and screen[1] == "inspect")
