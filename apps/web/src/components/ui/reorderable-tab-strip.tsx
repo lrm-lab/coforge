@@ -34,20 +34,6 @@ import { cx } from "#src/utils/cx";
 
 export type ReorderableTabMeta = { label: () => string; icon?: FC<{ className?: string }> };
 
-/**
- * A panel's tab strip whose tabs the viewer drags into their own order. It is the official
- * horizontal `underline` Tabs list; dragging
- * only translates a tab along the strip
- * ([dnd-kit Sortable](https://docs.dndkit.com/presets/sortable)). A mouse drag starts after 6px
- * of movement so a click still selects; a touch drag starts after a 250ms press so a swipe still
- * scrolls a strip that overflows a phone
- * ([dnd-kit sensors](https://docs.dndkit.com/api-documentation/sensors)).
- *
- * The keyboard reorders too, as Raft's strips do: Space picks up the focused tab, the arrow keys
- * (and Home, End) move it, Space or Enter drops it and Escape puts it back. Each step is announced.
- * The strip handles these keys itself rather than through dnd-kit's keyboard sensor: that sensor
- * reads the arrows on the document, after the tab list has used them to move focus.
- */
 export function ReorderableTabStrip<T extends string>({
   tabs,
   meta,
@@ -60,18 +46,14 @@ export function ReorderableTabStrip<T extends string>({
   scrollRef,
   "aria-label": ariaLabel,
 }: {
-  /** The tabs in display order. */
   tabs: readonly T[];
   meta: Record<T, ReorderableTabMeta>;
   active: T;
   onSelect: (tab: T) => void;
   onReorder: (order: T[]) => void;
   size?: "sm" | "md";
-  /** No underline or rule: unselected tabs sit at 60% opacity, the selected one at full. */
   quiet?: boolean;
   className?: string;
-  /** The caller's element that scrolls the strip sideways when its tabs do not fit; the selected
-   * tab is kept in view inside it (`useActiveTabInView`). */
   scrollRef?: RefObject<HTMLElement | null>;
   "aria-label": string;
 }) {
@@ -79,14 +61,10 @@ export function ReorderableTabStrip<T extends string>({
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
   );
-  // Releasing a dragged tab is also a press on it; that press is swallowed so a drop only
-  // reorders. The flag is cleared when the next press starts.
   const dragged = useRef(false);
   const tabsRef = useRef<HTMLDivElement>(null);
-  // A strip with more tabs than room scrolls, so the selected tab can start out of sight.
   useActiveTabInView(tabsRef, scrollRef ?? tabsRef);
 
-  // The tab picked up from the keyboard, and the order it is being moved through.
   const [moving, setMoving] = useState<{ tab: T; order: T[] } | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const instructions = useId();
@@ -102,19 +80,15 @@ export function ReorderableTabStrip<T extends string>({
     count: order.length,
   });
 
-  // Moving a tab re-inserts its element, which loses focus; so does putting it back or dropping
-  // it. Focus returns to it after each keyboard step.
   const refocus = useRef<T | null>(null);
   useLayoutEffect(() => {
     if (refocus.current === null) return;
     elements.current.get(refocus.current)?.focus();
     refocus.current = null;
   });
-  // A tab appearing or going (permissions settling, say) ends a keyboard move without saving it.
   const tabSet = tabs.join(" ");
   useEffect(() => setMoving(null), [tabSet]);
   const { direction } = useLocale();
-  // A press anywhere else puts a picked-up tab back.
   useEffect(() => {
     if (!moving) return;
     const cancel = () => setMoving(null);
@@ -122,7 +96,6 @@ export function ReorderableTabStrip<T extends string>({
     return () => document.removeEventListener("pointerdown", cancel, true);
   }, [moving]);
 
-  // Keys reach this wrapper before the tab list sees them.
   const keyDown = (event: KeyboardEvent<HTMLElement>) => {
     const tab = [...elements.current].find(([, node]) => node === event.target)?.[0] as
       | T
@@ -135,7 +108,6 @@ export function ReorderableTabStrip<T extends string>({
     } else {
       const from = moving.order.indexOf(moving.tab);
       const last = moving.order.length - 1;
-      // The arrows follow the reading direction.
       const step = direction === "rtl" ? -1 : 1;
       let to: number | undefined;
       switch (event.key) {
@@ -162,12 +134,10 @@ export function ReorderableTabStrip<T extends string>({
       } else if (event.key === "Escape" || event.key === "Tab") {
         setMoving(null);
         setAnnouncement(m.tab_reorder_cancelled(at(tabs, moving.tab)));
-        // Tab still moves focus on.
         if (event.key === "Tab") return;
       } else return;
     }
     refocus.current = moving?.tab ?? tab;
-    // The tab list would otherwise select on Space and move focus on the arrows.
     event.preventDefault();
     event.stopPropagation();
   };
@@ -182,15 +152,11 @@ export function ReorderableTabStrip<T extends string>({
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
-      // Tabs are reordered with a pointer only, so there is no keyboard drag to announce.
       accessibility={{ announcements: SILENT_ANNOUNCEMENTS }}
       onDragStart={() => (dragged.current = true)}
       onDragEnd={dropped}
     >
       <SortableContext items={[...shown]} strategy={horizontalListSortingStrategy}>
-        {/* Selection stays with the caller: a mouse press would otherwise select on press start,
-         * before a drag can begin, so each tab selects from its own `onPress` instead. */}
-        {/* Layout-free: it only sees the tabs' keys first. */}
         <div className="contents" onKeyDownCapture={keyDown}>
           <Tabs ref={tabsRef} selectedKey={active} className={cx("w-max shrink-0", className)}>
             <TabList
@@ -247,7 +213,6 @@ function SortableTab({
 }: {
   id: string;
   meta: ReorderableTabMeta;
-  /** Picked up from the keyboard. */
   moving: boolean;
   quiet: boolean;
   describedBy: string;
@@ -257,7 +222,6 @@ function SortableTab({
 }) {
   const { listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   useDocumentDragCursor(isDragging);
-  // The official Tab takes no ref, so the sortable node is the tab element around its label.
   const labelRef = useCallback(
     (label: HTMLSpanElement | null) => {
       const tab = label?.closest<HTMLElement>('[role="tab"]') ?? null;
@@ -270,8 +234,6 @@ function SortableTab({
     <Tab
       id={id}
       icon={meta.icon}
-      // The tab handles its own press events and stops them from bubbling, so the sensors
-      // listen in the capture phase instead.
       onMouseDownCapture={(event) => listeners?.onMouseDown?.(event)}
       onTouchStartCapture={(event) => listeners?.onTouchStart?.(event)}
       aria-describedby={describedBy}

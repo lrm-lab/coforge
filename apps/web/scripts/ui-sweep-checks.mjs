@@ -1,5 +1,3 @@
-// The in-page layout checks ui-sweep.mjs runs on every capture, as one script for Runtime.evaluate.
-
 import { isInsideViewportScroller } from "./ui-sweep-helpers.mjs";
 
 const FORBIDDEN_CLASS_PATTERNS = [
@@ -15,9 +13,6 @@ const FORBIDDEN_CLASS_PATTERNS = [
   },
 ];
 
-// ---------------------------------------------------------------------------
-// In-page automatic layout checks (one Runtime.evaluate round-trip).
-// ---------------------------------------------------------------------------
 export const CHECKS_EXPR = `
 (() => {
   const findings = [];
@@ -35,14 +30,12 @@ export const CHECKS_EXPR = `
     return el.tagName.toLowerCase() + id + cls + (text ? ' "' + text + '"' : "");
   }
 
-  // 1. horizontal overflow
   const scrollWidth = document.documentElement.scrollWidth;
   const clientWidth = document.documentElement.clientWidth;
   if (scrollWidth > clientWidth + 1) {
     findings.push({ check: "horizontal-overflow", detail: \`scrollWidth \${scrollWidth} > clientWidth \${clientWidth}\` });
   }
 
-  // 2. elements exceeding viewport horizontally + 3. clipped text
   const all = document.querySelectorAll("body *");
   let oversizedCount = 0;
   let clippedCount = 0;
@@ -59,9 +52,6 @@ export const CHECKS_EXPR = `
       findings.push({ check: "element-exceeds-viewport", detail: \`right=\${Math.round(rect.right)} viewport=\${vw}\`, locator: locator(el) });
       oversizedCount++;
     }
-    // Ellipsis truncation (Tailwind's "truncate" utility) is this app's
-    // deliberate, affordanced way to shorten text in a tight container —
-    // only flag a hard clip with no such affordance as a real defect.
     if (
       el.children.length === 0 &&
       el.textContent &&
@@ -76,12 +66,7 @@ export const CHECKS_EXPR = `
     }
   }
 
-  // 4. fixed elements overlapping the page <h1>: a floating bar or banner over the title. An
-  // absolutely positioned piece belongs to its component (an avatar's sticker beside a DM's
-  // title reaches into the title's box without covering a letter), so it is not counted.
   const h1 = document.querySelector("h1");
-  // While a dialog, menu or listbox is open the page under it, <h1> included, is covered by
-  // design (its underlay is a transparent fixed layer over everything).
   const overlayOpen = document.querySelector('[role="dialog"], [role="menu"], [role="listbox"]');
   if (!h1) {
     findings.push({ check: "missing-h1", detail: "no <h1> found on the page" });
@@ -90,9 +75,6 @@ export const CHECKS_EXPR = `
     let overlapCount = 0;
     for (const el of all) {
       if (el === h1 || el.contains(h1) || h1.contains(el)) continue;
-      // A modal dialog/menu legitimately covers the whole page, including the
-      // <h1>, while it is open — that is not a layout defect, so skip any
-      // fixed/absolute wrapper that contains one.
       if (el.querySelector('[role="dialog"], [role="menu"], [role="listbox"]')) continue;
       const style = getComputedStyle(el);
       if (style.position !== "fixed") continue;
@@ -107,9 +89,6 @@ export const CHECKS_EXPR = `
     }
   }
 
-  // 5. buttons/inputs inside headers smaller than 24px tall, the smallest target WCAG 2.2 allows
-  // (2.5.8). Bigger is never a defect: a header holds avatar stacks (24px) and an account
-  // photo button (101px) by design.
   const headers = document.querySelectorAll("header");
   let headerControlCount = 0;
   for (const header of headers) {
@@ -126,15 +105,11 @@ export const CHECKS_EXPR = `
     }
   }
 
-  // 6. dialogs whose overlay does not cover the full viewport
   const dialogs = document.querySelectorAll('[role="dialog"]');
   for (const dialog of dialogs) {
     const dr = dialog.getBoundingClientRect();
-    // A popover/tooltip is a small dialog — only check overlay coverage for
-    // larger, modal-shaped dialogs (roughly > 30% of viewport area).
     const isLikelyModal = dr.width * dr.height > vw * vh * 0.3;
     if (!isLikelyModal) {
-      // 7. popovers extending outside the viewport
       if (dr.left < -1 || dr.top < -1 || dr.right > vw + 1 || dr.bottom > vh + 1) {
         findings.push({ check: "popover-outside-viewport", detail: \`rect=\${Math.round(dr.left)},\${Math.round(dr.top)},\${Math.round(dr.right)},\${Math.round(dr.bottom)} viewport=\${vw}x\${vh}\`, locator: locator(dialog) });
       }
@@ -142,8 +117,6 @@ export const CHECKS_EXPR = `
     }
     let coveringOverlay = null;
     for (const el of all) {
-      // Exclude the dialog and anything inside it; an ancestor wrapper is a
-      // valid (and common) place for the backdrop to live, so it stays in.
       if (el === dialog || dialog.contains(el)) continue;
       const style = getComputedStyle(el);
       if (style.position !== "fixed") continue;
@@ -156,7 +129,6 @@ export const CHECKS_EXPR = `
     }
   }
 
-  // 8. forbidden classes / hex colors in style
   const forbidden = ${JSON.stringify(FORBIDDEN_CLASS_PATTERNS.map((p) => p.re.source))};
   const forbiddenLabels = ${JSON.stringify(FORBIDDEN_CLASS_PATTERNS.map((p) => p.label))};
   let forbiddenCount = 0;
@@ -218,7 +190,6 @@ export const CHECKS_EXPR = `
     }
   }
 
-  // sidebar width (best effort)
   let sidebarWidth = null;
   const marker = document.querySelector('[aria-label="Resize sidebar"], [aria-label*="Current workspace"]');
   let walker = marker;
