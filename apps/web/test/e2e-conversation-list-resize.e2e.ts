@@ -64,9 +64,7 @@ test("the conversation list resizes and remembers its width", async () => {
   };
 
   const LIST = "main > section";
-  // By name: the sidebar's edge is a vertical separator too, and comes first.
   const HANDLE = '[role="separator"][aria-label="Resize conversation list"]';
-  /** Waits for the list column's rendered width. */
   const waitForWidth = (width: number) =>
     waitFor(
       `Math.round(document.querySelector('${LIST}').getBoundingClientRect().width) === ${width}`,
