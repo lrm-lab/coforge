@@ -1,5 +1,5 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -21,7 +21,8 @@ import { useExecutePiChat } from "./use-execute-pi-chat";
 import { PiChatFilesContext } from "./pi-chat-files-context";
 import { PiChatFilesPanel } from "./pi-chat-files-panel";
 import { PiChatSessionList } from "./pi-chat-session-list";
-import type { PiChatDraft, PiChatView } from "./pi-chat-state";
+import { createPiChatDrafts } from "./pi-chat-drafts";
+import type { PiChatView } from "./pi-chat-state";
 import { PiChatConversation } from "./pi-chat-conversation";
 import { PiChatOff } from "./pi-chat-off";
 import { WorkbenchStart, type WorkbenchComputer } from "./workbench-start";
@@ -65,10 +66,18 @@ function PiChatContent(props: Props) {
     {},
   );
   const filePanel = filePanels[computerId ?? ""];
-  const openFiles = (path?: string) =>
-    setFilePanels((current) => ({ ...current, [computerId!]: { open: true, path } }));
+  const openFiles = useCallback(
+    (path?: string) =>
+      setFilePanels((current) => ({ ...current, [computerId!]: { open: true, path } })),
+    [computerId],
+  );
+  const filesSupported = computer?.files ?? false;
+  const files = useMemo(
+    () => ({ supported: filesSupported, open: openFiles }),
+    [filesSupported, openFiles],
+  );
   const [search, setSearch] = useState("");
-  const [drafts, setDrafts] = useState<Record<string, PiChatDraft>>({});
+  const [drafts] = useState(createPiChatDrafts);
   const key = `${workspaceSlug}:${computerId}:${sessionId ?? "new"}:${runtime ?? RUNTIME_PROVIDER.PI}`;
   const execute = useExecutePiChat();
   const sessions = useQuery({
@@ -128,7 +137,7 @@ function PiChatContent(props: Props) {
   const sessionRuntime =
     computer.pi === false ? RUNTIME_PROVIDER.CODEX : (initialSession?.runtime ?? runtime);
   return (
-    <PiChatFilesContext value={{ supported: computer?.files ?? false, open: openFiles }}>
+    <PiChatFilesContext value={files}>
       <main className="flex h-full min-h-0 min-w-0 overflow-hidden bg-primary">
         <section
           aria-label={m.pi_chat_sessions()}
@@ -232,17 +241,14 @@ function PiChatContent(props: Props) {
             workspaceSlug={workspaceSlug}
             viewport={viewports.current.get(key)!}
             initialSession={initialSession}
-            draft={drafts[key] ?? { text: "" }}
-            onDraft={(value) => setDrafts((current) => ({ ...current, [key]: value }))}
+            drafts={drafts}
+            draftKey={key}
             onSelect={(id) => {
               if (selection.current === key)
                 select(computerId, id, id ? sessionRuntime : undefined);
             }}
             onRecover={(text) => {
-              setDrafts((current) => ({
-                ...current,
-                [`${workspaceSlug}:${computerId}:new:codex`]: { text },
-              }));
+              drafts.set(`${workspaceSlug}:${computerId}:new:codex`, { text });
               select(computerId, "new", RUNTIME_PROVIDER.CODEX);
             }}
           />
@@ -274,17 +280,11 @@ function PiChatContent(props: Props) {
             path={filePanel.path}
             onPath={openFiles}
             onMention={(path) =>
-              setDrafts((current) => {
-                const draft = current[key] ?? { text: "" };
-                return {
-                  ...current,
-                  [key]: {
-                    ...draft,
-                    text: [draft.text, `@${JSON.stringify(path)}`].filter(Boolean).join(" "),
-                    request: undefined,
-                  },
-                };
-              })
+              drafts.update(key, (draft) => ({
+                ...draft,
+                text: [draft.text, `@${JSON.stringify(path)}`].filter(Boolean).join(" "),
+                request: undefined,
+              }))
             }
             onClose={() =>
               setFilePanels((current) => ({

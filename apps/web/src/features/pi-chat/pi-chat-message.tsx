@@ -1,4 +1,4 @@
-import { lazy, Suspense, useId, type ReactNode } from "react";
+import { lazy, memo, Suspense, useId, useMemo, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
@@ -109,43 +109,49 @@ function Raw({ text }: { text: string }) {
   return <pre className="font-mono text-xs whitespace-pre-wrap wrap-anywhere">{text}</pre>;
 }
 
-export function PiChatMessage({ message }: { message: Message }) {
+const REMARK_PLUGINS = [remarkGfm, remarkMessageMath];
+const REHYPE_PLUGINS = [rehypeSanitize];
+
+export const PiChatMessage = memo(function PiChatMessage({ message }: { message: Message }) {
   const files = usePiChatFiles();
-  const components: Components = {
-    ...markdownComponents,
-    a({ href, children }) {
-      const path = href && piChatLocalPath(href);
-      if (path && files.supported)
-        return (
-          <Button size="sm" color="link-color" onClick={() => files.open(path)}>
-            {children}
-          </Button>
-        );
-      return <a href={href}>{children}</a>;
-    },
-    code({ children, className }) {
-      const value = String(children);
-      if (className?.split(" ").includes("language-math"))
-        return <MessageFormula source={value} display={false} />;
-      const path =
-        !className &&
-        !value.includes("\n") &&
-        /(?:^|\/)[^/]+\.[a-z\d]{1,12}$/i.test(value) &&
-        piChatLocalPath(value);
-      if (path && files.supported)
-        return (
-          <Button
-            size="sm"
-            color="link-color"
-            className="font-mono"
-            onClick={() => files.open(path)}
-          >
-            {children}
-          </Button>
-        );
-      return <code className={className}>{children}</code>;
-    },
-  };
+  const components = useMemo<Components>(
+    () => ({
+      ...markdownComponents,
+      a({ href, children }) {
+        const path = href && piChatLocalPath(href);
+        if (path && files.supported)
+          return (
+            <Button size="sm" color="link-color" onClick={() => files.open(path)}>
+              {children}
+            </Button>
+          );
+        return <a href={href}>{children}</a>;
+      },
+      code({ children, className }) {
+        const value = String(children);
+        if (className?.split(" ").includes("language-math"))
+          return <MessageFormula source={value} display={false} />;
+        const path =
+          !className &&
+          !value.includes("\n") &&
+          /(?:^|\/)[^/]+\.[a-z\d]{1,12}$/i.test(value) &&
+          piChatLocalPath(value);
+        if (path && files.supported)
+          return (
+            <Button
+              size="sm"
+              color="link-color"
+              className="font-mono"
+              onClick={() => files.open(path)}
+            >
+              {children}
+            </Button>
+          );
+        return <code className={className}>{children}</code>;
+      },
+    }),
+    [files],
+  );
   const running = message.id.startsWith("running:");
   const Status = message.isError ? XCircle : running ? Terminal : CheckCircle;
   return (
@@ -206,8 +212,8 @@ export function PiChatMessage({ message }: { message: Message }) {
         <>
           <div className="prose max-w-none text-sm leading-relaxed text-primary [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-secondary [&_pre]:p-3 [&_pre]:text-xs [&_table]:block [&_table]:overflow-auto [&_a]:text-brand-secondary">
             <ReactMarkdown
-              remarkPlugins={[remarkGfm, remarkMessageMath]}
-              rehypePlugins={[rehypeSanitize]}
+              remarkPlugins={REMARK_PLUGINS}
+              rehypePlugins={REHYPE_PLUGINS}
               components={components}
             >
               {rewriteLatexDelimiters(message.text)}
@@ -246,4 +252,4 @@ export function PiChatMessage({ message }: { message: Message }) {
       ))}
     </div>
   );
-}
+});

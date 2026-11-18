@@ -1,5 +1,5 @@
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowLeft, Folder } from "@untitledui/icons";
 import type {
@@ -9,12 +9,14 @@ import type {
   WorkbenchRuntime,
 } from "@lrm/coforge-sdk/internal/pi-chat";
 import { Button } from "#src/components/base/buttons/button";
+import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { PageHeader } from "#src/components/layout/page-header";
 import { m } from "#src/paraglide/messages";
 import { piChatFailureMessage, type PiChatFailure } from "./pi-chat-failure";
 import { useExecutePiChat } from "./use-execute-pi-chat";
 import { PiChatTranscript } from "./pi-chat-transcript";
 import { PiChatComposer } from "./pi-chat-composer";
+import { usePiChatDraft, type PiChatDrafts } from "./pi-chat-drafts";
 import { PiChatSessionActions } from "./pi-chat-session-actions";
 import { usePiChatScroll } from "./pi-chat-scroll";
 import { PiChatDisclosureContext } from "./pi-chat-disclosure";
@@ -35,8 +37,8 @@ export function PiChatConversation({
   computerId,
   sessionId,
   workspaceSlug,
-  draft,
-  onDraft,
+  drafts,
+  draftKey,
   onSelect,
   onRecover,
   viewport,
@@ -53,8 +55,8 @@ export function PiChatConversation({
   initialSession?: PiChatSession;
   runtime?: WorkbenchRuntime;
   controls?: boolean;
-  draft: PiChatDraft;
-  onDraft(value: PiChatDraft): void;
+  drafts: PiChatDrafts;
+  draftKey: string;
   onSelect(id?: string): void;
   onRecover(text: string): void;
 }) {
@@ -64,12 +66,8 @@ export function PiChatConversation({
   const [error, setError] = useState<PiChatFailure | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [pendingSend, setPendingSend] = useState<PiChatPendingMessage>();
-  const latestDraft = useRef(draft);
-  latestDraft.current = draft;
-  const updateDraft = (value: PiChatDraft) => {
-    latestDraft.current = value;
-    onDraft(value);
-  };
+  const readDraft = () => drafts.get(draftKey);
+  const updateDraft = (value: PiChatDraft) => drafts.set(draftKey, value);
   const [now, setNow] = useState(Date.now);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const queryKey = ["pi-chat", workspaceSlug, computerId, "session", sessionId];
@@ -136,6 +134,15 @@ export function PiChatConversation({
     })),
   ];
   const position = usePiChatScroll(history.data, sessionId === "new" || !!history.data, viewport);
+  const pauseFollowing = useLatestCallback(position.pauseFollowing);
+  const disclosure = useMemo(
+    () => ({
+      expanded: viewport.expanded,
+      closed: (viewport.closed ??= new Set()),
+      onInspect: pauseFollowing,
+    }),
+    [viewport, pauseFollowing],
+  );
   const refresh = (id = sessionId) => {
     void queryClient.invalidateQueries({
       queryKey: ["pi-chat", workspaceSlug, computerId, "session", id],
@@ -195,9 +202,9 @@ export function PiChatConversation({
     }
   };
   const send = async () => {
-    const text = latestDraft.current.text.trim();
+    const text = readDraft().text.trim();
     if (!text || submitting || (busy && !nativeControls)) return;
-    const prepared = preparePiChatSend(latestDraft.current);
+    const prepared = preparePiChatSend(readDraft());
     updateDraft(prepared);
     const pending = {
       ...prepared.request!,
@@ -220,8 +227,7 @@ export function PiChatConversation({
     );
     setPendingSend(undefined);
     if (result?.session) {
-      if (latestDraft.current === prepared)
-        updateDraft({ ...prepared, text: "", request: undefined });
+      if (readDraft() === prepared) updateDraft({ ...prepared, text: "", request: undefined });
       position.followLatest();
       if (sessionId === "new") onSelect(result.session.id);
     }
@@ -232,7 +238,7 @@ export function PiChatConversation({
     const { steering, followUp } = result.takenQueue;
     if (!steering.length && !followUp.length) return;
     const restored = [...steering, ...followUp].join("\n\n");
-    const current = latestDraft.current;
+    const current = readDraft();
     updateDraft({
       ...current,
       text:
@@ -381,13 +387,7 @@ export function PiChatConversation({
                 {m.pi_chat_loading()}
               </p>
             )}
-            <PiChatDisclosureContext
-              value={{
-                expanded: viewport.expanded,
-                closed: (viewport.closed ??= new Set()),
-                onInspect: position.pauseFollowing,
-              }}
-            >
+            <PiChatDisclosureContext value={disclosure}>
               <PiChatTranscript
                 messages={messages}
                 busy={busy}
@@ -467,9 +467,9 @@ export function PiChatConversation({
           </div>
         </div>
       )}
-      <PiChatComposer
-        draft={draft}
-        onDraft={updateDraft}
+      <DraftedComposer
+        drafts={drafts}
+        draftKey={draftKey}
         busy={busy}
         pending={submitting}
         controls={nativeControls}
@@ -487,6 +487,20 @@ export function PiChatConversation({
         terminalStatus={session && !busy ? statusLabel(session.status, isCodex) : undefined}
       />
     </section>
+  );
+}
+
+function DraftedComposer({
+  drafts,
+  draftKey,
+  ...props
+}: Omit<Parameters<typeof PiChatComposer>[0], "draft" | "onDraft"> & {
+  drafts: PiChatDrafts;
+  draftKey: string;
+}) {
+  const draft = usePiChatDraft(drafts, draftKey);
+  return (
+    <PiChatComposer {...props} draft={draft} onDraft={(value) => drafts.set(draftKey, value)} />
   );
 }
 
