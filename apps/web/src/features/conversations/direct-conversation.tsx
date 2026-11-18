@@ -70,6 +70,7 @@ export function DirectConversationHeader({
   );
   return (
     <TabbedHeader
+      soft
       identity={
         <>
           <ConversationListButton />

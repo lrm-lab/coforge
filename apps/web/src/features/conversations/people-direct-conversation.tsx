@@ -44,6 +44,7 @@ export function PeopleDirectConversationHeader({
   const self = useIsSelfConversation(conversation);
   return (
     <TabbedHeader
+      soft
       identity={
         <>
           <ConversationListButton />
