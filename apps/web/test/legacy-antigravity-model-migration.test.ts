@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 
+import { LEGACY_ANTIGRAVITY_EFFORT_MODELS } from "#src/server/agents/agent-runtime-config.server";
+
 const migration = await Bun.file(
   new URL(
     "../prisma/migrations/20261118150000_split_legacy_antigravity_model_runtime_key/migration.sql",
@@ -7,28 +9,26 @@ const migration = await Bun.file(
   ),
 ).text();
 
-test("legacy antigravity model migration splits only the known suffixed ids through the stored runtime key", () => {
+const splitTable = [...migration.matchAll(/\('([^']+)', '([^']+)', '([^']+)'\)/g)]
+  .map(([, legacyId, model, reasoning]) => ({ legacyId, model, reasoning }))
+  .sort((left, right) => left.legacyId.localeCompare(right.legacyId));
+
+const expectedSplits = Object.entries(LEGACY_ANTIGRAVITY_EFFORT_MODELS)
+  .map(([legacyId, split]) => ({ legacyId, ...split }))
+  .sort((left, right) => left.legacyId.localeCompare(right.legacyId));
+
+test("the migration splits exactly the ids the code knows, and reads the stored runtime key", () => {
+  expect(splitTable).toEqual(expectedSplits);
   expect(migration).toContain("SET lock_timeout = '5s';");
-  expect(migration).toContain("-- Rollback:");
   expect(migration).toContain("RESET lock_timeout;");
+  expect(migration).toContain("-- Rollback:");
+  expect(migration).toMatch(
+    /^-- Rollback: .*"runtimeConfigRevision" = GREATEST\("runtimeConfigRevision" - 1, 0\)/m,
+  );
   expect(migration).toContain("\"runtimeConfig\"->>'runtime' = 'antigravity'");
   expect(migration).not.toContain("\"runtimeConfig\"->>'provider' = 'antigravity'");
-  expect(migration).toContain("COALESCE(\"runtimeConfig\"->>'reasoning', '') = ''");
-  for (const model of [
-    "gemini-3.8-flash-high",
-    "gemini-3.8-flash-medium",
-    "gemini-3.8-flash-low",
-    "gemini-3.7-flash-high",
-    "gemini-3.7-flash-medium",
-    "gemini-3.7-flash-low",
-    "gemini-3.6-flash-high",
-    "gemini-3.6-flash-medium",
-    "gemini-3.6-flash-low",
-    "gemini-3.1-pro-high",
-    "gemini-3.1-pro-low",
-  ]) {
-    expect(migration).toContain(`'${model}'`);
-  }
+  expect(migration).toMatch(/COALESCE\("a"\."runtimeConfig"->>'reasoning', ''\) = ''/);
+  expect(migration).not.toContain("CASE");
   expect(migration).not.toContain("gpt-oss-120b-medium");
   expect(migration).not.toContain("claude-opus-4-6-thinking");
 });
