@@ -56,7 +56,9 @@ These rules apply to `src/features/computers/`.
   `/desktop/<computer id>/<agent id>/` in-page (thumbnail → overlay; see
   `agent-desktop-thumbnail.tsx`). On a phone portrait viewport the maximized chrome offers
   Landscape view (CSS fake-landscape via `desktop-landscape.ts`); Portrait view, minimize,
-  or sleep clears it. Action-card takeover follows the same phone overlay / wide popup
+  or sleep clears it. In landscape the title chrome overlays and auto-hides after idle
+  (`desktop-chrome-autohide.ts`); a top-edge handle reveals it. Portrait phone and wider
+  viewports keep the chrome always visible. Action-card takeover follows the same phone overlay / wide popup
   split. Focused plain-text paste on that desktop page is forwarded into the remote
   clipboard by the host adapter (`packages/computer` `host/desktop-page.ts`); files and
   images are not. That origin is the deployment site; Caddy confirms the signed-in owner
