@@ -1,13 +1,14 @@
 import type { AgentRuntimeSelectionRefusal } from "./agent-runtime-availability.server";
 
-export type ReadinessResource = "computer" | "runtime" | "login";
+export type ReadinessResource = "computer" | "runtime" | "login" | "launch";
 export type ReadinessBehaviour = "blocked" | "waiting" | "advisory";
 export type ReadinessActor = "none" | "computer_owner" | "agent_owner";
 export type ReadinessExit =
   | "computer_reconnects"
   | "upgrade_deadline_elapsed"
   | "runtime_reported_usable"
-  | "person_signs_in_and_starts";
+  | "person_signs_in_and_starts"
+  | "person_starts_again";
 
 export const READINESS_STATES = {
   computer_updating: {
@@ -34,6 +35,12 @@ export const READINESS_STATES = {
     actor: "agent_owner",
     exits: ["person_signs_in_and_starts"],
   },
+  launch_failed: {
+    resource: "launch",
+    behaviour: "blocked",
+    actor: "agent_owner",
+    exits: ["person_starts_again"],
+  },
 } as const satisfies Record<
   string,
   {
@@ -51,6 +58,7 @@ const PRECEDENCE = [
   "computer_offline",
   "runtime_missing",
   "runtime_login_required",
+  "launch_failed",
 ] as const satisfies readonly ReadinessState[];
 
 export type AgentReadiness =
@@ -62,6 +70,7 @@ export type AgentReadiness =
       actor: ReadinessActor;
       exits: readonly ReadinessExit[];
       also: readonly ReadinessState[];
+      detail: string | null;
     };
 
 export type AgentReadinessInput = {
@@ -70,6 +79,7 @@ export type AgentReadinessInput = {
   upgradeExpiresAtMs: number | null;
   runtimeRefusal: AgentRuntimeSelectionRefusal | null;
   stopReason: string | null;
+  failureReason: string | null;
 };
 
 const RUNTIME_MISSING_REFUSALS: readonly AgentRuntimeSelectionRefusal[] = [
@@ -91,9 +101,15 @@ export function agentReadiness(input: AgentReadinessInput): AgentReadiness {
   if (input.runtimeRefusal !== null && RUNTIME_MISSING_REFUSALS.includes(input.runtimeRefusal))
     active.add("runtime_missing");
   if (input.stopReason === LOGIN_REQUIRED_STOP_REASON) active.add("runtime_login_required");
+  if (input.failureReason !== null) active.add("launch_failed");
   const [state, ...also] = PRECEDENCE.filter((candidate) => active.has(candidate));
   if (!state) return READY;
-  return { state, ...READINESS_STATES[state], also };
+  return {
+    state,
+    ...READINESS_STATES[state],
+    also,
+    detail: state === "launch_failed" ? input.failureReason : null,
+  };
 }
 
 export function readinessSelfHeals(readiness: AgentReadiness): boolean {

@@ -15,6 +15,7 @@ function input(overrides: Partial<AgentReadinessInput> = {}): AgentReadinessInpu
     upgradeExpiresAtMs: null,
     runtimeRefusal: null,
     stopReason: null,
+    failureReason: null,
     ...overrides,
   };
 }
@@ -130,4 +131,24 @@ test("every state names its exits and only a waiting state heals by itself", () 
     expect(row.exits.length).toBeGreaterThan(0);
     expect(row.behaviour === "waiting").toBe(state === "computer_updating");
   }
+});
+
+test("a failed launch blocks with its error code and the Agent's person to act, after every other cause", () => {
+  const readiness = agentReadiness(input({ failureReason: "agent_authorization_failed" }));
+  expect(readiness).toMatchObject({
+    state: "launch_failed",
+    resource: "launch",
+    behaviour: "blocked",
+    actor: "agent_owner",
+    exits: ["person_starts_again"],
+    detail: "agent_authorization_failed",
+    also: [],
+  });
+  expect(readinessSelfHeals(readiness)).toBe(false);
+  expect(
+    agentReadiness(input({ failureReason: "launch_failed", stopReason: "runtime_login_required" })),
+  ).toMatchObject({ state: "runtime_login_required", also: ["launch_failed"], detail: null });
+  expect(
+    agentReadiness(input({ failureReason: "launch_failed", runtimeRefusal: "runtime_missing" })),
+  ).toMatchObject({ state: "runtime_missing", also: ["launch_failed"] });
 });
