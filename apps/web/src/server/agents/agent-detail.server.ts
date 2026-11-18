@@ -5,6 +5,7 @@ import type { AgentDisplay } from "./agent-display.server";
 import { appLogoUrl } from "#src/server/apps/app-logo.server";
 import { canDirectMessageAgent } from "./agent-visibility.server";
 import { agentControlRevision } from "./agent-control-types.server";
+import { readableRuntimeConfig } from "./agent-runtime-config.server";
 
 type DetailComputer = {
   id: string;
@@ -135,9 +136,11 @@ export class AgentDetailQuery {
     const control = (
       agent.controlState && typeof agent.controlState === "object" ? agent.controlState : undefined
     ) as { phase?: string; errorCode?: string; configRevision?: string } | undefined;
+    const runtimeConfig = readableRuntimeConfig(agent.runtimeConfig, agent.id);
     const isFailed =
       control?.phase === "failed" &&
-      control.configRevision === agentControlRevision(agent.runtimeConfig);
+      !!runtimeConfig &&
+      control.configRevision === agentControlRevision(runtimeConfig);
     let failureReason: string | null = isFailed ? (control?.errorCode ?? "launch_failed") : null;
     if (!failureReason && !agent.stoppedAt) {
       const recentActivity = agent.latestActivity ?? agent.activity?.[0];
