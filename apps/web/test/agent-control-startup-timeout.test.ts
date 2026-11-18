@@ -212,8 +212,8 @@ function resultFor(
 
 const claim = { workspaceId: "w", computerId: "c" };
 
-async function afterStopSent() {
-  const f = fixture();
+async function afterStopSent(state: AgentControlState = startingState) {
+  const f = fixture(state);
   f.clock.now = START + WINDOW;
   await f.timeout.settle("a");
   const receiver = new AgentControlReceiver(
@@ -242,6 +242,20 @@ test("the Daemon's stopped receipt for the fenced Stop settles the launch as fai
   expect(lines[0]).toMatchObject({ stop_outcome: "confirmed" });
   expect(f.events.at(-1)).toMatchObject({
     phase: "failed",
+    errorCode: STARTUP_DEADLINE_ERROR_CODE,
+  });
+});
+
+test("the fenced Stop restarts the result sequence, so the receipt for its epoch is accepted", async () => {
+  const f = await afterStopSent({ ...startingState, controlSequence: 1 });
+  expect(f.current().state).toMatchObject({ phase: "starting", epoch: 4, controlSequence: 0 });
+  const state = f.current().state!;
+  await captureWarnings(() =>
+    f.receiver.result(claim, resultFor(state, { phase: "stopped", sequence: 1 })),
+  );
+  expect(f.current().state).toMatchObject({
+    phase: "failed",
+    controlSequence: 1,
     errorCode: STARTUP_DEADLINE_ERROR_CODE,
   });
 });

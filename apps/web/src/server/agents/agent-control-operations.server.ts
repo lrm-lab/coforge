@@ -154,5 +154,10 @@ export function advanceControlEpochForComputerMove(
       );
     return undefined;
   }
-  return { ...parsed.data, computerId, epoch: nextControlEpoch(parsed.data) };
+  return {
+    ...parsed.data,
+    computerId,
+    epoch: nextControlEpoch(parsed.data),
+    controlSequence: 0,
+  };
 }

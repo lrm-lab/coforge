@@ -106,7 +106,12 @@ export class AgentControlStartupTimeout {
       computerId: state.computerId,
     });
     if (!online) return this.#fail(settling, "offline", now);
-    const fenced = { ...state, epoch: nextControlEpoch(state), stopSentAtMs: now };
+    const fenced = {
+      ...state,
+      epoch: nextControlEpoch(state),
+      controlSequence: 0,
+      stopSentAtMs: now,
+    };
     if (!(await store.replace(agent, fenced))) return "lost";
     await this.deps.sendStop(fenced).catch((error: unknown) =>
       console.warn(

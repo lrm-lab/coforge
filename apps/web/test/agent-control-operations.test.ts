@@ -13,6 +13,29 @@ test("moving an Agent with empty control state skips without warning", () => {
   }
 });
 
+test("moving an Agent bumps the epoch and restarts the result sequence", () => {
+  const state = {
+    version: 1,
+    protocolMajor: 1,
+    requestId: "r1",
+    workspaceId: "w",
+    computerId: "c-old",
+    agentId: "a",
+    provider: "pi",
+    epoch: 3,
+    action: "start",
+    phase: "completed",
+    configRevision: "",
+    controlSequence: 7,
+    sessionSequence: 2,
+  };
+  expect(advanceControlEpochForComputerMove(state, "a", "c-new")).toMatchObject({
+    computerId: "c-new",
+    epoch: 4,
+    controlSequence: 0,
+  });
+});
+
 test("moving an Agent with invalid control state warns with its id", () => {
   const warnings: string[] = [];
   const original = console.warn;
