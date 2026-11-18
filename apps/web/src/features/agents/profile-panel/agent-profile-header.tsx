@@ -38,6 +38,7 @@ export function AgentProfileHeader({
   deleted = false,
   onClose,
   back,
+  pageHeading = false,
 }: {
   agent: {
     id: string;
@@ -63,9 +64,11 @@ export function AgentProfileHeader({
   /** Where the profile was opened from, when it is shown inside another page (a channel's
    * members): a Back button before the avatar returns there. */
   back?: { label: string; onPress: () => void };
+  pageHeading?: boolean;
 }) {
   const openDirectConversation = useOpenDirectConversation();
   const message = () => void openDirectConversation({ agentId: agent.id });
+  const Name = pageHeading ? "h1" : "p";
   const header = (
     // Same 20px gutter as the panel body (px-5): the bordered utility buttons align by box edge,
     // while the borderless Close pulls -mr-1.5 so its glyph lands on the gutter
@@ -103,9 +106,9 @@ export function AgentProfileHeader({
       )}
       {/* The name alone: the avatar's dot carries the live status
           and the Profile tab the description. */}
-      <p className="min-w-0 flex-1 truncate text-md font-medium tracking-tight text-secondary">
+      <Name className="min-w-0 flex-1 truncate text-md font-medium tracking-tight text-secondary">
         {agent.displayName}
-      </p>
+      </Name>
       {deleted && <DeletedAgentBadge />}
       <div className="flex items-center gap-2">
         {canMessage && (

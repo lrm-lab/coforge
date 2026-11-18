@@ -108,22 +108,7 @@ export function AgentsContent({
   const loadMore = () => {
     if (pages.hasNextPage && !pages.isFetchingNextPage) void pages.fetchNextPage();
   };
-  const profile = profileAgentId ? (
-    <AgentProfilePanel
-      agentId={profileAgentId}
-      requestedTab={agentTab}
-      onTabChange={setAgentProfileTab}
-      onClose={closeAgentProfile}
-    />
-  ) : profilePersonId ? (
-    <PersonProfilePanel
-      // A fresh panel per person, so one never shows another's state while it loads.
-      key={profilePersonId}
-      userId={profilePersonId}
-      onClose={closeAgentProfile}
-    />
-  ) : null;
-  const profileOpen = profile !== null;
+  const profileOpen = Boolean(profileAgentId || profilePersonId);
   // `useBreakpoint` is true during SSR for a desktop's request (a phone's request assumes narrow,
   // `AssumedViewportProvider`), which cannot tell a narrow desktop window. Stay stacked until after
   // mount so a phone never first-paints the profile as a 35% column with a blank left side.
@@ -131,6 +116,23 @@ export function AgentsContent({
   useEffect(() => setMounted(true), []);
   const desktop = useBreakpoint("md");
   const splitOpen = mounted && desktop && profileOpen;
+  const profile = profileAgentId ? (
+    <AgentProfilePanel
+      agentId={profileAgentId}
+      requestedTab={agentTab}
+      onTabChange={setAgentProfileTab}
+      onClose={closeAgentProfile}
+      pageHeading={!splitOpen}
+    />
+  ) : profilePersonId ? (
+    <PersonProfilePanel
+      // A fresh panel per person, so one never shows another's state while it loads.
+      key={profilePersonId}
+      userId={profilePersonId}
+      onClose={closeAgentProfile}
+      pageHeading={!splitOpen}
+    />
+  ) : null;
   const membersLayout = useDefaultLayout({
     id: "coforge-members",
     panelIds: splitOpen ? ["main", "profile"] : ["main"],

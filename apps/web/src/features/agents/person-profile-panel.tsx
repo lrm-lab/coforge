@@ -58,6 +58,7 @@ export function PersonProfilePanel({
   onClose,
   back,
   onOpenAgent,
+  pageHeading = false,
 }: {
   userId: string;
   onClose: () => void;
@@ -67,7 +68,9 @@ export function PersonProfilePanel({
   /** Opens one of the person's Agents in the host's own place for it. Absent, the Agent opens in
    * the page's profile slot through the address. */
   onOpenAgent?: (agentId: string) => void;
+  pageHeading?: boolean;
 }) {
+  const Name = pageHeading ? "h1" : "p";
   // The app shell's Workspace, which every page hosting this panel sits under.
   const workspaceId = useCurrentWorkspaceId();
   const person = useQuery({
@@ -138,9 +141,9 @@ export function PersonProfilePanel({
           name={profile.displayName}
           src={profile.avatarUrl}
         />
-        <p className="min-w-0 flex-1 truncate text-md font-medium tracking-tight text-secondary">
+        <Name className="min-w-0 flex-1 truncate text-md font-medium tracking-tight text-secondary">
           {profile.displayName}
-        </p>
+        </Name>
         {/* Every member offers it, the viewer too: that opens their DM with themself. */}
         <ButtonUtility
           icon={MessageSquare}

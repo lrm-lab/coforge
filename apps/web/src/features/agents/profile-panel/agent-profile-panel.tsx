@@ -90,6 +90,7 @@ export function AgentProfilePanel({
   onTabChange,
   onClose,
   back,
+  pageHeading,
 }: {
   agentId: string;
   requestedTab: ProfileTabId | undefined;
@@ -97,6 +98,7 @@ export function AgentProfilePanel({
   onClose: () => void;
   /** Shown inside another page: its Back button (see `AgentProfileHeader`). */
   back?: { label: string; onPress: () => void };
+  pageHeading?: boolean;
 }) {
   const timeZone = appRoute.useLoaderData().timeZone;
   const router = useRouter();
@@ -262,6 +264,7 @@ export function AgentProfilePanel({
   return (
     <div ref={root} className="flex h-full min-h-0 min-w-0 flex-col">
       <AgentProfileHeader
+        pageHeading={pageHeading}
         canMessage={Boolean(profile?.canMessage)}
         deleted={deleted}
         // Until the profile arrives, the face the lists show (the live roster's), not the one the
