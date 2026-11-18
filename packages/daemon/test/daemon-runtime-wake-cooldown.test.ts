@@ -4,6 +4,7 @@ import { rm } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { LAUNCH_FAILURE_BACKOFF_BASE_MS } from "#src/agent-runtime/launch-failure-backoff";
 import { DaemonRuntime } from "#src/daemon-runtime/runtime";
 import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
@@ -30,11 +31,10 @@ test("a message for an Agent whose wake launch just failed waits out the cooldow
   const exits = new Set<() => void>();
   const notices: string[] = [];
   const acknowledgements: string[] = [];
-  let allAcknowledged!: () => void;
-  const bothAcknowledged = new Promise<void>((resolve) => {
-    allAcknowledged = resolve;
-  });
+  const stateDirectory = join(workspaceRoot, `state-${crypto.randomUUID()}`);
   let launchAttempts = 0;
+  let failedAt = 0;
+  let retriedAt = 0;
   let broken = false;
   const runtime = new DaemonRuntime(
     connection,
@@ -42,7 +42,11 @@ test("a message for an Agent whose wake launch just failed waits out the cooldow
       provider: "pi",
       createAgentSession: async () => {
         launchAttempts++;
-        if (broken) throw new Error("pi: command not found");
+        if (launchAttempts === 3) retriedAt = Date.now();
+        if (broken) {
+          failedAt = Date.now();
+          throw new Error("pi: command not found");
+        }
         return {
           ...sessionSpy(),
           notify: async (notice) => {
@@ -63,7 +67,6 @@ test("a message for an Agent whose wake launch just failed waits out the cooldow
         sendAgentStatus() {},
         async sendAgentDeliveryAck(ack) {
           acknowledgements.push(ack.deliveryId);
-          if (acknowledgements.length === 2) allAcknowledged();
         },
         async requestAgentApiKey() {
           return `sk_agent_${"a".repeat(43)}`;
@@ -74,6 +77,7 @@ test("a message for an Agent whose wake launch just failed waits out the cooldow
     },
     undefined,
     emptyCodeAgentDiscovery,
+    stateDirectory,
   );
   const delivery = (sequence: number) => ({
     protocolMajor: 1 as const,
@@ -99,9 +103,9 @@ test("a message for an Agent whose wake launch just failed waits out the cooldow
     expect(launchAttempts).toBe(2);
     expect(acknowledgements).toEqual(["delivery-1", "delivery-2"]);
     broken = false;
-    await Bun.sleep(1300);
-    await bothAcknowledged;
+    await waitFor(() => notices.length > 0);
     expect(launchAttempts).toBe(3);
+    expect(retriedAt - failedAt).toBeGreaterThanOrEqual(LAUNCH_FAILURE_BACKOFF_BASE_MS);
     expect(notices).toHaveLength(1);
     expect(notices[0]).toContain("@agent 2 new messages");
     expect(acknowledgements).toEqual(["delivery-1", "delivery-2"]);
@@ -109,3 +113,11 @@ test("a message for an Agent whose wake launch just failed waits out the cooldow
     await runtime.stop();
   }
 });
+
+async function waitFor(condition: () => boolean, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error("condition was not met in time");
+    await Bun.sleep(10);
+  }
+}
