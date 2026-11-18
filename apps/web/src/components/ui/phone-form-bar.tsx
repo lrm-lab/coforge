@@ -1,36 +1,51 @@
 import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 
 export function PhoneFormBar({
   heading,
-  saving,
+  submitLabel,
+  pending,
+  submitDisabled,
   onCancel,
-  onCreate,
+  onSubmit,
+  className,
 }: {
   heading: string;
-  saving: boolean;
+  submitLabel: string;
+  pending: boolean;
+  submitDisabled?: boolean;
   onCancel: () => void;
-  onCreate: () => void;
+  onSubmit: () => void;
+  className?: string;
 }) {
   return (
-    <div className="grid h-11 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 sm:hidden">
+    <div
+      className={cx(
+        "grid h-11 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 sm:hidden",
+        className,
+      )}
+    >
       <Button
         color="link-gray"
         size="md"
-        isDisabled={saving}
+        isDisabled={pending}
         onClick={onCancel}
         className="h-11 justify-self-start after:absolute after:-inset-x-2 after:inset-y-0"
       >
-        {m.tasks_create_cancel()}
+        {m.controls_cancel()}
       </Button>
-      <span className="truncate text-md font-semibold text-primary">{heading}</span>
+      <span aria-hidden="true" className="truncate text-md font-semibold text-primary">
+        {heading}
+      </span>
       <Button
         size="sm"
-        isLoading={saving}
-        onClick={onCreate}
+        isLoading={pending}
+        isDisabled={submitDisabled}
+        onClick={onSubmit}
         className="justify-self-end after:absolute after:-inset-y-1 after:inset-x-0"
       >
-        {m.tasks_create_submit_short()}
+        {submitLabel}
       </Button>
     </div>
   );

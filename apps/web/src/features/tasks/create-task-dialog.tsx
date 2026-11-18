@@ -178,9 +178,9 @@ export function CreateTaskDialog({
       isOpen={open}
       onOpenChange={(value) => !busy.current && onOpenChange(value)}
       isDismissable
-      className="max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px]"
+      page
     >
-      <Modal className="flex w-full flex-col overflow-hidden max-sm:h-full max-sm:rounded-none max-sm:safe-area-padding sm:w-[min(44rem,calc(100vw-2rem))] dark:bg-secondary">
+      <Modal className="flex w-full flex-col overflow-hidden sm:w-[min(44rem,calc(100vw-2rem))] dark:bg-secondary">
         <Dialog aria-label={heading} className="flex min-h-0 flex-1 flex-col">
           {({ close }) => (
             <form
@@ -196,9 +196,10 @@ export function CreateTaskDialog({
             >
               <PhoneFormBar
                 heading={heading}
-                saving={saving}
+                submitLabel={m.tasks_create_submit_short()}
+                pending={saving}
                 onCancel={close}
-                onCreate={() => formRef.current?.requestSubmit()}
+                onSubmit={() => formRef.current?.requestSubmit()}
               />
               <div
                 className={cn(

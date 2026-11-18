@@ -23,9 +23,11 @@ import { cx } from "#src/utils/cx";
 export function ModalOverlay({
   className,
   confirmation,
+  page,
   ...props
 }: Omit<ComponentProps<typeof OfficialModalOverlay>, "style"> & {
   confirmation?: boolean;
+  page?: boolean;
 }) {
   const trigger = useContext(OverlayTriggerStateContext);
   const open = props.isOpen ?? trigger?.isOpen ?? false;
@@ -34,7 +36,7 @@ export function ModalOverlay({
   const wide = useBreakpoint("sm");
   useKeepFocusedFieldInView(open);
   return (
-    <ConfirmationSheetContext.Provider value={Boolean(confirmation)}>
+    <PhoneFormContext.Provider value={confirmation ? "sheet" : page ? "page" : null}>
       <OfficialModalOverlay
         {...props}
         isDismissable={props.isDismissable ?? (Boolean(confirmation) && !wide)}
@@ -52,24 +54,26 @@ export function ModalOverlay({
             !keyboardMayBeUp &&
               "max-sm:[--visual-viewport-height:100dvh]! max-sm:[--visual-viewport-top:0px]!",
             confirmation && "max-sm:px-0 max-sm:[--modal-pb:0px]",
+            page &&
+              "max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px]",
             typeof className === "function" ? className(state) : className,
           )
         }
       />
-    </ConfirmationSheetContext.Provider>
+    </PhoneFormContext.Provider>
   );
 }
 
-const ConfirmationSheetContext = createContext(false);
+const PhoneFormContext = createContext<"sheet" | "page" | null>(null);
 
 export function useConfirmationSheet(): boolean {
   const wide = useBreakpoint("sm");
-  return useContext(ConfirmationSheetContext) && !wide;
+  return useContext(PhoneFormContext) === "sheet" && !wide;
 }
 
 export function Modal({ className, children, ...props }: ComponentProps<typeof OfficialModal>) {
-  const confirmation = useContext(ConfirmationSheetContext);
-  if (!confirmation)
+  const form = useContext(PhoneFormContext);
+  if (form !== "sheet")
     return (
       <OfficialModal
         {...props}
@@ -77,6 +81,8 @@ export function Modal({ className, children, ...props }: ComponentProps<typeof O
           cx(
             "ring-1 ring-modal-edge",
             typeof className === "function" ? className(state) : className,
+            form === "page" &&
+              "max-sm:h-full max-sm:w-full max-sm:max-w-none max-sm:rounded-none max-sm:ring-0 max-sm:safe-area-padding",
           )
         }
       >

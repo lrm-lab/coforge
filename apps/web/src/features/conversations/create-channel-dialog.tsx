@@ -21,6 +21,7 @@ import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { Input } from "#src/components/base/input/input";
 import { Toggle } from "#src/components/base/toggle/toggle";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
+import { PhoneFormBar } from "#src/components/ui/phone-form-bar";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import {
@@ -112,17 +113,22 @@ export function CreateChannelDialog({
           if (value) onOpenChange(true);
           else guard.requestClose();
         }}
-        className={memberPicker ? "max-md:px-0 max-md:[--modal-pb:0px]" : undefined}
+        page={!memberPicker}
+        className={
+          memberPicker
+            ? "max-md:items-stretch max-md:px-0 max-md:[--modal-pb:0px] max-md:[--modal-pt:0px]"
+            : undefined
+        }
       >
         {memberPicker ? (
-          <Modal className="w-[calc(100vw-2rem)] max-w-4xl overflow-hidden max-md:h-full max-md:w-full max-md:rounded-b-none max-md:pb-safe-bottom">
+          <Modal className="w-[calc(100vw-2rem)] max-w-4xl overflow-hidden max-md:h-full max-md:w-full max-md:rounded-none max-md:ring-0 max-md:safe-area-padding">
             <Dialog className="flex h-full flex-col p-0 md:h-[min(36rem,calc(100dvh-4rem))] md:flex-row">
               {({ close }) => <CreateChannelForm {...form} memberPicker close={close} />}
             </Dialog>
           </Modal>
         ) : (
           <Modal className="w-[calc(100vw-2rem)] max-w-md">
-            <Dialog className="p-6">
+            <Dialog className="p-6 max-sm:flex max-sm:h-full max-sm:flex-col max-sm:p-0">
               {({ close }) => <CreateChannelForm {...form} memberPicker={false} close={close} />}
             </Dialog>
           </Modal>
@@ -180,6 +186,7 @@ function CreateChannelForm({
     notice: "members" | "created";
   } | null>(null);
   const formId = useId();
+  const formRef = useRef<HTMLFormElement>(null);
   const wide = useBreakpoint("md");
   const nameValid = CHANNEL_NAME_PATTERN.test(name.trim());
   const canCreate = canCreateGroupChat(selectedKeys.size, minMembers);
@@ -281,23 +288,39 @@ function CreateChannelForm({
   if (!memberPicker) {
     return (
       <>
+        <PhoneFormBar
+          heading={m.channel_create()}
+          submitLabel={m.controls_create()}
+          pending={saving}
+          submitDisabled={locked || !nameValid}
+          onCancel={close}
+          onSubmit={() => formRef.current?.requestSubmit()}
+        />
         <ButtonUtility
           aria-label={m.controls_close()}
           icon={XClose}
           size="sm"
           color="tertiary"
-          className="absolute top-4 right-4"
+          className="absolute top-4 right-4 max-sm:hidden"
           onClick={close}
         />
-        <Heading slot="title" className="pr-8 text-lg font-semibold text-primary">
+        <Heading slot="title" className="pr-8 text-lg font-semibold text-primary max-sm:sr-only">
           {m.channel_create()}
         </Heading>
         {!makePrivate && (
-          <Text slot="description" className="mt-2 block text-sm text-tertiary">
+          <Text
+            slot="description"
+            className="mt-2 block text-sm text-tertiary max-sm:mt-0 max-sm:px-4 max-sm:pt-4"
+          >
             {m.channel_public_description()}
           </Text>
         )}
-        <form onSubmit={(event) => void submit(event)} className="mt-5 flex flex-col gap-2">
+        <form
+          id={formId}
+          ref={formRef}
+          onSubmit={(event) => void submit(event)}
+          className="mt-5 flex flex-col gap-2 max-sm:mt-0 max-sm:min-h-0 max-sm:flex-1 max-sm:overflow-y-auto max-sm:p-4"
+        >
           {nameField}
           {privateField}
           {initialMembers &&
@@ -327,7 +350,11 @@ function CreateChannelForm({
               </div>
             )}
           {errorText}
-          <Button type="submit" isDisabled={locked || !nameValid} className="mt-4 w-full">
+          <Button
+            type="submit"
+            isDisabled={locked || !nameValid}
+            className="mt-4 w-full max-sm:hidden"
+          >
             {m.channel_create()}
           </Button>
         </form>
@@ -349,45 +376,32 @@ function CreateChannelForm({
   const minMembersHint = !canCreate && (
     <p className="text-sm text-tertiary">{m.channel_group_min_members({ count: minMembers })}</p>
   );
-  const finishButton = (size?: "sm") =>
-    size ? (
-      <Button
-        type="submit"
-        form={formId}
-        size={size}
-        isDisabled={locked || !nameValid || !canCreate}
-      >
-        {m.channel_group_finish()}
-      </Button>
-    ) : (
-      <DialogAction type="submit" form={formId} isDisabled={locked || !nameValid || !canCreate}>
-        {m.channel_group_finish()}
-      </DialogAction>
-    );
+  const finishButton = () => (
+    <DialogAction type="submit" form={formId} isDisabled={locked || !nameValid || !canCreate}>
+      {m.channel_group_finish()}
+    </DialogAction>
+  );
   if (!wide) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex shrink-0 items-center gap-2 border-b border-secondary py-3 pr-4 pl-2">
-          <ButtonUtility
-            aria-label={m.controls_close()}
-            icon={XClose}
-            size="sm"
-            color="tertiary"
-            onClick={close}
-          />
-          <Heading
-            slot="title"
-            className="min-w-0 flex-1 truncate text-md font-semibold text-primary"
-          >
-            {m.channel_start_group()}
-          </Heading>
-          {!createdNotice && finishButton("sm")}
-        </div>
+        <Heading slot="title" className="sr-only">
+          {m.channel_start_group()}
+        </Heading>
+        <PhoneFormBar
+          className="sm:grid"
+          heading={m.channel_start_group()}
+          submitLabel={m.channel_group_finish()}
+          pending={saving}
+          submitDisabled={locked || !nameValid || !canCreate}
+          onCancel={close}
+          onSubmit={() => formRef.current?.requestSubmit()}
+        />
         {createdNotice ? (
           <div className="p-4">{createdNotice}</div>
         ) : (
           <form
             id={formId}
+            ref={formRef}
             onSubmit={(event) => void submit(event)}
             className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4"
           >
@@ -428,6 +442,7 @@ function CreateChannelForm({
         ) : (
           <form
             id={formId}
+            ref={formRef}
             onSubmit={(event) => void submit(event)}
             className="mt-5 flex flex-1 flex-col gap-4"
           >
