@@ -7,23 +7,8 @@ import { deleteAttachmentRows } from "#src/server/db/repositories/attachment-del
 import { PrismaWorkspaceCatalogStore } from "#src/server/workspaces/catalog.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
-/**
- * Text longer than the server takes goes out as a Markdown file, with no warning (task #138,
- * Frank): a paste that long never enters the field but lands in the tray as a `.md` at once, and
- * sent with nothing else written its message is the text's first lines and a note; a paste of
- * exactly the limit is left to the browser like any other. A draft that grows past the limit by
- * typing is turned the same way at Send, keeping a file already attached. The channel composer is
- * the one every conversation, thread and Task reply uses.
- *
- * A real clipboard needs a permission headless Chrome does not grant, so the pastes are paste
- * events carrying the text, which run the composer's own paste handler.
- *
- * Opt-in like the other browser E2Es: real local Web and `agent-browser`. The Workspace is seeded
- * per run and removed after it.
- */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const field = "textarea[placeholder]";
-/** Pastes `text` into the composer; says whether the composer took the paste over. */
 const paste = (text: string) => `(() => {
   const data = new DataTransfer();
   data.setData("text/plain", ${JSON.stringify(text)});
@@ -76,7 +61,6 @@ test("a message past the limit goes out as a Markdown file with a preview; the l
     await browser("open", `${origin}/en/w/${slug}/channel/${conversationId}`);
     await browser("wait", "--fn", `${pageHydrated} && document.querySelector('${field}') !== null`);
 
-    // A paste of exactly the limit is the browser's to put in the field.
     const atLimit = "a".repeat(MESSAGE_BODY_MAX_LENGTH);
     expect(await evaluate<boolean>(paste(atLimit))).toBe(false);
     expect(await evaluate<number>(trayFiles)).toBe(0);
@@ -86,15 +70,12 @@ test("a message past the limit goes out as a Markdown file with a preview; the l
     expect(first!.body).toBe(atLimit);
     expect(first!.attachments).toEqual([]);
 
-    // One more: the paste goes to the tray as a file, the field stays empty, and nothing warns.
     const lines = ["Release notes", "", "- one", "- two", "- three", "- four"];
     const long = `${lines.join("\n")}\n${"b".repeat(MESSAGE_BODY_MAX_LENGTH)}`;
     expect(await evaluate<boolean>(paste(long))).toBe(true);
     await browser("wait", "--fn", `${trayFiles} === 1`);
     expect(await evaluate<string>(`document.querySelector('${field}').value`)).toBe("");
     expect(await evaluate<boolean>(`/too long|超长/i.test(document.body.innerText)`)).toBe(false);
-    // Sent with nothing written, the message is the text's first lines and the note.
-    // Once its upload is in, Send is open.
     for (const deadline = Date.now() + 30_000; ; await Bun.sleep(200)) {
       const uploaded = await db.attachment.count({
         where: { conversationId, messageId: null, fileName: { endsWith: ".md" } },
@@ -112,7 +93,6 @@ test("a message past the limit goes out as a Markdown file with a preview; the l
     expect(second.attachments[0]!.contentType).toStartWith("text/markdown");
     expect(second.attachments[0]!.sizeBytes).toBe(new TextEncoder().encode(`${long}\n`).byteLength);
 
-    // Typed past the limit beside a file already attached: Send turns it, keeping the file.
     const note = `${Bun.env.TMPDIR ?? "/tmp"}/long-message-note-${suffix}.txt`;
     await Bun.write(note, "kept alongside\n");
     await browser("upload", 'input[type="file"]', note);
