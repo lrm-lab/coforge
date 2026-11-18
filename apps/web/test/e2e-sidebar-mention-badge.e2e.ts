@@ -1,17 +1,6 @@
 import { expect, test } from "bun:test";
 import { setupAgentReplying } from "./helpers/agent-replying-fixture";
 
-/**
- * A mention that arrives while the reader is in another channel (task #coforge-designer-team:#135):
- * the sidebar row of the channel that mentions them takes the "@" badge without a reload, and the
- * badge is gone once they open that channel. The mention travels the real path — an Agent of the
- * channel sends it through the Agent API's send handler, so the row is updated by the app's own
- * realtime fan-out — and the assertions read the row itself, not the server state.
- *
- * Opt-in like the other browser E2Es (`scripts/e2e` starts the stack it needs). Each run seeds its
- * own channels, Agent, Computer and member through the shared fixture and removes them afterwards.
- * Screenshots are written under `.artifacts/e2e/sidebar-mention-badge/`.
- */
 const fx = setupAgentReplying({ artifactsName: "sidebar-mention-badge" });
 const { suffix, open, until, untilText, evaluate, agentSends } = fx;
 
