@@ -117,9 +117,15 @@ const DESKTOP_TITLE_MAX_LENGTH = 80;
 /** The window title for one desktop page. Markup in the name stays text. */
 export function withDesktopTitle(html: string, title: string | undefined): string {
   const text = title
-    ?.replace(/[\u0000-\u001F\u007F]/g, "")
-    .trim()
-    .slice(0, DESKTOP_TITLE_MAX_LENGTH);
+    ? [...title]
+        .filter((character) => {
+          const code = character.charCodeAt(0);
+          return code >= 0x20 && code !== 0x7f;
+        })
+        .join("")
+        .trim()
+        .slice(0, DESKTOP_TITLE_MAX_LENGTH)
+    : undefined;
   if (!text) return html;
   const safe = text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
   if (html.includes("<title>")) {
