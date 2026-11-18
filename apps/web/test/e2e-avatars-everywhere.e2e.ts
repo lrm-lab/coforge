@@ -90,6 +90,17 @@ test("names carry their faces", async () => {
     expect(
       await evaluate<number>(`${history}.querySelectorAll("img").length`),
     ).toBeGreaterThanOrEqual(3);
+    await browser(
+      "wait",
+      "--fn",
+      `[...document.querySelectorAll("img[data-avatar-img]")].every((img) => img.complete)`,
+    );
+    await browser("wait", "300");
+    expect(
+      await evaluate<string[]>(
+        `[...document.querySelectorAll("img[data-avatar-img]")].filter((img) => img.naturalWidth > 0).map((img) => getComputedStyle(img.parentElement).backgroundColor).filter((color) => color !== "rgba(0, 0, 0, 0)")`,
+      ),
+    ).toEqual([]);
     await browser("set", "viewport", "390", "844");
     await openHistory();
     await shoot("history-phone");
