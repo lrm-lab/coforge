@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 import { Button } from "#src/components/base/buttons/button";
-import { Input } from "#src/components/base/input/input";
 import { TextArea } from "#src/components/base/textarea/textarea";
 import { Popconfirm } from "#src/components/ui/popconfirm";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
@@ -80,7 +79,6 @@ export function ExternalAgentForm({
       setError(m.agent_form_username_required());
       return;
     }
-    const displayName = String(form.get("displayName") ?? "").trim();
     const description = String(form.get("description") ?? "").trim();
     await guard(async () => {
       setError("");
@@ -89,7 +87,6 @@ export function ExternalAgentForm({
           data: {
             hosting: "external",
             name,
-            displayName: displayName || undefined,
             description,
           },
         });
@@ -141,7 +138,6 @@ export function ExternalAgentForm({
     >
       <div className="space-y-4 px-6 pt-5 pb-4">
         <AgentUsernameField autoFocus={autoFocus} isReadOnly={submitting} draft={usernameDraft} />
-        <Input name="displayName" label={m.agent_profile_display_name()} isDisabled={submitting} />
         <TextArea
           name="description"
           label={m.agent_create_description()}

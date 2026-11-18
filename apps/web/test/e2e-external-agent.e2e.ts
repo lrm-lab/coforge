@@ -54,7 +54,6 @@ test("external Agent: page credential, browser-approved login, presence, revoke 
     );
     await browser("click", `label:has(input[value="external"])`);
     await browser("fill", `input[name="name"]`, agentName);
-    await browser("fill", `input[name="displayName"]`, `External ${tail}`);
     await browser("click", `[role="dialog"] button[type="submit"]`);
     await browser(
       "wait",
@@ -82,9 +81,10 @@ test("external Agent: page credential, browser-approved login, presence, revoke 
 
     const agentRow = await db.agent.findFirst({
       where: { workspaceId, name: agentName, deletedAt: null },
-      select: { id: true },
+      select: { id: true, displayName: true },
     });
     expect(agentRow).not.toBeNull();
+    expect(agentRow!.displayName).toBe(agentName);
     createdAgentId = agentRow!.id;
 
     const ctxRes = await fetch(`${origin}/api/agent/v1/context`, {

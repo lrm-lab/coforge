@@ -87,3 +87,10 @@ test("the schema accepts external creation without a runtime or Computer", () =>
     createExternalAgentInputSchema.safeParse({ hosting: "managed", name: "scout" }).success,
   ).toBe(false);
 });
+
+test("a form sent with no display name names the external Agent by its username", async () => {
+  const agents = repository();
+  const input = createExternalAgentInputSchema.parse({ hosting: "external", name: "scout" });
+  await createExternalAgent(agents, OWNER, input);
+  expect(agents.created[0]).toMatchObject({ name: "scout", displayName: "scout" });
+});
