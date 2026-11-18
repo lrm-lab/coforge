@@ -58,7 +58,7 @@ async function search(
       Prisma.sql`CASE WHEN search_text ILIKE ${`%${escapeLike(term)}%`} THEN ${term.length > 2 ? 3 : 1} ELSE 0 END`,
   );
   return db.$queryRaw<Row[]>(Prisma.sql`
-    SELECT id, workspace_id AS "workspaceId", title, left(content, 600) AS content, left(source, 200) AS source, kind, applicability, status,
+    SELECT id, workspace_id AS "workspaceId", title, left(ltrim(content, ${PREVIEW_WHITESPACE}), 600) AS content, left(ltrim(source, ${PREVIEW_WHITESPACE}), 200) AS source, kind, applicability, status,
       revision, author_agent_id AS "authorAgentId", author_user_id AS "authorUserId", project_id AS "projectId", pinned, updated_at AS "updatedAt"
     FROM team_memory_entries WHERE workspace_id = ${workspaceId}::uuid AND status = ${archived ? "archived" : "active"}
     AND (${Prisma.join(matches, " OR ")})
@@ -114,7 +114,7 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
         if (command.operation === "list")
           return page(
             await tx.$queryRaw<Row[]>(
-              Prisma.sql`SELECT id, workspace_id AS "workspaceId", title, left(content,600) AS content, left(source,200) AS source, kind, applicability, status, revision, author_agent_id AS "authorAgentId", author_user_id AS "authorUserId", project_id AS "projectId", pinned, updated_at AS "updatedAt" FROM team_memory_entries WHERE workspace_id = ${actor.workspaceId}::uuid AND status = ${command.archived ? "archived" : "active"} ${actor.agentId && actor.includeHumanAuthors === false ? Prisma.sql`AND author_agent_id IS NOT NULL` : Prisma.empty} ${command.projectId ? Prisma.sql`AND project_id = ${command.projectId}::uuid` : Prisma.empty} ORDER BY updated_at DESC, id ASC LIMIT 11 OFFSET ${command.offset ?? 0}`,
+              Prisma.sql`SELECT id, workspace_id AS "workspaceId", title, left(ltrim(content, ${PREVIEW_WHITESPACE}),600) AS content, left(ltrim(source, ${PREVIEW_WHITESPACE}),200) AS source, kind, applicability, status, revision, author_agent_id AS "authorAgentId", author_user_id AS "authorUserId", project_id AS "projectId", pinned, updated_at AS "updatedAt" FROM team_memory_entries WHERE workspace_id = ${actor.workspaceId}::uuid AND status = ${command.archived ? "archived" : "active"} ${actor.agentId && actor.includeHumanAuthors === false ? Prisma.sql`AND author_agent_id IS NOT NULL` : Prisma.empty} ${command.projectId ? Prisma.sql`AND project_id = ${command.projectId}::uuid` : Prisma.empty} ORDER BY updated_at DESC, id ASC LIMIT 11 OFFSET ${command.offset ?? 0}`,
             ),
             command.offset ?? 0,
             true,
@@ -270,13 +270,12 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
             !target.authorAgentId
           )
             throw new TeamMemoryError("upgrade_required");
-          if (
-            target &&
-            command.operation === "create" &&
-            command.projectId !== undefined &&
-            command.projectId !== (target.projectId ?? null)
-          )
-            throw new TeamMemoryError("conflict");
+          if (target && command.operation === "create") {
+            if (command.projectId !== undefined && command.projectId !== (target.projectId ?? null))
+              throw new TeamMemoryError("conflict");
+            await receipts.update({ entryId: target.id, reviewToken: null, reviewExpiresAt: null });
+            return { status: "ok", entries: [head(target)] };
+          }
           const sources =
             command.operation === "merge"
               ? ((await tx.teamMemoryEntry.findMany({
@@ -362,6 +361,11 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
               else throw new TeamMemoryError("forbidden");
             }
           }
+          const status =
+            command.operation === "archive" ||
+            (command.operation === "update" && target?.status === "archived")
+              ? "archived"
+              : "active";
           const data = {
             projectId,
             pinned: draft.pinned ?? target?.pinned ?? false,
@@ -371,11 +375,11 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
             kind: draft.kind,
             applicability: draft.applicability,
             dedupKey:
-              command.operation === "archive"
+              status === "archived"
                 ? `archived:${target!.id}`
                 : teamMemoryDedup({ ...draft, projectId }),
             searchText: searchText(draft),
-            status: command.operation === "archive" ? "archived" : "active",
+            status,
           };
           const archivedAt = new Date();
           if (sources.length)

@@ -235,6 +235,106 @@ test("project discovery is paginated and creation reuses an exact existing proje
   ).toHaveLength(4);
 });
 
+test("a duplicate create keeps the original evidence, protection and revision", async () => {
+  const fields = draft("Protected deployment fact", "Retain this decision");
+  const original = (
+    await write({
+      operation: "create",
+      ...fields,
+      pinned: true,
+      requestId: crypto.randomUUID(),
+    })
+  ).entries[0]!;
+  const human = { workspaceId, userId };
+  const duplicate = await reviewed(
+    {
+      operation: "create",
+      ...fields,
+      source: "Different evidence",
+      projectId: null,
+      pinned: false,
+      requestId: crypto.randomUUID(),
+    },
+    human,
+  );
+  expect((await service().execute(human, duplicate)).entries).toEqual([original]);
+  expect((await service().execute(human, duplicate)).replayed).toBe(true);
+  expect(
+    (await service().execute(human, { operation: "history", id: original.id })).entries,
+  ).toHaveLength(1);
+});
+
+test("shared memory list and search previews retain content after leading indentation", async () => {
+  const padded = (
+    await write({
+      operation: "create",
+      ...draft("Indented guidance", `${" ".repeat(600)}Verified paragraph`),
+      source: `${" ".repeat(200)}Verified source`,
+      requestId: crypto.randomUUID(),
+    })
+  ).entries[0]!;
+  for (const query of [
+    { operation: "list" },
+    { operation: "search", query: "Indented guidance" },
+  ] as const) {
+    const page = decodeTeamMemoryResult(await service().execute(actor(), query));
+    expect(page.entries.find((entry) => entry.id === padded.id)).toMatchObject({
+      content: "Verified paragraph",
+      source: "Verified source",
+    });
+  }
+});
+
+test("correcting an archived entry keeps it archived until an explicit restore", async () => {
+  const entry = await create("Archived deployment fact", "Initial archived value");
+  const human = { workspaceId, userId };
+  const archived = (
+    await write(
+      {
+        operation: "archive",
+        id: entry.id,
+        revision: entry.revision,
+        reason: "Retire old guidance",
+        requestId: crypto.randomUUID(),
+      },
+      human,
+    )
+  ).entries[0]!;
+  const corrected = (
+    await write(
+      {
+        operation: "update",
+        id: archived.id,
+        revision: archived.revision,
+        ...draft(entry.title, "Corrected archived value"),
+        reason: "Fix the record",
+        requestId: crypto.randomUUID(),
+      },
+      human,
+    )
+  ).entries[0]!;
+  expect(corrected.status).toBe("archived");
+  expect(
+    (await service().execute(actor(), { operation: "search", query: "archived" })).entries.some(
+      (item) => item.id === entry.id,
+    ),
+  ).toBe(false);
+  const restored = (
+    await write(
+      {
+        operation: "restore",
+        id: corrected.id,
+        revision: corrected.revision,
+        fromRevision: corrected.revision,
+        reason: "Reactivate the record",
+        requestId: crypto.randomUUID(),
+      },
+      human,
+    )
+  ).entries[0]!;
+  expect(restored).toMatchObject({ status: "active", content: "Corrected archived value" });
+});
+
 test("legacy Computers keep reading Agent knowledge while upgraded Computers also see human entries", async () => {
   const entry = (
     await write(
