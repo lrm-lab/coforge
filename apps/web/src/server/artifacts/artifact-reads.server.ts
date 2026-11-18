@@ -114,7 +114,12 @@ const accessRuleInput = (
 });
 
 export type ArtifactOrigin =
-  | { messageId: string; conversationId: string; homeKind: Exclude<ArtifactHomeKind, "workspace"> }
+  | {
+      messageId: string;
+      conversationId: string;
+      homeKind: Exclude<ArtifactHomeKind, "workspace">;
+      threadRootId?: string;
+    }
   | { hidden: true };
 
 export class ArtifactReads {
@@ -122,6 +127,25 @@ export class ArtifactReads {
     private readonly db: PrismaClient,
     private readonly enabled: (workspaceId: string) => Promise<boolean>,
   ) {}
+
+  async #origin(
+    messageId: string | null,
+    home: string | undefined,
+    homeKind: ArtifactHomeKind,
+  ): Promise<ArtifactOrigin | null> {
+    if (messageId === null) return null;
+    if (home === undefined || homeKind === "workspace") return { hidden: true };
+    const message = await this.db.message.findFirst({
+      where: { id: messageId, conversationId: home },
+      select: { threadRootId: true },
+    });
+    return {
+      messageId,
+      conversationId: home,
+      homeKind,
+      ...(message?.threadRootId ? { threadRootId: message.threadRootId } : {}),
+    };
+  }
 
   async artifact(workspaceId: string, artifactId: string, reader: ArtifactActor) {
     if (!(await this.enabled(workspaceId))) throw artifactsDisabled();
@@ -154,12 +178,7 @@ export class ArtifactReads {
     });
     const { originMessageId, ...shown } = artifact;
     const originHome = artifactHomeConversationId(view.homeKey ?? "");
-    const origin: ArtifactOrigin | null =
-      originMessageId === null
-        ? null
-        : originHome === undefined || view.homeKind === "workspace"
-          ? { hidden: true }
-          : { messageId: originMessageId, conversationId: originHome, homeKind: view.homeKind };
+    const origin = await this.#origin(originMessageId, originHome, view.homeKind);
     return {
       ...shown,
       origin,

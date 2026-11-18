@@ -112,3 +112,44 @@ test("a read names the origin to someone who can read its conversation and only 
   });
   expect((await read(f.bob)).artifact.origin).toEqual({ hidden: true });
 });
+
+test("an origin that is a thread reply also names the thread's root message, and a main-stream one does not", async () => {
+  const id = await f.make("Threaded plan");
+  const root = await f.db.message.create({
+    data: {
+      workspaceId: f.workspaceId,
+      conversationId: docsId,
+      body: "root",
+      sequence: 700_000 + Math.floor(Math.random() * 90_000),
+    },
+  });
+  const reply = await f.db.message.create({
+    data: {
+      workspaceId: f.workspaceId,
+      conversationId: docsId,
+      threadRootId: root.id,
+      body: link(id),
+      sequence: 790_000 + Math.floor(Math.random() * 90_000),
+      createdAt: new Date(Date.now() + 1000),
+    },
+  });
+  const read = () =>
+    f.artifacts.reads
+      .read({ workspaceId: f.workspaceId, artifactId: id, reader: { userId: f.alice } })
+      .then((result) => result.artifact.origin);
+  await f.db
+    .$executeRaw`UPDATE "artifacts" SET "originMessageId" = ${reply.id}::uuid WHERE "id" = ${id}::uuid`;
+  expect(await read()).toEqual({
+    messageId: reply.id,
+    conversationId: docsId,
+    homeKind: "channel",
+    threadRootId: root.id,
+  });
+  await f.db
+    .$executeRaw`UPDATE "artifacts" SET "originMessageId" = ${root.id}::uuid WHERE "id" = ${id}::uuid`;
+  expect(await read()).toEqual({
+    messageId: root.id,
+    conversationId: docsId,
+    homeKind: "channel",
+  });
+});
