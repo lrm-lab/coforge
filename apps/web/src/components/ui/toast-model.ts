@@ -14,19 +14,54 @@ export type ToastInput = {
 
 export type Toast = ToastInput & { revision: number };
 
-export function createToastStore() {
+const MOST_WAITING = 3;
+
+type Waiting = { input: ToastInput; since: number };
+
+function stillDue({ input, since }: Waiting, now: number): ToastInput | null {
+  const left = input.durationMs - (now - since);
+  if (left <= 0) return null;
+  return input.action ? { ...input, durationMs: left } : input;
+}
+
+function cutsIn(input: ToastInput, shown: Toast | null): boolean {
+  return input.icon === "error" || (input.icon === "countdown" && shown?.icon === "countdown");
+}
+
+export function createToastStore(now: () => number = () => performance.now()) {
   let shown: Toast | null = null;
+  let waiting: Waiting[] = [];
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((listener) => listener());
+  const showNext = () => {
+    shown = null;
+    while (!shown && waiting.length > 0) {
+      const [next, ...rest] = waiting;
+      waiting = rest;
+      const due = stillDue(next!, now());
+      if (due) shown = { ...due, revision: 0 };
+    }
+  };
   return {
     current: () => shown,
     show(input: ToastInput) {
-      shown = { ...input, revision: shown?.id === input.id ? shown.revision + 1 : 0 };
+      if (shown?.id === input.id) shown = { ...input, revision: shown.revision + 1 };
+      else if (waiting.some((entry) => entry.input.id === input.id))
+        waiting = waiting.map((entry) =>
+          entry.input.id === input.id ? { ...entry, input } : entry,
+        );
+      else if (cutsIn(input, shown)) shown = { ...input, revision: 0 };
+      else if (shown?.action || waiting.length > 0) {
+        waiting = [...waiting, { input, since: now() }].slice(-MOST_WAITING);
+        if (!shown?.action) showNext();
+      } else shown = { ...input, revision: 0 };
       emit();
     },
     dismiss(id: string) {
-      if (shown?.id !== id) return;
-      shown = null;
+      const waited = waiting.length;
+      waiting = waiting.filter((entry) => entry.input.id !== id);
+      if (shown?.id === id) showNext();
+      else if (waiting.length === waited) return;
       emit();
     },
     subscribe(listener: () => void) {

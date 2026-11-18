@@ -56,6 +56,125 @@ describe("one toast at a time", () => {
   });
 });
 
+const undo = (id: string, title: string): ToastInput => ({
+  id,
+  title,
+  icon: "countdown",
+  durationMs: 6000,
+  action: { label: "Undo", onClick: () => undefined },
+});
+
+describe("a toast with an action is not cut short", () => {
+  test("a new toast waits while the one on screen holds an action, then shows", () => {
+    const store = createToastStore();
+    store.show(undo("deleted", "Task deleted"));
+    store.show(status("copied", "Link copied"));
+    expect(store.current()?.id).toBe("deleted");
+    store.dismiss("deleted");
+    expect(store.current()?.id).toBe("copied");
+  });
+
+  test("waiting toasts show in the order they came", () => {
+    const store = createToastStore();
+    store.show(undo("closed-a", "Chat closed"));
+    store.show({ ...undo("made", "Task #4 made"), icon: "done" });
+    store.show(status("copied", "Link copied"));
+    store.dismiss("closed-a");
+    expect(store.current()?.id).toBe("made");
+    store.dismiss("made");
+    expect(store.current()?.id).toBe("copied");
+  });
+
+  test("the toast with the action still changes in place", () => {
+    const store = createToastStore();
+    store.show(undo("deleted", "Task deleted"));
+    store.show(status("copied", "Link copied"));
+    store.show(status("deleted", "Restored"));
+    expect(store.current()?.title).toBe("Restored");
+    store.show(status("next", "Chat closed"));
+    expect(store.current()?.id).toBe("copied");
+  });
+
+  test("a waiting toast is updated where it waits, or dropped when dismissed", () => {
+    const store = createToastStore();
+    store.show(undo("deleted", "Task deleted"));
+    store.show({ ...status("upload", "Uploading"), icon: "progress", durationMs: Infinity });
+    store.show(status("upload", "Uploaded"));
+    store.show(status("copied", "Link copied"));
+    store.dismiss("copied");
+    store.dismiss("deleted");
+    expect(store.current()?.title).toBe("Uploaded");
+    store.dismiss("upload");
+    expect(store.current()).toBeNull();
+  });
+});
+
+describe("waiting never outlives the toast", () => {
+  test("a toast with an action that waited shows only the time it has left, and is dropped once that is gone", () => {
+    let now = 0;
+    const store = createToastStore(() => now);
+    const made = (id: string): ToastInput => ({ ...undo(id, "Task made"), icon: "done" });
+    store.show(undo("closed", "Chat closed"));
+    store.show(made("made-b"));
+    store.show(made("made-c"));
+    now = 2000;
+    store.dismiss("closed");
+    expect(store.current()?.id).toBe("made-b");
+    expect(store.current()?.durationMs).toBe(4000);
+    now = 7000;
+    store.dismiss("made-b");
+    expect(store.current()).toBeNull();
+  });
+
+  test("a status that waited past its own time is dropped", () => {
+    let now = 0;
+    const store = createToastStore(() => now);
+    store.show(undo("deleted", "Task deleted"));
+    store.show(status("copied", "Link copied"));
+    now = 3500;
+    store.dismiss("deleted");
+    expect(store.current()).toBeNull();
+  });
+
+  test("a new toast never jumps ahead of the ones already waiting", () => {
+    const store = createToastStore();
+    store.show(undo("deleted", "Task deleted"));
+    store.show(status("copied", "Link copied"));
+    store.show({ ...status("deleted", "Restoring"), icon: "progress", durationMs: Infinity });
+    store.show(status("saved", "Saved"));
+    expect(store.current()?.id).toBe("copied");
+    store.dismiss("copied");
+    expect(store.current()?.id).toBe("saved");
+  });
+
+  test("at most three wait; the oldest gives way", () => {
+    const store = createToastStore();
+    store.show(undo("deleted", "Task deleted"));
+    for (const id of ["a", "b", "c", "d"]) store.show(status(id, id));
+    store.dismiss("deleted");
+    expect(store.current()?.id).toBe("b");
+  });
+});
+
+describe("what does not wait", () => {
+  test("an error replaces even a toast with an action, and the queue still follows it", () => {
+    const store = createToastStore();
+    store.show(undo("deleted", "Task deleted"));
+    store.show(status("copied", "Link copied"));
+    store.show({ ...status("send", "Could not send"), icon: "error" });
+    expect(store.current()?.id).toBe("send");
+    store.dismiss("send");
+    expect(store.current()?.id).toBe("copied");
+  });
+
+  test("a new Undo replaces the Undo on screen", () => {
+    const store = createToastStore();
+    store.show(undo("closed-a", "Chat closed"));
+    store.show(undo("closed-b", "Chat closed"));
+    expect(store.current()?.id).toBe("closed-b");
+  });
+});
+
 describe("how long a status toast stays", () => {
   test("three seconds for a few words, up to five for a long line", () => {
     expect(statusToastMs("Copied")).toBe(3000);
