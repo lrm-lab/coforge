@@ -117,7 +117,8 @@ export function PaneFrame({ full, children }: { full?: boolean; children: React.
     <section
       aria-label={m.doc_pane_label()}
       className={cn(
-        "@container/doc flex min-h-0 flex-col bg-primary max-md:fixed max-md:inset-0 max-md:z-40 max-md:w-auto",
+        "@container/doc flex min-h-0 flex-col bg-primary",
+        "max-md:w-full max-md:min-w-0 max-md:flex-1 max-md:border-l-0",
         full ? "min-w-0 flex-1" : "w-[min(48rem,56%)] shrink-0 border-l border-secondary",
       )}
     >
