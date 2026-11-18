@@ -94,6 +94,66 @@ function page(rows: Row[], offset: number, snippets = false): TeamMemoryResult {
   return { status: "ok", entries, ...(rows.length > 10 ? { nextOffset: offset + 10 } : {}) };
 }
 
+function conflictLinks(row: Row) {
+  return (head(row).relations ?? []).filter(({ kind }) => kind === "conflicts_with");
+}
+
+async function expandConflicts(
+  db: Database,
+  actor: TeamMemoryActor,
+  rows: Row[],
+  projectId: string | null | undefined,
+  includeWorkspace: boolean | undefined,
+): Promise<Row[]> {
+  const primary = rows.slice(0, 5);
+  if (!primary.length) return rows;
+  const match = primary.flatMap((row) => [
+    Prisma.sql`relations @> ${JSON.stringify([{ kind: "conflicts_with", id: row.id, revision: row.revision }])}::jsonb`,
+    ...conflictLinks(row).map(
+      ({ id, revision }) => Prisma.sql`(id = ${id}::uuid AND revision = ${revision})`,
+    ),
+  ]);
+  const linked = await db.$queryRaw<Row[]>`
+    SELECT id, workspace_id AS "workspaceId", title, left(ltrim(content, ${PREVIEW_WHITESPACE}), 600) AS content,
+      left(ltrim(source, ${PREVIEW_WHITESPACE}), 200) AS source, kind, applicability, status, revision,
+      author_agent_id AS "authorAgentId", author_user_id AS "authorUserId", project_id AS "projectId",
+      pinned, updated_at AS "updatedAt", relations, effective_at AS "effectiveAt"
+    FROM team_memory_entries
+    WHERE workspace_id = ${actor.workspaceId}::uuid AND status = 'active'
+      AND (effective_at IS NULL OR effective_at <= CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
+      ${actor.agentId && actor.includeHumanAuthors === false ? Prisma.sql`AND author_agent_id IS NOT NULL` : Prisma.empty}
+      ${
+        projectId === null
+          ? Prisma.sql`AND project_id IS NULL`
+          : projectId
+            ? Prisma.sql`AND (project_id = ${projectId}::uuid ${includeWorkspace ? Prisma.sql`OR project_id IS NULL` : Prisma.empty})`
+            : Prisma.empty
+      }
+      AND (${Prisma.join(match, " OR ")})
+    ORDER BY updated_at DESC, id ASC LIMIT 10`;
+  const expanded = new Map<string, Row>();
+  for (const row of primary) {
+    const outgoing = conflictLinks(row);
+    const paired = linked.filter(
+      (peer) =>
+        peer.id !== row.id &&
+        (outgoing.some((link) => link.id === peer.id && link.revision === peer.revision) ||
+          conflictLinks(peer).some((link) => link.id === row.id && link.revision === row.revision)),
+    );
+    const relations = (head(row).relations ?? []).slice();
+    for (const { id, revision } of paired)
+      if (
+        relations.length < 8 &&
+        !outgoing.some((link) => link.id === id && link.revision === revision)
+      )
+        relations.push({ kind: "conflicts_with", id, revision });
+    expanded.set(row.id, { ...row, relations });
+    for (const peer of paired) if (!expanded.has(peer.id)) expanded.set(peer.id, peer);
+  }
+  for (const row of rows) if (!expanded.has(row.id)) expanded.set(row.id, row);
+  return [...expanded.values()];
+}
+
 export async function projectEvidence(
   tx: Prisma.TransactionClient,
   workspaceId: string,
@@ -122,22 +182,26 @@ export class TeamMemoryReads {
             actor,
             `${command.title} ${command.content} ${command.applicability}`,
           );
-        if (command.operation === "search")
+        if (command.operation === "search") {
+          const rows = await search(
+            tx,
+            actor.workspaceId,
+            command.query,
+            command.offset,
+            command.projectId,
+            command.archived,
+            !(actor.agentId && actor.includeHumanAuthors === false),
+            command.includeSuperseded,
+            command.includeWorkspace,
+          );
           return page(
-            await search(
-              tx,
-              actor.workspaceId,
-              command.query,
-              command.offset,
-              command.projectId,
-              command.archived,
-              !(actor.agentId && actor.includeHumanAuthors === false),
-              command.includeSuperseded,
-              command.includeWorkspace,
-            ),
+            command.includeConflicts && !command.archived
+              ? await expandConflicts(tx, actor, rows, command.projectId, command.includeWorkspace)
+              : rows,
             command.offset ?? 0,
             true,
           );
+        }
         if (command.operation === "list")
           return page(
             await tx.$queryRaw<Row[]>(

@@ -20,6 +20,10 @@ import {
 } from "./memory-record-pages";
 
 const LIST_PAGE_SIZE = 5;
+const SEARCH_MATCH_PAGE_SIZE = 10;
+const SEARCH_FILE_LIMIT = 1_024;
+const SEARCH_OFFSET_PREFIX = 100_001;
+const SEARCH_OFFSET_STRIDE = SEARCH_FILE_LIMIT + 1;
 
 export class LocalMemory {
   readonly #index: MemoryFileIndex;
@@ -140,7 +144,11 @@ export class LocalMemory {
     const listed = await listMemoryFiles(this.root);
     const paths = listed.paths;
     let incomplete = listed.incomplete;
-    const page = paths.slice(offset, offset + 1_024);
+    const rankedOffset = offset >= SEARCH_OFFSET_PREFIX ? offset - SEARCH_OFFSET_PREFIX : 0;
+    const fileOffset =
+      offset >= SEARCH_OFFSET_PREFIX ? Math.floor(rankedOffset / SEARCH_OFFSET_STRIDE) : offset;
+    const matchOffset = rankedOffset % SEARCH_OFFSET_STRIDE;
+    const page = paths.slice(fileOffset, fileOffset + SEARCH_FILE_LIMIT);
     const matches: { entry: LocalMemoryEntry; score: number }[] = [];
     let inspected = 0;
     let bytes = 0;
@@ -191,15 +199,21 @@ export class LocalMemory {
       );
       matches.push(...batch.filter((item) => item !== undefined));
     }
-    const next = offset + Math.min(inspected, page.length);
-    const nextOffset = next < paths.length ? next : undefined;
+    const nextFile = fileOffset + Math.min(inspected, page.length);
+    const nextMatch = matchOffset + SEARCH_MATCH_PAGE_SIZE;
+    const nextOffset =
+      nextMatch < matches.length
+        ? SEARCH_OFFSET_PREFIX + fileOffset * SEARCH_OFFSET_STRIDE + nextMatch
+        : nextFile < paths.length
+          ? nextFile
+          : undefined;
     return {
       entries: matches
         .sort((a, b) => b.score - a.score || b.entry.updatedAt.localeCompare(a.entry.updatedAt))
-        .slice(0, 10)
+        .slice(matchOffset, nextMatch)
         .map((item) => item.entry),
       ...(nextOffset === undefined ? {} : { nextOffset }),
-      ...(incomplete || nextOffset !== undefined ? { incomplete: true } : {}),
+      ...(incomplete || nextFile < paths.length ? { incomplete: true } : {}),
     };
   }
 

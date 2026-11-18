@@ -112,7 +112,7 @@ export function decodeLocalMemoryCommand(value: unknown): LocalMemoryCommand {
       (typeof offset !== "number" ||
         !Number.isSafeInteger(offset) ||
         offset < 0 ||
-        offset > 100_000)
+        offset > (operation === "search" ? 10_000_000 : 100_000))
     )
       throw new Error("invalid_memory_offset");
     const pagination = offset === undefined ? {} : { offset };

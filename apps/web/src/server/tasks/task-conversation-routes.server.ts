@@ -11,7 +11,11 @@ import {
   agentRouteDomainErrorResponse,
 } from "#src/server/agents/agent-http-routes.server";
 import type { TaskConversations } from "./task-conversations.server";
-import type { AgentTaskIdleNudgeRequest, AgentTaskIdleNudgeResponse } from "@lrm/coforge-sdk/agent";
+import type {
+  AgentTaskIdleNudgeRequest,
+  AgentTaskIdleNudgeResponse,
+  AgentTaskViewResponse,
+} from "@lrm/coforge-sdk/agent";
 import type { AgentTaskPrincipal } from "./task-principal.server";
 
 /**
@@ -61,11 +65,18 @@ function queryRef(request: Request) {
   });
 }
 
-export async function handleTaskViewGet(request: Request, principal: Principal, service: Service) {
+export async function handleTaskViewGet(
+  request: Request,
+  principal: Principal,
+  service: Service,
+  recall?: (task: AgentTaskViewResponse["task"]) => Promise<AgentTaskViewResponse["relatedMemory"]>,
+) {
   try {
     const ref = queryRef(request);
     const limit = limitSchema.parse(new URL(request.url).searchParams.get("limit") ?? undefined);
-    return Response.json(await service.view(principal, asRef(ref), { limit }));
+    const view = await service.view(principal, asRef(ref), { limit });
+    const relatedMemory = await recall?.(view.task);
+    return Response.json({ ...view, ...(relatedMemory?.length ? { relatedMemory } : {}) });
   } catch (error) {
     return failure(error);
   }

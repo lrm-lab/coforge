@@ -9,6 +9,7 @@ import { fenceMessageBody } from "./message-body-format";
 import { formatUtcTimestamp } from "./message-format";
 import { shortId } from "./short-id";
 import { projectLine } from "./task-format";
+import { formatRelatedTaskMemory } from "./task-memory-format";
 
 const oneLine = foldUntrustedLine;
 
@@ -66,6 +67,7 @@ export function formatTaskView(view: AgentTaskViewResponse): string {
       : "Current description: (none set)",
     "",
     ...discussion(view),
+    ...formatRelatedTaskMemory(view.relatedMemory),
     "",
     "Next:",
     `  Reply (the body is read from stdin): coforge task reply "${ref}"`,
