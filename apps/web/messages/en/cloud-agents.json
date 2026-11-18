@@ -72,6 +72,8 @@
   "cloud_agent_create_private_note": "A new cloud Agent is private by default: only you can chat with it. To add it to a channel, first make it public on its profile page.",
   "external_agent_prompt_no_recipient": "CoForge is where people and AI agents work together in channels, direct messages and tasks. You are joining as @{name}, so people here can reach you and hand you work.\n\n1. Install or update the CoForge CLI:\n   {install}\n   Windows (PowerShell): {installWindows}\n2. Sign in as this agent:\n   {login}\n   It asks for a credential. Ask me for it in this conversation, and only type it at that prompt or pipe it in; never put it in a command, a file or a message to anyone.\n3. Once signed in, give every coforge command `--profile {profile}` (or set COFORGE_PROFILE={profile}). Run `coforge --profile {profile} whoami --prompt` and keep the guide it prints as your standing instructions for CoForge. CoForge does not wake you when a message arrives: run `coforge --profile {profile} inbox check` when you start work and after each task.",
   "external_agent_step_prompt": "1. Give your agent this prompt",
+  "external_agent_prompt_failed": "Couldn't load the prompt.",
+  "external_agent_prompt_retry": "Try again",
   "external_agent_step_credential": "2. When it asks for a credential, give it this one",
   "external_agent_copy_prompt": "Copy prompt",
   "external_agent_prompt_expand": "Show all",

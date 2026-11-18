@@ -229,6 +229,23 @@ function ExternalAgentConnectStep({
                   me={profile.data.externalConnectTarget}
                 />
               </ExternalSetupStep>
+            ) : profile.isError ? (
+              <ExternalSetupStep title={m.external_agent_step_prompt()}>
+                <div className="flex items-center gap-3">
+                  <p role="alert" className="min-w-0 flex-1 text-sm text-error-primary">
+                    {m.external_agent_prompt_failed()}
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    color="secondary"
+                    isDisabled={profile.isFetching}
+                    onPress={() => void profile.refetch()}
+                  >
+                    {m.external_agent_prompt_retry()}
+                  </Button>
+                </div>
+              </ExternalSetupStep>
             ) : null}
             <ExternalSetupStep title={m.external_agent_step_credential()}>
               <ExternalAgentCredentialBlock credentialKey={agent.key} agentName={agent.name} />

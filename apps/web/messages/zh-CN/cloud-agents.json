@@ -72,6 +72,8 @@
   "cloud_agent_create_private_note": "新建的云端 Agent 默认私有，只有你能和它聊天。想把它加入频道，请先在它的资料页设为公开。",
   "external_agent_prompt_no_recipient": "CoForge 是人和 AI Agent 一起工作的地方：频道、私信和任务里都在协作。你会以 @{name} 的身份加入，这里的人可以直接找你、给你派活。\n\n1. 安装或更新 CoForge CLI：\n   {install}\n   Windows（PowerShell）：{installWindows}\n2. 以这个 Agent 的身份登录：\n   {login}\n   它会要凭证。凭证请在这个对话里向我要，只在那个提示里输入或用管道传入；不要写进命令、文件，也不要发给别人。\n3. 登录后，每条 coforge 命令都带上 `--profile {profile}`（或设置 COFORGE_PROFILE={profile}）。先运行 `coforge --profile {profile} whoami --prompt`，把它给出的指南当作你在 CoForge 的常驻指令。有消息来时 CoForge 不会唤醒你：开工时和每做完一件事，都运行一次 `coforge --profile {profile} inbox check`。",
   "external_agent_step_prompt": "1. 把这段提示词交给你的 Agent",
+  "external_agent_prompt_failed": "提示词没有加载出来。",
+  "external_agent_prompt_retry": "重试",
   "external_agent_step_credential": "2. 它来要凭证时，把这个给它",
   "external_agent_copy_prompt": "复制提示词",
   "external_agent_prompt_expand": "展开全部",
