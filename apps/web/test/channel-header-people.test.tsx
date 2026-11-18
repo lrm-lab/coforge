@@ -39,7 +39,7 @@ const roster = (extraAgents: number): ChannelHeaderFace[] => [
   })),
 ];
 
-test("channel header cluster renders 32px faces, spec +N chip, and dashed add button", () => {
+test("channel header cluster renders 24px faces with a 1px outline, spec +N chip, and dashed add button", () => {
   const html = renderToStaticMarkup(
     <ChannelHeaderFaces
       entries={roster(8)}
@@ -50,20 +50,21 @@ test("channel header cluster renders 32px faces, spec +N chip, and dashed add bu
   );
 
   expect(html).toContain("avatar-portrait");
-  expect(html).toContain("avatar-header");
-  expect(html).toContain("avatar-stack-face ring-2 ring-bg-primary");
+  expect(html).toContain("size-6 avatar-stack-face ring-1 ring-avatar-ring");
+  expect(html).not.toContain("avatar-header");
+  expect(html).not.toContain("ring-2");
   expect(html).not.toContain("ring-[1.5px]");
 
   expect(html).toContain(">+7<");
   expect(html).toContain("bg-avatar-more");
   expect(html).toContain("[&amp;&gt;span]:text-avatar-more-fg");
-  expect(html).toContain("text-sm font-semibold");
+  expect(html).toContain("text-xs font-semibold");
   expect(html).toContain("outline-none");
 
-  expect(html).toMatch(/border-dashed[^"]*size-8[^"]*border-secondary[^"]*text-avatar-add-fg/);
+  expect(html).toMatch(/border-dashed[^"]*size-6[^"]*border-secondary[^"]*text-avatar-add-fg/);
 });
 
-test("three-digit overflow expands into a 32px-tall pill instead of clipping", () => {
+test("three-digit overflow expands into a 24px-tall pill instead of clipping", () => {
   const html = renderToStaticMarkup(
     <ChannelHeaderFaces
       entries={roster(105)}

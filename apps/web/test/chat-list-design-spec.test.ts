@@ -22,7 +22,7 @@ test("Chat list avatars: a 48px circle for a DM and a channel, 38px round for th
   expect(group).toContain("--avatar-group-size: 3rem");
   expect(group).toContain("border-radius: 9999px");
   expect(group).not.toContain("gradient");
-  expect(group).not.toContain("background");
+  expect(group).toContain("background-color: var(--color-avatar-group-bg)");
   expect(rule(".avatar-sticker")).not.toContain("background");
   expect(rule("[data-avatar][data-avatar-sticker]")).toContain("border-radius: 9999px");
   const figure = rule(".avatar-sticker-figure");
