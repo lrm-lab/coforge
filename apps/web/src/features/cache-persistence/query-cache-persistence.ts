@@ -7,6 +7,7 @@ import {
 import { hashKey, type Query, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { isAppError } from "#src/lib/app-error";
+import { nextTask } from "#src/lib/next-task";
 import {
   isStoredData,
   persistsQuery,
@@ -97,7 +98,7 @@ export function installQueryCachePersistence(
     deferredWrites.clear();
     for (const [key, value] of writes) void storage.setItem(key, value);
   }
-  const keyOf = async (key: string) => {
+  const ownNamespace = async () => {
     const viewer = viewerId();
     if (!viewer || sealed) return undefined;
     await claim(viewer);
@@ -106,7 +107,28 @@ export function installQueryCachePersistence(
       sealed = true;
       return undefined;
     }
-    return `${namespaceOf(viewer)}${key}`;
+    return namespaceOf(viewer);
+  };
+  const keyOf = async (key: string) => {
+    const namespace = await ownNamespace();
+    return namespace && `${namespace}${key}`;
+  };
+  let lookup: { keys: string[]; rows: Promise<Map<string, StoredQuery | undefined>> } | undefined;
+  const lookUp = (key: string) => {
+    if (!lookup) {
+      const keys: string[] = [];
+      const rows = new Promise<void>((resolve) => nextTask(resolve)).then(async () => {
+        lookup = undefined;
+        const namespace = await ownNamespace();
+        if (!namespace) return new Map<string, StoredQuery | undefined>();
+        const stored = await Promise.all(keys.map((each) => store.get(`${namespace}${each}`)));
+        storeAnswered();
+        return new Map(keys.map((each, i) => [each, stored[i] as StoredQuery | undefined]));
+      });
+      lookup = { keys, rows };
+    }
+    lookup.keys.push(key);
+    return lookup.rows.then((rows) => rows.get(key));
   };
   const answered = <T>(work: Promise<T>, miss: T): Promise<T> => {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -128,22 +150,7 @@ export function installQueryCachePersistence(
   };
   const storage: AsyncStorage<StoredQuery | undefined> = {
     getItem: (key) =>
-      safely(
-        async () =>
-          unresponsive
-            ? undefined
-            : answered(
-                (async () => {
-                  const own = await keyOf(key);
-                  if (!own) return undefined;
-                  const stored = (await store.get(own)) as StoredQuery | undefined;
-                  storeAnswered();
-                  return stored;
-                })(),
-                undefined,
-              ),
-        undefined,
-      ),
+      safely(async () => (unresponsive ? undefined : answered(lookUp(key), undefined)), undefined),
     setItem: (key, value) =>
       safely(async () => {
         if (unresponsive) {
