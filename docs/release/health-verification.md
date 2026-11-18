@@ -81,8 +81,9 @@ A local Computer release version is production-ready only when:
 2. the version's schema 2 manifest, every downloaded platform Computer executable, and the
    downloaded `photon_rs_bg.wasm` match their recorded byte sizes and SHA-256 checksums;
 3. an unsigned anonymous/direct GET of each exact private OSS object key is
-   rejected with 403, while authenticated OSS read-back for every version object
-   and `latest` is byte-identical to the workflow's source bytes;
+   rejected with 403, while an authenticated OSS `HEAD` reports every version
+   object's stored length and CRC-64 equal to the workflow's source bytes, and
+   `latest` reads back byte for byte;
 4. clean per-user Computer install and supported per-user upgrade checks pass
    without a separate Daemon install or elevation on every required target
    platform/architecture;

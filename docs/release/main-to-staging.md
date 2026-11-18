@@ -71,8 +71,10 @@ tracks' `latest` pointers are never the same object):
 4. Publish `manifest.json`, every platform's `coforge-computer.sha256`
    sidecar, every platform's sole `coforge-computer.gz`, and the one
    platform-independent `photon_rs_bg.wasm` beneath the new `<version>/`
-   prefix on the staging feed. Re-read every object through authenticated OSS
-   access and compare it byte-for-byte with the workflow source, then prove
+   prefix on the staging feed. Check every object with an authenticated OSS
+   `HEAD`: its stored length and CRC-64 (ECMA-182) must equal the workflow
+   source's. No object body is read back, because that doubles the billable
+   transfer-acceleration traffic. Then prove
    unsigned anonymous/direct reads of the exact private-origin keys return 403.
 5. Only after every object under `<version>/` is published and verified,
    write the staging feed's `latest` pointer to the new version. A publish

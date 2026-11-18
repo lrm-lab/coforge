@@ -38,12 +38,15 @@ must not link to a CDN or OSS origin directly.
 Users never depend on or discover the OSS bucket URL. Immutable version objects
 use a long immutable cache policy; `latest` requires an evidenced, effective
 every-request origin-revalidation policy. Routine publication verifies storage,
-not domestic CDN reachability: the workflow performs authenticated, byte-identical
-OSS read-back for every version object and `latest`, and proves that an unsigned
-anonymous/direct GET of each exact private-origin key returns 403. The durable
+not domestic CDN reachability: the workflow checks every version object's stored
+length and CRC-64 through an authenticated OSS `HEAD`, reads `latest` back byte
+for byte, and proves that an unsigned
+anonymous/direct GET of each exact private-origin key returns 403. A version
+object's body is never read back: that doubles billable transfer-acceleration
+traffic for no extra evidence. The durable
 record stores only pass/fail evidence, not the private bucket endpoint or
-credentials. An anonymously readable origin object or authenticated read-back
-that differs from the source bytes fails publication.
+credentials. An anonymously readable origin object, or a stored size or checksum
+that differs from the source bytes, fails publication.
 
 Consumer-path CDN reachability, private-origin authorization, redirects, cache
 behavior, and bytes remain independent infrastructure acceptance concerns.

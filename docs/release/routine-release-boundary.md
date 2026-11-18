@@ -8,9 +8,9 @@ Before any mutating deployment, verify all of the following:
 - the target has isolated secrets/credentials and a unique concurrency group;
 - the track-specific configuration or feed manifest validates;
 - the applicable cloud or local-package verification checks are defined;
-- local distribution proves authenticated OSS read-back of every object and
-  `latest` is byte-identical and unsigned/direct reads of each exact
-  private-origin object key return 403;
+- local distribution proves every object's stored length and CRC-64 through an
+  authenticated OSS `HEAD`, `latest` is byte-identical, and unsigned/direct
+  reads of each exact private-origin object key return 403;
 - the previous healthy identity is recorded, or the target is verified and
   recorded as empty for a first deployment;
 - no secret will enter workflow input, command arguments, logs, or artifacts;
