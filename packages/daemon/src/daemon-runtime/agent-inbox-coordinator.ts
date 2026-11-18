@@ -226,7 +226,11 @@ export class AgentInboxCoordinator {
       const pending = notified?.get(item.itemId);
       return pending ? [pending] : [];
     });
-    const told = await this.ports.notifiedAppItems.read(agentId);
+    const sessionId = this.#sessionId(agentId);
+    const told = await this.ports.notifiedAppItems.read(agentId, sessionId);
+    const present = new Set(items.map((item) => item.itemId));
+    for (const gone of told.filter((itemId) => !present.has(itemId)))
+      await this.ports.notifiedAppItems.remove(agentId, gone);
     const fresh = items.filter(
       (item) => !notified?.has(item.itemId) && !told.includes(item.itemId),
     );
@@ -239,6 +243,10 @@ export class AgentInboxCoordinator {
     return !!manager.session(agentId) || !!manager.restartConfig(agentId);
   }
 
+  #sessionId(agentId: string): string | undefined {
+    return this.ports.processManager.restartConfig(agentId)?.sessionId;
+  }
+
   async notifyAppItem(
     agentId: string,
     item: AgentAppItem | string,
@@ -247,7 +255,10 @@ export class AgentInboxCoordinator {
     const itemId = typeof item === "string" ? item : item.itemId;
     const existing = this.#notifiedAppItems.get(agentId)?.get(itemId);
     if (existing) return existing;
-    if ((await this.ports.notifiedAppItems.read(agentId)).includes(itemId)) return true;
+    if (
+      (await this.ports.notifiedAppItems.read(agentId, this.#sessionId(agentId))).includes(itemId)
+    )
+      return true;
     const resolved =
       typeof item === "string"
         ? (await this.appInbox(agentId)).list().find((entry) => entry.itemId === itemId)
@@ -339,7 +350,7 @@ export class AgentInboxCoordinator {
   /** Keeps the items the Agent was just told about, so a restart does not announce them again. */
   async #recordNotified(agentId: string, itemIds: readonly string[]): Promise<void> {
     try {
-      await this.ports.notifiedAppItems.add(agentId, itemIds);
+      await this.ports.notifiedAppItems.add(agentId, this.#sessionId(agentId), itemIds);
     } catch (error) {
       logger.warn("App Inbox notices were sent but not recorded", {
         event: "inbox.app_notified_write_failed",
@@ -424,6 +435,13 @@ export class AgentInboxCoordinator {
       agentInboxes: this.#agentInboxes,
       appInboxes: this.#appInboxes,
       appSeals: this.#appSeals,
+    });
+    void this.ports.notifiedAppItems.clear(agentId).catch((error: unknown) => {
+      logger.warn("The App Inbox notices of a deleted Agent could not be removed", {
+        event: "inbox.app_notified_clear_failed",
+        agent_id: agentId,
+        error,
+      });
     });
   }
 }
