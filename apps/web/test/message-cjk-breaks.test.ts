@@ -30,7 +30,6 @@ test("a quote or flag right after Chinese text may start the next line", () => {
 });
 
 test("letters, digits and links after Chinese text already break there, so autospace can space them", () => {
-  // A <wbr> between Han and Latin would stop text-autospace from adding its gap.
   expect(
     html([
       element("p", [

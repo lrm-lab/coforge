@@ -38,8 +38,6 @@ export function ComposerEdgeOverlay({
             className="col-start-1 min-w-0"
           />
           {onShowLatest && (
-            // A phone keeps the pill in the row, at its end beside the line; wider panes float it
-            // centred just above the row, taking no height of its own.
             <div className="col-start-2 flex items-end justify-self-end md:h-0 md:min-h-0 md:justify-self-center">
               <div className="md:-translate-y-2">
                 <NewMessagesPill

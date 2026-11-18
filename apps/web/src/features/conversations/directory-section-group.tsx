@@ -58,20 +58,13 @@ export function DirectorySection({
 }) {
   const listId = useId();
   const wrap = wrapTitle ?? ((toggle: ReactNode) => toggle);
-  // Only a fold someone asks for with the toggle eases shut or open. The directory also folds and
-  // reopens sections itself while something is dragged (every section while sections are
-  // reordered, a hovered one under a dragged row); those change at once, so the drag's
-  // measurements and its drop settle never read a section mid-fold.
-  const [easing, setEasing] = useState(false);
-  // Ends with the fold's own transition, not a timer, so a slow frame never cuts it short. Not on
-  // transitioncancel: a second press mid-fold replaces the transition, and the fold must turn back
-  // from where it got to rather than jump.
-  const settled = (event: TransitionEvent<HTMLDivElement>) => {
+  const [easesAfterToggle, setEasesAfterToggle] = useState(false);
+  const stopEasingWhenFoldEnds = (event: TransitionEvent<HTMLDivElement>) => {
     if (
       event.target === event.currentTarget.firstElementChild &&
       event.propertyName === "grid-template-rows"
     )
-      setEasing(false);
+      setEasesAfterToggle(false);
   };
   // The title carries its own size, weight and colour, so it reads as a title of the list rather
   // than a caption above it (and beats the Button's own `font-semibold`, which belongs to a real
@@ -109,7 +102,7 @@ export function DirectorySection({
                 aria-expanded={expanded}
                 aria-controls={listId}
                 onPress={() => {
-                  setEasing(true);
+                  setEasesAfterToggle(true);
                   onToggle?.();
                 }}
                 className="min-w-0 flex-1 justify-start pr-2 pl-0 hover:bg-transparent! [&_[data-text]]:min-w-0 [&_[data-text]]:flex-1 [&_[data-text]]:text-left"
@@ -145,15 +138,16 @@ export function DirectorySection({
           )}
         </div>
       </div>
-      {/* Kept mounted but folded shut (inert): collapsing must not throw away the rows' realtime state. A
-          section that cannot collapse still folds while the sections are being reordered. */}
       {/* Design spec: 36px from the last row's avatar to the next section's title. A row pads its
           avatar by 0.5rem and its list item by 1px, so the list adds the 27px left (1.6875rem);
           when the last row is a bordered card (a channel or direct message), its 1px border takes
           one of those (1.625rem). An empty section is the 2.25rem note alone. A folded section
           adds nothing: folded titles stay one 2.25rem row apart. */}
-      <div onTransitionEnd={settled}>
-        <Fold open={expanded !== false} className={easing ? undefined : "transition-none"}>
+      <div onTransitionEnd={stopEasingWhenFoldEnds}>
+        <Fold
+          open={expanded !== false}
+          className={easesAfterToggle ? undefined : "transition-none"}
+        >
           <div
             id={listId}
             className={

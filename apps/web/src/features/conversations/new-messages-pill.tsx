@@ -29,9 +29,6 @@ export function NewMessagesPill({
       : count === 1
         ? m.conversation_one_new_message()
         : m.conversation_new_messages({ count });
-  // On a phone the label would take the row the replying line needs: the pill is a round arrow
-  // there (its label stays for screen readers) and the count rides on it as a badge. It is drawn at
-  // 36px; a clear `after:` box 4px around it makes the tap target 44px.
   return (
     <span className="pointer-events-auto relative inline-flex">
       <Button

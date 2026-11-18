@@ -4,17 +4,12 @@ import type { Element, ElementContent, Root } from "hast";
 const CJK = /[⺀-〿぀-ヿ㄀-ㇿ㐀-䶿一-鿿가-힯豈-﫿︰-﹏＀-￯]/u;
 /** Opening brackets and quotes: a line never ends on one. */
 const OPENING = /[〈《「『【〔〖〘〚〝（［｛｟“‘]/u;
-/** The ASCII characters a browser will not start a line with after Chinese text, so a run that
- * begins with one (a path, a quote, a flag) sticks to the word before it. Letters, digits and the
- * rest already break there, and need no `<wbr>`: one would also stop `text-autospace` from putting
- * its gap between the Chinese and the Latin, which it adds only between adjacent characters.
- * Punctuation that closes what came before (`!),.:;?]}`) must stay on its line, and is left out. */
-const ASCII_JOINED = /["%'\-/=|]/;
+const ASCII_NO_BREAK_BEFORE = /["%'\-/=|]/;
 /** Their text is code or verbatim: never broken. */
 const VERBATIM = new Set(["code", "pre", "kbd", "samp"]);
 
 function breaksBetween(before: string, after: string) {
-  return CJK.test(before) && !OPENING.test(before) && ASCII_JOINED.test(after);
+  return CJK.test(before) && !OPENING.test(before) && ASCII_NO_BREAK_BEFORE.test(after);
 }
 
 const WBR = (): Element => ({ type: "element", tagName: "wbr", properties: {}, children: [] });

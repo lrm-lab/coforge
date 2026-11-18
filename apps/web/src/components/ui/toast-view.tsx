@@ -265,9 +265,6 @@ export function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: () =>
               reduceMotion ? TOAST_FADE : { delay: 0.1, duration: 0.3, ease: SETTLE_EASE }
             }
           >
-            {/* Two lines at most: a narrow screen keeps the end of a title (often its point) instead of
-                cutting it to one line. Top-aligned with 6px + 4px so one line sits where it did when
-                the row was centred (less the 1px border), and the actions stay level with the first line. */}
             <span className="line-clamp-2 min-w-0 py-1 text-sm font-medium [overflow-wrap:anywhere] text-primary">
               {toast.title}
             </span>

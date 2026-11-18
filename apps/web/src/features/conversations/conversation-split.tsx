@@ -17,15 +17,6 @@ const SIDE_PANE_MIN_REM = 22;
 /** The list column's width before one is set (`LIST_COLUMN_CLASS`'s fallback). */
 const LIST_COLUMN_DEFAULT_REM = 18;
 
-/**
- * The thread or profile pane comes in from the side it opens on: 24px from the right as it fades
- * in (motion-enter-lg, 250ms); with reduced motion it only fades. The chat beside it takes its new
- * width at once rather than easing, so its text reflows once. Closing is immediate for both: a
- * pane sliding out would leave the chat to widen when it had gone, or cover it while it went.
- * It plays whenever the pane is shown: when it mounts, when it comes back from `hidden` as chat
- * full screen ends, and when a resized window moves it between the side-by-side and the stacked
- * layout. Moving between threads in a pane already shown does not replay it.
- */
 const SIDE_PANE_ENTER = "animate-in fade-in slide-in-from-right-6 motion-enter-lg";
 
 /** The conversation beside its thread or profile pane, resizable while there is room for both. */

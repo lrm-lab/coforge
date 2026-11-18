@@ -26,8 +26,6 @@ test("an open section shows its rows in an open fold", () => {
 });
 
 test("a fold the directory makes itself (no toggle pressed) changes at once", () => {
-  // Every section folds while sections are reordered and a hovered one opens under a dragged
-  // row; the drag measures them, so only a press of the toggle eases.
   expect(render(false)).toContain("transition-none");
   expect(render(true)).toContain("transition-none");
 });
