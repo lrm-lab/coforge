@@ -40,7 +40,8 @@ coforge memory get --key preview-domain --revision '<historical hash>'
 
 Search covers MEMORY.md and Markdown under notes, excluding history and symlinks. It uses exact
 terms and Chinese character pairs, not an embedding service. Results are short excerpts, not whole
-files. Read the named file for full evidence. Search reads 128 documents per page; if `nextOffset`
+files. Read the named file for full evidence. Search ranks up to 1,024 files per page within a
+bounded read budget. If `nextOffset`
 is returned, continue with `--offset`. An incomplete search is not evidence that nothing was saved.
 Files over 512 KiB and a directory scan exceeding its bound require a narrower/reorganized source.
 

@@ -90,6 +90,26 @@ test("search sees manual edits and long legacy notes without loading code or his
   ).toContain("Blue");
 });
 
+test("search returns the strongest match on the first page across a large notebook", async () => {
+  const { root, memory } = await subject();
+  await mkdir(join(root, "notes"));
+  await Promise.all(
+    Array.from({ length: 140 }, (_, i) =>
+      writeFile(
+        join(root, `notes/a-${String(i).padStart(3, "0")}.md`),
+        "A generic note about deployment",
+      ),
+    ),
+  );
+  const path = join(root, "notes/z-confirmed.md");
+  await writeFile(path, "production rollout approved");
+  const first = await memory.execute({ operation: "search", query: "production rollout approved" });
+  expect(first.entries[0]?.path).toBe("notes/z-confirmed.md");
+  await writeFile(path, "production approval withdrawn");
+  const updated = await memory.execute({ operation: "search", query: "withdrawn" });
+  expect(updated.entries[0]?.content).toContain("withdrawn");
+});
+
 test("archived facts leave recall and ordinary startup summaries, and remain inspectable", async () => {
   const { memory } = await subject();
   const first = (await memory.execute(purchased)).entries[0]!;
