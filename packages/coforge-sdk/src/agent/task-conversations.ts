@@ -7,6 +7,7 @@
 
 import {
   isRecord,
+  type TaskHistoryEvent,
   type TaskPriority,
   type TaskProjectRef,
   type TaskResult,
@@ -75,8 +76,15 @@ export type AgentTaskViewResponse = {
   followReason: string | null;
   conversation: { exists: boolean; replyCount: number };
   recentMessages: AgentTaskViewMessage[];
+  /** The Task's history events among the latest entries; absent from an older server. Messages
+   * and events together are at most `limit`, and `hasOlder` speaks for the merged stream. */
+  recentEvents?: TaskHistoryEvent[];
   hasOlder: boolean;
 };
+
+/** What `GET /api/agent/v1/tasks/read` adds to a message window: the task's history events the
+ * window owns; absent from an older server. */
+export type AgentTaskReadEvents = { events?: TaskHistoryEvent[] };
 
 /** Response for `POST /api/agent/v1/tasks/reply`. */
 export type AgentTaskReplyResponse = {
@@ -121,6 +129,20 @@ function isViewMessage(value: unknown): value is AgentTaskViewMessage {
   );
 }
 
+function isHistoryEvent(value: unknown): value is TaskHistoryEvent {
+  return (
+    isRecord(value) &&
+    typeof value.seq === "number" &&
+    isString(value.createdAt) &&
+    isString(value.eventType) &&
+    isRecord(value.payload)
+  );
+}
+
+export function isHistoryEventList(value: unknown): value is TaskHistoryEvent[] {
+  return Array.isArray(value) && value.every(isHistoryEvent);
+}
+
 export function decodeAgentTaskViewResponse(value: unknown): AgentTaskViewResponse {
   if (
     !isRecord(value) ||
@@ -135,6 +157,7 @@ export function decodeAgentTaskViewResponse(value: unknown): AgentTaskViewRespon
     typeof value.conversation.replyCount !== "number" ||
     !Array.isArray(value.recentMessages) ||
     !value.recentMessages.every(isViewMessage) ||
+    !(value.recentEvents === undefined || isHistoryEventList(value.recentEvents)) ||
     typeof value.hasOlder !== "boolean"
   )
     throw new Error("invalid Agent task view response");

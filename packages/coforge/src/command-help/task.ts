@@ -35,10 +35,10 @@ export const taskHelp: Readonly<Record<string, HelpEntry>> = {
     flags: [
       "<ref>  the task: '#channel:#7', or 'dm:@peer:#7' for a task in a DM; quote it, an unquoted # starts a shell comment",
       "--target, --number  the board ('#channel' or 'dm:@peer') and the task's number, instead of the ref",
-      "--limit  how many of the latest messages to show (default 5, at most 20)",
+      "--limit  how many of the latest entries to show, messages and history events together (default 5, at most 20)",
     ],
     guidance:
-      "Shows the task's own conversation, whether its replies wake you, and its latest messages.",
+      "Shows the task's own conversation, whether its replies wake you, and its latest entries: the messages and the task's history events (status, assignee, priority, due, label, project, blocker and parent changes; a description change shows only that it was updated) as one stream, oldest first.",
     example: "coforge task view '#general:#7'",
   },
   "task reply": {
@@ -56,6 +56,8 @@ export const taskHelp: Readonly<Record<string, HelpEntry>> = {
       "--before | --after | --around  one history window, by message id",
       "--limit  page size, 1-100",
     ],
+    guidance:
+      "History events that fall in the window are listed among the messages (`- [event ...]` lines); each belongs to exactly one page.",
     example: "coforge task read '#general:#7' --unread",
   },
   "task follow": {

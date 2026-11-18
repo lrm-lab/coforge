@@ -461,6 +461,7 @@ export * from "./reminder-due";
 export * from "./app-config";
 export * from "./tasks";
 export * from "./task-order";
+export * from "./task-timeline";
 export * from "./task-assign-reason";
 export * from "./task-codec";
 export * from "./channel-command";

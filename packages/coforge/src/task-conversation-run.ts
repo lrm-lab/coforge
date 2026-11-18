@@ -4,6 +4,7 @@ import {
   decodeAgentTaskFollowingResponse,
   decodeAgentTaskReplyResponse,
   decodeAgentTaskViewResponse,
+  isHistoryEventList,
 } from "@lrm/coforge-sdk/agent";
 import { isRecord } from "@lrm/coforge-sdk/internal";
 import { CliError, withOutputMode } from "./cli-error";
@@ -43,7 +44,11 @@ function decoded<T>(decode: (value: unknown) => T, value: unknown): T {
 }
 
 function decodeReadWindow(value: unknown): ReadWindowResponse {
-  if (!isRecord(value) || (value.messages !== undefined && !Array.isArray(value.messages)))
+  if (
+    !isRecord(value) ||
+    (value.messages !== undefined && !Array.isArray(value.messages)) ||
+    (value.events !== undefined && !isHistoryEventList(value.events))
+  )
     throw new Error("invalid Agent task read response");
   return value as ReadWindowResponse;
 }

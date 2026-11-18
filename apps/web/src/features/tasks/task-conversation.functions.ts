@@ -10,6 +10,7 @@ import {
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { getMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
+import { TaskConversationPages } from "#src/server/conversations/task-conversation-page.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
 
 /** A task, by the board it sits on and its number there: the page knows both. */
@@ -85,3 +86,18 @@ export const getTaskFollow = createServerFn({ method: "GET" })
   .handler(async ({ context: { db, user, workspaceId }, data }) =>
     taskConversations(db).followState({ workspaceId, userId: user.id }, data),
   );
+
+const eventsSchema = z.object({
+  conversationId: z.uuid(),
+  oldestSequence: z.number().int().positive().optional(),
+  newestSequence: z.number().int().positive().optional(),
+});
+
+/** The task's history events a page of its conversation owns (`TaskConversationPages.events`). */
+export const loadTaskConversationEvents = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(eventsSchema)
+  .handler(async ({ context: { db, user, workspaceId }, data }) => {
+    const { conversationId, ...window } = data;
+    return new TaskConversationPages(db).events(workspaceId, user.id, conversationId, window);
+  });

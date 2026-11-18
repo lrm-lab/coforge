@@ -1,11 +1,16 @@
 import { LIVE_TASK_WHERE } from "#src/server/tasks/task-view.server";
+import {
+  taskEventsAfterMessage,
+  taskEventsInWindow,
+  messageTime,
+  VISIBLE_TASK_THREAD_MESSAGE_WHERE,
+} from "#src/server/tasks/task-timeline.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { windowPageFlags } from "#src/lib/conversation-window";
-import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import type { HistoryWindow } from "#src/server/db/repositories/direct-conversation-types.server";
 import { conversationMentionables } from "#src/server/db/repositories/user-direct-reads.repositories.server";
-import { ConversationHistory } from "./conversation-history.server";
+import { browserMessageUpdates, ConversationHistory } from "./conversation-history.server";
 import { browserMessageFields, mapBrowserMessages } from "./browser-message-projection.server";
 
 /**
@@ -26,7 +31,7 @@ export class TaskConversationPages {
     );
     const task = await this.db.task.findUnique({
       where: { discussionConversationId: conversationId, ...LIVE_TASK_WHERE },
-      select: { conversationId: true, number: true },
+      select: { id: true, conversationId: true, number: true },
     });
     if (!task) throw new AppError("NOT_FOUND");
     return { ...access, task };
@@ -46,6 +51,7 @@ export class TaskConversationPages {
         where: {
           conversationId,
           threadRootId: null,
+          ...VISIBLE_TASK_THREAD_MESSAGE_WHERE,
           sequence: forward
             ? { gt: window.afterSequence }
             : window.beforeSequence
@@ -123,10 +129,43 @@ export class TaskConversationPages {
     afterSequence: number,
   ) {
     await this.authorize(workspaceId, userId, conversationId);
-    return new PrismaDirectConversationRepository(this.db).updatesSince(
-      workspaceId,
+    const arrived = await browserMessageUpdates(
+      this.db,
       conversationId,
       afterSequence,
+      undefined,
+      VISIBLE_TASK_THREAD_MESSAGE_WHERE,
     );
+    return mapBrowserMessages(this.db, arrived, workspaceId);
+  }
+
+  /**
+   * The task's history events a page of the conversation owns, oldest first, as people read them.
+   * An event belongs to the page holding the first message at or after it. `oldestSequence` and
+   * `newestSequence` are the page's own oldest and newest messages; `newestSequence` is omitted for
+   * the page holding the conversation's newest message. A conversation with no messages names
+   * neither and gets every event.
+   */
+  async events(
+    workspaceId: string,
+    userId: string,
+    conversationId: string,
+    window: { oldestSequence?: number; newestSequence?: number },
+  ) {
+    const { task } = await this.authorize(workspaceId, userId, conversationId);
+    if (window.oldestSequence === undefined && window.newestSequence === undefined)
+      return taskEventsInWindow(this.db, task.id, "people");
+    const through =
+      window.newestSequence === undefined
+        ? undefined
+        : await messageTime(this.db, conversationId, window.newestSequence);
+    if (window.newestSequence !== undefined && !through) throw new AppError("NOT_FOUND");
+    return taskEventsAfterMessage(this.db, {
+      taskId: task.id,
+      conversationId,
+      reader: "people",
+      afterSequence: (window.oldestSequence ?? 1) - 1,
+      through,
+    });
   }
 }

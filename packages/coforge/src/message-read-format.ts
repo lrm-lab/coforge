@@ -12,7 +12,13 @@ import {
   taskSuffix,
 } from "./message-format";
 import { shortId } from "./short-id";
-import type { AgentMessageRecord } from "@lrm/coforge-sdk/internal";
+import type { AgentTaskReadEvents } from "@lrm/coforge-sdk/agent";
+import {
+  mergeTimeline,
+  type AgentMessageRecord,
+  type TaskHistoryEvent,
+} from "@lrm/coforge-sdk/internal";
+import { timelineEventLine } from "./task-timeline-format";
 
 export type ReadWindowResponse = {
   messages?: AgentMessageRecord[];
@@ -24,7 +30,7 @@ export type ReadWindowResponse = {
   foldedMessageCount?: number;
   foldedFromSequence?: number;
   foldedThroughSequence?: number;
-};
+} & AgentTaskReadEvents;
 
 const COVERAGE_THREAD = "Coverage: this thread target only.";
 const COVERAGE_TOP_LEVEL =
@@ -65,6 +71,10 @@ function foldedLine(
   if (readPositionMoved(response)) return line;
   return `${line} To see ${count === 1 ? "it" : "them"} again: ${readCommand(target, task)} --after ${response.unreadCursorBefore ?? 0}`;
 }
+
+/** The history events since the read position, when no message came with them. */
+const historyAfterRead = (events: readonly TaskHistoryEvent[]) =>
+  events.length ? ["", "History since your read position:", ...events.map(timelineEventLine)] : [];
 
 /** The unread read's footer: whether more remain past the last shown message. */
 function unreadFooter(target: string, response: ReadWindowResponse, task: boolean): string[] {
@@ -107,8 +117,12 @@ export function formatReadWindow(
       ? COVERAGE_THREAD
       : COVERAGE_TOP_LEVEL;
   const folded = options.unread ? foldedLine(target, response, task) : undefined;
+  const events = task ? (response.events ?? []) : [];
   if (messages.length === 0) {
-    if (!options.unread) return `No messages in ${target}.`;
+    if (!options.unread)
+      return events.length
+        ? [`No messages in ${target}. History:`, ...events.map(timelineEventLine)].join("\n")
+        : `No messages in ${target}.`;
     if (!folded) {
       const through = response.readPositionAfter ?? response.unreadCursorBefore ?? 0;
       return [
@@ -118,11 +132,13 @@ export function formatReadWindow(
           ? `No unread messages from others in ${target} up to seq ${through}.`
           : `No unread messages in ${target}. You have read through seq ${through}.`,
         ...(response.moreUnread ? unreadFooter(target, response, task) : []),
+        ...historyAfterRead(events),
       ].join("\n");
     }
     return [
       `No new unread messages in ${target}. ${folded}`,
       ...unreadFooter(target, response, task),
+      ...historyAfterRead(events),
     ].join("\n");
   }
 
@@ -144,12 +160,19 @@ export function formatReadWindow(
   // An attachment takes top-level comments only, so naming a reply target there would point an
   // Agent at a send that is refused.
   const includeReplyTarget = !task && !isThreadTarget(target) && !target.startsWith("attachment:");
-  messages.forEach((message, index) => {
+  let position = 0;
+  for (const entry of mergeTimeline(messages, events)) {
+    if (entry.kind === "event") {
+      lines.push(timelineEventLine(entry.event));
+      continue;
+    }
+    const message = entry.message;
+    const index = position++;
     const replyTarget = includeReplyTarget ? ` replyTarget=${target}:${shortId(message.id)}` : "";
     lines.push(
       `${coordinationLine(message)}[${index + 1}/${messages.length} msg=${message.id} seq=${message.sequence}${message.replyCount ? ` replyCount=${message.replyCount}` : ""} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}${replyTarget}]${commentAnchorAt(message)} ${messageSender(message)}: ${fenceMessageBody(message.body)}${attachmentSuffix(message)}${taskSuffix(message)}${forwardedSuffix(message)}`,
     );
-  });
+  }
 
   lines.push("");
   lines.push(`End of window: ${messages.length}/${messages.length} shown.`);

@@ -29,6 +29,11 @@ import {
 import { resolveTaskScope } from "./task-scope.server";
 import { LIVE_TASK_WHERE, TASK_SCOPE_WHERE, taskSelection } from "./task-view.server";
 import { taskViewOf } from "./task-relations.server";
+import {
+  taskEventsForReadPage,
+  taskTimelinePage,
+  VISIBLE_TASK_THREAD_MESSAGE_WHERE,
+} from "./task-timeline.server";
 
 /** Names a task by the board it is on (`target`, an Agent's `#channel`, or `conversationId`, a
  * person's page) and its number. */
@@ -66,7 +71,7 @@ export class TaskConversations {
   async view(principal: TaskPrincipal, ref: TaskConversationRef, options: { limit?: number }) {
     const { task, member, boardName } = await this.resolve(principal, ref);
     const limit = Math.min(Math.max(options.limit ?? 5, 1), MAX_VIEW_MESSAGES);
-    const [full, follow, discussion] = await Promise.all([
+    const [full, follow, timeline] = await Promise.all([
       this.ports.db.task.findUniqueOrThrow({ where: { id: task.id }, select: taskSelection }),
       member
         ? this.ports.db.taskFollow.findUnique({
@@ -74,18 +79,17 @@ export class TaskConversations {
             select: { reason: true },
           })
         : null,
-      task.discussionConversationId
-        ? this.discussionPage(task.discussionConversationId, limit)
-        : null,
+      taskTimelinePage(this.ports.db, task, this.ports.reader, limit),
     ]);
     return {
       taskRef: `${boardName}:#${task.number}`,
       task: await taskViewOf(this.ports.db, "agent", full),
       following: follow !== null,
       followReason: follow?.reason ?? null,
-      conversation: { exists: discussion !== null, replyCount: discussion?.total ?? 0 },
-      recentMessages: discussion?.messages ?? [],
-      hasOlder: discussion ? discussion.total > discussion.messages.length : false,
+      conversation: { exists: timeline.exists, replyCount: timeline.replyCount },
+      recentMessages: timeline.messages,
+      recentEvents: timeline.events,
+      hasOlder: timeline.hasOlder,
     };
   }
 
@@ -156,7 +160,19 @@ export class TaskConversations {
     const agentId = principal.agentId;
     const { task } = await this.resolve(principal, ref, { member: true });
     if (!task.discussionConversationId)
-      return { messages: [], hasOlder: false, hasNewer: false, modelSeenUpToSeq: null };
+      return {
+        messages: [],
+        hasOlder: false,
+        hasNewer: false,
+        modelSeenUpToSeq: null,
+        events: await taskEventsForReadPage(this.ports.db, {
+          taskId: task.id,
+          conversationId: null,
+          reader: this.ports.reader,
+          messages: [],
+          hasNewer: false,
+        }),
+      };
     const conversationId = task.discussionConversationId;
     const db = this.ports.db;
     await db.conversationMember.upsert({
@@ -174,6 +190,7 @@ export class TaskConversations {
       isChannel: false,
       isUserAgentDirectConversation: false,
       page,
+      additionalScope: VISIBLE_TASK_THREAD_MESSAGE_WHERE,
       resolveAnchor: async (value) => {
         const rows = await db.message.findMany({
           where: { conversationId, id: messageAnchorWhere(value) },
@@ -187,6 +204,14 @@ export class TaskConversations {
     });
     return {
       ...result,
+      events: await taskEventsForReadPage(db, {
+        taskId: task.id,
+        conversationId,
+        reader: this.ports.reader,
+        messages: result.messages,
+        hasNewer: result.hasNewer,
+        ...(page.unread ? { unreadAfterSequence: result.unreadCursorBefore ?? 0 } : {}),
+      }),
       messages: result.messages.map((message) => ({
         ...message,
         createdAt: message.createdAt.toISOString(),
@@ -328,6 +353,7 @@ export class TaskConversations {
       where: {
         conversationId,
         sequence: { gt: seat?.agentReadThroughSequence ?? 0 },
+        ...VISIBLE_TASK_THREAD_MESSAGE_WHERE,
         ...(seat ? { OR: [{ senderMemberId: null }, { senderMemberId: { not: seat.id } }] } : {}),
       },
     });
@@ -365,40 +391,6 @@ export class TaskConversations {
       scope,
       member: scope.member,
       boardName: boardLabel(scope.channelName, ref.target?.replace(/^@/, "")),
-    };
-  }
-
-  /** The task's conversation, made now if the task has none. */
-  private async discussionPage(conversationId: string, limit: number) {
-    const [total, rows] = await Promise.all([
-      this.ports.db.message.count({ where: { conversationId } }),
-      this.ports.db.message.findMany({
-        where: { conversationId },
-        orderBy: { sequence: "desc" },
-        take: limit,
-        select: {
-          id: true,
-          sequence: true,
-          body: true,
-          createdAt: true,
-          sender: {
-            select: {
-              user: { select: { username: true } },
-              agent: { select: { name: true } },
-            },
-          },
-        },
-      }),
-    ]);
-    return {
-      total,
-      messages: rows.reverse().map((row) => ({
-        id: row.id,
-        sequence: row.sequence,
-        body: row.body,
-        createdAt: row.createdAt.toISOString(),
-        sender: row.sender?.agent?.name ?? row.sender?.user?.username ?? null,
-      })),
     };
   }
 }

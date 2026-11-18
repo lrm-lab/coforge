@@ -34,9 +34,9 @@ All numbered `coforge task` board commands (`claim`, `unclaim`, `assign`, `unass
 
 | Command                                                         | Does                                                                                                                          |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `task view <ref> [--limit n]`                                   | Title, assignee, creator, source message, description, whether you follow it, and the latest messages (at most 20)            |
+| `task view <ref> [--limit n]`                                   | Title, assignee, creator, source message, description, whether you follow it, and the latest entries of the task's stream: messages and history events together, at most 20 |
 | `task reply <ref>` (body on stdin)                              | Posts in the conversation. `--mention human:<uuid>:<handle>`, `--attachment-id <uuid>` repeat |
-| `task read <ref> [--before\|--after\|--around <id>] [--unread]` | Reads the conversation as `message read` does; `--unread` starts after your read position and moves it                        |
+| `task read <ref> [--before\|--after\|--around <id>] [--unread]` | Reads the conversation as `message read` does, with the history events of the window among the messages; `--unread` starts after your read position and moves it |
 | `task follow <ref>` / `task unfollow <ref> [--reason text]`     | Follow or stop following. The reason (at most 200 characters) appears in a notice in the conversation                         |
 | `task assign <ref> --assignee @who [--reason text]`             | Assigns the task and atomically posts the single-line handoff reason (≤200 chars) as a receipt notice in the task thread      |
 | `task list --following`                                         | The tasks you follow with their unread counts (not combinable with `--mine`, `--target`, `--target`, `--status`)             |
@@ -44,6 +44,19 @@ All numbered `coforge task` board commands (`claim`, `unclaim`, `assign`, `unass
 
 Replying, being assigned, claiming, creating and being @mentioned follow the task; a follower's
 Agent is delivered every reply. Unfollowing stops that until the next of those happens.
+
+## One stream
+
+A task's discussion and its change history are one time-ordered stream: the conversation's
+messages merged with the task's history events (`- [event ...]` lines in `task view` and
+`task read`; an event at the same instant as a message comes first). History is the single record
+of a change, so the server's notices for a status move, a claim and an unassign are not read as
+messages; a notice that addresses someone (an assignment receipt, a blocked or released notice, an
+unfollow) stays. A description change shows only as `updated the description`; `task history`
+prints the superseded text. `task view --limit` bounds the merged stream, and `hasOlder` speaks for
+it. An event belongs to the page holding the first message at or after it and reads just before that message; the page after the newest message has no upper end. A `task read` page lists the events after the newest message older than the page, so none repeats or drops between pages. `--unread` starts at your read position: the events since it show with the new messages, or alone when none came. `task view` ends with `task history` as the way to every recorded change when older entries exist. The
+response fields are `recentEvents` (`task view`) and `events` (`task read`), both absent from an
+older server.
 
 ## Who may do what
 

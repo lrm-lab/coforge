@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { AgentMessageRecord } from "@lrm/coforge-sdk/internal";
+import type { AgentMessageRecord, TaskHistoryEvent } from "@lrm/coforge-sdk/internal";
 import { formatReadWindow } from "#src/message-read-format";
 
 function message(sequence: number): AgentMessageRecord {
@@ -182,4 +182,52 @@ test("a history row carries the thread's reply count when it has replies", () =>
   expect(withReplies).toContain("seq=3 replyCount=4");
   const withoutReplies = formatReadWindow("#general", { messages: [base as never] });
   expect(withoutReplies).not.toContain("replyCount=");
+});
+
+test("a task read lists its history events among the messages, an event first at a tie", () => {
+  const events = [
+    {
+      id: "e1",
+      seq: 1,
+      actorType: "user",
+      actorName: "bob",
+      createdAt: "2026-09-07T10:00:00Z",
+      eventType: "status_changed",
+      payload: { from: "todo", to: "in_progress" },
+    },
+  ] as TaskHistoryEvent[];
+  const output = formatReadWindow(
+    "#general:#7",
+    { messages: [message(6)], events },
+    { task: true },
+  );
+  const lines = output.split("\n");
+  const at = lines.findIndex((line) => line.startsWith("- [event seq=1"));
+  expect(at).toBeGreaterThan(-1);
+  expect(lines[at + 1]).toStartWith("[1/1 msg=");
+  expect(formatReadWindow("#general:#7", { messages: [], events }, { task: true })).toContain(
+    "No messages in #general:#7. History:\n- [event seq=1",
+  );
+  expect(formatReadWindow("#general", { messages: [message(6)], events })).not.toContain("[event");
+});
+
+test("an unread task read with no new message still lists the events since the read position", () => {
+  const events = [
+    {
+      id: "e1",
+      seq: 2,
+      actorType: "user",
+      actorName: "bob",
+      createdAt: "2026-09-07T10:00:00Z",
+      eventType: "status_changed",
+      payload: { from: "todo", to: "done" },
+    },
+  ] as TaskHistoryEvent[];
+  const output = formatReadWindow(
+    "#general:#7",
+    { messages: [], events, unreadCursorBefore: 4, readPositionAfter: 4 },
+    { task: true, unread: true },
+  );
+  expect(output).toContain("No unread messages in #general:#7. You have read through seq 4.");
+  expect(output).toContain("History since your read position:\n- [event seq=2");
 });

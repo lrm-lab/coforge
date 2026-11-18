@@ -1,4 +1,4 @@
-import { foldUntrustedLine } from "@lrm/coforge-sdk/internal";
+import { foldUntrustedLine, mergeTimeline } from "@lrm/coforge-sdk/internal";
 import type {
   AgentTaskFollowResponse,
   AgentTaskFollowingResponse,
@@ -10,6 +10,7 @@ import { formatUtcTimestamp } from "./message-format";
 import { shortId } from "./short-id";
 import { projectLine } from "./task-format";
 import { formatRelatedTaskMemory } from "./task-memory-format";
+import { timelineEventLine } from "./task-timeline-format";
 
 const oneLine = foldUntrustedLine;
 
@@ -19,18 +20,24 @@ function followingLine(view: AgentTaskViewResponse): string {
     : "Following: no - replies do not wake you unless you are @mentioned";
 }
 
-/** The window of the conversation `task view` shows: its latest messages, oldest first. */
+/** The window of the task's stream `task view` shows: its latest messages and history events,
+ * oldest first. */
 function discussion(view: AgentTaskViewResponse): string[] {
-  if (!view.conversation.exists)
+  const { recentMessages: messages, recentEvents: events = [] } = view;
+  if (!view.conversation.exists && events.length === 0)
     return ["Discussion: none yet - the first reply starts the task's conversation."];
-  const { recentMessages: messages } = view;
-  if (messages.length === 0) return ["Discussion: no messages yet."];
-  const total = view.hasOlder ? ` of ${view.conversation.replyCount}` : "";
+  if (messages.length === 0 && events.length === 0) return ["Discussion: no messages yet."];
+  const entries = mergeTimeline(messages, events);
+  const heading =
+    events.length === 0
+      ? `Discussion (latest ${messages.length}${view.hasOlder ? ` of ${view.conversation.replyCount}` : ""}, oldest first):`
+      : `Discussion and history (latest ${entries.length}${view.hasOlder ? ", older exist" : ""}, oldest first):`;
   return [
-    `Discussion (latest ${messages.length}${total}, oldest first):`,
-    ...messages.map(
-      (message) =>
-        `- [msg=${message.id} seq=${message.sequence} time=${formatUtcTimestamp(message.createdAt)}] ${message.sender ? `@${foldUntrustedLine(message.sender)}` : "system"}: ${fenceMessageBody(message.body)}`,
+    heading,
+    ...entries.map((entry) =>
+      entry.kind === "event"
+        ? timelineEventLine(entry.event)
+        : `- [msg=${entry.message.id} seq=${entry.message.sequence} time=${formatUtcTimestamp(entry.message.createdAt)}] ${entry.message.sender ? `@${foldUntrustedLine(entry.message.sender)}` : "system"}: ${fenceMessageBody(entry.message.body)}`,
     ),
   ];
 }
@@ -46,7 +53,8 @@ function sourceLine({ taskRef, task }: AgentTaskViewResponse): string {
 
 export function formatTaskView(view: AgentTaskViewResponse): string {
   const ref = view.taskRef;
-  const older = view.hasOlder ? ` --before ${shortId(view.recentMessages[0]!.id)}` : "";
+  const oldest = view.recentMessages[0];
+  const older = view.hasOlder && oldest ? ` --before ${shortId(oldest.id)}` : "";
   return [
     `## Task ${ref} [${view.task.status}]`,
     "",
@@ -72,6 +80,9 @@ export function formatTaskView(view: AgentTaskViewResponse): string {
     "Next:",
     `  Reply (the body is read from stdin): coforge task reply "${ref}"`,
     `  Read the discussion: coforge task read "${ref}"${older}`,
+    ...(view.hasOlder && view.recentEvents
+      ? [`  Every recorded change: coforge task history "${ref}"`]
+      : []),
     view.following
       ? `  Stop following: coforge task unfollow "${ref}"`
       : `  Follow: coforge task follow "${ref}"`,

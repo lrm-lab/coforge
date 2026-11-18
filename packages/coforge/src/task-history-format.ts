@@ -7,15 +7,16 @@ function historyActor(event: TaskHistoryEvent): string {
   return event.actorName ? `@${event.actorName}` : "<unresolved>";
 }
 
+export function historyEventHeader(event: TaskHistoryEvent, time = event.createdAt): string {
+  return `seq=${event.seq} time=${time} actor=${historyActor(event)} type=${event.eventType}`;
+}
+
 export function formatTaskHistory(result: TaskResult): string {
   const task = result.tasks[0]!;
   const events = result.history?.length
     ? result.history
         .map((event) => {
-          const lines = [
-            `seq=${event.seq} time=${event.createdAt} actor=${historyActor(event)} type=${event.eventType}`,
-            `  ${JSON.stringify(event.payload)}`,
-          ];
+          const lines = [historyEventHeader(event), `  ${JSON.stringify(event.payload)}`];
           if (event.eventType === "amended") {
             const { title, description } = event.payload.changes;
             lines.push(

@@ -122,3 +122,15 @@ test("refuses responses of the wrong shape", () => {
     "invalid Agent followed tasks response",
   );
 });
+
+test("a view's events are checked for their minimal shape", () => {
+  expect(() => decodeAgentTaskViewResponse({ ...VIEW, recentEvents: [{ seq: 1 }] })).toThrow(
+    "invalid Agent task view response",
+  );
+  expect(
+    decodeAgentTaskViewResponse({
+      ...VIEW,
+      recentEvents: [{ seq: 1, createdAt: "t", eventType: "created", payload: {} }],
+    }).recentEvents,
+  ).toHaveLength(1);
+});

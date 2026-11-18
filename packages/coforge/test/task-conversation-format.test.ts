@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import type { AgentTaskViewResponse } from "@lrm/coforge-sdk/agent";
+import type { TaskHistoryEvent } from "@lrm/coforge-sdk/internal";
 import {
   formatTaskFollow,
   formatTaskFollowing,
@@ -189,4 +190,90 @@ test("the followed list gives each task's unread count and how to read it", () =
   expect(formatTaskFollowing({ tasks: [] })).toBe(
     "You follow no task conversations in your Workspace.",
   );
+});
+
+const event = (
+  seq: number,
+  createdAt: string,
+  rest: Partial<TaskHistoryEvent> & Pick<TaskHistoryEvent, "eventType" | "payload">,
+) =>
+  ({
+    id: `e${seq}`,
+    seq,
+    actorType: "user",
+    actorName: "bob",
+    createdAt,
+    ...rest,
+  }) as TaskHistoryEvent;
+
+test("history events join the messages in one time-ordered stream, an event first at a tie", () => {
+  const text = formatTaskView(
+    view({
+      recentEvents: [
+        event(2, "2026-10-30T10:01:00.000Z", {
+          eventType: "status_changed",
+          payload: { from: "todo", to: "in_progress" },
+        }),
+        event(1, "2026-10-30T09:00:00.000Z", {
+          eventType: "assignee_changed",
+          payload: { assigneeId: "u1", assigneeType: "user" },
+        }),
+      ],
+    }),
+  );
+  const lines = text.split("\n").filter((line) => line.startsWith("- ["));
+  expect(text).toContain("Discussion and history (latest 4, oldest first):");
+  expect(
+    lines.map((line) => line.match(/^- \[(\w+)/)![1] + ":" + line.match(/seq=(\d+)/)![1]),
+  ).toEqual(["event:1", "msg:1", "event:2", "msg:2"]);
+  expect(lines[0]).toBe(
+    '- [event seq=1 time=2026-10-30 09:00:00Z actor=@bob type=assignee_changed] {"assigneeId":"u1","assigneeType":"user"}',
+  );
+});
+
+test("a description change is a flag in the stream, never its text", () => {
+  const text = formatTaskView(
+    view({
+      recentMessages: [],
+      recentEvents: [
+        event(1, "2026-10-30T09:00:00.000Z", {
+          eventType: "amended",
+          payload: {
+            changes: { description: { from: "old secret", to: "new secret" } },
+            revision: 2,
+          },
+        }),
+        event(2, "2026-10-30T09:01:00.000Z", {
+          eventType: "amended",
+          payload: {
+            changes: { title: { from: "a", to: "b" }, description: { from: "x", to: "y" } },
+          },
+        }),
+      ],
+    }),
+  );
+  expect(text).toContain("type=amended] updated the description\n");
+  expect(text).toContain('{"changes":{"title":{"from":"a","to":"b"}}} updated the description');
+  expect(text).not.toContain("secret");
+  expect(text).not.toContain('"y"');
+});
+
+test("a task with events but no conversation still shows its history, and older ones are flagged", () => {
+  const text = formatTaskView(
+    view({
+      conversation: { exists: false, replyCount: 0 },
+      recentMessages: [],
+      hasOlder: true,
+      recentEvents: [
+        event(9, "2026-10-30T09:00:00.000Z", {
+          eventType: "priority_changed",
+          payload: { from: "none", to: "high" },
+        }),
+      ],
+    }),
+  );
+  expect(text).toContain("Discussion and history (latest 1, older exist, oldest first):");
+  expect(text).toContain("type=priority_changed");
+  expect(text).toContain('Read the discussion: coforge task read "#general:#7"\n');
+  expect(text).toContain('Every recorded change: coforge task history "#general:#7"');
 });
