@@ -1,17 +1,17 @@
 import type { LocalMemoryEntry } from "@lrm/coforge-sdk/agent";
-import { readMemoryFile } from "./memory-files";
+import { MEMORY_FILE_BYTES, readMemoryFile } from "./memory-files";
 import { memoryRecordSummary } from "./memory-record";
 
 const historyOrders = new Map<string, { files: string[]; ordered: string[]; expires: number }>();
 
 export async function readMemoryRecordSummary(root: string, path: string) {
-  const prefix = await readMemoryFile(root, path, 1024).catch(() => undefined);
-  if (!prefix) return undefined;
-  const text =
-    prefix.startsWith("---\n") && prefix.indexOf("\n---\n", 4) === -1
-      ? await readMemoryFile(root, path).catch(() => undefined)
-      : prefix;
-  return text ? memoryRecordSummary(text) : undefined;
+  for (const bytes of [1024, 12_288, 65_536, MEMORY_FILE_BYTES]) {
+    const prefix = await readMemoryFile(root, path, bytes).catch(() => undefined);
+    if (!prefix?.startsWith("---\n")) return undefined;
+    if (prefix.includes("\n---\n", 4)) return memoryRecordSummary(prefix);
+    if (Buffer.byteLength(prefix) < bytes - 3) return undefined;
+  }
+  return undefined;
 }
 
 export async function orderMemoryHistory(root: string, key: string, files: string[]) {
