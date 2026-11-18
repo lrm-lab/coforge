@@ -1,7 +1,4 @@
-import { rm } from "node:fs/promises";
-import { join } from "node:path";
 import { expect, setSystemTime, test } from "bun:test";
-import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import type { AgentStartIntent } from "@lrm/coforge-sdk/internal";
 import {
@@ -10,7 +7,6 @@ import {
   MEMORY,
   PROVIDER_BRIEFING,
   SWEEP_MS,
-  connection,
   logged,
   minutes,
   run,
@@ -167,15 +163,6 @@ test.each<[string, HarnessOptions, boolean]>([
   "a recycled start's memory decision says whether its briefing %s",
   async (_name, options, carried) => {
     const { records } = await run(options, async (h) => {
-      if (options.memory === false)
-        await rm(
-          join(
-            agentWorkspaceDirectory(connection.workspaceRoot, connection.workspaceId, "agent-a"),
-            "notes",
-            "active-context.md",
-          ),
-          { force: true },
-        );
       setSystemTime(minutes(90));
       await h.runtime.handleAgentStart(
         h.intent({ sessionId: "old-session", sessionMode: "resume" }),
@@ -211,16 +198,23 @@ test("the briefing is its own turn ahead of the recovery notice", async () => {
   expect(inputs[0]).toContain("do not reply to it");
   expect(inputs[1]).toContain("#general");
 });
-test("a briefing that cannot be built still starts a fresh, bare session", async () => {
-  const { result: h, records } = await run({ briefing: "fails", memory: false }, async (h) => {
-    setSystemTime(minutes(90));
-    await h.runtime.handleAgentStart(h.intent({ sessionId: "old-session", sessionMode: "resume" }));
-    return h;
-  });
+test("a briefing that cannot be built still starts a fresh session with the memory files alone", async () => {
+  const { result: h, records } = await run(
+    { briefing: "fails", memory: false, activeContext: "- next: review\n" },
+    async (h) => {
+      setSystemTime(minutes(90));
+      await h.runtime.handleAgentStart(
+        h.intent({ sessionId: "old-session", sessionMode: "resume" }),
+      );
+      return h;
+    },
+  );
   expect(h.sessions[0]!.options.sessionId).toBeUndefined();
   expect(h.reports[0]).toMatchObject({ replacedSessionId: "old-session" });
   expect(h.sessions[0]!.inputs).toHaveLength(1);
   expect(h.sessions[0]!.inputs[0]).toStartWith("<memory-index>");
+  expect(h.sessions[0]!.inputs[0]).toContain("- next: review");
+  expect(h.sessions[0]!.inputs[0]).not.toContain('<memory file="MEMORY.md"');
   expect(h.sessions[0]!.inputs[0]).toContain("You are starting a fresh session.");
   expect(records.map((r) => r.properties.event)).toContain("agent.runtime.wake_briefing_failed");
 });
