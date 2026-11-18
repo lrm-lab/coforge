@@ -43,6 +43,11 @@ test("an agent's desktop carries that agent's name as its window title", () => {
   expect(cloudDesktopUrl("http://10.110.158.143:6090", COMPUTER, agent, "   ")).toBe(
     `http://10.110.158.143:6090/desktop/${COMPUTER}/${agent}/`,
   );
+  expect(
+    new URL(
+      cloudDesktopUrl("http://10.110.158.143:6090", COMPUTER, agent, "小\u0000明\u007f")!,
+    ).searchParams.get("title"),
+  ).toBe("小明");
 });
 
 test("a desktop opens in its own sized window, and a second open targets that name without a url", () => {
