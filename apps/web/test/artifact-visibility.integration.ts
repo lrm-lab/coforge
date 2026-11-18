@@ -422,3 +422,70 @@ test("a list with no home shows exactly what a read of each artifact allows, in 
     await countingDb.$disconnect();
   }
 });
+
+test("an owner opens an artifact to anyone with the link; members still read it, and narrowing it ends the old public links", async () => {
+  const shared = await create(inConversation(privateChannel), { agentId: agents.helper });
+  await push(shared.id, { agentId: agents.helper });
+  const change = (tier: "conversation" | "workspace" | "link", userId = people.alice) =>
+    artifacts.visibility.change({
+      workspaceId,
+      artifactId: shared.id,
+      userId,
+      tier,
+    });
+  const events = () =>
+    db.artifactAccessEvent.findMany({
+      where: { artifactId: shared.id },
+      orderBy: { createdAt: "asc" },
+      select: { from: true, to: true, actorUserId: true },
+    });
+
+  expect(await change("link")).toMatchObject({ from: "conversation", to: "link" });
+  expect((await db.artifact.findUniqueOrThrow({ where: { id: shared.id } })).access).toBe("link");
+  expect((await read(shared.id, { userId: people.bob })).artifact.access).toBe("workspace");
+  expect(await change("link")).toMatchObject({ from: "link", to: "link" });
+  expect(await events()).toEqual([{ from: "conversation", to: "link", actorUserId: people.alice }]);
+  await expect(change("link", people.bob)).rejects.toMatchObject({ code: "ACCESS_DENIED" });
+
+  const token = `tok-${crypto.randomUUID()}`;
+  await db.artifactPublicLink.create({
+    data: { artifactId: shared.id, token, createdByUserId: people.alice },
+  });
+  expect(await change("workspace")).toMatchObject({ from: "link", to: "workspace" });
+  expect(
+    (await db.artifactPublicLink.findFirstOrThrow({ where: { token } })).revokedAt,
+  ).not.toBeNull();
+  expect((await events()).at(-1)).toEqual({
+    from: "link",
+    to: "workspace",
+    actorUserId: people.alice,
+  });
+
+  await change("link");
+  const second = `tok-${crypto.randomUUID()}`;
+  await db.artifactPublicLink.create({
+    data: { artifactId: shared.id, token: second, createdByUserId: people.alice },
+  });
+  expect(await change("conversation")).toMatchObject({ from: "link", to: "conversation" });
+  expect(
+    (await db.artifactPublicLink.findFirstOrThrow({ where: { token: second } })).revokedAt,
+  ).not.toBeNull();
+});
+
+test("an Agent cannot move a link-tier artifact, and setting link is a person's alone", async () => {
+  const shared = await create(inConversation(privateChannel), { agentId: agents.helper });
+  await push(shared.id, { agentId: agents.helper });
+  await artifacts.visibility.change({
+    workspaceId,
+    artifactId: shared.id,
+    userId: people.alice,
+    tier: "link",
+  });
+  await expect(
+    artifacts.visibility.moveToWorkspace({
+      workspaceId,
+      artifactId: shared.id,
+      agentId: agents.helper,
+    }),
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+});

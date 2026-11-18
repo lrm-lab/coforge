@@ -26,6 +26,8 @@ export type ArtifactHomeAccess = { read: boolean; write: boolean; homeKind: Arti
 
 export type ArtifactTier = "conversation" | "workspace";
 
+export type ArtifactAccessTier = ArtifactTier | "link";
+
 export type ArtifactAccessRow = {
   homeKey: string;
   access: string;
@@ -76,6 +78,12 @@ export function artifactTier(
     artifact.homeKey === "workspace"
     ? "workspace"
     : "conversation";
+}
+
+export function artifactAccessTier(
+  artifact: Pick<ArtifactAccessRow, "homeKey" | "access">,
+): ArtifactAccessTier {
+  return artifact.access === "link" ? "link" : artifactTier(artifact);
 }
 
 export async function conversationHomeAccess(

@@ -81,7 +81,7 @@ export const setArtifactAccess = createServerFn({ method: "POST" })
     z
       .object({
         artifactId: id,
-        access: z.enum(["conversation", "workspace"]),
+        access: z.enum(["conversation", "workspace", "link"]),
         expectedLost: z.number().int().min(0).optional(),
       })
       .strict(),

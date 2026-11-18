@@ -15,7 +15,7 @@ import { errorType } from "#src/server/errors/error-type.server";
 import {
   artifactHomeConversationId,
   artifactTier,
-  type ArtifactTier,
+  type ArtifactAccessTier,
 } from "./artifact-access.server";
 
 export type ArtifactSignalEvent =
@@ -89,13 +89,13 @@ export async function announceAccessChange(
     workspaceId: string;
     homeKey: string;
     artifactId: string;
-    tier: ArtifactTier;
+    tier: ArtifactAccessTier;
   },
 ) {
   if (!signals) return;
   await publishBestEffort(
     signals,
-    channelsOf({ ...input, wide: input.tier === "workspace" }),
+    channelsOf({ ...input, wide: input.tier !== "conversation" }),
     {
       type: REALTIME_EVENTS.artifactAccessChanged,
       workspaceId: input.workspaceId,

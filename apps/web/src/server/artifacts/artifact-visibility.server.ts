@@ -11,6 +11,7 @@ import {
   artifactAuthorOwnerId,
   artifactHomeConversationId,
   artifactReadView,
+  artifactAccessTier,
   artifactTier,
   artifactViewer,
   artifactsDisabled,
@@ -19,7 +20,7 @@ import {
   homeStands,
   requireArtifactRead,
   type ArtifactActor,
-  type ArtifactTier,
+  type ArtifactAccessTier,
 } from "./artifact-access.server";
 import { revokeArtifactPublicLinks } from "./artifact-public-links.server";
 import { announceAccessChange, type ArtifactSignals } from "./artifact-signals.server";
@@ -93,7 +94,7 @@ export class ArtifactVisibility {
     workspaceId: string;
     artifactId: string;
     userId: string;
-    tier: ArtifactTier;
+    tier: ArtifactAccessTier;
     expectedLost?: number;
   }) {
     if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
@@ -104,13 +105,14 @@ export class ArtifactVisibility {
       await requireArtifactRead(tx, input.workspaceId, actor, artifact, { authorAgentOwnerId });
       if (!(await canManageArtifactSharing(tx, input.workspaceId, actor, { authorAgentOwnerId })))
         throw new AppError("ACCESS_DENIED");
-      const from = artifactTier(artifact);
+      const from = artifactAccessTier(artifact);
       if (from === input.tier) return { artifact, from, changed: false };
       if (input.tier === "conversation") {
         const { total } = await narrowing(tx, input.workspaceId, actor, artifact);
         if (input.expectedLost !== undefined && input.expectedLost !== total) throw lossChanged();
-        await revokeArtifactPublicLinks(tx, artifact.id, input.userId);
       }
+      if (input.tier === "conversation" || from === "link")
+        await revokeArtifactPublicLinks(tx, artifact.id, input.userId);
       await writeTier(tx, artifact, from, input.tier, actor);
       return { artifact, from, changed: true };
     });
@@ -270,8 +272,8 @@ async function requireOwnerMayWiden(db: Tx, workspaceId: string, artifact: Locke
 async function writeTier(
   tx: Prisma.TransactionClient,
   artifact: LockedArtifact,
-  from: ArtifactTier,
-  to: ArtifactTier,
+  from: ArtifactAccessTier,
+  to: ArtifactAccessTier,
   actor: ArtifactActor,
 ) {
   await tx.$executeRaw`UPDATE "artifacts" SET "access" = ${to} WHERE "id" = ${artifact.id}::uuid`;
