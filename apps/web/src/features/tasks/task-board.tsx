@@ -36,39 +36,24 @@ import { useCanSetAnyTaskStatus } from "./task-board-authority";
 import { TaskCardSkeleton } from "./tasks-pending";
 import type { FinishedColumn, FinishedTasks } from "./use-finished-tasks";
 
-/** A Task as a board shows it: the Workspace Tasks page adds where it lives and its Project. */
 export type BoardTask = TaskView &
   FilterableTask & {
-    /** The conversation it lives in (`#channel`), on the Workspace Tasks page. */
     source?: { label: string; channelName?: string | null };
   };
 
-/** What only a conversation's Tasks tab has. */
 export type ConversationBoard = {
-  /** The conversation header (with its Chat / Tasks / Files tabs) the board sits under. */
   header: ReactNode;
-  /** `#channel` or the direct conversation's name, which the Task popup shows. */
   name?: string;
-  /** Who the Task popup names as assignees and offers to assign. */
   members?: readonly Mentionable[];
   loading?: boolean;
   error?: string;
-  /** Creates a Task from the create dialog's draft. */
   onCreateTask?: (draft: TaskDraft, idempotencyKey: string) => Promise<TaskView[]>;
-  /** The conversation itself, so its New Task form offers a Project. */
   conversationId?: string;
-  /** Shows a single Task just created from the board. */
   onOpenCreated: (task: TaskView) => void | Promise<void>;
 };
 
 const FINISHED: readonly FinishedStatus[] = ["done", "closed"];
 
-/**
- * The Task board: the Workspace Tasks page, or one conversation's Tasks tab when `conversation` is
- * given. Both have the same toolbar (Filter, Display), board or list, cards, moves and Done and
- * Closed read in pages; only the Tasks page has its page header and shows each Task's source and
- * Project, and only a conversation creates Tasks.
- */
 export function TaskBoard<T extends BoardTask>({
   tasks,
   finished,
@@ -82,30 +67,16 @@ export function TaskBoard<T extends BoardTask>({
   tree,
   newTask,
 }: {
-  /** The unfinished Tasks, and any the board itself moved to Done or Closed. */
   tasks: readonly T[];
-  /** Done and Closed, counted and paged by the server. */
   finished: FinishedTasks<T>;
-  /** The board's view from the address (`useTaskBoardSearch`). */
   view: TaskBoardView;
-  /** Opens a Task's popup over the board. */
   onOpenTask: (task: T) => void;
-  /** Wraps a card's title in the surface's own link; a button that opens the popup otherwise. */
   renderTitle?: (task: T, title: ReactNode) => ReactNode;
-  /** Absent where the viewer may not change Tasks: no drag, no menu. */
   onCommand?: (task: T, command: OverviewTaskCommand) => Promise<void>;
-  /** The commands arrive after hydration (the server render offers none). Until then New task and
-   * the drag handles stand where they will be, inert, so the page does not shift when they come. */
   commandsPending?: boolean;
   conversation?: ConversationBoard;
-  /** One Project's board, on its page under the page's own header: no Project is offered. */
   project?: boolean;
-  /** What shows instead of the board or list, with the Tasks its picks offer: a Project's task
-   * tree (task #462), which also offers the channel picks, or its skeleton. */
   tree?: { node: ReactNode; tasks: readonly FilterableTask[] };
-  /** Offers "New task" in the toolbar and on each column (All tasks and a Project's board, not a
-   * conversation, which has its own create flow): `projectSlug` files the Task under that
-   * Project, none files it under none; `onCreated` reads the board again. */
   newTask?: { projectSlug?: string; onCreated: () => void };
 }) {
   const { statuses, filter, layout } = view;
@@ -115,7 +86,6 @@ export function TaskBoard<T extends BoardTask>({
   const showTree = tree !== undefined;
   const [hiddenColumns, setColumnHidden] = useTaskHiddenColumns();
   const [createOpen, setCreateOpen] = useState(false);
-  // The column the board's "New task" form was opened from.
   const [creating, setCreating] = useState<TaskWriteStatus | null>(null);
   const filtered =
     statuses.length > 0 ||
@@ -131,13 +101,11 @@ export function TaskBoard<T extends BoardTask>({
       ),
     [unfinished, done.rows, closed.rows, statuses, filter],
   );
-  // The owner and Project choices count the finished Tasks too, by their counted groups.
   const choices = useMemo(() => [...unfinished, ...finished.groups], [unfinished, finished.groups]);
   const finishedShown = FINISHED.filter((value) => statusMatches(value, statuses)).reduce(
     (sum, value) => sum + finished.columns[value].count,
     0,
   );
-  // Until the list and the finished counts arrive, the board cannot tell it is empty.
   const loading = (conversation?.loading && tasks.length === 0) || finished.pending;
   const empty = !loading && visible.length === 0 && finishedShown === 0;
   const paged = useMemo(() => {
@@ -152,22 +120,15 @@ export function TaskBoard<T extends BoardTask>({
     () => (newTask ? newTaskChoices(tasks, newTask.projectSlug) : undefined),
     [tasks, newTask],
   );
-  // Where a new Task can go: the channels the board's Tasks were filed in, or — on a board that
-  // holds none yet, a new Workspace's or a new Project's — the viewer's own channels (task #60).
-  // Every board would ask the server for them, so only the boards that offer "New task" do.
   const newTaskPlaces = useAssignTargets({ enabled: newTask !== undefined });
   const canFile = newTaskChoice
     ? canFileNewTask(newTaskChoice.places, newTaskPlaces.targets)
     : false;
   const onCreateTask = onCommand ? conversation?.onCreateTask : undefined;
-  // A Workspace owner or admin sets any status; the board must offer exactly what the server takes.
   const canSetAnyStatus = useCanSetAnyTaskStatus();
-  // The board sits inside its page: All tasks or a Project (with their header), or a conversation's
-  // Tasks tab, which brings its own header.
   return (
     <section
       aria-label={m.tasks_board()}
-      // Cards inside follow the viewer's shown fields (Display → Show).
       data-task-board=""
       className={cn(
         "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-primary",
@@ -247,7 +208,6 @@ export function TaskBoard<T extends BoardTask>({
             onHiddenChange={setColumnHidden}
             disabled={!onCommand}
             commandsPending={commandsPending}
-            // A conversation's board says above it when any command, a move included, is refused.
             showMoveError={!conversation}
             adding={
               newTaskChoice && (onCommand || commandsPending) && canFile
@@ -292,8 +252,6 @@ export function TaskBoard<T extends BoardTask>({
           conversationId={conversation?.conversationId}
           onCreate={async (draft, idempotencyKey, { more }) => {
             const created = await onCreateTask(draft, idempotencyKey);
-            // The new Task opens: its message in the chat, or, made without one, its popup. Not
-            // while the viewer keeps creating: the form stays for the next one.
             if (created.length === 1 && !more) await conversation?.onOpenCreated(created[0]!);
           }}
         />
@@ -302,9 +260,6 @@ export function TaskBoard<T extends BoardTask>({
   );
 }
 
-/**
- * Under a finished group's cards: the next page, placeholders while it loads, or why it did not.
- */
 function FinishedFooter<T extends BoardTask>({
   column,
   list,
@@ -321,7 +276,6 @@ function FinishedFooter<T extends BoardTask>({
         </Button>
       </div>
     );
-  // An empty group shows nothing under its count; Display picks how far back Done and Closed reach.
   if (column.rows.length === 0)
     return column.loading ? (
       <div className={cn("flex flex-col", list ? "divide-y divide-secondary" : "gap-2")}>
@@ -348,7 +302,6 @@ function FinishedFooter<T extends BoardTask>({
   );
 }
 
-/** One Task's card or row, the same on every board; moves go through drag or its menu. */
 function BoardTaskCard<T extends BoardTask>({
   task,
   controls,
@@ -368,10 +321,6 @@ function BoardTaskCard<T extends BoardTask>({
   conversation?: ConversationBoard;
   project: boolean;
 }) {
-  // The menu, with its tooltip, is built once someone reaches for this card (a mouse over it), or
-  // tabs to or presses the plain button standing in for it; building every card's up front was
-  // about a quarter of the Tasks page's script time. `start` carries what the stand-in was doing
-  // over to the real button, once.
   const [menu, setMenu] = useState<{ start?: "focus" | "open" }>();
   const reach = () => setMenu((current) => current ?? {});
   const { label: menuLabel, ...menuButton } = taskMenuButton(task);
@@ -391,7 +340,6 @@ function BoardTaskCard<T extends BoardTask>({
       }
       source={conversation ? undefined : task.source?.label}
       channel={conversation ? undefined : task.source?.channelName}
-      // Null for a Task outside any Project: no pill.
       project={project ? undefined : task.project}
       controls={controls}
       menu={
@@ -413,7 +361,6 @@ function BoardTaskCard<T extends BoardTask>({
             aria-label={menuLabel}
             aria-haspopup="menu"
             {...menuButton}
-            // Keyboard focus only: a tap focuses it too, and must land on it to open the menu.
             onFocus={(event: FocusEvent<HTMLElement>) =>
               event.currentTarget.matches(":focus-visible") && setMenu({ start: "focus" })
             }
