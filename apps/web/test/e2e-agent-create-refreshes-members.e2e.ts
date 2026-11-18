@@ -88,7 +88,7 @@ test("an Agent created from a channel's Add members view shows on an already-rea
     await waitFor(`${createEntry} !== undefined`);
     await browser("eval", `${createEntry}.click()`);
     await waitFor(
-      `${agentForm}?.querySelector('button[aria-label="Refresh model catalog"]:not([disabled])') != null`,
+      `${agentForm}?.querySelector('input[placeholder="Search models"]:not([disabled])') != null`,
     );
     const picked = JSON.parse(
       await browser(

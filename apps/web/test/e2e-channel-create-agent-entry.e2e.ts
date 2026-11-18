@@ -68,7 +68,7 @@ test("the add view creates an Agent named by the search, and it joins the channe
   }
   async function chooseClaudeCode() {
     await waitFor(
-      `${agentForm}.querySelector('button[aria-label="Refresh model catalog"]:not([disabled])') != null`,
+      `${agentForm}.querySelector('input[placeholder="Search models"]:not([disabled])') != null`,
     );
     const picked = JSON.parse(
       await browser(
