@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from "bun:test";
+import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import {
   AgentControlPublisher,
   START_INTENT_INVALID_ERROR_CODE,
@@ -20,6 +20,8 @@ const state: AgentControlState = {
   controlSequence: 0,
   launchId: "l1",
 } as AgentControlState;
+
+afterEach(() => mock.restore());
 
 const badRecovery = {
   unreadSummary: {},
