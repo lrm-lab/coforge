@@ -302,7 +302,10 @@ export function buildRuntimeErrorFingerprintFenceActivity(
   fence: RuntimeErrorFingerprintFenceState,
   lastError: RuntimeErrorEvent,
 ): ReturnType<typeof buildRuntimeErrorActivity> {
-  const detail = `Runtime stopped after ${fence.attempts} repeated runtime errors with the same fingerprint (${fence.fingerprint}). Last error: ${lastError.message} Restart after the runtime/tooling issue is fixed.`;
+  const detail =
+    fence.fingerprint === "zero_evidence_turn_completed"
+      ? `The runtime ended ${fence.attempts} turns in a row without any output, so CoForge stopped restarting it. Restart the Agent to try again.`
+      : `Runtime stopped after ${fence.attempts} repeated runtime errors with the same fingerprint (${fence.fingerprint}). Last error: ${lastError.message} Restart after the runtime/tooling issue is fixed.`;
   return {
     ...built,
     detail,
