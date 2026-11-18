@@ -5,6 +5,7 @@ import {
   cloudDesktopUrl,
   cloudDesktopWindowName,
   openCloudDesktopWindow,
+  withCloudDesktopPhoneView,
 } from "#src/features/computers/cloud-desktop-url";
 
 const COMPUTER = "01a15829-2da5-740c-848c-c287bf1e8ab6";
@@ -96,4 +97,15 @@ test("a computer id or origin that is not one desktop proxy is refused", () => {
   expect(cloudDesktopUrl("http://10.110.158.143:6090", "a/b")).toBeUndefined();
   expect(cloudDesktopUrl("https://staging.example.com/w/acme", COMPUTER)).toBeUndefined();
   expect(cloudDesktopUrl("not a url", COMPUTER)).toBeUndefined();
+});
+
+test("a phone view keeps the same desktop path and only marks the viewer", () => {
+  const agent = "01a15829-2da5-740c-848c-c287bf1e8ab7";
+  const base = cloudDesktopUrl("http://10.110.158.143:6090", COMPUTER, agent, "小明")!;
+  const phone = new URL(withCloudDesktopPhoneView(base));
+  expect(phone.pathname).toBe(`/desktop/${COMPUTER}/${agent}/`);
+  expect(phone.searchParams.get("title")).toBe("小明");
+  expect(phone.searchParams.get("view")).toBe("phone");
+  expect(phone.searchParams.get("token")).toBeNull();
+  expect(withCloudDesktopPhoneView(base)).toBe(withCloudDesktopPhoneView(phone.toString()));
 });

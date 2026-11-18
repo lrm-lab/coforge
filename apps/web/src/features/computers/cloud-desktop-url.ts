@@ -41,6 +41,13 @@ export function cloudDesktopUrl(
   return desktop.toString();
 }
 
+/** Marks the shared desktop for a phone viewer: fit/pan in the page, same 1080p session. */
+export function withCloudDesktopPhoneView(url: string): string {
+  const desktop = new URL(url);
+  desktop.searchParams.set("view", "phone");
+  return desktop.toString();
+}
+
 /** A sized popup. The window name is what reuses it; `noopener` would discard that name. */
 export const CLOUD_DESKTOP_WINDOW_FEATURES = "popup,width=1280,height=800";
 

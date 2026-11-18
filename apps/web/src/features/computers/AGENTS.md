@@ -58,7 +58,10 @@ These rules apply to `src/features/computers/`.
   Landscape view (CSS fake-landscape via `desktop-landscape.ts`); Portrait view, minimize,
   or sleep clears it. In landscape the title chrome overlays and auto-hides after idle
   (`desktop-chrome-autohide.ts`); a top-edge handle reveals it. Portrait phone and wider
-  viewports keep the chrome always visible. Action-card takeover follows the same phone overlay / wide popup
+  viewports keep the chrome always visible. A phone iframe adds `view=phone`
+  (`withCloudDesktopPhoneView`) so the shared 1080p desktop keeps computer-primary geometry
+  while the noVNC page offers fit vs native-size pan; the cloud image dock stays visible for
+  touch. Action-card takeover follows the same phone overlay / wide popup
   split. Focused plain-text paste on that desktop page is forwarded into the remote
   clipboard by the host adapter (`packages/computer` `host/desktop-page.ts`); files and
   images are not. That origin is the deployment site; Caddy confirms the signed-in owner

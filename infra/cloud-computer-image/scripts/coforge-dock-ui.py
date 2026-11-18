@@ -20,6 +20,7 @@ gi.require_version("Gdk", "3.0")
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gdk, GLib, Gtk
 
+from coforge_dock_policy import dock_hides_when_idle
 from coforge_x11 import (
     X11,
     activate_window,
@@ -212,6 +213,8 @@ class CoforgeDock:
         return geometry, x, width
 
     def _should_hide(self) -> bool:
+        if not dock_hides_when_idle():
+            return False
         if self.pointer_inside or self.preview_visible:
             return False
         gdk_display = Gdk.Display.get_default()
