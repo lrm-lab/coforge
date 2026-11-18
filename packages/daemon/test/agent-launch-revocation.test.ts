@@ -16,22 +16,31 @@ import {
 
 function fakeProxy() {
   const revoked: string[] = [];
+  const revokedAgents: string[] = [];
   const proxy: AgentProxy = {
     issue: () => undefined,
     revoke: (token: string) => void revoked.push(token),
+    revokeAgent: (agentId: string) => void revokedAgents.push(agentId),
     request: () => Promise.reject(new Error("unused")),
   } as unknown as AgentProxy;
-  return { proxy, revoked };
+  return { proxy, revoked, revokedAgents };
 }
 
-/** The catch path: put back what this launch displaced, then revoke only its own issue. */
+/** The catch path: put back what this launch displaced, then revoke only its own issue. A token
+ * the launch reused is the Agent's and is left alone, as is anything a Stop removed meanwhile. */
 function failedLaunchCleanup(
   contexts: Map<string, string>,
   proxyTokens: Map<string, string>,
   proxy: AgentProxy | undefined,
   agentId: string,
-  launch: { localContext?: string; proxyToken?: string; priorProxyToken?: string },
+  launch: {
+    localContext?: string;
+    proxyToken?: string;
+    priorProxyToken?: string;
+    created?: boolean;
+  },
 ) {
+  if (launch.created === false) return;
   restoreSupersededProxyToken(proxyTokens, agentId, launch.proxyToken, launch.priorProxyToken);
   if (launch.localContext !== undefined)
     revokeLocalLaunch(
@@ -48,13 +57,15 @@ describe("revokeLocalLaunch", () => {
   test("a bare revoke drops the Agent's current context and token from the tables", () => {
     const contexts = new Map([["agent-a", "context-a"]]);
     const proxyTokens = new Map([["agent-a", "token-a"]]);
-    const { proxy, revoked } = fakeProxy();
+    const { proxy, revoked, revokedAgents } = fakeProxy();
 
     revokeLocalLaunch(contexts, proxyTokens, proxy, "agent-a");
 
     expect(contexts.has("agent-a")).toBe(false);
     expect(proxyTokens.has("agent-a")).toBe(false);
     expect(revoked).toEqual(["token-a"]);
+    // Stop, delete, unbind and logout drop the whole registration, named or not.
+    expect(revokedAgents).toEqual(["agent-a"]);
   });
 
   test("an explicit pair leaves table values the pair does not match", () => {
@@ -146,5 +157,46 @@ describe("failed launch cleanup beside a running process", () => {
     restoreSupersededProxyToken(proxyTokens, "agent-a", "token-new", "token-old");
 
     expect(proxyTokens.get("agent-a")).toBe("token-newest");
+  });
+
+  test("a launch that reused the Agent's token revokes nothing when it fails", () => {
+    const contexts = new Map([["agent-a", "token-shared"]]);
+    const proxyTokens = new Map([["agent-a", "token-shared"]]);
+    const { proxy, revoked, revokedAgents } = fakeProxy();
+
+    failedLaunchCleanup(contexts, proxyTokens, proxy, "agent-a", {
+      localContext: "token-shared",
+      proxyToken: "token-shared",
+      priorProxyToken: "token-shared",
+      created: false,
+    });
+
+    expect(contexts.get("agent-a")).toBe("token-shared");
+    expect(proxyTokens.get("agent-a")).toBe("token-shared");
+    expect(revoked).toEqual([]);
+    expect(revokedAgents).toEqual([]);
+  });
+
+  test("a Stop during a launch is not undone when that launch then fails", () => {
+    const contexts = new Map<string, string>();
+    const proxyTokens = new Map<string, string>();
+    const { proxy, revoked, revokedAgents } = fakeProxy();
+    contexts.set("agent-a", "token-new");
+    proxyTokens.set("agent-a", "token-new");
+    revokeLocalLaunch(contexts, proxyTokens, proxy, "agent-a");
+
+    failedLaunchCleanup(contexts, proxyTokens, proxy, "agent-a", {
+      localContext: "token-new",
+      proxyToken: "token-new",
+      priorProxyToken: undefined,
+      created: true,
+    });
+
+    // Nothing is put back: no context, no token, and the Stop's revoke is the only one that
+    // mattered. A later launch issues a fresh token.
+    expect(contexts.has("agent-a")).toBe(false);
+    expect(proxyTokens.has("agent-a")).toBe(false);
+    expect(revokedAgents).toEqual(["agent-a"]);
+    expect(revoked).toEqual(["token-new", "token-new"]);
   });
 });

@@ -294,6 +294,7 @@ export type AgentProxyRuntime = {
     agentApiKey: string,
   ): Promise<WeeklyReportMemoryResult>;
   issueAgentContext?: (agentId: string, context?: string) => string;
+  isAgentSessionRunning?: (agentId: string) => boolean;
   collab?: AgentProxyCollabHooks;
 };
 

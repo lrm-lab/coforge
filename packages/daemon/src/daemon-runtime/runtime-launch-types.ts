@@ -34,4 +34,5 @@ export type AgentProxy = {
   url: string;
   issue(agentId: string, agentApiKey: string): string;
   revoke(token: string): void;
+  revokeAgent?(agentId: string): void;
 };

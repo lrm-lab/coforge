@@ -83,7 +83,6 @@ test("an abandoned launch is logged with the launch it tore down", async () => {
         interruptIfBusy: () => {},
         activityPublisher: { forgetBusy: () => {}, publish: () => {} },
         disposeLaunchObservations: () => {},
-        revokeLocalLaunch: () => {},
         offlineResidency: { record: () => undefined, remember: () => {} },
         stopCoordinator: { releaseAgentRuntime: async () => {} },
         drafts: { runtimeError: () => ({}) as never },

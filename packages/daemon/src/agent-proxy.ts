@@ -47,6 +47,7 @@ export type AgentProxy = {
   url: string;
   issue(agentId: string, agentApiKey: string): string;
   revoke(token: string): void;
+  revokeAgent?(agentId: string): void;
   close(): void;
 };
 import type { AgentProxyRuntime } from "./agent-proxy-runtime";
@@ -59,7 +60,11 @@ import {
   type ProxyRoute,
   type TokenBinding,
 } from "./agent-proxy-route";
-import { AgentProxyTokens } from "./agent-proxy-tokens";
+import {
+  AgentProxyTokens,
+  SESSION_NOT_RUNNING_CODE,
+  SESSION_NOT_RUNNING_MESSAGE,
+} from "./agent-proxy-tokens";
 const LOCAL_PROXY_TOKEN = /^sfp_[A-Za-z0-9_-]{43}$/;
 const MESSAGE_ID_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`, "i");
 const LOCAL_PROXY_ROUTES = agentApiRoutes.proxy;
@@ -317,6 +322,35 @@ const ROUTE_TABLE: readonly ProxyRoute[] = [
   }),
   ...TASK_CONVERSATION_PROXY_ROUTES,
 ];
+function canAnswerNow(
+  runtime: AgentProxyRuntime,
+  agentApiKeys: { get(agentId: string): string | undefined },
+  agentId: string,
+): boolean {
+  if (runtime.isAgentSessionRunning && !runtime.isAgentSessionRunning(agentId)) return false;
+  return agentApiKeys.get(agentId) !== undefined;
+}
+
+function sessionNotRunning(): Response {
+  return Response.json(
+    {
+      error: SESSION_NOT_RUNNING_MESSAGE,
+      code: SESSION_NOT_RUNNING_CODE,
+      retryable: false,
+      proxy: {
+        layer: "local_daemon_proxy",
+        correlation_id: crypto.randomUUID(),
+        route_family: "agent-api/session",
+        failure_class: "local_precondition",
+        cause_code: SESSION_NOT_RUNNING_CODE,
+        response_started: false,
+        response_complete: false,
+      },
+    },
+    { status: 409 },
+  );
+}
+
 export function startAgentProxy(input: {
   onRequest?: (request: { method: string; path: string }) => void;
   runtime: AgentProxyRuntime;
@@ -352,6 +386,8 @@ export function startAgentProxy(input: {
       const candidate = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
       const token = candidate && LOCAL_PROXY_TOKEN.test(candidate) ? candidate : undefined;
       const registered = tokens.find(token);
+      if (registered && !canAnswerNow(input.runtime, agentApiKeys, registered.agentId))
+        return sessionNotRunning();
       const direct = await collab.dispatchDirect(request, requestUrl, registered);
       if (direct) return direct;
       const found = findProxyRoute(ROUTE_TABLE, request.method, requestUrl.pathname);
@@ -426,15 +462,18 @@ export function startAgentProxy(input: {
     url: `http://127.0.0.1:${server.port}${LOCAL_PROXY_ROUTES.messages.path}`,
     issue(agentId, agentApiKey) {
       if (!isAgentApiKey(agentApiKey)) throw new Error("invalid Agent API key");
-      const token = tokens.register(
+      const { token } = tokens.issue(
         agentId,
-        (issued) => input.runtime.issueAgentContext?.(agentId, issued) || issued,
+        (context) => input.runtime.issueAgentContext?.(agentId, context) || context,
       );
       agentApiKeys.set(agentId, agentApiKey);
       return token;
     },
     revoke(token) {
       tokens.revoke(token);
+    },
+    revokeAgent(agentId) {
+      tokens.revokeAgent(agentId);
     },
     close() {
       server.stop(true);

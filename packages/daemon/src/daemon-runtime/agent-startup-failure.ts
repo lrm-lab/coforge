@@ -28,7 +28,6 @@ type Ports = {
   interruptIfBusy(agentId: string, launch: ActivityLaunch | undefined): void;
   activityPublisher: Pick<AgentActivityPublisher<ActivityLaunch>, "forgetBusy" | "publish">;
   disposeLaunchObservations(agentId: string): void;
-  revokeLocalLaunch(agentId: string): void;
   offlineResidency: Pick<AgentOfflineResidency, "record" | "remember">;
   stopCoordinator: Pick<AgentStopCoordinator, "releaseAgentRuntime">;
   drafts: Pick<AgentActivityDrafts, "runtimeError">;
@@ -57,7 +56,6 @@ export async function abandonLaunch(
   ports.interruptIfBusy(agentId, activityLaunch);
   ports.activityPublisher.forgetBusy(agentId);
   ports.disposeLaunchObservations(agentId);
-  ports.revokeLocalLaunch(agentId);
   // An abandoned launch is teardown, not a person's Stop: an offline error's record must
   // survive so later deliveries still restate the failure that took the Agent down.
   const offlineError = ports.offlineResidency.record(agentId);

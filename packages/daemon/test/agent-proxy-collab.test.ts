@@ -366,6 +366,8 @@ describe("agent-proxy P1-6 features", () => {
     const reminderCalls: unknown[] = [];
     const fakeDaemon = {
       stateDirectory,
+      agentProcessManager: { isRunning: () => true },
+      currentActivityLaunch: () => undefined,
       issueAgentContext: (id: string) => `ctx-${id}`,
       authorizedAgent(ctx: string, key: string | undefined) {
         if (!daemonRunning) throw new AgentPreflightError("not running", "DAEMON_NOT_RUNNING");

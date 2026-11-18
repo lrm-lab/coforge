@@ -18,6 +18,7 @@ import { mentionRuntime } from "#src/agent-proxy-mention-runtime";
 import { conversationRuntime } from "#src/agent-proxy-conversation-runtime";
 import { appRuntime } from "#src/agent-proxy-app-runtime";
 import { workspaceRuntime } from "#src/agent-proxy-workspace-runtime";
+import { agentSessionIsLive } from "#src/agent-proxy-session-admission";
 
 const APP_EVENT_TARGET = /^@app\.(?:system\.)?[a-z][a-z0-9-]{2,63}$/;
 const compactionCache = new Map<string, boolean>();
@@ -255,6 +256,16 @@ export function daemonAgentProxyRuntime(
     agentArtifactDownload: async (context, request, key) =>
       agentApi().agentArtifact(context, { file: "download", ...request }, key),
     issueAgentContext: (agentId) => requireRuntime().issueAgentContext(agentId),
+    isAgentSessionRunning: (agentId) => {
+      const runtime = requireRuntime();
+      return agentSessionIsLive(
+        {
+          isRunning: (id) => runtime.agentProcessManager.isRunning(id),
+          launch: (id) => runtime.currentActivityLaunch(id),
+        },
+        agentId,
+      );
+    },
     collab: createCollabHooks(requireRuntime),
   };
 }
