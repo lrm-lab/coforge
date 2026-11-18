@@ -1,26 +1,11 @@
 import { AppError } from "#src/lib/app-error";
-import {
-  artifactKindOfPath,
-  type ArtifactPathKind,
-} from "#src/features/artifacts/artifact-path-kind";
-import {
-  NO_RATE_LIMIT,
-  type AppRateLimit,
-} from "#src/server/app-rate-limits/app-rate-limit.server";
-import { clientAddress } from "#src/server/http/public-origin.server";
+import type { AppRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
 import type { ArtifactReads } from "./artifact-reads.server";
 import { pageLevelOf } from "./artifact-page-access.server";
 import { pageAssetName, type ArtifactPageAssets } from "./artifact-page-assets.server";
 import type { PageLevel } from "#src/features/artifacts/artifact-page-levels";
 import { PAGE_RUNTIME_PATH } from "./artifact-page-runtime.server";
-import { artifactContentType } from "./artifact-content-types.server";
-import {
-  publicFileDrawn,
-  publicImagePage,
-  publicNoPreviewPage,
-  publicTextPage,
-} from "./artifact-public-files.server";
-import { publicMarkdownResponse } from "./artifact-public-markdown.server";
+import { ArtifactPublicServing, useAllowed } from "./artifact-sandbox-public.server";
 import type { PublicArtifactMissGuard } from "./artifact-public-miss-guard.server";
 import type { LinkLookup, PublicPage } from "./artifact-public-page.server";
 import { artifactPageOrigin, sandboxTarget } from "./artifact-sandbox-config.server";
@@ -31,7 +16,6 @@ import {
   isPdfDocument,
   isPdfFile,
   pageFileResponse,
-  PUBLIC_FILE_CACHE,
   SIGNED_FILE_CACHE,
   type FileRequestUse,
 } from "./artifact-sandbox-files.server";
@@ -54,7 +38,7 @@ import {
 
 export const SANDBOX_OPEN_PATH = "/_coforge/open";
 
-type SandboxDependencies = {
+export type SandboxDependencies = {
   reads: Pick<ArtifactReads, "read" | "file" | "fileInVersion">;
   readBlob(workspaceId: string, sha256: string): Promise<Uint8Array | null>;
   pageAssets?: Pick<ArtifactPageAssets, "lookupByFileToken">;
@@ -72,16 +56,14 @@ type SandboxDependencies = {
   publicClientAddress?: (request: Request) => string | undefined;
 };
 
-type PublicRef = {
-  base: string;
-  load(path?: string): Promise<{ page: PublicPage | null; miss: boolean }>;
-  guarded: boolean;
-};
-
-type ArtifactHost = { origin: string; artifactId: string; pageOrigin: string };
+export type ArtifactHost = { origin: string; artifactId: string; pageOrigin: string };
 
 export class ArtifactSandbox {
-  constructor(private readonly deps: SandboxDependencies) {}
+  readonly #public: ArtifactPublicServing;
+
+  constructor(private readonly deps: SandboxDependencies) {
+    this.#public = new ArtifactPublicServing(deps);
+  }
 
   async link(input: {
     workspaceId: string;
@@ -157,17 +139,18 @@ export class ArtifactSandbox {
     if (pathname === PAGE_RUNTIME_PATH) return sandboxRuntimeResponse(method);
     if (pathname === SANDBOX_OPEN_PATH) return this.open(request, host);
     const linkFile = /^\/l\/file\/(.+)$/.exec(pathname);
-    if (linkFile) return this.serveLinkFile(request, host, linkFile[1]!);
+    if (linkFile) return this.#public.serveLinkFile(request, host, linkFile[1]!);
     const linkPage = /^\/l(?:\/page\/(.+))?$/.exec(pathname);
-    if (linkPage) return this.serveLink(request, host, linkPage[1]);
+    if (linkPage) return this.#public.serveLink(request, host, linkPage[1]);
     const file = /^\/_f\/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\/(.+)$/.exec(pathname);
     if (file) return this.serveFile(request, host, file[1]!, file[2]!);
     const asset = /^\/_a\/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\/([^/]+)$/.exec(pathname);
     if (asset) return this.serveAsset(request, host, asset[1]!, asset[2]!);
     const publicFile = /^\/p\/([A-Za-z0-9_-]{43})\/file\/(.+)$/.exec(pathname);
-    if (publicFile) return this.servePublicFile(request, host, publicFile[1]!, publicFile[2]!);
+    if (publicFile)
+      return this.#public.servePublicFile(request, host, publicFile[1]!, publicFile[2]!);
     const publicPage = /^\/p\/([A-Za-z0-9_-]{43})(?:\/page\/(.+))?$/.exec(pathname);
-    if (publicPage) return this.servePublic(request, host, publicPage[1]!, publicPage[2]);
+    if (publicPage) return this.#public.servePublic(request, host, publicPage[1]!, publicPage[2]);
     return sandboxRefusal(404, "Not found.");
   }
 
@@ -287,204 +270,6 @@ export class ArtifactSandbox {
     return sandboxAssetResponse(request.method, asset.contentType, bytes);
   }
 
-  private serveLink(request: Request, host: ArtifactHost, raw?: string): Promise<Response> {
-    return this.servePublicPage(request, host, this.linkRef(host), raw);
-  }
-
-  private serveLinkFile(request: Request, host: ArtifactHost, raw: string): Promise<Response> {
-    return this.servePublicFileOf(request, host, this.linkRef(host), raw);
-  }
-
-  private linkRef(host: ArtifactHost): PublicRef | null {
-    const linkPage = this.deps.linkPage;
-    return linkPage
-      ? {
-          base: "/l",
-          load: async (path) => {
-            const { shared, page } = await linkPage(host.artifactId, path);
-            return { page, miss: !shared };
-          },
-          guarded: true,
-        }
-      : null;
-  }
-
-  private tokenRef(token: string): PublicRef | null {
-    const publicPage = this.deps.publicPage;
-    return publicPage
-      ? {
-          base: `/p/${token}`,
-          load: async (path) => ({ page: await publicPage(token, path), miss: false }),
-          guarded: false,
-        }
-      : null;
-  }
-
-  private servePublic(
-    request: Request,
-    host: ArtifactHost,
-    token: string,
-    raw?: string,
-  ): Promise<Response> {
-    return this.servePublicPage(request, host, this.tokenRef(token), raw);
-  }
-
-  private servePublicFile(
-    request: Request,
-    host: ArtifactHost,
-    token: string,
-    raw: string,
-  ): Promise<Response> {
-    return this.servePublicFileOf(request, host, this.tokenRef(token), raw);
-  }
-
-  private async loadPublic(
-    request: Request,
-    ref: PublicRef,
-    path: string | undefined,
-    artifactId?: string,
-  ): Promise<PublicPage | Response | null> {
-    const client = (this.deps.publicClientAddress ?? clientAddress)(request);
-    const guard = ref.guarded ? this.deps.missGuard : undefined;
-    const refusal = await guard?.refusal(client);
-    if (refusal) {
-      const response = sandboxRefusal(429, "Too many requests.");
-      response.headers.set("Retry-After", String(refusal.retryAfterSeconds));
-      return response;
-    }
-    const { page, miss } = await ref.load(path);
-    if (miss) await guard?.miss(client);
-    if (page && artifactId && ref.guarded) {
-      const crowd = await (this.deps.linkArtifactLimit ?? NO_RATE_LIMIT).admit(artifactId);
-      if (!crowd.allowed) {
-        const response = sandboxRefusal(429, "Too many requests.");
-        response.headers.set("Retry-After", String(crowd.retryAfterSeconds));
-        return response;
-      }
-    }
-    return page;
-  }
-
-  private async servePublicPage(
-    request: Request,
-    host: ArtifactHost,
-    ref: PublicRef | null,
-    raw?: string,
-  ): Promise<Response> {
-    if (!ref) return sandboxRefusal(404, "Not found.");
-    const path = raw === undefined ? undefined : decodeSandboxFilePath(raw);
-    const use = path === undefined ? null : fileRequestUse(request.headers);
-    if (path === null || (path !== undefined && (!use || !publicUseAllowed(path, use))))
-      return sandboxRefusal(404, "Not found.");
-    const refused = await this.admitPublic(request, use);
-    if (refused) return refused;
-    const loaded = await this.loadPublic(
-      request,
-      ref,
-      path,
-      use === "frame" ? host.artifactId : undefined,
-    );
-    if (loaded instanceof Response) return loaded;
-    const page = loaded;
-    if (!page || page.artifactId !== host.artifactId) return sandboxRefusal(404, "Not found.");
-    if (path === undefined)
-      return sandboxRedirect(
-        `${ref.base}/${publicPageKind(page.kind) ? "page" : "file"}/${sandboxFileUrlPath(page.entryPath)}`,
-      );
-    if (
-      !publicPageKind(page.kind) ||
-      (page.kind === "markdown" && (path !== page.entryPath || use !== "frame"))
-    )
-      return sandboxRefusal(404, "Not found.");
-    const bytes = await this.deps.readBlob(page.workspaceId, page.sha256);
-    return (
-      (page.kind === "markdown"
-        ? publicMarkdownResponse({
-            method: request.method,
-            title: page.title,
-            bytes,
-            limit: ARTIFACT_HTML_LIMIT,
-          })
-        : pageFileResponse({
-            method: request.method,
-            path,
-            bytes,
-            use: use!,
-            pageOrigin: host.pageOrigin,
-            frameAncestor: "'none'",
-            hostOrigin: null,
-            filePrefix: `${host.pageOrigin}${ref.base}/page/`,
-            fileCache: PUBLIC_FILE_CACHE,
-          })) ?? sandboxRefusal(404, "Not found.")
-    );
-  }
-
-  private async admitPublic(
-    request: Request,
-    use: FileRequestUse | null,
-  ): Promise<Response | null> {
-    const limit =
-      use === "subresource"
-        ? (this.deps.publicFileRateLimit ?? this.deps.publicRateLimit)
-        : this.deps.publicRateLimit;
-    const admitted = await (limit ?? NO_RATE_LIMIT).admit(
-      (this.deps.publicClientAddress ?? clientAddress)(request) ?? "unknown",
-    );
-    if (admitted.allowed) return null;
-    const response = sandboxRefusal(429, "Too many requests.");
-    response.headers.set("Retry-After", String(admitted.retryAfterSeconds));
-    return response;
-  }
-
-  private async servePublicFileOf(
-    request: Request,
-    host: ArtifactHost,
-    ref: PublicRef | null,
-    raw: string,
-  ): Promise<Response> {
-    if (!ref) return sandboxRefusal(404, "Not found.");
-    const path = decodeSandboxFilePath(raw);
-    const use = fileRequestUse(request.headers);
-    if (path === null || !use) return sandboxRefusal(404, "Not found.");
-    const refused = await this.admitPublic(request, use);
-    if (refused) return refused;
-    const loaded = await this.loadPublic(request, ref, path);
-    if (loaded instanceof Response) return loaded;
-    const page = loaded;
-    if (
-      !page ||
-      page.artifactId !== host.artifactId ||
-      publicPageKind(page.kind) ||
-      path !== page.entryPath
-    )
-      return sandboxRefusal(404, "Not found.");
-    const drawn = publicFileDrawn(page.kind, page.sizeBytes);
-    if (use === "subresource") {
-      if (!drawn || page.kind !== "image" || request.headers.get("sec-fetch-dest") !== "image")
-        return sandboxRefusal(404, "Not found.");
-      const bytes = await this.deps.readBlob(page.workspaceId, page.sha256);
-      return bytes
-        ? sandboxAssetResponse(
-            request.method,
-            artifactContentType(path, "other"),
-            bytes,
-            "no-store",
-          )
-        : sandboxRefusal(404, "Not found.");
-    }
-    const shown = {
-      method: request.method,
-      title: page.title,
-      acceptLanguage: request.headers.get("accept-language"),
-    };
-    if (!drawn) return publicNoPreviewPage(shown);
-    if (page.kind === "image") return publicImagePage({ ...shown, path });
-    const bytes = await this.deps.readBlob(page.workspaceId, page.sha256);
-    return bytes
-      ? publicTextPage({ ...shown, kind: page.kind, bytes })
-      : sandboxRefusal(404, "Not found.");
-  }
-
   private async page(input: {
     workspaceId: string;
     artifactId: string;
@@ -512,15 +297,8 @@ export class ArtifactSandbox {
   }
 }
 
-const useAllowed = (path: string, use: FileRequestUse) => use === "subresource" || isPageFile(path);
-
 const signedUseAllowed = (path: string, use: FileRequestUse) =>
   useAllowed(path, use) || isPdfFile(path);
-
-const publicPageKind = (kind: ArtifactPathKind) => kind === "html" || kind === "markdown";
-
-const publicUseAllowed = (path: string, use: FileRequestUse) =>
-  useAllowed(path, use) || artifactKindOfPath(path) === "markdown";
 
 function refusable(error: unknown): null {
   if (!(error instanceof AppError)) throw error;
