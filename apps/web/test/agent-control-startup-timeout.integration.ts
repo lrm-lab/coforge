@@ -1,77 +1,32 @@
 import { expect, test } from "bun:test";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "#src/generated/prisma/client";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import { startupDeadlineMs } from "@lrm/coforge-sdk/internal";
-import { agentControlRevision } from "#src/server/agents/agent-control.server";
 import { LocalAgentControlSignal } from "#src/server/agents/agent-control-signal.server";
 import {
   AgentControlStartupTimeout,
   STARTUP_DEADLINE_ERROR_CODE,
 } from "#src/server/agents/agent-control-startup-timeout.server";
-import { parseAgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
+import {
+  database,
+  seedAgentOnComputer,
+  seedWorkspace,
+  startingState,
+} from "./helpers/agent-control-integration";
 
-function database() {
-  const connectionString = Bun.env.AGENT_SESSION_TEST_DATABASE_URL;
-  if (!connectionString)
-    throw new Error("AGENT_SESSION_TEST_DATABASE_URL is required (local PostgreSQL)");
-  return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
-}
-
-const storedConfig = {
-  runtime: "pi",
-  provider: { kind: "default" },
-  model: "",
-  modelProvider: "",
-  reasoning: "",
-};
 const STARTED = 1_800_000_000_000;
 
 async function seedStarting(db: PrismaClient) {
-  const fixture = crypto.randomUUID();
-  const owner = await db.user.create({
-    data: { displayName: `to-${fixture}`, username: `to-${fixture}` },
-  });
-  const workspace = await db.workspace.create({
-    data: { slug: `to-${fixture}`, name: "Timeout", members: { create: { userId: owner.id } } },
-  });
-  const computer = await db.computer.create({
-    data: { ownerId: owner.id, machineId: `to-${fixture}` },
-  });
-  await db.workspaceComputer.create({
-    data: { workspaceId: workspace.id, computerId: computer.id },
-  });
-  const agent = await db.agent.create({
-    data: {
-      workspaceId: workspace.id,
-      ownerId: owner.id,
-      computerId: computer.id,
-      name: "timeout",
-      displayName: "Timeout",
-      runtimeConfig: storedConfig,
-    },
-  });
+  const base = await seedWorkspace(db);
+  const agent = await seedAgentOnComputer(db, base, { name: "timeout" });
   await db.agent.update({
     where: { id: agent.id },
     data: {
-      controlState: {
-        version: 1,
-        protocolMajor: 1,
-        requestId: fixture,
-        workspaceId: workspace.id,
-        computerId: computer.id,
-        agentId: agent.id,
-        provider: "pi",
-        epoch: 1,
-        action: "start",
-        phase: "starting",
-        configRevision: agentControlRevision(parseAgentRuntimeConfig(storedConfig)),
+      controlState: startingState(agent, crypto.randomUUID(), {
         launchId: "launch-a",
-        controlSequence: 0,
-        sessionSequence: 0,
         startedAtMs: STARTED,
         deadlineAtMs: STARTED + startupDeadlineMs("pi"),
-      },
+      }),
     },
   });
   return agent;

@@ -1,88 +1,25 @@
 import { expect, test } from "bun:test";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "#src/generated/prisma/client";
-import { agentControlRevision } from "#src/server/agents/agent-control.server";
-import { parseAgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
+import type { Prisma } from "#src/generated/prisma/client";
 import { PrismaAgentControlStore } from "#src/server/db/repositories/agent-control.repositories.server";
+import {
+  database,
+  seedAgentOnComputer,
+  seedWorkspace,
+  startingState,
+} from "./helpers/agent-control-integration";
 
-function database() {
-  const connectionString = Bun.env.AGENT_SESSION_TEST_DATABASE_URL;
-  if (!connectionString)
-    throw new Error("AGENT_SESSION_TEST_DATABASE_URL is required (local PostgreSQL)");
-  return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
-}
-
-const storedConfig = {
-  runtime: "pi",
-  provider: { kind: "default" },
-  model: "",
-  modelProvider: "",
-  reasoning: "",
-};
-
-async function seedWorkspace(db: PrismaClient) {
-  const fixture = crypto.randomUUID();
-  const owner = await db.user.create({
-    data: { displayName: `cand-${fixture}`, username: `cand-${fixture}` },
-  });
-  const workspace = await db.workspace.create({
-    data: {
-      slug: `cand-${fixture}`,
-      name: "Candidates",
-      members: { create: { userId: owner.id } },
-    },
-  });
-  const computer = await db.computer.create({
-    data: { ownerId: owner.id, machineId: `cand-${fixture}` },
-  });
-  await db.workspaceComputer.create({
-    data: { workspaceId: workspace.id, computerId: computer.id },
-  });
-  return { owner, workspace, computer };
-}
-
-async function seedAgent(
-  db: PrismaClient,
+const seedAgent = (
+  db: ReturnType<typeof database>,
   base: Awaited<ReturnType<typeof seedWorkspace>>,
   name: string,
-  controlState: Record<string, unknown> | null,
+  controlState: Prisma.InputJsonObject | null,
   deletedAt: Date | null = null,
-) {
-  const agent = await db.agent.create({
-    data: {
-      workspaceId: base.workspace.id,
-      ownerId: base.owner.id,
-      computerId: base.computer.id,
-      name,
-      displayName: name,
-      runtimeConfig: storedConfig,
-      deletedAt,
-    },
+) =>
+  seedAgentOnComputer(db, base, {
+    name,
+    deletedAt,
+    ...(controlState ? { state: (agent) => startingState(agent, `r-${name}`, controlState) } : {}),
   });
-  if (controlState)
-    await db.agent.update({
-      where: { id: agent.id },
-      data: {
-        controlState: {
-          version: 1,
-          protocolMajor: 1,
-          requestId: `r-${name}`,
-          workspaceId: base.workspace.id,
-          computerId: base.computer.id,
-          agentId: agent.id,
-          provider: "pi",
-          epoch: 1,
-          action: "start",
-          configRevision: agentControlRevision(parseAgentRuntimeConfig(storedConfig)),
-          launchId: "launch",
-          controlSequence: 0,
-          sessionSequence: 0,
-          ...controlState,
-        },
-      },
-    });
-  return agent;
-}
 
 test("only starting Agents whose deadline has passed, or that never recorded one, are listed", async () => {
   const db = database();
