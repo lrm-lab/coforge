@@ -1,14 +1,12 @@
 import { expect, test } from "bun:test";
-import type { CentrifugeWorkspaceClient } from "#src/connection/centrifuge-workspace-client";
 import { DaemonConnection } from "#src/connection/daemon-connection";
+import { gatedCentrifuge, readyRequest } from "./fixtures/gated-centrifuge";
 import { ReminderScheduler } from "#src/agent-reminder/reminder-scheduler";
 import { RuntimePublicationSubscriptions } from "#src/daemon-runtime/runtime-publication-subscriptions";
 import {
-  DAEMON_RUNTIME_READY_METHOD,
   encodeAgentStopIntent,
   encodeReminderSync,
   type AgentStopIntent,
-  type DaemonRuntimeReadyRequest,
   type ReminderSync,
 } from "@lrm/coforge-sdk/internal";
 import { captureDaemonLogs } from "./log-capture";
@@ -17,42 +15,6 @@ import { Clock, job, MemoryStore, snapshot } from "./reminder-scheduler-fixtures
 const workspaceId = "workspace-a";
 const computerId = "computer-a";
 
-/** A Centrifugo client whose ready RPC answers only when the test lets it, which is how an outage
- * looks from inside the daemon: the handshake stays pending while publications keep arriving. */
-function gatedCentrifuge() {
-  let connected = () => {};
-  let publication = (_event: { channel: string; data: Uint8Array }) => {};
-  const answer = Promise.withResolvers<void>();
-  const client: CentrifugeWorkspaceClient = {
-    on(event, callback) {
-      if (event === "connected") connected = callback as () => void;
-      else if (event === "publication") publication = callback as typeof publication;
-    },
-    connect: () => connected(),
-    disconnect() {},
-    rpc: async (method) => {
-      if (method === DAEMON_RUNTIME_READY_METHOD) await answer.promise;
-      return new Uint8Array();
-    },
-  };
-  return {
-    client,
-    answerReady: () => answer.resolve(),
-    publish: (data: Uint8Array) =>
-      publication({ channel: `daemon:${workspaceId}:${computerId}`, data }),
-  };
-}
-
-const readyRequest = (): DaemonRuntimeReadyRequest => ({
-  protocolMajor: 1,
-  requestId: crypto.randomUUID(),
-  workspaceId,
-  computerId,
-  workerInstanceId: "runtime-1",
-  startedAt: 123,
-  runningAgentIds: [],
-});
-
 /**
  * The daemon holds a pending ready's publications in two places, one after the other: the
  * connection holds them until the cloud accepts ready, then the runtime's own subscriptions buffer
@@ -60,7 +22,7 @@ const readyRequest = (): DaemonRuntimeReadyRequest => ({
  * reads zero for exactly as long as the publications queue up.
  */
 test("a publication queued behind a pending ready is reported as held", async () => {
-  const centrifuge = gatedCentrifuge();
+  const centrifuge = gatedCentrifuge(workspaceId, computerId);
   const transport = new DaemonConnection("wss://cloud.example", () => centrifuge.client);
   await transport.start("secret", { workspaceId, computerId });
   const delivered: string[] = [];
@@ -72,7 +34,7 @@ test("a publication queued behind a pending ready is reported as held", async ()
   } as unknown as ConstructorParameters<typeof RuntimePublicationSubscriptions>[0]);
   await subscriptions.install();
 
-  const ready = transport.ready(readyRequest);
+  const ready = transport.ready(() => readyRequest(workspaceId, computerId));
   centrifuge.publish(
     encodeAgentStopIntent({
       protocolMajor: 1,
@@ -142,7 +104,7 @@ test("logs a failed reminder sync application with its scope", async () => {
 });
 
 test("dispatches a held overdue snapshot through the scheduler to fireReminder", async () => {
-  const centrifuge = gatedCentrifuge();
+  const centrifuge = gatedCentrifuge(workspaceId, computerId);
   const transport = new DaemonConnection("wss://cloud.example", () => centrifuge.client);
   await transport.start("secret", { workspaceId, computerId });
   const clock = new Clock();
@@ -177,7 +139,7 @@ test("dispatches a held overdue snapshot through the scheduler to fireReminder",
   } as unknown as ConstructorParameters<typeof RuntimePublicationSubscriptions>[0]);
   await subscriptions.install();
 
-  const ready = transport.ready(readyRequest);
+  const ready = transport.ready(() => readyRequest(workspaceId, computerId));
   centrifuge.publish(
     encodeReminderSync({
       ...snapshot([job]),
