@@ -150,22 +150,7 @@ export class AgentOfflineResidency {
       errorReason: string;
     }>,
   ): void {
-    launch.offlineError = built;
-    const draft = this.#ports.buildDraft(agentId, built);
-    const ending = new Error("Agent is inactive");
-    this.#ports.endHoldForNextLaunch(agentId);
-    this.#ports.keepInputDeliveriesForNextLaunch(agentId, ending);
-    this.#ports.closeAgentInputQueue(agentId, ending);
-    this.#ports.forgetRuntimeErrorHold(agentId);
-    logger.warning("Agent runtime error cannot be retried; terminating the process", {
-      event: log.event,
-      agent_id: agentId,
-      provider,
-      launch_id: launch.launchId,
-      runtime_error_class: log.errorClass,
-      runtime_error_reason: log.errorReason,
-      outcome: "failed",
-    });
+    const draft = this.#keepForNextLaunch(agentId, launch, provider, built, log);
     this.#ports.publish(agentId, launch, draft);
     // The dead launch object keeps the shared clientSeq counter: the exit republish and any
     // custody restatement each advance it, never colliding with an already-sent seq.
@@ -180,6 +165,52 @@ export class AgentOfflineResidency {
         error_code: diagnosticErrorCode(error),
       });
     });
+  }
+
+  takeOfflineAfterExit(
+    agentId: string,
+    launch: OfflineResidencyLaunch,
+    provider: RuntimeProvider,
+    built: ReturnType<typeof buildRuntimeErrorActivity>,
+    log: Readonly<{
+      event: string;
+      errorClass: string;
+      errorReason: string;
+    }>,
+  ): void {
+    const draft = this.#keepForNextLaunch(agentId, launch, provider, built, log);
+    this.#records.set(agentId, { launch, draft });
+    this.#ports.sendAgentStatus(agentId, "inactive");
+  }
+
+  #keepForNextLaunch(
+    agentId: string,
+    launch: OfflineResidencyLaunch,
+    provider: RuntimeProvider,
+    built: ReturnType<typeof buildRuntimeErrorActivity>,
+    log: Readonly<{
+      event: string;
+      errorClass: string;
+      errorReason: string;
+    }>,
+  ): ActivityDraft {
+    launch.offlineError = built;
+    const draft = this.#ports.buildDraft(agentId, built);
+    const ending = new Error("Agent is inactive");
+    this.#ports.endHoldForNextLaunch(agentId);
+    this.#ports.keepInputDeliveriesForNextLaunch(agentId, ending);
+    this.#ports.closeAgentInputQueue(agentId, ending);
+    this.#ports.forgetRuntimeErrorHold(agentId);
+    logger.warning("Agent runtime error cannot be retried; the Agent is taken offline", {
+      event: log.event,
+      agent_id: agentId,
+      provider,
+      launch_id: launch.launchId,
+      runtime_error_class: log.errorClass,
+      runtime_error_reason: log.errorReason,
+      outcome: "failed",
+    });
+    return draft;
   }
 
   /**

@@ -19,6 +19,7 @@ import { PhaseBookkeeping } from "./phase-bookkeeping";
 import { ReplyIntentPublisher } from "./reply-intent-publisher";
 import { RuntimeErrorDeliveryHold } from "./runtime-error-delivery-hold";
 import type { CredentialInvalidHolds } from "./credential-invalid-holds";
+import { ExitStreak } from "./exit-streak";
 import type { AgentLifecycle } from "./agent-lifecycle";
 import { WakeRecycle } from "./wake-recycle";
 import { agentActivityDrafts } from "./agent-activity-drafts";
@@ -89,7 +90,7 @@ export type AgentLaunchCoordinatorPorts = {
   /** Told when a launch fails with a provider credential known unusable, and when a person's Start
    * ends that record before the launch it is making. */
   credentialHolds: Pick<CredentialInvalidHolds, "record" | "started">;
-  lifecycle: Pick<AgentLifecycle, "processClosed">;
+  lifecycle: Pick<AgentLifecycle, "processClosed" | "subscribe">;
   replyIntents: ReplyIntentPublisher<ActivityLaunch>;
   offlineResidency: AgentOfflineResidency;
   drafts: Drafts;
@@ -149,6 +150,7 @@ export class AgentLaunchCoordinator {
   readonly #freshLaunches = new Set<string>();
   /** Consecutive qualifying early crashes of a resumed Session, across this runtime's launches. */
   readonly resumedEarlyCrash = new ResumedEarlyCrashStreak();
+  readonly exits = new ExitStreak();
   /** What a cold start of a rejected Session still owes the Agent's next launch. */
   readonly #owed: OwedRecovery;
   /** Proactive native compaction at Working->Idle when context tokens exceed 250k. */
@@ -160,6 +162,7 @@ export class AgentLaunchCoordinator {
 
   constructor(readonly ports: AgentLaunchCoordinatorPorts) {
     this.#owed = new OwedRecovery(ports.deliveryGate.inboxes);
+    ports.lifecycle.subscribe(this.exits);
     const isAgentIdle = (agentId: string) => {
       const session = this.ports.agentProcessManager.session(agentId);
       return (
@@ -376,6 +379,7 @@ export class AgentLaunchCoordinator {
         },
         idleNudge: this.idleNudge,
         resumedEarlyCrash: this.resumedEarlyCrash,
+        exitStreak: this.exits,
         coldStartResumedSession: (id, ended, stale) =>
           coldStartResumedSession(this.ports, this.#owed, id, ended, stale, "repeated_early_crash"),
         coldStartRejectedReplay: (id, running, stale, started) =>

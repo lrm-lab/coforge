@@ -23,6 +23,15 @@ import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 export const RESUMED_EARLY_CRASH_WINDOW_MS = 15_000;
 export const RESUMED_EARLY_CRASH_FALLBACK_THRESHOLD = 2;
 
+export function isMainSessionModelOutput(event: AgentRuntimeEvent): boolean {
+  return (
+    (event.type === "text-delta" ||
+      event.type === "thinking-delta" ||
+      event.type === "tool-start") &&
+    !event.subagent
+  );
+}
+
 export type ResumedEarlyCrashFacts = Readonly<{
   /** The stored Session this launch asked to resume; undefined for a launch that created or
    * recycled its Session, whatever id it carried. */
@@ -101,13 +110,7 @@ export class ResumedEarlyCrashWatch {
   /** Main-session model output only: a subagent's work does not prove the resumed Session
    * itself produced anything (Raft's `RATE_LIMIT_BACKOFF_CLEARING_PROGRESS`). */
   observe(event: AgentRuntimeEvent): void {
-    if (
-      (event.type === "text-delta" ||
-        event.type === "thinking-delta" ||
-        event.type === "tool-start") &&
-      !event.subagent
-    )
-      this.#modelOutputObserved = true;
+    if (isMainSessionModelOutput(event)) this.#modelOutputObserved = true;
   }
 
   /** The process ended: count a qualifying close, or clear the streak on any other ending. */

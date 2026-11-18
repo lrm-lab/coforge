@@ -11,7 +11,18 @@ import { trackAgentLaunch } from "./agent-launch-tracking";
 import { buildRuntimeCrashedActivity } from "#src/agent-runtime/runtime-error-activity";
 import { TURN_ACTIVITY_EVENT_TYPES } from "#src/agent-runtime/runtime-phases";
 import { runtimeErrorRecoverySignal } from "#src/agent-runtime/runtime-error-recovery";
-import { ResumedEarlyCrashWatch, type ResumedEarlyCrashStreak } from "./resumed-early-crash";
+import { RUNTIME_ERROR_CLASS } from "#src/agent-runtime/runtime-error-vocabulary";
+import {
+  buildExitStreakActivity,
+  EXIT_STREAK_CAP,
+  isUncleanExit,
+  type ExitStreak,
+} from "./exit-streak";
+import {
+  isMainSessionModelOutput,
+  ResumedEarlyCrashWatch,
+  type ResumedEarlyCrashStreak,
+} from "./resumed-early-crash";
 import { ProviderReplayWatch } from "./provider-replay-recovery";
 import { isBusyActivityDetailKind } from "./agent-activity-publisher";
 import { reportLaunchFailure } from "./agent-startup-failure";
@@ -40,6 +51,7 @@ export async function launchAgentProcess(
   ports: AgentLaunchCoordinatorPorts & {
     idleNudge?: Pick<TaskIdleNudge, "maybeAsk">;
     resumedEarlyCrash: ResumedEarlyCrashStreak;
+    exitStreak: ExitStreak;
     coldStartResumedSession(agentId: string, launch: ActivityLaunch, staleSessionId: string): void;
     coldStartRejectedReplay(
       agentId: string,
@@ -232,6 +244,7 @@ export async function launchAgentProcess(
       replyIntents.observe(event);
       earlyCrashWatch.observe(event);
       const isCurrent = current();
+      if (isCurrent && isMainSessionModelOutput(event)) ports.exitStreak.clear(agentId);
       const recoverySignal = isCurrent ? runtimeErrorRecoverySignal(event) : undefined;
       if (isCurrent && (event.type === "text-delta" || event.type === "tool-start")) {
         ports.runtimeErrorHold.resetZeroEvidence(agentId);
@@ -284,6 +297,27 @@ export async function launchAgentProcess(
           .then((identity) => ports.agentControl.stopped(agentId, launch.launchId, identity))
           .then(() => ports.agentSessions.replay(agentId))
           .catch(() => {});
+      if (
+        !ports.isStopping() &&
+        !launch.offlineError &&
+        isUncleanExit({ crash: launch.crashDetail, exit })
+      ) {
+        const attempts = ports.exitStreak.note(agentId);
+        if (attempts >= EXIT_STREAK_CAP) {
+          ports.exitStreak.clear(agentId);
+          ports.offlineResidency.takeOfflineAfterExit(
+            agentId,
+            launch,
+            config.provider,
+            buildExitStreakActivity(attempts),
+            {
+              event: "agent_runtime:exit_streak",
+              errorClass: RUNTIME_ERROR_CLASS.RUNTIME,
+              errorReason: "runtime_error_fenced",
+            },
+          );
+        }
+      }
       const crashed = launch.offlineError
         ? ports.activity(
             agentId,
