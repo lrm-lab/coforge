@@ -5729,7 +5729,7 @@ describe("DaemonRuntime", () => {
     );
     const stopping = harness.runtime.stopAgent("agent-a");
     rejectRecovery(new Error("recovery rejected"));
-    await expect(launching).rejects.toThrow("cancelled");
+    await expect(launching).rejects.toThrow("stopping");
     await disposed;
     expect(await startDuringStop).toContain("stopping");
     await stopping;

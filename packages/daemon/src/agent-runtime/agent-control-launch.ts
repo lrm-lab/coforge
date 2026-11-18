@@ -29,6 +29,7 @@ export class ManagedLaunches {
   /** Agents whose managed launch attempt is between its start and its settlement. Attempts run
    * under the Agent's control mutex, so at most one per Agent. */
   readonly #attempting = new Set<string>();
+  readonly #preempted = new Set<string>();
   constructor(
     private readonly context: AgentControlContext,
     launchRetryScheduler: LaunchRetryScheduler,
@@ -49,6 +50,13 @@ export class ManagedLaunches {
    * (a replay, a fence refusal) or waits out a retry cooldown is not in a launch attempt. */
   launchAttemptInProgress(agentId: string): boolean {
     return this.#attempting.has(agentId);
+  }
+
+  preempt(agentId: string): boolean {
+    if (!this.#attempting.has(agentId)) return false;
+    this.#preempted.add(agentId);
+    this.supersede(agentId);
+    return true;
   }
 
   /** Counts `run` as a pending Start of this Agent until it settles. */
@@ -160,6 +168,7 @@ export class ManagedLaunches {
       this.#onLaunchSucceeded(intent.agentId);
     } catch (launchError) {
       await this.context.runtime.stop(intent.agentId);
+      if (this.#preempted.has(intent.agentId)) return;
       const failed = await settleLaunchFailure({
         intent,
         scope,
@@ -177,6 +186,7 @@ export class ManagedLaunches {
       return;
     } finally {
       this.#attempting.delete(intent.agentId);
+      this.#preempted.delete(intent.agentId);
     }
     await this.context.runtime.result(record.lastResult).catch(() => {});
   }

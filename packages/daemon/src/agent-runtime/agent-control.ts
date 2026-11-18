@@ -8,7 +8,7 @@ import type {
 } from "@lrm/coforge-sdk/internal";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { LAUNCH_FAILURE_REASON } from "./launch-failure";
-import type { AgentRuntimeState } from "./agent-runtime-state";
+import type { AgentRuntimeRecord, AgentRuntimeState } from "./agent-runtime-state";
 import type { AgentSessions } from "./agent-session";
 import type { AgentControlContext, AgentControlRuntime } from "./agent-control-runtime";
 import { ManagedLaunches } from "./agent-control-launch";
@@ -52,6 +52,7 @@ export class AgentControl {
   stop(scope: AgentControlScope): Promise<void> {
     const known = this.#known.has(scope.agentId);
     this.#known.add(scope.agentId);
+    void this.#preemptLaunch(scope);
     return this.#context.state.run(scope.agentId, async () => {
       let record = await this.#context.state.store.read(scope.agentId);
       await requireRecord(record, known);
@@ -116,6 +117,30 @@ export class AgentControl {
       await this.#context.runtime.result(record.lastResult).catch(() => {});
       assertPhaseInvariants(this.#context, scope.agentId, record);
     });
+  }
+
+  async #preemptLaunch(scope: AgentControlScope): Promise<void> {
+    if (!this.#launches.launchAttemptInProgress(scope.agentId)) return;
+    try {
+      const record = await this.#context.state.store.read(scope.agentId);
+      if (!record || record.phase !== "starting" || !newerScope(record, scope)) return;
+      if (!this.#launches.preempt(scope.agentId)) return;
+      this.#stopped.add(scope.agentId);
+      logger.info("A Stop ends the launch in progress instead of waiting behind it", {
+        event: "agent_control:launch_preempted",
+        agent_id: scope.agentId,
+        launch_id: record.launchId,
+        start_epoch: record.scope.epoch,
+        stop_epoch: scope.epoch,
+      });
+      await this.#context.runtime.stop(scope.agentId);
+    } catch (error) {
+      logger.warning("A Stop could not end the launch in progress; it waits behind it", {
+        event: "agent_control:launch_preempt_failed",
+        agent_id: scope.agentId,
+        error_code: diagnosticErrorCode(error),
+      });
+    }
   }
 
   staleRuntimeStop(agentId: string, controlEpoch: number): Promise<"released" | "rejected"> {
@@ -390,3 +415,9 @@ export class AgentControl {
     return replayAgentControlResults(this.#known, this.#context.state, this.#context.runtime);
   }
 }
+
+const newerScope = (record: AgentRuntimeRecord, scope: AgentControlScope) =>
+  record.scope.workspaceId === scope.workspaceId &&
+  record.scope.computerId === scope.computerId &&
+  record.scope.agentId === scope.agentId &&
+  record.scope.epoch < scope.epoch;

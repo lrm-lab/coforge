@@ -26,7 +26,7 @@ export type AgentInput =
       kind: "recovery";
       context: AgentRecoveryContext;
       completion: AgentInputCompletion;
-      told?: () => void;
+      recovered?: (told: boolean) => void;
     }
   | {
       kind: "delivery";

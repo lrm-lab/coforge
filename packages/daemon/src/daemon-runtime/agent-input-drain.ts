@@ -238,6 +238,13 @@ export class AgentInputDrain {
           item.completion.resolve();
           continue;
         }
+        const settleLaunchInput = (work: Promise<void>) => {
+          const launch =
+            !queue.keep && this.ports.isLaunching(agentId)
+              ? this.ports.launchFor(agentId)
+              : undefined;
+          return launch?.startup ? launch.startup.run(work) : work;
+        };
         if (item.kind === "delivery") {
           const launch = this.ports.launchFor(agentId);
           if (launch) {
@@ -271,13 +278,20 @@ export class AgentInputDrain {
           // Release the queue at real readiness if this provider awaits the whole turn.
           if (session && launch) await this.ports.runStartup(agentId, session, launch, item.text);
         } else if (item.kind === "prompt") {
-          await this.ports.runPrompt(agentId, item.text, item.introduction);
+          await settleLaunchInput(this.ports.runPrompt(agentId, item.text, item.introduction));
         } else if (item.kind === "memory") {
           // Context, not a request: it opens a turn of its own ahead of the real input.
-          if (this.ports.sessionFor(agentId)) await this.ports.runPrompt(agentId, item.text);
+          if (this.ports.sessionFor(agentId))
+            await settleLaunchInput(this.ports.runPrompt(agentId, item.text));
         } else {
-          await this.ports.recoverAttention(agentId, item.context);
-          item.told?.();
+          const recovering = this.ports.recoverAttention(agentId, item.context).then(
+            () => item.recovered?.(true),
+            (error: unknown) => {
+              item.recovered?.(false);
+              throw error;
+            },
+          );
+          await settleLaunchInput(recovering);
         }
       } catch (error) {
         if (watchedDelivery)
