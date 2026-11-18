@@ -24,9 +24,9 @@ type PendingObservation = {
 
 /**
  * The daemon's per-launch observations (a context-window reading, the applied service tier):
- * fire-and-forget, buffered latest-per-agent while disconnected, flushed on reconnect, and never
- * retried or surfaced to a caller. A rejection from an old server that does not know the RPC is
- * logged once per connection lifetime rather than on every send.
+ * fire-and-forget, buffered latest per method and Agent while disconnected, flushed on reconnect,
+ * and never retried or surfaced to a caller. A rejection from an old server that does not know the
+ * RPC is logged once per connection lifetime rather than on every send.
  */
 export class AgentObservationPublisher {
   readonly #methods: { contextUsage: string; serviceTier: string; contextViewAvailability: string };
@@ -123,7 +123,7 @@ export class AgentObservationPublisher {
 
   #send(observation: PendingObservation, client: CentrifugeWorkspaceClient | undefined): void {
     if (!client) {
-      this.#pending.set(observation.agentId, observation);
+      this.#pending.set(`${observation.method}:${observation.agentId}`, observation);
       return;
     }
     this.#publish(client, observation);
