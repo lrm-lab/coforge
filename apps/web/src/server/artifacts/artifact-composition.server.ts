@@ -13,7 +13,8 @@ import { ArtifactSandbox } from "./artifact-sandbox.server";
 import { productionTicketNonces } from "./artifact-sandbox-nonces.server";
 import { artifactSandboxOrigin } from "./artifact-sandbox-config.server";
 import { ArtifactPublicLinks } from "./artifact-public-links.server";
-import { publicPageLookup } from "./artifact-public-page.server";
+import { linkPageLookup, publicPageLookup } from "./artifact-public-page.server";
+import { PublicArtifactMissGuard } from "./artifact-public-miss-guard.server";
 import { getAppRateLimits } from "#src/server/app-rate-limits/app-rate-limits-composition.server";
 import { artifactsEnabled, type ArtifactActor } from "./artifact-access.server";
 import { ArtifactReads, type ArtifactMessageCard } from "./artifact-reads.server";
@@ -174,6 +175,12 @@ export function productionArtifactSandbox(db: PrismaClient) {
     secret: () => readSessionSecret(process.env),
     now: () => new Date(),
     publicPage: publicPageLookup(db),
+    linkPage: linkPageLookup(db),
+    missGuard: new PublicArtifactMissGuard({
+      perClient: getAppRateLimits().publicArtifactMiss,
+      global: getAppRateLimits().publicArtifactMissGlobal,
+      now: Date.now,
+    }),
   });
 }
 
