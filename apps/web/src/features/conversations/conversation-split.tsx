@@ -26,14 +26,10 @@ export function ConversationSplit({
   focused,
 }: {
   main: ReactNode;
-  /** The pane beside the conversation, told whether the conversation stands beside it (not covered
-   * by it, not in full screen), which the thread's title depends on. */
   side: (beside: boolean) => ReactNode;
   visibleSlot: ConversationSlot | undefined;
   /** A thread shown without its conversation (Activity). */
   threadAlone: boolean;
-  /** The pane in full screen (task #75): the other and the separator hide. The panes stay mounted,
-   * and the library keeps its sizes, so leaving restores the split. */
   focused?: FocusedPanel;
 }) {
   // The thread/profile pane's share of the width is the user's to set; remembered across visits,

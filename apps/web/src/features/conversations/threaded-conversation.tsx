@@ -244,8 +244,6 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
   });
   const threadPaneVisible = (rootId: string) => visibleSlot === "thread" && selected === rootId;
   const focus = useConversationFocus();
-  // The thread in view is marked read: the task popup's when it is open, else the side pane's,
-  // unless the chat's full screen hides it.
   const threadInView =
     openTaskRoot?.id ?? (detailVisible && focus?.focused !== "chat" ? selected : undefined);
   const threadInViewSequence = useThreadTailSequence(conversation.conversationId, threadInView);
@@ -332,8 +330,6 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       />
     </ThreadStoreProvider>
   );
-  // Beside the chat, whose header names the conversation, the thread's title leaves that out;
-  // covering it, or in full screen, it keeps it.
   const conversationSidePane = (beside: boolean) => (
     <>
       {visibleSlot === "profile" && profileAgentId && (

@@ -18,8 +18,6 @@ export function useConversationFocusState(layoutKey: string, desktop: boolean): 
   if (state && (state.key !== layoutKey || !desktop)) setState(undefined);
   const focused = state?.key === layoutKey && desktop ? state.panel : undefined;
 
-  // Esc leaves focus last: anything else on the page that takes it (select mode, a completion, the
-  // profile panel) marks it taken during the dispatch, so the decision waits until that is over.
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (!focused) return;
     if (!shouldExitOnEscape(event, () => document.querySelector(OPEN_OVERLAY_SELECTOR) !== null))

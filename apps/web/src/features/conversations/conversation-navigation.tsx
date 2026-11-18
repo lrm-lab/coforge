@@ -81,8 +81,6 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   });
   const [browsing, setBrowsing] = useState(false);
   const [creating, setCreating] = useState(false);
-  // Held here, over the list and the chat both. Focus is for the layout it was set in: this
-  // conversation with this thread or profile beside it.
   const slot = useRouterState({
     select: ({ location: { search } }) =>
       `${"threadRootId" in search ? search.threadRootId : ""}|${"profile" in search ? JSON.stringify(search.profile) : ""}`,
@@ -224,9 +222,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
           <UnreadStoreContext value={unread.store}>
             <main
               data-panel-cards
-              // The area `ConversationSplit` measures against the list's width.
               data-chat-cards
-              // The focused panel, for the list's CSS (`group-data-[focus]/chat`).
               data-focus={focus.focused}
               className="group/chat flex h-full min-w-0 flex-col bg-primary lg:flex-row lg:gap-2 lg:bg-transparent"
             >
@@ -235,10 +231,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                   "relative min-h-0 flex-1 flex-col lg:flex lg:flex-none lg:overflow-hidden lg:rounded-xl lg:bg-primary",
                   LIST_COLUMN_CLASS,
                   showList ? "flex" : "hidden",
-                  // No room for the list beside the chat and an open thread or profile:
-                  // `ConversationSplit` asks it to give way; closing the pane brings it back.
                   "lg:group-has-[[data-crowd-list]]/chat:hidden",
-                  // After `lg:flex`, so it wins: the chat's or the thread's full screen.
                   "lg:group-data-[focus]/chat:hidden",
                 )}
               >
@@ -316,8 +309,6 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                       agentIds: memberAgentIds ?? [],
                     },
                   });
-                  // Only the channel list and names changed: re-read those. A failed re-read leaves
-                  // the channel created, so it is reported as such rather than failing the create.
                   const sidebarRefreshed = await refreshSidebar(["channels", "channelNames"]).then(
                     () => true,
                     () => false,
