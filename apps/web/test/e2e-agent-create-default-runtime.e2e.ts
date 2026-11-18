@@ -7,12 +7,6 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
-/**
- * The New Agent form starts on a runtime the chosen Computer can run, not on the CoForge runtime,
- * which needs an API key the form does not ask for. No daemon runs: the Computer and what it
- * reports are seeded and removed after the run. Screenshots, light, dark and phone, are written
- * under `.amp/e2e/agent-create-default-runtime/`.
- */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-create-default-runtime");
 
