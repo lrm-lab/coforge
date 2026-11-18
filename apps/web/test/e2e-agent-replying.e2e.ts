@@ -163,13 +163,23 @@ test("the jump-to-latest pill keeps its height above the composer, whatever the 
     const shown = Boolean(button?.checkVisibility());
     const box = shown ? button.getBoundingClientRect() : null;
     const rect = line?.getBoundingClientRect();
-    const row = line?.closest("[class*='grid-cols-']")?.getBoundingClientRect();
+    const grid = line?.closest("[class*='grid-cols-']");
+    const outer = grid?.getBoundingClientRect();
+    const pad = grid && getComputedStyle(grid);
+    // The row's content box: its side padding is not width the line could take.
+    const row = outer && pad && {
+      left: outer.left + Number.parseFloat(pad.paddingLeft),
+      right: outer.right - Number.parseFloat(pad.paddingRight),
+    };
+    // The line's own box hugs its text; its grid cell is what takes the row's free width.
+    const cell = line?.parentElement?.getBoundingClientRect();
     return {
       pillVisible: shown,
       gap: box && scroller ? Math.round(scroller.getBoundingClientRect().bottom - box.bottom) : null,
       pill: box && { top: Math.round(box.top), bottom: Math.round(box.bottom), left: Math.round(box.left), right: Math.round(box.right) },
       line: rect ? { top: Math.round(rect.top), bottom: Math.round(rect.bottom), left: Math.round(rect.left), right: Math.round(rect.right) } : null,
       row: row && { left: Math.round(row.left), right: Math.round(row.right) },
+      cell: cell && { left: Math.round(cell.left), right: Math.round(cell.right) },
     };
   })()`;
   type Geometry = {
@@ -178,6 +188,7 @@ test("the jump-to-latest pill keeps its height above the composer, whatever the 
     pill: { top: number; bottom: number; left: number; right: number } | null;
     line: { top: number; bottom: number; left: number; right: number } | null;
     row: { left: number; right: number } | null;
+    cell: { left: number; right: number } | null;
   };
 
   await until(`(() => {
@@ -195,6 +206,11 @@ test("the jump-to-latest pill keeps its height above the composer, whatever the 
   const call = await announce(`#${name}`);
   try {
     await until(visible(typingSentence));
+    // The line eases in from 0.25rem lower (replying-agents-line.css); measure it where it lands.
+    await until(`[...document.querySelectorAll(".replying-line")].some(
+      (node) => node.textContent === ${JSON.stringify(typingSentence)} &&
+        node.getAnimations().every((animation) => animation.playState === "finished"),
+    )`);
     const withLine = await evaluate<Geometry>(geometry);
     expect(withLine.line).not.toBeNull();
     expect(withLine.gap).toBe(alone.gap!);
@@ -215,8 +231,9 @@ test("the jump-to-latest pill keeps its height above the composer, whatever the 
     expect(landed.pillVisible).toBe(false);
     expect(landed.line).toEqual(line);
     const row = landed.row!;
-    expect(landed.line!.left - row.left).toBeLessThanOrEqual(24);
-    expect(row.right - landed.line!.right).toBeLessThanOrEqual(24);
+    const cell = landed.cell!;
+    expect(cell.left - row.left).toBeLessThanOrEqual(24);
+    expect(row.right - cell.right).toBeLessThanOrEqual(24);
     await fx.screenshot("pill-gone-line-kept.png");
   } finally {
     await call.end();
