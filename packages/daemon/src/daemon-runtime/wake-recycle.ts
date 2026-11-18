@@ -31,6 +31,7 @@ export type WakeRecycleRequest = Readonly<{
 }>;
 export type RecycledWake = Readonly<{
   activityText: string;
+  carriedMemoryBlock: boolean;
 }>;
 export type WakeRecyclePorts = Readonly<{
   provider(provider: RuntimeProvider): CodeAgentProvider;
@@ -134,6 +135,7 @@ export class WakeRecycle {
       has_provider_briefing: providerBriefing !== undefined && providerBriefing.length > 0,
     });
     return {
+      carriedMemoryBlock: memoryBlock !== undefined,
       activityText: `Starting a fresh ${runtimeDisplayName(request.provider)} session (${describeRecycledSession(decision.idleMs, decision.priorContextTokens)}) with a briefing`,
     };
   }

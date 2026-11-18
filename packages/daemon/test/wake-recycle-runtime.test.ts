@@ -1,4 +1,7 @@
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
 import { expect, setSystemTime, test } from "bun:test";
+import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import type { AgentStartIntent } from "@lrm/coforge-sdk/internal";
 import {
@@ -7,6 +10,7 @@ import {
   MEMORY,
   PROVIDER_BRIEFING,
   SWEEP_MS,
+  connection,
   logged,
   minutes,
   run,
@@ -156,6 +160,38 @@ test("a start that would resume a cold, large session starts a fresh one with th
   expect(session?.inputs[0]).not.toContain("You are back online");
   expect(h.factReads).toEqual([{ sessionId: "old-session" }]);
 });
+test.each<[string, HarnessOptions, boolean]>([
+  ["carried", {}, true],
+  ["had nothing to carry", { memory: false, briefing: "fails" }, false],
+])(
+  "a recycled start's memory decision says whether its briefing %s",
+  async (_name, options, carried) => {
+    const { records } = await run(options, async (h) => {
+      if (options.memory === false)
+        await rm(
+          join(
+            agentWorkspaceDirectory(connection.workspaceRoot, connection.workspaceId, "agent-a"),
+            "notes",
+            "active-context.md",
+          ),
+          { force: true },
+        );
+      setSystemTime(minutes(90));
+      await h.runtime.handleAgentStart(
+        h.intent({ sessionId: "old-session", sessionMode: "resume" }),
+      );
+    });
+    const decisions = records.filter(
+      (record) => record.properties.event === "agent.runtime.session_memory",
+    );
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]!.properties).toMatchObject({
+      reason: "recycle",
+      injected: carried,
+      has_memory_block: carried,
+    });
+  },
+);
 test("the briefing is its own turn ahead of the recovery notice", async () => {
   const { result: h } = await run({}, async (h) => {
     setSystemTime(minutes(90));

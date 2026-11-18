@@ -13,6 +13,7 @@ export async function openLaunchSessionMemory(input: {
   agentId: string;
   launchId: string;
   recycled: boolean;
+  recycledMemoryBlock?: boolean;
   sessionMode?: "create" | "resume";
   /** The session the launch asked to continue; absent when it asked for none. */
   requestedSessionId?: string;
@@ -36,7 +37,7 @@ export async function openLaunchSessionMemory(input: {
       input.requestedSessionId === undefined ||
       input.providerReplaced === true ||
       !continued);
-  let injected = false;
+  let injected = input.recycled && input.recycledMemoryBlock === true;
   let errorCode: string | undefined;
   if (freshSession) {
     try {
