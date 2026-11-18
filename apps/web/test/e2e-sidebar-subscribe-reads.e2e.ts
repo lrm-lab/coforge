@@ -11,24 +11,6 @@ import {
 } from "#src/features/conversations/conversation-realtime";
 import { CHAT_LIST_READS, type ChatListRead } from "#src/features/conversations/chat-list-reads";
 
-/**
- * Chat reads each of its lists once (the channel list, every channel's name, the DM list from its
- * two reads, the Saved list, and the sections with their order) when nothing was published between that read and the moment its
- * realtime subscriptions start — the reader batches them into one call when their lookups land
- * together — and reads a list again when something was that its subscription
- * will never deliver (`rereadMissedBySubscribe`, Centrifugo's read-the-position-first recipe:
- * https://centrifugal.dev/docs/server/history_and_recovery).
- *
- * Opt-in like the other browser E2Es: a real local Web built with `bun run build` and served from
- * `.output/` (`COFORGE_E2E_WEB_URL`, its Server Function ids are read from that build), a real
- * Centrifugo with this repository's `infra/centrifugo/config.yaml` whose proxies and JWKS point at
- * that Web (`COFORGE_E2E_CENTRIFUGO_URL`, and `COFORGE_CENTRIFUGO_API_KEY` to publish), the Web's
- * `COFORGE_CENTRIFUGO_API_URL` pointing at the same Centrifugo, `agent-browser`, and the dev user
- * an owner of its Workspace (seed-dev). The browser talks to a proxy in this test that counts the
- * list reads, can hold the channel list's answer, and forwards `/connection/*` to Centrifugo,
- * noting which channels the browser has asked to subscribe to.
- * Counts are written to `.artifacts/e2e/sidebar-subscribe-reads/reads.json`.
- */
 const upstreamOrigin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!upstreamOrigin || !["localhost", "127.0.0.1"].includes(new URL(upstreamOrigin).hostname))
   throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
@@ -43,19 +25,13 @@ if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/sidebar-subscribe-reads");
 
-/** The server functions counted: the one that reads Chat's lists (`loadChatLists`, each list
- * taking the position of the signal channel that keeps it live before it reads) and the Activity
- * dot's. */
 const COUNTED = ["loadChatLists", "loadActivityNavAttention"] as const;
 type Counted = (typeof COUNTED)[number];
 type Reads = Record<Counted | ChatListRead, number>;
 const NAMES = [...COUNTED, ...CHAT_LIST_READS];
-/** Every count at `count`. */
 const readsOf = (count: number): Reads =>
   Object.fromEntries(NAMES.map((name) => [name, count])) as Reads;
 
-/** The lists one `loadChatLists` call names: its GET payload is in the query string, where each
- * list's name is a quoted string. */
 const listsOf = (url: URL): ChatListRead[] =>
   CHAT_LIST_READS.filter((list) => decodeURIComponent(url.search).includes(`"${list}"`));
 
@@ -65,16 +41,12 @@ type ProxySocket = { path: string; protocol?: string; upstream?: WebSocket; pend
 
 function countingProxy() {
   const reads = readsOf(0);
-  /** Every counted call as it went over the wire, for calls.json. */
   const calls: { name: Counted; lists: ChatListRead[]; status: number; search: string }[] = [];
-  /** The watched channels the browser has sent a subscribe command naming. */
   const subscribing = new Set<string>();
   let watched: string[] = [];
   let gate: { opened: Promise<void>; release: () => void } | undefined;
-  /** While set, frames naming a watched channel wait in `heldFrames` for `releaseFrames`. */
   let framesHeld = false;
   let heldNow = 0;
-  /** WebSocket frames naming a watched channel, waiting for `releaseFrames`. */
   const heldFrames: { client: { data: ProxySocket }; message: string | Buffer }[] = [];
   const upstream = new URL(upstreamOrigin!);
   const centrifugo = new URL(centrifugoOrigin!);
@@ -83,8 +55,6 @@ function countingProxy() {
     port: 0,
     async fetch(request, server) {
       const url = new URL(request.url);
-      // A same-origin page that boots nothing: clearing the kept Query copy needs a document on
-      // this origin, and any app page would fill the copy again as it loads.
       if (url.pathname === "/e2e-blank")
         return new Response("<!doctype html><title>e2e</title>", {
           headers: { "content-type": "text/html" },
@@ -112,14 +82,8 @@ function countingProxy() {
         duplex: "half",
       };
       const response = await fetch(upstream.origin + url.pathname + url.search, init);
-      // Every counted call's wire shape lands in calls.json: a count the per-list names cannot
-      // explain (a second loadChatLists naming no list) is debugged from here, not guessed.
       if (name) calls.push({ name, lists, status: response.status, search: url.search });
       const body = await response.arrayBuffer();
-      // The answer, read at the server already, waits here: what is published meanwhile is newer
-      // than the stream position it carries. Subscribe commands naming a watched channel wait
-      // for `releaseFrames()` (see the WebSocket handler), so their recovery positions land
-      // after the publish too.
       if (lists.includes("channels") && gate) {
         heldNow += 1;
         await gate.opened;
@@ -135,7 +99,6 @@ function countingProxy() {
         const target = client.data.path.startsWith("/connection/")
           ? `ws://${centrifugo.host}${client.data.path}`
           : `ws://${upstream.host}${client.data.path}`;
-        // Sent without an Origin header, which Centrifugo's `allowed_origins` check lets through.
         const socket = new WebSocket(target, client.data.protocol);
         socket.binaryType = "arraybuffer";
         client.data.upstream = socket;
@@ -148,16 +111,10 @@ function countingProxy() {
         socket.onerror = () => client.close(1011, "Upstream WebSocket error");
       },
       message(client, message) {
-        // A subscribe command carries its channel's name as plain bytes in the protobuf frame, so
-        // finding the name in a frame the browser sent is enough to know it asked for the
-        // channel; nothing is decoded.
         if (client.data.path.startsWith("/connection/")) {
           const frame = typeof message === "string" ? Buffer.from(message) : message;
           const namesWatched = watched.some((channel) => frame.includes(channel));
           for (const channel of watched) if (frame.includes(channel)) subscribing.add(channel);
-          // Held past the list's answer: a subscribe that beat the publish would recover it and
-          // find nothing missed, and one that lands before the lists settle would re-read for
-          // the wrong reason — the test releases these once the reads have.
           if (namesWatched && framesHeld) {
             heldFrames.push({ client, message });
             return;
@@ -180,14 +137,10 @@ function countingProxy() {
       Object.assign(reads, readsOf(0));
       subscribing.clear();
     },
-    /** Notes from now on when the browser subscribes to these channels. */
     watch(channels: string[]) {
       watched = channels;
     },
-    /** The browser has asked to subscribe to every watched channel. */
     subscribedToAll: () => watched.every((channel) => subscribing.has(channel)),
-    /** From now on the channel list's answers wait for `release()`, and subscribe commands
-     * naming a watched channel wait for `releaseFrames()`. */
     hold() {
       let release = () => {};
       const opened = new Promise<void>((resolve) => (release = resolve));
@@ -198,8 +151,6 @@ function countingProxy() {
       gate?.release();
       gate = undefined;
     },
-    /** Lets the held subscribe commands through: call once the page's reads have settled, so
-     * their stream positions predate the publication the test sent meanwhile. */
     releaseFrames() {
       framesHeld = false;
       for (const held of heldFrames.splice(0)) {
@@ -232,7 +183,6 @@ async function browser(...args: string[]) {
   return stdout;
 }
 
-/** Polls a condition this process can observe, failing with its description. */
 async function until(description: string, condition: () => boolean, ms = 20_000) {
   const deadline = Date.now() + ms;
   while (!condition()) {
@@ -281,28 +231,13 @@ afterAll(async () => {
   await db.$disconnect();
 });
 
-/**
- * Chat has loaded its lists and its realtime is running: every list has been asked for, and the
- * browser has sent the subscribe command for both signal channels (the Workspace channel and the
- * viewer's own). A subscription that finds a list stale re-reads it right after its subscribe
- * reply, which follows the command within a round trip to Centrifugo; the `networkidle` wait that
- * comes next (no request for 500 ms, restarted by a re-read's request) covers that gap. This is a
- * per-browser signal, unlike asking Centrifugo who is subscribed: the `chat` namespace keeps no
- * presence, and its API would also count another tab of the same user on the same channels.
- */
 const chatIsLive = () =>
   until(
     "Chat's lists read and both signal channels subscribed",
     () => NAMES.every((name) => proxy.reads[name] >= 1) && proxy.subscribedToAll(),
-    // The first page load of a run pays the cold-start cost; later ones reuse the warm stack.
     60_000,
   );
 
-/**
- * Drops the kept Query copy (`coforge-query-cache` in IndexedDB) the file's earlier page left on
- * this origin. Restored lists carry their stream positions, so the subscribe's missed-publication
- * check can run before this test's publish and find nothing moved — the re-read then never fires.
- */
 async function dropKeptQueryCache() {
   await browser("open", `${proxy.origin}/e2e-blank`);
   await browser(
@@ -332,16 +267,10 @@ async function dropKeptQueryCache() {
 test("with nothing published between the reads and the subscriptions, every list is read once", async () => {
   proxy.reset();
   const callsFrom = proxy.calls.length;
-  // /saved, not the Chat index: the index lands on a conversation, whose open writes read
-  // cursors — publications the quiet counts would then see as re-reads.
   await browser("open", `${proxy.origin}${workspacePath}/saved`);
   await chatIsLive();
   await browser("wait", "--load", "networkidle");
   results.quiet = { ...proxy.reads };
-  // Every list is read once. The reader batches best-effort, so a list whose stored-copy lookup
-  // outlasts the batch window joins the next call (the split was seen on the runner): at most two
-  // calls, and their lists must partition CHAT_LIST_READS — a call naming a list twice, or none,
-  // is a real re-read or a lost one, not the split.
   const chatListCalls = proxy.calls
     .slice(callsFrom)
     .filter((call) => call.name === "loadChatLists");
@@ -358,29 +287,15 @@ test("a publication between the read and the subscriptions has the channel list 
   proxy.hold();
   await browser("open", `${proxy.origin}${workspacePath}/saved`);
   await until("the channel list's answer to be held", () => proxy.held() > 0);
-  // Published after the list's position was read and before the subscribe commands join the
-  // signal channels (held with the answer), so the subscribe's recovery position is newer than
-  // the read's and the list is judged stale.
   await publish(workspaceConversationChannel(workspaceId), { type: "e2e.noop" });
   proxy.release();
-  // The reads must settle before the subscribes go out: an early subscribe re-reads against
-  // positions that have not landed yet.
   await browser("wait", "--load", "networkidle");
   proxy.releaseFrames();
   await until("the channel list read again", () => proxy.reads.channels >= 2);
-  // The publication moved the Workspace channel only, so the channel list is judged stale. Every
-  // count is recorded; the channel names, kept live by the same channel, are not asserted because
-  // whether their own position was read before the publication depends on the parallel reads.
   results.published = { ...proxy.reads };
   expect(proxy.reads.channels).toBe(2);
 }, 300_000);
 
-/**
- * Task #285's rule, as a regression: a message is announced to the viewer's own channel with the
- * row it changes, so the sidebar writes that row and the Activity dot lights itself — neither
- * reads anything. Ten messages, ten events, zero list reads and zero attention reads; the numbers
- * land in `reads.json` beside the others.
- */
 test("ten messages move the sidebar and the dot without a single read", async () => {
   await browser("open", `${proxy.origin}${workspacePath}/saved`);
   await chatIsLive();
