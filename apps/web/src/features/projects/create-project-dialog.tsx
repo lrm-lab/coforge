@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronRight, FolderLock, GitBranch01, Share04 } from "@untitledui/icons";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { PhoneFormBar } from "#src/components/ui/phone-form-bar";
+import { PHONE_PAGE_HEADER, PhoneFormBar } from "#src/components/ui/phone-form-bar";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
@@ -251,7 +251,7 @@ export function CreateProjectDialog({
                     })}
               />
               <DialogHeader
-                className="max-sm:px-4 max-sm:pt-2 max-sm:[&_[data-dialog-close]]:hidden max-sm:[&_:is(h1,h2,h3)]:sr-only"
+                className={PHONE_PAGE_HEADER}
                 title={m.project_create_title()}
                 description={step === "choose" ? m.project_create_source_description() : undefined}
                 onClose={busy ? undefined : () => onOpenChange(false)}

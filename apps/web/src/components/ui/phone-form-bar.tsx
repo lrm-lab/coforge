@@ -2,6 +2,9 @@ import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 
+export const PHONE_PAGE_HEADER =
+  "max-sm:px-4 max-sm:pt-2 max-sm:[&_[data-dialog-close]]:hidden max-sm:[&_:is(h1,h2,h3)]:sr-only";
+
 export function PhoneFormBar({
   heading,
   submitLabel,

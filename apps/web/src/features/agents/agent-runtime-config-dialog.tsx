@@ -8,6 +8,7 @@ import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
 import { StatusDot } from "#src/components/ui/status-dot";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { PHONE_PAGE_HEADER, PhoneFormBar } from "#src/components/ui/phone-form-bar";
 import {
   UnsavedChangesDialog,
   useReportDirty,
@@ -76,6 +77,7 @@ export function AgentRuntimeConfigForm({
   }, [computerId]);
   const [runtimeDirty, setRuntimeDirty] = useState(false);
   const [envRows, setEnvRows] = useState<EnvironmentRow[]>([]);
+  const formRef = useRef<HTMLFormElement>(null);
   const seeded = useRef(false);
   useEffect(() => {
     if (!environment?.loaded || seeded.current) return;
@@ -93,6 +95,8 @@ export function AgentRuntimeConfigForm({
 
   return (
     <form
+      ref={formRef}
+      className="max-sm:flex max-sm:min-h-full max-sm:flex-col"
       onSubmit={(event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
         onSave(new FormData(event.currentTarget), {
@@ -101,8 +105,20 @@ export function AgentRuntimeConfigForm({
         });
       }}
     >
-      <DialogHeader title={m.agent_profile_edit_runtime_config()} onClose={onClose} />
-      <div className="grid gap-4 px-6 pt-6 pb-2">
+      <PhoneFormBar
+        heading={m.agent_profile_edit_runtime_config()}
+        submitLabel={m.controls_save()}
+        pending={saving}
+        submitDisabled={!dirty || envPending || envKeyErrors.some(Boolean) || !selectedComputerId}
+        onCancel={onClose}
+        onSubmit={() => formRef.current?.requestSubmit()}
+      />
+      <DialogHeader
+        className={PHONE_PAGE_HEADER}
+        title={m.agent_profile_edit_runtime_config()}
+        onClose={onClose}
+      />
+      <div className="grid gap-4 px-6 pt-6 pb-2 max-sm:px-4 max-sm:pt-2">
         {showComputerPicker ? (
           <Select
             name="computerId"
@@ -238,7 +254,7 @@ export function AgentRuntimeConfigForm({
           </p>
         )}
       </div>
-      <DialogActions className="px-6 pt-4 pb-6">
+      <DialogActions className="px-6 pt-4 pb-6 max-sm:hidden">
         <DialogCancel type="button" isDisabled={saving} onPress={onClose}>
           {m.controls_cancel()}
         </DialogCancel>
@@ -287,6 +303,7 @@ export function AgentRuntimeConfigDialog({
   return (
     <>
       <ModalOverlay
+        page
         isOpen={open}
         onOpenChange={(next: boolean) => {
           if (saving) return;

@@ -86,6 +86,7 @@
   "tab_reorder_cancelled": "Cancelled. {tab} is back at position {position} of {count}.",
   "controls_cancel": "Cancel",
   "controls_create": "Create",
+  "controls_save": "Save",
   "action_undo": "Undo",
   "controls_copied": "Copied",
   "controls_back": "Back",
