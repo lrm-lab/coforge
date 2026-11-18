@@ -240,11 +240,17 @@ test("a Stop older than the launch in progress does not end it", async () => {
 
 test("a Stop of a process that ignores SIGTERM returns stopped within 20 seconds", async () => {
   const owner = new ProcessTreeOwner();
+  const ignoring = join(tempRoot, "ignoring-sigterm");
   const tree = owner.spawn(
-    [process.execPath, "-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"],
+    [
+      process.execPath,
+      "-e",
+      `process.on('SIGTERM', () => {}); await Bun.write(${JSON.stringify(ignoring)}, ''); setInterval(() => {}, 1000)`,
+    ],
     tempRoot,
     { PATH: process.env.PATH ?? "" },
   );
+  await within(10_000, untilExists(ignoring));
   const h = await runtimeWith({
     answers: true,
     onDispose: () => cleanupOwnedTree(tree, tree.child),
@@ -264,4 +270,8 @@ test("a Stop of a process that ignores SIGTERM returns stopped within 20 seconds
 
 function runtime(h: { runtime: DaemonRuntime }) {
   return h.runtime;
+}
+
+async function untilExists(path: string) {
+  while (!(await Bun.file(path).exists())) await Bun.sleep(10);
 }
