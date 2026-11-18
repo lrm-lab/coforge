@@ -1,11 +1,17 @@
-import type { TeamMemoryDraft, TeamMemoryHead, TeamMemoryWrite } from "@lrm/coforge-sdk/agent";
+import type {
+  TeamMemoryDraft,
+  TeamMemoryEvidence,
+  TeamMemoryHead,
+  TeamMemoryRelation,
+  TeamMemoryWrite,
+} from "@lrm/coforge-sdk/agent";
 import type { Prisma } from "#src/generated/prisma/client";
 import { TeamMemoryError } from "#src/server/team-memory/memory";
 
 export const PREVIEW_WHITESPACE =
   " \t\n\r\v\f\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
 
-export type Row = TeamMemoryDraft & {
+export type Row = Omit<TeamMemoryDraft, "evidence" | "relations" | "effectiveAt"> & {
   id: string;
   workspaceId: string;
   revision: number;
@@ -13,6 +19,9 @@ export type Row = TeamMemoryDraft & {
   authorAgentId: string | null;
   authorUserId?: string | null;
   updatedAt: Date;
+  evidence?: Prisma.JsonValue;
+  relations?: Prisma.JsonValue;
+  effectiveAt?: Date | null;
 };
 export type Version = {
   snapshot: Prisma.JsonValue;
@@ -52,6 +61,9 @@ export function head(row: Row): TeamMemoryHead {
     source: row.source,
     applicability: row.applicability,
     kind: row.kind,
+    ...(Array.isArray(row.evidence) ? { evidence: row.evidence as TeamMemoryEvidence[] } : {}),
+    ...(Array.isArray(row.relations) ? { relations: row.relations as TeamMemoryRelation[] } : {}),
+    ...(row.effectiveAt ? { effectiveAt: row.effectiveAt.toISOString() } : {}),
   };
 }
 export function searchText(draft: TeamMemoryDraft): string {

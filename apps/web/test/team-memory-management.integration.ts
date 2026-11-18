@@ -82,6 +82,93 @@ async function create(title: string, content: string) {
   ).entries[0]!;
 }
 
+test("a current confirmation replaces only the named production revision", async () => {
+  const old = (
+    await write({
+      operation: "create",
+      ...draft("Rollout approval", "Migration awaiting approval"),
+      applicability: "production",
+      requestId: crypto.randomUUID(),
+    })
+  ).entries[0]!;
+  const staging = await create("Rollout approval", "Migration completed in staging");
+  const current = (
+    await write({
+      operation: "create",
+      ...draft("Rollout approval", "Migration approved"),
+      applicability: "production",
+      requestId: crypto.randomUUID(),
+      relations: [{ kind: "supersedes", id: old.id, revision: old.revision }],
+    })
+  ).entries[0]!;
+  expect(current.relations).toEqual([{ kind: "supersedes", id: old.id, revision: old.revision }]);
+  const found = await service().execute(actor(), {
+    operation: "search",
+    query: "Rollout approval",
+  });
+  const ids = found.entries.map(({ id }) => id);
+  expect(ids).toContain(current.id);
+  expect(ids).toContain(staging.id);
+  expect(ids).not.toContain(old.id);
+  const history = await service().execute(actor(), {
+    operation: "get",
+    id: old.id,
+    revision: old.revision,
+  });
+  expect(history.entries[0]?.content).toBe(old.content);
+  await write({
+    operation: "archive",
+    id: current.id,
+    revision: current.revision,
+    reason: "Withdrawal",
+    requestId: crypto.randomUUID(),
+  });
+  expect(
+    (
+      await service().execute(actor(), { operation: "search", query: "Rollout approval" })
+    ).entries.map(({ id }) => id),
+  ).toContain(old.id);
+});
+
+test("structured evidence is accepted and returned only while Workspace-readable", async () => {
+  const artifact = await db.artifact.create({
+    data: {
+      workspaceId,
+      homeKey: "workspace",
+      access: "workspace",
+      name: "reviewed-evidence",
+      entryPath: "index.md",
+    },
+  });
+  const evidence = [{ kind: "artifact" as const, id: artifact.id }];
+  const created = (
+    await write({
+      operation: "create",
+      ...draft("Review evidence", "Verified by a published document"),
+      requestId: crypto.randomUUID(),
+      evidence,
+    })
+  ).entries[0]!;
+  expect(created.evidence).toEqual(evidence);
+  await db.artifact.update({
+    where: { id: artifact.id },
+    data: { access: "conversation", homeKey: `conversation:${crypto.randomUUID()}` },
+  });
+  const historical = await service().execute(actor(), {
+    operation: "get",
+    id: created.id,
+    revision: 1,
+  });
+  expect(historical.entries[0]?.evidence).toEqual([]);
+  const invalid = await reviewed({
+    operation: "create",
+    ...draft("New restricted evidence", "Not Workspace-readable"),
+    requestId: crypto.randomUUID(),
+    evidence,
+  });
+  await expect(service().execute(actor(), invalid)).rejects.toThrow("memory_forbidden");
+});
+
 test("members create and correct team memories with real human attribution", async () => {
   const member = await db.user.create({
     data: { username: `memory-member-${crypto.randomUUID()}`, displayName: "Memory member" },

@@ -165,6 +165,14 @@ Creating a duplicate returns the existing entry with its evidence, protection an
 Tokens bind the current agent, exact operation/draft/requestId and workspace version, and expire after ten minutes. Changing the intended operation requires another review. Stale entry or workspace revisions return a conflict: reread/review before submitting a new UUID.
 Network retries reuse the same requestId and exact command to avoid duplicate mutations.
 
+Use `--evidence '[{"kind":"task","id":"<UUID>","revision":2}]'` for Workspace-readable
+task, message or artifact references. A message revision is its sequence and an artifact revision
+is its published version. Use `--relations '[{"kind":"supersedes","id":"<memory UUID>","revision":1}]'`
+when a new conclusion replaces an exact active version in the same Project and applicability.
+Use `conflicts_with` to record a disagreement. `--effectiveAt` takes a UTC timestamp or `none`.
+Search returns effective entries by default. Use `--includeSuperseded` to look up previous
+conclusions, and `get --revision` to inspect recorded evidence.
+
 History returns previews of at most ten versions within a 12,000-byte response budget. Continue
 with `--offset` when offered. Read one full historical version with `get --revision <number>`;
 previews are not the complete evidence.
