@@ -36,10 +36,11 @@ async function search(
   workspaceId: string,
   query: string,
   offset = 0,
-  projectId?: string,
+  projectId?: string | null,
   archived = false,
   includeHumanAuthors = true,
   includeSuperseded = false,
+  includeWorkspace = false,
 ): Promise<Row[]> {
   const terms = teamMemoryTerms(query);
   if (!terms.length) return [];
@@ -55,7 +56,13 @@ async function search(
     FROM team_memory_entries AS candidate WHERE workspace_id = ${workspaceId}::uuid AND status = ${archived ? "archived" : "active"}
     AND (${Prisma.join(matches, " OR ")})
     ${includeHumanAuthors ? Prisma.empty : Prisma.sql`AND author_agent_id IS NOT NULL`}
-    ${projectId ? Prisma.sql`AND project_id = ${projectId}::uuid` : Prisma.empty}
+    ${
+      projectId === null
+        ? Prisma.sql`AND project_id IS NULL`
+        : projectId
+          ? Prisma.sql`AND (project_id = ${projectId}::uuid ${includeWorkspace ? Prisma.sql`OR project_id IS NULL` : Prisma.empty})`
+          : Prisma.empty
+    }
     ${
       archived || includeSuperseded
         ? Prisma.empty
@@ -73,7 +80,8 @@ async function search(
             jsonb_build_object('kind', 'supersedes', 'id', candidate.id, 'revision', candidate.revision))
       )`
     }
-    ORDER BY (${Prisma.join(ranks, " + ")}) DESC, updated_at DESC, id ASC LIMIT 11 OFFSET ${offset}`);
+    ORDER BY ${includeWorkspace && projectId ? Prisma.sql`(project_id IS NOT NULL) DESC,` : Prisma.empty}
+      (${Prisma.join(ranks, " + ")}) DESC, updated_at DESC, id ASC LIMIT 11 OFFSET ${offset}`);
 }
 
 function page(rows: Row[], offset: number, snippets = false): TeamMemoryResult {
@@ -125,6 +133,7 @@ export class TeamMemoryReads {
               command.archived,
               !(actor.agentId && actor.includeHumanAuthors === false),
               command.includeSuperseded,
+              command.includeWorkspace,
             ),
             command.offset ?? 0,
             true,

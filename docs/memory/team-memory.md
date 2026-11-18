@@ -48,6 +48,10 @@ Entries can cite structured Workspace-readable tasks, messages and artifacts. Ex
 relationships record replacement or disagreement. Search omits a replaced version while its
 replacement is active and effective. Historical reads still work, with current evidence access.
 
+When Web enables `COFORGE_TEAM_MEMORY_RECALL=true`, an Agent opening or claiming a single task
+can receive up to five current memory excerpts from the task's Project and the Workspace.
+The task request keeps working when recall fails or exceeds its 400 ms budget.
+
 ## Upgrade and retained data
 
 Stop existing dedicated Memory Agent processes, then deploy Web/backend migrations before updating Computers. Migrations archive registered legacy

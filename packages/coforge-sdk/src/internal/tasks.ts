@@ -369,6 +369,15 @@ export type TaskQueueEntry = { position: number; taskId: string };
 
 export type TaskResult = {
   tasks: TaskView[];
+  relatedMemory?: {
+    id: string;
+    revision: number;
+    title: string;
+    content: string;
+    source: string;
+    applicability: string;
+    conflictsWith?: { id: string; revision: number }[];
+  }[];
   /** Set only on an Agent's own (`mine`) list. */
   coverage?: TaskListCoverage;
   /** Set only on an Agent's own (`mine`) list. */

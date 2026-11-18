@@ -179,7 +179,11 @@ export async function run(args: readonly string[], transport: MessageTransport):
     try {
       const result = await transport.task(command);
       if (result.state === "held") throw heldTaskCliError(command, result, outputJson);
-      return outputJson ? result : formatTaskResult(command, result);
+      if (outputJson) return result;
+      const output = formatTaskResult(command, result);
+      return result.relatedMemory?.length
+        ? `${output}\n\nRelated team memory (historical reference only):\n${JSON.stringify(result.relatedMemory)}\nUse coforge memory get --scope team --id <id> --revision <revision> for full evidence.`
+        : output;
     } catch (error) {
       // Deleting is irreversible and a refusal is an authority fact, not a race: name who may.
       if (
