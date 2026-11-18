@@ -21,6 +21,8 @@ import {
   type AgentRecoveryFields,
 } from "./agent-control-types.server";
 
+export const START_INTENT_INVALID_ERROR_CODE = "start_intent_invalid";
+
 type SubjectSession = { sessionId: string; sessionMode: "create" | "resume" };
 
 /** Sends the Daemon the command a control operation's current phase calls for. */
@@ -142,8 +144,7 @@ export class AgentControlPublisher {
           launchId = refreshedLaunchId;
         }
       }
-      await this.sendStart(agent, state, launchId, { recovery });
-      logPublished();
+      if (await this.sendStart(agent, state, launchId, { recovery })) logPublished();
     }
   }
   /** Sends `state`'s Start for `agent`, carrying either message recovery or a resume prompt. */
@@ -152,7 +153,7 @@ export class AgentControlPublisher {
     state: AgentControlState,
     launchId: string | undefined,
     first: { recovery?: AgentRecoveryFields; resumePrompt?: string },
-  ) {
+  ): Promise<boolean> {
     const { requestId, identity } = state;
     const reset =
       state.phase !== "completed" &&
@@ -187,9 +188,48 @@ export class AgentControlPublisher {
       ...(introductionPrompt !== undefined ? { introductionPrompt } : {}),
     };
     const selected = this.sessions ? await this.sessions.prepare(intent) : intent;
-    await this.api.publish(
-      daemonControlChannel(state.workspaceId, state.computerId),
-      encodeAgentStartIntent(selected),
+    let bytes: Uint8Array;
+    try {
+      bytes = encodeAgentStartIntent(selected);
+    } catch (error) {
+      await this.#failUnsendableStart(agent, state, error);
+      return false;
+    }
+    await this.api.publish(daemonControlChannel(state.workspaceId, state.computerId), bytes);
+    return true;
+  }
+
+  async #failUnsendableStart(agent: AgentControlAgent, state: AgentControlState, error: unknown) {
+    console.warn(
+      JSON.stringify({
+        event: "agent_control:start_intent_invalid",
+        agent_id: agent.id,
+        workspace_id: state.workspaceId,
+        request_id: state.requestId,
+        error_type: errorType(error),
+        reason: error instanceof Error ? error.message : String(error),
+      }),
     );
+    const failedFrom = ({
+      stopSentAtMs: _stopSentAtMs,
+      failedStreak,
+      ...fields
+    }: AgentControlState) => ({
+      ...fields,
+      phase: "failed" as const,
+      errorCode: START_INTENT_INVALID_ERROR_CODE,
+      failedAtMs: this.clock(),
+      failedStreak: (failedStreak ?? 0) + 1,
+    });
+    if (await this.store.replace(agent, failedFrom(state))) return;
+    const latest = await this.store.get(agent.id);
+    const latestState = latest?.state;
+    if (
+      latest &&
+      latestState?.requestId === state.requestId &&
+      latestState.epoch === state.epoch &&
+      latestState.phase === "starting"
+    )
+      await this.store.replace(latest, failedFrom(latestState));
   }
 }
