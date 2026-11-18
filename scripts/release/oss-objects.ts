@@ -2,7 +2,60 @@
 // and the redacted error they all report. publish.ts composes them into a publication.
 import OSS from "ali-oss";
 
+import { crc64Decimal } from "./oss-crc64";
 import type { OssConnection } from "./oss-client";
+
+/** OSS reports the CRC-64/ECMA-182 of the stored object in this response header, on an upload's
+ * own answer and on a HEAD alike. Its value is a decimal unsigned 64-bit integer, so it is kept as
+ * a string and compared as one: a JS number would lose the low bits above 2^53. */
+const CRC64_HEADER = "x-oss-hash-crc64ecma";
+const CONTENT_LENGTH_HEADER = "content-length";
+
+/** What a publication checks an object against instead of reading its bytes back: the stored
+ * object's exact length and its CRC-64. The length catches a truncated or half-committed object,
+ * the checksum a corrupted one. */
+export interface ObjectDigest {
+  size: number;
+  crc64: string;
+}
+
+export function digestOf(bytes: Uint8Array): ObjectDigest {
+  return { size: bytes.byteLength, crc64: crc64Decimal(bytes) };
+}
+
+export function digestsMatch(left: ObjectDigest, right: ObjectDigest): boolean {
+  return left.size === right.size && left.crc64 === right.crc64;
+}
+
+function headerValue(headers: unknown, name: string): string | undefined {
+  if (typeof headers !== "object" || headers === null) return undefined;
+  const wanted = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() !== wanted) continue;
+    if (typeof value === "string") return value;
+    if (Array.isArray(value) && typeof value[0] === "string") return value[0];
+  }
+  return undefined;
+}
+
+function digestFromHeaders(headers: unknown, objectKey: string): ObjectDigest {
+  const length = headerValue(headers, CONTENT_LENGTH_HEADER);
+  const size = length === undefined ? Number.NaN : Number(length);
+  if (!Number.isSafeInteger(size) || size < 0) {
+    throw new Error(`OSS reported no usable ${CONTENT_LENGTH_HEADER} for ${objectKey}`);
+  }
+  return { size, crc64: reportedCrc64(headers, objectKey) };
+}
+
+function reportedCrc64(headers: unknown, objectKey: string): string {
+  const value = headerValue(headers, CRC64_HEADER);
+  if (value === undefined) {
+    throw new Error(
+      `OSS reported no ${CRC64_HEADER} for ${objectKey}; the publication cannot verify the object`,
+    );
+  }
+  return value;
+}
 
 /** The request URL for an object, built the same way the SDK itself would route the request
  * (bucket-prefixed host unless `cname` is set) - used only for the unauthenticated
@@ -89,26 +142,37 @@ function contentTypeFor(objectKey: string): string {
   return objectKey.endsWith(".wasm") ? "application/wasm" : "application/octet-stream";
 }
 
+export interface PutObjectOptions {
+  /** A test-only hook, so the stalled-server fixture can pin the `ResponseTimeoutError` path;
+   * production uses ali-oss's 60 s default. */
+  requestTimeoutMs?: number;
+  /** A test-only hook that lets a small fixture object take the multipart branch. */
+  multipartMinBytes?: number;
+}
+
+/** Uploads one object and returns the CRC-64 OSS reports for what it stored, which
+ * `publish.ts` compares against the checksum of the bytes it handed over. */
 export async function putObject(
   client: OSS,
   objectKey: string,
   bytes: Uint8Array,
-  requestTimeoutMs?: number,
-): Promise<void> {
+  options: PutObjectOptions = {},
+): Promise<string> {
   const buffer = Buffer.from(bytes);
   const contentType = contentTypeFor(objectKey);
-  // `requestTimeoutMs` is a test-only hook so the stalled-server fixture can pin the
-  // `ResponseTimeoutError` reporting path; production uses ali-oss's 60 s default.
-  const requestOptions = requestTimeoutMs ? { timeout: requestTimeoutMs } : {};
+  const requestOptions = options.requestTimeoutMs ? { timeout: options.requestTimeoutMs } : {};
+  const minimum = options.multipartMinBytes ?? MULTIPART_MIN_BYTES;
+  let headers: unknown;
   try {
-    if (buffer.byteLength >= MULTIPART_MIN_BYTES) {
+    if (buffer.byteLength >= minimum) {
       for (let attempt = 1; ; attempt += 1) {
         try {
-          await client.multipartUpload(objectKey, buffer, {
+          const result = await client.multipartUpload(objectKey, buffer, {
             ...requestOptions,
             headers: { "Content-Type": contentType },
           });
-          return;
+          headers = result.res.headers;
+          break;
         } catch (error) {
           // Only a timeout is worth re-attempting from here; anything else is either a
           // configuration fault (a 403) or a real server error, and ossError already names it.
@@ -124,14 +188,48 @@ export async function putObject(
             throw error;
         }
       }
+    } else {
+      const result = await client.put(objectKey, buffer, {
+        ...requestOptions,
+        headers: { "Content-Type": contentType },
+      });
+      headers = result.res.headers;
     }
-    await client.put(objectKey, buffer, {
-      ...requestOptions,
-      headers: { "Content-Type": contentType },
-    });
   } catch (error) {
     throw ossError("upload", objectKey, error);
   }
+  return reportedCrc64(headers, objectKey);
+}
+
+async function headHeaders(client: OSS, objectKey: string): Promise<unknown> {
+  try {
+    return (await client.head(objectKey)).res.headers;
+  } catch (error) {
+    throw ossError("head", objectKey, error);
+  }
+}
+
+/** What a HEAD says the stored object is: its length and its CRC-64. No object byte is
+ * transferred, which is the whole point - a read-back is billed as transfer-acceleration
+ * traffic, a HEAD response is a few hundred bytes. */
+export async function objectDigest(client: OSS, objectKey: string): Promise<ObjectDigest> {
+  return digestFromHeaders(await headHeaders(client, objectKey), objectKey);
+}
+
+/** The stored digest, or undefined when the object is absent: a finalize pass HEADs what an
+ * earlier job uploaded instead of probing it and then HEADing it twice. */
+export async function objectDigestIfPresent(
+  client: OSS,
+  objectKey: string,
+): Promise<ObjectDigest | undefined> {
+  let headers: unknown;
+  try {
+    headers = (await client.head(objectKey)).res.headers;
+  } catch (error) {
+    if (isMissingObject(error)) return undefined;
+    throw ossError("head", objectKey, error);
+  }
+  return digestFromHeaders(headers, objectKey);
 }
 
 export async function getObject(client: OSS, objectKey: string): Promise<Uint8Array> {

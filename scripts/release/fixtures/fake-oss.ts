@@ -1,3 +1,4 @@
+import { crc64Decimal } from "../oss-crc64";
 import type { OssConnection, OssCredentials } from "../publish";
 
 /** The bucket, region and credentials every publish test signs with. The fixture host names no
@@ -40,6 +41,14 @@ export interface FakeOssOptions {
   /** Delay every authenticated upload response by this many ms, simulating a slow link. Used by
    * the slow-server regression test to prove a stalled upload reports the timeout's `name`. */
   delayUploadMs?: number;
+  /** Keys whose HEAD answer carries no `x-oss-hash-crc64ecma`, as a bucket that stopped reporting
+   * it would: the publication must refuse rather than fall back to reading the object back. */
+  omitCrc64Keys?: Set<string>;
+  /** Keys whose stored bytes gain a byte the moment their upload is answered: the upload's own
+   * answer is honest, the object later reads back at a different size and checksum. */
+  corruptStoredKeys?: Set<string>;
+  /** Keys whose upload answer reports a checksum that is not the stored object's. */
+  lieAboutStoredCrcKeys?: Set<string>;
 }
 
 export interface FakeOss {
@@ -66,6 +75,35 @@ export function startFakeOssServer(options: FakeOssOptions = {}): FakeOss {
   const authHeaders: Array<string | undefined> = [];
   const contentTypes = new Map<string, string | undefined>();
 
+  const uploads = new Map<string, Map<number, Uint8Array>>();
+  let nextUploadId = 1;
+
+  const crcHeaders = (key: string, bytes: Uint8Array): Record<string, string> =>
+    options.omitCrc64Keys?.has(key) ? {} : { "x-oss-hash-crc64ecma": crc64Decimal(bytes) };
+
+  const storedHeaders = (key: string, bytes: Uint8Array): Record<string, string> => ({
+    "content-length": String(bytes.byteLength),
+    ...crcHeaders(key, bytes),
+  });
+
+  const assemble = (objectKey: string, uploadId: string) => {
+    const parts = uploads.get(uploadId);
+    if (!parts) return undefined;
+    const numbers = [...parts.keys()].sort((left, right) => left - right);
+    const bytes = new Uint8Array(
+      numbers.reduce((total, number) => total + (parts.get(number)?.byteLength ?? 0), 0),
+    );
+    let offset = 0;
+    for (const number of numbers) {
+      const part = parts.get(number)!;
+      bytes.set(part, offset);
+      offset += part.byteLength;
+    }
+    uploads.delete(uploadId);
+    store.set(objectKey, bytes);
+    return { bytes, partCount: numbers.length };
+  };
+
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -84,6 +122,54 @@ export function startFakeOssServer(options: FakeOssOptions = {}): FakeOss {
         });
       }
 
+      const uploadId = url.searchParams.get("uploadId");
+      const partNumber = url.searchParams.get("partNumber");
+      if (method === "POST" && url.searchParams.has("uploads")) {
+        const id = `upload-${nextUploadId}`;
+        nextUploadId += 1;
+        uploads.set(id, new Map());
+        contentTypes.set(objectKey, request.headers.get("content-type") ?? undefined);
+        return new Response(
+          `<?xml version="1.0" encoding="UTF-8"?><InitiateMultipartUploadResult><Bucket>${BUCKET}</Bucket><Key>${objectKey}</Key><UploadId>${id}</UploadId></InitiateMultipartUploadResult>`,
+          { status: 200, headers: { "content-type": "application/xml" } },
+        );
+      }
+      if (method === "PUT" && uploadId && partNumber) {
+        if (options.delayUploadMs) await Bun.sleep(options.delayUploadMs);
+        if (options.failUploadKeys?.has(objectKey))
+          return new Response("<Error><Code>InternalError</Code></Error>", {
+            status: 500,
+            headers: { "x-oss-request-id": "fake-request-id-upload-fail" },
+          });
+        const parts = uploads.get(uploadId);
+        if (!parts)
+          return new Response("<Error><Code>NoSuchUpload</Code></Error>", { status: 404 });
+        parts.set(Number(partNumber), new Uint8Array(await request.arrayBuffer()));
+        return new Response(null, { status: 200, headers: { etag: `"part-${partNumber}"` } });
+      }
+      if (method === "POST" && uploadId) {
+        await request.arrayBuffer();
+        const completed = assemble(objectKey, uploadId);
+        if (!completed)
+          return new Response("<Error><Code>NoSuchUpload</Code></Error>", { status: 404 });
+        const etag = `"fake-${completed.partCount}"`;
+        return new Response(
+          `<?xml version="1.0" encoding="UTF-8"?><CompleteMultipartUploadResult><Location>${url.origin}/${objectKey}</Location><Bucket>${BUCKET}</Bucket><Key>${objectKey}</Key><ETag>${etag}</ETag></CompleteMultipartUploadResult>`,
+          {
+            status: 200,
+            headers: {
+              "content-type": "application/xml",
+              etag,
+              ...crcHeaders(objectKey, completed.bytes),
+            },
+          },
+        );
+      }
+      if (method === "DELETE" && uploadId) {
+        uploads.delete(uploadId);
+        return new Response(null, { status: 204 });
+      }
+
       if (method === "DELETE") {
         if (options.failDeleteKeys?.has(objectKey))
           return new Response("<Error><Code>AccessDenied</Code></Error>", { status: 403 });
@@ -100,9 +186,18 @@ export function startFakeOssServer(options: FakeOssOptions = {}): FakeOss {
             headers: { "x-oss-request-id": "fake-request-id-upload-fail" },
           });
         }
-        store.set(objectKey, new Uint8Array(await request.arrayBuffer()));
+        const uploaded = new Uint8Array(await request.arrayBuffer());
+        store.set(objectKey, uploaded);
         contentTypes.set(objectKey, request.headers.get("content-type") ?? undefined);
-        return new Response(null, { status: 200 });
+        const headers = crcHeaders(objectKey, uploaded);
+        if (options.lieAboutStoredCrcKeys?.has(objectKey)) headers["x-oss-hash-crc64ecma"] = "1";
+        if (options.corruptStoredKeys?.has(objectKey)) {
+          const corrupted = new Uint8Array(uploaded.byteLength + 1);
+          corrupted.set(uploaded);
+          corrupted[uploaded.byteLength] = 0xff;
+          store.set(objectKey, corrupted);
+        }
+        return new Response(null, { status: 200, headers });
       }
 
       if (method === "HEAD") {
@@ -112,7 +207,9 @@ export function startFakeOssServer(options: FakeOssOptions = {}): FakeOss {
             headers: { "x-oss-request-id": "fake-request-id-probe-fail" },
           });
         }
-        return new Response(null, { status: store.has(objectKey) ? 200 : 404 });
+        const stored = store.get(objectKey);
+        if (!stored) return new Response(null, { status: 404 });
+        return new Response(null, { status: 200, headers: storedHeaders(objectKey, stored) });
       }
 
       if (method === "GET") {

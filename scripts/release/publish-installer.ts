@@ -3,8 +3,8 @@
  * Publishes one `coforge-installer` release to the installer feed in the release bucket
  * (docs/release/installer-feed.md), in the steps `.github/workflows/release-installer-staging.yml`
  * runs. Every step goes through publish.ts's upload flow, the one the Computer release uses:
- * objects up and read back, the version's manifest last, then the pointer with the previous value
- * saved, verified, and restored on failure. There is no second upload path here.
+ * objects up and verified by size and CRC-64, the version's manifest last, then the pointer with
+ * the previous value saved, verified, and restored on failure. There is no second upload path here.
  *
  *   plan      refuse a version whose manifest is already up, before six runners build anything
  *   finalize  the one job that reaches the bucket with the six built binaries in hand: package
