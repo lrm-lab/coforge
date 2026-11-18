@@ -1,6 +1,7 @@
 import { ArrowDown } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
+import { UnreadBadge } from "#src/components/ui/unread-marker";
 import { m } from "#src/paraglide/messages";
 import { usePushedNewMessages } from "./pushed-new-messages";
 
@@ -28,15 +29,26 @@ export function NewMessagesPill({
       : count === 1
         ? m.conversation_one_new_message()
         : m.conversation_new_messages({ count });
+  // On a phone the label would take the row the replying line needs: the pill is a round arrow
+  // there (its label stays for screen readers) and the count rides on it as a badge. It is drawn at
+  // 36px; a clear `after:` box 4px around it makes the tap target 44px.
   return (
-    <Button
-      size="sm"
-      color={count > 0 ? "primary" : "secondary"}
-      iconTrailing={ArrowDown}
-      onClick={onShowLatest}
-      className="pointer-events-auto rounded-full whitespace-nowrap shadow-md"
-    >
-      {label}
-    </Button>
+    <span className="pointer-events-auto relative inline-flex">
+      <Button
+        size="sm"
+        color={count > 0 ? "primary" : "secondary"}
+        iconTrailing={ArrowDown}
+        onClick={onShowLatest}
+        className="rounded-full whitespace-nowrap shadow-md max-md:p-2 max-md:*:data-text:sr-only max-md:after:absolute max-md:after:-inset-1 max-md:after:content-['']"
+      >
+        {label}
+      </Button>
+      {count > 0 && (
+        <UnreadBadge
+          count={count}
+          className="pointer-events-none absolute -top-1.5 -right-1.5 md:hidden"
+        />
+      )}
+    </span>
   );
 }

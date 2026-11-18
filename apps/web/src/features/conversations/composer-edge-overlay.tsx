@@ -28,7 +28,7 @@ export function ComposerEdgeOverlay({
         <div
           className={`grid items-end gap-2 px-4 md:px-6 ${
             onShowLatest
-              ? "grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]"
+              ? "grid-cols-[minmax(0,1fr)_auto_auto] md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]"
               : "grid-cols-[minmax(0,1fr)_auto]"
           }`}
         >
@@ -38,8 +38,10 @@ export function ComposerEdgeOverlay({
             className="col-start-1 min-w-0"
           />
           {onShowLatest && (
-            <div className="col-start-2 flex h-0 min-h-0 items-end justify-self-center">
-              <div className="pointer-events-auto -translate-y-2">
+            // A phone keeps the pill in the row, at its end beside the line; wider panes float it
+            // centred just above the row, taking no height of its own.
+            <div className="col-start-2 flex items-end justify-self-end md:h-0 md:min-h-0 md:justify-self-center">
+              <div className="md:-translate-y-2">
                 <NewMessagesPill
                   conversationId={conversationId}
                   rootId={threadRootId ?? undefined}

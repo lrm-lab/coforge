@@ -134,6 +134,20 @@ test("on a phone the typing line and the jump-to-latest pill do not cover each o
         line.bottom <= jump.top ||
         jump.bottom <= line.top;
       expect(apart).toBe(true);
+      // On a phone the pill is a round arrow at the row's end, leaving the row to the line.
+      expect(Math.round(jump.width)).toBe(Math.round(jump.height));
+      expect(jump.left).toBeGreaterThanOrEqual(line.right);
+      // Drawn at 36px, it answers taps across a 44x44 box around its centre.
+      const tappable = await evaluate<boolean>(`(() => {
+        const button = ${pill};
+        const box = button.getBoundingClientRect();
+        const x = box.left + box.width / 2;
+        const y = box.top + box.height / 2;
+        return [[-21.5, 0], [21.5, 0], [0, -21.5], [0, 21.5], [-21.5, -21.5], [21.5, 21.5]].every(
+          ([dx, dy]) => button.contains(document.elementFromPoint(x + dx, y + dy)),
+        );
+      })()`);
+      expect(tappable).toBe(true);
       await fx.screenshot("typing-phone.png");
     } finally {
       await call.end();
