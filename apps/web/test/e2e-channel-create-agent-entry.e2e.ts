@@ -5,18 +5,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 
-/**
- * Creating an Agent from a channel's add view, in a real browser. A search that matches nobody
- * offers "Create Agent “<search>”", which says the Agent joins the channel once created. It opens
- * the Agent form with that name filled in and the visibility held at Public (a private Agent can
- * never be in a channel); creating the Agent adds it to the channel and returns the list to
- * every candidate. A refused create (the name is taken) shows its reason in the form, and a
- * member who may not create Agents sees why in place of the entry.
- *
- * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the dev user an owner of
- * its Workspace with a Computer attached (seed-dev). Each run seeds a fresh channel and removes it
- * and the Agent afterwards. Screenshots are written under `.amp/e2e/channel-create-agent-entry/`.
- */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
   throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
@@ -46,8 +34,6 @@ test("the add view creates an Agent named by the search, and it joins the channe
   async function evaluate<T>(expression: string): Promise<T> {
     return JSON.parse(JSON.parse(await browser("eval", `JSON.stringify(${expression})`))) as T;
   }
-  /** Waits for `condition`, failing with its text rather than at the test timeout; a first page
-   * load compiles on the dev server, so it gets longer. */
   const waitFor = (condition: string, ms = 20_000) =>
     Promise.race([
       browser("wait", "--fn", condition),
@@ -70,7 +56,6 @@ test("the add view creates an Agent named by the search, and it joins the channe
       `document.querySelector('[aria-label="Channel details and settings"]') !== null`,
       60_000,
     );
-    // A click that lands before the page hydrates opens nothing; try again until the panel opens.
     for (let attempt = 0; ; attempt += 1) {
       await browser("click", '[aria-label="Channel details and settings"]');
       const opened = await waitFor(`${panel} !== null`, 5_000).then(
@@ -81,14 +66,7 @@ test("the add view creates an Agent named by the search, and it joins the channe
       if (attempt === 5) throw new Error("the channel settings panel never opened");
     }
   }
-  /** The seeded Computer's Claude Code needs no API key, unlike the default runtime. */
   async function chooseClaudeCode() {
-    // The picker opens on the Computer's preferred runtime (Pi on the seeded Computer), so its
-    // trigger is found by the "Runtime" label it is named for, not by the runtime it
-    // happens to show. The catalog the form loads on open re-renders the picker, and a command
-    // sent in between can land on a rebuilt option list; the catalog-loaded wait keeps that
-    // re-render ahead of the picker, and one eval polls and picks inside the page, so the
-    // option is clicked in the same tick it exists.
     await waitFor(
       `${agentForm}.querySelector('button[aria-label="Refresh model catalog"]:not([disabled])') != null`,
     );
@@ -150,7 +128,6 @@ test("the add view creates an Agent named by the search, and it joins the channe
     );
     await openPanel();
 
-    // "+" opens the add view, which always ends with the create entry.
     await waitFor(`${panel}?.querySelector('[aria-label="Add members"]') != null`);
     await browser("eval", `${panel}.querySelector('[aria-label="Add members"]').click()`);
     await waitFor(panelHas("Add selected (0)"));
@@ -161,13 +138,11 @@ test("the add view creates an Agent named by the search, and it joins the channe
       ),
     ).toBe(true);
 
-    // A search that matches nobody names the Agent to create.
     await browser("fill", 'input[placeholder="Name"]', agentName);
     await waitFor(panelHas(`No members match “${agentName}”`));
     await waitFor(panelHas(`Create Agent “${agentName}”`));
     await browser("screenshot", join(artifacts, "entry.png"));
 
-    // It opens the Agent form with that name, and the visibility cannot leave Public.
     await clickText(`[role="dialog"] button`, `Create Agent “${agentName}”`);
     await waitFor(`${agentForm} !== undefined`);
     await waitFor(
@@ -175,7 +150,6 @@ test("the add view creates an Agent named by the search, and it joins the channe
     );
     const form = await evaluate<{ name: string; visibilityDisabled: boolean }>(`(() => {
       const dialog = ${agentForm};
-      // The visibility is the "Make private" option card's checkbox (4a4fc89db).
       const makePrivate = [...dialog.querySelectorAll('input[type="checkbox"]')].find((input) => input.closest("label")?.textContent.includes("Make private"));
       return {
         name: dialog.querySelector('input[name="name"]').value,
@@ -187,7 +161,6 @@ test("the add view creates an Agent named by the search, and it joins the channe
 
     await chooseClaudeCode();
 
-    // Creating it adds it to the channel and clears the search.
     await clickText(`[role="dialog"] button`, "Create Agent");
     await waitFor(`${agentForm} === undefined`);
     await waitFor(`!${panelHas(`No members match “${agentName}”`)}`);
@@ -203,9 +176,6 @@ test("the add view creates an Agent named by the search, and it joins the channe
     ).toBe("");
     await browser("screenshot", join(artifacts, "joined.png"));
 
-    // The name is taken now, so the search offers no create-by-name entry for it
-    // (3633f7701); the plain entry's form still says so and the page stays up. The live Agent
-    // directory hears about the create asynchronously, so the entry can linger until it lands.
     await browser("fill", 'input[placeholder="Name"]', agentName);
     await waitFor(panelHas(`No members match “${agentName}”`));
     await waitFor(`!${panelHas(`Create Agent “`)}`);
@@ -217,14 +187,12 @@ test("the add view creates an Agent named by the search, and it joins the channe
     await waitFor(`${agentForm}?.querySelector('[role="alert"]')?.textContent.trim().length > 0`);
     expect(await evaluate<boolean>(`${panel} !== null`)).toBe(true);
     await browser("screenshot", join(artifacts, "refused.png"));
-    // The name typed is an edit, so Cancel asks first.
     await clickText(`[role="dialog"] button`, "Cancel");
     await waitFor(`${byText(`[role="dialog"] button`, "Discard changes")} !== undefined`);
     await clickText(`[role="dialog"] button`, "Discard changes");
     await waitFor(`${agentForm} === undefined`);
     expect(await db.agent.count({ where: { workspaceId, name: agentName } })).toBe(1);
 
-    // A member who may not create Agents sees why instead of the entry.
     await db.workspaceMembership.update({
       where: { workspaceId_userId: { workspaceId, userId: DEV_BROWSER_USER.id } },
       data: { role: "member" },
@@ -246,7 +214,6 @@ test("the add view creates an Agent named by the search, and it joins the channe
       data: { role: "owner" },
     });
     await db.conversation.deleteMany({ where: { id: channel.id } }).catch(() => {});
-    // Not caught: an Agent left behind would make the next run's name check lie.
     await db.agent.deleteMany({ where: { workspaceId, name: agentName } });
     await browser("close").catch(() => undefined);
     await db.$disconnect();
