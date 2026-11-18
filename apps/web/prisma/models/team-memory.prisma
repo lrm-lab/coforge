@@ -118,6 +118,7 @@ model TeamMemorySuggestion {
   decidedAt DateTime? @map("decided_at")
   decidedByUserId String? @map("decided_by_user_id") @db.Uuid
   appliedEntryId String? @map("applied_entry_id") @db.Uuid
+  scanId String? @map("scan_id") @db.Uuid
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@unique([workspaceId, sourceKey])
@@ -130,6 +131,7 @@ model TeamMemoryReviewScan {
   scannedAt DateTime @map("scanned_at")
   cursorAt DateTime? @map("cursor_at")
   cursorId String? @map("cursor_id") @db.Uuid
+  cursorProjectId String? @map("cursor_project_id") @db.Uuid
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@map("team_memory_review_scans")

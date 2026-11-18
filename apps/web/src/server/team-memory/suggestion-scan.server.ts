@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import { teamMemoryAccess } from "#src/server/db/repositories/team-memory-access.repositories.server";
 import { readableMemoryEvidence } from "#src/server/db/repositories/team-memory-evidence.server";
 import { head, type Row } from "#src/server/db/repositories/team-memory-projections.server";
@@ -15,31 +15,53 @@ export async function scanTeamMemorySuggestions(
   now = new Date(),
 ) {
   return db.$transaction(async (tx) => {
-    if (userId) await teamMemoryAccess(tx, { workspaceId, userId });
+    if (userId) await teamMemoryAccess(tx, { workspaceId, userId }, true);
+    else {
+      const [workspace] = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM workspaces WHERE id = ${workspaceId}::uuid FOR SHARE`;
+      if (!workspace) return { inspected: 0, suggested: 0 };
+    }
     const cutoff = new Date(now.getTime() - TEAM_MEMORY_SCAN_INTERVAL_MS);
-    const [scan] = await tx.$queryRaw<{ cursorAt: Date | null; cursorId: string | null }[]>`
+    const [scan] = await tx.$queryRaw<
+      { cursorAt: Date | null; cursorId: string | null; cursorProjectId: string | null }[]
+    >`
       INSERT INTO team_memory_review_scans (workspace_id, scanned_at)
       VALUES (${workspaceId}::uuid, ${now})
       ON CONFLICT (workspace_id) DO UPDATE SET scanned_at = EXCLUDED.scanned_at
       WHERE ${!!userId} OR team_memory_review_scans.scanned_at <= ${cutoff}
-      RETURNING cursor_at AS "cursorAt", cursor_id AS "cursorId"`;
+      RETURNING cursor_at AS "cursorAt", cursor_id AS "cursorId", cursor_project_id AS "cursorProjectId"`;
     if (!scan) return { inspected: 0, suggested: 0 };
-    const where = { workspaceId, status: "active", pinned: false };
-    const read = (range: Prisma.TeamMemoryEntryWhereInput) =>
-      tx.teamMemoryEntry.findMany({
-        where: { ...where, ...range },
-        orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
-        take: PAGE_SIZE,
-      });
-    const window =
-      scan.cursorAt && scan.cursorId
-        ? await read({
-            OR: [
-              { updatedAt: { gt: scan.cursorAt } },
-              { updatedAt: scan.cursorAt, id: { gt: scan.cursorId } },
-            ],
-          })
-        : await read({});
+    const found = await tx.teamMemoryEntry.findMany({
+      where: {
+        workspaceId,
+        status: "active",
+        pinned: false,
+        ...(scan.cursorAt && scan.cursorId
+          ? {
+              OR: [
+                scan.cursorProjectId
+                  ? { projectId: { gt: scan.cursorProjectId } }
+                  : { projectId: { not: null } },
+                {
+                  projectId: scan.cursorProjectId,
+                  OR: [
+                    { updatedAt: { gt: scan.cursorAt } },
+                    { updatedAt: scan.cursorAt, id: { gt: scan.cursorId } },
+                  ],
+                },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [
+        { projectId: { sort: "asc", nulls: "first" } },
+        { updatedAt: "asc" },
+        { id: "asc" },
+      ],
+      take: PAGE_SIZE + 1,
+    });
+    const projectId = found[0]?.projectId ?? null;
+    const window = found.filter((row) => row.projectId === projectId).slice(0, PAGE_SIZE);
     const entries = window.map((entry) => head(entry as Row));
     const withEvidence = entries.filter((entry) => entry.evidence?.length);
     const references = withEvidence.flatMap((entry) => entry.evidence ?? []);
@@ -49,14 +71,20 @@ export async function scanTeamMemorySuggestions(
     const stale = withEvidence.filter((entry) =>
       entry.evidence?.some((ref) => !readable.has(JSON.stringify(ref))),
     );
-    const fingerprints = [
+    const buckets = [
       ...new Set(
-        window.map(({ content }) =>
-          new Bun.CryptoHasher("md5").update(normalizedMemoryContent(content)).digest("hex"),
+        window.map(({ content, kind, applicability }) =>
+          JSON.stringify({
+            hash: new Bun.CryptoHasher("md5")
+              .update(normalizedMemoryContent(content))
+              .digest("hex"),
+            kind,
+            applicability,
+          }),
         ),
       ),
     ];
-    const related = fingerprints.length
+    const related = buckets.length
       ? await tx.$queryRaw<
           {
             id: string;
@@ -69,25 +97,36 @@ export async function scanTeamMemorySuggestions(
             pinned: boolean;
           }[]
         >`
-      SELECT id, revision, title, content, kind, applicability, project_id AS "projectId", pinned
-      FROM team_memory_entries
-      WHERE workspace_id = ${workspaceId}::uuid AND status = 'active' AND NOT pinned
-        AND md5(trim(regexp_replace(normalize(content, NFKC), '[[:space:]]+', ' ', 'g'))) = ANY(${fingerprints}::text[])
-      ORDER BY id ASC LIMIT 128`
+      SELECT peer.*
+      FROM jsonb_to_recordset(${`[${buckets.join(",")}]`}::jsonb)
+        AS bucket(hash text, kind text, applicability text)
+      CROSS JOIN LATERAL (
+        SELECT id, revision, title, content, kind, applicability, project_id AS "projectId", pinned
+        FROM team_memory_entries
+        WHERE workspace_id = ${workspaceId}::uuid AND status = 'active' AND NOT pinned
+          AND COALESCE(project_id, '00000000-0000-0000-0000-000000000000'::uuid) =
+            COALESCE(${projectId}::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+          AND kind = bucket.kind AND applicability = bucket.applicability
+          AND md5(trim(regexp_replace(normalize(content, NFKC), '[[:space:]]+', ' ', 'g'))) = bucket.hash
+        ORDER BY id ASC LIMIT 2
+      ) peer`
       : [];
     const records = [...new Map([...window, ...related].map((row) => [row.id, row])).values()].sort(
       (left, right) => left.id.localeCompare(right.id),
     );
     const duplicates = duplicateMemorySuggestions(records, records.length);
+    const scanId = crypto.randomUUID();
     const candidates = [
       ...stale.map((entry) => ({
         workspaceId,
+        scanId,
         sourceKey: `evidence:${entry.id}:${entry.revision}`,
         kind: "evidence",
         payload: { id: entry.id, revision: entry.revision, title: entry.title },
       })),
       ...duplicates.map(({ key, ...payload }) => ({
         workspaceId,
+        scanId,
         sourceKey: key,
         kind: "duplicate",
         payload,
@@ -113,11 +152,15 @@ export async function scanTeamMemorySuggestions(
     const suggested = fresh.length
       ? (await tx.teamMemorySuggestion.createMany({ data: fresh, skipDuplicates: true })).count
       : 0;
-    const last = window.length === PAGE_SIZE ? window.at(-1) : undefined;
+    const last = found.length > window.length ? window.at(-1) : undefined;
     await tx.teamMemoryReviewScan.update({
       where: { workspaceId },
-      data: { cursorAt: last?.updatedAt ?? null, cursorId: last?.id ?? null },
+      data: {
+        cursorAt: last?.updatedAt ?? null,
+        cursorId: last?.id ?? null,
+        cursorProjectId: last?.projectId ?? null,
+      },
     });
-    return { inspected: window.length, suggested };
+    return { inspected: window.length, suggested, scanId, projectId };
   });
 }

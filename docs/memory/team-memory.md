@@ -53,10 +53,17 @@ can receive up to five current memory excerpts from the task's Project and the W
 The task request keeps working when recall fails or exceeds its 400 ms budget.
 
 Set `COFORGE_TEAM_MEMORY_REVIEW=true` on Web to enable the review queue. A public task
-marked done records one draft for that revision. A scan of each enabled Workspace creates
-review suggestions for duplicates and unavailable evidence. A human decides whether to publish,
-reconfirm, merge or dismiss. A reviewed write and its decision commit together; fixed memories
-are skipped by scans.
+marked done records one draft for that exact Task revision. Workspace members can also submit new
+memories and corrections from the editor. In the review queue, open readable evidence and the
+cited memory revision, compare a correction with its proposed text, and publish, edit, set aside
+for verification, or dismiss a suggestion. Reopening a Task or withdrawing its shareable evidence
+invalidates its draft. A reviewed write and its decision commit together.
+
+The daily sweep handles one project or the unscoped Workspace entries per batch. Each batch
+examines up to 64 non-fixed entries and records up to five new suggestions for duplicates or
+unavailable evidence. The review page can start a batch manually. Logs record the scan ID,
+inspected and suggested counts, and failures. Each committed approval records one acceptance
+with the originating scan ID, so operations can count accepted suggestions per batch.
 
 ## Upgrade and retained data
 
