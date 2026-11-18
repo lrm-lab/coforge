@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowLeft, Folder } from "@untitledui/icons";
 import type {
   PiChatCommand,
+  PiChatResult,
   PiChatSession,
   WorkbenchRuntime,
 } from "@lrm/coforge-sdk/internal/pi-chat";
