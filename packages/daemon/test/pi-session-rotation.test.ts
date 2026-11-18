@@ -106,6 +106,7 @@ test("oversized CoForge/Pi session JSONL rotates cleanly and remains discoverabl
   });
   expect(rotated.rotated).toBe(true);
   expect((await stat(file)).size).toBeLessThan(10_000);
+  expect((await stat(`${file}.rotated`)).size).toBeGreaterThan(180_000);
   expect(await resolveAgentSessionFile(workspaceDir, sessionDir, "agent-pi-1")).toBe(file);
   expect((await readdir(sessionDir)).filter((name) => name.endsWith(".jsonl"))).toHaveLength(1);
 });

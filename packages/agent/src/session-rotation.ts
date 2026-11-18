@@ -2,8 +2,35 @@ import { rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { SessionEntry, SessionManager } from "@earendil-works/pi-coding-agent";
 
-export const DEFAULT_PI_SESSION_ROTATE_BYTES = 4 * 1024 * 1024;
+export const DEFAULT_PI_SESSION_ROTATION_MIN_BYTES = 30 * 1024 * 1024;
+export const DEFAULT_PI_SESSION_ROTATE_BYTES = DEFAULT_PI_SESSION_ROTATION_MIN_BYTES;
 const PI_SESSION_ROTATE_ENV = "COFORGE_PI_SESSION_ROTATE_BYTES";
+const PI_SESSION_ROTATION_ENABLED_ENV = "COFORGE_PI_SESSION_ROTATION_ENABLED";
+
+const KNOWN_SESSION_ENTRY_TYPES = new Set([
+  "session",
+  "message",
+  "model_change",
+  "thinking_level_change",
+  "compaction",
+  "branch_summary",
+  "custom",
+  "custom_message",
+  "label",
+  "session_info",
+]);
+
+export function isPiSessionRotationEnabled(
+  environment?: Readonly<Record<string, string | undefined>>,
+  processEnv: Readonly<Record<string, string | undefined>> = Bun.env,
+): boolean {
+  const raw = (
+    environment?.[PI_SESSION_ROTATION_ENABLED_ENV] ?? processEnv[PI_SESSION_ROTATION_ENABLED_ENV]
+  )
+    ?.trim()
+    .toLowerCase();
+  return raw === "1" || raw === "true";
+}
 
 export type PiSessionRotationResult = Readonly<{
   rotated: boolean;
@@ -32,51 +59,28 @@ function isSystemMessageEntry(entry: SessionEntry): boolean {
   );
 }
 
-function isUserMessageEntry(entry: SessionEntry): boolean {
-  return (
-    entry.type === "message" &&
-    typeof entry.message === "object" &&
-    entry.message !== null &&
-    "role" in entry.message &&
-    entry.message.role === "user"
-  );
-}
+function activeEntriesForRotation(path: readonly SessionEntry[]): SessionEntry[] | null {
+  for (const entry of path) {
+    if (!KNOWN_SESSION_ENTRY_TYPES.has(entry.type)) return null;
+  }
 
-function activeEntriesForRotation(path: readonly SessionEntry[], maxBytes: number): SessionEntry[] {
   let compactionIdx = -1;
   for (let i = 0; i < path.length; i++) {
     if (path[i]!.type === "compaction") compactionIdx = i;
   }
+  if (compactionIdx < 0) return null;
 
-  let cutStart = 0;
-  if (compactionIdx >= 0) {
-    const compaction = path[compactionIdx] as Extract<SessionEntry, { type: "compaction" }>;
-    let firstKeptIdx = -1;
-    if (compaction.firstKeptEntryId) {
-      for (let i = 0; i < compactionIdx; i++) {
-        if (path[i]!.id === compaction.firstKeptEntryId) {
-          firstKeptIdx = i;
-          break;
-        }
-      }
-    }
-    cutStart = firstKeptIdx >= 0 ? firstKeptIdx : compactionIdx;
-  } else {
-    // Uncompacted oversized linear branch: retain the newest suffix starting at a user message
-    // within roughly half of maxBytes so resuming never starts on an assistant/tool message.
-    const targetBytes = Math.max(4_096, Math.floor(maxBytes / 2));
-    let runningBytes = 0;
-    let candidate = path.length - 1;
-    for (let i = path.length - 1; i >= 0; i--) {
-      runningBytes += JSON.stringify(path[i]).length + 1;
-      if (isUserMessageEntry(path[i]!)) candidate = i;
-      if (runningBytes >= targetBytes && isUserMessageEntry(path[i]!)) {
-        cutStart = i;
-        break;
-      }
-      cutStart = candidate;
+  const compaction = path[compactionIdx] as Extract<SessionEntry, { type: "compaction" }>;
+  if (!compaction.firstKeptEntryId) return null;
+  let firstKeptIdx = -1;
+  for (let i = 0; i < compactionIdx; i++) {
+    if (path[i]!.id === compaction.firstKeptEntryId) {
+      firstKeptIdx = i;
+      break;
     }
   }
+  if (firstKeptIdx < 0) return null;
+  const cutStart = firstKeptIdx;
 
   // Preserve the latest model_change, thinking_level_change, and session_info before cutStart so
   // SessionManager reconstructs identical session settings after reload.
@@ -125,9 +129,12 @@ function activeEntriesForRotation(path: readonly SessionEntry[], maxBytes: numbe
  */
 export async function rotatePiSessionTranscriptIfOversized(
   sessionManager: SessionManager,
-  options: { maxBytes?: number } = {},
+  options: { maxBytes?: number; enabled?: boolean } = {},
 ): Promise<PiSessionRotationResult> {
-  const maxBytes = options.maxBytes ?? DEFAULT_PI_SESSION_ROTATE_BYTES;
+  if (options.enabled === false) {
+    return { rotated: false, beforeBytes: 0, afterBytes: 0 };
+  }
+  const maxBytes = options.maxBytes ?? DEFAULT_PI_SESSION_ROTATION_MIN_BYTES;
   const sessionFile = sessionManager.getSessionFile();
   const header = sessionManager.getHeader();
   if (!sessionFile || !header) {
@@ -147,7 +154,10 @@ export async function rotatePiSessionTranscriptIfOversized(
     return { rotated: false, beforeBytes, afterBytes: beforeBytes };
   }
 
-  const retained = activeEntriesForRotation(branch, maxBytes);
+  const retained = activeEntriesForRotation(branch);
+  if (!retained) {
+    return { rotated: false, beforeBytes, afterBytes: beforeBytes };
+  }
   const serialized = `${[header, ...retained].map((entry) => JSON.stringify(entry)).join("\n")}\n`;
   const afterBytes = Buffer.byteLength(serialized, "utf8");
   if (afterBytes >= beforeBytes) {
@@ -155,9 +165,16 @@ export async function rotatePiSessionTranscriptIfOversized(
   }
 
   const tempPath = join(sessionManager.getSessionDir(), `.rotate-${crypto.randomUUID()}.tmp`);
+  const rotatedPath = `${sessionFile}.rotated`;
   try {
     await writeFile(tempPath, serialized, "utf8");
-    await rename(tempPath, sessionFile);
+    await rename(sessionFile, rotatedPath);
+    try {
+      await rename(tempPath, sessionFile);
+    } catch (error) {
+      await rename(rotatedPath, sessionFile).catch(() => {});
+      throw error;
+    }
     sessionManager.setSessionFile(sessionFile);
     return { rotated: true, beforeBytes, afterBytes };
   } catch (error) {

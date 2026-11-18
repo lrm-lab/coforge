@@ -30,6 +30,7 @@ import { installChannelTurnPolicy } from "./channel-turn-policy";
 import { modelWithSizes } from "./model-size-override";
 import { contextViewRequestLogFields } from "./session-context-view-log";
 import {
+  isPiSessionRotationEnabled,
   resolvePiSessionRotateBytes,
   rotatePiSessionTranscriptIfOversized,
 } from "./session-rotation";
@@ -207,6 +208,7 @@ export async function createSession(options: CreateSessionOptions) {
     ),
     rotateTranscript: async () => {
       if (created.session.isStreaming || created.session.isCompacting) return;
+      if (!isPiSessionRotationEnabled(options.environment)) return;
       const outcome = await rotatePiSessionTranscriptIfOversized(sessionManager, {
         maxBytes: rotateBytes,
       }).catch(() => undefined);
@@ -217,11 +219,6 @@ export async function createSession(options: CreateSessionOptions) {
       created.session.clearQueue();
       await created.session.abort();
       await created.session.waitForIdle();
-      if (!created.session.isCompacting) {
-        await rotatePiSessionTranscriptIfOversized(sessionManager, { maxBytes: rotateBytes }).catch(
-          () => {},
-        );
-      }
       created.session.dispose();
     },
   };
@@ -242,9 +239,6 @@ async function sessionManagerFor(
       const sessionManager = SessionManager.open(path, sessionDir, workspace);
       if (sessionManager.getSessionId() !== sessionId)
         throw new Error("CoForge session history changed during recovery");
-      await rotatePiSessionTranscriptIfOversized(sessionManager, {
-        maxBytes: rotateMaxBytes,
-      }).catch(() => {});
       return { sessionManager, replacedSessionId: undefined };
     }
   }
