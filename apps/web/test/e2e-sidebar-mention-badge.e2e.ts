@@ -35,6 +35,21 @@ test("a mention in another channel puts the @ badge on its sidebar row until tha
   await until(`(${mentionMark(mentioned)})?.shown === false`, 30_000);
 
   await agentSends(`#${mentionedName}`, `<@human:${DEV_BROWSER_USER.id}> look at this ${suffix}`);
+  const rowState = await evaluate(`(() => {
+  const link = ${rowOf(mentioned)};
+  if (!link) return { found: false };
+  const capsules = [...link.querySelectorAll("span")].filter((span) =>
+    typeof span.className === "string" && span.className.includes("rounded-full"),
+  ).length;
+  return { found: true, label: link.getAttribute("aria-label"), capsules };
+})()`);
+  console.log("row state after the mention:", JSON.stringify(rowState));
+  const dbName = (Bun.env.DATABASE_URL ?? "").split("/").pop() ?? "";
+  const mentionRows =
+    await Bun.$`docker exec coforge-e2e-postgres-1 psql -U coforge -d ${dbName} -tAc "select count(*) from message_mentions"`
+      .text()
+      .catch(() => "unreadable");
+  console.log("message_mentions rows:", mentionRows.trim());
   await until(`(${mentionMark(mentioned)})?.shown === true`, 60_000);
   await fx.screenshot("mention-badge.png");
 
