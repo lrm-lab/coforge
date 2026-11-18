@@ -265,7 +265,7 @@ export function LocalAgentForm({
                 label={m.agent_create_add_computer()}
                 icon={Plus}
                 selectionIndicator="none"
-                className="mt-1 border-t border-secondary pt-1"
+                className="sticky bottom-0 z-10 -mb-1 mt-1 border-t border-secondary bg-primary pt-1 pb-1"
               />
             )}
           </Select>
