@@ -66,6 +66,7 @@ test("a submenu opens inside the viewport on a phone and beside its menu on a de
     );
     await browser("find", "role", "button", "click", "--name", "Filter");
     await browser("wait", "--fn", `document.querySelector('${filterMenu}') !== null`);
+    await browser("wait", "--fn", settled(filterMenu));
     await browser("find", "role", "menuitem", "click", "--name", "Owner");
     await browser("wait", "--fn", `document.querySelector('${ownerMenu}') !== null`);
     // Past the popover's entry motion, so its box and the screenshot are where it rests.
