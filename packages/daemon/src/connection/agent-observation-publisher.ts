@@ -32,6 +32,11 @@ export class AgentObservationPublisher {
   readonly #methods: { contextUsage: string; serviceTier: string; contextViewAvailability: string };
   readonly #pending = new Map<string, PendingObservation>();
   readonly #loggedUnknownMethod = new Set<string>();
+  readonly #inFlight = new Set<string>();
+  readonly #queued = new Map<
+    string,
+    { client: CentrifugeWorkspaceClient; observation: PendingObservation }
+  >();
 
   constructor(methods: {
     contextUsage: string;
@@ -113,6 +118,7 @@ export class AgentObservationPublisher {
   /** Drops buffered observations; used when the connection is torn down for good. */
   clear(): void {
     this.#pending.clear();
+    this.#queued.clear();
   }
 
   #send(observation: PendingObservation, client: CentrifugeWorkspaceClient | undefined): void {
@@ -124,16 +130,31 @@ export class AgentObservationPublisher {
   }
 
   #publish(client: CentrifugeWorkspaceClient, observation: PendingObservation): void {
-    void client.rpc(observation.method, observation.payload).catch((error) => {
-      const errorCode = diagnosticErrorCode(error);
-      if (errorCode === "404" && this.#loggedUnknownMethod.has(observation.method)) return;
-      if (errorCode === "404") this.#loggedUnknownMethod.add(observation.method);
-      logger.warning("Agent observation was not accepted", {
-        ...observation.log,
-        error_code: errorCode,
-        outcome: "failed",
+    const key = `${observation.method}\0${observation.agentId}`;
+    if (this.#inFlight.has(key)) {
+      this.#queued.set(key, { client, observation });
+      return;
+    }
+    this.#inFlight.add(key);
+    void client
+      .rpc(observation.method, observation.payload)
+      .catch((error) => {
+        const errorCode = diagnosticErrorCode(error);
+        if (errorCode === "404" && this.#loggedUnknownMethod.has(observation.method)) return;
+        if (errorCode === "404") this.#loggedUnknownMethod.add(observation.method);
+        logger.warning("Agent observation was not accepted", {
+          ...observation.log,
+          error_code: errorCode,
+          outcome: "failed",
+        });
+      })
+      .finally(() => {
+        this.#inFlight.delete(key);
+        const next = this.#queued.get(key);
+        if (!next) return;
+        this.#queued.delete(key);
+        this.#publish(next.client, next.observation);
       });
-    });
   }
 }
 
