@@ -10,6 +10,8 @@ import { getLocale } from "#src/paraglide/runtime";
 import { MessageAttachments } from "./attachment-card";
 import { ConversationIdProvider } from "./conversation-id";
 import { MessageBody } from "./message-body";
+import { CollapsibleBlock } from "./collapsible-message-body";
+import { useExpansion } from "./message-expansion-context";
 import { attachmentMessageDisplayBody } from "./attachment-file-name";
 import type { ForwardedMessageView } from "./message-forward";
 import { forwardSourceTarget } from "./message-forward-model";
@@ -37,9 +39,11 @@ function attachmentsOf(
 export function ForwardedMessageCard({
   forwarded,
   attachments,
+  messageId,
 }: {
   forwarded: readonly ForwardedMessageView[];
   attachments: MessageView["attachments"];
+  messageId?: string;
 }) {
   const workspaceSlug = useWorkspaceSlug();
   const [first] = forwarded;
@@ -86,6 +90,7 @@ export function ForwardedMessageCard({
             key={original.sourceMessageId ?? index}
             original={original}
             attachments={attachmentsOf(original, attachments)}
+            expansionKey={messageId === undefined ? undefined : `${messageId}:forward:${index}`}
           />
         ))}
       </div>
@@ -96,10 +101,13 @@ export function ForwardedMessageCard({
 function ForwardedOriginal({
   original,
   attachments,
+  expansionKey,
 }: {
   original: ForwardedMessageView;
   attachments: MessageView["attachments"];
+  expansionKey: string | undefined;
 }) {
+  const expansion = useExpansion(expansionKey);
   const hydrated = useHydrated();
   const timeFormat = useTimeFormat();
   const body = attachmentMessageDisplayBody({ body: original.sourceBody, attachments });
@@ -140,10 +148,32 @@ function ForwardedOriginal({
         {original.sourceRawBody !== undefined && original.sourceMentions
           ? rawBody && (
               <ConversationIdProvider conversationId={undefined}>
-                <MessageBody body={rawBody} mentions={original.sourceMentions} />
+                <div>
+                  <CollapsibleBlock
+                    measureKey={rawBody}
+                    expanded={expansion.expanded}
+                    collapsible={expansion.collapsible}
+                    onToggleExpanded={expansion.toggle}
+                  >
+                    {() => <MessageBody body={rawBody} mentions={original.sourceMentions} />}
+                  </CollapsibleBlock>
+                </div>
               </ConversationIdProvider>
             )
-          : body && <p className="message-markdown whitespace-pre-wrap text-primary">{body}</p>}
+          : body && (
+              <div>
+                <CollapsibleBlock
+                  measureKey={body}
+                  expanded={expansion.expanded}
+                  collapsible={expansion.collapsible}
+                  onToggleExpanded={expansion.toggle}
+                >
+                  {() => (
+                    <p className="message-markdown whitespace-pre-wrap text-primary">{body}</p>
+                  )}
+                </CollapsibleBlock>
+              </div>
+            )}
         <MessageAttachments attachments={attachments} />
       </div>
     </div>

@@ -274,6 +274,7 @@ export const MessageRow = memo(function MessageRow({
               <ForwardedMessageCard
                 forwarded={message.forwarded}
                 attachments={message.attachments}
+                messageId={message.id}
               />
             )}
             <MessageRowFooter

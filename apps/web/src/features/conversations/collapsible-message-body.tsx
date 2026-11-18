@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ComponentProps } from "react";
+import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { ChevronDown } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -23,6 +23,44 @@ export function CollapsibleMessageBody({
   collapsible?: boolean;
   onToggleExpanded: () => void;
 }) {
+  return (
+    <CollapsibleBlock
+      measureKey={body}
+      expanded={expanded}
+      collapsible={collapsible}
+      onToggleExpanded={onToggleExpanded}
+      trailing={trailing}
+      className="message-text text-md"
+    >
+      {(collapsed) => (
+        <MessageBody
+          body={body}
+          mentions={mentions}
+          trailing={collapsed ? undefined : trailing}
+          {...bodyProps}
+        />
+      )}
+    </CollapsibleBlock>
+  );
+}
+
+export function CollapsibleBlock({
+  measureKey,
+  expanded,
+  collapsible,
+  onToggleExpanded,
+  trailing,
+  className,
+  children,
+}: {
+  measureKey: string;
+  expanded: boolean;
+  collapsible: boolean;
+  onToggleExpanded: () => void;
+  trailing?: ReactNode;
+  className?: string;
+  children: (collapsed: boolean) => ReactNode;
+}) {
   const contentRef = useRef<HTMLDivElement>(null);
   const [overflowing, setOverflowing] = useState(false);
 
@@ -40,7 +78,7 @@ export function CollapsibleMessageBody({
     const observer = new ResizeObserver(measure);
     observer.observe(content);
     return () => observer.disconnect();
-  }, [body, collapsible]);
+  }, [measureKey, collapsible]);
 
   const foldable = collapsible && overflowing;
   const collapsed = foldable && !expanded;
@@ -55,18 +93,13 @@ export function CollapsibleMessageBody({
           if (event.target.getBoundingClientRect().bottom > content.bottom) onToggleExpanded();
         }}
         className={cn(
-          "message-text text-md",
+          className,
           collapsed &&
             "overflow-hidden [mask-image:linear-gradient(to_bottom,black_calc(100%-2.5rem),transparent)]",
         )}
         style={collapsed ? { maxHeight: COLLAPSED_MESSAGE_MAX_HEIGHT } : undefined}
       >
-        <MessageBody
-          body={body}
-          mentions={mentions}
-          trailing={collapsed ? undefined : trailing}
-          {...bodyProps}
-        />
+        {children(collapsed)}
       </div>
       {foldable && (
         <div className="flex items-center">

@@ -82,12 +82,54 @@ test("a member turns off collapsing long messages for one channel and back on", 
         ),
       },
     });
+    const longText = (label: string) =>
+      Array.from({ length: 40 }, (_, line) => `${label} line ${line + 1}.`).join("\n\n");
+    await db.message.create({
+      data: {
+        workspaceId,
+        conversationId: channel.id,
+        senderMemberId: member.id,
+        sequence: 2,
+        body: "",
+        forwards: {
+          create: [
+            { text: longText("Marked up"), raw: true },
+            { text: longText("Plain"), raw: false },
+          ].map(({ text, raw }, position) => ({
+            position,
+            sourceConversationId: channel.id,
+            sourceConversationName: channel.channelName,
+            sourceSenderName: "Dev User",
+            sourceSenderHandle: "dev",
+            sourceCreatedAt: new Date(),
+            sourceBody: text,
+            ...(raw ? { sourceRawBody: text, sourceMentions: [] } : {}),
+            workspaceId,
+          })),
+        },
+      },
+    });
+    await db.conversation.update({ where: { id: channel.id }, data: { lastSequence: 2 } });
     await mkdir(artifacts, { recursive: true });
 
+    const cardButtons = `[...document.querySelectorAll("[data-forwarded-card] button[aria-expanded]")].map((button) => button.textContent.trim()).join("|")`;
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${workspacePath}/channel/${channel.id}`);
     await waitFor(showMore, 60_000);
     await browser("screenshot", join(artifacts, "collapsed.png"));
+    await waitFor(`${cardButtons} === "Show more|Show more"`);
+    for (let attempt = 0; ; attempt += 1) {
+      await browser(
+        "eval",
+        `document.querySelector("[data-forwarded-card] button[aria-expanded]").click()`,
+      );
+      const opened = await waitFor(`${cardButtons} === "Collapse|Show more"`, 5_000).then(
+        () => true,
+        () => false,
+      );
+      if (opened) break;
+      if (attempt === 5) throw new Error("the forwarded original never opened");
+    }
 
     await openSettings();
     const toggle = `((el) => el && (el.tagName === "INPUT" ? el : el.querySelector("input")))(${panel}?.querySelector('[aria-label="Collapse long messages"]'))`;
@@ -104,6 +146,7 @@ test("a member turns off collapsing long messages for one channel and back on", 
       ).collapseLongMessages;
     await browser("press", "Escape");
     await waitFor(`!${showMore}`);
+    await waitFor(`${cardButtons} === ""`);
     expect(await stored()).toBe(false);
     await browser("screenshot", join(artifacts, "full.png"));
 
