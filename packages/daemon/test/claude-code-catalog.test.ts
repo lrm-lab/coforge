@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -127,6 +127,51 @@ describe("Claude Code model catalog minimum versions", () => {
       await Bun.write(claudePath, "#!/bin/sh\necho upgraded claude\n");
       installed.claude.version = "2.1.285 (Claude Code)\n";
       expectListed(await claudeModelIds(), [FABLE_5_1, OPUS_5_5, SONNET_5_5]);
+    } finally {
+      await rm(stateDirectory, { recursive: true, force: true });
+      await rm(binDirectory, { recursive: true, force: true });
+    }
+  });
+
+  test("upgrading Claude Code from 2.1.306 to 2.1.327 clears any stale cached catalog and lists Claude Fable 5.2", async () => {
+    const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-claude-catalog-state-"));
+    const binDirectory = await mkdtemp(join(tmpdir(), "coforge-claude-catalog-bin-"));
+    const claudePath = join(binDirectory, "claude");
+    try {
+      await Bun.write(claudePath, "#!/bin/sh\necho claude 2.1.306\n");
+      const installed = { claude: { path: claudePath, version: "2.1.306 (Claude Code)\n" } };
+      const inventory = () =>
+        discoverCodeAgentInventory({
+          probe: probeFor(installed),
+          environment: { HOME: "/fixture/home", PATH: "", PI_OFFLINE: "1" },
+          piModels: async () => [],
+          cacheDirectory: stateDirectory,
+        });
+      const claudeModelIds = async () =>
+        ids((await inventory()).catalogs.find((catalog) => catalog.provider === "claude-code"));
+
+      expectListed(await claudeModelIds(), [FABLE_5_1, OPUS_5_5, SONNET_5_5, HAIKU_5_5]);
+
+      const cacheFile = join(stateDirectory, "code-agent-inventory-cache.json");
+      const cache = JSON.parse(await readFile(cacheFile, "utf8")) as Record<
+        string,
+        Record<string, unknown>
+      >;
+      cache["claude-code"] = {
+        ...cache["claude-code"],
+        catalog: { provider: "claude-code", models: [] },
+      };
+      await writeFile(cacheFile, JSON.stringify(cache));
+
+      await Bun.write(claudePath, "#!/bin/sh\necho upgraded claude 2.1.327\n");
+      installed.claude.version = "2.1.327 (Claude Code)\n";
+      expectListed(await claudeModelIds(), [FABLE_5_2, FABLE_5_1, OPUS_5_5, SONNET_5_5, HAIKU_5_5]);
+
+      const updatedCache = JSON.parse(await readFile(cacheFile, "utf8")) as Record<
+        string,
+        Record<string, unknown>
+      >;
+      expect(updatedCache["claude-code"]?.catalog).toBeUndefined();
     } finally {
       await rm(stateDirectory, { recursive: true, force: true });
       await rm(binDirectory, { recursive: true, force: true });

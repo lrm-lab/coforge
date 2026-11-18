@@ -341,12 +341,13 @@ export async function discoverExternalCodeAgents(
   if (cacheDirectory && (dropped.size > 0 || probed.length > 0)) {
     await updateInventoryCache(cacheDirectory, (current) => {
       for (const provider of dropped) delete current[provider];
-      for (const entry of probed)
-        current[entry.provider] = {
-          ...current[entry.provider],
-          key: entry.cacheKey,
-          runtime: entry.runtime,
-        };
+      for (const entry of probed) {
+        const previous = current[entry.provider];
+        current[entry.provider] =
+          previous?.key === entry.cacheKey
+            ? { ...previous, key: entry.cacheKey, runtime: entry.runtime }
+            : { key: entry.cacheKey, runtime: entry.runtime };
+      }
     });
   }
   return runtimes;
