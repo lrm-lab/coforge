@@ -3,7 +3,11 @@ import { z } from "zod";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { FINISHED_AGENT_MIGRATION_STATES } from "#src/server/agent-migrations/agent-migrations.server";
 import { parseAgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
-import { agentControlStateSchema } from "#src/server/agents/agent-control-types.server";
+import {
+  agentControlStateSchema,
+  type AgentControlStartupStore,
+  type StartupCandidateCursor,
+} from "#src/server/agents/agent-control-types.server";
 import type {
   AgentControlAgent,
   AgentControlState,
@@ -23,8 +27,31 @@ function controlState(state: AgentControlState) {
 }
 
 /** Session rows own native identity; Agent JSONB owns only the current control fence. */
-export class PrismaAgentControlStore implements AgentControlStore {
+export class PrismaAgentControlStore implements AgentControlStore, AgentControlStartupStore {
   constructor(private readonly db: PrismaClient) {}
+  async listStartupCandidates(now: number, limit: number, after?: StartupCandidateCursor) {
+    const afterDeadline = after?.deadlineAtMs ?? -1;
+    const afterId = after?.id ?? "00000000-0000-0000-0000-000000000000";
+    const rows = await this.db.$queryRaw<{ id: string; deadlineAtMs: bigint | number | null }[]>`
+      SELECT id, ("controlState"->>'deadlineAtMs')::bigint AS "deadlineAtMs"
+      FROM agents
+      WHERE "controlState"->>'phase' = 'starting'
+        AND "deletedAt" IS NULL
+        AND ("controlState"->>'deadlineAtMs' IS NULL
+          OR ("controlState"->>'deadlineAtMs')::bigint <= ${now})
+        AND (COALESCE(("controlState"->>'deadlineAtMs')::bigint, 0), id)
+          > (${afterDeadline}::bigint, ${afterId}::uuid)
+      ORDER BY COALESCE(("controlState"->>'deadlineAtMs')::bigint, 0), id
+      LIMIT ${limit}`;
+    const last = rows.at(-1);
+    return {
+      ids: rows.map((row) => row.id),
+      next:
+        last && rows.length === limit
+          ? { deadlineAtMs: Number(last.deadlineAtMs ?? 0), id: last.id }
+          : undefined,
+    };
+  }
   async get(agentId: string): Promise<AgentControlAgent | undefined> {
     const agent = await this.db.agent.findUnique({
       where: { id: agentId },

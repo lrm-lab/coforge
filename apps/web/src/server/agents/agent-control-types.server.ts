@@ -194,6 +194,16 @@ export interface AgentControlStore {
   memberRole(workspaceId: string, userId: string): Promise<WorkspaceMemberRole | undefined>;
 }
 
+export type StartupCandidateCursor = { deadlineAtMs: number; id: string };
+
+export interface AgentControlStartupStore {
+  listStartupCandidates(
+    now: number,
+    limit: number,
+    after?: StartupCandidateCursor,
+  ): Promise<{ ids: string[]; next: StartupCandidateCursor | undefined }>;
+}
+
 export type AgentControlView = {
   requestId: string;
   action: AgentControlAction;
