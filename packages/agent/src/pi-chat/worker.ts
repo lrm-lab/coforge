@@ -1,3 +1,4 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
@@ -67,7 +68,8 @@ export async function runPiChatWorker(
   const sessions = new PiChatSessions(
     store,
     (id, model, runtime) => {
-      if (runtime !== "codex") return createPiChatRuntime(cwd, id, undefined, notify, model);
+      if (runtime !== RUNTIME_PROVIDER.CODEX)
+        return createPiChatRuntime(cwd, id, undefined, notify, model);
       if (!codex) return Promise.reject(new Error("Codex runtime is unavailable"));
       return codex.open(id);
     },
@@ -109,7 +111,7 @@ export async function runPiChatWorker(
         const command = request.command;
         const execution =
           command.action === "files" || command.action === "file" || command.action === "upload"
-            ? command.runtime === "codex"
+            ? command.runtime === RUNTIME_PROVIDER.CODEX
               ? Promise.reject(new Error("Codex workbench file browsing is unavailable"))
               : files.execute(command)
             : sessions.execute(command);

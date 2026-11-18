@@ -1,3 +1,4 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { mkdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { codexWorkbench } from "@lrm/coforge-anvil/codex";
@@ -13,14 +14,14 @@ export function createWorkbenchCodex(directory: string, notify: (event: PiChatUp
   );
   return codexWorkbench(
     async () => {
-      const cwd = join(await realpath(directory), "codex");
+      const cwd = join(await realpath(directory), RUNTIME_PROVIDER.CODEX);
       await mkdir(cwd, { recursive: true, mode: 0o700 });
       if ((await realpath(cwd)) !== cwd) throw new Error("Codex workbench directory is redirected");
       return cwd;
     },
     {
       command: () => {
-        const executable = resolveHostCodeAgentExecutable("codex", environment);
+        const executable = resolveHostCodeAgentExecutable(RUNTIME_PROVIDER.CODEX, environment);
         if (!executable) throw new Error("Codex runtime is unavailable");
         return [executable, "app-server", "--listen", "stdio://"];
       },
