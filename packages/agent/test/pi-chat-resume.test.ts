@@ -94,6 +94,37 @@ function fixture() {
   };
 }
 
+test("an interrupted first Codex turn retains its input without automatically starting a turn", async () => {
+  const f = fixture();
+  const id = crypto.randomUUID();
+  const requestId = crypto.randomUUID();
+  f.records.set(id, {
+    id,
+    title: "native",
+    model: "Codex",
+    status: "running",
+    updatedAt: 0,
+    requestIds: [requestId],
+    runtime: "codex",
+  });
+  f.checkpoints.set(id, { requestId, message: "preserve this", messageCount: 0 });
+  const sessions = new PiChatSessions(f.store, f.factory);
+  try {
+    expect((await sessions.read(id)).session).toMatchObject({
+      status: "interrupted",
+      interruptedInputs: [{ id: requestId, text: "preserve this" }],
+    });
+    expect(await sessions.execute({ action: "list" })).toEqual({ sessions: [] });
+    expect((await sessions.execute({ action: "list", includeCodex: true })).sessions?.length).toBe(
+      1,
+    );
+    expect(f.resumed).toEqual([]);
+    expect(f.prompted).toEqual([]);
+  } finally {
+    await sessions.dispose();
+  }
+});
+
 test("a restarted worker automatically continues its accepted task without resending the user message", async () => {
   const f = fixture();
   const id = crypto.randomUUID();
