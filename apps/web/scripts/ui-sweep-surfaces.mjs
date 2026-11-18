@@ -1,10 +1,5 @@
 import { sleep } from "./cdp-browser.mjs";
 
-// ---------------------------------------------------------------------------
-// Surface list. `prepare` runs after navigation + theme/viewport emulation,
-// before checks + screenshot. `postEscape` marks surfaces that opened an
-// overlay, so we verify Escape closes it (dialogCount === 0 after).
-// ---------------------------------------------------------------------------
 export function buildSurfaces(ids, { baseUrl: BASE_URL, locale: LOCALE }) {
   const missing = [];
   if (!ids.agentId) missing.push("agentId");
@@ -26,9 +21,6 @@ export function buildSurfaces(ids, { baseUrl: BASE_URL, locale: LOCALE }) {
       key: "channel-tasks-tab",
       url: url(`/channel/${ids.channelId}`),
       prepare: async (page) => {
-        // Scoped to the in-channel Chat/Tasks tab nav — an unscoped "Tasks"
-        // text match hits the sidebar's global Tasks nav link first (it comes
-        // earlier in the DOM) and navigates away to /tasks instead.
         const ok = await page.clickText("^Tasks", { within: '[aria-label="Chat / Tasks"]' });
         if (!ok) return "could not find the channel Tasks tab";
       },
@@ -37,7 +29,7 @@ export function buildSurfaces(ids, { baseUrl: BASE_URL, locale: LOCALE }) {
       key: "channel-thread-open",
       url: url(`/channel/${ids.channelId}`),
       prepare: async (page) => {
-        const ok = await page.clickText("repl"); // "N replies" / "1 reply"
+        const ok = await page.clickText("repl");
         if (!ok) return "could not find a message with replies to open the thread panel";
       },
       postEscape: true,
@@ -118,15 +110,13 @@ export function buildSurfaces(ids, { baseUrl: BASE_URL, locale: LOCALE }) {
       },
       postEscape: true,
     },
-    // The standalone /tasks board is read-only; "Create task" only exists on
-    // a channel's embedded task board (its Tasks tab), so open it from there.
     ids.channelId && {
       key: "dialog-create-task",
       url: url(`/channel/${ids.channelId}`),
       prepare: async (page) => {
         if (!(await page.clickText("^Tasks", { within: '[aria-label="Chat / Tasks"]' })))
           return "could not find the channel Tasks tab";
-        await sleepScript(500); // the Tasks tab is a route search-param change; let it settle
+        await sleepScript(500);
         const ok = await page.clickText("Create Task");
         if (!ok) return "could not find the Create task trigger";
       },
@@ -169,7 +159,6 @@ export function buildSurfaces(ids, { baseUrl: BASE_URL, locale: LOCALE }) {
         await page.mouseDown(rect.x, rect.y);
         await page.mouseMove(rect.x + 60, rect.y);
         await sleepScript(150);
-        // deliberately leave the mouse "down" for the screenshot, then release.
       },
       cleanup: async (page) => {
         await page.mouseUp(0, 0);

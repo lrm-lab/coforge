@@ -18,19 +18,9 @@ import { m } from "#src/paraglide/messages";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
 
-/**
- * The panel's first band (48px, the same height as Thread's header): the Agent's identity on the
- * left, bordered icon buttons on the right — Message, Start-or-Stop, Restart/Reset, then a plain
- * Close. On a narrow panel Message stays and the other two go in one menu
- * (`AgentProfileActionsMenu`), as in Raft, so the name keeps the room. Available on every tab (rendered once by the panel shell, not per tab). All four use the
- * official `ButtonUtility` with its `tooltip` prop.
- */
 export function AgentProfileHeader({
   agent,
   mascot,
-  /** True when this profile is an app's bot, which has no mascot: its picture stays still,
-   * as on its card. Undefined while the profile is still loading — the face is then unknown,
-   * and the neutral monogram stands in. */
   appBot,
   display,
   controls,
@@ -44,25 +34,15 @@ export function AgentProfileHeader({
     id: string;
     displayName: string;
     avatarUrl?: string | null;
-    /** The face is unknown until a read provides it: an app's bot, or an Agent outside the
-     * roster, waits with the neutral monogram instead of the id's mascot. */
     noIdDefault?: boolean;
   };
-  /** The Agent's mascot key, once the profile has loaded: the avatar then moves. Until then, a
-   * still picture. */
   mascot?: AgentMascot;
-  /** True when this profile is an app's bot, which has no mascot: its picture stays still,
-   * as on its card. Undefined while the profile is still loading. */
   appBot?: boolean | undefined;
   display?: AgentDisplaySnapshot;
   controls: AgentRuntimeControls;
-  /** The viewer may message this Agent: any member a public one, only its creator a private one. */
   canMessage: boolean;
-  /** The Agent was deleted: its profile is read-only, so the header offers no runtime control. */
   deleted?: boolean;
   onClose: () => void;
-  /** Where the profile was opened from, when it is shown inside another page (a channel's
-   * members): a Back button before the avatar returns there. */
   back?: { label: string; onPress: () => void };
   pageHeading?: boolean;
 }) {
@@ -70,9 +50,6 @@ export function AgentProfileHeader({
   const message = () => void openDirectConversation({ agentId: agent.id });
   const Name = pageHeading ? "h1" : "p";
   const header = (
-    // Same 20px gutter as the panel body (px-5): the bordered utility buttons align by box edge,
-    // while the borderless Close pulls -mr-1.5 so its glyph lands on the gutter
-    // (docs/design/page-skeleton-and-density.md §8 optical alignment).
     <header className="@container/agent-header flex h-12 shrink-0 items-center gap-2 px-5 py-0">
       {back && (
         <ButtonUtility
@@ -104,8 +81,6 @@ export function AgentProfileHeader({
           deleted={deleted}
         />
       )}
-      {/* The name alone: the avatar's dot carries the live status
-          and the Profile tab the description. */}
       <Name className="min-w-0 flex-1 truncate text-md font-medium tracking-tight text-secondary">
         {agent.displayName}
       </Name>
@@ -122,7 +97,6 @@ export function AgentProfileHeader({
         {!deleted && (
           <>
             <AgentProfileActionsMenu className="flex @lg/agent-header:hidden" controls={controls} />
-            {/* One trigger for both states, so keyboard focus stays on it when Start becomes Stop. */}
             <ButtonUtility
               icon={controls.isOnline ? Stop : Play}
               size="sm"

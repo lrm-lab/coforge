@@ -77,13 +77,6 @@ import {
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
-/**
- * An Agent's profile: the conversation's right-hand slot content when it is the visible panel,
- * and a page of the channel settings sheet (with `back`) opened from its members. Same
- * chrome as the Thread panel (48px header band, 44px tab band, flat body, no page-level card),
- * built from `getAgentProfile` plus the existing workspace realtime hooks for live status/activity
- * — never its own subscription (`src/features/agents/AGENTS.md`'s Agent-state rule).
- */
 export function AgentProfilePanel({
   agentId,
   requestedTab,
@@ -96,7 +89,6 @@ export function AgentProfilePanel({
   requestedTab: ProfileTabId | undefined;
   onTabChange: (tab: ProfileTabId) => void;
   onClose: () => void;
-  /** Shown inside another page: its Back button (see `AgentProfileHeader`). */
   back?: { label: string; onPress: () => void };
   pageHeading?: boolean;
 }) {
@@ -115,25 +107,15 @@ export function AgentProfilePanel({
   const query = useQuery(agentProfileQuery(agentId));
   const profile = query.data;
   const invalidate = useInvalidateAgentProfile(agentId);
-  // `liveAgent` (the shared realtime roster) is blank for an Agent outside the viewer's own
-  // `listAgents` roster until its first live publication arrives, e.g. an owner/admin's
-  // placeholder for another member's private Agent. `getAgentProfile` (this panel's authorized
-  // fetch) already computes an initial display snapshot for any Agent the viewer can see;
-  // prefer the live one once a publication lands, but seed from that fetch, not nothing.
   const display = liveAgent?.display ?? profile?.display;
 
   const knownName = profile?.displayName ?? liveAgent?.displayName ?? "";
-  // A deleted Agent's profile is read-only: the Profile tab alone, nothing acting on it.
   const deleted = Boolean(profile?.deletedAt);
   const canManage = profile && !deleted ? canManageAgent(profile) : false;
   usePrefetchAgentActivityFeed(agentId, canManage);
   const owned = Boolean(profile?.ownedByCurrentUser) && !deleted;
-  // `undefined` for an unreadable stored config: the migration section's refusal names need a
-  // runtime and model, so it stays hidden with the rest of the runtime block (task #517).
   const migrationRuntime = agentMigrationRuntime(profile?.runtimeConfig);
   const loadComputers = useServerFn(listComputers);
-  // An unbound Agent needs a Computer before its runtime can be saved; once bound, only
-  // "Move to another Computer" changes it.
   const offerComputerPicker = Boolean(profile && canManage && !profile.computer);
   const computersQuery = useQuery({
     queryKey: ["agent-runtime-computers", profile?.id, profile?.computerId ?? "none"],
@@ -144,16 +126,12 @@ export function AgentProfilePanel({
     offerComputerPicker && computersQuery.isSuccess
       ? setupComputerOptions(computersQuery.data ?? [], profile?.isWeeklyReportAssistant)
       : undefined;
-  // An app's bot has no manager tabs, but its Chat is every viewer's.
   const tabOrder = useAgentProfileTabOrder(
     canManage,
     Boolean(profile) && !deleted && !profile?.appBot,
     Boolean(profile) && !deleted && (canManage || Boolean(profile?.appBot)),
   );
   const tab = resolveAgentProfileTab(requestedTab, tabOrder.tabs);
-  // Opened without `agentTab`, the panel lands on the first tab of the viewer's order once their
-  // permissions are known, and records it through `onTabChange` (the URL, or the embedding page's
-  // state) so a later reorder does not move it.
   const loaded = Boolean(profile);
   useEffect(() => {
     if (loaded && !requestedTab) onTabChange(tab);
@@ -162,7 +140,6 @@ export function AgentProfilePanel({
   const { onLoadReminders, onLoadSkills, onListWorkspaceDir, onReadWorkspaceFile } =
     useAgentPanelLoaders(agentId);
 
-  // Owner-only env, for the Runtime config dialog.
   const queryClient = useQueryClient();
   const workspaceId = useCurrentWorkspaceId();
   const envQuery = useQuery(agentEnvironmentQuery(agentId, owned));
@@ -210,12 +187,6 @@ export function AgentProfilePanel({
     setRuntimeEditing(false);
     setRuntimeFormError("");
   }
-  // Reuses the full page's edit-dialog submit path (`updateAgentInputFromForm` +
-  // `agentUpdateErrorMessage`, `agent-form.ts`) so the two Runtime config editors never drift.
-  // The panel's form carries only the runtime fields, so displayName/description are supplied
-  // as fallbacks — never blanked by this save. Env rows are a second, independent save
-  // (`saveAgentEnvironment`) gated by the form's own `changed.environment` flag, since Save can
-  // fire with only one of the two actually different from what loaded.
   function onSaveRuntime(form: FormData, changed: { runtime: boolean; environment: boolean }) {
     void guardRuntimeForm(async () => {
       if (!profile) return;
@@ -253,8 +224,6 @@ export function AgentProfilePanel({
   }
 
   if (query.isError) {
-    // An Agent that exists but is private to someone else answers a distinct, detail-
-    // free state — no "you may not have access, or it was removed" guess, just the one fact.
     const notVisible = isAppErrorCode(query.error, "AGENT_NOT_VISIBLE");
     return <AgentProfileUnavailable notVisible={notVisible} back={back} onClose={onClose} />;
   }
@@ -267,15 +236,10 @@ export function AgentProfilePanel({
         pageHeading={pageHeading}
         canMessage={Boolean(profile?.canMessage)}
         deleted={deleted}
-        // Until the profile arrives, the face the lists show (the live roster's), not the one the
-        // Agent's id would choose: an Agent given another mascot otherwise opens with the wrong
-        // face for a frame (task #66).
         agent={{
           id: agentId,
           displayName: knownName,
           avatarUrl: profile?.avatarUrl ?? liveAgent?.avatarUrl,
-          // A face this panel has no list data for — an app's bot, or an Agent outside the
-          // roster — waits with the neutral monogram instead of the id's mascot.
           noIdDefault: !liveAgent,
         }}
         mascot={profile?.mascot ?? liveAgent?.mascot}
@@ -311,7 +275,6 @@ export function AgentProfilePanel({
         onSelect={onTabChange}
         onReorder={tabOrder.reorder}
       />
-      {/* Workspace and Activity scroll their own parts. */}
       <div
         className={
           profile && (tab === "workspace" || tab === "activity")
@@ -348,9 +311,6 @@ export function AgentProfilePanel({
             timeZone={timeZone}
             canManage={canManage}
             controls={controls}
-            // Realtime once a display snapshot has arrived, the initial `getAgentProfile` load
-            // until then — trusting the live display's own (possibly explicitly null)
-            // `contextUsage` once present, never falling back past it to a stale initial read.
             contextUsage={display?.contextUsage ?? null}
             fastMode={display?.fastMode ?? null}
             onSaveDisplayName={async (value) => {

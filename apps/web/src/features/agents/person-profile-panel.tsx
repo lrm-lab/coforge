@@ -46,13 +46,6 @@ import { formatAgentProfileParam } from "./profile-panel/profile-panel-search";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
-/**
- * A person's right-hand panel (`profile=user:<id>`) on the Members page and in a conversation, the
- * human counterpart of `AgentProfilePanel`: who they are (name, description, email), their Workspace role and join
- * date, and the Agents they created that the viewer may see. Owners and admins change the
- * person's role and remove them here as in Settings → Members; a person edits their own profile
- * in Settings → Account.
- */
 export function PersonProfilePanel({
   userId,
   onClose,
@@ -62,16 +55,11 @@ export function PersonProfilePanel({
 }: {
   userId: string;
   onClose: () => void;
-  /** Where the profile was opened from, when it is shown inside another page (a channel's
-   * members): a Back button before the avatar returns there. */
   back?: PanelBack;
-  /** Opens one of the person's Agents in the host's own place for it. Absent, the Agent opens in
-   * the page's profile slot through the address. */
   onOpenAgent?: (agentId: string) => void;
   pageHeading?: boolean;
 }) {
   const Name = pageHeading ? "h1" : "p";
-  // The app shell's Workspace, which every page hosting this panel sits under.
   const workspaceId = useCurrentWorkspaceId();
   const person = useQuery({
     ...memberPersonQuery(workspaceId ?? "", userId),
@@ -131,7 +119,6 @@ export function PersonProfilePanel({
   const profile = person.data;
   return (
     <aside aria-label={profile.displayName} className="flex min-h-0 flex-1 flex-col">
-      {/* Same 48px band and 20px gutter as the Agent panel's header. */}
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-secondary px-5">
         {back && <BackButton back={back} />}
         <ActorAvatar
@@ -144,7 +131,6 @@ export function PersonProfilePanel({
         <Name className="min-w-0 flex-1 truncate text-md font-medium tracking-tight text-secondary">
           {profile.displayName}
         </Name>
-        {/* Every member offers it, the viewer too: that opens their DM with themself. */}
         <ButtonUtility
           icon={MessageSquare}
           size="sm"
@@ -194,7 +180,6 @@ function PersonProfileBody({
 }: {
   profile: MemberPersonProfile;
   onOpenAgent?: (agentId: string) => void;
-  /** The person was removed from the Workspace: the panel has nothing left to show. */
   onRemoved: () => void;
 }) {
   const workspaceSlug = useWorkspaceSlug();
@@ -203,8 +188,6 @@ function PersonProfileBody({
   const navigate = useNavigate();
   const timeZone = appRoute.useLoaderData().timeZone;
   const locale = getLocale();
-  // Without a time-zone preference the server and browser zones differ, so the date is only
-  // formatted once hydrated.
   const hydrated = useHydrated();
   const joinedOn =
     timeZone || hydrated ? formatCalendarDate(profile.joinedAt, timeZone, locale) : "";
@@ -256,8 +239,6 @@ function PersonProfileBody({
 
       <section className="border-b border-secondary px-6 py-5">
         <p className={SECTION_CAPTION_CLASS}>{m.agent_profile_section_info()}</p>
-        {/* Short read-only facts: docs/design/field-display.md's fact list, label left and value
-            right, with the one action on a fact at its row's end and its error under the row. */}
         <dl className="mt-2">
           <FactRow
             label={m.agent_profile_role()}
@@ -317,8 +298,6 @@ function PersonProfileBody({
                   </AriaButton>
                 ) : (
                   <Link
-                    // The page the panel is on (Members or a conversation) shows the Agent's panel
-                    // in the same slot.
                     to="."
                     resetScroll={false}
                     search={(previous: { profile?: string; agentTab?: string }) => ({
@@ -365,12 +344,6 @@ function PersonProfileBody({
   );
 }
 
-/**
- * The owner/admin actions on a person, through the same writes Settings → Members uses (the
- * server re-checks who may do what). Each refreshes the Members directory and the page. A failure
- * stays inline where it happened (docs/design/toast-vs-inline.md): under the role row, or in the
- * remove dialog, which stays open so it can be tried again.
- */
 function useMemberActions(profile: MemberPersonProfile, onRemoved: () => void) {
   const updateRole = useServerFn(updateWorkspaceMemberRole);
   const removeMember = useServerFn(removeWorkspaceMember);
@@ -411,8 +384,6 @@ function useMemberActions(profile: MemberPersonProfile, onRemoved: () => void) {
   };
 }
 
-/** One fact of the Info list: label left, value right, an optional action at the row's end, and
- * the action's error under the row (docs/design/field-display.md). */
 function FactRow({
   label,
   help,
@@ -421,7 +392,6 @@ function FactRow({
   error,
 }: {
   label: string;
-  /** On-demand help about the fact, beside its label. */
   help?: ReactNode;
   children: ReactNode;
   action?: ReactNode;
@@ -460,7 +430,6 @@ function CreatedAgentRow({ agent }: { agent: MemberPersonProfile["createdAgents"
   );
 }
 
-/** A created Agent's face with its live status, read from the shell's one Agent subscription. */
 function CreatedAgentAvatar({ agent }: { agent: MemberPersonProfile["createdAgents"][number] }) {
   const display = useLiveAgentDisplay(agent.id);
   return (

@@ -57,7 +57,6 @@ export function AgentsContent({
   owner: OwnerFilter;
   onFiltersChange: (filters: { memberType?: MemberTab; owner?: OwnerFilter }) => void;
   profileAgentId?: string;
-  /** The person whose profile the panel shows (`profile=user:<id>`). */
   profilePersonId?: string;
   agentTab?: AgentProfileTab;
   onDeleteAgent: (agentId: string, confirmation: string) => Promise<void>;
@@ -68,26 +67,20 @@ export function AgentsContent({
   const timeZone = appRoute.useLoaderData().timeZone;
   const locale = getLocale();
   const [search, setSearch] = useState("");
-  // The server searches; wait for a pause in typing instead of fetching on every keystroke.
   const [query, setQuery] = useState("");
   useEffect(() => {
     const timer = setTimeout(() => setQuery(search.trim()), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [search]);
-  // The target outlives `deleteOpen` so the dialog keeps its title through the close animation.
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const canInviteMember = summary.actorRole === "owner" || summary.actorRole === "admin";
-  // Agent creation requires Workspace owner/admin; see ManageAgents.create / assertCanCreateAgents.
   const canCreateAgent = canInviteMember;
-  // Deletion is the same owner/admin capability, and only for Agents the directory marks
-  // deletable; the server re-checks both.
   const canDeleteAgent = canInviteMember;
   const onAgentTab = memberType === "agent";
   const tabTotal = onAgentTab ? summary.agentCount : summary.peopleCount;
   const filtersActive = onAgentTab && owner === "mine";
   const searchLabel = onAgentTab ? m.member_search_agents() : m.member_search_humans();
-  // Keep the cards already on screen while a changed filter or search loads its first page.
   const agentPages = useInfiniteQuery({
     ...memberAgentsQuery(summary.workspaceId, { owner, query }),
     enabled: onAgentTab,
@@ -109,13 +102,10 @@ export function AgentsContent({
     if (pages.hasNextPage && !pages.isFetchingNextPage) void pages.fetchNextPage();
   };
   const profileOpen = Boolean(profileAgentId || profilePersonId);
-  // `useBreakpoint` is true during SSR for a desktop's request (a phone's request assumes narrow,
-  // `AssumedViewportProvider`), which cannot tell a narrow desktop window. Stay stacked until after
-  // mount so a phone never first-paints the profile as a 35% column with a blank left side.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
   const desktop = useBreakpoint("md");
-  const splitOpen = mounted && desktop && profileOpen;
+  const splitOpen = hydrated && desktop && profileOpen;
   const profile = profileAgentId ? (
     <AgentProfilePanel
       agentId={profileAgentId}
@@ -126,7 +116,6 @@ export function AgentsContent({
     />
   ) : profilePersonId ? (
     <PersonProfilePanel
-      // A fresh panel per person, so one never shows another's state while it loads.
       key={profilePersonId}
       userId={profilePersonId}
       onClose={closeAgentProfile}
@@ -148,8 +137,6 @@ export function AgentsContent({
       }}
       className="@container/members min-h-0 min-w-0 flex-1"
     >
-      {/* One row with centred tabs once the pane (not the viewport) is wide enough; narrower, as
-       * on a phone or beside the profile panel, the tabs wrap onto their own row. */}
       <header className="flex shrink-0 flex-wrap items-center gap-x-3 border-b border-secondary px-page @2xl/members:grid @2xl/members:h-12 @2xl/members:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
         <div className="flex h-12 min-w-0 flex-1 items-center gap-3">
           <PageBackButton />
@@ -221,8 +208,6 @@ export function AgentsContent({
           />
         </div>
       )}
-      {/* `relative` makes the list the containing block of the cards' absolutely positioned
-          `sr-only` labels; without it they escape this scroll box and stretch the document. */}
       <TabPanel id={memberType} className="relative min-h-0 flex-1 overflow-y-auto px-page pb-8">
         {pages.isError && !pages.data ? (
           <div role="alert" className="mt-8 flex flex-col items-center gap-3 text-center">
@@ -249,12 +234,9 @@ export function AgentsContent({
                 key={member.id}
                 member={member}
                 selected={member.id === profileAgentId}
-                // Without a time-zone preference the server and browser zones differ, so the date
-                // is only formatted after mount (the same rule as RelativeTime).
                 createdOn={
-                  timeZone || mounted ? formatCalendarDate(member.createdAt, timeZone, locale) : ""
+                  timeZone || hydrated ? formatCalendarDate(member.createdAt, timeZone, locale) : ""
                 }
-                // Editing follows the profile panel's rule: Workspace owner/admin or the creator.
                 canEdit={canInviteMember || member.owner.id === summary.viewerId}
                 onDelete={
                   canDeleteAgent && member.deletable
@@ -266,7 +248,6 @@ export function AgentsContent({
                 }
               />
             ))}
-            {/* React Aria asks for the next page as this sentinel nears the scroll area's end. */}
             <GridListLoadMoreItem
               onLoadMore={loadMore}
               isLoading={pages.isFetchingNextPage}
@@ -283,8 +264,6 @@ export function AgentsContent({
           </GridList>
         ) : null}
         {pages.isFetchNextPageError ? (
-          // React Aria re-arms its sentinel only when the list changes, so a failed page needs an
-          // explicit retry or the list would silently end early.
           <div role="alert" className="mt-4 flex flex-col items-center gap-3 text-center">
             <p className="text-sm text-error-primary">{m.member_directory_load_error()}</p>
             <Button size="sm" color="secondary" onPress={() => void pages.fetchNextPage()}>

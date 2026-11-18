@@ -1,28 +1,4 @@
 #!/usr/bin/env bun
-// Scripted browser walkthrough: visits every route/state/theme/viewport this
-// repo's dev seed (`bun run seed:dev`) populates, runs automatic layout
-// checks, and writes screenshots plus a findings report.
-//
-// Run from the repository root with `bun run --cwd apps/web ui:sweep`; the script is this
-// package's, so a bare `bun run ui:sweep` from the root finds no such script.
-//
-// Browser automation: this drives a locally launched Chromium instance over
-// the raw Chrome DevTools Protocol (`--remote-debugging-port`), not the
-// ego-browser skill — ego-browser's task-space runtime is an interactive tool
-// for an agent's own session, not something a checked-in repo script can
-// depend on other engineers having installed. Plain CDP has no dependency
-// beyond a local Chromium binary (auto-detected; override with
-// UI_SWEEP_CHROME_PATH).
-//
-// Env vars:
-//   UI_SWEEP_BASE        base URL of the running dev server (default http://127.0.0.1:8795)
-//   UI_SWEEP_OUT          output directory (default ./sweep next to this script's cwd)
-//   UI_SWEEP_CHROME_PATH  explicit path to a Chromium/Chrome binary
-//   UI_SWEEP_LOCALE       locale path prefix (default "en")
-//   UI_SWEEP_THEMES       comma-separated theme names (light,dark)
-//   UI_SWEEP_VIEWPORTS    comma-separated viewport names (1440,1024,390)
-//   UI_SWEEP_STRICT       "1": exit non-zero when any capture has a finding, exception or
-//                         console error, or a surface was skipped (CI)
 
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -57,10 +33,6 @@ async function runChecks(page) {
   return page.evalJs(CHECKS_EXPR);
 }
 
-// ---------------------------------------------------------------------------
-// Surface discovery: resolve seed-created ids from the live app instead of
-// hardcoding them, so the sweep works against any seeded workspace.
-// ---------------------------------------------------------------------------
 async function discoverIds(page) {
   const ids = {
     workspaceSlug: null,
@@ -80,7 +52,6 @@ async function discoverIds(page) {
     return null;
   })()`;
 
-  // The app root opens the signed-in user's Workspace; every page lives under `/w/<slug>`.
   await page.navigate(`${BASE_URL}/${LOCALE}`);
   ids.workspaceSlug = await page.evalJs(
     `location.pathname.match(new RegExp(${JSON.stringify(`^/${LOCALE}/w/([^/?#]+)`)}))?.[1] ?? null`,
@@ -101,15 +72,11 @@ async function discoverIds(page) {
 
   await page.navigate(`${BASE_URL}${workspace}`);
   ids.channelId = await page.evalJs(extract(`${workspace}/channel/([0-9a-fA-F-]{36})(?:[/?]|$)`));
-  // The sidebar lists only the direct conversations the user already has, each at `dm/<id>`.
   ids.dmId = await page.evalJs(extract(`${workspace}/dm/([0-9a-fA-F-]{36})(?:[/?]|$)`));
 
   return ids;
 }
 
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
 
@@ -197,8 +164,6 @@ async function main() {
 
             if (surface.postEscape) {
               await page.pressEscape();
-              // A dialog leaves through its exit animation: count what is still there once that
-              // has had time to run, not in the same frame as the key.
               let after = await page.evalJs('document.querySelectorAll("[role=dialog]").length');
               for (let waited = 0; after !== 0 && waited < 1500; waited += 100) {
                 await sleep(100);
@@ -233,7 +198,6 @@ async function main() {
       }
     }
 
-    // Extra: resize 1440 -> 1920 while a dialog is open (once per theme).
     for (const theme of THEMES) {
       await page.setViewport(1440, 900);
       await page.setTheme(theme);
@@ -276,8 +240,6 @@ async function main() {
 
     writeReports(results, notes);
     printSummary(results);
-    // In CI (UI_SWEEP_STRICT=1) any finding, page exception or console error fails the run; the
-    // report above says which surface, theme and width.
     if (process.env.UI_SWEEP_STRICT === "1") {
       const failures = results.filter(
         (r) => r.findings.length || r.exceptions.length || r.consoleErrors.length,
