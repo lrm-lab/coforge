@@ -14,6 +14,7 @@ import { productionTicketNonces } from "./artifact-sandbox-nonces.server";
 import { artifactSandboxOrigin } from "./artifact-sandbox-config.server";
 import { ArtifactPublicLinks } from "./artifact-public-links.server";
 import { linkPageLookup, publicPageLookup } from "./artifact-public-page.server";
+import { ArtifactLinkOpen } from "./artifact-link-open.server";
 import { PublicArtifactMissGuard } from "./artifact-public-miss-guard.server";
 import { getAppRateLimits } from "#src/server/app-rate-limits/app-rate-limits-composition.server";
 import { artifactsEnabled, type ArtifactActor } from "./artifact-access.server";
@@ -160,6 +161,25 @@ export function productionArtifactShares(
   return new ArtifactShares(db, enabled);
 }
 
+let linkMissGuard: PublicArtifactMissGuard | undefined;
+
+function productionLinkMissGuard() {
+  linkMissGuard ??= new PublicArtifactMissGuard({
+    perClient: getAppRateLimits().publicArtifactMiss,
+    global: getAppRateLimits().publicArtifactMissGlobal,
+    now: Date.now,
+  });
+  return linkMissGuard;
+}
+
+export function productionArtifactLinkOpen(db: PrismaClient) {
+  return new ArtifactLinkOpen({
+    lookup: linkPageLookup(db),
+    guard: productionLinkMissGuard(),
+    origin: artifactSandboxOrigin(),
+  });
+}
+
 export function productionArtifactSandbox(db: PrismaClient) {
   const { artifacts, blobs } = productionArtifacts(db);
   return new ArtifactSandbox({
@@ -176,11 +196,7 @@ export function productionArtifactSandbox(db: PrismaClient) {
     now: () => new Date(),
     publicPage: publicPageLookup(db),
     linkPage: linkPageLookup(db),
-    missGuard: new PublicArtifactMissGuard({
-      perClient: getAppRateLimits().publicArtifactMiss,
-      global: getAppRateLimits().publicArtifactMissGlobal,
-      now: Date.now,
-    }),
+    missGuard: productionLinkMissGuard(),
   });
 }
 

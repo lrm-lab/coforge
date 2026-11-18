@@ -4,8 +4,12 @@ import { z } from "zod";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { artifactInputs } from "./artifact-inputs";
-import { productionArtifactSandbox } from "#src/server/artifacts/artifact-composition.server";
-import { publicOrigin } from "#src/server/http/public-origin.server";
+import {
+  productionArtifactLinkOpen,
+  productionArtifactSandbox,
+} from "#src/server/artifacts/artifact-composition.server";
+import { requireDatabaseClient } from "#src/server/db/client.server";
+import { clientAddress, publicOrigin } from "#src/server/http/public-origin.server";
 
 export const loadArtifactSandboxLink = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
@@ -34,4 +38,13 @@ export const loadArtifactSandboxLink = createServerFn({ method: "GET" })
       viewer: link.viewer,
       level: link.level,
     };
+  });
+
+export const openLinkArtifact = createServerFn({ method: "GET" })
+  .validator(z.object({ artifactId: artifactInputs.id }).strict())
+  .handler(async ({ data }) => {
+    return productionArtifactLinkOpen(requireDatabaseClient()).open({
+      artifactId: data.artifactId,
+      client: clientAddress(getRequest()),
+    });
   });
