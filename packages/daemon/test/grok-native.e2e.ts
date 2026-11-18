@@ -1,6 +1,6 @@
 // Opt-in: COFORGE_GROK_E2E_COMMAND=/path/to/grok bun test ./test/grok-native.e2e.ts
 // Runs a real Grok CLI against a local model endpoint and an isolated GROK_HOME. No login or
-// provider credits required. Writes a repeatable report to .amp/e2e/grok-native/report.json.
+// provider credits required. Writes a repeatable report through grokReportPath.
 import { grokRuntimeHost } from "#src/code-agent/grok/host";
 import { expect, test } from "bun:test";
 import { mkdtemp, mkdir, rm } from "node:fs/promises";
@@ -10,90 +10,14 @@ import type { AgentSession, AgentRuntimeEvent } from "@coforge/agent";
 import { grokProvider, readGrokVersion, isolatedEnvironment } from "./fixtures/grok-host";
 import { discoverGrokCatalog } from "@lrm/coforge-anvil/grok";
 import { withDeadline } from "@lrm/coforge-anvil";
+import {
+  grokReportPath,
+  serveFixtureModel,
+  writeFixtureConfig,
+} from "./fixtures/grok-fixture-model";
 
 const command = Bun.env.COFORGE_GROK_E2E_COMMAND;
 if (!command) throw new Error("Set COFORGE_GROK_E2E_COMMAND to the installed Grok executable");
-
-type ChatRequest = {
-  messages?: { role?: string; content?: unknown }[];
-  stream?: boolean;
-  tools?: { function?: { name?: string } }[];
-};
-type ChatReply = { message: Record<string, unknown>; finishReason: string };
-
-/** A local chat-completions endpoint. Only the model API is substituted: the native CLI, ACP
- * catalog and Provider all run. `reply` answers each completion, streamed or not. */
-function serveFixtureModel(
-  reply: (body: ChatRequest) => ChatReply | Promise<ChatReply>,
-  {
-    usage = { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 },
-    onRequest,
-  }: { usage?: object; onRequest?: (path: string) => void } = {},
-) {
-  return Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    async fetch(request) {
-      const path = new URL(request.url).pathname;
-      onRequest?.(path);
-      if (!path.endsWith("/chat/completions"))
-        return Response.json({ error: { message: "fixture endpoint" } }, { status: 404 });
-      const body = (await request.json()) as ChatRequest;
-      const { message, finishReason } = await reply(body);
-      const base = { id: "chatcmpl-fixture", model: "coforge-fixture", created: 1 };
-      if (!body.stream)
-        return Response.json({
-          ...base,
-          object: "chat.completion",
-          choices: [{ index: 0, message, finish_reason: finishReason }],
-          usage,
-        });
-      const chunk = (delta: object, finish_reason: string | null) => ({
-        ...base,
-        object: "chat.completion.chunk",
-        choices: [{ index: 0, delta, finish_reason }],
-      });
-      return new Response(
-        [
-          `data: ${JSON.stringify(chunk(message, null))}\n\n`,
-          `data: ${JSON.stringify({ ...chunk({}, finishReason), usage })}\n\n`,
-          "data: [DONE]\n\n",
-        ].join(""),
-        { headers: { "content-type": "text/event-stream" } },
-      );
-    },
-  });
-}
-
-/** An isolated Grok config: no updates or remote fetch, and the fixture model at `port` as the
- * default. `extra` lines are appended to the table they name. */
-function writeFixtureConfig(
-  home: string,
-  port: number,
-  contextWindow: number,
-  extra: { features?: string[]; session?: string[]; model?: string[] } = {},
-) {
-  return Bun.write(
-    join(home, "config.toml"),
-    [
-      "[cli]",
-      "auto_update = false",
-      "[features]",
-      "remote_fetch = false",
-      ...(extra.features ?? []),
-      ...(extra.session ? ["[session]", ...extra.session] : []),
-      "[models]",
-      'default = "coforge-fixture"',
-      "[model.coforge-fixture]",
-      'model = "coforge-fixture"',
-      `base_url = "http://127.0.0.1:${port}/v1"`,
-      'api_key = "fixture-only"',
-      `context_window = ${contextWindow}`,
-      ...(extra.model ?? []),
-      "",
-    ].join("\n"),
-  );
-}
 
 test("native Grok discovers custom reasoning choices and reports compaction in a resumed turn", async () => {
   const root = await mkdtemp(join(tmpdir(), "coforge-grok-native-"));
@@ -264,7 +188,7 @@ test("native Grok discovers custom reasoning choices and reports compaction in a
       } finally {
         await server.stop(true);
         await Bun.write(
-          new URL("../../../.amp/e2e/grok-native/report.json", import.meta.url),
+          grokReportPath("report.json"),
           JSON.stringify(
             {
               outcome,
@@ -423,7 +347,7 @@ test("native ACP admits live interjections, runs a background follow-up and resu
     } finally {
       await server.stop(true);
       await Bun.write(
-        new URL("../../../.amp/e2e/grok-native/acp-lifecycle.json", import.meta.url),
+        grokReportPath("acp-lifecycle.json"),
         JSON.stringify(
           {
             outcome,
@@ -504,7 +428,7 @@ test("native ACP replaces a resumed session Grok reports as missing", async () =
     } finally {
       await server.stop(true);
       await Bun.write(
-        new URL("../../../.amp/e2e/grok-native/restore-missing.json", import.meta.url),
+        grokReportPath("restore-missing.json"),
         JSON.stringify(
           {
             outcome,
@@ -632,7 +556,7 @@ test("native Grok replaces its system prompt with the instructions on new and on
       const excerpt = (value: string | undefined) =>
         value === undefined ? undefined : value.length > 240 ? `${value.slice(0, 240)}…` : value;
       await Bun.write(
-        new URL("../../../.amp/e2e/grok-native/system-prompt-override.json", import.meta.url),
+        grokReportPath("system-prompt-override.json"),
         JSON.stringify(
           {
             outcome,

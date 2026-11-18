@@ -1,6 +1,5 @@
 import { emptyCatalogs } from "./fixtures/empty-catalogs";
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -45,14 +44,16 @@ import {
   startAgentProxy,
 } from "@lrm/coforge-daemon";
 import { PiJsonlFixtureProvider } from "@lrm/coforge-daemon/test/fixtures/pi-jsonl-fixture-provider";
+import { pidExists, readProcesses, waitFor } from "./helpers/agent-process-probe";
+import { e2eArtifactsDirectory } from "./helpers/e2e-artifacts";
 
 const databaseUrl = requireEnvironment("DATABASE_URL");
 if (requireEnvironment("COFORGE_E2E_ALLOW_RESET") !== "1")
   throw new Error("COFORGE_E2E_ALLOW_RESET=1 is required for destructive E2E cleanup");
 const workspaceId = "10000000-0000-4000-8000-000000000001";
 const workspaceSlug = "e2e-workspace";
-const workspaceRoot = join(import.meta.dir, "../../../.amp/e2e/workspace-root");
-const daemonStateDirectory = join(import.meta.dir, "../../../.amp/e2e/daemon-state");
+const workspaceRoot = join(e2eArtifactsDirectory, "workspace-root");
+const daemonStateDirectory = join(e2eArtifactsDirectory, "daemon-state");
 const attachmentDirectory = join(
   import.meta.dir,
   "../.data/files/workspaces",
@@ -648,36 +649,6 @@ function requireEnvironment(name: string) {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is required; run scripts/e2e/run-agent-direct-message.sh`);
   return value;
-}
-
-async function waitFor(check: () => boolean | Promise<boolean>) {
-  const deadline = Date.now() + 10_000;
-  while (!(await check())) {
-    if (Date.now() >= deadline) throw new Error("timed out waiting for E2E state");
-    await Bun.sleep(50);
-  }
-}
-
-async function readProcesses(path: string) {
-  await waitFor(async () => Bun.file(path).exists());
-  return (await Bun.file(path).json()) as {
-    directPid: number;
-    descendantPid: number;
-  };
-}
-
-function pidExists(pid: number) {
-  try {
-    process.kill(pid, 0);
-    if (process.platform === "linux") {
-      const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-      return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[0] !== "Z";
-    }
-    return true;
-  } catch (error) {
-    if ((error as { code?: string }).code === "ESRCH") return false;
-    throw error;
-  }
 }
 
 function bytesToBase64(bytes: Uint8Array) {

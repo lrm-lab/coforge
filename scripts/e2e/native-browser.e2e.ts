@@ -2,6 +2,12 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import {
+  controlComputer,
+  evidenceDirectory,
+  failureSnapshotPath,
+  nativeBrowser,
+} from "./native-browser-driver";
 
 // Run after run-computer-setup.sh, against its real installed Computer. No
 // application imports, database seeding, injected Provider, or runtime starts.
@@ -21,41 +27,9 @@ test("installed Computer creates an Agent through Web and persists its real repl
   const name = `native-${Date.now()}`;
   const session = `native-${process.pid}`;
   const attachmentDir = await mkdtemp(resolve(tmpdir(), "native-attachment-"));
-  let failed = false;
+  let failure: { error: unknown } | undefined;
   let computerStopped = false;
-  async function controlComputer(action: "stop" | "start") {
-    const executable = Bun.which("coforge-computer");
-    if (!executable) throw new Error("Installed Computer is required");
-    const child = Bun.spawn([executable, action], { stdout: "pipe", stderr: "pipe" });
-    const [, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0) throw new Error(`Computer ${action} failed: ${stderr}`);
-  }
-  async function browser(...args: string[]) {
-    const child = Bun.spawn(
-      [browserPath!, "--session", session, "--ignore-https-errors", ...args],
-      {
-        env: { ...Bun.env, AGENT_BROWSER_DEFAULT_TIMEOUT: "15000" },
-        stdout: "pipe",
-        stderr: "pipe",
-      },
-    );
-    const [stdout, stderr, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    if (code !== 0) throw new Error(`Native browser ${args[0]} failed: ${stderr}`);
-    return stdout;
-  }
-  async function click(role: string, label: string) {
-    await browser("find", "role", role, "click", "--name", label, "--exact");
-    if (role === "option")
-      await browser("wait", "--fn", "!document.querySelector('[role=listbox]')");
-  }
+  const { browser, click } = nativeBrowser(browserPath, session);
   try {
     console.log("native_browser:computer_online");
     await browser("open", `${origin}${workspacePath}/computer/${registration.computer_id}`);
@@ -203,10 +177,10 @@ test("installed Computer creates an Agent through Web and persists its real repl
         ),
       ),
     ).toEqual({ status: 200, body: attachmentContent });
-    await mkdir(resolve(import.meta.dir, "../../.amp/in/artifacts"), { recursive: true });
+    await mkdir(evidenceDirectory, { recursive: true });
     await browser(
       "screenshot",
-      resolve(import.meta.dir, "../../.amp/in/artifacts/native-browser-reply.png"),
+      resolve(evidenceDirectory, "native-browser-reply.png"),
     );
     console.log("native_browser:create_task");
     const taskTitle = `TASK_${crypto.randomUUID()}: After this task is assigned to you, create a text file named task-result.txt containing task received, then submit this task for review. Do not start before assignment.`;
@@ -248,7 +222,7 @@ test("installed Computer creates an Agent through Web and persists its real repl
     expect(JSON.parse(await browser("eval", taskInReview))).toBe(true);
     await browser(
       "screenshot",
-      resolve(import.meta.dir, "../../.amp/in/artifacts/native-browser-task.png"),
+      resolve(evidenceDirectory, "native-browser-task.png"),
     );
     console.log("native_browser:approve_task");
     const taskDone = `Array.from(document.querySelectorAll('section[aria-label="Done"] article')).some(e => e.textContent.includes(${JSON.stringify(taskTitle)}) && e.textContent.includes(${JSON.stringify(name)}))`;
@@ -267,7 +241,7 @@ test("installed Computer creates an Agent through Web and persists its real repl
     expect(JSON.parse(await browser("eval", taskInReview))).toBe(false);
     await browser(
       "screenshot",
-      resolve(import.meta.dir, "../../.amp/in/artifacts/native-browser-task-done.png"),
+      resolve(evidenceDirectory, "native-browser-task-done.png"),
     );
     console.log("native_browser:agent_create_task");
     const agentTaskTitle = `FOLLOWUP_${crypto.randomUUID()}`;
@@ -304,7 +278,7 @@ test("installed Computer creates an Agent through Web and persists its real repl
     expect(JSON.parse(await browser("eval", taskDone))).toBe(true);
     await browser(
       "screenshot",
-      resolve(import.meta.dir, "../../.amp/in/artifacts/native-browser-agent-task.png"),
+      resolve(evidenceDirectory, "native-browser-agent-task.png"),
     );
     await browser("find", "text", agentTaskTitle, "click", "--exact");
     await browser(
@@ -445,26 +419,27 @@ test("installed Computer creates an Agent through Web and persists its real repl
       }),
     );
   } catch (error) {
-    failed = true;
+    failure = { error };
     try {
       await Bun.write(
-        resolve(import.meta.dir, "../../.amp/e2e/native-browser-failure.txt"),
+        failureSnapshotPath,
         await browser("snapshot"),
       );
     } catch (diagnosticError) {
       console.error("native_browser:diagnostic_failed", diagnosticError);
     }
-    throw error;
-  } finally {
-    const cleanup = await Promise.allSettled([
-      computerStopped ? controlComputer("start") : Promise.resolve(),
-      rm(attachmentDir, { recursive: true, force: true }),
-      browser("close"),
-    ]);
-    for (const result of cleanup) {
-      if (result.status !== "rejected") continue;
-      if (!failed) throw result.reason;
-      console.error("native_browser:cleanup_failed", result.reason);
-    }
   }
+  const cleanup = await Promise.allSettled([
+    computerStopped ? controlComputer("start") : Promise.resolve(),
+    rm(attachmentDir, { recursive: true, force: true }),
+    browser("close"),
+  ]);
+  const cleanupErrors = cleanup.flatMap((result) =>
+    result.status === "rejected" ? [result.reason] : [],
+  );
+  if (failure) {
+    for (const reason of cleanupErrors) console.error("native_browser:cleanup_failed", reason);
+    throw failure.error;
+  }
+  if (cleanupErrors.length > 0) throw cleanupErrors[0];
 }, 900_000);
