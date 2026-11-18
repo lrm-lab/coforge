@@ -12,6 +12,7 @@ export {
   AGENT_START_PROMPT_MAX_LENGTH,
   encodeAgentStartIntent,
   decodeAgentStartIntent,
+  decodeAgentStartIntentScope,
   encodeAgentStopIntent,
   decodeAgentStopIntent,
 } from "./agent-intent-codec";

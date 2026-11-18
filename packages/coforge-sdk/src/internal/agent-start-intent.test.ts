@@ -1,7 +1,12 @@
 import { create, toBinary } from "@bufbuild/protobuf";
 import { expect, test } from "bun:test";
 import { AgentStartIntentSchema } from "#src/internal/gen/coforge/rpc/v1/workspace_pb";
-import { AGENT_START_MESSAGE_TYPE, decodeAgentStartIntent, encodeAgentStartIntent } from "./index";
+import {
+  AGENT_START_MESSAGE_TYPE,
+  decodeAgentStartIntent,
+  decodeAgentStartIntentScope,
+  encodeAgentStartIntent,
+} from "./index";
 const base = {
   protocolMajor: 1,
   requestId: "request-1",
@@ -341,4 +346,45 @@ test("encoding refuses every recovery context the Daemon would refuse", () => {
       })),
     ),
   ).toThrow("recovery context");
+});
+
+const rejected = (over: Record<string, unknown> = {}) =>
+  toBinary(
+    AgentStartIntentSchema,
+    create(AgentStartIntentSchema, {
+      ...base,
+      messageType: AGENT_START_MESSAGE_TYPE,
+      controlEpoch: 3,
+      launchId: "launch-1",
+      unreadSummary: [{ target: "@ada", count: 0 }],
+      ...over,
+    }),
+  );
+test("an intent the Daemon refuses as a whole still names the operation it belongs to", () => {
+  const bytes = rejected();
+  expect(() => decodeAgentStartIntent(bytes)).toThrow();
+  expect(decodeAgentStartIntentScope(bytes)).toEqual({
+    protocolMajor: 1,
+    requestId: "request-1",
+    workspaceId: "workspace-1",
+    computerId: "computer-1",
+    agentId: "agent-1",
+    provider: "codex",
+    epoch: 3,
+  });
+});
+test("an intent with no operation to fail yields no scope", () => {
+  expect(decodeAgentStartIntentScope(rejected({ controlEpoch: undefined }))).toBeUndefined();
+});
+test("a scope is refused when any part of it is missing or not a provider", () => {
+  for (const over of [
+    { agentId: "" },
+    { requestId: "" },
+    { workspaceId: "" },
+    { computerId: "" },
+    { provider: "nonsense" },
+    { messageType: "something-else" },
+    { controlEpoch: 0 },
+  ])
+    expect(() => decodeAgentStartIntentScope(rejected(over)), JSON.stringify(over)).toThrow();
 });

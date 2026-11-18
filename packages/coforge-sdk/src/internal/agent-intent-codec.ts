@@ -4,6 +4,7 @@ import { safeUint64 } from "./agent-observation-codec";
 import { assertAgentRecoveryContext } from "./agent-recovery-context";
 import { AGENT_START_MESSAGE_TYPE, AGENT_STOP_MESSAGE_TYPE, requireRuntimeProvider } from "./index";
 import type {
+  AgentControlScope,
   AgentRecoveryMessage,
   AgentRuntimeProviderConfig,
   AgentStartIntent,
@@ -126,6 +127,34 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
 }
 const recoveryCreatedAt = ({ createdAtMs }: AgentRecoveryMessage) =>
   createdAtMs === undefined ? undefined : BigInt(createdAtMs);
+export function decodeAgentStartIntentScope(bytes: Uint8Array): AgentControlScope | undefined {
+  const v = fromBinary(AgentStartIntentSchema, bytes);
+  if (
+    v.messageType !== AGENT_START_MESSAGE_TYPE ||
+    !v.requestId ||
+    !v.workspaceId ||
+    !v.computerId ||
+    !v.agentId ||
+    !v.provider
+  )
+    throw new Error("invalid agent start intent");
+  const provider = requireRuntimeProvider(
+    v.provider,
+    `unsupported runtime provider: ${v.provider}`,
+  );
+  if (v.controlEpoch === undefined) return undefined;
+  assertPositiveControlCounter(v.controlEpoch, "Agent control epoch");
+  return {
+    protocolMajor: v.protocolMajor,
+    requestId: v.requestId,
+    workspaceId: v.workspaceId,
+    computerId: v.computerId,
+    agentId: v.agentId,
+    provider,
+    epoch: v.controlEpoch,
+  };
+}
+
 export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
   const v = fromBinary(AgentStartIntentSchema, bytes);
   if (v.$unknown?.some((field) => field.no === 21 || field.no === 22))
