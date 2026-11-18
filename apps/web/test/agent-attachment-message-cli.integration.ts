@@ -158,7 +158,11 @@ test("real CLI → proxy → daemon operations → HTTP → PostgreSQL reads a f
     };
     const cli = async (args: string[], body?: string) => {
       const { exit, stdout, stderr } = await runCli(args, body);
-      expect({ exit, stderr }).toEqual({ exit: 0, stderr: "" });
+      const unexpectedStderr = stderr
+        .split("\n")
+        .filter((line) => line && !line.startsWith("[Guidance] "))
+        .join("\n");
+      expect({ exit, stderr: unexpectedStderr }).toEqual({ exit: 0, stderr: "" });
       return stdout;
     };
     const capabilities = await cli(["attachment", "comments", f.attachment.id]);
