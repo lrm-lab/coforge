@@ -30,7 +30,7 @@ import {
   TaskHistoryPage,
   TaskSubtasksPage,
   type TaskDetailTab,
-} from "./task-detail-tabs";
+} from "./task-detail-sections";
 import { TaskDescription } from "./task-description";
 import { TaskSection, type RelationPicker } from "./task-section";
 import { ownsDiscussion, taskFollowMenuItem, useTaskFollow } from "./task-follow";
