@@ -1,23 +1,10 @@
 import { expect, test } from "bun:test";
 
 import {
+  LEGACY_ANTIGRAVITY_EFFORT_MODELS,
   parseAgentRuntimeConfig,
   runtimeStartFields,
 } from "#src/server/agents/agent-runtime-config.server";
-
-const LEGACY_SUFFIXED_MODELS = [
-  ["gemini-3.8-flash-high", "gemini-3.8-flash", "high"],
-  ["gemini-3.8-flash-medium", "gemini-3.8-flash", "medium"],
-  ["gemini-3.8-flash-low", "gemini-3.8-flash", "low"],
-  ["gemini-3.7-flash-high", "gemini-3.7-flash", "high"],
-  ["gemini-3.7-flash-medium", "gemini-3.7-flash", "medium"],
-  ["gemini-3.7-flash-low", "gemini-3.7-flash", "low"],
-  ["gemini-3.6-flash-high", "gemini-3.6-flash", "high"],
-  ["gemini-3.6-flash-medium", "gemini-3.6-flash", "medium"],
-  ["gemini-3.6-flash-low", "gemini-3.6-flash", "low"],
-  ["gemini-3.1-pro-high", "gemini-3.1-pro", "high"],
-  ["gemini-3.1-pro-low", "gemini-3.1-pro", "low"],
-] as const;
 
 function storedConfig(overrides: Record<string, unknown> = {}) {
   return {
@@ -30,14 +17,20 @@ function storedConfig(overrides: Record<string, unknown> = {}) {
   };
 }
 
-for (const [legacy, model, reasoning] of LEGACY_SUFFIXED_MODELS) {
-  test(`a row stored with ${legacy} reads as ${model} at ${reasoning}`, () => {
-    expect(parseAgentRuntimeConfig(storedConfig({ model: legacy }))).toMatchObject({
-      model,
-      reasoning,
-    });
+for (const [legacy, split] of Object.entries(LEGACY_ANTIGRAVITY_EFFORT_MODELS)) {
+  test(`a row stored with ${legacy} reads as ${split.model} at ${split.reasoning}`, () => {
+    expect(parseAgentRuntimeConfig(storedConfig({ model: legacy }))).toMatchObject(split);
   });
 }
+
+test("a model named like an Object prototype key is not a legacy id", () => {
+  for (const model of ["toString", "constructor", "valueOf", "__proto__"]) {
+    expect(parseAgentRuntimeConfig(storedConfig({ model }))).toMatchObject({
+      model,
+      reasoning: "",
+    });
+  }
+});
 
 test("the launch fields carry the split model, never the suffixed id", () => {
   const config = parseAgentRuntimeConfig(storedConfig({ model: "gemini-3.1-pro-high" }));
