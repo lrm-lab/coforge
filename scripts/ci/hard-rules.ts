@@ -28,6 +28,11 @@ import { suppressionIn } from "./suppressions";
 import { serverDirectiveFiles, TREE_FIX, type TreeRule, treeViolations } from "./tree-rules";
 import { unquote } from "./unquote";
 import { MIGRATION_SAFETY_FIX, migrationSafetyViolations } from "../migration-safety/hard-rule";
+import {
+  SCHEMA_HISTORY_FIX,
+  schemaHistoryViolations,
+} from "../migration-safety/check-schema-history";
+import { MIGRATION_CONTRACT_FIX, migrationContractViolations } from "./migration-contract";
 import { MIGRATION_IMMUTABLE_FIX, migrationImmutabilityViolations } from "./migration-immutable";
 import {
   COMMIT_MIX_FIX,
@@ -46,7 +51,9 @@ type Rule =
   | "new-suppression"
   | "author-identity"
   | "migration-safety"
+  | "migration-contract"
   | "migration-immutable"
+  | "schema-history"
   | "commit-title"
   | "revert-effect"
   | "rename-purity"
@@ -67,7 +74,9 @@ const FIX: Record<Rule, string> = {
   "author-identity":
     "Commit as the person running the Agent, never as an Agent or bot (AGENTS.md); author and committer both count: set `git config user.name` and `git config user.email` to their own identity. Rewrite a listed commit not yet on main with `git rebase --exec 'git commit --amend --no-edit --reset-author' <base>`; one already on main is rewritten only when Frank asks. A Co-authored-by trailer is not checked.",
   "migration-safety": MIGRATION_SAFETY_FIX,
+  "migration-contract": MIGRATION_CONTRACT_FIX,
   "migration-immutable": MIGRATION_IMMUTABLE_FIX,
+  "schema-history": SCHEMA_HISTORY_FIX,
   "commit-title": COMMIT_TITLE_FIX,
   "revert-effect": REVERT_EFFECT_FIX,
   "rename-purity": RENAME_PURITY_FIX,
@@ -380,10 +389,12 @@ async function fileViolations(source: ChangeSource): Promise<Violation[]> {
     ...suppressionViolations(source, exempt),
     ...treeRuleViolations(source, changes),
     ...migrationSafetyViolations(source),
+    ...migrationContractViolations(source),
     ...migrationImmutabilityViolations(source).map((violation) => ({
       rule: "migration-immutable" as const,
       ...violation,
     })),
+    ...(await schemaHistoryViolations(changes)),
   ];
 }
 
