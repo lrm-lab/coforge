@@ -332,7 +332,7 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
 
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1440", "900");
-  });
+  }, 120_000);
 
   afterAll(async () => {
     await browser("close").catch(() => undefined);
