@@ -21,6 +21,15 @@ import {
   externalSetups,
 } from "#src/server/agents/external-agent-presence.server";
 import { userRuntimeUsage } from "#src/server/computers/runtime-usage-composition.server";
+import {
+  agentReadinessOf,
+  readAgentReadinessInputs,
+} from "#src/server/agents/agent-readiness-facts.server";
+import {
+  computerRuntimeRefusal,
+  storedRuntimeSelection,
+} from "#src/server/agents/computer-runtime-availability.server";
+import { getComputerUpgradeStore } from "#src/server/computers/computer-upgrade-store.server";
 import { isAdminLike, type WorkspaceMemberRole } from "#src/server/workspaces/member-role.server";
 import { agentAvatarUrl, agentMascot } from "#src/features/agents/agent-mascot";
 import { humanLabel } from "#src/lib/human-label";
@@ -65,6 +74,20 @@ export async function loadAgentProfileDetail(context: WorkspaceUserContext, agen
     result.hosting === "external" ? agentDisplayScope(workspaceId, result) : undefined;
   const managesExternal =
     result.hosting === "external" && (ownedByCurrentUser || canManageAgentRole);
+  const readinessReads = readAgentReadinessInputs(
+    {
+      latestUpgrade: async (computerId) =>
+        (await getComputerUpgradeStore().latestMany([{ workspaceId, computerId }]))[0],
+      runtimeRefusal: (computerId, selection) =>
+        computerRuntimeRefusal(db, { workspaceId, userId: user.id }, computerId, selection, {
+          requireModel: false,
+        }),
+    },
+    {
+      computerId: computer?.id,
+      selection: runtimeConfig ? storedRuntimeSelection(runtimeConfig) : undefined,
+    },
+  );
   const [
     computerOnline,
     usage,
@@ -111,8 +134,16 @@ export async function loadAgentProfileDetail(context: WorkspaceUserContext, agen
       ? humanRef(db, workspaceId, agentId, user.username)
       : null,
   ]);
+  const readiness = agentReadinessOf(await readinessReads, {
+    nowMs: Date.now(),
+    computerId: computer?.id,
+    computerOnline,
+    stopReason: result.display?.stopReason ?? null,
+    failureReason: result.failureReason,
+  });
   return {
     ...result,
+    readiness,
     owner: {
       ...result.owner,
       avatarUrl: workspaceUserAvatarUrl(
