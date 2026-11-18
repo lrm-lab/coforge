@@ -5,13 +5,14 @@ import {
   type TaskView,
 } from "@lrm/coforge-sdk/internal";
 
-import { useMemo, useState, type FocusEvent, type ReactNode } from "react";
+import { memo, useMemo, useState, type FocusEvent, type ReactNode } from "react";
 import { Plus } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import type { Mentionable } from "#src/features/conversations/mention-text";
+import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { useTaskHiddenColumns } from "#src/features/settings/task-hidden-columns";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -80,6 +81,10 @@ export function TaskBoard<T extends BoardTask>({
   newTask?: { projectSlug?: string; onCreated: () => void };
 }) {
   const { statuses, filter, layout } = view;
+  const openTask = useLatestCallback(onOpenTask);
+  const runCommand = useLatestCallback((task: T, command: OverviewTaskCommand) =>
+    onCommand ? onCommand(task, command) : Promise.resolve(),
+  );
   const availableStatuses = tasks.some((task) => task.status === "backlog")
     ? TASK_READ_STATUSES
     : TASK_WRITE_STATUSES;
@@ -223,10 +228,12 @@ export function TaskBoard<T extends BoardTask>({
                 task={task}
                 controls={controls}
                 list={layout === "list"}
-                onOpenDetails={() => onOpenTask(task)}
+                onOpenTask={openTask}
                 renderTitle={renderTitle}
-                onCommand={onCommand ? (command) => onCommand(task, command) : undefined}
-                conversation={conversation}
+                onCommand={onCommand ? runCommand : undefined}
+                inConversation={conversation !== undefined}
+                conversationName={conversation?.name}
+                members={conversation?.members}
                 project={project}
               />
             )}
@@ -302,25 +309,34 @@ function FinishedFooter<T extends BoardTask>({
   );
 }
 
-function BoardTaskCard<T extends BoardTask>({
+const BoardTaskCard = memo(BoardTaskCardContent) as typeof BoardTaskCardContent;
+
+function BoardTaskCardContent<T extends BoardTask>({
   task,
   controls,
   list,
-  onOpenDetails,
+  onOpenTask,
   renderTitle,
-  onCommand,
-  conversation,
+  onCommand: onTaskCommand,
+  inConversation,
+  conversationName,
+  members,
   project,
 }: {
   task: T;
   controls: TaskControls;
   list: boolean;
-  onOpenDetails: () => void;
+  onOpenTask: (task: T) => void;
   renderTitle?: (task: T, title: ReactNode) => ReactNode;
-  onCommand?: (command: OverviewTaskCommand) => Promise<void>;
-  conversation?: ConversationBoard;
+  onCommand?: (task: T, command: OverviewTaskCommand) => Promise<void>;
+  inConversation: boolean;
+  conversationName?: string;
+  members?: readonly Mentionable[];
   project: boolean;
 }) {
+  const onOpenDetails = () => onOpenTask(task);
+  const onCommand =
+    onTaskCommand && ((command: OverviewTaskCommand) => onTaskCommand(task, command));
   const [menu, setMenu] = useState<{ start?: "focus" | "open" }>();
   const reach = () => setMenu((current) => current ?? {});
   const { label: menuLabel, ...menuButton } = taskMenuButton(task);
@@ -338,8 +354,8 @@ function BoardTaskCard<T extends BoardTask>({
           </AriaButton>
         )
       }
-      source={conversation ? undefined : task.source?.label}
-      channel={conversation ? undefined : task.source?.channelName}
+      source={inConversation ? undefined : task.source?.label}
+      channel={inConversation ? undefined : task.source?.channelName}
       project={project ? undefined : task.project}
       controls={controls}
       menu={
@@ -352,8 +368,8 @@ function BoardTaskCard<T extends BoardTask>({
             moves={controls.moves}
             onOpenDetails={onOpenDetails}
             onCommand={onCommand}
-            conversationName={conversation ? conversation.name : task.source?.label}
-            members={conversation?.members}
+            conversationName={inConversation ? conversationName : task.source?.label}
+            members={members}
             currentMemberId={task.currentMemberId ?? null}
           />
         ) : (

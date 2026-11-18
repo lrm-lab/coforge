@@ -29,6 +29,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { flyOverlay, liftFor } from "#src/components/ui/drag-ripple/drag-ripple";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
+import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -50,6 +51,8 @@ export function useTaskLayout(layout: TaskLayout | undefined): TaskLayout {
   const desktop = useBreakpoint("md");
   return layout ?? (!hydrated || desktop ? "board" : "list");
 }
+
+const POINTER_SENSOR_OPTIONS = { activationConstraint: { distance: 6 } };
 
 export function TaskWorkflow<T extends TaskView>({
   tasks,
@@ -109,7 +112,7 @@ export function TaskWorkflow<T extends TaskView>({
   const saving = useRef(false);
   const [error, setError] = useState(false);
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(PointerSensor, POINTER_SENSOR_OPTIONS),
     useSensor(KeyboardSensor),
   );
   const groups = useMemo(() => {
@@ -139,17 +142,29 @@ export function TaskWorkflow<T extends TaskView>({
     return open ? "open" : "blocked";
   };
 
-  const controls = (task: T): TaskControls => {
+  const moveTask = useLatestCallback(move);
+  const builtControls = useRef(
+    new Map<string, { task: T; signature: string; controls: TaskControls }>(),
+  );
+  const buildControls = (task: T, inert: boolean): TaskControls => {
     if (disabled && !commandsPending) return { handle: null, moves: [] };
     const moves = TASK_WRITE_STATUSES.filter((status) =>
       getTaskMoveCommand(task, currentMemberId(task), status, { canSetAnyStatus }),
-    ).map((status) => ({ status, onMove: () => void move(task, status) }));
+    ).map((status) => ({ status, onMove: () => void moveTask(task, status) }));
     if (moves.length === 0) return { handle: null, moves };
-    const inert = Boolean(pending) || Boolean(disabled);
     return {
       handle: <DragHandle task={task} disabled={inert} />,
       moves: inert ? [] : moves,
     };
+  };
+  const controls = (task: T): TaskControls => {
+    const inert = Boolean(pending) || Boolean(disabled);
+    const signature = `${disabled}|${commandsPending}|${canSetAnyStatus}|${inert}`;
+    const built = builtControls.current.get(task.id);
+    if (built?.task === task && built.signature === signature) return built.controls;
+    const fresh = buildControls(task, inert);
+    builtControls.current.set(task.id, { task, signature, controls: fresh });
+    return fresh;
   };
 
   const add = (status: TaskStatus) =>
