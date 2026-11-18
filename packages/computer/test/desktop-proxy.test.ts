@@ -163,9 +163,12 @@ describe("desktop route", () => {
     expect(html).toContain('addEventListener("paste"');
     expect(html).toContain('getData("text/plain")');
     expect(html).toContain("coforgeDesktopPaste");
-    expect(html).toContain("clipboardPasteFrom(text)");
+    expect(html).toContain("coforgeDesktopCopyOut");
+    expect(html).not.toContain("clipboardPasteFrom(text)");
     expect(html).toContain("/clipboard");
     expect(html).toContain("sendKey(0xffe3");
+    expect(html).toContain("navigator.clipboard.writeText");
+    expect(html).toContain('addEventListener("clipboard"');
     expect(html).toContain("stopImmediatePropagation");
     expect(html).toContain("preventDefault()");
   });
@@ -217,7 +220,21 @@ describe("desktop route", () => {
 `;
     const html = adaptDesktopHtml(stale);
     expect(html).toContain("coforgeDesktopPaste");
+    expect(html).toContain("coforgeDesktopCopyOut");
     expect(html).toContain("sendKey(0xffe3");
+  });
+
+  test("a page with paste but no copy-out is rewritten for cloud-to-office copy", () => {
+    const stale = `<!DOCTYPE html>
+<script type="module">
+    import RFB from "./core/rfb.js";
+    function coforgeDesktopPaste(text) {}
+</script>
+<button type="button" id="coforge-desktop-reconnect"></button>
+`;
+    const html = adaptDesktopHtml(stale);
+    expect(html).toContain("coforgeDesktopCopyOut");
+    expect(html).toContain("navigator.clipboard.writeText");
   });
 
   test("the page title becomes the requested name, and markup in it stays text", () => {

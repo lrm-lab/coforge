@@ -236,7 +236,17 @@ def load_desktop_clipboard():
     return module
 
 
-def handle_clipboard(
+def clipboard_error_status(code: str) -> str:
+    if code == "clipboard_busy":
+        return "409 Conflict"
+    if code == "too_large":
+        return "413 Payload Too Large"
+    if code in ("xlib_missing", "owner_failed"):
+        return "503 Service Unavailable"
+    return "400 Bad Request"
+
+
+def handle_clipboard_post(
     conn: socket.socket,
     headers: dict,
     query: str,
@@ -262,14 +272,40 @@ def handle_clipboard(
     try:
         module.set_clipboard(display, text, xauthority=xauthority)
     except module.ClipboardError as exc:
-        status = "400 Bad Request"
-        if exc.code == "clipboard_busy":
-            status = "409 Conflict"
-        elif exc.code == "too_large":
-            status = "413 Payload Too Large"
-        send_http(conn, status, json.dumps({"error": exc.code}).encode(), "application/json")
+        send_http(
+            conn,
+            clipboard_error_status(exc.code),
+            json.dumps({"error": exc.code}).encode(),
+            "application/json",
+        )
         return
     send_http(conn, "200 OK", b'{"ok":true}', "application/json")
+
+
+def handle_clipboard_get(
+    conn: socket.socket,
+    headers: dict,
+    query: str,
+    token: str,
+    display: str,
+    xauthority: str | None = None,
+) -> None:
+    """Return the X CLIPBOARD as UTF-8 plain text. The body is not logged."""
+    if not token_ok(request_token(headers, query), token):
+        send_http(conn, "401 Unauthorized", b"", "text/plain")
+        return
+    module = load_desktop_clipboard()
+    try:
+        text = module.get_clipboard(display, xauthority=xauthority)
+    except module.ClipboardError as exc:
+        send_http(
+            conn,
+            clipboard_error_status(exc.code),
+            json.dumps({"error": exc.code}).encode(),
+            "application/json",
+        )
+        return
+    send_http(conn, "200 OK", text.encode("utf-8"), "text/plain; charset=utf-8")
 
 
 def handle_http(conn: socket.socket, expected_token: str) -> None:
@@ -302,9 +338,7 @@ def handle_http(conn: socket.socket, expected_token: str) -> None:
                 display = found["display"]
         handle_fill(conn, headers, parsed.query, rest, expected_token, display)
         return
-    if method == "POST" and (
-        parsed.path == "/clipboard" or (screen is not None and screen[1] == "clipboard")
-    ):
+    if parsed.path == "/clipboard" or (screen is not None and screen[1] == "clipboard"):
         agent_id = screen[0] if screen is not None and screen[1] == "clipboard" else ""
         display = os.environ.get("VNC_DISPLAY", ":1")
         xauthority = None
@@ -313,9 +347,17 @@ def handle_http(conn: socket.socket, expected_token: str) -> None:
             if found and found.get("display"):
                 display = found["display"]
                 xauthority = found.get("xauthority")
-        handle_clipboard(
-            conn, headers, parsed.query, rest, expected_token, display, xauthority
-        )
+        if method == "POST":
+            handle_clipboard_post(
+                conn, headers, parsed.query, rest, expected_token, display, xauthority
+            )
+            return
+        if method == "GET":
+            handle_clipboard_get(
+                conn, headers, parsed.query, expected_token, display, xauthority
+            )
+            return
+        send_http(conn, "405 Method Not Allowed", b"", "text/plain")
         return
     if method == "GET" and (
         parsed.path == "/inspect" or (screen is not None and screen[1] == "inspect")

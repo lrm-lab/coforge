@@ -263,6 +263,9 @@ const RELATIVE_PAGE_SCRIPT = `
         msg.hidden = false;
         msg.textContent = "桌面连接已断开";
       });
+      rfb.addEventListener("clipboard", () => {
+        void coforgeDesktopCopyOut();
+      });
     }
     reconnect?.addEventListener("click", () => {
       showReconnect(false);
@@ -292,18 +295,13 @@ const RELATIVE_PAGE_SCRIPT = `
       sendKey(code, false);
     });
     function coforgeDesktopPaste(text) {
-      try {
-        rfb._clipboardServerCapabilitiesFormats = {};
-        rfb._clipboardServerCapabilitiesActions = {};
-        rfb.clipboardPasteFrom(text);
-      } catch {
-      }
       const push = fetch(\`\${base}/clipboard\${query}\`, {
         method: "POST",
         body: text,
         headers: { "Content-Type": "text/plain;charset=utf-8" },
-      }).catch(() => {});
-      return push.then(() => {
+      });
+      return push.then((res) => {
+        if (!res.ok) return;
         try {
           rfb.sendKey(0xffe3, "ControlLeft", true);
           rfb.sendKey(0x0076, "KeyV", true);
@@ -311,7 +309,16 @@ const RELATIVE_PAGE_SCRIPT = `
           rfb.sendKey(0xffe3, "ControlLeft", false);
         } catch {
         }
-      });
+      }).catch(() => {});
+    }
+    function coforgeDesktopCopyOut() {
+      return fetch(\`\${base}/clipboard\${query}\`)
+        .then((res) => (res.ok ? res.text() : ""))
+        .then((text) => {
+          if (!text) return;
+          return navigator.clipboard.writeText(text);
+        })
+        .catch(() => {});
     }
     document.addEventListener(
       "keydown",
@@ -326,6 +333,11 @@ const RELATIVE_PAGE_SCRIPT = `
       "keyup",
       (ev) => {
         if (!rfb) return;
+        if ((ev.ctrlKey || ev.metaKey) && (ev.code === "KeyC" || ev.code === "KeyX") && !ev.repeat) {
+          window.setTimeout(() => {
+            void coforgeDesktopCopyOut();
+          }, 80);
+        }
         if (ev.code !== "KeyV" && ev.code !== "ControlLeft" && ev.code !== "ControlRight" && ev.code !== "MetaLeft" && ev.code !== "MetaRight") return;
         if (ev.code === "KeyV" || ev.ctrlKey || ev.metaKey) ev.stopImmediatePropagation();
       },
@@ -341,8 +353,11 @@ const RELATIVE_PAGE_SCRIPT = `
     connect();
 `;
 
-/** Present once office→cloud paste sets the clipboard then sends Ctrl+V. */
+/** Present once office→cloud paste sets the UTF-8 clipboard then sends Ctrl+V. */
 export const DESKTOP_PASTE_CLASSIC_MARKER = "coforgeDesktopPaste";
+
+/** Present once cloud→office copy reads UTF-8 CLIPBOARD into the local clipboard. */
+export const DESKTOP_CLIPBOARD_OUT_MARKER = "coforgeDesktopCopyOut";
 
 /** Present once the phone fit/pan toolbar is in the adapted page. */
 export const DESKTOP_PHONE_VIEW_MARKER = "coforge-desktop-phone-bar";
@@ -354,6 +369,7 @@ export const DESKTOP_PHONE_GESTURES_MARKER = "coforgeAttachPhoneGestures";
 export const DESKTOP_PHONE_KEYBOARD_MARKER = "coforge-desktop-keyboard-input";
 
 const DESKTOP_CONTROLS = `<style>
+
 #msg[hidden]{display:none!important}
 #coforge-desktop-reconnect{position:fixed;top:50%;left:50%;z-index:2147483647;display:none;place-items:center;width:4.5rem;height:4.5rem;margin:0;padding:0;border:0;border-radius:50%;transform:translate(-50%,-50%);background:rgba(255,255,255,.18);color:#fff;cursor:pointer}
 #coforge-desktop-reconnect.is-visible{display:grid}
@@ -403,9 +419,8 @@ export function withDesktopTitle(html: string, title: string | undefined): strin
 
 /** Older images require a token in the address and load noVNC from the site root.
  * Current images already use a relative RFB import; both get reconnect, phone view,
- * keys, gestures and the soft keyboard. A page missing paste, phone view, gestures
- * or the keyboard input is rewritten so office→cloud paste and phone controls keep
- * working without waiting for a new image. */
+ * keys, gestures, soft keyboard and UTF-8 clipboard copy-out. A page missing paste,
+ * copy-out, phone view, gestures or the keyboard input is rewritten. */
 export function adaptDesktopHtml(html: string): string {
   if (
     !html.includes('from "/core/rfb.js"') &&
@@ -416,6 +431,7 @@ export function adaptDesktopHtml(html: string): string {
   if (
     html.includes('id="coforge-desktop-reconnect"') &&
     html.includes(DESKTOP_PASTE_CLASSIC_MARKER) &&
+    html.includes(DESKTOP_CLIPBOARD_OUT_MARKER) &&
     html.includes(DESKTOP_PHONE_VIEW_MARKER) &&
     html.includes(DESKTOP_PHONE_GESTURES_MARKER) &&
     html.includes(DESKTOP_PHONE_KEYBOARD_MARKER)

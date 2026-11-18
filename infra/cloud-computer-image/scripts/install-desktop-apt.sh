@@ -51,6 +51,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
   python3-gi \
   python3-pip \
   python3-venv \
+  python3-xlib \
   gir1.2-gtk-3.0 \
   chromium
 

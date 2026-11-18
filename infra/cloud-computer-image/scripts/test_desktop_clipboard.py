@@ -41,6 +41,9 @@ class DesktopClipboardTests(unittest.TestCase):
         with self.assertRaises(self.module.ClipboardError) as bad:
             self.module.set_clipboard("1", "hi")
         self.assertEqual(bad.exception.code, "bad_display")
+        with self.assertRaises(self.module.ClipboardError) as bad_get:
+            self.module.get_clipboard("1")
+        self.assertEqual(bad_get.exception.code, "bad_display")
 
     def test_spawns_owner_and_stops_previous(self):
         killed: list[int] = []
@@ -53,6 +56,9 @@ class DesktopClipboardTests(unittest.TestCase):
             killed.append(pid)
 
         with (
+            mock.patch.object(self.module, "_require_xlib"),
+            mock.patch.object(self.module, "_pid_running", side_effect=lambda pid: pid == 4242),
+            mock.patch.object(self.module, "get_clipboard", return_value="你好"),
             mock.patch.object(self.module.os, "spawnv", return_value=4242) as spawn,
             mock.patch.object(self.module.os, "kill", side_effect=fake_kill),
             mock.patch.object(self.module.time, "sleep"),
@@ -67,6 +73,28 @@ class DesktopClipboardTests(unittest.TestCase):
             self.assertEqual(args[1], str(Path(HERE) / "desktop_clipboard.py"))
             self.assertEqual(args[2], "--serve")
             self.assertEqual(args[3], ":1")
+
+    def test_owner_failed_when_spawn_dies(self):
+        with (
+            mock.patch.object(self.module, "_require_xlib"),
+            mock.patch.object(self.module, "_pid_running", return_value=False),
+            mock.patch.object(self.module, "get_clipboard", side_effect=self.module.ClipboardError("empty")),
+            mock.patch.object(self.module.os, "spawnv", return_value=99),
+            mock.patch.object(self.module.time, "sleep"),
+        ):
+            with self.assertRaises(self.module.ClipboardError) as failed:
+                self.module.set_clipboard(":1", "你好")
+            self.assertEqual(failed.exception.code, "owner_failed")
+
+    def test_get_clipboard_requires_xlib(self):
+        with mock.patch.object(
+            self.module,
+            "_require_xlib",
+            side_effect=self.module.ClipboardError("xlib_missing"),
+        ):
+            with self.assertRaises(self.module.ClipboardError) as missing:
+                self.module.get_clipboard(":1")
+            self.assertEqual(missing.exception.code, "xlib_missing")
 
 
 if __name__ == "__main__":

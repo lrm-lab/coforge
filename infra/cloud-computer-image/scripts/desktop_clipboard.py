@@ -1,4 +1,4 @@
-"""Set the X CLIPBOARD selection to UTF-8 text for the cloud desktop.
+"""Set and read the X CLIPBOARD selection as UTF-8 for the cloud desktop.
 
 TigerVNC 1.12 advertises extended clipboard but never completes the
 Notify/Request/Provide round-trip from a viewer, and classic ClientCutText is
@@ -26,6 +26,28 @@ def _state_paths(display_name: str) -> tuple[Path, Path]:
     safe = display_name.replace(":", "_").replace("/", "_")
     base = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp"))
     return base / f"coforge-clipboard{safe}.pid", base / f"coforge-clipboard{safe}.bin"
+
+
+def _pid_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    try:
+        with open(f"/proc/{pid}/status", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("State:"):
+                    return not line.split()[1].startswith("Z")
+    except OSError:
+        return False
+    return True
+
+
+def _require_xlib() -> None:
+    try:
+        import Xlib  # noqa: F401
+    except ImportError as exc:
+        raise ClipboardError("xlib_missing") from exc
 
 
 def _serve(display_name: str, payload: bytes, xauthority: str | None) -> None:
@@ -56,8 +78,11 @@ def _serve(display_name: str, payload: bytes, xauthority: str | None) -> None:
         ret_prop = prop
         if target == targets:
             ev.requestor.change_property(prop, Xatom.ATOM, 32, [utf8, Xatom.STRING])
-        elif target in (utf8, Xatom.STRING):
-            ev.requestor.change_property(prop, target, 8, list(payload))
+        elif target == utf8:
+            ev.requestor.change_property(prop, utf8, 8, list(payload))
+        elif target == Xatom.STRING:
+            # Latin-1 STRING cannot carry arbitrary UTF-8; refuse rather than mojibake.
+            ret_prop = X.NONE
         else:
             ret_prop = X.NONE
         ev.requestor.send_event(
@@ -80,6 +105,7 @@ def set_clipboard(display_name: str, text: str, xauthority: str | None = None) -
         raise ClipboardError("empty")
     if len(raw) > MAX_CLIPBOARD_BYTES:
         raise ClipboardError("too_large")
+    _require_xlib()
     auth = xauthority or os.environ.get("XAUTHORITY") or "/root/.Xauthority"
     pid_path, bin_path = _state_paths(display_name)
     bin_path.write_bytes(raw)
@@ -94,9 +120,7 @@ def set_clipboard(display_name: str, text: str, xauthority: str | None = None) -
         except OSError:
             pass
         for _ in range(20):
-            try:
-                os.kill(int(old), 0)
-            except OSError:
+            if not _pid_running(int(old)):
                 break
             time.sleep(0.05)
     script = Path(__file__).resolve()
@@ -106,11 +130,70 @@ def set_clipboard(display_name: str, text: str, xauthority: str | None = None) -
         [sys.executable, str(script), "--serve", display_name, str(bin_path), auth],
     )
     pid_path.write_text(f"{pid}\n", encoding="utf-8")
-    time.sleep(0.05)
-    try:
-        os.kill(pid, 0)
-    except OSError as exc:
-        raise ClipboardError("owner_failed") from exc
+    for _ in range(40):
+        if not _pid_running(pid):
+            break
+        try:
+            if get_clipboard(display_name, xauthority=auth) == text:
+                return
+        except ClipboardError:
+            pass
+        time.sleep(0.05)
+    if not _pid_running(pid):
+        raise ClipboardError("owner_failed")
+    raise ClipboardError("owner_failed")
+
+
+def get_clipboard(display_name: str, xauthority: str | None = None) -> str:
+    if not display_name.startswith(":"):
+        raise ClipboardError("bad_display")
+    _require_xlib()
+    from Xlib import X, display
+
+    auth = xauthority or os.environ.get("XAUTHORITY") or "/root/.Xauthority"
+    os.environ["DISPLAY"] = display_name
+    os.environ["XAUTHORITY"] = auth
+    last_error = "empty"
+    for _ in range(8):
+        d = display.Display()
+        try:
+            root = d.screen().root
+            clipboard = d.intern_atom("CLIPBOARD")
+            utf8 = d.intern_atom("UTF8_STRING")
+            prop = d.intern_atom("COFORGE_CLIPBOARD_READ")
+            win = root.create_window(0, 0, 1, 1, 0, d.screen().root_depth)
+            win.convert_selection(clipboard, utf8, prop, X.CurrentTime)
+            d.flush()
+            deadline = time.time() + 1
+            while time.time() < deadline:
+                ev = d.next_event()
+                if ev.type != X.SelectionNotify:
+                    continue
+                if ev.property == X.NONE:
+                    last_error = "empty"
+                    break
+                data = win.get_full_property(prop, X.AnyPropertyType)
+                if data is None:
+                    last_error = "read_failed"
+                    break
+                value = data.value
+                raw = bytes(value) if not isinstance(value, (bytes, bytearray)) else bytes(value)
+                try:
+                    text = raw.decode("utf-8")
+                except UnicodeError as exc:
+                    raise ClipboardError("not_utf8") from exc
+                if len(raw) > MAX_CLIPBOARD_BYTES:
+                    raise ClipboardError("too_large")
+                if len(text) == 0:
+                    last_error = "empty"
+                    break
+                return text
+            else:
+                last_error = "read_timeout"
+        finally:
+            d.close()
+        time.sleep(0.05)
+    raise ClipboardError(last_error)
 
 
 def main(argv: list[str]) -> int:
