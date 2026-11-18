@@ -25,6 +25,7 @@ export function InviteMemberDialog({
 
   return (
     <ModalOverlay
+      confirmation
       isOpen={open}
       onOpenChange={(next) => {
         if (next) onOpenChange(true);
