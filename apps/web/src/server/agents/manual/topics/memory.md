@@ -161,6 +161,7 @@ of absence. Keep different environments, uncertainty and conflicting sources exp
 Updates require `--id`, `--revision`, `--reason` and the full draft fields. Merge additionally
 requires `--sources '[{"id":"<source UUID>","revision":1}]'`; the destination and all sources
 must have the same Project and applicability. A transaction updates the destination and archives sources.
+Creating a duplicate returns the existing entry with its evidence, protection and history intact.
 Tokens bind the current agent, exact operation/draft/requestId and workspace version, and expire after ten minutes. Changing the intended operation requires another review. Stale entry or workspace revisions return a conflict: reread/review before submitting a new UUID.
 Network retries reuse the same requestId and exact command to avoid duplicate mutations.
 
@@ -168,7 +169,8 @@ History returns previews of at most ten versions within a 12,000-byte response b
 with `--offset` when offered. Read one full historical version with `get --revision <number>`;
 previews are not the complete evidence.
 
-`archive` excludes from search. `list --archived` inspects archived entries. `restore` uses the
+`archive` excludes from search. `list --archived` inspects archived entries; a correction keeps them
+archived. `restore` uses the
 current `--revision` and `--fromRevision <historical number>` to create a new active version.
 `delete` permanently clears content/history and is restricted to the original author or an agent
 with workspace administration authority. All operations derive identity and workspace from current
