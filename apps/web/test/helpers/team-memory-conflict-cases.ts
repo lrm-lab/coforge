@@ -60,4 +60,40 @@ export async function verifyTaskRecallConflicts(
     revision: disagreement.revision,
   });
   expect(found.entries.map(({ id }) => id)).not.toContain(foreign.id);
+
+  await createScoped("Updated objection", "Approval now confirmed", project.id, [
+    { kind: "supersedes", id: disagreement.id, revision: disagreement.revision },
+  ]);
+  const command = {
+    operation: "search" as const,
+    projectId: project.id,
+    includeWorkspace: true,
+    includeConflicts: true,
+    query: "Quasar fingerprint",
+  };
+  const current = await teamMemory(db).execute(actor, command);
+  expect(current.entries.map(({ id }) => id)).toEqual([result.id]);
+  const historical = await teamMemory(db).execute(actor, { ...command, includeSuperseded: true });
+  expect(historical.entries.map(({ id }) => id)).toContain(disagreement.id);
+
+  const matches = [];
+  for (let index = 0; index < 6; index++) {
+    matches.push(
+      await createScoped(
+        `Quasar fingerprint ${index}`,
+        `Independent evidence ${index}`,
+        project.id,
+      ),
+    );
+  }
+  const peer = await createScoped("Current objection", "Review remained open", project.id, [
+    { kind: "conflicts_with", id: matches[5]!.id, revision: matches[5]!.revision },
+  ]);
+  const first = await teamMemory(db).execute(actor, command);
+  expect(first.nextOffset).toBe(5);
+  const second = await teamMemory(db).execute(actor, { ...command, offset: first.nextOffset });
+  expect(second.nextOffset).toBeUndefined();
+  expect(new Set([...first.entries, ...second.entries].map(({ id }) => id))).toEqual(
+    new Set([result.id, peer.id, ...matches.map(({ id }) => id)]),
+  );
 }
