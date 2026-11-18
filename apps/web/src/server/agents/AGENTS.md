@@ -73,7 +73,12 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
   launch outlives the provider's window (`startupWindow` in
   `agent-control-types`), and `-startup-sweep` finds those expired operations
   every 30 seconds. That is the launch's bound, not an age-based settlement of
-  an operation that may still be progressing — do not generalize it.
+  an operation that may still be progressing — do not generalize it. A launch
+  whose deadline passes while its Computer is offline is not a failure: the
+  deadline moves out by another provider window and the sweep answers
+  `waiting`, so a sleeping Computer wakes into a full window instead of being
+  stopped at once. Only a launch still offline `TRANSIENT_FAILURE_MAX_WINDOW_MS`
+  (24 hours) after `startedAtMs` settles failed, with `stop_outcome=offline`.
 - A superseded caller's `drive()` resolves `phase: "superseded"` instead of
   throwing; `executeAgentControl` throws only on `failed`. `publishStop()`
   throws on supersede because its callers need a confirmed stop.

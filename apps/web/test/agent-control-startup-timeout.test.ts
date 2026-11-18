@@ -19,7 +19,10 @@ import {
   STARTUP_DEADLINE_ERROR_CODE,
   STARTUP_STOP_CONFIRM_MS,
 } from "#src/server/agents/agent-control-startup-timeout.server";
-import { isEligibleForTransientRetry } from "#src/server/agents/agent-control-types.server";
+import {
+  isEligibleForTransientRetry,
+  TRANSIENT_FAILURE_MAX_WINDOW_MS,
+} from "#src/server/agents/agent-control-types.server";
 import { createAgentControlResultMethod } from "#src/server/centrifugo/agent-control-receiver.server";
 import { pendingOpStore, pendingRuntimeConfig } from "./helpers/agent-control-store";
 
@@ -143,9 +146,44 @@ test("the Stop is given sixty seconds before the launch is settled as failed", a
   ]);
 });
 
-test("an offline Computer is settled as failed at once, without a Stop", async () => {
+test("an offline Computer only pushes the deadline out by another window, without a Stop", async () => {
   const f = fixture(startingState, false);
   f.clock.now = START + WINDOW;
+  expect(await f.timeout.settle("a")).toBe("waiting");
+  expect(f.stops).toHaveLength(0);
+  expect(f.events).toHaveLength(0);
+  expect(f.reasons).toHaveLength(0);
+  expect(f.current().state).toMatchObject({
+    phase: "starting",
+    startedAtMs: START,
+    deadlineAtMs: START + 2 * WINDOW,
+  });
+});
+
+test("a Computer that comes back inside the pushed-out window still settles from the Daemon's started", async () => {
+  const f = fixture(startingState, false);
+  f.clock.now = START + WINDOW;
+  expect(await f.timeout.settle("a")).toBe("waiting");
+  const state = f.current().state!;
+  const receiver = new AgentControlReceiver(
+    f.store,
+    f.signal,
+    {} as never,
+    undefined,
+    async (_agent, reason) => void f.reasons.push(reason),
+    { publish: (_agent: unknown, event: unknown) => void f.events.push(event) } as never,
+  );
+  f.clock.now = START + 2 * WINDOW - 1;
+  await receiver.result(
+    claim,
+    resultFor(state, { phase: "started", launchId: "launch-1", sequence: 1 }),
+  );
+  expect(f.current().state).toMatchObject({ phase: "completed" });
+});
+
+test("a Computer still offline a day after the launch began settles it as failed", async () => {
+  const f = fixture(startingState, false);
+  f.clock.now = START + TRANSIENT_FAILURE_MAX_WINDOW_MS + 1;
   const { value, lines } = await captureWarnings(() => f.timeout.settle("a"));
   expect(value).toBe("failed");
   expect(f.stops).toHaveLength(0);
@@ -166,8 +204,13 @@ test("an offline Computer is settled as failed at once, without a Stop", async (
 });
 
 test("the same launch is settled once when two sweeps race", async () => {
-  const f = fixture(startingState, false);
-  f.clock.now = START + WINDOW;
+  const f = fixture({
+    ...startingState,
+    epoch: 4,
+    controlSequence: 0,
+    stopSentAtMs: START + WINDOW,
+  });
+  f.clock.now = START + WINDOW + STARTUP_STOP_CONFIRM_MS;
   const results = await Promise.all([f.timeout.settle("a"), f.timeout.settle("a")]);
   expect(results.sort()).toEqual(["failed", "lost"]);
   expect(f.events).toHaveLength(1);

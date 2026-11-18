@@ -1,3 +1,4 @@
+import { startupDeadlineMs } from "@lrm/coforge-sdk/internal";
 import type { AgentControlEvents } from "./agent-control-events.server";
 import type { AgentStopReasonRecorder } from "./agent-control-receiver.server";
 import type { AgentRuntimeLock } from "./agent-runtime-lock.server";
@@ -6,6 +7,7 @@ import {
   current,
   nextControlEpoch,
   startupWindow,
+  TRANSIENT_FAILURE_MAX_WINDOW_MS,
   type AgentControlAgent,
   type AgentControlState,
   type AgentControlStore,
@@ -105,7 +107,16 @@ export class AgentControlStartupTimeout {
       workspaceId: state.workspaceId,
       computerId: state.computerId,
     });
-    if (!online) return this.#fail(settling, "offline", now);
+    if (!online) {
+      const startedAtMs = state.startedAtMs ?? now;
+      if (now - startedAtMs > TRANSIENT_FAILURE_MAX_WINDOW_MS)
+        return this.#fail(settling, "offline", now);
+      const extended = {
+        ...state,
+        deadlineAtMs: now + startupDeadlineMs(state.provider),
+      };
+      return (await store.replace(agent, extended)) ? "waiting" : "lost";
+    }
     const fenced = {
       ...state,
       epoch: nextControlEpoch(state),
