@@ -218,6 +218,22 @@ test("a briefing that cannot be built still starts a fresh session with the memo
   expect(h.sessions[0]!.inputs[0]).toContain("You are starting a fresh session.");
   expect(records.map((r) => r.properties.event)).toContain("agent.runtime.wake_briefing_failed");
 });
+test("a briefing that cannot be built, with no memory files, starts a fresh session on the plain starter", async () => {
+  const { result: h, records } = await run({ briefing: "fails", memory: false }, async (h) => {
+    setSystemTime(minutes(90));
+    await h.runtime.handleAgentStart(h.intent({ sessionId: "old-session", sessionMode: "resume" }));
+    return h;
+  });
+  expect(h.sessions).toHaveLength(1);
+  expect(h.sessions[0]!.options.sessionId).toBeUndefined();
+  expect(h.sessions[0]!.options.sessionMode).toBe("create");
+  expect(h.reports[0]).toMatchObject({ replacedSessionId: "old-session" });
+  expect(h.sessions[0]!.inputs).toHaveLength(1);
+  expect(h.sessions[0]!.inputs[0]).toStartWith("You are starting a fresh session.");
+  expect(h.sessions[0]!.inputs[0]).not.toContain("<memory-index");
+  expect(h.sessions[0]!.inputs[0]).toContain("read MEMORY.md and notes/active-context.md");
+  expect(records.map((r) => r.properties.event)).toContain("agent.runtime.wake_briefing_failed");
+});
 const RESUMED: Array<[string, HarnessOptions, Partial<AgentStartIntent>, number, number]> = [
   ["a resume prompt is carried", {}, { resumePrompt: "continue the review" }, 90, 0],
   ["the provider has no seam", { seam: false }, {}, 90, 0],
