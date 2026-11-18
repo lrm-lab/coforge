@@ -38,7 +38,6 @@ type Props = {
   select(computerId: string, sessionId?: string, runtime?: WorkbenchRuntime): void;
 };
 
-/** The Workbench, or one line saying it is off once the Workspace's switch turns off. */
 export function PiChatPage(props: Props) {
   return useAiWorkbenchEnabled() ? <PiChatContent {...props} /> : <PiChatOff />;
 }
@@ -141,8 +140,6 @@ function PiChatContent(props: Props) {
         >
           <PageHeader
             heading={m.pi_chat_title()}
-            // An icon, so the title keeps its full width in the narrow list column; the empty
-            // conversation pane spells out "New chat" beside it.
             actions={
               <ButtonUtility
                 size="sm"

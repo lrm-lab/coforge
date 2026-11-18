@@ -24,7 +24,6 @@ const markdownComponents: Components = {
     const language = Array.isArray(classes)
       ? String(classes.find((name) => String(name).startsWith("language-")) ?? "").slice(9)
       : "";
-    // A `$$` block, a `\[…\]` one and a ```math fence (`message-math.ts`), drawn as in messages.
     if (language === "math") return <MessageFormula source={value} display />;
     return (
       <Suspense
@@ -102,9 +101,7 @@ function inputPreview(input: string) {
     const args = JSON.parse(input);
     for (const key of ["command", "path", "file_path", "query", "url"])
       if (typeof args?.[key] === "string") return args[key];
-  } catch {
-    // A streaming argument may not be complete JSON yet.
-  }
+  } catch {}
   return input;
 }
 

@@ -90,7 +90,7 @@ export function PiChatConversation({
       query.state.status === "error"
         ? 3_000
         : query.state.data?.session?.status === "running"
-          ? 10_000 // Watchdog/recovery only; live content arrives on the shared realtime connection.
+          ? 10_000
           : false,
   });
   const session = history.data?.session;
@@ -157,7 +157,6 @@ export function PiChatConversation({
       const accepted = result.session;
       if (accepted) {
         const acceptedKey = ["pi-chat", workspaceSlug, computerId, "session", accepted.id];
-        // An older in-flight read must not overwrite the acknowledged session state.
         await queryClient.cancelQueries({ queryKey: acceptedKey, exact: true });
         queryClient.setQueryData<PiChatHistory>(acceptedKey, (current) => {
           const observed =
@@ -263,7 +262,6 @@ export function PiChatConversation({
           },
         },
       });
-      // A polling response started before this page was loaded must not discard it.
       await queryClient.cancelQueries({ queryKey });
       position.capturePrepend();
       queryClient.setQueryData<PiChatHistory>(queryKey, (current) => {
@@ -323,7 +321,6 @@ export function PiChatConversation({
           role="alert"
           className="flex flex-wrap items-center gap-2 border-b border-secondary p-3 text-sm text-error-primary"
         >
-          {/* The history query failing on its own is a read. */}
           <p>{piChatFailureMessage(error ?? "load")}</p>
           <Button
             color="secondary"
