@@ -1,6 +1,7 @@
-import type { TaskStatus } from "@lrm/coforge-sdk/internal";
+import type { TaskPriority, TaskStatus } from "@lrm/coforge-sdk/internal";
 
 import { m } from "#src/paraglide/messages";
+import { taskChangeText } from "./system-notice-change-text";
 import type { Locale } from "#src/paraglide/runtime";
 import {
   isSystemNotice,
@@ -41,6 +42,12 @@ const KIND_EMOJI: Partial<Record<SystemNotice["kind"], string>> = {
   "task.released": "🚦",
   "task.blocked": "⛔",
   "task.subtasks_finished": "✅",
+  "task.due_changed": "🗓️",
+  "task.labels_changed": "🏷️",
+  "task.project_changed": "📁",
+  "task.parent_changed": "🌿",
+  "task.dependencies_changed": "⛓️",
+  "task.amended": "✏️",
 };
 
 const STATUS_EMOJI: Record<TaskStatus, string> = {
@@ -60,6 +67,14 @@ const STATUS_LABEL: Record<TaskStatus, (locale?: Locale) => string> = {
   in_review: (locale) => m.tasks_status_in_review({}, { locale }),
   done: (locale) => m.tasks_status_done({}, { locale }),
   closed: (locale) => m.tasks_status_closed({}, { locale }),
+};
+
+const PRIORITY_LABEL: Record<TaskPriority, (locale?: Locale) => string> = {
+  urgent: (locale) => m.tasks_priority_urgent({}, { locale }),
+  high: (locale) => m.tasks_priority_high({}, { locale }),
+  medium: (locale) => m.tasks_priority_medium({}, { locale }),
+  low: (locale) => m.tasks_priority_low({}, { locale }),
+  none: (locale) => m.tasks_priority_none({}, { locale }),
 };
 
 /** How a notice writes the people it names: as text, or (`systemNoticeParts`) as a marker the
@@ -184,8 +199,8 @@ function noticeText(notice: SystemNotice, locale?: Locale, names: Names = TEXT_N
           {
             actor: shown(notice.params.actor),
             task: reference(notice.params.task, locale),
-            from: notice.params.from,
-            to: notice.params.to,
+            from: PRIORITY_LABEL[notice.params.from](locale),
+            to: PRIORITY_LABEL[notice.params.to](locale),
           },
           { locale },
         )}`,
@@ -326,6 +341,17 @@ function noticeText(notice: SystemNotice, locale?: Locale, names: Names = TEXT_N
       return m.system_notice_agent_dm_chain_limit({}, { locale });
     case "agent_dm.rate_limit":
       return m.system_notice_agent_dm_rate_limit({}, { locale });
+    case "task.due_changed":
+    case "task.labels_changed":
+    case "task.project_changed":
+    case "task.parent_changed":
+    case "task.dependencies_changed":
+    case "task.amended":
+      return taskChangeText(notice, {
+        locale,
+        shown,
+        reference: (task) => reference(task, locale),
+      });
     case "legacy_text":
       return "";
   }

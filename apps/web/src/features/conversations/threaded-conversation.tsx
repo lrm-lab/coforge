@@ -181,6 +181,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
                   {...popupProfile.openers}
                   conversationId={taskDiscussionId}
                   board={{ conversationId: conversation.conversationId, number: openTask.number }}
+                  changedAt={openTask.updatedAt}
                   mentionables={conversation.mentionables}
                   emptyState={taskRepliesEmpty}
                 />

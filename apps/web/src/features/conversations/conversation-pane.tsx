@@ -200,9 +200,9 @@ export function ConversationPane({
     () =>
       groupSystemMessages(
         visibleMessages,
-        (message) => message.sequence === openBoundary?.sequence,
+        (message) => inTaskPopup || message.sequence === openBoundary?.sequence,
       ),
-    [visibleMessages, openBoundary],
+    [visibleMessages, openBoundary, inTaskPopup],
   );
   const {
     openedMessages: openedSystemMessages,

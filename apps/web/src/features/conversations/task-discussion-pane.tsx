@@ -10,6 +10,7 @@ import { ComposerScopeProvider, type ComposerScope } from "./composer-scope";
 import type { DirectConversationView } from "./conversation-types";
 import { ThreadLoadStatus, threadRootLoadOf } from "./thread-root-state";
 import { useTaskConversation } from "./use-task-conversation";
+import { useTaskEvents } from "./use-task-events";
 
 type PaneProps = ComponentProps<typeof ConversationPane>;
 
@@ -26,6 +27,7 @@ type PaneProps = ComponentProps<typeof ConversationPane>;
 export function TaskDiscussionPane({
   conversationId: known,
   board,
+  changedAt,
   mentionables,
   // The host conversation's jumps say nothing about this one.
   onLoadMessageAround: _around,
@@ -35,6 +37,7 @@ export function TaskDiscussionPane({
   conversationId: string | undefined;
   /** The Task by its board and number, the address a reply goes to. */
   board: { conversationId: string; number: number };
+  changedAt: string | undefined;
   /** Whom a reply may mention before the conversation exists: the board's members. */
   mentionables: DirectConversationView["mentionables"];
 }) {
@@ -42,6 +45,14 @@ export function TaskDiscussionPane({
   const queryClient = useQueryClient();
   const { conversationId, made, pages, newest, seated, messages, catchUp, ensure, loadBackTo } =
     useTaskConversation({ known, board });
+  const timeline = useTaskEvents({
+    conversationId,
+    messages,
+    loaded: pages.isSuccess,
+    number: board.number,
+    changedAt,
+    members: mentionables,
+  });
   // A context, not composer props: the composer sits under `ConversationPane`, which is kept from
   // growing; the scope reaches it and its outbox without threading two props through the pane.
   const scope = useMemo<ComposerScope>(
@@ -89,7 +100,7 @@ export function TaskDiscussionPane({
           senderMemberId: newest?.senderMemberId ?? "",
           // A Task's conversation has no threads of its own.
           threads: undefined,
-          messages,
+          messages: timeline,
           hasOlder: pages.hasNextPage,
         }}
         onSend={async (body, idempotencyKey, attachmentIds, options) => {

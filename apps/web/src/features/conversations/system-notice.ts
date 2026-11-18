@@ -1,4 +1,4 @@
-import type { TaskPriority, TaskStatus } from "@lrm/coforge-sdk/internal";
+import type { TaskName, TaskPriority, TaskStatus } from "@lrm/coforge-sdk/internal";
 
 /** A person a system notice names: the id opens their profile when it resolves; the handle and
  * name survive a deleted person. */
@@ -15,6 +15,8 @@ export type SystemTask = {
   /** In a channel the reader may not be able to read: named by nothing else (`number` is 0). */
   hidden?: true;
 };
+
+export type SystemNamed = { id: string; name: string };
 
 /** The notices that address a Task's owner name them here, when someone holds the Task. */
 type OwnerParam = { owner?: SystemPerson | null };
@@ -45,6 +47,50 @@ export type SystemNotice =
       };
     }
   | { kind: "task.unassigned"; params: { actor: SystemPerson; task: SystemTask } }
+  | {
+      kind: "task.due_changed";
+      params: {
+        actor: SystemPerson;
+        task: SystemTask;
+        from: string | null;
+        to: string | null;
+      };
+    }
+  | {
+      kind: "task.labels_changed";
+      params: {
+        actor?: SystemPerson;
+        task: SystemTask;
+        added: SystemNamed[];
+        removed: SystemNamed[];
+      };
+    }
+  | {
+      kind: "task.project_changed";
+      params: {
+        actor: SystemPerson;
+        task: SystemTask;
+        from: SystemNamed | null;
+        to: SystemNamed | null;
+      };
+    }
+  | {
+      kind: "task.parent_changed";
+      params: { actor: SystemPerson; task: SystemTask; from: TaskName | null; to: TaskName | null };
+    }
+  | {
+      kind: "task.dependencies_changed";
+      params: { actor: SystemPerson; task: SystemTask; added: TaskName[]; removed: TaskName[] };
+    }
+  | {
+      kind: "task.amended";
+      params: {
+        actor: SystemPerson;
+        task: SystemTask;
+        title?: { from: string; to: string };
+        description?: true;
+      };
+    }
   | {
       kind: "task.unfollowed";
       params: { actor: SystemPerson; task: SystemTask; reason?: string };
@@ -126,6 +172,31 @@ const ownerAddressed = (params: Record<string, unknown>) =>
   task(params.task) &&
   (params.owner === null || params.owner === undefined || person(params.owner));
 
+const named = (value: unknown): value is SystemNamed => {
+  const row = value as Record<string, unknown> | null;
+  return !!row && typeof row.id === "string" && typeof row.name === "string";
+};
+
+const taskName = (value: unknown): value is TaskName => {
+  const row = value as Record<string, unknown> | null;
+  if (!row) return false;
+  if (row.hidden === true) return true;
+  return (
+    row.hidden === false &&
+    typeof row.number === "number" &&
+    (row.channel === null || typeof row.channel === "string")
+  );
+};
+
+const instant = (value: unknown) =>
+  value === null || (typeof value === "string" && !Number.isNaN(Date.parse(value)));
+
+const changed = <T>(value: unknown, check: (value: unknown) => value is T) =>
+  value === null || check(value);
+
+const listOf = <T>(value: unknown, check: (value: unknown) => value is T) =>
+  Array.isArray(value) && value.every(check);
+
 const STATUSES = new Set(["todo", "in_progress", "in_review", "done", "closed"]);
 const PRIORITIES = new Set(["urgent", "high", "medium", "low", "none"]);
 
@@ -175,6 +246,47 @@ export function isSystemNotice(value: { kind: string; params: unknown }): value 
         PRIORITIES.has(String(params.to)) &&
         (params.owner === null || params.owner === undefined || person(params.owner))
       );
+    case "task.due_changed":
+      return (
+        person(params.actor) && task(params.task) && instant(params.from) && instant(params.to)
+      );
+    case "task.labels_changed":
+      return (
+        (params.actor === undefined || person(params.actor)) &&
+        task(params.task) &&
+        listOf(params.added, named) &&
+        listOf(params.removed, named)
+      );
+    case "task.project_changed":
+      return (
+        person(params.actor) &&
+        task(params.task) &&
+        changed(params.from, named) &&
+        changed(params.to, named)
+      );
+    case "task.parent_changed":
+      return (
+        person(params.actor) &&
+        task(params.task) &&
+        changed(params.from, taskName) &&
+        changed(params.to, taskName)
+      );
+    case "task.dependencies_changed":
+      return (
+        person(params.actor) &&
+        task(params.task) &&
+        listOf(params.added, taskName) &&
+        listOf(params.removed, taskName)
+      );
+    case "task.amended": {
+      const title = params.title as Record<string, unknown> | undefined;
+      return (
+        person(params.actor) &&
+        task(params.task) &&
+        (title === undefined || (typeof title.from === "string" && typeof title.to === "string")) &&
+        (params.description === undefined || params.description === true)
+      );
+    }
     case "task.unfollowed":
       return (
         person(params.actor) &&
