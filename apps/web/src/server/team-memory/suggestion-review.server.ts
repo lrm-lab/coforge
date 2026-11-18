@@ -1,0 +1,195 @@
+import {
+  decodeTeamMemoryCommand,
+  type TeamMemoryDraft,
+  type TeamMemoryWrite,
+} from "@lrm/coforge-sdk/agent";
+import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import { teamMemoryAccess } from "#src/server/db/repositories/team-memory-access.repositories.server";
+import { readableMemoryEvidence } from "#src/server/db/repositories/team-memory-evidence.server";
+import { head, type Row } from "#src/server/db/repositories/team-memory-projections.server";
+import { teamMemory } from "./composition.server";
+import { TeamMemoryError } from "./memory";
+
+type Reviewer = { workspaceId: string; userId: string };
+type Suggestion = { id: string; kind: string; payload: Prisma.JsonValue };
+type Edit = Pick<Partial<TeamMemoryDraft>, "title" | "content">;
+
+export async function listMemorySuggestions(db: PrismaClient, actor: Reviewer, after?: string) {
+  return db.$transaction(async (tx) => {
+    await teamMemoryAccess(tx, actor);
+    const rows = await tx.teamMemorySuggestion.findMany({
+      where: {
+        workspaceId: actor.workspaceId,
+        status: "pending",
+        ...(after ? { id: { gt: after } } : {}),
+      },
+      select: { id: true, kind: true, payload: true, createdAt: true },
+      orderBy: { id: "asc" },
+      take: 21,
+    });
+    const page = rows.slice(0, 20);
+    const refs = page.flatMap((row) => {
+      if (row.kind !== "task") return [];
+      const draft = row.payload as unknown as TeamMemoryDraft;
+      return draft.evidence ?? [];
+    });
+    const readable = new Set(
+      (await readableMemoryEvidence(tx, actor.workspaceId, refs)).map(({ id }) => id),
+    );
+    return {
+      rows: page.filter(
+        (row) =>
+          row.kind !== "task" ||
+          (row.payload as unknown as TeamMemoryDraft).evidence?.every(({ id }) => readable.has(id)),
+      ),
+      next: rows.length > 20 ? rows[19]?.id : undefined,
+    };
+  });
+}
+
+export async function reviewMemorySuggestion(
+  db: PrismaClient,
+  actor: Reviewer,
+  id: string,
+  decision: "accept" | "dismiss",
+  edit?: Edit,
+) {
+  return db.$transaction(
+    async (tx) => {
+      await teamMemoryAccess(tx, actor);
+      const key = { id, workspaceId: actor.workspaceId };
+      const [locked] = await tx.$queryRaw<{ id: string }[]>`
+      SELECT id FROM team_memory_suggestions
+      WHERE id = ${id}::uuid AND workspace_id = ${actor.workspaceId}::uuid FOR UPDATE`;
+      if (!locked) throw new TeamMemoryError("not_found");
+      const row = await tx.teamMemorySuggestion.findUniqueOrThrow({ where: key });
+      if (row.status !== "pending") return { status: row.status, entryId: row.appliedEntryId };
+      const decided = { decidedAt: new Date(), decidedByUserId: actor.userId };
+      if (decision === "dismiss") {
+        await tx.teamMemorySuggestion.update({
+          where: key,
+          data: { ...decided, status: "dismissed" },
+        });
+        return { status: "dismissed", entryId: null };
+      }
+      const command = await suggestedCommand(tx, actor.workspaceId, row, edit);
+      if (!command) {
+        await tx.teamMemorySuggestion.update({ where: key, data: { ...decided, status: "stale" } });
+        return { status: "stale", entryId: null };
+      }
+      const memory = teamMemory(tx);
+      const reviewed = await memory.execute(actor, command);
+      const applied =
+        reviewed.status === "review_required"
+          ? await memory.execute(actor, { ...command, reviewToken: reviewed.reviewToken! })
+          : reviewed;
+      const entryId = applied.entries[0]?.id ?? null;
+      await tx.teamMemorySuggestion.update({
+        where: key,
+        data: { ...decided, status: "accepted", appliedEntryId: entryId },
+      });
+      return { status: "accepted", entryId };
+    },
+    { timeout: 10_000 },
+  );
+}
+
+async function suggestedCommand(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  row: Suggestion,
+  edit?: Edit,
+): Promise<TeamMemoryWrite | undefined> {
+  if (row.kind === "task") {
+    const draft = row.payload as unknown as TeamMemoryDraft;
+    const source = draft.evidence?.[0];
+    if (!source) return undefined;
+    const task = await tx.task.findFirst({
+      where: {
+        id: source.id,
+        workspaceId,
+        deletedAt: null,
+        status: { in: ["done", "closed"] },
+        revision: { gte: source.revision ?? 0 },
+        conversation: {
+          channelName: { not: null },
+          visibility: "public",
+          hiddenFromWorkspaceAt: null,
+        },
+      },
+      select: { id: true },
+    });
+    if (!task) return undefined;
+    return decodeTeamMemoryCommand({
+      ...draft,
+      ...edit,
+      operation: "create",
+      requestId: row.id,
+    }) as TeamMemoryWrite;
+  }
+  if (row.kind === "evidence") {
+    const { id, revision } = row.payload as unknown as { id: string; revision: number };
+    const entry = await tx.teamMemoryEntry.findFirst({
+      where: { id, revision, workspaceId, status: "active", pinned: false },
+    });
+    if (!entry) return undefined;
+    const current = head(entry as Row);
+    const evidence = await readableMemoryEvidence(tx, workspaceId, current.evidence ?? []);
+    return decodeTeamMemoryCommand({
+      operation: "update",
+      requestId: row.id,
+      id,
+      revision,
+      title: edit?.title ?? current.title,
+      content: edit?.content ?? current.content,
+      applicability: current.applicability,
+      kind: current.kind,
+      projectId: current.projectId,
+      source: "Reconfirmed during team memory review",
+      evidence,
+      reason: "Reconfirmed after evidence became unavailable",
+    }) as TeamMemoryWrite;
+  }
+  if (row.kind !== "duplicate") return undefined;
+  const { keep, duplicate } = row.payload as unknown as {
+    keep: { id: string; revision: number };
+    duplicate: { id: string; revision: number };
+  };
+  const rows = await tx.teamMemoryEntry.findMany({
+    where: { workspaceId, id: { in: [keep.id, duplicate.id] }, status: "active", pinned: false },
+    take: 2,
+  });
+  const target = rows.find((entry) => entry.id === keep.id && entry.revision === keep.revision);
+  const source = rows.find(
+    (entry) => entry.id === duplicate.id && entry.revision === duplicate.revision,
+  );
+  if (!target || !source) return undefined;
+  const retained = head(target as Row);
+  const other = head(source as Row);
+  const refs = new Map(
+    [...(retained.evidence ?? []), ...(other.evidence ?? [])].map((ref) => [
+      JSON.stringify(ref),
+      ref,
+    ]),
+  );
+  if (refs.size > 8) return undefined;
+  const evidence = await readableMemoryEvidence(tx, workspaceId, [...refs.values()]);
+  return decodeTeamMemoryCommand({
+    ...edit,
+    operation: "merge",
+    requestId: row.id,
+    ...keep,
+    sources: [duplicate],
+    title: edit?.title ?? retained.title,
+    content: edit?.content ?? retained.content,
+    source: [retained.source, other.source]
+      .filter((text, i, list) => i === list.indexOf(text))
+      .join("\n")
+      .slice(0, 1_000),
+    kind: retained.kind,
+    applicability: retained.applicability,
+    projectId: retained.projectId,
+    evidence,
+    reason: "Reviewed duplicate team memory",
+  }) as TeamMemoryWrite;
+}

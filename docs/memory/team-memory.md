@@ -52,6 +52,12 @@ When Web enables `COFORGE_TEAM_MEMORY_RECALL=true`, an Agent opening, viewing or
 can receive up to five current memory excerpts from the task's Project and the Workspace.
 The task request keeps working when recall fails or exceeds its 400 ms budget.
 
+Set `COFORGE_TEAM_MEMORY_REVIEW=true` on Web to enable the review queue. A public task
+marked done records one draft for that revision. A scan of each enabled Workspace creates
+review suggestions for duplicates and unavailable evidence. A human decides whether to publish,
+reconfirm, merge or dismiss. A reviewed write and its decision commit together; fixed memories
+are skipped by scans.
+
 ## Upgrade and retained data
 
 Stop existing dedicated Memory Agent processes, then deploy Web/backend migrations before updating Computers. Migrations archive registered legacy

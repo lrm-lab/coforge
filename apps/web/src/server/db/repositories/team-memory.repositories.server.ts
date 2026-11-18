@@ -14,7 +14,8 @@ import { memoryReceipts } from "./team-memory-receipts.repositories.server";
 import { teamMemoryAccess as access } from "./team-memory-access.repositories.server";
 import { readableMemoryEvidence } from "./team-memory-evidence.server";
 import { head, searchText, fingerprint, type Row } from "./team-memory-projections.server";
-import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import { Prisma } from "#src/generated/prisma/client";
+import { inTransaction, type DatabaseScope } from "#src/server/db/transaction.server";
 import {
   type TeamMemoryCatalogCommand,
   type TeamMemoryDraft,
@@ -33,7 +34,7 @@ import {
 export class PrismaTeamMemoryStore implements TeamMemoryStore {
   private readonly reads: TeamMemoryReads;
 
-  constructor(private readonly db: PrismaClient) {
+  constructor(private readonly db: DatabaseScope) {
     this.reads = new TeamMemoryReads(db);
   }
 
@@ -54,7 +55,8 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
 
   async review(actor: TeamMemoryActor, command: TeamMemoryWrite): Promise<TeamMemoryResult> {
     const hash = fingerprint(command);
-    return this.db.$transaction(
+    return inTransaction(
+      this.db,
       async (tx) => {
         await access(tx, actor);
         const receipts = memoryReceipts(tx, actor, command.requestId);
@@ -104,7 +106,8 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
   async write(actor: TeamMemoryActor, command: TeamMemoryWrite): Promise<TeamMemoryResult> {
     const hash = fingerprint(command);
     try {
-      return await this.db.$transaction(
+      return await inTransaction(
+        this.db,
         async (tx) => {
           const admin = await access(tx, actor, true);
           await tx.teamMemoryState.upsert({

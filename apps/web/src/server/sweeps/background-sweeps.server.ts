@@ -16,6 +16,7 @@ import {
 import { ensureAgentMuteHintSweep } from "#src/server/conversations/agent-mute-hint-sweep.server";
 import { ensureDeferredMobilePushSweep } from "#src/server/notifications/deferred-mobile-push-sweep.server";
 import { ensureUsageLimitSweep } from "#src/server/usage-limits/usage-limit-sweep.server";
+import { ensureTeamMemorySuggestionSweep } from "#src/server/team-memory/suggestion-sweep.server";
 
 /**
  * The periodic sweeps the Centrifugo RPC composition starts, and the one place that connects the
@@ -38,4 +39,5 @@ export function registerBackgroundSweeps(): void {
   ensureDeletedTaskSweep();
   ensureComputerAttachSweep();
   ensureUsageLimitSweep();
+  ensureTeamMemorySuggestionSweep();
 }

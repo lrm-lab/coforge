@@ -1,4 +1,5 @@
-import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import { Prisma } from "#src/generated/prisma/client";
+import { inTransaction, type DatabaseScope } from "#src/server/db/transaction.server";
 import type { TeamMemoryCatalogCommand, TeamMemoryResult } from "@lrm/coforge-sdk/agent";
 import { teamMemoryAccess } from "./team-memory-access.repositories.server";
 import { escapeLike } from "./team-memory-projections.server";
@@ -6,11 +7,11 @@ import { TeamMemoryError, type TeamMemoryActor } from "#src/server/team-memory/m
 
 type Project = { id: string; name: string; slug: string; description: string };
 export async function teamMemoryCatalog(
-  db: PrismaClient,
+  db: DatabaseScope,
   actor: TeamMemoryActor,
   command: TeamMemoryCatalogCommand,
 ): Promise<TeamMemoryResult> {
-  return db.$transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     await teamMemoryAccess(tx, actor, command.operation === "project-create");
     if (command.operation === "projects") {
       const offset = command.offset ?? 0;

@@ -44,6 +44,7 @@ import { requireManager, isTaskManager } from "./task-assignees.server";
 import { rememberTaskProject, resolveTaskProject } from "./task-projects.server";
 import { assertCanSetPriority } from "./task-priority.server";
 import { indexedRequestId } from "./task-request-ids.server";
+import { captureAcceptedTaskMemory } from "#src/server/team-memory/suggestion-capture.server";
 import { LABELS_PER_TASK_MAX, labelsChange, labelView, resolveTaskLabels } from "./labels.server";
 
 export async function updateTaskStatus(
@@ -139,6 +140,8 @@ export async function updateTaskStatus(
       });
     }
     await noticeStatusFollowUps(tx, notices, member, task, updated);
+    if (task.status !== updated.status && updated.status === "done")
+      await captureAcceptedTaskMemory(tx, { ...updated, projectId: updated.project?.id ?? null });
     return updated;
   });
   const view = await taskViewOf(ports.db, ports.reader, updated);

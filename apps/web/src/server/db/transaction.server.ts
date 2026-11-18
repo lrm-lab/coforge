@@ -13,6 +13,7 @@ export function isDatabaseClient(scope: DatabaseScope): scope is PrismaClient {
 export function inTransaction<Result>(
   scope: DatabaseScope,
   work: (tx: Prisma.TransactionClient) => Promise<Result>,
+  options?: { timeout?: number; isolationLevel?: Prisma.TransactionIsolationLevel },
 ): Promise<Result> {
-  return isDatabaseClient(scope) ? scope.$transaction(work) : work(scope);
+  return isDatabaseClient(scope) ? scope.$transaction(work, options) : work(scope);
 }
