@@ -14,6 +14,10 @@ import {
   TARGETABLE_CONVERSATION_WHERE,
 } from "#src/server/conversations/active-member.server";
 import { personConversationAccess } from "#src/server/conversations/channel-read-access.server";
+import {
+  taskDiscussionAgentAccess,
+  taskDiscussionBoardSelect,
+} from "#src/server/conversations/task-discussion-access.server";
 
 import { ATTACHMENT_MAX_BYTES } from "@lrm/coforge-sdk/internal";
 
@@ -178,6 +182,27 @@ async function personMayReadAttachment(db: PrismaClient, conversationId: string,
   return access === "read";
 }
 
+async function agentMayReadAttachment(
+  db: PrismaClient,
+  conversationId: string,
+  agentId: string,
+): Promise<boolean> {
+  const seat = await db.conversationMember.findFirst({
+    where: {
+      conversationId,
+      agentId,
+      ...ACTIVE_MEMBER_WHERE,
+      conversation: VISIBLE_CONVERSATION_WHERE,
+    },
+  });
+  if (seat) return true;
+  const taskThread = await db.conversation.findFirst({
+    where: { id: conversationId, kind: "task_thread", ...VISIBLE_CONVERSATION_WHERE },
+    select: taskDiscussionBoardSelect({ agentId }),
+  });
+  return taskThread !== null && taskDiscussionAgentAccess(taskThread) === "read";
+}
+
 /**
  * Resolves an attachment the requester may download and hands back a lazy `open` for its
  * bytes. Authorization happens here, against the committed message and the requester's
@@ -207,14 +232,7 @@ export async function readAuthorizedAttachment(
     ? await personMayReadAttachment(db, attachment.conversationId, input.userId)
     : Boolean(
         input.agentId &&
-        (await db.conversationMember.findFirst({
-          where: {
-            conversationId: attachment.conversationId,
-            agentId: input.agentId,
-            ...ACTIVE_MEMBER_WHERE,
-            conversation: VISIBLE_CONVERSATION_WHERE,
-          },
-        })),
+        (await agentMayReadAttachment(db, attachment.conversationId, input.agentId)),
       );
   if (!allowed || (input.conversationId && input.conversationId !== attachment.conversationId))
     throw new AppError("ACCESS_DENIED");
