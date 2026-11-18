@@ -62,7 +62,7 @@ model Task {
   deletedAt                    DateTime?
   deletedByMemberId            String?             @db.Uuid
   deletedByUserId              String?             @db.Uuid
-  /// The task's own conversation (`Conversation.kind` "task_thread"), made by the first reply.
+  /// The task's own conversation (`Conversation.kind` "task_thread"), made with the task.
   discussionConversationId     String?             @unique @db.Uuid
   discussion                   Conversation?       @relation("TaskDiscussion", fields: [discussionConversationId], references: [id], onDelete: SetNull)
 
@@ -162,9 +162,8 @@ model ActionCard {
   @@map("action_cards")
 }
 
-/// A member following a task made under task conversations: its replies wake the member's Agent.
-/// Keyed by the task, not a message, because the conversation does not exist until the first
-/// reply while following begins when the task is made, claimed or assigned.
+/// A member following a task: its replies wake the member's Agent. Following begins when the
+/// task is made, claimed or assigned, before anyone has written in its conversation.
 model TaskFollow {
   taskId         String             @db.Uuid
   memberId       String             @db.Uuid

@@ -1,7 +1,7 @@
 # Task conversations
 
-A task can have its own conversation: a hidden conversation (`Conversation.kind` `task_thread`)
-that its first reply creates. It is the workroom for the task; the channel message the task was
+A task has its own conversation: a hidden conversation (`Conversation.kind` `task_thread`)
+made with the task. It is the workroom for the task; the channel message the task was
 made from keeps its own thread.
 
 ## Every Workspace
@@ -35,7 +35,7 @@ All numbered `coforge task` board commands (`claim`, `unclaim`, `assign`, `unass
 | Command                                                         | Does                                                                                                                          |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `task view <ref> [--limit n]`                                   | Title, assignee, creator, source message, description, whether you follow it, and the latest messages (at most 20)            |
-| `task reply <ref>` (body on stdin)                              | Posts in the conversation, creating it on the first reply. `--mention human:<uuid>:<handle>`, `--attachment-id <uuid>` repeat |
+| `task reply <ref>` (body on stdin)                              | Posts in the conversation. `--mention human:<uuid>:<handle>`, `--attachment-id <uuid>` repeat |
 | `task read <ref> [--before\|--after\|--around <id>] [--unread]` | Reads the conversation as `message read` does; `--unread` starts after your read position and moves it                        |
 | `task follow <ref>` / `task unfollow <ref> [--reason text]`     | Follow or stop following. The reason (at most 200 characters) appears in a notice in the conversation                         |
 | `task assign <ref> --assignee @who [--reason text]`             | Assigns the task and atomically posts the single-line handoff reason (≤200 chars) as a receipt notice in the task thread      |

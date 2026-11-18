@@ -39,7 +39,7 @@ export { TASK_FOLLOW_REASONS, type TaskFollowReason } from "./task-discussion-st
 const MAX_VIEW_MESSAGES = 20;
 
 /**
- * A task's own conversation (`Conversation.kind` "task_thread"), made by its first reply, and who
+ * A task's own conversation (`Conversation.kind` "task_thread"), made with the task, and who
  * follows the task. A task is read through the board's conversation: the reader must see the
  * channel it is on, and the conversation row itself says nothing of that channel.
  */
@@ -409,9 +409,8 @@ export function boardLabel(channelName: string | null, peer?: string | null) {
 }
 
 /**
- * A server notice in a task's conversation (an assignment, a follower leaving): no sender, made
- * with the conversation if the task has none yet, delivered to `deliverToAgentId` when it names
- * one. The caller holds the board's lock.
+ * A server notice in a task's conversation (an assignment, a follower leaving): no sender,
+ * delivered to `deliverToAgentId` when it names one. The caller holds the board's lock.
  */
 export async function postTaskNotice(
   tx: Transaction,
@@ -423,19 +422,7 @@ export async function postTaskNotice(
     where: { id: taskId },
     select: { id: true, discussionConversationId: true },
   });
-  const conversationId =
-    task.discussionConversationId ??
-    (await (async () => {
-      const conversation = await tx.conversation.create({
-        data: { workspaceId: scope.workspaceId, kind: "task_thread" },
-        select: { id: true },
-      });
-      await tx.task.update({
-        where: { id: taskId },
-        data: { discussionConversationId: conversation.id },
-      });
-      return conversation.id;
-    })());
+  const conversationId = await discussionOf(tx, task, scope.workspaceId);
   await lockConversation(tx, conversationId);
   const sequence = await allocateSequence(tx, conversationId);
   const message = await tx.message.create({

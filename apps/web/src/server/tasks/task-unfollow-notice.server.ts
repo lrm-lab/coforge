@@ -14,8 +14,8 @@ export function unfollowNoticeBody(name: string, reason?: string) {
 }
 
 /**
- * Posts that line after a real unfollow. A task with no conversation has nowhere to show it, and
- * making a conversation just for it would be noise.
+ * Posts that line after a real unfollow. A task nobody has written in has no discussion to show it
+ * in, and the line alone would make an empty conversation look started.
  */
 export async function postUnfollowNotice(
   ports: TaskBoardPorts,
@@ -31,6 +31,11 @@ export async function postUnfollowNotice(
   reason?: string,
 ) {
   if (!task.discussionConversationId) return;
+  const started = await ports.db.message.findFirst({
+    where: { conversationId: task.discussionConversationId },
+    select: { id: true },
+  });
+  if (!started) return;
   const member = await ports.db.conversationMember.findUnique({
     where: { id: memberId },
     select: TASK_MEMBER_SELECT,

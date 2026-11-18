@@ -219,7 +219,6 @@ test("a task made for someone already carries its conversation, and notices are 
     assignee: `@${(await db.user.findUniqueOrThrow({ where: { id: people.author.id } })).username}`,
   });
   const made = tasks[0]!;
-  // The assignment notice made the conversation; the task read back already points at it.
   expect(made.discussionConversationId).toBeString();
   const listed = async () =>
     (await run({ operation: "list", status: "all" })).tasks.find(

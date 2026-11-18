@@ -177,7 +177,7 @@ test("an old task's notices and receipts go to its own conversation and never to
   expect(notices.length).toBe(2);
 });
 
-test("an old task's unfollow notice goes to its own conversation, and with none it posts nothing", async () => {
+test("an old task's unfollow notice goes to its own conversation, and with no word in it it posts nothing", async () => {
   const task = await legacyTask("Followed once");
   const conversations = new TaskConversations({ db, reader: "people", dependencies: {} });
   const ref = { conversationId: channel.id, number: task.number };
@@ -192,6 +192,11 @@ test("an old task's unfollow notice goes to its own conversation, and with none 
 
   const { conversationId } = await conversations.open(principal, ref);
   await conversations.follow(principal, ref);
+  await conversations.unfollow(principal, ref);
+  expect(await db.systemMessage.count({ where: { conversationId } })).toBe(0);
+
+  await conversations.follow(principal, ref);
+  await conversations.reply(principal, ref, { body: "a first word" });
   await conversations.unfollow(principal, ref, "not mine");
   expect(await db.message.count({ where: { threadRootId: task.messageId } })).toBe(0);
   expect(

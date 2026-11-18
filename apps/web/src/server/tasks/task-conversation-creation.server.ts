@@ -36,9 +36,9 @@ import { indexedRequestId } from "./task-request-ids.server";
 import { linkCreatedTasks } from "./task-gates.server";
 import { assignmentQueueNotes } from "./task-queue.server";
 import { ownTaskScope } from "./task-list.server";
-import { parentTasksOf, taskViewsOf } from "./task-relations.server";
+import { NEW_TASK_COUNTS, parentTasksOf, taskViewsOf } from "./task-relations.server";
 import { postTaskNotice } from "./task-conversations.server";
-import { followTask } from "./task-discussion-store.server";
+import { createTaskThread, followTask } from "./task-discussion-store.server";
 import { TASK_CREATES_RESOURCE_RETIRED } from "./task-resource-receipt.server";
 import {
   taskSelection,
@@ -201,8 +201,8 @@ export async function createConversationTasks(
     }
     await linkCreatedTasks(tx, scope, member, tasks, command);
     // The assignee's notice, one per Task, carries the queue note `assign` would give it
-    // (task #716): a person's create-and-assign is the same direct instruction. Each notice
-    // makes the task's conversation, so the task is read again to carry it.
+    // (task #716): a person's create-and-assign is the same direct instruction. Each notice is
+    // posted in the task's conversation, so the task is read again to carry its unread state.
     if (assignee && assignee.id !== member.id) {
       const queueNotes = assignee.agentId
         ? await assignmentQueueNotes(
@@ -252,7 +252,10 @@ export async function createConversationTasks(
     const parents = command.parent ? await parentTasksOf(ports.db, result.tasks) : [];
     const here = parents.filter((parent) => parent.conversationId === scope.conversationId);
     await announceTasks(ports, scope, async () => scopes.task, {
-      tasks: await taskViewsOf(ports.db, "people", [...result.tasks, ...here]),
+      tasks: [
+        ...(await taskViewsOf(ports.db, "people", result.tasks, NEW_TASK_COUNTS)),
+        ...(await taskViewsOf(ports.db, "people", here)),
+      ],
       publicationId: `${result.tasks[0]!.id}:task-created`,
     }).catch(() => undefined);
     if (parents.length)
@@ -263,7 +266,7 @@ export async function createConversationTasks(
         `${result.tasks[0]!.id}:task-created`,
       ).catch(() => undefined);
   }
-  return { tasks: await taskViewsOf(ports.db, ports.reader, result.tasks) };
+  return { tasks: await taskViewsOf(ports.db, ports.reader, result.tasks, NEW_TASK_COUNTS) };
 }
 
 /** The numbers a conversation's next `count` tasks take; the caller holds its lock. */
@@ -314,7 +317,7 @@ export async function insertConversationTask(
     /** The Project the new Task is filed under; the conversation's unless it was chosen. */
     project?: TaskProjectRef | null;
     /** Post the assignee's notice later, once the caller has linked the new Tasks' relations
-     * (their queue note reads them); the task then comes back unread for its new conversation. */
+     * (their queue note reads them); the task then comes back unread for its conversation. */
     deferAssignedNotice?: boolean;
   },
 ) {
@@ -326,6 +329,7 @@ export async function insertConversationTask(
   const task = await tx.task.create({
     data: {
       id: Bun.randomUUIDv7(),
+      discussionConversationId: await createTaskThread(tx, scope.workspaceId),
       conversationId: scope.conversationId,
       workspaceId: scope.workspaceId,
       number: input.number,
@@ -370,7 +374,7 @@ export async function insertConversationTask(
   if (assignee && assignee.id !== member.id)
     await followTask(tx, scope, task.id, assignee.id, "assigned");
   if (assignee?.agentId && claimed) await ensureTaskExecutionSession(tx, task, assignee.agentId);
-  // The assignee's notice makes the task's conversation, so the task is read again to carry it.
+  // The assignee's notice is in the task's conversation, so the task is read again to carry its unread state.
   const assigned = assignee && assignee.id !== member.id;
   if (assigned && !input.deferAssignedNotice)
     await postTaskNotice(tx, scope, task.id, {

@@ -185,12 +185,15 @@ export async function taskViewsOf(
   db: Client,
   reader: TaskReader,
   tasks: readonly SelectedTask[],
+  counts?: DiscussionCounts,
 ): Promise<TaskView[]> {
   const relations = await loadTaskRelations(db, reader, tasks);
   return tasks.map((task) =>
-    taskView(task, reader, { relations: relationsOf(relations, task.id) }),
+    taskView(task, reader, { relations: relationsOf(relations, task.id), counts }),
   );
 }
+
+export const NEW_TASK_COUNTS: DiscussionCounts = { replyCount: 0, earlierReplies: 0, fileCount: 0 };
 
 /**
  * The parents the Tasks `tasks` were just linked under, deduplicated: a create's announcement

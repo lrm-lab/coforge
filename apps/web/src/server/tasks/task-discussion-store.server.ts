@@ -1,4 +1,3 @@
-import { LIVE_TASK_WHERE } from "#src/server/tasks/task-view.server";
 import { AppError } from "#src/lib/app-error";
 import type { Transaction } from "./task-board-ports.server";
 
@@ -41,31 +40,35 @@ export async function followTask(
   return count > 0;
 }
 
-/** The task's own conversation, made by the first message or notice that needs it. */
+/** A new task's own conversation, made with the task in the same transaction. */
+export async function createTaskThread(tx: Pick<Transaction, "conversation">, workspaceId: string) {
+  const conversation = await tx.conversation.create({
+    data: { workspaceId, kind: "task_thread" },
+    select: { id: true },
+  });
+  return conversation.id;
+}
+
+/** The task's own conversation; a task from before every task had one gets it on first use. */
 export async function discussionOf(
   tx: Transaction,
   task: { id: string; discussionConversationId: string | null },
   workspaceId: string,
 ) {
   if (task.discussionConversationId) return task.discussionConversationId;
-  // The row lock on the task is what guarantees one conversation: a concurrent first use waits
-  // here and then reads the id the winner stored, instead of creating a second one.
   await tx.$queryRaw`SELECT "id" FROM "tasks" WHERE "id" = ${task.id}::uuid FOR UPDATE`;
   const fresh = await tx.task.findUnique({
-    where: { id: task.id, ...LIVE_TASK_WHERE },
+    where: { id: task.id },
     select: { discussionConversationId: true },
   });
   if (!fresh) throw new AppError("NOT_FOUND");
   if (fresh.discussionConversationId) return fresh.discussionConversationId;
-  const conversation = await tx.conversation.create({
-    data: { workspaceId, kind: "task_thread" },
-    select: { id: true },
-  });
+  const conversationId = await createTaskThread(tx, workspaceId);
   await tx.task.update({
     where: { id: task.id },
-    data: { discussionConversationId: conversation.id },
+    data: { discussionConversationId: conversationId },
   });
-  return conversation.id;
+  return conversationId;
 }
 
 /** The member's seat in the task's conversation, taken (or taken back) by speaking in it. */
