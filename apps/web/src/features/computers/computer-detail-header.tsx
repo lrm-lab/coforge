@@ -3,11 +3,12 @@ import { Monitor01 as Monitor, RefreshCw01 as RotateCw } from "@untitledui/icons
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { useAppToast } from "#src/components/ui/toast";
 import { useMediaQuery } from "#src/hooks/use-media-query";
 import { m } from "#src/paraglide/messages";
 import { BackToComputers } from "./back-to-computers";
 import { CloudDesktopOverlay } from "./cloud-desktop-overlay";
-import { cloudDesktopUrl, openCloudDesktopWindow } from "./cloud-desktop-url";
+import { cloudDesktopOpening, cloudDesktopUrl, openCloudDesktopWindow } from "./cloud-desktop-url";
 import { useCloudDesktopOrigin } from "./cloud-desktop-origin";
 
 /** Restart control next to Open desktop. The detail page owns the request. */
@@ -47,6 +48,7 @@ export function ComputerDetailHeader({
     showDesktop && desktopOrigin ? cloudDesktopUrl(desktopOrigin, computerId) : undefined;
   const phone = useMediaQuery("(max-width: 639px)", false);
   const [overlayOpen, setOverlayOpen] = useState(false);
+  const toast = useAppToast();
   const restartLabel = restart?.pending
     ? m.computer_restart_requesting()
     : m.computer_restart_action();
@@ -61,9 +63,10 @@ export function ComputerDetailHeader({
           color="primary"
           className="shrink-0"
           iconLeading={Monitor}
-          isDisabled={!online}
           onPress={() => {
-            if (phone) setOverlayOpen(true);
+            const opening = cloudDesktopOpening({ online, phone });
+            if (opening === "offline") toast.error(m.computer_desktop_offline());
+            else if (opening === "overlay") setOverlayOpen(true);
             else openCloudDesktopWindow(desktopUrl, computerId);
           }}
         >

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 
 import {
   CLOUD_DESKTOP_WINDOW_FEATURES,
+  cloudDesktopOpening,
   cloudDesktopUrl,
   cloudDesktopWindowName,
   openCloudDesktopWindow,
@@ -113,4 +114,11 @@ test("a phone view keeps the same desktop path and only marks the viewer", () =>
   expect(phone.searchParams.get("view")).toBe("phone");
   expect(phone.searchParams.get("token")).toBeNull();
   expect(withCloudDesktopPhoneView(base)).toBe(withCloudDesktopPhoneView(phone.toString()));
+});
+
+test("Open desktop on an offline Computer says so instead of opening anything", () => {
+  expect(cloudDesktopOpening({ online: false, phone: false })).toBe("offline");
+  expect(cloudDesktopOpening({ online: false, phone: true })).toBe("offline");
+  expect(cloudDesktopOpening({ online: true, phone: true })).toBe("overlay");
+  expect(cloudDesktopOpening({ online: true, phone: false })).toBe("window");
 });

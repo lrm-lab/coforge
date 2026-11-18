@@ -76,3 +76,13 @@ export function openCloudDesktopWindow(url: string, computerId: string, agentId?
     // The named desktop is already open.
   }
 }
+
+export type CloudDesktopOpening = "offline" | "overlay" | "window";
+
+export function cloudDesktopOpening(input: {
+  online: boolean;
+  phone: boolean;
+}): CloudDesktopOpening {
+  if (!input.online) return "offline";
+  return input.phone ? "overlay" : "window";
+}
