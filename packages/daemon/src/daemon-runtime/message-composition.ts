@@ -1,4 +1,5 @@
 import { AGENT_ACTIVITY_DETAIL_KIND, type AgentActivity } from "@lrm/coforge-sdk/internal";
+import type { RuntimeSweeps } from "./runtime-sweeps";
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { unreadNoticeComposer } from "./important-unread-compose";
@@ -31,6 +32,7 @@ import { ImportantUnreadNoticeStore } from "#src/persistence/important-unread-no
 import { composeImportantUnreadReminder } from "./important-unread-wiring";
 import { MentionDeliveryTracker as MentionDeliveries } from "./mention-delivery-tracker";
 export type MessageCompositionPorts = {
+  sweeps: Pick<RuntimeSweeps, "add">;
   connection: Pick<DaemonConfig, "workspaceId" | "computerId">;
   stateDirectory: string;
   transport(): DaemonConnectionClient;
