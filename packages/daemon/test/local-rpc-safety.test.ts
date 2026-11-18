@@ -97,7 +97,7 @@ test("local RPC closes immediately and logs frame_too_large on a 4-byte oversize
   ).toBe(true);
 });
 
-test("local RPC rejects buffer growth past the frame cap without unbounded allocation", async () => {
+test("local RPC enforces the 4 MiB limit per frame rather than across combined buffered frames", async () => {
   const socketPath = join(tmpdir(), `coforge-${crypto.randomUUID()}.sock`);
   const { records } = await captureDaemonLogs(async () => {
     const server = await startDaemonLocalRpcServer({
@@ -109,16 +109,19 @@ test("local RPC rejects buffer growth past the frame cap without unbounded alloc
     });
     servers.push(server);
 
-    // Valid header claiming MAX_LOCAL_RPC_FRAME_BYTES, followed by extra bytes pushing the
-    // unconsumed socket buffer past 4 + MAX_LOCAL_RPC_FRAME_BYTES.
-    const oversizedChunk = new Uint8Array(4 + MAX_LOCAL_RPC_FRAME_BYTES + 64);
-    new DataView(oversizedChunk.buffer).setUint32(0, MAX_LOCAL_RPC_FRAME_BYTES);
-    await sendBytesAndAwaitClose(socketPath, [oversizedChunk]);
+    const frameOne = new Uint8Array(4 + MAX_LOCAL_RPC_FRAME_BYTES);
+    new DataView(frameOne.buffer).setUint32(0, MAX_LOCAL_RPC_FRAME_BYTES);
+    const frameTwoHeader = new Uint8Array(4);
+    new DataView(frameTwoHeader.buffer).setUint32(0, 64);
+    const combined = new Uint8Array(frameOne.byteLength + frameTwoHeader.byteLength);
+    combined.set(frameOne, 0);
+    combined.set(frameTwoHeader, frameOne.byteLength);
+    await sendBytesAndAwaitClose(socketPath, [combined]);
   });
 
   expect(
     records.some((record) => record.properties.event === "daemon.local_rpc.frame_too_large"),
-  ).toBe(true);
+  ).toBe(false);
 });
 
 test("configure refusal rolls back credentials and config before answering with structured error and errorCode", async () => {

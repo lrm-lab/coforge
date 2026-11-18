@@ -150,8 +150,6 @@ export async function startDaemonLocalRpcServer(
   };
 }
 
-const MAX_LOCAL_RPC_BUFFER_BYTES = 4 + MAX_LOCAL_RPC_FRAME_BYTES;
-
 type LocalSocketData = { buffer: Uint8Array; processing: Promise<void>; closed?: boolean };
 
 /** Decodes framed local RPC requests and answers each one with a framed response payload. */
@@ -174,12 +172,7 @@ class LocalRpcDispatcher {
 
   async receive(socket: Bun.Socket<LocalSocketData>, chunk: Uint8Array): Promise<void> {
     if (socket.data.closed) return;
-    const bufferedBytes = socket.data.buffer.byteLength + chunk.byteLength;
-    if (bufferedBytes > MAX_LOCAL_RPC_BUFFER_BYTES) {
-      this.#rejectOversizedFrame(socket, bufferedBytes);
-      return;
-    }
-    const next = new Uint8Array(bufferedBytes);
+    const next = new Uint8Array(socket.data.buffer.byteLength + chunk.byteLength);
     next.set(socket.data.buffer);
     next.set(chunk, socket.data.buffer.byteLength);
     let parsed: ReturnType<typeof readLocalRpcFrames>;

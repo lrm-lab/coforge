@@ -469,12 +469,7 @@ async function connectToLocalDaemon(socketPath: string): Promise<LocalDaemonConn
     socket: {
       data(activeSocket, chunk) {
         socketRef = activeSocket;
-        const bufferedBytes = buffer.byteLength + chunk.byteLength;
-        if (bufferedBytes > 4 + MAX_LOCAL_RPC_FRAME_BYTES) {
-          failSocket(new LocalRpcFrameTooLargeError(bufferedBytes, "decode"));
-          return;
-        }
-        const next = new Uint8Array(bufferedBytes);
+        const next = new Uint8Array(buffer.byteLength + chunk.byteLength);
         next.set(buffer);
         next.set(chunk, buffer.byteLength);
         buffer = next;
@@ -490,7 +485,7 @@ async function connectToLocalDaemon(socketPath: string): Promise<LocalDaemonConn
         resolveResponse = undefined;
         rejectResponse = undefined;
         resolve(frame);
-        buffer = new Uint8Array();
+        buffer = buffer.slice(frame.byteLength + 4);
       },
       error(_socket, error) {
         rejectResponse?.(error instanceof Error ? error : new Error("local daemon socket failed"));
