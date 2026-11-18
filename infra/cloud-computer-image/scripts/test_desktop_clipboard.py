@@ -106,6 +106,14 @@ class DesktopClipboardTests(unittest.TestCase):
                 self.module.get_clipboard(":1")
             self.assertEqual(missing.exception.code, "xlib_missing")
 
+    def test_decode_prefers_utf8_then_latin1(self):
+        self.assertEqual(self.module._decode_clipboard("你好".encode("utf-8"), "utf8"), "你好")
+        self.assertEqual(self.module._decode_clipboard(b"ascii-only", "string"), "ascii-only")
+        self.assertEqual(
+            self.module._decode_clipboard("café".encode("latin-1"), "string"),
+            "café",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

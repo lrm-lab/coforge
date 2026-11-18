@@ -62,6 +62,7 @@ describe("desktop page adaptation", () => {
 <script type="module">
     import RFB from "./core/rfb.js";
     function coforgeDesktopPaste(text) {}
+    function coforgeWriteLocalClipboard(text) {}
     function coforgeDesktopCopyOut() {}
     function coforgeAttachPhoneGestures() {}
     const phone = params.get("view") === "phone";
@@ -93,11 +94,15 @@ describe("desktop page adaptation", () => {
     expect(html).toContain('getData("text/plain")');
     expect(html).toContain("coforgeDesktopPaste");
     expect(html).toContain("coforgeDesktopCopyOut");
+    expect(html).toContain("coforgeWriteLocalClipboard");
+    expect(html).toContain("coforgeExecCommandCopy");
     expect(html).not.toContain("clipboardPasteFrom(text)");
     expect(html).toContain("/clipboard");
     expect(html).toContain("sendKey(0xffe3");
-    expect(html).toContain("navigator.clipboard.writeText");
+    expect(html).toContain("navigator.clipboard?.writeText");
     expect(html).toContain('addEventListener("clipboard"');
+    expect(html).toContain('"copy"');
+    expect(html).toContain('"cut"');
     expect(html).toContain("stopImmediatePropagation");
     expect(html).toContain("preventDefault()");
   });
@@ -150,6 +155,7 @@ describe("desktop page adaptation", () => {
     const html = adaptDesktopHtml(stale);
     expect(html).toContain("coforgeDesktopPaste");
     expect(html).toContain("coforgeDesktopCopyOut");
+    expect(html).toContain("coforgeWriteLocalClipboard");
     expect(html).toContain("sendKey(0xffe3");
   });
 
@@ -163,7 +169,26 @@ describe("desktop page adaptation", () => {
 `;
     const html = adaptDesktopHtml(stale);
     expect(html).toContain("coforgeDesktopCopyOut");
-    expect(html).toContain("navigator.clipboard.writeText");
+    expect(html).toContain("coforgeWriteLocalClipboard");
+    expect(html).toContain("navigator.clipboard?.writeText");
+  });
+
+  test("a page with the old copy-out marker is rewritten for local clipboard write", () => {
+    const stale = `<!DOCTYPE html>
+<script type="module">
+    import RFB from "./core/rfb.js";
+    function coforgeDesktopPaste(text) {}
+    function coforgeDesktopCopyOut() {}
+    function coforgeAttachPhoneGestures() {}
+    const phone = params.get("view") === "phone";
+</script>
+<div id="coforge-desktop-phone-bar"></div>
+<textarea id="coforge-desktop-keyboard-input"></textarea>
+<button type="button" id="coforge-desktop-reconnect"></button>
+`;
+    const html = adaptDesktopHtml(stale);
+    expect(html).toContain("coforgeWriteLocalClipboard");
+    expect(html).toContain('"copy"');
   });
 
   test("the page title becomes the requested name, and markup in it stays text", () => {
