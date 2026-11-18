@@ -6,6 +6,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import type { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
+import type { AppNotifiedStore } from "#src/persistence/app-notified-store";
 import type {
   AgentAppInbox,
   AgentAppItem,
@@ -62,6 +63,7 @@ function planAppItemNotices(items: readonly AgentAppItem[]): AppItemNotice[] {
 export type AgentInboxCoordinatorPorts = {
   workspaceId: string;
   stateDirectory: string;
+  notifiedAppItems: AppNotifiedStore;
   consumedSeqs: AgentConsumedSeqStore;
   messageAttention: Pick<AgentMessageAttentionIndex, "check">;
   deliveryGate: AgentDeliveryGate;
@@ -124,6 +126,7 @@ export class AgentInboxCoordinator {
   async removeAppItem(agentId: string, itemId: string): Promise<boolean> {
     const removed = await (await this.appInbox(agentId)).remove(itemId);
     this.#notifiedAppItems.get(agentId)?.delete(itemId);
+    await this.ports.notifiedAppItems.remove(agentId, itemId);
     return removed;
   }
 
@@ -131,6 +134,13 @@ export class AgentInboxCoordinator {
    * for a Session replaced with a fresh one, which was told of none. */
   forgetAnnouncedAppItems(agentId: string): void {
     this.#notifiedAppItems.delete(agentId);
+    void this.ports.notifiedAppItems.clear(agentId).catch((error: unknown) => {
+      logger.warn("The App Inbox notices of one Agent could not be forgotten", {
+        event: "inbox.app_notified_clear_failed",
+        agent_id: agentId,
+        error,
+      });
+    });
   }
 
   async inbox(context: string, request: LocalInboxRequest): Promise<InboxResponse> {
@@ -216,7 +226,10 @@ export class AgentInboxCoordinator {
       const pending = notified?.get(item.itemId);
       return pending ? [pending] : [];
     });
-    const fresh = items.filter((item) => !notified?.has(item.itemId));
+    const told = await this.ports.notifiedAppItems.read(agentId);
+    const fresh = items.filter(
+      (item) => !notified?.has(item.itemId) && !told.includes(item.itemId),
+    );
     await Promise.all(inFlight);
     await this.#notifyAppItemNotices(agentId, planAppItemNotices(fresh));
   }
@@ -234,6 +247,7 @@ export class AgentInboxCoordinator {
     const itemId = typeof item === "string" ? item : item.itemId;
     const existing = this.#notifiedAppItems.get(agentId)?.get(itemId);
     if (existing) return existing;
+    if ((await this.ports.notifiedAppItems.read(agentId)).includes(itemId)) return true;
     const resolved =
       typeof item === "string"
         ? (await this.appInbox(agentId)).list().find((entry) => entry.itemId === itemId)
@@ -304,6 +318,7 @@ export class AgentInboxCoordinator {
           if (launch && this.ports.processManager.session(agentId) === session)
             this.ports.reconcileIdleTurn(agentId, launch);
         }
+        await this.#recordNotified(agentId, itemIds);
         return true;
       });
       for (const itemId of itemIds) notified.set(itemId, pending);
@@ -319,6 +334,19 @@ export class AgentInboxCoordinator {
       }
     }
     return accepted;
+  }
+
+  /** Keeps the items the Agent was just told about, so a restart does not announce them again. */
+  async #recordNotified(agentId: string, itemIds: readonly string[]): Promise<void> {
+    try {
+      await this.ports.notifiedAppItems.add(agentId, itemIds);
+    } catch (error) {
+      logger.warn("App Inbox notices were sent but not recorded", {
+        event: "inbox.app_notified_write_failed",
+        agent_id: agentId,
+        error,
+      });
+    }
   }
 
   /** Re-attempts every app-item notice `AgentDeliveryGate` held for `agentId` — each
