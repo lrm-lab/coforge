@@ -18,6 +18,7 @@ import { dmParentTarget } from "#src/server/db/repositories/agent-peer-direct.re
 import type { MentionDeliveryIssuer } from "./mention-deliveries.server";
 import type { MessageNotifier } from "#src/server/notifications/web-push-composition.server";
 import { announceMessageBestEffort } from "./conversation-activity.server";
+import { publishConcurrently } from "./concurrent-publication.server";
 
 export class ReadDirectMessages {
   constructor(private readonly conversations: DirectConversationRepository) {}
@@ -84,22 +85,23 @@ export class SendDirectMessage {
           input.withinSend,
         ),
     );
-    if (!message.agentId) throw new Error("message is not an Agent direct message");
-    // The sender is the only human in a DM with an Agent: their own channel carries the signal so
-    // their other tabs and devices refresh the DM row. The message names the sender, so it never
-    // bumps their own badge.
-    await this.publishBrowserEvent(
-      message,
-      input.conversationId,
-      { userId: input.senderUserId, agentId: message.agentId, senderUserId: input.senderUserId },
-      input.idempotencyKey,
-    );
-    await this.publishUserMessageToAgent(
-      input.idempotencyKey,
-      input.conversationId,
-      { ...message, agentId: message.agentId },
-      input.attachmentIds?.length ?? 0,
-      input.forwarded,
+    const { agentId } = message;
+    if (!agentId) throw new Error("message is not an Agent direct message");
+    await publishConcurrently(
+      this.publishBrowserEvent(
+        message,
+        input.conversationId,
+        { userId: input.senderUserId, agentId, senderUserId: input.senderUserId },
+        input.idempotencyKey,
+      ),
+      () =>
+        this.publishUserMessageToAgent(
+          input.idempotencyKey,
+          input.conversationId,
+          { ...message, agentId },
+          input.attachmentIds?.length ?? 0,
+          input.forwarded,
+        ),
     );
     return message;
   }
@@ -177,31 +179,25 @@ export class SendDirectMessage {
         return persisted;
       },
     );
-    // A send that joined the channel on the way announces the roster change like `channel join`.
     if (message.joinedChannel)
       await announceMemberChanged(this.realtime, {
         workspaceId: input.workspaceId,
         conversationIds: [conversation.id],
       });
-    const publications = (async () => {
-      // A channel message fans out to the Workspace; a DM goes only to its human viewer, naming
-      // the sending Agent's badge so the browser needs no conversation alias. A DM between two
-      // Agents has no viewer and nobody to notify: only the delivery below.
-      if (isChannel || dmUserId) {
-        await this.publishBrowserEvent(
-          message,
-          conversation.id,
-          isChannel
-            ? { workspaceId: input.workspaceId }
-            : { userId: dmUserId!, agentId: input.agentId },
-        );
-        await this.notifications?.notifyMessage(message.id);
-      }
-      await this.publishAgentMentionDeliveries(input.idempotencyKey, conversation.id, message);
+    const browser = (async () => {
+      if (!isChannel && !dmUserId) return;
+      await this.publishBrowserEvent(
+        message,
+        conversation.id,
+        isChannel
+          ? { workspaceId: input.workspaceId }
+          : { userId: dmUserId!, agentId: input.agentId },
+      );
+      await this.notifications?.notifyMessage(message.id);
     })();
-    // What the message did not reach, read from the stored message so a replay reports the same.
-    // It reads only what the send committed, so it runs alongside the publications; both settle
-    // before the send answers, as when they ran one after the other.
+    const publications = publishConcurrently(browser, () =>
+      this.publishAgentMentionDeliveries(input.idempotencyKey, conversation.id, message),
+    );
     const reading = (async () =>
       (await this.conversations.agentMentionReport?.(input.workspaceId, input.agentId, {
         id: message.id,

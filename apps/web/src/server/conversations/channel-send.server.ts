@@ -45,6 +45,7 @@ export type ChannelSendPorts = {
   publisher?: CentrifugoServerApi;
 };
 import { announceMessageBestEffort } from "./conversation-activity.server";
+import { publishConcurrently } from "./concurrent-publication.server";
 
 export async function sendChannel(
   ctx: ChannelSendPorts,
@@ -273,7 +274,7 @@ export async function sendChannel(
     },
   });
   if (created) await ctx.notifications?.notifyMessage(message.id);
-  await announceMessageBestEffort(ctx.db, ctx.realtime, {
+  const announcement = announceMessageBestEffort(ctx.db, ctx.realtime, {
     conversationId: channelId,
     messageId: message.id,
     sequence: message.sequence,
@@ -283,52 +284,55 @@ export async function sendChannel(
     // Only a person sends here; an Agent's channel message goes through `SendDirectMessage`.
     senderUserId: userId,
   });
-  // Every Agent's push goes out at once; a failure still rejects the send. The encoder reads the
-  // stored tokens back as text for the Agent.
-  const publisher = ctx.publisher ?? createCentrifugoServerApi();
-  // Routed through the shared projection rather than two non-null assertions on
-  // `sender.user`, which broke for an Agent-authored channel delivery.
-  const sender = agentMessageSender(message.sender);
-  // A direct message's task names the DM's other party; each recipient reads it from their seat.
-  const taskViews = new Map(
-    await Promise.all(
-      message.deliveries.map(
-        async (delivery) =>
-          [
-            delivery.agentId,
-            await taskReferenceView(ctx.db, workspaceId, delivery.agentId, channelId, message.body),
-          ] as const,
+  await publishConcurrently(announcement, async () => {
+    const publisher = ctx.publisher ?? createCentrifugoServerApi();
+    const sender = agentMessageSender(message.sender);
+    const taskViews = new Map(
+      await Promise.all(
+        message.deliveries.map(
+          async (delivery) =>
+            [
+              delivery.agentId,
+              await taskReferenceView(
+                ctx.db,
+                workspaceId,
+                delivery.agentId,
+                channelId,
+                message.body,
+              ),
+            ] as const,
+        ),
       ),
-    ),
-  );
-  const pushed = await new AgentDeliveryPublisher(
-    publisher,
-    new MentionDeliveryIssuer(new PrismaMentionDeliveryRepository(ctx.db)),
-  ).publish(
-    workspaceId,
-    message.deliveries.map((delivery) => ({
-      computerId: delivery.agent.computerId,
-      requestId: idempotencyKey,
-      conversationId: channelId,
-      agentId: delivery.agentId,
-      messageId: message.id,
-      deliveryId: delivery.deliveryId,
-      sequence: message.sequence,
-      createdAtMs: message.createdAt.getTime(),
-      body: message.body,
-      mentions: message.mentions,
-      forwarded: input.forwarded,
-      target: `#${channel.channelName}${message.threadRootId ? `:${message.threadRootId}` : ""}`,
-      latestSenderKind: sender.kind,
-      latestSenderHandle: sender.handle,
-      latestSenderDescription: sender.description,
-      attachmentCount: new Set(attachmentIds ?? []).size,
-      mentionsAgent: deliveryMentionsAgent(message.mentions, delivery.agentId),
-      taskView: taskViews.get(delivery.agentId),
-    })),
-  );
-  const failed = pushed.find((result) => result.status === "rejected");
-  if (failed) throw failed.reason;
+    );
+    const pushed = await new AgentDeliveryPublisher(
+      publisher,
+      new MentionDeliveryIssuer(new PrismaMentionDeliveryRepository(ctx.db)),
+    ).publish(
+      workspaceId,
+      message.deliveries.map((delivery) => ({
+        computerId: delivery.agent.computerId,
+        requestId: idempotencyKey,
+        conversationId: channelId,
+        agentId: delivery.agentId,
+        messageId: message.id,
+        deliveryId: delivery.deliveryId,
+        sequence: message.sequence,
+        createdAtMs: message.createdAt.getTime(),
+        body: message.body,
+        mentions: message.mentions,
+        forwarded: input.forwarded,
+        target: `#${channel.channelName}${message.threadRootId ? `:${message.threadRootId}` : ""}`,
+        latestSenderKind: sender.kind,
+        latestSenderHandle: sender.handle,
+        latestSenderDescription: sender.description,
+        attachmentCount: new Set(attachmentIds ?? []).size,
+        mentionsAgent: deliveryMentionsAgent(message.mentions, delivery.agentId),
+        taskView: taskViews.get(delivery.agentId),
+      })),
+    );
+    const failed = pushed.find((result) => result.status === "rejected");
+    if (failed) throw failed.reason;
+  });
   // Read from the stored body, so an idempotent replay reads the same `@handle`s. These two
   // post-commit reads are independent, so they go together.
   const [unresolved, pendingMentionActions] = await Promise.all([
