@@ -200,6 +200,63 @@ test("searching archived personal memory does not return active notes", async ()
   expect((await memory.execute({ operation: "search", query: "域名" })).entries).toHaveLength(0);
 });
 
+test("list pages count matching status, even with active notes before and between archives", async () => {
+  const { memory } = await subject();
+  const archiveKeys: string[] = [];
+  for (let index = 0; index < 18; index++) {
+    const key = `record-${String(index).padStart(2, "0")}`;
+    const {
+      entries: [entry],
+    } = await memory.execute({ ...purchased, key });
+    if (index >= 6 && index % 2 === 0) {
+      await memory.execute({ operation: "archive", key, revision: entry!.revision });
+      archiveKeys.push(key);
+    }
+  }
+  const first = await memory.execute({ operation: "list", archived: true });
+  expect(first.entries.map((entry) => entry.key)).toEqual(archiveKeys.slice(0, 5));
+  expect(first.nextOffset).toBe(5);
+  const last = await memory.execute({
+    operation: "list",
+    archived: true,
+    offset: first.nextOffset,
+  });
+  expect(last.entries.map((entry) => entry.key)).toEqual(archiveKeys.slice(5));
+  expect(last.nextOffset).toBeUndefined();
+});
+
+test("personal history pages follow recorded timestamps across page boundaries", async () => {
+  const { root, memory } = await subject();
+  const path = join(root, "notes/knowledge/preview-domain.md");
+  let revision = "new";
+  for (const day of [1, 3, 2, 5, 4, 7, 6, 8]) {
+    await memory.execute({ ...purchased, revision, content: `Version ${day}` });
+    const lines = (await readFile(path, "utf8")).split("\n");
+    const metadata = JSON.parse(lines[1]!);
+    metadata.updatedAt = new Date(Date.UTC(2025, 10, day)).toISOString();
+    lines[1] = JSON.stringify(metadata);
+    await writeFile(path, lines.join("\n"));
+    const current = await memory.execute({ operation: "get", key: purchased.key });
+    revision = current.entries[0]!.revision;
+  }
+  const first = await memory.execute({ operation: "history", key: purchased.key });
+  expect(first.entries.map((entry) => entry.content)).toEqual([
+    "Version 7",
+    "Version 6",
+    "Version 5",
+    "Version 4",
+    "Version 3",
+  ]);
+  expect(first.nextOffset).toBe(5);
+  const last = await memory.execute({
+    operation: "history",
+    key: purchased.key,
+    offset: first.nextOffset,
+  });
+  expect(last.entries.map((entry) => entry.content)).toEqual(["Version 2", "Version 1"]);
+  expect(last.nextOffset).toBeUndefined();
+});
+
 test("history normalizes a long valid timestamp so every preview page advances", async () => {
   const { root, memory } = await subject();
   await memory.execute(purchased);
@@ -220,4 +277,14 @@ test("history normalizes a long valid timestamp so every preview page advances",
     (await memory.execute({ operation: "get", key: purchased.key, revision: manual.revision }))
       .entries[0]?.updatedAt,
   ).toBe(metadata.updatedAt);
+});
+
+test("an unreadable historical file does not hide valid versions", async () => {
+  const { root, memory } = await subject();
+  const original = (await memory.execute(purchased)).entries[0]!;
+  await memory.execute({ ...purchased, revision: original.revision, content: "Edited" });
+  const invalidPath = join(root, "notes/history", original.key, `${"0".repeat(64)}.md`);
+  await writeFile(invalidPath, "x".repeat(512 * 1024 + 1));
+  const history = await memory.execute({ operation: "history", key: original.key });
+  expect(history.entries.map((entry) => entry.revision)).toEqual([original.revision]);
 });

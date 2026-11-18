@@ -10,7 +10,7 @@ export function encodeMemoryRecord(entry: Omit<LocalMemoryEntry, "path" | "revis
   return `---\n${JSON.stringify({ format: "coforge-memory-v1", ...metadata })}\n---\n${content}\n`;
 }
 
-export function decodeMemoryRecord(text: string, path: string): LocalMemoryEntry | undefined {
+function memoryRecordHeader(text: string) {
   const match = /^---\n([^\n]+)\n---\n/.exec(text);
   if (!match) return undefined;
   try {
@@ -22,6 +22,29 @@ export function decodeMemoryRecord(text: string, path: string): LocalMemoryEntry
       !Number.isFinite(Date.parse(metadata.updatedAt))
     )
       return undefined;
+    return { metadata, contentOffset: match[0].length };
+  } catch {
+    return undefined;
+  }
+}
+
+export function memoryRecordSummary(
+  text: string,
+): (Pick<LocalMemoryEntry, "key" | "status"> & { timestamp: number }) | undefined {
+  const header = memoryRecordHeader(text);
+  if (!header || typeof header.metadata.key !== "string") return undefined;
+  return {
+    key: header.metadata.key,
+    status: header.metadata.status,
+    timestamp: Date.parse(header.metadata.updatedAt),
+  };
+}
+
+export function decodeMemoryRecord(text: string, path: string): LocalMemoryEntry | undefined {
+  const header = memoryRecordHeader(text);
+  if (!header) return undefined;
+  const { metadata, contentOffset } = header;
+  try {
     const command = decodeLocalMemoryCommand({
       operation: "save",
       key: metadata.key,
@@ -30,7 +53,7 @@ export function decodeMemoryRecord(text: string, path: string): LocalMemoryEntry
       kind: metadata.kind,
       applicability: metadata.applicability,
       source: metadata.source,
-      content: text.slice(match[0].length).trimEnd(),
+      content: text.slice(contentOffset).trimEnd(),
     });
     if (command.operation !== "save") return undefined;
     return {
