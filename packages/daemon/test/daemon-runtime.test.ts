@@ -3454,7 +3454,7 @@ describe("DaemonRuntime", () => {
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
-      for (const exit of [...exits]) exit();
+      for (const exit of exits) exit();
       const first = runtime.handleAgentMessage(delivery(1));
       void first.catch(() => {});
       await wakeLaunching;
@@ -3551,7 +3551,7 @@ describe("DaemonRuntime", () => {
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
-      for (const exit of [...exits]) exit();
+      for (const exit of exits) exit();
       await expect(runtime.handleAgentMessage(delivery(1))).rejects.toThrow(
         "pi: command not found",
       );
@@ -3637,7 +3637,7 @@ describe("DaemonRuntime", () => {
       target: "@agent",
     });
     const exitAll = () => {
-      for (const exit of [...exits]) exit();
+      for (const exit of exits) exit();
       exits.clear();
     };
     try {
@@ -3896,7 +3896,7 @@ describe("DaemonRuntime", () => {
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
-      for (const exit of [...exits]) exit();
+      for (const exit of exits) exit();
       const dm = runtime.handleAgentMessage(delivery(1, "@ada", "conversation-dm"));
       await wakeLaunching.promise;
       const team = runtime.handleAgentMessage(delivery(2, "#team", "conversation-team"));
@@ -3988,7 +3988,7 @@ describe("DaemonRuntime", () => {
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
-      for (const exit of [...exits]) exit();
+      for (const exit of exits) exit();
       const dm = runtime.handleAgentMessage(delivery(1, "@ada", "conversation-dm"));
       void dm.catch(() => {});
       await failingLaunchStarted.promise;
