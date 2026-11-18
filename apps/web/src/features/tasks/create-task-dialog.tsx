@@ -22,7 +22,7 @@ import { m } from "#src/paraglide/messages";
 import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "./task-assignment";
 import { CreateTaskProperties } from "./create-task-properties";
 import { TaskDialogWhere } from "./task-dialog-where";
-import { CreateTaskPhoneBar } from "./create-task-phone-bar";
+import { PhoneFormBar } from "#src/components/ui/phone-form-bar";
 import { cn } from "#src/lib/utils";
 import { TaskStatusIcon } from "./task-status-icon";
 import { useTaskAssignmentAccess } from "./use-task-assignment-access";
@@ -31,15 +31,6 @@ import { draftLabels, useWorkspaceLabels } from "./workspace-labels";
 import { emptyDraft, type TaskDraft } from "./task-draft";
 import { registerUnsavedTemporaryState } from "#src/features/updates/build-update";
 
-/**
- * A new Task, laid out as the Task popup lays out a Task (Frank, 11-05: "按照我们目前 task 的设计"):
- * where it goes above (the conversation, or the Task it is a step of), its title beside its status,
- * its description, then its owner, Project, labels and priority as a row of chips, as Linear's new
- * issue reads (Frank, 11-06: not a form to fill in). The board's "New task" is this dialog too. One Task per dialog
- * (Frank, 11-05: "就一次建一个吧"). In a conversation its Project is a chip too, with the one the
- * viewer last filed a Task under there first among its options (Frank, 11-06: "给出选项"); a sub-task
- * takes its parent's, so it offers none.
- */
 export function CreateTaskDialog({
   open,
   onOpenChange,
@@ -52,22 +43,11 @@ export function CreateTaskDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** `more`: the viewer keeps creating (the form stays open for the next), so the caller does not
-   * open the one just made. */
   onCreate: (draft: TaskDraft, idempotencyKey: string, options: { more: boolean }) => Promise<void>;
-  /** Words a refusal the caller knows the reason for (a sub-task under a Task that cannot take
-   * one); anything else reads as the plain failure. */
   describeError?: (cause: unknown) => string | undefined;
-  /** Where the Task goes, as the popup's trail names it: `#channel`, or `#12 Parent title`. */
   where?: { label: string; subtask?: boolean };
-  /** Who may be its owner; without them, no owner is offered. Someone who may not assign others
-   * is offered only themselves, as in the popup. */
   members?: readonly Mentionable[];
-  /** The conversation the Task goes in, so the form offers its Project. Absent for a sub-task. */
   conversationId?: string;
-  /** On a board, whose Task can go anywhere and start in any column: the control that picks where
-   * it goes takes `where`'s place, its status is a chip, and a Project's board starts at that
-   * Project. */
   board?: {
     place: ReactNode;
     status: TaskWriteStatus;
@@ -79,8 +59,6 @@ export function CreateTaskDialog({
   const [draft, setDraft] = useState(emptyDraft);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  // "Create more" (task #54): after each Task the form stays open, its title and description
-  // cleared and what it was set to kept, for the next one.
   const [more, setMore] = useState(false);
   useEffect(() => {
     const dirty =
@@ -95,16 +73,12 @@ export function CreateTaskDialog({
   const busy = useRef(false);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  // The title grows with what it holds through `field-sizing: content`. A browser without it would
-  // keep one row and hide the rest of a long title, the very cut the textarea is there to prevent:
-  // there it is sized to its content here instead.
   useLayoutEffect(() => {
     const title = titleRef.current;
     if (!title || CSS.supports("field-sizing", "content")) return;
     title.style.height = "auto";
     title.style.height = `${title.scrollHeight}px`;
   }, [open, draft.title]);
-  // A retry of the same Task reuses its idempotency key, so a create that did land is not repeated.
   const submission = useRef<{ key: string; idempotencyKey: string } | undefined>(undefined);
   const { labels: workspaceLabels } = useWorkspaceLabels(draft.labels.length > 0);
   const access = useTaskAssignmentAccess();
@@ -112,7 +86,6 @@ export function CreateTaskDialog({
     ? members
     : members?.filter((member) => member.kind === "user" && member.id === access.userId);
   const lastProject = useLastTaskProject(conversationId, open);
-  // A Task its creator takes on is made started, as the server makes it.
   const status =
     board?.status ?? (draft.assignee === `user:${access.userId}` ? "in_progress" : "todo");
   const project = draft.project !== undefined ? draft.project : (board?.project ?? null);
@@ -148,8 +121,6 @@ export function CreateTaskDialog({
       titleRef.current?.focus();
       return;
     }
-    // A new Task always names its priority (task #12); the submit button is disabled until one
-    // is picked, and a requestSubmit from the keyboard or the phone bar still lands here.
     const priority = draft.priority;
     if (!priority) {
       setError(m.tasks_priority_required());
@@ -188,7 +159,6 @@ export function CreateTaskDialog({
         onOpenChange(false);
       }
     } catch (cause) {
-      // Assigning others was taken away meanwhile: say so, and offer only oneself from now on.
       if (isAppError(cause) && cause.errorId === TASK_ASSIGNMENT_MANAGER_REQUIRED) {
         void access.refetch();
         change({ assignee: undefined });
@@ -210,14 +180,12 @@ export function CreateTaskDialog({
       isDismissable
       className="max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px]"
     >
-      {/* In dark, one surface up from the page, so the form does not sink into it (task #54). */}
       <Modal className="flex w-full flex-col overflow-hidden max-sm:h-full max-sm:rounded-none max-sm:safe-area-padding sm:w-[min(44rem,calc(100vw-2rem))] dark:bg-secondary">
         <Dialog aria-label={heading} className="flex min-h-0 flex-1 flex-col">
           {({ close }) => (
             <form
               ref={formRef}
               onSubmit={(event) => void submit(event)}
-              // ⌘↵ (Ctrl+↵) creates from anywhere in the form, the description included.
               onKeyDown={(event) => {
                 if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !event.repeat) {
                   event.preventDefault();
@@ -226,14 +194,12 @@ export function CreateTaskDialog({
               }}
               className="flex min-h-0 flex-1 flex-col"
             >
-              <CreateTaskPhoneBar
+              <PhoneFormBar
                 heading={heading}
                 saving={saving}
                 onCancel={close}
                 onCreate={() => formRef.current?.requestSubmit()}
               />
-              {/* Where it goes, as the popup's trail: the conversation, or the Task above it. On a
-                  phone the bar above names the page and closes it, so only where it goes stays. */}
               <div
                 className={cn(
                   "flex shrink-0 items-center gap-1 pt-3 pr-3 pl-4 max-sm:pt-1 sm:pl-6",
@@ -243,7 +209,6 @@ export function CreateTaskDialog({
                 <p className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium text-tertiary">
                   {(board || where) && (
                     <>
-                      {/* Where it goes, as a block of its own (task #54); a board's is the picker. */}
                       <span
                         data-layout="create"
                         className="inline-flex h-8 min-w-0 items-center rounded-lg bg-secondary text-secondary ring-1 ring-secondary ring-inset dark:bg-tertiary"
@@ -279,11 +244,7 @@ export function CreateTaskDialog({
                   level={2}
                   className="flex items-start gap-2 px-4 pt-4 sm:px-6"
                 >
-                  {/* On a board its status is the first chip below. */}
                   {!board && <TaskStatusIcon status={status} className="mt-1.5 size-5" />}
-                  {/* A long title wraps rather than scrolling out of sight (task #54): one line
-                      that grows. It stays one paragraph: Enter creates, and a pasted line break
-                      becomes a space. */}
                   <TextArea
                     ref={titleRef}
                     aria-label={m.tasks_new_title()}
@@ -315,9 +276,6 @@ export function CreateTaskDialog({
                   className="mt-2 block w-full resize-none bg-transparent px-4 pb-4 text-md text-secondary outline-hidden placeholder:text-placeholder sm:px-6"
                 />
               </div>
-              {/* What else it starts with, under what it says, as the popup's chips. On a phone they
-                  are one row that scrolls sideways at the page's foot, which the overlay keeps right
-                  above the keyboard, so they are in reach while the title is typed. */}
               <CreateTaskProperties
                 board={board}
                 assignable={assignable}
@@ -333,8 +291,6 @@ export function CreateTaskDialog({
                   {error}
                 </p>
               )}
-              {/* Closing is the corner's ✕ and Escape; the row is creating, once or one after another.
-                  A phone has no ⌘↵ and rarely makes Tasks in a row: its bar above does both jobs. */}
               <div className="flex shrink-0 items-center justify-end gap-4 border-t border-secondary px-4 py-3 max-sm:hidden sm:px-6">
                 <Toggle
                   size="sm"

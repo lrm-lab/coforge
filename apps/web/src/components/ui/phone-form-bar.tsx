@@ -1,14 +1,7 @@
 import { Button } from "#src/components/base/buttons/button";
 import { m } from "#src/paraglide/messages";
 
-/**
- * The New task page's top bar on a phone (task #54): Cancel, what this page is, Create. The keyboard
- * takes the bottom of the screen while the title is typed, so the action that ends the page sits at
- * its top, a filled button as on desktop; the chips stay at the bottom, right above the keyboard.
- * Each control's hit area reaches 44px, the bar's height. Create submits the form without being its
- * submit button: the form keeps one, the desktop footer's, which Enter presses.
- */
-export function CreateTaskPhoneBar({
+export function PhoneFormBar({
   heading,
   saving,
   onCancel,
