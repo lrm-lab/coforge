@@ -19,7 +19,7 @@ import type {
   AgentWorkspaceDeleteRequest,
   RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
-import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
+import type { AgentRuntimeConfig, AgentSession } from "@lrm/coforge-anvil";
 import {
   DaemonRuntime,
   InMemoryDaemonCredentialStore,
@@ -110,6 +110,7 @@ async function setupRuntimeFixture(
   >();
 
   let runtime!: DaemonRuntime;
+  let latestSession: (AgentSession & { exit(): void }) | undefined;
   const proxy = startAgentProxy({
     runtime: daemonAgentProxyRuntime(() => runtime),
   });
@@ -118,10 +119,13 @@ async function setupRuntimeFixture(
     connection,
     () => ({
       provider: options.provider ?? "pi",
-      createAgentSession: async () => ({
-        ...sessionSpy(),
-        readSessionIdentity: async () => ({ sessionId: currentSessionId, state: "resumable" }),
-      }),
+      async createAgentSession() {
+        latestSession = {
+          ...sessionSpy(),
+          readSessionIdentity: async () => ({ sessionId: currentSessionId, state: "resumable" }),
+        };
+        return latestSession;
+      },
     }),
     credentials,
     {
@@ -184,6 +188,9 @@ async function setupRuntimeFixture(
     stateDirectory,
     setSessionId(next: string) {
       currentSessionId = next;
+    },
+    triggerExit() {
+      latestSession?.exit();
     },
     async triggerStart(intent: AgentStartIntent) {
       const done = waitControl(intent.requestId, ["started", "failed"]);
@@ -441,6 +448,52 @@ describe("agent-proxy proc routes and lifecycle hooks", () => {
 
       for (let i = 0; i < 60 && pidAlive(job.pid); i++) await Bun.sleep(50);
       expect(pidAlive(job.pid)).toBe(false);
+    } finally {
+      await fixture.runtime.stop();
+      fixture.proxy.close();
+    }
+  });
+
+  test("an Agent's proxy token survives its session's exit and the next launch reuses it", async () => {
+    const fixture = await setupRuntimeFixture({ managed: true });
+    const intent = {
+      protocolMajor: 1,
+      workspaceId: fixture.connection.workspaceId,
+      computerId: fixture.connection.computerId,
+      agentId: "agent-a",
+      provider: "pi",
+      model: "default",
+      modelProvider: "anthropic",
+      reasoning: "balanced",
+    } as const;
+    try {
+      await fixture.triggerStart({
+        ...intent,
+        requestId: "start-1",
+        controlEpoch: 1,
+        launchId: "launch-1",
+      });
+      const token = fixture.proxy.issue("agent-a", `sk_agent_${"a".repeat(43)}`);
+      const first = await callProcStart(fixture.proxy, token, "srv-1");
+      expect(first.status).toBe(200);
+      cleanupPids.add(decodeAgentProcStartResponse(await first.json()).job.pid);
+
+      fixture.triggerExit();
+      for (let i = 0; i < 40 && fixture.runtime.runtime("agent-a") !== undefined; i++)
+        await Bun.sleep(25);
+      expect(fixture.runtime.runtime("agent-a")).toBeUndefined();
+      expect((await callProcStart(fixture.proxy, token, "srv-2")).status).toBe(409);
+
+      await fixture.triggerStart({
+        ...intent,
+        requestId: "start-2",
+        controlEpoch: 2,
+        launchId: "launch-2",
+      });
+      expect(fixture.proxy.issue("agent-a", `sk_agent_${"b".repeat(43)}`)).toBe(token);
+      const restarted = await callProcStart(fixture.proxy, token, "srv-3");
+      expect(restarted.status).toBe(200);
+      cleanupPids.add(decodeAgentProcStartResponse(await restarted.json()).job.pid);
     } finally {
       await fixture.runtime.stop();
       fixture.proxy.close();

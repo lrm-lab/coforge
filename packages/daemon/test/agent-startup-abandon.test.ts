@@ -21,7 +21,6 @@ test("an abandoned launch keeps the Session the next wake resumes", async () => 
       interruptIfBusy: () => {},
       activityPublisher: { forgetBusy: () => {}, publish: () => {} },
       disposeLaunchObservations: () => {},
-      revokeLocalLaunch: () => {},
       offlineResidency: { record: () => undefined, remember: () => {} },
       stopCoordinator: { releaseAgentRuntime: async () => {} },
       drafts: {

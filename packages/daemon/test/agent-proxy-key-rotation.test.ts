@@ -57,14 +57,14 @@ test("a proxy binding forwards the registry's current key after a rotation", asy
   expect(forwarded).toEqual([K1, K2]);
 });
 
-test("a binding whose Agent left the registry gets no key", async () => {
+test("a binding whose Agent's key is gone is refused with 409 and never forwarded", async () => {
   const agentApiKeys = new Map<string, string>();
   const { forwarded, proxy, request } = setup(agentApiKeys);
   const token = proxy.issue("agent-a", K1);
   agentApiKeys.delete("agent-a");
 
-  expect((await request(token)).status).toBe(200);
-  expect(forwarded).toEqual([undefined]);
+  expect((await request(token)).status).toBe(409);
+  expect(forwarded).toEqual([]);
 });
 
 test("forwarded Agent HTTPS requests carry an x-request-id correlation header", () => {

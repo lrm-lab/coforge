@@ -1067,7 +1067,6 @@ export class DaemonRuntime {
         this.#turn.interruptIfBusy(id, current),
       activityPublisher: this.#activityPublisher,
       disposeLaunchObservations: this.#disposeLaunchObservations,
-      revokeLocalLaunch: this.#revokeLocalLaunch,
       offlineResidency: this.#offlineResidency,
       stopCoordinator: this.#stopCoordinator,
       drafts: this.#drafts,

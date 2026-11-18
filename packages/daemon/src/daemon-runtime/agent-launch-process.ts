@@ -78,6 +78,7 @@ export async function launchAgentProcess(
   let priorProxyToken: string | undefined;
   let launchTagToken = "";
   let proxyToken: string | undefined;
+  let issuedProxyToken = false;
   let localContext: string | undefined;
   try {
     const launchConfig = await requestAgentLaunchConfig(
@@ -105,6 +106,7 @@ export async function launchAgentProcess(
     priorProxyToken = ports.agentProxyTokens.get(agentId);
     proxyToken = ports.agentProxy?.issue(agentId, agentApiKey);
     if (proxyToken) ports.agentProxyTokens.set(agentId, proxyToken);
+    issuedProxyToken = proxyToken !== undefined && proxyToken !== priorProxyToken;
     localContext = proxyToken ?? ports.contextFor(agentId);
     const desktopEnvironment = await ports.desktops.hold(agentId);
     const workspaceDirectory = agentWorkspaceDirectory(
@@ -266,7 +268,6 @@ export async function launchAgentProcess(
       ports.messageAttention.clearAgent(agentId);
       ports.deliveryGate.onProcessExit(agentId);
       ports.lifecycle.processClosed(agentId);
-      ports.revokeLocalLaunch(agentId, localContext, proxyToken);
       void ports.revokeAgentApiKey(agentId, agentApiKey).catch((revokeError) => {
         logAgentApiKeyRevokeFailed(agentId, revokeError);
       });
@@ -337,8 +338,10 @@ export async function launchAgentProcess(
     ports.desktops.end(agentId);
     launch.startup?.dispose();
     if (launchTagToken) clearAgentLaunchTag(agentId, launchTagToken);
-    restoreSupersededProxyToken(ports.agentProxyTokens, agentId, proxyToken, priorProxyToken);
-    if (localContext !== undefined) ports.revokeLocalLaunch(agentId, localContext, proxyToken);
+    if (issuedProxyToken) {
+      restoreSupersededProxyToken(ports.agentProxyTokens, agentId, proxyToken, priorProxyToken);
+      if (localContext !== undefined) ports.revokeLocalLaunch(agentId, localContext, proxyToken);
+    }
     if (agentApiKey) {
       restoreSupersededAgentApiKey(ports.agentApiKeys, agentId, agentApiKey, priorAgentApiKey);
       try {

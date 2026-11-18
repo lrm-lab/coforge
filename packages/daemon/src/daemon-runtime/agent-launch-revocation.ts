@@ -2,8 +2,9 @@ import type { AgentProxy } from "./runtime-launch-types";
 
 /** Drops the Agent's issued local context and proxy token, only when the maps still hold exactly
  * the pair being revoked — a relaunched Agent's newer pair is never touched. With no pair the
- * tables' current one is revoked; a caller that passes any part of its own pair (even a launch
- * that issued only a context) revokes exactly that, never values another process still uses. */
+ * tables' current one and the Agent's proxy registration are revoked; a caller that passes any
+ * part of its own pair (even a launch that issued only a context) revokes exactly that, never
+ * values another process still uses. */
 export function revokeLocalLaunch(
   contexts: Map<string, string>,
   proxyTokens: Map<string, string>,
@@ -15,6 +16,7 @@ export function revokeLocalLaunch(
   if (context === undefined && proxyToken === undefined) {
     context = contexts.get(agentId);
     proxyToken = proxyTokens.get(agentId);
+    proxy?.revokeAgent?.(agentId);
   }
   if (context && contexts.get(agentId) === context) contexts.delete(agentId);
   if (proxyToken && proxyTokens.get(agentId) === proxyToken) proxyTokens.delete(agentId);
