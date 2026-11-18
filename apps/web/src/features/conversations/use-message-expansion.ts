@@ -1,13 +1,5 @@
-import { useCallback, useState } from "react";
+import { toggleExpanded, useExpandedMessages } from "./conversation-view-memory";
 
 export function useMessageExpansion() {
-  const [expandedMessages, setExpandedMessages] = useState<ReadonlySet<string>>(new Set());
-  const toggleExpandedMessage = useCallback((messageId: string) => {
-    setExpandedMessages((current) => {
-      const next = new Set(current);
-      if (!next.delete(messageId)) next.add(messageId);
-      return next;
-    });
-  }, []);
-  return { expandedMessages, toggleExpandedMessage };
+  return { expandedMessages: useExpandedMessages(), toggleExpandedMessage: toggleExpanded };
 }

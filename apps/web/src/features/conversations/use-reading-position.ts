@@ -8,12 +8,14 @@ import { ConversationBottomPin, FOLLOWING_DISTANCE_PX } from "./conversation-bot
 import type { ConversationPaneProps } from "./conversation-pane-props";
 import {
   captureScrollAnchor,
+  restoreAnchoredRow,
   restoreScrollAnchor,
   scrollTwice,
   type ScrollAnchor,
 } from "./conversation-scroll-anchor";
 import { newerPageCommit } from "./conversation-thread-search";
 import { latestTopLevelSequence } from "./conversation-unread";
+import { openingPosition, savedPosition, savePosition } from "./conversation-view-memory";
 import type { useConversationOpen } from "./use-conversation-open";
 import { useHistoryResize } from "./use-history-resize";
 
@@ -92,6 +94,13 @@ export function useStreamPositioning({
   const [newerCommit, setNewerCommit] = useState(0);
   const appliedNewerCommitRef = useRef(0);
   const lastSequence = conversation.messages.at(-1)?.sequence;
+  const memoryKey = root
+    ? `${conversation.conversationId}:thread:${root.id}`
+    : conversation.conversationId;
+  const memoryKeyRef = useRef(memoryKey);
+  memoryKeyRef.current = memoryKey;
+  const savingRef = useRef<number | undefined>(undefined);
+  const pendingOffsetRef = useRef<number | undefined>(undefined);
   useLayoutEffect(() => {
     const firstRender = previousConversationIdRef.current === undefined;
     const changedConversation =
@@ -100,23 +109,39 @@ export function useStreamPositioning({
     previousConversationIdRef.current = openKey;
     if (firstRender || changedConversation || followingLatestRef.current) {
       const opening = firstRender || changedConversation;
-      if (opening && jumpMessage && !window.location.hash) {
+      const loaded = (id: string | undefined) =>
+        id !== undefined && conversation.messages.some((message) => message.id === id);
+      const saved = opening ? savedPosition(memoryKey) : undefined;
+      const openMessageId = opening ? openBoundary?.id : undefined;
+      const position = openingPosition({
+        hash: Boolean(window.location.hash),
+        jump: opening && Boolean(jumpMessage),
+        top: opening && openAtTop,
+        saved: loaded(saved?.rowId),
+        boundary: loaded(openMessageId),
+      });
+      if (position === "jump") {
         setFollowingLatest(false);
         return undefined;
       }
-      if (opening && openAtTop && !window.location.hash) {
+      if (position === "top") {
         setFollowingLatest(false);
         scrollTwice(() => historyRef.current?.scrollTo({ top: 0 }));
         return undefined;
       }
-      const openMessageId = opening ? openBoundary?.id : undefined;
-      if (openMessageId && !window.location.hash) {
-        if (conversation.messages.some((message) => message.id === openMessageId)) {
-          setFollowingLatest(false);
-          pendingOpenMessageIdRef.current = openMessageId;
-          applyOpenPosition();
-          return undefined;
-        }
+      if (position === "saved" && saved) {
+        setFollowingLatest(false);
+        pendingOpenMessageIdRef.current = saved.rowId;
+        pendingOffsetRef.current = saved.offset;
+        applyOpenPosition();
+        return undefined;
+      }
+      if (position === "boundary") {
+        setFollowingLatest(false);
+        pendingOpenMessageIdRef.current = openMessageId;
+        pendingOffsetRef.current = undefined;
+        applyOpenPosition();
+        return undefined;
       }
       setFollowingLatest(true);
       scrollTwice(() => {
@@ -210,8 +235,20 @@ export function useStreamPositioning({
     const messageId = pendingOpenMessageIdRef.current;
     if (messageId === undefined) return;
     const history = historyRef.current;
-    const row = history?.querySelector(`li[data-message-id="${CSS.escape(messageId)}"]`);
-    if (!history || !row || history.clientHeight === 0) return;
+    if (!history || history.clientHeight === 0) return;
+    const offset = pendingOffsetRef.current;
+    if (offset !== undefined) {
+      if (!restoreAnchoredRow(history, messageId, offset)) return;
+      pendingOpenMessageIdRef.current = undefined;
+      pendingOffsetRef.current = undefined;
+      scrollTwice(() => {
+        restoreAnchoredRow(history, messageId, offset);
+        if (bottomPin.landed(history)) setFollowingLatest(true);
+      });
+      return;
+    }
+    const row = history.querySelector(`li[data-message-id="${CSS.escape(messageId)}"]`);
+    if (!row) return;
     pendingOpenMessageIdRef.current = undefined;
     scrollTwice(() => {
       if (bottomPin.open(history, row)) setFollowingLatest(true);
@@ -228,11 +265,30 @@ export function useStreamPositioning({
     const followingLatest = distance <= FOLLOWING_DISTANCE_PX;
     const wasFollowingLatest = followingLatestRef.current;
     setFollowingLatest(followingLatest);
+    rememberPosition(followingLatest);
     if (loadingNewerRef.current) newerAnchorRef.current = captureScrollAnchor(history);
     if (followingLatest && !wasFollowingLatest && !root) {
       const through = latestTopLevelSequence(conversation.messages);
       if (through > 0) onReadLatest?.(through);
     }
+  }
+
+  function rememberPosition(followingLatest: boolean) {
+    const key = memoryKey;
+    if (openAtTop || !historyRef.current?.clientHeight) return;
+    if (followingLatest) {
+      savePosition(key, undefined);
+      return;
+    }
+    if (savingRef.current !== undefined) return;
+    savingRef.current = requestAnimationFrame(() => {
+      savingRef.current = undefined;
+      const history = historyRef.current;
+      if (!history?.clientHeight || memoryKeyRef.current !== key || followingLatestRef.current)
+        return;
+      const { rowId, offset } = captureScrollAnchor(history);
+      savePosition(key, rowId === undefined ? undefined : { rowId, offset });
+    });
   }
 
   async function loadNewer() {

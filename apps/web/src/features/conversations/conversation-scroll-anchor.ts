@@ -44,20 +44,20 @@ export function restoreScrollAnchor(
     if (delta) history.scrollTop += delta;
     return;
   }
-  if (anchor.rowId) {
-    const id = CSS.escape(anchor.rowId);
-    const row =
-      history.querySelector<HTMLElement>(`li[data-message-id="${id}"]:not([data-system-group])`) ??
-      history.querySelector<HTMLElement>(`li[data-system-group-members~="${id}"]`);
-    if (row) {
-      const containerTop = history.getBoundingClientRect().top;
-      const delta =
-        scrollAnchorOf(row).getBoundingClientRect().top - (containerTop + anchor.offset);
-      if (delta) history.scrollTop += delta;
-      return;
-    }
-  }
+  if (anchor.rowId && restoreAnchoredRow(history, anchor.rowId, anchor.offset)) return;
   history.scrollTop = anchor.top + (history.scrollHeight - anchor.height);
+}
+
+export function restoreAnchoredRow(history: HTMLDivElement, rowId: string, offset: number) {
+  const id = CSS.escape(rowId);
+  const row =
+    history.querySelector<HTMLElement>(`li[data-message-id="${id}"]:not([data-system-group])`) ??
+    history.querySelector<HTMLElement>(`li[data-system-group-members~="${id}"]`);
+  if (!row) return false;
+  const containerTop = history.getBoundingClientRect().top;
+  const delta = scrollAnchorOf(row).getBoundingClientRect().top - (containerTop + offset);
+  if (delta) history.scrollTop += delta;
+  return true;
 }
 
 export const ROW_TOP_GAP_PX = 12;
