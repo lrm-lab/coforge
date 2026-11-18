@@ -358,6 +358,8 @@ export class AgentLaunchCoordinator {
       {
         ...this.ports,
         observeRuntimeEvent: (id, activeLaunch, activeConfig, activeRuntime, managed, event) => {
+          if (event.type === "completed" && !event.conversation)
+            this.turnEndCompaction.noteTurnFinished(id);
           this.ports.observeRuntimeEvent(
             id,
             activeLaunch,
@@ -366,8 +368,6 @@ export class AgentLaunchCoordinator {
             managed,
             event,
           );
-          if (event.type === "completed" && !event.conversation)
-            this.turnEndCompaction.noteTurnFinished(id);
         },
         disposeLaunchObservations: (id) => {
           this.turnEndCompaction.noteTurnFinished(id);
