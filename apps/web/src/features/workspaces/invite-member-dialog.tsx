@@ -5,8 +5,6 @@ import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { m } from "#src/paraglide/messages";
 import { InviteLinkPanel, useInviteLink } from "./invite-link-panel";
 
-/** The invite-people dialog shared by the Members directory and the Settings Members section: the
- * Workspace's join link, to copy, limit or revoke. Only owners and admins open it. */
 export function InviteMemberDialog({
   open,
   onOpenChange,
@@ -16,7 +14,6 @@ export function InviteMemberDialog({
 }) {
   const inviteLink = useInviteLink();
 
-  // The link is made the first time the dialog opens, so there is always one to copy.
   useEffect(() => {
     if (open) inviteLink.show();
   }, [open]);
