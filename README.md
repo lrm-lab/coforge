@@ -154,3 +154,9 @@ Follow branch-based GitHub Flow: a maintainer or an Agent may push directly to `
 [AGENTS.md](AGENTS.md#collaboration-and-delivery).
 
 - [docs/eval-memory-requests.md](docs/eval-memory-requests.md): 原生 workspace memory 的验证范围与验收测试。
+
+| [docs/local-logging.md](docs/local-logging.md) | Local logging configuration |
+| [docs/runtime-sign-in.md](docs/runtime-sign-in.md) | Runtime sign-in behavior |
+| [docs/design/](docs/design/) | Design tokens and guidelines |
+| [docs/observability/](docs/observability/) | System observability and monitoring |
+| [docs/release/](docs/release/) | Release and deployment notes |
