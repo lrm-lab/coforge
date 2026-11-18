@@ -42,8 +42,8 @@ export type ToolCallLogIdentity = Readonly<{ agentId: string; launchId: string }
 type ToolCallLedgerOptions = {
   /** Absent for a ledger outside a daemon launch (a test): nothing is logged then. */
   identity?: ToolCallLogIdentity;
-  /** OS descendant count after `startedAfterProcessClockMs`; `undefined` when unobservable. */
-  countLiveDescendants?: (startedAfterProcessClockMs: number) => Promise<number | undefined>;
+  /** Per-call process liveness probe: `true` if alive, `false` if proven exited, `undefined` when unobservable (`no_evidence`). */
+  isToolProcessAlive?: (callId: string, call: { name: string }) => Promise<boolean | undefined>;
 };
 
 /**
@@ -61,8 +61,8 @@ type ToolCallLedgerOptions = {
 export class ToolCallLedger {
   readonly #calls = new Map<string, ToolCall>();
   readonly #identity: ToolCallLogIdentity | undefined;
-  readonly #countLiveDescendants:
-    | ((startedAfterProcessClockMs: number) => Promise<number | undefined>)
+  readonly #isToolProcessAlive:
+    | ((callId: string, call: { name: string }) => Promise<boolean | undefined>)
     | undefined;
   readonly #loggedCompletionLoss = new Set<string>();
   #loggedCalls = 0;
@@ -75,7 +75,7 @@ export class ToolCallLedger {
     options: ToolCallLedgerOptions = {},
   ) {
     this.#identity = options.identity;
-    this.#countLiveDescendants = options.countLiveDescendants;
+    this.#isToolProcessAlive = options.isToolProcessAlive;
   }
 
   observe(event: AgentRuntimeEvent): void {
@@ -143,24 +143,30 @@ export class ToolCallLedger {
    * any descendant started at or after the oldest open call's start remains alive.
    */
   async openToolHoldsNoLiveWork(): Promise<boolean> {
-    if (!this.#countLiveDescendants) return false;
-    const oldest = this.#oldestOpenToolEntry();
-    if (!oldest) return false;
-    const [callId, call] = oldest;
-    const live = await this.#countLiveDescendants(call.startedAtProcessClockMs).catch(
-      () => undefined,
-    );
-    if (live !== 0) return false;
-    if (this.#identity && !this.#loggedCompletionLoss.has(callId)) {
-      this.#loggedCompletionLoss.add(callId);
-      logger.warning("Open tool call holds no live OS descendants", {
-        event: "agent_runtime:tool_completion_loss",
-        agent_id: this.#identity.agentId,
-        launch_id: this.#identity.launchId,
-        call_id: callId,
-        tool: call.name,
-        silent_for_ms: Math.max(0, Math.round(this.clock() - call.startedAtMs)),
-      });
+    if (!this.#isToolProcessAlive) return false;
+    const openCalls: [string, ToolCall][] = [];
+    for (const entry of this.#calls) {
+      if (entry[1].endedAtMs === undefined) openCalls.push(entry);
+    }
+    if (openCalls.length === 0) return false;
+    for (const [callId, call] of openCalls) {
+      const alive = await this.#isToolProcessAlive(callId, { name: call.name }).catch(
+        () => undefined,
+      );
+      if (alive !== false) return false;
+    }
+    for (const [callId, call] of openCalls) {
+      if (this.#identity && !this.#loggedCompletionLoss.has(callId)) {
+        this.#loggedCompletionLoss.add(callId);
+        logger.warning("Open tool call holds no live OS descendants", {
+          event: "agent_runtime:tool_completion_loss",
+          agent_id: this.#identity.agentId,
+          launch_id: this.#identity.launchId,
+          call_id: callId,
+          tool: call.name,
+          silent_for_ms: Math.max(0, Math.round(this.clock() - call.startedAtMs)),
+        });
+      }
     }
     return true;
   }
