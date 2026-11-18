@@ -31,6 +31,9 @@ export function combineRuntimeSaveOutcomes(
   return combined;
 }
 
+/** Long enough to read the line and reach Restart now; matches how long Raft keeps the same notice. */
+const RUNTIME_SAVE_TOAST_MS = 8000;
+
 /** The one-line toast a saved runtime config earns, if any: a running Agent's save applies later,
  * so it offers Restart now. `canRestart` mirrors who sees the profile's Restart control. */
 export function useAgentRuntimeSaveNotice(
@@ -52,6 +55,7 @@ export function useAgentRuntimeSaveNotice(
     }
     toast.success(title, {
       key: agentId,
+      durationMs: RUNTIME_SAVE_TOAST_MS,
       action: canRestart
         ? { label: m.agent_runtime_restart_now(), onClick: restartNow }
         : undefined,
