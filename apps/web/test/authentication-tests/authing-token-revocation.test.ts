@@ -3,9 +3,6 @@ import { expect, spyOn, test } from "bun:test";
 import type { AuthingAuthentication } from "#src/server/auth/authing-authentication.server";
 import { signInThroughAuthing } from "#src/server/auth/authing-sign-in.server";
 
-// CoForge keeps its own session, so Authing's token is revoked once a sign-in has it: whatever
-// happens after the tokens are obtained, and without the person waiting for Authing to answer.
-
 const accessToken = "access-token-secret-9c1d";
 
 function authingStub(options: { revokeToken?: AuthingAuthentication["revokeToken"] } = {}) {
@@ -114,7 +111,6 @@ test("a revocation that fails is logged without the token and does not fail the 
       }),
     });
     expect(result.status).toBe("signed_in");
-    // The revocation runs in the background: wait for its log line.
     for (let wait = 0; wait < 100 && warnings.length === 0; wait++) await Bun.sleep(10);
     expect(warnings.map((line) => JSON.parse(line))).toEqual([
       { event: "auth.token_revocation_failed", errorType: "Error" },
