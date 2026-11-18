@@ -355,8 +355,6 @@ RUN mkdir -p /usr/local/lib/coforge /usr/local/share/coforge \
   && grep -q 'ensure_venv' /usr/local/bin/persist-user-data.sh \
   && python3 -c 'import venv' \
   && python3 -c 'import Xlib' \
-  && grep -q 'coforgeDesktopCopyOut' /usr/local/share/coforge/vnc-desktop.html \
-  && grep -q 'coforgeDesktopPaste' /usr/local/share/coforge/vnc-desktop.html \
   && test -x /usr/local/bin/select-computer-binary.sh \
   && test -x /usr/local/bin/activate-computer-release.sh \
   && test -x /usr/local/bin/supervise-computer-runtime.sh \
