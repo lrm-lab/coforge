@@ -1,7 +1,12 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowLeft, Folder } from "@untitledui/icons";
-import type { PiChatCommand, PiChatSession, PiChatResult } from "@lrm/coforge-sdk/internal/pi-chat";
+import type {
+  PiChatCommand,
+  PiChatSession,
+  WorkbenchRuntime,
+} from "@lrm/coforge-sdk/internal/pi-chat";
 import { Button } from "#src/components/base/buttons/button";
 import { PageHeader } from "#src/components/layout/page-header";
 import { m } from "#src/paraglide/messages";
@@ -32,8 +37,10 @@ export function PiChatConversation({
   draft,
   onDraft,
   onSelect,
+  onRecover,
   viewport,
   initialSession,
+  runtime,
   controls = false,
 }: {
   userId: string;
@@ -43,10 +50,12 @@ export function PiChatConversation({
   workspaceSlug: string;
   viewport: PiChatView;
   initialSession?: PiChatSession;
+  runtime?: WorkbenchRuntime;
   controls?: boolean;
   draft: PiChatDraft;
   onDraft(value: PiChatDraft): void;
   onSelect(id?: string): void;
+  onRecover(text: string): void;
 }) {
   const execute = useExecutePiChat();
   const files = usePiChatFiles();
@@ -68,8 +77,10 @@ export function PiChatConversation({
     queryKey,
     queryFn: () =>
       reconcile(() =>
-        loadPiChatHistory(queryClient.getQueryData<PiChatHistory>(queryKey), (before) =>
-          execute({ data: { computerId, command: { action: "read", sessionId, before } } }),
+        loadPiChatHistory(queryClient.getQueryData<PiChatHistory>(queryKey), (before, cursor) =>
+          execute({
+            data: { computerId, command: { action: "read", sessionId, before, cursor, runtime } },
+          }),
         ),
       ),
     enabled: sessionId !== "new",
@@ -81,14 +92,17 @@ export function PiChatConversation({
           ? 10_000 // Watchdog/recovery only; live content arrives on the shared realtime connection.
           : false,
   });
+  const session = history.data?.session;
+  const isCodex =
+    (session?.runtime ?? initialSession?.runtime ?? runtime) === RUNTIME_PROVIDER.CODEX;
+  const nativeControls = controls && !isCodex;
   const models = useQuery({
     queryKey: ["pi-chat", workspaceSlug, computerId, "models"],
     queryFn: () => execute({ data: { computerId, command: { action: "models" } } }),
-    enabled: controls,
+    enabled: nativeControls,
     staleTime: 60_000,
     retry: false,
   });
-  const session = history.data?.session;
   const busy = session?.status === "running";
   useEffect(() => {
     if (!busy) return;
@@ -133,7 +147,12 @@ export function PiChatConversation({
     setError(null);
     setSubmitting(true);
     try {
-      const result = await execute({ data: { computerId, command } });
+      const result = await execute({
+        data: {
+          computerId,
+          command: { ...command, ...(isCodex ? { runtime: RUNTIME_PROVIDER.CODEX } : {}) },
+        },
+      });
       const accepted = result.session;
       if (accepted) {
         const acceptedKey = ["pi-chat", workspaceSlug, computerId, "session", accepted.id];
@@ -177,7 +196,7 @@ export function PiChatConversation({
   };
   const send = async () => {
     const text = latestDraft.current.text.trim();
-    if (!text || submitting || (busy && !controls)) return;
+    if (!text || submitting || (busy && !nativeControls)) return;
     const prepared = preparePiChatSend(latestDraft.current);
     updateDraft(prepared);
     const pending = {
@@ -193,8 +212,9 @@ export function PiChatConversation({
         sessionId: sessionId === "new" ? undefined : sessionId,
         requestId: prepared.request!.id,
         message: text,
+        ...(sessionId === "new" && isCodex ? { runtime: RUNTIME_PROVIDER.CODEX } : {}),
         ...(busy ? { mode: prepared.mode ?? "steer" } : {}),
-        ...(!busy && prepared.model ? { model: prepared.model } : {}),
+        ...(!busy && !isCodex && prepared.model ? { model: prepared.model } : {}),
       },
       pending,
     );
@@ -224,24 +244,38 @@ export function PiChatConversation({
     });
   };
   const loadOlder = async () => {
-    const cursor = history.data?.before;
-    if (!cursor || loadingOlder) return;
+    const before = history.data?.before;
+    const cursor = history.data?.cursor;
+    if ((!cursor && !before) || loadingOlder) return;
     setLoadingOlder(true);
     setError(null);
     try {
       const result = await execute({
-        data: { computerId, command: { action: "read", sessionId, before: cursor } },
+        data: {
+          computerId,
+          command: {
+            action: "read",
+            sessionId,
+            before,
+            cursor,
+            runtime: isCodex ? RUNTIME_PROVIDER.CODEX : undefined,
+          },
+        },
       });
       // A polling response started before this page was loaded must not discard it.
       await queryClient.cancelQueries({ queryKey });
       position.capturePrepend();
-      queryClient.setQueryData<PiChatResult>(queryKey, (current) => {
+      queryClient.setQueryData<PiChatHistory>(queryKey, (current) => {
         const merged = new Map((result.messages ?? []).map((message) => [message.id, message]));
         for (const message of current?.messages ?? []) merged.set(message.id, message);
         return {
           ...current,
           messages: [...merged.values()],
-          before: Math.min(current?.before ?? cursor, result.before ?? 0),
+          ...(cursor
+            ? {
+                cursor: result.cursor === cursor ? undefined : result.cursor,
+              }
+            : { before: Math.min(current?.before ?? before ?? 0, result.before ?? 0) }),
         };
       });
     } catch {
@@ -266,9 +300,11 @@ export function PiChatConversation({
         }
         actions={
           <>
-            <Button size="sm" color="secondary" iconLeading={Folder} onClick={() => files.open()}>
-              {m.pi_chat_files()}
-            </Button>
+            {!isCodex && (
+              <Button size="sm" color="secondary" iconLeading={Folder} onClick={() => files.open()}>
+                {m.pi_chat_files()}
+              </Button>
+            )}
             {(session ?? initialSession) && (
               <PiChatSessionActions
                 session={(session ?? initialSession)!}
@@ -308,6 +344,18 @@ export function PiChatConversation({
               <li key={input.id}>{input.text}</li>
             ))}
           </ul>
+          {isCodex && history.isSuccess && !nativeMessages.length && (
+            <Button
+              className="mt-2"
+              size="sm"
+              color="secondary"
+              onClick={() =>
+                onRecover(session.interruptedInputs!.map(({ text }) => text).join("\n\n"))
+              }
+            >
+              {m.pi_chat_codex_recover()}
+            </Button>
+          )}
         </div>
       )}
       <div className="relative flex min-h-0 flex-1 flex-col">
@@ -317,7 +365,7 @@ export function PiChatConversation({
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-page [overflow-anchor:none]"
         >
           <div ref={position.content} className="mx-auto max-w-[48rem] py-3">
-            {(history.data?.before ?? 0) > 0 && (
+            {((history.data?.before ?? 0) > 0 || Boolean(history.data?.cursor)) && (
               <div className="py-3">
                 <Button
                   size="sm"
@@ -377,12 +425,53 @@ export function PiChatConversation({
           </div>
         )}
       </div>
+      {busy && !!history.data?.approvals?.length && (
+        <div className="shrink-0 px-page">
+          <div className="mx-auto max-h-48 max-w-[48rem] space-y-3 overflow-y-auto">
+            {history.data.approvals.map((approval) => (
+              <section
+                key={approval.id}
+                className="space-y-2 rounded-lg border border-secondary p-3"
+              >
+                <p className="text-sm font-medium text-primary">
+                  {approval.kind === "command"
+                    ? m.pi_chat_approve_command()
+                    : m.pi_chat_approve_file()}
+                </p>
+                <pre className="whitespace-pre-wrap wrap-anywhere text-xs text-secondary">
+                  {approval.detail}
+                </pre>
+                <div className="flex flex-wrap gap-2">
+                  {(["deny", "allow"] as const).map((decision) => (
+                    <Button
+                      key={decision}
+                      size="sm"
+                      color={decision === "allow" ? "primary" : "secondary"}
+                      isDisabled={submitting}
+                      onClick={() =>
+                        void mutate({
+                          action: "approval",
+                          sessionId,
+                          approvalId: approval.id,
+                          decision,
+                        })
+                      }
+                    >
+                      {decision === "allow" ? m.pi_chat_allow_once() : m.pi_chat_deny()}
+                    </Button>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        </div>
+      )}
       <PiChatComposer
         draft={draft}
         onDraft={updateDraft}
         busy={busy}
         pending={submitting}
-        controls={controls}
+        controls={nativeControls}
         models={models.data?.models}
         modelError={models.isError}
         sessionModel={session?.model}

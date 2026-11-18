@@ -1,3 +1,4 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { useState } from "react";
 import { Heading } from "react-aria-components";
 import { DotsHorizontal, Edit03, Trash01 } from "@untitledui/icons";
@@ -84,7 +85,15 @@ export function PiChatSessionActions({
                 setPending(true);
                 setError(false);
                 void execute({
-                  data: { computerId, command: { action: "rename", sessionId: session.id, title } },
+                  data: {
+                    computerId,
+                    command: {
+                      action: "rename",
+                      sessionId: session.id,
+                      title,
+                      runtime: session.runtime,
+                    },
+                  },
                 })
                   .then(() => {
                     setRenaming(false);
@@ -130,13 +139,22 @@ export function PiChatSessionActions({
         open={deleting}
         onOpenChange={setDeleting}
         title={running ? m.pi_chat_stop_delete() : m.pi_chat_delete()}
-        description={running ? m.pi_chat_stop_delete_confirm() : m.pi_chat_delete_confirm()}
+        description={
+          session.runtime === RUNTIME_PROVIDER.CODEX
+            ? m.pi_chat_codex_archive_confirm()
+            : running
+              ? m.pi_chat_stop_delete_confirm()
+              : m.pi_chat_delete_confirm()
+        }
         confirmLabel={running ? m.pi_chat_stop_delete() : m.pi_chat_delete_action()}
         errorMessage={piChatFailureMessage("action")}
         onConfirm={async () => {
           if (running && !controls)
             await execute({
-              data: { computerId, command: { action: "stop", sessionId: session.id } },
+              data: {
+                computerId,
+                command: { action: "stop", sessionId: session.id, runtime: session.runtime },
+              },
             });
           await execute({
             data: {
@@ -144,6 +162,7 @@ export function PiChatSessionActions({
               command: {
                 action: "delete",
                 sessionId: session.id,
+                runtime: session.runtime,
                 ...(running && controls ? { stop: true } : {}),
               },
             },
