@@ -345,7 +345,7 @@ export class DaemonRuntime {
     mentionDeliveries: () => this.#mentionDeliveries,
     messageAttention: () => this.#messageAttention,
     launchCustody: () => this.#launchCustody,
-    abandonLaunch: (agentId, error) => this.#abandonLaunch(agentId, error),
+    abandonLaunch: (agentId, error) => abandonLaunch(this.#startupFailurePorts(), agentId, error),
     activityPublisher: () => this.#activityPublisher,
     drafts: () => this.#drafts,
     introducedAgents: () => this.#introducedAgents,
@@ -802,7 +802,7 @@ export class DaemonRuntime {
       connection: this.#connection,
       transport: () => this.#transport,
       assertRunning: () => this.#assertRunning(),
-      assertOwnIntent: (probe) => this.#assertOwnIntent(probe),
+      assertOwnIntent: this.#assertOwnIntent,
       agentIdForContext: (context) => agentIdForContext(this.#agentContexts, context),
       currentActivityLaunch: (agentId) => this.#currentActivityLaunches.get(agentId),
       activityPublisher: this.#activityPublisher,
@@ -1051,9 +1051,6 @@ export class DaemonRuntime {
   }
   #env = () => runtimeEnvelope(this.#connection);
 
-  async #abandonLaunch(agentId: string, error: unknown): Promise<unknown> {
-    return abandonLaunch(this.#startupFailurePorts(), agentId, error);
-  }
   #scheduleStartupFailure = (agentId: string, launch: ActivityLaunch): void =>
     scheduleStartupFailure(this.#startupFailurePorts(), agentId, launch);
   #startupFailurePorts() {
@@ -1096,11 +1093,8 @@ export class DaemonRuntime {
     currentLaunch: (id) => this.#currentActivityLaunches.get(id),
     observation: this.#observationPorts,
   }));
-  #assertOwnIntent = (intent: {
-    protocolMajor: number;
-    workspaceId: string;
-    computerId?: string;
-  }) => assertOwnIntent(intent, this.#connection.workspaceId, this.#connection.computerId);
+  #assertOwnIntent = (intent: Parameters<typeof assertOwnIntent>[0]) =>
+    assertOwnIntent(intent, this.#connection.workspaceId, this.#connection.computerId);
   async handleAgentStart(intent: AgentStartIntent): Promise<AgentRuntime> {
     return handleAgentStart(this.#controlIntentPorts(), intent);
   }
@@ -1134,7 +1128,7 @@ export class DaemonRuntime {
   async handleAgentTurnInterrupt(intent: AgentTurnInterruptIntent): Promise<void> {
     return handleAgentTurnInterrupt(
       {
-        assertOwnIntent: (intent) => this.#assertOwnIntent(intent),
+        assertOwnIntent: this.#assertOwnIntent,
         launch: (agentId) => this.#currentActivityLaunches.get(agentId),
         interrupt: (agentId, options) => this.#agentProcessManager.interruptTurn(agentId, options),
         interruptSubagent: (agentId, taskId) =>
