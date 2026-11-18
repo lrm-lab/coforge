@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
+import { artifactTier } from "#src/server/artifacts/artifact-access.server";
 import { ArtifactGallery } from "#src/server/artifacts/artifact-gallery.server";
 import { ArtifactViewerPositions } from "#src/server/artifacts/artifact-viewer-positions.server";
 import { commentsFixture, type CommentsFixture } from "./helpers/artifact-comments-fixture";
@@ -261,5 +262,22 @@ test("a gallery page costs a fixed number of queries however many artifacts the 
     expect(before).toEqual([7, 7]);
   } finally {
     await countingDb.$disconnect();
+  }
+});
+
+test("the link tier reads and lists like the workspace tier", async () => {
+  const id = await f.make("Link-tier note", undefined, { target: `#${f.privateChannel}` });
+  await f.db.$executeRaw`UPDATE "artifacts" SET "access" = 'link' WHERE "id" = ${id}::uuid`;
+  try {
+    expect(await titles(f.bob)).toContain("Link-tier note");
+    expect(await titles(f.alice, { scope: { kind: "workspace" } })).toEqual([
+      "Delta report",
+      "Link-tier note",
+    ]);
+    expect(artifactTier({ homeKey: `conversation:${crypto.randomUUID()}`, access: "link" })).toBe(
+      "workspace",
+    );
+  } finally {
+    await f.db.artifact.delete({ where: { id } });
   }
 });

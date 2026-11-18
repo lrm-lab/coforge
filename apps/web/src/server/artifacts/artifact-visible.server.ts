@@ -37,7 +37,7 @@ export function visibleToMemberSql(workspaceId: string, userId: string): Prisma.
 function readableSql(workspaceId: string, reader: ArtifactActor, goneReach: Prisma.Sql) {
   const home = actorConversationHomeSql("home", workspaceId, reader);
   const homeKeyOfConversation = Prisma.sql`'conversation:' || home."id"::text`;
-  return Prisma.sql`(a."access" = 'workspace' OR a."homeKey" = 'workspace'
+  return Prisma.sql`(a."access" IN ('workspace', 'link') OR a."homeKey" = 'workspace'
     OR EXISTS (
       SELECT 1 FROM "conversations" home
       WHERE a."homeKey" = ${homeKeyOfConversation} AND ${home.reads})

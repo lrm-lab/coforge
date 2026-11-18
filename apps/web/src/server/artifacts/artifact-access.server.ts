@@ -71,7 +71,9 @@ export async function artifactViewer(
 export function artifactTier(
   artifact: Pick<ArtifactAccessRow, "homeKey" | "access">,
 ): ArtifactTier {
-  return artifact.access === "workspace" || artifact.homeKey === "workspace"
+  return artifact.access === "workspace" ||
+    artifact.access === "link" ||
+    artifact.homeKey === "workspace"
     ? "workspace"
     : "conversation";
 }

@@ -172,7 +172,7 @@ export class ArtifactGallery {
   #scopeFilters(input: GalleryInput): Prisma.Sql[] {
     return [
       ...(input.scope?.kind === "workspace"
-        ? [Prisma.sql`(a."access" = 'workspace' OR a."homeKey" = 'workspace')`]
+        ? [Prisma.sql`(a."access" IN ('workspace', 'link') OR a."homeKey" = 'workspace')`]
         : []),
       ...(input.scope?.kind === "link"
         ? [
