@@ -21,7 +21,7 @@ on:
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: deploy-production
@@ -304,3 +304,9 @@ jobs:
         uses: ./.github/actions/catalog-snapshot
         with:
           environment: production
+
+      - name: Update web-production tag
+        if: success()
+        run: |
+          git tag -f web-production "${{ github.sha }}"
+          git push -f origin refs/tags/web-production
