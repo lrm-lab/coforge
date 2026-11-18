@@ -1,9 +1,32 @@
+import { decodeAgentStartIntent, encodeAgentStartIntent } from "@lrm/coforge-sdk/internal";
 import { expect, test } from "bun:test";
 import { agentDirectKey } from "#src/features/conversations/direct-key";
 import { AppBotInbox } from "#src/server/app-bots/app-bot-inbox.server";
 import { unreadAgentMessagesFragment } from "#src/server/db/repositories/agent-attention.repositories.server";
-import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
+import {
+  PrismaDirectConversationRepository,
+  type AgentRecoveryContext,
+} from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { agentAttachmentMessagesFixture } from "./helpers/agent-attachment-messages-fixture";
+
+function startIntentFor(
+  f: { workspace: { id: string } },
+  agentId: string,
+  recovery: AgentRecoveryContext,
+) {
+  return {
+    protocolMajor: 1,
+    requestId: "request-1",
+    workspaceId: f.workspace.id,
+    computerId: "computer-1",
+    agentId,
+    provider: "codex" as const,
+    model: "gpt-5",
+    reasoning: "medium",
+    resumeMessages: recovery.resumeMessages,
+    unreadSummary: recovery.unreadSummary,
+  };
+}
 
 test("an Agent reads comments without enrollment, and a comment that mentions it notifies it", async () => {
   const f = await agentAttachmentMessagesFixture();
@@ -100,14 +123,17 @@ test("a comment that mentions an Agent delivers to it and reads as its attention
     expect(owed).toEqual([{ id: comment.id }]);
     const repository = new PrismaDirectConversationRepository(f.db);
     const recovery = await repository.readAgentRecoveryContext(f.workspace.id, f.principal.agentId);
-    expect(recovery.unreadSummary).toEqual({ [`attachment:${f.attachment.id}`]: 1 });
-    expect(recovery.resumeMessages).toMatchObject([
-      { messageId: comment.id, target: `attachment:${f.attachment.id}` },
-    ]);
+    // A comment's conversation is addressed by its attachment, which no start intent carries:
+    // recovery leaves it out rather than handing the daemon a target it refuses.
+    expect(recovery.unreadSummary).toEqual({});
+    expect(recovery.resumeMessages).toEqual([]);
+    const intent = startIntentFor(f, f.principal.agentId, recovery);
+    expect(decodeAgentStartIntent(encodeAgentStartIntent(intent)).resumeMessages).toBeUndefined();
     const pending = await repository.readPendingAgentDeliveries(
       f.workspace.id,
       f.principal.agentId,
     );
+    // The delivery is not lost: the Agent still owes it, and its own reads answer the comment.
     expect(pending).toMatchObject([
       { deliveryId: delivery.deliveryId, target: `attachment:${f.attachment.id}` },
     ]);
@@ -115,6 +141,70 @@ test("a comment that mentions an Agent delivers to it and reads as its attention
     expect((await new AppBotInbox(f.db).check(f.principal)).events).toMatchObject([
       { id: comment.id, target: `attachment:${f.attachment.id}` },
     ]);
+    expect((await f.messages.read(f.principal, f.target, { unread: true })).messages).toMatchObject(
+      [{ id: comment.id }],
+    );
+  } finally {
+    await f.close();
+  }
+});
+
+test("a start intent carries the channel delivery and leaves the comment to the Agent's reads", async () => {
+  const f = await agentAttachmentMessagesFixture();
+  try {
+    const agentName = (
+      await f.db.agent.findUniqueOrThrow({
+        where: { id: f.principal.agentId },
+        select: { name: true },
+      })
+    ).name;
+    const comment = await f.comments.post(f.actor, {
+      attachmentId: f.attachment.id,
+      body: `Please review @${agentName}`,
+    });
+    const ownerSeat = await f.db.conversationMember.findFirstOrThrow({
+      where: { conversationId: f.conversation.id, userId: f.owner.id },
+    });
+    const channelMessage = await f.db.message.create({
+      data: {
+        conversationId: f.conversation.id,
+        workspaceId: f.workspace.id,
+        senderMemberId: ownerSeat.id,
+        sequence: 2,
+        body: "Status for the channel",
+      },
+    });
+    await f.db.agentMessageDelivery.create({
+      data: {
+        messageId: channelMessage.id,
+        conversationId: f.conversation.id,
+        workspaceId: f.workspace.id,
+        agentId: f.principal.agentId,
+        sequence: channelMessage.sequence,
+        reason: "mentioned",
+      },
+    });
+
+    const repository = new PrismaDirectConversationRepository(f.db);
+    const recovery = await repository.readAgentRecoveryContext(f.workspace.id, f.principal.agentId);
+    expect(recovery.unreadSummary).toEqual({ "#files": 1 });
+    expect(recovery.resumeMessages).toMatchObject([
+      { messageId: channelMessage.id, target: "#files" },
+    ]);
+    const decoded = decodeAgentStartIntent(
+      encodeAgentStartIntent(startIntentFor(f, f.principal.agentId, recovery)),
+    );
+    expect(decoded.resumeMessages).toMatchObject([
+      { messageId: channelMessage.id, target: "#files" },
+    ]);
+    expect(decoded.unreadSummary).toEqual({ "#files": 1 });
+
+    const pendingTargets = (
+      await repository.readPendingAgentDeliveries(f.workspace.id, f.principal.agentId)
+    )
+      .map((row) => row.target)
+      .sort();
+    expect(pendingTargets).toEqual(["#files", `attachment:${f.attachment.id}`].sort());
     expect((await f.messages.read(f.principal, f.target, { unread: true })).messages).toMatchObject(
       [{ id: comment.id }],
     );
@@ -260,8 +350,8 @@ test("a migrated comment still surfaces as the attachment's attention", async ()
     // the delivery target carries the thread-root anchor here; with no thread row (the real
     // migrated shape) the naming falls back to bare `attachment:<id>`.
     const target = `attachment:${f.attachment.id}:${f.message.id}`;
-    expect(recovery.unreadSummary).toEqual({ [target]: 1 });
-    expect(recovery.resumeMessages).toMatchObject([{ messageId: comment.id, target }]);
+    expect(recovery.unreadSummary).toEqual({});
+    expect(recovery.resumeMessages).toEqual([]);
     expect((await new AppBotInbox(f.db).check(f.principal)).events).toMatchObject([
       { id: comment.id, target },
     ]);

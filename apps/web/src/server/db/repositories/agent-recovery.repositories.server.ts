@@ -1,4 +1,5 @@
 import type { DirectConversationPorts } from "./agent-targets.repositories.server";
+import { isRecoverableAgentTarget } from "@lrm/coforge-sdk/internal";
 import type { QuestionsAnswer } from "#src/server/conversations/action-card-questions.server";
 import {
   TARGET_CONVERSATION_SELECT,
@@ -249,6 +250,7 @@ export async function readAgentRecoveryContext(
           : directRefOf(row),
       row.threadRootId,
     );
+    if (!isRecoverableAgentTarget(target)) continue;
     unreadSummary[target] ??= row.unreadCount;
     unreadConversationIds[target] = row.conversationId;
     if (row.globalRank > AGENT_RECOVERY_MESSAGE_LIMIT) continue;

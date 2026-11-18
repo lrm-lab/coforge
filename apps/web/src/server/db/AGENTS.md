@@ -86,6 +86,7 @@ These rules apply to `src/server/db/`.
   `PrismaDirectConversationRepository` keeps the DM's messages and read
   cursors.
 - `agent-message-reads.repositories.server.ts` reads an Agent's message pages and advances its read-through; `agent-recovery.repositories.server.ts` reads pending deliveries and the recovery context. `agent-attention-deliveries.repositories.server.ts` holds the delivery-side half of the Agent attention rule (`pendingDeliveryWhere`, `unreadAgentMessagesFragment`, the shared live-delivery and notified-Agent predicates) that `agent-attention.repositories.server.ts` re-exports.
+- A recovery target must be one the SDK's `isRecoverableAgentTarget` accepts, and the start-intent encoder applies the same check. An attachment comment's `attachment:<id>` target stays out of recovery: its delivery, the Agent's own reads and its pending deliveries carry it instead.
 - `mention-delivery.repositories.server.ts` keeps tracked @mention outcomes on
   `agent_message_deliveries`. Every write is conditional on the outcome still
   being open (pending or unknown) and, for a daemon report, on the row still

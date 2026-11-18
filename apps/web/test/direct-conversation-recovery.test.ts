@@ -137,6 +137,7 @@ describe("PrismaDirectConversationRepository recovery", () => {
   });
 
   test("names channel senders individually and direct senders by the conversation user", async () => {
+    const threadAnchor = "0190a5b0-1234-7000-8000-000000000001";
     const db = {
       conversation: { findMany: async () => [] },
       ...recoverySecondPassStubs,
@@ -146,7 +147,7 @@ describe("PrismaDirectConversationRepository recovery", () => {
           sequence: 7,
           body: "from carol",
           conversationId: "channel-1",
-          threadRootId: "root-1",
+          threadRootId: threadAnchor,
           senderMemberId: "member-carol",
           createdAt: RECOVERY_CREATED_AT,
           deliveryId: "delivery-1",
@@ -164,7 +165,7 @@ describe("PrismaDirectConversationRepository recovery", () => {
           sequence: 8,
           body: "system notice",
           conversationId: "channel-1",
-          threadRootId: "root-1",
+          threadRootId: threadAnchor,
           senderMemberId: null,
           createdAt: RECOVERY_CREATED_AT,
           deliveryId: "delivery-2",
@@ -185,10 +186,46 @@ describe("PrismaDirectConversationRepository recovery", () => {
     expect(
       result.resumeMessages.map((m) => [m.target, m.latestSenderKind, m.latestSenderHandle]),
     ).toEqual([
-      ["#general:root-1", "human", "carol"],
-      ["#general:root-1", "system", ""],
+      [`#general:${threadAnchor}`, "human", "carol"],
+      [`#general:${threadAnchor}`, "system", ""],
     ]);
-    expect(result.unreadSummary).toEqual({ "#general:root-1": 2 });
+    expect(result.unreadSummary).toEqual({ [`#general:${threadAnchor}`]: 2 });
+  });
+
+  test("leaves out a target the Daemon refuses to replay", async () => {
+    const db = {
+      conversation: { findMany: async () => [] },
+      ...recoverySecondPassStubs,
+      $queryRaw: async () => [
+        {
+          id: "message-1",
+          sequence: 7,
+          body: "comment on the file",
+          conversationId: "attachment-conversation",
+          threadRootId: null,
+          senderMemberId: "member-carol",
+          createdAt: RECOVERY_CREATED_AT,
+          deliveryId: "delivery-1",
+          senderAgentName: null,
+          senderAgentDescription: null,
+          senderUsername: "carol",
+          senderUserDescription: "",
+          channelName: null,
+          otherUsername: null,
+          attachmentId: "0190a5b0-1234-7000-8000-000000000002",
+          unreadCount: 1,
+          globalRank: 1,
+        },
+      ],
+    } as unknown as PrismaClient;
+
+    const result = await new PrismaDirectConversationRepository(db).readAgentRecoveryContext(
+      "workspace-1",
+      "agent-1",
+    );
+
+    expect(result.resumeMessages).toEqual([]);
+    expect(result.unreadSummary).toEqual({});
   });
 
   test("reads a direct message's sender from the message and its target from the other member", async () => {

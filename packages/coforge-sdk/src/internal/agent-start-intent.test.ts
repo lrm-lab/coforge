@@ -162,6 +162,33 @@ test("a task conversation target round-trips through start recovery", () => {
       ),
     ).toThrow("invalid agent recovery context");
 });
+
+test("encoding refuses a target this boundary never accepts, as decoding does", () => {
+  const message = {
+    messageId: "message-1",
+    deliveryId: "delivery-1",
+    conversationId: "conversation-1",
+    sequence: 4,
+    target: "@ada",
+    latestSenderKind: "human" as const,
+    latestSenderHandle: "frank",
+    latestSenderDescription: "",
+    body: "status?",
+  };
+  const attachment = "attachment:12345678-1234-4234-8234-123456789abc";
+  expect(() =>
+    encodeAgentStartIntent({ ...base, resumeMessages: [{ ...message, target: attachment }] }),
+  ).toThrow("invalid agent recovery context");
+  expect(() => encodeAgentStartIntent({ ...base, unreadSummary: { [attachment]: 1 } })).toThrow(
+    "invalid agent recovery context",
+  );
+  expect(
+    decodeAgentStartIntent(
+      encodeAgentStartIntent({ ...base, resumeMessages: [message], unreadSummary: { "@ada": 1 } }),
+    ).unreadSummary,
+  ).toEqual({ "@ada": 1 });
+});
+
 test("summary recovery carries conversation ids without loading message bodies", () => {
   const intent = {
     ...base,

@@ -87,6 +87,11 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
     new Set(recoveryMessages.map(({ deliveryId }) => deliveryId)).size !== recoveryMessages.length
   )
     throw new Error("invalid agent recovery context");
+  if (
+    recoveryMessages.some((message) => !isRecoverableAgentTarget(message.target)) ||
+    Object.keys(value.unreadSummary ?? {}).some((target) => !isRecoverableAgentTarget(target))
+  )
+    throw new Error("invalid agent recovery context");
   for (const message of recoveryMessages) {
     if (!message.body) throw new Error("Agent recovery body is required");
     assertUint(message.sequence, Number.MAX_SAFE_INTEGER, "Agent recovery sequence");
