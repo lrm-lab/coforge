@@ -26,18 +26,20 @@ function slot(left: number, top: number, size: number, overflow = false): Collag
   };
 }
 
+const FACE = 24;
+
 const FOUR: readonly CollageSlot[] = [
-  slot(3, 3, 26),
-  slot(19, 2, 26),
-  slot(2, 19, 26),
-  slot(19, 20, 26),
+  slot(3, 3, FACE),
+  slot(21, 3, FACE),
+  slot(3, 21, FACE),
+  slot(21, 21, FACE),
 ];
 
 const LAYOUTS: readonly (readonly CollageSlot[])[] = [
   [],
   [slot(0, 0, 48)],
-  [slot(1, 1, 29), slot(18, 18, 29)],
-  [slot(10, 1, 28), slot(0, 20, 28), slot(20, 18, 28)],
+  [slot(2, 12, FACE), slot(22, 12, FACE)],
+  [slot(12, 3, FACE), slot(3, 21, FACE), slot(21, 21, FACE)],
   FOUR,
 ];
 

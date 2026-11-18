@@ -20,15 +20,12 @@ test("One member fills the circle", () => {
   expect([only.left, only.top, only.size, only.overflow]).toEqual([0, 0, 1, false]);
 });
 
-test("Two members overlap diagonally, the second lower right and drawn over the first", () => {
+test("Two members sit side by side on the circle's middle, the second drawn over the first", () => {
   const [first, second] = collageLayout(2) as [CollageSlot, CollageSlot];
-  expect(second.left).toBeGreaterThan(first.left);
-  expect(second.top).toBeGreaterThan(first.top);
-  for (const along of overlap(first, second)) expect(along).toBeGreaterThan(0.15);
-  for (const size of sizes(collageLayout(2))) {
-    expect(size).toBeGreaterThanOrEqual(0.55);
-    expect(size).toBeLessThanOrEqual(0.65);
-  }
+  expect(second.left).toBeGreaterThan(first.left + 0.25);
+  expect(second.top).toBe(first.top);
+  expect(centre(first)[1]).toBeCloseTo(0.5, 2);
+  expect(sizes(collageLayout(2))).toEqual([0.5, 0.5]);
 });
 
 test("Three members: one at the top centre behind, two overlapping at the bottom left and right", () => {
@@ -41,10 +38,7 @@ test("Three members: one at the top centre behind, two overlapping at the bottom
   expect(overlap(left, right)[0]).toBeGreaterThan(0.05);
   expect(overlap(top, left)[1]).toBeGreaterThan(0);
   expect(overlap(top, right)[1]).toBeGreaterThan(0);
-  for (const size of sizes(collageLayout(3))) {
-    expect(size).toBeGreaterThanOrEqual(0.55);
-    expect(size).toBeLessThanOrEqual(0.6);
-  }
+  expect(sizes(collageLayout(3))).toEqual([0.5, 0.5, 0.5]);
 });
 
 test("Four members form a tight 2 by 2: top-left, top-right, bottom-left, bottom-right", () => {
@@ -58,10 +52,7 @@ test("Four members form a tight 2 by 2: top-left, top-right, bottom-left, bottom
   expect(overlap(a, c)[1]).toBeGreaterThan(0);
   expect(overlap(c, d)[0]).toBeGreaterThan(0);
   expect(overlap(b, d)[1]).toBeGreaterThan(0);
-  for (const size of sizes(collageLayout(4))) {
-    expect(size).toBeGreaterThanOrEqual(0.5);
-    expect(size).toBeLessThanOrEqual(0.56);
-  }
+  expect(sizes(collageLayout(4))).toEqual([0.5, 0.5, 0.5, 0.5]);
   expect(collageLayout(4).some((slot) => slot.overflow)).toBe(false);
 });
 

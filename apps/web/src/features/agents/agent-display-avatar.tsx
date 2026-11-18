@@ -59,8 +59,10 @@ export function AgentDisplayAvatar({
 
 export function AgentStackFace({
   agent,
+  ring = "regular",
 }: {
   agent: { id: string; displayName: string; avatarUrl?: string | null };
+  ring?: keyof typeof AVATAR_STACK_RING;
 }) {
   return (
     <IdentityAvatar
@@ -68,7 +70,7 @@ export function AgentStackFace({
       alt=""
       src={agent.avatarUrl ?? agentAvatarUrl(agent.id)}
       name={agent.displayName}
-      className={AVATAR_STACK_RING.regular}
+      className={AVATAR_STACK_RING[ring]}
     />
   );
 }
