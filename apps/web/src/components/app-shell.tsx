@@ -10,6 +10,7 @@ import {
   LogOut01 as LogOut,
   MessageChatSquare,
   Monitor01 as Monitor,
+  Keyboard01,
   Settings01,
   Stars01,
   Users01 as Users,
@@ -60,6 +61,12 @@ import { SidebarToggle } from "#src/components/layout/sidebar/sidebar-toggle";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { cx } from "#src/utils/cx";
+import {
+  KeyboardShortcutsHost,
+  useOpenKeyboardShortcuts,
+} from "#src/features/shortcuts/keyboard-shortcuts-host";
+import { HOTKEYS, hotkeyLabel } from "#src/lib/hotkeys";
+import { isApplePlatform } from "#src/lib/platform";
 
 export type AppUser = {
   id: string;
@@ -194,13 +201,15 @@ export function AppShell(props: AppShellProps) {
       enabled={props.canSeeUsageLimits ?? false}
     >
       <WhatsNewAnnouncer />
-      {standalone ? (
-        <div className="flex h-svh flex-col bg-primary pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left font-body antialiased">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">{props.children}</div>
-        </div>
-      ) : (
-        <WorkspaceChrome {...props} />
-      )}
+      <KeyboardShortcutsHost>
+        {standalone ? (
+          <div className="flex h-svh flex-col bg-primary pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left font-body antialiased">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">{props.children}</div>
+          </div>
+        ) : (
+          <WorkspaceChrome {...props} />
+        )}
+      </KeyboardShortcutsHost>
     </SystemNotificationsProvider>
   );
 }
@@ -419,6 +428,7 @@ function UserMenuCard({
       className={compact ? undefined : "rounded-md"}
     />
   );
+  const openShortcuts = useOpenKeyboardShortcuts();
   return (
     <Dropdown.Root>
       {compact ? (
@@ -447,6 +457,7 @@ function UserMenuCard({
         <Dropdown.Menu
           onAction={(key) => {
             if (key === "sign-out") void onSignOut();
+            if (key === "shortcuts") openShortcuts();
           }}
         >
           <Dropdown.Item
@@ -454,6 +465,12 @@ function UserMenuCard({
             label={m.navigation_personal_settings()}
             href={localizeHref(`${base}/settings`)}
             icon={Settings01}
+          />
+          <Dropdown.Item
+            id="shortcuts"
+            label={m.shortcuts_title()}
+            addon={hotkeyLabel(HOTKEYS.shortcuts, isApplePlatform())}
+            icon={Keyboard01}
           />
           <Dropdown.Separator />
           <Dropdown.Item id="sign-out" label={m.controls_sign_out()} icon={LogOut} />

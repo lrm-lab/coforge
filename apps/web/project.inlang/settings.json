@@ -28,6 +28,7 @@
       "./messages/{locale}/whats-new.json",
       "./messages/{locale}/task-history-more.json",
       "./messages/{locale}/artifacts.json",
+      "./messages/{locale}/shortcuts.json",
       "./messages/{locale}/channel-notifications.json",
       "./messages/{locale}/message-forward.json",
       "./messages/{locale}/task-board-create.json",

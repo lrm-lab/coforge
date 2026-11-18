@@ -32,6 +32,7 @@ The module map of `src/features/`, split out of [`apps/web/AGENTS.md`](../../AGE
 - `features/settings/` — preference pages and device-local preferences, and what the request says
   about the browser for the server render (phone or desktop).
 - `features/search/` — Workspace search, a dialog over the current page (`SearchDialogHost` in the Workspace layout; Cmd/Ctrl+K, the sidebar's search field and the rail's search icon, the phone Chat list's search field, "Search this channel"): filters, matching channels, Agents and Computers, message results, and the browser-local search history and frequently used places. `/w/<slug>/search` is only an old address that opens the dialog.
+- `features/shortcuts/` — the read-only keyboard shortcuts panel (`KeyboardShortcutsHost` in `AppShell`; Cmd/Ctrl+/ and the account menu open it); its rows live in `keyboard-shortcuts.ts`, and the keys the app binds come from `src/lib/hotkeys.ts`.
 - `features/tasks/` — Task board, list, overview, and message task actions.
 - `features/usage-limits/` — provider usage-limit events: the `usage.limit.changed.v1` wire type and decoder, and the owner/admin-only server functions (list, seen, dismiss) its provider calls.
 - `features/updates/` — deployment update detection and the refresh prompt for stale pages and failed lazy chunks.

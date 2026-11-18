@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMediaQuery } from "#src/hooks/use-media-query";
+import { HOTKEYS, hotkeyLabel } from "#src/lib/hotkeys";
 import { isApplePlatform } from "#src/lib/platform";
 import { isSidebarExpanded, writeSidebarExpanded } from "./sidebar-expanded";
 
@@ -8,7 +9,7 @@ const DESKTOP_QUERY = "(min-width: 64rem)";
 
 export function useSidebarShortcutLabel(): string | undefined {
   const [label, setLabel] = useState<string>();
-  useEffect(() => setLabel(isApplePlatform() ? "⌘B" : "Ctrl+B"), []);
+  useEffect(() => setLabel(hotkeyLabel(HOTKEYS.sidebar, isApplePlatform())), []);
   return label;
 }
 
@@ -25,7 +26,7 @@ export function SidebarToggleTooltip({ label }: { label: string }) {
 export function useSidebarShortcut() {
   const desktop = useMediaQuery(DESKTOP_QUERY, false);
   useHotkey(
-    "Mod+B",
+    HOTKEYS.sidebar,
     (event) => {
       const target = event.target;
       if (

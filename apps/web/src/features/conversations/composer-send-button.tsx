@@ -3,6 +3,7 @@ import { CheckSquare, ChevronDown, Send01 } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
+import { HOTKEYS, hotkeyLabel } from "#src/lib/hotkeys";
 import { isApplePlatform } from "#src/lib/platform";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
@@ -36,7 +37,7 @@ export function ComposerSendButton({
     : {
         label: m.conversation_send_as_task(),
         description: m.conversation_send_as_task_description(),
-        shortcut: isApplePlatform() ? "⌘⇧Enter" : "Ctrl+Shift+Enter",
+        shortcut: hotkeyLabel(HOTKEYS.sendAsTask, isApplePlatform()),
       };
   const look = isDisabled
     ? ({ color: "secondary" } as const)
