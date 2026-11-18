@@ -23,16 +23,24 @@ test("a path right after Chinese punctuation may start the next line", () => {
   );
 });
 
-test("a link right after Chinese text may start the next line", () => {
+test("a quote or flag right after Chinese text may start the next line", () => {
+  expect(html([element("p", [text('参数"--force"和-v')])])).toBe(
+    '<p>参数<wbr>"--force"和<wbr>-v</p>',
+  );
+});
+
+test("letters, digits and links after Chinese text already break there, so autospace can space them", () => {
+  // A <wbr> between Han and Latin would stop text-autospace from adding its gap.
   expect(
     html([
       element("p", [
-        text("详见"),
+        text("用Claude把PR 128合进main，详见"),
         element("a", [text("https://github.com/x")], { href: "https://github.com/x" }),
-        text("的改动"),
       ]),
     ]),
-  ).toBe('<p>详见<wbr><a href="https://github.com/x">https://github.com/x</a>的改动</p>');
+  ).toBe(
+    '<p>用Claude把PR 128合进main，详见<a href="https://github.com/x">https://github.com/x</a></p>',
+  );
 });
 
 test("no break after an opening bracket, before closing punctuation, or inside code", () => {

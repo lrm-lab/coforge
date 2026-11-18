@@ -4,20 +4,17 @@ import type { Element, ElementContent, Root } from "hast";
 const CJK = /[⺀-〿぀-ヿ㄀-ㇿ㐀-䶿一-鿿가-힯豈-﫿︰-﹏＀-￯]/u;
 /** Opening brackets and quotes: a line never ends on one. */
 const OPENING = /[〈《「『【〔〖〘〚〝（［｛｟“‘]/u;
-/** Where an ASCII run may start a line: not a space (already a break) and not punctuation that
- * closes what came before. */
-const ASCII_START = /[\x21-\x7e]/;
-const ASCII_CLOSING = /[!),.:;?\]}]/;
+/** The ASCII characters a browser will not start a line with after Chinese text, so a run that
+ * begins with one (a path, a quote, a flag) sticks to the word before it. Letters, digits and the
+ * rest already break there, and need no `<wbr>`: one would also stop `text-autospace` from putting
+ * its gap between the Chinese and the Latin, which it adds only between adjacent characters.
+ * Punctuation that closes what came before (`!),.:;?]}`) must stay on its line, and is left out. */
+const ASCII_JOINED = /["%'\-/=|]/;
 /** Their text is code or verbatim: never broken. */
 const VERBATIM = new Set(["code", "pre", "kbd", "samp"]);
 
 function breaksBetween(before: string, after: string) {
-  return (
-    CJK.test(before) &&
-    !OPENING.test(before) &&
-    ASCII_START.test(after) &&
-    !ASCII_CLOSING.test(after)
-  );
+  return CJK.test(before) && !OPENING.test(before) && ASCII_JOINED.test(after);
 }
 
 const WBR = (): Element => ({ type: "element", tagName: "wbr", properties: {}, children: [] });
@@ -31,9 +28,10 @@ function edge(node: ElementContent | undefined, end: "first" | "last"): string {
 }
 
 /**
- * Lets a line break where Chinese (or Japanese, Korean) text runs into a path, link or other
- * ASCII run: `路径：/Users/…`. Browsers find no break between the two, so the whole stretch is one
- * word, and wrapping broke it between the last two Chinese characters instead ("路" / "径：/Users…").
+ * Lets a line break where Chinese (or Japanese, Korean) text runs into a path or other ASCII run
+ * that starts with a character browsers keep on the line before it: `路径：/Users/…`. They find no
+ * break between the two, so the whole stretch is one word, and wrapping broke it between the last
+ * two Chinese characters instead ("路" / "径：/Users…").
  * A `<wbr>` there keeps `路径：` on its line and starts the path on the next. Code is left alone.
  */
 export function rehypeCjkBreaks() {
