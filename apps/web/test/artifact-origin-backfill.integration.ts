@@ -59,6 +59,7 @@ test("a dry run writes nothing and a second run changes nothing", async () => {
 });
 
 test("scanning a few messages at a time reaches every one and can resume from a cursor", async () => {
+  const before = Bun.randomUUIDv7("hex", Date.now() - 60_000);
   const ids = [
     await f.make("Window one"),
     await f.make("Window two"),
@@ -69,7 +70,7 @@ test("scanning a few messages at a time reaches every one and can resume from a 
     await say(docsId, "filler");
     messages.push(await say(docsId, link(id)));
   }
-  const small = await run({ scanWindow: 2, batchSize: 1 });
+  const small = await run({ fromMessageId: before, scanWindow: 2, batchSize: 1, pauseMs: 0 });
   for (const [i, id] of ids.entries()) expect(await originOf(id)).toBe(messages[i]!);
   expect(small.cursor).toBeTruthy();
   const resumed = await run({ fromMessageId: small.cursor!, scanWindow: 2 });
