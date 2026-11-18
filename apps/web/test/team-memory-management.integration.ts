@@ -170,7 +170,7 @@ test("structured evidence is accepted and returned only while Workspace-readable
   await expect(service().execute(actor(), invalid)).rejects.toThrow("memory_forbidden");
 });
 
-test("task recall expands incoming conflicts and excludes different Projects", () =>
+test("task recall expands current conflicts and excludes superseded or cross-Project entries", () =>
   verifyTaskRecallConflicts(db, actor(), draft, write));
 
 test("members create and correct team memories with real human attribution", async () => {

@@ -31,6 +31,22 @@ export async function readTarget(db: Database, actor: TeamMemoryActor, id: strin
   return row as Row;
 }
 
+function effectiveSearchHeads(includeHumanAuthors: boolean) {
+  return Prisma.sql`
+      AND (candidate.effective_at IS NULL OR candidate.effective_at <= CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
+      AND NOT EXISTS (
+        SELECT 1 FROM team_memory_entries AS replacement
+        WHERE replacement.workspace_id = candidate.workspace_id
+          AND replacement.status = 'active'
+          AND replacement.project_id IS NOT DISTINCT FROM candidate.project_id
+          AND replacement.applicability = candidate.applicability
+          AND (replacement.effective_at IS NULL OR replacement.effective_at <= CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
+          ${includeHumanAuthors ? Prisma.empty : Prisma.sql`AND replacement.author_agent_id IS NOT NULL`}
+          AND replacement.relations @> jsonb_build_array(
+            jsonb_build_object('kind', 'supersedes', 'id', candidate.id, 'revision', candidate.revision))
+      )`;
+}
+
 async function search(
   db: Database,
   workspaceId: string,
@@ -63,23 +79,7 @@ async function search(
           ? Prisma.sql`AND (project_id = ${projectId}::uuid ${includeWorkspace ? Prisma.sql`OR project_id IS NULL` : Prisma.empty})`
           : Prisma.empty
     }
-    ${
-      archived || includeSuperseded
-        ? Prisma.empty
-        : Prisma.sql`
-      AND (effective_at IS NULL OR effective_at <= CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
-      AND NOT EXISTS (
-        SELECT 1 FROM team_memory_entries AS replacement
-        WHERE replacement.workspace_id = candidate.workspace_id
-          AND replacement.status = 'active'
-          AND replacement.project_id IS NOT DISTINCT FROM candidate.project_id
-          AND replacement.applicability = candidate.applicability
-          AND (replacement.effective_at IS NULL OR replacement.effective_at <= CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
-          ${includeHumanAuthors ? Prisma.empty : Prisma.sql`AND replacement.author_agent_id IS NOT NULL`}
-          AND replacement.relations @> jsonb_build_array(
-            jsonb_build_object('kind', 'supersedes', 'id', candidate.id, 'revision', candidate.revision))
-      )`
-    }
+    ${archived || includeSuperseded ? Prisma.empty : effectiveSearchHeads(includeHumanAuthors)}
     ORDER BY ${includeWorkspace && projectId ? Prisma.sql`(project_id IS NOT NULL) DESC,` : Prisma.empty}
       (${Prisma.join(ranks, " + ")}) DESC, updated_at DESC, id ASC LIMIT 11 OFFSET ${offset}`);
 }
@@ -101,12 +101,13 @@ function conflictLinks(row: Row) {
 async function expandConflicts(
   db: Database,
   actor: TeamMemoryActor,
-  rows: Row[],
+  primary: Row[],
   projectId: string | null | undefined,
   includeWorkspace: boolean | undefined,
+  includeSuperseded: boolean | undefined,
 ): Promise<Row[]> {
-  const primary = rows.slice(0, 5);
-  if (!primary.length) return rows;
+  if (!primary.length) return [];
+  const includeHumanAuthors = !(actor.agentId && actor.includeHumanAuthors === false);
   const match = primary.flatMap((row) => [
     Prisma.sql`relations @> ${JSON.stringify([{ kind: "conflicts_with", id: row.id, revision: row.revision }])}::jsonb`,
     ...conflictLinks(row).map(
@@ -118,10 +119,10 @@ async function expandConflicts(
       left(ltrim(source, ${PREVIEW_WHITESPACE}), 200) AS source, kind, applicability, status, revision,
       author_agent_id AS "authorAgentId", author_user_id AS "authorUserId", project_id AS "projectId",
       pinned, updated_at AS "updatedAt", relations, effective_at AS "effectiveAt"
-    FROM team_memory_entries
+    FROM team_memory_entries AS candidate
     WHERE workspace_id = ${actor.workspaceId}::uuid AND status = 'active'
-      AND (effective_at IS NULL OR effective_at <= CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
-      ${actor.agentId && actor.includeHumanAuthors === false ? Prisma.sql`AND author_agent_id IS NOT NULL` : Prisma.empty}
+      ${includeSuperseded ? Prisma.empty : effectiveSearchHeads(includeHumanAuthors)}
+      ${includeHumanAuthors ? Prisma.empty : Prisma.sql`AND author_agent_id IS NOT NULL`}
       ${
         projectId === null
           ? Prisma.sql`AND project_id IS NULL`
@@ -131,26 +132,26 @@ async function expandConflicts(
       }
       AND (${Prisma.join(match, " OR ")})
     ORDER BY updated_at DESC, id ASC LIMIT 10`;
+  const primaryIds = new Set(primary.map(({ id }) => id));
+  const supplements = linked.filter(({ id }) => !primaryIds.has(id)).slice(0, 5);
+  const visible = [...primary, ...supplements];
   const expanded = new Map<string, Row>();
-  for (const row of primary) {
+  for (const row of visible) {
     const outgoing = conflictLinks(row);
-    const paired = linked.filter(
+    const paired = visible.filter(
       (peer) =>
         peer.id !== row.id &&
         (outgoing.some((link) => link.id === peer.id && link.revision === peer.revision) ||
           conflictLinks(peer).some((link) => link.id === row.id && link.revision === row.revision)),
     );
-    const relations = (head(row).relations ?? []).slice();
-    for (const { id, revision } of paired)
-      if (
-        relations.length < 8 &&
-        !outgoing.some((link) => link.id === id && link.revision === revision)
-      )
-        relations.push({ kind: "conflicts_with", id, revision });
+    const relations = (head(row).relations ?? []).filter(({ kind }) => kind !== "conflicts_with");
+    for (const { id, revision } of paired) {
+      if (relations.length >= 8) break;
+      relations.push({ kind: "conflicts_with", id, revision });
+    }
     expanded.set(row.id, { ...row, relations });
     for (const peer of paired) if (!expanded.has(peer.id)) expanded.set(peer.id, peer);
   }
-  for (const row of rows) if (!expanded.has(row.id)) expanded.set(row.id, row);
   return [...expanded.values()];
 }
 
@@ -194,13 +195,21 @@ export class TeamMemoryReads {
             command.includeSuperseded,
             command.includeWorkspace,
           );
-          return page(
-            command.includeConflicts && !command.archived
-              ? await expandConflicts(tx, actor, rows, command.projectId, command.includeWorkspace)
-              : rows,
-            command.offset ?? 0,
-            true,
+          const offset = command.offset ?? 0;
+          if (!command.includeConflicts || command.archived) return page(rows, offset, true);
+          const pageSize = 5;
+          const expanded = await expandConflicts(
+            tx,
+            actor,
+            rows.slice(0, pageSize),
+            command.projectId,
+            command.includeWorkspace,
+            command.includeSuperseded,
           );
+          return {
+            ...page(expanded, offset, true),
+            ...(rows.length > pageSize ? { nextOffset: offset + pageSize } : {}),
+          };
         }
         if (command.operation === "list")
           return page(
