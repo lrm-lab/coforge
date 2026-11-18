@@ -37,7 +37,6 @@ export function CreateProjectDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The new Project, by the slug it was made with. */
   onCreated: (project: { slug: string }) => Promise<void>;
 }) {
   const controlSize = useDialogControlSize();
@@ -55,9 +54,6 @@ export function CreateProjectDialog({
   const [repositoryId, setRepositoryId] = useState(0);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  // The slug follows the name until the slug field is edited by hand; clearing
-  // it makes it follow the name again. The name follows a selected GitHub
-  // repository's short name only until the user types into the name field.
   const slugTouched = useRef(false);
   const nameTouched = useRef(false);
 
@@ -140,7 +136,6 @@ export function CreateProjectDialog({
 
   function changeSlug(value: string) {
     if (value.length === 0) {
-      // Clearing the slug hands control back to the name.
       slugTouched.current = false;
       setSlug(nameToSlug(name, PROJECT_SLUG_MAX_LENGTH));
       return;
