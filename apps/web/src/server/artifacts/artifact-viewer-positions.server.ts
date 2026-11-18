@@ -57,7 +57,7 @@ export class ArtifactViewerPositions {
     viewing: readonly string[],
   ) {
     const select = { userId: true, openedAt: true, seenVersion: true } as const;
-    const [latest, watching] = await Promise.all([
+    const [latest, watching, seenLatest] = await Promise.all([
       this.db.artifactViewerPosition.findMany({
         where: { artifactId: artifact.id },
         select,
@@ -70,6 +70,13 @@ export class ArtifactViewerPositions {
             select,
           })
         : [],
+      this.db.artifactViewerPosition.count({
+        where: {
+          artifactId: artifact.id,
+          userId: { not: input.userId },
+          seenVersion: { gte: artifact.currentVersion },
+        },
+      }),
     ]);
     const rows = [
       ...new Map([...latest, ...watching].map((row) => [row.userId, row])).values(),
@@ -86,6 +93,7 @@ export class ArtifactViewerPositions {
         name: names.get(row.userId) ?? "",
         avatarUrl: faces.get(row.userId) ?? null,
       })),
+      seenLatest,
       behind: rows.filter(
         (row) => row.userId !== input.userId && row.seenVersion < artifact.currentVersion,
       ).length,

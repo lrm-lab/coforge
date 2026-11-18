@@ -281,3 +281,16 @@ test("the link tier reads and lists like the workspace tier", async () => {
     await f.db.artifact.delete({ where: { id } });
   }
 });
+
+test("the roster counts the others who have seen the latest version, apart from those still behind", async () => {
+  const id = await f.make("Latest plan");
+  const place = (userId: string) => ({ workspaceId: f.workspaceId, artifactId: id, userId });
+  await positions.open(place(f.alice));
+  await positions.open(place(f.bob));
+  expect(await positions.roster(place(f.alice))).toMatchObject({ seenLatest: 1, behind: 0 });
+  await f.db.artifact.update({ where: { id }, data: { currentVersion: 2 } });
+  expect(await positions.roster(place(f.alice))).toMatchObject({ seenLatest: 0, behind: 1 });
+  await positions.open(place(f.bob));
+  expect(await positions.roster(place(f.alice))).toMatchObject({ seenLatest: 1, behind: 0 });
+  expect(await positions.roster(place(f.bob))).toMatchObject({ seenLatest: 0, behind: 1 });
+});
