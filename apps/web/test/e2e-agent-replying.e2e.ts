@@ -89,26 +89,51 @@ test("a viewer who cannot write in the channel still sees who is typing", async 
   await until(`!(${visible(typingSentence)})`);
 }, 180_000);
 
-test("on a phone the typing line shares the composer's top edge with the jump group", async () => {
+test("on a phone the typing line and the jump-to-latest pill do not cover each other", async () => {
   await browser("set", "viewport", "393", "852");
   try {
-    await open(fx.joinedId);
-    await untilText(`Thread root ${suffix}`);
-    const call = await announce(`#e2e-replying-${suffix}`);
+    const name = `e2e-pill-${suffix}`;
+    const channelId = await fx.createChannel(name);
+    for (let index = 1; index <= 40; index += 1)
+      await fx.send(channelId, DEV_BROWSER_USER.id, `Filler ${index} ${suffix}`);
+    await open(channelId);
+    await untilText(`Filler 40 ${suffix}`);
+    const pill = `[...document.querySelectorAll("button")].find((node) => node.textContent.trim() === "Jump to latest")`;
+    await until(`(() => {
+      const history = [...document.querySelectorAll("[data-conversation-pane] .overflow-y-auto")].find(
+        (node) => node.scrollHeight > node.clientHeight,
+      );
+      if (history) history.scrollTop = 0;
+      return Boolean(${pill}?.checkVisibility());
+    })()`);
+    const call = await announce(`#${name}`);
     try {
       await until(visible(typingSentence));
-      // The dev user's own root puts the jump group on the line's row, and the sentence ends
-      // before the group starts: neither covers the other.
-      const gap = await evaluate<number | null>(`(() => {
-        // The pill is a button since the line counts working Agents too; its sentence is its text.
+      const layout = await evaluate<{
+        pillVisible: boolean;
+        line: DOMRect | null;
+        pill: DOMRect | null;
+      }>(`(() => {
         const line = [...document.querySelectorAll(".replying-line")].find(
           (node) => node.textContent === ${JSON.stringify(typingSentence)},
         );
-        const group = line.closest(':has([role="group"])')?.querySelector('[role="group"]');
-        return group && group.getBoundingClientRect().left - line.getBoundingClientRect().right;
+        const button = ${pill};
+        return {
+          pillVisible: Boolean(button?.checkVisibility()),
+          line: line?.getBoundingClientRect() ?? null,
+          pill: button?.getBoundingClientRect() ?? null,
+        };
       })()`);
-      expect(gap).not.toBeNull();
-      expect(gap!).toBeGreaterThanOrEqual(0);
+      expect(layout.pillVisible).toBe(true);
+      expect(layout.line).not.toBeNull();
+      const line = layout.line!;
+      const jump = layout.pill!;
+      const apart =
+        line.right <= jump.left ||
+        jump.right <= line.left ||
+        line.bottom <= jump.top ||
+        jump.bottom <= line.top;
+      expect(apart).toBe(true);
       await fx.screenshot("typing-phone.png");
     } finally {
       await call.end();
