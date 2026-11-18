@@ -36,6 +36,14 @@ function staggeredStore(store: PersistedQueryStore): PersistedQueryStore {
 }
 
 const workspaceId = "ws-1";
+const VALUES: Record<string, unknown> = {
+  channels: { rows: [] },
+  directBadges: { rows: [] },
+  channelNames: { names: [] },
+  saved: { entries: [] },
+  sections: { sections: [] },
+  sectionOrder: { order: [] },
+};
 const LISTS: [ChatListRead, readonly unknown[]][] = [
   ["channels", sidebarChannelsQueryKey(workspaceId)],
   ["directBadges", sidebarDirectsQueryKey(workspaceId)],
@@ -50,7 +58,7 @@ test("Chat's lists started together go out in one read even when storage answers
   const read = createChatListReader(
     async (lists) => {
       calls.push(lists);
-      return Object.fromEntries(lists.map((list) => [list, { value: { rows: [] } }])) as never;
+      return Object.fromEntries(lists.map((list) => [list, { value: VALUES[list] }])) as never;
     },
     { workspace: () => workspaceId },
   );
@@ -61,6 +69,41 @@ test("Chat's lists started together go out in one read even when storage answers
       queryClient.fetchQuery(queryOptions({ queryKey, queryFn: () => read(list) })),
     ),
   );
+
+  expect(calls).toHaveLength(1);
+  expect([...calls[0]!].sort()).toEqual(LISTS.map(([list]) => list).sort());
+});
+
+test("Chat's lists restored from storage go out in one read even when storage answers them tasks apart", async () => {
+  const disk = memoryStore();
+  const reader = (calls: ChatListRead[][]) =>
+    createChatListReader(
+      async (lists) => {
+        calls.push(lists);
+        return Object.fromEntries(lists.map((list) => [list, { value: VALUES[list] }])) as never;
+      },
+      { workspace: () => workspaceId },
+    );
+  const before = pageLoad(disk.store);
+  const firstRead = reader([]);
+  await Promise.all(
+    LISTS.map(([list, queryKey]) =>
+      before.queryClient.fetchQuery(queryOptions({ queryKey, queryFn: () => firstRead(list) })),
+    ),
+  );
+  await disk.written(LISTS.length - 1);
+
+  const calls: ChatListRead[][] = [];
+  const read = reader(calls);
+  const { queryClient } = pageLoad(staggeredStore(disk.store));
+  await Promise.all(
+    LISTS.map(([list, queryKey]) =>
+      queryClient.fetchQuery(queryOptions({ queryKey, queryFn: () => read(list) })),
+    ),
+  );
+  for (const deadline = Date.now() + 2_000; calls.length === 0 && Date.now() < deadline;)
+    await tasks(1);
+  await tasks(20);
 
   expect(calls).toHaveLength(1);
   expect([...calls[0]!].sort()).toEqual(LISTS.map(([list]) => list).sort());

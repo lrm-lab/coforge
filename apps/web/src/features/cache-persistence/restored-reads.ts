@@ -1,6 +1,7 @@
 import type { Query, QueryClient } from "@tanstack/react-query";
 
 import { isAppErrorCode } from "#src/lib/app-error";
+import { nextTask } from "#src/lib/next-task";
 
 export const RESTORED_READ_RETRY = { firstMs: 1_000, maxMs: 30_000 };
 
@@ -21,6 +22,7 @@ export function followRestoredReads(
   const listeners = new Set<() => void>();
   const notify = () => listeners.forEach((listener) => listener());
   const read = (query: Query) => void query.fetch().catch(() => {});
+  const restoredToRead: Query[] = [];
   queryClient.getQueryCache().subscribe((event) => {
     const { query } = event;
     if (event.type === "removed") {
@@ -67,7 +69,7 @@ export function followRestoredReads(
       awaiting.add(query.queryHash);
       restoring.add(query.queryHash);
       notify();
-      setTimeout(() => read(query), 0);
+      if (restoredToRead.push(query) === 1) nextTask(() => restoredToRead.splice(0).forEach(read));
     },
     replaced(query: Query) {
       stopRetrying(query.queryHash);
