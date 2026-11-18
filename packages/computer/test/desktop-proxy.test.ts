@@ -49,6 +49,10 @@ describe("desktop route", () => {
       computerId: "computer-1",
       upstreamPath: "/inspect",
     });
+    expect(parseDesktopRoute("/desktop/computer-1/clipboard")).toEqual({
+      computerId: "computer-1",
+      upstreamPath: "/clipboard",
+    });
     expect(parseDesktopRoute("/desktop/computer-1/agent-1/fill")).toEqual({
       computerId: "computer-1",
       upstreamPath: "/screen/agent-1/fill",
@@ -56,6 +60,10 @@ describe("desktop route", () => {
     expect(parseDesktopRoute("/desktop/computer-1/agent-1/inspect")).toEqual({
       computerId: "computer-1",
       upstreamPath: "/screen/agent-1/inspect",
+    });
+    expect(parseDesktopRoute("/desktop/computer-1/agent-1/clipboard")).toEqual({
+      computerId: "computer-1",
+      upstreamPath: "/screen/agent-1/clipboard",
     });
     expect(parseDesktopRoute("/desktop/computer-1/agent-1/websockify")).toEqual({
       computerId: "computer-1",
@@ -124,8 +132,28 @@ describe("desktop route", () => {
     const html = adaptDesktopHtml(oldPage);
     expect(html).toContain('addEventListener("paste"');
     expect(html).toContain('getData("text/plain")');
+    expect(html).toContain("coforgeDesktopPaste");
     expect(html).toContain("clipboardPasteFrom(text)");
+    expect(html).toContain("/clipboard");
+    expect(html).toContain("sendKey(0xffe3");
+    expect(html).toContain("stopImmediatePropagation");
     expect(html).toContain("preventDefault()");
+  });
+
+  test("a reconnect page that still uses extended clipboard paste is rewritten", () => {
+    const stale = `<!DOCTYPE html>
+<script type="module">
+    import RFB from "./core/rfb.js";
+    const rfb = new RFB(document.getElementById("screen"), "ws://example/websockify");
+    document.addEventListener("paste", (ev) => {
+      rfb.clipboardPasteFrom(ev.clipboardData.getData("text/plain"));
+    });
+</script>
+<button type="button" id="coforge-desktop-reconnect"></button>
+`;
+    const html = adaptDesktopHtml(stale);
+    expect(html).toContain("coforgeDesktopPaste");
+    expect(html).toContain("sendKey(0xffe3");
   });
 
   test("the page title becomes the requested name, and markup in it stays text", () => {

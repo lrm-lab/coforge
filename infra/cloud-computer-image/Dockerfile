@@ -230,6 +230,7 @@ COPY scripts/page-fill.py /usr/local/bin/page-fill.py
 COPY scripts/page_fill_cdp.py /usr/local/bin/page_fill_cdp.py
 COPY scripts/page_fill_dom.py /usr/local/bin/page_fill_dom.py
 COPY scripts/page_fill_ws.py /usr/local/bin/page_fill_ws.py
+COPY scripts/desktop_clipboard.py /usr/local/bin/desktop_clipboard.py
 COPY scripts/vnc-xstartup /usr/local/share/coforge/vnc-xstartup
 COPY scripts/vnc-agent-xstartup /usr/local/share/coforge/vnc-agent-xstartup
 COPY scripts/vnc-agent-screen.py /usr/local/bin/vnc-agent-screen.py
@@ -288,6 +289,7 @@ RUN mkdir -p /usr/local/lib/coforge /usr/local/share/coforge \
       /usr/local/bin/page_fill_cdp.py \
       /usr/local/bin/page_fill_dom.py \
       /usr/local/bin/page_fill_ws.py \
+      /usr/local/bin/desktop_clipboard.py \
       /usr/local/bin/vnc-agent-screen.py \
       /usr/local/bin/coforge-chromium \
       /usr/local/bin/coforge-cdp-endpoint \

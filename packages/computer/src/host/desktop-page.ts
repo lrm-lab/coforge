@@ -47,18 +47,58 @@ const RELATIVE_PAGE_SCRIPT = `
       } catch {
       }
     });
+    function coforgeDesktopPaste(text) {
+      try {
+        rfb._clipboardServerCapabilitiesFormats = {};
+        rfb._clipboardServerCapabilitiesActions = {};
+        rfb.clipboardPasteFrom(text);
+      } catch {
+      }
+      const push = fetch(\`\${base}/clipboard\${query}\`, {
+        method: "POST",
+        body: text,
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+      }).catch(() => {});
+      return push.then(() => {
+        try {
+          rfb.sendKey(0xffe3, "ControlLeft", true);
+          rfb.sendKey(0x0076, "KeyV", true);
+          rfb.sendKey(0x0076, "KeyV", false);
+          rfb.sendKey(0xffe3, "ControlLeft", false);
+        } catch {
+        }
+      });
+    }
+    document.addEventListener(
+      "keydown",
+      (ev) => {
+        if (!rfb) return;
+        if (!(ev.ctrlKey || ev.metaKey) || ev.code !== "KeyV" || ev.repeat) return;
+        ev.stopImmediatePropagation();
+      },
+      true,
+    );
+    document.addEventListener(
+      "keyup",
+      (ev) => {
+        if (!rfb) return;
+        if (ev.code !== "KeyV" && ev.code !== "ControlLeft" && ev.code !== "ControlRight" && ev.code !== "MetaLeft" && ev.code !== "MetaRight") return;
+        if (ev.code === "KeyV" || ev.ctrlKey || ev.metaKey) ev.stopImmediatePropagation();
+      },
+      true,
+    );
     document.addEventListener("paste", (ev) => {
       if (!rfb) return;
       const text = ev.clipboardData?.getData("text/plain");
       if (!text) return;
       ev.preventDefault();
-      try {
-        rfb.clipboardPasteFrom(text);
-      } catch {
-      }
+      void coforgeDesktopPaste(text);
     });
     connect();
 `;
+
+/** Present once office→cloud paste sets the clipboard then sends Ctrl+V. */
+export const DESKTOP_PASTE_CLASSIC_MARKER = "coforgeDesktopPaste";
 
 const RECONNECT_CONTROL = `<style>
 #msg[hidden]{display:none!important}
@@ -89,7 +129,9 @@ export function withDesktopTitle(html: string, title: string | undefined): strin
 }
 
 /** Older images require a token in the address and load noVNC from the site root.
- * Current images already use a relative RFB import; both get the reconnect control. */
+ * Current images already use a relative RFB import; both get the reconnect control.
+ * A page that already has reconnect but still uses the extended-clipboard paste
+ * path is rewritten so office→cloud paste keeps working. */
 export function adaptDesktopHtml(html: string): string {
   if (
     !html.includes('from "/core/rfb.js"') &&
@@ -97,7 +139,11 @@ export function adaptDesktopHtml(html: string): string {
     !html.includes("缺少连接令牌")
   )
     return html;
-  if (html.includes('id="coforge-desktop-reconnect"')) return html;
+  if (
+    html.includes('id="coforge-desktop-reconnect"') &&
+    html.includes(DESKTOP_PASTE_CLASSIC_MARKER)
+  )
+    return html;
   return withReconnectControl(
     html.replace(
       /<script type="module">[\s\S]*?<\/script>/,

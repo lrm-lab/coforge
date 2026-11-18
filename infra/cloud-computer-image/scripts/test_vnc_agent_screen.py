@@ -64,7 +64,10 @@ class AgentScreenTest(unittest.TestCase):
         other = screens.hold("agent-2")
         self.assertEqual(len(launched), 2)
         self.assertEqual(first["display"], second["display"])
-        self.assertEqual(screens.lookup("agent-1"), {"display": first["display"]})
+        self.assertEqual(
+            screens.lookup("agent-1"),
+            {"display": first["display"], "xauthority": first["xauthority"]},
+        )
         self.assertIsNone(screens.lookup("missing"))
         self.assertNotEqual(first["display"], other["display"])
         self.assertNotEqual(first["configHome"], other["configHome"])

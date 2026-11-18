@@ -77,7 +77,10 @@ class AgentScreens:
             screen = self._screens.get(agent_id)
             if screen is None or not self._alive(screen):
                 return None
-            return {"display": f":{screen['number']}"}
+            return {
+                "display": f":{screen['number']}",
+                "xauthority": self._spec(screen)["env"]["XAUTHORITY"],
+            }
 
     def hold(self, agent_id: str) -> dict:
         screen = self._ensure(agent_id)
