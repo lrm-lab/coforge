@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
+import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { postTaskNotice } from "#src/server/tasks/task-conversations.server";
 import { postTaskMessage } from "#src/server/tasks/task-discussion-send.server";
 
@@ -132,4 +133,46 @@ test("only the attachment from elsewhere is named when the others belong to the 
 test("an id that is not the sender's own upload stays a plain refusal", async () => {
   const refused = (await reply([crypto.randomUUID()])) as AppError;
   expect(refused.code).toBe("ACCESS_DENIED");
+});
+
+const discussionId = async () =>
+  (
+    await db.task.findUniqueOrThrow({
+      where: { id: taskId },
+      select: { discussionConversationId: true },
+    })
+  ).discussionConversationId!;
+
+const send = (attachmentIds: string[]) =>
+  new PrismaDirectConversationRepository(db)
+    .sendAgentMessage(boardId, seat.agentId!, "see attached", attachmentIds)
+    .then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+test("a channel message with an attachment uploaded to the task names the task and the channel", async () => {
+  const inTask = await upload(await discussionId(), "d.png");
+  const refused = (await send([inTask.id])) as AppError;
+  expect(refused).toBeInstanceOf(AppError);
+  expect(refused.code).toBe("ATTACHMENT_IN_OTHER_CONVERSATION");
+  expect(refused.details).toEqual({
+    attachmentId: inTask.id,
+    uploadedTo: `#${channelName}:#7`,
+    uploadTo: `#${channelName}`,
+  });
+});
+
+test("a channel message names only the attachment from elsewhere", async () => {
+  const inChannel = await upload(boardId, "e.png");
+  const inTask = await upload(await discussionId(), "f.png");
+  const refused = (await send([inChannel.id, inTask.id])) as AppError;
+  expect(refused.code).toBe("ATTACHMENT_IN_OTHER_CONVERSATION");
+  expect(refused.details?.attachmentId).toBe(inTask.id);
+});
+
+test("a channel message with an id that is not the sender's own upload is refused as before", async () => {
+  const refused = (await send([crypto.randomUUID()])) as Error;
+  expect(refused).not.toBeInstanceOf(AppError);
+  expect(refused.message).toBe("attachment is not available for this message");
 });

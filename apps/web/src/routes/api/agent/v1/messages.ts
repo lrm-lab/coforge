@@ -38,6 +38,7 @@ import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.ser
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { messageAfterCommit } from "#src/server/conversations/message-after-commit.server";
 import { isAppErrorCode } from "#src/lib/app-error";
+import { agentErrorResponse } from "#src/server/agents/agent-http-middleware.server";
 import { AgentSendRejectedError } from "#src/server/conversations/agent-send-rejected-error.server";
 import { AGENT_DM_LIMIT_REASON } from "#src/server/conversations/agent-dm-limits.server";
 import {
@@ -273,6 +274,7 @@ export async function handleAgentMessagesPost(
       const refusal = attachmentMessageRefusal(error);
       if (refusal) return refusal;
     }
+    if (isAppErrorCode(error, "ATTACHMENT_IN_OTHER_CONVERSATION")) return agentErrorResponse(error);
     if (error instanceof AgentSendRejectedError)
       return Response.json({ error: error.message }, { status: error.status });
     if (error instanceof MessageRequestInProgressError) return inProgress(error);

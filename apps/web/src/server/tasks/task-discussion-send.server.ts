@@ -3,6 +3,7 @@ import type { MentionSelectorInput } from "@lrm/coforge-sdk/internal";
 import type { Prisma } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
+import { attachmentInOtherConversation } from "#src/server/attachments/attachment-in-other-conversation.server";
 import { userUploadedAttachmentWhere } from "#src/server/attachments/message-attachments.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { channelActorOf } from "#src/server/conversations/channel-actor.server";
@@ -13,7 +14,6 @@ import {
   writeMessageReferences,
 } from "#src/server/conversations/message-references.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
-import { attachmentInOtherConversation } from "./task-attachment-elsewhere.server";
 import type { Transaction } from "./task-board-ports.server";
 import { memberId } from "./task-board-ports.server";
 import { discussionOf, followTask, joinDiscussion } from "./task-discussion-store.server";

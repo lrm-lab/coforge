@@ -5,10 +5,9 @@ import {
   conversationTarget,
   TARGET_CONVERSATION_SELECT,
 } from "#src/server/db/repositories/direct-conversation-agent-message.server";
-import type { Transaction } from "./task-board-ports.server";
 
 export async function attachmentInOtherConversation(
-  tx: Transaction,
+  tx: Prisma.TransactionClient,
   input: {
     workspaceId: string;
     conversationId: string;

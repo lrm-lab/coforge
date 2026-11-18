@@ -15,6 +15,7 @@ import { agentChannelReader } from "#src/server/agents/workspace-assistant-autho
 import type { ChannelActor } from "#src/server/conversations/channel-actor.server";
 import { channelAgentRecipients } from "#src/server/conversations/channel-agent-recipients.server";
 import { enrollThreadReplyFollowers } from "#src/server/conversations/channel-threads.server";
+import { attachmentInOtherConversation } from "#src/server/attachments/attachment-in-other-conversation.server";
 import { AgentSendRejectedError } from "#src/server/conversations/agent-send-rejected-error.server";
 import {
   channelMentionTargets,
@@ -183,12 +184,19 @@ export async function sendAgentMessage(
       contentType: string;
       sizeBytes: number;
     }[] = [];
-    for (const attachmentId of requestedAttachmentIds) {
-      const attachment = attachmentsById.get(attachmentId);
-      if (!attachment)
-        throw new AgentSendRejectedError(403, "attachment is not available for this message");
-      attachments.push(attachment);
-    }
+    const missingAttachmentIds = requestedAttachmentIds.filter((id) => !attachmentsById.has(id));
+    if (missingAttachmentIds.length)
+      throw (
+        (await attachmentInOtherConversation(tx, {
+          workspaceId: conversation.workspaceId,
+          conversationId,
+          missingIds: missingAttachmentIds,
+          uploader: { uploaderAgentId: agentId },
+          agentId,
+        })) ?? new AgentSendRejectedError(403, "attachment is not available for this message")
+      );
+    for (const attachmentId of requestedAttachmentIds)
+      attachments.push(attachmentsById.get(attachmentId)!);
     if (mentions?.length) {
       for (const mention of mentions) {
         const match = members.find((member) =>

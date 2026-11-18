@@ -65,6 +65,13 @@ export function refusalNextAction(
         "and is read-only for it, so running the command again is refused the same way. Reply " +
         "in a conversation this Agent may post to."
       );
+    case "ATTACHMENT_IN_OTHER_CONVERSATION":
+      return (
+        `${nothingDone ?? "Nothing was done"}: an attachment was uploaded to another ` +
+        "conversation, and an attachment can only be sent where it was uploaded. Upload the file " +
+        `again with \`coforge attachment upload --path <file> --target ${JSON.stringify(target)}\`, ` +
+        "then run the command again with the new attachment id."
+      );
     case "GITHUB_RECONNECT_REQUIRED":
       return (
         "Retrying will not help: ask this Agent's owner to reconnect GitHub in Settings → " +

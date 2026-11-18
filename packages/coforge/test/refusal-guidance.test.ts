@@ -41,3 +41,14 @@ test("a send that asked for a password in chat points at page:fill", () => {
   expect(next).toContain("page:fill");
   expect(next).toContain("desktop:takeover");
 });
+
+test("an attachment uploaded to another conversation says to upload it again to the send's target", () => {
+  expect(
+    refusalNextAction("send", { status: 409, code: "ATTACHMENT_IN_OTHER_CONVERSATION" }, "#design"),
+  ).toBe(
+    "No message was sent: an attachment was uploaded to another conversation, and an attachment " +
+      "can only be sent where it was uploaded. Upload the file again with " +
+      '`coforge attachment upload --path <file> --target "#design"`, then run the command again ' +
+      "with the new attachment id.",
+  );
+});
