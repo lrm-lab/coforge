@@ -15,22 +15,30 @@ export type InventoryAgentRecoveryPorts<Agent extends RecoverableAgent> = {
   start(agent: Agent): Promise<void>;
 };
 
-/** After inventory lands, restart Agents that failed launch only because the runtime was not
- * reported yet (new Workspace race). `runtime_not_installed` is non-retryable, so without this
- * they stay offline until someone edits the runtime by hand. */
+const RECOVERABLE_LAUNCH_FAILURES = ["runtime_not_installed", "runtime_version_too_old"] as const;
+
+type ReportedRuntime = { provider: RuntimeProvider; unavailableCode?: string | null };
+
+const usable = (runtimes: readonly ReportedRuntime[]) =>
+  new Set(
+    runtimes.filter((runtime) => !runtime.unavailableCode).map((runtime) => runtime.provider),
+  );
+
 export async function recoverAgentsAfterInventory<Agent extends RecoverableAgent>(
   ports: InventoryAgentRecoveryPorts<Agent>,
+  before: readonly ReportedRuntime[],
   runtimes: readonly RuntimeMetadata[],
 ): Promise<void> {
-  for (const runtime of runtimes) {
-    if (runtime.unavailableCode) continue;
-    const agentIds = await ports.failedAgentIds(runtime.provider, "runtime_not_installed");
-    for (const agentId of agentIds) {
-      const cleared = await ports.clearLaunchFailure(agentId, "runtime_not_installed");
-      if (!cleared) continue;
-      const agent = await ports.agent(agentId);
-      if (!agent || agent.stoppedAt || agent.deletedAt || agent.migrating) continue;
-      await ports.start(agent).catch(() => {});
+  const wasUsable = usable(before);
+  for (const provider of usable(runtimes)) {
+    if (wasUsable.has(provider)) continue;
+    for (const errorCode of RECOVERABLE_LAUNCH_FAILURES) {
+      for (const agentId of await ports.failedAgentIds(provider, errorCode)) {
+        if (!(await ports.clearLaunchFailure(agentId, errorCode))) continue;
+        const agent = await ports.agent(agentId);
+        if (!agent || agent.stoppedAt || agent.deletedAt || agent.migrating) continue;
+        await ports.start(agent).catch(() => {});
+      }
     }
   }
 }
@@ -43,6 +51,7 @@ export function productionInventoryAgentRecovery(
   const control = userAgentControl(db);
   const store = new PrismaAgentControlStore(db);
   return {
+    before: () => inventory.listInWorkspace(scope.workspaceId, [scope.computerId]),
     failedAgentIds: (provider: RuntimeProvider, errorCode: string) =>
       inventory.findFailedAgentIdsForRuntime(
         scope.workspaceId,
