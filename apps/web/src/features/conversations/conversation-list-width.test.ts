@@ -119,5 +119,4 @@ describe("list column width", () => {
     expect(dragListWidth(SIDEBAR_COLUMN, 220, 220, 600)).toBe(320);
     expect(CONVERSATION_LIST_BOOT).toContain(SIDEBAR_COLUMN.property);
   });
-  });
 });
