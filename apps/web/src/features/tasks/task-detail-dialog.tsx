@@ -20,17 +20,11 @@ import type { Mentionable } from "#src/features/conversations/mention-text";
 import { useMediaQuery } from "#src/hooks/use-media-query";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { TaskStatusIcon } from "./task-status-icon";
 import { TaskTrail } from "./task-trail";
 import { taskDeleteMenuItem, useCanDeleteTask, useDeleteTask } from "./task-delete";
 import type { VisibleTaskName } from "./task-relation-edits";
 import { taskRelationMenuItems } from "./task-relation-lines";
-import {
-  TaskDetailTabs,
-  TaskHistoryPage,
-  TaskSubtasksPage,
-  type TaskDetailTab,
-} from "./task-detail-sections";
+import { TaskHistoryPage, TaskSubtasks } from "./task-detail-sections";
 import { TaskDescription } from "./task-description";
 import { TaskSection, type RelationPicker } from "./task-section";
 import { ownsDiscussion, taskFollowMenuItem, useTaskFollow } from "./task-follow";
@@ -145,17 +139,12 @@ type TaskDetailDialogProps = {
    * Without them the assignee is shown but cannot be changed. */
   members?: readonly Mentionable[];
   currentMemberId: string | null;
-  thread?: () => ReactNode;
+  thread?: (lead: ReactNode) => ReactNode;
   /** Opens a Task this one is related to, in its own channel where that is where it lives. Where
    * absent, related Tasks are named but not opened. */
   onOpenRelated?: (task: VisibleTaskName) => void;
 };
 
-/**
- * The Task popup: its title and properties, then tabs for the discussion (where the caller owns
- * the conversation, the Task message's thread, which `thread` renders around the section), the
- * sub-tasks and History.
- */
 /** A phone top bar's button: 44px to touch, its icon centred. */
 const PHONE_BAR_BUTTON = "max-sm:size-11 max-sm:justify-center";
 
@@ -181,13 +170,12 @@ export function TaskDetailDialog({
   });
   // The relation pickers belong to the popup, not its task section: the header menu opens them too.
   const [picker, setPicker] = useState<RelationPicker | null>(null);
-  const [tab, setTab] = useState<TaskDetailTab>("discussion");
+  const [history, setHistory] = useState(false);
   const canDelete = useCanDeleteTask(task, currentMemberId);
   const relations = useTaskRelationAccess(task, currentMemberId);
   // A Task followed for its own conversation; a message's thread keeps the thread's own follow.
   const follow = useTaskFollow(task, open && Boolean(thread) && ownsDiscussion(task));
-  // The properties are a column beside the tabs, as Linear's issue; a phone has no room beside.
-  const sidebar = !useMediaQuery("(max-width: 639px)", false);
+  const sidebar = useMediaQuery("(min-width: 1024px)", true);
   // Opened from another Task's popup: Esc and the back arrow step back up to it (browser Back
   // does by itself); only the first popup closes.
   const router = useRouter();
@@ -203,18 +191,20 @@ export function TaskDetailDialog({
     // Taken inside (the composer's completion closing): the overlay, which does not look at
     // that, must not close the popup on the same press.
     if (event.defaultPrevented) return event.stopPropagation();
-    if (!step || event.nativeEvent.isComposing || event.keyCode === 229) return;
+    if ((!step && !history) || event.nativeEvent.isComposing || event.keyCode === 229) return;
     // Only from the popup itself, not from an overlay over it that the React tree passes through.
     if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
     event.preventDefault();
-    router.history.back();
+    if (history) setHistory(false);
+    else router.history.back();
   };
   useHotkey(
     "Escape",
     (event) => {
       if (event.target !== document.body && event.target !== document.documentElement) return;
       event.preventDefault();
-      if (stepBack) stepBack();
+      if (history) setHistory(false);
+      else if (stepBack) stepBack();
       else onOpenChange(false);
     },
     { enabled: open, preventDefault: false },
@@ -231,16 +221,34 @@ export function TaskDetailDialog({
       onOpenRelated={onOpenRelated}
     />
   );
-  // The discussion is there only with a thread; the sub-tasks only once there are some.
-  const tabs: TaskDetailTab[] = [
-    ...(thread ? (["discussion"] as const) : []),
-    ...(task.subtasks ? (["subtasks"] as const) : []),
-    "history",
-  ];
-  const current = tabs.includes(tab) ? tab : tabs[0];
+  const description = task.description?.trim();
+  const lead = (
+    <div className="flex flex-col gap-5 px-4 pt-4 pb-6 sm:px-8 sm:pt-6">
+      <div className="flex flex-col gap-3">
+        <Heading slot="title" level={2} className="text-xl font-semibold break-words text-primary">
+          {task.title}
+        </Heading>
+        {!sidebar && <div className="-mx-4 sm:-mx-8 sm:[&_dl]:px-8">{section}</div>}
+      </div>
+      {description && <TaskDescription text={description} />}
+      {task.subtasks && (
+        <TaskSubtasks
+          task={task}
+          canAdd={relations.canEdit}
+          onAdd={() => setPicker("subtask")}
+          onOpen={onOpenRelated}
+        />
+      )}
+    </div>
+  );
+  const discussion = thread?.(lead);
   return (
     <>
-      <TaskPopupOverlay isOpen={open} onOpenChange={onOpenChange} keyboardDismiss={!step}>
+      <TaskPopupOverlay
+        isOpen={open}
+        onOpenChange={onOpenChange}
+        keyboardDismiss={!step && !history}
+      >
         <Modal
           className={cn(
             // On a phone the thread scrolls, never the sheet (the shared Modal scrolls there).
@@ -248,10 +256,8 @@ export function TaskDetailDialog({
             // With a discussion the popup is a workspace of one height, whatever the Task's text,
             // so a long description never squeezes the discussion (Frank, 11-04). Without one it
             // hugs the Task, up to the same cap.
-            thread ? "sm:h-[min(92vh,48rem)]" : "sm:h-auto sm:max-h-[min(92vh,64rem)]",
-            thread || sidebar
-              ? "sm:w-[min(60rem,calc(100vw-2rem))]"
-              : "sm:w-[min(44rem,calc(100vw-2rem))]",
+            thread ? "sm:h-[min(92vh,52rem)]" : "sm:h-auto sm:max-h-[min(92vh,64rem)]",
+            sidebar ? "sm:w-[min(68rem,calc(100vw-2rem))]" : "sm:w-[min(48rem,calc(100vw-2rem))]",
           )}
         >
           <div className="contents" onKeyDown={stepOnEscape}>
@@ -278,6 +284,7 @@ export function TaskDetailDialog({
                     <Dropdown.Menu
                       onAction={(key) => {
                         if (key === "delete") void deleteTask();
+                        else if (key === "history") setHistory(true);
                         else if (key === "parent" || key === "blocker" || key === "subtask")
                           setPicker(key);
                       }}
@@ -288,6 +295,9 @@ export function TaskDetailDialog({
                           canAddBlocker: relations.canAddBlocker,
                           hasParent: task.parent != null,
                         })}
+                      </Dropdown.Section>
+                      <Dropdown.Section className="border-t border-secondary pt-1">
+                        <Dropdown.Item id="history" label={m.tasks_full_history()} />
                       </Dropdown.Section>
                       {(follow || canDelete) && (
                         <Dropdown.Section className="border-t border-secondary pt-1">
@@ -307,49 +317,26 @@ export function TaskDetailDialog({
                   className={cn(PHONE_BAR_BUTTON, "max-sm:order-first")}
                 />
               </div>
-              <TaskDetailTabs
-                tabs={tabs}
-                selected={current}
-                onChange={setTab}
-                subtasks={task.subtasks}
-                task={
-                  <>
-                    <Heading
-                      slot="title"
-                      level={2}
-                      className="flex items-start gap-2 px-4 pt-2 text-lg font-semibold break-words text-primary sm:px-6"
-                    >
-                      {/* On a phone the status is the first block right under the title, so the
-                          title does not say it again; three lines, as beside the pages. */}
-                      <TaskStatusIcon status={task.status} className="mt-1 size-5 max-sm:hidden" />
-                      <span className="line-clamp-3 min-w-0">{task.title}</span>
-                    </Heading>
-                    {/* On a phone the properties are one row of chips under the title, each its
-                        own control, so the discussion keeps the screen (Frank, 11-04). */}
-                    {!sidebar && section}
-                    {task.description?.trim() && (
-                      <TaskDescription text={task.description.trim()} short={!sidebar} />
-                    )}
-                  </>
-                }
-                sidebar={sidebar ? section : undefined}
-                pages={{
-                  // The popup is not inside the channel stream's directory: its notices and
-                  // seen-by lists name people by the board's members (task #coforge-ui:#20).
-                  discussion: () => (
-                    <MemberDirectory members={members}>{thread?.()}</MemberDirectory>
-                  ),
-                  subtasks: () => (
-                    <TaskSubtasksPage
+              <div className="flex min-h-0 flex-1 border-t border-secondary">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                  {history ? (
+                    <TaskHistoryPage
                       task={task}
-                      canAdd={relations.canEdit}
-                      onAdd={() => setPicker("subtask")}
-                      onOpen={onOpenRelated}
+                      members={members}
+                      onBack={() => setHistory(false)}
                     />
-                  ),
-                  history: () => <TaskHistoryPage task={task} members={members} />,
-                }}
-              />
+                  ) : discussion ? (
+                    <MemberDirectory members={members}>{discussion}</MemberDirectory>
+                  ) : (
+                    <div className="min-h-0 flex-1 overflow-y-auto">{lead}</div>
+                  )}
+                </div>
+                {sidebar && (
+                  <aside className="w-72 shrink-0 overflow-y-auto border-l border-secondary bg-secondary_alt px-5 py-5">
+                    {section}
+                  </aside>
+                )}
+              </div>
             </Dialog>
           </div>
         </Modal>

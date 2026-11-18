@@ -65,6 +65,7 @@ export function useStreamPositioning({
   root,
   openKey,
   openBoundary,
+  openAtTop,
   jumpMessage,
   messageListRef,
   onLoadNewer,
@@ -76,6 +77,7 @@ export function useStreamPositioning({
   root: ConversationPaneProps["root"];
   openKey: string;
   openBoundary: ReturnType<typeof useConversationOpen>["boundary"];
+  openAtTop: boolean;
   jumpMessage: ConversationPaneProps["jumpMessage"];
   messageListRef: RefObject<HTMLOListElement | null>;
   onLoadNewer: ConversationPaneProps["onLoadNewer"];
@@ -124,6 +126,11 @@ export function useStreamPositioning({
       // may scroll over it.
       if (opening && jumpMessage && !window.location.hash) {
         setFollowingLatest(false);
+        return undefined;
+      }
+      if (opening && openAtTop && !window.location.hash) {
+        setFollowingLatest(false);
+        scrollTwice(() => historyRef.current?.scrollTo({ top: 0 }));
         return undefined;
       }
       const openMessageId = opening ? openBoundary?.id : undefined;
@@ -197,6 +204,31 @@ export function useStreamPositioning({
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [conversation.conversationId, conversation.hasNewer, conversation.messages.length]);
+
+  const [latestInView, setLatestInView] = useState(false);
+  const readLatestRef = useRef<() => void>(() => {});
+  readLatestRef.current = () => {
+    const through = latestTopLevelSequence(conversation.messages);
+    if (through > 0) onReadLatest?.(through);
+  };
+  const latestId = conversation.messages.at(-1)?.id;
+  useEffect(() => {
+    const history = historyRef.current;
+    const latest =
+      latestId &&
+      messageListRef.current?.querySelector(`li[data-message-id="${CSS.escape(latestId)}"]`);
+    if (!openAtTop || root || !history || !latest) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const inView = entries.some((entry) => entry.isIntersecting);
+        setLatestInView(inView);
+        if (inView) readLatestRef.current();
+      },
+      { root: history },
+    );
+    observer.observe(latest);
+    return () => observer.disconnect();
+  }, [openAtTop, root, latestId]);
 
   useLayoutEffect(() => {
     if (!pendingLatestRef.current || conversation.hasNewer) return;
@@ -279,5 +311,5 @@ export function useStreamPositioning({
     scrollToLatest("smooth");
   }
 
-  return { newerSentinelRef, trackReadingPosition, showLatestMessages };
+  return { newerSentinelRef, trackReadingPosition, showLatestMessages, latestInView };
 }

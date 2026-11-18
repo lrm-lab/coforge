@@ -6,10 +6,12 @@ import { withTaskEvents, type TaskEventPeople } from "#src/features/tasks/task-t
 import { m } from "#src/paraglide/messages";
 import type { Mentionable } from "./mention-text";
 import type { MessageView } from "./message-view";
+import { taskEventsBounds } from "./task-conversation-window";
 
 export function useTaskEvents<M extends MessageView & { system?: { kind: string } }>({
   conversationId,
   messages,
+  hasNewer,
   loaded,
   number,
   changedAt,
@@ -17,18 +19,30 @@ export function useTaskEvents<M extends MessageView & { system?: { kind: string 
 }: {
   conversationId: string | undefined;
   messages: readonly M[];
+  hasNewer: boolean;
   loaded: boolean;
   number: number;
   changedAt: string | undefined;
   members: readonly Mentionable[] | undefined;
 }) {
   const load = useServerFn(loadTaskConversationEvents);
-  const oldest = messages[0]?.sequence;
+  const { oldestSequence, newestSequence } = taskEventsBounds(messages, hasNewer);
   const events = useQuery({
-    queryKey: ["conversation", "task-events", conversationId, oldest, changedAt] as const,
+    queryKey: [
+      "conversation",
+      "task-events",
+      conversationId,
+      oldestSequence,
+      newestSequence,
+      changedAt,
+    ] as const,
     queryFn: () =>
       load({
-        data: { conversationId: conversationId!, ...(oldest ? { oldestSequence: oldest } : {}) },
+        data: {
+          conversationId: conversationId!,
+          ...(oldestSequence ? { oldestSequence } : {}),
+          ...(newestSequence ? { newestSequence } : {}),
+        },
       }),
     enabled: conversationId !== undefined && loaded,
     placeholderData: keepPreviousData,

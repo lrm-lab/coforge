@@ -1,19 +1,51 @@
-import { UUID_LIKE_SOURCE } from "@lrm/coforge-sdk/internal";
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
+
+import {
+  CONVERSATION_WINDOW_PAGE_SIZE,
+  type ConversationWindowCursor,
+} from "#src/lib/conversation-window";
 import { mergeMessages } from "./conversation-messages";
 import { taskConversationQueryKey } from "./conversation-query-keys";
+import { windowAround } from "./conversation-queries";
+import { conversationPages } from "./conversation-window-query";
+import { windowReadSettled } from "./conversation-window-reads";
 import type { loadTaskConversation } from "./conversations.functions";
 
-export type Page = Awaited<ReturnType<typeof loadTaskConversation>>;
+export type TaskPage = Awaited<ReturnType<typeof loadTaskConversation>>;
+type TaskWindow = InfiniteData<TaskPage>;
 
-/** How many older pages (50 messages each) a read back to one message may take. */
-const BACK_PAGES = 5;
-const WHOLE_ID = new RegExp(`^${UUID_LIKE_SOURCE}$`, "i");
+export const TASK_WINDOW_START: ConversationWindowCursor = {
+  after: 0,
+  limit: CONVERSATION_WINDOW_PAGE_SIZE,
+};
 
-/** One page in place of the newest, the rest kept. */
-export function withNewest(data: InfiniteData<Page> | undefined, newest: (page: Page) => Page) {
-  const [first, ...rest] = data?.pages ?? [];
-  return data && first ? { ...data, pages: [newest(first), ...rest] } : data;
+export function taskConversationWindow(
+  conversationId: string | undefined,
+  loadPage: Parameters<typeof conversationPages<TaskPage["messages"][number], TaskPage>>[1],
+  {
+    start = TASK_WINDOW_START,
+    followingLatest = () => false,
+  }: { start?: ConversationWindowCursor; followingLatest?: () => boolean } = {},
+) {
+  const { query, loadInitialPage } = conversationPages<TaskPage["messages"][number], TaskPage>(
+    taskConversationQueryKey(conversationId),
+    loadPage,
+  );
+  return {
+    query: {
+      ...query,
+      initialPageParam: start,
+      meta: { ...query.meta, conversationFollowingLatest: followingLatest },
+    },
+    loadInitialPage,
+  };
+}
+
+export function taskWindowMessages(data: TaskWindow | undefined) {
+  return (data?.pages ?? []).reduce<TaskPage["messages"]>(
+    (all, page) => mergeMessages(all, page.messages),
+    [],
+  );
 }
 
 export async function catchUpTaskConversation(
@@ -22,51 +54,75 @@ export async function catchUpTaskConversation(
   readUpdates: (input: {
     conversationId: string;
     afterSequence: number;
-  }) => Promise<Page["messages"]>,
+  }) => Promise<TaskPage["messages"]>,
 ) {
   const key = taskConversationQueryKey(id);
-  const read = queryClient.getQueryData<InfiniteData<Page>>(key);
-  if (!read) return;
-  const after = read.pages[0]?.messages.at(-1)?.sequence ?? 0;
-  const arrived = await readUpdates({ conversationId: id, afterSequence: after });
-  queryClient.setQueryData<InfiniteData<Page>>(key, (data) =>
-    withNewest(data, (page) => ({
-      ...page,
-      messages: mergeMessages(page.messages, arrived),
-    })),
-  );
+  const held = queryClient.getQueryData<TaskWindow>(key)?.pages.at(-1);
+  if (!held || held.hasNewer) return;
+  const arrived = await readUpdates({
+    conversationId: id,
+    afterSequence: held.messages.at(-1)?.sequence ?? 0,
+  });
+  await windowReadSettled(queryClient, key);
+  queryClient.setQueryData<TaskWindow>(key, (data) => {
+    const newest = data?.pages.at(-1);
+    if (!data || !newest || newest.hasNewer) return data;
+    const last = newest.messages.at(-1)?.sequence ?? 0;
+    const following = arrived.filter((message) => message.sequence > last);
+    if (following.length === 0) return data;
+    return {
+      ...data,
+      pages: [
+        ...data.pages.slice(0, -1),
+        { ...newest, messages: mergeMessages(newest.messages, following) },
+      ],
+    };
+  });
 }
 
-export async function loadTaskBackTo({
-  queryClient,
-  conversationId,
-  messageId,
-  catchUp,
-  fetchNextPage,
-}: {
-  queryClient: QueryClient;
-  conversationId: string | undefined;
-  messageId: string;
-  catchUp: (id: string) => Promise<void>;
-  fetchNextPage: () => Promise<{
-    data: InfiniteData<Page> | undefined;
-    hasNextPage: boolean;
-    isError: boolean;
-  }>;
-}) {
-  const held = (data: InfiniteData<Page> | undefined) =>
-    data?.pages.some((page) => page.messages.some((message) => message.id === messageId));
-  if (!WHOLE_ID.test(messageId)) throw new Error("message not found");
-  const key = taskConversationQueryKey(conversationId);
-  if (held(queryClient.getQueryData(key))) return messageId;
-  if (conversationId) {
-    await catchUp(conversationId);
-    if (held(queryClient.getQueryData(key))) return messageId;
-  }
-  for (let page = 0; page < BACK_PAGES; page++) {
-    const read = await fetchNextPage();
-    if (held(read.data)) return messageId;
-    if (!read.hasNextPage || read.isError) break;
-  }
-  throw new Error("message not found");
+export async function replaceTaskWindowAround<A extends Parameters<typeof windowAround>[1]>(
+  queryClient: QueryClient,
+  id: string,
+  around: A,
+) {
+  const key = taskConversationQueryKey(id);
+  await windowReadSettled(queryClient, key);
+  queryClient.setQueryData<TaskWindow>(key, (data) => {
+    const newest = data?.pages.at(-1);
+    return data && newest ? (windowAround(newest, around) as TaskWindow) : data;
+  });
+}
+
+export async function replaceTaskWindowWithNewest(
+  queryClient: QueryClient,
+  id: string,
+  newest: TaskPage,
+) {
+  await windowReadSettled(queryClient, taskConversationQueryKey(id));
+  queryClient.setQueryData<TaskWindow>(taskConversationQueryKey(id), {
+    pages: [newest],
+    pageParams: [undefined],
+  });
+}
+
+export function withViewerSeat(
+  data: TaskWindow | undefined,
+  senderMemberId: TaskPage["senderMemberId"],
+) {
+  const newest = data?.pages.at(-1);
+  return data && newest
+    ? { ...data, pages: [...data.pages.slice(0, -1), { ...newest, senderMemberId }] }
+    : data;
+}
+
+export function taskEventsBounds(
+  messages: readonly { sequence: number }[],
+  hasNewer: boolean,
+): { oldestSequence?: number; newestSequence?: number } {
+  const oldest = messages[0]?.sequence;
+  const newest = messages.at(-1)?.sequence;
+  return {
+    ...(oldest ? { oldestSequence: oldest } : {}),
+    ...(hasNewer && newest ? { newestSequence: newest } : {}),
+  };
 }

@@ -74,7 +74,7 @@ These rules apply to `src/features/tasks/`.
 - A command's result names the Tasks it was given, not the ones the write
   changed beside them: a sub-task's parent, whose progress and tree changed, is
   a neighbour of the command, and only its announcement carries its new copy.
-  The popup held its pre-create copy and hid its Sub-tasks tab until a reload
+  The popup held its pre-create copy and hid its sub-tasks until a reload
   (task #65). A writer that changes a Task this way reads it again and writes
   its copy the way its own results are written — `createSubtasks` reads the
   parent, as `adoptSubtask` reads its tree — rather than leaving the copy to
@@ -98,10 +98,13 @@ These rules apply to `src/features/tasks/`.
   server allows. Its thread comes from the Task's conversation: a
   conversation page renders it, and the `/tasks` popup
   (`overview-task-popup.tsx`) renders that conversation's own popup through
-  `ThreadedConversation`'s `taskPopup` mode. The full Task section stays fixed above an
-  independently scrolling reply list, which opens at its oldest unread reply or at the bottom
-  when all are read or no cursor exists; expanded History has its own bounded scroll and never
-  consumes the reply workspace. Never build a second thread view for a popup. A Task
+  `ThreadedConversation`'s `taskPopup` mode. The Task (title, description, sub-tasks) is the
+  `lead` at the head of the discussion pane's own scroller, never a wrapper scroller around it,
+  so anchoring, the bottom pin and jumps keep working. The popup opens at the top; unread replies
+  show only as the new-messages pill, counted by the server, and the read position moves only when
+  the latest reply comes into view. Properties sit in a sidebar from 1024px, a chip row below it.
+  Full History is the ⋯ menu's, in place of the left column. Never build a second thread view
+  for a popup. A Task
   whose message is outside the loaded window has its message read alone
   (`useTaskPopupRoot`); opening a popup never replaces the stream's window.
 - `/tasks` names its open popup as `task=<conversationId>:<number>`

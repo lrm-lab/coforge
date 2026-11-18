@@ -138,7 +138,7 @@ export function TaskSection({
         data-layout={layout}
         className={cn(
           "flex",
-          layout === "sidebar" && "flex-col gap-3",
+          layout === "sidebar" && "flex-col gap-1",
           layout === "column" && "flex-col",
           // One row that scrolls sideways when it does not fit; the page's edge stays its margin.
           // Sideways only: `overflow-x: auto` alone makes the other axis `auto` too, and iOS then

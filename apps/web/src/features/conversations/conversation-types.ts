@@ -27,6 +27,7 @@ export type DirectConversationView = {
   threads?: Readonly<Record<string, ThreadSummary>>;
   hasOlder?: boolean;
   hasNewer?: boolean;
+  unreadCount?: number;
   agent: {
     id: string;
     name: string;

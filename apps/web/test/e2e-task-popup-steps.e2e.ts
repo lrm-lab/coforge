@@ -118,7 +118,7 @@ test("a Task popup opened from another steps back to it", async () => {
     };
     const press = async (text: string, within = dialog) => {
       await evaluate(
-        `[...${within}.querySelectorAll("button, [role=button], [role=tab], [role=row]")].find((el) => el.textContent.includes(${JSON.stringify(text)}))?.setAttribute("data-e2e-press", "") ?? true`,
+        `[...${within}.querySelectorAll("button, [role=button], [role=row]")].find((el) => el.textContent.includes(${JSON.stringify(text)}))?.setAttribute("data-e2e-press", "") ?? true`,
       );
       await browser("click", "[data-e2e-press]");
       await evaluate(
@@ -126,7 +126,6 @@ test("a Task popup opened from another steps back to it", async () => {
       );
     };
     const intoSubtask = async () => {
-      await press("子任务");
       await browser("wait", "--fn", `${dialog}.textContent.includes("服务端和命令行实现")`);
       await press("服务端和命令行实现");
       await browser(

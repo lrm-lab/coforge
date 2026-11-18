@@ -5,9 +5,9 @@ import { noteRestoredCopyReplaced } from "#src/features/cache-persistence/browse
 import type { FinishedWindow } from "#src/features/tasks/finished-tasks";
 import { finishedSummaryQuery } from "#src/features/tasks/use-finished-tasks";
 import type { ConversationTab } from "./conversation-tabs";
-import { aroundWindowCursor, type ConversationWindowCursor } from "#src/lib/conversation-window";
+import type { ConversationWindowCursor } from "#src/lib/conversation-window";
 import {
-  aroundWindow,
+  windowAround,
   channelNamesQuery,
   conversationAroundQuery,
   conversationWindowKeys,
@@ -202,15 +202,10 @@ async function readConversationWindow<M extends PageMessage, T extends Conversat
       conversationAroundQuery(latest.conversationId, targetMessageId),
     );
     await windowReadSettled(queryClient, query.queryKey);
-    const window: InfiniteData<T, ConversationWindowCursor> = {
-      pages: [
-        {
-          ...(queryClient.getQueryData(query.queryKey)?.pages.at(-1) ?? latest),
-          ...aroundWindow(around),
-        },
-      ],
-      pageParams: [aroundWindowCursor(around.messages)],
-    };
+    const window = windowAround(
+      queryClient.getQueryData(query.queryKey)?.pages.at(-1) ?? latest,
+      around,
+    );
     queryClient.setQueryData(query.queryKey, window);
     // The window is a read of the server now: no longer the browser's stored copy, whose own read
     // is followed until it lands (`followRestoredReads`).

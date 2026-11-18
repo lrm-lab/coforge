@@ -101,3 +101,14 @@ export const loadTaskConversationEvents = createServerFn({ method: "GET" })
     const { conversationId, ...window } = data;
     return new TaskConversationPages(db).events(workspaceId, user.id, conversationId, window);
   });
+
+export const loadTaskConversationUnread = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ conversationId: z.uuid() }))
+  .handler(async ({ context: { db, user, workspaceId }, data }) => ({
+    unreadCount: await new TaskConversationPages(db).unreadCount(
+      workspaceId,
+      user.id,
+      data.conversationId,
+    ),
+  }));

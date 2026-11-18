@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
+import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
 import { TaskConversationPages } from "#src/server/conversations/task-conversation-page.server";
 import { postTaskNotice } from "#src/server/tasks/task-conversations.server";
 
@@ -14,6 +15,31 @@ let privateDiscussionId = "";
 let dmId = "";
 const users = {} as Record<"reader" | "outsider", { id: string }>;
 const pages = new TaskConversationPages(db);
+
+const board = async (visibility: "public" | "private", number = 7) => {
+  const channel = await db.conversation.create({
+    data: {
+      workspaceId,
+      channelName: `tcpage-${visibility}-${number}-${suffix}`,
+      visibility,
+      members: { create: [{ userId: users.reader.id }] },
+    },
+    include: { members: true },
+  });
+  const task = await db.task.create({
+    data: {
+      conversationId: channel.id,
+      workspaceId,
+      number,
+      title: "a task",
+      creatorMemberId: channel.members[0]!.id,
+    },
+  });
+  const notice = await db.$transaction((tx) =>
+    postTaskNotice(tx, { conversationId: channel.id, workspaceId }, task.id, { body: "m1" }),
+  );
+  return notice.conversationId;
+};
 
 beforeAll(async () => {
   const made = await Promise.all(
@@ -31,30 +57,6 @@ beforeAll(async () => {
     },
   });
   workspaceId = workspace.id;
-  const board = async (visibility: "public" | "private") => {
-    const channel = await db.conversation.create({
-      data: {
-        workspaceId,
-        channelName: `tcpage-${visibility}-${suffix}`,
-        visibility,
-        members: { create: [{ userId: users.reader.id }] },
-      },
-      include: { members: true },
-    });
-    const task = await db.task.create({
-      data: {
-        conversationId: channel.id,
-        workspaceId,
-        number: 7,
-        title: "a task",
-        creatorMemberId: channel.members[0]!.id,
-      },
-    });
-    const notice = await db.$transaction((tx) =>
-      postTaskNotice(tx, { conversationId: channel.id, workspaceId }, task.id, { body: "m1" }),
-    );
-    return notice.conversationId;
-  };
   discussionId = await board("public");
   privateDiscussionId = await board("private");
   for (let sequence = 2; sequence <= 7; sequence++)
@@ -94,7 +96,7 @@ test("the newest page comes first and older ones follow by sequence", async () =
 
 test("a person with no seat has nothing unread, and the board's people can be mentioned", async () => {
   const page = await pages.page(workspaceId, users.reader.id, discussionId);
-  expect(page.senderMemberId).toBeNull();
+  expect(page.senderMemberId).toBeUndefined();
   expect(page.readThroughSequence).toBe(7);
   expect(page.mentionables.map((mentionable) => mentionable.handle)).toEqual([
     `tcp-reader-${suffix}`,
@@ -117,4 +119,72 @@ test("a private board's conversation is not found by someone off the board", asy
 
 test("a conversation that is not a task's is refused", async () => {
   await expect(pages.page(workspaceId, users.reader.id, dmId)).rejects.toThrow();
+});
+
+test("the first page can be read forward from the start and then has nothing older", async () => {
+  const first = await pages.page(workspaceId, users.reader.id, discussionId, {
+    afterSequence: 0,
+    limit: 3,
+  });
+  expect(first.messages.map((message) => message.body)).toEqual(["m1", "m2", "m3"]);
+  expect(first).toMatchObject({ hasOlder: false, hasNewer: true });
+  const next = await pages.page(workspaceId, users.reader.id, discussionId, {
+    afterSequence: 3,
+    limit: 3,
+  });
+  expect(next.messages.map((message) => message.body)).toEqual(["m4", "m5", "m6"]);
+  expect(next).toMatchObject({ hasOlder: true, hasNewer: true });
+  const tail = await pages.page(workspaceId, users.reader.id, discussionId, {
+    afterSequence: 6,
+    limit: 3,
+  });
+  expect(tail).toMatchObject({ hasOlder: true, hasNewer: false });
+});
+
+test("a reader with no seat reads the window around a message of a task's conversation", async () => {
+  const target = await db.message.findFirstOrThrow({
+    where: { conversationId: discussionId, body: "m4" },
+    select: { id: true },
+  });
+  const history = new ConversationHistory(db);
+  const around = await history.loadAround(workspaceId, users.reader.id, discussionId, target.id);
+  expect(around.anchorMessageId).toBe(target.id);
+  expect(around.messages.map((message) => message.body)).toContain("m4");
+  await expect(
+    history.loadAround(workspaceId, users.outsider.id, privateDiscussionId, target.id),
+  ).rejects.toMatchObject({ code: "NOT_FOUND" });
+});
+
+test("the unread count is others' messages past the read position, never notices or one's own", async () => {
+  const conversationId = await board("public", 20);
+  const [reader, other] = await Promise.all(
+    [users.reader.id, users.outsider.id].map((userId) =>
+      db.conversationMember.create({ data: { conversationId, workspaceId, userId } }),
+    ),
+  );
+  const say = (sequence: number, senderMemberId: string | null) =>
+    db.message.create({
+      data: { workspaceId, conversationId, body: `u${sequence}`, sequence, senderMemberId },
+    });
+  await say(2, other!.id);
+  await say(3, null);
+  await say(4, reader!.id);
+  await say(5, other!.id);
+  await say(6, other!.id);
+  await db.conversation.update({ where: { id: conversationId }, data: { lastSequence: 6 } });
+  const readThrough = (sequence: number, unreadFromSequence: number | null = null) =>
+    db.conversationMember.update({
+      where: { id: reader!.id },
+      data: { readThroughSequence: sequence, unreadFromSequence },
+    });
+  await readThrough(1);
+  expect(await pages.unreadCount(workspaceId, users.reader.id, conversationId)).toBe(3);
+  await readThrough(5);
+  expect(await pages.unreadCount(workspaceId, users.reader.id, conversationId)).toBe(1);
+  await readThrough(6, 5);
+  expect(await pages.unreadCount(workspaceId, users.reader.id, conversationId)).toBe(2);
+});
+
+test("a reader with no seat has nothing unread", async () => {
+  expect(await pages.unreadCount(workspaceId, users.outsider.id, discussionId)).toBe(0);
 });

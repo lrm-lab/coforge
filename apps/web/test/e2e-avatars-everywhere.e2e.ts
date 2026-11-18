@@ -70,14 +70,13 @@ test("names carry their faces", async () => {
         "open",
         `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${number}`,
       );
-      await browser(
-        "wait",
-        "--fn",
-        `${pageHydrated} && [...(${dialog}?.querySelectorAll('[role="tab"]') ?? [])].some((el) => el.textContent.trim() === "History")`,
-      );
-      await evaluate(
-        `([...${dialog}.querySelectorAll('[role="tab"]')].find((el) => el.textContent.trim() === "History").setAttribute("data-e2e-history", ""), true)`,
-      );
+      const actions = `${dialog}?.querySelector('button[aria-label="More actions for task #${number}"]')`;
+      await browser("wait", "--fn", `${pageHydrated} && ${actions} != null`);
+      await evaluate(`(${actions}.setAttribute("data-e2e-actions", ""), true)`);
+      await browser("click", "[data-e2e-actions]");
+      const fullHistory = `[...document.querySelectorAll('[role^="menuitem"]')].find((el) => el.textContent.trim() === "View full history")`;
+      await browser("wait", "--fn", `${fullHistory} != null`);
+      await evaluate(`(${fullHistory}.setAttribute("data-e2e-history", ""), true)`);
       await browser("click", "[data-e2e-history]");
       await browser("wait", "--fn", `${dialog}.textContent.includes("Owner: ")`);
       await browser("wait", "500");

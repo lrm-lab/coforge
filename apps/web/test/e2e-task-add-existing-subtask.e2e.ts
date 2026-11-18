@@ -181,23 +181,14 @@ test("an existing Task is put under the open one, and one under another parent i
         await Bun.sleep(100);
       expect(await parentOf(login!)).toBe(task);
 
-      // The sub-tasks tab lists both, with one "Add sub-task" button. Read afresh, as
+      // The sub-tasks section lists both, with one "Add sub-task" button. Read afresh, as
       // e2e-task-relation-pickers does: the popup's own copy follows by announcement.
       await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${task}`);
+      const section = `${popup}?.querySelector('section[aria-label="Sub-tasks"]')`;
       await browser(
         "wait",
         "--fn",
-        `${pageHydrated} && [...(${popup}?.querySelectorAll('[role="tab"]') ?? [])].some((el) => el.textContent.startsWith("Sub-tasks"))`,
-      );
-      await mark(
-        `[...(${popup}?.querySelectorAll('[role="tab"]') ?? [])].find((el) => el.textContent.startsWith("Sub-tasks"))`,
-        "tab",
-      );
-      await browser("click", '[data-e2e="tab"]');
-      await browser(
-        "wait",
-        "--fn",
-        `${popup}?.textContent.includes(${JSON.stringify(name("Write the docs"))}) && ${popup}?.textContent.includes(${JSON.stringify(name("Fix login"))}) && ${popup}?.textContent.includes("Add sub-task")`,
+        `${pageHydrated} && ${section}?.textContent.includes(${JSON.stringify(name("Write the docs"))}) && ${section}?.textContent.includes(${JSON.stringify(name("Fix login"))}) && ${section}?.querySelectorAll('button[aria-label="Add sub-task"]').length === 1`,
       );
       await shoot(`${label}-subtasks`);
       expect((await browser("errors")).trim()).toBe("");

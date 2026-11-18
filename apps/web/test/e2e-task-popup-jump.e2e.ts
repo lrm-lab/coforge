@@ -18,15 +18,15 @@ import {
 } from "./helpers/browser-e2e";
 
 /**
- * Jump to latest over a Task discussion that fits (Frank, 11-06, task #coforge-ui:#10): a pane
- * that grows back sends no scroll event, so its resize must say the reader is at the latest.
- * Screenshots go under `.artifacts/e2e/task-popup-jump/`.
+ * A Task popup offers a way down only to new replies: a reader who scrolls up through a discussion
+ * with nothing unread gets no "Jump to latest", whether it overflows or fits again (task
+ * #coforge-ui:#10). Screenshots go under `.artifacts/e2e/task-popup-jump/`.
  */
 const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL!;
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-popup-jump");
 
-test("a discussion that fits again drops Jump to latest", async () => {
+test("a Task popup offers no Jump to latest when nothing is unread", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `task-popup-jump-${process.pid}`);
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);
@@ -93,18 +93,17 @@ test("a discussion that fits again drops Jump to latest", async () => {
     expect(await evaluate<boolean>(`${backToBottom} === null`)).toBe(true);
     // The pane narrows until it overflows (a long draft, a status bar) and the reader goes up.
     await evaluate(`(${history}.style.maxHeight = "60px", true)`);
-    await browser(
-      "wait",
-      "--fn",
-      `${history}.scrollHeight > ${history}.clientHeight + 48 && ${history}.scrollTop > 48`,
-    );
+    await browser("wait", "--fn", `${history}.scrollHeight > ${history}.clientHeight + 48`);
+    await evaluate(`(${history}.scrollTop = ${history}.scrollHeight, true)`);
+    await browser("wait", "--fn", `${history}.scrollTop > 48`);
     await evaluate(
       `(${history}.dispatchEvent(new WheelEvent("wheel", { deltaY: -600, bubbles: true })), ${history}.scrollTop = 0, true)`,
     );
-    await browser("wait", "--fn", `${backToBottom} !== null`);
-    // The pane grows back. Its scrollTop stays 0, so no scroll event says it fits again.
+    await browser("wait", "500");
+    expect(await evaluate<boolean>(`${backToBottom} === null`)).toBe(true);
     await evaluate(`(${history}.style.maxHeight = "", true)`);
-    await browser("wait", "--fn", `${backToBottom} === null`);
+    await browser("wait", "500");
+    expect(await evaluate<boolean>(`${backToBottom} === null`)).toBe(true);
     await browser("screenshot", join(artifacts, "fits.png"));
   } finally {
     await browser("close").catch(() => undefined);

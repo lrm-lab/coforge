@@ -14,7 +14,7 @@ import {
 
 /**
  * Esc steps back one popup at a time inside one channel (task #478): from a parent's popup, a
- * sub-task opened from its Sub-tasks tab, and from a sub-task's popup, the parent opened from its
+ * sub-task opened from its Sub-tasks section, and from a sub-task's popup, the parent opened from its
  * properties. Each time Esc returns to the popup it was opened from, and only that one closes on
  * the next Esc. On the channel's page and on the Tasks page, on a desktop and a phone.
  *
@@ -119,10 +119,9 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
     ] as const) {
       await browser("set", "viewport", String(width), String(height));
       for (const [where, page] of Object.entries(pages)) {
-        // From the parent's Sub-tasks tab into the sub-task, then Esc back to the parent.
+        // From the parent's Sub-tasks section into the sub-task, then Esc back to the parent.
         await browser("open", page(parent));
         await browser("wait", "--fn", `${pageHydrated} && ${showing(parentTitle)}`);
-        await pressText("子任务", '[role="tab"]');
         await browser(
           "wait",
           "--fn",
@@ -172,7 +171,6 @@ test("Esc steps back to the popup a sub-task or a parent was opened from", async
       await browser("open", pages.channel(parent));
       await browser("wait", "--fn", `${pageHydrated} && ${showing(parentTitle)}`);
       if (state === "step") {
-        await pressText("子任务", '[role="tab"]');
         await browser(
           "wait",
           "--fn",

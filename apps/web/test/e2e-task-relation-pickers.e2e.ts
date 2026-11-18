@@ -225,7 +225,7 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
       expect((await db.task.findUniqueOrThrow({ where: { id: link!.taskId } })).description).toBe(
         `Copy notes ${tail}`,
       );
-      // The sub-task's trail opens its parent in place, and the parent's Sub-tasks tab appears
+      // The sub-task's trail opens its parent in place, and the parent's Sub-tasks section appears
       // once the copy's announcement reaches its view: the front door gives this run the realtime
       // connection production has, so no reload is needed.
       await browser(
@@ -239,7 +239,7 @@ test("the Task popup's menu sets a parent, a Task to wait on and a sub-task", as
       await browser(
         "wait",
         "--fn",
-        `${popup} !== undefined && [...(${popup}?.querySelectorAll('[role="tab"]') ?? [])].some((el) => el.textContent.includes("Sub-tasks"))`,
+        `${popup}?.querySelector('section[aria-label="Sub-tasks"]') != null`,
       );
       await shoot(`${label}-done`);
       void design;

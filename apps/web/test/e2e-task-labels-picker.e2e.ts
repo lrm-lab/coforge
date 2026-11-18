@@ -259,14 +259,22 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
     void 0;
     // History names each label and priority change, instead of leaving an empty row.
     await run({ operation: "update", number, priority: "high" });
-    const history = `[...${dialog}.querySelectorAll('[role="tab"]')].find((el) => el.textContent.includes("History"))`;
-    await evaluate(`(${history}.click(), true)`);
+    const actions = `${dialog}.querySelector('button[aria-label="More actions for task #${number}"]')`;
+    await evaluate(`(${actions}.setAttribute("data-e2e-actions", ""), true)`);
+    await browser("click", "[data-e2e-actions]");
+    const fullHistory = `[...document.querySelectorAll('[role^="menuitem"]')].find((el) => el.textContent.trim() === "View full history")`;
+    await browser("wait", "--fn", `${fullHistory} != null`);
+    await evaluate(`(${fullHistory}.setAttribute("data-e2e-history", ""), true)`);
+    await browser("click", "[data-e2e-history]");
     const inPopup = (text: string) => `${dialog}.textContent.includes(${JSON.stringify(text)})`;
     await browser("wait", "--fn", `${inPopup("Changed labels")} && ${inPopup("Changed priority")}`);
     expect(await evaluate<boolean>(inPopup(`Added: ${name("Motion")}`))).toBe(true);
     expect(await evaluate<boolean>(inPopup("Priority: None → High"))).toBe(true);
     await shoot("desktop-2b-history");
     await browser("press", "Escape");
+    await browser("wait", "--fn", `${dialog} != null && !${inPopup("Changed labels")}`);
+    await browser("press", "Escape");
+    await browser("wait", "--fn", `${dialog} == null`);
 
     // The board: the card shows its labels; a label pick keeps the Tasks that carry it, and
     // "No label" the ones with none.
@@ -296,51 +304,14 @@ test("labels go on and off a Task, are made from a name, show on cards and filte
     await browser("wait", "--fn", `${filterItem(name("Bug"))} != null`);
     expect(await evaluate<boolean>(`${filterItem(name("Design"))} == null`)).toBe(true);
 
-    await run({
-      operation: "amend",
-      number,
-      description:
-        "The login page flickers white for a moment on a slow connection before the form shows. Seen on Safari and Chrome.",
-    });
-    // On a desktop a popup with a discussion has one height, whatever its description: the
-    // discussion keeps its room and the description is cut, to open on a tap.
-    await browser("open", popup);
-    const discussion = `${dialog}?.querySelector('[role="tabpanel"]')`;
-    await browser("wait", "--fn", `${pageHydrated} && ${discussion} != null`);
-    expect(
-      Math.round(await evaluate<number>(`${dialog}.getBoundingClientRect().height`)),
-    ).toBeGreaterThanOrEqual(700);
-    expect(await evaluate<number>(`${discussion}.getBoundingClientRect().height`)).toBeGreaterThan(
-      256,
-    );
-    await shoot("desktop-6-description");
     await browser("set", "viewport", "390", "844");
     await browser("open", popup);
     const chipRow = `${dialog}?.querySelector('dl[data-layout="chips"]')`;
     await browser("wait", "--fn", `${pageHydrated} && ${chipRow} != null`);
-    // A phone shows the properties as one row of chips under the title, and two lines of the
-    // description, so the discussion keeps the screen.
-    expect(await evaluate<number>(`${chipRow}.getBoundingClientRect().height`)).toBeLessThan(40);
     expect(
       await evaluate<boolean>(`${chipRow}.textContent.includes(${JSON.stringify(name("Bug"))})`),
     ).toBe(true);
-    const description = `${dialog}.querySelector('button[aria-label="Show the whole description"]')`;
-    // How many lines the description shows, open or not.
-    const lines = async () =>
-      Math.round(
-        await evaluate<number>(`(() => {
-          const text = [...${dialog}.querySelectorAll("button[aria-expanded] > span")]
-            .find((el) => el.textContent.includes("flickers"));
-          return text.getBoundingClientRect().height / parseFloat(getComputedStyle(text).lineHeight);
-        })()`),
-      );
-    expect(await lines()).toBe(2);
     await shoot("phone-0-chips");
-    await evaluate(`(${description}.click(), true)`);
-    expect(await lines()).toBeGreaterThan(2);
-    await evaluate(
-      `(${dialog}.querySelector('button[aria-label="Shorten the description"]').click(), true)`,
-    );
     await openPicker();
     await shoot("phone-1-picker");
     // Phone: the create state with its swatches, the recolor popover (closed by the back gesture)

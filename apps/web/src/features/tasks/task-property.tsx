@@ -24,8 +24,6 @@ export function TaskProperty({
     <div
       className={cn(
         "flex min-h-8 min-w-0 items-center gap-3",
-        // Beside the pages, the label sits above its value, as Jira's Details.
-        "[[data-layout=sidebar]_&]:flex-col [[data-layout=sidebar]_&]:items-start [[data-layout=sidebar]_&]:gap-1",
         // On a phone each property is a block in one row, as in the form that makes a Task (task
         // #70): its value alone, the label for readers. A block is at most 14rem; a longer value
         // (an owner's, a Project's or a parent's name) truncates in it.
@@ -38,7 +36,7 @@ export function TaskProperty({
     >
       <dt
         className={cn(
-          "w-20 shrink-0 text-sm text-tertiary [[data-layout=sidebar]_&]:w-auto [[data-layout=sidebar]_&]:text-xs",
+          "w-20 shrink-0 text-sm text-tertiary [[data-layout=sidebar]_&]:w-16",
           labelInChip
             ? "[[data-layout=chips]_&]:mr-1.5 [[data-layout=chips]_&]:w-auto [[data-layout=chips]_&]:text-xs"
             : "[[data-layout=chips]_&]:sr-only",
@@ -47,7 +45,7 @@ export function TaskProperty({
       >
         {label}
       </dt>
-      <dd className="flex min-w-0 flex-1 items-center [[data-layout=chips]_&]:flex-initial [[data-layout=create]_&]:flex-initial [[data-layout=sidebar]_&]:w-full">
+      <dd className="flex min-w-0 flex-1 items-center [[data-layout=chips]_&]:flex-initial [[data-layout=create]_&]:flex-initial">
         {children}
       </dd>
     </div>
@@ -71,7 +69,7 @@ export function UnsetValue({
     <span className="inline-flex min-w-0 items-center gap-1.5 text-sm text-tertiary">
       <Icon
         aria-hidden="true"
-        className="hidden size-4 shrink-0 text-fg-quaternary [[data-layout=create]_&]:block"
+        className="hidden size-4 shrink-0 text-fg-quaternary [[data-layout=create]_&]:block [[data-layout=sidebar]_&]:block"
       />
       <span className="truncate [[data-layout=create]_&]:hidden">{text}</span>
       <span className="hidden truncate [[data-layout=create]_&]:inline">{field}</span>

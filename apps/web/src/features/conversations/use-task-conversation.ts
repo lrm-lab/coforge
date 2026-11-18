@@ -1,77 +1,102 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { aroundWindowCursor } from "#src/lib/conversation-window";
 import {
+  loadTaskConversationUnread,
   markTaskConversationRead,
   openTaskConversation,
 } from "#src/features/tasks/task-conversation.functions";
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
 import { useConversationOpened } from "./use-conversation-open";
 import { taskConversationQueryKey } from "./conversation-query-keys";
+import { conversationAroundQuery } from "./conversation-queries";
 import { conversationRealtimeChannel, decodeMessageAvailableEvent } from "./conversation-realtime";
 import { loadTaskConversation, loadTaskConversationUpdates } from "./conversations.functions";
 import {
   catchUpTaskConversation,
-  loadTaskBackTo,
-  withNewest,
-  type Page,
+  replaceTaskWindowAround,
+  replaceTaskWindowWithNewest,
+  taskConversationWindow,
+  taskWindowMessages,
+  TASK_WINDOW_START,
+  withViewerSeat,
 } from "./task-conversation-window";
 
-/**
- * A Task's own conversation, as its popup reads it: the newest page, older ones on request, and
- * what arrives after (`message.available.v1` on the conversation's channel). The viewer's read
- * position follows the newest message while they have a seat.
- *
- * It makes nothing by being read. `ensure` makes the conversation and the viewer's seat in it
- * (`openTaskConversation`), once however many ask at the same time; a reply makes both on the
- * server, and `ensure` then only names the conversation.
- */
+const taskUnreadQueryKey = (conversationId: string | undefined) =>
+  ["conversation", "task-unread", conversationId] as const;
+
 export function useTaskConversation({
   known,
   board,
+  jumpMessage,
 }: {
-  /** The Task's conversation; absent until someone has spoken there. */
   known: string | undefined;
-  /** The Task by its board and number. */
   board: { conversationId: string; number: number };
+  jumpMessage?: string;
 }) {
   const load = useServerFn(loadTaskConversation);
   const loadUpdates = useServerFn(loadTaskConversationUpdates);
+  const loadUnread = useServerFn(loadTaskConversationUnread);
   const open = useServerFn(openTaskConversation);
   const markRead = useServerFn(markTaskConversationRead);
   const queryClient = useQueryClient();
-  // The conversation made here, until the Task itself names it.
   const [made, setMade] = useState<string>();
   const conversationId = known ?? made;
-  const pages = useInfiniteQuery({
-    queryKey: taskConversationQueryKey(conversationId),
-    queryFn: ({ pageParam }) =>
-      load({ data: { conversationId: conversationId!, beforeSequence: pageParam } }),
-    initialPageParam: undefined as number | undefined,
-    getNextPageParam: (page) => (page.hasOlder ? page.messages[0]?.sequence : undefined),
-    enabled: conversationId !== undefined,
-  });
-  const newest = pages.data?.pages[0];
-  const seated = Boolean(newest?.senderMemberId);
+  const followingLatest = useRef(false);
+  const setFollowingLatest = useCallback((following: boolean) => {
+    followingLatest.current = following;
+  }, []);
 
-  // One catch-up at a time: a send, a publication and a resubscribe asking together share it.
+  const landing = useQuery({
+    ...conversationAroundQuery(conversationId ?? "", jumpMessage ?? ""),
+    enabled: Boolean(conversationId && jumpMessage),
+    retry: false,
+  });
+  const waitingForLanding = Boolean(conversationId && jumpMessage) && landing.isPending;
+  const { query, loadInitialPage } = taskConversationWindow(
+    conversationId,
+    (page, signal) => load({ data: { conversationId: conversationId!, ...page }, signal }),
+    {
+      start: landing.data ? aroundWindowCursor(landing.data.messages) : TASK_WINDOW_START,
+      followingLatest: () => followingLatest.current,
+    },
+  );
+  const pages = useInfiniteQuery({
+    ...query,
+    enabled: conversationId !== undefined && !waitingForLanding,
+  });
+  const newest = pages.data?.pages.at(-1);
+  const seated = Boolean(newest?.senderMemberId);
+  const hasNewer = newest?.hasNewer ?? false;
+  const messages = useMemo(() => taskWindowMessages(pages.data), [pages.data]);
+
+  const unread = useQuery({
+    queryKey: taskUnreadQueryKey(conversationId),
+    queryFn: () => loadUnread({ data: { conversationId: conversationId! } }),
+    enabled: Boolean(conversationId && seated),
+  });
+
+  const readTail = useCallback(
+    (id: string) =>
+      catchUpTaskConversation(queryClient, id, (data) => loadUpdates({ data })).catch(() => {}),
+    [queryClient, loadUpdates],
+  );
   const catchingUp = useRef<Promise<void>>(undefined);
   const catchUp = useCallback(
     (id: string) => {
-      catchingUp.current ??= catchUpTaskConversation(queryClient, id, (data) =>
-        loadUpdates({ data }),
-      )
-        // A missed read is made up by the next publication or resubscribe.
-        .catch(() => {})
-        .finally(() => (catchingUp.current = undefined));
+      void queryClient.invalidateQueries(
+        { queryKey: taskUnreadQueryKey(id) },
+        { cancelRefetch: false },
+      );
+      catchingUp.current ??= readTail(id).finally(() => (catchingUp.current = undefined));
       return catchingUp.current;
     },
-    [queryClient, loadUpdates],
+    [queryClient, readTail],
   );
   useRealtimeSubscription({
     channel: conversationId ? conversationRealtimeChannel(conversationId) : undefined,
     recoverable: true,
-    // A resubscribe may have missed replies.
     onSubscribed: useCallback(() => {
       if (conversationId) void catchUp(conversationId);
     }, [catchUp, conversationId]),
@@ -81,49 +106,68 @@ export function useTaskConversation({
           if (decodeMessageAvailableEvent(data).conversationId === conversationId)
             void catchUp(conversationId);
         } catch {
-          // Not a new message: reactions and the like, which this stream does not follow.
+          return;
         }
       },
       [catchUp, conversationId],
     ),
   });
-  // A reply published while the first page was on its way found nothing to join: look once more.
   const loaded = pages.isSuccess;
   useEffect(() => {
     if (loaded && conversationId) void catchUp(conversationId);
   }, [loaded, conversationId, catchUp]);
 
-  // The reader has seen up to the newest message: their read position follows it, but only once
-  // this open has read where their unread starts, or the pane's divider would find nothing unread
-  // (task #99), as a channel's cursor waits for its open.
   const opened = useConversationOpened(
     conversationId ?? "",
     undefined,
     Boolean(conversationId && seated),
   );
-  const last = newest?.messages.at(-1)?.sequence;
+  const last = messages.at(-1)?.sequence;
   const readBefore = newest?.readThroughSequence ?? 0;
   const readThrough = useRef(0);
+  const reachedLatest = useRef(false);
   const { conversationId: boardId, number } = board;
+  const readingRef = useRef({ last, hasNewer, readBefore, seated, opened });
+  readingRef.current = { last, hasNewer, readBefore, seated, opened };
+  const markThrough = useCallback(
+    (through: number) => {
+      const now = readingRef.current;
+      if (!now.seated || !now.opened) return;
+      if (through <= Math.max(readThrough.current, now.readBefore)) return;
+      void markRead({ data: { conversationId: boardId, number, throughSequence: through } }).then(
+        () => {
+          readThrough.current = Math.max(readThrough.current, through);
+          if (through === readingRef.current.last && !readingRef.current.hasNewer)
+            queryClient.setQueryData(taskUnreadQueryKey(conversationId), { unreadCount: 0 });
+          else void queryClient.invalidateQueries({ queryKey: taskUnreadQueryKey(conversationId) });
+        },
+        () => {},
+      );
+    },
+    [markRead, queryClient, boardId, number, conversationId],
+  );
+  const readLatest = useCallback(() => {
+    const now = readingRef.current;
+    if (!now.last || now.hasNewer) return;
+    reachedLatest.current = true;
+    markThrough(now.last);
+  }, [markThrough]);
   useEffect(() => {
-    if (!last || !seated || !opened || last <= Math.max(readThrough.current, readBefore)) return;
-    void markRead({ data: { conversationId: boardId, number, throughSequence: last } }).then(
-      () => (readThrough.current = Math.max(readThrough.current, last)),
-      () => {},
-    );
-  }, [last, seated, opened, readBefore, markRead, boardId, number]);
+    if (opened && reachedLatest.current) readLatest();
+  }, [opened, readLatest]);
+  useEffect(() => {
+    if (reachedLatest.current && followingLatest.current) readLatest();
+  }, [last, readLatest]);
 
-  // One opening serves every caller at once; a failed one does not stand in for the next try.
   const opening = useRef<Promise<string>>(undefined);
   const ensure = useCallback(() => {
     opening.current ??= open({ data: { conversationId: boardId, number } }).then(
       async ({ conversationId: opened }) => {
         setMade(opened);
-        // The viewer has a seat now: the newest page says so once read again.
         const page = await load({ data: { conversationId: opened } }).catch(() => undefined);
         if (page)
-          queryClient.setQueryData<InfiniteData<Page>>(taskConversationQueryKey(opened), (data) =>
-            withNewest(data, (first) => ({ ...first, senderMemberId: page.senderMemberId })),
+          queryClient.setQueryData(taskConversationQueryKey(opened), (data: typeof pages.data) =>
+            withViewerSeat(data, page.senderMemberId),
           );
         return opened;
       },
@@ -135,17 +179,53 @@ export function useTaskConversation({
     return opening.current;
   }, [open, load, queryClient, boardId, number]);
 
-  // The pages run newest first; the stream reads oldest first.
-  const messages = useMemo(
-    () => [...(pages.data?.pages ?? [])].reverse().flatMap((page) => page.messages),
-    [pages.data],
+  const { fetchNextPage, fetchPreviousPage, hasPreviousPage } = pages;
+  const loadOlder = useCallback(async () => {
+    await fetchPreviousPage({ throwOnError: true });
+  }, [fetchPreviousPage]);
+  const loadNewer = useCallback(async () => {
+    await fetchNextPage({ throwOnError: true });
+    if (conversationId) await readTail(conversationId);
+  }, [fetchNextPage, readTail, conversationId]);
+  const loadMessageAround = useCallback(
+    async (messageId: string) => {
+      if (!conversationId) throw new Error("message not found");
+      const around = await queryClient.fetchQuery(
+        conversationAroundQuery(conversationId, messageId),
+      );
+      await replaceTaskWindowAround(queryClient, conversationId, around);
+      return around.anchorMessageId;
+    },
+    [queryClient, conversationId],
   );
-  const { fetchNextPage } = pages;
-  const loadBackTo = useCallback(
-    (messageId: string) =>
-      loadTaskBackTo({ queryClient, conversationId, messageId, catchUp, fetchNextPage }),
-    [fetchNextPage, queryClient, conversationId, catchUp],
-  );
+  const showLatest = useCallback(async () => {
+    if (!conversationId) return;
+    await replaceTaskWindowWithNewest(queryClient, conversationId, await loadInitialPage());
+    await readTail(conversationId);
+    const tail = taskWindowMessages(
+      queryClient.getQueryData(taskConversationQueryKey(conversationId)),
+    ).at(-1);
+    reachedLatest.current = true;
+    if (tail) markThrough(tail.sequence);
+  }, [queryClient, conversationId, loadInitialPage, readTail, markThrough]);
 
-  return { conversationId, made, pages, newest, seated, messages, catchUp, ensure, loadBackTo };
+  return {
+    conversationId,
+    made,
+    pages,
+    newest,
+    seated,
+    messages,
+    unreadCount: seated ? (unread.data?.unreadCount ?? 0) : undefined,
+    hasOlder: hasPreviousPage,
+    hasNewer,
+    catchUp,
+    ensure,
+    loadOlder,
+    loadNewer,
+    loadMessageAround,
+    showLatest,
+    readLatest,
+    setFollowingLatest,
+  };
 }

@@ -16,8 +16,9 @@ import {
  * A Task's popup on a phone is a page with a top bar (task #70): close on the left, the channel's
  * group avatar, name and the Task's number centred, More on the right, each 44px to touch. The
  * title does not repeat the status the first chip shows, and the chips are one row of blocks, as
- * in New task (task #54), a long owner's name truncating in its block rather than wrapping. A
- * desktop keeps close on the right and the status before the title. Screenshots, light and dark,
+ * in New task (task #54), a long owner's name truncating in its block rather than wrapping. The
+ * description shows in full at the head of the discussion's one scroller. A desktop keeps close on
+ * the right, the properties in a sidebar and the popup one height. Screenshots, light and dark,
  * at 390 and 320 wide, are written under `.artifacts/e2e/task-popup-phone-bar/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
@@ -74,6 +75,9 @@ test("a Task's popup on a phone has a top bar, and its properties are one row of
   const titleIcon = `${dialog}.querySelector('h2 svg')`;
   const chips = `[...${dialog}.querySelectorAll('dl[data-layout="chips"] > div')]`;
   const ownerName = `${dialog}.querySelector('dl[data-layout="chips"] span.break-words')`;
+  const discussion = `${dialog}.querySelector('[data-scroll-restoration-id^="conversation-"]')`;
+  const description = `[...${dialog}.querySelectorAll("*")].filter((el) => el.textContent.includes("Seen on Safari and Chrome.")).at(-1)`;
+  const inDiscussion = `${discussion}.contains(${description})`;
   try {
     const { tasks } = await new TaskBoard(db).execute(
       { workspaceId, userId: DEV_BROWSER_USER.id },
@@ -82,6 +86,8 @@ test("a Task's popup on a phone has a top bar, and its properties are one row of
         conversationId: channel.id,
         operation: "create",
         title: `Unify the push notification copy on iOS and Android and check the icons ${tail}`,
+        description:
+          "The login page flickers white for a moment on a slow connection before the form shows. Seen on Safari and Chrome.",
       } as Parameters<TaskBoard["execute"]>[1],
     );
     const number = tasks[0]!.number;
@@ -131,7 +137,7 @@ test("a Task's popup on a phone has a top bar, and its properties are one row of
         `e2e-phone-bar-${tail}#${number}`,
       );
       // The title does not repeat the status; the first chip says it.
-      expect(await evaluate<boolean>(`${titleIcon}.checkVisibility()`)).toBe(false);
+      expect(await evaluate<boolean>(`${titleIcon}?.checkVisibility() ?? false`)).toBe(false);
       // One row of blocks of one height: the long owner's name truncates rather than wrapping.
       const heights = await evaluate<number[]>(
         `${chips}.filter((el) => el.checkVisibility()).map((el) => Math.round(el.getBoundingClientRect().height))`,
@@ -140,13 +146,31 @@ test("a Task's popup on a phone has a top bar, and its properties are one row of
       expect(await evaluate<boolean>(`${ownerName}.scrollWidth > ${ownerName}.clientWidth`)).toBe(
         true,
       );
+      expect(await evaluate<boolean>(inDiscussion)).toBe(true);
+      const lines = await evaluate<number>(`(() => {
+        const range = document.createRange();
+        range.selectNodeContents(${description});
+        return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+      })()`);
+      expect(lines).toBeGreaterThan(2);
       await shots(`phone-${width}`);
     }
 
-    // A desktop keeps its bar: close on the right after More, the status before the title.
     await open("1440", "900");
     expect((await box(close))!.left).toBeGreaterThan((await box(more))!.right);
-    expect(await evaluate<boolean>(`${titleIcon}.checkVisibility()`)).toBe(true);
+    expect(await evaluate<boolean>(`${titleIcon} === null`)).toBe(true);
+    expect(
+      await evaluate<boolean>(
+        `${dialog}.querySelector('aside dl[data-layout="sidebar"]') !== null`,
+      ),
+    ).toBe(true);
+    expect(
+      await evaluate<number>(`${dialog}.getBoundingClientRect().height`),
+    ).toBeGreaterThanOrEqual(700);
+    expect(await evaluate<number>(`${discussion}.getBoundingClientRect().height`)).toBeGreaterThan(
+      256,
+    );
+    expect(await evaluate<boolean>(inDiscussion)).toBe(true);
     await shots("desktop");
   } finally {
     await browser("close").catch(() => undefined);

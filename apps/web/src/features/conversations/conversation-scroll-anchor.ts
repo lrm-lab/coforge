@@ -1,6 +1,7 @@
 /** The reading position around a page load: the row at the top of the viewport and its content's
  * offset, plus the raw height and scrollTop for the one case the row cannot cover. */
 export interface ScrollAnchor {
+  lead?: boolean;
   rowId?: string;
   offset: number;
   height: number;
@@ -17,6 +18,14 @@ export function scrollAnchorOf(row: HTMLElement): HTMLElement {
  * entirely above the container's top edge is the one the reader is looking at. */
 export function captureScrollAnchor(history: HTMLDivElement): ScrollAnchor {
   const containerTop = history.getBoundingClientRect().top;
+  const lead = history.querySelector<HTMLElement>("[data-scroll-lead]")?.getBoundingClientRect();
+  if (lead && lead.bottom > containerTop)
+    return {
+      lead: true,
+      offset: lead.top - containerTop,
+      height: history.scrollHeight,
+      top: history.scrollTop,
+    };
   let rowId: string | undefined;
   let offset = 0;
   for (const row of history.querySelectorAll<HTMLElement>("li[data-message-id]")) {
@@ -41,6 +50,13 @@ export function restoreScrollAnchor(
   anchor: ScrollAnchor | undefined,
 ) {
   if (!anchor || !history) return;
+  const lead = anchor.lead && history.querySelector<HTMLElement>("[data-scroll-lead]");
+  if (lead) {
+    const delta =
+      lead.getBoundingClientRect().top - (history.getBoundingClientRect().top + anchor.offset);
+    if (delta) history.scrollTop += delta;
+    return;
+  }
   if (anchor.rowId) {
     const id = CSS.escape(anchor.rowId);
     const row =

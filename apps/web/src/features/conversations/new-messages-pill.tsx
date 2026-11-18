@@ -8,14 +8,20 @@ export function NewMessagesPill({
   conversationId,
   rootId,
   viewerId,
+  unreadCount,
+  onlyNew = false,
   onShowLatest,
 }: {
   conversationId: string;
   rootId: string | undefined;
   viewerId: string | undefined;
+  unreadCount?: number;
+  onlyNew?: boolean;
   onShowLatest: () => void;
 }) {
-  const count = usePushedNewMessages({ conversationId, rootId, viewerId });
+  const pushed = usePushedNewMessages({ conversationId, rootId, viewerId });
+  const count = unreadCount ?? pushed;
+  if (onlyNew && count === 0) return null;
   const label =
     count === 0
       ? m.conversation_back_to_bottom()

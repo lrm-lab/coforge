@@ -1,3 +1,4 @@
+import { HUMAN_UNREAD_BASE_SQL } from "./human-unread.server";
 import { LIVE_TASK_WHERE, taskMentions } from "#src/server/tasks/task-view.server";
 import {
   taskEventsInWindow,
@@ -52,7 +53,7 @@ export class TaskConversationPages {
     const { activeMemberId, task } = await this.authorize(workspaceId, userId, conversationId);
     const limit = Math.min(window.limit ?? 50, 100);
     const forward = window.afterSequence !== undefined;
-    const [rows, seat, newest, board] = await Promise.all([
+    const [rows, seat, newest, board, olderHeld] = await Promise.all([
       this.db.message.findMany({
         where: {
           conversationId,
@@ -100,11 +101,19 @@ export class TaskConversationPages {
           },
         },
       }),
+      forward
+        ? this.db.message.findFirst({
+            where: { conversationId, threadRootId: null, sequence: { lte: window.afterSequence } },
+            select: { id: true },
+          })
+        : null,
     ]);
-    const { hasOlder, hasNewer } = windowPageFlags(
+    const flags = windowPageFlags(
       forward ? "forward" : window.beforeSequence ? "backward" : "initial",
       rows.length > limit,
     );
+    const hasOlder = forward ? olderHeld !== null : flags.hasOlder;
+    const { hasNewer } = flags;
     const pageRows = rows.slice(0, limit);
     const messages = forward ? pageRows : pageRows.reverse();
     return {
@@ -114,16 +123,33 @@ export class TaskConversationPages {
       viewerId: userId,
       // The viewer's seat keeps their read position; without one, whatever page this is, nothing is
       // unread for them.
-      senderMemberId: activeMemberId ?? null,
+      senderMemberId: activeMemberId,
       readThroughSequence: seat?.readThroughSequence ?? newest.lastSequence,
       othersReadThroughSequence: 0,
-      threads: [],
+      threads: {},
       threadReadThrough: {},
       mentionables: conversationMentionables(workspaceId, board),
       hasOlder,
       hasNewer,
       messages: await mapBrowserMessages(this.db, messages, workspaceId),
     };
+  }
+
+  /**
+   * How many top-level messages with a sender (never a system notice, never the viewer's own) lie
+   * past the viewer's read position or their mark-as-unread marker (`HUMAN_UNREAD_BASE_SQL`'s
+   * rule). Nothing for a viewer with no seat.
+   */
+  async unreadCount(workspaceId: string, userId: string, conversationId: string) {
+    const { activeMemberId } = await this.authorize(workspaceId, userId, conversationId);
+    if (!activeMemberId) return 0;
+    const [unread] = await this.db.$queryRaw<{ count: number }[]>`
+      SELECT COUNT(*)::int AS "count"
+      FROM "conversation_members" cm
+      JOIN "messages" m ON m."conversationId" = cm."conversationId" AND m."threadRootId" IS NULL
+        AND ${HUMAN_UNREAD_BASE_SQL}
+      WHERE cm."id" = ${activeMemberId}::uuid`;
+    return unread?.count ?? 0;
   }
 
   /** What arrived after `afterSequence`. */

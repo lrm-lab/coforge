@@ -162,55 +162,48 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       members={conversation.mentionables}
       currentMemberId={conversation.senderMemberId || null}
       thread={
-        ownDiscussion
-          ? () => {
-              const own = earlierOpen ? (
+        ownDiscussion || openTaskMessageId !== undefined
+          ? (lead) => {
+              const head = earlier ? (
+                <>
+                  {lead}
+                  <TaskEarlierDiscussion
+                    replyCount={earlier.replyCount}
+                    open={earlierOpen}
+                    onOpenChange={(open) => setEarlierOf(open ? openTask.id : undefined)}
+                  />
+                </>
+              ) : (
+                lead
+              );
+              if (ownDiscussion && !earlierOpen)
+                return (
+                  <TaskDiscussionPane
+                    {...sidePaneProps}
+                    jumpMessage={taskPopup?.landingMessageId}
+                    {...popupProfile.openers}
+                    lead={head}
+                    conversationId={taskDiscussionId}
+                    board={{ conversationId: conversation.conversationId, number: openTask.number }}
+                    changedAt={openTask.updatedAt}
+                    mentionables={conversation.mentionables}
+                    emptyState={taskRepliesEmpty}
+                  />
+                );
+              return (
                 openTaskRoot && (
                   <ThreadPane
                     {...threadPaneProps(openTaskRoot)}
                     {...popupProfile.openers}
                     inTaskPopup
-                    readOnlyNotice={<></>}
+                    lead={head}
+                    readOnlyNotice={ownDiscussion ? <></> : undefined}
                     emptyState={taskRepliesEmpty}
                   />
                 )
-              ) : (
-                <TaskDiscussionPane
-                  {...sidePaneProps}
-                  jumpMessage={taskPopup?.landingMessageId}
-                  {...popupProfile.openers}
-                  conversationId={taskDiscussionId}
-                  board={{ conversationId: conversation.conversationId, number: openTask.number }}
-                  changedAt={openTask.updatedAt}
-                  mentionables={conversation.mentionables}
-                  emptyState={taskRepliesEmpty}
-                />
-              );
-              return earlier ? (
-                <TaskEarlierDiscussion
-                  replyCount={earlier.replyCount}
-                  open={earlierOpen}
-                  onOpenChange={(open) => setEarlierOf(open ? openTask.id : undefined)}
-                >
-                  {own}
-                </TaskEarlierDiscussion>
-              ) : (
-                own
               );
             }
-          : // A message's thread: its tab is there while the message is still being read, so the
-            // popup does not open on another tab and jump back.
-            openTaskMessageId === undefined
-            ? undefined
-            : () =>
-                openTaskRoot && (
-                  <ThreadPane
-                    {...threadPaneProps(openTaskRoot)}
-                    {...popupProfile.openers}
-                    inTaskPopup
-                    emptyState={taskRepliesEmpty}
-                  />
-                )
+          : undefined
       }
     />
   ) : null;

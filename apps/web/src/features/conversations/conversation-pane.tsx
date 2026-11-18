@@ -44,6 +44,7 @@ export function ConversationPane({
   onSend,
   root,
   inTaskPopup = false,
+  lead,
   onClose,
   threadContext,
   composerTarget,
@@ -220,18 +221,20 @@ export function ConversationPane({
     scrollToLatest,
     bottomPin,
   });
-  const { newerSentinelRef, trackReadingPosition, showLatestMessages } = useStreamPositioning({
-    reading,
-    conversation,
-    root,
-    openKey,
-    openBoundary,
-    jumpMessage,
-    messageListRef,
-    onLoadNewer,
-    onShowLatest,
-    onReadLatest,
-  });
+  const { newerSentinelRef, trackReadingPosition, showLatestMessages, latestInView } =
+    useStreamPositioning({
+      reading,
+      conversation,
+      root,
+      openKey,
+      openBoundary,
+      openAtTop: inTaskPopup,
+      jumpMessage,
+      messageListRef,
+      onLoadNewer,
+      onShowLatest,
+      onReadLatest,
+    });
 
   // The cards a thread asks include its root's, shown above the replies.
   const cardMessages = useMemo(
@@ -272,6 +275,7 @@ export function ConversationPane({
           >
             {/* The side room sits inside the scroller, so the scrollbar stays on the pane edge. */}
             <div className={column ? MESSAGE_COLUMN_CLASS : undefined}>
+              {lead && <div data-scroll-lead>{lead}</div>}
               {root && !inTaskPopup && root.weeklyReportHidden !== true && (
                 <ThreadRootMessage
                   conversationId={conversation.conversationId}
@@ -365,7 +369,11 @@ export function ConversationPane({
             threadRootId={root?.id ?? null}
             overhead={composerHost.overhead}
             viewerId={conversation.viewerId}
-            onShowLatest={followingLatest ? undefined : () => void showLatestMessages()}
+            unreadCount={conversation.unreadCount}
+            onlyNew={inTaskPopup}
+            onShowLatest={
+              followingLatest || latestInView ? undefined : () => void showLatestMessages()
+            }
           />
         </div>
 

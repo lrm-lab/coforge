@@ -8,6 +8,8 @@ export function ComposerEdgeOverlay({
   conversationId,
   threadRootId,
   viewerId,
+  unreadCount,
+  onlyNew,
   onShowLatest,
   overhead,
 }: {
@@ -15,6 +17,8 @@ export function ComposerEdgeOverlay({
   conversationId: string;
   threadRootId: string | null;
   viewerId: string | undefined;
+  unreadCount?: number;
+  onlyNew?: boolean;
   onShowLatest?: () => void;
   overhead?: ReactNode;
 }) {
@@ -27,6 +31,8 @@ export function ComposerEdgeOverlay({
               conversationId={conversationId}
               rootId={threadRootId ?? undefined}
               viewerId={viewerId}
+              unreadCount={unreadCount}
+              onlyNew={onlyNew}
               onShowLatest={onShowLatest}
             />
           )}

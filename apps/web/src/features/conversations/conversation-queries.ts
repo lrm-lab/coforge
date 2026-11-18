@@ -76,6 +76,16 @@ export function aroundWindow<A extends { anchorThreadRootId?: string }>({
   return window;
 }
 
+export function windowAround<
+  P,
+  A extends { anchorThreadRootId?: string; messages: readonly { sequence: number }[] },
+>(newest: P, around: A): InfiniteData<P, ConversationWindowCursor> {
+  return {
+    pages: [{ ...newest, ...aroundWindow(around) }],
+    pageParams: [aroundWindowCursor(around.messages)],
+  };
+}
+
 /** A bounded window around one message, kept in the same Query cache as the stream. */
 export const conversationAroundQuery = (conversationId: string, messageId: string) =>
   queryOptions({
@@ -371,10 +381,7 @@ export function useConversationQuery<M extends PageMessage, T extends Conversati
   const loadMessageAround = async (messageId: string): Promise<string> => {
     const around = await queryClient.fetchQuery(conversationAroundQuery(conversationId, messageId));
     await windowReadSettled(queryClient, query.queryKey);
-    setPages((pages) => ({
-      pages: [{ ...pages.pages.at(-1)!, ...aroundWindow(around) }],
-      pageParams: [aroundWindowCursor(around.messages)],
-    }));
+    setPages((pages) => windowAround(pages.pages.at(-1)!, around));
     return around.anchorMessageId;
   };
 

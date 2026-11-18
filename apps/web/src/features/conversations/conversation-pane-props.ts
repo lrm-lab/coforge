@@ -16,8 +16,9 @@ export type ConversationPaneProps = Omit<ConversationProps, "conversation" | "ag
   /** Whether this stream's read has completed - see `stream-state.ts`. */
   streamRead?: StreamRead;
   root?: DirectConversationView["messages"][number];
-  /** The Task popup's discussion: the popup shows the Task above it, in place of a header. */
+  /** The Task popup's discussion: it opens at the top, on the Task (`lead`), with no header. */
   inTaskPopup?: boolean;
+  lead?: ReactNode;
   onClose?: () => void;
   /** Where a thread lives, named after "Thread" in its header: `#channel` or `@name`. */
   threadContext?: string;
@@ -50,6 +51,6 @@ export type ConversationPaneProps = Omit<ConversationProps, "conversation" | "ag
   /** Called exactly once per consumed jump, to strip the param one-shot like a hash. */
   onJumpMessageConsumed?: () => void;
   /** False for a stream with no read cursor of its own (a Task popup's discussion the viewer has
-   * no seat in): it opens at its latest and draws no "New messages" divider. */
+   * no seat in): it draws no "New messages" divider. */
   keepsReadCursor?: boolean;
 };
