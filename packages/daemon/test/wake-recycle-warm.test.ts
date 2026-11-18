@@ -300,3 +300,48 @@ test("DaemonRuntime triggers proactive session.compact() at Working->Idle when c
     records.some((record) => record.properties.event === "agent.runtime.idle_compaction_started"),
   ).toBe(true);
 });
+
+test("TurnEndCompaction logs 5m progress and releases buffered deliveries at 10m timeout without canceling", async () => {
+  let settledCount = 0;
+  let progressCount = 0;
+  let unconfirmedCount = 0;
+  let resolveCompact: (() => void) | undefined;
+  const compaction = new TurnEndCompaction({
+    idle: () => true,
+    launchId: () => "launch-timeout",
+    provider: () => "codex",
+    envVars: () => undefined,
+    contextTokens: () => 260_000,
+    contextGeneration: () => 1,
+    needsSessionReset: () => false,
+    canCompact: () => true,
+    compact: () =>
+      new Promise<void>((resolve) => {
+        resolveCompact = resolve;
+      }),
+    progressNoticeMs: 10,
+    waitMs: 30,
+    onProgress: () => {
+      progressCount += 1;
+    },
+    onUnconfirmed: () => {
+      unconfirmedCount += 1;
+    },
+    onSettled: () => {
+      settledCount += 1;
+    },
+  });
+
+  expect(compaction.maybeCompact("agent-timeout")).toBe(true);
+  expect(compaction.isCompacting("agent-timeout")).toBe(true);
+  await new Promise((resolve) => setTimeout(resolve, 60));
+
+  expect(progressCount).toBe(1);
+  expect(unconfirmedCount).toBe(1);
+  expect(settledCount).toBe(1);
+  expect(compaction.isCompacting("agent-timeout")).toBe(false);
+
+  resolveCompact?.();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(settledCount).toBe(1);
+});
