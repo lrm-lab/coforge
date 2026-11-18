@@ -8,6 +8,7 @@ export function PhoneFormBar({
   pending,
   submitDisabled,
   cancelDisabled = pending,
+  cancelLabel = m.controls_cancel(),
   onCancel,
   onSubmit,
   className,
@@ -17,6 +18,7 @@ export function PhoneFormBar({
   pending: boolean;
   submitDisabled?: boolean;
   cancelDisabled?: boolean;
+  cancelLabel?: string;
   onCancel: () => void;
   onSubmit?: () => void;
   className?: string;
@@ -35,7 +37,7 @@ export function PhoneFormBar({
         onClick={onCancel}
         className="h-11 justify-self-start after:absolute after:-inset-x-2 after:inset-y-0"
       >
-        {m.controls_cancel()}
+        {cancelLabel}
       </Button>
       <span aria-hidden="true" className="truncate text-md font-semibold text-primary">
         {heading}

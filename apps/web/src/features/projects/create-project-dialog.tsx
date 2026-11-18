@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronRight, FolderLock, GitBranch01, Share04 } from "@untitledui/icons";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { PhoneFormBar } from "#src/components/ui/phone-form-bar";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
@@ -54,6 +55,7 @@ export function CreateProjectDialog({
   const [repositoryId, setRepositoryId] = useState(0);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
   const slugTouched = useRef(false);
   const nameTouched = useRef(false);
 
@@ -225,6 +227,7 @@ export function CreateProjectDialog({
 
   return (
     <ModalOverlay
+      page
       isOpen={open}
       onOpenChange={(next) => {
         if (!busy) onOpenChange(next);
@@ -234,14 +237,28 @@ export function CreateProjectDialog({
         <Dialog>
           {() => (
             <>
+              <PhoneFormBar
+                heading={m.project_create_title()}
+                pending={busy}
+                {...(step === "choose"
+                  ? { onCancel: () => onOpenChange(false) }
+                  : {
+                      cancelLabel: m.controls_back(),
+                      onCancel: () => setStep("choose"),
+                      submitLabel: m.controls_create(),
+                      submitDisabled: !canSubmit,
+                      onSubmit: () => formRef.current?.requestSubmit(),
+                    })}
+              />
               <DialogHeader
+                className="max-sm:px-4 max-sm:pt-2 max-sm:[&_[data-dialog-close]]:hidden max-sm:[&_:is(h1,h2,h3)]:sr-only"
                 title={m.project_create_title()}
                 description={step === "choose" ? m.project_create_source_description() : undefined}
                 onClose={busy ? undefined : () => onOpenChange(false)}
               />
               {step === "choose" ? (
                 <>
-                  <div className="grid gap-3 px-6 py-6">
+                  <div className="grid gap-3 px-6 py-6 max-sm:px-4 max-sm:py-4">
                     <SourceOption
                       icon={FolderLock}
                       label={m.project_create_from_scratch()}
@@ -255,15 +272,15 @@ export function CreateProjectDialog({
                       onSelect={() => chooseSource("github")}
                     />
                   </div>
-                  <DialogActions className="px-6 pt-4 pb-6">
+                  <DialogActions className="px-6 pt-4 pb-6 max-sm:hidden">
                     <DialogCancel type="button" onPress={() => onOpenChange(false)}>
                       {m.controls_cancel()}
                     </DialogCancel>
                   </DialogActions>
                 </>
               ) : (
-                <form onSubmit={submit}>
-                  <div className="grid gap-4 px-6 py-6">
+                <form ref={formRef} onSubmit={submit}>
+                  <div className="grid gap-4 px-6 py-6 max-sm:px-4 max-sm:pt-2">
                     <Input
                       size={controlSize}
                       label={m.project_name()}
@@ -350,7 +367,7 @@ export function CreateProjectDialog({
                       </p>
                     )}
                   </div>
-                  <DialogActions className="px-6 pt-4 pb-6">
+                  <DialogActions className="px-6 pt-4 pb-6 max-sm:hidden">
                     <DialogCancel type="button" onPress={() => setStep("choose")} isDisabled={busy}>
                       {m.controls_back()}
                     </DialogCancel>
