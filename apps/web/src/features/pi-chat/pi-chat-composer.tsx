@@ -14,6 +14,7 @@ export function PiChatComposer({
   busy,
   pending,
   controls,
+  isCodex,
   models,
   modelError,
   sessionModel,
@@ -29,6 +30,7 @@ export function PiChatComposer({
   busy: boolean;
   pending: boolean;
   controls: boolean;
+  isCodex: boolean;
   models?: (PiChatModel & { name: string })[];
   modelError: boolean;
   sessionModel?: string;
@@ -51,6 +53,11 @@ export function PiChatComposer({
   const selected = activeModel
     ? JSON.stringify({ provider: activeModel.provider, id: activeModel.id })
     : null;
+  const placeholder = isCodex
+    ? m.pi_chat_codex_placeholder()
+    : busy
+      ? m.pi_chat_busy_placeholder()
+      : m.pi_chat_placeholder();
   return (
     <form
       onSubmit={(event) => {
@@ -117,7 +124,7 @@ export function PiChatComposer({
         <div className={cx("overflow-hidden", FIELD_STATES.frame, FIELD_STATES.frameTyping)}>
           <TextArea
             aria-label={m.pi_chat_message()}
-            placeholder={busy ? m.pi_chat_busy_placeholder() : m.pi_chat_placeholder()}
+            placeholder={placeholder}
             value={draft.text}
             onChange={(text) => onDraft({ ...draft, text, request: undefined })}
             maxLength={100_000}
@@ -166,7 +173,7 @@ export function PiChatComposer({
                 </Select>
               ) : (
                 <span className="text-xs text-tertiary wrap-anywhere">
-                  {sessionModel || m.pi_chat_model_default()}
+                  {sessionModel || (isCodex ? m.pi_chat_codex_model() : m.pi_chat_model_default())}
                 </span>
               )}
             </div>
@@ -222,7 +229,9 @@ export function PiChatComposer({
             {m.pi_chat_models_error()}
           </p>
         )}
-        {!controls && <p className="text-xs text-tertiary">{m.pi_chat_controls_upgrade()}</p>}
+        {!controls && !isCodex && (
+          <p className="text-xs text-tertiary">{m.pi_chat_controls_upgrade()}</p>
+        )}
         <p className="text-xs text-tertiary">
           {pendingCount ? m.pi_chat_queue_shortcut() : m.pi_chat_keyboard_hint()}
         </p>

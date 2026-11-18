@@ -394,6 +394,7 @@ export function PiChatConversation({
                 messages={messages}
                 busy={busy}
                 status={busy ? progressLabel(history.data, now) : undefined}
+                assistant={isCodex ? "Codex" : m.pi_chat_assistant()}
               />
               {pendingSend && !busy && (
                 <p role="status" className="text-xs text-tertiary">
@@ -406,7 +407,9 @@ export function PiChatConversation({
               (sessionId === "new" || !history.isPending) && (
                 <div className="py-10">
                   <p className="text-lg font-semibold text-primary">{m.pi_chat_start_title()}</p>
-                  <p className="mt-2 text-sm text-tertiary">{m.pi_chat_start_hint()}</p>
+                  <p className="mt-2 text-sm text-tertiary">
+                    {isCodex ? m.pi_chat_codex_start_hint() : m.pi_chat_start_hint()}
+                  </p>
                 </div>
               )}
           </div>
@@ -472,6 +475,7 @@ export function PiChatConversation({
         busy={busy}
         pending={submitting}
         controls={nativeControls}
+        isCodex={isCodex}
         models={models.data?.models}
         modelError={models.isError}
         sessionModel={session?.model}
@@ -482,13 +486,13 @@ export function PiChatConversation({
           await mutate({ action: "stop", sessionId });
         }}
         onTakeQueue={takeQueue}
-        terminalStatus={session && !busy ? statusLabel(session.status) : undefined}
+        terminalStatus={session && !busy ? statusLabel(session.status, isCodex) : undefined}
       />
     </section>
   );
 }
 
-function statusLabel(status: PiChatSession["status"]) {
+function statusLabel(status: PiChatSession["status"], isCodex: boolean) {
   switch (status) {
     case "running":
       return m.pi_chat_running();
@@ -497,7 +501,7 @@ function statusLabel(status: PiChatSession["status"]) {
     case "interrupted":
       return m.pi_chat_interrupted();
     case "error":
-      return m.pi_chat_failed();
+      return isCodex ? m.pi_chat_codex_failed() : m.pi_chat_failed();
     case "idle":
       return m.pi_chat_ready();
   }

@@ -12,10 +12,12 @@ export function PiChatTranscript({
   messages,
   busy,
   status,
+  assistant,
 }: {
   messages: Message[];
   busy: boolean;
   status?: string;
+  assistant: string;
 }) {
   const turns: Message[][] = [];
   for (const message of messages) {
@@ -28,11 +30,22 @@ export function PiChatTranscript({
       messages={turn}
       busy={busy && index === turns.length - 1}
       status={status}
+      assistant={assistant}
     />
   ));
 }
 
-function Turn({ messages, busy, status }: { messages: Message[]; busy: boolean; status?: string }) {
+function Turn({
+  messages,
+  busy,
+  status,
+  assistant,
+}: {
+  messages: Message[];
+  busy: boolean;
+  status?: string;
+  assistant: string;
+}) {
   const { open: expanded, toggle } = usePiChatDisclosure(`turn:${messages[0]!.id}`, busy);
   const user = messages[0]?.role === "user" ? messages[0] : undefined;
   const responses = messages.slice(user ? 1 : 0);
@@ -60,10 +73,10 @@ function Turn({ messages, busy, status }: { messages: Message[]; busy: boolean; 
         </article>
       )}
       {(responses.length > 0 || busy) && (
-        <article aria-label={m.pi_chat_assistant()} className="flex min-w-0 gap-3">
+        <article aria-label={assistant} className="flex min-w-0 gap-3">
           <Avatar size="xs" placeholderIcon={Stars01} className="mt-0.5 shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="mb-2 text-sm font-semibold text-primary">{m.pi_chat_assistant()}</p>
+            <p className="mb-2 text-sm font-semibold text-primary">{assistant}</p>
             {process.length > 0 && (
               <div className="mb-3">
                 <Button
