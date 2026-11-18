@@ -96,6 +96,11 @@
   --spacing-agent-tab-bar: 2.5rem;
 }
 
+@theme {
+  --spacing-pane-title: 3rem;
+  --spacing-pane-bar: 2.375rem;
+}
+
 @utility w-list-column {
   width: min(var(--list-column-width, 23.75rem), 50%);
 }

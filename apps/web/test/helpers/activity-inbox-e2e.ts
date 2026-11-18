@@ -55,7 +55,7 @@ export function shownInPane(id: string) {
 }
 
 /** Whether the pane lays out a conversation's Chat / Tasks / Files tabs (its header). */
-export const paneTabsShown = `(() => { const pane = ${pane}; return Boolean(pane) && [...pane.querySelectorAll('[role="tablist"]')].some((tabs) => tabs.getClientRects().length > 0); })()`;
+export const paneTabsShown = `(() => { const pane = ${pane}; return Boolean(pane) && [...pane.querySelectorAll('[role="tablist"]')].some((tabs) => tabs.getClientRects().length > 0 && [...tabs.querySelectorAll('[role="tab"]')].some((tab) => tab.textContent.trim() === "Tasks")); })()`;
 
 /** Resolves once `observe` holds, polling what the test cannot be told about (a database row). */
 export async function waitFor(observe: () => Promise<boolean>) {

@@ -53,6 +53,8 @@
   "member_person_joined": "Joined",
   "member_person_no_agents": "No Agents created",
   "member_person_edit_profile": "Edit profile",
+  "member_person_tabs": "Profile sections",
+  "member_person_tab_agents": "Agents",
   "member_person_not_found_title": "Member not found",
   "member_person_not_found_description": "They may have left this Workspace.",
   "member_person_load_error": "The profile could not be loaded.",

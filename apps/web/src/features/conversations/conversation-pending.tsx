@@ -1,10 +1,11 @@
 import { PageHeader } from "#src/components/layout/page-header";
+import { PaneHeader } from "#src/components/layout/pane-header";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 import { MESSAGE_COLUMN_CLASS } from "#src/features/settings/message-width";
 import { COMPOSER_FRAME_CLASS } from "./composer-frame";
 import { MessageSkeleton } from "./message-skeleton";
-import { ConversationBackHeader } from "./conversation-list-button";
+import { ConversationListButton } from "./conversation-list-button";
 import { LIST_COLUMN_CLASS } from "./conversation-list-width";
 import { cx } from "#src/utils/cx";
 
@@ -54,15 +55,15 @@ export function MessagesPending() {
   );
 }
 
-/** The open conversation's loading screen: its header, message skeletons and composer frame. */
 export function ConversationPending({ label = m.conversation_loading() }: { label?: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ConversationBackHeader>
+      <PaneHeader className="px-4 md:px-6" bar={null}>
+        <ConversationListButton />
         <p role="status" className="sr-only">
           {label}
         </p>
-      </ConversationBackHeader>
+      </PaneHeader>
       <div
         aria-busy="true"
         aria-label={m.conversation_history()}

@@ -8,9 +8,9 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 
 /**
  * The thread pane's layout in a real browser: the header names the thread and its channel,
- * its actions sit behind one menu next to Close, the root is followed by a marker saying where
- * the replies begin and how many there are, and the composer invites a thread reply. "View in
- * channel" leaves the thread for its root in the channel. On a phone the pane covers the chat,
+ * its actions sit in the header's second row, the root is followed by a marker saying where
+ * the replies begin and how many there are, and the composer invites a thread reply. "Original
+ * message" leaves the thread for its root in the channel. On a phone the pane covers the chat,
  * so a back arrow replaces Close.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`; the thread is seeded
@@ -151,16 +151,14 @@ test("the thread pane shows its title, actions, replies marker and thread compos
     expect(wide.placeholder).toBe("Message thread");
     await browser("screenshot", join(artifacts, "wide.png"));
 
-    await browser("click", '[aria-label="Thread actions"]');
-    await browser("wait", "--fn", `document.querySelectorAll('[role="menuitem"]').length > 0`);
-    const items = await evaluate<string[]>(
-      `[...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent.trim())`,
+    const bar = await evaluate<string[]>(
+      `[...document.querySelectorAll('[data-conversation-pane] [data-pane-bar] button')].map((button) => button.textContent.trim())`,
     );
-    expect(items[0]).toBe("View in channel");
-    expect(items[1]).toMatch(/^(Follow|Unfollow) thread$/);
-    await browser("screenshot", join(artifacts, "actions-menu.png"));
+    expect(bar[0]).toBe("Original message");
+    expect(bar[1]).toMatch(/^(Follow|Following)$/);
+    await browser("screenshot", join(artifacts, "actions-bar.png"));
 
-    await browser("find", "role", "menuitem", "click", "--name", "View in channel");
+    await browser("find", "role", "button", "click", "--name", "Original message");
     await browser("wait", "--fn", `!location.search.includes("threadRootId")`);
     await browser("wait", "--fn", `document.getElementById("message-${rootId}") !== null`);
     expect(await evaluate<boolean>(`!document.querySelector('[aria-label="Close thread"]')`)).toBe(

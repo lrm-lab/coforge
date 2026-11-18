@@ -85,7 +85,7 @@ test("members open a direct message with each other, and with themselves", async
     await browser("eval", `${cardChat(name)}.click()`);
   };
   /** The conversation's header: the one carrying the Chat / Tasks / Files tabs. */
-  const conversationHeader = `[...document.querySelectorAll("main header")].find((header) => header.querySelector('[role="tab"]'))`;
+  const conversationHeader = `[...document.querySelectorAll("main [data-pane-header]")].find((header) => header.querySelector('[role="tab"]'))`;
   const headerName = `${conversationHeader}?.querySelector("h1")?.textContent.trim()`;
   /** A Frequently used row in the empty search dialog. */
   const FREQUENT =

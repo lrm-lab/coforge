@@ -5,7 +5,10 @@ import { getRouteApi, Link, useHydrated, useNavigate, useRouter } from "@tanstac
 import { useServerFn } from "@tanstack/react-start";
 import {
   ArrowLeft,
+  CpuChip01,
+  Edit05,
   MessageSquare01 as MessageSquare,
+  UserCircle,
   UserMinus01,
   UserX01,
   XClose as X,
@@ -15,6 +18,8 @@ import { Button as AriaButton } from "react-aria-components";
 import { MemberRemovalDialog } from "#src/features/workspaces/member-removal-dialog";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Button } from "#src/components/base/buttons/button";
+import { Tab, TabList, Tabs } from "#src/components/application/tabs/tabs";
+import { PaneHeader } from "#src/components/layout/pane-header";
 import {
   Empty,
   EmptyDescription,
@@ -46,13 +51,6 @@ import { formatAgentProfileParam } from "./profile-panel/profile-panel-search";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
-/**
- * A person's right-hand panel (`profile=user:<id>`) on the Members page and in a conversation, the
- * human counterpart of `AgentProfilePanel`: who they are (name, description, email), their Workspace role and join
- * date, and the Agents they created that the viewer may see. Owners and admins change the
- * person's role and remove them here as in Settings → Members; a person edits their own profile
- * in Settings → Account.
- */
 export function PersonProfilePanel({
   userId,
   onClose,
@@ -74,17 +72,15 @@ export function PersonProfilePanel({
     ...memberPersonQuery(workspaceId ?? "", userId),
     enabled: workspaceId !== undefined,
   });
-  const openDirectConversation = useOpenDirectConversation();
 
   if (person.isPending) {
     return (
       <aside aria-busy="true" aria-label={m.agent_profile_loading()} className="flex flex-col">
-        <div className="flex h-12 items-center gap-2 px-5">
+        <PaneHeader className="px-5" bar={<Skeleton className="mb-2.5 h-4 w-40" />}>
           <Skeleton className="size-8 rounded-full" />
           <Skeleton className="h-4 w-32" />
-        </div>
-        <div className="space-y-3 border-t border-secondary px-6 py-5">
-          <Skeleton className="size-14 rounded-full" />
+        </PaneHeader>
+        <div className="space-y-3 px-6 py-5">
           <Skeleton className="h-4 w-48" />
           <Skeleton className="h-4 w-64" />
         </div>
@@ -97,11 +93,11 @@ export function PersonProfilePanel({
       isAppErrorCode(person.error, "NOT_FOUND") || isAppErrorCode(person.error, "ACCESS_DENIED");
     return (
       <aside className="flex min-h-0 flex-1 flex-col">
-        <div className="flex h-12 shrink-0 items-center gap-2 px-5">
+        <PaneHeader className="px-5" bar={null}>
           {back && <BackButton back={back} />}
           <span className="flex-1" />
           <CloseButton onClose={onClose} />
-        </div>
+        </PaneHeader>
         {missing ? (
           <Empty className="px-6">
             <EmptyHeader>
@@ -127,9 +123,35 @@ export function PersonProfilePanel({
 
   const profile = person.data;
   return (
+    <PersonProfile profile={profile} back={back} onClose={onClose} onOpenAgent={onOpenAgent} />
+  );
+}
+
+type PersonTab = "profile" | "agents";
+
+function PersonProfile({
+  profile,
+  back,
+  onClose,
+  onOpenAgent,
+}: {
+  profile: MemberPersonProfile;
+  back?: PanelBack;
+  onClose: () => void;
+  onOpenAgent?: (agentId: string) => void;
+}) {
+  const [tab, setTab] = useState<PersonTab>("profile");
+  const openDirectConversation = useOpenDirectConversation();
+  const navigate = useNavigate();
+  const workspaceSlug = useWorkspaceSlug();
+  return (
     <aside aria-label={profile.displayName} className="flex min-h-0 flex-1 flex-col">
-      {/* Same 48px band and 20px gutter as the Agent panel's header. */}
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-secondary px-5">
+      <PaneHeader
+        className="px-5"
+        bar={
+          <PersonProfileTabs tab={tab} onTab={setTab} agentCount={profile.createdAgents.length} />
+        }
+      >
         {back && <BackButton back={back} />}
         <ActorAvatar
           presence
@@ -140,8 +162,24 @@ export function PersonProfilePanel({
         />
         <p className="min-w-0 flex-1 truncate text-md font-medium tracking-tight text-secondary">
           {profile.displayName}
+          {profile.isViewer && (
+            <span className="ml-1.5 font-normal text-tertiary">({m.workspace_members_you()})</span>
+          )}
         </p>
-        {/* Every member offers it, the viewer too: that opens their DM with themself. */}
+        {profile.isViewer && (
+          <ButtonUtility
+            icon={Edit05}
+            size="sm"
+            tooltip={m.member_person_edit_profile()}
+            onClick={() =>
+              void navigate({
+                to: "/w/$workspaceSlug/settings",
+                params: { workspaceSlug },
+                search: { section: "account" },
+              })
+            }
+          />
+        )}
         <ButtonUtility
           icon={MessageSquare}
           size="sm"
@@ -149,9 +187,43 @@ export function PersonProfilePanel({
           onClick={() => void openDirectConversation({ userId: profile.id })}
         />
         <CloseButton onClose={onClose} />
-      </header>
-      <PersonProfileBody profile={profile} onRemoved={onClose} onOpenAgent={onOpenAgent} />
+      </PaneHeader>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {tab === "profile" ? (
+          <PersonProfileBody profile={profile} onRemoved={onClose} />
+        ) : (
+          <PersonCreatedAgents agents={profile.createdAgents} onOpenAgent={onOpenAgent} />
+        )}
+      </div>
     </aside>
+  );
+}
+
+function PersonProfileTabs({
+  tab,
+  onTab,
+  agentCount,
+}: {
+  tab: PersonTab;
+  onTab: (tab: PersonTab) => void;
+  agentCount: number;
+}) {
+  return (
+    <Tabs
+      selectedKey={tab}
+      onSelectionChange={(key) => onTab(key === "agents" ? "agents" : "profile")}
+      className="w-max shrink-0"
+    >
+      <TabList type="underline" size="sm" aria-label={m.member_person_tabs()}>
+        <Tab id="profile" icon={UserCircle}>
+          {m.agent_profile_tab()}
+        </Tab>
+        <Tab id="agents" icon={CpuChip01}>
+          {m.member_person_tab_agents()}
+          <span className="text-xs font-normal text-quaternary tabular-nums">{agentCount}</span>
+        </Tab>
+      </TabList>
+    </Tabs>
   );
 }
 
@@ -187,63 +259,20 @@ function CloseButton({ onClose }: { onClose: () => void }) {
 function PersonProfileBody({
   profile,
   onRemoved,
-  onOpenAgent,
 }: {
   profile: MemberPersonProfile;
-  onOpenAgent?: (agentId: string) => void;
-  /** The person was removed from the Workspace: the panel has nothing left to show. */
   onRemoved: () => void;
 }) {
-  const workspaceSlug = useWorkspaceSlug();
   const { changeRole, changingRole, roleError, remove, removeOpen, setRemoveOpen } =
     useMemberActions(profile, onRemoved);
-  const navigate = useNavigate();
   const timeZone = appRoute.useLoaderData().timeZone;
   const locale = getLocale();
-  // Without a time-zone preference the server and browser zones differ, so the date is only
-  // formatted once hydrated.
   const hydrated = useHydrated();
   const joinedOn =
     timeZone || hydrated ? formatCalendarDate(profile.joinedAt, timeZone, locale) : "";
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <section className="flex items-center gap-4 border-b border-secondary px-6 py-5">
-        <ActorAvatar
-          presence
-          size="xl"
-          userId={profile.id}
-          name={profile.displayName}
-          src={profile.avatarUrl}
-        />
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-lg font-semibold text-primary">
-            {profile.displayName}
-            {profile.isViewer && (
-              <span className="ml-1.5 text-md font-normal text-tertiary">
-                ({m.workspace_members_you()})
-              </span>
-            )}
-          </h2>
-        </div>
-        {profile.isViewer && (
-          <Button
-            size="sm"
-            color="secondary"
-            className="shrink-0"
-            onPress={() =>
-              void navigate({
-                to: "/w/$workspaceSlug/settings",
-                params: { workspaceSlug },
-                search: { section: "account" },
-              })
-            }
-          >
-            {m.member_person_edit_profile()}
-          </Button>
-        )}
-      </section>
-
+    <>
       <section className="border-b border-secondary px-6 py-5">
         <p className={SECTION_CAPTION_CLASS}>{m.agent_profile_description()}</p>
         <p className="mt-2 text-sm whitespace-pre-wrap break-words text-secondary">
@@ -253,8 +282,6 @@ function PersonProfileBody({
 
       <section className="border-b border-secondary px-6 py-5">
         <p className={SECTION_CAPTION_CLASS}>{m.agent_profile_section_info()}</p>
-        {/* Short read-only facts: docs/design/field-display.md's fact list, label left and value
-            right, with the one action on a fact at its row's end and its error under the row. */}
         <dl className="mt-2">
           <FactRow
             label={m.agent_profile_role()}
@@ -295,50 +322,8 @@ function PersonProfileBody({
         </dl>
       </section>
 
-      <section className="px-6 py-5">
-        <p className={SECTION_CAPTION_CLASS}>
-          {m.member_created_agents()}
-          <span className="ml-1.5 tabular-nums">{profile.createdAgents.length}</span>
-        </p>
-        {profile.createdAgents.length ? (
-          <ul aria-label={m.member_created_agents()} className="mt-3 flex flex-col gap-2">
-            {profile.createdAgents.map((agent) => (
-              <li key={agent.id}>
-                {onOpenAgent ? (
-                  <AriaButton
-                    aria-label={m.agent_open_profile({ name: agent.displayName })}
-                    className={CREATED_AGENT_ROW_CLASS}
-                    onPress={() => onOpenAgent(agent.id)}
-                  >
-                    <CreatedAgentRow agent={agent} />
-                  </AriaButton>
-                ) : (
-                  <Link
-                    // The page the panel is on (Members or a conversation) shows the Agent's panel
-                    // in the same slot.
-                    to="."
-                    resetScroll={false}
-                    search={(previous: { profile?: string; agentTab?: string }) => ({
-                      ...previous,
-                      profile: formatAgentProfileParam(agent.id),
-                      agentTab: undefined,
-                    })}
-                    aria-label={m.agent_open_profile({ name: agent.displayName })}
-                    className={CREATED_AGENT_ROW_CLASS}
-                  >
-                    <CreatedAgentRow agent={agent} />
-                  </Link>
-                )}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="mt-2 text-sm text-quaternary">{m.member_person_no_agents()}</p>
-        )}
-      </section>
-
       {profile.canRemove && (
-        <section className="border-t border-secondary px-6 py-5">
+        <section className="px-6 py-5">
           <p className={SECTION_CAPTION_CLASS}>{m.agent_profile_section_actions()}</p>
           <Button
             size="sm"
@@ -358,7 +343,49 @@ function PersonProfileBody({
           />
         </section>
       )}
-    </div>
+    </>
+  );
+}
+
+function PersonCreatedAgents({
+  agents,
+  onOpenAgent,
+}: {
+  agents: MemberPersonProfile["createdAgents"];
+  onOpenAgent?: (agentId: string) => void;
+}) {
+  return agents.length ? (
+    <ul aria-label={m.member_created_agents()} className="flex flex-col gap-2 px-6 py-5">
+      {agents.map((agent) => (
+        <li key={agent.id}>
+          {onOpenAgent ? (
+            <AriaButton
+              aria-label={m.agent_open_profile({ name: agent.displayName })}
+              className={CREATED_AGENT_ROW_CLASS}
+              onPress={() => onOpenAgent(agent.id)}
+            >
+              <CreatedAgentRow agent={agent} />
+            </AriaButton>
+          ) : (
+            <Link
+              to="."
+              resetScroll={false}
+              search={(previous: { profile?: string; agentTab?: string }) => ({
+                ...previous,
+                profile: formatAgentProfileParam(agent.id),
+                agentTab: undefined,
+              })}
+              aria-label={m.agent_open_profile({ name: agent.displayName })}
+              className={CREATED_AGENT_ROW_CLASS}
+            >
+              <CreatedAgentRow agent={agent} />
+            </Link>
+          )}
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p className="px-6 py-5 text-sm text-quaternary">{m.member_person_no_agents()}</p>
   );
 }
 

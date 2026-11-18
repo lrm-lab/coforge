@@ -10,6 +10,7 @@ import { Spinner } from "#src/components/ui/spinner";
 import { Tab, TabList, TabPanel, Tabs } from "#src/components/application/tabs/tabs";
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
 import { PageBackButton } from "#src/components/layout/page-back-button";
+import { PaneHeader } from "#src/components/layout/pane-header";
 import { formatCalendarDate } from "#src/lib/dates";
 import { getLocale } from "#src/paraglide/runtime";
 import { Button } from "#src/components/base/buttons/button";
@@ -144,18 +145,11 @@ export function AgentsContent({
       onSelectionChange={(key) => {
         if (key === "agent" || key === "human") onFiltersChange({ memberType: key });
       }}
-      className="@container/members min-h-0 min-w-0 flex-1"
+      className="min-h-0 min-w-0 flex-1"
     >
-      {/* One row with centred tabs once the pane (not the viewport) is wide enough; narrower, as
-       * on a phone or beside the profile panel, the tabs wrap onto their own row. */}
-      <header className="flex shrink-0 flex-wrap items-center gap-x-3 border-b border-secondary px-page @2xl/members:grid @2xl/members:h-12 @2xl/members:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-        <div className="flex h-12 min-w-0 flex-1 items-center gap-3">
-          <PageBackButton />
-          <h1 className="truncate text-lg font-semibold text-primary">
-            {m.member_directory_title()}
-          </h1>
-        </div>
-        <div className="order-last flex basis-full self-end @2xl/members:order-none @2xl/members:basis-auto">
+      <PaneHeader
+        className="px-page"
+        bar={
           <TabList
             aria-label={m.member_type_filter()}
             type="underline"
@@ -164,8 +158,13 @@ export function AgentsContent({
             <Tab id="agent">{m.member_tab_agents_count({ count: summary.agentCount })}</Tab>
             <Tab id="human">{m.member_tab_humans_count({ count: summary.peopleCount })}</Tab>
           </TabList>
-        </div>
-        <div className="ml-auto flex shrink-0 items-center gap-2 @2xl/members:justify-self-end">
+        }
+      >
+        <PageBackButton />
+        <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-primary">
+          {m.member_directory_title()}
+        </h1>
+        <div className="flex shrink-0 items-center gap-2">
           {onAgentTab
             ? canCreateAgent && (
                 <Button
@@ -188,7 +187,7 @@ export function AgentsContent({
                 </Button>
               )}
         </div>
-      </header>
+      </PaneHeader>
       {tabTotal > 0 && (
         <div className="flex shrink-0 flex-wrap items-center gap-3 px-page pt-5">
           {onAgentTab && (

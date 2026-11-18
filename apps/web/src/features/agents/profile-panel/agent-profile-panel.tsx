@@ -279,6 +279,14 @@ export function AgentProfilePanel({
         controls={controls}
         onClose={onClose}
         back={back}
+        tabs={
+          <AgentProfileTabs
+            active={tab}
+            tabs={tabOrder.tabs}
+            onSelect={onTabChange}
+            onReorder={tabOrder.reorder}
+          />
+        }
       />
       {diagnosticFacts && !deleted && (
         <AgentProfileStatus
@@ -299,12 +307,6 @@ export function AgentProfilePanel({
           }
         />
       )}
-      <AgentProfileTabs
-        active={tab}
-        tabs={tabOrder.tabs}
-        onSelect={onTabChange}
-        onReorder={tabOrder.reorder}
-      />
       {/* Workspace and Activity scroll their own parts. */}
       <div
         className={
