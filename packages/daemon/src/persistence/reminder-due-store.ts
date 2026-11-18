@@ -1,6 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { decodeReminderDue, encodeReminderDue } from "@lrm/coforge-sdk/internal";
+import { REMINDER_DUE_MESSAGE_TYPE, type ReminderDue } from "@lrm/coforge-sdk/internal";
 import type {
   ReminderDueRecord,
   ReminderDueRecordState,
@@ -9,12 +9,15 @@ import type {
 import { isSafePathScope } from "./path-scope";
 import { writePrivateJsonRecord } from "./private-json-record";
 
-const STATES: ReadonlySet<ReminderDueRecordState> = new Set([
+const STATES: ReadonlySet<string> = new Set<ReminderDueRecordState>([
   "received",
   "acknowledged",
   "delivered",
   "refused",
 ]);
+const JOB_TEXT = ["reminderId", "title", "target", "messageId", "fireAt"] as const;
+
+const text = (value: unknown): value is string => typeof value === "string" && value.length > 0;
 
 export class FileReminderDueStore implements ReminderDueStore {
   constructor(
@@ -57,33 +60,37 @@ export class FileReminderDueStore implements ReminderDueStore {
   }
 
   async write(agentId: string, records: readonly ReminderDueRecord[]): Promise<void> {
-    const occurrences = records.map((record) => ({
-      state: record.state,
-      due: Buffer.from(encodeReminderDue(this.#owned(agentId, record).due)).toString("base64"),
-    }));
+    const occurrences = records.map((record) => this.#record(agentId, record));
     await writePrivateJsonRecord(this.#path(agentId), { version: 1, occurrences });
   }
 
   #record(agentId: string, value: unknown): ReminderDueRecord {
-    const entry = value as { state?: unknown; due?: unknown } | null;
+    const entry = value as { state?: unknown; due?: Partial<ReminderDue> } | null;
+    const due = entry?.due;
+    const job = due?.job as Record<string, unknown> | undefined;
     if (
       !entry ||
-      typeof entry.due !== "string" ||
-      !STATES.has(entry.state as ReminderDueRecordState)
+      !STATES.has(entry.state as string) ||
+      !due ||
+      !job ||
+      due.protocolMajor !== 1 ||
+      due.messageType !== REMINDER_DUE_MESSAGE_TYPE ||
+      !text(due.occurrenceId) ||
+      !text(due.expiresAt) ||
+      !JOB_TEXT.every((key) => text(job[key])) ||
+      !Number.isSafeInteger(job.version)
     )
       throw new Error("reminder due records are corrupt");
-    const due = decodeReminderDue(Buffer.from(entry.due, "base64"));
-    return this.#owned(agentId, { state: entry.state as ReminderDueRecordState, due });
-  }
-
-  #owned(agentId: string, record: ReminderDueRecord): ReminderDueRecord {
-    const { due } = record;
     if (
       due.workspaceId !== this.workspaceId ||
       due.computerId !== this.computerId ||
-      due.agentId !== agentId
+      due.agentId !== agentId ||
+      job.ownerAgentId !== agentId
     )
       throw new Error("reminder due record belongs to another scope");
-    return record;
+    return {
+      state: entry.state as ReminderDueRecordState,
+      due: structuredClone(due as ReminderDue),
+    };
   }
 }

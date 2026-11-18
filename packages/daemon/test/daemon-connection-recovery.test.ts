@@ -1,18 +1,13 @@
 import { expect, test } from "bun:test";
 import {
-  decodeReminderFireRequest,
-  encodeReminderFireResponse,
-  REMINDER_FIRE_METHOD,
+  decodeReminderDueAckRequest,
+  encodeReminderDueAckResponse,
+  REMINDER_DUE_ACK_METHOD,
   type AgentReminderOperationRequest,
-  type ReminderFireRequest,
-  type ReminderJob,
-  type ReminderSync,
+  type ReminderDueAckRequest,
 } from "@lrm/coforge-sdk/internal";
-import type { ReminderReceipt, ReminderReceiptStore } from "#src/agent-reminder/reminder-receipt";
-import { ReminderScheduler, type ReminderClock } from "#src/agent-reminder/reminder-scheduler";
 import { DaemonConnection } from "#src/connection/daemon-connection";
 import type { DaemonConnectionTiming } from "#src/connection/daemon-connection-timing";
-import { captureDaemonLogs } from "./log-capture";
 import { config, fakeClient } from "./daemon-connection.test";
 
 /**
@@ -28,15 +23,15 @@ import { config, fakeClient } from "./daemon-connection.test";
 
 const AGENT_API_KEY = `sk_agent_${"a".repeat(43)}`;
 
-const reminderFire: ReminderFireRequest = {
+const reminderDueAck: ReminderDueAckRequest = {
   protocolMajor: 1,
   requestId: "b0b0b0b0-1111-4111-8111-b0b0b0b0b0b0",
-  workspaceId: config.workspaceId,
-  computerId: config.computerId,
-  agentId: "agent-a",
+  workspaceId: "019b0381-1111-7111-8111-111111111111",
+  computerId: "019b0381-2222-7222-8222-222222222222",
+  agentId: "019b0381-3333-7333-8333-333333333333",
+  occurrenceId: "019b0381-4444-7444-8444-444444444444",
   reminderId: "123e4567-e89b-42d3-a456-426614174000",
   version: 3,
-  firedAtClient: "2026-09-08T12:00:01Z",
 };
 
 const reminderOperation: AgentReminderOperationRequest = {
@@ -47,22 +42,13 @@ const reminderOperation: AgentReminderOperationRequest = {
   operation: "list",
 };
 
-/** Records every RPC the connection puts on the wire, and answers a reminder fire with the
- * acceptance the server would send back, correlated with the request it was given. */
 function recordRpc(fake: ReturnType<typeof fakeClient>): string[] {
   const calls: string[] = [];
   fake.client.rpc = async (method, data) => {
     calls.push(method);
-    if (method !== REMINDER_FIRE_METHOD) return { data: new Uint8Array() };
-    const request = decodeReminderFireRequest(data);
-    return {
-      data: encodeReminderFireResponse({
-        ...request,
-        result: "accepted",
-        fired: true,
-        catchup: false,
-      }),
-    };
+    if (method !== REMINDER_DUE_ACK_METHOD) return { data: new Uint8Array() };
+    const request = decodeReminderDueAckRequest(data);
+    return { data: encodeReminderDueAckResponse({ ...request, accepted: true }) };
   };
   return calls;
 }
@@ -105,7 +91,7 @@ test("a start that rejects after its client connected leaves the connection down
 
   await expect(transport.start("secret", config)).rejects.toThrow("status rpc unavailable");
   // Whatever the object thinks, RPC has to say so: the client that connected is gone.
-  await expect(transport.fireReminder(reminderFire)).rejects.toThrow(
+  await expect(transport.acknowledgeReminderDue(reminderDueAck)).rejects.toThrow(
     "daemon connection is not connected",
   );
 
@@ -113,9 +99,7 @@ test("a start that rejects after its client connected leaves the connection down
   // rather than return early on a "connected" flag left behind by the attempt that failed.
   await transport.start("secret", config);
   expect(clients).toHaveLength(2);
-  await expect(transport.fireReminder(reminderFire)).resolves.toMatchObject({
-    result: "accepted",
-  });
+  await expect(transport.acknowledgeReminderDue(reminderDueAck)).resolves.toBe(true);
   await transport.stop();
 });
 
@@ -141,7 +125,7 @@ test("an Agent message keeps working through a reconnect window; only the RPC pa
   });
   expect(urls).toHaveLength(1);
   // The same instant, on the path that really does need the socket.
-  await expect(transport.fireReminder(reminderFire)).rejects.toThrow(
+  await expect(transport.acknowledgeReminderDue(reminderDueAck)).rejects.toThrow(
     "daemon connection is not connected",
   );
   await transport.stop();
@@ -158,7 +142,7 @@ test("an Agent message keeps working through a reconnect window; only the RPC pa
   );
 });
 
-test("the status refresh rebuilds a clientless connection, and a reminder due after the flap then fires", async () => {
+test("the status refresh rebuilds a clientless connection, and a reminder due ACK after the flap goes out", async () => {
   const clients: ReturnType<typeof fakeClient>[] = [];
   const rpcCalls: string[][] = [];
   const { timing, repeating } = manualTiming();
@@ -190,80 +174,8 @@ test("the status refresh rebuilds a clientless connection, and a reminder due af
   repeating[0]!.callback();
   await new Promise((resolve) => setTimeout(resolve, 0));
 
-  const store = new MemoryStore();
-  const clock = new TestClock();
-  const scheduler = new ReminderScheduler(
-    { workspaceId: config.workspaceId, computerId: config.computerId },
-    store,
-    (request) => transport.fireReminder(request),
-    async () => true,
-    clock,
-  );
-  const { records } = await captureDaemonLogs(async () => {
-    await scheduler.apply(snapshot([job]));
-    await clock.advance(1000);
-    // The fire runs through the receipt state machine, several awaits deep.
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  });
-
-  const failures = records.filter(
-    (record) => (record.properties as { event?: string }).event === "reminder.fire_failed",
-  );
-  expect(failures).toHaveLength(0);
-  expect(rpcCalls.flat()).toContain(REMINDER_FIRE_METHOD);
-  // And the client the reminder went out on is the one the refresh rebuilt.
+  await expect(transport.acknowledgeReminderDue(reminderDueAck)).resolves.toBe(true);
+  expect(rpcCalls[2]).toContain(REMINDER_DUE_ACK_METHOD);
   expect(clients).toHaveLength(3);
   await transport.stop();
-});
-
-class MemoryStore implements ReminderReceiptStore {
-  receipts: ReminderReceipt[] = [];
-  async read() {
-    return structuredClone(this.receipts);
-  }
-  async write(_agentId: string, receipts: readonly ReminderReceipt[]) {
-    this.receipts = structuredClone([...receipts]);
-  }
-}
-
-class TestClock implements ReminderClock {
-  time = Date.parse("2026-09-08T12:00:00Z");
-  timers: Array<{ at: number; callback: () => void }> = [];
-  now = () => this.time;
-  schedule(callback: () => void, delayMs: number) {
-    const timer = { at: this.time + delayMs, callback };
-    this.timers.push(timer);
-    return timer;
-  }
-  cancel(timer: unknown) {
-    this.timers = this.timers.filter((item) => item !== timer);
-  }
-  async advance(ms: number) {
-    this.time += ms;
-    const due = this.timers.filter((timer) => timer.at <= this.time);
-    this.timers = this.timers.filter((timer) => timer.at > this.time);
-    for (const timer of due) timer.callback();
-    await Promise.all(due.map(async () => {}));
-  }
-}
-
-const job: ReminderJob = {
-  reminderId: reminderFire.reminderId,
-  ownerAgentId: "agent-a",
-  version: reminderFire.version,
-  title: "Review",
-  target: "@frank",
-  messageId: "123e4567-e89b-42d3-a456-426614174001",
-  fireAt: "2026-09-08T12:00:01Z",
-};
-
-const snapshot = (jobs: ReminderJob[]): ReminderSync => ({
-  protocolMajor: 1,
-  requestId: crypto.randomUUID(),
-  workspaceId: config.workspaceId,
-  computerId: config.computerId,
-  agentId: "agent-a",
-  operation: "snapshot",
-  jobs,
-  messageType: "coforge.rpc.v1.ReminderSync",
 });

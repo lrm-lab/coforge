@@ -9,6 +9,11 @@ import type { DaemonConfig } from "#src/daemon-runtime/runtime";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
 import { emptyCodeAgentDiscovery } from "./fixtures/code-agent-discovery";
 import { sessionSpy } from "./fixtures/session-spy";
+import {
+  REMINDER_DUE_MESSAGE_TYPE,
+  type ReminderDue,
+  type ReminderDueAckRequest,
+} from "@lrm/coforge-sdk/internal";
 
 const tempRoot = realpathSync(tmpdir());
 const connection: DaemonConfig = {
@@ -180,6 +185,126 @@ describe("DaemonRuntime App Inbox notices", () => {
       });
       await Bun.sleep(10);
       expect(sessions).toBe(1);
+    } finally {
+      await runtime.stop();
+      await rm(stateDirectory, { recursive: true, force: true });
+    }
+  });
+  test("a Due for an Agent under a fenced Stop is stored, acknowledged and kept in its inbox, without a wake", async () => {
+    const stateDirectory = join(tempRoot, `coforge-due-stopped-${crypto.randomUUID()}`);
+    const credentials = new InMemoryDaemonCredentialStore();
+    await credentials.save(connection.workspaceId, connection.computerId, "token-a");
+    let sessions = 0;
+    let receiveDue!: (due: ReminderDue) => void;
+    const acks: ReminderDueAckRequest[] = [];
+    const runtime = new DaemonRuntime(
+      connection,
+      () => ({
+        provider: "pi",
+        createAgentSession: async () => {
+          sessions++;
+          return sessionSpy();
+        },
+      }),
+      credentials,
+      {
+        create: () => ({
+          async start() {},
+          async ready() {},
+          async stop() {},
+          onReminderDue(callback) {
+            receiveDue = callback;
+            return () => undefined;
+          },
+          async acknowledgeReminderDue(request) {
+            acks.push(request);
+            return true;
+          },
+          async requestAgentApiKey() {
+            return `sk_agent_${"a".repeat(43)}`;
+          },
+          async revokeAgentApiKey() {},
+          async sendAgentDeliveryAck() {},
+          async agentMessage() {
+            throw new Error("must not read cloud");
+          },
+        }),
+      },
+      undefined,
+      emptyCodeAgentDiscovery,
+      stateDirectory,
+    );
+    try {
+      await runtime.start(connection);
+      await runtime.handleAgentStart({
+        protocolMajor: 1,
+        requestId: "start-1",
+        workspaceId: connection.workspaceId,
+        computerId: connection.computerId,
+        agentId: "agent-a",
+        provider: "pi",
+        model: "default",
+        reasoning: "balanced",
+        controlEpoch: 1,
+        launchId: "launch-1",
+      });
+      await runtime.handleAgentStop({
+        protocolMajor: 1,
+        requestId: "stop-1",
+        workspaceId: connection.workspaceId,
+        computerId: connection.computerId,
+        agentId: "agent-a",
+        provider: "pi",
+        controlEpoch: 2,
+      });
+      const fireAt = new Date(Date.now() - 1000).toISOString();
+      receiveDue({
+        protocolMajor: 1,
+        workspaceId: connection.workspaceId,
+        computerId: connection.computerId,
+        agentId: "agent-a",
+        occurrenceId: crypto.randomUUID(),
+        job: {
+          reminderId: "123e4567-e89b-42d3-a456-426614174000",
+          ownerAgentId: "agent-a",
+          version: 1,
+          title: "Check the build",
+          target: "@frank",
+          messageId: "123e4567-e89b-42d3-a456-426614174001",
+          fireAt,
+        },
+        expiresAt: new Date(Date.parse(fireAt) + 7 * 24 * 60 * 60_000).toISOString(),
+        messageType: REMINDER_DUE_MESSAGE_TYPE,
+      });
+      const recordPath = join(
+        stateDirectory,
+        "reminder-due",
+        connection.workspaceId,
+        "agent-a",
+        "occurrences.json",
+      );
+      const state = async () => {
+        try {
+          return (await Bun.file(recordPath).json()).occurrences[0]?.state;
+        } catch {
+          return undefined;
+        }
+      };
+      const deadline = Date.now() + 5_000;
+      while ((await state()) !== "delivered") {
+        if (Date.now() > deadline) throw new Error("the Due was never delivered");
+        await Bun.sleep(10);
+      }
+      await Bun.sleep(10);
+      expect(acks).toHaveLength(1);
+      expect(sessions).toBe(1);
+      const context = runtime.issueAgentContext("agent-a");
+      const inbox = await runtime.inbox(context, {
+        idempotencyKey: "check-stopped",
+        context,
+        operation: "check",
+      });
+      expect(inbox.entries.filter((entry) => entry.kind === "app")).toHaveLength(1);
     } finally {
       await runtime.stop();
       await rm(stateDirectory, { recursive: true, force: true });

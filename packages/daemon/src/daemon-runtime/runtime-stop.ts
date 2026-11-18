@@ -17,7 +17,7 @@ import type { UpgradeResultReporter } from "./upgrade-result-reporter";
 import type { AgentUsageReport } from "./agent-usage-report";
 import type { AgentProxy } from "./runtime-launch-types";
 import type { MentionDeliveryTracker } from "./mention-delivery-tracker";
-import type { ReminderScheduler } from "#src/agent-reminder/reminder-scheduler";
+import type { ReminderDueReceiver } from "#src/agent-reminder/reminder-due-receiver";
 import type { AgentMigrationRunner } from "#src/agent-migration/migration-runner";
 import type { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
 import type { SystemCleaner } from "#src/system-cleaner/system-cleaner";
@@ -53,7 +53,7 @@ export type RuntimeStopPorts = {
   launchCoordinator: Pick<AgentLaunchCoordinator, "clearOwedRecovery">;
   messageAttention: AgentMessageAttentionIndex;
   mentionDeliveries: MentionDeliveryTracker;
-  reminders: Pick<ReminderScheduler, "stop" | "awaitIdle">;
+  reminders: Pick<ReminderDueReceiver, "stop" | "awaitIdle">;
   systemCleaner: Pick<SystemCleaner, "clear">;
   migrations: Pick<AgentMigrationRunner, "close"> | undefined;
   agentProxy: Pick<AgentProxy, "revoke"> | undefined;

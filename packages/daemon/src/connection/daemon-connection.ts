@@ -119,20 +119,16 @@ import {
   type AgentMessageRequest,
   type WorkspaceInfoRequest,
   type WorkspaceInfoResponse,
-  REMINDER_FIRE_METHOD,
-  REMINDER_SNAPSHOT_METHOD,
+  REMINDER_DUE_ACK_METHOD,
   REMINDER_SYNC_MESSAGE_TYPE,
-  decodeReminderFireResponse,
+  decodeReminderDueAckResponse,
   decodeReminderSync,
   decodeAgentMigrationCancel,
   decodeAgentMigrationLease,
-  encodeReminderFireRequest,
-  encodeReminderSnapshotRequest,
+  encodeReminderDueAckRequest,
   type AgentReminderOperationRequest,
-  type ReminderFireRequest,
-  type ReminderFireResponse,
-  type ReminderSnapshotRequest,
-  type ReminderSync,
+  type ReminderDue,
+  type ReminderDueAckRequest,
   APP_CONFIG_SNAPSHOT_METHOD,
   decodeAppConfigSync,
   encodeAppConfigSnapshotRequest,
@@ -236,7 +232,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   readonly #agentInboxPurge = new ListenerSlot<(purge: AgentInboxPurge) => void>();
   readonly #agentWorkspaceReset = new ListenerSlot<(request: AgentWorkspaceResetRequest) => void>();
   readonly #agentMessage = new ListenerSlot<(message: AgentMessageDelivery) => void>();
-  readonly #reminderSync = new ListenerSlot<(sync: ReminderSync) => void>();
   readonly #serverPublications = new ServerPublications();
   readonly #appRegistrationNotice = new ListenerSlot<(notice: AppRegistrationNotice) => void>();
   readonly #agentMigrationLease = new ListenerSlot<(lease: ReceivedAgentMigrationLease) => void>();
@@ -523,8 +518,8 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   onRuntimeAuth(callback: (intent: RuntimeAuthIntent) => void): () => void {
     return this.#runtimeAuthIntent.set(callback);
   }
-  onReminderSync(callback: (sync: ReminderSync) => void): () => void {
-    return this.#reminderSync.set(callback);
+  onReminderDue(callback: (due: ReminderDue) => void): () => void {
+    return this.#serverPublications.onReminderDue(callback);
   }
   onAppConfigSync(callback: (sync: AppConfigSync) => void): () => void {
     return this.#serverPublications.onAppConfigSync(callback);
@@ -758,13 +753,9 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   async agentReminder(request: AgentReminderOperationRequest, agentApiKey: string) {
     return agentReminder(this.#agentMessagePorts(), request, agentApiKey);
   }
-  async fireReminder(request: ReminderFireRequest): Promise<ReminderFireResponse> {
-    const reply = await this.#rpc(REMINDER_FIRE_METHOD, encodeReminderFireRequest(request));
-    return decodeReminderFireResponse(rpcData(reply));
-  }
-  async requestSnapshot(request: ReminderSnapshotRequest): Promise<ReminderSync> {
-    const reply = await this.#rpc(REMINDER_SNAPSHOT_METHOD, encodeReminderSnapshotRequest(request));
-    return decodeReminderSync(rpcData(reply));
+  async acknowledgeReminderDue(request: ReminderDueAckRequest): Promise<boolean> {
+    const reply = await this.#rpc(REMINDER_DUE_ACK_METHOD, encodeReminderDueAckRequest(request));
+    return decodeReminderDueAckResponse(rpcData(reply)).accepted;
   }
   async requestAppConfigSnapshot(request: AppConfigSnapshotRequest): Promise<AppConfigSync> {
     const reply = await this.#rpc(
@@ -781,11 +772,11 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     const handled =
       routeRuntimeAuthPublication(data, config, this.#runtimeAuthIntent.current) ||
       this.#queries.receive(data, config) ||
-      routePublication(data, decodeReminderSync, (sync) => {
-        if (sync.messageType !== REMINDER_SYNC_MESSAGE_TYPE || !ownsDaemon(sync)) return false;
-        this.#readyPublications.deliver(this.#reminderSync, sync);
-        return true;
-      }) ||
+      routePublication(
+        data,
+        decodeReminderSync,
+        (sync) => sync.messageType === REMINDER_SYNC_MESSAGE_TYPE && ownsDaemon(sync),
+      ) ||
       this.#serverPublications.route(
         data,
         { workspaceId, computerId: config.computerId },
@@ -1171,7 +1162,6 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
       this.#agentInboxPurge,
       this.#agentWorkspaceReset,
       this.#agentMessage,
-      this.#reminderSync,
       this.#serverPublications,
       this.#appRegistrationNotice,
       this.#agentMigrationLease,

@@ -104,7 +104,6 @@ import {
   drainAppInboxNotices,
   inbox,
   requestAppConfigSnapshot,
-  requestReminderSnapshot,
   resyncAppConfigs,
 } from "./runtime-app-inbox-sync";
 import { handleAgentMessage } from "./runtime-message-delivery";
@@ -112,7 +111,6 @@ import { RuntimeTurn } from "./runtime-turn-management";
 import { abandonLaunch, scheduleStartupFailure } from "./agent-startup-failure";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
 import { ColdIdleSweep } from "./cold-idle-sweep";
-import { ReminderSnapshotAsks, reminderAgentIds } from "./reminder-snapshot-asks";
 import { assembleAgentConfigApply } from "./agent-config-apply-assembly";
 import { stalledRecoverySweep } from "./stalled-recovery-sweep";
 import { CatalogFreshnessSweep } from "./catalog-freshness-sweep";
@@ -320,10 +318,6 @@ export class DaemonRuntime {
     credential: this.#credentialHolds,
   });
   readonly #services: RuntimeServices;
-  readonly #reminderSnapshots = new ReminderSnapshotAsks({
-    requestReminderSnapshot: (agentId, reason) =>
-      requestReminderSnapshot(this.#appInboxSyncPorts(), agentId, { reason }),
-  });
 
   readonly #inboxCoordinator: AgentInboxCoordinator;
   readonly #stopCoordinator: AgentStopCoordinator;
@@ -559,8 +553,6 @@ export class DaemonRuntime {
       systemCleaner,
       stopAgent: (agentId) => this.stopAgent(agentId),
       runningAgentIds: () => this.#agentProcessManager.runningAgentIds(),
-      requestReminderSnapshot: (agentId) =>
-        this.#reminderSnapshots.request(agentId, "unsynchronised_upsert"),
       forgetLocalAgent: (agentId) => this.#forgetLocalAgent(agentId),
       upgradeResults: this.lifecycle,
     });
@@ -765,7 +757,7 @@ export class DaemonRuntime {
         deliverMessage: (message) => this.handleAgentMessage(message),
         stopRuntime: () => this.stop(),
         connectionRefused: (reason) => this.lifecycle.connectionRefused?.(reason),
-        applyReminderSync: (sync) => this.#services.reminders.apply(sync),
+        receiveReminderDue: (due) => this.#services.reminders.receive(due),
         applyAppConfigSync: (sync) => this.#services.appConfigs.apply(sync),
         applyAgentServerFeatures: (sync) => this.#sync.applyServerFeatures(sync),
         acceptAppRegistrationNotice: (notice) =>
@@ -804,8 +796,7 @@ export class DaemonRuntime {
         this.#services.upgradeResults,
         this.#connection.workspaceId,
       ),
-      reminderSnapshots: this.#reminderSnapshots,
-      reminderAgentIds: () => reminderAgentIds(this.#agentProcessManager, this.#agentLaunches),
+      reminders: this.#services.reminders,
       resyncAppConfigs: () => this.#resyncAppConfigs(),
       activityPublisher: this.#activityPublisher,
       coldIdleSweep: this.#coldIdleSweep,
@@ -1010,7 +1001,6 @@ export class DaemonRuntime {
         assertAgentNotStopping: (id) => this.#assertAgentNotStopping(id),
         migrations: this.#services.migrations,
         requestAppConfigSnapshot: (id) => requestAppConfigSnapshot(this.#appInboxSyncPorts(), id),
-        requestReminderSnapshot: (id) => this.#reminderSnapshots.request(id, "agent_start"),
         inputDrain: this.#inputDrain,
         introducedAgents: this.#introducedAgents,
         agentLaunches: this.#agentLaunches,
@@ -1053,12 +1043,10 @@ export class DaemonRuntime {
     return {
       transport: () => this.#transport,
       appConfigs: this.#services.appConfigs,
-      reminders: this.#services.reminders,
       inboxCoordinator: this.#inboxCoordinator,
       env: () => this.#env(),
       readyRunningAgentIds: () => this.#readyRunningAgentIds(),
       launchingAgentIds: this.#agentLaunches.keys(),
-      signal: this.#shutdown.stopSignal,
     };
   }
   #agentApiRemindersPorts() {
@@ -1333,7 +1321,6 @@ export class DaemonRuntime {
   issueAgentContext(agentId: string, context: string = crypto.randomUUID()): string {
     this.#assertRunning();
     this.#agentContexts.set(agentId, context);
-    this.#reminderSnapshots.request(agentId, "agent_context");
     return context;
   }
   #runnerHoldCell() {

@@ -4,6 +4,9 @@ import {
   APP_CONFIG_CAPABILITY,
   APP_CONFIG_SYNC_MESSAGE_TYPE,
   CLEANER_APP_ID,
+  REMINDER_DUE_MESSAGE_TYPE,
+  type ReminderDue,
+  type ReminderJob,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentMigrationServer } from "#src/agent-migration/transfer-ports";
 import type { ReceivedAgentMigrationLease } from "#src/connection/daemon-connection-client";
@@ -7430,7 +7433,7 @@ describe("DaemonRuntime", () => {
       await rm(stateDirectory, { recursive: true, force: true });
     }
   });
-  test("a reminder-triggered restart waits for the shared notice outcome before becoming terminal", async () => {
+  test("a reminder whose wake notice is refused keeps its App Inbox item and counts as delivered", async () => {
     const stateDirectory = join(tempRoot, `coforge-reminder-notice-${crypto.randomUUID()}`);
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -7438,7 +7441,7 @@ describe("DaemonRuntime", () => {
     const notifyStarted = Promise.withResolvers<void>();
     const exits = new Set<() => void>();
     let sessions = 0;
-    let receiveReminder!: (sync: import("@lrm/coforge-sdk/internal").ReminderSync) => void;
+    let receiveReminder!: (due: ReminderDue) => void;
     const reminderId = "123e4567-e89b-42d3-a456-426614174000";
     const runtime = new DaemonRuntime(
       connection,
@@ -7469,12 +7472,12 @@ describe("DaemonRuntime", () => {
           async start() {},
           async ready() {},
           async stop() {},
-          onReminderSync(callback) {
+          onReminderDue(callback) {
             receiveReminder = callback;
             return () => undefined;
           },
-          async fireReminder(request) {
-            return { ...request, result: "accepted", fired: true, catchup: false } as const;
+          async acknowledgeReminderDue() {
+            return true;
           },
           async requestAgentLaunchConfig() {
             return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
@@ -7490,45 +7493,29 @@ describe("DaemonRuntime", () => {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
       for (const exit of exits) exit();
-      receiveReminder({
-        protocolMajor: 1,
-        requestId: "reminder-snapshot",
-        workspaceId: connection.workspaceId,
-        computerId: connection.computerId,
-        agentId: "agent-a",
-        operation: "snapshot",
-        messageType: "coforge.rpc.v1.ReminderSync",
-        jobs: [
-          {
-            reminderId,
-            ownerAgentId: "agent-a",
-            version: 1,
-            title: "Retry me",
-            target: "@frank",
-            messageId: "123e4567-e89b-42d3-a456-426614174001",
-            fireAt: new Date(Date.now() - 1000).toISOString(),
-          },
-        ],
-      });
+      receiveReminder(
+        reminderDue({
+          reminderId,
+          ownerAgentId: "agent-a",
+          version: 1,
+          title: "Retry me",
+          target: "@frank",
+          messageId: "123e4567-e89b-42d3-a456-426614174001",
+          fireAt: new Date(Date.now() - 1000).toISOString(),
+        }),
+      );
       await notifyStarted.promise;
       const concurrentDrain = runtime.drainAppInboxNotices("agent-a");
       notify.reject(new Error("notify rejected"));
       await expect(concurrentDrain).rejects.toThrow("notify rejected");
-      const receipts = (await Bun.file(
-        join(
-          stateDirectory,
-          "reminder-receipts",
-          connection.workspaceId,
-          "agent-a",
-          "receipts.json",
-        ),
-      ).json()) as {
-        receipts: Array<{
-          wakeAccepted: boolean;
-          terminal: boolean;
-        }>;
-      };
-      expect(receipts.receipts[0]).toMatchObject({ wakeAccepted: false, terminal: false });
+      await waitFor(async () => (await reminderDueStates(stateDirectory))[0] === "delivered");
+      const context = runtime.issueAgentContext("agent-a");
+      const inbox = await runtime.inbox(context, {
+        idempotencyKey: "check-refused-notice",
+        context,
+        operation: "check",
+      });
+      expect(inbox.entries.filter((entry) => entry.kind === "app")).toHaveLength(1);
     } finally {
       notify.resolve();
       await runtime.stop();
@@ -7540,7 +7527,7 @@ describe("DaemonRuntime", () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
     const notified = Promise.withResolvers<void>();
-    let receiveReminder!: (sync: import("@lrm/coforge-sdk/internal").ReminderSync) => void;
+    let receiveReminder!: (due: ReminderDue) => void;
     const dueAt = new Date(Date.now() - 2 * 60 * 60000).toISOString();
     const runtime = new DaemonRuntime(
       connection,
@@ -7556,12 +7543,12 @@ describe("DaemonRuntime", () => {
           async start() {},
           async ready() {},
           async stop() {},
-          onReminderSync(callback) {
+          onReminderDue(callback) {
             receiveReminder = callback;
             return () => undefined;
           },
-          async fireReminder(request) {
-            return { ...request, result: "accepted", fired: true, catchup: true } as const;
+          async acknowledgeReminderDue() {
+            return true;
           },
           async requestAgentLaunchConfig() {
             return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
@@ -7576,26 +7563,17 @@ describe("DaemonRuntime", () => {
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
-      receiveReminder({
-        protocolMajor: 1,
-        requestId: "reminder-snapshot",
-        workspaceId: connection.workspaceId,
-        computerId: connection.computerId,
-        agentId: "agent-a",
-        operation: "snapshot",
-        messageType: "coforge.rpc.v1.ReminderSync",
-        jobs: [
-          {
-            reminderId: "123e4567-e89b-42d3-a456-426614174000",
-            ownerAgentId: "agent-a",
-            version: 1,
-            title: "Check the build",
-            target: "@frank",
-            messageId: "123e4567-e89b-42d3-a456-426614174001",
-            fireAt: dueAt,
-          },
-        ],
-      });
+      receiveReminder(
+        reminderDue({
+          reminderId: "123e4567-e89b-42d3-a456-426614174000",
+          ownerAgentId: "agent-a",
+          version: 1,
+          title: "Check the build",
+          target: "@frank",
+          messageId: "123e4567-e89b-42d3-a456-426614174001",
+          fireAt: dueAt,
+        }),
+      );
       await notified.promise;
       const context = runtime.issueAgentContext("agent-a");
       const inbox = await runtime.inbox(context, {
@@ -7610,7 +7588,7 @@ describe("DaemonRuntime", () => {
       await rm(stateDirectory, { recursive: true, force: true });
     }
   });
-  describe("a stop with a reminder fire request in flight", () => {
+  describe("a stop with a reminder Due ACK in flight", () => {
     async function withFireInFlight(
       run: (harness: {
         runtime: DaemonRuntime;
@@ -7626,7 +7604,7 @@ describe("DaemonRuntime", () => {
       const fireStarted = Promise.withResolvers<void>();
       const answer = Promise.withResolvers<void>();
       let answered = false;
-      let receiveReminder!: (sync: import("@lrm/coforge-sdk/internal").ReminderSync) => void;
+      let receiveReminder!: (due: ReminderDue) => void;
       const runtime = new DaemonRuntime(
         connection,
         () => ({ provider: "pi", createAgentSession: async () => sessionSpy() }),
@@ -7636,15 +7614,15 @@ describe("DaemonRuntime", () => {
             async start() {},
             async ready() {},
             async stop() {},
-            onReminderSync(callback) {
+            onReminderDue(callback) {
               receiveReminder = callback;
               return () => undefined;
             },
-            async fireReminder(request) {
+            async acknowledgeReminderDue() {
               fireStarted.resolve();
               await answer.promise;
               answered = true;
-              return { ...request, result: "accepted", fired: true, catchup: false } as const;
+              return true;
             },
             async revokeAgentApiKey() {},
           }),
@@ -7655,26 +7633,17 @@ describe("DaemonRuntime", () => {
       );
       try {
         await runtime.start(connection);
-        receiveReminder({
-          protocolMajor: 1,
-          requestId: "reminder-snapshot",
-          workspaceId: connection.workspaceId,
-          computerId: connection.computerId,
-          agentId: "agent-a",
-          operation: "snapshot",
-          messageType: "coforge.rpc.v1.ReminderSync",
-          jobs: [
-            {
-              reminderId: "123e4567-e89b-42d3-a456-426614174000",
-              ownerAgentId: "agent-a",
-              version: 1,
-              title: "Check the build",
-              target: "@frank",
-              messageId: "123e4567-e89b-42d3-a456-426614174001",
-              fireAt: new Date(Date.now() - 1000).toISOString(),
-            },
-          ],
-        });
+        receiveReminder(
+          reminderDue({
+            reminderId: "123e4567-e89b-42d3-a456-426614174000",
+            ownerAgentId: "agent-a",
+            version: 1,
+            title: "Check the build",
+            target: "@frank",
+            messageId: "123e4567-e89b-42d3-a456-426614174001",
+            fireAt: new Date(Date.now() - 1000).toISOString(),
+          }),
+        );
         await fireStarted.promise;
         await run({
           runtime,
@@ -7702,20 +7671,7 @@ describe("DaemonRuntime", () => {
         answerFire();
         await stopping;
         expect(fireAnswered()).toBe(true);
-        const receipts = (await Bun.file(
-          join(
-            stateDirectory,
-            "reminder-receipts",
-            connection.workspaceId,
-            "agent-a",
-            "receipts.json",
-          ),
-        ).json()) as {
-          receipts: Array<Record<string, unknown>>;
-        };
-        expect(receipts.receipts).toHaveLength(1);
-        expect(receipts.receipts[0]).toMatchObject({ attempt: 1, wakeAccepted: false });
-        expect(receipts.receipts[0]!.serverResult).toBeUndefined();
+        expect(await reminderDueStates(stateDirectory)).toEqual(["acknowledged"]);
       });
     });
     test(
@@ -7738,7 +7694,7 @@ describe("DaemonRuntime", () => {
     );
   });
   test.each(["deleted", "damaged"] as const)(
-    "a delivered reminder can still be acknowledged after its local receipt file is %s",
+    "a delivered reminder can still be acknowledged after its local Due record is %s",
     async (damage) => {
       const stateDirectory = join(tempRoot, `coforge-reminder-lost-receipt-${crypto.randomUUID()}`);
       const credentials = new InMemoryDaemonCredentialStore();
@@ -7746,7 +7702,7 @@ describe("DaemonRuntime", () => {
       const reminderId = "123e4567-e89b-42d3-a456-426614174000";
       const agentKey = `sk_agent_${"a".repeat(43)}`;
       const createRuntime = (onNotify: () => void) => {
-        let receiveReminder!: (sync: import("@lrm/coforge-sdk/internal").ReminderSync) => void;
+        let receiveReminder!: (due: ReminderDue) => void;
         const runtime = new DaemonRuntime(
           connection,
           () => ({
@@ -7761,12 +7717,12 @@ describe("DaemonRuntime", () => {
               async start() {},
               async ready() {},
               async stop() {},
-              onReminderSync(callback) {
+              onReminderDue(callback) {
                 receiveReminder = callback;
                 return () => undefined;
               },
-              async fireReminder(request) {
-                return { ...request, result: "accepted", fired: true, catchup: false } as const;
+              async acknowledgeReminderDue() {
+                return true;
               },
               async requestAgentLaunchConfig() {
                 return agentLaunchConfig(agentKey);
@@ -7780,8 +7736,7 @@ describe("DaemonRuntime", () => {
         );
         return {
           runtime,
-          receive: (sync: import("@lrm/coforge-sdk/internal").ReminderSync) =>
-            receiveReminder(sync),
+          receive: (due: ReminderDue) => receiveReminder(due),
         };
       };
       const notified = Promise.withResolvers<void>();
@@ -7789,36 +7744,27 @@ describe("DaemonRuntime", () => {
       try {
         await first.runtime.start(connection);
         await first.runtime.startAgent("agent-a", config);
-        first.receive({
-          protocolMajor: 1,
-          requestId: "reminder-snapshot",
-          workspaceId: connection.workspaceId,
-          computerId: connection.computerId,
-          agentId: "agent-a",
-          operation: "snapshot",
-          messageType: "coforge.rpc.v1.ReminderSync",
-          jobs: [
-            {
-              reminderId,
-              ownerAgentId: "agent-a",
-              version: 1,
-              title: "Check the build",
-              target: "@frank",
-              messageId: "123e4567-e89b-42d3-a456-426614174001",
-              fireAt: new Date(Date.now() - 1000).toISOString(),
-            },
-          ],
-        });
+        first.receive(
+          reminderDue({
+            reminderId,
+            ownerAgentId: "agent-a",
+            version: 1,
+            title: "Check the build",
+            target: "@frank",
+            messageId: "123e4567-e89b-42d3-a456-426614174001",
+            fireAt: new Date(Date.now() - 1000).toISOString(),
+          }),
+        );
         await notified.promise;
       } finally {
         await first.runtime.stop();
       }
       const receiptFile = join(
         stateDirectory,
-        "reminder-receipts",
+        "reminder-due",
         connection.workspaceId,
         "agent-a",
-        "receipts.json",
+        "occurrences.json",
       );
       if (damage === "deleted") await rm(receiptFile, { force: true });
       else await Bun.write(receiptFile, "{ not json");
@@ -7869,7 +7815,7 @@ describe("DaemonRuntime", () => {
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
     const notified = Promise.withResolvers<void>();
-    let receiveReminder!: (sync: import("@lrm/coforge-sdk/internal").ReminderSync) => void;
+    let receiveReminder!: (due: ReminderDue) => void;
     const fullTitle = `  检查\n\t${"中".repeat(115)}😀${"长期项目进度".repeat(30)}  `;
     const reminderId = "123e4567-e89b-42d3-a456-426614174000";
     const runtime = new DaemonRuntime(
@@ -7886,12 +7832,12 @@ describe("DaemonRuntime", () => {
           async start() {},
           async ready() {},
           async stop() {},
-          onReminderSync(callback) {
+          onReminderDue(callback) {
             receiveReminder = callback;
             return () => undefined;
           },
-          async fireReminder(request) {
-            return { ...request, result: "accepted", fired: true, catchup: false } as const;
+          async acknowledgeReminderDue() {
+            return true;
           },
           async requestAgentLaunchConfig() {
             return agentLaunchConfig(`sk_agent_${"a".repeat(43)}`);
@@ -7906,26 +7852,17 @@ describe("DaemonRuntime", () => {
     try {
       await runtime.start(connection);
       await runtime.startAgent("agent-a", config);
-      receiveReminder({
-        protocolMajor: 1,
-        requestId: "reminder-snapshot",
-        workspaceId: connection.workspaceId,
-        computerId: connection.computerId,
-        agentId: "agent-a",
-        operation: "snapshot",
-        messageType: "coforge.rpc.v1.ReminderSync",
-        jobs: [
-          {
-            reminderId,
-            ownerAgentId: "agent-a",
-            version: 1,
-            title: fullTitle,
-            target: "@frank",
-            messageId: "123e4567-e89b-42d3-a456-426614174001",
-            fireAt: new Date(Date.now() - 1000).toISOString(),
-          },
-        ],
-      });
+      receiveReminder(
+        reminderDue({
+          reminderId,
+          ownerAgentId: "agent-a",
+          version: 1,
+          title: fullTitle,
+          target: "@frank",
+          messageId: "123e4567-e89b-42d3-a456-426614174001",
+          fireAt: new Date(Date.now() - 1000).toISOString(),
+        }),
+      );
       await notified.promise;
       const context = runtime.issueAgentContext("agent-a");
       const inbox = await runtime.inbox(context, {
@@ -7949,22 +7886,10 @@ describe("DaemonRuntime", () => {
         (await runtime.inbox(context, { idempotencyKey: "after-ack", context, operation: "check" }))
           .entries,
       ).toEqual([]);
-      const receipts = (await Bun.file(
-        join(
-          stateDirectory,
-          "reminder-receipts",
-          connection.workspaceId,
-          "agent-a",
-          "receipts.json",
-        ),
-      ).json()) as {
-        receipts: Array<{
-          job: {
-            title: string;
-          };
-        }>;
-      };
-      expect(receipts.receipts[0]?.job.title).toBe(fullTitle);
+      const record = (await Bun.file(
+        join(stateDirectory, "reminder-due", connection.workspaceId, "agent-a", "occurrences.json"),
+      ).json()) as { occurrences: Array<{ due: { job: { title: string } } }> };
+      expect(record.occurrences[0]?.due.job.title).toBe(fullTitle);
     } finally {
       await runtime.stop();
       await rm(stateDirectory, { recursive: true, force: true });
@@ -10307,3 +10232,33 @@ test("an App config the cloud pushes reaches the System Cleaner", async () => {
     await runtime.stop();
   }
 });
+
+function reminderDue(job: ReminderJob): ReminderDue {
+  return {
+    protocolMajor: 1,
+    workspaceId: connection.workspaceId,
+    computerId: connection.computerId,
+    agentId: job.ownerAgentId,
+    occurrenceId: crypto.randomUUID(),
+    job,
+    expiresAt: new Date(Date.parse(job.fireAt) + 7 * 24 * 60 * 60_000).toISOString(),
+    messageType: REMINDER_DUE_MESSAGE_TYPE,
+  };
+}
+
+async function reminderDueStates(stateDirectory: string, agentId = "agent-a") {
+  const file = Bun.file(
+    join(stateDirectory, "reminder-due", connection.workspaceId, agentId, "occurrences.json"),
+  );
+  if (!(await file.exists())) return [];
+  const value = (await file.json()) as { occurrences: Array<{ state: string }> };
+  return value.occurrences.map((occurrence) => occurrence.state);
+}
+
+async function waitFor(condition: () => Promise<boolean>, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!(await condition())) {
+    if (Date.now() > deadline) throw new Error("condition was not met in time");
+    await Bun.sleep(10);
+  }
+}

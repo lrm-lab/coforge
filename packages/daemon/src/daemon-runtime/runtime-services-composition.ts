@@ -1,6 +1,5 @@
 import type { AgentAppConfigSync } from "#src/agent-app-config/agent-app-config-sync";
 import type { AgentMigrationRunner } from "#src/agent-migration/migration-runner";
-import type { ReminderScheduler } from "#src/agent-reminder/reminder-scheduler";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { SystemCleaner, SystemCleanerOptions } from "#src/system-cleaner/system-cleaner";
 import type { ReminderJob } from "@lrm/coforge-sdk/internal";
@@ -11,8 +10,8 @@ import { AgentAppConfigSync as AppConfigSync } from "#src/agent-app-config/agent
 import { AgentMigrationBucketClient } from "#src/connection/agent-migration-bucket-client";
 import { AgentMigrationRunner as MigrationRunner } from "#src/agent-migration/migration-runner";
 import { ProcJobManager } from "#src/proc-jobs/proc-job-manager";
-import { FileReminderReceiptStore } from "#src/persistence/reminder-receipt-store";
-import { ReminderScheduler as Reminders } from "#src/agent-reminder/reminder-scheduler";
+import { FileReminderDueStore } from "#src/persistence/reminder-due-store";
+import { ReminderDueReceiver } from "#src/agent-reminder/reminder-due-receiver";
 import { ReminderAcknowledgementSync } from "#src/agent-reminder/reminder-acknowledgement-sync";
 import { sendReminderAcknowledgement } from "./runtime-reminder-acknowledgement";
 import { SystemCleaner as Cleaner } from "#src/system-cleaner/system-cleaner";
@@ -42,8 +41,6 @@ export type RuntimeServicesPorts = {
   notifyAppItem(agentId: string, itemId: string): Promise<boolean>;
   /** The reminder job that came due, delivered through the Agent's wake path. */
   acceptReminderDue(job: ReminderJob, late: boolean): Promise<boolean>;
-  /** Asks for an Agent's reminder snapshot, for a change that arrived before one did. */
-  requestReminderSnapshot(agentId: string): void;
   /** The cleaner's host-injected clock and measurements. */
   systemCleaner: Pick<SystemCleanerOptions, "clock" | "measureMemoryFile" | "measureDiskSpace">;
   stopAgent(agentId: string): Promise<void>;
@@ -61,7 +58,7 @@ export type RuntimeServicesPorts = {
 };
 
 export type RuntimeServices = {
-  reminders: ReminderScheduler;
+  reminders: ReminderDueReceiver;
   systemCleaner: SystemCleaner;
   appConfigs: AgentAppConfigSync;
   migrations: AgentMigrationRunner | undefined;
@@ -85,21 +82,18 @@ export function composeRuntimeServices(ports: RuntimeServicesPorts): RuntimeServ
       connection.computerId,
     ),
   );
-  const reminders = new Reminders(
+  const reminders = new ReminderDueReceiver(
     { workspaceId: connection.workspaceId, computerId: connection.computerId },
-    new FileReminderReceiptStore(stateDirectory, connection.workspaceId, connection.computerId),
-    (request) => {
-      const current = transport();
-      if (!current.fireReminder) throw new Error("reminder fire is unavailable");
-      return current.fireReminder(request);
+    new FileReminderDueStore(stateDirectory, connection.workspaceId, connection.computerId),
+    {
+      acknowledge: (request) => {
+        const current = transport();
+        if (!current.acknowledgeReminderDue) throw new Error("reminder due ACK is unavailable");
+        return current.acknowledgeReminderDue(request);
+      },
+      deliver: (job, occurrence) => ports.acceptReminderDue(job, occurrence.late),
+      acknowledgeCloud: (request) => acknowledgementSync.enqueue(request),
     },
-    (job: ReminderJob, occurrence: { late: boolean }) =>
-      ports.acceptReminderDue(job, occurrence.late),
-    // The default clock and randomness; only the snapshot ask comes from the runtime.
-    undefined,
-    undefined,
-    (agentId) => ports.requestReminderSnapshot(agentId),
-    (request) => acknowledgementSync.enqueue(request),
   );
   const systemCleaner = new Cleaner({
     ...ports.systemCleaner,

@@ -6,6 +6,10 @@ import {
   type ReminderDueRecordState,
   type ReminderDueStore,
 } from "./reminder-due-record";
+import {
+  reminderAcknowledgementRequest,
+  type ReminderAcknowledgementSyncRequest,
+} from "./reminder-acknowledgement-sync";
 import { ReminderWork } from "./reminder-work";
 
 const logger = getLogger(["coforge", "daemon", "reminder"]);
@@ -14,6 +18,7 @@ const LATE_AFTER_MS = 60_000;
 export type ReminderDuePorts = Readonly<{
   acknowledge(request: ReminderDueAckRequest): Promise<boolean>;
   deliver(job: ReminderJob, occurrence: { late: boolean }): Promise<unknown>;
+  acknowledgeCloud?(request: ReminderAcknowledgementSyncRequest): void;
   now?(): number;
 }>;
 
@@ -70,15 +75,36 @@ export class ReminderDueReceiver {
       });
   }
 
-  isDelivered(agentId: string, reminderId: string, version: number): Promise<boolean> {
-    return this.#work.serial(agentId, async () =>
-      (await this.#records(agentId)).some(
+  acknowledge(
+    agentId: string,
+    reminderId: string,
+    version: number,
+    operation: "ack" | "dismiss" = "ack",
+  ): Promise<boolean> {
+    return this.#work.serial(agentId, async () => {
+      let records: ReminderDueRecord[];
+      try {
+        records = await this.#records(agentId);
+      } catch (error) {
+        logger.warn("reminder.due_records_unreadable", {
+          event: "reminder.due_records_unreadable",
+          agent_id: agentId,
+          error,
+        });
+        return false;
+      }
+      const delivered = records.some(
         (record) =>
           record.state === "delivered" &&
           record.due.job.reminderId === reminderId &&
           record.due.job.version === version,
-      ),
-    );
+      );
+      if (delivered)
+        this.ports.acknowledgeCloud?.(
+          reminderAcknowledgementRequest({ agentId, reminderId, version }, operation),
+        );
+      return delivered;
+    });
   }
 
   stop(): void {
