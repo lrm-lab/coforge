@@ -334,6 +334,7 @@ export const CLASSIFICATION_RULES: readonly ClassificationRule[] = [
       /\bstream\b[^.]{0,20}\b(?:closed|ended|terminated)\b[^.]{0,20}\bunexpectedly\b/i.test(
         message,
       ) ||
+      /\bstream closed before response\.completed\b/i.test(message) ||
       /\berror decoding\b.*\bresponse\b/i.test(message) ||
       /\bincomplete (?:response|stream)\b/i.test(message) ||
       /\bpremature (?:close|end)\b/i.test(message),

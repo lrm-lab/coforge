@@ -228,3 +228,24 @@ test("the exit that cold-starts a resumed session counts once, not as a resume f
     await h.cleanup();
   }
 });
+
+test("exits after a stream that closed before response.completed count toward the stop", async () => {
+  const h = await harness();
+  try {
+    const hosts = ["alpha", "bravo", "charlie", "delta", "echo"];
+    for (const [exit, host] of hosts.entries()) {
+      await h.runtime.startAgent("agent-a", config);
+      h.sessions.at(-1)!.emit({
+        type: "error",
+        message: `stream closed before response.completed from ${host}`,
+        retryable: true,
+      });
+      h.sessions.at(-1)!.crash(crash);
+      await settle();
+      expect(stoppedForExits(h)).toHaveLength(exit < 4 ? 0 : 1);
+    }
+  } finally {
+    await h.runtime.stop();
+    await h.cleanup();
+  }
+});
