@@ -20,7 +20,6 @@ import {
 } from "./report-draft-cache";
 import {
   deleteOverviewReport,
-  startTeamKeyPointExtraction,
   sendWeeklyReportAssignments,
   updateFormatReportMeta,
 } from "./records.functions";
@@ -52,6 +51,7 @@ import { useReportSidePanelOpen } from "./use-record-side-panel-open";
 import { useReportDraftSave, useSettledReportSave } from "./use-report-save";
 import { ReportSaveFailureBar, useReportSaveState } from "./report-save-state";
 import { useRecordRefresh } from "./use-record-refresh";
+import { useTeamKeyPointStart } from "./use-team-key-point-start";
 
 export function TemplateReportDetail({
   report,
@@ -70,7 +70,6 @@ export function TemplateReportDetail({
   const deleteDialog = useRecordDeleteDialog();
   const saveFormatMeta = useServerFn(updateFormatReportMeta);
   const sendAssignments = useServerFn(sendWeeklyReportAssignments);
-  const startTeamKeyPoints = useServerFn(startTeamKeyPointExtraction);
   const removeOverview = useServerFn(deleteOverviewReport);
   const isOverview = report.surface === "overview";
   const isOverviewLeader = isOverview && report.editable === true;
@@ -81,7 +80,7 @@ export function TemplateReportDetail({
   const [titleDraft, setTitleDraft] = useState(report.title);
   const [editorRevision, setEditorRevision] = useState(0);
   const formatPageRef = useRef("");
-  const [teamKeyPointBusy, setTeamKeyPointBusy] = useState(false);
+  const teamKeyPoints = useTeamKeyPointStart(report.id, isOverviewLeader);
   const contentRef = useRef(content);
   contentRef.current = content;
   const reportIdRef = useRef(report.id);
@@ -327,23 +326,6 @@ export function TemplateReportDetail({
     }
   }
 
-  async function onStartTeamKeyPoints() {
-    if (!isOverviewLeader || teamKeyPointBusy) return;
-    setTeamKeyPointBusy(true);
-    try {
-      const result = await startTeamKeyPoints({
-        data: { overviewReportId: report.id, force: true },
-      });
-      if (result.error === "no_submitted_member_reports") {
-        toast.error(m.records_key_points_team_none_submitted());
-        return;
-      }
-      await refresh.record();
-    } finally {
-      setTeamKeyPointBusy(false);
-    }
-  }
-
   return (
     <div className="relative flex min-h-0 flex-1">
       <div
@@ -465,8 +447,8 @@ export function TemplateReportDetail({
                 <TeamKeyPointSection
                   overviewReportId={report.id}
                   extraction={content.keyPointExtraction}
-                  busy={teamKeyPointBusy}
-                  onStart={onStartTeamKeyPoints}
+                  busy={teamKeyPoints.busy}
+                  onStart={teamKeyPoints.start}
                 />
               ) : null}
             </RecordsReadingColumn>
