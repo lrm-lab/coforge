@@ -371,7 +371,11 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
               : undefined;
           return {
             status: "ok",
-            entries: [await projectEvidence(tx, actor.workspaceId, saved)],
+            entries: [
+              "title" in command && command.evidence !== undefined
+                ? saved
+                : await projectEvidence(tx, actor.workspaceId, saved),
+            ],
             ...(maintenanceHint ? { maintenanceHint } : {}),
           };
         },
