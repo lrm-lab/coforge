@@ -17,27 +17,6 @@ import {
 } from "./helpers/browser-e2e";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
-/**
- * People comment on an element and on a text selection inside an HTML artifact's page with one
- * gesture and no pick button. A person turns comment mode on; the element under the pointer is
- * outlined, a real click on it (the page is in a frame of its own origin, so only trusted input
- * reaches it) opens the composer at the click with the element's path, a step of the path widens
- * the comment to that outer element and the arrow keys walk the path from an empty field. The
- * thread names the element and is marked in the frame; a click elsewhere moves an empty composer to
- * that element, focused, and Escape closes it and leaves nothing;
- * a drag selects text and offers it; a click on a mark opens its thread; a second person's comment
- * appears live; a new version without the element shows the thread as changed. A page script that
- * posts a forged "picked" message, with comment mode off, and with it on but no click of the person,
- * opens no composer; one posted right after a real click of the person does open it, showing the
- * page's label, and nothing is posted until the person sends. The test page posts its forgeries on
- * command and then a message the host visibly handles (its error banner), which proves the
- * forgeries were handled.
- *
- * Opt-in like the other browser E2Es: the Web with the flag file that offers `artifacts`,
- * `COFORGE_ARTIFACT_SANDBOX_ORIGIN` on another host of the same server, `COFORGE_SESSION_SECRET`,
- * and a Centrifugo the Web is reachable from (`COFORGE_E2E_CENTRIFUGO_URL`). Screenshots go to
- * `COFORGE_E2E_SHOTS_DIR`, else `.amp/e2e/artifact-element-comments/`.
- */
 const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
@@ -195,8 +174,6 @@ test("people comment on a page element and a text selection; marks show in the f
     await waitFor(`document.querySelector("[data-comment-popover]") == null`);
     expect(await commentCount()).toBe(0);
 
-    await browser("find", "role", "button", "click", "--name", "Comment options");
-    await browser("find", "role", "menuitem", "click", "--name", "All comments");
     await waitFor(`document.querySelector('aside[aria-label="Comments"]') != null`);
     const origin = await frameOrigin();
     await mouse("move", origin.x + 60, origin.y + 230);

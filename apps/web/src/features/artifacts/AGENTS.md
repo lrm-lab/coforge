@@ -75,10 +75,12 @@ These rules apply to `src/features/artifacts/`. They extend
   consume-once handoffs (`useCommentHandoff`): one is dropped when a newer one replaces it or its file or comment mode moves away, and a reveal is consumed only once the surface has located it against a settled index (`useSurfaceIndex.settled`), so a partial render does not spend it. Stable
   values, the thread list, the handoffs and the places are separate contexts
   (`artifact-commenting.ts`). The composer's target is one union (`ComposerTarget`).
-- Comment mode (the header toggle) is separate from the panel and its transitions live in
-  `useCommentMode`: the toggle turns the mode on or off and never opens or closes the panel;
-  "all comments" (the chevron) and a marker or thread link open the panel; closing the panel keeps
-  the mode. Everything
+- Comment mode and the panel are separate states; their transitions live in `useCommentMode`.
+  The header's one comment button turns both on (on a phone, where the panel covers the page, the
+  mode alone) and turns both off. The panel docks beside the page, but while the artifact area is
+  under 48rem (beside chat) it floats over the page's right side so the page keeps its width
+  (Frank's choice over the docked-only panel); on a phone it fills the screen. A marker or
+  thread link opens the panel alone; closing the panel keeps the mode. Everything
   is drawn beside the content (the observed content node is never touched); highlights use the CSS
   Custom Highlight API (`lib/css-highlight.ts`). The text index skips `data-anchor-chrome` widgets
   (the code block's toolbar and previews), so a quote is what the reader sees; a quote shorter than

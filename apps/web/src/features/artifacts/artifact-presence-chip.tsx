@@ -8,6 +8,7 @@ import { ActorAvatarStack } from "#src/features/avatars/actor-avatar-stack";
 import { AVATAR_STACK_RING } from "#src/features/avatars/avatar-stack-ring";
 import { m } from "#src/paraglide/messages";
 import { POPOVER_MOTION } from "#src/utils/popover-motion";
+import { FLOATING_SURFACE_CLASS } from "#src/features/conversations/review-chrome";
 import { cn } from "#src/lib/utils";
 import { useChannelPresence, usePresentUsers } from "#src/features/realtime/channel-presence";
 import { ARTIFACT_ROSTER_SIZE, artifactPresenceChannel } from "./artifact-presence-channel";
@@ -137,14 +138,14 @@ export function ArtifactPresenceChip({
     <DialogTrigger>
       <AriaButton
         aria-label={m.av_presence_label()}
-        className="flex shrink-0 items-center rounded-lg px-1.5 py-1 outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
+        className="flex h-8 shrink-0 items-center rounded-lg px-1.5 outline-focus-ring transition-colors duration-150 hover:bg-primary_hover focus-visible:outline-2"
       >
         <ActorAvatarStack more={Math.max(0, othersCount - shown.length)}>
           {[...shown, ...(me ? [me] : [])].map((person) => (
             <span
               key={person.userId}
               data-viewer={person.userId}
-              className="flex animate-in fade-in zoom-in-95 motion-enter-sm"
+              className="flex animate-in fade-in motion-enter-sm"
             >
               <PersonFace person={person} className={cn("size-5", AVATAR_STACK_RING.regular)} />
               <span className="sr-only">{nameOf(person)}</span>
@@ -155,7 +156,8 @@ export function ArtifactPresenceChip({
       <Popover
         placement="bottom start"
         className={cn(
-          "w-64 origin-(--trigger-anchor-point) rounded-lg bg-primary shadow-lg ring-1 ring-secondary_alt",
+          "w-64 origin-(--trigger-anchor-point)",
+          FLOATING_SURFACE_CLASS,
           POPOVER_MOTION,
         )}
       >
@@ -185,7 +187,7 @@ export function ArtifactPresenceChip({
             ))}
           </ul>
           {data.behind > 0 && (
-            <p className="mt-1 border-t border-secondary px-2 pt-2 text-xs text-tertiary">
+            <p className="mt-2 px-2 text-xs text-tertiary">
               {m.av_presence_behind({ count: data.behind, version: data.currentVersion })}
             </p>
           )}
@@ -205,7 +207,7 @@ function PresenceRow({
   detail: ReactNode;
 }) {
   return (
-    <li className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm">
+    <li className="flex h-9 items-center gap-2 rounded-md px-2 text-sm">
       <PersonFace person={person} />
       <span className="min-w-0 flex-1 truncate font-medium text-secondary">{name}</span>
       <span className="shrink-0 text-xs text-tertiary">{detail}</span>

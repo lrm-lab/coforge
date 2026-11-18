@@ -6,6 +6,8 @@ import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { MessageBody } from "#src/features/conversations/message-body";
 import type { ChipMention } from "#src/features/conversations/message-reference-chips";
+import { SECTION_LABEL_CLASS } from "#src/features/conversations/review-chrome";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { CommentThreadView, type CommentContext } from "./artifact-comment-thread";
 import type { ReviewFilter } from "./use-review-filter";
@@ -38,7 +40,7 @@ export function ReviewChip({ filter }: { filter: ReviewFilter }) {
   return (
     <span
       data-review-chip=""
-      className="mb-3 inline-flex max-w-full items-center gap-1 rounded-md bg-quaternary py-0.5 pr-0.5 pl-2 text-xs font-medium text-secondary"
+      className="mb-3 inline-flex h-8 max-w-full items-center gap-1 rounded-lg bg-secondary pl-2 text-xs font-medium text-secondary"
     >
       <Check aria-hidden="true" className="size-3.5 shrink-0" />
       <span className="min-w-0 truncate">{m.av_dr_filter_review({ name })}</span>
@@ -85,8 +87,8 @@ export function ReviewComments({
   return (
     <div className="flex flex-col gap-3" data-review-comments="">
       {review?.body && (
-        <section className="rounded-lg bg-secondary px-3 py-2.5">
-          <h3 className="mb-1 text-xs font-semibold text-tertiary">{m.av_dr_review_summary()}</h3>
+        <section className="rounded-lg bg-secondary p-3">
+          <h3 className={cn(SECTION_LABEL_CLASS, "mb-1")}>{m.av_dr_review_summary()}</h3>
           <div className="message-text text-sm text-primary [overflow-wrap:anywhere]">
             <MessageBody body={review.body} plainMentions={plainMentions} />
           </div>

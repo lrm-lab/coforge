@@ -1,12 +1,11 @@
 import { Link } from "@tanstack/react-router";
-import { MessageChatCircle } from "@untitledui/icons";
 
 import { homeConversationOf, homeLinkProps, type ArtifactHome } from "./artifact-home";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { VisibilityChoice } from "./artifact-scope";
-import { pressablePillClass } from "./artifact-visibility-pill";
+import { PRESSABLE_CHIP_CLASS } from "#src/features/conversations/review-chrome";
 
 export function ArtifactHomeChip({
   home,
@@ -23,9 +22,8 @@ export function ArtifactHomeChip({
     <Link
       {...homeLinkProps(home, workspaceSlug)}
       aria-label={m.av_home_chip_aria({ name: homeName })}
-      className={cn(pressablePillClass, "max-w-40")}
+      className={cn(PRESSABLE_CHIP_CLASS, "max-w-40")}
     >
-      <MessageChatCircle aria-hidden="true" className="size-3.5 shrink-0" />
       <span className="truncate">{homeName}</span>
     </Link>
   );

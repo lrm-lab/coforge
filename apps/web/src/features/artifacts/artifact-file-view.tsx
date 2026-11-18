@@ -236,7 +236,7 @@ const CsvTable = memo(function CsvTable({
           {(head?.cells ?? []).map((cell, index) => (
             <th
               key={index}
-              className="border-b border-secondary px-3 py-1.5 text-left font-semibold text-secondary"
+              className="border-b border-secondary px-3 py-1.5 text-left font-medium text-secondary"
             >
               {cell}
             </th>

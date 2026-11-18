@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Browser, Image01, XClose } from "@untitledui/icons";
+import { Image01, XClose } from "@untitledui/icons";
 import { ARTIFACT_COMMENT_IMAGES_MAX, COMMENT_BODY_MAX } from "@lrm/coforge-sdk/agent";
 import { readMessageReferences } from "@lrm/coforge-sdk/internal/message-references";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { ComposerField } from "#src/features/conversations/composer-field";
-import {
-  COMPOSER_BOX_CLASS,
-  COMPOSER_FOCUS_CLASS,
-} from "#src/features/conversations/composer-frame";
 import type { Mentionable } from "#src/features/conversations/mention-text";
+import {
+  COMMENT_FIELD_CLASS,
+  COMMENT_FIELD_LAYOUT_CLASS,
+} from "#src/features/conversations/review-chrome";
 import {
   addMentionPin,
   mentionPinFor,
@@ -284,10 +284,8 @@ export function ArtifactCommentComposer({
 
   const names = audience.data?.notified ?? [];
   const notifyLine =
-    audience.data && !empty
-      ? names.length
-        ? m.av_cm_will_notify({ names: formatList(names) })
-        : m.av_cm_wont_notify()
+    audience.data && !empty && names.length
+      ? m.av_cm_will_notify({ names: formatList(names) })
       : null;
   const error = tooLong
     ? m.av_cm_err_too_long({ count: COMMENT_BODY_MAX })
@@ -295,7 +293,7 @@ export function ArtifactCommentComposer({
 
   return (
     <form
-      className={cn("shrink-0 space-y-1.5 border-t border-secondary px-3 pt-2 pb-3", className)}
+      className={cn("shrink-0 space-y-2 border-t border-secondary p-3", className)}
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
@@ -319,12 +317,11 @@ export function ArtifactCommentComposer({
         )
       )}
       {target.kind === "anchor" && target.suggestion !== undefined && (
-        <p data-page-suggested="" className="flex items-center gap-1 text-xs text-tertiary">
-          <Browser aria-hidden="true" className="size-4 shrink-0" />
+        <p data-page-suggested="" className="text-xs text-tertiary">
           {m.av_cm_page_suggested()}
         </p>
       )}
-      <div className={cn(COMPOSER_BOX_CLASS, COMPOSER_FOCUS_CLASS)}>
+      <div className={target.kind === "anchor" ? COMMENT_FIELD_LAYOUT_CLASS : COMMENT_FIELD_CLASS}>
         <ComposerField
           completion={completion}
           value={body}
@@ -343,7 +340,7 @@ export function ArtifactCommentComposer({
           leading={(className) => (
             <ButtonUtility
               icon={Image01}
-              size="sm"
+              size="xs"
               color="tertiary"
               className={className}
               tooltip={m.av_cm_add_image()}
@@ -379,7 +376,7 @@ export function ArtifactCommentComposer({
                       icon={XClose}
                       size="xs"
                       color="secondary"
-                      className="absolute -top-1.5 -right-1.5 rounded-full"
+                      className="absolute -top-2 -right-2 rounded-full"
                       tooltip={m.av_cm_remove_image()}
                       onClick={() => removeAttachment(attachment.key)}
                     />

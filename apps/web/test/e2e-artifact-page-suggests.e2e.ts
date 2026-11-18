@@ -150,9 +150,7 @@ test("a page suggests a comment from a click: the box opens with the page's text
       type: "page",
       data: { name: "plan:two", label: "Plan two", quote: "Ships on Friday" },
     });
-    const zh = locale === "zh-CN";
-    await browser("find", "role", "button", "click", "--name", zh ? "评论选项" : "Comment options");
-    await browser("find", "role", "menuitem", "click", "--name", zh ? "全部评论" : "All comments");
+    await click("button[aria-pressed]");
     await waitFor(
       `[...document.querySelectorAll("[data-comment-thread]")].some((thread) => thread.textContent.includes("Plan two") && thread.textContent.includes("Ships on Friday"))`,
     );

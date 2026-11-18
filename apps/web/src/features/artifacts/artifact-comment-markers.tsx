@@ -45,7 +45,7 @@ export function ArtifactCommentMarkers({
                 <TooltipTrigger
                   aria-label={m.av_dr_marker()}
                   data-draft-marker={marker.draft.id}
-                  className="flex size-7 cursor-pointer items-center justify-center rounded-full border-2 border-dashed border-brand bg-primary outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
+                  className="flex size-7 cursor-pointer items-center justify-center rounded-full border border-dashed border-primary bg-primary outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
                   onPress={() => onOpenDraft(marker.draft)}
                 />
               </Tooltip>
@@ -65,7 +65,7 @@ export function ArtifactCommentMarkers({
               <TooltipTrigger
                 aria-label={label}
                 data-comment-marker={root.id}
-                className="flex cursor-pointer items-center gap-1 rounded-full bg-primary p-0.5 pr-1 shadow-xs ring-1 ring-secondary outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
+                className="flex cursor-pointer items-center gap-1 rounded-full bg-primary p-0.5 ring-1 ring-secondary has-[span]:pr-1.5 outline-focus-ring hover:bg-primary_hover focus-visible:outline-2"
                 onPress={() => onOpen(thread)}
               >
                 <CommentAuthorAvatar comment={root} size="xs" />

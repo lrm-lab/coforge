@@ -4,7 +4,7 @@ import { memo, type ReactNode } from "react";
 import { MESSAGE_REMARK_PLUGINS } from "#src/lib/message-syntax";
 
 const Heading = ({ children }: { children?: ReactNode }) => (
-  <p className="mt-2 font-semibold text-primary first:mt-0">{children}</p>
+  <p className="mt-2 font-medium text-primary first:mt-0">{children}</p>
 );
 
 const Paragraph = ({ children }: { children?: ReactNode }) => (

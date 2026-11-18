@@ -57,7 +57,7 @@ export function ArtifactMoreMenu({
 }) {
   return (
     <Dropdown.Root>
-      <ButtonUtility icon={DotsHorizontal} size="sm" color="tertiary" tooltip={m.doc_more()} />
+      <ButtonUtility icon={DotsHorizontal} size="xs" color="tertiary" tooltip={m.doc_more()} />
       <Dropdown.Popover placement="bottom end">
         <Dropdown.Menu aria-label={m.doc_more()} onAction={(key) => onAction(key as MoreAction)}>
           {phone && canFind && (

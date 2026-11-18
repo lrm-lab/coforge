@@ -17,7 +17,8 @@ import {
   reviewFileClass,
   useReviewComments,
 } from "./review-comments";
-import { ReviewTitle, TOOLBAR_ICON } from "./review-title";
+import { PANEL_HEADER_CLASS } from "./review-chrome";
+import { ReviewTitle } from "./review-title";
 
 export type LightboxImage = {
   id: string;
@@ -29,29 +30,10 @@ export type LightboxImage = {
   largeUrl?: string;
 };
 
-/**
- * Moves focus from an arrow about to be disabled (it has reached the first or last image) to the
- * dialog: a disabled button drops focus to the page body, outside the dialog, where Escape no
- * longer reaches it.
- */
 function keepFocusInside(arrow: HTMLElement) {
   arrow.closest<HTMLElement>('[role="dialog"]')?.focus();
 }
 
-/**
- * Raft's image lightbox over the dimmed page: a message's images one at a time, under a bar with
- * the file's type and name, "2 / 5", Download and Close. With several, arrows at either side and
- * the left and right keys step through them, stopping at the ends (the arrow there is disabled, as
- * on Raft), and a strip of thumbnails along the bottom jumps to one. A lone image shows none of
- * these. An image that fails to load says it has no preview, and Download still fetches it.
- *
- * The bar's comments button shows the image's comments beside it, as a file's review does (on a
- * phone, in its place), the image then on the review's opaque background; stepping to another
- * image shows that one's. `commentsOpen` opens straight at them, scrolled to `focusCommentId`:
- * what a link into a comment asks for.
- *
- * Open state comes from the surrounding `DialogTrigger`, or from `isOpen`/`onOpenChange`.
- */
 export function ImageLightbox({
   images,
   index,
@@ -98,8 +80,6 @@ export function ImageLightbox({
   );
 }
 
-/** The open lightbox: its bar, the image (with arrows and thumbnails when paged) and, asked for,
- * the image's comments. Mounted with each opening, so a link's `commentsOpen` holds for it. */
 function LightboxContent({
   images,
   index,
@@ -121,7 +101,6 @@ function LightboxContent({
   const href = `/api/attachments/${image.id}`;
   const paged = images.length > 1 && onIndexChange !== undefined;
   const commentable = takesComments(image);
-  // A link naming the image while the lightbox is already open shows its comments too.
   const showComments = useEffectEvent(comments.show);
   useEffect(() => {
     if (commentsOpen) showComments();
@@ -130,8 +109,6 @@ function LightboxContent({
     const next = lightboxStepTarget(index, delta, images.length);
     if (next !== undefined) onIndexChange?.(next);
   };
-  // Left and right step through the images, except in a text field (the comment being written),
-  // where they move the caret.
   useHotkeys(
     [
       { hotkey: "ArrowLeft", callback: () => step(-1) },
@@ -141,13 +118,10 @@ function LightboxContent({
   );
   return (
     <>
-      <div className="flex h-14 shrink-0 items-center gap-1 border-b border-secondary bg-primary pr-2 pl-4">
+      <div className={cn(PANEL_HEADER_CLASS, "bg-primary")}>
         <ReviewTitle fileName={image.fileName} contentType={image.contentType} />
         {paged && (
-          <span
-            data-lightbox-position
-            className="mx-2 shrink-0 rounded-md px-2 py-0.5 text-xs text-tertiary tabular-nums ring-1 ring-secondary ring-inset"
-          >
+          <span data-lightbox-position className="mx-2 shrink-0 text-xs text-tertiary tabular-nums">
             <span aria-hidden="true">
               {index + 1} / {images.length}
             </span>
@@ -159,23 +133,20 @@ function LightboxContent({
         {commentable && <ReviewCommentsToggle comments={comments} />}
         <ButtonUtility
           icon={Download01}
-          size="sm"
+          size="xs"
           color="tertiary"
           tooltip={m.attachment_preview_download({ name: image.fileName })}
-          className={TOOLBAR_ICON}
           href={`${href}?download`}
         />
         <ButtonUtility
           icon={XClose}
-          size="sm"
+          size="xs"
           color="tertiary"
           tooltip={m.controls_close()}
-          className={TOOLBAR_ICON}
           onClick={close}
         />
       </div>
       <div className="flex min-h-0 flex-1">
-        {/* Over the dimmed page alone; beside the comments, on the review's own background. */}
         <div className={cn(reviewFileClass(comments), comments.shown && "bg-secondary")}>
           <div className="relative flex min-h-0 flex-1 items-center justify-center p-4 sm:px-20">
             {failed.has(image.id) ? (
@@ -183,8 +154,6 @@ function LightboxContent({
                 <EmptyTitle>{m.attachment_comments_no_preview()}</EmptyTitle>
               </Empty>
             ) : (
-              // The large tier over the thumbnail the message already showed until it
-              // arrives; Download keeps the original. Keyed, so a new image starts afresh.
               <LoadingImage
                 key={image.id}
                 src={image.largeUrl ?? image.previewUrl ?? href}

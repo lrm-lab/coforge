@@ -28,7 +28,8 @@ import {
   reviewFileClass,
   useReviewComments,
 } from "./review-comments";
-import { ReviewTitle, TOOLBAR_ICON } from "./review-title";
+import { PANEL_HEADER_CLASS } from "./review-chrome";
+import { ReviewTitle } from "./review-title";
 
 type ReviewFile = {
   id: string;
@@ -40,19 +41,6 @@ type ReviewFile = {
   largeUrl?: string;
 };
 
-/**
- * An image's lightbox (`ImageLightbox`, the image alone), or a previewable file filling the screen
- * under an icon bar, its comments closed until asked for, as on Raft's page. A file that takes no
- * comments (`takesComments`: a PDF) has no comments button, and no note in its place, as on Raft.
- * A file without a preview never opens here: its card downloads it (`previewKindFor`).
- *
- * A text preview is read before the dialog opens, as in Raft: `children` (the card) shows
- * `loading` meanwhile. A file found to have no preview after all (past `TEXT_PREVIEW_MAX_BYTES`,
- * or no UTF-8 text) downloads instead of opening.
- *
- * An address naming the file (`attachment-review-address.ts`) opens it as a card's click does, at
- * its comments, scrolled to the one the address names; closing it takes the address off.
- */
 export function AttachmentReviewDialog({
   file,
   children,
@@ -60,15 +48,10 @@ export function AttachmentReviewDialog({
 }: {
   file: ReviewFile;
   children: (state: { loading: boolean }) => ReactNode;
-  /** A video's player in the message: the preview carries on from its place, and back. */
   mediaHandoff?: MediaHandoff;
 }) {
-  // Where the message's player was as the preview opened, and where the preview's is now: closing
-  // hands that back, or the start again if the preview never got going (closed before it loaded,
-  // or failed).
   const [mediaStart, setMediaStart] = useState<MediaStart>();
   const mediaPlace = useRef<MediaPlace | undefined>(undefined);
-  // A preview opens on the file alone; on an HTML page showing the comments also marks regions.
   const comments = useReviewComments();
   const [pendingAnchor, setPendingAnchor] = useState<AttachmentCommentAnchor | null>(null);
   const [surface, setSurface] = useState<AnchorSurface | null>(null);
@@ -86,7 +69,6 @@ export function AttachmentReviewDialog({
     }),
     [],
   );
-  // Jump once the preview is showing: on a phone it is hidden behind the comments until then.
   useEffect(() => {
     if (!jumpTo || !surface || comments.onPhone) return;
     surface.jump(jumpTo);
@@ -98,14 +80,11 @@ export function AttachmentReviewDialog({
   const [open, setOpen] = useState(false);
   const address = useAttachmentReviewAddress(file.id);
   const [loading, setLoading] = useState(false);
-  // What reading the text preview found, once per card.
   const [read, setRead] = useState<PreviewRead | undefined>(undefined);
   const text = typeof read === "object" ? read.text : undefined;
   const reading = useRef<AbortController | null>(null);
   useEffect(() => () => reading.current?.abort(), []);
-  // Whether this card holds the address: it wrote it, opening by hand, or followed a link to it.
   const holdsAddress = useRef(false);
-  /** Shows the review; opened by hand, it also goes into the address, so a reload reopens it. */
   const reveal = (viaAddress: boolean) => {
     if (!viaAddress) {
       holdsAddress.current = true;
@@ -113,26 +92,19 @@ export function AttachmentReviewDialog({
     }
     setOpen(true);
   };
-  /** `viaAddress`: a link opens the review, and a file without a preview after all only takes the
-   * link off the address, never downloads unasked. */
   const onOpenChange = (next: boolean, viaAddress = false) => {
     const noPreview = () => (viaAddress ? address.clear() : download(`${href}?download`));
     if (!next) {
       setOpen(false);
       setPendingAnchor(null);
-      // The next opening by hand starts on the file alone again.
       comments.hide();
-      // Also when the address has yet to show what opening wrote.
       if (address.requested || holdsAddress.current) address.clear();
       const place = mediaPlace.current ?? mediaStart?.place;
       if (place) mediaHandoff?.give(place);
       return;
     }
-    // A file found to have no preview after all (past the limit, or no text) downloads instead,
-    // as one without a preview does from its card.
     if (read === "too-large" || read === "unavailable") return noPreview();
     if (!isTextPreviewKind(kind) || read !== undefined) {
-      // Only an opening preview takes the message's player's place (and pauses it).
       mediaPlace.current = undefined;
       setMediaStart(mediaHandoff?.take());
       return reveal(viaAddress);
@@ -148,17 +120,13 @@ export function AttachmentReviewDialog({
         if (typeof value === "object") reveal(viaAddress);
         else noPreview();
       },
-      // Aborted: the card is gone.
       () => {},
     );
   };
-  // A review the address asks for opens (at its comments, on a phone straight into them, when it
-  // names one); one the address stops asking for (Back, another link) closes.
   const followAddress = useEffectEvent((requested: boolean) => {
     if (requested === holdsAddress.current) return;
     if (requested && !address.follow()) return;
     holdsAddress.current = requested;
-    // A link into a comment opens at the comments; an address naming the file alone, at the file.
     if (requested && commentable && address.commentId) comments.show();
     if (!requested) address.release();
     if (requested !== open) onOpenChange(requested, requested);
@@ -197,16 +165,15 @@ export function AttachmentReviewDialog({
           >
             {({ close }) => (
               <>
-                <div className="flex h-14 shrink-0 items-center gap-1 border-b border-secondary bg-primary pr-2 pl-4">
+                <div className={cn(PANEL_HEADER_CLASS, "bg-primary")}>
                   <ReviewTitle fileName={file.fileName} contentType={file.contentType} />
                   {commentable && <ReviewCommentsToggle comments={comments} />}
                   {copyLabel && text && (
                     <ButtonUtility
                       icon={Copy01}
-                      size="sm"
+                      size="xs"
                       color="tertiary"
                       tooltip={copyLabel}
-                      className={TOOLBAR_ICON}
                       onClick={() =>
                         void copyText(text).then(
                           (copied) => copied && toast.success(m.controls_copied()),
@@ -216,18 +183,16 @@ export function AttachmentReviewDialog({
                   )}
                   <ButtonUtility
                     icon={Download01}
-                    size="sm"
+                    size="xs"
                     color="tertiary"
                     tooltip={m.attachment_preview_download({ name: file.fileName })}
-                    className={TOOLBAR_ICON}
                     href={`${href}?download`}
                   />
                   <ButtonUtility
                     icon={XClose}
-                    size="sm"
+                    size="xs"
                     color="tertiary"
                     tooltip={m.controls_close()}
-                    className={TOOLBAR_ICON}
                     onClick={close}
                   />
                 </div>
@@ -281,11 +246,6 @@ export function AttachmentReviewDialog({
   );
 }
 
-/**
- * Downloads by navigating to the `?download` address, which answers `Content-Disposition:
- * attachment`, so the page stays where it is. A navigation is not a pop-up: Safari lets it through
- * even after the asynchronous read, where it may block a synthetic link click.
- */
 function download(href: string) {
   window.location.assign(href);
 }

@@ -22,6 +22,13 @@ import type { ChipMention } from "#src/features/conversations/message-reference-
 import { MessageBody } from "#src/features/conversations/message-body";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
+import {
+  COMMENT_AUTHOR_CLASS,
+  COMMENT_BODY_CLASS,
+  COMMENT_FLASH_CLASS,
+  COMMENT_META_CLASS,
+  COMMENT_ROW_CLASS,
+} from "#src/features/conversations/review-chrome";
 import { m } from "#src/paraglide/messages";
 import {
   deleteArtifactComment,
@@ -97,10 +104,8 @@ export function CommentThreadView({
     <li
       data-comment-thread={thread.root.id}
       className={cn(
-        "overflow-hidden rounded-lg border bg-primary transition-[box-shadow,border-color] duration-500",
-        context.flashId === thread.root.id
-          ? "border-utility-yellow-300 ring-2 ring-utility-yellow-200"
-          : "border-secondary",
+        "overflow-hidden rounded-lg border border-secondary bg-primary transition-colors duration-300",
+        context.flashId === thread.root.id && COMMENT_FLASH_CLASS,
       )}
     >
       <ul className="divide-y divide-secondary">
@@ -145,7 +150,7 @@ function CommentRow({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   if (!isLive(comment))
     return (
-      <p data-comment-id={comment.id} className="px-3 py-2 text-sm text-tertiary">
+      <p data-comment-id={comment.id} className="p-3 text-sm text-tertiary">
         {m.av_cm_deleted()}
       </p>
     );
@@ -191,21 +196,24 @@ function CommentRow({
   return (
     <article
       data-comment-id={comment.id}
-      className="group/comment relative flex gap-2.5 px-3 py-2.5 hover:bg-primary_hover"
+      className={cn(
+        COMMENT_ROW_CLASS,
+        "group/comment relative transition-colors duration-150 hover:bg-primary_hover",
+      )}
     >
       <CommentAuthorAvatar comment={comment} size="sm" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <header className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-1.5 pr-16">
-          <span className="min-w-0 truncate text-sm font-semibold text-primary">{author.name}</span>
+        <header className="flex min-h-6 min-w-0 flex-wrap items-center gap-x-2 pr-16">
+          <span className={cn(COMMENT_AUTHOR_CLASS, "min-w-0")}>{author.name}</span>
           {author.kind === "agent" && (
             <Badge size="sm" color="gray" type="modern">
               {m.member_agent()}
             </Badge>
           )}
-          <RelativeTime value={comment.createdAt} plain className="text-xs text-tertiary" />
-          {comment.editedAt && <span className="text-xs text-tertiary">{m.av_cm_edited()}</span>}
+          <RelativeTime value={comment.createdAt} plain className={COMMENT_META_CLASS} />
+          {comment.editedAt && <span className={COMMENT_META_CLASS}>{m.av_cm_edited()}</span>}
           {versionTag && (
-            <span className="text-xs text-quaternary tabular-nums">
+            <span className={COMMENT_META_CLASS}>
               {m.av_cm_version({ version: comment.version })}
             </span>
           )}
@@ -230,7 +238,7 @@ function CommentRow({
         ) : (
           <>
             {comment.body && (
-              <div className="message-text min-w-0 text-sm text-primary [overflow-wrap:anywhere]">
+              <div className={cn(COMMENT_BODY_CLASS, "message-text min-w-0")}>
                 <MessageBody body={comment.body} plainMentions={context.plainMentions} />
               </div>
             )}
@@ -247,7 +255,7 @@ function CommentRow({
       {!editing && (
         <div
           className={cn(
-            "absolute top-1.5 right-1.5 flex items-center gap-0.5 rounded-md bg-primary p-0.5 shadow-xs ring-1 ring-secondary",
+            "absolute top-2 right-2 flex items-center",
             "opacity-0 transition-opacity group-hover/comment:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100",
           )}
         >

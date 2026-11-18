@@ -141,7 +141,8 @@ function ArtifactPageFor({
   const [sendingTo, setSendingTo] = useState(false);
   const [finding, setFinding] = useState(false);
   const [panel, setPanel] = useState<ArtifactPanelName | null>(null);
-  const commentMode = useCommentMode(setPanel);
+  const docked = useBreakpoint("sm");
+  const commentMode = useCommentMode(setPanel, docked);
   const [places, setPlaces] = useState<PublishedPlaces>(null);
   const [holds] = useState(createComposerHolds);
   const review = useReviewFilter(artifactId, reviewId, () => onClearReview?.());
@@ -323,7 +324,7 @@ function ArtifactPageFor({
       delete: () => setDeleting(true),
     },
   });
-  const phone = !useBreakpoint("sm");
+  const phone = !docked;
   const failure = read.error;
   if (isGone(failure) || (failure && !current)) {
     const unavailable = (
@@ -359,7 +360,6 @@ function ArtifactPageFor({
                       total={current.commentCount}
                       active={commentMode.mode}
                       onToggle={commentMode.toggle}
-                      onShowAll={commentMode.showAll}
                     />
                   )
                 }
@@ -367,18 +367,20 @@ function ArtifactPageFor({
                   current && (
                     <>
                       <VisibilityPill visibility={visibility} />
-                      {home && (
-                        <ArtifactHomeChip
-                          home={home}
-                          homeName={homeName}
-                          scope={visibility.current}
+                      <span className="contents @max-2xl/header:hidden">
+                        {home && (
+                          <ArtifactHomeChip
+                            home={home}
+                            homeName={homeName}
+                            scope={visibility.current}
+                          />
+                        )}
+                        <ArtifactPresenceChip
+                          workspaceId={workspaceId}
+                          artifactId={artifactId}
+                          ready={opened}
                         />
-                      )}
-                      <ArtifactPresenceChip
-                        workspaceId={workspaceId}
-                        artifactId={artifactId}
-                        ready={opened}
-                      />
+                      </span>
                     </>
                   )
                 }
@@ -399,7 +401,7 @@ function ArtifactPageFor({
                   )
                 }
               />
-              <div className="relative flex min-h-0 flex-1">
+              <div className="@container/artifact relative flex min-h-0 flex-1">
                 <div
                   className={cn(
                     "relative flex min-w-0 flex-1 flex-col",

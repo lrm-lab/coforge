@@ -8,11 +8,6 @@ import { LocalFileStorage } from "#src/server/files/file-storage.server";
 import { deleteAttachmentRows } from "#src/server/db/repositories/attachment-deletion.repositories.server";
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 
-/** Opt-in whole-file comments E2E: local built Web served with development skip-auth,
- * seeded dev user, PostgreSQL, Redis, Centrifugo and ego-browser. DATABASE_URL,
- * COFORGE_E2E_WEB_URL, COFORGE_E2E_CENTRIFUGO_URL and COFORGE_FILE_STORAGE_DIR must
- * name that private stack. Creates one file/channel, deletes both afterwards. Screenshots:
- * .amp/e2e/attachment-comments/. No provider credentials or remote resources required. */
 const databaseUrl = Bun.env.DATABASE_URL;
 const web = Bun.env.COFORGE_E2E_WEB_URL;
 const centrifugo = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
@@ -123,7 +118,6 @@ afterAll(async () => {
   if (objectKey) await files.remove(objectKey);
   if (zipObjectKey) await files.remove(zipObjectKey);
   await db.$disconnect();
-  // A failed round keeps its one diagnostic space for recovery; successful standalone runs close it.
   if (browserPassed && Bun.env.COFORGE_E2E_KEEP_BROWSER !== "1")
     await runBrowser(
       'const task = await taskSpace("coforge-backend task116 review revisions"); await task.finish({ keep: [] });',
@@ -144,7 +138,7 @@ test("commenting on the whole attachment survives refreshing and reopening its p
     // A preview opens on the file alone; its comments are one icon away, as on Raft's page.
     await page.click('[role="dialog"] button[aria-label="Comments"]');
     await page.waitForSelector('[role="dialog"] textarea', { timeout: 8000 });
-    await page.waitForFunction((name) => document.querySelector('[role="dialog"] textarea')?.placeholder === "Add a comment…" && document.body.innerText.includes("No comments yet") && !document.body.innerText.includes("For general discussion"));
+    await page.waitForFunction((name) => document.querySelector('[role="dialog"] textarea')?.placeholder === "Add a comment" && document.body.innerText.includes("No comments yet") && !document.body.innerText.includes("For general discussion"));
     // The panel is dragged by its left edge; a left arrow widens it, and the width is kept.
     // Widths are layout widths: the dialog may still be scaling in, which skews rendered ones.
     const separator = '[role="dialog"] [role="separator"][aria-label="Resize comments"]';

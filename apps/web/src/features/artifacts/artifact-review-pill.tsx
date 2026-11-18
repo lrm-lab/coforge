@@ -4,6 +4,7 @@ import { FlipBackward, FlipForward } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
+import { FLOATING_SURFACE_CLASS } from "#src/features/conversations/review-chrome";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
@@ -44,7 +45,8 @@ function PillBar({
           if (leaving && event.target === event.currentTarget) onLeft();
         }}
         className={cn(
-          "absolute bottom-4 left-1/2 z-20 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-1 rounded-full border border-secondary bg-primary p-1 shadow-lg",
+          "absolute bottom-4 left-1/2 z-20 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-1 p-1",
+          FLOATING_SURFACE_CLASS,
           leaving
             ? "animate-out fade-out slide-out-to-bottom-1 fill-mode-forwards motion-leave-sm"
             : "animate-in fade-in slide-in-from-bottom-1 motion-enter-sm",
@@ -52,7 +54,7 @@ function PillBar({
       >
         <ButtonUtility
           icon={FlipBackward}
-          size="sm"
+          size="xs"
           color="tertiary"
           tooltip={m.av_dr_undo()}
           isDisabled={!drafts.canUndo || locked}
@@ -61,7 +63,7 @@ function PillBar({
         />
         <ButtonUtility
           icon={FlipForward}
-          size="sm"
+          size="xs"
           color="tertiary"
           tooltip={m.av_dr_redo()}
           isDisabled={!drafts.canRedo || locked}
@@ -72,7 +74,7 @@ function PillBar({
           <>
             <Divider />
             <Button
-              size="sm"
+              size="xs"
               color="tertiary"
               isDisabled={locked}
               data-draft-discard=""
@@ -81,7 +83,7 @@ function PillBar({
               {m.av_dr_discard()}
             </Button>
             <Button
-              size="sm"
+              size="xs"
               color="primary"
               isDisabled={locked}
               isLoading={drafts.submitting}
@@ -109,4 +111,4 @@ function PillBar({
   );
 }
 
-const Divider = () => <span aria-hidden="true" className="mx-0.5 h-5 border-l border-secondary" />;
+const Divider = () => <span aria-hidden="true" className="mx-1 h-4 border-l border-secondary" />;

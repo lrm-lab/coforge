@@ -17,10 +17,10 @@ import { Skeleton } from "#src/components/ui/skeleton";
 import { ChannelPlace } from "#src/features/conversations/channel-name";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
+import { PRESSABLE_CHIP_CLASS } from "#src/features/conversations/review-chrome";
 import { m } from "#src/paraglide/messages";
 import { homeConversationOf, homeLinkProps, type ArtifactHome } from "./artifact-home";
 import { useArrivedFromGallery } from "./artifact-search";
-import { ArtifactIcon } from "./artifact-parts";
 import { VersionMenu } from "./artifact-version-menu";
 
 export const ARTIFACT_TITLE_ID = "artifact-page-title";
@@ -60,7 +60,7 @@ export function ArtifactPageHeader({
   return (
     <header
       className={cn(
-        "flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-secondary py-2 sm:min-h-14 sm:flex-nowrap",
+        "@container/header flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-secondary py-1.5 sm:min-h-12 sm:flex-nowrap",
         pane ? "pr-2 pl-4" : "px-3 sm:px-4",
       )}
     >
@@ -69,10 +69,9 @@ export function ArtifactPageHeader({
         <Skeleton className="h-4 w-40" />
       ) : (
         <>
-          <ArtifactIcon entryPath={entryPath} size="sm" />
           <Title
             id={ARTIFACT_TITLE_ID}
-            className="min-w-0 truncate text-sm font-semibold text-primary"
+            className="min-w-0 truncate text-sm font-medium text-primary"
           >
             {title}
           </Title>
@@ -80,10 +79,10 @@ export function ArtifactPageHeader({
             <Dropdown.Root>
               <AriaButton
                 aria-label={m.av_version_switch({ version: shownVersion })}
-                className="flex shrink-0 cursor-pointer items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs text-tertiary tabular-nums outline-focus-ring ring-1 ring-secondary ring-inset hover:bg-primary_hover focus-visible:outline-2"
+                className={cn(PRESSABLE_CHIP_CLASS, "shrink-0 tabular-nums")}
               >
                 v{shownVersion}
-                <ChevronDown aria-hidden="true" className="size-3" />
+                <ChevronDown aria-hidden="true" className="size-3.5" />
               </AriaButton>
               <Dropdown.Popover placement="bottom start" className="w-72">
                 <VersionMenu
@@ -96,7 +95,7 @@ export function ArtifactPageHeader({
           )}
         </>
       )}
-      <div className="flex min-w-0 items-center gap-1.5 max-sm:order-last max-sm:basis-full">
+      <div className="flex min-w-0 items-center gap-1.5 max-sm:order-last max-sm:basis-full sm:@max-2xl/header:max-w-28">
         {pills}
       </div>
       <span className="flex-1 max-sm:order-1" />
@@ -105,7 +104,7 @@ export function ArtifactPageHeader({
         {onFind && (
           <ButtonUtility
             icon={SearchLg}
-            size="sm"
+            size="xs"
             color="tertiary"
             tooltip={m.doc_page_find()}
             className="max-sm:hidden"
@@ -115,7 +114,7 @@ export function ArtifactPageHeader({
         {onCopyLink && (
           <ButtonUtility
             icon={Link01}
-            size="sm"
+            size="xs"
             color="tertiary"
             tooltip={m.doc_copy_link()}
             className="max-sm:hidden"
@@ -127,7 +126,7 @@ export function ArtifactPageHeader({
           <>
             <ButtonUtility
               icon={pane.full ? Minimize01 : Maximize01}
-              size="sm"
+              size="xs"
               color="tertiary"
               tooltip={pane.full ? m.doc_exit_fullscreen() : m.doc_fullscreen()}
               className="max-md:hidden"
@@ -135,7 +134,7 @@ export function ArtifactPageHeader({
             />
             <ButtonUtility
               icon={XClose}
-              size="sm"
+              size="xs"
               color="tertiary"
               tooltip={m.doc_close()}
               onClick={pane.onClose}
@@ -181,7 +180,7 @@ function BackToHome({
             }
           : undefined
       }
-      className="flex min-w-0 shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-sm text-tertiary outline-focus-ring hover:bg-primary_hover hover:text-secondary focus-visible:outline-2"
+      className="flex h-8 min-w-0 shrink-0 items-center gap-1 rounded-lg px-2 text-sm text-tertiary outline-focus-ring transition-colors duration-150 hover:bg-primary_hover hover:text-secondary focus-visible:outline-2"
     >
       <ArrowLeft aria-hidden="true" className="size-4 shrink-0" />
       <span className="max-w-40 truncate max-sm:sr-only">{label}</span>
