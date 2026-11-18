@@ -22,6 +22,10 @@ export function parseTeamMemoryArgs(args: readonly string[]): TeamMemoryInvocati
       row.archived = true;
       continue;
     }
+    if (flag === "--includeSuperseded") {
+      row.includeSuperseded = true;
+      continue;
+    }
     if (!flag.startsWith("--") || args[index + 1] === undefined)
       throw new Error("Team memory flags require values; see coforge manual get memory");
     const key = flag.slice(2);
@@ -29,7 +33,7 @@ export function parseTeamMemoryArgs(args: readonly string[]): TeamMemoryInvocati
     const value = args[++index]!;
     row[key] = ["offset", "revision", "fromRevision"].includes(key)
       ? Number(value)
-      : key === "sources"
+      : ["sources", "evidence", "relations"].includes(key)
         ? JSON.parse(value)
         : key === "pinned"
           ? value === "true"
@@ -39,7 +43,9 @@ export function parseTeamMemoryArgs(args: readonly string[]): TeamMemoryInvocati
               : value
           : key === "projectId" && value === "none"
             ? null
-            : value;
+            : key === "effectiveAt" && value === "none"
+              ? null
+              : value;
   }
   if (["prepare", "create", "update", "merge"].includes(String(row.operation))) {
     row.kind ??= "fact";
@@ -58,7 +64,7 @@ export async function runTeamMemoryCommand(
   return [
     ...result.entries.map(
       (entry) =>
-        `${entry.title} [${entry.id}]\n${entry.content}\nSource: ${entry.source}\nApplies to: ${entry.applicability || "unspecified"}\nRevision: ${entry.revision}\nState: ${entry.status}\nAuthor: ${entry.authorAgentId ?? entry.authorUserId}${entry.change ? `\nChanged by: ${entry.change.actorAgentId ?? entry.change.actorUserId} (${entry.change.operation})\nReason: ${entry.change.reason}\nMerged from: ${JSON.stringify(entry.change.mergedFrom)}` : ""}`,
+        `${entry.title} [${entry.id}]\n${entry.content}\nSource: ${entry.source}\nApplies to: ${entry.applicability || "unspecified"}\nRevision: ${entry.revision}\nState: ${entry.status}\nAuthor: ${entry.authorAgentId ?? entry.authorUserId}${entry.effectiveAt ? `\nEffective at: ${entry.effectiveAt}` : ""}${entry.evidence?.length ? `\nEvidence: ${JSON.stringify(entry.evidence)}` : ""}${entry.relations?.length ? `\nRelated revisions: ${JSON.stringify(entry.relations)}` : ""}${entry.change ? `\nChanged by: ${entry.change.actorAgentId ?? entry.change.actorUserId} (${entry.change.operation})\nReason: ${entry.change.reason}\nMerged from: ${JSON.stringify(entry.change.mergedFrom)}` : ""}`,
     ),
     ...(result.maintenanceHint
       ? [

@@ -18,6 +18,7 @@ import {
   type Row,
   type Version,
 } from "./team-memory-projections.server";
+import { readableMemoryEvidence } from "./team-memory-evidence.server";
 
 type Database = PrismaClient | Prisma.TransactionClient;
 export async function readTarget(db: Database, actor: TeamMemoryActor, id: string): Promise<Row> {
@@ -38,6 +39,7 @@ async function search(
   projectId?: string,
   archived = false,
   includeHumanAuthors = true,
+  includeSuperseded = false,
 ): Promise<Row[]> {
   const terms = teamMemoryTerms(query);
   if (!terms.length) return [];
@@ -48,11 +50,29 @@ async function search(
   );
   return db.$queryRaw<Row[]>(Prisma.sql`
     SELECT id, workspace_id AS "workspaceId", title, left(ltrim(content, ${PREVIEW_WHITESPACE}), 600) AS content, left(ltrim(source, ${PREVIEW_WHITESPACE}), 200) AS source, kind, applicability, status,
-      revision, author_agent_id AS "authorAgentId", author_user_id AS "authorUserId", project_id AS "projectId", pinned, updated_at AS "updatedAt"
-    FROM team_memory_entries WHERE workspace_id = ${workspaceId}::uuid AND status = ${archived ? "archived" : "active"}
+      revision, author_agent_id AS "authorAgentId", author_user_id AS "authorUserId", project_id AS "projectId", pinned, updated_at AS "updatedAt",
+      relations, effective_at AS "effectiveAt"
+    FROM team_memory_entries AS candidate WHERE workspace_id = ${workspaceId}::uuid AND status = ${archived ? "archived" : "active"}
     AND (${Prisma.join(matches, " OR ")})
     ${includeHumanAuthors ? Prisma.empty : Prisma.sql`AND author_agent_id IS NOT NULL`}
     ${projectId ? Prisma.sql`AND project_id = ${projectId}::uuid` : Prisma.empty}
+    ${
+      archived || includeSuperseded
+        ? Prisma.empty
+        : Prisma.sql`
+      AND (effective_at IS NULL OR effective_at <= CURRENT_TIMESTAMP)
+      AND NOT EXISTS (
+        SELECT 1 FROM team_memory_entries AS replacement
+        WHERE replacement.workspace_id = candidate.workspace_id
+          AND replacement.status = 'active'
+          AND replacement.project_id IS NOT DISTINCT FROM candidate.project_id
+          AND replacement.applicability = candidate.applicability
+          AND (replacement.effective_at IS NULL OR replacement.effective_at <= CURRENT_TIMESTAMP)
+          ${includeHumanAuthors ? Prisma.empty : Prisma.sql`AND replacement.author_agent_id IS NOT NULL`}
+          AND replacement.relations @> jsonb_build_array(
+            jsonb_build_object('kind', 'supersedes', 'id', candidate.id, 'revision', candidate.revision))
+      )`
+    }
     ORDER BY (${Prisma.join(ranks, " + ")}) DESC, updated_at DESC, id ASC LIMIT 11 OFFSET ${offset}`);
 }
 
@@ -64,6 +84,15 @@ function page(rows: Row[], offset: number, snippets = false): TeamMemoryResult {
       : entry;
   });
   return { status: "ok", entries, ...(rows.length > 10 ? { nextOffset: offset + 10 } : {}) };
+}
+
+export async function projectEvidence(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  entry: TeamMemoryHead,
+) {
+  if (!entry.evidence?.length) return entry;
+  return { ...entry, evidence: await readableMemoryEvidence(tx, workspaceId, entry.evidence) };
 }
 
 export class TeamMemoryReads {
@@ -95,6 +124,7 @@ export class TeamMemoryReads {
               command.projectId,
               command.archived,
               !(actor.agentId && actor.includeHumanAuthors === false),
+              command.includeSuperseded,
             ),
             command.offset ?? 0,
             true,
@@ -109,7 +139,11 @@ export class TeamMemoryReads {
           );
         const target = await readTarget(tx, actor, command.id);
         if (command.operation === "get") {
-          if (command.revision === undefined) return { status: "ok", entries: [head(target)] };
+          if (command.revision === undefined)
+            return {
+              status: "ok",
+              entries: [await projectEvidence(tx, actor.workspaceId, head(target))],
+            };
           const version = await tx.teamMemoryVersion.findUnique({
             where: {
               workspaceId_entryId_revision: {
@@ -120,11 +154,14 @@ export class TeamMemoryReads {
             },
           });
           if (!version) throw new TeamMemoryError("not_found");
-          return { status: "ok", entries: [versionHead(version)] };
+          return {
+            status: "ok",
+            entries: [await projectEvidence(tx, actor.workspaceId, versionHead(version))],
+          };
         }
         const offset = command.offset ?? 0;
         const versions = await tx.$queryRaw<Version[]>`
-          SELECT snapshot || jsonb_build_object(
+          SELECT (snapshot - 'evidence') || jsonb_build_object(
             'content', left(ltrim(snapshot->>'content', ${PREVIEW_WHITESPACE}), 600),
             'source', left(ltrim(snapshot->>'source', ${PREVIEW_WHITESPACE}), 200)
           ) AS snapshot, actor_agent_id AS "actorAgentId", actor_user_id AS "actorUserId", operation, left(reason, 200) AS reason, merged_from AS "mergedFrom"
@@ -161,6 +198,7 @@ export class TeamMemoryReads {
         undefined,
         false,
         !(actor.agentId && actor.includeHumanAuthors === false),
+        true,
       ),
     ]);
     const related = page(rows, 0, true);

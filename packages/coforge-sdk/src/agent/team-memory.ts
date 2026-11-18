@@ -2,6 +2,16 @@ import { isRecord } from "#src/internal/json-record";
 import { MEMORY_KINDS, type MemoryKind } from "./local-memory";
 
 export const TEAM_MEMORY_ROUTE = { method: "POST", path: "/api/agent/v1/team-memory" } as const;
+export type TeamMemoryEvidence = {
+  kind: "task" | "message" | "artifact";
+  id: string;
+  revision?: number;
+};
+export type TeamMemoryRelation = {
+  kind: "supersedes" | "conflicts_with";
+  id: string;
+  revision: number;
+};
 export type TeamMemoryDraft = {
   title: string;
   content: string;
@@ -10,6 +20,9 @@ export type TeamMemoryDraft = {
   applicability: string;
   projectId?: string | null;
   pinned?: boolean;
+  evidence?: TeamMemoryEvidence[];
+  relations?: TeamMemoryRelation[];
+  effectiveAt?: string | null;
 };
 export type TeamMemoryHead = TeamMemoryDraft & {
   id: string;
@@ -51,7 +64,14 @@ export type TeamMemoryCommand =
   | TeamMemoryMaintenanceCommand
   | TeamMemoryCatalogCommand
   | ({ operation: "prepare" } & TeamMemoryDraft)
-  | { operation: "search"; query: string; offset?: number; projectId?: string; archived?: boolean }
+  | {
+      operation: "search";
+      query: string;
+      offset?: number;
+      projectId?: string;
+      archived?: boolean;
+      includeSuperseded?: boolean;
+    }
   | { operation: "list"; offset?: number; archived?: boolean; projectId?: string }
   | { operation: "get"; id: string; revision?: number }
   | { operation: "history"; id: string; offset?: number }
@@ -79,6 +99,53 @@ export type TeamMemoryResult = {
 };
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+const evidenceKinds = ["task", "message", "artifact"] as const;
+const relationKinds = ["supersedes", "conflicts_with"] as const;
+
+function decodeReferences<K extends string>(
+  value: unknown,
+  kinds: readonly K[],
+  field: "evidence" | "relations",
+): { kind: K; id: string; revision?: number }[] {
+  if (!Array.isArray(value) || value.length > 8) throw new Error(`invalid_memory_${field}`);
+  const seen = new Set<string>();
+  return value.map((item) => {
+    if (
+      !isRecord(item) ||
+      Object.keys(item).some((key) => !["kind", "id", "revision"].includes(key)) ||
+      !kinds.includes(item.kind as K) ||
+      typeof item.id !== "string" ||
+      !UUID.test(item.id) ||
+      (item.revision === undefined
+        ? field === "relations"
+        : !Number.isSafeInteger(item.revision) ||
+          Number(item.revision) < (item.kind === "task" ? 0 : 1) ||
+          Number(item.revision) > 2_147_483_647)
+    )
+      throw new Error(`invalid_memory_${field}`);
+    const id = item.id.toLowerCase();
+    const key = `${item.kind}:${id}:${item.revision ?? ""}`;
+    if (seen.has(key)) throw new Error(`invalid_memory_${field}`);
+    seen.add(key);
+    return {
+      kind: item.kind as K,
+      id,
+      ...(item.revision === undefined ? {} : { revision: Number(item.revision) }),
+    };
+  });
+}
+
+function decodeEffectiveAt(value: unknown): string | null {
+  if (value === null) return null;
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value) ||
+    !Number.isFinite(Date.parse(value))
+  )
+    throw new Error("invalid_memory_effectiveAt");
+  return new Date(value).toISOString();
+}
+
 export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {
   if (!isRecord(value)) throw new Error("invalid_memory_command");
   const string = (key: string, max = 1_000, empty = false) => {
@@ -136,10 +203,21 @@ export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {
       description: string("description", 2000, true),
     };
   }
-  const draftKeys = ["title", "content", "source", "kind", "applicability", "projectId", "pinned"];
+  const draftKeys = [
+    "title",
+    "content",
+    "source",
+    "kind",
+    "applicability",
+    "projectId",
+    "pinned",
+    "evidence",
+    "relations",
+    "effectiveAt",
+  ];
   const readKeys =
     operation === "search"
-      ? ["query", "offset", "projectId", "archived"]
+      ? ["query", "offset", "projectId", "archived", "includeSuperseded"]
       : operation === "list"
         ? ["offset", "archived", "projectId"]
         : operation === "get"
@@ -170,9 +248,14 @@ export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {
       : { projectId: value.projectId === null && hasDraft ? null : uuid("projectId") };
   if (value.archived !== undefined && typeof value.archived !== "boolean")
     throw new Error("invalid_memory_archived");
+  if (value.includeSuperseded !== undefined && typeof value.includeSuperseded !== "boolean")
+    throw new Error("invalid_memory_includeSuperseded");
   if (operation === "search")
     return {
       ...(value.archived === undefined ? {} : { archived: value.archived }),
+      ...(value.includeSuperseded === undefined
+        ? {}
+        : { includeSuperseded: value.includeSuperseded }),
       operation,
       query: string("query", 500),
       offset: number("offset", 0),
@@ -208,6 +291,21 @@ export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {
       source: string("source"),
       applicability: string("applicability", 300, true),
       kind: kind as MemoryKind,
+      ...(value.evidence === undefined
+        ? {}
+        : { evidence: decodeReferences(value.evidence, evidenceKinds, "evidence") }),
+      ...(value.relations === undefined
+        ? {}
+        : {
+            relations: decodeReferences(
+              value.relations,
+              relationKinds,
+              "relations",
+            ) as TeamMemoryRelation[],
+          }),
+      ...(value.effectiveAt === undefined
+        ? {}
+        : { effectiveAt: decodeEffectiveAt(value.effectiveAt) }),
     };
   }
   if (operation === "prepare") return { operation, ...draft! };
@@ -296,6 +394,9 @@ export function decodeTeamMemoryResult(value: unknown): TeamMemoryResult {
       applicability: entry.applicability,
       projectId: entry.projectId,
       pinned: entry.pinned,
+      evidence: entry.evidence,
+      relations: entry.relations,
+      effectiveAt: entry.effectiveAt,
     });
   }
   if (

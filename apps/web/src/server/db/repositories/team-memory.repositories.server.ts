@@ -1,4 +1,8 @@
-import { TeamMemoryReads, readTarget } from "./team-memory-read.repositories.server";
+import {
+  TeamMemoryReads,
+  readTarget,
+  projectEvidence,
+} from "./team-memory-read.repositories.server";
 import {
   beginTeamMemoryMaintenance,
   suggestTeamMemoryMaintenance,
@@ -8,6 +12,7 @@ import {
 import { teamMemoryCatalog } from "./team-memory-projects.repositories.server";
 import { memoryReceipts } from "./team-memory-receipts.repositories.server";
 import { teamMemoryAccess as access } from "./team-memory-access.repositories.server";
+import { readableMemoryEvidence } from "./team-memory-evidence.server";
 import { head, searchText, fingerprint, type Row } from "./team-memory-projections.server";
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import {
@@ -90,7 +95,7 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
     ]);
     return {
       status: "ok",
-      entries: [head(entry)],
+      entries: [await projectEvidence(tx, actor.workspaceId, head(entry))],
       replayed: true,
       ...(maintenanceHint ? { maintenanceHint } : {}),
     };
@@ -158,7 +163,10 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
             if (command.projectId !== undefined && command.projectId !== (target.projectId ?? null))
               throw new TeamMemoryError("conflict");
             await receipts.update({ entryId: target.id, reviewToken: null, reviewExpiresAt: null });
-            return { status: "ok", entries: [head(target)] };
+            return {
+              status: "ok",
+              entries: [await projectEvidence(tx, actor.workspaceId, head(target))],
+            };
           }
           validateTeamMutation(
             actor,
@@ -189,6 +197,9 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
                 title: "",
                 content: "",
                 source: "",
+                evidence: Prisma.DbNull,
+                relations: Prisma.DbNull,
+                effectiveAt: null,
                 applicability: "",
                 searchText: "",
                 revision: { increment: 1 },
@@ -222,7 +233,7 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
             });
             if (!version) throw new TeamMemoryError("not_found");
             draft = version.snapshot as unknown as TeamMemoryHead;
-          } else draft = "title" in command ? command : target!;
+          } else draft = "title" in command ? command : head(target!);
           let projectId =
             draft.projectId === undefined ? (target?.projectId ?? null) : draft.projectId;
           if (projectId) {
@@ -239,12 +250,57 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
             (command.operation === "update" && target?.status === "archived")
               ? "archived"
               : "active";
+          const previous = target ? head(target) : undefined;
+          const restore = command.operation === "restore";
+          const evidence = draft.evidence ?? (restore ? undefined : previous?.evidence);
+          const relations = draft.relations ?? (restore ? undefined : previous?.relations);
+          const effectiveAt =
+            draft.effectiveAt === undefined
+              ? restore
+                ? undefined
+                : previous?.effectiveAt
+              : draft.effectiveAt;
+          if (
+            "title" in command &&
+            command.evidence?.length &&
+            (await readableMemoryEvidence(tx, actor.workspaceId, command.evidence)).length !==
+              command.evidence.length
+          )
+            throw new TeamMemoryError("forbidden");
+          if ("title" in command && command.relations?.length) {
+            const related = await tx.teamMemoryEntry.findMany({
+              where: {
+                workspaceId: actor.workspaceId,
+                id: { in: command.relations.map(({ id }) => id) },
+                status: "active",
+              },
+              select: { id: true, revision: true, projectId: true, applicability: true },
+              take: command.relations.length,
+            });
+            if (
+              command.relations.some(
+                (link) =>
+                  !related.some(
+                    (row) =>
+                      row.id === link.id &&
+                      row.id !== target?.id &&
+                      row.revision === link.revision &&
+                      (link.kind === "conflicts_with" ||
+                        (row.projectId === projectId && row.applicability === draft.applicability)),
+                  ),
+              )
+            )
+              throw new TeamMemoryError("conflict");
+          }
           const data = {
             projectId,
             pinned: draft.pinned ?? target?.pinned ?? false,
             title: draft.title,
             content: draft.content,
             source: draft.source,
+            evidence: evidence ?? Prisma.DbNull,
+            relations: relations ?? Prisma.DbNull,
+            effectiveAt: effectiveAt ? new Date(effectiveAt) : null,
             kind: draft.kind,
             applicability: draft.applicability,
             dedupKey:
@@ -315,7 +371,7 @@ export class PrismaTeamMemoryStore implements TeamMemoryStore {
               : undefined;
           return {
             status: "ok",
-            entries: [saved],
+            entries: [await projectEvidence(tx, actor.workspaceId, saved)],
             ...(maintenanceHint ? { maintenanceHint } : {}),
           };
         },

@@ -64,3 +64,28 @@ test("project and protection fields are bounded and survive command decoding", (
   ).toThrow();
   expect(() => decodeTeamMemoryCommand({ operation: "projects", workspaceId: id })).toThrow();
 });
+
+test("structured team memory evidence and version relationships survive decoding", () => {
+  const draft = {
+    operation: "prepare",
+    title: "Migration",
+    content: "Approved",
+    source: "Task acceptance",
+    kind: "decision",
+    applicability: "production",
+    evidence: [{ kind: "task", id, revision: 2 }],
+    relations: [{ kind: "supersedes", id, revision: 1 }],
+    effectiveAt: "2026-11-18T00:00:00Z",
+  };
+  expect(decodeTeamMemoryCommand(draft)).toMatchObject({
+    evidence: draft.evidence,
+    relations: draft.relations,
+    effectiveAt: "2026-11-18T00:00:00.000Z",
+  });
+  expect(() =>
+    decodeTeamMemoryCommand({ ...draft, evidence: [{ kind: "message", id: "bad" }] }),
+  ).toThrow("invalid_memory_evidence");
+  expect(() =>
+    decodeTeamMemoryCommand({ ...draft, relations: [...draft.relations, ...draft.relations] }),
+  ).toThrow("invalid_memory_relations");
+});

@@ -44,6 +44,9 @@ can permanently clear an entry and its versions. Workspace deletion cascades all
 
 History pages contain previews within a 12,000-byte response budget. Full historical evidence is
 available one version at a time through `get --revision`, without loading every version into context.
+Entries can cite structured Workspace-readable tasks, messages and artifacts. Exact version
+relationships record replacement or disagreement. Search omits a replaced version while its
+replacement is active and effective. Historical reads still work, with current evidence access.
 
 ## Upgrade and retained data
 

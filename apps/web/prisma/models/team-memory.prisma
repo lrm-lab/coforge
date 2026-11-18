@@ -12,6 +12,9 @@ model TeamMemoryEntry {
   title String
   content String
   source String
+  evidence Json?
+  relations Json?
+  effectiveAt DateTime? @map("effective_at")
   kind String
   applicability String
   status String @default("active")
@@ -34,6 +37,7 @@ model TeamMemoryEntry {
   @@index([workspaceId, projectId, status, updatedAt])
   @@index([workspaceId, projectId, updatedAt, id], where: { status: "active", pinned: false }, map: "team_memory_maintenance_candidates_idx")
   @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([relations(ops: JsonbPathOps)], type: Gin, map: "team_memory_relations_idx")
   @@map("team_memory_entries")
 }
 
