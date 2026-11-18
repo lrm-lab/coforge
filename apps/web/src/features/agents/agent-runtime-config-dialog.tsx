@@ -20,7 +20,10 @@ import {
   useDialogControlSize,
 } from "#src/components/ui/dialog-actions";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
-import { ComputerStatusIcon } from "#src/features/computers/computer-status-icon";
+import {
+  ComputerStatusIcon,
+  computerOptionClassName,
+} from "#src/features/computers/computer-status-icon";
 import { m } from "#src/paraglide/messages";
 import { agentEnvironmentNameError, agentEnvironmentRowsChanged } from "./agent-form";
 import {
@@ -144,6 +147,7 @@ export function AgentRuntimeConfigForm({
                 label={computer.displayName}
                 aria-label={`${computer.displayName}, ${computer.online ? m.computer_status_online() : m.computer_status_offline()}`}
                 icon={<ComputerStatusIcon computer={computer} online={Boolean(computer.online)} />}
+                className={computerOptionClassName(Boolean(computer.online))}
               />
             ))}
           </Select>

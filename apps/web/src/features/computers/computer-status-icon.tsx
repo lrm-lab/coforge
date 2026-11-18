@@ -14,11 +14,15 @@ export function ComputerStatusIcon({
   const Icon = computerIcon(computer);
   return (
     <span data-icon aria-hidden="true" className={cx("relative inline-flex shrink-0", className)}>
-      <Icon className="size-full text-fg-tertiary" />
+      <Icon className={cx("size-full", online ? "text-fg-tertiary" : "text-fg-quaternary")} />
       <StatusDot
         tone={online ? "online" : "offline"}
         className="absolute -right-px -bottom-px size-1.5 ring-[1.5px] ring-bg-primary"
       />
     </span>
   );
+}
+
+export function computerOptionClassName(online: boolean): string | undefined {
+  return online ? undefined : "[&_[slot=label]]:text-quaternary";
 }
