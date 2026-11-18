@@ -50,6 +50,8 @@ export function ModalOverlay({
         className={(state) =>
           cx(
             "bg-modal-scrim/70",
+            state.isEntering && "scrim-in",
+            state.isExiting && "scrim-out",
             "max-sm:top-(--visual-viewport-top) max-sm:bottom-auto max-sm:h-(--visual-viewport-height) max-sm:min-h-0",
             !keyboardMayBeUp &&
               "max-sm:[--visual-viewport-height:100dvh]! max-sm:[--visual-viewport-top:0px]!",
@@ -80,6 +82,8 @@ export function Modal({ className, children, ...props }: ComponentProps<typeof O
         className={(state) =>
           cx(
             "ring-1 ring-modal-edge",
+            state.isEntering && "sm:fade-in",
+            state.isExiting && "fade-out",
             typeof className === "function" ? className(state) : className,
             form === "page" &&
               "max-sm:h-full max-sm:w-full max-sm:max-w-none max-sm:rounded-none max-sm:ring-0 max-sm:safe-area-padding",
@@ -95,6 +99,8 @@ export function Modal({ className, children, ...props }: ComponentProps<typeof O
       className={(state) =>
         cx(
           "ring-1 ring-modal-edge",
+          state.isEntering && "sm:fade-in",
+          state.isExiting && "sm:fade-out",
           typeof className === "function" ? className(state) : className,
           "max-sm:relative max-sm:w-full max-sm:max-w-none max-sm:rounded-t-2xl max-sm:rounded-b-none max-sm:pb-safe-bottom",
           "max-sm:zoom-in-100 max-sm:zoom-out-100 max-sm:slide-in-from-bottom max-sm:slide-out-to-bottom",

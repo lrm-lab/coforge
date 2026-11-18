@@ -186,8 +186,8 @@ export function MessageActionSheet({
       className={(state) =>
         cn(
           "fixed inset-0 z-50 flex min-h-dvh items-end justify-center bg-modal-scrim/70 outline-hidden backdrop-blur-[6px]",
-          state.isEntering && "motion-enter animate-in fade-in",
-          state.isExiting && "motion-leave animate-out fade-out",
+          state.isEntering && "motion-enter animate-in scrim-in",
+          state.isExiting && "motion-leave animate-out scrim-out",
         )
       }
     >

@@ -170,3 +170,29 @@
   --color-reference-bg: color-mix(in srgb, var(--color-brand-500) 24%, transparent);
   --color-reference-text: var(--color-brand-300);
 }
+
+@keyframes scrim-in {
+  from {
+    background-color: transparent;
+    backdrop-filter: blur(0);
+  }
+}
+
+@keyframes scrim-out {
+  to {
+    background-color: transparent;
+    backdrop-filter: blur(0);
+  }
+}
+
+@utility scrim-in {
+  && {
+    animation-name: scrim-in;
+  }
+}
+
+@utility scrim-out {
+  && {
+    animation-name: scrim-out;
+  }
+}
