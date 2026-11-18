@@ -163,6 +163,7 @@ export type WorkspaceQueryRequest = {
 };
 
 export * from "./runtime-provider";
+export * from "./agent-startup-window";
 export type AgentRuntimeProviderConfig =
   | { kind: "default" }
   | { kind: "coforge"; providerId: string };

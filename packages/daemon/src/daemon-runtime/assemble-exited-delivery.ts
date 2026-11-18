@@ -8,7 +8,10 @@ import { launchFailureLogFields } from "#src/agent-runtime/launch-failure";
 import { AgentStartupDeadlineExceededError } from "#src/agent-runtime/startup-deadline-failure";
 import type { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
-import { MENTION_DELIVERY_TERMINAL_CODES } from "@lrm/coforge-sdk/internal";
+import {
+  MENTION_DELIVERY_TERMINAL_CODES,
+  startupDeadlineMs as providerStartupDeadlineMs,
+} from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { logAgentOperationFailure } from "./agent-failure-logs";
 import { AgentExitedDelivery } from "./agent-exited-delivery";
@@ -18,7 +21,6 @@ import type { AgentLaunchCustody } from "./agent-launch-custody";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import type { AgentOfflineResidency } from "./agent-offline-residency";
 import { agentDeliveryRejection } from "./message-composition";
-import { startupTimeoutMs } from "#src/agent-runtime/agent-startup";
 import { WAKE_FAILURE_STREAK_CAP } from "./wake-launch";
 import { isTrackedMention, type MentionDeliveryTracker } from "./mention-delivery-tracker";
 import { deliveryWakeKey } from "./wake-loop-guard";
@@ -52,7 +54,7 @@ function startupDeadlineMs(
   agentId: string,
 ): number | undefined {
   const provider = ports.agentProcessManager().restartConfig(agentId)?.config.provider;
-  return provider === undefined ? undefined : startupTimeoutMs(provider) * 2 + 60_000;
+  return provider === undefined ? undefined : providerStartupDeadlineMs(provider);
 }
 
 /** Settles a delivery for an Agent with no hold, session or launch in flight (`AgentExitedDelivery`). */
