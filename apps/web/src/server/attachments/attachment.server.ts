@@ -1,6 +1,7 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { readFileImageDimensions } from "./attachment-image-dimensions.server";
 import { AppError } from "#src/lib/app-error";
+import { storedAttachmentContentType } from "#src/lib/inline-image";
 import {
   getFileStorage,
   type BulkFileRemoval,
@@ -100,7 +101,7 @@ export async function storeAttachment(
   if (!conversation) throw new AppError("ACCESS_DENIED");
   const id = crypto.randomUUID();
   const objectKey = `workspaces/${conversation.workspaceId}/attachments/${id}/original`;
-  const contentType = input.file.type || "application/octet-stream";
+  const contentType = storedAttachmentContentType(input.file.name, input.file.type);
   const files = await storage();
   await files.put(objectKey, input.file, contentType);
   const dimensions = await readFileImageDimensions(input.file, contentType);

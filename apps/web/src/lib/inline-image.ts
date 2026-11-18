@@ -17,6 +17,18 @@ export function isSvgImage(contentType: string): boolean {
   return contentType === SVG_IMAGE_TYPE;
 }
 
+const OCTET_STREAM_TYPE = "application/octet-stream";
+
+export function storedAttachmentContentType(
+  fileName: string,
+  declaredType: string | undefined,
+): string {
+  const declared = (declaredType ?? "").trim();
+  if (declared && declared !== OCTET_STREAM_TYPE) return declared;
+  if (/\.svg$/i.test(fileName.trim())) return SVG_IMAGE_TYPE;
+  return declared || OCTET_STREAM_TYPE;
+}
+
 /** Photos the server turns into WebP variants, since browsers other than Safari cannot draw them. */
 const CONVERTED_IMAGE_TYPES = new Set(["image/heic", "image/heif"]);
 

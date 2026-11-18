@@ -2,6 +2,7 @@ import type { PrismaClient, Prisma } from "#src/generated/prisma/client";
 import { ATTACHMENT_MAX_BYTES, ATTACHMENT_SESSION_SECONDS } from "./attachment.server";
 import type { FileStorage } from "#src/server/files/file-storage.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
+import { storedAttachmentContentType } from "#src/lib/inline-image";
 import { readStoredImageDimensions } from "./attachment-image-dimensions.server";
 
 /**
@@ -164,6 +165,7 @@ export async function createAttachmentUploadSession(
     );
   const sessionExpiresInSeconds = options.sessionExpiresInSeconds ?? ATTACHMENT_SESSION_SECONDS;
   const now = options.now ?? new Date();
+  const contentType = storedAttachmentContentType(input.fileName, input.contentType);
 
   const existing = await db.attachmentUploadSession.findUnique({
     where: {
@@ -186,7 +188,7 @@ export async function createAttachmentUploadSession(
         attachmentId,
         objectKey,
         fileName: input.fileName,
-        contentType: input.contentType,
+        contentType,
         sizeBytes: input.sizeBytes,
         idempotencyKey: input.idempotencyKey,
         state: "pending",
@@ -205,7 +207,7 @@ export async function createAttachmentUploadSession(
     return replaySession(storage, raced, input, sessionExpiresInSeconds);
   }
   const upload = await storage.presignPut(objectKey, {
-    contentType: input.contentType,
+    contentType,
     expiresInSeconds: sessionExpiresInSeconds,
   });
   return {
@@ -231,7 +233,7 @@ async function replaySession(
   const matches =
     existing.conversationId === input.conversationId &&
     existing.fileName === input.fileName &&
-    existing.contentType === input.contentType &&
+    existing.contentType === storedAttachmentContentType(input.fileName, input.contentType) &&
     existing.sizeBytes === input.sizeBytes;
   if (!matches)
     throw new AttachmentUploadSessionError(
@@ -380,7 +382,7 @@ export async function completeAttachmentUploadSession(
           uploaderAgentId: session.agentId,
           objectKey: session.objectKey,
           fileName: session.fileName,
-          contentType: session.contentType,
+          contentType: storedAttachmentContentType(session.fileName, session.contentType),
           sizeBytes: session.sizeBytes,
           ...dimensions,
         },
