@@ -241,7 +241,7 @@ def clipboard_error_status(code: str) -> str:
         return "409 Conflict"
     if code == "too_large":
         return "413 Payload Too Large"
-    if code in ("xlib_missing", "owner_failed"):
+    if code in ("xlib_missing", "owner_failed", "display_down"):
         return "503 Service Unavailable"
     return "400 Bad Request"
 

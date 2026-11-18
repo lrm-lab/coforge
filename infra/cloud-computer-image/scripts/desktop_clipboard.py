@@ -50,6 +50,14 @@ def _require_xlib() -> None:
         raise ClipboardError("xlib_missing") from exc
 
 
+def _require_display(display_name: str) -> None:
+    if not display_name.startswith(":"):
+        raise ClipboardError("bad_display")
+    socket_path = Path("/tmp/.X11-unix") / f"X{display_name[1:]}"
+    if not socket_path.exists():
+        raise ClipboardError("display_down")
+
+
 def _serve(display_name: str, payload: bytes, xauthority: str | None) -> None:
     from Xlib import X, Xatom, display
     from Xlib.protocol import event
@@ -98,13 +106,12 @@ def _serve(display_name: str, payload: bytes, xauthority: str | None) -> None:
 
 
 def set_clipboard(display_name: str, text: str, xauthority: str | None = None) -> None:
-    if not display_name.startswith(":"):
-        raise ClipboardError("bad_display")
     raw = text.encode("utf-8")
     if len(raw) == 0:
         raise ClipboardError("empty")
     if len(raw) > MAX_CLIPBOARD_BYTES:
         raise ClipboardError("too_large")
+    _require_display(display_name)
     _require_xlib()
     auth = xauthority or os.environ.get("XAUTHORITY") or "/root/.Xauthority"
     pid_path, bin_path = _state_paths(display_name)
@@ -145,8 +152,7 @@ def set_clipboard(display_name: str, text: str, xauthority: str | None = None) -
 
 
 def get_clipboard(display_name: str, xauthority: str | None = None) -> str:
-    if not display_name.startswith(":"):
-        raise ClipboardError("bad_display")
+    _require_display(display_name)
     _require_xlib()
     from Xlib import X, display
 

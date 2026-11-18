@@ -45,6 +45,11 @@ class DesktopClipboardTests(unittest.TestCase):
             self.module.get_clipboard("1")
         self.assertEqual(bad_get.exception.code, "bad_display")
 
+    def test_rejects_missing_display_socket(self):
+        with self.assertRaises(self.module.ClipboardError) as down:
+            self.module.set_clipboard(":9", "hi")
+        self.assertEqual(down.exception.code, "display_down")
+
     def test_spawns_owner_and_stops_previous(self):
         killed: list[int] = []
 
