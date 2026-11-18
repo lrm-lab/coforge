@@ -42,8 +42,6 @@ export type ToolCallLogIdentity = Readonly<{ agentId: string; launchId: string }
 type ToolCallLedgerOptions = {
   /** Absent for a ledger outside a daemon launch (a test): nothing is logged then. */
   identity?: ToolCallLogIdentity;
-  /** Per-call process liveness probe: `true` if alive, `false` if proven exited, `undefined` when unobservable (`no_evidence`). */
-  isToolProcessAlive?: (callId: string, call: { name: string }) => Promise<boolean | undefined>;
 };
 
 /**
@@ -61,10 +59,6 @@ type ToolCallLedgerOptions = {
 export class ToolCallLedger {
   readonly #calls = new Map<string, ToolCall>();
   readonly #identity: ToolCallLogIdentity | undefined;
-  readonly #isToolProcessAlive:
-    | ((callId: string, call: { name: string }) => Promise<boolean | undefined>)
-    | undefined;
-  readonly #loggedCompletionLoss = new Set<string>();
   #loggedCalls = 0;
   #reportedTruncation = false;
 
@@ -75,7 +69,6 @@ export class ToolCallLedger {
     options: ToolCallLedgerOptions = {},
   ) {
     this.#identity = options.identity;
-    this.#isToolProcessAlive = options.isToolProcessAlive;
   }
 
   observe(event: AgentRuntimeEvent): void {
@@ -85,7 +78,6 @@ export class ToolCallLedger {
       // A repeated start for a known id re-starts that call: it takes fresh clocks and is open
       // again, as before this ledger logged anything. Its line is written once, when the turn
       // ends or the call finishes.
-      this.#loggedCompletionLoss.delete(event.id);
       this.#calls.set(event.id, {
         name: event.name,
         startedAtMs: this.clock(),
@@ -107,7 +99,6 @@ export class ToolCallLedger {
             : "agent_runtime:tool_finished",
         );
       this.#calls.clear();
-      this.#loggedCompletionLoss.clear();
     }
   }
 
@@ -137,40 +128,6 @@ export class ToolCallLedger {
     return this.#oldestOpenTool()?.startedAtProcessClockMs;
   }
 
-  /**
-   * Whether open tool calls hold zero live OS child/descendant processes (`completion_loss`).
-   * Returns `false` when no tool is open, when OS descendant liveness is unobservable, or while
-   * any descendant started at or after the oldest open call's start remains alive.
-   */
-  async openToolHoldsNoLiveWork(): Promise<boolean> {
-    if (!this.#isToolProcessAlive) return false;
-    const openCalls: [string, ToolCall][] = [];
-    for (const entry of this.#calls) {
-      if (entry[1].endedAtMs === undefined) openCalls.push(entry);
-    }
-    if (openCalls.length === 0) return false;
-    for (const [callId, call] of openCalls) {
-      const alive = await this.#isToolProcessAlive(callId, { name: call.name }).catch(
-        () => undefined,
-      );
-      if (alive !== false) return false;
-    }
-    for (const [callId, call] of openCalls) {
-      if (this.#identity && !this.#loggedCompletionLoss.has(callId)) {
-        this.#loggedCompletionLoss.add(callId);
-        logger.warning("Open tool call holds no live OS descendants", {
-          event: "agent_runtime:tool_completion_loss",
-          agent_id: this.#identity.agentId,
-          launch_id: this.#identity.launchId,
-          call_id: callId,
-          tool: call.name,
-          silent_for_ms: Math.max(0, Math.round(this.clock() - call.startedAtMs)),
-        });
-      }
-    }
-    return true;
-  }
-
   /** Writes the line for every call this launch was still holding when its process ended — the
    * turn-scoped kill, a shutdown, an unexpected exit — and forgets them. Such a call never
    * reaches `finish()` and its turn never completes, so without this the one thing worth knowing
@@ -178,7 +135,6 @@ export class ToolCallLedger {
   logAbandoned(): void {
     for (const [id, call] of this.#calls) this.#logCall(id, call, "agent_runtime:tool_unfinished");
     this.#calls.clear();
-    this.#loggedCompletionLoss.clear();
   }
 
   #oldestOpenTool(): ToolCall | undefined {
