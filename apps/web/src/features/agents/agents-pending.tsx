@@ -2,40 +2,38 @@ import { Plus, SearchLg as Search } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { PageBackButton } from "#src/components/layout/page-back-button";
+import { PaneHeader } from "#src/components/layout/pane-header";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 
 export function AgentsPending() {
   return (
     <main className="flex h-full min-w-0">
-      <section className="@container/members flex min-w-0 flex-1 flex-col overflow-hidden bg-primary">
-        <header className="flex shrink-0 flex-wrap items-center gap-x-3 border-b border-secondary px-page @2xl/members:grid @2xl/members:h-12 @2xl/members:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-          <div className="flex h-12 min-w-0 flex-1 items-center gap-3">
-            <PageBackButton />
-            <h1 className="truncate text-lg font-semibold text-primary">
-              {m.member_directory_title()}
-            </h1>
-          </div>
-          <div
-            aria-hidden="true"
-            className="order-last flex basis-full gap-6 self-end @2xl/members:order-none @2xl/members:basis-auto"
-          >
-            {[m.member_tab_agents(), m.member_tab_humans()].map((label) => (
-              <span
-                key={label}
-                className="flex items-center gap-1 px-0.5 pb-2.5 text-sm font-semibold text-quaternary"
-              >
-                {label}
-                <Skeleton className="h-4 w-6 rounded-full" />
-              </span>
-            ))}
-          </div>
-          <div className="ml-auto flex shrink-0 items-center @2xl/members:justify-self-end">
-            <Button size="sm" color="primary" iconLeading={Plus} isDisabled>
-              {m.header_new_agent()}
-            </Button>
-          </div>
-        </header>
+      <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-primary">
+        <PaneHeader
+          className="px-page"
+          bar={
+            <div aria-hidden="true" className="flex gap-6">
+              {[m.member_tab_agents(), m.member_tab_humans()].map((label) => (
+                <span
+                  key={label}
+                  className="flex items-center gap-1 px-0.5 pb-2.5 text-sm font-semibold text-quaternary"
+                >
+                  {label}
+                  <Skeleton className="h-4 w-6 rounded-full" />
+                </span>
+              ))}
+            </div>
+          }
+        >
+          <PageBackButton />
+          <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-primary">
+            {m.member_directory_title()}
+          </h1>
+          <Button size="sm" color="primary" iconLeading={Plus} isDisabled>
+            {m.header_new_agent()}
+          </Button>
+        </PaneHeader>
         <div className="flex shrink-0 flex-wrap items-center gap-3 px-page pt-5">
           <Skeleton aria-hidden="true" className="h-9 w-32 rounded-lg" />
           <Input

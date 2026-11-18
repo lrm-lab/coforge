@@ -30,7 +30,7 @@ import {
  * The Activity page in a real browser: listing, the "N active" count, the views, the row menu and
  * Done; on a wide screen, opening a row beside a narrowed list (kept through a change of view and a
  * reload) and at the right message, a thread's row showing only the thread and leaving its channel
- * unread until "View in channel" (a profile opened from it covering it and returning to it), and
+ * unread until "Original message" (a profile opened from it covering it and returning to it), and
  * the thread's close returning to the list; Member DMs are `e2e-activity-inbox-dm.e2e.ts`; the Pinned section is `e2e-activity-inbox-pinned.e2e.ts`. The phone layout
  * is `e2e-activity-inbox-phone.e2e.ts`.
  *
@@ -271,9 +271,8 @@ test("the Activity page lists, filters, marks Done and opens inbox items", async
     );
     await browser("wait", "--fn", `${shownInPane(rootId)} && !(${profilePanel})`);
     expect(await evaluate<boolean>(shownInPane(newestId))).toBe(false);
-    // "View in channel" shows the channel in the pane in place of the thread, and reads it.
-    await browser("click", '[aria-label="Thread actions"]');
-    await browser("find", "role", "menuitem", "click", "--name", "View in channel");
+    // "Original message" shows the channel in the pane in place of the thread, and reads it.
+    await browser("find", "role", "button", "click", "--name", "Original message");
     await browser("wait", "--fn", `${openParam} === ${JSON.stringify(`channel:${channelId}`)}`);
     expect(await evaluate<boolean>(`location.search.includes("threadRootId")`)).toBe(false);
     expect(await evaluate<string>("location.hash")).toBe("");

@@ -44,7 +44,7 @@ test("the channel name keeps its room and the description stays out of the heade
   }
   const header = `document.querySelector('[aria-label="Channel details and settings"]')?.closest("header")`;
   const measure = `(() => {
-    const name = ${header}.querySelector("h1");
+    const name = ${header}.querySelector("h1 [data-channel-name]");
     const actions = document.querySelector('[aria-label="Channel details and settings"]');
     return {
       nameWhole: name.scrollWidth <= name.clientWidth,

@@ -8,6 +8,7 @@ import {
 } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { PaneHeader } from "#src/components/layout/pane-header";
 import { AgentProfileActionsMenu } from "./agent-profile-actions-menu";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import type { AgentMascot } from "#src/features/agents/agent-mascot";
@@ -18,19 +19,9 @@ import { m } from "#src/paraglide/messages";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
 import { useOpenDirectConversation } from "#src/features/conversations/open-direct-conversation";
 
-/**
- * The panel's first band (48px, the same height as Thread's header): the Agent's identity on the
- * left, bordered icon buttons on the right — Message, Start-or-Stop, Restart/Reset, then a plain
- * Close. On a narrow panel Message stays and the other two go in one menu
- * (`AgentProfileActionsMenu`), as in Raft, so the name keeps the room. Available on every tab (rendered once by the panel shell, not per tab). All four use the
- * official `ButtonUtility` with its `tooltip` prop.
- */
 export function AgentProfileHeader({
   agent,
   mascot,
-  /** True when this profile is an app's bot, which has no mascot: its picture stays still,
-   * as on its card. Undefined while the profile is still loading — the face is then unknown,
-   * and the neutral monogram stands in. */
   appBot,
   display,
   controls,
@@ -38,6 +29,7 @@ export function AgentProfileHeader({
   deleted = false,
   onClose,
   back,
+  tabs,
 }: {
   agent: {
     id: string;
@@ -63,14 +55,12 @@ export function AgentProfileHeader({
   /** Where the profile was opened from, when it is shown inside another page (a channel's
    * members): a Back button before the avatar returns there. */
   back?: { label: string; onPress: () => void };
+  tabs: React.ReactNode;
 }) {
   const openDirectConversation = useOpenDirectConversation();
   const message = () => void openDirectConversation({ agentId: agent.id });
   const header = (
-    // Same 20px gutter as the panel body (px-5): the bordered utility buttons align by box edge,
-    // while the borderless Close pulls -mr-1.5 so its glyph lands on the gutter
-    // (docs/design/page-skeleton-and-density.md §8 optical alignment).
-    <header className="@container/agent-header flex h-12 shrink-0 items-center gap-2 px-5 py-0">
+    <PaneHeader className="@container/agent-header px-5" bar={tabs}>
       {back && (
         <ButtonUtility
           icon={ArrowLeft}
@@ -101,8 +91,6 @@ export function AgentProfileHeader({
           deleted={deleted}
         />
       )}
-      {/* The name alone: the avatar's dot carries the live status
-          and the Profile tab the description. */}
       <p className="min-w-0 flex-1 truncate text-md font-medium tracking-tight text-secondary">
         {agent.displayName}
       </p>
@@ -119,7 +107,6 @@ export function AgentProfileHeader({
         {!deleted && (
           <>
             <AgentProfileActionsMenu className="flex @lg/agent-header:hidden" controls={controls} />
-            {/* One trigger for both states, so keyboard focus stays on it when Start becomes Stop. */}
             <ButtonUtility
               icon={controls.isOnline ? Stop : Play}
               size="sm"
@@ -155,7 +142,7 @@ export function AgentProfileHeader({
         tooltip={m.controls_close()}
         onClick={onClose}
       />
-    </header>
+    </PaneHeader>
   );
   const statusLine = controls?.controlPendingLabel ?? controls?.controlFailureDetail;
   const submitError = controls?.startStopError ?? controls?.restartSubmitError;

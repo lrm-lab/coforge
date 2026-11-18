@@ -117,6 +117,11 @@
   --spacing-agent-tab-bar: 2.5rem;
 }
 
+@theme {
+  --spacing-pane-title: 3rem;
+  --spacing-pane-bar: 2.375rem;
+}
+
 /* A list column beside a conversation pane (Activity): the width its resize handle keeps
    (`LIST_COLUMN` in conversation-list-width.ts, 380px = 23.75rem by default), at most half the
    page so the conversation keeps room (docs/design/sizing-units.md). */

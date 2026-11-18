@@ -53,6 +53,8 @@
   "member_person_joined": "加入时间",
   "member_person_no_agents": "尚未创建 Agent",
   "member_person_edit_profile": "编辑资料",
+  "member_person_tabs": "资料分区",
+  "member_person_tab_agents": "Agent",
   "member_person_not_found_title": "找不到该成员",
   "member_person_not_found_description": "对方可能已离开此 Workspace。",
   "member_person_load_error": "资料加载失败。",

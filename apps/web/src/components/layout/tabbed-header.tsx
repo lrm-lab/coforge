@@ -1,22 +1,13 @@
 import type { ReactNode } from "react";
 
-import { cx } from "#src/utils/cx";
+import { PaneHeader } from "#src/components/layout/pane-header";
 
-/**
- * A header row with underline tabs: identity on the left, the tabs centered, utility actions on the
- * right. The row follows its own width, not the viewport's (a thread or profile pane can squeeze
- * a conversation on a wide screen): when it is narrower than `@2xl`, the tabs drop to a second row
- * under the identity. The tabs sit on the header's bottom rule (`-mb-px`), which lets the active
- * tab's underline stand in for the rule beneath it. `className` sets the side gutter. With
- * `tabsStart` the tabs (pills) follow the identity on its left, centred on its line, instead of
- * sitting centered on the header's rule.
- */
 export function TabbedHeader({
   identity,
   actions,
   tabs,
   tabsStart,
-  className,
+  className = "px-4 md:px-6",
 }: {
   identity: ReactNode;
   actions?: ReactNode;
@@ -25,38 +16,13 @@ export function TabbedHeader({
   className?: string;
 }) {
   return (
-    <div className="@container/tabbed-header shrink-0">
-      <header
-        className={cx(
-          "grid grid-cols-[minmax(0,1fr)_auto] border-b border-secondary px-4 md:px-6 @2xl/tabbed-header:gap-x-6",
-          tabsStart
-            ? "@2xl/tabbed-header:grid-cols-[auto_minmax(0,1fr)_auto]"
-            : "@2xl/tabbed-header:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]",
-          className,
-        )}
-      >
-        {/* The row plus this header's 1px rule is the 48px band, so it lines up with the page
-            header beside it. */}
-        <div className="col-start-1 row-start-1 flex h-[calc(--spacing(12)-1px)] min-w-0 items-center gap-2 md:gap-3">
-          {identity}
-        </div>
-        {actions && (
-          <div className="col-start-2 row-start-1 flex items-center justify-self-end @2xl/tabbed-header:col-start-3">
-            {actions}
-          </div>
-        )}
-        {tabs && (
-          <div
-            className={cx(
-              "col-span-2 row-start-2 flex @2xl/tabbed-header:col-span-1 @2xl/tabbed-header:col-start-2 @2xl/tabbed-header:row-start-1",
-              // Underline tabs sit on the header's rule; pills beside the title centre on its line.
-              tabsStart ? "items-center pb-2 @2xl/tabbed-header:pb-0" : "-mb-px items-end",
-            )}
-          >
-            {tabs}
-          </div>
-        )}
-      </header>
-    </div>
+    <PaneHeader
+      bar={tabs || undefined}
+      barAlign={tabsStart ? "center" : "rule"}
+      className={className}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-2 md:gap-3">{identity}</div>
+      {actions && <div className="flex shrink-0 items-center">{actions}</div>}
+    </PaneHeader>
   );
 }

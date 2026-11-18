@@ -37,19 +37,16 @@ export function ActivityInboxTabs({
       }}
       className="w-max shrink-0"
     >
-      {/* In a list column dragged narrow the tabs sit closer, with less padding, and step down a
-          size, so the three still fit with their counts (English "Mentions" and "99+" included). */}
       <TabList
         type="button-gray"
         size="sm"
         aria-label={m.activity_inbox_filter_label()}
-        className="@max-[22rem]/tabbed-header:gap-1 @max-[22rem]/tabbed-header:*:px-1.5 @max-[22rem]/tabbed-header:*:text-sm"
+        className="*:py-1 @max-[22rem]/pane:gap-1 @max-[22rem]/pane:*:px-1.5 @max-[22rem]/pane:*:text-sm"
       >
         {FILTER_TABS.map((tab) => (
           <Tab
             key={tab.id}
             id={tab.id}
-            // Linear's filter pills (Frank, 11-09): the open one a soft grey fill in primary text.
             className={({ isSelected }) =>
               cn("gap-1.5 font-medium", isSelected ? "text-primary" : "text-tertiary")
             }

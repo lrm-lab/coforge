@@ -1,6 +1,7 @@
 import { ArrowLeft, UserX01, XClose as X } from "@untitledui/icons";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { PaneHeader } from "#src/components/layout/pane-header";
 import {
   Empty,
   EmptyHeader,
@@ -10,8 +11,6 @@ import {
 } from "#src/components/ui/empty";
 import { m } from "#src/paraglide/messages";
 
-/** The panel when its Agent's profile could not be read: a bare header and one fact. `notVisible`
- * is an Agent that exists but is private to someone else. */
 export function AgentProfileUnavailable({
   notVisible,
   back,
@@ -23,7 +22,7 @@ export function AgentProfileUnavailable({
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-secondary px-2">
+      <PaneHeader className="justify-between px-2" bar={null}>
         {back ? (
           <ButtonUtility
             icon={ArrowLeft}
@@ -43,7 +42,7 @@ export function AgentProfileUnavailable({
           tooltip={m.controls_close()}
           onClick={onClose}
         />
-      </header>
+      </PaneHeader>
       <Empty className="flex-1 items-center justify-center px-6 text-center">
         <EmptyHeader className="items-center gap-3">
           <EmptyMedia>
