@@ -7,62 +7,20 @@ import { AvatarCount } from "#src/components/base/avatar/base-components/avatar-
 export interface AvatarProps {
     size?: "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
     className?: string;
-    /**
-     * The class name for the main child of the avatar.
-     */
     contentClassName?: string;
     src?: string | null;
     alt?: string;
-    /**
-     * Display an inner contrast border around the avatar image.
-     */
     contrastBorder?: boolean;
-    /**
-     * Whether the avatar should be rounded.
-     * @default true
-     */
     rounded?: boolean;
-    /**
-     * Display an outer border around the avatar.
-     */
     border?: boolean;
-    /**
-     * Display a badge (i.e. company logo).
-     */
     badge?: ReactNode;
-    /**
-     * Display a status indicator.
-     */
     status?: "online" | "offline";
-    /**
-     * Display a verified tick icon.
-     *
-     * @default false
-     */
     verified?: boolean;
-    /**
-     * Display a count badge.
-     */
     count?: number;
-    /**
-     * The initials of the user to display if no image is available.
-     */
     initials?: string;
-    /**
-     * An icon to display if no image is available.
-     */
     placeholderIcon?: FC<{ className?: string }>;
-    /**
-     * A placeholder to display if no image is available.
-     */
     placeholder?: ReactNode;
 
-    /**
-     * Whether the avatar should show a focus ring when the parent group is in focus.
-     * For example, when the avatar is wrapped inside a link.
-     *
-     * @default false
-     */
     focusable?: boolean;
 }
 
@@ -103,8 +61,6 @@ export const Avatar = ({
         }
 
         if (initials) {
-            // The initials stand in for the picture, so they say what its `alt` says: nothing beside
-            // a name already given (task #553), that name when it is the only one.
             return (
                 <span
                     {...(alt === "" ? { "aria-hidden": true } : alt ? { role: "img", "aria-label": alt } : {})}
@@ -144,7 +100,6 @@ export const Avatar = ({
             className={cx(
                 "relative inline-flex shrink-0 rounded-[7px]",
                 rounded && "rounded-full",
-                // Focus styles
                 focusable && "outline-transparent group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-focus-ring",
                 border && "ring-1 ring-secondary_alt",
                 border && styles[size].rootWithBorder,
