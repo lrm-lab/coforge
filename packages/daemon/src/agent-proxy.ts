@@ -4,7 +4,6 @@ import {
   type AgentProxyCloudForward,
 } from "./agent-proxy-collab-routes";
 import { guardDelivery } from "./agent-proxy-delivery";
-import { randomBytes } from "node:crypto";
 import { exactPath, pathParam } from "./agent-proxy-paths";
 import {
   encodeLocalReminderRequest,
@@ -60,6 +59,7 @@ import {
   type ProxyRoute,
   type TokenBinding,
 } from "./agent-proxy-route";
+import { AgentProxyTokens } from "./agent-proxy-tokens";
 const LOCAL_PROXY_TOKEN = /^sfp_[A-Za-z0-9_-]{43}$/;
 const MESSAGE_ID_ANCHOR = new RegExp(`^(?:${MESSAGE_ANCHOR_SOURCE}|${UUID_LIKE_SOURCE})$`, "i");
 const LOCAL_PROXY_ROUTES = agentApiRoutes.proxy;
@@ -329,7 +329,7 @@ export function startAgentProxy(input: {
   cloudForward?: AgentProxyCloudForward;
   port?: number;
 }): AgentProxy {
-  const contexts = new Map<string, TokenBinding>();
+  const tokens = new AgentProxyTokens();
   const agentApiKeys = input.agentApiKeys ?? new Map<string, string>();
   const collab = createCollabProxyDispatcher({
     agentApiKeys,
@@ -351,7 +351,7 @@ export function startAgentProxy(input: {
       });
       const candidate = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
       const token = candidate && LOCAL_PROXY_TOKEN.test(candidate) ? candidate : undefined;
-      const registered = token ? contexts.get(token) : undefined;
+      const registered = tokens.find(token);
       const direct = await collab.dispatchDirect(request, requestUrl, registered);
       if (direct) return direct;
       const found = findProxyRoute(ROUTE_TABLE, request.method, requestUrl.pathname);
@@ -426,18 +426,19 @@ export function startAgentProxy(input: {
     url: `http://127.0.0.1:${server.port}${LOCAL_PROXY_ROUTES.messages.path}`,
     issue(agentId, agentApiKey) {
       if (!isAgentApiKey(agentApiKey)) throw new Error("invalid Agent API key");
-      const token = `sfp_${randomBytes(32).toString("base64url")}`;
-      const context = input.runtime.issueAgentContext?.(agentId, token) || token;
+      const token = tokens.register(
+        agentId,
+        (issued) => input.runtime.issueAgentContext?.(agentId, issued) || issued,
+      );
       agentApiKeys.set(agentId, agentApiKey);
-      contexts.set(token, { agentId, context });
       return token;
     },
     revoke(token) {
-      contexts.delete(token);
+      tokens.revoke(token);
     },
     close() {
       server.stop(true);
-      contexts.clear();
+      tokens.clear();
     },
   };
 }
