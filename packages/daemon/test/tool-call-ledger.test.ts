@@ -98,44 +98,40 @@ test("bounds tracked open tools", () => {
   expect(ledger.oldestOpenTool()?.name).toBe("Bash");
 });
 
-test("openToolHoldsNoLiveWork detects completion loss only when OS descendants are proven zero", async () => {
+test("openToolHoldsNoLiveWork returns false without per-tool exit proof (no_evidence or alive_silent_blocked)", async () => {
   let now = 100;
-  let procClock = 5_000;
-  let live: number | undefined = 2;
-  const observedCutoffs: number[] = [];
+  const statuses = new Map<string, boolean | undefined>();
   const calls = new ToolCallLedger(
     () => now,
     () => now,
-    () => procClock,
+    () => 5_000,
     {
       identity: { agentId: "agent-a", launchId: "launch-1" },
-      countLiveDescendants: async (startedAfterMs) => {
-        observedCutoffs.push(startedAfterMs);
-        return live;
-      },
+      isToolProcessAlive: async (callId) => statuses.get(callId),
     },
   );
   expect(await calls.openToolHoldsNoLiveWork()).toBe(false);
   calls.observe({ type: "tool-start", id: "call-1", name: "bash" });
+  calls.observe({ type: "tool-start", id: "call-mcp", name: "mcp_fetch" });
   now = 900_100;
-  expect(await calls.openToolHoldsNoLiveWork()).toBe(false);
-  expect(observedCutoffs).toEqual([5_000]);
 
-  // Unknown process table (e.g. Windows or embedded mock) never claims dead children.
-  live = undefined;
+  statuses.set("call-1", true);
+  statuses.set("call-mcp", undefined);
   expect(await calls.openToolHoldsNoLiveWork()).toBe(false);
 
-  // Zero live descendants means the child exited while the tool completion wedged.
-  live = 0;
+  statuses.set("call-1", false);
+  statuses.set("call-mcp", undefined);
+  expect(await calls.openToolHoldsNoLiveWork()).toBe(false);
+
+  statuses.set("call-mcp", false);
   const { records } = await captureDaemonLogs(async () => {
     expect(await calls.openToolHoldsNoLiveWork()).toBe(true);
-    // Repeated checks on the same wedged call do not spam duplicate log lines.
     expect(await calls.openToolHoldsNoLiveWork()).toBe(true);
   });
   const logged = records.filter(
     (entry) => entry.properties.event === "agent_runtime:tool_completion_loss",
   );
-  expect(logged).toHaveLength(1);
+  expect(logged).toHaveLength(2);
   expect(logged[0]?.properties).toMatchObject({
     agent_id: "agent-a",
     launch_id: "launch-1",
