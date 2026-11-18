@@ -346,6 +346,12 @@ message AgentMessageDelivery {
   optional bool artifacts = 25;
   // Context view on in the Workspace; unset from older servers.
   optional bool agent_context_view = 26;
+  // The message's own machine-readable notice kind (`system.kind`, e.g. "task.assigned_you");
+  // unset on ordinary messages and from a server that predates it.
+  optional string notice_kind = 27;
+  // True when this delivery belongs to a Task's discussion, decided by the server from the Task
+  // and its conversation, never from the target's shape; unset from a server that predates it.
+  optional bool task_discussion = 28;
 }
 
 // The recipient Agent's launch and native session a tracked @mention delivery was issued for.
