@@ -1,4 +1,3 @@
-import { startupDeadlineMs } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import type { AgentControlAccess } from "./agent-control-access.server";
 import type { AgentControlEvents } from "./agent-control-events.server";
@@ -8,6 +7,7 @@ import {
   current,
   nextControlEpoch,
   operationFence,
+  startupWindow,
   type AgentControlAction,
   type AgentControlAgent,
   type AgentControlState,
@@ -137,10 +137,6 @@ export class AgentControlOperations {
   }
 }
 
-export function startupWindow(provider: string, now: number) {
-  return { startedAtMs: now, deadlineAtMs: now + startupDeadlineMs(provider) };
-}
-
 export function advanceControlEpochForComputerMove(
   value: unknown,
   agentId: string,
@@ -158,5 +154,5 @@ export function advanceControlEpochForComputerMove(
       );
     return undefined;
   }
-  return { ...parsed.data, computerId, epoch: parsed.data.epoch + 1 };
+  return { ...parsed.data, computerId, epoch: nextControlEpoch(parsed.data) };
 }

@@ -1,4 +1,3 @@
-import { startupWindow } from "./agent-control-operations.server";
 import type { AgentControlEvents } from "./agent-control-events.server";
 import type { AgentStopReasonRecorder } from "./agent-control-receiver.server";
 import type { AgentRuntimeLock } from "./agent-runtime-lock.server";
@@ -6,6 +5,7 @@ import type { AgentControlSignal } from "./agent-control-signal.server";
 import {
   current,
   nextControlEpoch,
+  startupWindow,
   type AgentControlAgent,
   type AgentControlState,
   type AgentControlStore,
@@ -32,10 +32,10 @@ type Settlement = {
 
 export async function settleStartupTimeout(
   deps: Settlement,
-  agent: AgentControlAgent,
-  state: AgentControlState,
+  agent: AgentControlAgent & { state: AgentControlState },
   input: { outcome: StartupStopOutcome; now: number; controlSequence?: number },
 ): Promise<boolean> {
+  const state = agent.state;
   const { stopSentAtMs: _stopSentAtMs, errorCode: _errorCode, failedStreak, ...fields } = state;
   const next: AgentControlState = {
     ...fields,
@@ -90,6 +90,7 @@ export class AgentControlStartupTimeout {
     const agent = await store.get(agentId);
     const state = agent?.state;
     if (!agent || !state || state.phase !== "starting" || !current(agent, state)) return "skipped";
+    const settling = { ...agent, state };
     const now = clock();
     if (state.deadlineAtMs === undefined) {
       const armed = { ...state, ...startupWindow(state.provider, now) };
@@ -98,13 +99,13 @@ export class AgentControlStartupTimeout {
     if (now < state.deadlineAtMs) return "skipped";
     if (state.stopSentAtMs !== undefined) {
       if (now < state.stopSentAtMs + STARTUP_STOP_CONFIRM_MS) return "waiting";
-      return this.#fail(agent, state, "unconfirmed", now);
+      return this.#fail(settling, "unconfirmed", now);
     }
     const online = await this.deps.computerOnline({
       workspaceId: state.workspaceId,
       computerId: state.computerId,
     });
-    if (!online) return this.#fail(agent, state, "offline", now);
+    if (!online) return this.#fail(settling, "offline", now);
     const fenced = { ...state, epoch: nextControlEpoch(state), stopSentAtMs: now };
     if (!(await store.replace(agent, fenced))) return "lost";
     await this.deps.sendStop(fenced).catch((error: unknown) =>
@@ -121,13 +122,10 @@ export class AgentControlStartupTimeout {
   }
 
   async #fail(
-    agent: AgentControlAgent,
-    state: AgentControlState,
+    agent: AgentControlAgent & { state: AgentControlState },
     outcome: StartupStopOutcome,
     now: number,
   ): Promise<StartupSettleOutcome> {
-    return (await settleStartupTimeout(this.deps, agent, state, { outcome, now }))
-      ? "failed"
-      : "lost";
+    return (await settleStartupTimeout(this.deps, agent, { outcome, now })) ? "failed" : "lost";
   }
 }

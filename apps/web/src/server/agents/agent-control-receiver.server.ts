@@ -186,7 +186,7 @@ export class AgentControlReceiver {
         events: this.events,
         stopReasons: this.stopReasons,
       };
-      const settled = await settleStartupTimeout(deps, agent, state, {
+      const settled = await settleStartupTimeout(deps, agent, {
         outcome: "confirmed",
         now: Date.now(),
         controlSequence: result.sequence,

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   RUNTIME_PROVIDER_VALUES,
+  startupDeadlineMs,
   type AgentControlScope,
   type AgentStartIntent,
   type SessionIdentity,
@@ -222,6 +223,10 @@ export function agentControlRevision(config: unknown) {
 
 export const nextControlEpoch = (state: { epoch: number } | null | undefined) =>
   (state?.epoch ?? 0) + 1;
+
+export function startupWindow(provider: string, now: number) {
+  return { startedAtMs: now, deadlineAtMs: now + startupDeadlineMs(provider) };
+}
 
 export function terminal(state: AgentControlState) {
   return state.phase === "completed" || state.phase === "failed";

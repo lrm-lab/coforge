@@ -9,7 +9,7 @@ import {
   type AgentControlView,
   type AgentRecoveryFields,
 } from "./agent-control-types.server";
-import { startupWindow } from "./agent-control-operations.server";
+import { startupWindow } from "./agent-control-types.server";
 import type { AgentControlPublisher } from "./agent-control-publisher.server";
 import type { AgentControlSignal } from "./agent-control-signal.server";
 
