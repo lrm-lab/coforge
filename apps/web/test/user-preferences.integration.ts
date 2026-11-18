@@ -26,6 +26,7 @@ test("a user who never saved a preference reads the defaults, and saving keeps t
 
     expect(await preferences.read(user.id)).toEqual({
       timeZone: null,
+      observedTimeZone: null,
       timeFormat: null,
       language: null,
     });
@@ -36,6 +37,7 @@ test("a user who never saved a preference reads the defaults, and saving keeps t
     expect(await preferences.getBrowserNotificationsEnabled(user.id)).toBeTrue();
     expect(await preferences.read(user.id)).toEqual({
       timeZone: "Asia/Tokyo",
+      observedTimeZone: null,
       timeFormat: null,
       language: null,
     });
@@ -47,6 +49,7 @@ test("a user who never saved a preference reads the defaults, and saving keeps t
     expect(await preferences.set(user.id, null)).toBeNull();
     expect(await preferences.read(user.id)).toEqual({
       timeZone: null,
+      observedTimeZone: null,
       timeFormat: "24h",
       language: "zh-CN",
     });

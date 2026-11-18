@@ -9,6 +9,7 @@ import type { DatabaseScope } from "#src/server/db/transaction.server";
 /** The settings every page reads together, as stored: one row, so one read. */
 export type StoredUserPreferences = {
   timeZone: string | null;
+  observedTimeZone?: string | null;
   timeFormat: string | null;
   language: string | null;
 };
@@ -20,6 +21,7 @@ export type UserLanguage = (typeof USER_LANGUAGES)[number];
 export type UserPreferencesRepository = {
   read(userId: string): Promise<StoredUserPreferences>;
   setTimeZone(userId: string, timeZone: string | null): Promise<string | null>;
+  setObservedTimeZone?(userId: string, timeZone: string): Promise<void>;
   getBrowserNotificationsEnabled(userId: string): Promise<boolean>;
   setBrowserNotificationsEnabled(userId: string, enabled: boolean): Promise<boolean>;
   setTimeFormat(userId: string, timeFormat: string | null): Promise<string | null>;
@@ -45,6 +47,7 @@ export class PrismaUserPreferencesRepository implements UserPreferencesRepositor
     const row = await this.row(userId);
     return {
       timeZone: row?.timeZone ?? null,
+      observedTimeZone: row?.observedTimeZone ?? null,
       timeFormat: row?.timeFormat ?? null,
       language: row?.language ?? null,
     };
@@ -60,6 +63,14 @@ export class PrismaUserPreferencesRepository implements UserPreferencesRepositor
 
   async setTimeZone(userId: string, timeZone: string | null) {
     return (await this.write(userId, { timeZone })).timeZone;
+  }
+
+  async setObservedTimeZone(userId: string, timeZone: string) {
+    const valid = validateTimeZone(timeZone);
+    if (!valid) return;
+    const existing = await this.row(userId);
+    if (existing?.observedTimeZone === valid) return;
+    await this.write(userId, { observedTimeZone: valid });
   }
 
   async getBrowserNotificationsEnabled(userId: string) {
@@ -94,6 +105,7 @@ export class UserPreferences {
     const stored = await this.repository.read(userId);
     return {
       timeZone: stored.timeZone,
+      observedTimeZone: stored.observedTimeZone ?? null,
       timeFormat: isTimeFormat(stored.timeFormat) ? stored.timeFormat : null,
       language: isUserLanguage(stored.language) ? stored.language : null,
     };

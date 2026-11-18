@@ -50,7 +50,7 @@ test("Agent API raw and surface clients preserve error layering", async () => {
 
 const reminderId = "12345678-1234-4123-8123-123456789abc";
 
-test("parses recurring reminders with an explicit default timezone and dispatches them", async () => {
+test("parses recurring reminders omitting default timezone when --tz is absent and dispatches them", async () => {
   const invocation = parseArgs([
     "reminder",
     "schedule",
@@ -70,7 +70,6 @@ test("parses recurring reminders with an explicit default timezone and dispatche
     target: "@ada:abcdef12",
     messageId: "deadbeef",
     repeat: "daily@09:30",
-    timezone: "Asia/Shanghai",
   });
   const calls: unknown[] = [];
   const output = await run(

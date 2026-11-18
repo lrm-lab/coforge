@@ -91,6 +91,7 @@ model UserPreference {
   userId                      String   @id @db.Uuid
   user                        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   timeZone                    String?
+  observedTimeZone            String?
   browserNotificationsEnabled Boolean?
   /// Retired open-mode preference. Out of the client, so no query names it; the column is dropped
   /// once this release is live.
