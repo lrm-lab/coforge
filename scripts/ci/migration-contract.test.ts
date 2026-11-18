@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   extractDrops,
   findContractViolationsInSnapshot,
   MIGRATION_CONTRACT_FIX,
+  resolveContractBaseline,
 } from "./migration-contract";
 import { runSchemaHistoryDiff } from "../migration-safety/check-schema-history";
 
@@ -146,5 +150,50 @@ model UserPreference {
     const res = await runSchemaHistoryDiff({});
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.detail).toContain("SHADOW_DATABASE_URL");
+  });
+
+  test("resolveContractBaseline prefers refs/tags/web-production over range base and falls back when absent", () => {
+    const dir = mkdtempSync(join(tmpdir(), "migration-contract-base-"));
+    try {
+      const run = (args: string[]) =>
+        Bun.spawnSync(["git", ...args], {
+          cwd: dir,
+          env: {
+            ...process.env,
+            GIT_AUTHOR_NAME: "Test",
+            GIT_AUTHOR_EMAIL: "test@example.com",
+            GIT_COMMITTER_NAME: "Test",
+            GIT_COMMITTER_EMAIL: "test@example.com",
+          },
+        });
+      run(["init"]);
+      writeFileSync(join(dir, "a.txt"), "v1\n");
+      run(["add", "a.txt"]);
+      run(["commit", "-m", "v1"]);
+      const firstSha = run(["rev-parse", "HEAD"]).stdout.toString().trim();
+
+      writeFileSync(join(dir, "a.txt"), "v2\n");
+      run(["add", "a.txt"]);
+      run(["commit", "-m", "v2"]);
+      const secondSha = run(["rev-parse", "HEAD"]).stdout.toString().trim();
+
+      const withoutTag = resolveContractBaseline(
+        { kind: "range", base: secondSha, head: secondSha },
+        dir,
+        false,
+      );
+      expect(withoutTag.revision).toBe(secondSha);
+
+      run(["tag", "web-production", firstSha]);
+      const withTag = resolveContractBaseline(
+        { kind: "range", base: secondSha, head: secondSha },
+        dir,
+        false,
+      );
+      expect(withTag.revision).toBe("refs/tags/web-production");
+      expect(withTag.label).toBe("production (web-production)");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -37,6 +37,8 @@ jobs:
     name: Verify the staging-healthy candidate
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      staging_sha: ${{ steps.find_staging.outputs.staging_sha }}
     permissions:
       contents: read
       actions: read
@@ -49,6 +51,7 @@ jobs:
           fi
 
       - name: Find a healthy staging deployment of this digest
+        id: find_staging
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -60,7 +63,9 @@ jobs:
             if jq -e --arg image "$IMAGE" \
               'select(.artifact_identity == $image and .outcome == "healthy")' \
               "$dir/deployment-records.jsonl" >/dev/null 2>&1; then
-              echo "healthy in staging: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/$run" | tee -a "$GITHUB_STEP_SUMMARY"
+              sha="$(gh run view "$run" --repo "$GITHUB_REPOSITORY" --json headSha --jq .headSha)"
+              echo "staging_sha=$sha" >> "$GITHUB_OUTPUT"
+              echo "healthy in staging ($sha): ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/$run" | tee -a "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
           done
@@ -306,7 +311,8 @@ jobs:
           environment: production
 
       - name: Update web-production tag
-        if: success()
+        if: success() && needs.candidate.outputs.staging_sha != ''
         run: |
-          git tag -f web-production "${{ github.sha }}"
+          git fetch --depth=1 origin "${{ needs.candidate.outputs.staging_sha }}"
+          git tag -f web-production "${{ needs.candidate.outputs.staging_sha }}"
           git push -f origin refs/tags/web-production
