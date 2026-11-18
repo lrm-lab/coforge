@@ -42,14 +42,6 @@ test("a confirmation is a bottom sheet on a phone", async () => {
     ]);
   const byText = (selector: string, text: string) =>
     `[...document.querySelectorAll(${JSON.stringify(selector)})].filter((element) => element.textContent.trim() === ${JSON.stringify(text)}).at(-1)`;
-  async function clickText(selector: string, text: string) {
-    await waitFor(`${byText(selector, text)} !== undefined`);
-    const clicked = await browser(
-      "eval",
-      `(() => { const target = ${byText(selector, text)}; target?.click(); return Boolean(target); })()`,
-    );
-    if (!clicked.includes("true")) throw new Error(`"${text}" disappeared before it was clicked`);
-  }
 
   const channelName = `e2e-confirm-mid-${process.pid}`;
   const membership = await db.workspaceMembership.findFirstOrThrow({
@@ -102,7 +94,43 @@ test("a confirmation is a bottom sheet on a phone", async () => {
       if (attempt === 5) throw new Error("the channel settings panel never opened");
     }
     await waitFor(`${byText("button", "Delete channel")} !== undefined`);
-    await clickText("button", "Delete channel");
+    const opening = JSON.parse(
+      await browser(
+        "eval",
+        `(async () => {
+          const dialogs = () => document.querySelectorAll('[role="dialog"], [role="alertdialog"]');
+          const before = dialogs().length;
+          ${byText("button", "Delete channel")}.click();
+          const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+          const started = performance.now();
+          let least = 1;
+          let surface = "";
+          let frames = 0;
+          while (frames < 30 && performance.now() - started < 5000) {
+            await frame();
+            const dialog = [...dialogs()].at(-1);
+            if (dialogs().length <= before || !dialog) continue;
+            frames += 1;
+            let opacity = 1;
+            let painted;
+            for (let element = dialog; element; element = element.parentElement) {
+              const style = getComputedStyle(element);
+              opacity *= Number(style.opacity);
+              const background = style.backgroundColor;
+              if (!painted && background !== "rgba(0, 0, 0, 0)" && background !== "transparent") painted = background;
+            }
+            least = Math.min(least, opacity);
+            surface = painted ?? "";
+          }
+          return JSON.stringify({ least, surface, frames });
+        })()`,
+      ),
+    );
+    const firstFrames = (typeof opening === "string" ? JSON.parse(opening) : opening) as {
+      least: number;
+      surface: string;
+      frames: number;
+    };
     await waitFor(`document.body.textContent.includes("permanently deleted")`);
     await browser("wait", "500");
     const raw = JSON.parse(
@@ -124,6 +152,9 @@ test("a confirmation is a bottom sheet on a phone", async () => {
     await browser("wait", "300");
     await browser("screenshot", join(artifacts, "phone-dark.png"));
     await browser("eval", `document.documentElement.classList.remove("dark-mode")`);
+    expect(firstFrames.frames).toBe(30);
+    expect(firstFrames.least).toBe(1);
+    expect(firstFrames.surface).toMatch(/^rgb\(/);
     expect(Math.abs(box.bottom - box.height)).toBeLessThan(2);
     expect(box.left).toBeLessThan(1);
     expect(Math.abs(box.right - box.width)).toBeLessThan(1);
