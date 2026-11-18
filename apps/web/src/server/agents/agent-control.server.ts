@@ -89,7 +89,7 @@ export class AgentControl {
     const clock = () => this.clock();
     this.#access = new AgentControlAccess(store);
     const events = new AgentControlEvents(api);
-    this.#operations = new AgentControlOperations(store, this.#access, events);
+    this.#operations = new AgentControlOperations(store, this.#access, events, clock);
     this.#publisher = new AgentControlPublisher(
       store,
       api,
@@ -98,7 +98,7 @@ export class AgentControl {
       conversations,
       introductions,
     );
-    this.#driver = new AgentControlDriver(store, this.#publisher, signal, timing);
+    this.#driver = new AgentControlDriver(store, this.#publisher, signal, timing, clock);
     this.#receiver = new AgentControlReceiver(
       store,
       signal,

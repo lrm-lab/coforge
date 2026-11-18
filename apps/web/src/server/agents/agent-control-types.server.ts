@@ -113,6 +113,9 @@ export const agentControlStateSchema = z
      * `AUTOMATIC_START_STREAK_LIMIT` the automatic retries stop and only a person's Start may
      * try again (Raft 1.0.69 item 12, task #25). */
     failedStreak: z.number().int().nonnegative().optional(),
+    startedAtMs: z.number().int().nonnegative().optional(),
+    deadlineAtMs: z.number().int().nonnegative().optional(),
+    stopSentAtMs: z.number().int().nonnegative().optional(),
     updatedAtMs: z.number().nonnegative().optional(),
   })
   .strict();

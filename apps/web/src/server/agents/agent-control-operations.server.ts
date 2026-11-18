@@ -1,3 +1,4 @@
+import { startupDeadlineMs } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import type { AgentControlAccess } from "./agent-control-access.server";
 import type { AgentControlEvents } from "./agent-control-events.server";
@@ -19,6 +20,7 @@ export class AgentControlOperations {
     private readonly access: AgentControlAccess,
     /** Publishes `agent.control.v1` for the operation this write begins. */
     private readonly events?: AgentControlEvents,
+    private readonly clock: () => number = Date.now,
   ) {}
 
   async begin(
@@ -86,7 +88,12 @@ export class AgentControlOperations {
       ...(action === "start" && carryFailedStreak && old?.failedStreak
         ? { failedStreak: old.failedStreak }
         : {}),
-      ...(action === "start" ? { launchId: crypto.randomUUID() } : {}),
+      ...(action === "start"
+        ? {
+            launchId: crypto.randomUUID(),
+            ...startupWindow(agent.runtimeConfig.runtime, this.clock()),
+          }
+        : {}),
     };
     if (
       await this.store.replace(agent, state, stoppedAt !== undefined ? { stoppedAt } : undefined)
@@ -127,6 +134,10 @@ export class AgentControlOperations {
       throw new Error("Agent control could not begin after 3 compare-and-swap attempts");
     return this.begin(refreshed, action, requestId, attempt + 1, stoppedAt, carryFailedStreak);
   }
+}
+
+export function startupWindow(provider: string, now: number) {
+  return { startedAtMs: now, deadlineAtMs: now + startupDeadlineMs(provider) };
 }
 
 export function advanceControlEpochForComputerMove(

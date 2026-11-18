@@ -9,6 +9,7 @@ import {
   type AgentControlView,
   type AgentRecoveryFields,
 } from "./agent-control-types.server";
+import { startupWindow } from "./agent-control-operations.server";
 import type { AgentControlPublisher } from "./agent-control-publisher.server";
 import type { AgentControlSignal } from "./agent-control-signal.server";
 
@@ -24,6 +25,7 @@ export class AgentControlDriver {
     private readonly publisher: AgentControlPublisher,
     private readonly signal: AgentControlSignal,
     private readonly timing: { timeoutMs: number; fallbackMs?: number },
+    private readonly clock: () => number = Date.now,
   ) {}
 
   async advance(agentId: string, requestId: string, recovery?: AgentRecoveryFields) {
@@ -52,7 +54,7 @@ export class AgentControlDriver {
             phase: next ? commands[next].pending : "completed",
             sessionSequence: 0,
             ...(!clearSession && identity ? { identity } : {}),
-            ...(launchId ? { launchId } : {}),
+            ...(launchId ? { launchId, ...startupWindow(state.provider, this.clock()) } : {}),
           },
           { clearSession },
         ))
