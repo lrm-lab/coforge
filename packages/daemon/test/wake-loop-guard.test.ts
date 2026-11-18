@@ -16,7 +16,9 @@ import {
 } from "#src/agent-runtime/runtime-error-classification";
 import { TurnEvidenceLedger } from "#src/agent-runtime/turn-evidence";
 import { InMemoryDaemonCredentialStore } from "#src/credentials/credential-store";
+import { AgentDeliveryGate } from "#src/daemon-runtime/agent-delivery-gate";
 import { DaemonRuntime } from "#src/daemon-runtime/runtime";
+import { RuntimeErrorDeliveryHold } from "#src/daemon-runtime/runtime-error-delivery-hold";
 import {
   deliveryWakeKey,
   WAKE_LOOP_BACKOFF_MS,
@@ -140,7 +142,7 @@ test("classifyRuntimeError classifies zero_evidence_turn_completed as retryable 
   ]) {
     expect(classifyRuntimeError({ message })).toMatchObject({
       errorClass: RUNTIME_ERROR_CLASS.PROVIDER_SERVER,
-      errorReason: "provider_server_error",
+      errorReason: "zero_evidence_turn_completed",
       retryDecision: RUNTIME_ERROR_RETRY_DECISION.RETRY,
       takesAgentOffline: false,
     });
@@ -359,4 +361,38 @@ test("DaemonRuntime treats a live zero-evidence turn as retryable failure and gu
     await runtime.stop();
     await rm(tempDir, { recursive: true, force: true });
   }
+});
+
+test("zero_evidence_turn_completed trips CRASH_STREAK_CAP=5 without tripping WakeLoopGuard at turn 3", () => {
+  const gate = new AgentDeliveryGate();
+  const hold = new RuntimeErrorDeliveryHold({ deliveryGate: gate });
+  const classification = classifyRuntimeError({
+    message:
+      "Agent runtime completed a turn with no assistant text or tool calls (zero_evidence_turn_completed).",
+  });
+  expect(classification.errorReason).toBe("zero_evidence_turn_completed");
+
+  for (let turn = 1; turn <= 4; turn++) {
+    gate.wakeLoop.noteDeliveryArrival("agent-z", "msg-z");
+    gate.wakeLoop.noteWakeStarted("agent-z", "msg-z");
+    const fence = hold.noteFailure("agent-z", classification, "zero_evidence_turn_completed");
+    expect(fence).toBeUndefined();
+    const wakeOutcome = gate.wakeLoop.noteTurnCompleted("agent-z", { status: "failed" });
+    expect(wakeOutcome.action).toBe("none");
+    expect(gate.wakeLoop.isParked("agent-z")).toBe(false);
+  }
+
+  gate.wakeLoop.noteDeliveryArrival("agent-z", "msg-z");
+  gate.wakeLoop.noteWakeStarted("agent-z", "msg-z");
+  const fifth = hold.noteFailure("agent-z", classification, "zero_evidence_turn_completed");
+  expect(fifth).toEqual({
+    fingerprint: "zero_evidence_turn_completed",
+    attempts: 5,
+    fenced: true,
+  });
+
+  const ledger = new TurnEvidenceLedger();
+  ledger.observe({ type: "thinking-delta", text: "thinking" });
+  ledger.noteMessageSent();
+  expect(ledger.finish("completed")).toBeUndefined();
 });

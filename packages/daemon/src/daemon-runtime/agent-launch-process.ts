@@ -230,6 +230,9 @@ export async function launchAgentProcess(
       earlyCrashWatch.observe(event);
       const isCurrent = current();
       const recoverySignal = isCurrent ? runtimeErrorRecoverySignal(event) : undefined;
+      if (isCurrent && (event.type === "text-delta" || event.type === "tool-start")) {
+        ports.runtimeErrorHold.resetZeroEvidence(agentId);
+      }
       if (recoverySignal)
         ports.runtimeErrorHold.noteRecoverySignal(
           agentId,

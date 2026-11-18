@@ -43,6 +43,13 @@ export const RUNTIME_ERROR_DELIVERY_BACKOFF_JITTER_RATIO = 0.1;
 export const QUOTA_RESET_BACKOFF_MAX_MS = 60 * 60_000;
 /** Consecutive same-fingerprint failures before the caller stops retrying that fingerprint. */
 export const RUNTIME_ERROR_FINGERPRINT_FENCE_THRESHOLD = 3;
+export const ZERO_EVIDENCE_CRASH_STREAK_CAP = 5;
+
+export function isZeroEvidenceReason(reason: string | undefined): boolean {
+  return (
+    reason === "zero_evidence_turn_completed" || reason === "codex_zero_evidence_turn_completed"
+  );
+}
 
 /**
  * The classes the repeat fence never counts. A provider this machine cannot reach, that provider's
