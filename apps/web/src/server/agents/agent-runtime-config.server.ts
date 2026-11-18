@@ -1,4 +1,8 @@
-import { parseRuntimeProvider, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import {
+  parseRuntimeProvider,
+  RUNTIME_PROVIDER,
+  type RuntimeProvider,
+} from "@lrm/coforge-sdk/internal";
 import { modelSizesApply } from "#src/features/agents/agent-model-sizes";
 import { runtimeProviderSelectionRefusal } from "#src/features/agents/runtime-provider-selection";
 import { AppError } from "#src/lib/app-error";
@@ -39,6 +43,36 @@ export type AgentRuntimeConfig = {
   maxOutputTokens?: number;
   environment?: EncryptedAgentEnvironment;
 };
+
+const LEGACY_ANTIGRAVITY_EFFORT_MODELS: Readonly<
+  Record<string, { model: string; reasoning: string }>
+> = {
+  "gemini-3.8-flash-high": { model: "gemini-3.8-flash", reasoning: "high" },
+  "gemini-3.8-flash-medium": { model: "gemini-3.8-flash", reasoning: "medium" },
+  "gemini-3.8-flash-low": { model: "gemini-3.8-flash", reasoning: "low" },
+  "gemini-3.7-flash-high": { model: "gemini-3.7-flash", reasoning: "high" },
+  "gemini-3.7-flash-medium": { model: "gemini-3.7-flash", reasoning: "medium" },
+  "gemini-3.7-flash-low": { model: "gemini-3.7-flash", reasoning: "low" },
+  "gemini-3.6-flash-high": { model: "gemini-3.6-flash", reasoning: "high" },
+  "gemini-3.6-flash-medium": { model: "gemini-3.6-flash", reasoning: "medium" },
+  "gemini-3.6-flash-low": { model: "gemini-3.6-flash", reasoning: "low" },
+  "gemini-3.1-pro-high": { model: "gemini-3.1-pro", reasoning: "high" },
+  "gemini-3.1-pro-low": { model: "gemini-3.1-pro", reasoning: "low" },
+};
+
+function legacyAntigravitySuffix(
+  runtime: RuntimeProvider,
+  model: string,
+): { model: string; reasoning: string } | undefined {
+  return runtime === RUNTIME_PROVIDER.ANTIGRAVITY
+    ? LEGACY_ANTIGRAVITY_EFFORT_MODELS[model]
+    : undefined;
+}
+
+function splitLegacyAntigravityModel(runtime: RuntimeProvider, model: string, reasoning: string) {
+  if (reasoning !== "") return { model, reasoning };
+  return legacyAntigravitySuffix(runtime, model) ?? { model, reasoning };
+}
 
 /** Refuses a runtime provider an Agent cannot be given (`runtimeProviderSelectionRefusal`). */
 export function assertProviderSelectable(provider: unknown) {
@@ -106,12 +140,13 @@ export function parseAgentRuntimeConfig(value: unknown, agentId?: string): Agent
     (maxOutputTokens === undefined && Reflect.get(value, "maxOutputTokens") !== undefined)
   )
     throw new Error("invalid runtime config");
+  const split = splitLegacyAntigravityModel(runtime, model, reasoning);
   return {
     runtime,
     provider: parseProviderConfig(Reflect.get(value, "provider"), agentId),
-    model,
+    model: split.model,
     modelProvider: modelProvider ?? "",
-    reasoning,
+    reasoning: split.reasoning,
     ...(fastMode === true ? { fastMode: true } : {}),
     ...(contextWindow === undefined ? {} : { contextWindow }),
     ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
