@@ -26,6 +26,7 @@ import { CloudAgentForm } from "./cloud-agent-form";
 import { ExternalAgentForm } from "./external-agent-form";
 import { useCloudAgentComputer } from "./cloud-agent-computer";
 import { useCurrentWorkspaceId } from "./workspace-agents-realtime";
+import { useAgentUsernameDraft, type AgentUsernameDraft } from "./agent-username-field";
 
 export function NewAgentDialog({
   open,
@@ -79,6 +80,7 @@ function NewAgentForms({
   const cloud = useCloudAgentComputer();
   const [chosen, setChosen] = useState<AgentKind>();
   const [submitting, setSubmitting] = useState(false);
+  const usernameDraft = useAgentUsernameDraft();
   if (cloud.isPending)
     return (
       <Loading className="py-12">
@@ -135,6 +137,7 @@ function NewAgentForms({
           onBusyChange={onBusyChange}
           onSubmittingChange={setSubmitting}
           autoFocus={chosen !== undefined}
+          usernameDraft={usernameDraft}
         />
       ) : kind === "cloud" && cloudComputer ? (
         <CloudAgentForm
@@ -145,12 +148,14 @@ function NewAgentForms({
           onBusyChange={onBusyChange}
           onSubmittingChange={setSubmitting}
           autoFocus={chosen === undefined}
+          usernameDraft={usernameDraft}
         />
       ) : (
         <NewLocalAgent
           onClose={onClose}
           conversationReplacesPage={conversationReplacesPage}
           onBusyChange={onBusyChange}
+          usernameDraft={usernameDraft}
         />
       )}
     </div>
@@ -161,10 +166,12 @@ function NewLocalAgent({
   onClose,
   conversationReplacesPage,
   onBusyChange,
+  usernameDraft,
 }: {
   onClose: () => void;
   conversationReplacesPage: boolean;
   onBusyChange: (busy: boolean) => void;
+  usernameDraft: AgentUsernameDraft;
 }) {
   const workspaceId = useCurrentWorkspaceId();
   const loadComputers = useServerFn(listComputers);
@@ -221,6 +228,7 @@ function NewLocalAgent({
       onClose={onClose}
       headless
       onBusyChange={onBusyChange}
+      usernameDraft={usernameDraft}
     />
   );
 }

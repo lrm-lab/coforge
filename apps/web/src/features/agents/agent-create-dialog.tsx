@@ -25,7 +25,7 @@ import { RuntimeSignInDialog } from "#src/features/computers/runtime-sign-in-dia
 import { useRuntimeAuthSignals } from "#src/features/computers/use-runtime-auth-signals";
 import { runtimeProviderLabel } from "./runtime-provider-display";
 import { finishedAgentUsername } from "./agent-username";
-import { AgentUsernameField } from "./agent-username-field";
+import { AgentUsernameField, type AgentUsernameDraft } from "./agent-username-field";
 import type { CreateAgentInput } from "./agent.schemas";
 import { preferredRuntimeProvider, runtimeOptionsFromRuntimes } from "./agent-runtime-options";
 import {
@@ -69,6 +69,7 @@ type LocalAgentFormOptions = {
   joinsChannelName?: string;
   nameNote?: string;
   actionCardMessageId?: string;
+  usernameDraft?: AgentUsernameDraft;
 };
 
 export function LocalAgentForm({
@@ -81,6 +82,7 @@ export function LocalAgentForm({
   joinsChannelName,
   nameNote,
   actionCardMessageId,
+  usernameDraft,
   submitLabel = m.agent_form_submit(),
   onClose,
   headless = false,
@@ -205,7 +207,7 @@ export function LocalAgentForm({
               {m.agent_form_joins_channel({ channel: joinsChannelName })}
             </p>
           )}
-          <AgentUsernameField defaultValue={defaults?.name} note={nameNote} />
+          <AgentUsernameField defaultValue={defaults?.name} note={nameNote} draft={usernameDraft} />
           <Select
             name="computerId"
             isRequired

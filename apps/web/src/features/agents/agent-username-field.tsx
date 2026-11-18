@@ -14,18 +14,28 @@ import {
   typedAgentUsername,
 } from "./agent-username";
 
+export function useAgentUsernameDraft(defaultValue?: string) {
+  const [typed, setTyped] = useState<string>();
+  const [suggested, setSuggested] = useState(() => defaultValue ?? randomAgentUsername());
+  return { typed, setTyped, suggested, setSuggested };
+}
+
+export type AgentUsernameDraft = ReturnType<typeof useAgentUsernameDraft>;
+
 export function AgentUsernameField({
   label = m.agent_form_username(),
   defaultValue,
   note,
   autoFocus,
   isReadOnly,
+  draft,
 }: {
   label?: string;
   defaultValue?: string;
   note?: string;
   autoFocus?: boolean;
   isReadOnly?: boolean;
+  draft?: AgentUsernameDraft;
 }) {
   const controlSize = useDialogControlSize();
   const directory = useWorkspaceDirectory();
@@ -33,8 +43,8 @@ export function AgentUsernameField({
     () => new Set((directory.data?.agents ?? []).map((agent) => agent.handle.toLowerCase())),
     [directory.data],
   );
-  const [typed, setTyped] = useState<string>();
-  const [suggested, setSuggested] = useState(() => defaultValue ?? randomAgentUsername());
+  const ownDraft = useAgentUsernameDraft(defaultValue);
+  const { typed, setTyped, suggested, setSuggested } = draft ?? ownDraft;
   const username = typed ?? (defaultValue ? suggested : availableAgentUsername(suggested, taken));
   const [left, setLeft] = useState(false);
   const empty = left && username === "";

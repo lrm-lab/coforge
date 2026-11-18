@@ -18,7 +18,7 @@ import { createCloudAgent } from "./cloud-agents.functions";
 import { cloudAgentComputerKey, type PlacedCloudAgentComputer } from "./cloud-agent-computer";
 import { AgentCreateFooter, AgentCreateForm } from "./agent-create-frame";
 import { finishedAgentUsername } from "./agent-username";
-import { AgentUsernameField } from "./agent-username-field";
+import { AgentUsernameField, type AgentUsernameDraft } from "./agent-username-field";
 
 export function CloudAgentForm({
   computer,
@@ -28,6 +28,7 @@ export function CloudAgentForm({
   onBusyChange,
   onSubmittingChange,
   autoFocus,
+  usernameDraft,
 }: {
   computer: PlacedCloudAgentComputer;
   open: boolean;
@@ -36,6 +37,7 @@ export function CloudAgentForm({
   onBusyChange: (busy: boolean) => void;
   onSubmittingChange: (submitting: boolean) => void;
   autoFocus: boolean;
+  usernameDraft?: AgentUsernameDraft;
 }) {
   const create = useServerFn(createCloudAgent);
   const refreshDirectory = useRefreshAgentDirectory();
@@ -150,7 +152,7 @@ export function CloudAgentForm({
     >
       <div className="flex flex-col gap-3 px-6 pt-5 pb-2">
         {!ready && <CloudComputerStatus computer={computer} onLeave={close} />}
-        <AgentUsernameField autoFocus={autoFocus} isReadOnly={submitting} />
+        <AgentUsernameField autoFocus={autoFocus} isReadOnly={submitting} draft={usernameDraft} />
         {ready && <p className="text-sm text-tertiary">{m.cloud_agent_create_private_note()}</p>}
         {error && (
           <p role="alert" className="text-sm text-error-primary">

@@ -16,7 +16,7 @@ import { createExternalAgent, deleteAgent } from "./agents.functions";
 import { agentCreateErrorMessage } from "./agent-form";
 import { AgentCreateFooter, AgentCreateForm } from "./agent-create-frame";
 import { finishedAgentUsername } from "./agent-username";
-import { AgentUsernameField } from "./agent-username-field";
+import { AgentUsernameField, type AgentUsernameDraft } from "./agent-username-field";
 import { useRefreshAgentDirectory } from "./workspace-agents-realtime";
 import {
   ExternalAgentCredentialBlock,
@@ -31,12 +31,14 @@ export function ExternalAgentForm({
   onBusyChange,
   onSubmittingChange,
   autoFocus,
+  usernameDraft,
 }: {
   onClose: () => void;
   conversationReplacesPage: boolean;
   onBusyChange: (busy: boolean) => void;
   onSubmittingChange: (submitting: boolean) => void;
   autoFocus: boolean;
+  usernameDraft?: AgentUsernameDraft;
 }) {
   const create = useServerFn(createExternalAgent);
   const refreshDirectory = useRefreshAgentDirectory();
@@ -138,7 +140,7 @@ export function ExternalAgentForm({
       }
     >
       <div className="space-y-4 px-6 pt-5 pb-4">
-        <AgentUsernameField autoFocus={autoFocus} isReadOnly={submitting} />
+        <AgentUsernameField autoFocus={autoFocus} isReadOnly={submitting} draft={usernameDraft} />
         <Input name="displayName" label={m.agent_profile_display_name()} isDisabled={submitting} />
         <TextArea
           name="description"
