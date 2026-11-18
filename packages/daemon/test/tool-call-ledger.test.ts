@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { countLiveProcessDescendants } from "#src/agent-runtime/process-descendants";
 import { TOOL_CALL_LEDGER_MAX, ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
-import { captureDaemonLogs } from "./log-capture";
 
 /** A ledger on a clock the test sets. */
 function ledger() {
@@ -96,49 +95,6 @@ test("bounds tracked open tools", () => {
   for (let i = 0; i < TOOL_CALL_LEDGER_MAX + 1; i++)
     ledger.observe({ type: "tool-start", id: `tool-${i}`, name: "Bash", input: {} });
   expect(ledger.oldestOpenTool()?.name).toBe("Bash");
-});
-
-test("openToolHoldsNoLiveWork returns false without per-tool exit proof (no_evidence or alive_silent_blocked)", async () => {
-  let now = 100;
-  const statuses = new Map<string, boolean | undefined>();
-  const calls = new ToolCallLedger(
-    () => now,
-    () => now,
-    () => 5_000,
-    {
-      identity: { agentId: "agent-a", launchId: "launch-1" },
-      isToolProcessAlive: async (callId) => statuses.get(callId),
-    },
-  );
-  expect(await calls.openToolHoldsNoLiveWork()).toBe(false);
-  calls.observe({ type: "tool-start", id: "call-1", name: "bash" });
-  calls.observe({ type: "tool-start", id: "call-mcp", name: "mcp_fetch" });
-  now = 900_100;
-
-  statuses.set("call-1", true);
-  statuses.set("call-mcp", undefined);
-  expect(await calls.openToolHoldsNoLiveWork()).toBe(false);
-
-  statuses.set("call-1", false);
-  statuses.set("call-mcp", undefined);
-  expect(await calls.openToolHoldsNoLiveWork()).toBe(false);
-
-  statuses.set("call-mcp", false);
-  const { records } = await captureDaemonLogs(async () => {
-    expect(await calls.openToolHoldsNoLiveWork()).toBe(true);
-    expect(await calls.openToolHoldsNoLiveWork()).toBe(true);
-  });
-  const logged = records.filter(
-    (entry) => entry.properties.event === "agent_runtime:tool_completion_loss",
-  );
-  expect(logged).toHaveLength(2);
-  expect(logged[0]?.properties).toMatchObject({
-    agent_id: "agent-a",
-    launch_id: "launch-1",
-    call_id: "call-1",
-    tool: "bash",
-    silent_for_ms: 900_000,
-  });
 });
 
 test("countLiveProcessDescendants walks the process tree and fences by processClockMs resolution", async () => {

@@ -17,12 +17,7 @@ import type { DaemonIdleFacts } from "./agent-idle-facts";
 import type { BusyActivity } from "./agent-activity-publisher";
 import type { DeliveryHoldReason } from "./agent-delivery-gate";
 import type { LaunchRequest } from "./runtime-launch-types";
-import {
-  needsOpenToolLivenessProbe,
-  probeStalledRuntime,
-  stalledRuntime,
-  type StalledRuntime,
-} from "./runtime-release-stalled";
+import { stalledRuntime, type StalledRuntime } from "./runtime-release-stalled";
 import {
   coldIdleRuntimePlan,
   configApplyRuntimePlan,
@@ -106,14 +101,14 @@ export class RuntimeRelease<L extends ReleasableLaunch> {
     return stalledRuntime(this.#ports, agentId);
   }
   needsStalledProbe(agentId: string): boolean {
-    return this.#probing.has(agentId) || needsOpenToolLivenessProbe(this.#ports, agentId);
+    return this.#probing.has(agentId);
   }
   probeStalled(agentId: string): Promise<StalledRuntime<L> | undefined> {
     const existing = this.#probing.get(agentId);
     if (existing) return existing;
     const probe = (async () => {
       await this.reapBackgroundTasks(agentId);
-      return probeStalledRuntime(this.#ports, agentId);
+      return stalledRuntime(this.#ports, agentId);
     })().finally(() => {
       if (this.#probing.get(agentId) === probe) this.#probing.delete(agentId);
     });
