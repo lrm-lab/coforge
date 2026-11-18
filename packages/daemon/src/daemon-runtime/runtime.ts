@@ -75,7 +75,6 @@ import {
   type RuntimeProvider,
   type UsageScanResponse,
   type LocalReminderRequest,
-  type ReminderJob,
   type TaskCommand,
   type TaskResult,
   type AgentWorkspaceDeleteRequest,
@@ -99,7 +98,7 @@ import { failCollectorRunningSlots } from "./runtime-collector-failure";
 import { runtimeEnvelope } from "./runtime-envelope";
 import { replaceTransport } from "./runtime-transport-lifecycle";
 import { holdRunners, releaseRunners } from "./runtime-runner-hold";
-import { agentTask, acceptReminderDue, mintAppItem, reminder } from "./runtime-agent-api-reminders";
+import { agentTask, mintAppItem, reminder } from "./runtime-agent-api-reminders";
 import {
   drainAppInboxNotices,
   inbox,
@@ -549,7 +548,7 @@ export class DaemonRuntime {
       isWorking: (agentId) => this.#turn.isWorking(agentId),
       notifyAppItem: (agentId, itemId) =>
         this.#inboxCoordinator.notifyAppItem(agentId, itemId, { startStopped: false }),
-      acceptReminderDue: (job, late) => this.#acceptReminderDue(job, late),
+      reminderInbox: () => this.#agentApiRemindersPorts(),
       systemCleaner,
       stopAgent: (agentId) => this.stopAgent(agentId),
       runningAgentIds: () => this.#agentProcessManager.runningAgentIds(),
@@ -1306,8 +1305,6 @@ export class DaemonRuntime {
   async reminder(context: string, request: LocalReminderRequest, agentApiKey: string) {
     return reminder(this.#agentApiRemindersPorts(), context, request, agentApiKey);
   }
-  #acceptReminderDue = (job: ReminderJob, late: boolean): Promise<boolean> =>
-    acceptReminderDue(this.#agentApiRemindersPorts(), job, late);
   #resyncAppConfigs(): void {
     resyncAppConfigs(this.#appInboxSyncPorts());
   }

@@ -11,26 +11,32 @@ import {
   type ReminderAcknowledgementSyncRequest,
 } from "./reminder-acknowledgement-sync";
 import { ReminderWork } from "./reminder-work";
+import { defaultClock, type ReminderClock } from "./reminder-clock";
+import { ReminderRetries, settle } from "./reminder-retries";
 
 const logger = getLogger(["coforge", "daemon", "reminder"]);
 const LATE_AFTER_MS = 60_000;
 
 export type ReminderDuePorts = Readonly<{
   acknowledge(request: ReminderDueAckRequest): Promise<boolean>;
-  deliver(job: ReminderJob, occurrence: { late: boolean }): Promise<unknown>;
+  deliver(job: ReminderJob, occurrence: { late: boolean }): Promise<string>;
+  wake(agentId: string, itemId: string): Promise<boolean>;
   acknowledgeCloud?(request: ReminderAcknowledgementSyncRequest): void;
-  now?(): number;
+  clock?: ReminderClock;
 }>;
 
 export class ReminderDueReceiver {
   readonly #work = new ReminderWork();
+  readonly #retries: ReminderRetries;
   #running = true;
 
   constructor(
     private readonly scope: { workspaceId: string; computerId: string },
     private readonly store: ReminderDueStore,
     private readonly ports: ReminderDuePorts,
-  ) {}
+  ) {
+    this.#retries = new ReminderRetries(this.#clock());
+  }
 
   receive(due: ReminderDue): Promise<void> {
     return this.#work.serial(due.agentId, async () => {
@@ -56,7 +62,12 @@ export class ReminderDueReceiver {
         records.push(record);
         await this.#save(due.agentId, records);
       }
-      await this.#advance(due.agentId, records, record);
+      try {
+        await this.#advance(due.agentId, records, record);
+      } catch (error) {
+        this.#log("warn", "reminder.due_delivery_failed", due, { error });
+        this.#retryRestore(due.agentId);
+      }
     });
   }
 
@@ -64,7 +75,19 @@ export class ReminderDueReceiver {
     return this.#work
       .serial("", async () => {
         const agents = await this.store.agents();
-        await Promise.all(agents.map((agentId) => this.#restoreAgent(agentId)));
+        await Promise.all(
+          agents.map((agentId) =>
+            this.#restoreAgent(agentId).catch((error: unknown) => {
+              logger.error("Reminder due records of one Agent could not be restored", {
+                error,
+                event: "reminder.due_restore_failed",
+                agent_id: agentId,
+                outcome: "failed",
+              });
+              this.#retryRestore(agentId);
+            }),
+          ),
+        );
       })
       .catch((error: unknown) => {
         logger.error("Reminder due records could not be restored", {
@@ -109,6 +132,7 @@ export class ReminderDueReceiver {
 
   stop(): void {
     this.#running = false;
+    this.#retries.stop();
   }
 
   awaitIdle(): Promise<void> {
@@ -116,12 +140,14 @@ export class ReminderDueReceiver {
   }
 
   #restoreAgent(agentId: string): Promise<void> {
-    return this.#work.serial(agentId, async () => {
-      const records = await this.#records(agentId);
-      for (const record of records)
-        if (record.state === "received" || record.state === "acknowledged")
-          await this.#advance(agentId, records, record);
-    });
+    return this.#work.serial(agentId, () => this.#advanceAll(agentId));
+  }
+
+  async #advanceAll(agentId: string): Promise<void> {
+    const records = await this.#records(agentId);
+    for (const record of records)
+      if (record.state === "received" || record.state === "acknowledged")
+        await this.#advance(agentId, records, record);
   }
 
   async #advance(
@@ -141,9 +167,36 @@ export class ReminderDueReceiver {
     }
     if (!this.#running || record.state !== "acknowledged") return;
     const late = this.#now() - Date.parse(record.due.job.fireAt) > LATE_AFTER_MS;
-    await this.ports.deliver(record.due.job, { late });
+    const itemId = await this.ports.deliver(record.due.job, { late });
     await this.#transition(agentId, records, record, "delivered");
     this.#log("info", "reminder.due_delivered", record.due, { late });
+    this.#wake(record.due, itemId);
+  }
+
+  #wake(due: ReminderDue, itemId: string): void {
+    const key = `wake:${due.agentId}:${itemId}`;
+    const attempt = () =>
+      this.#running ? this.ports.wake(due.agentId, itemId) : Promise.resolve(true);
+    void settle(attempt).then((done) => {
+      if (done) return;
+      this.#log("warn", "reminder.due_wake_failed", due, { item_id: itemId });
+      this.#retries.later(key, attempt, () =>
+        this.#log("warn", "reminder.due_wake_abandoned", due, { item_id: itemId }),
+      );
+    });
+  }
+
+  #retryRestore(agentId: string): void {
+    const attempt = () =>
+      this.#running
+        ? this.#work.serial(agentId, () => this.#advanceAll(agentId)).then(() => true)
+        : Promise.resolve(true);
+    this.#retries.later(`restore:${agentId}`, attempt, () =>
+      logger.error("Reminder due delivery kept failing; the next restore tries again", {
+        event: "reminder.due_delivery_abandoned",
+        agent_id: agentId,
+      }),
+    );
   }
 
   async #acknowledge(due: ReminderDue): Promise<boolean | undefined> {
@@ -190,7 +243,11 @@ export class ReminderDueReceiver {
   }
 
   #now(): number {
-    return this.ports.now?.() ?? Date.now();
+    return this.#clock().now();
+  }
+
+  #clock(): ReminderClock {
+    return this.ports.clock ?? defaultClock;
   }
 
   #log(
