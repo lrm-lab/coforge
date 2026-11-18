@@ -623,7 +623,7 @@ export class DaemonRuntime {
       isWorking: this.#turn.isWorking,
       drainAppInboxNotices: (agentId) => this.#inboxCoordinator.drainAppInboxNotices(agentId),
       failCollectorRunningSlots: (agentId, reason) =>
-        this.#failCollectorRunningSlots(agentId, reason),
+        failCollectorRunningSlots(this.#transport, this.agentApiKeys, agentId, reason),
     });
   }
 
@@ -895,7 +895,7 @@ export class DaemonRuntime {
         assertRunning: () => this.#assertRunning(),
         workspaceRoot: this.#connection.workspaceRoot,
         createProvider: (provider) => this.#createProvider(provider),
-        observedUsage: (provider) => this.#currentObservedUsage(provider),
+        observedUsage: (provider) => currentObservedUsage(this.#observedUsage, provider),
       },
       provider,
     );
@@ -1096,10 +1096,6 @@ export class DaemonRuntime {
     currentLaunch: (id) => this.#currentActivityLaunches.get(id),
     observation: this.#observationPorts,
   }));
-  #failCollectorRunningSlots = (agentId: string, failureReason: string) =>
-    failCollectorRunningSlots(this.#transport, this.agentApiKeys, agentId, failureReason);
-  #currentObservedUsage = (provider: RuntimeProvider) =>
-    currentObservedUsage(this.#observedUsage, provider);
   #assertOwnIntent = (intent: {
     protocolMajor: number;
     workspaceId: string;
