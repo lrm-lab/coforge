@@ -51,6 +51,7 @@ describe("PrismaDirectConversationRepository sending", () => {
         }),
       },
       attachment: {
+        findFirst: async () => null,
         findMany: async ({
           where,
         }: {
