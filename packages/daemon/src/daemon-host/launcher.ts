@@ -5,8 +5,6 @@ import {
   encodeDaemonHandshakeRequest,
   encodeDaemonRuntimeConfigureRequest,
   frameLocalRpc,
-  LocalRpcFrameTooLargeError,
-  MAX_LOCAL_RPC_FRAME_BYTES,
   readLocalRpcFrame,
   encodeLocalRpcRequest,
   decodeLocalRpcResponse,
