@@ -2,12 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { STALLED_RESTART_LIMIT_ERROR } from "@lrm/coforge-sdk/internal";
 import { AgentDetailQuery } from "#src/server/agents/agent-detail.server";
 import { agentControlRevision } from "#src/server/agents/agent-control.server";
+import { parseAgentRuntimeConfig } from "#src/server/agents/agent-runtime-config.server";
 
 const runtimeConfig = {
+  model: "gpt-5",
   runtime: "codex",
   provider: { kind: "default" },
-  model: "gpt-5",
+  reasoning: "",
+  modelProvider: "",
 };
+const runtimeConfigRevision = agentControlRevision(parseAgentRuntimeConfig(runtimeConfig));
 
 const baseAgent = {
   id: "agent-1",
@@ -22,14 +26,13 @@ const baseAgent = {
 
 describe("AgentDetailQuery failureReason", () => {
   test("surfaces typed failure reason when agent controlState is failed and current", async () => {
-    const revision = agentControlRevision(runtimeConfig);
     const query = new AgentDetailQuery({
       findAuthorized: async () => ({
         ...baseAgent,
         controlState: {
           phase: "failed",
           errorCode: "runtime_private",
-          configRevision: revision,
+          configRevision: runtimeConfigRevision,
         },
       }),
     });
@@ -39,13 +42,12 @@ describe("AgentDetailQuery failureReason", () => {
   });
 
   test("returns null when controlState phase is not failed", async () => {
-    const revision = agentControlRevision(runtimeConfig);
     const query = new AgentDetailQuery({
       findAuthorized: async () => ({
         ...baseAgent,
         controlState: {
           phase: "completed",
-          configRevision: revision,
+          configRevision: runtimeConfigRevision,
         },
       }),
     });
