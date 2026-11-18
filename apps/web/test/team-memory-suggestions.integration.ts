@@ -315,3 +315,45 @@ test("a queued maintenance merge cannot revive a superseded revision", async () 
     (await memory.execute(actor, { operation: "get", id: early.id })).entries[0]?.revision,
   ).toBe(early.revision);
 });
+
+test("Task recall omits conflict peers awaiting evidence review", async () => {
+  const actor = { workspaceId, userId };
+  const memory = teamMemory(db);
+  const write = async (
+    title: string,
+    relations?: { kind: "conflicts_with"; id: string; revision: number }[],
+  ) => {
+    const draft = {
+      operation: "create" as const,
+      requestId: crypto.randomUUID(),
+      title,
+      content: "A finding from verification",
+      source: "Workspace review",
+      kind: "fact" as const,
+      applicability: "release conflict check",
+      relations,
+    };
+    const review = await memory.execute(actor, draft);
+    return (await memory.execute(actor, { ...draft, reviewToken: review.reviewToken })).entries[0]!;
+  };
+  const result = await write("Unique fingerprint");
+  const peer = await write("Unconfirmed objection", [
+    { kind: "conflicts_with", id: result.id, revision: result.revision },
+  ]);
+  const command = { operation: "search" as const, query: result.title, includeConflicts: true };
+  expect((await memory.execute(actor, command)).entries.map(({ id }) => id)).toEqual([
+    result.id,
+    peer.id,
+  ]);
+  await db.teamMemorySuggestion.create({
+    data: {
+      workspaceId,
+      kind: "evidence",
+      sourceKey: `evidence:${peer.id}:${peer.revision}`,
+      payload: { id: peer.id, revision: peer.revision, title: peer.title },
+    },
+  });
+  const found = await memory.execute(actor, command);
+  expect(found.entries.map(({ id }) => id)).toEqual([result.id]);
+  expect(found.entries[0]?.relations).toEqual([]);
+});
