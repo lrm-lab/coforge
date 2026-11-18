@@ -52,23 +52,13 @@ export class AntigravityAcpTurnEvents {
           const intent = this.#scanner.feed({ callId: id, fragment: JSON.stringify(call.input) });
           if (intent) events.push(intent);
         }
+        if (acpToolUpdateEnded(update.status)) events.push(...this.#progress(id, update));
         return events;
       }
       case "tool_call_update": {
         const id = nonEmptyString(update.toolCallId);
         if (!id || !this.#started.has(id) || this.#ended.has(id)) return [];
-        const events: AgentRuntimeEvent[] = [];
-        const output = acpToolOutput(this.#output.get(id) ?? "", update.content);
-        if (output) {
-          if (output.text) events.push({ type: "tool-output", id, text: output.text });
-          this.#output.set(id, output.full);
-        }
-        if (acpToolUpdateEnded(update.status)) {
-          this.#ended.add(id);
-          this.#output.delete(id);
-          this.#scanner.complete(id);
-          events.push({ type: "tool-end", id, isError: update.status !== "completed" });
-        }
+        const events = this.#progress(id, update);
         return events.length
           ? events
           : [{ type: "progress", source: "antigravity_tool_call_update" }];
@@ -84,6 +74,21 @@ export class AntigravityAcpTurnEvents {
       default:
         return [];
     }
+  }
+  #progress(id: string, update: Readonly<Record<string, unknown>>): AgentRuntimeEvent[] {
+    const events: AgentRuntimeEvent[] = [];
+    const output = acpToolOutput(this.#output.get(id) ?? "", update.content);
+    if (output) {
+      if (output.text) events.push({ type: "tool-output", id, text: output.text });
+      this.#output.set(id, output.full);
+    }
+    if (acpToolUpdateEnded(update.status)) {
+      this.#ended.add(id);
+      this.#output.delete(id);
+      this.#scanner.complete(id);
+      events.push({ type: "tool-end", id, isError: update.status !== "completed" });
+    }
+    return events;
   }
   end(): AgentRuntimeEvent[] {
     return this.#scanner.reset().map((id) => ({ type: "reply-intent-retracted", id }));
