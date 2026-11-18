@@ -11,6 +11,7 @@ import { LAUNCH_FAILURE_REASON } from "./launch-failure";
 import type { AgentRuntimeRecord, AgentRuntimeState } from "./agent-runtime-state";
 import type { AgentSessions } from "./agent-session";
 import type { AgentControlContext, AgentControlRuntime } from "./agent-control-runtime";
+import { nextSequence } from "./agent-control-sequence";
 import { ManagedLaunches } from "./agent-control-launch";
 import {
   assertPhaseInvariants,
@@ -324,7 +325,7 @@ export class AgentControl {
           .result({
             ...scope,
             phase: "failed",
-            sequence: (record?.scope.epoch === scope.epoch ? record.sequence : 0) + 1,
+            sequence: nextSequence(record, scope),
             errorCode: "agent_launch_id_required",
           })
           .catch(() => {});
@@ -351,7 +352,7 @@ export class AgentControl {
           // record is missing, or claims a different phase — should not happen). Send a failed
           // result so the server's new operation terminates instead of hanging forever, then
           // still throw so this stays diagnosable (`control_code` logging).
-          const sequence = (record?.scope.epoch === scope.epoch ? record.sequence : 0) + 1;
+          const sequence = nextSequence(record, scope);
           await this.#context.runtime
             .result({ ...scope, phase: "failed", sequence, errorCode: "agent_already_running" })
             .catch(() => {});
