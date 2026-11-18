@@ -34,9 +34,15 @@ export function cloudDesktopUrl(
   desktop.pathname = agentId ? `/desktop/${computerId}/${agentId}/` : `/desktop/${computerId}/`;
   // 80 is the Agent display-name cap. The proxy applies the same cap again.
   const windowTitle = title
-    ?.replace(/[\u0000-\u001F\u007F]/g, "")
-    .trim()
-    .slice(0, 80);
+    ? [...title]
+        .filter((character) => {
+          const code = character.charCodeAt(0);
+          return code >= 0x20 && code !== 0x7f;
+        })
+        .join("")
+        .trim()
+        .slice(0, 80)
+    : undefined;
   if (windowTitle) desktop.searchParams.set("title", windowTitle);
   return desktop.toString();
 }
