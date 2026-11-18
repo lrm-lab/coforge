@@ -29,6 +29,8 @@ out" a move, not a split:
 - `artifact-sandbox-config.server.ts`, `artifact-sandbox-http.server.ts` — the
   sandbox origin and its HTTP serving.
 - `artifact-blob-sweep.server.ts` — the hourly blob sweep registration.
+- `artifact-origins.server.ts` — `ArtifactOrigins`, which needs only the database and no
+  storage, so the origin backfill and the message hook build it directly.
 
 Everything else is internal: `artifacts.server.ts` (the `Artifacts` use
 cases), the merge/read/write/signals/documents/public-links/blobs

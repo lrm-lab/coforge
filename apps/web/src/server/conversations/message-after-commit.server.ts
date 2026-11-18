@@ -1,5 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { productionArtifactOrigins } from "#src/server/artifacts/artifact-composition.server";
+import { ArtifactOrigins } from "#src/server/artifacts/artifact-origins.server";
 import {
   bestEffortMessageNotifier,
   type MessageNotifier,
@@ -24,7 +24,7 @@ async function noteArtifactOrigin(db: PrismaClient, messageId: string) {
       select: { id: true, workspaceId: true, conversationId: true, body: true, createdAt: true },
     });
     if (!message) return;
-    await productionArtifactOrigins(db).noteMessage({
+    await new ArtifactOrigins(db).noteMessage({
       workspaceId: message.workspaceId,
       conversationId: message.conversationId,
       messageId: message.id,
