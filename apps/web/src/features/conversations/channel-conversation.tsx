@@ -43,21 +43,13 @@ export type ChannelConversationView = Omit<DirectConversationView, "agent" | "me
   visibility: ChannelVisibility;
   coordinatorAgent?: { id: string; name: string; displayName: string };
   muted: boolean;
-  /** The viewer's notification level here (task #401); absent from a page kept from before. */
   notificationLevel?: ChannelNotificationLevel;
   pinned: boolean;
-  /** What this viewer may change from the settings panel. */
   channelCapabilities: ChannelCapabilities;
-  /** Whether this viewer, a Workspace owner or admin, may hide this channel (only #general). */
   canHideGeneral: boolean;
-  /** Whether this viewer, a Workspace owner or admin, may delete this channel (never #general). */
   canDelete: boolean;
-  /** Whether this viewer, a Workspace owner or admin, may create an Agent while adding members. */
   canCreateAgents: boolean;
-  /** Whether this viewer, a member of this unarchived channel, may stop every Agent in it. */
   canStopAgents: boolean;
-  /** Whether this viewer, a Workspace owner or admin in this live channel, may make it private
-   * or public (never #general). */
   canChangeVisibility?: boolean;
   followedThreadRootIds?: string[];
   messages: DirectConversationView["messages"];
@@ -71,14 +63,11 @@ export function ChannelConversationHeader({
   ...tabs
 }: HeaderTabs & {
   conversation: ChannelConversationView;
-  /** Refreshes the page and the sidebar after the settings panel changed the channel. */
   onChanged: () => Promise<void>;
-  /** Set when something outside the header (the archived notice) also opens the panel. */
   settingsOpen?: boolean;
   onSettingsOpenChange?: (open: boolean) => void;
 }) {
   const [ownSettingsOpen, setOwnSettingsOpen] = useState(false);
-  // Which members page the panel opens on. Null is the settings themselves.
   const [membersStart, setMembersStart] = useState<ChannelMembersView | null>(null);
   const openSearch = useOpenSearch();
   const settingsOpen = controlledSettingsOpen ?? ownSettingsOpen;
@@ -114,10 +103,6 @@ export function ChannelConversationHeader({
           </>
         }
         actions={
-          // Borderless utility strip: the -mr-1.5 cancels the last button's p-1.5 so its glyph
-          // lands on the pane gutter (docs/design/page-skeleton-and-density.md §8 optical alignment).
-          // Search and settings draw in the text colour with a 1.5 stroke (design spec), not the
-          // utility button's default muted 2px glyph.
           <div className="-mr-1.5 flex shrink-0 items-center gap-3">
             <ButtonUtility
               icon={SearchLg}
@@ -201,54 +186,36 @@ export function ChannelConversation({
     options?: SendOptions,
   ) => Promise<SentMessage | void>;
   onJoin: () => Promise<void>;
-  /** Refreshes the page and the sidebar after the settings panel changed the channel. */
   onChanged: () => Promise<void>;
   onLoadOlder?: () => Promise<void>;
-  /** Fetch the next page towards the live end once the bounded window pushed the tail out. */
   onLoadNewer?: () => Promise<void>;
   onLoadMessageAround?: (messageId: string) => Promise<string>;
   onShowLatest?: () => Promise<void>;
   onReadThread?: (rootMessageId: string, throughSequence: number) => Promise<void>;
-  /** The main pane's own scroll reached the latest message; advances the conversation cursor. */
   onReadLatest?: (throughSequence: number) => void;
   onThreadFollowedChange?: (rootMessageId: string, followed: boolean) => Promise<void>;
-  /** Whether a top-level send may go "As task": the message is a Task, with every upload. */
   canSendAsTask?: boolean;
-  /** Toggles the viewer's own emoji reaction on a message; the route refreshes it. */
   onToggleReaction?: (messageId: string, emoji: string, active: boolean) => Promise<void>;
   onShowTasks?: () => void;
   onShowFiles?: () => void;
-  /** Opens the Agent profile panel from an Agent sender's avatar/name in the message list, on a
-   * given tab when one is named. */
   onOpenAgentProfile?: OpenAgentProfile;
   onOpenPersonProfile?: ConversationProps["onOpenPersonProfile"];
   agentProfile?: ConversationProps["agentProfile"];
   onAgentProfileTabChange?: (tab: AgentProfileTab) => void;
   onCloseAgentProfile?: () => void;
-  /** The channel's Tasks tab, shown in place of the message stream (see `ThreadedConversation`). */
   tasksPane?: ReactNode;
-  /** Every channel of the Workspace, where no messages layout supplies it (see `ThreadedConversation`). */
   channels?: readonly ChannelSuggestion[];
-  /** Shows only the Task popup, opened and closed by a page other than the channel's own. */
   taskPopup?: TaskPopupControls;
-  /** The message the stream lands on, kept by the host (see `ThreadedConversation`). */
   jumpMessage?: string;
-  /** Clears that landing once the pane has used it (see `ThreadedConversation`). */
   onJumpMessageConsumed?: () => void;
 }) {
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // The @-completion directory stays current while the conversation is open.
   const freshMentionables = useChannelMentionables(
     conversation.conversationId,
     conversation.mentionables,
   );
-  // Who else the viewer may mention on purpose. Read by the page's loader beside its window
-  // (`prefetchChannelPageReads`), and refetched with the directory (the key shares its prefix) on
-  // `member.changed.v1`, on a resubscribe that lost publications, and on focus — not on the first
-  // subscribe, which follows its first read by about one round trip (see `useConversationQuery`).
-  // Loaded only for a member of an open channel, who has a composer.
   const mentionOutsiders = useQuery({
     ...channelMentionOutsidersQuery(conversation.conversationId),
     enabled: readsMentionOutsiders(conversation),
@@ -283,9 +250,6 @@ export function ChannelConversation({
       setJoining(false);
     }
   }
-  // The channel's member directory doubles as the plain-`@handle` display resolution (see
-  // `MessageBody`): a body written without the @-completion still reads the member's display
-  // label. Display-only — bodies, wake rules and mention rows are unchanged.
   const plainMentions = useMemo(
     () => plainMentionsByHandle(conversationWithFreshDirectory.mentionables),
     [conversationWithFreshDirectory.mentionables],
@@ -362,8 +326,6 @@ export function ChannelConversation({
       readOnlyNotice={
         conversation.archived ? (
           <ArchivedChannelNotice
-            // The Unarchive action opens the settings panel in the channel header, which the
-            // Task popup (`taskPopup`) does not show; there the notice stays, without the action.
             canUnarchive={conversation.channelCapabilities.unarchive && !taskPopup}
             onOpenSettings={() => setSettingsOpen(true)}
           />
@@ -386,8 +348,6 @@ export function ChannelConversation({
   return <ChannelAgentsContext value={channelAgents}>{threaded}</ChannelAgentsContext>;
 }
 
-/** Replaces the composer of an archived channel: nobody posts or joins until it is unarchived.
- * A channel admin's Unarchive opens the settings panel, where the action lives. */
 function ArchivedChannelNotice({
   canUnarchive,
   onOpenSettings,
