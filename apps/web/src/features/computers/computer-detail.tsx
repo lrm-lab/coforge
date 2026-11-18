@@ -35,10 +35,6 @@ import { useComputerDetailLifecycle } from "./use-computer-detail-lifecycle";
 
 export { RESTART_MAX_POLLS, RESTART_POLL_INTERVAL_MS, type ComputerDetailView };
 
-/**
- * One Computer's detail panel: what this machine is, which Code Agents it
- * carries, and the usage scan each of them answers.
- */
 export function ComputerDetail({
   computer,
   timeZone = null,
@@ -69,18 +65,14 @@ export function ComputerDetail({
   onRestart?: (requestId: string) => Promise<ComputerRestartStatus>;
   onReadRestartStatus?: (requestId: string) => Promise<ComputerRestartStatus>;
   onUpgrade?: (requestId: string, target?: "runtime" | "image") => Promise<ComputerUpgradeStatus>;
-  /** The last Agent workspace scan the owner took (kept across reloads); `null` when none. */
   agentWorkspaceScan?: AgentWorkspaceScanSnapshot | null;
-  /** Scans the Computer and records the result as `agentWorkspaceScan`. */
   onScanAgentWorkspaces?: () => Promise<void>;
   onDeleteAgentWorkspace?: (agentId: string) => Promise<{ status: string }>;
   onRemoveComputer?: () => Promise<void>;
   onDeleteComputer?: () => Promise<void>;
-  /** Queues a disk format. The argument is the name the owner typed. */
   onFormatCloudComputer?: (confirmName: string) => Promise<void>;
   onCreateAgent?: (input: CreateAgentInput) => Promise<{ startPublished: boolean }>;
   onLoadRuntimeCatalog?: (computerId: string) => Promise<RuntimeCatalog[]>;
-  /** Asks the Computer which runtimes it has, now; resolves whether it answered. */
   onRescanRuntimes?: () => Promise<RuntimeRescanResult>;
   onSelectAgent?: (agentId: string) => void;
   onExecuteAgentControl?: AgentControlExecute;
@@ -169,11 +161,9 @@ export function ComputerDetail({
         showDesktop={isCloud && computer.ownedByCurrentUser}
         online={computer.online}
         restart={
-          // Its owner, or a Workspace owner or admin (`mayRestartComputer`), may restart it.
           onRestart && (computer.ownedByCurrentUser || computer.canManageAgents)
             ? {
                 pending: restartState === "pending",
-                // Nothing is running on an offline Computer to restart.
                 disabled:
                   !computer.online ||
                   upgrading ||
@@ -199,7 +189,6 @@ export function ComputerDetail({
             {refusal && (
               <ComputerRefusalAlert refusal={refusal} computer={computer} timeZone={timeZone} />
             )}
-            {/* The header band has no room for it on a phone. */}
             <ComputerDetailWhere
               computer={computer}
               label={label}
@@ -221,7 +210,6 @@ export function ComputerDetail({
               onRuntimeUpgrade={() => setUpgradeConfirmOpen(true)}
               onImageUpgrade={() => setImageUpdateOpen(true)}
             />
-            {/* A Computer can carry many runtimes, so they get a line of their own and wrap. */}
             <section aria-labelledby="computer-runtimes">
               <h2 id="computer-runtimes" className="text-xs text-tertiary">
                 {m.computer_runtimes()}
@@ -283,7 +271,6 @@ export function ComputerDetail({
             computerOnline={computer.online}
             computerName={label}
           />
-          {/* Two one-line tools in one box: the workspace scan and terminal troubleshooting. */}
           <div className="divide-y divide-secondary rounded-xl border border-secondary [&>*]:px-4">
             {computer.ownedByCurrentUser && <ComputerFileUploadPanel computerId={computer.id} />}
             <div className="py-2">
