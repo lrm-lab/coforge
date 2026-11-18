@@ -45,8 +45,12 @@ test("resolveReminderId matches a dash-stripped id prefix, and rejects zero or m
     resolveReminderId(listing([ambiguousFirst, ambiguousSecond]), "aaaaaaaa"),
   ).rejects.toMatchObject({
     code: "AMBIGUOUS",
-    message: "Ambiguous id prefix 'aaaaaaaa' matches 2 reminders; pass a longer id.",
+    message:
+      "Ambiguous id prefix 'aaaaaaaa' matches 2 reminders; pass a longer id: aaaaaaaa1, aaaaaaaa2.",
   });
+  await expect(
+    resolveReminderId(listing([ambiguousFirst, ambiguousSecond]), "aaaaaaaa-2"),
+  ).resolves.toBe(ambiguousSecond.reminderId);
 });
 
 test("resolveReminderId scopes the lookup to scheduled/fired for cancel/snooze, and names that scope in NOT_FOUND", async () => {

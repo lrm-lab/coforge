@@ -5,36 +5,38 @@ import type {
   ReminderSummaryRecord,
 } from "@lrm/coforge-sdk/internal";
 
-/** The eight-hex prefix the reminder commands print. */
-function shortId(id: string): string {
-  return id.slice(0, 8);
+const MIN_SHORT_ID_LENGTH = 8;
+
+function hexId(id: string): string {
+  return id.replace(/-/g, "").toLowerCase();
 }
 
-/**
- * One reminder as a line, as the reference client prints it:
- * `#id8 [status] (one-time|recurring · rule) next=<iso> [OVERDUE] "title"`.
- * `[OVERDUE]` marks a scheduled reminder whose fire time has passed.
- */
+export function shortReminderId(id: string, ids: readonly string[]): string {
+  const hex = hexId(id);
+  const others = ids.filter((other) => other !== id).map(hexId);
+  let length = MIN_SHORT_ID_LENGTH;
+  while (length < hex.length && others.some((other) => other.startsWith(hex.slice(0, length))))
+    length += 1;
+  return hex.slice(0, length);
+}
+
 export function formatReminderRow(
   reminder: ReminderSummaryRecord,
   now: number = Date.now(),
+  shortId: string = shortReminderId(reminder.reminderId, []),
 ): string {
   const cadence = reminder.repeat
     ? `recurring · ${reminder.repeat}${reminder.timezone ? ` (${reminder.timezone})` : ""}`
     : "one-time";
   const overdue =
     reminder.status === "scheduled" && Date.parse(reminder.fireAt) < now ? " [OVERDUE]" : "";
-  return `#${shortId(reminder.reminderId)} [${reminder.status}] (${cadence}) next=${reminder.fireAt}${overdue} ${JSON.stringify(foldUntrustedLine(reminder.title))}`;
+  return `#${shortId} [${reminder.status}] (${cadence}) next=${reminder.fireAt}${overdue} ${JSON.stringify(foldUntrustedLine(reminder.title))}`;
 }
 
 function formatLogEvent(event: ReminderLogEvent): string {
   return `event=${event.eventId} type=${event.type} time=${event.time} next=${event.nextFireAt ?? "-"}`;
 }
 
-/**
- * What a reminder command prints for the server's answer. The server returns the reminder a
- * schedule, update, snooze or cancel produced, so those name it instead of saying "Accepted".
- */
 export function formatReminderResponse(
   operation: string,
   result: AgentReminderOperationResponse,
@@ -42,7 +44,12 @@ export function formatReminderResponse(
   if (!result.accepted) return "Reminder request was not accepted.";
   if (operation === "list") {
     if (!result.reminders.length) return "No reminders.";
-    return result.reminders.map((reminder) => formatReminderRow(reminder)).join("\n");
+    const ids = result.reminders.map((reminder) => reminder.reminderId);
+    return result.reminders
+      .map((reminder) =>
+        formatReminderRow(reminder, Date.now(), shortReminderId(reminder.reminderId, ids)),
+      )
+      .join("\n");
   }
   if (operation === "log") {
     if (!result.events.length) return "No reminder events found.";

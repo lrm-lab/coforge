@@ -121,3 +121,24 @@ test("formats usable reminder lists, empty logs, and receipt acknowledgements", 
 });
 
 /** The creator and timestamps every Task read carries. */
+
+test("a list lengthens a short id only as far as needed to tell colliding reminders apart", () => {
+  setSystemTime(now);
+  try {
+    const first = reminder({ reminderId: "01a1edf8-1111-7000-8000-000000000001" });
+    const second = reminder({ reminderId: "01a1edf8-1211-7000-8000-000000000002" });
+    const third = reminder({ reminderId: "abcdef12-0000-4000-8000-000000000003" });
+    const lines = formatReminderResponse("list", {
+      accepted: true,
+      reminders: [first, second, third],
+      events: [],
+    } as never).split("\n");
+    expect(lines.map((line) => line.split(" ")[0])).toEqual([
+      "#01a1edf811",
+      "#01a1edf812",
+      "#abcdef12",
+    ]);
+  } finally {
+    setSystemTime();
+  }
+});

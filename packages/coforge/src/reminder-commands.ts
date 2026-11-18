@@ -12,7 +12,10 @@ import {
 import { CliError } from "#src/cli-error";
 import { unknownCommandError } from "./command-help";
 import { parseDurationSeconds } from "#src/reminder-duration";
-import { formatReminderResponse as formatAgentReminderResponse } from "#src/reminder-format";
+import {
+  formatReminderResponse as formatAgentReminderResponse,
+  shortReminderId,
+} from "#src/reminder-format";
 
 export type ReminderInvocation = Omit<LocalReminderRequest, "context" | "idempotencyKey"> & {
   command: "reminder";
@@ -24,22 +27,15 @@ export type LocalReminderReceiptResponse = {
   reminderId: string;
   revision: number;
 };
-/** What one reminder command answers: the cloud's operation result, a local receipt, or a local
- * seal/unseal (or its refusal). */
 export type ReminderResponse =
   | AgentReminderOperationResponse
   | LocalReminderReceiptResponse
   | LocalReminderLocalResponse;
 
-/** The reminder transport these commands need: the CLI's `MessageTransport.reminder`. */
 type ReminderTransport = {
   reminder?(request: ReminderTransportRequest): Promise<ReminderResponse>;
 };
 
-/**
- * Issues one reminder command. A seal or unseal is answered by the daemon's local seal store, so
- * its failure is `UPDATE_FAILED` rather than the generic transport wording the cloud commands use.
- */
 export async function sendReminderCommand(
   transport: ReminderTransport,
   request: ReminderTransportRequest,
@@ -64,7 +60,6 @@ export async function sendReminderCommand(
 const REMINDER_USAGE =
   "Usage: coforge reminder schedule --title <title> (--target <target>|--channel <target>) (--message-id <full UUID|8hex>|--msg-id <full UUID|8hex>) (--delay-seconds <n|duration> | --fire-at <timestamp> | --repeat <rule>) [--repeat <rule>] [--tz <timezone>] | coforge reminder list [--all | --status <comma-list of scheduled,fired,canceled; default scheduled,fired>] | coforge reminder update --id <full UUID|8hex+> (--fire-at <timestamp> | --in <duration> | --repeat <rule|none>|--cadence <rule|none> | --title <title>) [--tz <timezone>] | coforge reminder snooze --id <full UUID|8hex+> (--delay-seconds <n|duration> | --by <duration> | --fire-at <timestamp>) | coforge reminder cancel|log --id <full UUID|8hex+> | coforge reminder ack|dismiss --id <full UUID|8hex+> --revision <n> | coforge reminder seal --id <full UUID|8hex+> [--revision <n>|--all-pending] --owner <who> --until <condition> | coforge reminder unseal --id <full UUID|8hex+> [--revision <n>|--all-pending]";
 
-/** A resolvable `--id` is a full UUID or a case-insensitive hex prefix of at least 8 characters. */
 const REMINDER_ID_PREFIX = /^[0-9a-f]{8,}$/i;
 
 export function parseReminderArgs(args: readonly string[]): ReminderInvocation {
@@ -104,9 +99,6 @@ export function parseReminderArgs(args: readonly string[]): ReminderInvocation {
   };
   const request: Record<string, unknown> = { command: "reminder", operation };
   const seen = new Set<string>();
-  // Tracks which literal flag last claimed each logical field, so an alias used together with its
-  // canonical spelling (or with another alias of the same field) is a usage error even though the
-  // two flags are spelled differently and so never collide in `seen`.
   const flagForField = new Map<string, string>();
   const claimField = (field: string, flag: string) => {
     const existing = flagForField.get(field);
@@ -127,9 +119,6 @@ export function parseReminderArgs(args: readonly string[]): ReminderInvocation {
       continue;
     }
     if (flag === "--by" || flag === "--in") {
-      // Both are duration spellings of the same wire field, `delaySeconds`: `--by` on snooze and
-      // `--in` on update. Neither computes an absolute `fireAt` locally — the daemon/server derive
-      // the due time from `delaySeconds` exactly as they already do for snooze.
       const value = args[++index];
       if (value === undefined || value.startsWith("--"))
         throw new Error(`Unknown or incomplete reminder flag: ${flag}\n${REMINDER_USAGE}`);
@@ -158,10 +147,6 @@ export function parseReminderArgs(args: readonly string[]): ReminderInvocation {
     } else request[field] = value;
   }
   validateReminderShape(request as ReminderInvocation);
-  // The wire-level round trip below requires a full UUID for `reminderId` (the daemon and server
-  // never see a bare prefix — it is resolved to a full ID before the real request goes out; see
-  // `resolveReminderRequestId`). Substitute a throwaway, well-formed UUID so this local check still
-  // validates every other field early; the substitution is discarded and never sent anywhere.
   const rawId = request.reminderId as string | undefined;
   const needsIdProbe = rawId !== undefined && !isReminderId(rawId);
   decodeLocalReminderRequest(
@@ -210,16 +195,12 @@ function validateReminderShape(value: ReminderInvocation): void {
       value.repeat === "none")
   )
     throw new Error(REMINDER_USAGE);
-  // `list` defaults to scheduled,fired when neither `--all` nor `--status` is given (the server
-  // already applies that default); only passing both together is a usage error.
   if (value.operation === "list" && present("all") && present("status"))
     throw new Error(REMINDER_USAGE);
   if (["cancel", "log"].includes(value.operation) && !id) throw new Error(REMINDER_USAGE);
   if (value.operation === "snooze" && (!id || timed !== 1)) throw new Error(REMINDER_USAGE);
   if (value.operation === "update") {
     if (!id || timed > 1) throw new Error(REMINDER_USAGE);
-    // "Pass exactly one of --fire-at, --in, --cadence, or --title" (code INVALID_ARG).
-    // --fire-at and --in both land in `timed` (the time mutation), so they count as one slot.
     const mutations = [timed === 1, value.repeat !== undefined, value.title !== undefined].filter(
       Boolean,
     ).length;
@@ -242,15 +223,8 @@ function validateReminderShape(value: ReminderInvocation): void {
   }
 }
 
-/** The `list` scope an `--id` prefix lookup runs under, per command. */
 export type ReminderIdResolutionScope = { all: true } | { statuses: readonly string[] };
 
-/**
- * Reminder operations that take `--id`, and the `list` scope each resolves a short prefix within.
- * `cancel`/`snooze` only ever act on an active reminder, so they resolve within scheduled/fired.
- * `update`, `log`, `ack`, and `dismiss` can target any status, so they resolve unscoped
- * (`all: true`); `log` needs the lookup because the wire protocol always requires a full UUID.
- */
 const REMINDER_ID_RESOLUTION_SCOPE: Record<string, ReminderIdResolutionScope> = {
   cancel: { statuses: ["scheduled", "fired"] },
   snooze: { statuses: ["scheduled", "fired"] },
@@ -262,10 +236,6 @@ const REMINDER_ID_RESOLUTION_SCOPE: Record<string, ReminderIdResolutionScope> = 
   unseal: { all: true },
 };
 
-/**
- * Resolves `request.reminderId` to a full UUID when it is a short prefix, leaving every other
- * request untouched. A full UUID never triggers the lookup (the brief's "skip the lookup" case).
- */
 export async function resolveReminderRequestId(
   transport: ReminderTransport,
   request: ReminderTransportRequest,
@@ -278,7 +248,6 @@ export async function resolveReminderRequestId(
   try {
     resolved = await resolveReminderId(transport, prefix, scope);
   } catch (error) {
-    // A seal names one reminder: an ambiguous prefix is a bad argument, not a second lookup.
     if (
       (request.operation === "seal" || request.operation === "unseal") &&
       error instanceof CliError &&
@@ -294,12 +263,6 @@ export async function resolveReminderRequestId(
   return { ...request, reminderId: resolved };
 }
 
-/**
- * Resolves an `--id` prefix (at least 8 hex characters, case-insensitive) to the one full reminder
- * ID it matches, by listing reminders within `scope` and comparing prefixes against each id with
- * its formatting dashes stripped. Takes the transport directly (rather than reaching for the
- * ambient one) so it is unit-testable with a fake transport.
- */
 export async function resolveReminderId(
   transport: ReminderTransport,
   prefix: string,
@@ -311,12 +274,10 @@ export async function resolveReminderId(
       ? { operation: "list", all: true }
       : { operation: "list", status: scope.statuses.join(",") },
   )) as AgentReminderOperationResponse;
-  const lowerPrefix = prefix.toLowerCase();
+  const lowerPrefix = prefix.replace(/-/g, "").toLowerCase();
   const matches = (response.reminders ?? []).filter((item: ReminderSummaryRecord) =>
     item.reminderId.replace(/-/g, "").toLowerCase().startsWith(lowerPrefix),
   );
-  // An unscoped ("all") lookup just says "reminder"; a status-scoped lookup names the scope,
-  // e.g. "scheduled/fired reminder".
   const scopeLabel = "all" in scope ? "reminder" : `${scope.statuses.join("/")} reminder`;
   if (matches.length === 0)
     throw new CliError({
@@ -324,10 +285,13 @@ export async function resolveReminderId(
       message: `No ${scopeLabel} matches id prefix '${prefix}'.`,
       retryable: false,
     });
+  const matchedIds = matches.map((item) => item.reminderId);
   if (matches.length > 1)
     throw new CliError({
       code: "AMBIGUOUS",
-      message: `Ambiguous id prefix '${prefix}' matches ${matches.length} reminders; pass a longer id.`,
+      message: `Ambiguous id prefix '${prefix}' matches ${matches.length} reminders; pass a longer id: ${matches
+        .map((item) => shortReminderId(item.reminderId, matchedIds))
+        .join(", ")}.`,
       retryable: false,
     });
   return matches[0]!.reminderId;
@@ -377,8 +341,6 @@ export function formatReminderCommandResponse(
   return formatAgentReminderResponse(operation, result as AgentReminderOperationResponse);
 }
 
-/** `coforge reminder ...`: resolves a short reminder id, sends the command, and says what came of
- * it. */
 export async function runReminder(
   invocation: ReminderInvocation,
   transport: ReminderTransport,
