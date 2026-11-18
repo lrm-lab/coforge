@@ -33,6 +33,7 @@ import {
   AgentCreateForm,
   AgentCreateIntro,
   AgentCreateModal,
+  AgentCreatePhoneBar,
 } from "./agent-create-frame";
 import type {
   RuntimeAuthProvider,
@@ -159,8 +160,11 @@ export function LocalAgentForm({
             onClose={onClose}
           />
         )}
-        <DialogActions className="mt-6 px-6 pb-6">
-          <DialogCancel onPress={onClose}>{m.controls_cancel()}</DialogCancel>
+        <AgentCreatePhoneBar pending={false} onCancel={onClose} />
+        <DialogActions className="mt-6 px-6 pb-6 max-sm:mt-4 max-sm:px-4">
+          <DialogCancel onPress={onClose} className="max-sm:hidden">
+            {m.controls_cancel()}
+          </DialogCancel>
           <DialogAction
             href={localizeHref(workspacePath(workspaceSlug, "/computers?add=1"))}
             onPress={onClose}
@@ -306,7 +310,12 @@ export function AgentCreateDialog({
 }) {
   const [busy, setBusy] = useState(false);
   return (
-    <AgentCreateModal open={open} onOpenChange={onOpenChange} dismissable={!busy}>
+    <AgentCreateModal
+      open={open}
+      onOpenChange={onOpenChange}
+      dismissable={!busy}
+      title={m.agent_create_local_title()}
+    >
       <LocalAgentForm
         {...options}
         onCreate={async (input) => {

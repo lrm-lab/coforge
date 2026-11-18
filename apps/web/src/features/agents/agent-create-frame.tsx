@@ -1,10 +1,12 @@
-import { createContext, useContext, useState, type FormEvent, type ReactNode } from "react";
+import { createContext, useContext, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Heading, Text } from "react-aria-components";
 import { XClose as X } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { PhoneFormBar } from "#src/components/ui/phone-form-bar";
 import { useDialogControlSize } from "#src/components/ui/dialog-actions";
 import {
   UnsavedChangesDialog,
@@ -21,18 +23,32 @@ const AgentCreateGuardContext = createContext<{
   requestClose: () => void;
 } | null>(null);
 
+const AgentCreatePhoneBarContext = createContext<{
+  slot: HTMLElement | null;
+  title: string;
+} | null>(null);
+
+export function AgentCreatePhoneBar(props: Omit<Parameters<typeof PhoneFormBar>[0], "heading">) {
+  const phone = useContext(AgentCreatePhoneBarContext);
+  if (!phone?.slot) return null;
+  return createPortal(<PhoneFormBar heading={phone.title} {...props} />, phone.slot);
+}
+
 export function AgentCreateModal({
   open,
   onOpenChange,
   dismissable = true,
+  title,
   children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   dismissable?: boolean;
+  title: string;
   children: ReactNode;
 }) {
   const [dirty, setDirty] = useState(false);
+  const [slot, setSlot] = useState<HTMLDivElement | null>(null);
   const guard = useUnsavedChangesGuard({
     overlayOpen: open,
     dirty,
@@ -42,6 +58,7 @@ export function AgentCreateModal({
     <>
       <ModalOverlay
         isOpen={open}
+        page
         className="sm:items-start sm:[--modal-pt:12vh]"
         onOpenChange={(next) => {
           if (!dismissable) return;
@@ -51,9 +68,12 @@ export function AgentCreateModal({
       >
         <Modal className="flex w-[calc(100vw-2rem)] max-w-100 flex-col rounded-xl max-sm:overflow-hidden">
           <Dialog className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <AgentCreateGuardContext value={{ setDirty, requestClose: guard.requestClose }}>
-              {children}
-            </AgentCreateGuardContext>
+            <div ref={setSlot} className="shrink-0 sm:hidden" />
+            <AgentCreatePhoneBarContext value={{ slot, title }}>
+              <AgentCreateGuardContext value={{ setDirty, requestClose: guard.requestClose }}>
+                {children}
+              </AgentCreateGuardContext>
+            </AgentCreatePhoneBarContext>
           </Dialog>
         </Modal>
       </ModalOverlay>
@@ -118,7 +138,7 @@ export function AgentCreateIntro({
   const Illustration = AGENT_ILLUSTRATIONS[illustration];
   const requestClose = useContext(AgentCreateGuardContext)?.requestClose ?? onClose;
   return (
-    <div className="relative px-6 pt-6 text-center">
+    <div className="relative px-6 pt-6 text-center max-sm:px-4 max-sm:pt-4 max-sm:text-left">
       {onClose && (
         <ButtonUtility
           type="button"
@@ -127,15 +147,18 @@ export function AgentCreateIntro({
           size="sm"
           color="tertiary"
           onClick={requestClose}
-          className="absolute top-3 right-3"
+          className="absolute top-3 right-3 max-sm:hidden"
         />
       )}
-      <Illustration className="mx-auto h-16.5 w-26.5" />
-      <Heading slot="title" className="mt-3 text-lg font-semibold text-primary">
+      <Illustration className="mx-auto h-16.5 w-26.5 max-sm:hidden" />
+      <Heading slot="title" className="mt-3 text-lg font-semibold text-primary max-sm:sr-only">
         {title}
       </Heading>
       {description && (
-        <Text slot="description" className="mt-1 block text-sm text-balance text-tertiary">
+        <Text
+          slot="description"
+          className="mt-1 block text-sm text-balance text-tertiary max-sm:mt-0 max-sm:mb-1"
+        >
           {description}
         </Text>
       )}
@@ -160,8 +183,17 @@ export function AgentCreateFooter({
   const controlSize = useDialogControlSize();
   const guarded = useContext(AgentCreateGuardContext)?.requestClose;
   const requestClose = submitting || !guarded ? onCancel : guarded;
+  const row = useRef<HTMLDivElement>(null);
   return (
-    <div className="grid grid-cols-2 gap-3 px-6 pt-4 pb-6">
+    <div ref={row} className="grid grid-cols-2 gap-3 px-6 pt-4 pb-6 max-sm:hidden">
+      <AgentCreatePhoneBar
+        submitLabel={submitLabel}
+        pending={submitting}
+        submitDisabled={submitDisabled}
+        cancelDisabled={cancelDisabled}
+        onCancel={requestClose}
+        onSubmit={() => row.current?.closest("form")?.requestSubmit()}
+      />
       <Button
         type="button"
         color="secondary"

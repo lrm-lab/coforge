@@ -37,7 +37,12 @@ export function NewAgentDialog({
 }) {
   const [busy, setBusy] = useState(false);
   return (
-    <AgentCreateModal open={open} onOpenChange={onOpenChange} dismissable={!busy}>
+    <AgentCreateModal
+      open={open}
+      onOpenChange={onOpenChange}
+      dismissable={!busy}
+      title={m.header_new_agent()}
+    >
       <NewAgentForms
         open={open}
         busy={busy}
