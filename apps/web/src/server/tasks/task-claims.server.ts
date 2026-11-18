@@ -12,7 +12,6 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { channelThreadRootWhere } from "#src/server/db/message-anchor.server";
 import { AppError } from "#src/lib/app-error";
-import { noticeActor, noticeText } from "./task-notices.server";
 import { storedTaskStatus, taskMember, taskSelection, type SelectedTask } from "./task-view.server";
 import { taskViewOf } from "./task-relations.server";
 import { TASK_BLOCKED } from "./task-gates.server";
@@ -128,7 +127,7 @@ async function claimTask(
   number: number,
 ) {
   const { conversationId } = conversation;
-  const task = await withNotices(ports, conversation, async (tx, notices) => {
+  const task = await withNotices(ports, conversation, async (tx) => {
     const existing = await findTaskByNumber(tx, conversationId, number);
     if (!existing) throw new ClaimRefused(CLAIM_REFUSAL.taskNotFound);
     if (
@@ -160,11 +159,6 @@ async function claimTask(
         ...(existing.status === "todo" && { status: "in_progress" as const }),
       },
     );
-    // Claiming a Todo Task also moves it to In Progress; the claim notice says both.
-    await notices.inThread(claimed, (quoted) => ({
-      body: noticeText.claimed(noticeActor(member).handle, quoted),
-      system: { kind: "task.claimed", params: { claimer: noticeActor(member), task: quoted } },
-    }));
     return claimed;
   });
   const view = await taskViewOf(ports.db, ports.reader, task);

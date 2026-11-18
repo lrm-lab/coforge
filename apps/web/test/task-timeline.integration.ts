@@ -109,12 +109,9 @@ const eventOf = (taskId: string, seq: number, seconds: number) =>
 const discussionOf = async (taskId: string) =>
   (await db.task.findUniqueOrThrow({ where: { id: taskId } })).discussionConversationId!;
 
-test("a task's conversation reads the receipt and replies, never the notices history also records", async () => {
+test("a task's conversation pages and counts its receipt and replies", async () => {
   const task = await makeTask(1);
   await replyOf(1, "hello", 10);
-  await noticeOf(task.id, "task.claimed", 11);
-  await noticeOf(task.id, "task.moved", 12);
-  await noticeOf(task.id, "task.unassigned", 13);
   await noticeOf(task.id, "task.assigned_you", 14);
   await replyOf(1, "bye", 15);
   const bodies = ["hello", "task.assigned_you", "bye"];
@@ -144,16 +141,13 @@ test("a task's conversation reads the receipt and replies, never the notices his
   const arrived = await pages.updates(workspaceId, userId, conversationId, 0);
   expect(arrived.map((message) => message.body)).toEqual(bodies);
 
-  expect(await db.message.count({ where: { conversationId } })).toBe(6);
+  expect(await db.message.count({ where: { conversationId } })).toBe(3);
 });
 
-test("a size-limited view page is full of readable entries when hidden notices sit among them", async () => {
-  const task = await makeTask(2);
+test("a size-limited view and read page hold exactly the limit and page back to the older entries", async () => {
+  await makeTask(2);
   await replyOf(2, "one", 10);
-  await noticeOf(task.id, "task.moved", 11);
-  await noticeOf(task.id, "task.moved", 12);
   await replyOf(2, "two", 13);
-  await noticeOf(task.id, "task.claimed", 14);
   await replyOf(2, "three", 15);
   const view = await conversations.view(asAgent(), agentRef(2), { limit: 2 });
   expect(view.recentMessages.map((message) => message.body)).toEqual(["two", "three"]);

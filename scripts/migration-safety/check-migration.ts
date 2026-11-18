@@ -9,6 +9,7 @@
 //   bun scripts/migration-safety/check-migration.ts --deploy [--migrations <dir>]
 //       On the deploy host, before `migrate deploy`: the pending migrations against the live catalog.
 // Exit 0 when every file passes, 1 when one is rejected, 2 on bad usage or unreadable input.
+import { approvedRewrite } from "./approved-rewrites";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { formatAnnotation, PG_VERSION, split } from "./annotation";
@@ -40,7 +41,12 @@ function write(file: string, snapshot: Snapshot, now: Date): string[] {
     console.log(`${file}: no high-risk statements, so no annotation is needed`);
     return [];
   }
-  const judgement = judge(analysis, catalogOf(snapshot), createdBySiblings(file));
+  const judgement = judge(
+    analysis,
+    catalogOf(snapshot),
+    createdBySiblings(file),
+    approvedRewrite(file, body),
+  );
   if (judgement.verdict === "rewrite")
     return [
       `${file}: not annotated, it must be rewritten: ${judgement.rewrites.map((effect) => `line ${effect.line} ${effect.label} on ${effect.table ?? "a table it names"}`).join("; ")}. ${REWRITE_IN_STEPS}.`,

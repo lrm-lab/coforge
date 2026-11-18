@@ -1,4 +1,4 @@
-import type { TaskPriority, TaskStatus } from "@lrm/coforge-sdk/internal";
+import type { TaskPriority } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import type { HumanNames } from "#src/lib/human-label";
 import {
@@ -15,9 +15,9 @@ import { browserSenderName } from "#src/server/conversations/sender-display.serv
 
 declare const brand: unique symbol;
 /**
- * A notice names a person one of three ways: a claim uses the claimer's bare handle, an assignment
- * addresses the assignee as `@handle`, and every other line reads as prose with the actor's display
- * name. The three are distinct types so a call site cannot pass one where another belongs.
+ * A notice addresses an assignee as `@handle` and reads every other person as prose with the
+ * actor's display name; the bare handle goes into the notice's params. The three are distinct types
+ * so a call site cannot pass one where another belongs.
  */
 export type Handle = string & { readonly [brand]: "handle" };
 export type AssigneeMention = `@${string}` & { readonly [brand]: "mention" };
@@ -127,15 +127,6 @@ export function quotedTask(
   };
 }
 
-const STATUS_WORDING: Record<TaskStatus, { emoji: string; label: string }> = {
-  backlog: { emoji: "🗂", label: "Backlog" },
-  todo: { emoji: "📝", label: "Todo" },
-  in_progress: { emoji: "🔄", label: "In Progress" },
-  in_review: { emoji: "👀", label: "In Review" },
-  done: { emoji: "✅", label: "Done" },
-  closed: { emoji: "🚫", label: "Closed" },
-};
-
 const reference = (task: QuotedTask) => {
   if (task.hidden) return task.deleted ? "a deleted task" : "a task in another channel";
   const name = task.channel ? `#${task.channel}:#${task.number}` : `#${task.number}`;
@@ -163,9 +154,6 @@ export const noticeText = {
     reason?: string,
   ) =>
     `📌 ${actor} assigned ${reference(task)} to ${assignee}${queueNote ? ` — ${queueNote}` : ""}${reason ? ` — "${reason}"` : ""}`,
-  claimed: (claimer: Handle, task: QuotedTask) => `📌 ${claimer} claimed ${reference(task)}`,
-  moved: (actor: DisplayName, task: QuotedTask, status: TaskStatus) =>
-    `${STATUS_WORDING[status].emoji} ${actor} moved ${reference(task)} to ${STATUS_WORDING[status].label}`,
   priorityChanged: (
     actor: DisplayName,
     task: QuotedTask,
@@ -177,7 +165,6 @@ export const noticeText = {
       `🏷️ ${actor} changed ${reference(task)} priority from ${from} to ${to}`,
       owner ?? null,
     ),
-  unassigned: (actor: DisplayName, task: QuotedTask) => `🔓 ${actor} unassigned ${reference(task)}`,
   /** The notice that a Task's last unfinished blocker finished; it names the owner when there is one. */
   unblocked: (blocker: QuotedTask, task: QuotedTask, owner: AssigneeMention | null) =>
     addressed(`🚦 ${reference(blocker)} is finished, so ${reference(task)} can start`, owner),

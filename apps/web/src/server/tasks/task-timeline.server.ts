@@ -1,5 +1,5 @@
 import { mergeTimeline, type TaskHistoryEvent } from "@lrm/coforge-sdk/internal";
-import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import type { PrismaClient } from "#src/generated/prisma/client";
 import type { BrowserMessageMentionRow } from "#src/server/conversations/mentions.server";
 import { browserSenderHandle } from "#src/server/conversations/sender-display.server";
 import { historyEventView } from "./task-history.server";
@@ -7,14 +7,8 @@ import type { TaskReader } from "./task-view.server";
 
 /**
  * A Task's discussion and its change history read as one stream: the messages of its own
- * conversation merged with its history events. History is the single record of a change, so the
- * three notices it also posted in the conversation (a move, a claim, an unassign) are not read.
+ * conversation merged with its history events.
  */
-const HIDDEN_TASK_THREAD_NOTICE_KINDS = ["task.moved", "task.claimed", "task.unassigned"];
-
-export const VISIBLE_TASK_THREAD_MESSAGE_WHERE = {
-  NOT: { systemMessage: { kind: { in: HIDDEN_TASK_THREAD_NOTICE_KINDS } } },
-} satisfies Prisma.MessageWhereInput;
 
 type Db = Pick<PrismaClient, "taskHistoryEvent" | "message">;
 
@@ -84,9 +78,9 @@ export async function messageTime(db: Db, conversationId: string, sequence: numb
   return row?.createdAt;
 }
 
-export async function visibleTimeUpTo(db: Db, conversationId: string, sequence: number) {
+export async function messageTimeUpTo(db: Db, conversationId: string, sequence: number) {
   const row = await db.message.findFirst({
-    where: { conversationId, sequence: { lte: sequence }, ...VISIBLE_TASK_THREAD_MESSAGE_WHERE },
+    where: { conversationId, sequence: { lte: sequence } },
     orderBy: { sequence: "desc" },
     select: { createdAt: true },
   });
@@ -94,7 +88,7 @@ export async function visibleTimeUpTo(db: Db, conversationId: string, sequence: 
 }
 
 /**
- * The events a page owns: those after the newest readable message at or below `afterSequence` (none
+ * The events a page owns: those after the newest message at or below `afterSequence` (none
  * below it: from the first event) and through `through`.
  */
 export async function taskEventsAfterMessage(
@@ -108,15 +102,15 @@ export async function taskEventsAfterMessage(
     through?: Date;
   },
 ) {
-  const after = await visibleTimeUpTo(db, input.conversationId, input.afterSequence);
+  const after = await messageTimeUpTo(db, input.conversationId, input.afterSequence);
   return taskEventsInWindow(db, input.taskId, input.reader, input.mentions, {
     after,
     through: input.through,
   });
 }
 
-async function newestVisibleMessages(db: Db, conversationId: string, limit: number) {
-  const where = { conversationId, ...VISIBLE_TASK_THREAD_MESSAGE_WHERE };
+async function newestMessages(db: Db, conversationId: string, limit: number) {
+  const where = { conversationId };
   const [total, rows] = await Promise.all([
     db.message.count({ where }),
     db.message.findMany({
@@ -149,7 +143,7 @@ async function newestVisibleMessages(db: Db, conversationId: string, limit: numb
 
 /**
  * `task view`: the newest `limit` entries of the merged stream. `replyCount` is the conversation's
- * messages as read (the hidden notices not counted); `hasOlder` says whether entries of either kind
+ * messages; `hasOlder` says whether entries of either kind
  * lie before the ones shown.
  */
 export async function taskTimelinePage(
@@ -161,7 +155,7 @@ export async function taskTimelinePage(
 ) {
   const conversationId = task.discussionConversationId;
   const [thread, eventPage] = await Promise.all([
-    conversationId ? newestVisibleMessages(db, conversationId, limit) : { total: 0, messages: [] },
+    conversationId ? newestMessages(db, conversationId, limit) : { total: 0, messages: [] },
     newestTaskEvents(db, task.id, reader, mentions, limit),
   ]);
   const shown = newestTimeline(thread.messages, eventPage.events, limit);
@@ -206,10 +200,7 @@ export async function taskEventsForReadPage(
     });
   if (!first || !last) {
     const [readable, events] = await Promise.all([
-      db.message.count({
-        where: { conversationId, ...VISIBLE_TASK_THREAD_MESSAGE_WHERE },
-        take: 1,
-      }),
+      db.message.count({ where: { conversationId }, take: 1 }),
       taskEventsInWindow(db, taskId, reader, mentions, {}),
     ]);
     return readable ? [] : events;

@@ -34,7 +34,6 @@ import {
   taskEventsForReadPage,
   taskEventsInWindow,
   taskTimelinePage,
-  VISIBLE_TASK_THREAD_MESSAGE_WHERE,
 } from "./task-timeline.server";
 
 /** Names a task by the board it is on (`target`, an Agent's `#channel`, or `conversationId`, a
@@ -192,7 +191,6 @@ export class TaskConversations {
       isChannel: false,
       isUserAgentDirectConversation: false,
       page,
-      additionalScope: VISIBLE_TASK_THREAD_MESSAGE_WHERE,
       resolveAnchor: async (value) => {
         const rows = await db.message.findMany({
           where: { conversationId, id: messageAnchorWhere(value) },
@@ -356,7 +354,6 @@ export class TaskConversations {
       where: {
         conversationId,
         sequence: { gt: seat?.agentReadThroughSequence ?? 0 },
-        ...VISIBLE_TASK_THREAD_MESSAGE_WHERE,
         ...(seat ? { OR: [{ senderMemberId: null }, { senderMemberId: { not: seat.id } }] } : {}),
       },
     });

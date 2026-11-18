@@ -157,6 +157,7 @@ export function judge(
   analysis: Analysis,
   catalog: Catalog,
   createdElsewhere: ReadonlySet<string>,
+  approved = false,
 ): Judgement {
   const statFor = (effect: Risk): { stat: Size; large: boolean } => {
     if (effect.unknown) {
@@ -186,7 +187,7 @@ export function judge(
       rewrite: effect.scans,
       statement: effect.label,
     });
-    if (effect.scans && large) rewrites.push(effect);
+    if (effect.scans && large && !approved) rewrites.push(effect);
   }
   const verdict: Verdict =
     rewrites.length > 0 ? "rewrite" : analysis.needsLockTimeout ? "ok-with-lock-timeout" : "ok";

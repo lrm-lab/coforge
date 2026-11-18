@@ -66,9 +66,10 @@ order helpers live beside it in `task-order.ts`.
 - Task writes post their server notice (wording in `task-notices.server.ts`)
   through `withNotices`, which holds the conversation lock and signals open
   pages after the commit. Creation and conversion post no chat message (a task is
-  made from its source message, and a composer's "Send as task" posts none); assignment, claims,
-  status moves and unassignment post in the Task's own conversation (a Task made from a channel
-  message never writes to that message's thread). `unclaim`, `delete`, `amend`, the resource `receipt`, `history`,
+  made from its source message, and a composer's "Send as task" posts none); assignment posts
+  in the Task's own conversation (a Task made from a channel message never writes to that
+  message's thread). Claims, status moves and unassignment write history only: it is read with
+  the conversation as one stream. `unclaim`, `delete`, `amend`, the resource `receipt`, `history`,
   `list` and no-op writes post nothing, except that an `amend` which gives a started Task an
   unfinished blocker posts the notice below. Delivered and pushed notices, each to one member only
   and posted in the Task's own conversation (`NoticeWriter.toOwner`; with no owner it is posted and

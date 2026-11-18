@@ -130,48 +130,27 @@ async function channelFixture(name: string) {
   };
 }
 
-test("claims, moves and unassignment post in the Task's own conversation", async () => {
-  const { run, createTasks, noticesOf, asAlice, asBob, asAgent } = await channelFixture("thread");
+test("claims, moves and unassignment write history and post no notice in the Task's own conversation", async () => {
+  const { channel, run, createTasks, noticesOf, asAlice, asBob, asAgent } =
+    await channelFixture("thread");
   const [shipTask, docsTask, testsTask] = await createTasks(asAlice, [
     "Ship notices",
     "Write docs",
     "Add tests",
   ]);
   const own = (body: string) => ({ body, thread: null });
-  const newSince = async (task: { number: number }, seen: number) =>
-    (await noticesOf(task)).slice(seen);
 
-  // Claiming an unassigned Todo Task moves it to In Progress and says so once, as a claim.
   await run(asAgent, { operation: "claim", number: shipTask!.number });
-  expect(await noticesOf(shipTask!)).toEqual([
-    own(`📌 ${agent.name} claimed #${shipTask!.number} "Ship notices"`),
-  ]);
-
-  // Each status move names the actor by display name and the status by its label.
   await run(asAgent, { operation: "update", number: shipTask!.number, status: "in_review" });
-  await run(asAgent, { operation: "update", number: shipTask!.number, status: "in_progress" });
   await run(asAlice, { operation: "update", number: shipTask!.number, status: "done" });
-  await run(asAlice, { operation: "update", number: shipTask!.number, status: "todo" });
   await run(asAlice, { operation: "update", number: shipTask!.number, status: "closed" });
-  // A status that does not change posts nothing.
-  await run(asAlice, { operation: "update", number: shipTask!.number, status: "closed" });
-  const moved = (actor: string, emoji: string, label: string) =>
-    own(`${emoji} ${actor} moved #${shipTask!.number} "Ship notices" to ${label}`);
-  expect(await newSince(shipTask!, 1)).toEqual([
-    moved("Notice Agent", "👀", "In Review"),
-    moved("Notice Agent", "🔄", "In Progress"),
-    moved("Alice An", "✅", "Done"),
-    moved("Alice An", "📝", "Todo"),
-    moved("Alice An", "🚫", "Closed"),
-  ]);
+  expect(await noticesOf(shipTask!)).toEqual([]);
 
-  // Clearing an assignee, by `unassign` or by assigning no one, names the actor.
   await run(asAlice, {
     operation: "assign",
     number: docsTask!.number,
     assignee: `@${bob.username}`,
   });
-  const seen = (await noticesOf(docsTask!)).length;
   await run(asAlice, { operation: "unassign", number: docsTask!.number });
   await run(asAlice, {
     operation: "assign",
@@ -179,20 +158,26 @@ test("claims, moves and unassignment post in the Task's own conversation", async
     assignee: `@${bob.username}`,
   });
   await run(asAlice, { operation: "assign", number: docsTask!.number, assignee: null });
-  const unassigned = own(`🔓 Alice An unassigned #${docsTask!.number} "Write docs"`);
-  expect(await newSince(docsTask!, seen)).toEqual([
-    unassigned,
-    own(`📌 Alice An assigned #${docsTask!.number} "Write docs" to @${bob.username}`),
-    unassigned,
-  ]);
+  const assigned = own(
+    `📌 Alice An assigned #${docsTask!.number} "Write docs" to @${bob.username}`,
+  );
+  expect(await noticesOf(docsTask!)).toEqual([assigned, assigned]);
 
-  // A member without a display name is named by username.
   await run(asBob, { operation: "claim", number: testsTask!.number });
-  const claimed = (await noticesOf(testsTask!)).length;
   await run(asBob, { operation: "update", number: testsTask!.number, status: "in_review" });
-  expect(await newSince(testsTask!, claimed)).toEqual([
-    own(`👀 ${bob.username} moved #${testsTask!.number} "Add tests" to In Review`),
-  ]);
+  expect(await noticesOf(testsTask!)).toEqual([]);
+
+  const duplicates = await db.systemMessage.count({
+    where: {
+      kind: { in: ["task.moved", "task.claimed", "task.unassigned"] },
+      conversation: { kind: "task_thread", taskDiscussionOf: { conversationId: channel.id } },
+    },
+  });
+  expect(duplicates).toBe(0);
+  const history = (task: { id: string }) =>
+    db.taskHistoryEvent.findMany({ where: { taskId: task.id }, select: { eventType: true } });
+  expect((await history(shipTask!)).map((event) => event.eventType)).toContain("status_changed");
+  expect((await history(docsTask!)).map((event) => event.eventType)).toContain("assignee_changed");
 });
 
 test("unclaiming and deleting a Task post no notice", async () => {

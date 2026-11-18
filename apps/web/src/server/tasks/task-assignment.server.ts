@@ -127,13 +127,7 @@ export async function assignTask(
       { ownerMemberId: current.ownerMemberId },
       owner ? { ownerMemberId: owner.id, claimedAt: null } : withoutAssignee(current),
     );
-    if (!owner) {
-      await notices.inThread(task, (quoted) => ({
-        body: noticeText.unassigned(noticeActor(member).displayName, quoted),
-        system: { kind: "task.unassigned", params: { actor: noticeActor(member), task: quoted } },
-      }));
-      return { task, changed: true, receipt: null, assigneeHandle: null };
-    }
+    if (!owner) return { task, changed: true, receipt: null, assigneeHandle: null };
     const [posted] = await assignmentReceipts(
       tx,
       notices,
@@ -180,7 +174,7 @@ export async function unassignTask(
   command: TaskCommand,
 ): Promise<TaskResult> {
   const { conversationId, workspaceId } = conversation;
-  const result = await withNotices(ports, conversation, async (tx, notices) => {
+  const result = await withNotices(ports, conversation, async (tx) => {
     const current = await findTaskByNumber(tx, conversationId, command.number!);
     if (!current) throw new AppError("NOT_FOUND");
     if (!current.ownerMemberId) return { task: current, changed: false };
@@ -193,10 +187,6 @@ export async function unassignTask(
       { ownerMemberId: current.ownerMemberId },
       withoutAssignee(current),
     );
-    await notices.inThread(task, (quoted) => ({
-      body: noticeText.unassigned(noticeActor(member).displayName, quoted),
-      system: { kind: "task.unassigned", params: { actor: noticeActor(member), task: quoted } },
-    }));
     return { task, changed: true };
   });
   const view = await taskViewOf(ports.db, ports.reader, result.task);

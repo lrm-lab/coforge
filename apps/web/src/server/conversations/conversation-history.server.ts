@@ -49,13 +49,9 @@ export async function browserMessageUpdates(
   conversationId: string,
   afterSequence: number,
   afterReplySequence?: number,
-  readable: Prisma.MessageWhereInput = {},
 ): Promise<BrowserMessageRow[]> {
   const arrived = await db.message.findMany({
-    where: {
-      ...messagesArrivedWhere(conversationId, afterSequence, afterReplySequence),
-      ...readable,
-    },
+    where: messagesArrivedWhere(conversationId, afterSequence, afterReplySequence),
     orderBy: { sequence: "asc" },
     take: 100,
     select: { id: true },

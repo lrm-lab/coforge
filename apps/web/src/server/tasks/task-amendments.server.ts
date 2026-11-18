@@ -91,22 +91,6 @@ export async function updateTaskStatus(
       { ...(status !== undefined && { status }), ...(priority !== undefined && { priority }) },
       { manager },
     );
-    if (updated.status !== task.status)
-      await notices.inThread(updated, (quoted) => ({
-        body: noticeText.moved(
-          noticeActor(member).displayName,
-          quoted,
-          storedTaskStatus(updated.status),
-        ),
-        system: {
-          kind: "task.moved",
-          params: {
-            actor: noticeActor(member),
-            task: quoted,
-            status: storedTaskStatus(updated.status),
-          },
-        },
-      }));
     if (priority !== undefined) {
       const owner = updated.owner?.leftAt ? null : updated.owner;
       const shouldWake =

@@ -99,6 +99,12 @@ a `lock_timeout` in a file of their own.
 | `ok-with-lock-timeout` | Otherwise, with a blocking lock: the migration must set the lock_timeout.                                                                                                                                             |
 | `ok`                   | Otherwise.                                                                                                                                                                                                            |
 
+One exception exists, and it is a list, not a rule: `APPROVED` in
+`scripts/migration-safety/approved-rewrites.ts` names each migration Frank approved despite a
+`rewrite` verdict, by its directory and the hash of its body, so an edit voids the approval. Its
+statements are judged by their locks alone, and its annotation still marks them `rewrite=yes`.
+Never add an entry without Frank's approval for that migration.
+
 ## The annotation
 
 A migration with a high-risk statement starts with the check's annotation (comments only: the

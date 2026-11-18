@@ -50,8 +50,7 @@ Agent is delivered every reply. Unfollowing stops that until the next of those h
 A task's discussion and its change history are one time-ordered stream: the conversation's
 messages merged with the task's history events (`- [event ...]` lines in `task view` and
 `task read`; an event at the same instant as a message comes first). History is the single record
-of a change, so the server's notices for a status move, a claim and an unassign are not read as
-messages; a notice that addresses someone (an assignment receipt, a blocked or released notice, an
+of a change: a status move, a claim and an unassign write no message; a notice that addresses someone (an assignment receipt, a blocked or released notice, an
 unfollow) stays. A description change shows only as `updated the description`; `task history`
 prints the superseded text. `task view --limit` bounds the merged stream, and `hasOlder` speaks for
 it. An event belongs to the page holding the first message at or after it and reads just before that message; the page after the newest message has no upper end. A `task read` page lists the events after the newest message older than the page, so none repeats or drops between pages. `--unread` starts at your read position: the events since it show with the new messages, or alone when none came. `task view` ends with `task history` as the way to every recorded change when older entries exist. The

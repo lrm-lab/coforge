@@ -1,6 +1,7 @@
 // Checks one migration file against its annotation, offline or against a catalog. Every consumer
 // (the hard rule, `check-migration.ts`, the deploy gate) goes through `verifyMigration`.
 import { type Annotation, keys, parseAnnotation, PG_VERSION, sha256 } from "./annotation";
+import { approvedRewrite } from "./approved-rewrites";
 import { analyze, judge, type Judgement, type Analysis } from "./rules";
 import { type Catalog, MAX_SNAPSHOT_AGE_DAYS, type Snapshot, snapshotAgeDays } from "./snapshot";
 
@@ -82,7 +83,12 @@ export function verifyMigration(text: string, context: VerifyContext): Verificat
         `the ${snapshot.environment} catalog snapshot is ${Math.floor(age)} days old (at most ${MAX_SNAPSHOT_AGE_DAYS} days), so it no longer shows the table sizes`,
       );
   }
-  const judgement = judge(analysis, tables, context.createdElsewhere());
+  const judgement = judge(
+    analysis,
+    tables,
+    context.createdElsewhere(),
+    approvedRewrite(context.file, parsed.body),
+  );
   result.judgement = judgement;
   if (judgement.verdict === "rewrite")
     fail(

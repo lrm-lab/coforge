@@ -27,7 +27,8 @@
     "test:docs-site": "bun scripts/test/isolated-test-run.ts bun test scripts/docs",
     "check:docs-site": "bunx oxfmt --check scripts/docs && bunx oxlint scripts/docs",
     "format:ci": "bunx oxfmt scripts/ci scripts/audit scripts/test scripts/git-hooks scripts/dev",
-    "format:release": "bunx oxfmt scripts/release"
+    "format:release": "bunx oxfmt scripts/release",
+    "format:deploy": "bunx oxfmt scripts/deploy scripts/migration-safety"
   },
   "devDependencies": {
     "@alicloud/alidns20150109": "4.6.1",

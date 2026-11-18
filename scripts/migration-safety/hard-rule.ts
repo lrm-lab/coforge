@@ -12,7 +12,7 @@ import { createdTables } from "./rules";
 import { catalogOf, loadSnapshot } from "./snapshot";
 import { REWRITE_IN_STEPS, verifyMigration } from "./verify";
 
-export const MIGRATION_SAFETY_FIX = `A migration with a high-risk statement (a lock or rewrite of an existing table, a destructive change, or anything the check does not recognise) needs an annotation from the catalog snapshot: download the latest catalog-snapshot artifact (\`gh run download --name catalog-snapshot-production\`), run \`bun scripts/migration-safety/check-migration.ts --write --snapshot <snapshot.json> <migration.sql>\`, and commit the file with its annotation. If it says the migration must be rewritten, ${REWRITE_IN_STEPS}. Do not edit the body after annotating. The rule has no override. See docs/agents/git-hooks/hard-rules.md.`;
+export const MIGRATION_SAFETY_FIX = `A migration with a high-risk statement (a lock or rewrite of an existing table, a destructive change, or anything the check does not recognise) needs an annotation from the catalog snapshot: download the latest catalog-snapshot artifact (\`gh run download --name catalog-snapshot-production\`), run \`bun scripts/migration-safety/check-migration.ts --write --snapshot <snapshot.json> <migration.sql>\`, and commit the file with its annotation. If it says the migration must be rewritten, ${REWRITE_IN_STEPS}. Do not edit the body after annotating. The only exception is a migration Frank approved by name in scripts/migration-safety/approved-rewrites.ts. See docs/agents/git-hooks/hard-rules.md.`;
 
 const MIGRATION = /^apps\/web\/prisma\/migrations\/([^/]+)\/migration\.sql$/;
 const CREATES_A_TABLE = /CREATE\s+(UNLOGGED\s+)?TABLE/i;
