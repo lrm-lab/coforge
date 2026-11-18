@@ -22,7 +22,7 @@
 //   UI_SWEEP_THEMES       comma-separated theme names (light,dark)
 //   UI_SWEEP_VIEWPORTS    comma-separated viewport names (1440,1024,390)
 //   UI_SWEEP_STRICT       "1": exit non-zero when any capture has a finding, exception or
-//                         console error (CI)
+//                         console error, or a surface was skipped (CI)
 
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -94,7 +94,7 @@ async function discoverIds(page) {
   await page.navigate(`${BASE_URL}${workspace}/members`);
   ids.agentId =
     (await page.evalJs(extract(`${workspace}/agent/([0-9a-fA-F-]{36})(?:[/?]|$)`))) ||
-    (await page.evalJs(extract(`profile=agent:([0-9a-fA-F-]{36})`)));
+    (await page.evalJs(extract(`profile=agent(?::|%3A)([0-9a-fA-F-]{36})`)));
 
   await page.navigate(`${BASE_URL}${workspace}/computers`);
   ids.computerId = await page.evalJs(extract(`${workspace}/computer/([0-9a-fA-F-]{36})(?:[/?]|$)`));
@@ -284,6 +284,10 @@ async function main() {
       ).length;
       if (failures) {
         console.error(`UI sweep: ${failures} capture(s) with findings; see findings.md`);
+        process.exitCode = 1;
+      }
+      if (missing.length) {
+        console.error(`UI sweep: skipped surfaces needing ${missing.join(", ")}`);
         process.exitCode = 1;
       }
     }
