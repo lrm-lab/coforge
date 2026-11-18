@@ -7,10 +7,15 @@ import { MemoryFields } from "./memory-fields";
 import { personalMemoryCommand } from "./personal-memory.functions";
 import { personalResponseError } from "./personal-memory-response";
 
-export type PersonalMemoryDraft = TeamMemoryDraft & { key: string; revision: string };
+export type PersonalMemoryDraft = TeamMemoryDraft & {
+  key: string;
+  revision: string;
+  restoring: boolean;
+};
 export const personalMemoryDraft = (entry?: LocalMemoryEntry): PersonalMemoryDraft => ({
   key: entry?.key ?? "",
   revision: entry?.revision ?? "new",
+  restoring: entry?.status === "archived",
   title: entry?.title ?? "",
   content: entry?.content ?? "",
   source: entry?.source ?? "",
@@ -125,7 +130,10 @@ export function PersonalMemoryEditor({
           <Button
             color="secondary"
             onPress={() => {
-              onChange({ revision: comparison.revision });
+              onChange({
+                revision: comparison.revision,
+                restoring: draft.restoring || comparison.status === "archived",
+              });
               setComparison(undefined);
               setError("");
             }}
@@ -145,7 +153,7 @@ export function PersonalMemoryEditor({
             !draft.source.trim()
           }
         >
-          {m.memory_save()}
+          {draft.restoring || entry?.status === "archived" ? m.memory_restore() : m.memory_save()}
         </Button>
         <Button color="secondary" isDisabled={busy} onPress={onCancel}>
           {m.memory_cancel()}
