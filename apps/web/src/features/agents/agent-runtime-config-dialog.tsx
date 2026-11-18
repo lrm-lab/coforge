@@ -30,12 +30,6 @@ import {
 
 const MAX_ENV_ROWS = 64;
 
-/** What the RUNTIME CONFIG section's own TanStack Query load of `getAgentEnvironment` looks like
- * by the time it reaches this form. `undefined` (not this type at all) means the viewer is not
- * the Agent's owner, so the whole Advanced disclosure is omitted (`agent-profile-panel.tsx`
- * never builds this object for a non-owner). `loaded: false` means the owner's query is still in
- * flight; the disclosure still renders (so its own trigger doesn't pop in later) but shows the
- * loading line and keeps Save disabled instead of seeding rows from an empty map. */
 export type AgentEnvironmentState = { loaded: boolean; values: Record<string, string> };
 
 export type AgentRuntimeComputerOption = {
@@ -46,18 +40,6 @@ export type AgentRuntimeComputerOption = {
 
 type EnvironmentRow = { key: string; value: string };
 
-/**
- * The RUNTIME CONFIG pencil's form body: the same `AgentRuntimeFields` as the full page's edit
- * dialog, plus Save/Cancel and an inline error line. Kept as its own plain component (no
- * `Modal`/`Dialog`) so it renders outside a browser DOM — `Modal` needs a portal target
- * `renderToStaticMarkup` cannot provide (verified: it renders empty, no thrown error), so
- * `agent-runtime-config-dialog.test.tsx` renders this piece directly instead of the dialog shell.
- * Save stays disabled until `AgentRuntimeFields` reports an actual change via `onDirtyChange`, or
- * until the Advanced env rows differ from their loaded starting point.
- *
- * When `computers` is provided (Agent has no Computer yet), a Computer picker appears first so
- * that bind and runtime configuration share one save.
- */
 export function AgentRuntimeConfigForm({
   computerId,
   computers,
@@ -78,12 +60,10 @@ export function AgentRuntimeConfigForm({
   credentialConfigured?: boolean;
   initial: RuntimeSelection;
   onLoad: (computerId: string) => Promise<RuntimeOptions>;
-  /** Omitted entirely for a viewer who does not own the Agent. */
   environment?: AgentEnvironmentState;
   saving: boolean;
   error: string;
   onClose: () => void;
-  /** Tells the dialog whether the form holds unsaved edits, so closing can ask first. */
   onDirtyChange?: (dirty: boolean) => void;
   onSave: (form: FormData, changed: { runtime: boolean; environment: boolean }) => void;
 }) {
@@ -122,8 +102,6 @@ export function AgentRuntimeConfigForm({
       }}
     >
       <DialogHeader title={m.agent_profile_edit_runtime_config()} onClose={onClose} />
-      {/* One column: the runtime fields stack (provider, then the model it belongs to, then
-          reasoning) instead of splitting into two columns on a wide screen. */}
       <div className="grid gap-4 px-6 pt-6 pb-2">
         {showComputerPicker ? (
           <Select
@@ -176,11 +154,6 @@ export function AgentRuntimeConfigForm({
           <p className="text-sm text-tertiary">{m.agent_form_computer_required()}</p>
         )}
         {environment !== undefined && (
-          // This is a plain "More" disclosure — a small-caps trigger with a chevron, not a
-          // bordered pill — whose panel is a titled section: the section's own
-          // heading, one line saying what environment variables do, then the rows and the add
-          // action. The heading and the line together replace what used to be a bordered box with
-          // a trailing hint, which read as a stray control rather than a section of the form.
           <Disclosure>
             <Button
               slot="trigger"
@@ -192,8 +165,6 @@ export function AgentRuntimeConfigForm({
             >
               {m.agent_env_more()}
             </Button>
-            {/* The spacing sits on a wrapper: on the panel, its top padding stayed when the panel
-                was closed, a gap under "More" nobody asked for (task #coforge-ui:#21). */}
             <DisclosurePanel>
               <div className="grid gap-3 pt-3">
                 {envPending ? (
@@ -220,8 +191,6 @@ export function AgentRuntimeConfigForm({
                             )
                           }
                         />
-                        {/* Top-aligned so a name's error line grows the row downward; `h-9` is the sm
-                          input's height, keeping "=" and the remove button level with the inputs. */}
                         <span aria-hidden="true" className="flex h-9 items-center text-tertiary">
                           =
                         </span>
@@ -286,13 +255,6 @@ export function AgentRuntimeConfigForm({
   );
 }
 
-/**
- * The Agent profile panel's Runtime config pencil target — a modal dialog, mirroring
- * `AgentRuntimeCredentialDialog` and the full page's edit dialog, rather than editing the
- * RUNTIME CONFIG section in place: the Runtime/Model/Reasoning badges never change; only the
- * pencil opens this. Closing (Esc, overlay click, Cancel, the header's X) is blocked while
- * `saving`, same as the credential dialog, and asks first while the form holds unsaved edits.
- */
 export function AgentRuntimeConfigDialog({
   open,
   onClose,
@@ -320,8 +282,6 @@ export function AgentRuntimeConfigDialog({
   error: string;
   onSave: (form: FormData, changed: { runtime: boolean; environment: boolean }) => void;
 }) {
-  // The form reports its edits; every way out (Esc, overlay click, Cancel, the X) reaches the
-  // overlay's `onOpenChange`, where closing with edits asks first.
   const [dirty, setDirty] = useState(false);
   const guard = useUnsavedChangesGuard({ overlayOpen: open, dirty, close: onClose });
   return (
