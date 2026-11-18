@@ -134,14 +134,13 @@ import {
   encodeAppConfigSnapshotRequest,
   type AppConfigSnapshotRequest,
   type AgentMigrationCancel,
-  thrownMessage,
 } from "@lrm/coforge-sdk/internal";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import {
   decodeAppRegistrationNotice,
   type AppRegistrationNotice,
 } from "@lrm/coforge-sdk/internal/app-registration-notice";
-import { controlPayloadShape } from "./control-payload";
+import { logRejectedControl } from "./control-rejection-log";
 import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "./shutdown-notice-timeout";
 import { reportAgentSessionWithRetry } from "./agent-session-report";
 import { getLogger } from "@logtape/logtape";
@@ -890,18 +889,7 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
         rejections.push({ kind, error });
       }
     }
-    logger.warning("Rejected invalid Daemon control publication", {
-      event: "daemon_control:rejected",
-      workspace_id: workspaceId,
-      computer_id: computerId,
-      payload_bytes: data.byteLength,
-      rejections: rejections
-        .map(({ kind, error }) => `${kind}: ${thrownMessage(error)}`)
-        .join("; "),
-      payload_shape: controlPayloadShape(data),
-      error_code: diagnosticErrorCode(rejections.at(-1)?.error),
-      outcome: "rejected",
-    });
+    logRejectedControl({ workspaceId, computerId }, data, rejections);
   }
   async sendAgentControlResult(result: AgentControlResult) {
     await this.#rpc(AGENT_CONTROL_RESULT_METHOD, encodeAgentControlResult(result));
