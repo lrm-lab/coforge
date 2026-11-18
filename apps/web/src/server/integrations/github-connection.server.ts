@@ -418,6 +418,7 @@ export class GitHubConnection {
   }
 
   async disconnect(userId: string) {
+    this.tokens.forgetRefreshCooldown(userId);
     await this.tokens.locked(userId, async (tx) => {
       await tx.gitHubAuthorization.deleteMany({ where: { userId } });
       await tx.gitHubConnection.deleteMany({ where: { userId } });

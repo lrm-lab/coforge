@@ -4,7 +4,10 @@ import {
   GitHubOAuthRejected,
   GitHubUnauthorized,
 } from "#src/server/integrations/github-api.server";
-import { GitHubUserTokens } from "#src/server/integrations/github-user-tokens.server";
+import {
+  GitHubUserTokens,
+  REFRESH_COOLDOWN_MS,
+} from "#src/server/integrations/github-user-tokens.server";
 
 const NOW = Date.parse("2026-11-18T16:00:00Z");
 const row = (overrides: Record<string, unknown> = {}) => ({
@@ -132,6 +135,91 @@ test("a 401 on the call clears and logs the call site", async () => {
   });
   expect(result).toMatchObject({ ok: false, status: "reauthorize" });
   expect(events(warn)).toMatchObject([{ event: "github.credentials_cleared", site: "call_401" }]);
+});
+
+const timeout = async () => {
+  throw new AppError("TEMPORARILY_UNAVAILABLE");
+};
+const fresh = async () => ({
+  access_token: "a2",
+  refresh_token: "r2",
+  expires_in: 28800,
+  refresh_token_expires_in: 15811200,
+});
+
+test("after a refresh gets no answer, requests in the cooldown neither exchange nor take the lock", async () => {
+  spyOn(console, "warn").mockImplementation(() => {});
+  const counts = { transactions: 0 };
+  let exchanges = 0;
+  const t = tokens(
+    row(),
+    async () => {
+      exchanges++;
+      return timeout();
+    },
+    { now: NOW },
+    counts,
+  );
+  await t.withToken("u1", async () => 1).catch(() => {});
+  expect([exchanges, counts.transactions]).toEqual([1, 1]);
+  const refused = await t.withToken("u1", async () => 1).catch((error: unknown) => error);
+  expect(refused).toBeInstanceOf(AppError);
+  expect([exchanges, counts.transactions]).toEqual([1, 1]);
+});
+
+test("the first request after the cooldown refreshes again", async () => {
+  spyOn(console, "warn").mockImplementation(() => {});
+  const clock = { now: NOW };
+  let exchanges = 0;
+  const t = tokens(
+    row(),
+    async () => {
+      exchanges++;
+      return exchanges === 1 ? timeout() : fresh();
+    },
+    clock,
+  );
+  await t.withToken("u1", async () => 1).catch(() => {});
+  clock.now = NOW + REFRESH_COOLDOWN_MS - 1;
+  await t.withToken("u1", async () => 1).catch(() => {});
+  expect(exchanges).toBe(1);
+  clock.now = NOW + REFRESH_COOLDOWN_MS;
+  const result = await t.withToken("u1", async (token) => token);
+  expect(exchanges).toBe(2);
+  expect(result).toMatchObject({ ok: true, data: "a2" });
+});
+
+test("connecting or disconnecting clears the cooldown", async () => {
+  spyOn(console, "warn").mockImplementation(() => {});
+  let exchanges = 0;
+  const t = tokens(row(), async () => {
+    exchanges++;
+    return timeout();
+  });
+  await t.withToken("u1", async () => 1).catch(() => {});
+  t.forgetRefreshCooldown("u1");
+  await t.withToken("u1", async () => 1).catch(() => {});
+  expect(exchanges).toBe(2);
+  await t.storedTokens("u1", (await fresh()) as never);
+  await t.withToken("u1", async () => 1).catch(() => {});
+  expect(exchanges).toBe(3);
+});
+
+test("a request already waiting on the lock does not send the refresh token again", async () => {
+  spyOn(console, "warn").mockImplementation(() => {});
+  let exchanges = 0;
+  const t = tokens(row(), async () => {
+    exchanges++;
+    await Promise.resolve();
+    return timeout();
+  });
+  const results = await Promise.all([
+    t.withToken("u1", async () => 1).catch((error: unknown) => error),
+    t.withToken("u1", async () => 1).catch((error: unknown) => error),
+    t.withToken("u1", async () => 1).catch((error: unknown) => error),
+  ]);
+  expect(exchanges).toBe(1);
+  expect(results.every((result) => result instanceof AppError)).toBe(true);
 });
 
 test("a transaction that does not commit logs no cleared credential", async () => {

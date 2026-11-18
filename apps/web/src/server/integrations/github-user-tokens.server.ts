@@ -11,11 +11,15 @@ import {
 } from "./github-api.server";
 import type { GitHubSealedValues } from "./github-sealed-values.server";
 
+export const REFRESH_COOLDOWN_MS = 30_000;
+
 /**
  * A User's stored GitHub tokens: the only code that reads, refreshes, rewrites or clears them.
  * Serializes per User with an advisory lock.
  */
 export class GitHubUserTokens {
+  readonly #refreshCooldown = new Map<string, number>();
+
   constructor(
     private readonly db: PrismaClient,
     private readonly config: { clientId: string },
@@ -33,6 +37,7 @@ export class GitHubUserTokens {
     ) => Promise<T>,
     refreshWithinMs = 60_000,
   ) {
+    if (this.#cooling(userId)) throw unavailable("refresh_cooldown");
     const prepared = await this.locked(userId, async (tx) => {
       const row = await tx.gitHubConnection.findUnique({ where: { userId } });
       if (!row) return { ok: false as const, status: "disconnected" as const, login: null };
@@ -56,12 +61,14 @@ export class GitHubUserTokens {
             reason = "refresh_token_expired";
             throw new GitHubUnauthorized();
           }
+          if (this.#cooling(userId)) throw unavailable("refresh_cooldown");
           stage = "exchange";
           reason = "bad_refresh_token";
           const refreshed = await this.github.exchange({
             grant_type: "refresh_token",
             refresh_token: tokens.refresh_token,
           });
+          this.#refreshCooldown.delete(userId);
           stage = "store";
           current = await tx.gitHubConnection.update({
             where: { userId },
@@ -85,6 +92,8 @@ export class GitHubUserTokens {
             cleared: { reason, row },
           };
         }
+        if (stage === "exchange" && !(error instanceof GitHubOAuthRejected))
+          this.#refreshCooldown.set(userId, this.now() + REFRESH_COOLDOWN_MS);
         if (stage !== "read" && !(error instanceof GitHubOAuthRejected))
           console.warn(
             JSON.stringify({
@@ -143,6 +152,14 @@ export class GitHubUserTokens {
     if (cleared) this.logCleared(userId, "call_401", "unauthorized", cleared);
   }
 
+  #cooling(userId: string) {
+    const until = this.#refreshCooldown.get(userId);
+    if (until === undefined) return false;
+    if (until > this.now()) return true;
+    this.#refreshCooldown.delete(userId);
+    return false;
+  }
+
   private logCleared(
     userId: string,
     site: "refresh" | "call_401",
@@ -181,7 +198,12 @@ export class GitHubUserTokens {
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`github-account:${this.config.clientId}:${githubUserId}`}, 0))::text`;
   }
 
+  forgetRefreshCooldown(userId: string) {
+    this.#refreshCooldown.delete(userId);
+  }
+
   async storedTokens(userId: string, tokens: z.infer<typeof tokensSchema>) {
+    this.forgetRefreshCooldown(userId);
     return {
       credentials: await this.sealed.seal(
         userId,
