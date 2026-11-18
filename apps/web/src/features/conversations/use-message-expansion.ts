@@ -1,6 +1,5 @@
 import { useCallback, useState } from "react";
 
-/** Keeps long-message expansion independent from row mounting and virtualization. */
 export function useMessageExpansion() {
   const [expandedMessages, setExpandedMessages] = useState<ReadonlySet<string>>(new Set());
   const toggleExpandedMessage = useCallback((messageId: string) => {
