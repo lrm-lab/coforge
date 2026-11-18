@@ -90,8 +90,6 @@ import {
   type AgentMentionDeliveryTerminalError,
   type MachineStatusReport,
   type RuntimeAuthStatusReport,
-  DAEMON_RUNTIME_SHUTDOWN_METHOD,
-  encodeDaemonRuntimeShutdown,
   type DaemonRuntimeShutdown,
   AGENT_STATUS_METHOD,
   type DaemonRuntimeReadyRequest,
@@ -141,7 +139,7 @@ import {
   type AppRegistrationNotice,
 } from "@lrm/coforge-sdk/internal/app-registration-notice";
 import { logRejectedControl } from "./control-rejection-log";
-import { DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS } from "./shutdown-notice-timeout";
+import { sendShutdownNoticeOver } from "./shutdown-notice";
 import { reportAgentSessionWithRetry } from "./agent-session-report";
 import { getLogger } from "@logtape/logtape";
 import { AGENT_RPC_TIMEOUT_MS } from "./agent-http-wire";
@@ -908,51 +906,7 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
     );
   }
   async sendShutdownNotice(notice: DaemonRuntimeShutdown): Promise<void> {
-    const fields = {
-      event: "daemon_connection:shutdown_notice",
-      request_id: notice.requestId,
-      workspace_id: notice.workspaceId,
-      computer_id: notice.computerId,
-      reason: notice.reason,
-    };
-    const client = this.#connected ? this.#client : undefined;
-    if (!client) {
-      logger.info("Shutdown notice not sent: not connected", {
-        ...fields,
-        outcome: "unknown",
-        error_code: "not_connected",
-      });
-      return;
-    }
-    let timer: unknown;
-    const timedOut = new Promise<"timed_out">((resolve) => {
-      timer = this.timing.schedule(() => resolve("timed_out"), DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS);
-    });
-    try {
-      const answered = await Promise.race([
-        client
-          .rpc(DAEMON_RUNTIME_SHUTDOWN_METHOD, encodeDaemonRuntimeShutdown(notice))
-          .then(() => "answered" as const),
-        timedOut,
-      ]);
-      if (answered === "answered")
-        logger.info("Shutdown notice sent", { ...fields, outcome: "ok" });
-      else
-        logger.warning("Shutdown notice got no answer in time", {
-          ...fields,
-          outcome: "unknown",
-          error_code: "timeout",
-          duration_ms: DAEMON_SHUTDOWN_NOTICE_TIMEOUT_MS,
-        });
-    } catch (error) {
-      logger.warning("Shutdown notice was not accepted", {
-        ...fields,
-        outcome: "rejected",
-        error_code: diagnosticErrorCode(error),
-      });
-    } finally {
-      this.timing.cancel(timer);
-    }
+    return sendShutdownNoticeOver(this.#connected ? this.#client : undefined, this.timing, notice);
   }
   sendUsageScanResult(response: DaemonRuntimeUsageScanResponse): Promise<void> {
     return this.#providerPublications.sendUsageScanResult(response).then(() => undefined);
