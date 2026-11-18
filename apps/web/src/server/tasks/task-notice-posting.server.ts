@@ -1,9 +1,7 @@
 import type { Prisma } from "#src/generated/prisma/client";
 import { announceMessageBestEffort } from "#src/server/conversations/conversation-activity.server";
-import { hostMessageId } from "./task-view.server";
 import { postTaskNotice } from "./task-conversations.server";
 import { followTask } from "./task-discussion-store.server";
-import { enrollThreadReplyFollowers } from "#src/server/conversations/channel-threads.server";
 import {
   lockConversation,
   lockWorkspaceTaskWrites,
@@ -39,14 +37,11 @@ type NoticeInput = {
   threadRootId?: string;
   body: string;
   system: SystemNotice;
-  deliverTo?: string | null;
-  /** The member the notice personally mentions: its one mention row. */
-  mentions?: Assignee;
 };
 /**
- * The Task fields a notice quotes; `messageId` is also the root of the Task's thread. A Task in
- * another conversation than the notice's names it, so a notice quotes it with its channel, or
- * hidden when the notice's readers may not read that channel.
+ * The Task fields a notice quotes. A Task in another conversation than the notice's names it, so
+ * a notice quotes it with its channel, or hidden when the notice's readers may not read that
+ * channel.
  */
 export type NoticeSubject = {
   id: string;
@@ -69,16 +64,14 @@ export type NoticeWriter = {
   quote(tasks: readonly NoticeSubject[]): Promise<QuotedTask[]>;
   /** A top-level notice in the conversation; `id` fixes it, for a notice written at most once. */
   inConversation(notice: SystemNoticeContent, id?: string): Promise<PostedNotice>;
-  /** A reply in the Task's own thread. */
   inThread(
     task: NoticeSubject,
     body: (task: QuotedTask) => SystemNoticeContent,
   ): Promise<PostedNotice>;
   /**
-   * Fixed-id receipt in the Task's own thread, with an assignee mention (overrides human mute)
-   * and one delivery to an Agent assignee other than the actor, whose target is that thread.
-   * Self-assigned Agents already hold it in the result. The assignee follows the thread, so its
-   * later replies reach them. The body is server-built @handle text.
+   * Fixed-id receipt in the Task's own conversation, with one delivery to an Agent assignee other
+   * than the actor. Self-assigned Agents already hold it in the result. The assignee follows the
+   * Task, so its later replies reach them. The body is server-built @handle text.
    */
   receipt(input: {
     id: string;
@@ -88,9 +81,9 @@ export type NoticeWriter = {
     actor: Member;
   }): Promise<PostedNotice>;
   /**
-   * A notice in the Task's own thread addressed to its owner or reserved assignee: it mentions
-   * them (a person hears of it as an Activity mention) and is delivered to `deliverTo`, an Agent
-   * owner, and nobody else. With no owner it is an ordinary thread notice, delivered to no one.
+   * A notice in the Task's own conversation addressed to its owner or reserved assignee: it is
+   * delivered to `deliverTo`, an Agent owner, and nobody else. With no owner it is an ordinary
+   * notice, delivered to no one.
    * `content` is given the quoted Task and the quoted `related` Tasks, as the Task's own
    * conversation names them. A Task in another conversation than this writer's is told in its own, in this same transaction: its conversation is
    * locked here if `prepare` did not already. Delivery and push follow the commit.
@@ -182,26 +175,19 @@ export async function withNotices<T>(
           ),
         );
       };
-      /**
-       * A notice in a Task's own thread: a reply to its message, or, for a Task with no message in
-       * the channel, a notice in its own conversation (which has no mentions). `id` fixes it.
-       */
-      const inTaskThread = async (
+      const inTaskConversation = async (
         task: NoticeSubject,
         content: SystemNoticeContent & { id?: string },
-        to: { deliverTo?: string | null; mentions?: Assignee } = {},
+        to: { deliverTo?: string | null } = {},
       ): Promise<PostedNotice> => {
-        if (!task.messageId) {
-          const { id, body, system } = content;
-          const placed = await postTaskNotice(tx, conversation, task.id, {
-            id,
-            body,
-            system,
-            deliverToAgentId: to.deliverTo,
-          });
-          return { ...placed, threadRootId: null };
-        }
-        return post({ ...content, threadRootId: task.messageId, ...to });
+        const { id, body, system } = content;
+        const placed = await postTaskNotice(tx, conversation, task.id, {
+          id,
+          body,
+          system,
+          deliverToAgentId: to.deliverTo,
+        });
+        return { ...placed, threadRootId: null };
       };
       return {
         prepare: async (conversationIds) => {
@@ -211,55 +197,35 @@ export async function withNotices<T>(
         inConversation: (notice, id) => postAndSignal({ ...notice, id }),
         inThread: async (task, body) => {
           const [quoted] = await quote([task]);
-          const notice = await inTaskThread(task, body(quoted!));
-          // A task with no message in the channel keeps its notices in its own conversation.
-          if (task.messageId) posted.push(notice);
-          return notice;
+          return inTaskConversation(task, body(quoted!));
         },
         toOwner: async (input) => {
           const { id, task, owner, deliverTo } = input;
           if (task.conversationId && task.conversationId !== conversation.conversationId)
             return (await writerIn(task.conversationId)).toOwner(input);
           const [quoted, ...related] = await quote([task, ...(input.related ?? [])]);
-          const notice = await inTaskThread(
+          const notice = await inTaskConversation(
             task,
             { ...input.content(quoted!, related), id },
-            owner ? { deliverTo, mentions: owner } : {},
+            owner ? { deliverTo } : {},
           );
           if (owner) addressed.push(notice);
-          else if (task.messageId) posted.push(notice);
         },
         receipt: async ({ id, task, body, assignee, actor }) => {
           const [quoted] = await quote([task]);
           const self = assignee.id === actor.id;
-          const notice = await inTaskThread(
+          const notice = await inTaskConversation(
             task,
             { ...body(quoted!), id },
-            { deliverTo: self ? null : assignee.agentId, mentions: assignee },
+            { deliverTo: self ? null : assignee.agentId },
           );
-          // A task with no message in the channel: the assignee follows the task.
-          if (!task.messageId) {
-            await followTask(
-              tx,
-              conversation,
-              task.id,
-              memberId(assignee),
-              self ? "claimed" : "assigned",
-            );
-            return notice;
-          }
-          // The receipt is the thread's first reply when it starts the thread, so it enrolls as a
-          // reply does: the assignee, and the root's author while nobody follows yet.
-          const root = await tx.message.findUniqueOrThrow({
-            where: { id: hostMessageId(task) },
-            select: { senderMemberId: true },
-          });
-          await enrollThreadReplyFollowers(tx, {
-            workspaceId: conversation.workspaceId,
-            conversationId: conversation.conversationId,
-            root: { id: hostMessageId(task), senderMemberId: root.senderMemberId },
-            participantMemberIds: [memberId(assignee)],
-          });
+          await followTask(
+            tx,
+            conversation,
+            task.id,
+            memberId(assignee),
+            self ? "claimed" : "assigned",
+          );
           return notice;
         },
       };
@@ -274,8 +240,6 @@ export async function withNotices<T>(
   return result;
 }
 
-/** Post one server notice (a null sender); only a receipt mentions a member and names the Agent
- * it is delivered to. */
 async function writeNotice(
   tx: Transaction,
   conversation: ConversationRef,
@@ -292,20 +256,6 @@ async function writeNotice(
       threadRootId: input.threadRootId,
       body: input.body,
       sequence,
-      mentions: input.mentions
-        ? {
-            create: {
-              memberId: memberId(input.mentions),
-              workspaceId,
-              kind: input.mentions.agentId ? "agent" : "user",
-              actorId: input.mentions.agentId ?? input.mentions.userId!,
-              handle: input.mentions.agent?.name ?? input.mentions.user!.username,
-            },
-          }
-        : undefined,
-      deliveries: input.deliverTo
-        ? { create: { conversationId, workspaceId, agentId: input.deliverTo, sequence } }
-        : undefined,
     },
     select: {
       id: true,

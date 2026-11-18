@@ -144,3 +144,57 @@ test("an old task made from a channel message still names that message and its t
   expect(view!.sourceMessageId).toBeUndefined();
   expect(view!.sourceMessage).toBeNull();
 });
+
+test("an old task's notices and receipts go to its own conversation and never to its message thread", async () => {
+  const task = await legacyTask("Quiet old thread");
+  const board = new TaskBoard(db);
+  const principal = { workspaceId, userId };
+  await board.execute(principal, {
+    operation: "assign",
+    idempotencyKey: crypto.randomUUID(),
+    conversationId: channel.id,
+    number: task.number,
+    assignee: `user:${userId}`,
+  });
+  await board.execute(principal, {
+    operation: "update",
+    idempotencyKey: crypto.randomUUID(),
+    conversationId: channel.id,
+    number: task.number,
+    status: "in_progress",
+  });
+
+  expect(await db.message.count({ where: { threadRootId: task.messageId } })).toBe(0);
+  expect(await db.threadFollow.count({ where: { rootMessageId: task.messageId! } })).toBe(0);
+  const stored = await db.task.findUniqueOrThrow({
+    where: { id: task.id },
+    select: { discussionConversationId: true },
+  });
+  const notices = await db.systemMessage.findMany({
+    where: { conversationId: stored.discussionConversationId! },
+    select: { kind: true },
+  });
+  expect(notices.length).toBe(2);
+});
+
+test("an old task's unfollow notice goes to its own conversation, and with none it posts nothing", async () => {
+  const task = await legacyTask("Followed once");
+  const conversations = new TaskConversations({ db, reader: "people", dependencies: {} });
+  const ref = { conversationId: channel.id, number: task.number };
+  const principal = { workspaceId, userId };
+
+  await conversations.follow(principal, ref);
+  await conversations.unfollow(principal, ref);
+  expect(await db.message.count({ where: { threadRootId: task.messageId } })).toBe(0);
+  expect(
+    (await db.task.findUniqueOrThrow({ where: { id: task.id } })).discussionConversationId,
+  ).toBeNull();
+
+  const { conversationId } = await conversations.open(principal, ref);
+  await conversations.follow(principal, ref);
+  await conversations.unfollow(principal, ref, "not mine");
+  expect(await db.message.count({ where: { threadRootId: task.messageId } })).toBe(0);
+  expect(
+    await db.systemMessage.findMany({ where: { conversationId }, select: { kind: true } }),
+  ).toEqual([{ kind: "task.unfollowed" }]);
+});

@@ -67,17 +67,16 @@ order helpers live beside it in `task-order.ts`.
   through `withNotices`, which holds the conversation lock and signals open
   pages after the commit. Creation and conversion post no chat message (a task is
   made from its source message, and a composer's "Send as task" posts none); assignment, claims,
-  status moves and unassignment post in the Task's own conversation, or in the message thread of
-  a Task made before task conversations. `unclaim`, `delete`, `amend`, the resource `receipt`, `history`,
+  status moves and unassignment post in the Task's own conversation (a Task made from a channel
+  message never writes to that message's thread). `unclaim`, `delete`, `amend`, the resource `receipt`, `history`,
   `list` and no-op writes post nothing, except that an `amend` which gives a started Task an
   unfinished blocker posts the notice below. Delivered and pushed notices, each to one member only
-  and posted in the Task's own thread (`NoticeWriter.toOwner`; with no owner it is posted and
+  and posted in the Task's own conversation (`NoticeWriter.toOwner`; with no owner it is posted and
   delivered to no one; the member who caused it is not woken): the assignment receipt; "`#N` is
   finished, so this can start" to the owner or reserved assignee when a status move to done or
   closed satisfies the Task's last open blocker; "now blocked by `#N`" to the owner of an
   In Progress or In Review Task that an amendment gave an unfinished blocker; and "all subtasks
-  are finished" to a parent's owner when its last open subtask is done or closed. A person
-  addressed hears of it through `activity.changed.v1` (it is their Activity mention). No notice counts unread, so every notice's
+  are finished" to a parent's owner when its last open subtask is done or closed. No notice counts unread, so every notice's
   message signal reaches only the conversation's own realtime channel.
 - Every Task write also announces the new copies of the Tasks it changed, or
   the ids it deleted, as `task.changed.v1` (`ConversationRealtime.taskChanged`),

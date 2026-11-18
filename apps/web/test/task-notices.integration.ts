@@ -1,11 +1,8 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
-import type { ConversationRealtimeMessage } from "#src/server/conversations/conversation-realtime.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { PrismaWebPushSubscriptionStore } from "#src/server/notifications/prisma-web-push-subscriptions.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import { legacyMessageTask } from "./fixtures/legacy-message-task";
 
 const connectionString = Bun.env.TASK_TEST_DATABASE_URL ?? Bun.env.DATABASE_URL;
 if (!connectionString)
@@ -74,21 +71,7 @@ async function channelFixture(name: string) {
     },
     include: { members: true },
   });
-  const signaled: ConversationRealtimeMessage[] = [];
-  const pushed: string[] = [];
-  const board = new TaskBoard(db, {
-    realtime: {
-      async memberChanged() {},
-      async messageAvailable(event) {
-        signaled.push(event);
-      },
-    },
-    notifications: {
-      async notifyMessage(messageId) {
-        pushed.push(messageId);
-      },
-    },
-  });
+  const board = new TaskBoard(db);
   type Principal =
     | { workspaceId: string; userId: string }
     | { workspaceId: string; agentId: string };
@@ -100,57 +83,45 @@ async function channelFixture(name: string) {
         : { conversationId: channel.id }),
       ...command,
     } as Parameters<TaskBoard["execute"]>[1]);
-  const latestSequence = async () =>
-    (
-      await db.message.findFirst({
-        where: { conversationId: channel.id },
-        orderBy: { sequence: "desc" },
-        select: { sequence: true },
-      })
-    )?.sequence ?? 0;
-  /** Server notices posted after `sequence`, oldest first, with where each one landed. */
-  const noticesAfter = async (sequence: number) =>
-    (
+  /** The server notices in a Task's own conversation, oldest first. */
+  const noticesOf = async (task: { number: number }) => {
+    const { discussionConversationId } = await db.task.findFirstOrThrow({
+      where: { conversationId: channel.id, number: task.number },
+      select: { discussionConversationId: true },
+    });
+    if (!discussionConversationId) return [];
+    return (
       await db.message.findMany({
-        where: { conversationId: channel.id, senderMemberId: null, sequence: { gt: sequence } },
+        where: { conversationId: discussionConversationId, senderMemberId: null },
         orderBy: { sequence: "asc" },
         select: { body: true, threadRootId: true },
       })
     ).map(({ body, threadRootId }) => ({ body, thread: threadRootId }));
-  /** Every server notice in the channel, with its delivery count. */
+  };
+  /** Every server notice in the Tasks' conversations, with its delivery count. */
   const allNotices = () =>
     db.message.findMany({
-      where: { conversationId: channel.id, senderMemberId: null },
-      select: { id: true, _count: { select: { deliveries: true } } },
+      where: {
+        senderMemberId: null,
+        conversation: { kind: "task_thread", taskDiscussionOf: { conversationId: channel.id } },
+      },
+      select: { id: true, conversationId: true, _count: { select: { deliveries: true } } },
     });
   const memberId = (by: { userId?: string; agentId?: string }) =>
     channel.members.find((member) =>
       by.userId ? member.userId === by.userId : member.agentId === by.agentId,
     )!.id;
-  /** Tasks from before task conversations (each a message in the channel), made by `by`. */
-  const legacyTasks = async (by: { userId: string }, titles: string[]) => {
+  const createTasks = async (principal: Principal, titles: string[]) => {
     const tasks = [];
     for (const title of titles)
-      tasks.push(
-        (
-          await legacyMessageTask(db, {
-            conversationId: channel.id,
-            workspaceId,
-            creatorMemberId: memberId(by),
-            title,
-          })
-        ).task,
-      );
+      tasks.push((await run(principal, { operation: "create", title })).tasks[0]!);
     return tasks;
   };
   return {
     channel,
-    signaled,
-    pushed,
-    legacyTasks,
+    createTasks,
     run,
-    latestSequence,
-    noticesAfter,
+    noticesOf,
     allNotices,
     memberId,
     asAlice: { workspaceId, userId: alice.id },
@@ -159,25 +130,24 @@ async function channelFixture(name: string) {
   };
 }
 
-test("claims, moves and unassignment post in the Task's own thread", async () => {
-  const { run, latestSequence, noticesAfter, legacyTasks, asAlice, asBob, asAgent } =
-    await channelFixture("thread");
-  const [shipTask, docsTask, testsTask] = await legacyTasks({ userId: alice.id }, [
+test("claims, moves and unassignment post in the Task's own conversation", async () => {
+  const { run, createTasks, noticesOf, asAlice, asBob, asAgent } = await channelFixture("thread");
+  const [shipTask, docsTask, testsTask] = await createTasks(asAlice, [
     "Ship notices",
     "Write docs",
     "Add tests",
   ]);
-  const inThread = (task: typeof shipTask, body: string) => ({ body, thread: task!.messageId });
+  const own = (body: string) => ({ body, thread: null });
+  const newSince = async (task: { number: number }, seen: number) =>
+    (await noticesOf(task)).slice(seen);
 
   // Claiming an unassigned Todo Task moves it to In Progress and says so once, as a claim.
-  let mark = await latestSequence();
   await run(asAgent, { operation: "claim", number: shipTask!.number });
-  expect(await noticesAfter(mark)).toEqual([
-    inThread(shipTask, `📌 ${agent.name} claimed #${shipTask!.number} "Ship notices"`),
+  expect(await noticesOf(shipTask!)).toEqual([
+    own(`📌 ${agent.name} claimed #${shipTask!.number} "Ship notices"`),
   ]);
 
   // Each status move names the actor by display name and the status by its label.
-  mark = await latestSequence();
   await run(asAgent, { operation: "update", number: shipTask!.number, status: "in_review" });
   await run(asAgent, { operation: "update", number: shipTask!.number, status: "in_progress" });
   await run(asAlice, { operation: "update", number: shipTask!.number, status: "done" });
@@ -186,8 +156,8 @@ test("claims, moves and unassignment post in the Task's own thread", async () =>
   // A status that does not change posts nothing.
   await run(asAlice, { operation: "update", number: shipTask!.number, status: "closed" });
   const moved = (actor: string, emoji: string, label: string) =>
-    inThread(shipTask, `${emoji} ${actor} moved #${shipTask!.number} "Ship notices" to ${label}`);
-  expect(await noticesAfter(mark)).toEqual([
+    own(`${emoji} ${actor} moved #${shipTask!.number} "Ship notices" to ${label}`);
+  expect(await newSince(shipTask!, 1)).toEqual([
     moved("Notice Agent", "👀", "In Review"),
     moved("Notice Agent", "🔄", "In Progress"),
     moved("Alice An", "✅", "Done"),
@@ -201,7 +171,7 @@ test("claims, moves and unassignment post in the Task's own thread", async () =>
     number: docsTask!.number,
     assignee: `@${bob.username}`,
   });
-  mark = await latestSequence();
+  const seen = (await noticesOf(docsTask!)).length;
   await run(asAlice, { operation: "unassign", number: docsTask!.number });
   await run(asAlice, {
     operation: "assign",
@@ -209,79 +179,61 @@ test("claims, moves and unassignment post in the Task's own thread", async () =>
     assignee: `@${bob.username}`,
   });
   await run(asAlice, { operation: "assign", number: docsTask!.number, assignee: null });
-  const unassigned = inThread(docsTask, `🔓 Alice An unassigned #${docsTask!.number} "Write docs"`);
-  expect(await noticesAfter(mark)).toEqual([
+  const unassigned = own(`🔓 Alice An unassigned #${docsTask!.number} "Write docs"`);
+  expect(await newSince(docsTask!, seen)).toEqual([
     unassigned,
-    inThread(
-      docsTask,
-      `📌 Alice An assigned #${docsTask!.number} "Write docs" to @${bob.username}`,
-    ),
+    own(`📌 Alice An assigned #${docsTask!.number} "Write docs" to @${bob.username}`),
     unassigned,
   ]);
 
   // A member without a display name is named by username.
   await run(asBob, { operation: "claim", number: testsTask!.number });
-  mark = await latestSequence();
+  const claimed = (await noticesOf(testsTask!)).length;
   await run(asBob, { operation: "update", number: testsTask!.number, status: "in_review" });
-  expect(await noticesAfter(mark)).toEqual([
-    inThread(testsTask, `👀 ${bob.username} moved #${testsTask!.number} "Add tests" to In Review`),
+  expect(await newSince(testsTask!, claimed)).toEqual([
+    own(`👀 ${bob.username} moved #${testsTask!.number} "Add tests" to In Review`),
   ]);
 });
 
 test("unclaiming and deleting a Task post no notice", async () => {
-  const { run, latestSequence, noticesAfter, asAlice, asBob } = await channelFixture("silent");
+  const { run, allNotices, asAlice, asBob } = await channelFixture("silent");
   const task = (await run(asAlice, { operation: "create", title: "Quiet task" })).tasks[0]!;
   await run(asBob, { operation: "claim", number: task.number });
-  const mark = await latestSequence();
+  const before = (await allNotices()).length;
   await run(asBob, { operation: "unclaim", number: task.number });
   await run(asAlice, { operation: "delete", number: task.number });
-  expect(await noticesAfter(mark)).toEqual([]);
+  expect((await allNotices()).length).toBe(before);
 });
 
-test("only the assignment receipt is delivered and pushed; no notice reaches a badge channel", async () => {
-  const {
-    channel,
-    signaled,
-    pushed,
-    run,
-    latestSequence,
-    noticesAfter,
-    allNotices,
-    legacyTasks,
-    asAlice,
-    asAgent,
-  } = await channelFixture("receipts");
-  const [startedTask, reservedTask] = await legacyTasks({ userId: alice.id }, [
-    "Started by me",
-    "Reserved",
-  ]);
+test("only the assignment receipt is delivered", async () => {
+  const { run, noticesOf, allNotices, createTasks, asAlice, asAgent } =
+    await channelFixture("receipts");
+  const [startedTask, reservedTask] = await createTasks(asAlice, ["Started by me", "Reserved"]);
 
-  // Assigned to oneself, a Task's receipt is the one assignment notice, in the Task's own thread.
-  let mark = await latestSequence();
+  // Assigned to oneself, a Task's receipt is the one assignment notice, in the Task's own conversation.
   const started = await run(asAgent, {
     operation: "assign",
     number: startedTask!.number,
     assignee: `@${agent.name}`,
   });
   const startedLine = `📌 Notice Agent assigned #${startedTask!.number} "Started by me" to @${agent.name}`;
-  expect(await noticesAfter(mark)).toEqual([
+  expect(await noticesOf(startedTask!)).toEqual([
     // An Agent's own assignment carries its queue note (task #716); earlier tests leave the
     // Agent other queued Tasks, so the position is not pinned here.
-    { body: expect.stringContaining(startedLine), thread: startedTask!.messageId },
+    { body: expect.stringContaining(startedLine), thread: null },
   ]);
   expect(started.assignmentReceipts).toEqual([
     expect.objectContaining({ content: expect.stringContaining(startedLine) }),
   ]);
 
   // Reserved for someone else, it is the same assignment notice.
-  mark = await latestSequence();
   const reserved = await run(asAlice, {
     operation: "assign",
     number: reservedTask!.number,
     assignee: `@${agent.name}`,
   });
   const assignLine = `📌 Alice An assigned #${reservedTask!.number} "Reserved" to @${agent.name} — do it first`;
-  expect(await noticesAfter(mark)).toEqual([{ body: assignLine, thread: reservedTask!.messageId }]);
+  expect(await noticesOf(reservedTask!)).toEqual([{ body: assignLine, thread: null }]);
   expect(reserved.assignmentReceipts).toEqual([
     expect.objectContaining({ state: "assigned", content: assignLine }),
   ]);
@@ -289,113 +241,69 @@ test("only the assignment receipt is delivered and pushed; no notice reaches a b
   await run(asAlice, { operation: "update", number: reservedTask!.number, status: "closed" });
   await run(asAlice, { operation: "unassign", number: reservedTask!.number });
 
-  const receiptIds = [started, reserved].map((result) => result.assignmentReceipts![0]!.messageId);
   const notices = await allNotices();
-  // Each receipt carries its push; no other notice has one. Only the receipt of a person's
-  // assignment is delivered to the Agent: an Agent that assigns itself never wakes itself.
-  const receiptsFirst = [...receiptIds].sort();
+  // Only the receipt of a person's assignment is delivered to the Agent: an Agent that assigns
+  // itself never wakes itself.
   expect(
     notices
       .filter((notice) => notice._count.deliveries > 0)
       .map((notice) => [notice.id, notice._count.deliveries]),
   ).toEqual([[reserved.assignmentReceipts![0]!.messageId, 1]]);
-  expect(pushed.filter((id) => notices.some((notice) => notice.id === id)).sort()).toEqual(
-    receiptsFirst,
-  );
-
-  // No notice counts unread, the receipt included, so each reaches the open conversation only,
-  // never the Workspace-wide signal that drives unread badges.
-  for (const notice of notices) {
-    const events = signaled.filter((event) => event.messageId === notice.id);
-    expect(events).toHaveLength(1);
-    expect(events[0]!.conversationId).toBe(channel.id);
-    expect(events[0]).not.toHaveProperty("workspaceId");
-  }
 });
 
-test("an assignment receipt mentions its assignee: a muted human assignee is still pushed, and an Agent assignee reads it as its mention", async () => {
-  const { channel, run, memberId, legacyTasks, asAlice } = await channelFixture("muted-assignee");
-  const [first, second, third] = await legacyTasks({ userId: alice.id }, [
-    "Review the plan",
-    "Second",
-    "For the Agent",
-  ]);
-  await db.conversationMember.update({
-    where: { id: memberId({ userId: bob.id }) },
-    data: { channelMuted: true },
-  });
-  await db.userPreference.upsert({
-    where: { userId: bob.id },
-    create: { userId: bob.id, browserNotificationsEnabled: true },
-    update: { browserNotificationsEnabled: true },
-  });
-  const push = new PrismaWebPushSubscriptionStore(db);
+test("a receipt lands in the Task's own conversation: the assignee follows the Task, an Agent assignee gets its one delivery there", async () => {
+  const { channel, run, memberId, createTasks, asAlice } = await channelFixture("receipt-target");
+  const [first, second] = await createTasks(asAlice, ["Review the plan", "For the Agent"]);
+  const messagesInChannel = () => db.message.count({ where: { conversationId: channel.id } });
+  const before = await messagesInChannel();
 
-  const created = await run(asAlice, {
+  const forBob = await run(asAlice, {
     operation: "assign",
     number: first!.number,
     assignee: `@${bob.username}`,
   });
-  const assigned = await run(asAlice, {
-    operation: "assign",
-    number: second!.number,
-    assignee: `@${bob.username}`,
+  const bobReceipt = forBob.assignmentReceipts![0]!;
+  const stored = await db.message.findUniqueOrThrow({
+    where: { id: bobReceipt.messageId },
+    select: {
+      body: true,
+      threadRootId: true,
+      conversation: { select: { kind: true, taskDiscussionOf: { select: { number: true } } } },
+      _count: { select: { deliveries: true } },
+    },
   });
-  for (const [result, task] of [
-    [created, created.tasks[0]!],
-    [assigned, assigned.tasks[0]!],
-  ] as const) {
-    const receipt = result.assignmentReceipts![0]!;
-    // The body is the same server-built text; the mention row is what reaches the muted assignee.
-    expect(receipt.content).toEndWith(` to @${bob.username}`);
-    const stored = await db.message.findUniqueOrThrow({
-      where: { id: receipt.messageId },
-      select: {
-        body: true,
-        threadRootId: true,
-        mentions: { select: { kind: true, actorId: true, handle: true } },
-        _count: { select: { deliveries: true } },
-      },
-    });
-    expect(stored).toEqual({
-      body: receipt.content,
-      threadRootId: task.messageId,
-      mentions: [{ kind: "user", actorId: bob.id, handle: bob.username }],
-      _count: { deliveries: 0 },
-    });
-    expect(await push.notificationForRecipient(receipt.messageId, bob.id)).not.toBeNull();
-  }
+  expect(stored).toEqual({
+    body: bobReceipt.content,
+    threadRootId: null,
+    conversation: { kind: "task_thread", taskDiscussionOf: { number: first!.number } },
+    _count: { deliveries: 0 },
+  });
+  expect(
+    await db.taskFollow.count({
+      where: { memberId: memberId({ userId: bob.id }), task: { number: first!.number } },
+    }),
+  ).toBe(1);
 
-  // An Agent assignee's receipt keeps its one delivery and now reads as a personal mention, aimed
-  // at the Task's thread, which the Agent now follows, and so does the Task's author, as a first
-  // reply enrolls them.
   const forAgent = await run(asAlice, {
     operation: "assign",
-    number: third!.number,
+    number: second!.number,
     assignee: `@${agent.name}`,
   });
   const agentReceipt = forAgent.assignmentReceipts![0]!;
-  const agentTask = forAgent.tasks[0]!;
   const pending = await new PrismaDirectConversationRepository(db).readPendingAgentDeliveries(
     workspaceId,
     agent.id,
   );
+  const taskConversation = await db.task.findFirstOrThrow({
+    where: { conversationId: channel.id, number: second!.number },
+    select: { discussionConversationId: true },
+  });
   expect(pending.filter((delivery) => delivery.messageId === agentReceipt.messageId)).toEqual([
     expect.objectContaining({
       body: agentReceipt.content,
-      target: `#${channel.channelName}:${agentTask.messageId}`,
-      mentionsAgent: true,
+      conversationId: taskConversation.discussionConversationId,
+      target: `#${channel.channelName}:#${second!.number}`,
     }),
   ]);
-  expect(
-    await db.threadFollow.findMany({
-      where: { rootMessageId: agentTask.messageId! },
-      select: { memberId: true },
-      orderBy: { memberId: "asc" },
-    }),
-  ).toEqual(
-    [memberId({ agentId: agent.id }), memberId({ userId: alice.id })]
-      .sort()
-      .map((id) => ({ memberId: id })),
-  );
+  expect(await messagesInChannel()).toBe(before);
 });

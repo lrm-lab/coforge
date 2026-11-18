@@ -165,11 +165,5 @@ export async function ensureTaskExecutionSession(
         },
         select: { id: true },
       });
-  // A task without a message in the channel has no delivery of that message to point at the session.
-  if (task.messageId)
-    await tx.agentMessageDelivery.updateMany({
-      where: { messageId: task.messageId, agentId },
-      data: { taskExecutionSessionId: session.id },
-    });
   return session;
 }

@@ -110,7 +110,6 @@ export async function readIdleTaskFacts(
       dueAt: true,
       createdAt: true,
       ownerMemberId: true,
-      messageId: true,
       conversationId: true,
       discussionConversationId: true,
       conversation: { select: BOARD_SELECT },
@@ -250,60 +249,29 @@ export async function readIdleTaskFacts(
   });
 }
 
-/**
- * The newest member-sent message (server notices have no sender) in each Task's conversation, by
- * Task id: its own conversation, or the thread of the message an earlier Task started as.
- */
+/** The newest member-sent message (server notices have no sender) in each Task's conversation, by Task id. */
 async function conversationMessages(
   db: PrismaClient,
   workspaceId: string,
-  tasks: {
-    id: string;
-    conversationId: string;
-    messageId: string | null;
-    discussionConversationId: string | null;
-  }[],
+  tasks: { id: string; discussionConversationId: string | null }[],
   sender: Prisma.MessageWhereInput,
 ) {
   const discussions = tasks.filter((task) => task.discussionConversationId);
-  const threads = tasks.filter((task) => task.messageId);
-  const where = {
-    workspaceId,
-    senderMemberId: { not: null },
-    ...sender,
-  } satisfies Prisma.MessageWhereInput;
-  const [inDiscussions, inThreads] = await Promise.all([
-    discussions.length === 0
-      ? []
-      : db.message.groupBy({
-          by: ["conversationId"],
-          where: {
-            ...where,
-            conversationId: { in: discussions.map((task) => task.discussionConversationId!) },
-          },
-          _max: { createdAt: true },
-        }),
-    // A thread's replies are in its root's conversation: `(conversationId, threadRootId, …)`.
-    threads.length === 0
-      ? []
-      : db.message.groupBy({
-          by: ["threadRootId"],
-          where: {
-            ...where,
-            conversationId: { in: [...new Set(threads.map((task) => task.conversationId))] },
-            threadRootId: { in: threads.map((task) => task.messageId!) },
-          },
-          _max: { createdAt: true },
-        }),
-  ]);
+  if (discussions.length === 0) return new Map<string, Date>();
+  const rows = await db.message.groupBy({
+    by: ["conversationId"],
+    where: {
+      workspaceId,
+      senderMemberId: { not: null },
+      ...sender,
+      conversationId: { in: discussions.map((task) => task.discussionConversationId!) },
+    },
+    _max: { createdAt: true },
+  });
   const newest = new Map<string, Date>();
-  for (const task of tasks) {
-    const date = latest([
-      inDiscussions.find((row) => row.conversationId === task.discussionConversationId)?._max
-        .createdAt,
-      inThreads.find((row) => task.messageId && row.threadRootId === task.messageId)?._max
-        .createdAt,
-    ]);
+  for (const task of discussions) {
+    const date = rows.find((row) => row.conversationId === task.discussionConversationId)?._max
+      .createdAt;
     if (date) newest.set(task.id, date);
   }
   return newest;

@@ -7,12 +7,11 @@ import type {
 } from "#src/server/conversations/conversation-realtime.server";
 import { enrollGeneralChannel } from "#src/server/conversations/general-channel.server";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
-import { legacyMessageTask } from "./fixtures/legacy-message-task";
 
 /**
- * An assignment receipt is a server notice: nobody counts it unread, so its signal goes only to
- * the conversation's own channel, never to a sidebar's badge channel; a person assigned hears of
- * their Activity mention through `activity.changed.v1` instead.
+ * An assignment receipt is a server notice in the Task's own conversation: its signal goes only to
+ * that conversation's channel; the Task's followers (the creator, and a person assigned) hear of it
+ * through `activity.changed.v1`.
  *
  * Skipped unless `CHANNEL_TEST_DATABASE_URL` points at local PostgreSQL.
  */
@@ -59,40 +58,45 @@ test.skipIf(!connectionString)(
       };
       const board = new TaskBoard(db, { realtime });
       const asAda = { workspaceId: workspace.id, userId: ada.id };
-      const adaSeat = await db.conversationMember.findFirstOrThrow({
-        where: { conversationId: general.id, userId: ada.id },
-      });
-      const legacyTask = async (title: string) =>
+      const createTask = async (title: string) =>
         (
-          await legacyMessageTask(db, {
+          await board.execute(asAda, {
+            operation: "create",
+            idempotencyKey: crypto.randomUUID(),
             conversationId: general.id,
-            workspaceId: workspace.id,
-            creatorMemberId: adaSeat.id,
             title,
           })
-        ).task;
+        ).tasks[0]!;
       await board.execute(asAda, {
         operation: "assign",
         idempotencyKey: crypto.randomUUID(),
         conversationId: general.id,
-        number: (await legacyTask("Review the plan")).number,
+        number: (await createTask("Review the plan")).number,
         assignee: `@${bob.username}`,
       });
-      const receipt = await db.message.findFirstOrThrow({
-        where: { conversationId: general.id, senderMemberId: null, mentions: { some: {} } },
-      });
-      // The notice lands in the task's own thread, so the signal names its root.
-      expect(receipt.threadRootId).not.toBeNull();
-      const receiptSignals = messages.filter((message) => message.messageId === receipt.id);
+      const taskReceipts = () =>
+        db.message.findMany({
+          where: {
+            senderMemberId: null,
+            conversation: { kind: "task_thread", taskDiscussionOf: { conversationId: general.id } },
+          },
+          select: { id: true, conversationId: true, threadRootId: true },
+        });
+      const [receipt] = await taskReceipts();
+      expect(receipt!.threadRootId).toBeNull();
+      expect(await db.message.count({ where: { conversationId: general.id } })).toBe(0);
+      const receiptSignals = messages.filter((message) => message.messageId === receipt!.id);
       expect(receiptSignals).toEqual([
         {
-          conversationId: general.id,
-          messageId: receipt.id,
-          sequence: receipt.sequence,
-          threadRootId: receipt.threadRootId!,
+          conversationId: receipt!.conversationId,
+          messageId: receipt!.id,
+          sequence: expect.any(Number),
+          workspaceId: workspace.id,
         },
       ]);
-      expect(activity).toEqual([{ workspaceId: workspace.id, userId: bob.id }]);
+      const told = (...users: { id: string }[]) =>
+        users.map((user) => ({ workspaceId: workspace.id, userId: user.id }));
+      expect(activity).toEqual(told(ada, bob));
 
       // Assigning later tells the person the same way; an Agent assignee has no Activity to tell.
       const agent = await db.agent.create({
@@ -113,7 +117,7 @@ test.skipIf(!connectionString)(
       await db.conversationMember.create({
         data: { conversationId: general.id, workspaceId: workspace.id, agentId: agent.id },
       });
-      const later = await legacyTask("Draft the notes");
+      const later = await createTask("Draft the notes");
       const assign = (assignee: string) =>
         board.execute(asAda, {
           operation: "assign",
@@ -124,18 +128,11 @@ test.skipIf(!connectionString)(
         });
       activity.length = 0;
       await assign(`@${agent.name}`);
-      expect(activity).toEqual([]);
+      expect(activity).toEqual(told(ada));
+      activity.length = 0;
       await assign(`@${bob.username}`);
-      expect(activity).toEqual([{ workspaceId: workspace.id, userId: bob.id }]);
-      const receipts = await db.message.findMany({
-        where: { conversationId: general.id, senderMemberId: null, mentions: { some: {} } },
-        select: { id: true },
-      });
-      expect(receipts).toHaveLength(3);
-      for (const { id } of receipts)
-        expect(messages.filter((message) => message.messageId === id)).toEqual([
-          expect.not.objectContaining({ workspaceId: expect.anything() }),
-        ]);
+      expect(activity).toEqual(told(ada, bob));
+      expect(await taskReceipts()).toHaveLength(3);
     } finally {
       await db.workspace.delete({ where: { id: workspace.id } }).catch(() => {});
       await db.user.deleteMany({ where: { username: { endsWith: suffix } } }).catch(() => {});

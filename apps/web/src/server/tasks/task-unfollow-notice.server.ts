@@ -5,8 +5,7 @@ import type { TaskBoardPorts } from "./task-board-ports.server";
 import { TASK_MEMBER_SELECT } from "./task-view.server";
 
 /**
- * The line a task's conversation (or, for a task made from a message, that message's thread) shows
- * when someone stops following it, as a thread shows it. A reason is the follower's own words:
+ * The line a task's conversation shows when someone stops following it. A reason is the follower's own words:
  * stored mention tokens in it are broken so it cannot forge a mention.
  */
 export function unfollowNoticeBody(name: string, reason?: string) {
@@ -15,8 +14,8 @@ export function unfollowNoticeBody(name: string, reason?: string) {
 }
 
 /**
- * Posts that line after a real unfollow. A task with neither a conversation nor a host message has
- * nowhere to show it, and making a conversation just for it would be noise.
+ * Posts that line after a real unfollow. A task with no conversation has nowhere to show it, and
+ * making a conversation just for it would be noise.
  */
 export async function postUnfollowNotice(
   ports: TaskBoardPorts,
@@ -31,7 +30,7 @@ export async function postUnfollowNotice(
   memberId: string,
   reason?: string,
 ) {
-  if (!task.messageId && !task.discussionConversationId) return;
+  if (!task.discussionConversationId) return;
   const member = await ports.db.conversationMember.findUnique({
     where: { id: memberId },
     select: TASK_MEMBER_SELECT,

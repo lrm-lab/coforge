@@ -5,9 +5,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { DELIVERY_RETRY_DELAYS_MS } from "#src/server/conversations/agent-delivery.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
-import { ConversationHistory } from "#src/server/conversations/conversation-history.server";
 import { withPublishBatch } from "./helpers/fake-centrifugo";
-import { legacyMessageTask } from "./fixtures/legacy-message-task";
 
 test("assignment receipts survive mute and disconnect without waking unrelated Agents", async () => {
   const connectionString = Bun.env.TASK_TEST_DATABASE_URL;
@@ -81,22 +79,19 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
     }),
   });
   try {
-    const humanSeat = await db.conversationMember.findFirstOrThrow({
-      where: { conversationId: channel.id, userId: human.id },
-    });
-    const legacyTask = async (conversationId: string, creatorMemberId: string, title: string) =>
+    const createTask = async (conversationId: string, title: string) =>
       (
-        await legacyMessageTask(db, {
+        await board.execute(principal, {
+          operation: "create",
+          idempotencyKey: crypto.randomUUID(),
           conversationId,
-          workspaceId: workspace.id,
-          creatorMemberId,
           title,
         })
-      ).task;
+      ).tasks[0]!;
     const [first, second, third] = [
-      await legacyTask(channel.id, humanSeat.id, "First reserved task"),
-      await legacyTask(channel.id, humanSeat.id, "Second reserved task"),
-      await legacyTask(channel.id, humanSeat.id, "Third reserved task"),
+      await createTask(channel.id, "First reserved task"),
+      await createTask(channel.id, "Second reserved task"),
+      await createTask(channel.id, "Third reserved task"),
     ];
     // The Agents have read the channel up to its Task messages, which woke nobody.
     await db.conversationMember.updateMany({
@@ -125,7 +120,7 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
     // One receipt per Task, each in that Task's own thread and delivered there.
     const receipts = created.assignmentReceipts!;
     expect(receipts.map((receipt) => receipt.state)).toEqual(["assigned", "assigned"]);
-    const threads = created.tasks.map((task) => `${target}:${task.messageId}`);
+    const threads = created.tasks.map((task) => `${target}:#${task.number}`);
     // The receipts are published concurrently, so they may be published in either order. The
     // daemon does not depend on it: it dedupes by delivery and keeps one read cursor per thread.
     // Every attempt fails here, so the delivery retry publishes each receipt 1 + its retries times;
@@ -153,21 +148,26 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
         receipts[index],
       ]);
     expect(published).toHaveLength(publishedSoFar);
-    // Three Task messages and the two receipts; the retries wrote nothing.
-    expect(await db.message.count({ where: { conversationId: channel.id } })).toBe(5);
+    // The receipts are in the Tasks' own conversations; the channel holds no message, and the
+    // retries wrote nothing.
+    expect(await db.message.count({ where: { conversationId: channel.id } })).toBe(0);
     expect(
       await db.message.findMany({
         where: { id: { in: receipts.map((receipt) => receipt.messageId) } },
         orderBy: { sequence: "asc" },
-        select: { threadRootId: true },
+        select: { threadRootId: true, conversation: { select: { kind: true } } },
       }),
-    ).toEqual(created.tasks.map((task) => ({ threadRootId: task.messageId })));
-    // Each thread is followed by its assignee and by the Task's author, as a first reply enrolls.
+    ).toEqual(
+      created.tasks.map(() => ({ threadRootId: null, conversation: { kind: "task_thread" } })),
+    );
     expect(
-      await db.threadFollow.count({
-        where: { rootMessageId: { in: created.tasks.map((task) => task.messageId!) } },
+      await db.taskFollow.count({
+        where: {
+          member: { agentId: assigned!.id },
+          task: { id: { in: created.tasks.map((task) => task.id) } },
+        },
       }),
-    ).toBe(4);
+    ).toBe(2);
     expect(await repo.readPendingAgentDeliveries(workspace.id, assigned!.id)).toEqual(
       receipts.map((receipt, index) =>
         expect.objectContaining({
@@ -183,50 +183,7 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
       resumeMessages: [],
       unreadSummary: {},
     });
-    const recovery = await repo.readAgentRecoveryContext(workspace.id, assigned!.id);
-    expect(recovery.unreadSummary).toEqual({ [threads[0]!]: 1, [threads[1]!]: 1 });
-    expect(recovery.resumeMessages.map((message) => message.messageId)).toEqual(
-      receipts.map((receipt) => receipt.messageId),
-    );
-    // A system notice never holds a send: the send's freshness excludes senderless notices, so
-    // the receipt shows in the delivery read and the recovery context above, not here.
-    expect(
-      (
-        await (
-          await repo.agentTargetFreshness(workspace.id, assigned!.id, threads[0]!)
-        ).readPending(0)
-      ).map((message) => message.senderKind),
-    ).toEqual([]);
     const receipt = receipts[0]!;
-    const page = await repo.readMessagesPage(workspace.id, assigned!.id, threads[0]!, {
-      around: receipt.messageId,
-    });
-    expect(page.messages.find((message) => message.id === receipt.messageId)).toMatchObject({
-      senderKind: "system",
-      channelCoordination: "[CoForge current channel role: member; coordinator=none]",
-      body: receipt.content,
-    });
-    const browser = await new ConversationHistory(db).loadThread(
-      workspace.id,
-      human.id,
-      channel.id,
-      created.tasks[0]!.messageId!,
-    );
-    expect(browser.replies.find((message) => message.id === receipt.messageId)).toMatchObject({
-      senderKind: "system",
-      senderMemberId: null,
-      senderName: "System",
-    });
-    for (const [index, thread] of threads.entries())
-      await repo.advanceAgentReadThrough(
-        workspace.id,
-        assigned!.id,
-        thread,
-        recovery.resumeMessages[index]!.sequence,
-      );
-    expect((await repo.readAgentRecoveryContext(workspace.id, assigned!.id)).unreadSummary).toEqual(
-      {},
-    );
 
     // The Agent owner being Workspace owner must not confer admin authority on the Agent.
     await expect(
@@ -287,10 +244,7 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
       expect.objectContaining({ number: created.tasks[1]!.number, channelRef: target }),
     ]);
     const direct = await repo.getOrCreateUserAgent(workspace.id, human.id, assigned!.id);
-    const directAgentSeat = await db.conversationMember.findFirstOrThrow({
-      where: { conversationId: direct.id, agentId: assigned!.id },
-    });
-    const directTask = await legacyTask(direct.id, directAgentSeat.id, "Direct assignment");
+    const directTask = await createTask(direct.id, "Direct assignment");
     const directCreated = await board.execute(agentPrincipal, {
       operation: "assign",
       idempotencyKey: crypto.randomUUID(),
@@ -300,8 +254,8 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
     });
     // The receipt of the Agent's own self-assignment is not replayed to it on the next `ready`.
     expect(
-      (await repo.readPendingAgentDeliveries(workspace.id, assigned!.id)).find(
-        (message) => message.conversationId === direct.id,
+      (await repo.readPendingAgentDeliveries(workspace.id, assigned!.id)).find((message) =>
+        message.target.startsWith(`@${human.username}:`),
       ),
     ).toBeUndefined();
     const directMine = await board.execute(agentPrincipal, {
@@ -312,29 +266,22 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
     expect(directMine.tasks.find((task) => task.conversationId === direct.id)?.channelRef).toBe(
       `@${human.username}`,
     );
-    // Nor does the Agent owe attention to it.
-    expect(
-      (await repo.readAgentRecoveryContext(workspace.id, assigned!.id)).resumeMessages.find(
-        (message) => message.conversationId === direct.id,
-      ),
-    ).toBeUndefined();
     await board.execute(agentPrincipal, {
       operation: "unclaim",
       idempotencyKey: crypto.randomUUID(),
       target: `@${human.username}`,
       number: directCreated.tasks[0]!.number,
     });
-    const directBrowser = await new ConversationHistory(db).loadThread(
-      workspace.id,
-      human.id,
-      direct.id,
-      directCreated.tasks[0]!.messageId!,
-    );
     expect(
-      directBrowser.replies.find(
-        (message) => message.id === directCreated.assignmentReceipts![0]!.messageId,
-      )?.senderKind,
-    ).toBe("system");
+      await db.message.findUniqueOrThrow({
+        where: { id: directCreated.assignmentReceipts![0]!.messageId },
+        select: {
+          senderMemberId: true,
+          threadRootId: true,
+          conversation: { select: { kind: true } },
+        },
+      }),
+    ).toEqual({ senderMemberId: null, threadRootId: null, conversation: { kind: "task_thread" } });
     const selfAssignCommand = {
       operation: "assign" as const,
       idempotencyKey: crypto.randomUUID(),
@@ -372,16 +319,11 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
       latestSenderKind: "system",
       latestSenderHandle: "",
       latestSenderDescription: "",
-      target: `@${human.username}:${directCreated.tasks[0]!.messageId}`,
+      target: `@${human.username}:#${directCreated.tasks[0]!.number}`,
     };
     expect(
-      (await repo.readPendingAgentDeliveries(workspace.id, assigned!.id)).find(
-        (message) => message.conversationId === direct.id,
-      ),
-    ).toMatchObject(directPending);
-    expect(
-      (await repo.readAgentRecoveryContext(workspace.id, assigned!.id)).resumeMessages.find(
-        (message) => message.conversationId === direct.id,
+      (await repo.readPendingAgentDeliveries(workspace.id, assigned!.id)).find((message) =>
+        message.target.startsWith(`@${human.username}:`),
       ),
     ).toMatchObject(directPending);
     await board.execute(principal, {
@@ -396,9 +338,13 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
     });
 
     const beforeRollback = await db.task.count({ where: { conversationId: channel.id } });
-    const beforeRollbackMessages = await db.message.count({
-      where: { conversationId: channel.id },
-    });
+    const taskMessages = () =>
+      db.message.count({
+        where: {
+          conversation: { kind: "task_thread", taskDiscussionOf: { conversationId: channel.id } },
+        },
+      });
+    const beforeRollbackMessages = await taskMessages();
     // A disposable-DB constraint fails exactly the system Message write, after Task insertion.
     await db.$executeRaw`ALTER TABLE "messages" ADD CONSTRAINT "test_reject_system_receipt" CHECK ("senderMemberId" IS NOT NULL) NOT VALID`;
     try {
@@ -419,9 +365,7 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
         }),
       ).rejects.toThrow();
       expect(await db.task.count({ where: { conversationId: channel.id } })).toBe(beforeRollback);
-      expect(await db.message.count({ where: { conversationId: channel.id } })).toBe(
-        beforeRollbackMessages,
-      );
+      expect(await taskMessages()).toBe(beforeRollbackMessages);
       const afterRollback = await board.execute(agentPrincipal, {
         operation: "list",
         idempotencyKey: crypto.randomUUID(),
