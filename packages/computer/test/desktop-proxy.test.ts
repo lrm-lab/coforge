@@ -125,7 +125,21 @@ describe("desktop route", () => {
 `;
     const html = adaptDesktopHtml(currentPage);
     expect(html).toContain('id="coforge-desktop-reconnect"');
+    expect(html).toContain('id="coforge-desktop-phone-bar"');
     expect(html).not.toContain("msg.remove()");
+  });
+
+  test("a reconnect page that already has phone view is left alone", () => {
+    const current = `<!DOCTYPE html>
+<script type="module">
+    import RFB from "./core/rfb.js";
+    function coforgeDesktopPaste(text) {}
+    const phone = params.get("view") === "phone";
+</script>
+<div id="coforge-desktop-phone-bar"></div>
+<button type="button" id="coforge-desktop-reconnect"></button>
+`;
+    expect(adaptDesktopHtml(current)).toBe(current);
   });
 
   test("a focused paste sends the local plain text into the remote clipboard", () => {
@@ -138,6 +152,17 @@ describe("desktop route", () => {
     expect(html).toContain("sendKey(0xffe3");
     expect(html).toContain("stopImmediatePropagation");
     expect(html).toContain("preventDefault()");
+  });
+
+  test("a phone viewer can fit the shared desktop or pan at native size", () => {
+    const html = adaptDesktopHtml(oldPage);
+    expect(html).toContain('params.get("view") === "phone"');
+    expect(html).toContain("scaleViewport = true");
+    expect(html).toContain("clipViewport = true");
+    expect(html).toContain("dragViewport = true");
+    expect(html).toContain('id="coforge-desktop-phone-bar"');
+    expect(html).toContain("适应屏幕");
+    expect(html).toContain("实际大小");
   });
 
   test("a reconnect page that still uses extended clipboard paste is rewritten", () => {

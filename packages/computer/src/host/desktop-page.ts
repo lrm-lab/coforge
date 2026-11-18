@@ -4,15 +4,34 @@ const RELATIVE_PAGE_SCRIPT = `
     const msg = document.getElementById("msg");
     const screen = document.getElementById("screen");
     const params = new URLSearchParams(location.search);
+    const phone = params.get("view") === "phone";
     const token = params.get("token") || "";
     const proto = location.protocol === "https:" ? "wss" : "ws";
     const base = location.pathname.replace(/\\/desktop\\.html$/, "").replace(/\\/+$/, "");
     const query = token ? \`?token=\${encodeURIComponent(token)}\` : "";
     const url = \`\${proto}://\${location.host}\${base}/websockify\${query}\`;
     const reconnect = document.getElementById("coforge-desktop-reconnect");
+    const phoneBar = document.getElementById("coforge-desktop-phone-bar");
     const showReconnect = (visible) => {
       reconnect?.classList.toggle("is-visible", visible);
     };
+    let phoneMode = "fit";
+    function applyPhoneMode(mode) {
+      if (!rfb || !phone) return;
+      phoneMode = mode;
+      if (mode === "pan") {
+        rfb.scaleViewport = false;
+        rfb.clipViewport = true;
+        rfb.dragViewport = true;
+      } else {
+        rfb.scaleViewport = true;
+        rfb.clipViewport = false;
+        rfb.dragViewport = false;
+      }
+      phoneBar?.querySelectorAll("button[data-mode]").forEach((button) => {
+        button.classList.toggle("is-active", button.dataset.mode === mode);
+      });
+    }
 
     let session = 0;
     let rfb;
@@ -21,9 +40,14 @@ const RELATIVE_PAGE_SCRIPT = `
       rfb = new RFB(screen, url);
       rfb.scaleViewport = true;
       rfb.focusOnClick = true;
+      if (phone) {
+        phoneBar?.classList.add("is-visible");
+        applyPhoneMode(phoneMode);
+      }
       rfb.addEventListener("connect", () => {
         showReconnect(false);
         if (msg) msg.hidden = true;
+        if (phone) applyPhoneMode(phoneMode);
       });
       rfb.addEventListener("securityfailure", (ev) => {
         if (!msg) return;
@@ -46,6 +70,10 @@ const RELATIVE_PAGE_SCRIPT = `
         previous?.disconnect();
       } catch {
       }
+    });
+    phoneBar?.addEventListener("click", (ev) => {
+      const mode = ev.target?.closest?.("button[data-mode]")?.dataset?.mode;
+      if (mode === "fit" || mode === "pan") applyPhoneMode(mode);
     });
     function coforgeDesktopPaste(text) {
       try {
@@ -100,15 +128,30 @@ const RELATIVE_PAGE_SCRIPT = `
 /** Present once office→cloud paste sets the clipboard then sends Ctrl+V. */
 export const DESKTOP_PASTE_CLASSIC_MARKER = "coforgeDesktopPaste";
 
-const RECONNECT_CONTROL = `<style>
+/** Present once the phone fit/pan toolbar is in the adapted page. */
+export const DESKTOP_PHONE_VIEW_MARKER = "coforge-desktop-phone-bar";
+
+const DESKTOP_CONTROLS = `<style>
 #msg[hidden]{display:none!important}
 #coforge-desktop-reconnect{position:fixed;top:50%;left:50%;z-index:2147483647;display:none;place-items:center;width:4.5rem;height:4.5rem;margin:0;padding:0;border:0;border-radius:50%;transform:translate(-50%,-50%);background:rgba(255,255,255,.18);color:#fff;cursor:pointer}
 #coforge-desktop-reconnect.is-visible{display:grid}
-</style><button type="button" id="coforge-desktop-reconnect" aria-label="重新连接"><svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true"><path fill="currentColor" d="M12 6V3L8 7l4 4V8c2.76 0 5 2.24 5 5a5 5 0 0 1-8.9 3.1L6.68 17.5A7 7 0 0 0 19 13c0-3.87-3.13-7-7-7z"/></svg></button>`;
+#coforge-desktop-phone-bar{position:fixed;left:50%;bottom:max(12px,env(safe-area-inset-bottom));z-index:2147483646;display:none;gap:8px;transform:translateX(-50%);padding:8px;border-radius:999px;background:rgba(0,0,0,.55)}
+#coforge-desktop-phone-bar.is-visible{display:flex}
+#coforge-desktop-phone-bar button{min-height:44px;min-width:5.5rem;padding:0 14px;border:0;border-radius:999px;background:rgba(255,255,255,.9);color:#111;font:15px/1.2 sans-serif}
+#coforge-desktop-phone-bar button.is-active{background:#fff;font-weight:600}
+</style><div id="coforge-desktop-phone-bar" role="toolbar" aria-label="手机桌面缩放"><button type="button" data-mode="fit" class="is-active">适应屏幕</button><button type="button" data-mode="pan">实际大小</button></div><button type="button" id="coforge-desktop-reconnect" aria-label="重新连接"><svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true"><path fill="currentColor" d="M12 6V3L8 7l4 4V8c2.76 0 5 2.24 5 5a5 5 0 0 1-8.9 3.1L6.68 17.5A7 7 0 0 0 19 13c0-3.87-3.13-7-7-7z"/></svg></button>`;
 
-function withReconnectControl(html: string): string {
-  if (html.includes("</body>")) return html.replace("</body>", `${RECONNECT_CONTROL}</body>`);
-  return `${html}${RECONNECT_CONTROL}`;
+function stripDesktopControls(html: string): string {
+  return html
+    .replace(/<style>\s*#msg\[hidden\][\s\S]*?<\/style>/g, "")
+    .replace(/<div id="coforge-desktop-phone-bar"[\s\S]*?<\/div>/g, "")
+    .replace(/<button type="button" id="coforge-desktop-reconnect"[\s\S]*?<\/button>/g, "");
+}
+
+function withDesktopControls(html: string): string {
+  const cleaned = stripDesktopControls(html);
+  if (cleaned.includes("</body>")) return cleaned.replace("</body>", `${DESKTOP_CONTROLS}</body>`);
+  return `${cleaned}${DESKTOP_CONTROLS}`;
 }
 
 /** 80 is the Agent display-name cap. A crafted address cannot set a longer title. */
@@ -135,9 +178,9 @@ export function withDesktopTitle(html: string, title: string | undefined): strin
 }
 
 /** Older images require a token in the address and load noVNC from the site root.
- * Current images already use a relative RFB import; both get the reconnect control.
- * A page that already has reconnect but still uses the extended-clipboard paste
- * path is rewritten so office→cloud paste keeps working. */
+ * Current images already use a relative RFB import; both get reconnect and phone view.
+ * A page missing paste or phone view is rewritten so office→cloud paste and phone
+ * fit/pan keep working without waiting for a new image. */
 export function adaptDesktopHtml(html: string): string {
   if (
     !html.includes('from "/core/rfb.js"') &&
@@ -147,10 +190,11 @@ export function adaptDesktopHtml(html: string): string {
     return html;
   if (
     html.includes('id="coforge-desktop-reconnect"') &&
-    html.includes(DESKTOP_PASTE_CLASSIC_MARKER)
+    html.includes(DESKTOP_PASTE_CLASSIC_MARKER) &&
+    html.includes(DESKTOP_PHONE_VIEW_MARKER)
   )
     return html;
-  return withReconnectControl(
+  return withDesktopControls(
     html.replace(
       /<script type="module">[\s\S]*?<\/script>/,
       `<script type="module">${RELATIVE_PAGE_SCRIPT}  </script>`,

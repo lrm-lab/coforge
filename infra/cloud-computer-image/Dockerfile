@@ -239,6 +239,7 @@ COPY scripts/coforge_cdp.py /usr/local/lib/coforge/coforge_cdp.py
 COPY scripts/coforge-chromium.py /usr/local/bin/coforge-chromium
 COPY scripts/coforge-cdp-endpoint /usr/local/bin/coforge-cdp-endpoint
 COPY scripts/coforge_x11.py /usr/local/lib/coforge/coforge_x11.py
+COPY scripts/coforge_dock_policy.py /usr/local/lib/coforge/coforge_dock_policy.py
 COPY scripts/coforge-launcher-focus.py /usr/local/bin/coforge-launcher-focus
 COPY scripts/coforge-dock-ui.py /usr/local/bin/coforge-dock-ui
 COPY scripts/coforge-thunar.sh /usr/local/bin/coforge-thunar
@@ -325,6 +326,10 @@ RUN mkdir -p /usr/local/lib/coforge /usr/local/share/coforge \
   && grep -q '<property name="panels" type="array">' /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml \
   && ! grep -q '>xfce4-panel<' /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-session.xml \
   && test -x /usr/local/bin/coforge-dock-ui \
+  && test -f /usr/local/lib/coforge/coforge_dock_policy.py \
+  && grep -q 'def dock_hides_when_idle' /usr/local/lib/coforge/coforge_dock_policy.py \
+  && grep -q 'return False' /usr/local/lib/coforge/coforge_dock_policy.py \
+  && grep -q 'coforge-desktop-phone-bar' /usr/local/share/coforge/vnc-desktop.html \
   && test -x /usr/local/bin/coforge-thunar \
   && grep -q 'coforge-dock-ui' /usr/local/share/coforge/vnc-xstartup \
   && grep -q 'coforge-dock-ui' /usr/local/share/coforge/vnc-agent-xstartup \

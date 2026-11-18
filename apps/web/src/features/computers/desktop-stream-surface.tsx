@@ -13,6 +13,7 @@ import { useMediaQuery } from "#src/hooks/use-media-query";
 import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
+import { withCloudDesktopPhoneView } from "./cloud-desktop-url";
 import { DESKTOP_CHROME_AUTOHIDE_MS, desktopChromeAutoHides } from "./desktop-chrome-autohide";
 import { desktopLandscapeFrameStyle } from "./desktop-landscape";
 import type { EmbeddedDesktopPhase } from "./embedded-desktop-session";
@@ -68,6 +69,7 @@ export function DesktopStreamSurface({
   const bumpChromeIdle = () => setChromeIdleToken((n) => n + 1);
 
   const showLandscapeToggle = maximized && phone && (portrait || landscape);
+  const streamUrl = phone ? withCloudDesktopPhoneView(url) : url;
   const frameStyle =
     maximized && landscape
       ? desktopLandscapeFrameStyle()
@@ -166,7 +168,7 @@ export function DesktopStreamSurface({
         <div className={cx("relative min-h-0", maximized ? "flex-1" : "h-full w-full")}>
           <iframe
             aria-label={title}
-            src={url}
+            src={streamUrl}
             className="absolute inset-0 h-full w-full border-0 bg-black"
             allow="clipboard-read; clipboard-write"
           />
