@@ -143,11 +143,16 @@ export class ReminderDueReceiver {
     return this.#work.serial(agentId, () => this.#advanceAll(agentId));
   }
 
+  /** A delivery that ran while no wake followed it — the daemon stopped, or the launch was
+   * cancelled — is woken again here, and `wake` settles one whose item is already gone. */
   async #advanceAll(agentId: string): Promise<void> {
     const records = await this.#records(agentId);
-    for (const record of records)
+    for (const record of records) {
       if (record.state === "received" || record.state === "acknowledged")
         await this.#advance(agentId, records, record);
+      else if (record.state === "delivered" && record.wokenAtMs === undefined)
+        this.#wake(agentId, record);
+    }
   }
 
   async #advance(
@@ -168,21 +173,40 @@ export class ReminderDueReceiver {
     if (!this.#running || record.state !== "acknowledged") return;
     const late = this.#now() - Date.parse(record.due.job.fireAt) > LATE_AFTER_MS;
     const itemId = await this.ports.deliver(record.due.job, { late });
+    record.itemId = itemId;
     await this.#transition(agentId, records, record, "delivered");
     this.#log("info", "reminder.due_delivered", record.due, { late });
-    this.#wake(record.due, itemId);
+    this.#wake(agentId, record);
   }
 
-  #wake(due: ReminderDue, itemId: string): void {
-    const key = `wake:${due.agentId}:${itemId}`;
-    const attempt = () =>
-      this.#running ? this.ports.wake(due.agentId, itemId) : Promise.resolve(true);
+  #wake(agentId: string, record: ReminderDueRecord): void {
+    if (record.itemId === undefined || record.wokenAtMs !== undefined) return;
+    const itemId = record.itemId;
+    const key = `wake:${agentId}:${itemId}`;
+    const attempt = async () => {
+      if (!this.#running) return false;
+      const woken = await this.ports.wake(agentId, itemId).catch(() => false);
+      if (woken) await this.#markWoken(agentId, record);
+      return woken;
+    };
     void settle(attempt).then((done) => {
-      if (done) return;
-      this.#log("warn", "reminder.due_wake_failed", due, { item_id: itemId });
+      // A runtime on its way out leaves the wake to the restore that follows, not to a retry.
+      if (!this.#running || done) return;
+      this.#log("warn", "reminder.due_wake_failed", record.due, { item_id: itemId });
       this.#retries.later(key, attempt, () =>
-        this.#log("warn", "reminder.due_wake_abandoned", due, { item_id: itemId }),
+        this.#log("warn", "reminder.due_wake_abandoned", record.due, { item_id: itemId }),
       );
+    });
+  }
+
+  /** Records the wake that reached the Agent, so no later restore wakes it a second time. */
+  async #markWoken(agentId: string, record: ReminderDueRecord): Promise<void> {
+    await this.#work.serial(agentId, async () => {
+      const fresh = await this.#records(agentId);
+      const target = fresh.find((entry) => entry.due.occurrenceId === record.due.occurrenceId);
+      if (!target || target.wokenAtMs !== undefined) return;
+      target.wokenAtMs = this.#now();
+      await this.#save(agentId, fresh);
     });
   }
 
