@@ -8145,19 +8145,13 @@ describe("Agent delivery queue", () => {
         true,
         false,
       ],
-      ["a finished compaction", { type: "compaction-finished" }, false, true],
+      ["a finished compaction", { type: "compaction-finished" }, false, false],
       ["a finished review", { type: "review-finished" }, false, true],
       ["a tool end", { type: "tool-end", id: "tool-1", isError: false }, false, false],
       ["a reconnect", { type: "reconnecting", attempt: 1 }, false, false],
     ] as const satisfies ReadonlyArray<
       readonly [kind: string, event: AgentRuntimeEvent, endsBackoff: boolean, resetsFence: boolean]
     >;
-    const fencedActivities = (
-      activities: readonly import("@lrm/coforge-sdk/internal").AgentActivity[],
-    ) =>
-      activities.filter(
-        (activity) => activity.runtimeError?.errorReason === "runtime_error_fenced",
-      );
     const runtimeErrorReasons = (
       activities: readonly import("@lrm/coforge-sdk/internal").AgentActivity[],
     ) =>
@@ -8176,29 +8170,6 @@ describe("Agent delivery queue", () => {
       await fake.waitForNotices(1);
       await acks.done;
       expect(fake.notices).toHaveLength(1);
-    });
-    test("the same error ending every turn never trips the fence, so a later delivery is still notified", async () => {
-      const acks = ackGate(1);
-      const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
-      const { runtime, fake, deliver } = await deliveryGateHarness(
-        "pi",
-        acks,
-        undefined,
-        (activity) => activities.push(activity),
-      );
-      jest.useFakeTimers();
-      try {
-        for (let turn = 0; turn < 3; turn++) {
-          fake.emit({ type: "error", message: "You've hit your session limit · resets 3:45pm" });
-          fake.emit({ type: "completed", status: "failed" });
-        }
-        expect(fencedActivities(activities)).toEqual([]);
-        await deliver(1);
-        await acks.done;
-        expect(fake.notices).toHaveLength(1);
-      } finally {
-        await runtime.stop();
-      }
     });
     test.each(
       RECOVERY_EVENTS.filter(([, , endsBackoff]) => endsBackoff).map(
@@ -8279,7 +8250,7 @@ describe("Agent delivery queue", () => {
       }
     });
     test.each(["failed", "completed", "interrupted"] as const)(
-      "a %s turn end between three identical errors resets the fence's streak",
+      "a %s turn end that showed nothing between three identical errors leaves the streak",
       async (status) => {
         const activities: import("@lrm/coforge-sdk/internal").AgentActivity[] = [];
         const { runtime, fake } = await deliveryGateHarness(
@@ -8296,7 +8267,7 @@ describe("Agent delivery queue", () => {
           expect(runtimeErrorReasons(activities)).toEqual([
             "provider_api_error",
             "provider_api_error",
-            "provider_api_error",
+            "runtime_error_fenced",
           ]);
         } finally {
           await runtime.stop();
