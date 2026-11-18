@@ -1,4 +1,5 @@
 import { ImportantUnreadNotices, type ImportantUnreadNotice } from "./important-unread-notice";
+import type { AgentConsumedSeqState } from "#src/persistence/agent-consumed-seq-store";
 import {
   ImportantUnreadReminder,
   type ImportantUnreadBatchDelivery,
@@ -58,6 +59,19 @@ export function importantUnreadNoticeText(
     .map((row) => `${row.target} (${row.count})`)
     .join(", ");
   return `Still waiting: ${rows}. Run \`coforge inbox check\` to see them.`;
+}
+
+/**
+ * The read position an Agent's consumed cursor now holds: the furthest frontier among the targets
+ * it names. A batch's highest sequence is compared against this exactly as the batch itself takes
+ * the highest sequence of the conversations it holds, so the same reading settles both — a notice
+ * is done once the Agent has read past what it named, and a `check` that showed none of those
+ * messages leaves the frontier alone and the retries running (task #14).
+ */
+export function consumedThroughSequence(state: AgentConsumedSeqState): number {
+  let highest = 0;
+  for (const entry of Object.values(state.targets)) highest = Math.max(highest, entry.seq ?? 0);
+  return highest;
 }
 
 /** Binds the loop to the daemon: a notice goes into the running session, and a batch nobody read

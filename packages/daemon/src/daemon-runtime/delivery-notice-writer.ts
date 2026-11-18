@@ -1,3 +1,10 @@
+/**
+ * Where a delivery's notice is written into an Agent's process (task #14). Who writes it depends on
+ * who owns the message: the unread loop writes every reliable delivery, because it holds the batch
+ * and retries on one state machine; a Memory Agent's notice and a tracked @mention's are written
+ * here, by the mechanisms that own them. The rule is one writer per message — not one writer in the
+ * daemon — so a delivery that is both is written exactly once.
+ */
 import type { AgentConversationScope } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import { setContextViewMessageIds } from "./context-view-runtime-wiring";
@@ -89,9 +96,10 @@ export function writeDeliveryNotice(
   // notice for the same message. The loop wrote this first attempt into the session just now, so
   // the delivery counts as told; the retries that follow are the loop's.
   //
-  // A tracked @mention keeps this writer instead: its notice names its deliveries to the session
-  // (`deliveryIds`) and its retries are the mention tracker's, not the loop's; routing it here
-  // would take the notice away from the mechanism that guarantees it.
+  // A tracked @mention keeps this writer instead: the rule is one writer per message rather than one
+  // writer in the daemon. Its notice names its deliveries to the session (`deliveryIds`) and its
+  // retries are the mention tracker's, not the loop's; routing it there would take the notice away
+  // from the mechanism that guarantees it.
   const tracked = announced.some((item) => isTrackedMention(item));
   if (
     deliveryImportance(message) === DELIVERY_IMPORTANCE.RELIABLE &&

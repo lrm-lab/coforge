@@ -149,10 +149,13 @@ export class ImportantUnreadReminder {
 
   /** Writes every notice whose schedule says it is due, and reports the ones that ran out. A retry
    * the session refuses keeps its schedule and is nobody's rejection here: the sweep is not the
-   * delivery that asked for it. */
-  flushDue(): void {
-    for (const agentId of this.notices.agents())
+   * delivery that asked for it. Returns how many Agents had a notice pending, so the sweep driving
+   * this can log the tick it took. */
+  flushDue(): number {
+    const agents = this.notices.agents();
+    for (const agentId of agents)
       void Promise.resolve(this.#writeIfDue(agentId)).catch(() => undefined);
+    return agents.length;
   }
 
   #writeIfDue(agentId: string): void | Promise<void> {
