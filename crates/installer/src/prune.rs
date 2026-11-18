@@ -81,7 +81,13 @@ pub fn prune_inactive_versions(
     candidates.sort();
 
     let live = match live_executables(processes) {
-        Ok(live) => live,
+        Ok(LiveExecutables::Known(live)) => live,
+        Ok(LiveExecutables::Blocked(reason)) => {
+            report.warnings.push(format!(
+                "skipping version pruning because {reason}"
+            ));
+            return Ok(report);
+        }
         Err(error) => {
             report.warnings.push(format!(
                 "skipping version pruning because running processes could not be inspected: {error}"
@@ -128,14 +134,30 @@ pub(crate) fn prune_best_effort(
     }
 }
 
-fn live_executables(processes: &dyn ProcessTable) -> Result<Vec<PathBuf>, ProcessError> {
+enum LiveExecutables {
+    Known(Vec<PathBuf>),
+    Blocked(&'static str),
+}
+
+fn live_executables(processes: &dyn ProcessTable) -> Result<LiveExecutables, ProcessError> {
     let mut executables = Vec::new();
     for pid in processes.pids()? {
-        if let Inspection::Alive(identity) = processes.inspect(pid)? {
-            executables.push(identity.executable);
+        match processes.inspect(pid)? {
+            Inspection::Alive(identity) => executables.push(identity.executable),
+            Inspection::Unlinked { .. } => {
+                return Ok(LiveExecutables::Blocked(
+                    "a running process has an unlinked executable",
+                ));
+            }
+            Inspection::Unreadable => {
+                return Ok(LiveExecutables::Blocked(
+                    "some running processes could not be inspected",
+                ));
+            }
+            Inspection::Absent | Inspection::Zombie => {}
         }
     }
-    Ok(executables)
+    Ok(LiveExecutables::Known(executables))
 }
 
 fn version_is_running(store: &VersionStore, version: &str, live: &[PathBuf]) -> bool {
