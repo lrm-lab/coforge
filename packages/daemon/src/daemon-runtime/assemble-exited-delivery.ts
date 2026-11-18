@@ -8,10 +8,7 @@ import { launchFailureLogFields } from "#src/agent-runtime/launch-failure";
 import { AgentStartupDeadlineExceededError } from "#src/agent-runtime/startup-deadline-failure";
 import type { LaunchFailureBackoff } from "#src/agent-runtime/launch-failure-backoff";
 import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
-import {
-  MENTION_DELIVERY_TERMINAL_CODES,
-  startupDeadlineMs as providerStartupDeadlineMs,
-} from "@lrm/coforge-sdk/internal";
+import { MENTION_DELIVERY_TERMINAL_CODES, startupDeadlineMs } from "@lrm/coforge-sdk/internal";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import { logAgentOperationFailure } from "./agent-failure-logs";
 import { AgentExitedDelivery } from "./agent-exited-delivery";
@@ -49,12 +46,12 @@ export type ExitedDeliveryCollaborators = {
 /** How long every attempt to wake this Agent may take together: twice its provider's own startup
  * window plus a minute of slack, so a slow runtime gets two honest tries before the person is told
  * it is not going to start (task #32). */
-function startupDeadlineMs(
+function wakeStartupDeadlineMs(
   ports: ExitedDeliveryCollaborators,
   agentId: string,
 ): number | undefined {
   const provider = ports.agentProcessManager().restartConfig(agentId)?.config.provider;
-  return provider === undefined ? undefined : providerStartupDeadlineMs(provider);
+  return provider === undefined ? undefined : startupDeadlineMs(provider);
 }
 
 /** Settles a delivery for an Agent with no hold, session or launch in flight (`AgentExitedDelivery`). */
@@ -94,7 +91,7 @@ export function assembleExitedDelivery(ports: ExitedDeliveryCollaborators): Agen
       // runs a probe of its own, so what it kept is delivered by that launch and must not be
       // refused here (task #39: the launch ladder stops at the refused key, the hold goes on).
       if (waitsOnProvider(ports.deliveryGate.explicitHold(agentId))) return;
-      const deadlineMs = startupDeadlineMs(ports, agentId);
+      const deadlineMs = wakeStartupDeadlineMs(ports, agentId);
       const cause = ports.wakeLaunchFailures.exhaustedBy(
         agentId,
         WAKE_FAILURE_STREAK_CAP,
