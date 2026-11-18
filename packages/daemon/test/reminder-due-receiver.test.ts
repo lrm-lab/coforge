@@ -134,6 +134,44 @@ test("a repeated Due only repeats its ACK, and never a second item or wake", asy
   expect(h.delivered).toHaveLength(1);
 });
 
+test("a wake that never reached the Agent is woken again on the next restore", async () => {
+  const h = harness({ wakes: [false] });
+  const stopped = h.build();
+  await stopped.receive(due());
+  await flush();
+  expect(h.delivered).toHaveLength(1);
+  stopped.stop();
+  await stopped.awaitIdle();
+
+  const restarted = h.build();
+  await restarted.restore();
+  await flush();
+  expect(h.wakes).toEqual([`${agentId}:item-7`, `${agentId}:item-7`]);
+  expect(h.delivered).toHaveLength(1);
+  await restarted.awaitIdle();
+
+  const again = h.build();
+  await again.restore();
+  await flush();
+  expect(h.wakes).toHaveLength(2);
+});
+
+test("a wake that failed is retried, and the record is settled once one succeeds", async () => {
+  const h = harness({ wakes: ["reject"] });
+  const receiver = h.build();
+  await receiver.receive(due());
+  await flush();
+  expect(h.wakes).toHaveLength(1);
+  await h.advance(60_000);
+  expect(h.wakes).toHaveLength(2);
+  await receiver.awaitIdle();
+  expect(typeof (await h.store.read(agentId))[0]!.wokenAtMs).toBe("number");
+
+  await h.build().restore();
+  await flush();
+  expect(h.wakes).toHaveLength(2);
+});
+
 test("a lost ACK delivers nothing until the republished Due is acknowledged", async () => {
   const h = harness();
   let reachable = false;

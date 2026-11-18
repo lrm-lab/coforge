@@ -98,7 +98,12 @@ export class FileReminderDueStore implements ReminderDueStore {
   }
 
   #record(agentId: string, value: unknown): ReminderDueRecord {
-    const entry = value as { state?: unknown; due?: Partial<ReminderDue> } | null;
+    const entry = value as {
+      state?: unknown;
+      due?: Partial<ReminderDue>;
+      itemId?: unknown;
+      wokenAtMs?: unknown;
+    } | null;
     const due = entry?.due;
     const job = due?.job as Record<string, unknown> | undefined;
     if (
@@ -124,6 +129,8 @@ export class FileReminderDueStore implements ReminderDueStore {
     return {
       state: entry.state as ReminderDueRecordState,
       due: structuredClone(due as ReminderDue),
+      ...(text(entry.itemId) ? { itemId: entry.itemId } : {}),
+      ...(Number.isSafeInteger(entry.wokenAtMs) ? { wokenAtMs: entry.wokenAtMs as number } : {}),
     };
   }
 }
