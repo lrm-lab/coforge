@@ -39,6 +39,10 @@ type DuplicateRecord = {
   pinned: boolean;
 };
 
+export function normalizedMemoryContent(content: string) {
+  return content.normalize("NFKC").trim().replace(/\s+/gu, " ");
+}
+
 export function duplicateMemorySuggestions(entries: readonly DuplicateRecord[], limit = 5) {
   const seen = new Map<string, DuplicateRecord>();
   const results: {
@@ -48,7 +52,7 @@ export function duplicateMemorySuggestions(entries: readonly DuplicateRecord[], 
   }[] = [];
   for (const entry of entries) {
     if (entry.pinned) continue;
-    const text = entry.content.normalize("NFKC").trim().replace(/\s+/gu, " ");
+    const text = normalizedMemoryContent(entry.content);
     if (!text) continue;
     const key = JSON.stringify([entry.projectId, entry.applicability, entry.kind, text]);
     const existing = seen.get(key);

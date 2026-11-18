@@ -14,6 +14,49 @@ type Reviewer = { workspaceId: string; userId: string };
 type Suggestion = { id: string; kind: string; payload: Prisma.JsonValue };
 type Edit = Pick<Partial<TeamMemoryDraft>, "title" | "content">;
 
+export async function submitMemorySuggestion(db: PrismaClient, actor: Reviewer, input: unknown) {
+  let command;
+  try {
+    command = decodeTeamMemoryCommand(input);
+  } catch {
+    throw new TeamMemoryError("invalid");
+  }
+  if (command.operation !== "create" && command.operation !== "update")
+    throw new TeamMemoryError("invalid");
+  if (command.reviewToken || command.maintenanceToken) throw new TeamMemoryError("invalid");
+  return db.$transaction(async (tx) => {
+    await teamMemoryAccess(tx, actor);
+    if (command.operation === "update") {
+      const target = await tx.teamMemoryEntry.findFirst({
+        where: {
+          workspaceId: actor.workspaceId,
+          id: command.id,
+          revision: command.revision,
+          status: { not: "deleted" },
+        },
+        select: { id: true },
+      });
+      if (!target) throw new TeamMemoryError("conflict");
+    }
+    if (
+      command.evidence?.length &&
+      (await readableMemoryEvidence(tx, actor.workspaceId, command.evidence)).length !==
+        command.evidence.length
+    )
+      throw new TeamMemoryError("forbidden");
+    await tx.teamMemorySuggestion.createMany({
+      data: {
+        workspaceId: actor.workspaceId,
+        sourceKey: `draft:${actor.userId}:${command.requestId}`,
+        kind: "draft",
+        payload: command,
+      },
+      skipDuplicates: true,
+    });
+    return { status: "queued" as const };
+  });
+}
+
 export async function listMemorySuggestions(db: PrismaClient, actor: Reviewer, after?: string) {
   return db.$transaction(async (tx) => {
     await teamMemoryAccess(tx, actor);
@@ -33,14 +76,31 @@ export async function listMemorySuggestions(db: PrismaClient, actor: Reviewer, a
       const draft = row.payload as unknown as TeamMemoryDraft;
       return draft.evidence ?? [];
     });
-    const readable = new Set(
-      (await readableMemoryEvidence(tx, actor.workspaceId, refs)).map(({ id }) => id),
-    );
+    const current = refs.length
+      ? await tx.task.findMany({
+          where: {
+            id: { in: refs.map(({ id }) => id) },
+            workspaceId: actor.workspaceId,
+            status: "done",
+            deletedAt: null,
+            conversation: {
+              channelName: { not: null },
+              visibility: "public",
+              hiddenFromWorkspaceAt: null,
+            },
+          },
+          select: { id: true, revision: true },
+          take: refs.length,
+        })
+      : [];
+    const readable = new Set(current.map(({ id, revision }) => `${id}:${revision}`));
     return {
       rows: page.filter(
         (row) =>
           row.kind !== "task" ||
-          (row.payload as unknown as TeamMemoryDraft).evidence?.every(({ id }) => readable.has(id)),
+          (row.payload as unknown as TeamMemoryDraft).evidence?.every(({ id, revision }) =>
+            readable.has(`${id}:${revision}`),
+          ),
       ),
       next: rows.length > 20 ? rows[19]?.id : undefined,
     };
@@ -100,25 +160,43 @@ async function suggestedCommand(
   row: Suggestion,
   edit?: Edit,
 ): Promise<TeamMemoryWrite | undefined> {
+  if (row.kind === "draft") {
+    const command = row.payload as unknown as Extract<
+      TeamMemoryWrite,
+      { operation: "create" | "update" }
+    >;
+    if (command.operation === "update") {
+      const target = await tx.teamMemoryEntry.findFirst({
+        where: {
+          workspaceId,
+          id: command.id,
+          revision: command.revision,
+          status: { not: "deleted" },
+        },
+        select: { id: true },
+      });
+      if (!target) return undefined;
+    }
+    if (
+      command.evidence?.length &&
+      (await readableMemoryEvidence(tx, workspaceId, command.evidence)).length !==
+        command.evidence.length
+    )
+      return undefined;
+    return decodeTeamMemoryCommand({ ...command, ...edit, requestId: row.id }) as TeamMemoryWrite;
+  }
   if (row.kind === "task") {
     const draft = row.payload as unknown as TeamMemoryDraft;
     const source = draft.evidence?.[0];
     if (!source) return undefined;
-    const task = await tx.task.findFirst({
-      where: {
-        id: source.id,
-        workspaceId,
-        deletedAt: null,
-        status: { in: ["done", "closed"] },
-        revision: { gte: source.revision ?? 0 },
-        conversation: {
-          channelName: { not: null },
-          visibility: "public",
-          hiddenFromWorkspaceAt: null,
-        },
-      },
-      select: { id: true },
-    });
+    const [task] = await tx.$queryRaw<{ id: string }[]>`
+      SELECT t.id FROM tasks t JOIN conversations c
+        ON c.id = t."conversationId" AND c."workspaceId" = t."workspaceId"
+      WHERE t.id = ${source.id}::uuid AND t."workspaceId" = ${workspaceId}::uuid
+        AND t."deletedAt" IS NULL AND t.status = 'done' AND t.revision = ${source.revision ?? 0}
+        AND c."channelName" IS NOT NULL AND c.visibility = 'public'
+        AND c."hiddenFromWorkspaceAt" IS NULL
+      FOR SHARE OF t, c`;
     if (!task) return undefined;
     return decodeTeamMemoryCommand({
       ...draft,

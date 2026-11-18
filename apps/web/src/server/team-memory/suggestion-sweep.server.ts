@@ -7,7 +7,18 @@ let ticking = false;
 
 export function ensureTeamMemorySuggestionSweep() {
   if (timer || Bun.env.COFORGE_TEAM_MEMORY_REVIEW !== "true") return;
-  timer = setInterval(() => void sweep().catch(() => undefined), 15 * 60_000);
+  timer = setInterval(
+    () =>
+      void sweep().catch((error: unknown) => {
+        console.error(
+          JSON.stringify({
+            event: "team_memory.review_sweep_failed",
+            error_type: error instanceof Error ? error.name : "unknown",
+          }),
+        );
+      }),
+    15 * 60_000,
+  );
   onServerShutdown(() => {
     if (timer) clearInterval(timer);
     timer = undefined;
@@ -31,7 +42,24 @@ async function sweep() {
           WHERE m.workspace_id = w.id AND m.status = 'active' AND NOT m.pinned
         )
       ORDER BY s.scanned_at ASC NULLS FIRST, w.id ASC LIMIT 8`;
-    await Promise.allSettled(workspaces.map(({ id }) => scanTeamMemorySuggestions(db, id)));
+    await Promise.allSettled(
+      workspaces.map(async ({ id }) => {
+        try {
+          const result = await scanTeamMemorySuggestions(db, id);
+          console.info(
+            JSON.stringify({ event: "team_memory.review_scanned", workspace_id: id, ...result }),
+          );
+        } catch (error) {
+          console.error(
+            JSON.stringify({
+              event: "team_memory.review_scan_failed",
+              workspace_id: id,
+              error_type: error instanceof Error ? error.name : "unknown",
+            }),
+          );
+        }
+      }),
+    );
   } finally {
     ticking = false;
   }

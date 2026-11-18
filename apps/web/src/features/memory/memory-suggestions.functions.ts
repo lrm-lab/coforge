@@ -4,6 +4,7 @@ import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import {
   listMemorySuggestions,
   reviewMemorySuggestion,
+  submitMemorySuggestion,
 } from "#src/server/team-memory/suggestion-review.server";
 import { scanTeamMemorySuggestions } from "#src/server/team-memory/suggestion-scan.server";
 import { TeamMemoryError } from "#src/server/team-memory/memory";
@@ -11,6 +12,7 @@ import { TeamMemoryError } from "#src/server/team-memory/memory";
 const command = z.discriminatedUnion("operation", [
   z.object({ operation: z.literal("list"), after: z.uuid().optional() }).strict(),
   z.object({ operation: z.literal("scan") }).strict(),
+  z.object({ operation: z.literal("submit"), draft: z.unknown() }).strict(),
   z
     .object({
       operation: z.enum(["accept", "dismiss"]),
@@ -41,6 +43,11 @@ export const memorySuggestionCommand = createServerFn({ method: "POST" })
         return {
           kind: "scan" as const,
           ...(await scanTeamMemorySuggestions(db, workspaceId, user.id)),
+        };
+      if (data.operation === "submit")
+        return {
+          kind: "queued" as const,
+          ...(await submitMemorySuggestion(db, actor, data.draft)),
         };
       return {
         kind: "decision" as const,
