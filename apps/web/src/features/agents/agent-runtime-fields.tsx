@@ -47,12 +47,7 @@ import { RuntimeRefreshOutcome } from "./runtime-refresh-outcome";
 
 export * from "./agent-runtime-fields-state";
 
-/** The Model select's "let the built-in provider/Pi choose" sentinel and the Configured list's
- * "type it in myself" sentinel. Neither collides with a real `modelOptionValue` (which always
- * contains "--"), and both stay free of the CSS-selector-special characters `modelOptionValue`
- * itself has to avoid. */
 const CUSTOM_MODEL_KEY = "custom-model";
-/** The model field's entries a search never hides: the default and "Custom…". */
 const PINNED_MODEL_CHOICES: ReadonlySet<string> = new Set(["", CUSTOM_MODEL_KEY]);
 
 export function AgentRuntimeFields({
@@ -69,13 +64,7 @@ export function AgentRuntimeFields({
   initial?: RuntimeSelection;
   credentialConfigured?: boolean;
   onLoad: (computerId: string) => Promise<RuntimeOptions>;
-  /** Fires with the current "would this Save do anything" state whenever a field the user can
-   * actually change moves away from (or back to) `initial`. `AgentRuntimeFields` keeps owning
-   * every field's state; this is only a notification, not a hook for the caller to drive values
-   * (the Profile panel's edit dialog uses it to disable Save until something changed). */
   onDirtyChange?: (dirty: boolean) => void;
-  /** What to say under the runtime picker about the runtime picked (the create dialog's
-   * not-signed-in notice). */
   providerNotice?: (provider: RuntimeProvider) => ReactNode;
 }) {
   const controlSize = useDialogControlSize();
@@ -95,9 +84,6 @@ export function AgentRuntimeFields({
   const [fastMode, setFastMode] = useState(initial?.fastMode ?? false);
   const [sizes, setSizes] = useState(initialModelSizes(initial));
   const [apiKey, setApiKey] = useState("");
-  // Only the catalog-load-failed fallback below renders plain, uncontrolled text `Input`s for
-  // modelProvider/model instead of the tracked `Select`s; their own `onChange` marks this so
-  // `dirty` still notices a manual edit in that fallback.
   const [manualDirty, setManualDirty] = useState(false);
   const [optionsByComputer, setOptionsByComputer] = useState<
     Record<string, RuntimeOptions | undefined>
@@ -165,8 +151,6 @@ export function AgentRuntimeFields({
     initial?.model && provider === initial.provider && modelKey === initialModelKey,
   );
 
-  // A saved Pi Configured pick whose model the Computer's Pi catalog no longer reports (or never
-  // did) opens as Custom, prefilled, rather than silently falling back to "Configured default".
   useEffect(() => {
     if (!options || customModelActive) return;
     if (!(piConfigured && configuredModelSelected)) return;
@@ -220,8 +204,6 @@ export function AgentRuntimeFields({
     if (provider === RUNTIME_PROVIDER.COFORGE) return model.modelProvider === modelProvider;
     return true;
   });
-  // The model field's entries: the runtime's models in its own order, between the default and,
-  // on Pi's Configured list, "Custom…". A saved model the catalog no longer reports stays listed.
   const modelChoices: ModelChoice[] = [
     {
       id: "",
@@ -238,7 +220,6 @@ export function AgentRuntimeFields({
     ...(piConfigured ? [{ id: CUSTOM_MODEL_KEY, label: m.agent_form_model_custom() }] : []),
   ];
   const modelValue = submittedModel;
-  // Command Code's catalog carries no efforts; they are read for the selected model.
   const effortModelId =
     provider === RUNTIME_PROVIDER.COMMAND_CODE && !failed ? (modelValue ?? "").trim() : "";
   const readEfforts = useCommandCodeEfforts({ open, computerId, modelId: effortModelId });
@@ -320,9 +301,6 @@ export function AgentRuntimeFields({
           size={controlSize}
           className="min-w-0"
           isDisabled={!options}
-          // The Pi provider picker carries no hint: the sentence that used to sit here explained
-          // Configured by contrast with the key-passing choices, which the picker and the API-key
-          // field already say on their own.
           selectedKey={isPi ? piProviderChoice : modelProvider}
           onSelectionChange={(key) => {
             if (key === null) return;
@@ -389,7 +367,6 @@ export function AgentRuntimeFields({
                   if (model?.modelProvider !== modelProvider) setApiKey("");
                   setModelProvider(model?.modelProvider ?? "");
                 }
-                // The Agent's own model comes back with its saved level, not the model default.
                 setReasoning(
                   value === initialModelKey && provider === initial?.provider
                     ? initial.reasoning
@@ -421,8 +398,6 @@ export function AgentRuntimeFields({
           placeholder="provider/model-id"
           value={customModelText}
           onChange={setCustomModelText}
-          // Native validation blocks the form submit: an empty or slash-less entry would
-          // otherwise submit no model and silently save "Configured default".
           isRequired
           validate={(value) => (splitCustomModel(value) ? null : m.agent_form_model_custom_error())}
           isInvalid={customInvalid}

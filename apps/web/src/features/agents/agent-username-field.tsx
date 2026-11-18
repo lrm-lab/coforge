@@ -14,14 +14,6 @@ import {
   typedAgentUsername,
 } from "./agent-username";
 
-/**
- * Where a person names an Agent — every such place uses this field (docs/design/component-decisions.md,
- * 「给 Agent 起名」; `test/agent-username-field.test.ts` keeps it so). Prefilled with a suggestion the
- * suggest button replaces, never one an Agent the viewer can see already has; reshaped as it is
- * typed so it never needs its rules spelled out; a name already taken says so before submit, which
- * the server checks again for the Agents the viewer cannot see. Mounted with the dialog's content,
- * so each opening suggests a fresh name. The form reads it as its `name` field.
- */
 export function AgentUsernameField({
   label = m.agent_form_username(),
   defaultValue,
@@ -33,7 +25,6 @@ export function AgentUsernameField({
   defaultValue?: string;
   note?: string;
   autoFocus?: boolean;
-  /** While a create runs: the name it sent stays the name shown. */
   isReadOnly?: boolean;
 }) {
   const controlSize = useDialogControlSize();
@@ -42,13 +33,9 @@ export function AgentUsernameField({
     () => new Set((directory.data?.agents ?? []).map((agent) => agent.handle.toLowerCase())),
     [directory.data],
   );
-  // What the person typed; until they do, the suggestion, which moves off a name the directory
-  // (once read) has taken. A caller's own default is kept as given.
   const [typed, setTyped] = useState<string>();
   const [suggested, setSuggested] = useState(() => defaultValue ?? randomAgentUsername());
   const username = typed ?? (defaultValue ? suggested : availableAgentUsername(suggested, taken));
-  // Typing cannot produce a malformed name, and Submit drops a trailing hyphen, so an empty field
-  // is the one mistake left; it says how to fill the field rather than only that it is required.
   const [left, setLeft] = useState(false);
   const empty = left && username === "";
   const isTaken = !isReadOnly && taken.has(username.toLowerCase());
