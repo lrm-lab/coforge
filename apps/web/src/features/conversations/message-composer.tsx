@@ -52,21 +52,12 @@ export type SentMessage = {
   sequence: number;
   body: string;
   createdAt: Date | string;
-  /** The `@handle`s this send left as text because they name nobody the sender can see. */
   unresolvedMentionHandles?: readonly string[];
-  /** Mentions of people outside the channel this send did not notify, for the sender to act on. */
   pendingMentionActions?: readonly PendingMention[];
 };
 
-/** No name kept as text: one set every reset returns, so a state already holding it does not change. */
 const NO_NAMES: ReadonlySet<string> = new Set();
 
-/**
- * The message form at the foot of a conversation or thread. Owns the draft, the pending
- * attachments (each uploaded sequentially as soon as it is chosen, so its progress is
- * visible), whether an edited-back Task goes out as one, and the retry idempotency key, so typing
- * never re-renders the history above it.
- */
 export function MessageComposer({
   conversationId,
   threadRootId,
@@ -83,26 +74,13 @@ export function MessageComposer({
   hostRef,
 }: {
   conversationId: string;
-  /** The thread root this composer replies to; absent for the main pane. Together with
-   * `conversationId` it scopes the device-local draft, so the main pane and each thread
-   * keep their own unsent text. */
   threadRootId?: string;
-  /** Thread composers cannot create Tasks. */
   inThread: boolean;
-  /** Who the main pane's messages go to (`#channel`, `@name`), named in its placeholder. */
   target?: string;
-  /** The conversation's @-completion candidates; absent or empty, `@` opens no popup. */
   mentionables?: readonly Mentionable[];
-  /** The channel's people and public Agents outside it, offered after the members. */
   mentionOutsiders?: readonly Mentionable[];
-  /** Handles that recently sent a message in this conversation, most-recent first (channels
-   * only); ranks @-completion candidates ahead of alphabetical order. */
   recentHandles?: readonly string[];
-  /** The Workspace's channels for #-completion; `conversationId` leads the list when it is one. */
   channels?: readonly ChannelSuggestion[];
-  /** A finished quote from a message the reader highlighted (`message-row.tsx`'s reply-to-
-   * selection), to be appended to the draft. The `id` is what makes a repeat insertion of the same
-   * text land again, so it is the caller's monotone counter — never a content hash. */
   quotedDraft?: { id: number; text: string };
   onSend: (
     body: string,
@@ -110,20 +88,13 @@ export function MessageComposer({
     attachmentIds?: string[],
     options?: SendOptions,
   ) => Promise<SentMessage | void>;
-  /** Whether a top-level send may go "As task" (thread composers never offer it). */
   canSendAsTask?: boolean;
-  /** Opening the conversation puts the caret here; false where the host keeps it (Activity). */
   autoFocus?: boolean;
-  /** The host's ref this composer's field registers itself in (`ComposerHost.composerRef`). */
   hostRef?: RefObject<HTMLTextAreaElement | null>;
 }) {
   const hydrated = useHydrated();
-  // Device-local draft, scoped to this chat (and thread): typing here never touches another
-  // conversation, and the text survives switching chats, reloads, and restarts on this device.
   const scope = useComposerScope();
   const draftKey = scope?.draftKey ?? composerDraftKey(conversationId, threadRootId);
-  // A failed send keeps its idempotency key so a retry of the same text is idempotent; the Task
-  // mode and priority it went out with are part of "the same", so changing either mints a key.
   const retryRef = useRef<
     | {
         body: string;
@@ -134,10 +105,7 @@ export function MessageComposer({
     | undefined
   >(undefined);
   const [body, setBody] = useState(() => readComposerDraft(draftKey));
-  // Who each `@name` in the draft was picked to mean; sending turns those names into handles. Kept
-  // with the draft and in step with its text: a name edited away takes its pin with it.
   const [pins, setPins] = useState(() => readComposerDraftPins(draftKey));
-  // Names the sender chose to leave as text when asked who they meant.
   const [keptAsText, setKeptAsText] = useState(NO_NAMES);
   useEffect(() => {
     setBody(readComposerDraft(draftKey));
@@ -152,7 +120,6 @@ export function MessageComposer({
   useEffect(() => {
     writeComposerDraftPins(draftKey, pins);
   }, [draftKey, pins]);
-  // @-member and #-channel completion: query tracking, popup state, and keyboard interaction.
   const completion = useReferenceCompletion({
     mentionables,
     mentionOutsiders,
@@ -166,8 +133,6 @@ export function MessageComposer({
     },
     onPickMention: pinMention,
   });
-  // A name typed by hand that matches a member, never picked: sending it notifies no one, so the
-  // composer offers who was meant. Not while the `@` list is open, which is already asking.
   const namedCandidates = useMemo(
     () => mentionsByLabel([...(mentionables ?? []), ...(mentionOutsiders ?? [])]),
     [mentionables, mentionOutsiders],
@@ -181,9 +146,6 @@ export function MessageComposer({
           ),
     [completion.open, body, pins, namedCandidates, keptAsText],
   );
-  // What this chat's newest accepted send did not reach: `@handle`s that name nobody, and mentions
-  // of people outside the channel. Kept with the chat and the message's position: a reply that
-  // lands after the reader moved to another chat, or after a newer send's reply, never replaces it.
   const [unresolved, setUnresolved] = useState<
     | {
         draftKey: string;
@@ -203,9 +165,6 @@ export function MessageComposer({
         ),
       })
     : "";
-  // Submitting clears the composer at once and never disables it, so the next message can be
-  // typed straight away; the outbox holds each submitted message until the server accepts it,
-  // and the conversation shows it (greyed, then failed if need be) in the message list.
   const outbox = useMessageOutbox({
     draftKey,
     onSend,
@@ -224,29 +183,18 @@ export function MessageComposer({
   });
   const { attachments, setAttachments, uploading, anyFailed, room, addFiles, tray } =
     useComposerAttachments(scope?.uploadTo ?? (() => Promise.resolve(conversationId)));
-  // Set by the send menu, Cmd/Ctrl+Shift+Enter, or editing an unsent Task back into the composer:
-  // the next send goes out as a Task, with the priority the chip under the field shows.
   const [asTask, setAsTask] = useState(false);
-  // The new Task's priority: the last one picked on this device until the sender changes it
-  // (task #12). It is only ever sent while `asTask` is armed.
   const [taskPriority, setTaskPriority] = useLastTaskPriority();
-  // The edited-back Task belongs to its draft; another conversation's Send is a plain send again.
   useEffect(() => setAsTask(false), [draftKey]);
-  // The last quote this composer consumed. Held by id so a re-render (or an unrelated state
-  // change) never re-inserts a quote the reader already has in the draft.
   const consumedQuoteIdRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (!quotedDraft || quotedDraft.id === consumedQuoteIdRef.current) return;
     consumedQuoteIdRef.current = quotedDraft.id;
-    // Appended, not replaced: a quote answers what the reader was already writing as often as it
-    // starts a reply, and losing their draft to a highlight would be unforgivable.
     setBody((current) => {
       const kept = current.replace(/\s+$/u, "");
       return kept ? `${kept}\n\n${quotedDraft.text}\n\n` : `${quotedDraft.text}\n\n`;
     });
     retryRef.current = undefined;
-    // The draft is React state, so the caret can only be placed once the textarea has re-rendered
-    // with the quote in it.
     requestAnimationFrame(focusComposer);
   }, [quotedDraft]);
   const composerDisabled = !hydrated;
@@ -274,9 +222,6 @@ export function MessageComposer({
     focusDraftEnd(completion.textareaRef.current);
   }
 
-  // Opening a conversation or thread puts the caret in its composer, as a chat app does, so the
-  // first message needs no click. Only with a fine pointer: on touch it would pop the keyboard.
-  // The textarea is disabled until hydration, and a disabled field cannot take focus.
   useEffect(() => {
     if (autoFocus && hydrated && window.matchMedia("(pointer: fine)").matches) focusComposer();
   }, [autoFocus, draftKey, hydrated]);
@@ -289,13 +234,11 @@ export function MessageComposer({
     };
   }, [hostRef, completion.textareaRef]);
 
-  /** Sends the draft: as a Task while the send menu (or an edited-back unsent Task) armed it. */
   function submit() {
     if (sendDisabled || longMessage.divert()) return;
     const text =
       body.trim() || longMessage.emptyBody(attachments) || attachments[0]?.file.name || "";
     const sendAsTask = taskMode && asTask;
-    // The remembered priority always names a level, so an armed send can never lack one.
     const sendPriority = sendAsTask ? taskPriority : undefined;
     const idempotencyKey =
       retryRef.current?.body === text &&
@@ -303,7 +246,6 @@ export function MessageComposer({
       retryRef.current.taskPriority === sendPriority
         ? retryRef.current.idempotencyKey
         : localId();
-    // Only files that finished uploading and were not removed.
     const uploaded = attachments.filter((item) => item.id);
     const message: OutgoingMessage = {
       localId: localId(),
@@ -325,14 +267,10 @@ export function MessageComposer({
     completion.close();
     setAttachments([]);
     setAsTask(false);
-    // A click on the send button moved focus there; typing continues in the composer.
     focusComposer();
     outbox.send(message, uploaded);
   }
 
-  // "Edit" on an unsent message in the conversation puts it back here, ahead of anything typed
-  // since; sending it again unchanged reuses its idempotency key. Retry and Delete just hand the focus
-  // back, since the row button that held it is gone.
   useComposerRequests(draftKey, (request) => {
     if (request.kind === "focus") {
       focusComposer();
@@ -341,8 +279,6 @@ export function MessageComposer({
     setBody((current) => draftWithUnsentMessage(current, request.body));
     setPins((current) => request.pins.reduce(addMentionPin, current));
     setAttachments((current) => [...request.chips, ...current]);
-    // An unsent Task comes back armed, with its priority; an entry stored before priorities
-    // were required keeps the device's remembered one. A plain message disarms a Task send.
     setAsTask(request.asTask);
     if (request.taskPriority) setTaskPriority(request.taskPriority);
     retryRef.current = {
@@ -399,7 +335,6 @@ export function MessageComposer({
           }
         />
       )}
-      {/* Always mounted, so a screen reader announces the notice when its text arrives. */}
       <p role="status" className="sr-only">
         {unresolvedNotice}
       </p>
