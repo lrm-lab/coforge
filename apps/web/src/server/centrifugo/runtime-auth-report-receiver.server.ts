@@ -98,12 +98,11 @@ export function computerRuntimeMethods(
             runtimes: RuntimeMetadata[],
             catalogs: CodeAgentModelCatalog[],
           ) => {
+            const recovery = productionInventoryAgentRecovery(db, scope);
+            const before = await recovery.before().catch(() => undefined);
             await new PrismaComputerRuntimeRepository(db).replace(scope, runtimes, catalogs);
-            // Best-effort: inventory persistence already succeeded.
-            void recoverAgentsAfterInventory(
-              productionInventoryAgentRecovery(db, scope),
-              runtimes,
-            ).catch(() => {});
+            if (before)
+              void recoverAgentsAfterInventory(recovery, before, runtimes).catch(() => {});
           },
         })
       : unavailable,
