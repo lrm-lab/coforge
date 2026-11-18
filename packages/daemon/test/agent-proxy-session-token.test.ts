@@ -1,7 +1,12 @@
 import { afterEach, expect, test } from "bun:test";
 import { agentApiRoutes } from "@lrm/coforge-sdk/agent";
 import { startAgentProxy } from "#src/agent-proxy";
+import { agentSessionIsLive } from "#src/agent-proxy-session-admission";
 import { SESSION_NOT_RUNNING_CODE } from "#src/agent-proxy-tokens";
+import { revokeLocalLaunch } from "#src/daemon-runtime/agent-launch-revocation";
+import { AgentStopRegistry } from "#src/daemon-runtime/agent-stop-registry";
+import { abandonLaunch } from "#src/daemon-runtime/agent-startup-failure";
+import type { ActivityLaunch } from "#src/daemon-runtime/activity-launch";
 
 const proxies: Array<{ close(): void }> = [];
 afterEach(() => {
@@ -19,14 +24,14 @@ const LIST = {
   nextBefore: null,
 };
 
-function start(running: { value: boolean }) {
+function start(running: { value: boolean }, isLive?: (agentId: string) => boolean) {
   const keys = new Map<string, string>();
   const seenKeys: Array<string | undefined> = [];
   const proxy = startAgentProxy({
     runtime: {
       agentMessage: async () => ({}),
       issueAgentContext: (agentId: string) => agentId,
-      isAgentSessionRunning: () => running.value,
+      isAgentSessionRunning: isLive ?? (() => running.value),
       inboxList: async (_context, _request, agentApiKey) => {
         seenKeys.push(agentApiKey);
         return LIST;
@@ -130,4 +135,63 @@ test("a new proxy does not know a token an earlier one issued", async () => {
   const token = first.proxy.issue("agent-a", KEY_A);
   const second = start({ value: true });
   expect((await ask(second.proxy, token)).status).toBe(401);
+});
+
+test("a launch the daemon abandoned leaves its token answering 409, not 401", async () => {
+  const launch: ActivityLaunch = { launchId: "launch-1", clientSeq: 1, stopping: false };
+  const launches = new Map<string, ActivityLaunch>([["agent-a", launch]]);
+  const { proxy } = start({ value: false }, () =>
+    agentSessionIsLive(
+      { isRunning: () => false, launch: (agentId) => launches.get(agentId) },
+      "agent-a",
+    ),
+  );
+  const token = proxy.issue("agent-a", KEY_A);
+  expect((await ask(proxy, token)).status).toBe(200);
+
+  await abandonLaunch(
+    {
+      stopping: false,
+      stops: new AgentStopRegistry(),
+      inputDrain: { close: () => {} },
+      currentActivityLaunches: launches,
+      interruptIfBusy: () => {},
+      activityPublisher: { forgetBusy: () => {}, publish: () => {} },
+      disposeLaunchObservations: () => {},
+      offlineResidency: { record: () => undefined, remember: () => {} },
+      stopCoordinator: { releaseAgentRuntime: async () => {} },
+      drafts: {
+        runtimeError: () => ({
+          protocolMajor: 1,
+          requestId: "request-1",
+          workspaceId: "w",
+          agentId: "agent-a",
+          detail: "",
+          detailKind: "runtime_error",
+          level: "error",
+        }),
+      },
+      agentControl: { stopped: async () => {} },
+    },
+    "agent-a",
+    new Error("startup timed out"),
+  );
+
+  expect(launch.stopping).toBe(true);
+  const response = await ask(proxy, token);
+  expect(response.status).toBe(409);
+  expect(((await response.json()) as { code: string }).code).toBe(SESSION_NOT_RUNNING_CODE);
+});
+
+test("deleting an Agent drops its registration, so the old token is 401", async () => {
+  const { proxy } = start({ value: true });
+  const token = proxy.issue("agent-a", KEY_A);
+  expect((await ask(proxy, token)).status).toBe(200);
+
+  const contexts = new Map([["agent-a", "context-1"]]);
+  const tokens = new Map([["agent-a", token]]);
+  revokeLocalLaunch(contexts, tokens, proxy, "agent-a");
+
+  expect(tokens.size).toBe(0);
+  expect((await ask(proxy, token)).status).toBe(401);
 });
