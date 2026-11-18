@@ -82,7 +82,6 @@ export async function createSession(options: CreateSessionOptions) {
     sessionDir,
     options.sessionId ?? options.agentId,
     options.sessionMode ?? (options.sessionId ? "resume" : "create"),
-    rotateBytes,
   );
   const modelRuntime =
     sessionKind === "pi"
@@ -228,7 +227,6 @@ async function sessionManagerFor(
   sessionDir: string,
   sessionId: string | undefined,
   mode: "create" | "resume",
-  rotateMaxBytes?: number,
 ) {
   const workspace = await prepareAgentSessionDirectory(cwd, sessionDir);
   if (sessionId !== undefined && !/^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/.test(sessionId))
