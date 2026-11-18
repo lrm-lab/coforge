@@ -25,8 +25,8 @@ staging`), implements the [Main to staging](main-to-staging.md#local-computer-di
 local-distribution path: it runs the repository gates, cross-compiles the unified
 Computer for a set of release targets, assembles the schema 2 version tree
 (`build-release.ts`), uploads every object `buildReleaseTree` lists, and verifies
-authenticated OSS read-back. Before updating `latest`, it verifies **every**
-exact object key is byte-identical through authenticated OSS access and that an
+each one. Before updating `latest`, it checks **every** exact object key's stored
+length and CRC-64 through an authenticated OSS `HEAD` and that an
 unsigned exact-origin GET returns 403. Probe failures produce sanitized
 diagnostics.
 The existing `latest` bytes are saved and verified before activation. The new
@@ -122,5 +122,5 @@ this publisher. The bootstrap scripts (`install.sh`, `install.ps1`) and `coforge
 the same feed. The release Skill may publish development candidates through this
 workflow, but must distinguish published targets and native smoke checks from
 complete platform lifecycle acceptance. A successful live publish workflow
-proves authenticated OSS storage read-back and private-origin rejection, not CDN
+proves authenticated OSS storage size and checksum and private-origin rejection, not CDN
 or end-user delivery. CDN acceptance remains a separate infrastructure check.

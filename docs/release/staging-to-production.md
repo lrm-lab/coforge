@@ -64,9 +64,9 @@ updating itself from staging. Promotion therefore rebuilds:
    differences from the staging set are the approved release version and the
    compiled-in environment (feed and matching business server addresses).
 4. The Agent publishes the new manifest, checksum sidecars and binaries beneath
-   the production feed's `<version>/` path, then performs authenticated OSS
-   byte-identical read-back and verifies the unsigned-origin 403 guard for each
-   object.
+   the production feed's `<version>/` path, then checks every object's stored
+   length and CRC-64 through an authenticated OSS `HEAD` and verifies the
+   unsigned-origin 403 guard for each object.
 5. Only after that confirmation does the Agent write the production feed's
    `latest` pointer to the approved version.
 6. The Agent re-reads the production feed's `latest` through authenticated OSS

@@ -9,6 +9,6 @@ state. An interrupted release is a recorded outcome, not a missing entry. The
 records must reveal the selected and next rollback identities without relying
 on an Agent's private memory, and must never contain secrets. Local records also
 preserve the previous and resulting version strings, the manifest's per-platform
-SHA-256 checksums, authenticated storage read-back evidence, and the unsigned
+SHA-256 checksums, authenticated storage size and checksum evidence, and the unsigned
 private-origin guard result. Independently run CDN acceptance evidence may be
 linked, but is not required for routine publication or rollback.

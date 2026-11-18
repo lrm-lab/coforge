@@ -91,8 +91,10 @@ gate separately from full production lifecycle acceptance, and report unverified
 platform behavior explicitly. Stop if installation requires elevation or a
 system-wide path, or exposes a standalone Daemon on `PATH`. Also
 stop if the implemented interface cannot prove that direct anonymous origin
-reads return 403 and authenticated OSS read-back returns byte-identical bytes for
-every version object and `latest`. Do not require CDN read-back for routine
+reads return 403 and an authenticated OSS `HEAD` reports every version object's
+stored length and CRC-64 matching the source bytes, with `latest` read back byte
+for byte. Version objects are never read back: a read-back is billed as
+transfer-acceleration traffic. Do not require CDN read-back for routine
 Computer publication or rollback. Treat domestic CDN reachability and cache
 behavior as independent infrastructure acceptance, retain its separate tooling,
 and do not report end-user delivery as verified from storage evidence alone.

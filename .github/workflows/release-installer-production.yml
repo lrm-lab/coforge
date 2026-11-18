@@ -259,7 +259,7 @@ jobs:
       commit: ${{ inputs.commit }}
 
   # The only job that reaches the bucket with the six binaries in hand, and it compiles nothing:
-  # it packages them, uploads and reads back every object, writes the manifest, then moves
+  # it packages them, uploads every object and checks each one's size and CRC-64, writes the manifest, then moves
   # `installer/latest`.
   publish:
     name: Package, upload, and move installer/latest

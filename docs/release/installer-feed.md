@@ -40,8 +40,9 @@ installer's `file`, `size`, `checksum`, and its `gzip` `file`, `size`,
   written after everything it names, and only ever names a version whose manifest
   is up.
 - **Private origin, integrity.** As for the Computer feed: the bucket refuses
-  anonymous reads (the CDN serves it), every upload is read back byte for byte,
-  and integrity is HTTPS plus SHA-256, with no signed envelope.
+  anonymous reads (the CDN serves it), every upload is checked by its stored
+  length and CRC-64 through an authenticated `HEAD`, and integrity is HTTPS plus
+  SHA-256, with no signed envelope.
 - **CDN freshness.** The pointer must never be served from cache. The staging CDN
   revalidates `/latest` and `*.json` on every request and caches everything else for
   a year. A directory-type rule matches by path prefix, so `/latest` does not cover
@@ -98,7 +99,7 @@ authenticates exactly as `release-staging.yml` does: GitHub OIDC exchanged for t
 RAM role `coforge-release-publisher` through the `staging` environment, no stored
 AccessKey. Every step is a subcommand of `scripts/release/publish-installer.ts`,
 which goes through `scripts/release/publish.ts`'s upload flow - the flow the
-Computer release uses (objects up and read back, the manifest last, the pointer
+Computer release uses (objects up and checked by size and CRC-64, the manifest last, the pointer
 saved, written, read back, and restored on failure); there is no second upload path.
 
 ```sh
