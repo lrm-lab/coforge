@@ -40,7 +40,6 @@ import { CHANNEL_VISIBILITY, type ChannelVisibility } from "./channel-visibility
 import { useWorkspaceDirectory } from "./workspace-directory-query";
 import { GroupChatPicker } from "./group-chat-picker-list";
 
-/** The `user:<id>` / `agent:<id>` keys an Agent-prepared card preselects. */
 function initialKeys(initialMembers: CreateChannelDialogProps["initialMembers"]) {
   return new Set([
     ...(initialMembers?.humans ?? []).map((human) => `user:${human.id}`),
@@ -51,30 +50,20 @@ function initialKeys(initialMembers: CreateChannelDialogProps["initialMembers"])
 type CreateChannelDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Creates the channel. A resolved result says whether the picked members were added and the
-   * Chat list re-read; a rejection means nothing was created. */
   onCreate: (
     name: string,
     memberUserIds?: string[],
     memberAgentIds?: string[],
     visibility?: ChannelVisibility,
   ) => Promise<CreatedChannel | void>;
-  /** Opens a channel the dialog created (the picker's result state and success). */
   onOpenChannel?: (channelId: string) => void | Promise<void>;
-  /** Prefills, but does not force, the channel name. */
   defaultName?: string;
-  /** An Agent-prepared `channel:create` action card's initial humans/Agents: shown as
-   * preselected, individually deselectable checkboxes. */
   initialMembers?: {
     humans: { id: string; displayName: string }[];
     agents: { id: string; displayName: string }[];
   };
-  /** The two-pane group chat dialog: the Workspace's people and public Agents to pick from, beside
-   * the name. Off, the dialog is the single column the other callers keep. */
   memberPicker?: boolean;
-  /** With `memberPicker`, the fewest people (besides the creator) the channel may start with. */
   minMembers?: number;
-  /** Offers making the channel private; an Agent's card has decided that already. */
   offersPrivate?: boolean;
 };
 
@@ -94,10 +83,7 @@ export function CreateChannelDialog({
     () => (directory.data ? buildGroupChatCandidates(directory.data) : []),
     [directory.data],
   );
-  // A create in flight keeps the dialog from closing; the form below holds all other state and
-  // mounts afresh on each opening, so a reopened dialog never shows the previous session.
   const busy = useRef(false);
-  // Whether the form holds edits (it reports them while mounted); closing then asks first.
   const [dirty, setDirty] = useState(false);
   const guard = useUnsavedChangesGuard({
     overlayOpen: open,
@@ -126,12 +112,9 @@ export function CreateChannelDialog({
           if (value) onOpenChange(true);
           else guard.requestClose();
         }}
-        // On a phone the group chat dialog is Raft's sheet: edge to edge and down to the bottom.
         className={memberPicker ? "max-md:px-0 max-md:[--modal-pb:0px]" : undefined}
       >
         {memberPicker ? (
-          // On a phone the sheet takes the screen's height, so the member list has room to fill
-          // (task #331); side by side the panes share a fixed height.
           <Modal className="w-[calc(100vw-2rem)] max-w-4xl overflow-hidden max-md:h-full max-md:w-full max-md:rounded-b-none max-md:pb-safe-bottom">
             <Dialog className="flex h-full flex-col p-0 md:h-[min(36rem,calc(100dvh-4rem))] md:flex-row">
               {({ close }) => <CreateChannelForm {...form} memberPicker close={close} />}
@@ -168,8 +151,6 @@ type CreateChannelFormProps = Pick<
   close: () => void;
 };
 
-/** The dialog's content. Mounted per opening, so its name, search, selection and result start
- * from the dialog's own props each time. */
 function CreateChannelForm({
   onCreate,
   onOpenChannel,
@@ -193,7 +174,6 @@ function CreateChannelForm({
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  // Set once the channel exists: the dialog then only offers to open it, never to create it again.
   const [created, setCreated] = useState<{
     channelId: string;
     name: string;
@@ -260,7 +240,6 @@ function CreateChannelForm({
       isDisabled={locked}
     />
   );
-  // Slack's switch, without a description: the name says what it does.
   const privateField = offersPrivate && (
     <Toggle
       label={m.channel_create_private()}
@@ -313,7 +292,6 @@ function CreateChannelForm({
         <Heading slot="title" className="pr-8 text-lg font-semibold text-primary">
           {m.channel_create()}
         </Heading>
-        {/* What a public channel is; a private one is not that. */}
         {!makePrivate && (
           <Text slot="description" className="mt-2 block text-sm text-tertiary">
             {m.channel_public_description()}
@@ -387,8 +365,6 @@ function CreateChannelForm({
       </DialogAction>
     );
   if (!wide) {
-    // A phone gets Raft's sheet: close, title and Finish along the top, then one column whose
-    // member list takes what the fields leave (task #331).
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex shrink-0 items-center gap-2 border-b border-secondary py-3 pr-4 pl-2">
