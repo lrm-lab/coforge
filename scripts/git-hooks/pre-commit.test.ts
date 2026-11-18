@@ -55,6 +55,17 @@ test("a formatted staged blob passes even when the worktree is now different", (
   expect(repo.commit().exitCode).toBe(0);
 });
 
+test("a staged file the formatter is told to ignore passes on its own", () => {
+  repo.seed({
+    "apps/web/.oxfmtrc.json": '{ "ignorePatterns": ["src/vendor/**"] }\n',
+    "apps/web/src/vendor/kit.ts": formatted,
+  });
+  repo.write({ "apps/web/src/vendor/kit.ts": unformatted });
+  repo.ok("add", "apps/web/src/vendor/kit.ts");
+
+  expect(repo.commit().exitCode).toBe(0);
+});
+
 test("a missing formatter fails with an actionable no-bypass message", () => {
   const error = spyOn(console, "error").mockImplementation(() => {});
   try {

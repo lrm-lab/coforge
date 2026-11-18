@@ -107,7 +107,16 @@ export function runStagedFormat(): number {
     }
 
     const result = Bun.spawnSync(
-      [process.execPath, "x", "--no-install", "oxfmt", "--check", "--", ...temporaryFiles],
+      [
+        process.execPath,
+        "x",
+        "--no-install",
+        "oxfmt",
+        "--check",
+        "--no-error-on-unmatched-pattern",
+        "--",
+        ...temporaryFiles,
+      ],
       { cwd: repositoryRoot, stdout: "pipe", stderr: "pipe" },
     );
     if (result.exitCode !== 0) {
