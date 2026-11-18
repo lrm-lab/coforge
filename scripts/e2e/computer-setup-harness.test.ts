@@ -11,8 +11,8 @@ const fixtureBuild = await readFile(
   "utf8",
 );
 const waitForOnline = await readFile(new URL("./wait-for-online.sh", import.meta.url), "utf8");
-const managedInfra = await readFile(new URL("./managed-infra.sh", import.meta.url), "utf8");
-const managedWeb = await readFile(new URL("./managed-web.sh", import.meta.url), "utf8");
+const e2eInfra = await readFile(new URL("./start-e2e-infra.sh", import.meta.url), "utf8");
+const e2eWeb = await readFile(new URL("./start-e2e-web.sh", import.meta.url), "utf8");
 
 test("Computer setup harness exercises the compiled CLI and real daemon path", () => {
   expect(harness).toContain(".amp/e2e/native-package");
@@ -47,18 +47,18 @@ test("Computer setup follows the localized computers redirect while waiting for 
 });
 
 test("Computer setup infrastructure keeps the normal fixed Centrifugo port", () => {
-  expect(managedInfra).not.toContain("CENTRIFUGO_PORT");
+  expect(e2eInfra).not.toContain("CENTRIFUGO_PORT");
 });
 
 test("managed Web seeds the fixed development user after database migration", () => {
-  const migration = managedWeb.indexOf("db:migrate:deploy");
-  const seed = managedWeb.indexOf("seed-dev-data.ts");
+  const migration = e2eWeb.indexOf("db:migrate:deploy");
+  const seed = e2eWeb.indexOf("seed-dev-data.ts");
 
   expect(migration).toBeGreaterThan(-1);
   expect(seed).toBeGreaterThan(migration);
 });
 
 test("managed Web loads the stable local Web Push key pair", () => {
-  expect(managedWeb).toContain("COFORGE_WEB_PUSH_PUBLIC_KEY");
-  expect(managedWeb).toContain("COFORGE_WEB_PUSH_PRIVATE_KEY_FILE");
+  expect(e2eWeb).toContain("COFORGE_WEB_PUSH_PUBLIC_KEY");
+  expect(e2eWeb).toContain("COFORGE_WEB_PUSH_PRIVATE_KEY_FILE");
 });
