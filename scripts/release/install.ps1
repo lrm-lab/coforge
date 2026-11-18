@@ -102,7 +102,26 @@ if ([string]::IsNullOrEmpty($Target)) {
   $rawArchitecture = if (-not [string]::IsNullOrEmpty($env:PROCESSOR_ARCHITEW6432)) {
     $env:PROCESSOR_ARCHITEW6432
   } else {
-    [string]$env:PROCESSOR_ARCHITECTURE
+    $detected = $null
+    if ($env:OS -eq "Windows_NT") {
+      try {
+        $signature = @'
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+public static extern System.IntPtr GetCurrentProcess();
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+public static extern bool IsWow64Process2(System.IntPtr hProcess, out ushort pProcessMachine, out ushort pNativeMachine);
+'@
+        $wowType = Add-Type -MemberDefinition $signature -Name "CoforgeNativeArch" -Namespace "CoforgeInstaller" -PassThru -ErrorAction Stop
+        [ushort]$procMachine = 0
+        [ushort]$nativeMachine = 0
+        if ($wowType::IsWow64Process2($wowType::GetCurrentProcess(), [ref]$procMachine, [ref]$nativeMachine)) {
+          if ($nativeMachine -eq 0xAA64) { $detected = "ARM64" }
+          elseif ($nativeMachine -eq 0x8664) { $detected = "AMD64" }
+        }
+      } catch {
+      }
+    }
+    if (-not [string]::IsNullOrEmpty($detected)) { $detected } else { [string]$env:PROCESSOR_ARCHITECTURE }
   }
   $architecture = $rawArchitecture.Trim().ToLowerInvariant()
   $Target = switch ($architecture) {

@@ -235,6 +235,7 @@ test("install.ps1 avoids RuntimeInformation.OSArchitecture so Windows PowerShell
   expect(powershellCode).not.toContain("OSArchitecture");
   expect(powershellCode).toContain("PROCESSOR_ARCHITEW6432");
   expect(powershellCode).toContain("PROCESSOR_ARCHITECTURE");
+  expect(powershellCode).toContain("IsWow64Process2");
 });
 
 test("install.ps1 resolves Windows x64 and arm64 across WOW64 and native environment variables and rejects unsupported architectures", async () => {
