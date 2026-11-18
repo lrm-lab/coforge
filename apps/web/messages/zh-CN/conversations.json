@@ -250,7 +250,7 @@
     }
   ],
   "conversation_saved_empty_title": "暂无收藏的消息",
-  "conversation_saved_empty_description": "选择消息上的书签图标即可保存。",
+  "conversation_saved_empty_description": "在消息上选「收藏消息」，就会出现在这里。",
   "conversation_saved_copy_link": "复制链接",
   "conversation_saved_link_copied": "链接已复制",
   "conversation_unresolved_mentions": "没有找到 {handles}，对应的提及没有通知到任何人。要通知某人，请从 @ 列表中选择后再提及一次。",
