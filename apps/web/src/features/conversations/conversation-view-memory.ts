@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 export type SavedPosition = { rowId: string; offset: number };
 
@@ -56,4 +56,26 @@ function snapshot() {
 
 export function useExpandedMessages() {
   return useSyncExternalStore(subscribe, snapshot, snapshot);
+}
+
+const sendingAsTask = new Set<string>();
+const sendAsTaskListeners = new Set<() => void>();
+
+export function setSendAsTask(draftKey: string, on: boolean) {
+  if (on === sendingAsTask.has(draftKey)) return;
+  if (on) sendingAsTask.add(draftKey);
+  else sendingAsTask.delete(draftKey);
+  for (const listener of sendAsTaskListeners) listener();
+}
+
+function subscribeSendAsTask(listener: () => void) {
+  sendAsTaskListeners.add(listener);
+  return () => sendAsTaskListeners.delete(listener);
+}
+
+export function useSendAsTask(draftKey: string) {
+  const armed = () => sendingAsTask.has(draftKey);
+  const on = useSyncExternalStore(subscribeSendAsTask, armed, armed);
+  const set = useCallback((next: boolean) => setSendAsTask(draftKey, next), [draftKey]);
+  return [on, set] as const;
 }

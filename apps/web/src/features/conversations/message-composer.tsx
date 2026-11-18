@@ -1,3 +1,4 @@
+import { useSendAsTask } from "./conversation-view-memory";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useHydrated } from "@tanstack/react-router";
 import type { TaskPriorityLevel } from "@lrm/coforge-sdk/internal";
@@ -183,9 +184,8 @@ export function MessageComposer({
   });
   const { attachments, setAttachments, uploading, anyFailed, room, addFiles, tray } =
     useComposerAttachments(draftKey, scope?.uploadTo ?? (() => Promise.resolve(conversationId)));
-  const [asTask, setAsTask] = useState(false);
+  const [asTask, setAsTask] = useSendAsTask(draftKey);
   const [taskPriority, setTaskPriority] = useLastTaskPriority();
-  useEffect(() => setAsTask(false), [draftKey]);
   const consumedQuoteIdRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (!quotedDraft || quotedDraft.id === consumedQuoteIdRef.current) return;

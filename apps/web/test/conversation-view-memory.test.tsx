@@ -5,6 +5,8 @@ import {
   openingPosition,
   savedPosition,
   savePosition,
+  setSendAsTask,
+  useSendAsTask,
 } from "#src/features/conversations/conversation-view-memory";
 import { useMessageExpansion } from "#src/features/conversations/use-message-expansion";
 
@@ -45,4 +47,16 @@ test("a link, a jump or the Task popup's top wins over where the reader was, and
   const none = { hash: false, jump: false, top: false, saved: false, boundary: false };
   expect(openingPosition({ ...none, boundary: true })).toBe("boundary");
   expect(openingPosition(none)).toBe("latest");
+});
+
+test("Send as Task stays armed for its own draft through a remount, and only for that draft", () => {
+  function Composer({ draftKey }: { draftKey: string }) {
+    const [asTask] = useSendAsTask(draftKey);
+    return <i>{String(asTask)}</i>;
+  }
+  setSendAsTask("c1", true);
+  expect(renderToStaticMarkup(<Composer draftKey="c1" />)).toBe("<i>true</i>");
+  expect(renderToStaticMarkup(<Composer draftKey="c2" />)).toBe("<i>false</i>");
+  setSendAsTask("c1", false);
+  expect(renderToStaticMarkup(<Composer draftKey="c1" />)).toBe("<i>false</i>");
 });
