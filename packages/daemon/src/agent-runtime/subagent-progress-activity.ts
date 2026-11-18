@@ -1,6 +1,8 @@
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import { subagentTypeLabel } from "@lrm/coforge-anvil";
 import { getLogger } from "@logtape/logtape";
+import { awakeClockMs } from "#src/platform/awake-clock";
+import { processClockMs } from "#src/platform/process-tree";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
@@ -14,11 +16,13 @@ const PHASE_LABEL: Readonly<Record<SubagentProgress["phase"], string>> = {
 
 /** Default silence threshold before a background task with zero live OS descendants is reaped. */
 export const BACKGROUND_TASK_SILENT_MS = 60 * 60_000;
+export const BACKGROUND_TASK_START_SLACK_MS = 60_000;
 
 export type OutstandingBackgroundTasksOptions = Readonly<{
   clock?: () => number;
+  processClock?: () => number;
   silentThresholdMs?: number;
-  countLiveDescendants?: () => Promise<number | undefined>;
+  countLiveDescendants?: (startedAfterMs?: number) => Promise<number | undefined>;
   identity?: Readonly<{ agentId: string; launchId: string }>;
 }>;
 
@@ -44,14 +48,18 @@ export function subagentProgressDetail(event: SubagentProgress): string {
  * new launch starts with none. A report without a task id is never counted.
  */
 export class OutstandingBackgroundTasks {
-  readonly #tasks = new Map<string, number>();
+  readonly #tasks = new Map<string, { lastActivityAtMs: number; startedProcessClockMs: number }>();
   readonly #clock: () => number;
+  readonly #processClock: () => number;
   readonly #silentThresholdMs: number;
-  readonly #countLiveDescendants: (() => Promise<number | undefined>) | undefined;
+  readonly #countLiveDescendants:
+    | ((startedAfterMs?: number) => Promise<number | undefined>)
+    | undefined;
   readonly #identity: Readonly<{ agentId: string; launchId: string }> | undefined;
 
   constructor(options: OutstandingBackgroundTasksOptions = {}) {
-    this.#clock = options.clock ?? Date.now;
+    this.#clock = options.clock ?? awakeClockMs;
+    this.#processClock = options.processClock ?? processClockMs;
     this.#silentThresholdMs = options.silentThresholdMs ?? BACKGROUND_TASK_SILENT_MS;
     this.#countLiveDescendants = options.countLiveDescendants;
     this.#identity = options.identity;
@@ -64,8 +72,15 @@ export class OutstandingBackgroundTasks {
       this.#tasks.delete(event.taskId);
       return;
     }
-    if (event.phase === "started" || (event.phase === "progress" && this.#tasks.has(event.taskId)))
-      this.#tasks.set(event.taskId, this.#clock());
+    const existing = this.#tasks.get(event.taskId);
+    if (event.phase === "started") {
+      this.#tasks.set(event.taskId, {
+        lastActivityAtMs: this.#clock(),
+        startedProcessClockMs: existing?.startedProcessClockMs ?? this.#processClock(),
+      });
+    } else if (event.phase === "progress" && existing) {
+      existing.lastActivityAtMs = this.#clock();
+    }
   }
 
   /** How many tasks have started and not yet ended. */
@@ -76,8 +91,8 @@ export class OutstandingBackgroundTasks {
   /** Task IDs silent for at least the configured threshold. */
   silentTaskIds(nowMs = this.#clock()): string[] {
     const silent: string[] = [];
-    for (const [taskId, lastActivityAtMs] of this.#tasks) {
-      if (nowMs - lastActivityAtMs >= this.#silentThresholdMs) silent.push(taskId);
+    for (const [taskId, entry] of this.#tasks) {
+      if (nowMs - entry.lastActivityAtMs >= this.#silentThresholdMs) silent.push(taskId);
     }
     return silent;
   }
@@ -92,16 +107,17 @@ export class OutstandingBackgroundTasks {
   ): Promise<string[]> {
     const candidates = this.silentTaskIds(nowMs);
     if (candidates.length === 0 || !countLiveDescendants) return [];
-    const live = await countLiveDescendants().catch(() => undefined);
-    if (live !== 0) return [];
-    const currentNowMs = this.#clock();
     const reaped: string[] = [];
     for (const taskId of candidates) {
-      const lastActivityAtMs = this.#tasks.get(taskId);
-      if (
-        lastActivityAtMs !== undefined &&
-        currentNowMs - lastActivityAtMs >= this.#silentThresholdMs
-      ) {
+      const entry = this.#tasks.get(taskId);
+      if (!entry) continue;
+      const live = await countLiveDescendants(
+        entry.startedProcessClockMs - BACKGROUND_TASK_START_SLACK_MS,
+      ).catch(() => undefined);
+      if (live !== 0) continue;
+      const currentNowMs = this.#clock();
+      const latest = this.#tasks.get(taskId);
+      if (latest && currentNowMs - latest.lastActivityAtMs >= this.#silentThresholdMs) {
         this.#tasks.delete(taskId);
         reaped.push(taskId);
       }
