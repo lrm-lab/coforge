@@ -109,7 +109,10 @@ export class AgentControlPublisher {
           epoch: state.epoch,
         }),
       );
-    if (state.phase === "stopping") {
+    if (
+      state.phase === "stopping" ||
+      (state.phase === "starting" && state.stopSentAtMs !== undefined)
+    ) {
       await this.sendStop(state);
       logPublished();
     } else if (state.phase === "clearing") {

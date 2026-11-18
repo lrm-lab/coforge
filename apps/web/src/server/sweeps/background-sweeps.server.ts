@@ -1,4 +1,5 @@
 import { ensureAgentActivitySweep } from "#src/server/agents/agent-activity-sweep.server";
+import { ensureAgentControlStartupSweep } from "#src/server/agents/agent-control-startup-sweep.server";
 import { ensureArtifactBlobSweep } from "#src/server/artifacts/artifact-blob-sweep.server";
 import { ensureAttachmentOrphanSweep } from "#src/server/attachments/attachment-orphan-sweep.server";
 import { ensureDeletedTaskSweep } from "#src/server/tasks/deleted-task-sweep.server";
@@ -30,6 +31,7 @@ export function registerBackgroundSweeps(): void {
   const presence = fanOutPresenceObservers(appNotificationPresence, computerOfflineAlerts());
   setPresenceObserver(presence);
   ensureAgentActivitySweep();
+  ensureAgentControlStartupSweep();
   ensurePresenceSweep(presence, () => presence.enabled());
   ensureComputerOfflineAlertSweep();
   ensureAgentMuteHintSweep();

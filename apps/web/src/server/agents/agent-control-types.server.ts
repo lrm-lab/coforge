@@ -220,6 +220,9 @@ export function agentControlRevision(config: unknown) {
   return new Bun.CryptoHasher("sha256").update(JSON.stringify(config)).digest("hex");
 }
 
+export const nextControlEpoch = (state: { epoch: number } | null | undefined) =>
+  (state?.epoch ?? 0) + 1;
+
 export function terminal(state: AgentControlState) {
   return state.phase === "completed" || state.phase === "failed";
 }

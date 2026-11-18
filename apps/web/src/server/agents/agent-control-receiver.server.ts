@@ -2,6 +2,7 @@ import type { AgentControlResult } from "@lrm/coforge-sdk/internal";
 import { agentControlAcceptedKey, type AgentControlDriver } from "./agent-control-driver.server";
 import type { AgentControlSignal } from "./agent-control-signal.server";
 import type { AgentControlEvents } from "./agent-control-events.server";
+import { settleStartupTimeout } from "./agent-control-startup-timeout.server";
 import {
   commands,
   current,
@@ -174,6 +175,25 @@ export class AgentControlReceiver {
     const agent = await requireCurrentAgentScope(this.store, claim, result);
     const state = agent.state;
     if (result.sequence <= state.controlSequence) return;
+    if (
+      result.phase === "stopped" &&
+      state.phase === "starting" &&
+      state.stopSentAtMs !== undefined
+    ) {
+      const deps = {
+        store: this.store,
+        signal: this.signal,
+        events: this.events,
+        stopReasons: this.stopReasons,
+      };
+      const settled = await settleStartupTimeout(deps, agent, state, {
+        outcome: "confirmed",
+        now: Date.now(),
+        controlSequence: result.sequence,
+      });
+      if (!settled) throw new Error("Control result lost its fence");
+      return;
+    }
     const command = Object.values(commands).find((command) => command.result === result.phase);
     if (command && state.phase !== command.pending) throw new Error("Unexpected command result");
     if (result.phase === "started" && (!result.launchId || state.launchId !== result.launchId))
