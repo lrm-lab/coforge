@@ -69,7 +69,7 @@ model Task {
   @@unique([conversationId, number])
   @@unique([messageId, conversationId])
   @@index([deletedAt], map: "tasks_deletedAt_idx", where: raw("\"deletedAt\" IS NOT NULL"))
-  @@index([dueAt], map: "tasks_dueAt_open_idx", where: raw("\"dueAt\" IS NOT NULL AND \"status\" NOT IN ('done', 'closed')"))
+  @@index([dueAt], map: "tasks_dueAt_open_idx", where: raw("(\"dueAt\" IS NOT NULL) AND (status <> ALL (ARRAY['done'::text, 'closed'::text]))"))
   @@unique([id, conversationId])
   @@unique([conversationId, creatorMemberId, requestId])
   @@index([workspaceId, conversationId, status])

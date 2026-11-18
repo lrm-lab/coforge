@@ -109,6 +109,9 @@ jobs:
       - name: Prepare the checkout and database
         run: ./scripts/test/prepare-web-integration.sh
 
+      - name: Check Prisma schema matches migration history
+        run: bun scripts/migration-safety/check-schema-history.ts
+
       - name: Run the integration suites
         # `shell: bash` makes a failing `mise run` fail the pipe, not just `tee`.
         shell: bash
