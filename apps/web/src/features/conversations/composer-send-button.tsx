@@ -7,17 +7,14 @@ import { isApplePlatform } from "#src/lib/platform";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 
-/** The send buttons are near-black (neutral-600 in dark mode, where near-black sinks into the background), not the primary button's brand violet, with white icons instead of the dimmed default. With nothing to send, both halves are the library's disabled secondary button instead (design spec), as Raft's grey outlined send. */
-const SEND_BUTTON_CLASS =
+const NEAR_BLACK_NOT_BRAND_VIOLET_SEND_CLASS =
   "bg-primary-solid hover:bg-primary-solid data-loading:bg-primary-solid dark:bg-secondary-solid dark:hover:bg-secondary-solid dark:data-loading:bg-secondary-solid *:data-icon:text-white hover:*:data-icon:text-white";
 
-/**
- * The composer's submit button. With `taskMode` it is split: a chevron beside it opens a menu
- * holding the other send, as a Task or as a plain message (sending as a Task has the keyboard twin
- * Cmd/Ctrl+Shift+Enter), so the one-line row has no room-taking toggle. The two halves overlap by
- * a pixel and drop their seam-side inner highlight, so they read as one button with a single
- * hairline between them.
- */
+const MENU_OFFSET_CLEARING_COMPOSER_PADDING_AND_BORDER = 17;
+
+const SPLIT_HALF_OVERLAPS_ONE_PIXEL_WITH_NO_SEAM_HIGHLIGHT =
+  "-ml-px rounded-l-none before:rounded-l-none before:border-l-0";
+
 export function ComposerSendButton({
   asTask,
   taskMode,
@@ -26,16 +23,10 @@ export function ComposerSendButton({
   label: labelOverride,
   className,
 }: {
-  /** What the send says it does, when not a plain send (the forward dialog's "Forward to 2"). */
   label?: string;
-  /** Whether the send goes out as a Task: armed by the send menu or Cmd/Ctrl+Shift+Enter, or an
-   * edited-back unsent Task. */
   asTask: boolean;
   taskMode: boolean;
   isDisabled: boolean;
-  /** The menu's choice of the other send: as a Task or not, whichever the button itself does
-   * not — sent now, or armed for the next submit when the owner needs a choice first (the Task's
-   * priority, task #12). */
   onChoose: (asTask: boolean) => void;
   className?: string;
 }) {
@@ -49,7 +40,7 @@ export function ComposerSendButton({
       };
   const look = isDisabled
     ? ({ color: "secondary" } as const)
-    : ({ color: "primary", className: SEND_BUTTON_CLASS } as const);
+    : ({ color: "primary", className: NEAR_BLACK_NOT_BRAND_VIOLET_SEND_CLASS } as const);
   return (
     <div className={cx("flex items-center", className)}>
       <Tooltip title={label} isDisabled={isDisabled}>
@@ -74,24 +65,19 @@ export function ComposerSendButton({
               size="xs"
               iconLeading={ChevronDown}
               aria-label={m.conversation_send_options()}
-              className={cx(
-                look.className,
-                "-ml-px rounded-l-none before:rounded-l-none before:border-l-0",
-              )}
+              className={cx(look.className, SPLIT_HALF_OVERLAPS_ONE_PIXEL_WITH_NO_SEAM_HIGHLIGHT)}
               isDisabled={isDisabled}
             />
           </Tooltip>
-          {/* The offset clears the composer's padding and border, so the menu sits above the
-              composer instead of on its edge. */}
-          <Dropdown.Popover placement="top end" offset={17} className="w-64">
+          <Dropdown.Popover
+            placement="top end"
+            offset={MENU_OFFSET_CLEARING_COMPOSER_PADDING_AND_BORDER}
+            className="w-64"
+          >
             <Dropdown.Menu
               aria-label={m.conversation_send_options()}
               onAction={() => onChoose(!asTask)}
             >
-              {/* Only the other send, as a split button's menu offers; what choosing it does —
-                  send now or arm the mode — is the owner's. An edited-back Task's other send has
-                  no shortcut. The popover renders only in the browser, where the platform is
-                  known. */}
               <Dropdown.Item id={asTask ? "send" : "task"} textValue={other.label}>
                 <span className="flex items-baseline justify-between gap-3">
                   {other.label}
