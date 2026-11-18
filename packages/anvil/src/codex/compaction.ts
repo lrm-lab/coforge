@@ -1,8 +1,14 @@
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import { asRecord, eventTime } from "@lrm/coforge-anvil";
 import type { JsonlProcess } from "@lrm/coforge-anvil/execution";
+import { getLogger } from "@logtape/logtape";
 import { codexTurnOutcome } from "./turn-outcome";
 import type { CodexSessionState } from "./provider-support";
+
+const logger = getLogger(["coforge", "daemon", "code-agent", "codex"]);
+
+export const TURN_END_COMPACTION_WAIT_MS = 10 * 60_000;
+export const TURN_END_COMPACTION_PROGRESS_MS = 5 * 60_000;
 
 export type CodexCompactingState = {
   type: "compacting";
@@ -29,13 +35,29 @@ export async function runCodexCompactRequest(options: {
   setState: (next: CodexCompactingState) => void;
   beginIdle: () => void;
   startGraceMs?: number;
+  waitMs?: number;
+  progressNoticeMs?: number;
+  onProgress?: () => void;
+  onUnconfirmed?: () => void;
 }): Promise<void> {
   const settled = Promise.withResolvers<void>();
   let startGraceTimer: ReturnType<typeof setTimeout> | undefined;
+  let progressTimer: ReturnType<typeof setTimeout> | undefined;
+  let waitTimer: ReturnType<typeof setTimeout> | undefined;
   const clearGrace = () => {
     if (startGraceTimer === undefined) return;
     clearTimeout(startGraceTimer);
     startGraceTimer = undefined;
+  };
+  const clearWaitTimers = () => {
+    if (progressTimer !== undefined) {
+      clearTimeout(progressTimer);
+      progressTimer = undefined;
+    }
+    if (waitTimer !== undefined) {
+      clearTimeout(waitTimer);
+      waitTimer = undefined;
+    }
   };
   const state: CodexCompactingState = {
     type: "compacting",
@@ -46,14 +68,44 @@ export async function runCodexCompactRequest(options: {
     noteStarted: clearGrace,
     settle: () => {
       clearGrace();
+      clearWaitTimers();
       settled.resolve();
     },
     fail: (error) => {
       clearGrace();
+      clearWaitTimers();
       settled.reject(error);
     },
   };
   options.setState(state);
+  const progressMs = options.progressNoticeMs ?? TURN_END_COMPACTION_PROGRESS_MS;
+  const waitMs = options.waitMs ?? TURN_END_COMPACTION_WAIT_MS;
+  if (progressMs > 0 && progressMs < waitMs) {
+    progressTimer = setTimeout(() => {
+      progressTimer = undefined;
+      if (options.getState() !== state) return;
+      logger.info("Codex compaction still in progress", {
+        event: "codex.compaction.in_progress",
+        thread_id: options.threadId,
+        elapsed_ms: progressMs,
+      });
+      options.onProgress?.();
+    }, progressMs);
+    progressTimer.unref?.();
+  }
+  waitTimer = setTimeout(() => {
+    waitTimer = undefined;
+    if (options.getState() !== state) return;
+    logger.warn("Codex compaction wait timed out; marking unconfirmed without canceling", {
+      event: "codex.compaction.unconfirmed",
+      thread_id: options.threadId,
+      wait_ms: waitMs,
+    });
+    options.onUnconfirmed?.();
+    options.beginIdle();
+    state.settle();
+  }, waitMs);
+  waitTimer.unref?.();
   let response: Readonly<Record<string, unknown>>;
   try {
     response = await options.process.request({

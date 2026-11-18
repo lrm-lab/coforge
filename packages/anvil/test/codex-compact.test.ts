@@ -3,6 +3,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentRuntimeEvent } from "@lrm/coforge-anvil";
+import {
+  TURN_END_COMPACTION_PROGRESS_MS,
+  TURN_END_COMPACTION_WAIT_MS,
+  runCodexCompactRequest,
+} from "../src/codex/compaction";
+import type { CodexSessionState } from "../src/codex/provider-support";
 import { scenarioProvider, waitForEvent } from "./codex-scenarios";
 
 let directory: string;
@@ -50,4 +56,44 @@ test("Codex compact() keeps hasLiveTurn true, emits compaction + context-usage e
   } finally {
     await session.dispose();
   }
+});
+
+test("runCodexCompactRequest emits progress notice and marks unconfirmed on timeout without canceling", async () => {
+  expect(TURN_END_COMPACTION_PROGRESS_MS).toBe(5 * 60_000);
+  expect(TURN_END_COMPACTION_WAIT_MS).toBe(10 * 60_000);
+  let state: CodexSessionState = { type: "idle" };
+  let progressCount = 0;
+  let unconfirmedCount = 0;
+  let beginIdleCount = 0;
+  const methods: string[] = [];
+  await runCodexCompactRequest({
+    process: {
+      request: async (req: { method: string }) => {
+        methods.push(req.method);
+        return { result: { turn: { id: "turn-slow-compact" } } };
+      },
+    } as never,
+    threadId: "thread-1",
+    getState: () => state,
+    setState: (next) => {
+      state = next;
+    },
+    beginIdle: () => {
+      beginIdleCount += 1;
+      state = { type: "idle" };
+    },
+    progressNoticeMs: 10,
+    waitMs: 30,
+    onProgress: () => {
+      progressCount += 1;
+    },
+    onUnconfirmed: () => {
+      unconfirmedCount += 1;
+    },
+  });
+  expect(methods).toEqual(["thread/compact/start"]);
+  expect(progressCount).toBe(1);
+  expect(unconfirmedCount).toBe(1);
+  expect(beginIdleCount).toBe(1);
+  expect(state.type).toBe("idle");
 });
