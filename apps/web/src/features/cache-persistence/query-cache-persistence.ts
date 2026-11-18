@@ -16,7 +16,6 @@ import {
 } from "./persisted-queries";
 import { followRestoredReads } from "./restored-reads";
 
-/** Where kept queries go: a key-value store that outlives the page (IndexedDB in the browser). */
 export type PersistedQueryStore = {
   get(key: string): Promise<unknown>;
   set(key: string, value: unknown): Promise<void>;
@@ -26,8 +25,6 @@ export type PersistedQueryStore = {
   clear(): Promise<void>;
 };
 
-/** What is in storage for one query: only what a restore needs, never the query's error or fetch
- * state. */
 type StoredQuery = {
   buster: string;
   queryHash: string;
@@ -35,8 +32,6 @@ type StoredQuery = {
   state: { data: unknown; dataUpdatedAt: number };
 };
 
-/** Whether what storage returned for a query is a row this page can open: a row of a shape the
- * app no longer reads (or that something else wrote) is a miss, not a crash. */
 function isReadableRow(stored: unknown): stored is StoredQuery {
   if (typeof stored !== "object" || stored === null) return false;
   const { buster, queryHash, queryKey, state } = stored as Partial<StoredQuery>;
@@ -50,20 +45,12 @@ function isReadableRow(stored: unknown): stored is StoredQuery {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-/** When a person's rows were last swept, next to them (not a query's key, so the sweep skips it). */
 const COLLECTED_AT_KEY = "meta/collected-at";
 
-/** Whose rows the store holds now. A page loaded as someone else stops using it: another tab signed
- * out, or in as another person, and this page's reads now carry that session's cookie. */
 const OWNER_KEY = "meta/owner";
-/** How long a read waits for the store before it reads the network instead. */
 const STORE_WAIT_MS = 250;
-/** Reads in a row the store let time out before this page stops asking it (an IndexedDB open that
- * stalls). One is not enough: a first open on a cold profile, with the one-time claim, can be slow
- * once and then answer. */
 const UNANSWERED_READS_LIMIT = 2;
 
-/** The start of every key one person owns; an id cannot spell another person's. */
 const namespaceOf = (viewer: string) => `${encodeURIComponent(viewer)}/`;
 
 export function installQueryCachePersistence(
@@ -71,26 +58,17 @@ export function installQueryCachePersistence(
   {
     store,
     viewerId,
-    // A stored copy is a first paint, and one older than a day is not shown (task #382).
     maxAge = DAY_MS,
   }: {
     store: PersistedQueryStore;
-    /** Who is signed in as of now; storage is inert while this is `undefined`. */
     viewerId: () => string | undefined;
     maxAge?: number;
   },
 ) {
-  /**
-   * The store, claimed for one person the first time they use it: whatever another person left
-   * (a sign-out that never ran, a session that ended) goes before anything is read or written.
-   */
   let claimed: { viewer: string; done: Promise<void> } | undefined;
   const claim = (viewer: string) => {
     if (claimed?.viewer === viewer) return claimed.done;
     const namespace = namespaceOf(viewer);
-    // The owner is recorded first, so the earlier person's tabs stop at their next check, before
-    // their rows go. The owner row is overwritten, never removed: the same person's other tab
-    // checks it.
     const done = store
       .set(OWNER_KEY, viewer)
       .then(() => store.keys())
@@ -103,26 +81,14 @@ export function installQueryCachePersistence(
       )
       .then(storeAnswered);
     claimed = { viewer, done };
-    // A store that failed the claim is claimed again by the next use.
     done.catch(() => {
       if (claimed?.done === done) claimed = undefined;
     });
     return done;
   };
-  /**
-   * Set by `purge`, or when the store has passed to someone else (`OWNER_KEY`): a read still in
-   * flight must not write back, and this page opens nothing more from storage.
-   */
   let sealed = false;
-  /**
-   * Reads in a row the store did not answer in time, and whether reads have stopped waiting on it.
-   * Only reads stop: a write waits for the store however long it takes. Once the store answers
-   * anything (a first open on a cold profile, slow once), reads wait on it again.
-   */
   let unansweredReads = 0;
   let unresponsive = false;
-  /** Writes made while reads do not wait on the store: the newest per query, not each one, so a
-   * store that never answers holds one row's data per kept query rather than every read's. */
   const deferredWrites = new Map<string, StoredQuery | undefined>();
   function storeAnswered() {
     unansweredReads = 0;
@@ -131,24 +97,17 @@ export function installQueryCachePersistence(
     deferredWrites.clear();
     for (const [key, value] of writes) void storage.setItem(key, value);
   }
-  /**
-   * A key in the signed-in person's own namespace, or `undefined` while nobody is known, once the
-   * page is sealed, or when the store now belongs to someone else. Ownership is checked on every
-   * use: a sign-out or another sign-in in another tab happens while this page stays open.
-   */
   const keyOf = async (key: string) => {
     const viewer = viewerId();
     if (!viewer || sealed) return undefined;
     await claim(viewer);
     const owner = await store.get(OWNER_KEY);
-    // A sign-out may have sealed the page while the owner was being read.
     if (sealed || owner !== viewer) {
       sealed = true;
       return undefined;
     }
     return `${namespaceOf(viewer)}${key}`;
   };
-  /** What a read waits for: the store's answer, or a miss once `STORE_WAIT_MS` has passed. */
   const answered = <T>(work: Promise<T>, miss: T): Promise<T> => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const late = new Promise<T>((resolve) => {
@@ -160,8 +119,6 @@ export function installQueryCachePersistence(
     });
     return Promise.race([work, late]).finally(() => clearTimeout(timer));
   };
-  /** Storage is a cache: a store that fails (no IndexedDB in a private window, a full disk) is a
-   * miss and a dropped write, never a failed read. TanStack's persister does not catch these. */
   const safely = async <T>(work: () => Promise<T>, fallback: T): Promise<T> => {
     try {
       return await work();
@@ -170,7 +127,6 @@ export function installQueryCachePersistence(
     }
   };
   const storage: AsyncStorage<StoredQuery | undefined> = {
-    // The one call a read waits on before it reaches the network, so it waits only so long.
     getItem: (key) =>
       safely(
         async () =>
@@ -188,8 +144,6 @@ export function installQueryCachePersistence(
               ),
         undefined,
       ),
-    // A write is not time-boxed; while reads do not wait on the store it is deferred, and written
-    // once the store answers anything.
     setItem: (key, value) =>
       safely(async () => {
         if (unresponsive) {
@@ -210,7 +164,6 @@ export function installQueryCachePersistence(
         const own = await keyOf(key);
         if (own) await store.delete(own);
       }, undefined),
-    // What garbage collection walks: this person's rows, under the keys the persister gave them.
     entries: () =>
       safely(async () => {
         const viewer = viewerId();
@@ -224,7 +177,6 @@ export function installQueryCachePersistence(
           ]);
       }, []),
   };
-  /** What goes to storage for a query: only what a restore needs, cut to its first paint. */
   const toStored = (persisted: Omit<PersistedQuery, "state"> & { state: Query["state"] }) => {
     const data = storedQueryData(persisted.queryKey, persisted.state.data);
     if (data === undefined) return undefined;
@@ -239,12 +191,9 @@ export function installQueryCachePersistence(
     storage,
     buster: storedShapeBuster,
     maxAge,
-    // The read after a restore is `followRestoredReads`'s, not the persister's own (see there).
     refetchOnRestore: false,
     filters: { predicate: (query) => persistsQuery(query.queryKey) },
     serialize: (persisted) => toStored(persisted),
-    // A row this page cannot open makes the persister remove it and read the network (its
-    // "malformed"), on a restore and on the daily sweep alike.
     deserialize: (stored): PersistedQuery => {
       if (!isReadableRow(stored)) throw new Error("nothing readable stored");
       return {
@@ -268,7 +217,6 @@ export function installQueryCachePersistence(
       };
     },
   });
-  // A restored read is only a first paint: the network read always follows (`followRestoredReads`).
   const restoredReads = followRestoredReads(queryClient);
   const persisterFn: typeof persister.persisterFn = async (queryFn, context, query) => {
     const restoring = query.state.data === undefined;
@@ -281,24 +229,16 @@ export function installQueryCachePersistence(
       context,
       query,
     );
-    // After the query took the restored data as its result, which clears the flag.
     if (restoring && !networkRead && readsAfterRestore(query.queryKey))
       restoredReads.restored(query);
     return data;
   };
-  // What the server says is gone (deleted, or this person lost access: both are `NOT_FOUND`) does
-  // not stay in storage, where nothing would ever read it again but a restore.
   queryClient.getQueryCache().subscribe((event) => {
     if (event.type !== "updated" || event.action.type !== "error") return;
     if (!persistsQuery(event.query.queryKey)) return;
     if (!isAppError(event.action.error) || event.action.error.code !== "NOT_FOUND") return;
     void storage.removeItem(`${PERSISTER_KEY_PREFIX}-${event.query.queryHash}`);
   });
-  /**
-   * Stores the query as the cache holds it now, if it still does: one the server answered
-   * `NOT_FOUND` for (removed from storage above) or the page dropped is not written back, and a
-   * stand-in the page marked stale is not stored as data.
-   */
   const storeNow = (queryHash: string) => {
     const query = queryClient.getQueryCache().get(queryHash);
     if (!query || query.state.status !== "success" || query.state.isInvalidated) return;
@@ -317,24 +257,16 @@ export function installQueryCachePersistence(
     queries: {
       ...defaults.queries,
       persister: persisterFn,
-      // A persister would make every query `offlineFirst`; only the network mode the app has always
-      // had keeps a paused read paused.
       networkMode: defaults.queries?.networkMode ?? "online",
     },
   });
   return {
-    /** Whether the query `queryKey` still shows its restored copy (`followRestoredReads`). */
     restoredCopyShown: (queryKey: QueryKey) => restoredReads.awaiting(hashKey(queryKey)),
     restoredCopyReplaced: (queryKey: QueryKey) => {
       const query = queryClient.getQueryCache().find({ queryKey, exact: true });
       if (query) restoredReads.replaced(query);
     },
     subscribeRestoredReads: restoredReads.subscribe,
-    /**
-     * Stores the kept queries the page already holds: a read that finished while nobody was known
-     * yet (a client-side entry into a Workspace from a page outside one) wrote nothing, and a query
-     * that arrived hydrated ran no read here. The next page load opens from them all the same.
-     */
     async seed() {
       await safely(async () => {
         const held = queryClient.getQueryCache().findAll({
@@ -343,10 +275,6 @@ export function installQueryCachePersistence(
         await Promise.all(held.map((query) => persister.persistQuery(query)));
       }, undefined);
     },
-    /**
-     * Removes what is past `maxAge`, for queries nobody opened again (opening one removes it
-     * anyway). It reads every row, so it runs at most once a day.
-     */
     async collectGarbage() {
       await safely(async () => {
         const marker = await keyOf(COLLECTED_AT_KEY);
@@ -357,18 +285,10 @@ export function installQueryCachePersistence(
         await store.set(marker, Date.now());
       }, undefined);
     },
-    /**
-     * Stores the kept query `queryKey` as the cache holds it now. Only what a read of the server
-     * returned is stored by itself, as TanStack's persister does (`setQueryData` is not persisted:
-     * a write of the page's own stored with a new time made an old window look new, task #382);
-     * this is for data the page itself read that no query read stands behind: a Computer's Agent
-     * workspace scan. Resolves once stored, or once storage declined it (a failing store is a miss).
-     */
     async store(queryKey: QueryKey) {
       if (!persistsQuery(queryKey)) return;
       await storeNow(hashKey(queryKey));
     },
-    /** Sign-out: removes every kept query, and keeps this page from writing any more. */
     async purge() {
       sealed = true;
       await store.clear();
