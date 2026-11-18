@@ -203,32 +203,41 @@ export class LocalMemory {
     let incomplete = listed.incomplete;
     const status = archived ? "archived" : "active";
     let matched = 0;
-    const entries: LocalMemoryEntry[] = [];
+    const page: string[] = [];
     for (let index = 0; offset < paths.length && index < paths.length; index += 8) {
+      const batch = paths.slice(index, index + 8);
       const candidates = await Promise.all(
-        paths.slice(index, index + 8).map(async (path) => {
-          const summary = await readMemoryRecordSummary(this.root, path);
-          if (!summary || path !== `notes/knowledge/${summary.key}.md`) {
-            incomplete = true;
-            return undefined;
-          }
-          if (summary.status !== status) return undefined;
-          const text = await this.#index.read(path).catch(() => undefined);
-          const entry = text ? decodeMemoryRecord(text, path) : undefined;
-          if (entry && path === `notes/knowledge/${entry.key}.md`) return entry;
-          incomplete = true;
-          return undefined;
-        }),
+        batch.map((path) => readMemoryRecordSummary(this.root, path)),
       );
-      for (const candidate of candidates) {
-        if (candidate?.status !== status) continue;
+      for (const [position, candidate] of candidates.entries()) {
+        const path = batch[position]!;
+        if (!candidate || path !== `notes/knowledge/${candidate.key}.md`) {
+          incomplete = true;
+          continue;
+        }
+        if (candidate.status !== status) continue;
         if (matched++ < offset) continue;
-        if (entries.length === LIST_PAGE_SIZE)
-          return { entries, nextOffset: offset + LIST_PAGE_SIZE, incomplete: true };
-        entries.push(memoryListPreview(candidate, Math.floor(11_000 / LIST_PAGE_SIZE) - 2));
+        page.push(path);
+        if (page.length > LIST_PAGE_SIZE) break;
       }
+      if (page.length > LIST_PAGE_SIZE) break;
     }
-    return { entries, ...(incomplete ? { incomplete } : {}) };
+    const records = await Promise.all(
+      page.slice(0, LIST_PAGE_SIZE).map(async (path) => {
+        const text = await this.#index.read(path).catch(() => undefined);
+        const entry = text ? decodeMemoryRecord(text, path) : undefined;
+        return entry?.status === status && path === `notes/knowledge/${entry.key}.md`
+          ? memoryListPreview(entry, Math.floor(11_000 / LIST_PAGE_SIZE) - 2)
+          : undefined;
+      }),
+    );
+    const entries = records.filter((record) => record !== undefined);
+    const hasNext = page.length > LIST_PAGE_SIZE;
+    return {
+      entries,
+      ...(hasNext ? { nextOffset: offset + LIST_PAGE_SIZE } : {}),
+      ...(incomplete || hasNext || records.length !== entries.length ? { incomplete: true } : {}),
+    };
   }
 
   async brief(maxBytes: number): Promise<string> {
