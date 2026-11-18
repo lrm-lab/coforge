@@ -49,20 +49,17 @@ test("channel header cluster renders 32px faces, spec +N chip, and dashed add bu
     />,
   );
 
-  // Cartoon people take avatar-portrait; every header face and "+7" take 32px avatar-header + 2px ring.
   expect(html).toContain("avatar-portrait");
   expect(html).toContain("avatar-header");
   expect(html).toContain("avatar-stack-face ring-2 ring-bg-primary");
   expect(html).not.toContain("ring-[1.5px]");
 
-  // "+7" overflow circle: #F9F5FF fill token, 14px semibold #5D36DC text token, no photo hairline.
   expect(html).toContain(">+7<");
   expect(html).toContain("bg-avatar-more");
   expect(html).toContain("[&amp;&gt;span]:text-avatar-more-fg");
   expect(html).toContain("text-sm font-semibold");
   expect(html).toContain("outline-none");
 
-  // Dashed add-member circle: 32px (size-8), 1px dashed #E0E5F1 (border-secondary), #777D8D plus icon.
   expect(html).toMatch(/border-dashed[^"]*size-8[^"]*border-secondary[^"]*text-avatar-add-fg/);
 });
 
