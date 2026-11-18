@@ -19,6 +19,12 @@ export type AgentDeliveryRejectionOutcome =
   | "start_failed"
   | "operation_in_flight";
 
+type SettledOutcome = {
+  outcome: AgentDeliveryRejectionOutcome;
+  /** When this round of not waking began: the Stop, or the failed Start, the messages wait on. */
+  roundStart?: Date;
+};
+
 /** The rejecting Computer does not host this Agent in this Workspace. */
 export class AgentDeliveryRejectionScopeError extends Error {
   constructor() {
@@ -53,27 +59,32 @@ export class AgentDeliveryRejections {
   ): Promise<AgentDeliveryRejectionOutcome> {
     // Most rejections start nothing; only one that might start the Agent takes its lock.
     const unlocked = settledOutcome(await this.#read(scope, rejection));
-    const outcome =
+    const settled =
       unlocked ??
       (await this.runtimeLock.run(rejection.agentId, async () => {
         const agent = await this.#read(scope, rejection);
-        return settledOutcome(agent) ?? (await this.#wake(agent));
+        const underLock = settledOutcome(agent);
+        if (underLock) return underLock;
+        await this.#wake(agent);
+        return { outcome: "woken" as const };
       }));
-    log("agent_delivery:rejected", scope, rejection, { outcome });
-    await this.#recordWakeBlock(scope, rejection, outcome);
-    return outcome;
+    log("agent_delivery:rejected", scope, rejection, { outcome: settled.outcome });
+    await this.#recordWakeBlock(scope, rejection, settled);
+    return settled.outcome;
   }
 
   async #recordWakeBlock(
     scope: { workspaceId: string; computerId: string },
     rejection: AgentMessageDeliveryRejection,
-    outcome: AgentDeliveryRejectionOutcome,
+    settled: SettledOutcome,
   ): Promise<void> {
-    const reason = wakeBlockReason(outcome);
+    const reason = wakeBlockReason(settled.outcome);
     if (!this.wakeBlocks || !reason) return;
-    await this.wakeBlocks.record(rejection.agentId, reason).catch((error: unknown) => {
-      log("agent_delivery:wake_block_write_failed", scope, rejection, { error: String(error) });
-    });
+    await this.wakeBlocks
+      .record(rejection.agentId, reason, settled.roundStart)
+      .catch((error: unknown) => {
+        log("agent_delivery:wake_block_write_failed", scope, rejection, { error: String(error) });
+      });
   }
 
   async #read(
@@ -107,18 +118,20 @@ export class AgentDeliveryRejections {
 }
 
 /** The outcome for an Agent this rejection must not start, or `undefined` when it may. */
-function settledOutcome(
-  agent: AgentControlAgent,
-  now = Date.now(),
-): AgentDeliveryRejectionOutcome | undefined {
-  if (agent.deletedAt) return "deleted";
-  if (agent.stoppedAt) return "stopped";
+function settledOutcome(agent: AgentControlAgent, now = Date.now()): SettledOutcome | undefined {
+  if (agent.deletedAt) return { outcome: "deleted" };
+  if (agent.stoppedAt) return { outcome: "stopped", roundStart: new Date(agent.stoppedAt) };
   switch (controlOperationState(agent)) {
     case "in_flight":
-      return "operation_in_flight";
-    case "failed":
+      return { outcome: "operation_in_flight" };
+    case "failed": {
       if (isEligibleForTransientRetry(agent, now)) return undefined;
-      return "start_failed";
+      const failedAtMs = agent.state?.failedAtMs;
+      return {
+        outcome: "start_failed",
+        ...(typeof failedAtMs === "number" ? { roundStart: new Date(failedAtMs) } : {}),
+      };
+    }
     case "settled":
       return undefined;
   }
