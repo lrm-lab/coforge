@@ -129,11 +129,12 @@ describe("desktop route", () => {
     expect(html).not.toContain("msg.remove()");
   });
 
-  test("a reconnect page that already has phone gestures and keyboard is left alone", () => {
+  test("a reconnect page that already has phone gestures, keyboard and copy-out is left alone", () => {
     const current = `<!DOCTYPE html>
 <script type="module">
     import RFB from "./core/rfb.js";
     function coforgeDesktopPaste(text) {}
+    function coforgeDesktopCopyOut() {}
     function coforgeAttachPhoneGestures() {}
     const phone = params.get("view") === "phone";
 </script>
