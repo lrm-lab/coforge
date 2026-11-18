@@ -26,6 +26,8 @@ type Lookup = {
   entryPath: string;
   sha256: string;
   sizeBytes: number;
+  access: string;
+  workspaceSlug: string;
 };
 
 function publicSandbox(
@@ -58,6 +60,8 @@ const page = (overrides: Partial<Lookup> = {}): Lookup => ({
   entryPath: "index.html",
   sha256: "sha",
   sizeBytes: 10,
+  access: "conversation",
+  workspaceSlug: "acme",
   ...overrides,
 });
 

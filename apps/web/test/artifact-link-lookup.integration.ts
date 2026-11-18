@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { linkPageLookup } from "#src/server/artifacts/artifact-public-page.server";
+import {
+  linkPageLookup,
+  publicPageLookup,
+} from "#src/server/artifacts/artifact-public-page.server";
 import { commentsFixture, type CommentsFixture } from "./helpers/artifact-comments-fixture";
 
 let f: CommentsFixture;
@@ -28,4 +31,19 @@ test("a deleted link-tier artifact is not found, the same as one that never exis
   await f.db.artifact.update({ where: { id }, data: { deletedAt: new Date() } });
   expect(await lookup(id)).toEqual({ shared: false, page: null });
   expect(await lookup(crypto.randomUUID())).toEqual({ shared: false, page: null });
+});
+
+test("a revoked public token finds nothing even when its artifact is link-tier again", async () => {
+  const id = await f.make("Revoked page");
+  await share(id);
+  const token = `tok-${crypto.randomUUID()}`;
+  await f.db.artifactPublicLink.create({
+    data: { artifactId: id, token, createdByUserId: f.alice, revokedAt: new Date() },
+  });
+  expect(await publicPageLookup(f.db, async () => true)(token)).toBeNull();
+  await f.db.artifactPublicLink.update({ where: { token }, data: { revokedAt: null } });
+  expect(await publicPageLookup(f.db, async () => true)(token)).toMatchObject({
+    access: "link",
+    workspaceSlug: expect.any(String),
+  });
 });

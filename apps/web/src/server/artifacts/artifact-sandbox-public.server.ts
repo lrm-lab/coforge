@@ -34,6 +34,7 @@ export type PublicServingDependencies = Pick<
   | "linkPage"
   | "missGuard"
   | "linkArtifactLimit"
+  | "appOrigin"
   | "publicRateLimit"
   | "publicFileRateLimit"
   | "publicClientAddress"
@@ -148,6 +149,7 @@ export class ArtifactPublicServing {
     if (loaded instanceof Response) return loaded;
     const page = loaded;
     if (!page || page.artifactId !== host.artifactId) return sandboxRefusal(404, "Not found.");
+    if (!ref.guarded && page.access === "link") return this.redirectToApp(page, path);
     if (path === undefined)
       return sandboxRedirect(
         `${ref.base}/${publicPageKind(page.kind) ? "page" : "file"}/${sandboxFileUrlPath(page.entryPath)}`,
@@ -197,6 +199,12 @@ export class ArtifactPublicServing {
     return response;
   }
 
+  private redirectToApp(page: PublicPage, path: string | undefined): Response {
+    const app = this.deps.appOrigin?.();
+    if (path !== undefined || !app) return sandboxRefusal(404, "Not found.");
+    return sandboxRedirect(`${app}/w/${page.workspaceSlug}/artifacts/${page.artifactId}`);
+  }
+
   private async servePublicFileOf(
     request: Request,
     host: ArtifactHost,
@@ -212,6 +220,7 @@ export class ArtifactPublicServing {
     const loaded = await this.loadPublic(request, ref, path);
     if (loaded instanceof Response) return loaded;
     const page = loaded;
+    if (page && !ref.guarded && page.access === "link") return this.redirectToApp(page, path);
     if (
       !page ||
       page.artifactId !== host.artifactId ||

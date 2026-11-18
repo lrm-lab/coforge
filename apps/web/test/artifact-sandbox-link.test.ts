@@ -22,6 +22,8 @@ const found: PublicPage = {
   entryPath: "index.html",
   sha256: "sha",
   sizeBytes: 10,
+  access: "link",
+  workspaceSlug: "acme",
 };
 
 const ABSENT: LinkLookup = { shared: false, page: null };

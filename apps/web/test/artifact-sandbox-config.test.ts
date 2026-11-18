@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
 import {
   ArtifactSandboxConfigError,
+  artifactApplicationOrigin,
   artifactPageOrigin,
   isSandboxRequest,
   readArtifactSandboxConfig,
@@ -136,5 +137,18 @@ describe("a request's host name", () => {
   test("an artifact's origin keeps the sandbox's scheme and port", () => {
     expect(artifactPageOrigin(SANDBOX, A.toUpperCase())).toBe(A_ORIGIN);
     expect(artifactPageOrigin("http://localhost:5199", A)).toBe(`http://a-${A}.localhost:5199`);
+  });
+});
+
+describe("the application origin a redirect points at", () => {
+  test("it is the origin of the first setting that names one, and none when none does", () => {
+    expect(artifactApplicationOrigin({ COFORGE_OIDC_ISSUER: `${APP}/auth/` })).toBe(APP);
+    expect(
+      artifactApplicationOrigin({
+        COFORGE_OIDC_ISSUER: "not a url",
+        COFORGE_GITHUB_CALLBACK_URL: `${APP}/api/github/callback`,
+      }),
+    ).toBe(APP);
+    expect(artifactApplicationOrigin({})).toBeNull();
   });
 });

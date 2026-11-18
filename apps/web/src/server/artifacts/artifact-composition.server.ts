@@ -11,7 +11,7 @@ import { ArtifactPageAssets } from "./artifact-page-assets.server";
 import { ArtifactPageData } from "./artifact-page-data.server";
 import { ArtifactSandbox } from "./artifact-sandbox.server";
 import { productionTicketNonces } from "./artifact-sandbox-nonces.server";
-import { artifactSandboxOrigin } from "./artifact-sandbox-config.server";
+import { artifactApplicationOrigin, artifactSandboxOrigin } from "./artifact-sandbox-config.server";
 import { ArtifactPublicLinks } from "./artifact-public-links.server";
 import { linkPageLookup, publicPageLookup } from "./artifact-public-page.server";
 import { ArtifactOrigins } from "./artifact-origins.server";
@@ -203,6 +203,7 @@ export function productionArtifactSandbox(db: PrismaClient) {
     linkPage: linkPageLookup(db),
     missGuard: productionLinkMissGuard(),
     linkArtifactLimit: getAppRateLimits().publicArtifactPerArtifact,
+    appOrigin: () => artifactApplicationOrigin(),
   });
 }
 

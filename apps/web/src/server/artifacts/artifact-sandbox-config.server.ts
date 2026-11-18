@@ -44,18 +44,23 @@ export function readArtifactSandboxConfig(
   return { origin };
 }
 
-/** The application's host names, from every setting that names its origin and parses. */
-function applicationHostnames(env: NodeJS.ProcessEnv): string[] {
+function applicationOrigins(env: NodeJS.ProcessEnv): string[] {
   return APPLICATION_ORIGIN_SETTINGS.flatMap((name) => {
     const value = env[name]?.trim();
     if (!value) return [];
     try {
-      return [hostnameOf(new URL(value))];
+      return [new URL(value).origin];
     } catch {
       return [];
     }
   });
 }
+
+const applicationHostnames = (env: NodeJS.ProcessEnv): string[] =>
+  applicationOrigins(env).map((origin) => hostnameOf(new URL(origin)));
+
+export const artifactApplicationOrigin = (env: NodeJS.ProcessEnv = process.env): string | null =>
+  applicationOrigins(env)[0] ?? null;
 
 function loopbackHttpOrigin(raw: string): string | null {
   let url: URL;

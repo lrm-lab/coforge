@@ -50,6 +50,7 @@ export type SandboxDependencies = {
   linkPage?(artifactId: string, path?: string): Promise<LinkLookup>;
   missGuard?: PublicArtifactMissGuard;
   linkArtifactLimit?: AppRateLimit;
+  appOrigin?: () => string | null;
   viewerName?: (workspaceId: string, userId: string) => Promise<string>;
   publicRateLimit?: AppRateLimit;
   publicFileRateLimit?: AppRateLimit;
