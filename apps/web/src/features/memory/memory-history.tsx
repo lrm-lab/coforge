@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { TeamMemoryHead } from "@lrm/coforge-sdk/agent";
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
+import { MemoryProvenance } from "./memory-provenance";
 import * as m from "#src/paraglide/messages";
 import { memoryCommand } from "./memory.functions";
 import { memoryError } from "./memory-copy";
@@ -101,6 +102,7 @@ export function MemoryHistory({
           </h3>
           <p className="whitespace-pre-wrap text-sm text-primary">{version.content}</p>
           <p className="whitespace-pre-wrap text-sm text-secondary">{version.source}</p>
+          <MemoryProvenance entry={version} />
           <Input label={m.memory_reason()} value={reason} onChange={setReason} maxLength={1000} />
           <Button
             color="secondary"
