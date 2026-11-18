@@ -129,3 +129,21 @@ test("a provider usage limit ending every turn with nothing shown never trips th
     hold.disposeAll();
   }
 });
+
+test("a plain-text session limit with no provider limit attached is not counted by the fence", () => {
+  const { hold } = harness();
+  try {
+    const event = {
+      type: "error",
+      message: "You've hit your session limit · resets 3:45pm",
+    } as never;
+    for (let turn = 0; turn < 4; turn += 1) {
+      expect(
+        hold.noteRuntimeFailure("agent", {} as Launch, event, classifyRuntimeError(event)).fence,
+      ).toBeUndefined();
+      hold.noteTurnEnd("agent");
+    }
+  } finally {
+    hold.disposeAll();
+  }
+});

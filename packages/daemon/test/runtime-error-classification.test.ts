@@ -415,10 +415,10 @@ test("Codex try-again-in hours on a usage limit waits that long", () => {
   expect(retryNotBefore).toBeLessThanOrEqual(Date.now() + 5 * 60 * 60 * 1000);
 });
 
-test("a session limit is not an exhausted usage quota", () => {
-  expect(classifyRuntimeErrorText("You've hit your session limit")).toEqual({
-    errorClass: RUNTIME_ERROR_CLASS.RUNTIME,
-    errorReason: "runtime_failure",
+test("a session limit is a window limit that retries and never takes the Agent offline", () => {
+  expect(classifyRuntimeErrorText("You've hit your session limit · resets 3:45pm")).toEqual({
+    errorClass: RUNTIME_ERROR_CLASS.RATE_LIMIT,
+    errorReason: "quota_exhausted",
     retryDecision: RUNTIME_ERROR_RETRY_DECISION.RETRY,
     requiredAction: "none",
     takesAgentOffline: false,
