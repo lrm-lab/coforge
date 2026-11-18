@@ -39,6 +39,16 @@ describe("migration-contract hard rule (#37)", () => {
     ]);
   });
 
+  test("extractDrops ignores ALTER COLUMN ... DROP DEFAULT / NOT NULL / EXPRESSION / IDENTITY", () => {
+    const sql = `
+      ALTER TABLE "tasks" ALTER COLUMN "dueAt" DROP DEFAULT;
+      ALTER TABLE "tasks" ALTER COLUMN "dueAt" DROP NOT NULL;
+      ALTER TABLE "tasks" ALTER COLUMN "computed" DROP EXPRESSION;
+      ALTER TABLE "tasks" ALTER COLUMN "seq" DROP IDENTITY IF EXISTS;
+    `;
+    expect(extractDrops(sql)).toEqual([]);
+  });
+
   test("rejects DROP COLUMN / DROP TABLE / DROP CONSTRAINT when base or current schema/code still references them", () => {
     const drops = [
       {

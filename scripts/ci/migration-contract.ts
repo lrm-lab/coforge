@@ -57,6 +57,32 @@ function skipIfExists(tokens: Token[], index: number): number {
   return index;
 }
 
+const NON_COLUMN_DROP_TARGETS = new Set([
+  "CONSTRAINT",
+  "INDEX",
+  "PRIMARY",
+  "FOREIGN",
+  "CHECK",
+  "UNIQUE",
+  "DEFAULT",
+  "NOT",
+  "EXPRESSION",
+  "IDENTITY",
+]);
+
+function nextTopLevelComma(tokens: Token[], from: number): number {
+  let depth = 0;
+  for (let i = from; i < tokens.length; i++) {
+    const t = tokens[i]!;
+    if (t.kind === "punct") {
+      if (t.text === "(") depth++;
+      else if (t.text === ")") depth = Math.max(0, depth - 1);
+      else if (t.text === "," && depth === 0) return i + 1;
+    }
+  }
+  return tokens.length;
+}
+
 export function extractDrops(sql: string): DropTarget[] {
   const drops: DropTarget[] = [];
   for (const statement of splitStatements(sql)) {
@@ -83,21 +109,21 @@ export function extractDrops(sql: string): DropTarget[] {
             if (constraint) {
               drops.push({ kind: "constraint", table, constraint, line: statement.line });
             }
-            idx = nameIdx + 1;
-            continue;
-          }
-          let colIdx = what === "COLUMN" ? idx + 2 : idx + 1;
-          if (what !== "CONSTRAINT" && what !== "INDEX") {
-            colIdx = skipIfExists(tokens, colIdx);
+          } else if (what === "COLUMN") {
+            const colIdx = skipIfExists(tokens, idx + 2);
             const column = unquotedName(tokens[colIdx]);
             if (column) {
               drops.push({ kind: "column", table, column, line: statement.line });
             }
-            idx = colIdx + 1;
-            continue;
+          } else if (!what || !NON_COLUMN_DROP_TARGETS.has(what)) {
+            const colIdx = skipIfExists(tokens, idx + 1);
+            const column = unquotedName(tokens[colIdx]);
+            if (column) {
+              drops.push({ kind: "column", table, column, line: statement.line });
+            }
           }
         }
-        idx++;
+        idx = nextTopLevelComma(tokens, idx);
       }
     }
   }
@@ -269,14 +295,25 @@ function pathsInRevision(revision: string, prefix: string[]): string[] {
   return git(tree).toString().split("\0").filter(Boolean);
 }
 
-function baseRevision(source: ChangeSource): string {
-  if (source.kind === "range") return source.base;
-  const hasOriginMain =
-    Bun.spawnSync(["git", "rev-parse", "--verify", "--quiet", "origin/main"], {
+function hasRevision(revision: string): boolean {
+  return (
+    Bun.spawnSync(["git", "rev-parse", "--verify", "--quiet", `${revision}^{commit}`], {
       stdout: "ignore",
       stderr: "ignore",
-    }).exitCode === 0;
-  return hasOriginMain ? "origin/main" : "HEAD";
+    }).exitCode === 0
+  );
+}
+
+function baseRevision(source: ChangeSource): { revision: string; label: string } {
+  if (hasRevision("refs/tags/web-production")) {
+    return { revision: "refs/tags/web-production", label: "production (web-production)" };
+  }
+  const fallback =
+    source.kind === "range" ? source.base : hasRevision("origin/main") ? "origin/main" : "HEAD";
+  console.warn(
+    `migration-contract: web-production tag not found; falling back to ${fallback} as baseline.`,
+  );
+  return { revision: fallback, label: `base (${fallback})` };
 }
 
 export function migrationContractViolations(source: ChangeSource) {
@@ -289,7 +326,7 @@ export function migrationContractViolations(source: ChangeSource) {
   }
   if (drops.length === 0) return [];
 
-  const baseRev = baseRevision(source);
+  const base = baseRevision(source);
   const checkRevision = (revision: string, label: string) => {
     const prismaPaths = pathsInRevision(revision, ["apps/web/prisma"]).filter((p) =>
       PRISMA_PATH.test(p),
@@ -305,8 +342,7 @@ export function migrationContractViolations(source: ChangeSource) {
     );
   };
 
-  return [
-    ...checkRevision(baseRev, "base (origin/main)"),
-    ...checkRevision(resultRev, "current"),
-  ].map((v) => ({ rule: "migration-contract" as const, ...v }));
+  return [...checkRevision(base.revision, base.label), ...checkRevision(resultRev, "current")].map(
+    (v) => ({ rule: "migration-contract" as const, ...v }),
+  );
 }
