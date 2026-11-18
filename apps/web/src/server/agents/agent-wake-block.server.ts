@@ -15,7 +15,7 @@ export type AgentWakeBlock = {
 };
 
 export type AgentWakeBlockWriter = {
-  record(agentId: string, reason: AgentWakeBlockReason): Promise<void>;
+  record(agentId: string, reason: AgentWakeBlockReason, roundStartedAt?: Date): Promise<void>;
 };
 
 export type AgentWakeBlockRow = {
@@ -27,12 +27,19 @@ export type AgentWakeBlockRow = {
 export class PrismaAgentWakeBlocks implements AgentWakeBlockWriter {
   constructor(private readonly db: PrismaClient) {}
 
-  async record(agentId: string, reason: AgentWakeBlockReason): Promise<void> {
+  async record(
+    agentId: string,
+    reason: AgentWakeBlockReason,
+    roundStartedAt?: Date,
+  ): Promise<void> {
+    const round = roundStartedAt ?? null;
     await this.db.$executeRaw`
       UPDATE "agents"
          SET "wakeBlockedReason" = ${reason},
              "wakeBlockedCount" = CASE
-               WHEN "wakeBlockedReason" = ${reason} THEN "wakeBlockedCount" + 1
+               WHEN "wakeBlockedReason" = ${reason}
+                AND (${round}::timestamp IS NULL OR "wakeBlockedAt" >= ${round}::timestamp)
+                 THEN "wakeBlockedCount" + 1
                ELSE 1
              END,
              "wakeBlockedAt" = now()

@@ -77,7 +77,7 @@ function fixture(options: { stoppedAt?: Date; deletedAt?: Date } = {}) {
   const lock = { run: async <T>(_id: string, work: () => Promise<T>) => work() };
   /** Runs while a rejection waits for the Agent's lock, after its unlocked first read. */
   let whileWaitingForLock = async () => {};
-  const recorded: { agentId: string; reason: string }[] = [];
+  const recorded: { agentId: string; reason: string; since?: Date }[] = [];
   const rejections = new AgentDeliveryRejections(
     store,
     conversations,
@@ -88,7 +88,10 @@ function fixture(options: { stoppedAt?: Date; deletedAt?: Date } = {}) {
       },
     },
     control,
-    { record: async (agentId, reason) => void recorded.push({ agentId, reason }) },
+    {
+      record: async (agentId, reason, since) =>
+        void recorded.push({ agentId, reason, ...(since ? { since } : {}) }),
+    },
   );
   let sequence = 0;
   return {
@@ -420,9 +423,10 @@ test("a transient failure stops retrying after 24 hours", async () => {
 });
 
 test("a rejection that leaves a stopped Agent alone records why its messages wait", async () => {
-  const agent = fixture({ stoppedAt: new Date() });
+  const stoppedAt = new Date(Date.now() - 1_000);
+  const agent = fixture({ stoppedAt });
   await expect(agent.reject()).resolves.toBe("stopped");
-  expect(agent.recorded).toEqual([{ agentId: "a", reason: "stopped" }]);
+  expect(agent.recorded).toEqual([{ agentId: "a", reason: "stopped", since: stoppedAt }]);
 });
 
 test("a rejection that wakes the Agent records no waiting messages", async () => {
@@ -431,10 +435,20 @@ test("a rejection that wakes the Agent records no waiting messages", async () =>
   expect(agent.recorded).toEqual([]);
 });
 
-test("a rejection held back by a failed Start records that reason", async () => {
+test("a rejection held back by a failed Start records that reason and when it began", async () => {
   const agent = fixture();
   await agent.reject();
   await agent.failLatestStart("runtime_private");
+  const failedAtMs = agent.current().state!.failedAtMs!;
   await expect(agent.reject()).resolves.toBe("start_failed");
-  expect(agent.recorded).toEqual([{ agentId: "a", reason: "start_failed" }]);
+  expect(agent.recorded).toEqual([
+    { agentId: "a", reason: "start_failed", since: new Date(failedAtMs) },
+  ]);
+});
+
+test("a rejection while a Start is in flight records no round to count from", async () => {
+  const agent = fixture();
+  await agent.reject();
+  await expect(agent.reject()).resolves.toBe("operation_in_flight");
+  expect(agent.recorded).toEqual([{ agentId: "a", reason: "operation_in_flight" }]);
 });
