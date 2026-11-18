@@ -44,6 +44,7 @@ import { AgentProfileConfirmationDialogs } from "./agent-profile-confirmation-di
 import type { AgentVisibility } from "#src/features/agents/agent-visibility";
 import { agentModelsQueryKey } from "#src/features/agents/agent-models";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
+import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
 import { AgentProfileHeader } from "./agent-profile-header";
 import { AgentProfileUnavailable } from "./agent-profile-unavailable";
 import { AgentProfileTabs, useAgentProfileTabOrder } from "./agent-profile-tabs";
@@ -103,10 +104,8 @@ export function AgentProfilePanel({
   useHotkey(
     "Escape",
     () => {
-      // A panel hidden behind the chat's full screen keeps its keys.
       if (root.current?.offsetParent === null) return;
-      if (document.querySelector("[role=dialog], [role=alertdialog], [role=listbox], [role=menu]"))
-        onClose();
+      if (document.querySelector(OPEN_OVERLAY_SELECTOR) === null) onClose();
     },
     { ignoreInputs: true, preventDefault: false },
   );
