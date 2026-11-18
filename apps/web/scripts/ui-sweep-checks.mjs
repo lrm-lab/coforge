@@ -158,35 +158,29 @@ export const CHECKS_EXPR = `
     }
   }
 
-  const paneHeaders = [...document.querySelectorAll("[data-pane-header]")]
-    .filter((el) => el.checkVisibility())
-    .map((el) => {
-      const box = el.getBoundingClientRect();
-      const bar = el.querySelector(":scope > [data-pane-bar]");
-      return {
-        el,
-        left: box.left,
-        right: box.right,
-        top: box.top,
-        title: el.querySelector(":scope > header").getBoundingClientRect().bottom,
-        bar: bar ? bar.getBoundingClientRect().bottom : null,
-      };
-    })
-    .filter((pane) => pane.right - pane.left > 0);
-  for (let i = 0; i < paneHeaders.length; i++) {
-    for (let j = i + 1; j < paneHeaders.length; j++) {
-      const [a, b] = [paneHeaders[i], paneHeaders[j]].sort((x, y) => x.left - y.left);
-      if (Math.abs(a.top - b.top) > 1 || b.left < a.right - 1) continue;
-      const where = locator(a.el) + " | " + locator(b.el);
-      if (Math.abs(a.title - b.title) > 1) {
-        findings.push({ check: "pane-header-misaligned", detail: \`title rules at \${Math.round(a.title)} and \${Math.round(b.title)}\`, locator: where });
-      }
-      if (a.bar !== null && b.bar !== null && Math.abs(a.bar - b.bar) > 1) {
-        findings.push({ check: "pane-header-misaligned", detail: \`second rules at \${Math.round(a.bar)} and \${Math.round(b.bar)}\`, locator: where });
-      }
-      if ((a.bar === null) !== (b.bar === null) && b.left - a.right <= 2) {
-        findings.push({ check: "pane-header-misaligned", detail: "side-by-side panes: one header has a second row, the other does not", locator: where });
-      }
+  const ruleDrawn = (el, pseudo) => {
+    const style = getComputedStyle(el, pseudo);
+    if (pseudo && (style.content === "none" || style.display === "none")) return false;
+    const line = parseFloat(pseudo ? style.height : style.borderBottomWidth);
+    const color = pseudo ? style.backgroundColor : style.borderBottomColor;
+    return line > 0 && line <= 2 && !/rgba\\(.*, 0\\)|transparent/.test(color);
+  };
+  for (const pane of document.querySelectorAll('[data-pane-header="soft"]')) {
+    if (!pane.checkVisibility()) continue;
+    const title = pane.querySelector(":scope > header");
+    const bar = pane.querySelector(":scope > [data-pane-bar]");
+    const tabs = pane.querySelector('[role="tablist"]');
+    if (tabs && !bar?.contains(tabs)) {
+      findings.push({ check: "pane-header-tab-row", detail: "the tabs are not in the second row", locator: locator(pane) });
+    }
+    const drawn = [
+      [title, null],
+      [bar, null],
+      [bar, "::after"],
+      [tabs, "::before"],
+    ].filter(([el, pseudo]) => el && ruleDrawn(el, pseudo));
+    if (drawn.length > 0) {
+      findings.push({ check: "pane-header-tab-row", detail: "a rule is drawn in the band, which has only its shadow", locator: locator(pane) });
     }
   }
 
