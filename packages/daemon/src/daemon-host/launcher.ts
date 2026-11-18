@@ -176,18 +176,15 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
   }
 
   async ensureStarted(input: DaemonWorkspaceConfig): Promise<DaemonStarted> {
+    let lastError: unknown;
     try {
       const started = await this.#handshake(input);
       if (started) return started;
     } catch (error) {
-      if (
-        error instanceof DaemonCommandRejectedError ||
-        (error instanceof Error && error.message.includes("server does not match"))
-      )
-        throw error;
-      throw new Error("coforge-daemon did not accept the local handshake", { cause: error });
+      if (isFatalHandshakeError(error)) throw error;
+      lastError = error;
     }
-    return this.#waitForHandshake(input);
+    return this.#waitForHandshake(input, lastError);
   }
 
   /** Whether a Daemon answers the local handshake now, whoever started it. */
@@ -204,12 +201,25 @@ export class LocalDaemonLauncher implements DaemonLauncher, DaemonCommandRunner 
     await this.#waitForHandshake();
   }
 
-  async #waitForHandshake(input?: DaemonWorkspaceConfig): Promise<DaemonStarted> {
+  async #waitForHandshake(
+    input?: DaemonWorkspaceConfig,
+    initialError?: unknown,
+  ): Promise<DaemonStarted> {
+    let lastError = initialError;
     const deadline = Date.now() + this.#timeoutMilliseconds;
     while (Date.now() < deadline) {
-      const started = await this.#handshake(input);
-      if (started) return started;
+      try {
+        const started = await this.#handshake(input);
+        if (started) return started;
+        lastError = undefined;
+      } catch (error) {
+        if (isFatalHandshakeError(error)) throw error;
+        lastError = error;
+      }
       await this.#sleep(50);
+    }
+    if (lastError !== undefined) {
+      throw new Error("coforge-daemon did not accept the local handshake", { cause: lastError });
     }
     throw new Error(
       "CoForge Daemon did not accept the local handshake. Start the user process manager, or run `coforge-computer foreground` under an external supervisor.",
@@ -515,4 +525,11 @@ async function connectToLocalDaemon(socketPath: string): Promise<LocalDaemonConn
       socket.end();
     },
   };
+}
+
+function isFatalHandshakeError(error: unknown): boolean {
+  return (
+    error instanceof DaemonCommandRejectedError ||
+    (error instanceof Error && error.message.includes("server does not match"))
+  );
 }
