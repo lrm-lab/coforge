@@ -19,7 +19,7 @@ const offset = {
 };
 
 /** The toasts sit at the bottom and start above a one-line composer, so the moment after an action
- * (an Undo shown for ten seconds) leaves the composer free to type and send in (Raft, task #507):
+ * leaves the composer free to type and send in (Raft, task #507):
  * in the bottom right on a desktop, centred on a phone (Frank, task #7). A phone's composer and its
  * tab bar both stand on the home indicator's inset, so the phone's toasts are lifted from it too and
  * keep the same gap above either with or without one. */
@@ -51,9 +51,9 @@ export function AppToastProvider({ children }: { children: React.ReactNode }) {
             title: "text-sm! font-medium!",
             description: "text-xs! text-tertiary!",
             closeButton:
-              "opacity-0! transition-[opacity,transform]! duration-200! ease-out! group-hover:opacity-100! bg-tertiary! text-primary! border-none!",
+              "transition-opacity! duration-200! ease-out! pointer-fine:opacity-0! pointer-fine:group-hover:opacity-100! pointer-fine:group-focus-within:opacity-100! bg-tertiary! text-primary! border-none!",
             actionButton:
-              "opacity-0! translate-y-1! transition-[opacity,transform,background-color]! duration-200! ease-out! group-hover:opacity-100! group-hover:translate-y-0! hover:bg-primary! hover:scale-105! active:scale-95! bg-primary! text-primary-foreground! rounded-md! px-3! py-1.5!",
+              "transition-[transform,background-color]! duration-200! ease-out! hover:bg-primary_hover! hover:text-secondary_hover! hover:scale-105! active:scale-95! bg-primary! text-secondary! ring-1! ring-primary! ring-inset! rounded-md! px-3! py-1.5!",
           },
         }}
       />
