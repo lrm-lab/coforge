@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
-import type { AgentMessageRecord, TaskHistoryEvent } from "@lrm/coforge-sdk/internal";
+import type { AgentMessageRecord } from "@lrm/coforge-sdk/internal";
 import { formatReadWindow } from "#src/message-read-format";
+import { historyEvent } from "./task-history-event-fixture";
 
 function message(sequence: number): AgentMessageRecord {
   return {
@@ -186,16 +187,11 @@ test("a history row carries the thread's reply count when it has replies", () =>
 
 test("a task read lists its history events among the messages, an event first at a tie", () => {
   const events = [
-    {
-      id: "e1",
-      seq: 1,
-      actorType: "user",
-      actorName: "bob",
-      createdAt: "2026-09-07T10:00:00Z",
+    historyEvent(1, "2026-09-07T10:00:00Z", {
       eventType: "status_changed",
       payload: { from: "todo", to: "in_progress" },
-    },
-  ] as TaskHistoryEvent[];
+    }),
+  ];
   const output = formatReadWindow(
     "#general:#7",
     { messages: [message(6)], events },
@@ -213,16 +209,11 @@ test("a task read lists its history events among the messages, an event first at
 
 test("an unread task read with no new message still lists the events since the read position", () => {
   const events = [
-    {
-      id: "e1",
-      seq: 2,
-      actorType: "user",
-      actorName: "bob",
-      createdAt: "2026-09-07T10:00:00Z",
+    historyEvent(2, "2026-09-07T10:00:00Z", {
       eventType: "status_changed",
       payload: { from: "todo", to: "done" },
-    },
-  ] as TaskHistoryEvent[];
+    }),
+  ];
   const output = formatReadWindow(
     "#general:#7",
     { messages: [], events, unreadCursorBefore: 4, readPositionAfter: 4 },

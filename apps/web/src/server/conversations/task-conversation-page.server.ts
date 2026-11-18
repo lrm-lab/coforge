@@ -1,8 +1,8 @@
-import { LIVE_TASK_WHERE } from "#src/server/tasks/task-view.server";
+import { LIVE_TASK_WHERE, taskMentions } from "#src/server/tasks/task-view.server";
 import {
-  taskEventsAfterMessage,
   taskEventsInWindow,
   messageTime,
+  visibleTimeUpTo,
   VISIBLE_TASK_THREAD_MESSAGE_WHERE,
 } from "#src/server/tasks/task-timeline.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
@@ -10,6 +10,7 @@ import { AppError } from "#src/lib/app-error";
 import { windowPageFlags } from "#src/lib/conversation-window";
 import type { HistoryWindow } from "#src/server/db/repositories/direct-conversation-types.server";
 import { conversationMentionables } from "#src/server/db/repositories/user-direct-reads.repositories.server";
+import { BROWSER_MESSAGE_MENTIONS_SELECT } from "./mentions.server";
 import { browserMessageUpdates, ConversationHistory } from "./conversation-history.server";
 import { browserMessageFields, mapBrowserMessages } from "./browser-message-projection.server";
 
@@ -31,7 +32,12 @@ export class TaskConversationPages {
     );
     const task = await this.db.task.findUnique({
       where: { discussionConversationId: conversationId, ...LIVE_TASK_WHERE },
-      select: { id: true, conversationId: true, number: true },
+      select: {
+        id: true,
+        conversationId: true,
+        number: true,
+        message: { select: { mentions: BROWSER_MESSAGE_MENTIONS_SELECT } },
+      },
     });
     if (!task) throw new AppError("NOT_FOUND");
     return { ...access, task };
@@ -153,19 +159,13 @@ export class TaskConversationPages {
     window: { oldestSequence?: number; newestSequence?: number },
   ) {
     const { task } = await this.authorize(workspaceId, userId, conversationId);
-    if (window.oldestSequence === undefined && window.newestSequence === undefined)
-      return taskEventsInWindow(this.db, task.id, "people");
-    const through =
+    const [through, after] = await Promise.all([
       window.newestSequence === undefined
         ? undefined
-        : await messageTime(this.db, conversationId, window.newestSequence);
+        : messageTime(this.db, conversationId, window.newestSequence),
+      visibleTimeUpTo(this.db, conversationId, (window.oldestSequence ?? 1) - 1),
+    ]);
     if (window.newestSequence !== undefined && !through) throw new AppError("NOT_FOUND");
-    return taskEventsAfterMessage(this.db, {
-      taskId: task.id,
-      conversationId,
-      reader: "people",
-      afterSequence: (window.oldestSequence ?? 1) - 1,
-      through,
-    });
+    return taskEventsInWindow(this.db, task.id, "people", taskMentions(task), { after, through });
   }
 }

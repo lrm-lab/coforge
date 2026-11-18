@@ -27,10 +27,12 @@ import {
   type TaskFollowReason,
 } from "./task-discussion-store.server";
 import { resolveTaskScope } from "./task-scope.server";
-import { LIVE_TASK_WHERE, TASK_SCOPE_WHERE, taskSelection } from "./task-view.server";
+import { BROWSER_MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/mentions.server";
+import { LIVE_TASK_WHERE, TASK_SCOPE_WHERE, taskMentions, taskSelection } from "./task-view.server";
 import { taskViewOf } from "./task-relations.server";
 import {
   taskEventsForReadPage,
+  taskEventsInWindow,
   taskTimelinePage,
   VISIBLE_TASK_THREAD_MESSAGE_WHERE,
 } from "./task-timeline.server";
@@ -79,7 +81,7 @@ export class TaskConversations {
             select: { reason: true },
           })
         : null,
-      taskTimelinePage(this.ports.db, task, this.ports.reader, limit),
+      taskTimelinePage(this.ports.db, task, this.ports.reader, taskMentions(task), limit),
     ]);
     return {
       taskRef: `${boardName}:#${task.number}`,
@@ -165,13 +167,13 @@ export class TaskConversations {
         hasOlder: false,
         hasNewer: false,
         modelSeenUpToSeq: null,
-        events: await taskEventsForReadPage(this.ports.db, {
-          taskId: task.id,
-          conversationId: null,
-          reader: this.ports.reader,
-          messages: [],
-          hasNewer: false,
-        }),
+        events: await taskEventsInWindow(
+          this.ports.db,
+          task.id,
+          this.ports.reader,
+          taskMentions(task),
+          {},
+        ),
       };
     const conversationId = task.discussionConversationId;
     const db = this.ports.db;
@@ -208,6 +210,7 @@ export class TaskConversations {
         taskId: task.id,
         conversationId,
         reader: this.ports.reader,
+        mentions: taskMentions(task),
         messages: result.messages,
         hasNewer: result.hasNewer,
         ...(page.unread ? { unreadAfterSequence: result.unreadCursorBefore ?? 0 } : {}),
@@ -383,6 +386,7 @@ export class TaskConversations {
         status: true,
         messageId: true,
         discussionConversationId: true,
+        message: { select: { mentions: BROWSER_MESSAGE_MENTIONS_SELECT } },
       },
     });
     if (!task) throw new AppError("NOT_FOUND");

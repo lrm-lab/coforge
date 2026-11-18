@@ -177,6 +177,11 @@ const humanReply = (number: number, body: string, seconds: number) =>
 const secondsOf = (events: { createdAt: string }[]) =>
   events.map((event) => (Date.parse(event.createdAt) - T0) / 1000);
 
+const windowOf = (page: { messages: { sequence: number }[] }, last: boolean) => ({
+  oldestSequence: page.messages[0]!.sequence,
+  ...(last ? {} : { newestSequence: page.messages.at(-1)!.sequence }),
+});
+
 test("each history event belongs to the page holding the first message at or after it", async () => {
   const task = await makeTask(3);
   for (const [index, seconds] of [10, 20, 30, 40].entries())
@@ -189,17 +194,18 @@ test("each history event belongs to the page holding the first message at or aft
     limit: 2,
     beforeSequence: newest.messages[0]!.sequence,
   });
-  const window = (page: typeof newest, last: boolean) => ({
-    oldestSequence: page.messages[0]!.sequence,
-    ...(last ? {} : { newestSequence: page.messages.at(-1)!.sequence }),
-  });
   const newestEvents = await pages.events(
     workspaceId,
     userId,
     conversationId,
-    window(newest, true),
+    windowOf(newest, true),
   );
-  const olderEvents = await pages.events(workspaceId, userId, conversationId, window(older, false));
+  const olderEvents = await pages.events(
+    workspaceId,
+    userId,
+    conversationId,
+    windowOf(older, false),
+  );
   expect(secondsOf(newestEvents)).toEqual([25, 30, 45]);
   expect(secondsOf(olderEvents)).toEqual([5, 10]);
 
@@ -228,12 +234,7 @@ test("an event at the instant of two messages across a page boundary appears onc
     beforeSequence: middle.messages[0]!.sequence,
   });
   const owned = async (page: typeof newest, last: boolean) =>
-    (
-      await pages.events(workspaceId, userId, conversationId, {
-        oldestSequence: page.messages[0]!.sequence,
-        ...(last ? {} : { newestSequence: page.messages.at(-1)!.sequence }),
-      })
-    ).length;
+    (await pages.events(workspaceId, userId, conversationId, windowOf(page, last))).length;
   expect([
     await owned(newest, true),
     await owned(middle, false),

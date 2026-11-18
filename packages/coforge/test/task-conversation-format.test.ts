@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { AgentTaskViewResponse } from "@lrm/coforge-sdk/agent";
-import type { TaskHistoryEvent } from "@lrm/coforge-sdk/internal";
+import { historyEvent } from "./task-history-event-fixture";
 import {
   formatTaskFollow,
   formatTaskFollowing,
@@ -192,29 +192,15 @@ test("the followed list gives each task's unread count and how to read it", () =
   );
 });
 
-const event = (
-  seq: number,
-  createdAt: string,
-  rest: Partial<TaskHistoryEvent> & Pick<TaskHistoryEvent, "eventType" | "payload">,
-) =>
-  ({
-    id: `e${seq}`,
-    seq,
-    actorType: "user",
-    actorName: "bob",
-    createdAt,
-    ...rest,
-  }) as TaskHistoryEvent;
-
 test("history events join the messages in one time-ordered stream, an event first at a tie", () => {
   const text = formatTaskView(
     view({
       recentEvents: [
-        event(2, "2026-10-30T10:01:00.000Z", {
+        historyEvent(2, "2026-10-30T10:01:00.000Z", {
           eventType: "status_changed",
           payload: { from: "todo", to: "in_progress" },
         }),
-        event(1, "2026-10-30T09:00:00.000Z", {
+        historyEvent(1, "2026-10-30T09:00:00.000Z", {
           eventType: "assignee_changed",
           payload: { assigneeId: "u1", assigneeType: "user" },
         }),
@@ -236,14 +222,14 @@ test("a description change is a flag in the stream, never its text", () => {
     view({
       recentMessages: [],
       recentEvents: [
-        event(1, "2026-10-30T09:00:00.000Z", {
+        historyEvent(1, "2026-10-30T09:00:00.000Z", {
           eventType: "amended",
           payload: {
             changes: { description: { from: "old secret", to: "new secret" } },
             revision: 2,
           },
         }),
-        event(2, "2026-10-30T09:01:00.000Z", {
+        historyEvent(2, "2026-10-30T09:01:00.000Z", {
           eventType: "amended",
           payload: {
             changes: { title: { from: "a", to: "b" }, description: { from: "x", to: "y" } },
@@ -265,7 +251,7 @@ test("a task with events but no conversation still shows its history, and older 
       recentMessages: [],
       hasOlder: true,
       recentEvents: [
-        event(9, "2026-10-30T09:00:00.000Z", {
+        historyEvent(9, "2026-10-30T09:00:00.000Z", {
           eventType: "priority_changed",
           payload: { from: "none", to: "high" },
         }),

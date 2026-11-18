@@ -72,9 +72,11 @@ function foldedLine(
   return `${line} To see ${count === 1 ? "it" : "them"} again: ${readCommand(target, task)} --after ${response.unreadCursorBefore ?? 0}`;
 }
 
+const eventLines = (events: readonly TaskHistoryEvent[]) => events.map(timelineEventLine);
+
 /** The history events since the read position, when no message came with them. */
 const historyAfterRead = (events: readonly TaskHistoryEvent[]) =>
-  events.length ? ["", "History since your read position:", ...events.map(timelineEventLine)] : [];
+  events.length ? ["", "History since your read position:", ...eventLines(events)] : [];
 
 /** The unread read's footer: whether more remain past the last shown message. */
 function unreadFooter(target: string, response: ReadWindowResponse, task: boolean): string[] {
@@ -121,7 +123,7 @@ export function formatReadWindow(
   if (messages.length === 0) {
     if (!options.unread)
       return events.length
-        ? [`No messages in ${target}. History:`, ...events.map(timelineEventLine)].join("\n")
+        ? [`No messages in ${target}. History:`, ...eventLines(events)].join("\n")
         : `No messages in ${target}.`;
     if (!folded) {
       const through = response.readPositionAfter ?? response.unreadCursorBefore ?? 0;
@@ -160,17 +162,15 @@ export function formatReadWindow(
   // An attachment takes top-level comments only, so naming a reply target there would point an
   // Agent at a send that is refused.
   const includeReplyTarget = !task && !isThreadTarget(target) && !target.startsWith("attachment:");
-  let position = 0;
   for (const entry of mergeTimeline(messages, events)) {
     if (entry.kind === "event") {
       lines.push(timelineEventLine(entry.event));
       continue;
     }
     const message = entry.message;
-    const index = position++;
     const replyTarget = includeReplyTarget ? ` replyTarget=${target}:${shortId(message.id)}` : "";
     lines.push(
-      `${coordinationLine(message)}[${index + 1}/${messages.length} msg=${message.id} seq=${message.sequence}${message.replyCount ? ` replyCount=${message.replyCount}` : ""} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}${replyTarget}]${commentAnchorAt(message)} ${messageSender(message)}: ${fenceMessageBody(message.body)}${attachmentSuffix(message)}${taskSuffix(message)}${forwardedSuffix(message)}`,
+      `${coordinationLine(message)}[${messages.indexOf(message) + 1}/${messages.length} msg=${message.id} seq=${message.sequence}${message.replyCount ? ` replyCount=${message.replyCount}` : ""} time=${formatUtcTimestamp(message.createdAt)} type=${message.senderKind}${replyTarget}]${commentAnchorAt(message)} ${messageSender(message)}: ${fenceMessageBody(message.body)}${attachmentSuffix(message)}${taskSuffix(message)}${forwardedSuffix(message)}`,
     );
   }
 

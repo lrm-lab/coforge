@@ -142,7 +142,9 @@ export function hostMessageId(task: { messageId: string | null }): string {
 }
 
 /** The mention rows of the message a Task's title was written in; none without a message. */
-export function taskMentions(task: Pick<SelectedTask, "message">) {
+export function taskMentions(task: {
+  message: { mentions: readonly BrowserMessageMentionRow[] } | null;
+}) {
   return task.message?.mentions ?? [];
 }
 
