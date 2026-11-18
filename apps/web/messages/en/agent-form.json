@@ -32,6 +32,7 @@
   "agent_form_provider_unsupported": "That runtime provider is not supported. Refresh the page and choose another one.",
   "agent_form_not_authorized": "Only the member who owns this Agent can change it.",
   "agent_form_model_provider_required": "That model needs a model provider. Fill one in, or choose a model from the catalog.",
+  "agent_form_model_effort_suffix": "That model id still carries its old effort suffix. Choose the model itself and pick the reasoning separately.",
   "agent_form_credential_unavailable": "The service is temporarily unavailable. Try again.",
   "agent_form_visibility_private": "Make private",
   "agent_form_pi_api_key_help": "Required for this Pi model provider.",

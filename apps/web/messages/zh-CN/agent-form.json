@@ -32,6 +32,7 @@
   "agent_form_provider_unsupported": "不支持这个运行时，请刷新页面后换一个。",
   "agent_form_not_authorized": "只有这个 Agent 的所有者才能修改它。",
   "agent_form_model_provider_required": "这个模型需要一个 model provider，请填写，或从模型目录里选一个。",
+  "agent_form_model_effort_suffix": "这个模型 id 还带着旧的强度后缀，请选模型本身，再单独选择强度。",
   "agent_form_credential_unavailable": "服务暂时不可用，请稍后重试。",
   "agent_form_visibility_private": "设为私有",
   "agent_form_pi_api_key_help": "此 Pi 模型提供商必须填写 API Key。",

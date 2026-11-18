@@ -89,6 +89,7 @@ const AGENT_FORM_ERROR_MESSAGES = new Map<string, () => string>([
   ["agent-provider-unsupported", m.agent_form_provider_unsupported],
   ["agent-not-authorized", m.agent_form_not_authorized],
   ["agent-model-provider-required", m.agent_form_model_provider_required],
+  ["antigravity-model-effort-suffix", m.agent_form_model_effort_suffix],
   ["agent-credential-unavailable", m.agent_form_credential_unavailable],
   ...Object.entries(AGENT_ENVIRONMENT_ERROR_MESSAGES).map(
     ([violation, message]) => [`agent-environment-${violation}`, message] as const,
