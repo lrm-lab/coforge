@@ -70,8 +70,9 @@ export type HarnessOptions = {
   facts?: SessionResumeFacts | undefined;
   briefing?: "fails" | "none";
   launchEnvVars?: Record<string, string>;
-  /** `false`: no MEMORY.md; `"long"`: one past the briefing's budget. */
+  /** `false`: an empty Agent directory; `"long"`: one past the briefing's budget. */
   memory?: boolean | "long";
+  activeContext?: string;
   /** Holds the first session's `dispose` open until it settles. */
   disposeGate?: Promise<void>;
   /** The first session's `dispose` fails, as a process that will not exit does. */
@@ -92,12 +93,15 @@ export async function harness(options: HarnessOptions = {}) {
     connection.workspaceId,
     "agent-a",
   );
+  await rm(agentDirectory, { recursive: true, force: true });
   await mkdir(agentDirectory, { recursive: true });
-  const memoryFile = join(agentDirectory, "MEMORY.md");
-  if (options.memory === false) await rm(memoryFile, { force: true });
-  else
+  if (options.activeContext) {
+    await mkdir(join(agentDirectory, "notes"), { recursive: true });
+    await writeFile(join(agentDirectory, "notes", "active-context.md"), options.activeContext);
+  }
+  if (options.memory !== false)
     await writeFile(
-      memoryFile,
+      join(agentDirectory, "MEMORY.md"),
       options.memory === "long" ? `${MEMORY}${"- entry\n".repeat(5_000)}` : MEMORY,
     );
   const sessions: Array<{
