@@ -140,11 +140,13 @@ export class LocalMemory {
     const listed = await listMemoryFiles(this.root);
     const paths = listed.paths;
     let incomplete = listed.incomplete;
-    const page = paths.slice(offset, offset + 128);
+    const page = paths.slice(offset, offset + 1_024);
     const matches: { entry: LocalMemoryEntry; score: number }[] = [];
-    for (let index = 0; index < page.length; index += 8) {
+    let inspected = 0;
+    let bytes = 0;
+    for (; inspected < page.length && bytes < 8 * 1024 * 1024; inspected += 8) {
       const batch = await Promise.all(
-        page.slice(index, index + 8).map(async (path) => {
+        page.slice(inspected, inspected + 8).map(async (path) => {
           const text = await this.#index.read(path).catch((error: unknown) => {
             if (
               error instanceof Error &&
@@ -156,6 +158,7 @@ export class LocalMemory {
             throw error;
           });
           if (!text) return undefined;
+          bytes += Buffer.byteLength(text);
           const saved = decodeMemoryRecord(text, path);
           if (
             path.startsWith("notes/knowledge/") &&
@@ -163,10 +166,12 @@ export class LocalMemory {
           )
             return undefined;
           if (archived && !saved) return undefined;
-          const { score, position } = memorySearchScore(
-            saved ? `${saved.title}\n${saved.content}\n${saved.applicability}` : text,
-            query,
-          );
+          const { score: bodyScore, position } = memorySearchScore(saved?.content ?? text, query);
+          const score = saved
+            ? bodyScore +
+              2 * memorySearchScore(saved.title, query).score +
+              memorySearchScore(saved.applicability, query).score
+            : bodyScore;
           if (!score) return undefined;
           const entry = saved ?? {
             key: path,
@@ -186,7 +191,8 @@ export class LocalMemory {
       );
       matches.push(...batch.filter((item) => item !== undefined));
     }
-    const nextOffset = offset + page.length < paths.length ? offset + page.length : undefined;
+    const next = offset + Math.min(inspected, page.length);
+    const nextOffset = next < paths.length ? next : undefined;
     return {
       entries: matches
         .sort((a, b) => b.score - a.score || b.entry.updatedAt.localeCompare(a.entry.updatedAt))

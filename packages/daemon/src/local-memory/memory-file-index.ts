@@ -21,7 +21,10 @@ export class MemoryFileIndex {
         this.#files.delete(path);
       }
       if (text !== undefined) {
-        while (this.#files.size >= 128 || this.#bytes + Buffer.byteLength(text) > 4 * 1024 * 1024) {
+        while (
+          this.#files.size >= 1_024 ||
+          this.#bytes + Buffer.byteLength(text) > 4 * 1024 * 1024
+        ) {
           const oldest = this.#files.keys().next().value;
           if (oldest === undefined) break;
           this.#bytes -= Buffer.byteLength(this.#files.get(oldest)!.text);
