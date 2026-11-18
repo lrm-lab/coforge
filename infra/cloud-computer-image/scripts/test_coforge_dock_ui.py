@@ -14,6 +14,10 @@ class CoforgeDockUiTest(unittest.TestCase):
     def test_dock_stays_visible_on_the_shared_desktop(self):
         self.assertFalse(policy.dock_hides_when_idle())
 
+    def test_dock_icons_are_large_enough_for_touch(self):
+        self.assertGreaterEqual(policy.dock_height_px(), 72)
+        self.assertGreaterEqual(policy.dock_icon_px(), 56)
+
 
 if __name__ == "__main__":
     unittest.main()

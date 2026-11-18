@@ -129,17 +129,33 @@ describe("desktop route", () => {
     expect(html).not.toContain("msg.remove()");
   });
 
-  test("a reconnect page that already has phone view is left alone", () => {
+  test("a reconnect page that already has phone gestures and keyboard is left alone", () => {
     const current = `<!DOCTYPE html>
 <script type="module">
     import RFB from "./core/rfb.js";
     function coforgeDesktopPaste(text) {}
+    function coforgeAttachPhoneGestures() {}
     const phone = params.get("view") === "phone";
+</script>
+<div id="coforge-desktop-phone-bar"></div>
+<textarea id="coforge-desktop-keyboard-input"></textarea>
+<button type="button" id="coforge-desktop-reconnect"></button>
+`;
+    expect(adaptDesktopHtml(current)).toBe(current);
+  });
+
+  test("a phone fit/pan page without gestures is rewritten for keys and touch", () => {
+    const stale = `<!DOCTYPE html>
+<script type="module">
+    import RFB from "./core/rfb.js";
+    function coforgeDesktopPaste(text) {}
 </script>
 <div id="coforge-desktop-phone-bar"></div>
 <button type="button" id="coforge-desktop-reconnect"></button>
 `;
-    expect(adaptDesktopHtml(current)).toBe(current);
+    const html = adaptDesktopHtml(stale);
+    expect(html).toContain("coforgeAttachPhoneGestures");
+    expect(html).toContain('id="coforge-desktop-keys"');
   });
 
   test("a focused paste sends the local plain text into the remote clipboard", () => {
@@ -163,6 +179,29 @@ describe("desktop route", () => {
     expect(html).toContain('id="coforge-desktop-phone-bar"');
     expect(html).toContain("适应屏幕");
     expect(html).toContain("实际大小");
+  });
+
+  test("a phone viewer gets modifier keys, long-press right-click, and two-finger scroll", () => {
+    const html = adaptDesktopHtml(oldPage);
+    expect(html).toContain('id="coforge-desktop-keys"');
+    expect(html).toContain('data-key="Escape"');
+    expect(html).toContain('data-key="ControlLeft"');
+    expect(html).toContain('data-key="Tab"');
+    expect(html).toContain('data-key="ArrowUp"');
+    expect(html).toContain("coforgeAttachPhoneGestures");
+    expect(html).toContain("touchstart");
+    expect(html).toContain("buttonMask");
+    expect(html).toContain("0xff1b");
+  });
+
+  test("a phone viewer can open the system soft keyboard", () => {
+    const html = adaptDesktopHtml(oldPage);
+    expect(html).toContain('id="coforge-desktop-keyboard-input"');
+    expect(html).toContain('data-action="keyboard"');
+    expect(html).toContain(">键盘<");
+    expect(html).toContain("coforgeAttachPhoneKeyboard");
+    expect(html).toContain("0x01000000");
+    expect(html).toContain("0xff08");
   });
 
   test("a reconnect page that still uses extended clipboard paste is rewritten", () => {
