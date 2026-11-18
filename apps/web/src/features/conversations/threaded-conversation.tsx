@@ -330,7 +330,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
       />
     </ThreadStoreProvider>
   );
-  const conversationSidePane = (beside: boolean) => (
+  const conversationSidePane = visibleSlot && (
     <>
       {visibleSlot === "profile" && profileAgentId && (
         <AgentProfilePanel
@@ -364,7 +364,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
             <ThreadPane
               {...threadPaneProps(root)}
               onClose={threadClose}
-              threadContext={beside ? undefined : threadContext}
+              threadContext={threadContext}
               onViewInConversation={() => viewInConversation(rootId)}
               threadFollow={threadFollow?.(rootId)}
               emptyState={{
@@ -388,7 +388,7 @@ function ThreadedConversationContent(props: ThreadedConversationProps) {
         >
           <ThreadRootState
             load={selectedRootLoad}
-            context={beside ? undefined : threadContext}
+            context={threadContext}
             onClose={threadClose}
             onRetry={() => void loadThreadRoot(selected)}
           />

@@ -26,7 +26,7 @@ export function ConversationSplit({
   focused,
 }: {
   main: ReactNode;
-  side: (beside: boolean) => ReactNode;
+  side: ReactNode;
   visibleSlot: ConversationSlot | undefined;
   /** A thread shown without its conversation (Activity). */
   threadAlone: boolean;
@@ -109,7 +109,7 @@ export function ConversationSplit({
           <div
             className={cn("flex min-h-0 min-w-0 flex-1 flex-col", focused === "chat" && "hidden")}
           >
-            {side(false)}
+            {side}
           </div>
         )}
       </div>
@@ -156,7 +156,7 @@ export function ConversationSplit({
               hidden={focused === "chat"}
               className="flex min-h-0 min-w-0 flex-col"
             >
-              {side(focused !== "thread")}
+              {side}
             </Panel>
           </>
         )}
