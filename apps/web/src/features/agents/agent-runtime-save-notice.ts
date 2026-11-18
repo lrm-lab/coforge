@@ -1,4 +1,4 @@
-import { UNDO_TOAST_MS, useAppToast } from "#src/components/ui/toast";
+import { useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
 import type { updateAgent } from "./agents.functions";
 import type { AgentRuntimeControls } from "./agent-runtime-controls";
@@ -51,8 +51,6 @@ export function useAgentRuntimeSaveNotice(
       return;
     }
     toast.success(title, {
-      // Longer than a plain confirmation so Restart now can be reached.
-      durationMs: UNDO_TOAST_MS,
       key: agentId,
       action: canRestart
         ? { label: m.agent_runtime_restart_now(), onClick: restartNow }

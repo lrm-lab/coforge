@@ -16,7 +16,7 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const dir = join(import.meta.dir, "../../../.amp/e2e/message-link-gone");
 const MISSING = "00000000-0000-4000-8000-000000000001";
-const toasts = `[...document.querySelectorAll("[data-sonner-toast]")].map((t) => t.textContent)`;
+const toasts = `[...document.querySelectorAll("[data-toast]")].map((t) => t.textContent)`;
 
 test("a link to a message that is gone opens the conversation and says so, with no load error", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

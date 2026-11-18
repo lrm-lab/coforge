@@ -12,7 +12,7 @@ import {
 import { SubmenuTrigger } from "react-aria-components";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { UNDO_TOAST_MS, useAppToast } from "#src/components/ui/toast";
+import { useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
 import type { PinRef } from "./pinned-conversations";
 import { useSidebarActions } from "./sidebar-lists";
@@ -133,18 +133,14 @@ export function ConversationRowMenu({
     /** Closes the chat, then offers the way back: Undo reopens it where it stood in the list. */
     const closeChat = async () => {
       await actions.close(row);
-      toast.success(m.conversation_closed(), {
-        // Closing chat A then chat B keeps both Undos.
+      toast.undoable(m.conversation_closed(), {
         key: row.kind === "channel" ? `channel:${row.channelId}` : `direct:${row.conversationId}`,
-        durationMs: UNDO_TOAST_MS,
-        action: {
-          label: m.action_undo(),
-          onClick: () =>
-            void actions.reopen(row).catch((cause: unknown) => {
-              console.error("closed chat could not be reopened", cause);
-              toast.error(m.conversation_menu_action_error());
-            }),
-        },
+        failed: m.conversation_menu_action_error(),
+        onUndo: () =>
+          actions.reopen(row).catch((cause: unknown) => {
+            console.error("closed chat could not be reopened", cause);
+            throw cause;
+          }),
       });
     };
     const run = {

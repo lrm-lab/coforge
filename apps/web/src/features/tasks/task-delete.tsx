@@ -43,25 +43,16 @@ export function useDeleteTask({
   // back), or straight to the server and into the conversation's Tasks.
   const restore = async () => {
     const command = { operation: "restore", number: task.number } as const;
-    try {
-      if (onCommand) return await onCommand(command);
-      const result = await execute({
-        data: {
-          ...command,
-          idempotencyKey: crypto.randomUUID(),
-          conversationId: task.conversationId,
-        },
-      });
-      writeTasks(task.conversationId, [{ tasks: result.tasks ?? [], deleted: [] }]);
-      // The Tasks page lists it too, and its popup deletes this way, not through its commands.
-      refreshTaskOverview(queryClient, workspaceId);
-    } catch (cause) {
-      toast.error(
-        isAppErrorCode(cause, "CONFLICT") && cause.errorId === "task-restore-window-elapsed"
-          ? m.tasks_restore_expired()
-          : m.tasks_restore_failed(),
-      );
-    }
+    if (onCommand) return onCommand(command);
+    const result = await execute({
+      data: {
+        ...command,
+        idempotencyKey: crypto.randomUUID(),
+        conversationId: task.conversationId,
+      },
+    });
+    writeTasks(task.conversationId, [{ tasks: result.tasks ?? [], deleted: [] }]);
+    refreshTaskOverview(queryClient, workspaceId);
   };
   return async () => {
     const command = { operation: "delete", number: task.number } as const;
@@ -81,10 +72,14 @@ export function useDeleteTask({
     }
     writeTasks(task.conversationId, [{ tasks: [], deleted: [task.id] }]);
     onDeleted?.();
-    toast.success(m.tasks_deleted_toast({ number: String(task.number) }), {
+    toast.undoable(m.tasks_deleted_toast({ number: String(task.number) }), {
       key: task.id,
       durationMs: UNDO_WINDOW_MS,
-      action: { label: m.action_undo(), onClick: () => void restore() },
+      onUndo: restore,
+      failed: (cause) =>
+        isAppErrorCode(cause, "CONFLICT") && cause.errorId === "task-restore-window-elapsed"
+          ? m.tasks_restore_expired()
+          : m.tasks_restore_failed(),
     });
   };
 }

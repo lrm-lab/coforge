@@ -166,8 +166,7 @@
   ],
   "channel_archived_toast": "Archived #{name}",
   "channel_left_toast": "Left #{name}",
-  "channel_general_hidden_toast": "Hid #general",
-  "channel_general_hidden_later": "Bring it back in Settings → Members → System channels.",
+  "channel_general_hidden_toast": "Hid #general. Restore it in Members → System channels.",
   "channel_made_private_toast": "#{name} is private now",
   "channel_undo_failed": "Couldn't undo. Try again."
 }

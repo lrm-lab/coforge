@@ -216,7 +216,7 @@ test("signing in with GitHub", async () => {
     await waitFor(returnedToSignIn("Could not sign in with GitHub. Try again."));
     expect(fake.signIns).toHaveLength(signInsBefore + 1);
     expect(await fake.revocations(signInsBefore)).toHaveLength(signInsBefore);
-    expect(await evaluate<boolean>(`!!document.querySelector("[data-sonner-toast]")`)).toBe(false);
+    expect(await evaluate<boolean>(`!!document.querySelector("[data-toast]")`)).toBe(false);
 
     // The page and its button read in Simplified Chinese too.
     await browser("cookies", "clear");

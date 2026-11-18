@@ -408,7 +408,6 @@
   "av_dr_delete_confirm": "Delete draft",
   "av_dr_delete_failed": "Couldn't delete the draft.",
   "av_dr_deleted": "Draft deleted",
-  "av_dr_deleted_undo": "Undo",
   "av_dr_save_failed": "Couldn't save the draft. Try again.",
   "av_dr_limit": [
     {

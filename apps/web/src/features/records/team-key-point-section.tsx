@@ -10,7 +10,13 @@ import type { KeyPointExtractionMeta } from "./records-content";
 import { KeyPointExtractionPanel } from "./key-point-extraction-panel";
 import { RECORDS_PRIMARY_BUTTON_CLASSNAME } from "./records-primary-button";
 
-/** Failed because nobody submitted — toast-only, never a parked panel state. */
+export class KeyPointStartRefusal extends Error {}
+
+function startFailure(cause: unknown) {
+  return cause instanceof KeyPointStartRefusal ? cause.message : m.records_key_points_failed();
+}
+
+/** Failed because nobody submitted: said where the start was pressed, never a parked panel state. */
 export function isNoneSubmittedKeyPointFailure(
   extraction: KeyPointExtractionMeta | undefined,
 ): boolean {
@@ -50,7 +56,7 @@ export function TeamKeyPointSection({
 
   function startFirst() {
     setStartError(null);
-    onStart().catch(() => setStartError(m.records_key_points_failed()));
+    onStart().catch((cause: unknown) => setStartError(startFailure(cause)));
   }
 
   async function restart() {
@@ -124,7 +130,7 @@ export function TeamKeyPointSection({
               title={m.records_key_points_team_restart_confirm_title()}
               description={m.records_key_points_team_restart_confirm_body()}
               confirmLabel={m.records_key_points_team_restart()}
-              errorMessage={m.records_key_points_failed()}
+              errorMessage={startFailure}
               placement="bottom end"
               fallbackFocus={() => sectionRef.current}
               onConfirm={restart}

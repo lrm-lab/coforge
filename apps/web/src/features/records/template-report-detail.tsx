@@ -106,6 +106,7 @@ export function TemplateReportDetail({
   });
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [titleError, setTitleError] = useState<string | null>(null);
   const [canSendAssignments, setCanSendAssignments] = useState(Boolean(report.canSendAssignments));
   const [sideRefresh, setSideRefresh] = useState(0);
   const sendSchedule = report.sendSchedule;
@@ -207,7 +208,7 @@ export function TemplateReportDetail({
     if (metaDirty) {
       const nextTitle = titleDraft.trim();
       if (!isValidTemplateName(nextTitle)) {
-        toast.error(m.records_format_meta_invalid());
+        setTitleError(m.records_format_meta_invalid());
         return;
       }
       let meta: Awaited<ReturnType<typeof saveFormatMeta>> | undefined;
@@ -346,7 +347,12 @@ export function TemplateReportDetail({
               aria-label={m.records_template_name()}
               value={titleDraft}
               disabled={saving || sending}
-              onChange={(event) => setTitleDraft(event.target.value)}
+              aria-invalid={titleError !== null}
+              aria-describedby={titleError ? "report-title-error" : undefined}
+              onChange={(event) => {
+                setTitleDraft(event.target.value);
+                setTitleError(null);
+              }}
               className="min-w-0 flex-1 truncate bg-transparent text-md font-semibold text-primary outline-none placeholder:text-tertiary focus-visible:outline-none disabled:opacity-60 sm:text-lg"
             />
           )}
@@ -433,9 +439,12 @@ export function TemplateReportDetail({
           </div>
         </header>
         {failure && <ReportSaveFailureBar failure={failure} retrying={saving} />}
-        {isOverview || !sendError ? null : (
-          <p className="border-b border-secondary px-4 py-2 text-sm text-error-primary sm:px-6">
-            {sendError}
+        {isOverview || !(titleError ?? sendError) ? null : (
+          <p
+            id={titleError ? "report-title-error" : undefined}
+            className="border-b border-secondary px-4 py-2 text-sm text-error-primary sm:px-6"
+          >
+            {titleError ?? sendError}
           </p>
         )}
 

@@ -48,7 +48,7 @@ test("a Task deleted from its popup comes back with Undo", async () => {
 
     await mkdir(artifacts, { recursive: true });
     const settled = `document.getAnimations().every((a) => a.playState !== "running")`;
-    const toast = `[...document.querySelectorAll("[data-sonner-toast]")].find((el) => el.textContent.includes("Deleted task #${number}"))`;
+    const toast = `[...document.querySelectorAll("[data-toast]")].find((el) => el.textContent.includes("Deleted task #${number}"))`;
     const shoot = async (name: string) => {
       await browser("screenshot", join(artifacts, `${name}.png`));
       await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);

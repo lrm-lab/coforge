@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
 
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { ProgressBarBase } from "#src/components/base/progress-indicators/progress-indicators";
@@ -8,17 +8,25 @@ import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
 import { WIZARD_STEPS, type WizardStep } from "./onboarding-wizard-plan";
 
+const WizardErrorContext = createContext<string | null>(null);
+
 /**
  * The setup wizard's modal, as wide as Raft's and over the real Workspace: closed by neither
  * Escape nor a click outside, since the only ways out are finishing and skipping. On a phone it
  * takes the full width.
  */
-export function OnboardingWizardModal({ children }: { children: ReactNode }) {
+export function OnboardingWizardModal({
+  error = null,
+  children,
+}: {
+  error?: string | null;
+  children: ReactNode;
+}) {
   return (
     <ModalOverlay isOpen isDismissable={false} isKeyboardDismissDisabled className="max-sm:px-0">
       <Modal className="flex w-[calc(100vw-2rem)] max-w-[55rem] flex-col max-sm:w-full max-sm:rounded-b-none">
         <Dialog className="flex min-h-0 flex-1 flex-col overflow-hidden sm:min-h-[38rem]">
-          {children}
+          <WizardErrorContext.Provider value={error}>{children}</WizardErrorContext.Provider>
         </Dialog>
       </Modal>
     </ModalOverlay>
@@ -62,6 +70,7 @@ export function WizardShell({
 }) {
   // Each step is a new shell: focus moves to its heading so a screen reader announces the step.
   const header = useRef<HTMLDivElement>(null);
+  const error = useContext(WizardErrorContext);
   useEffect(() => {
     const heading = header.current?.querySelector<HTMLElement>("h1,h2,h3,h4");
     heading?.setAttribute("tabindex", "-1");
@@ -82,6 +91,14 @@ export function WizardShell({
         <DialogHeader title={title} description={description} className="mt-1.5 p-0" />
       </div>
       <div className={cx("min-h-0 flex-1 overflow-y-auto", bodyClassName)}>{children}</div>
+      {error ? (
+        <p
+          role="alert"
+          className="shrink-0 border-t border-secondary px-6 pt-3 text-sm text-error-primary sm:px-8"
+        >
+          {error}
+        </p>
+      ) : null}
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 max-sm:flex-col-reverse max-sm:items-stretch border-t border-secondary px-6 py-4 sm:px-8">
         <div className="flex flex-wrap items-center gap-x-4">{skip}</div>
         <DialogActions>{actions}</DialogActions>

@@ -7,7 +7,7 @@ import { PageHeader } from "#src/components/layout/page-header";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { UNDO_TOAST_MS, useAppToast } from "#src/components/ui/toast";
+import { useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
 import type { ContentEditorRef } from "#src/features/records/report-editor/content-editor";
 import { ReportSectionEditor } from "#src/features/records/report-editor/report-section-editor";
@@ -130,18 +130,13 @@ export function NoteDetail({ note }: { note: NoteSubject["note"] }) {
       return;
     }
     if (clearedToastRef.current !== title) return;
-    toast.success(title, {
-      durationMs: UNDO_TOAST_MS,
-      action: {
-        label: m.action_undo(),
-        onClick: () => {
-          // Text typed since is newer than what was cleared: restoring would overwrite it.
-          if ((editorRef.current?.getMarkdown() ?? bodyRef.current) !== "") return;
-          clearedToastRef.current = undefined;
-          void replaceBody(previous).then((restored) => {
-            if (!restored) toast.error(m.records_note_restore_failed());
-          });
-        },
+    toast.undoable(title, {
+      failed: m.records_note_restore_failed(),
+      onUndo: async () => {
+        if ((editorRef.current?.getMarkdown() ?? bodyRef.current) !== "")
+          throw new Error("typed since");
+        clearedToastRef.current = undefined;
+        if (!(await replaceBody(previous))) throw new Error("not restored");
       },
     });
   }

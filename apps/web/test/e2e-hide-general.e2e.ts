@@ -100,7 +100,7 @@ test("an owner hides #general from its panel and restores it from Settings → M
     await waitFor(`location.pathname !== "${workspacePath}/channel/${general.id}"`);
     // The toast says where it comes back from once Undo is gone.
     await waitFor(
-      `[...document.querySelectorAll("[data-sonner-toast]")].some((t) => t.textContent.includes("System channels"))`,
+      `[...document.querySelectorAll("[data-toast]")].some((t) => t.textContent.includes("System channels"))`,
     );
     await browser("screenshot", join(artifacts, "hidden-toast.png"));
     await waitFor(`!${sidebarHasGeneral}`);

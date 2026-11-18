@@ -219,7 +219,7 @@ test("the channel settings panel edits info, preferences, archive and membership
     await clickText("button", "Archive channel");
     await waitFor(`document.body.textContent.includes("This channel is archived.")`);
     await waitFor(
-      `[...document.querySelectorAll("[data-sonner-toast]")].some((t) => t.textContent.includes("Archived #"))`,
+      `[...document.querySelectorAll("[data-toast]")].some((t) => t.textContent.includes("Archived #"))`,
     );
     expect(await evaluate<boolean>(`document.querySelector("main textarea") === null`)).toBe(true);
     expect(
@@ -252,7 +252,7 @@ test("the channel settings panel edits info, preferences, archive and membership
     await clickText("button", "Leave channel");
     await waitFor(`${byText("button", "Join channel")} !== undefined`);
     expect((await viewerRow()).leftAt).not.toBeNull();
-    const leftToast = `[...document.querySelectorAll("[data-sonner-toast]")].find((t) => t.textContent.includes("Left #"))`;
+    const leftToast = `[...document.querySelectorAll("[data-toast]")].find((t) => t.textContent.includes("Left #"))`;
     await waitFor(`${leftToast} !== undefined`);
     await evaluate(
       `([...${leftToast}.querySelectorAll("button")].find((b) => b.textContent.trim() === "Undo").setAttribute("data-e2e-undo", ""), true)`,

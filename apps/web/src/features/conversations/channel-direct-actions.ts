@@ -42,8 +42,6 @@ export function useDirectChannelAction({
       run: () => Promise<unknown>;
       undo: () => Promise<unknown>;
       done: () => string;
-      /** Where else it can be put back, once the toast is gone. */
-      later?: () => string;
       error: () => string;
       denied?: () => string;
     }
@@ -65,7 +63,6 @@ export function useDirectChannelAction({
       run: () => setGeneralHidden({ data: { hidden: true } }),
       undo: () => setGeneralHidden({ data: { hidden: false } }),
       done: m.channel_general_hidden_toast,
-      later: m.channel_general_hidden_later,
       error: m.channel_settings_hide_general_error,
       denied: m.channel_settings_hide_general_denied,
     },
@@ -89,18 +86,10 @@ export function useDirectChannelAction({
       );
       return;
     }
-    const title = action.done();
-    toast.success(title, {
+    toast.undoable(action.done(), {
       key: `${kind}:${channelId}`,
-      description: action.later?.(),
-      action: {
-        label: m.action_undo(),
-        onClick: () =>
-          void action.undo().then(
-            () => onDone(),
-            () => toast.error(m.channel_undo_failed()),
-          ),
-      },
+      failed: m.channel_undo_failed(),
+      onUndo: () => action.undo().then(onDone),
     });
     await onDone();
   };

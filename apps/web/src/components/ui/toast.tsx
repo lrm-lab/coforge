@@ -1,130 +1,154 @@
-import { type CSSProperties } from "react";
-import { AlertCircle, CheckCircle } from "@untitledui/icons";
-import { Toaster, toast } from "sonner";
+import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { AnimatePresence } from "motion/react";
 
-import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { m } from "#src/paraglide/messages";
 
-const toastStyle: CSSProperties & Record<`--${string}`, string> = {
-  "--normal-bg": "var(--color-bg-primary)",
-  "--normal-text": "var(--color-text-primary)",
-  "--normal-border": "var(--color-border-secondary)",
-};
+import { NoticeCardHost } from "./notice-card";
+import {
+  ACTION_TOAST_MS,
+  RESULT_TOAST_MS,
+  UNDONE_TOAST_MS,
+  createToastStore,
+  statusToastMs,
+  type ToastAction,
+  type ToastIcon,
+} from "./toast-model";
+import { ToastView } from "./toast-view";
 
-const offset = {
-  top: "max(1rem, var(--spacing-safe-top))",
-  bottom: "max(1rem, var(--spacing-safe-bottom))",
-  right: "max(1rem, var(--spacing-safe-right))",
-  left: "max(1rem, var(--spacing-safe-left))",
-};
+const toastStore = createToastStore();
 
-/** The toasts sit at the bottom and start above a one-line composer, so the moment after an action
- * leaves the composer free to type and send in (Raft, task #507):
- * in the bottom right on a desktop, centred on a phone (Frank, task #7). A phone's composer and its
- * tab bar both stand on the home indicator's inset, so the phone's toasts are lifted from it too and
- * keep the same gap above either with or without one. */
-const desktopOffset = { ...offset, bottom: "calc(max(1rem, var(--spacing-safe-bottom)) + 4.5rem)" };
-const phoneOffset = { ...offset, bottom: "calc(var(--spacing-safe-bottom) + 4.5rem)" };
+function ToastHost() {
+  const toast = useSyncExternalStore(toastStore.subscribe, toastStore.current, () => null);
+  const regionRef = useRef<HTMLElement>(null);
 
-export function AppToastProvider({ children }: { children: React.ReactNode }) {
-  const desktop = useBreakpoint("md");
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "F6" || event.altKey || event.ctrlKey || event.metaKey) return;
+      const target = regionRef.current?.querySelector<HTMLElement>("button") ?? null;
+      if (!target) return;
+      event.preventDefault();
+      target.focus();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 
+  return (
+    <section
+      ref={regionRef}
+      aria-label={m.toast_region()}
+      className="pointer-events-none fixed inset-x-0 top-[calc(var(--spacing-safe-top)+3.75rem)] z-60 flex justify-center px-4"
+    >
+      <p role="status" className="sr-only">
+        {toast?.title}
+      </p>
+      <AnimatePresence mode="popLayout">
+        {toast ? (
+          <ToastView key={toast.id} toast={toast} onDismiss={() => toastStore.dismiss(toast.id)} />
+        ) : null}
+      </AnimatePresence>
+    </section>
+  );
+}
+
+export function AppToastProvider({ children }: { children: ReactNode }) {
   return (
     <>
       {children}
-      <Toaster
-        position={desktop ? "bottom-right" : "bottom-center"}
-        visibleToasts={3}
-        hotkey={["F6"]}
-        customAriaLabel={m.navigation_notifications()}
-        offset={desktopOffset}
-        mobileOffset={phoneOffset}
-        style={toastStyle}
-        closeButton
-        icons={{
-          success: <CheckCircle aria-hidden="true" className="size-4 text-success-primary" />,
-          error: <AlertCircle aria-hidden="true" className="size-4 text-error-primary" />,
-        }}
-        toastOptions={{
-          classNames: {
-            toast: "group relative rounded-xl!",
-            title: "text-sm! font-medium!",
-            description: "text-xs! text-tertiary!",
-            closeButton:
-              "transition-opacity! duration-200! ease-out! pointer-fine:opacity-0! pointer-fine:group-hover:opacity-100! pointer-fine:group-focus-within:opacity-100! bg-tertiary! text-primary! border-none!",
-            actionButton:
-              "transition-[transform,background-color]! duration-200! ease-out! hover:bg-primary_hover! hover:text-secondary_hover! hover:scale-105! active:scale-95! bg-primary! text-secondary! ring-1! ring-primary! ring-inset! rounded-md! px-3! py-1.5!",
-          },
-        }}
-      />
+      <ToastHost />
+      <NoticeCardHost />
     </>
   );
 }
 
-/** How long a toast carrying an Undo stays: longer than the 4 s default so the action can be reached
- * (Material 3 suggests 4–10 s for a snackbar with an action). */
-export const UNDO_TOAST_MS = 6000;
+function toastId(kind: string, title: string, key?: string) {
+  return key === undefined ? `${kind}:${title}` : `${kind}:${title}:${key}`;
+}
 
-/** One success toast per title; `key` keeps two different items' toasts of the same title apart
- * (closing chat A then chat B must not replace A's Undo). */
-function successId(title: string, key?: string) {
-  return key === undefined ? `success:${title}` : `success:${title}:${key}`;
+function closing(id: string, action: ToastAction): ToastAction {
+  return {
+    label: action.label,
+    onClick: () => {
+      toastStore.dismiss(id);
+      action.onClick();
+    },
+  };
+}
+
+function show(
+  id: string,
+  title: string,
+  icon: ToastIcon,
+  durationMs = statusToastMs(title),
+  action?: ToastAction,
+) {
+  toastStore.show({ id, title, icon, durationMs, action: action && closing(id, action) });
 }
 
 export const appToast = {
-  info(
+  success(title: string, options?: { action?: ToastAction; durationMs?: number; key?: string }) {
+    show(
+      toastId("success", title, options?.key),
+      title,
+      "done",
+      options?.durationMs ?? (options?.action ? ACTION_TOAST_MS : statusToastMs(title)),
+      options?.action,
+    );
+  },
+  undoable(
     title: string,
-    options?: {
+    options: {
+      onUndo: () => unknown;
+      failed?: string | ((cause: unknown) => string);
       durationMs?: number;
-      action?: { label: string; onClick: () => void };
-      description?: string;
       key?: string;
     },
   ) {
-    toast(title, {
-      id: successId(title, options?.key),
-      duration: options?.durationMs,
-      action: options?.action,
-      description: options?.description,
+    const id = toastId("success", title, options.key);
+    const undo = async () => {
+      show(id, title, "progress", Infinity);
+      try {
+        await options.onUndo();
+        show(id, m.toast_undone(), "done", UNDONE_TOAST_MS);
+      } catch (cause) {
+        const failed =
+          typeof options.failed === "function"
+            ? options.failed(cause)
+            : (options.failed ?? m.toast_undo_failed());
+        show(id, failed, "error");
+      }
+    };
+    toastStore.show({
+      id,
+      title,
+      icon: "countdown",
+      durationMs: options.durationMs ?? ACTION_TOAST_MS,
+      action: { label: m.action_undo(), onClick: () => void undo() },
     });
   },
-  success(
-    title: string,
-    options?: {
-      durationMs?: number;
-      action?: { label: string; onClick: () => void };
-      description?: string;
-      key?: string;
-    },
-  ) {
-    toast.success(title, {
-      id: successId(title, options?.key),
-      duration: options?.durationMs,
-      action: options?.action,
-      description: options?.description,
-    });
+  progress(title: string) {
+    const id = toastId("progress", title);
+    show(id, title, "progress", Infinity);
+    return {
+      done: (result: string) => show(id, result, "done", RESULT_TOAST_MS),
+      fail: (result: string) => show(id, result, "error"),
+    };
   },
-  /** Takes a success toast away early, for an Undo that no longer applies. */
   dismiss(title: string, key?: string) {
-    toast.dismiss(successId(title, key));
+    toastStore.dismiss(toastId("success", title, key));
   },
-  /** A plain notice, one per title: something did not go as asked, but nothing failed. */
   notice(title: string) {
-    toast(title, { id: `notice:${title}` });
+    show(toastId("notice", title), title, "notice");
   },
-  /** Takes a notice or error toast away, for one that belongs to a page the viewer left. */
   dismissShown(title: string) {
-    toast.dismiss(`notice:${title}`);
-    toast.dismiss(`error:${title}`);
+    toastStore.dismiss(toastId("notice", title));
+    toastStore.dismiss(toastId("error", title));
   },
-  // A toast only confirms that an action failed; an error reference belongs under an inline
-  // failure, never in a toast.
   error(title: string) {
-    toast.error(title, { id: `error:${title}` });
+    show(toastId("error", title), title, "error");
   },
 };
 
-/** One object for the whole app, so an effect can depend on it without re-running. */
 export function useAppToast() {
   return appToast;
 }

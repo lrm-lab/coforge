@@ -49,12 +49,12 @@ export function WorkspaceMembersPanel(props: {
     await router.invalidate({ sync: true });
   }
 
-  async function run(action: () => Promise<unknown>) {
+  async function changeRole(name: string, action: () => Promise<unknown>) {
     try {
       await action();
       await refresh();
     } catch {
-      toast.error(m.workspace_members_action_failed());
+      toast.error(m.workspace_member_role_failed({ name }));
     }
   }
 
@@ -125,7 +125,7 @@ export function WorkspaceMembersPanel(props: {
                             onAction={(key) => {
                               if (key === "change-role") {
                                 const nextRole = member.role === "admin" ? "member" : "admin";
-                                void run(() =>
+                                void changeRole(displayName, () =>
                                   updateRole({
                                     data: {
                                       userId: member.userId,

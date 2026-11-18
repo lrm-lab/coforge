@@ -370,7 +370,6 @@
   "av_dr_delete_confirm": "删除草稿",
   "av_dr_delete_failed": "没能删除草稿。",
   "av_dr_deleted": "草稿已删除",
-  "av_dr_deleted_undo": "撤销",
   "av_dr_save_failed": "没能保存草稿，请再试一次。",
   "av_dr_limit": [
     {

@@ -92,9 +92,9 @@ export function ManageableLabelChip({ label }: { label: TaskLabel }) {
     try {
       await update({ data: { id: label.id, archived: true } });
       patch({ archivedAt: new Date() });
-      toast.success(m.tasks_label_archived_toast({ name: label.name }), {
+      toast.undoable(m.tasks_label_archived_toast({ name: label.name }), {
         key: `label-archive-${label.id}`,
-        action: { label: m.action_undo(), onClick: () => void restore() },
+        onUndo: restore,
       });
     } catch {
       setFailed(true);
@@ -105,8 +105,9 @@ export function ManageableLabelChip({ label }: { label: TaskLabel }) {
     try {
       await update({ data: { id: label.id, archived: false } });
       patch({ archivedAt: null });
-    } catch {
+    } catch (cause) {
       setFailed(true);
+      throw cause;
     }
   }
 

@@ -12,7 +12,6 @@
   "computer_refusal_copy": "Copy command",
   "computer_refusal_reconnect": "Reconnect",
   "computer_refusal_reconnecting": "Reconnecting",
-  "computer_refusal_reconnect_queued": "Reconnecting. This can take a minute.",
   "computer_refusal_reconnect_failed": "Could not reconnect this Computer.",
   "computer_refusal_stopped_undated": "It stopped connecting and stopped its Agents. Its files are kept."
 }

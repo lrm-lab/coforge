@@ -130,5 +130,15 @@
   "unsaved_changes_keep_editing": "Keep editing",
   "unsaved_changes_discard": "Discard changes",
   "unsaved_changes_save_and_close": "Save and close",
-  "unsaved_changes_saving": "Saving…"
+  "unsaved_changes_saving": "Saving…",
+  "toast_region": "Status messages",
+  "toast_undone": "Restored",
+  "toast_undo_failed": "Couldn't undo. Try again.",
+  "notice_region": "Notices",
+  "notice_previous": "Previous notice",
+  "notice_next": "Next notice",
+  "notice_position": "{index} of {count}",
+  "controls_later": "Later",
+  "app_updated_body": "Refresh to use the new version.",
+  "action_open": "Open"
 }

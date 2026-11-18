@@ -1,5 +1,5 @@
 import { createContext, useContext, useRef, useState, type ReactNode } from "react";
-import { useParams, useSearch } from "@tanstack/react-router";
+import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Heading } from "react-aria-components";
 import { XClose } from "@untitledui/icons";
@@ -15,6 +15,8 @@ import { makeTaskFromMessage } from "#src/features/tasks/message-task.functions"
 import { TaskPriorityMenu } from "#src/features/tasks/task-priority-menu";
 import { useConversationTaskWrites } from "#src/features/tasks/use-conversation-tasks";
 import { useLastTaskPriority } from "#src/features/settings/last-task-priority";
+import { overviewTaskParam } from "#src/features/tasks/task-overview-search";
+import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useOpenConversationTask } from "./open-conversation-thread";
 
 type MakeTaskSource = { conversationId: string; messageId: string };
@@ -55,10 +57,22 @@ export function MessageTaskHost({ children }: { children: ReactNode }) {
     select: (search) => (search as { open?: string }).open,
   });
   const shown = params.channelId ?? params.dmId ?? hosted?.split(":").at(-1);
+  const navigate = useNavigate();
+  const workspaceSlug = useWorkspaceSlug();
   const show = (conversationId: string, number: number) =>
     conversationId === shown
       ? openTask(number)
-      : toast.success(m.message_make_task_made({ number: String(number) }));
+      : toast.success(m.message_make_task_made({ number: String(number) }), {
+          action: {
+            label: m.action_open(),
+            onClick: () =>
+              void navigate({
+                to: "/w/$workspaceSlug/projects",
+                params: { workspaceSlug },
+                search: { task: overviewTaskParam({ conversationId, number }) },
+              }),
+          },
+        });
   const [pending, setPending] = useState<{ source: MakeTaskSource } | null>(null);
   const [making, setMaking] = useState(false);
   const [taken, setTaken] = useState<Taken | null>(null);

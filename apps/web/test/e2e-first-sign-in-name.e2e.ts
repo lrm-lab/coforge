@@ -181,7 +181,7 @@ test("a first sign-in is asked for a display name once, and the personal Workspa
     // Empty and too-long names are refused inline, under the field, and nothing is saved.
     await submitName("");
     await waitFor(`${fieldError} === "Enter your display name."`);
-    expect(await evaluate<boolean>(`!!document.querySelector("[data-sonner-toast]")`)).toBe(false);
+    expect(await evaluate<boolean>(`!!document.querySelector("[data-toast]")`)).toBe(false);
     await shoot("02-empty-error-desktop.png");
     await submitName("a".repeat(81));
     await waitFor(`${fieldError} === "Use 80 characters or fewer."`);

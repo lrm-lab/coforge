@@ -130,5 +130,15 @@
   "unsaved_changes_keep_editing": "继续编辑",
   "unsaved_changes_discard": "放弃更改",
   "unsaved_changes_save_and_close": "保存并关闭",
-  "unsaved_changes_saving": "保存中…"
+  "unsaved_changes_saving": "保存中…",
+  "toast_region": "状态提示",
+  "toast_undone": "已恢复",
+  "toast_undo_failed": "没能撤销，请重试。",
+  "notice_region": "通知",
+  "notice_previous": "上一条通知",
+  "notice_next": "下一条通知",
+  "notice_position": "{index} / {count}",
+  "controls_later": "稍后",
+  "app_updated_body": "刷新后使用新版本。",
+  "action_open": "打开"
 }

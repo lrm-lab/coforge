@@ -35,7 +35,7 @@ export function MessageSelectionHost({ children }: { children: ReactNode }) {
   const [state, setState] = useState<MessageSelectionState | null>(null);
   const toggle = useLatestCallback((conversationId: string, entry: ForwardSourceMessage) => {
     const next = toggleSelected(state, conversationId, entry);
-    if (next.full) toast.error(m.message_select_limit({ max: MESSAGE_SELECTION_MAX }));
+    if (next.full) toast.notice(m.message_select_limit({ max: MESSAGE_SELECTION_MAX }));
     else setState(next.state);
   });
   const exit = useLatestCallback(() => setState(null));

@@ -7,7 +7,6 @@ import { isAppError } from "#src/lib/app-error";
 
 import { Button } from "#src/components/base/buttons/button";
 import { DialogAction } from "#src/components/ui/dialog-actions";
-import { useAppToast } from "#src/components/ui/toast";
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { conversationRoute } from "#src/features/conversations/last-conversation";
 import { m } from "#src/paraglide/messages";
@@ -65,7 +64,6 @@ export function OnboardingWizard({
   const hydrated = useHydrated();
   const router = useRouter();
   const navigate = useNavigate();
-  const toast = useAppToast();
   const loadComputers = useServerFn(loadOnboardingComputers);
   const loadApproval = useServerFn(loadDeviceApproval);
   const configure = useServerFn(configureOnboardingAssistant);
@@ -84,6 +82,7 @@ export function OnboardingWizard({
     () => new Set(initial.computers.map((computer) => computer.id)),
   );
   const [finished, setFinished] = useState(false);
+  const [finishError, setFinishError] = useState<string | null>(null);
   const [finishing, guard] = useSubmitGuard();
 
   function selectionOf(rows: readonly WizardComputer[]) {
@@ -148,6 +147,7 @@ export function OnboardingWizard({
 
   async function finish(chosen: PersonRole | undefined) {
     await guard(async () => {
+      setFinishError(null);
       try {
         const { conversationId } = await complete({ data: { role: chosen } });
         setFinished(true);
@@ -155,7 +155,7 @@ export function OnboardingWizard({
         await navigate(conversationRoute({ dmId: conversationId }, workspaceSlug));
         await router.invalidate({ sync: true });
       } catch (cause) {
-        toast.error(wizardErrorMessage(cause));
+        setFinishError(wizardErrorMessage(cause));
       }
     });
   }
@@ -174,7 +174,7 @@ export function OnboardingWizard({
   }
 
   return (
-    <OnboardingWizardModal>
+    <OnboardingWizardModal error={finishError}>
       {step === "computer" && (
         <WizardShell
           step="computer"

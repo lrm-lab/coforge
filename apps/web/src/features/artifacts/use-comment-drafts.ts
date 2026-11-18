@@ -1,7 +1,7 @@
 import { useCallback, useReducer, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { UNDO_TOAST_MS, useAppToast } from "#src/components/ui/toast";
+import { useAppToast } from "#src/components/ui/toast";
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { COMMENT_DRAFTS_MAX, type DraftCreateInput } from "./artifact-comment-draft-inputs";
@@ -150,15 +150,16 @@ export function useCommentDraftsStore(artifactId: string, enabled: boolean, onCh
   );
 
   const restoreFromToast = useCallback(
-    (stepKey: string) => {
+    async (stepKey: string) => {
       const step = latest.current.past.find((held) => held.key === stepKey);
-      if (!step || step.kind !== "delete" || running.current) return;
-      void exclusive("changing", async () => {
+      if (!step || step.kind !== "delete") return;
+      if (running.current) throw new Error("another change is running");
+      await exclusive("changing", async () => {
         await recreate(step);
         dispatch({ type: "drop", key: stepKey });
-      }).catch(() => toast.error(m.av_dr_undo_failed()));
+      });
     },
-    [exclusive, recreate, toast],
+    [exclusive, recreate],
   );
   const remove = useCallback(
     (draft: CommentDraftView) =>
@@ -170,10 +171,10 @@ export function useCommentDraftsStore(artifactId: string, enabled: boolean, onCh
           type: "record",
           step: { key: stepKey, kind: "delete", id: draft.id, snapshot: snapshotOf(draft) },
         });
-        toast.success(m.av_dr_deleted(), {
-          durationMs: UNDO_TOAST_MS,
+        toast.undoable(m.av_dr_deleted(), {
           key: draft.id,
-          action: { label: m.av_dr_deleted_undo(), onClick: () => restoreFromToast(stepKey) },
+          failed: m.av_dr_undo_failed(),
+          onUndo: () => restoreFromToast(stepKey),
         });
       }),
     [exclusive, drop, toast, restoreFromToast],

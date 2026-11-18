@@ -42,7 +42,7 @@ export function useComposerPaste(
     }
     const ready = [...inlineReady, ...fetched];
     if (ready.length === 0) {
-      toast.error(m.conversation_paste_no_image());
+      toast.notice(m.conversation_paste_no_image());
       return;
     }
     onFiles(ready);

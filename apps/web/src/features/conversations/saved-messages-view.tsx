@@ -17,7 +17,7 @@ import {
   EmptyTitle,
 } from "#src/components/ui/empty";
 import { RelativeTime } from "#src/components/ui/relative-time";
-import { UNDO_TOAST_MS, useAppToast } from "#src/components/ui/toast";
+import { useAppToast } from "#src/components/ui/toast";
 import { copyText } from "#src/lib/clipboard";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { m } from "#src/paraglide/messages";
@@ -110,14 +110,10 @@ function SavedMessageCard({
   function remove() {
     void onUnsave(message.id)
       .then(() =>
-        toast.success(m.conversation_unsaved(), {
+        toast.undoable(m.conversation_unsaved(), {
           key: message.id,
-          durationMs: UNDO_TOAST_MS,
-          action: {
-            label: m.action_undo(),
-            onClick: () =>
-              void onSave(entry).catch(() => toast.error(m.conversation_save_failed())),
-          },
+          failed: m.conversation_save_failed(),
+          onUndo: () => onSave(entry),
         }),
       )
       .catch(() => toast.error(m.conversation_save_failed()));

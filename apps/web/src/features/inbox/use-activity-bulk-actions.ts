@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { useAppToast, UNDO_TOAST_MS } from "#src/components/ui/toast";
+import { useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
 import { markActivityAllDone, undoActivityDone } from "./activity-inbox.functions";
 import {
@@ -48,19 +48,16 @@ export function useActivityBulkActions({
     function offerUndo(done: { count: number; undo: ActivityDoneUndo | null }) {
       if (done.count === 0) return;
       const { undo } = done;
-      toast.success(m.activity_bulk_marked_done({ count: done.count }), {
-        durationMs: UNDO_TOAST_MS,
-        key: String(Date.now()),
-        action:
-          undo === null
-            ? undefined
-            : {
-                label: m.action_undo(),
-                onClick: () =>
-                  void undoDone({ data: undo })
-                    .catch(() => toast.error(m.activity_inbox_action_error()))
-                    .finally(onChanged),
-              },
+      const title = m.activity_bulk_marked_done({ count: done.count });
+      const key = String(Date.now());
+      if (undo === null) {
+        toast.success(title, { key });
+        return;
+      }
+      toast.undoable(title, {
+        key,
+        failed: m.activity_inbox_action_error(),
+        onUndo: () => undoDone({ data: undo }).finally(onChanged),
       });
     }
 

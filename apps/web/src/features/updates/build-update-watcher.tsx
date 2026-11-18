@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-import { appToast } from "#src/components/ui/toast";
+import { appNotice } from "#src/components/ui/notice-card";
 import { m } from "#src/paraglide/messages";
 
 import {
@@ -15,18 +15,21 @@ export { isChunkLoadError } from "./build-update";
 
 const BUILD_ID_PATH = "/api/build-id";
 const BUILD_ID_POLL_MS = 5 * 60 * 1000;
-const UPDATE_TOAST_KEY = "build-update";
+const UPDATE_NOTICE_ID = "build-update";
 
-let updateToastShown = false;
+let updateNoticeShown = false;
 
-export function showBuildUpdateToast(): void {
-  if (updateToastShown) return;
-  updateToastShown = true;
-  appToast.info(m.app_updated_title(), {
-    action: { label: m.controls_refresh(), onClick: () => window.location.reload() },
-    description: hasUnsavedTemporaryState() ? m.app_updated_unsaved_warning() : undefined,
-    durationMs: Infinity,
-    key: UPDATE_TOAST_KEY,
+export function showBuildUpdateNotice(): void {
+  if (updateNoticeShown) return;
+  updateNoticeShown = true;
+  appNotice.show({
+    id: UPDATE_NOTICE_ID,
+    title: m.app_updated_title(),
+    body: hasUnsavedTemporaryState() ? m.app_updated_unsaved_warning() : m.app_updated_body(),
+    actions: [
+      { label: m.controls_later(), onPress: () => undefined },
+      { label: m.controls_refresh(), onPress: () => window.location.reload() },
+    ],
   });
 }
 
@@ -55,7 +58,7 @@ export function BuildUpdateWatcher() {
       inFlight.current = false;
       if (disposed || serverBuildId === undefined) return;
       state.current = buildUpdateStateAfterProbe(state.current, CLIENT_BUILD_ID, serverBuildId);
-      if (state.current.updateDetected) showBuildUpdateToast();
+      if (state.current.updateDetected) showBuildUpdateNotice();
     };
     const onVisible = () => {
       if (document.visibilityState === "visible") void probe();
@@ -76,10 +79,10 @@ export function BuildUpdateWatcher() {
   useEffect(() => {
     if (CLIENT_BUILD_ID === "development") return;
     const onError = (event: ErrorEvent) => {
-      if (isChunkLoadError(event.error ?? event.message)) showBuildUpdateToast();
+      if (isChunkLoadError(event.error ?? event.message)) showBuildUpdateNotice();
     };
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
-      if (isChunkLoadError(event.reason)) showBuildUpdateToast();
+      if (isChunkLoadError(event.reason)) showBuildUpdateNotice();
     };
     window.addEventListener("error", onError);
     window.addEventListener("unhandledrejection", onUnhandledRejection);

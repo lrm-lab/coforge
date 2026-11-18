@@ -122,6 +122,7 @@
   "workspace_members_you": "你",
   "workspace_members_remove": "移除",
   "workspace_members_action_failed": "无法完成该成员操作。",
+  "workspace_member_role_failed": "没能更改 {name} 的角色。",
   "workspace_member_actions": "成员操作",
   "workspace_member_make_admin": "设为管理员",
   "workspace_member_make_member": "设为普通成员",

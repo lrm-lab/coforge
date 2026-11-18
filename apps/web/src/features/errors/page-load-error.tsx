@@ -5,7 +5,10 @@ import { useRouter } from "@tanstack/react-router";
 import { Button } from "#src/components/base/buttons/button";
 import { isAppError, isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
-import { isChunkLoadError, showBuildUpdateToast } from "#src/features/updates/build-update-watcher";
+import {
+  isChunkLoadError,
+  showBuildUpdateNotice,
+} from "#src/features/updates/build-update-watcher";
 
 export function PageLoadError({ error }: { error: unknown }) {
   const router = useRouter();
@@ -45,7 +48,7 @@ export function PageLoadError({ error }: { error: unknown }) {
 export function GlobalError({ error }: { error: unknown }) {
   const chunkLoadError = isChunkLoadError(error);
   useEffect(() => {
-    if (chunkLoadError) showBuildUpdateToast();
+    if (chunkLoadError) showBuildUpdateNotice();
   }, [chunkLoadError]);
   if (chunkLoadError) return <ErrorPageFrame />;
   return (

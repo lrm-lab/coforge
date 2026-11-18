@@ -6,4 +6,4 @@
   - Sizes: anything affecting layout or reading uses rem — the Tailwind scale or a rem arbitrary value such as `w-[18rem]`; never `w-[280px]`, `text-[10px]`, or numeric inline `style` sizes. px only for hairlines, stroke widths, shadows/blur, and positions and sizes measured from the DOM (§12).
   - Colors: semantic tokens only, no hex or `dark:` color overrides (§11).
   - People: show a person by `humanLabel` (`src/lib/human-label.ts`), never as `@username`, and do not search by username; an Agent keeps its `@handle`.
-  - Feedback: a toast only confirms an action; anything the user must see, handle, or come back to stays inline (§13). Toasts go through `AppToastProvider`; do not add a second notification system.
+  - Feedback: a toast only confirms an action; anything the user must see, handle, or come back to stays inline (§13). Toasts and system notice cards both go through `AppToastProvider`; do not add another notification system.

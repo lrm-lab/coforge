@@ -163,8 +163,7 @@
   ],
   "channel_archived_toast": "已归档 #{name}",
   "channel_left_toast": "已退出 #{name}",
-  "channel_general_hidden_toast": "已隐藏 #general",
-  "channel_general_hidden_later": "可以在 设置 → 成员 → 系统群聊 里恢复。",
+  "channel_general_hidden_toast": "已隐藏 #general，可在 成员 → 系统群聊 恢复",
   "channel_made_private_toast": "#{name} 已改为私有",
   "channel_undo_failed": "撤销没有成功，请再试一次。"
 }

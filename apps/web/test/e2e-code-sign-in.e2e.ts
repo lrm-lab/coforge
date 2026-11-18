@@ -130,7 +130,7 @@ test("signing in with a code sent by SMS or email", async () => {
     await submitCode("000000");
     await waitFor(`${formError} === "The verification code is incorrect or expired."`);
     expect(await evaluate<boolean>(`location.pathname.endsWith("/login")`)).toBe(true);
-    expect(await evaluate<boolean>(`!!document.querySelector("[data-sonner-toast]")`)).toBe(false);
+    expect(await evaluate<boolean>(`!!document.querySelector("[data-toast]")`)).toBe(false);
     expect(fake.revoked).toEqual([]);
     await browser("screenshot", join(artifacts, "4-wrong-code.png"));
     await submitCode(fake.sentCodes[0]!.code);

@@ -40,7 +40,7 @@ test("Activity's header marks all done with Undo, and a row's hover shows only D
     await browser("press", "Escape");
     await waitFor(`document.querySelectorAll('[role="menu"]').length === 0`);
   };
-  const toastButton = `[...document.querySelectorAll("[data-sonner-toast] button")].find((b) => b.textContent.trim() === "Undo")`;
+  const toastButton = `[...document.querySelectorAll("[data-toast] button")].find((b) => b.textContent.trim() === "Undo")`;
   const openSeeded = async (workspaceSlug: string) => {
     await browser("open", `${origin}/en/w/${workspaceSlug}/activity`);
     await waitFor(`${seeded}.length === 4 && ${pageHydrated}`, 40_000);
@@ -92,7 +92,7 @@ test("Activity's header marks all done with Undo, and a row's hover shows only D
     await waitFor(`${toastButton} !== undefined`);
     expect(
       await evaluate<boolean>(
-        `document.querySelector("[data-sonner-toast]").textContent.includes("Marked")`,
+        `document.querySelector("[data-toast]").textContent.includes("Marked")`,
       ),
     ).toBe(true);
     await evaluate(`(${toastButton}.click(), true)`);

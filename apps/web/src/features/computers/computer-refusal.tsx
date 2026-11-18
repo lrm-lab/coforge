@@ -126,7 +126,6 @@ function RefusalReconnect({ computerId }: { computerId: string }) {
         try {
           await reconnect({ data: { computerId } });
           setState("queued");
-          toast.success(m.computer_refusal_reconnect_queued());
           await router.invalidate();
         } catch {
           setState("idle");

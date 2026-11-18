@@ -168,7 +168,7 @@ test("signing in with an email and password, from a Workspace invite link", asyn
     expect(await evaluate<string>(`new URL(location.href).searchParams.get("returnTo")`)).toBe(
       joinPath,
     );
-    expect(await evaluate<boolean>(`!!document.querySelector("[data-sonner-toast]")`)).toBe(false);
+    expect(await evaluate<boolean>(`!!document.querySelector("[data-toast]")`)).toBe(false);
     expect(await evaluate<boolean>(`location.pathname.endsWith("/login")`)).toBe(true);
     await browser("screenshot", join(artifacts, "1c-wrong-password.png"));
     expect(fake.signIns.at(-1)?.person).toBe("alice");
