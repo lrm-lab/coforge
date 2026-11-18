@@ -1,3 +1,4 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { PiChatMessage, PiChatResult, PiChatModel } from "@lrm/coforge-sdk/internal/pi-chat";
 
 export type PiChatView = {
@@ -15,7 +16,9 @@ export type PiChatDraft = {
 };
 
 export type PiChatPendingMessage = { id: string; text: string; after?: string };
-export type PiChatHistory = PiChatResult & { pendingMessages?: PiChatPendingMessage[] };
+export type PiChatHistory = PiChatResult & {
+  pendingMessages?: PiChatPendingMessage[];
+};
 
 /** Keep the id with the retained draft, rather than with a mounted conversation panel. */
 export function preparePiChatSend(draft: PiChatDraft): PiChatDraft {
@@ -33,7 +36,7 @@ function finalized(message: PiChatMessage) {
 /** Merge moving native-history windows, fetching until the old and new windows overlap. */
 export async function loadPiChatHistory(
   previous: PiChatHistory | undefined,
-  read: (before?: number) => Promise<PiChatResult>,
+  read: (before?: number, nativeCursor?: string) => Promise<PiChatResult>,
 ): Promise<PiChatHistory> {
   const snapshot = await read();
   const newest: PiChatHistory = {
@@ -44,6 +47,20 @@ export async function loadPiChatHistory(
   };
   const old = previous?.messages?.filter(finalized) ?? [];
   if (!old.length) return newest;
+  if (snapshot.session?.runtime === RUNTIME_PROVIDER.CODEX) {
+    const ids = new Set(old.map((item) => item.id));
+    let incoming = snapshot.messages ?? [];
+    let cursor = snapshot.cursor;
+    for (let page = 0; cursor && page < 4 && !incoming.some((row) => ids.has(row.id)); page++) {
+      const earlier = await read(undefined, cursor);
+      incoming = [...(earlier.messages ?? []), ...incoming];
+      cursor = earlier.cursor === cursor ? undefined : earlier.cursor;
+    }
+    if (!incoming.some((row) => ids.has(row.id))) return { ...newest, cursor, messages: incoming };
+    const merged = new Map(old.map((message) => [message.id, message]));
+    for (const item of incoming) merged.set(item.id, item);
+    return { ...newest, messages: [...merged.values()], cursor: previous?.cursor };
+  }
   const oldIds = new Set(old.map((message) => message.id));
   let incoming = newest.messages ?? [];
   let cursor = newest.before ?? 0;

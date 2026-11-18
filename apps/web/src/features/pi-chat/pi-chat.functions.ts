@@ -1,12 +1,14 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { piChatCommandSchema } from "@lrm/coforge-sdk/internal/pi-chat";
+import { piChatCommandSchema, supportsWorkbenchCodex } from "@lrm/coforge-sdk/internal/pi-chat";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import { isAiWorkbenchEnabled, requireAiWorkbench } from "#src/server/pi-chat/ai-workbench.server";
 import {
   getPiChatControlsLease,
   getPiChatFilesLease,
+  getWorkbenchCodexLease,
 } from "#src/server/pi-chat/pi-chat-capability.server";
 import {
   piChatConfiguration,
@@ -29,33 +31,56 @@ export const getPiChatComputers = createServerFn({ method: "GET" })
     const computers = await context.db.computer.findMany({
       where: {
         ownerId: context.user.id,
-        kind: "cloud",
         deletedAt: null,
         workspaces: { some: { workspaceId: context.workspaceId } },
       },
-      select: { id: true, displayName: true, name: true },
+      select: {
+        id: true,
+        displayName: true,
+        name: true,
+        kind: true,
+        runtimes: {
+          where: { workspaceId: context.workspaceId, provider: RUNTIME_PROVIDER.CODEX },
+          select: { unavailableCode: true, version: true },
+        },
+      },
       orderBy: [{ cloudSlot: "asc" }, { id: "asc" }],
     });
     return {
       workspaceId: context.workspaceId,
       userId: context.user.id,
       configured: !!piChatConfiguration(),
-      computers: await Promise.all(
-        computers.map(async (computer) => ({
-          id: computer.id,
-          name: computer.displayName || computer.name,
-          files: piChatConfiguration()
-            ? await getPiChatFilesLease()
+      computers: (
+        await Promise.all(
+          computers.map(async (computer) => {
+            const pi = computer.kind === "cloud";
+            const codex = computer.runtimes.length > 0;
+            const usableCodex = computer.runtimes.some(
+              (runtime) => !runtime.unavailableCode && supportsWorkbenchCodex(runtime.version),
+            );
+            if (!pi && !codex) return undefined;
+            const supported = async (lease: typeof getPiChatFilesLease) =>
+              piChatConfiguration() &&
+              (await lease()
                 .supports(context.workspaceId, computer.id)
-                .catch(() => false)
-            : false,
-          controls: piChatConfiguration()
-            ? await getPiChatControlsLease()
-                .supports(context.workspaceId, computer.id)
-                .catch(() => false)
-            : false,
-        })),
-      ),
+                .catch(() => false));
+            const [files, controls, codexOnline] = await Promise.all([
+              pi && supported(getPiChatFilesLease),
+              pi && supported(getPiChatControlsLease),
+              usableCodex && supported(getWorkbenchCodexLease),
+            ]);
+            return {
+              id: computer.id,
+              name: computer.displayName || computer.name,
+              pi,
+              codex,
+              codexOnline,
+              files,
+              controls,
+            };
+          }),
+        )
+      ).filter((computer) => computer !== undefined),
     };
   });
 

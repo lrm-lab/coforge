@@ -43,3 +43,24 @@ test("a retained draft reuses the accepted-send identity after switching convers
     first.request?.id,
   );
 });
+
+test("Codex history uses native cursors to fill a gap before joining the cached transcript", async () => {
+  const session = {
+    id: crypto.randomUUID(),
+    title: "Native",
+    updatedAt: 0,
+    status: "idle" as const,
+    model: "Codex",
+    requestIds: [],
+    runtime: "codex" as const,
+  };
+  const result = await loadPiChatHistory(
+    { ...page(1, 3), cursor: "older", session },
+    async (_before, cursor) =>
+      cursor
+        ? { ...page(2, 5), cursor: "oldest", session }
+        : { ...page(5, 7), cursor: "middle", session },
+  );
+  expect(result.messages?.map(({ id }) => id)).toEqual(["1", "2", "3", "4", "5", "6"]);
+  expect(result.cursor).toBe("older");
+});

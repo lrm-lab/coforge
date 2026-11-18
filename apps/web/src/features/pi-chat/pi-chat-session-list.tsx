@@ -1,3 +1,4 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { useEffect, useState } from "react";
 import { Link, useHydrated } from "@tanstack/react-router";
 import { SearchLg } from "@untitledui/icons";
@@ -82,7 +83,7 @@ export function PiChatSessionList({
             <Link
               to="/w/$workspaceSlug/pi-chat"
               params={{ workspaceSlug }}
-              search={{ computer: computerId, session: session.id }}
+              search={{ computer: computerId, session: session.id, runtime: session.runtime }}
               aria-current={sessionId === session.id ? "page" : undefined}
               className={cn(
                 "block min-w-0 flex-1 rounded-lg px-3 py-2 text-sm text-primary outline-focus-ring hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2",
@@ -91,6 +92,7 @@ export function PiChatSessionList({
             >
               <p className="truncate font-medium">{session.title}</p>
               <div className="mt-1 flex items-center gap-2 text-xs text-tertiary">
+                {session.runtime === RUNTIME_PROVIDER.CODEX && <span>Codex</span>}
                 {session.status === "running" ? (
                   <span className="flex items-center gap-1.5">
                     <span aria-hidden="true" className="size-1.5 rounded-full bg-brand-solid" />

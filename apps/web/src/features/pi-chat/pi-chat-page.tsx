@@ -1,8 +1,10 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Plus, RefreshCw01, SearchLg } from "@untitledui/icons";
+import type { WorkbenchRuntime } from "@lrm/coforge-sdk/internal/pi-chat";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
@@ -22,16 +24,18 @@ import { PiChatSessionList } from "./pi-chat-session-list";
 import type { PiChatDraft, PiChatView } from "./pi-chat-state";
 import { PiChatConversation } from "./pi-chat-conversation";
 import { PiChatOff } from "./pi-chat-off";
+import { WorkbenchStart, type WorkbenchComputer } from "./workbench-start";
 
 type Props = {
   userId: string;
   workspaceId: string;
   workspaceSlug: string;
-  computers: { id: string; name: string; controls?: boolean; files?: boolean }[];
+  computers: WorkbenchComputer[];
   configured: boolean;
   computerId?: string;
   sessionId?: string;
-  select(computerId: string, sessionId?: string): void;
+  runtime?: WorkbenchRuntime;
+  select(computerId: string, sessionId?: string, runtime?: WorkbenchRuntime): void;
 };
 
 /** The Workbench, or one line saying it is off once the Workspace's switch turns off. */
@@ -41,7 +45,7 @@ export function PiChatPage(props: Props) {
 
 function PiChatContent(props: Props) {
   const queryClient = useQueryClient();
-  const { workspaceSlug, configured, sessionId, select } = props;
+  const { workspaceSlug, configured, sessionId, select, runtime } = props;
   const getComputers = useServerFn(getPiChatComputers);
   const capabilities = useQuery({
     queryKey: ["pi-chat", workspaceSlug, props.userId, "computers"],
@@ -55,9 +59,9 @@ function PiChatContent(props: Props) {
     retry: false,
   });
   const computers = capabilities.data?.computers ?? props.computers;
-  const computerId = props.computerId ?? computers[0]?.id;
-  const controls = computers.find((computer) => computer.id === computerId)?.controls ?? false;
-  const computer = computers.find((computer) => computer.id === computerId);
+  const computer = computers.find((entry) => entry.id === props.computerId) ?? computers[0];
+  const computerId = computer?.id;
+  const controls = computer?.controls ?? false;
   const [filePanels, setFilePanels] = useState<Record<string, { open: boolean; path?: string }>>(
     {},
   );
@@ -66,11 +70,22 @@ function PiChatContent(props: Props) {
     setFilePanels((current) => ({ ...current, [computerId!]: { open: true, path } }));
   const [search, setSearch] = useState("");
   const [drafts, setDrafts] = useState<Record<string, PiChatDraft>>({});
-  const key = `${workspaceSlug}:${computerId}:${sessionId ?? "new"}`;
+  const key = `${workspaceSlug}:${computerId}:${sessionId ?? "new"}:${runtime ?? RUNTIME_PROVIDER.PI}`;
   const execute = useExecutePiChat();
   const sessions = useQuery({
     queryKey: ["pi-chat", workspaceSlug, computerId, "sessions"],
-    queryFn: () => execute({ data: { computerId: computerId!, command: { action: "list" } } }),
+    queryFn: () =>
+      execute({
+        data: {
+          computerId: computerId!,
+          command: {
+            action: "list",
+            ...(computer?.pi === false
+              ? { runtime: RUNTIME_PROVIDER.CODEX }
+              : { includeCodex: true }),
+          },
+        },
+      }),
     enabled: configured && !!computerId,
     refetchInterval: (query) =>
       query.state.status === "error"
@@ -85,7 +100,7 @@ function PiChatContent(props: Props) {
     viewports.current.set(key, { top: 0, follow: true, expanded: new Set() });
   const selection = useRef(key);
   selection.current = key;
-  if (!configured || !computerId)
+  if (!configured || !computerId || !computer)
     return (
       <main className="flex h-full min-h-0 flex-col">
         <PageHeader heading={m.pi_chat_title()} />
@@ -110,6 +125,9 @@ function PiChatContent(props: Props) {
         </Empty>
       </main>
     );
+  const initialSession = sessions.data?.sessions?.find((session) => session.id === sessionId);
+  const sessionRuntime =
+    computer.pi === false ? RUNTIME_PROVIDER.CODEX : (initialSession?.runtime ?? runtime);
   return (
     <PiChatFilesContext value={{ supported: computer?.files ?? false, open: openFiles }}>
       <main className="flex h-full min-h-0 min-w-0 overflow-hidden bg-primary">
@@ -131,7 +149,9 @@ function PiChatContent(props: Props) {
                 color="secondary"
                 icon={Plus}
                 tooltip={m.pi_chat_new()}
-                onClick={() => select(computerId, "new")}
+                onClick={() =>
+                  select(computerId, "new", computer.codex ? undefined : RUNTIME_PROVIDER.PI)
+                }
               />
             }
           />
@@ -194,7 +214,16 @@ function PiChatContent(props: Props) {
             )}
           </div>
         </section>
-        {sessionId ? (
+        {sessionId === "new" && !runtime && computer.codex ? (
+          <WorkbenchStart
+            key={computerId}
+            computers={computers}
+            computer={computer}
+            onComputer={(id) => select(id, "new")}
+            onStart={(provider) => select(computerId, "new", provider)}
+            onBack={() => select(computerId)}
+          />
+        ) : sessionId ? (
           <PiChatConversation
             key={key}
             computerId={computerId}
@@ -202,13 +231,22 @@ function PiChatContent(props: Props) {
             userId={props.userId}
             workspaceId={props.workspaceId}
             sessionId={sessionId}
+            runtime={sessionRuntime}
             workspaceSlug={workspaceSlug}
             viewport={viewports.current.get(key)!}
-            initialSession={sessions.data?.sessions?.find((session) => session.id === sessionId)}
+            initialSession={initialSession}
             draft={drafts[key] ?? { text: "" }}
             onDraft={(value) => setDrafts((current) => ({ ...current, [key]: value }))}
             onSelect={(id) => {
-              if (selection.current === key) select(computerId, id);
+              if (selection.current === key)
+                select(computerId, id, id ? sessionRuntime : undefined);
+            }}
+            onRecover={(text) => {
+              setDrafts((current) => ({
+                ...current,
+                [`${workspaceSlug}:${computerId}:new:codex`]: { text },
+              }));
+              select(computerId, "new", RUNTIME_PROVIDER.CODEX);
             }}
           />
         ) : (
@@ -218,7 +256,12 @@ function PiChatContent(props: Props) {
                 <EmptyTitle>{m.pi_chat_start_title()}</EmptyTitle>
                 <EmptyDescription>{m.pi_chat_start_hint()}</EmptyDescription>
               </EmptyHeader>
-              <Button iconLeading={Plus} onClick={() => select(computerId, "new")}>
+              <Button
+                iconLeading={Plus}
+                onClick={() =>
+                  select(computerId, "new", computer.codex ? undefined : RUNTIME_PROVIDER.PI)
+                }
+              >
                 {m.pi_chat_new()}
               </Button>
             </Empty>
