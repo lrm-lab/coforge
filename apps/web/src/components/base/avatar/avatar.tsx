@@ -53,11 +53,26 @@ export const Avatar = ({
     const [isFailed, setIsFailed] = useState(false);
     useEffect(() => setIsFailed(false), [src]);
 
+    const [loadedSrc, setLoadedSrc] = useState<string>();
+
     const canShowImage = src && !isFailed;
+    const imageShown = canShowImage && loadedSrc === src;
 
     const renderMainContent = () => {
         if (canShowImage) {
-            return <img data-avatar-img className="size-full object-cover" src={src} alt={alt} onError={() => setIsFailed(true)} />;
+            return (
+                <img
+                    ref={(image) => {
+                        if (image?.complete && image.naturalWidth > 0) setLoadedSrc(src);
+                    }}
+                    data-avatar-img
+                    className="size-full object-cover"
+                    src={src}
+                    alt={alt}
+                    onLoad={() => setLoadedSrc(src)}
+                    onError={() => setIsFailed(true)}
+                />
+            );
         }
 
         if (initials) {
@@ -115,6 +130,7 @@ export const Avatar = ({
                         size !== "xs" &&
                         "before:absolute before:inset-0 before:rounded-[inherit] before:border before:border-white/32 before:mask-[linear-gradient(to_bottom,black_0%,transparent_25%,transparent_75%,black_100%)]",
                     contentClassName,
+                    imageShown && "bg-transparent",
                 )}
             >
                 {renderMainContent()}
