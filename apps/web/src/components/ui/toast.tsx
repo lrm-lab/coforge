@@ -47,8 +47,8 @@ export function AppToastProvider({ children }: { children: React.ReactNode }) {
             toast: "group relative rounded-xl!",
             title: "text-sm! font-medium!",
             description: "text-xs! text-tertiary!",
-            closeButton: "opacity-0! transition-opacity! group-hover:opacity-100! bg-tertiary! text-primary! border-none!",
-            actionButton: "opacity-0! transition-opacity! group-hover:opacity-100! bg-primary! text-primary! rounded-md! px-3! py-1.5!",
+            closeButton: "opacity-0! transition-[opacity,transform]! duration-200! ease-out! group-hover:opacity-100! bg-tertiary! text-primary! border-none!",
+            actionButton: "opacity-0! translate-y-1! transition-[opacity,transform,background-color]! duration-200! ease-out! group-hover:opacity-100! group-hover:translate-y-0! hover:bg-primary! hover:scale-105! active:scale-95! bg-primary! text-primary-foreground! rounded-md! px-3! py-1.5!",
           },
         }}
       />
