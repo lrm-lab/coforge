@@ -84,13 +84,13 @@ export function startAgent(
   const request = withOwed(startRequest, startRecovery, owed?.carried);
   if (fresh) ports.inputDrain.carry(agentId, endedInputs, request.resumePrompt !== undefined);
   const { recovery } = request;
-  let recoveryTold = false;
-  const enqueueRecovery = (context: AgentRecoveryContext, told?: () => void) =>
+  const recoveryOutcome = Promise.withResolvers<boolean>();
+  const enqueueRecovery = (context: AgentRecoveryContext, recovered?: (told: boolean) => void) =>
     ports.inputDrain.enqueue(agentId, (completion) => ({
       kind: "recovery",
       context,
       completion,
-      told,
+      recovered,
     }));
   const enqueueTurn = (text: string, introduction?: true) =>
     ports.inputDrain.enqueue(agentId, (completion) => ({
@@ -110,10 +110,13 @@ export function startAgent(
       ? introductionPrompt
       : undefined;
   // This Start's input in order: its introduction, the recovery handed over, its resume prompt.
-  const enqueueStartInput = (context: AgentRecoveryContext | undefined, told?: () => void) => {
+  const enqueueStartInput = (
+    context: AgentRecoveryContext | undefined,
+    recovered?: (told: boolean) => void,
+  ) => {
     const introductionCompletion =
       introduction === undefined ? undefined : enqueueTurn(introduction, true);
-    const recoveryCompletion = context ? enqueueRecovery(context, told) : undefined;
+    const recoveryCompletion = context ? enqueueRecovery(context, recovered) : undefined;
     const promptCompletion = resumePrompt === undefined ? undefined : enqueueTurn(resumePrompt);
     return {
       recoveryCompletion,
@@ -171,9 +174,9 @@ export function startAgent(
   // The Start's input (a resume prompt is a user's guidance when resuming a stopped Agent, sent
   // with no recovery) is queued before the launch, so any message that arrives while the process
   // is still starting queues behind it.
-  const { recoveryCompletion, inputs } = enqueueStartInput(recovery, () => {
-    recoveryTold = true;
-  });
+  const { recoveryCompletion, inputs } = enqueueStartInput(recovery, (told) =>
+    recoveryOutcome.resolve(told),
+  );
   for (const input of inputs) void input.catch(() => {});
   // A Start carrying a prompt never gets the starter, even when it queued none of its own.
   const startupCompletion =
@@ -199,16 +202,14 @@ export function startAgent(
         ports.wakeLaunchFailures.reset(agentId);
         ports.inputDrain.ensure(agentId);
         if (recoveryCompletion) await recoveryCompletion;
-        // No recovery notice told the Agent anything (no recovery item was enqueued, or the launch
-        // stands on one its session refused), yet the session is ready — flush anything
-        // AgentDeliveryGate held across an unexpected exit now, as the one owner of what a
-        // standing launch presents. Do not open a second recovery notice: the queued startup input
-        // opens the initial turn if needed.
-        if (!recoveryTold) ports.releaseSurvivingHolds(agentId);
+        if (!recoveryCompletion) ports.releaseSurvivingHolds(agentId);
         if (startupCompletion) await startupCompletion;
-        // Told: a launch that failed anywhere above leaves it owed to the next one, and so does a
-        // recovery notice the launch tolerated as refused.
-        if (!recoveryCompletion || recoveryTold) owed?.paid();
+        if (!recoveryCompletion) owed?.paid();
+        else
+          void recoveryOutcome.promise.then((told) => {
+            if (told) owed?.paid();
+            else ports.releaseSurvivingHolds(agentId);
+          });
         return runtime;
       },
       (error: unknown) => {

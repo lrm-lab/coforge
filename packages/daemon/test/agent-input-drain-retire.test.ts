@@ -26,7 +26,14 @@ function drain(options: { launching?: boolean } = {}) {
   const ports = {
     runnerHeld: () => false,
     sessionFor: () => ({ hasLiveTurn: false }),
-    launchFor: () => ({ startup: { responses: 0, endsLaunch: () => true, errorObserved: true } }),
+    launchFor: () => ({
+      startup: {
+        responses: 0,
+        endsLaunch: () => true,
+        errorObserved: true,
+        run: (input: Promise<void>) => input,
+      },
+    }),
     hasQueuedDeliveries: () => false,
     isLaunching: () => options.launching ?? false,
     isStopping: () => false,
