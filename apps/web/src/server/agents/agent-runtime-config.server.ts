@@ -102,6 +102,8 @@ export function agentRuntimeConfig(
 ): AgentRuntimeConfig {
   // Sizes for a pick that does not read them are not kept (task #124).
   const sized = sizesApply(selection.provider, provider);
+  if (selection.reasoning === "" && legacyAntigravitySuffix(selection.provider, selection.model))
+    throw new AppError("INVALID_INPUT", { errorId: "antigravity-model-effort-suffix" });
   return {
     runtime: selection.provider,
     provider,
