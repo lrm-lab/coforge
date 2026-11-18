@@ -73,3 +73,69 @@ test("manual scanning proposes a duplicate and concurrent reviewers commit it on
   );
   expect((await listMemorySuggestions(db, actor)).rows).toHaveLength(0);
 });
+
+test("a scan discovers duplicates beyond the current cursor window", async () => {
+  const workspace = await db.workspace.create({
+    data: {
+      slug: `memory-window-${crypto.randomUUID()}`,
+      name: "Memory review window",
+      members: { create: { userId, role: "owner" } },
+    },
+  });
+  try {
+    await db.teamMemoryEntry.createMany({
+      data: Array.from({ length: 70 }, (_, index) => ({
+        workspaceId: workspace.id,
+        authorUserId: userId,
+        title: `Decision ${index}`,
+        content:
+          index === 0 || index === 69 ? "Identical confirmed outcome" : `Unique evidence ${index}`,
+        source: "Workspace acceptance",
+        kind: "fact",
+        applicability: "production",
+        dedupKey: crypto.randomUUID(),
+        searchText: `decision ${index}`,
+        updatedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, index)),
+      })),
+    });
+    const result = await scanTeamMemorySuggestions(db, workspace.id, userId);
+    expect(result).toEqual({ inspected: 64, suggested: 1 });
+    expect(
+      (await listMemorySuggestions(db, { workspaceId: workspace.id, userId })).rows[0]?.kind,
+    ).toBe("duplicate");
+  } finally {
+    await db.workspace.delete({ where: { id: workspace.id } });
+  }
+});
+
+test("previously recorded review work does not hide a sixth unavailable source", async () => {
+  const workspace = await db.workspace.create({
+    data: {
+      slug: `memory-evidence-limit-${crypto.randomUUID()}`,
+      name: "Evidence review budget",
+      members: { create: { userId, role: "owner" } },
+    },
+  });
+  try {
+    await db.teamMemoryEntry.createMany({
+      data: Array.from({ length: 6 }, (_, index) => ({
+        workspaceId: workspace.id,
+        authorUserId: userId,
+        title: `Evidence ${index}`,
+        content: `Decision ${index}`,
+        source: "Removed artifact",
+        evidence: [{ kind: "artifact", id: crypto.randomUUID() }],
+        kind: "decision",
+        applicability: "production",
+        dedupKey: crypto.randomUUID(),
+        searchText: `evidence ${index}`,
+        updatedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, index)),
+      })),
+    });
+    expect((await scanTeamMemorySuggestions(db, workspace.id, userId)).suggested).toBe(5);
+    expect((await scanTeamMemorySuggestions(db, workspace.id, userId)).suggested).toBe(1);
+    expect((await scanTeamMemorySuggestions(db, workspace.id, userId)).suggested).toBe(0);
+  } finally {
+    await db.workspace.delete({ where: { id: workspace.id } });
+  }
+});

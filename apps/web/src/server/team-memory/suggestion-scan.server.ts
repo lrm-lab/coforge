@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { teamMemoryAccess } from "#src/server/db/repositories/team-memory-access.repositories.server";
 import { readableMemoryEvidence } from "#src/server/db/repositories/team-memory-evidence.server";
 import { head, type Row } from "#src/server/db/repositories/team-memory-projections.server";
-import { duplicateMemorySuggestions } from "./suggestions";
+import { duplicateMemorySuggestions, normalizedMemoryContent } from "./suggestions";
 
 export const TEAM_MEMORY_SCAN_INTERVAL_MS = 24 * 60 * 60 * 1_000;
 const PAGE_SIZE = 64;
@@ -46,13 +46,39 @@ export async function scanTeamMemorySuggestions(
     const readable = new Set(
       (await readableMemoryEvidence(tx, workspaceId, references)).map((ref) => JSON.stringify(ref)),
     );
-    const stale = withEvidence
-      .filter((entry) => entry.evidence?.some((ref) => !readable.has(JSON.stringify(ref))))
-      .slice(0, SUGGESTION_LIMIT);
-    const duplicates =
-      stale.length < SUGGESTION_LIMIT
-        ? duplicateMemorySuggestions(window, SUGGESTION_LIMIT - stale.length)
-        : [];
+    const stale = withEvidence.filter((entry) =>
+      entry.evidence?.some((ref) => !readable.has(JSON.stringify(ref))),
+    );
+    const fingerprints = [
+      ...new Set(
+        window.map(({ content }) =>
+          new Bun.CryptoHasher("md5").update(normalizedMemoryContent(content)).digest("hex"),
+        ),
+      ),
+    ];
+    const related = fingerprints.length
+      ? await tx.$queryRaw<
+          {
+            id: string;
+            revision: number;
+            title: string;
+            content: string;
+            kind: string;
+            applicability: string;
+            projectId: string | null;
+            pinned: boolean;
+          }[]
+        >`
+      SELECT id, revision, title, content, kind, applicability, project_id AS "projectId", pinned
+      FROM team_memory_entries
+      WHERE workspace_id = ${workspaceId}::uuid AND status = 'active' AND NOT pinned
+        AND md5(trim(regexp_replace(normalize(content, NFKC), '[[:space:]]+', ' ', 'g'))) = ANY(${fingerprints}::text[])
+      ORDER BY id ASC LIMIT 128`
+      : [];
+    const records = [...new Map([...window, ...related].map((row) => [row.id, row])).values()].sort(
+      (left, right) => left.id.localeCompare(right.id),
+    );
+    const duplicates = duplicateMemorySuggestions(records, records.length);
     const candidates = [
       ...stale.map((entry) => ({
         workspaceId,
@@ -67,8 +93,25 @@ export async function scanTeamMemorySuggestions(
         payload,
       })),
     ];
-    const suggested = candidates.length
-      ? (await tx.teamMemorySuggestion.createMany({ data: candidates, skipDuplicates: true })).count
+    const recorded = new Set(
+      candidates.length
+        ? (
+            await tx.teamMemorySuggestion.findMany({
+              where: {
+                workspaceId,
+                sourceKey: { in: candidates.map(({ sourceKey }) => sourceKey) },
+              },
+              select: { sourceKey: true },
+              take: candidates.length,
+            })
+          ).map(({ sourceKey }) => sourceKey)
+        : [],
+    );
+    const fresh = candidates
+      .filter(({ sourceKey }) => !recorded.has(sourceKey))
+      .slice(0, SUGGESTION_LIMIT);
+    const suggested = fresh.length
+      ? (await tx.teamMemorySuggestion.createMany({ data: fresh, skipDuplicates: true })).count
       : 0;
     const last = window.length === PAGE_SIZE ? window.at(-1) : undefined;
     await tx.teamMemoryReviewScan.update({
