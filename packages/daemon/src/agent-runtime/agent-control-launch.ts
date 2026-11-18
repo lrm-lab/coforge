@@ -7,6 +7,7 @@ import type {
 import { AgentSessionRecoveryError } from "@lrm/coforge-anvil";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { settleLaunchFailure } from "./launch-attempt-failure";
+import { isVersionUnsupportedLaunchFailure, launchFailureReason } from "./launch-failure";
 import type { AgentRuntimeRecord } from "./agent-runtime-state";
 import { assertPhaseInvariants } from "./agent-control-fence";
 import type { AgentControlContext } from "./agent-control-runtime";
@@ -182,6 +183,8 @@ export class ManagedLaunches {
           this.#scheduleLaunchRetry(intent, scope, launchId, next, cooldownMs, quotaProvider),
         clearRetry: () => this.#clearLaunchRetry(intent.agentId),
       });
+      if (isVersionUnsupportedLaunchFailure(launchFailureReason(launchError), launchError))
+        this.context.runtime.onVersionUnsupported?.(intent.provider);
       if (failed) await this.context.runtime.result(failed).catch(() => {});
       return;
     } finally {

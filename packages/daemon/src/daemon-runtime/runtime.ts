@@ -578,12 +578,10 @@ export class DaemonRuntime {
       stops: this.#stopState,
       dropOwedRecovery: (agentId) => this.#launchCoordinator.dropOwedRecovery(agentId),
       startSettled: (agentId) => this.#exitedDelivery.releaseStartBuffer(agentId),
-      sendSessionInvalidate: (message) => this.#transport.sendSessionInvalidate?.(message),
       reportSession: (report) => this.#reportAgentSession(report),
-      sendControlResult: async (result) => {
-        await this.#transport.sendAgentControlResult?.(result);
-      },
-      agentControlAccepted: () => this.#transport.agentControlAccepted?.() ?? false,
+      transport: () => this.#transport,
+      onVersionUnsupported: (provider) =>
+        void this.#codeAgentInventory.reprobe(provider, "launch_refused", this.#transport),
     });
     this.#agentSessions = control.agentSessions;
     this.#agentControl = control.agentControl;
@@ -712,15 +710,7 @@ export class DaemonRuntime {
       narrateUnavailable: (agentId, launch, activity) =>
         this.#turn.narrateUnavailable(agentId, launch, activity),
       disposeLaunchObservations: this.#disposeLaunchObservations,
-      revokeLocalLaunch: (agentId, context, proxyToken) =>
-        revokeLocalLaunch(
-          this.#agentContexts,
-          this.#agentProxyTokens,
-          this.#agentProxy,
-          agentId,
-          context,
-          proxyToken,
-        ),
+      revokeLocalLaunch: this.#revokeLocalLaunch,
       revokeAgentApiKey: (agentId, apiKey, scope) =>
         this.#revokeAgentApiKey(agentId, apiKey, scope),
       launchFailureActivity: (agentId, provider, error) =>
@@ -1077,8 +1067,7 @@ export class DaemonRuntime {
         this.#turn.interruptIfBusy(id, current),
       activityPublisher: this.#activityPublisher,
       disposeLaunchObservations: this.#disposeLaunchObservations,
-      revokeLocalLaunch: (id: string) =>
-        revokeLocalLaunch(this.#agentContexts, this.#agentProxyTokens, this.#agentProxy, id),
+      revokeLocalLaunch: this.#revokeLocalLaunch,
       offlineResidency: this.#offlineResidency,
       stopCoordinator: this.#stopCoordinator,
       drafts: this.#drafts,
@@ -1226,6 +1215,15 @@ export class DaemonRuntime {
     return this.#services.procJobs.stopAllForAgent(agentId, "owner_stop").then(() => {});
   }
 
+  #revokeLocalLaunch = (agentId: string, context?: string, proxyToken?: string) =>
+    revokeLocalLaunch(
+      this.#agentContexts,
+      this.#agentProxyTokens,
+      this.#agentProxy,
+      agentId,
+      context,
+      proxyToken,
+    );
   #disposeLaunchObservations = (agentId: string): void => {
     disposeLaunchObservations(
       agentId,

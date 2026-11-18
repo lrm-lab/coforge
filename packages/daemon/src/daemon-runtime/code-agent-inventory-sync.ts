@@ -4,7 +4,6 @@ import {
   type CodeAgentModelCatalog,
   type DaemonRuntimeCommandCodeEffortReadRequest,
   type DaemonRuntimeProviderModelRefreshRequest,
-  type ProviderModelRefreshResult,
   type RuntimeMetadata,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
@@ -54,6 +53,10 @@ const SWEEPABLE_EFFORT_PROVIDERS = new Set<RuntimeProvider>([
   RUNTIME_PROVIDER.OPENCODE,
 ]);
 
+import { ProviderProbeCoordinator, REPROBE_MIN_INTERVAL_MS } from "./code-agent-provider-probe";
+
+export { REPROBE_MIN_INTERVAL_MS };
+
 /** Keeps the cloud's copy of this Computer's Code Agent runtimes and model catalogs current. */
 export class CodeAgentInventorySync {
   readonly #discovery: CodeAgentDiscovery;
@@ -65,6 +68,7 @@ export class CodeAgentInventorySync {
   readonly #runtimeAuth: RuntimeAuthReporter | undefined;
   /** Serializes on-demand model-catalog refreshes (one CLI-spawning discovery at a time). */
   #modelRefreshChain: Promise<void> = Promise.resolve();
+  readonly #providerProbes: ProviderProbeCoordinator;
   /** Serializes Command Code effort reads so two forms do not spawn two processes at once. */
   readonly #efforts: CommandCodeEffortReads;
   #runtimeVersions = new Map<RuntimeMetadata["provider"], string>();
@@ -100,6 +104,7 @@ export class CodeAgentInventorySync {
       version: string | undefined,
       modelIds: readonly string[],
     ) => Promise<OpenCodeCatalogEfforts>,
+    now: () => number = Date.now,
   ) {
     this.#runtimeAuth = runtimeAuth;
     this.#discovery = discovery;
@@ -114,6 +119,32 @@ export class CodeAgentInventorySync {
       report: async (transport, requestId, runtimes, catalogs) => {
         await this.#sendInventory(transport, requestId, runtimes, catalogs);
       },
+    });
+    this.#providerProbes = new ProviderProbeCoordinator({
+      discovery: this.#discovery,
+      owner,
+      isLive: (transport) => this.#isLive(transport),
+      runtimeAuth: this.#runtimeAuth,
+      now,
+      serialize: <T>(work: () => Promise<T>) => {
+        const next = this.#modelRefreshChain.catch(() => {}).then(work);
+        this.#modelRefreshChain = next.then(
+          () => {},
+          () => {},
+        );
+        return next;
+      },
+      settle: (failures, catalogs) => this.#freshness.settle(failures, catalogs),
+      sendInventory: async (transport, requestId, runtimes, catalogs) => {
+        await this.#sendInventory(transport, requestId, runtimes, catalogs);
+      },
+      onReported: (runtimes) => {
+        this.#reportedRuntimes = runtimes;
+      },
+      reportedRuntimes: () => this.#reportedRuntimes,
+      resolveEfforts: (provider, reported, catalogs, scope) =>
+        this.#resolveEfforts(provider, reported, catalogs, scope),
+      sweepableProviders: SWEEPABLE_EFFORT_PROVIDERS,
     });
     this.#efforts = new CommandCodeEffortReads({
       owner,
@@ -199,11 +230,15 @@ export class CodeAgentInventorySync {
     request: DaemonRuntimeProviderModelRefreshRequest,
     transport: DaemonConnectionClient,
   ): Promise<void> {
-    // Serialize: each request gets a real discovery, in arrival order, never overlapping.
-    this.#modelRefreshChain = this.#modelRefreshChain
-      .catch(() => {})
-      .then(() => this.#refreshProviderModels(request, transport));
-    return this.#modelRefreshChain;
+    return this.#providerProbes.refreshProvider(request, transport);
+  }
+
+  reprobe(
+    provider: RuntimeProvider,
+    trigger: string,
+    transport: DaemonConnectionClient,
+  ): Promise<void> {
+    return this.#providerProbes.reprobe(provider, trigger, transport);
   }
 
   /** Answers one Command Code effort read after every read that arrived before it. */
@@ -212,103 +247,6 @@ export class CodeAgentInventorySync {
     transport: DaemonConnectionClient,
   ): Promise<void> {
     return this.#efforts.read(request, transport);
-  }
-
-  /**
-   * On-demand model-catalog re-discovery, driven by the server's `daemon:v1:provider:model_refresh`
-   * request (the browser's model selector asks for it). Re-runs the same live discovery the
-   * background refresh uses, re-reports through the ordinary inventory update so the server's copy
-   * is current, then answers the request with the fresh catalog. Serialized by `#modelRefreshChain`,
-   * and guarded against shutdown or a replaced transport like `#reportCatalogs`.
-   */
-  async #refreshProviderModels(
-    request: DaemonRuntimeProviderModelRefreshRequest,
-    transport: DaemonConnectionClient,
-  ): Promise<void> {
-    const requestId = crypto.randomUUID();
-    const scope = this.#scope(requestId);
-    const startedAt = performance.now();
-    logger.info("Code Agent catalog refresh started", {
-      event: "code_agent_catalog:refresh_started",
-      ...scope,
-      outcome: "started",
-    });
-    const reply = async (response: {
-      accepted: boolean;
-      results: ProviderModelRefreshResult[];
-    }): Promise<void> => {
-      await transport.sendProviderModelRefreshResult?.({
-        protocolMajor: WORKSPACE_PROTOCOL_MAJOR,
-        requestId: request.requestId,
-        workspaceId: this.#owner.workspaceId,
-        computerId: this.#owner.computerId,
-        ...response,
-      });
-    };
-    try {
-      const runtimes = await this.#discovery.runtimes();
-      const { catalogs, failures } = await this.#discovery.catalogs(runtimes, {
-        force: true,
-        provider: request.provider,
-      });
-      // A runtime whose launch handshake (start/version) failed its catalog probe is unusable:
-      // the report marks it so the settings page names why, not just that it failed.
-      const reported = reportedWithCatalogFailures(runtimes, failures);
-      this.#freshness.settle(failures, catalogs);
-      if (!this.#isLive(transport)) return;
-      await this.#sendInventory(transport, requestId, reported, catalogs);
-      this.#reportedRuntimes = reported;
-      const resolved =
-        request.provider && SWEEPABLE_EFFORT_PROVIDERS.has(request.provider)
-          ? await this.#resolveEfforts(request.provider, reported, catalogs, scope)
-          : undefined;
-      if (resolved && this.#isLive(transport))
-        await this.#sendInventory(transport, crypto.randomUUID(), reported, resolved);
-      this.#runtimeAuth?.inventoryObserved(reported);
-      logger.info("Code Agent catalog refresh completed", {
-        event: "code_agent_catalog:refresh_completed",
-        ...scope,
-        provider: request.provider,
-        catalog_count: catalogs.length,
-        failure_count: failures.length,
-        elapsed_ms: Math.round(performance.now() - startedAt),
-        outcome: failures.length ? "partial" : "ok",
-      });
-      const finalCatalogs = resolved ?? catalogs;
-      const outcomeFor = (provider: RuntimeProvider): ProviderModelRefreshResult => {
-        const failure = failures.find((entry) => entry.provider === provider);
-        if (failure)
-          return {
-            provider,
-            status: "error",
-            code: failure.code,
-            ...(failure.diagnostic ? { diagnostic: failure.diagnostic } : {}),
-          };
-        const catalog = finalCatalogs.find((entry) => entry.provider === provider);
-        if (catalog) return { provider, status: "refreshed", catalog };
-        const runtime = reported.find((entry) => entry.provider === provider);
-        return {
-          provider,
-          status: "error",
-          code: runtime?.unavailableCode ?? "unknown",
-          ...(runtime?.diagnostic ? { diagnostic: runtime.diagnostic } : {}),
-        };
-      };
-      const providers = request.provider
-        ? [request.provider]
-        : reported.map((runtime) => runtime.provider);
-      await reply({ accepted: true, results: providers.map(outcomeFor) });
-    } catch (error) {
-      logger.warning("Code Agent catalog refresh failed", {
-        event: "code_agent_catalog:refresh_failed",
-        ...scope,
-        provider: request.provider,
-        error_code: diagnosticErrorCode(error),
-        outcome: "failed",
-      });
-      if (!this.#isLive(transport)) return;
-      await reply({ accepted: false, results: [] }).catch(() => {});
-    }
   }
 
   /**

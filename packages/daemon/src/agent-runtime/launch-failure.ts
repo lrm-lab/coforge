@@ -179,6 +179,18 @@ function namesVersionRefusal(error: AgentAuthorizationError): boolean {
   return /version/iu.test(error.upstreamCode ?? "") || /version/iu.test(error.message);
 }
 
+export function isVersionUnsupportedLaunchFailure(
+  reason: LaunchFailureReason,
+  error: unknown,
+): boolean {
+  if (reason === LAUNCH_FAILURE_REASON.RUNTIME_VERSION_TOO_OLD) return true;
+  return (
+    reason === LAUNCH_FAILURE_REASON.RUNTIME_UNUSABLE &&
+    error instanceof AgentAuthorizationError &&
+    namesVersionRefusal(error)
+  );
+}
+
 /** The server's own refusal code: the launch route answers a refused handshake with a stable code
  * (`AGENT_LAUNCH_SUPERSEDED` and friends), which a refused relaunch quotes as its fence
  * (task #14). */

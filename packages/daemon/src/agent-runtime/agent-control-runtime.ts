@@ -2,6 +2,7 @@ import type {
   AgentControlResult,
   AgentSessionInvalidateReason,
   AgentStartIntent,
+  RuntimeProvider,
   SessionIdentity,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeState } from "./agent-runtime-state";
@@ -46,6 +47,7 @@ export type AgentControlRuntime = {
    */
   rebind(intent: AgentStartIntent, launchId: string): Promise<SessionIdentity | undefined>;
   result(result: AgentControlResult): Promise<void>;
+  onVersionUnsupported?(provider: RuntimeProvider): void;
   /** A Start that was pending for this Agent (see `startPending`) no longer is: it launched, its
    * attempts ran out, or a Stop or newer operation ended it. */
   startSettled?(agentId: string): void;

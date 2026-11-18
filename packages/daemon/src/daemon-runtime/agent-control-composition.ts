@@ -4,6 +4,7 @@ import type {
   AgentControlScope,
   AgentSessionReport,
   AgentStartIntent,
+  RuntimeProvider,
   SessionIdentity,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeConfig } from "@lrm/coforge-anvil";
@@ -13,6 +14,7 @@ import { AgentControlOpTiming } from "#src/agent-runtime/agent-control-timing";
 import { AgentSessions } from "#src/agent-runtime/agent-session";
 import { AgentRuntimeState } from "#src/agent-runtime/agent-runtime-state";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
+import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { DaemonConfig } from "./runtime";
 import type { AgentStopRegistry } from "./agent-stop-registry";
 import { recoveryOf, runtimeConfigOf, type AgentRecoveryContext } from "./runtime-launch-intent";
@@ -39,10 +41,15 @@ export type AgentControlCompositionPorts = {
   stops: Pick<AgentStopRegistry, "forgetSession">;
   dropOwedRecovery(agentId: string): void;
   startSettled(agentId: string): void;
-  sendSessionInvalidate(message: ReturnType<typeof connectionSessionInvalidate>): void;
+  sendSessionInvalidate?(message: ReturnType<typeof connectionSessionInvalidate>): void;
   reportSession(report: AgentSessionReport): Promise<void>;
-  sendControlResult(result: AgentControlResult): Promise<void>;
-  agentControlAccepted(): boolean;
+  sendControlResult?(result: AgentControlResult): Promise<void>;
+  onVersionUnsupported?(provider: RuntimeProvider): void;
+  agentControlAccepted?(): boolean;
+  transport?(): Pick<
+    DaemonConnectionClient,
+    "sendSessionInvalidate" | "sendAgentControlResult" | "agentControlAccepted"
+  >;
 };
 export type AgentControlComposition = {
   agentSessions: AgentSessions;
@@ -144,31 +151,37 @@ export function composeAgentControl(ports: AgentControlCompositionPorts): AgentC
     rebind: (intent, launchId) => ports.rebind(intent, launchId),
     startSettled: (agentId) => ports.startSettled(agentId),
     invalidateSession: (intent, launchId, sessionId, reason) => {
-      ports.sendSessionInvalidate(
-        connectionSessionInvalidate(connection, runtimeInstanceId, {
-          agentId: intent.agentId,
-          provider: intent.provider,
-          sessionId,
-          launchId,
-          reason,
-        }),
-      );
+      const msg = connectionSessionInvalidate(connection, runtimeInstanceId, {
+        agentId: intent.agentId,
+        provider: intent.provider,
+        sessionId,
+        launchId,
+        reason,
+      });
+      if (ports.sendSessionInvalidate) ports.sendSessionInvalidate(msg);
+      else ports.transport?.().sendSessionInvalidate?.(msg);
     },
     result: async (result) => {
       try {
-        await ports.sendControlResult(result);
+        await (ports.sendControlResult
+          ? ports.sendControlResult(result)
+          : ports.transport?.().sendAgentControlResult?.(result));
       } finally {
         opTiming.resultSent(result);
       }
     },
+    onVersionUnsupported: ports.onVersionUnsupported,
   });
   const accepted = (scope: AgentControlScope) => {
-    if (!ports.agentControlAccepted()) return;
+    const enabled = ports.agentControlAccepted
+      ? ports.agentControlAccepted()
+      : (ports.transport?.().agentControlAccepted?.() ?? false);
+    if (!enabled) return;
     const result: AgentControlResult = { ...scope, phase: "accepted", sequence: 1 };
-    void ports
-      .sendControlResult(result)
-      .catch(() => {})
-      .finally(() => opTiming.resultSent(result));
+    const send = ports.sendControlResult
+      ? ports.sendControlResult(result)
+      : (ports.transport?.().sendAgentControlResult?.(result) ?? Promise.resolve());
+    void send.catch(() => {}).finally(() => opTiming.resultSent(result));
   };
   const { start, stop, resetWorkspace } = agentControl;
   agentControl.start = (intent) => {
