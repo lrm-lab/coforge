@@ -64,11 +64,16 @@ const exitsOnInterrupt = process.argv.includes("exit-on-interrupt");
 const decoder = new TextDecoder();
 let buffer = "";
 let inputSeen = false;
+let turnAnswered = false;
+let interruptBeforeInit = false;
 const eventFeed = Bun.env.COFORGE_CLAUDE_EVENT_FEED;
 let feedStarted = false;
-// Register interrupt handling before responding to initialization.
 process.on("SIGINT", () => {
   if (exitsOnInterrupt) process.exit(130);
+  if (!turnAnswered) {
+    interruptBeforeInit = true;
+    return;
+  }
   write({ type: "result", subtype: "success" });
 });
 const initialization = {
@@ -85,6 +90,16 @@ const initialization = {
     },
   ],
 };
+
+function writeTurnStart(): void {
+  write(initialization);
+  turnAnswered = true;
+  if (interruptBeforeInit) {
+    interruptBeforeInit = false;
+    write({ type: "result", subtype: "success" });
+  }
+}
+
 for await (const chunk of Bun.stdin.stream()) {
   buffer += decoder.decode(chunk, { stream: true });
   let newline = buffer.indexOf("\n");
@@ -100,7 +115,6 @@ function handle(record: Record<string, unknown>): void {
   if (record.type === "control_request") {
     const request = record.request as Record<string, unknown>;
     if (request.subtype === "stop_task") {
-      // Like Claude Code: the task ends and the session keeps running.
       write({
         type: "system",
         subtype: "task_notification",
@@ -215,7 +229,7 @@ function handle(record: Record<string, unknown>): void {
           );
           return;
         }
-        write(initialization);
+        writeTurnStart();
         inputObserved();
       });
       return;
@@ -231,7 +245,7 @@ function handle(record: Record<string, unknown>): void {
       write({ type: "result", subtype: "success" });
       return;
     }
-    write(initialization);
+    writeTurnStart();
     if (process.argv.includes("--replay-user-messages") || record.uuid !== undefined)
       throw new Error("unexpected input replay protocol");
     if (eventFeed) inputObserved();
