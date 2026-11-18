@@ -34,8 +34,10 @@ import {
   getComputerRuntimeCatalog,
   listComputers,
 } from "#src/features/computers/computers.functions";
+import { CloudDesktopOverlay } from "#src/features/computers/cloud-desktop-overlay";
 import { getCloudDesktopOrigin } from "#src/features/computers/cloud-desktop-origin.functions";
 import { cloudDesktopUrl, openCloudDesktopWindow } from "#src/features/computers/cloud-desktop-url";
+import { useMediaQuery } from "#src/hooks/use-media-query";
 import type { ActionCardView } from "#src/server/conversations/action-cards.server";
 
 const REFUSALS = ["INVALID_INPUT", "NOT_FOUND", "ACCESS_DENIED", "AGENT_NOT_VISIBLE"] as const;
@@ -114,10 +116,13 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
     desktopOrigin.data && desktopComputerId && desktopAgentId
       ? cloudDesktopUrl(desktopOrigin.data, desktopComputerId, desktopAgentId, desktopTitle)
       : undefined;
+  const phone = useMediaQuery("(max-width: 639px)", false);
+  const [desktopOverlayOpen, setDesktopOverlayOpen] = useState(false);
 
   function openDesktop() {
     if (!desktopUrl || !desktopComputerId || !desktopAgentId) return;
-    openCloudDesktopWindow(desktopUrl, desktopComputerId, desktopAgentId);
+    if (phone) setDesktopOverlayOpen(true);
+    else openCloudDesktopWindow(desktopUrl, desktopComputerId, desktopAgentId);
   }
 
   function refetchOwn() {
@@ -361,6 +366,13 @@ function KnownActionCard({ card }: { card: ToolActionCardView }) {
           onCreated={() => void refetchOwn()}
         />
       )}
+      {desktopOverlayOpen && desktopUrl ? (
+        <CloudDesktopOverlay
+          url={desktopUrl}
+          title={desktopTitle ?? m.computer_open_desktop()}
+          onClose={() => setDesktopOverlayOpen(false)}
+        />
+      ) : null}
     </>
   );
 }

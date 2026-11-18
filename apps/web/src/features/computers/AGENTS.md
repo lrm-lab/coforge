@@ -49,15 +49,19 @@ These rules apply to `src/features/computers/`.
   user to pick a host. Another member's default cloud Computer stays linked for
   that owner's Agents and daemons, but `listComputers` / `listComputerNames`
   hide it from everyone except its owner (`computer-list-visibility.server.ts`);
-  extras and local Computers stay listed for every member. The owner's Computer detail Open desktop still opens
-  `<COFORGE_CLOUD_DESKTOP_ORIGIN>/desktop/<computer id>/` in its own window when that
-  deployment variable is set, and opening it again brings that window forward.
-  The Agent profile Computer row embeds `/desktop/<computer id>/<agent id>/` in-page
-  (thumbnail → overlay; see `agent-desktop-thumbnail.tsx`). Focused plain-text paste on
-  that desktop page is forwarded into the remote clipboard by the host adapter
-  (`packages/computer` `host/desktop-page.ts`); files and images are not. That origin is the
-  deployment site; Caddy confirms the signed-in owner before proxying to the Swarm
-  host. The address carries no token. Without the variable the control is absent. Formatting a cloud computer removes its service and disk,
+  extras and local Computers stay listed for every member. The owner's Computer detail Open
+  desktop opens `/desktop/<computer id>/` when `COFORGE_CLOUD_DESKTOP_ORIGIN` is set: below
+  `sm` as an in-page overlay (`cloud-desktop-overlay.tsx`), wider as a named popup that
+  opening again brings forward. The Agent profile Computer row embeds
+  `/desktop/<computer id>/<agent id>/` in-page (thumbnail → overlay; see
+  `agent-desktop-thumbnail.tsx`). On a phone portrait viewport the maximized chrome offers
+  Landscape view (CSS fake-landscape via `desktop-landscape.ts`); Portrait view, minimize,
+  or sleep clears it. Action-card takeover follows the same phone overlay / wide popup
+  split. Focused plain-text paste on that desktop page is forwarded into the remote
+  clipboard by the host adapter (`packages/computer` `host/desktop-page.ts`); files and
+  images are not. That origin is the deployment site; Caddy confirms the signed-in owner
+  before proxying to the Swarm host. The address carries no token. Without the variable the
+  control is absent. Formatting a cloud computer removes its service and disk,
   then places the same computer again. The owner must type its name; the server
   checks that name. Agents, messages, and workspace links stay.
 - An upgrade's status is polled and settled only by `ComputerUpgradeWatcher`, mounted in the

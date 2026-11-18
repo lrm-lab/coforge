@@ -1,10 +1,12 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Monitor01 as Monitor, RefreshCw01 as RotateCw } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { useMediaQuery } from "#src/hooks/use-media-query";
 import { m } from "#src/paraglide/messages";
 import { BackToComputers } from "./back-to-computers";
+import { CloudDesktopOverlay } from "./cloud-desktop-overlay";
 import { cloudDesktopUrl, openCloudDesktopWindow } from "./cloud-desktop-url";
 import { useCloudDesktopOrigin } from "./cloud-desktop-origin";
 
@@ -24,6 +26,7 @@ export type ComputerDetailRestart = {
 export function ComputerDetailHeader({
   computerId,
   identity,
+  desktopTitle,
   showDesktop,
   online,
   restart,
@@ -31,6 +34,8 @@ export function ComputerDetailHeader({
 }: {
   computerId: string;
   identity: ReactNode;
+  /** Window chrome title for the in-page desktop overlay (phone). */
+  desktopTitle: string;
   showDesktop: boolean;
   online: boolean;
   restart: ComputerDetailRestart | undefined;
@@ -40,6 +45,8 @@ export function ComputerDetailHeader({
   const desktopOrigin = useCloudDesktopOrigin();
   const desktopUrl =
     showDesktop && desktopOrigin ? cloudDesktopUrl(desktopOrigin, computerId) : undefined;
+  const phone = useMediaQuery("(max-width: 639px)", false);
+  const [overlayOpen, setOverlayOpen] = useState(false);
   const restartLabel = restart?.pending
     ? m.computer_restart_requesting()
     : m.computer_restart_action();
@@ -56,11 +63,19 @@ export function ComputerDetailHeader({
           iconLeading={Monitor}
           isDisabled={!online}
           onPress={() => {
-            openCloudDesktopWindow(desktopUrl, computerId);
+            if (phone) setOverlayOpen(true);
+            else openCloudDesktopWindow(desktopUrl, computerId);
           }}
         >
           {m.computer_open_desktop()}
         </Button>
+      ) : null}
+      {overlayOpen && desktopUrl ? (
+        <CloudDesktopOverlay
+          url={desktopUrl}
+          title={desktopTitle}
+          onClose={() => setOverlayOpen(false)}
+        />
       ) : null}
       {restart ? (
         <>
