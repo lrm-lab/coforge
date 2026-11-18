@@ -1,3 +1,4 @@
+import { RUNTIME_PROVIDER } from "./runtime-provider";
 import { z } from "zod";
 
 export const PI_CHAT_SHUTDOWN_GRACE_MS = 30_000;
@@ -5,7 +6,7 @@ export const PI_CHAT_FILE_MAX_BYTES = 10 * 1024 * 1024;
 export const PI_CHAT_UPLOAD_CHUNK_BYTES = 192 * 1024;
 
 const id = z.uuid();
-export const workbenchRuntimeSchema = z.enum(["pi", "codex"]);
+export const workbenchRuntimeSchema = z.enum([RUNTIME_PROVIDER.PI, RUNTIME_PROVIDER.CODEX]);
 export type WorkbenchRuntime = z.infer<typeof workbenchRuntimeSchema>;
 export const WORKBENCH_CODEX_MINIMUM_VERSION = "0.169.1";
 export function supportsWorkbenchCodex(version: string) {

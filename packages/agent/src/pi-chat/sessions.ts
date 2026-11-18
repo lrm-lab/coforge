@@ -1,3 +1,4 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type {
   PiChatCommand,
   PiChatMessage,
@@ -86,7 +87,7 @@ export class PiChatSessions {
         await this.store.clearCheckpoint(row.id);
         continue;
       }
-      if (row.runtime === "codex") {
+      if (row.runtime === RUNTIME_PROVIDER.CODEX) {
         if (
           row.requestIds.includes(checkpoint.requestId) &&
           !row.interruptedInputs?.some(({ id }) => id === checkpoint.requestId)
@@ -151,9 +152,14 @@ export class PiChatSessions {
     await this.#ready;
     const session = this.#record(id);
     const active = this.#active.get(id);
-    if (session.runtime === "codex" && this.store.codexHistory) {
+    if (session.runtime === RUNTIME_PROVIDER.CODEX && this.store.codexHistory) {
       const page = await (active?.nativePage(cursor) ?? this.store.codexHistory(id, cursor));
-      return { session: { ...session }, ...page, approvals: active?.approvals() ?? [] };
+      return {
+        session: { ...session },
+        ...page,
+        approvals: active?.approvals() ?? [],
+        queue: { steering: [], followUp: [] },
+      };
     }
     const messages = active ? active.messages() : await this.store.messages(id);
     const end = Math.min(before ?? messages.length, messages.length);
@@ -183,16 +189,18 @@ export class PiChatSessions {
       if (old) {
         if (input.sessionId && input.sessionId !== old.id)
           throw new Error("request belongs to another session");
-        if (input.runtime && input.runtime !== (old.runtime ?? "pi"))
+        if (input.runtime && input.runtime !== (old.runtime ?? RUNTIME_PROVIDER.PI))
           throw new Error("request belongs to another runtime");
         return { ...old };
       }
       if (await this.store.wasAccepted(input.requestId))
         throw new Error("request belongs to a deleted session");
       const prior = input.sessionId ? this.#record(input.sessionId) : undefined;
-      const selected = prior ? (prior.runtime ?? "pi") : (input.runtime ?? "pi");
+      const selected = prior
+        ? (prior.runtime ?? RUNTIME_PROVIDER.PI)
+        : (input.runtime ?? RUNTIME_PROVIDER.PI);
       if (input.runtime && input.runtime !== selected) throw new Error("session runtime mismatch");
-      if (selected === "codex" && (input.model || input.mode))
+      if (selected === RUNTIME_PROVIDER.CODEX && (input.model || input.mode))
         throw new Error("Codex uses the computer's configured model");
       const active = input.sessionId ? this.#active.get(input.sessionId) : undefined;
       if (active && input.mode) {
@@ -211,7 +219,7 @@ export class PiChatSessions {
         status: "running",
         requestIds: [...(previous?.requestIds ?? []), input.requestId],
         model: runtime.model(),
-        ...(selected === "codex" ? { runtime: selected } : {}),
+        ...(selected === RUNTIME_PROVIDER.CODEX ? { runtime: selected } : {}),
         interruptedInputs: previous?.interruptedInputs,
       };
       try {
@@ -347,7 +355,10 @@ export class PiChatSessions {
   async execute(command: PiChatCommand): Promise<PiChatResult> {
     if ("sessionId" in command && command.sessionId) {
       await this.#ready;
-      if ((this.#record(command.sessionId).runtime ?? "pi") !== (command.runtime ?? "pi"))
+      if (
+        (this.#record(command.sessionId).runtime ?? RUNTIME_PROVIDER.PI) !==
+        (command.runtime ?? RUNTIME_PROVIDER.PI)
+      )
         throw new Error("session runtime mismatch");
     }
     switch (command.action) {
@@ -360,7 +371,7 @@ export class PiChatSessions {
           sessions: (await this.list()).filter((row) =>
             command.includeCodex && !command.runtime
               ? true
-              : (row.runtime ?? "pi") === (command.runtime ?? "pi"),
+              : (row.runtime ?? RUNTIME_PROVIDER.PI) === (command.runtime ?? RUNTIME_PROVIDER.PI),
           ),
         };
       case "models":

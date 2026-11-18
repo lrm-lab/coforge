@@ -1,8 +1,13 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { mkdir, readdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { z } from "zod";
-import { piChatSessionSchema, type PiChatSession } from "@lrm/coforge-sdk/internal/pi-chat";
+import {
+  piChatSessionSchema,
+  type PiChatSession,
+  type WorkbenchRuntime,
+} from "@lrm/coforge-sdk/internal/pi-chat";
 import { PI_SESSION_DIR, prepareAgentSessionDirectory } from "#src/paths";
 import { storedChatMessages } from "./runtime";
 import type { PiChatStore, WorkbenchCodex } from "./sessions";
@@ -25,9 +30,9 @@ export class FilePiChatStore implements PiChatStore {
     const workspace = await prepareAgentSessionDirectory(cwd, join(cwd, PI_SESSION_DIR));
     return new FilePiChatStore(workspace, codex);
   }
-  #path(id: string, runtime?: "pi" | "codex") {
+  #path(id: string, runtime?: WorkbenchRuntime) {
     return join(
-      runtime === "codex" ? this.#codexMetadata : this.#metadata,
+      runtime === RUNTIME_PROVIDER.CODEX ? this.#codexMetadata : this.#metadata,
       `${piChatSessionSchema.shape.id.parse(id)}.json`,
     );
   }
@@ -44,7 +49,7 @@ export class FilePiChatStore implements PiChatStore {
         .map(async (file) => {
           const row = piChatSessionSchema.parse(await Bun.file(join(directory, file)).json());
           if (`${row.id}.json` !== file) throw new Error("session index mismatch");
-          if ((row.runtime === "codex") !== (directory === this.#codexMetadata))
+          if ((row.runtime === RUNTIME_PROVIDER.CODEX) !== (directory === this.#codexMetadata))
             throw new Error("session runtime index mismatch");
           return row;
         }),
@@ -52,7 +57,7 @@ export class FilePiChatStore implements PiChatStore {
   }
   async save(session: PiChatSession) {
     const row = piChatSessionSchema.parse(session);
-    await mkdir(row.runtime === "codex" ? this.#codexMetadata : this.#metadata, {
+    await mkdir(row.runtime === RUNTIME_PROVIDER.CODEX ? this.#codexMetadata : this.#metadata, {
       recursive: true,
       mode: 0o700,
     });
@@ -93,12 +98,12 @@ export class FilePiChatStore implements PiChatStore {
     return this.codex.history(id, cursor);
   }
   async remove(id: string) {
-    const codex = this.#path(id, "codex");
+    const codex = this.#path(id, RUNTIME_PROVIDER.CODEX);
     const path = this.codex && (await Bun.file(codex).exists()) ? codex : this.#path(id);
     const row = piChatSessionSchema.parse(await Bun.file(path).json());
     // Keep only request IDs after deletion: a delayed retry must not replay a tool.
     await this.#write(`${path}.retired`, row.requestIds);
-    if (row.runtime === "codex") {
+    if (row.runtime === RUNTIME_PROVIDER.CODEX) {
       if (!this.codex) throw new Error("Codex runtime is unavailable");
       await this.codex.archive(id);
     } else {

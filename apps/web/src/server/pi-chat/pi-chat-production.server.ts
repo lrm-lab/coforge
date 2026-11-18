@@ -1,3 +1,4 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type { PiChatScope } from "@lrm/coforge-sdk/internal/pi-chat";
 import { supportsWorkbenchCodex, type PiChatCommand } from "@lrm/coforge-sdk/internal/pi-chat";
@@ -66,7 +67,7 @@ export function productionPiChat(db: PrismaClient) {
             workspaceId_computerId_provider: {
               workspaceId: scope.workspaceId,
               computerId: scope.computerId,
-              provider: "codex",
+              provider: RUNTIME_PROVIDER.CODEX,
             },
           },
           select: { unavailableCode: true, version: true },
@@ -98,7 +99,7 @@ export function productionPiChat(db: PrismaClient) {
 }
 
 export function workbenchRequirements(computerKind: string, command: PiChatCommand) {
-  const codex = command.runtime === "codex";
+  const codex = command.runtime === RUNTIME_PROVIDER.CODEX;
   const files =
     command.action === "files" || command.action === "file" || command.action === "upload";
   const piControls =
