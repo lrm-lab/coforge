@@ -6,20 +6,16 @@
 @plugin "tailwindcss-react-aria-components";
 @plugin "tailwindcss-animate";
 
-/* Untitled UI's own dark mode switch: toggling `.dark-mode` on <html> (see
-   src/features/theme). Do not use Tailwind's default `.dark` class name. */
 @custom-variant dark (&:where(.dark-mode, .dark-mode *));
 @custom-variant label (& [data-label]);
 @custom-variant focus-input-within (&:has(input:focus));
 
 @utility scrollbar-hide {
-  /* For Webkit-based browsers (Chrome, Safari and Opera) */
   &::-webkit-scrollbar {
     display: none;
     -webkit-appearance: none;
   }
 
-  /* For IE, Edge and Firefox */
   -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none; /* Firefox */
 }
@@ -30,10 +26,6 @@
   transition-timing-function: inherit;
 }
 
-/* The page gutter: page content's side inset, 1rem and 1.5rem from `sm`
-   (docs/design/sizing-units.md). `page` is a spacing value, so `px-page`, `left-page` and
-   `-mx-page` are generated; arbitrary offsets that line up with it compute from
-   `--page-gutter`. */
 :root {
   --page-gutter: 1rem;
 
@@ -46,8 +38,6 @@
   --spacing-page: var(--page-gutter);
 }
 
-/* A phone's safe area (notch, status bar, home indicator), 0 elsewhere: `pt-safe-top`,
-   `pb-[max(1rem,var(--spacing-safe-bottom))]`. Never `env()` directly (docs/design/sizing-units.md). */
 @theme {
   --spacing-safe-top: env(safe-area-inset-top, 0px);
   --spacing-safe-right: env(safe-area-inset-right, 0px);
@@ -55,14 +45,11 @@
   --spacing-safe-left: env(safe-area-inset-left, 0px);
 }
 
-/* All four, for a layer that covers the whole screen. */
 @utility safe-area-padding {
   padding: var(--spacing-safe-top) var(--spacing-safe-right) var(--spacing-safe-bottom)
     var(--spacing-safe-left);
 }
 
-/* On a touch screen the app shell never moves, only its panes scroll: no rubber-banding or
-   pull-to-refresh on the root. Touch only, so a trackpad keeps its swipe back and forward. */
 @media (pointer: coarse) {
   html,
   body {
@@ -70,12 +57,6 @@
   }
 }
 
-/* iOS Safari zooms the whole page into a focused text field whose text is under 16px and leaves
-   it zoomed, so on a touch screen no text field is smaller than 16px (docs/design/typography.md).
-   The two sizes under it, `xs` and `sm`, become `md` (16/24) inside a field: its own `text-*`
-   class, the editor CSS that reads those tokens, and a note's paragraphs all follow, while a
-   field designed larger (a title) keeps its size. A field with no size class of its own, which
-   inherits the page's, gets 16px from the base layer, under every utility. */
 @media (pointer: coarse) {
   :is(
     input:not(
@@ -111,24 +92,14 @@
   }
 }
 
-/* The bar across the top of an Agent panel tab (Activity, Chat); an empty state under it starts
-   this much higher, so it sits where it sits in a tab without one (agent-tab-empty.tsx). */
 @theme {
   --spacing-agent-tab-bar: 2.5rem;
 }
 
-/* A list column beside a conversation pane (Activity): the width its resize handle keeps
-   (`LIST_COLUMN` in conversation-list-width.ts, 380px = 23.75rem by default), at most half the
-   page so the conversation keeps room (docs/design/sizing-units.md). */
 @utility w-list-column {
   width: min(var(--list-column-width, 23.75rem), 50%);
 }
 
-/* Inter has no CJK glyphs: Chinese uses the system's UI font (PingFang SC, Microsoft YaHei,
-   Noto Sans CJK SC), so it downloads nothing (docs/design/typography.md). PingFang SC is named
-   because macOS's own fallback can pick a Japanese font for Chinese on an English page.
-   Inter is self-hosted via @fontsource, so there are no external font requests. Code uses
-   theme.css's system monospace stack, which downloads nothing. */
 @import "@fontsource-variable/inter";
 
 @theme {
@@ -138,16 +109,9 @@
     "Segoe UI Emoji", "Noto Color Emoji";
   --font-display: var(--font-body);
 
-  /* The app's one curve for anything that appears or answers a press (Frank, 11-09: ease-out,
-     under 300ms): it moves at once and settles gently, so the same duration reads quicker than
-     the browser's own ease-out. Leaving uses it too, in a shorter time (the `--motion-*` times
-     and `motion-enter` / `motion-leave` utilities below). */
   --ease-snap: cubic-bezier(0.23, 1, 0.32, 1);
-  /* A spinner turning slowly reads as stuck; a quicker turn reads as working. */
   --animate-spin: spin 0.7s linear infinite;
 
-  /* An indeterminate progress bar's segment (a third of its track) sweeping across it. The
-     official Untitled UI progress bar only shows a known value. */
   --animate-progress-indeterminate: progress-indeterminate 1.4s ease-in-out infinite;
 
   @keyframes progress-indeterminate {
@@ -173,44 +137,32 @@ body {
 
 @layer base {
   body {
-    /* Without an explicit default, unset text falls back to the browser's
-       own dark-color-scheme default (a dim gray), not Untitled's own
-       --color-text-primary — visible as low-contrast text anywhere a
-       component doesn't set its own text-* color explicitly. */
     @apply bg-primary text-primary;
   }
 
-  /* The browser's "bolder" is 700 on regular text; emphasis tops out at 600, wherever it renders
-     (docs/design/ui-principles.md). */
   b,
   strong {
     font-weight: 600;
   }
 }
 
-/* Hide the default expand arrow on Safari.  */
 details summary::-webkit-details-marker {
   display: none;
 }
 
-/* Hide default arrows from number inputs. */
-/* Chrome, Safari, Edge, Opera */
 input::-webkit-outer-spin-button,
 input::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
-/* Firefox */
 input[type="number"] {
   -moz-appearance: textfield;
 }
 
-/* Hide the default clear button (X) from search inputs. */
 input[type="search"]::-webkit-search-cancel-button {
   -webkit-appearance: none;
 }
 
-/* Hide the default outline on chart elements. */
 .recharts-surface,
 .recharts-surface g,
 .recharts-surface path {
@@ -223,14 +175,10 @@ input[type="search"]::-webkit-search-cancel-button {
   }
 }
 
-/* A dnd-kit drag in progress (`hooks/use-document-drag-cursor.ts`): one grabbing cursor over the
-   whole page. Every DragOverlay takes `pointer-events-none` (dnd-kit sets none), so the pointer
-   reads what lies beneath the carried item, as the blocked rule below needs. */
 html[data-drag-cursor],
 html[data-drag-cursor] * {
   cursor: grabbing !important;
 }
-/* Over a place the carried item cannot be dropped (`data-drop-blocked`), the pointer says so. */
 html[data-drag-cursor] [data-drop-blocked],
 html[data-drag-cursor] [data-drop-blocked] * {
   cursor: not-allowed !important;
@@ -238,7 +186,6 @@ html[data-drag-cursor] [data-drop-blocked] * {
 
 @import "./styles/coforge-theme.css";
 
-/* Product avatar treatment; the official Avatar source stays unmodified. */
 @layer utilities {
   [data-avatar].size-4 {
     --avatar-size: 1rem;
@@ -252,7 +199,6 @@ html[data-drag-cursor] [data-drop-blocked] * {
     --avatar-size: 1.5rem;
   }
 
-  /* The "sm" step (the message avatar) is a 38 × 38px circle (its radius is set below). */
   [data-avatar].size-8 {
     width: 2.375rem;
     height: 2.375rem;
@@ -287,15 +233,11 @@ html[data-drag-cursor] [data-drop-blocked] * {
     border-radius: calc(var(--avatar-size) / 4);
   }
 
-  /* Two avatar components, both round: the small one ("xs", 24 × 24) and the message one ("sm",
-     38 × 38). Larger sizes are profile surfaces and keep the rounded square. */
   [data-avatar].size-6,
   [data-avatar].size-8 {
     border-radius: 9999px;
   }
 
-  /* The Direct messages row's avatar: the "sm" step scaled to a 48 × 48px circle. Its status dot
-     still follows `--avatar-size`. */
   [data-avatar].avatar-dm {
     width: 3rem;
     height: 3rem;
@@ -303,7 +245,6 @@ html[data-drag-cursor] [data-drop-blocked] * {
     border-radius: 9999px;
   }
 
-  /* A channel header's 32 × 32px round avatar (`sm` without the message stream's 38px bump). */
   [data-avatar].avatar-header {
     width: 2rem;
     height: 2rem;
@@ -311,27 +252,19 @@ html[data-drag-cursor] [data-drop-blocked] * {
     border-radius: 9999px;
   }
 
-  /* An Agent's mascot sticker (`AvatarSticker`) is a circle at every size, as in Frank's
-     references, profile sizes included. */
   [data-avatar][data-avatar-sticker] {
     border-radius: 9999px;
   }
 
-  /* Stacked stickers (`AVATAR_STACK_RING`) sit on pure white in both themes (jing, task #132). */
   .avatar-stack-face[data-avatar-sticker],
   .avatar-stack-face [data-avatar-sticker] {
     background-color: var(--color-avatar-outline);
   }
 
-  /* So is a cartoon person: the portrait is drawn as a circle (`IdentityAvatar`), where an
-     uploaded photo takes the size's shape. */
   [data-avatar].avatar-portrait {
     border-radius: 9999px;
   }
 
-  /* A cartoon portrait is drawn on its own coloured disc, edge to edge: it takes none of the hairline
-     and glossy edge a photo gets to keep it off the page (`Avatar`), which on the artwork read as a
-     muddy, jagged ring (jing, task #132). */
   [data-avatar].avatar-portrait > :first-child {
     outline: none;
   }
@@ -340,11 +273,7 @@ html[data-drag-cursor] [data-drop-blocked] * {
     content: none;
   }
 
-  /* A channel row's group avatar (`group-avatar.tsx`): a 48 × 48px box with no fill
-     behind its stickers. The member stickers are placed on it by percentage (`collage-layout.ts`), may pass
-     its edge a little, and size their initials from `--avatar-group-size`. */
   .avatar-group {
-    /* A span, sized here: it keeps its size outside a flex row too (an inline parent, task #74). */
     display: inline-block;
     vertical-align: middle;
     position: relative;
@@ -355,8 +284,6 @@ html[data-drag-cursor] [data-drop-blocked] * {
     border-radius: 9999px;
   }
 
-  /* A person's photo (or initial, or the "…") among a group avatar's stickers: a circle the size
-     of a mascot figure in the same slot, with a white sticker edge and nothing else clipping it. */
   .avatar-group-photo {
     position: absolute;
     inset: 9%;
@@ -365,12 +292,6 @@ html[data-drag-cursor] [data-drop-blocked] * {
     box-shadow: 0 0 0 calc(var(--avatar-group-size) * 0.04) var(--color-avatar-outline);
   }
 
-  /* A mascot or cartoon person as a sticker (`AvatarSticker` in `features/avatars`): the bare
-     white-edged figure, with no circle or fill behind it, drawn larger than the avatar's own box
-     (which sets its size and, inherited inside `[data-avatar]`, its round shape for the status dot
-     and a stack's ring), unclipped. The figure keeps a margin inside its 24-unit artboard (more
-     above, for the hover hop), so it fills the box and its edges pass it a little. Nudged up to
-     centre the figure. */
   .avatar-sticker {
     position: relative;
   }
@@ -383,17 +304,14 @@ html[data-drag-cursor] [data-drop-blocked] * {
     height: 110%;
   }
 
-  /* The group avatar at a picker face's 20 × 20px (a picker row, a form's chip). */
   .avatar-group.avatar-group-xs {
     --avatar-group-size: 1.25rem;
   }
 
-  /* The group avatar at a list row's 32 × 32px, a person's `sm` avatar beside it (a Drafts row). */
   .avatar-group.avatar-group-row {
     --avatar-group-size: 2rem;
   }
 
-  /* The group avatar at the message avatar's 38 × 38px (an Activity row). */
   .avatar-group.avatar-group-sm {
     --avatar-group-size: 2.375rem;
   }
@@ -403,8 +321,6 @@ html[data-drag-cursor] [data-drop-blocked] * {
     border-radius: inherit;
   }
 
-  /* Both the official member presence indicator and CoForge's Agent activity dot
-     use the reference's 8px dot / 32px avatar and 1.5px separator proportions. */
   [data-avatar] > span.ring-bg-primary,
   [data-avatar] > .avatar-status-dot {
     right: 0;
@@ -414,8 +330,6 @@ html[data-drag-cursor] [data-drop-blocked] * {
     box-shadow: 0 0 0 calc(var(--avatar-size) * 0.046875) var(--color-bg-primary);
   }
 
-  /* A round avatar's dot centre sits on the circle at 45°: that point is 0.1464 × the size from
-     the right and bottom edges, so the dot's own edge is that minus half its 1/4-size width. */
   [data-avatar].size-6 > span.ring-bg-primary,
   [data-avatar].size-6 > .avatar-status-dot,
   [data-avatar].size-8 > span.ring-bg-primary,
@@ -428,12 +342,6 @@ html[data-drag-cursor] [data-drop-blocked] * {
   }
 }
 
-/* The shared emoji grid (`components/ui/emoji-picker.tsx`). The library paints its surfaces by
-   reading these epr variables off its own root, where it also re-declares its defaults inline,
-   so the app's values are asserted on the root itself (`!important` wins the cascade against
-   both). Each maps to the nearest app token, and the tokens re-resolve per theme, so dark mode
-   needs no second block. Narrow screens shrink the cell, not the columns, which is what fits a
-   320px pane. */
 [data-epr-host] .EmojiPickerReact {
   --epr-bg-color: var(--color-bg-primary) !important;
   --epr-text-color: var(--color-text-secondary) !important;
@@ -470,11 +378,6 @@ html[data-drag-cursor] [data-drop-blocked] * {
   }
 }
 
-/* How long things take to appear (`in`) and leave (`out`), in three sizes, so every overlay is
-   timed from here: sm for what sits by its trigger (menus, selects, tooltips, hover cards), the
-   default for dialogs and the mobile menu, lg for panels that cross the screen (side panels,
-   bottom sheets). Leaving is the quicker of the two, but it uses the same quick-start curve as
-   entering: nothing eases in. */
 :root {
   --motion-in-sm: 150ms;
   --motion-out-sm: 100ms;
@@ -484,11 +387,6 @@ html[data-drag-cursor] [data-drop-blocked] * {
   --motion-out-lg: 200ms;
 }
 
-/* The only way a component names a time and a curve: `motion-enter-sm`, `motion-leave`, and so
-   on, next to `animate-in` / `animate-out` or a `transition-*`, and with a React Aria variant
-   as `exiting:motion-leave-sm`. They set the animation and the transition together, so either
-   kind of overlay takes the same time. The doubled `&&` raises their specificity above
-   `animate-in` / `animate-out`, which set their own duration and are written after them. */
 @utility motion-enter-sm {
   && {
     animation-duration: var(--motion-in-sm);
@@ -538,10 +436,6 @@ html[data-drag-cursor] [data-drop-blocked] * {
   }
 }
 
-/* Reduced motion, for every overlay at once: they keep fading but stop moving. The slide and
-   zoom classes of tailwindcss-animate move through the `--tw-enter-*` / `--tw-exit-*` variables
-   its `enter` and `exit` keyframes read, so those go to zero here; React Aria's popovers move
-   through `translate` (see utils/popover-motion.ts), which goes to none. */
 @media (prefers-reduced-motion: reduce) {
   .animate-in,
   .animate-out {

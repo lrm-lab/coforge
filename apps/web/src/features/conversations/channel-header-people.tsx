@@ -14,7 +14,6 @@ import { m } from "#src/paraglide/messages";
 import { useChannelMembers } from "./channel-members-query";
 import { PersonHoverCard } from "./person-hover-card";
 
-/** Faces kept in the header before the rest collapse into "+N". The mockup shows four. */
 export const CHANNEL_HEADER_FACE_LIMIT = 4;
 
 export type ChannelHeaderFace = {
@@ -30,8 +29,6 @@ export type ChannelHeaderFace = {
   channelRole?: string;
 };
 
-/** The overlapping member faces and the dashed invite button. Presentational, so the header and
- * a test can both supply the roster. */
 export function ChannelHeaderFaces({
   entries,
   canAdd,
@@ -63,7 +60,6 @@ export function ChannelHeaderFaces({
                 (entry.key.startsWith("user:") ? entry.key.replace(/^user:/, "") : undefined));
             const avatarNode = (
               <>
-                {/* A channel's faces list its people: each carries its status dot (task #510). */}
                 <ActorAvatar
                   presence
                   agentId={agentId}
@@ -150,7 +146,6 @@ export function ChannelHeaderFaces({
   );
 }
 
-/** Loads the channel roster and draws the header faces. Shares the settings panel's query. */
 export function ChannelHeaderMemberCluster({
   channelId,
   canAdd,
