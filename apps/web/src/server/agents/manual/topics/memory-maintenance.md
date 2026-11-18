@@ -5,6 +5,7 @@ unprotected active entries or 128 KiB of observed active content. Inspection rea
 entries through an index, never the whole library; a partial measurement is labelled. Protected
 (`pinned`) entries, archives and history are excluded. Hints are limited to one per Workspace
 per 24 hours and go only to that writer, without startup prompt injection or another Agent.
+Retrying the triggering write can recover its hint until the writer starts the batch.
 
 Finish the person's task first. Run `coforge memory maintenance --scope team` to start the batch.
 It returns at most five previews and a two-minute `maintenanceToken`; rereading the batch never

@@ -2,6 +2,9 @@ import type { TeamMemoryDraft, TeamMemoryHead, TeamMemoryWrite } from "@lrm/cofo
 import type { Prisma } from "#src/generated/prisma/client";
 import { TeamMemoryError } from "#src/server/team-memory/memory";
 
+export const PREVIEW_WHITESPACE =
+  " \t\n\r\v\f\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff";
+
 export type Row = TeamMemoryDraft & {
   id: string;
   workspaceId: string;

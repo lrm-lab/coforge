@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { teamMemory } from "#src/server/team-memory/composition.server";
-import type { TeamMemoryWrite } from "@lrm/coforge-sdk/agent";
+import { decodeTeamMemoryResult, type TeamMemoryWrite } from "@lrm/coforge-sdk/agent";
 const url = Bun.env.TEAM_MEMORY_TEST_DATABASE_URL;
 if (!url)
   throw new Error(
@@ -205,6 +205,19 @@ test("automatic maintenance cannot unpin, change Projects, create or restore ent
       requestId: crypto.randomUUID(),
     }),
   ).rejects.toThrow("memory_forbidden");
+  await write({
+    operation: "create",
+    ...draft("No automatic new facts"),
+    requestId: crypto.randomUUID(),
+  });
+  await expect(
+    write({
+      operation: "create",
+      ...draft("No automatic new facts"),
+      maintenanceToken: token,
+      requestId: crypto.randomUUID(),
+    }),
+  ).rejects.toThrow("memory_forbidden");
   const target = batch.entries[0]!;
   await expect(
     write({
@@ -345,4 +358,58 @@ test("Workspace disabling blocks maintenance and human writes never ask an Agent
   await expect(service().execute(human, { operation: "maintenance" })).rejects.toThrow(
     "memory_forbidden",
   );
+});
+
+test("an indented memory has a readable candidate preview", async () => {
+  const padded = (
+    await write({
+      operation: "create",
+      ...draft("Indented memory"),
+      content: `${" ".repeat(600)}Verified paragraph`,
+      source: `${" ".repeat(200)}Verified source`,
+      requestId: crypto.randomUUID(),
+    })
+  ).entries[0]!;
+  await db.teamMemoryEntry.update({
+    where: { id: padded.id },
+    data: { updatedAt: new Date(0) },
+  });
+  const batch = decodeTeamMemoryResult(await startBatch("Readable candidate threshold"));
+  expect(batch.entries[0]).toMatchObject({
+    id: padded.id,
+    content: "Verified paragraph",
+    source: "Verified source",
+  });
+});
+
+test("the triggering write can recover its unclaimed hint after a lost response", async () => {
+  await db.teamMemoryMaintenance.deleteMany({ where: { workspaceId } });
+  const command = {
+    operation: "create" as const,
+    ...draft("Recoverable maintenance hint"),
+    requestId: crypto.randomUUID(),
+  };
+  const review = await service().execute(actor(), command);
+  const confirmed = { ...command, reviewToken: review.reviewToken! };
+  const first = await service().execute(actor(), confirmed);
+  expect(first.maintenanceHint).toBeDefined();
+
+  const other = {
+    operation: "create" as const,
+    ...draft("Unrelated later write"),
+    requestId: crypto.randomUUID(),
+  };
+  expect((await write(other)).maintenanceHint).toBeUndefined();
+  expect((await service().execute(actor(), other)).maintenanceHint).toBeUndefined();
+  const retry = await service().execute(actor(), confirmed);
+  expect(retry.replayed).toBe(true);
+  expect(retry.maintenanceHint).toMatchObject({
+    projectId: null,
+    nextCommand: first.maintenanceHint!.nextCommand,
+  });
+  expect((await service().execute(actor(), command)).maintenanceHint).toBeDefined();
+
+  const batch = await service().execute(actor(), { operation: "maintenance" });
+  expect(batch.maintenance?.token).not.toBe(confirmed.requestId);
+  expect((await service().execute(actor(), confirmed)).maintenanceHint).toBeUndefined();
 });
