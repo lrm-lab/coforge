@@ -211,7 +211,7 @@ test("a first sign-in lands in the setup wizard, and finishing or skipping it op
       ).onboardingPendingSince,
     ).toBeNull();
     const pref = await db.userPreference.findUnique({ where: { userId: skipperId } });
-    expect(pref?.role).toBeUndefined();
+    expect(pref?.role ?? null).toBeNull();
     checks.push("skipping lands in the assistant's DM, the mark cleared and no role saved");
 
     await skipper.browser("open", `${origin}/en/w/${skipSlug}`);
