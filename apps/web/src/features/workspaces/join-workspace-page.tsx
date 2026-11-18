@@ -186,7 +186,7 @@ export function JoinWorkspacePage({
 
         {viewerAccount === null ? null : (
           <p className="flex flex-wrap items-center justify-center gap-x-1.5 text-center text-xs text-quaternary">
-            <span className="break-all">
+            <span className="wrap-anywhere">
               {emphasized({ account: viewerAccount }, (mark) =>
                 m.workspace_join_signed_in_as({ account: mark("account") }),
               )}

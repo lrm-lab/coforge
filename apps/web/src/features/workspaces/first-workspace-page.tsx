@@ -32,7 +32,7 @@ export function FirstWorkspacePage({ viewerAccount }: { viewerAccount: string })
           actions={(submit) => <Button {...submit} size="lg" className="mt-6 w-full" />}
         />
         <p className="flex flex-wrap items-center justify-center gap-x-1.5 text-center text-xs text-quaternary">
-          <span className="break-all">
+          <span className="wrap-anywhere">
             {m.workspace_join_signed_in_as({ account: viewerAccount })}
           </span>
           <span aria-hidden="true">·</span>

@@ -117,7 +117,7 @@ function Refusal({
         </div>
       ) : null}
       {account === null ? null : (
-        <p className="text-xs break-all text-quaternary">
+        <p className="text-xs wrap-anywhere text-quaternary">
           {m.app_authorization_signed_in_as({ account })}
         </p>
       )}

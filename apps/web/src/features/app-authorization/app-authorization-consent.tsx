@@ -80,7 +80,7 @@ export function AuthorizationConsent({
           {m.app_authorization_use_account({ app: app.name })}
         </p>
         {account === null ? null : (
-          <p className="mt-2 text-xs break-all text-quaternary">
+          <p className="mt-2 text-xs wrap-anywhere text-quaternary">
             {m.app_authorization_signed_in_as({ account })}
           </p>
         )}

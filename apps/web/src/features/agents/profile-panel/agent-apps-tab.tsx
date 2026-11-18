@@ -326,7 +326,7 @@ function AppRow({
         <p className="text-sm break-words whitespace-pre-line text-secondary">{description}</p>
       )}
       {manifestUrl && (
-        <p className="text-xs break-all text-tertiary">
+        <p className="text-xs wrap-anywhere text-tertiary">
           {m.agent_apps_manifest({ url: manifestUrl })}
           {manifestDerived && ` ${m.agent_apps_manifest_derived()}`}
         </p>

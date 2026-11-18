@@ -276,7 +276,7 @@ const ActivityTimelineRow = memo(function ActivityTimelineRow({
             id={contentId}
             className={cn(
               "mt-0.5 text-xs text-tertiary select-text",
-              row.expandable ? "whitespace-pre-wrap wrap-anywhere" : "break-all",
+              row.expandable ? "whitespace-pre-wrap wrap-anywhere" : "wrap-anywhere",
               canExpand && !expanded && "line-clamp-2",
             )}
           >

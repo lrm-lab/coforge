@@ -37,17 +37,17 @@ export function ActionCardAppBody({
           : m.app_register_card_client_key_auto()}
       </p>
       {view.app.redirectUrls.length > 0 && (
-        <p className="text-tertiary break-all">
+        <p className="text-tertiary wrap-anywhere">
           {m.app_register_card_redirect({ urls: view.app.redirectUrls.join(", ") })}
         </p>
       )}
       {view.app.homepageUrl && (
-        <p className="text-tertiary break-all">
+        <p className="text-tertiary wrap-anywhere">
           {m.app_register_card_homepage({ url: view.app.homepageUrl })}
         </p>
       )}
       {view.app.agentManifestUrl && (
-        <p className="text-tertiary break-all">
+        <p className="text-tertiary wrap-anywhere">
           {m.app_register_card_manifest({ url: view.app.agentManifestUrl })}
         </p>
       )}
