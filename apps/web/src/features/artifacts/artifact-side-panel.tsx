@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent, type ReactNode, useEffect } from "react";
+import type { ReactNode } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { cn } from "#src/lib/utils";
 

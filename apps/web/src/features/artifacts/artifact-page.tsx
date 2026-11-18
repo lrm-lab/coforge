@@ -13,6 +13,7 @@ import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { copyText } from "#src/lib/clipboard";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { deleteArtifact } from "./artifacts.functions";
 import { ArtifactDeleteConfirm } from "./artifact-delete-confirm";
