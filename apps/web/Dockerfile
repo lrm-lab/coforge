@@ -40,6 +40,8 @@ RUN bun build apps/web/scripts/backfill-owner-agent-names.ts \
   --target bun --outfile apps/web/.ops/backfill-owner-agent-names.js
 RUN bun build apps/web/scripts/backfill-message-references.ts \
   --target bun --outfile apps/web/.ops/backfill-message-references.js
+RUN bun build apps/web/scripts/backfill-artifact-origins.ts \
+  --target bun --outfile apps/web/.ops/backfill-artifact-origins.js
 RUN bun build apps/web/scripts/backfill-artifact-comment-mentions.ts \
   --target bun --outfile apps/web/.ops/backfill-artifact-comment-mentions.js
 RUN bun build apps/web/scripts/backfill-artifact-entry-facts.ts --external proxy-agent \

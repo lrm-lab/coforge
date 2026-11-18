@@ -83,3 +83,24 @@ test("a message from before the artifact existed names no origin", async () => {
   await run();
   expect(await originOf(id)).toBeNull();
 });
+
+test("a later origin the live hook wrote gives way to the earliest linking message", async () => {
+  const id = await f.make("Raced plan");
+  const earliest = await say(docsId, link(id));
+  const later = await say(docsId, `later ${link(id)}`);
+  await f.db
+    .$executeRaw`UPDATE "artifacts" SET "originMessageId" = ${later}::uuid WHERE "id" = ${id}::uuid`;
+  await run();
+  expect(await originOf(id)).toBe(earliest);
+});
+
+test("an origin saved from a message before the artifact existed is never replaced", async () => {
+  const saved = Bun.randomUUIDv7();
+  await Bun.sleep(5);
+  const id = await f.make("Saved plan");
+  await f.db
+    .$executeRaw`UPDATE "artifacts" SET "originMessageId" = ${saved}::uuid WHERE "id" = ${id}::uuid`;
+  await say(docsId, link(id));
+  await run();
+  expect(await originOf(id)).toBe(saved);
+});

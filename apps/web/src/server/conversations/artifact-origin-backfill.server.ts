@@ -73,6 +73,7 @@ export async function backfillArtifactOrigins(
             messageId: message.id,
             body: message.body,
             createdAt: message.createdAt,
+            replaceLater: true,
           });
     summary.scanned += Number(window.size);
     summary.cursor = window.last;

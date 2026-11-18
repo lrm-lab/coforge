@@ -17,6 +17,9 @@ expect "uuid from-id passes" 0 FROM_ID=11111111-2222-3333-4444-555555555555 MODE
 expect "14 maxMinutes rejects" 1 MAX_MINUTES=14 MODE=apply
 expect "a;id:5 batch rejects" 1 "BATCH_SIZE=a;id:5" MODE=apply
 expect "batchSize=0 rejects" 1 BATCH_SIZE=0 MODE=apply
+expect "scanWindow=0 rejects" 1 SCAN_WINDOW=0 MODE=apply
+expect "scanWindow a;b rejects" 1 "SCAN_WINDOW=a;b" MODE=apply
+expect "scanWindow 5000 passes" 0 SCAN_WINDOW=5000 MODE=apply
 expect "maxMinutes=0 rejects" 1 MAX_MINUTES=0 MODE=apply
 expect "pauseMs=0 passes" 0 PAUSE_MS=0 MODE=apply
 expect "newline rejects" 1 "BATCH_SIZE=10

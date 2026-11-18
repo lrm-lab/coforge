@@ -8,12 +8,12 @@ uuid='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{1
 posint='^[0-9]+$'
 # A value containing a newline would split into a second command on the remote shell — refuse it
 # before anything leaves the runner.
-for value in "${FROM_ID:-}" "${BATCH_SIZE:-}" "${MAX_MINUTES:-}" "${PAUSE_MS:-}" "${RUN_ID:-}"; do
+for value in "${FROM_ID:-}" "${SCAN_WINDOW:-}" "${BATCH_SIZE:-}" "${MAX_MINUTES:-}" "${PAUSE_MS:-}" "${RUN_ID:-}"; do
   if [[ $value == *$'\n'* ]]; then
     echo "an input contained a newline" >&2; exit 1; fi
 done
 [ -n "${FROM_ID:-}" ] && ! [[ ${FROM_ID} =~ $uuid ]] && { echo "fromMessageId must be a uuid" >&2; exit 1; }
-for pair in "batchSize:${BATCH_SIZE:-}" "maxMinutes:${MAX_MINUTES:-}"; do
+for pair in "scanWindow:${SCAN_WINDOW:-}" "batchSize:${BATCH_SIZE:-}" "maxMinutes:${MAX_MINUTES:-}"; do
   name=${pair%%:*}; value=${pair#*:}
   { [ -n "$value" ] && ! [[ $value =~ $posint ]]; } || [ "$value" = "0" ] &&
     { echo "$name must be a positive integer" >&2; exit 1; }
