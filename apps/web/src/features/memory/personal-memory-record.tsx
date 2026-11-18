@@ -1,5 +1,7 @@
 import type { LocalMemoryEntry } from "@lrm/coforge-sdk/agent";
 import * as m from "#src/paraglide/messages";
+import { getLocale } from "#src/paraglide/runtime";
+import { formatDateForDisplay } from "#src/lib/dates";
 
 export function PersonalMemoryRecord({ entry }: { entry: LocalMemoryEntry }) {
   return (
@@ -16,5 +18,13 @@ export function PersonalMemoryRecord({ entry }: { entry: LocalMemoryEntry }) {
         </dd>
       </dl>
     </>
+  );
+}
+
+export function PersonalMemoryVersionTime({ updatedAt }: Pick<LocalMemoryEntry, "updatedAt">) {
+  return (
+    <time dateTime={updatedAt} className="text-xs text-tertiary">
+      {formatDateForDisplay(updatedAt, undefined, getLocale())}
+    </time>
   );
 }
