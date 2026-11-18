@@ -4,6 +4,7 @@ import {
   type TeamMemoryWrite,
 } from "@lrm/coforge-sdk/agent";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import { activeMemoryCandidateIds } from "#src/server/db/repositories/team-memory-head-filters.server";
 import { teamMemoryAccess } from "#src/server/db/repositories/team-memory-access.repositories.server";
 import { readableMemoryEvidence } from "#src/server/db/repositories/team-memory-evidence.server";
 import { head, type Row } from "#src/server/db/repositories/team-memory-projections.server";
@@ -160,6 +161,8 @@ export async function reviewMemorySuggestion(
         });
         return { status: "dismissed", entryId: null };
       }
+      if (row.kind === "duplicate" || row.kind === "evidence")
+        await tx.$queryRaw`SELECT revision FROM team_memory_states WHERE workspace_id = ${actor.workspaceId}::uuid FOR UPDATE`;
       const command =
         row.kind !== "task" || currentTask
           ? await suggestedCommand(tx, actor.workspaceId, row, edit)
@@ -203,7 +206,7 @@ async function lockTaskSuggestionSource(
 ) {
   const source = (row.payload as unknown as TeamMemoryDraft).evidence?.[0];
   if (!source) return false;
-  // Workspace deletion also takes its conversation locks before the Workspace row.
+  // Task writes and Workspace deletion take the Conversation lock first.
   const [task] = await tx.$queryRaw<{ id: string }[]>`
     SELECT t.id FROM tasks t JOIN conversations c
       ON c.id = t."conversationId" AND c."workspaceId" = t."workspaceId"
@@ -211,7 +214,7 @@ async function lockTaskSuggestionSource(
       AND t."deletedAt" IS NULL AND t.status = 'done' AND t.revision = ${source.revision ?? 0}
       AND c."channelName" IS NOT NULL AND c.visibility = 'public'
       AND c."hiddenFromWorkspaceAt" IS NULL
-    FOR SHARE OF t, c`;
+    FOR SHARE OF c, t`;
   return !!task;
 }
 
@@ -257,6 +260,7 @@ async function suggestedCommand(
   }
   if (row.kind === "evidence") {
     const { id, revision } = row.payload as unknown as { id: string; revision: number };
+    if (!(await activeMemoryCandidateIds(tx, workspaceId, [id])).has(id)) return undefined;
     const entry = await tx.teamMemoryEntry.findFirst({
       where: { id, revision, workspaceId, status: "active", pinned: false },
     });
@@ -283,6 +287,8 @@ async function suggestedCommand(
     keep: { id: string; revision: number };
     duplicate: { id: string; revision: number };
   };
+  const eligible = await activeMemoryCandidateIds(tx, workspaceId, [keep.id, duplicate.id]);
+  if (eligible.size !== 2) return undefined;
   const rows = await tx.teamMemoryEntry.findMany({
     where: { workspaceId, id: { in: [keep.id, duplicate.id] }, status: "active", pinned: false },
     take: 2,

@@ -6,6 +6,7 @@ import { Prisma } from "#src/generated/prisma/client";
 import { inTransaction, type DatabaseScope } from "#src/server/db/transaction.server";
 import type { TeamMemoryHead, TeamMemoryResult, TeamMemoryWrite } from "@lrm/coforge-sdk/agent";
 import { TeamMemoryError, type TeamMemoryActor } from "#src/server/team-memory/memory";
+import { supersededMemoryCandidate } from "./team-memory-head-filters.server";
 import { teamMemoryAccess } from "./team-memory-access.repositories.server";
 import { head, PREVIEW_WHITESPACE, type Row } from "./team-memory-projections.server";
 
@@ -15,16 +16,6 @@ const ENTRY_LIMIT = 64;
 const BYTE_LIMIT = 128 * 1024;
 const scope = (projectId: string | null) =>
   projectId ? Prisma.sql`project_id = ${projectId}::uuid` : Prisma.sql`project_id IS NULL`;
-
-const superseded = Prisma.sql`EXISTS (
-  SELECT 1 FROM team_memory_entries replacement
-  WHERE replacement.workspace_id = candidate.workspace_id AND replacement.status = 'active'
-    AND replacement.project_id IS NOT DISTINCT FROM candidate.project_id
-    AND replacement.applicability = candidate.applicability
-    AND (replacement.effective_at IS NULL OR replacement.effective_at <= CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
-    AND replacement.relations @> jsonb_build_array(
-      jsonb_build_object('kind', 'supersedes', 'id', candidate.id, 'revision', candidate.revision))
-)`;
 
 async function observePressure(
   tx: Prisma.TransactionClient,
@@ -36,7 +27,7 @@ async function observePressure(
   >(Prisma.sql`
     SELECT count(*)::integer AS "observedEntries", COALESCE(sum(bytes),0)::integer AS "observedBytes" FROM (
       SELECT octet_length(title) + octet_length(content) + octet_length(source) + octet_length(applicability) AS bytes
-      FROM team_memory_entries candidate WHERE workspace_id = ${workspaceId}::uuid AND status = 'active' AND pinned = false AND ${scope(projectId)} AND NOT ${superseded}
+      FROM team_memory_entries candidate WHERE workspace_id = ${workspaceId}::uuid AND status = 'active' AND pinned = false AND ${scope(projectId)} AND NOT ${supersededMemoryCandidate}
       ORDER BY updated_at ASC, id ASC LIMIT 65
     ) candidates`);
   return {
@@ -127,7 +118,7 @@ export async function beginTeamMemoryMaintenance(
     const rows = remaining
       ? await tx.$queryRaw<Row[]>(Prisma.sql`
       SELECT id, workspace_id AS "workspaceId", title, left(ltrim(content, ${PREVIEW_WHITESPACE}),600) AS content, left(ltrim(source, ${PREVIEW_WHITESPACE}),200) AS source, kind, applicability, status, revision, author_agent_id AS "authorAgentId", author_user_id AS "authorUserId", project_id AS "projectId", pinned, updated_at AS "updatedAt"
-      FROM team_memory_entries candidate WHERE workspace_id = ${actor.workspaceId}::uuid AND status = 'active' AND pinned = false AND ${scope(state.projectId)} AND NOT ${superseded}
+      FROM team_memory_entries candidate WHERE workspace_id = ${actor.workspaceId}::uuid AND status = 'active' AND pinned = false AND ${scope(state.projectId)} AND NOT ${supersededMemoryCandidate}
       ${actor.includeHumanAuthors === false ? Prisma.sql`AND author_agent_id IS NOT NULL` : Prisma.empty}
       ORDER BY updated_at ASC, id ASC LIMIT ${remaining}`)
       : [];
@@ -198,7 +189,7 @@ export async function consumeTeamMemoryMaintenance(
       SELECT 1 FROM team_memory_entries candidate
       WHERE candidate.workspace_id = ${actor.workspaceId}::uuid
         AND candidate.id = ANY(${[target, ...sources].map(({ id }) => id)}::uuid[])
-        AND ${superseded}
+        AND ${supersededMemoryCandidate}
     ) AS found`;
   if (old?.found) throw new TeamMemoryError("forbidden");
   await tx.teamMemoryMaintenance.update({
