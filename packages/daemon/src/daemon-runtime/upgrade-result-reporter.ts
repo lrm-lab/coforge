@@ -26,6 +26,8 @@ export type RecoveredUpgradeResult = {
   error?: string;
   /** See `UPGRADE_ERROR_CODE`. */
   errorCode?: string;
+  deadProcessCount?: number;
+  expectedVersion?: string;
 };
 
 /** What this Workspace's local config says about its upgrade operations. */
@@ -171,6 +173,23 @@ export class UpgradeResultReporter {
     for (const result of reading.results) {
       if (!current()) break;
       if (this.#acknowledged.has(result.requestId)) continue;
+      if (
+        result.status === "succeeded" &&
+        result.version &&
+        result.expectedVersion &&
+        result.version !== result.expectedVersion
+      ) {
+        logger.warn("Computer upgrade receipt names a different version than requested", {
+          event: "upgrade:version_mismatch_not_reported",
+          request_id: result.requestId,
+          workspace_id: this.#options.workspaceId,
+          expected_version: result.expectedVersion,
+          receipt_version: result.version,
+        });
+        await this.#options.acknowledge?.(result.requestId);
+        this.#acknowledged.add(result.requestId);
+        continue;
+      }
       const transport = this.#options.transport();
       if (!transport.sendUpgradeResult) break;
       try {
@@ -204,6 +223,7 @@ export class UpgradeResultReporter {
       ...(result.version ? { version: result.version } : {}),
       ...(result.error ? { error: result.error } : {}),
       ...(result.errorCode ? { errorCode: result.errorCode } : {}),
+      ...(result.deadProcessCount ? { deadProcessCount: result.deadProcessCount } : {}),
     };
   }
 }
@@ -223,7 +243,14 @@ export function upgradeOperationsInConfig(
       upgradeOperations?: {
         requestId?: unknown;
         state?: unknown;
-        terminal?: { version?: unknown; error?: unknown; errorCode?: unknown; at?: unknown };
+        expectedVersion?: unknown;
+        terminal?: {
+          version?: unknown;
+          error?: unknown;
+          errorCode?: unknown;
+          deadProcessCount?: unknown;
+          at?: unknown;
+        };
       }[];
     } | null
   )?.upgradeOperations;
@@ -231,7 +258,7 @@ export function upgradeOperationsInConfig(
   const results = operations.flatMap((operation): RecoveredUpgradeResult[] => {
     if (operation.state !== "succeeded" && operation.state !== "failed") return [];
     if (typeof operation.requestId !== "string" || !operation.requestId) return [];
-    const { version, error, errorCode, at } = operation.terminal ?? {};
+    const { version, error, errorCode, deadProcessCount, at } = operation.terminal ?? {};
     return [
       {
         requestId: operation.requestId,
@@ -241,6 +268,12 @@ export function upgradeOperationsInConfig(
         ...(typeof error === "string" && error ? { error } : {}),
         ...(typeof errorCode === "string" && UPGRADE_ERROR_CODE_PATTERN.test(errorCode)
           ? { errorCode }
+          : {}),
+        ...(Number.isSafeInteger(deadProcessCount) && (deadProcessCount as number) > 0
+          ? { deadProcessCount: deadProcessCount as number }
+          : {}),
+        ...(typeof operation.expectedVersion === "string" && operation.expectedVersion
+          ? { expectedVersion: operation.expectedVersion }
           : {}),
       },
     ];

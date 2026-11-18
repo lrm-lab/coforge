@@ -48,6 +48,7 @@ import { startLoginShellPathImport } from "./login-shell-path-import";
 import { markStartup, startupTiming } from "#src/platform/startup-timing";
 import {
   sweepComputerUpgradeReceipts,
+  upgradeTerminalOf,
   watchComputerUpgradeReceipt,
   type ComputerUpgradeReceipt,
 } from "#src/platform/computer-upgrade-receipts";
@@ -360,13 +361,11 @@ async function runWithSupervisorLock(
     requestId: string,
     receipt: ComputerUpgradeReceipt,
   ) => {
-    const recorded = await supervisor.completeUpgrade(workspaceId, requestId, {
-      status: receipt.status,
-      at: receipt.at,
-      ...(receipt.version ? { version: receipt.version } : {}),
-      ...(receipt.error ? { error: receipt.error } : {}),
-      ...(receipt.errorCode ? { errorCode: receipt.errorCode } : {}),
-    });
+    const recorded = await supervisor.completeUpgrade(
+      workspaceId,
+      requestId,
+      upgradeTerminalOf(receipt),
+    );
     if (recorded) {
       supervisorLogger.info("Computer upgrade operation reached its terminal state", {
         event: "upgrade:operation_settled",

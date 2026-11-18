@@ -19,6 +19,7 @@ export type UpgradeOperationTerminal = {
   /** See `UPGRADE_ERROR_CODE`. Set only when the job (or the Coordinator, on a launch failure)
    * can name a stable reason for this terminal state. */
   errorCode?: string;
+  deadProcessCount?: number;
   at: number;
 };
 export type UpgradeOperation = {

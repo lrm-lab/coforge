@@ -1,6 +1,7 @@
 import { UPGRADE_ERROR_CODE } from "@lrm/coforge-sdk/internal";
 
 import { resolveComputerInstallDirectory } from "./computer-install-directory";
+import type { UpgradeOperationTerminal } from "#src/supervisor/machine-supervisor-operations";
 import { readUpgradeReceipt } from "./upgrade-receipt-file";
 
 /**
@@ -16,6 +17,7 @@ export type ComputerUpgradeReceipt = {
   /** See `UPGRADE_ERROR_CODE`. Set only when the upgrade job itself knew a stable reason for a
    * "failed" receipt (e.g. it rolled back, or the updater reported a typed `UpdateError`). */
   errorCode?: string;
+  deadProcessCount?: number;
   /** When the receipt became durable, taken from the file itself. */
   at: number;
 };
@@ -73,6 +75,7 @@ export async function readComputerUpgradeReceipt(
     ...(typeof result.errorCode === "string" && result.errorCode
       ? { errorCode: result.errorCode }
       : {}),
+    ...deadProcessCountOf(result),
     at: file.modifiedAt > 0 ? file.modifiedAt : Date.now(),
   };
 }
@@ -193,4 +196,24 @@ export async function watchComputerUpgradeReceipt(
     if (signal.aborted) return;
     await sleep(pollMs, signal);
   }
+}
+
+function deadProcessCountOf(result: object): { deadProcessCount?: number } {
+  const identities = (result as { deadProcessIdentities?: unknown }).deadProcessIdentities;
+  return Array.isArray(identities) && identities.length > 0
+    ? { deadProcessCount: identities.length }
+    : {};
+}
+
+export function upgradeTerminalOf(
+  receipt: ComputerUpgradeReceipt,
+): { status: "succeeded" | "failed" } & UpgradeOperationTerminal {
+  return {
+    status: receipt.status,
+    at: receipt.at,
+    ...(receipt.version ? { version: receipt.version } : {}),
+    ...(receipt.error ? { error: receipt.error } : {}),
+    ...(receipt.errorCode ? { errorCode: receipt.errorCode } : {}),
+    ...(receipt.deadProcessCount ? { deadProcessCount: receipt.deadProcessCount } : {}),
+  };
 }

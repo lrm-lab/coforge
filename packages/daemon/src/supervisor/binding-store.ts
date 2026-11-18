@@ -202,7 +202,8 @@ function validateUpgradeOperations(value: unknown): void {
         !isRecord(terminal) ||
         !integer(terminal.at) ||
         (terminal.version !== undefined && !text(terminal.version)) ||
-        (terminal.error !== undefined && !text(terminal.error))
+        (terminal.error !== undefined && !text(terminal.error)) ||
+        (terminal.deadProcessCount !== undefined && !integer(terminal.deadProcessCount))
       )
         throw new Error("invalid binding registry upgrade operation");
     }

@@ -410,3 +410,52 @@ describe("UpgradeResultReporter", () => {
     expect(clock.pending()).toEqual([]);
   });
 });
+
+describe("UpgradeResultReporter upgrade evidence", () => {
+  test("a succeeded result carries the dead-process count to the server", async () => {
+    const { transport, reporter } = harness({
+      results: [
+        {
+          requestId: "request-b",
+          status: "succeeded",
+          completedAtMs: 3_000,
+          version: "1.2.3",
+          expectedVersion: "1.2.3",
+          deadProcessCount: 2,
+        },
+      ],
+    });
+    await reporter.report();
+    expect(transport.wire).toEqual([
+      expect.objectContaining({ requestId: "request-b", status: "succeeded", deadProcessCount: 2 }),
+    ]);
+  });
+
+  test("a succeeded result without a dead-process count is sent with none", async () => {
+    const { transport, reporter } = harness({
+      results: [
+        { requestId: "request-c", status: "succeeded", completedAtMs: 3_000, version: "1.2.3" },
+      ],
+    });
+    await reporter.report();
+    expect(transport.wire).toHaveLength(1);
+    expect(transport.wire[0]).not.toHaveProperty("deadProcessCount");
+  });
+
+  test("a success whose receipt version differs from the requested one is acknowledged, not reported", async () => {
+    const { transport, acknowledged, reporter } = harness({
+      results: [
+        {
+          requestId: "request-d",
+          status: "succeeded",
+          completedAtMs: 3_000,
+          version: "1.2.4",
+          expectedVersion: "1.2.3",
+        },
+      ],
+    });
+    await reporter.report();
+    expect(transport.wire).toEqual([]);
+    expect(acknowledged).toEqual(["request-d"]);
+  });
+});

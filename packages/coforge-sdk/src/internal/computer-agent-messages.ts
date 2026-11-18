@@ -133,6 +133,7 @@ export type ComputerUpgradeResult = {
   version?: string;
   error?: string;
   errorCode?: string;
+  deadProcessCount?: number;
   messageType?: typeof COMPUTER_UPGRADE_RESULT_MESSAGE_TYPE;
 };
 export type DaemonRuntimeCodeAgentsUpdateRequest = {

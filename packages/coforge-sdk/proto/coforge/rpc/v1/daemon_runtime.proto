@@ -124,6 +124,7 @@ message ComputerUpgradeResult {
   optional string error_code = 10;
   reserved 11;
   reserved "recovery";
+  optional uint32 dead_process_count = 12;
 }
 
 message DaemonRuntimeCodeAgentsUpdateRequest {

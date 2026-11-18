@@ -22,6 +22,13 @@ test("round-trips a Computer upgrade result with no error code", () => {
   expect(decodeComputerUpgradeResult(encodeComputerUpgradeResult(value))).toEqual(value);
 });
 
+test("round-trips the dead-process count, and leaves it absent when there is none", () => {
+  const proven = { ...base, status: "succeeded" as const, deadProcessCount: 3 };
+  expect(decodeComputerUpgradeResult(encodeComputerUpgradeResult(proven))).toEqual(proven);
+  const unproven = { ...base, status: "succeeded" as const };
+  expect(decodeComputerUpgradeResult(encodeComputerUpgradeResult(unproven))).toEqual(unproven);
+});
+
 test("round-trips a Computer upgrade result carrying a known error code", () => {
   const value = {
     ...base,

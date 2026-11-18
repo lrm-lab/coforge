@@ -106,6 +106,7 @@ export function encodeComputerUpgradeResult(value: ComputerUpgradeResult): Uint8
       ...(value.version ? { version: value.version } : {}),
       ...(value.error ? { error: sanitizeUpgradeErrorText(value.error) } : {}),
       ...(value.errorCode ? { errorCode: value.errorCode } : {}),
+      ...(value.deadProcessCount ? { deadProcessCount: value.deadProcessCount } : {}),
     }),
   );
 }
@@ -138,6 +139,7 @@ export function decodeComputerUpgradeResult(bytes: Uint8Array): ComputerUpgradeR
     ...(value.version ? { version: value.version } : {}),
     ...(value.error ? { error: sanitizeUpgradeErrorText(value.error) } : {}),
     ...(value.errorCode ? { errorCode: value.errorCode } : {}),
+    ...(value.deadProcessCount ? { deadProcessCount: value.deadProcessCount } : {}),
     messageType: COMPUTER_UPGRADE_RESULT_MESSAGE_TYPE,
   };
 }

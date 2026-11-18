@@ -25,6 +25,14 @@ export function createComputerUpgradeResultMethod(
     if (denied) return denied;
     if (result.protocolMajor !== 1 || !result.requestId)
       return { code: 400, message: "invalid Computer upgrade result" };
+    console.info(
+      JSON.stringify({
+        event: "computer_upgrade.result_received",
+        requestId: result.requestId,
+        status: result.status,
+        deadProcessCount: result.deadProcessCount ?? "unproven",
+      }),
+    );
     try {
       await (upgrades ?? getComputerUpgradeStore()).reported(
         { workspaceId: result.workspaceId, computerId: result.computerId },

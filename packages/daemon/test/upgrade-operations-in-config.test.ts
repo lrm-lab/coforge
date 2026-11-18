@@ -117,6 +117,7 @@ describe("upgradeOperationsInConfig", () => {
           completedAtMs: 2_000,
           error: "download failed",
           errorCode: UPGRADE_ERROR_CODE.UPDATE_INTEGRITY_FAILED,
+          expectedVersion: "2.0.0",
         },
       ],
       pending: true,
