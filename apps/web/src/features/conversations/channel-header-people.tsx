@@ -48,7 +48,11 @@ export function ChannelHeaderFaces({
   return (
     <div className="flex shrink-0 items-center">
       {shown.length > 0 && (
-        <ActorAvatarStack className="hidden md:flex" aria-label={m.channel_settings_members()}>
+        <ActorAvatarStack
+          overlap="tight"
+          className="hidden md:flex"
+          aria-label={m.channel_settings_members()}
+        >
           {shown.map((entry) => {
             const isAgent = Boolean(entry.agentId) || entry.kind === "agent";
             const agentId = isAgent
@@ -64,11 +68,11 @@ export function ChannelHeaderFaces({
                   presence
                   agentId={agentId}
                   userId={userId}
-                  size="sm"
+                  size="xs"
                   alt=""
                   src={entry.avatarUrl ?? undefined}
                   name={entry.displayName}
-                  className={cn("avatar-header", AVATAR_STACK_RING.regular)}
+                  className={AVATAR_STACK_RING.outline}
                 />
                 <span className="sr-only">{entry.displayName}</span>
               </>
@@ -115,18 +119,14 @@ export function ChannelHeaderFaces({
               >
                 <ActorAvatar
                   presence={false}
-                  size="sm"
+                  size="xs"
                   alt=""
                   initials={`+${more}`}
                   contentClassName={cn(
                     "bg-avatar-more text-avatar-more-fg outline-none [&>span]:text-avatar-more-fg [&>span]:tabular-nums",
                     more > 99 && "px-1.5",
                   )}
-                  className={cn(
-                    "avatar-header",
-                    more > 99 && "[&&]:w-auto [&&]:min-w-8",
-                    AVATAR_STACK_RING.regular,
-                  )}
+                  className={cn(more > 99 && "[&&]:w-auto [&&]:min-w-6", AVATAR_STACK_RING.outline)}
                 />
                 <span className="sr-only">{m.channel_settings_members_more({ count: more })}</span>
               </TooltipTrigger>
@@ -136,7 +136,7 @@ export function ChannelHeaderFaces({
       )}
       {canAdd && (
         <AvatarAddButton
-          size="sm"
+          size="xs"
           className={cn("border-secondary text-avatar-add-fg", shown.length > 0 && "md:ml-2")}
           title={m.channel_settings_add_members()}
           onPress={onAddMembers}

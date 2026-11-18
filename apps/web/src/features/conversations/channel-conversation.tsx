@@ -89,7 +89,7 @@ export function ChannelConversationHeader({
             >
               <ChannelFace
                 channelId={conversation.conversationId}
-                className="avatar-group-xs"
+                className="avatar-group-header"
                 fallback={null}
               />
               <span data-channel-name className="min-w-0 truncate">

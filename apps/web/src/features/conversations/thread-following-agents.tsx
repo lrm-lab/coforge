@@ -131,7 +131,7 @@ export function ThreadFollowingAgents({
           <>
             <span aria-hidden="true" className="flex -space-x-1">
               {agents.slice(0, 3).map((agent) => (
-                <AgentStackFace key={agent.id} agent={agent} />
+                <AgentStackFace key={agent.id} agent={agent} ring="outline" />
               ))}
             </span>
             <span aria-hidden="true" className="tabular-nums">

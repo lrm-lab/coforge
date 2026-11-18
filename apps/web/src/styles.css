@@ -282,14 +282,15 @@ html[data-drag-cursor] [data-drop-blocked] * {
     width: var(--avatar-group-size);
     height: var(--avatar-group-size);
     border-radius: 9999px;
+    background-color: var(--color-avatar-group-bg);
   }
 
   .avatar-group-photo {
     position: absolute;
-    inset: 9%;
+    inset: 0;
     overflow: hidden;
     border-radius: 9999px;
-    box-shadow: 0 0 0 calc(var(--avatar-group-size) * 0.04) var(--color-avatar-outline);
+    box-shadow: 0 0 0 1px var(--color-avatar-ring);
   }
 
   .avatar-sticker {
@@ -302,6 +303,10 @@ html[data-drag-cursor] [data-drop-blocked] * {
     top: -6.5%;
     width: 110%;
     height: 110%;
+  }
+
+  .avatar-group.avatar-group-header {
+    --avatar-group-size: 1.5rem;
   }
 
   .avatar-group.avatar-group-xs {
