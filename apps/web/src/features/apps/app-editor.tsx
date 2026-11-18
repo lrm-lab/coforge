@@ -46,18 +46,8 @@ import { AppSecretPanel, type IssuedSecret } from "./app-secret-panel";
 import type { AppDeclarations, AppSummary } from "./apps.functions";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 
-/**
- * Registers an app (`app` absent) or edits one, in one wide form: a section nav beside Profile,
- * Login with CoForge, Installation setup, App permissions and App notifications (each where its
- * flag is on: `declares`), and, when editing, Agent access, Distribution and the Danger zone. One
- * Save sends the form, the declarations included, which a registration writes with the app;
- * approving a permissions update, regenerating the secret and deleting act at once. A click outside
- * never closes it; Escape and the close button do, except while a save runs, and with unsaved
- * edits they ask first.
- */
 export function AppEditor({ open, onClose, ...form }: AppEditorProps) {
   const [saving, guard] = useSubmitGuard();
-  // The form reports its unsaved edits; every way out reaches the overlay's `onOpenChange`.
   const [dirty, setDirty] = useState(false);
   const unsaved = useUnsavedChangesGuard({ overlayOpen: open, dirty, close: onClose });
   return (
@@ -72,7 +62,6 @@ export function AppEditor({ open, onClose, ...form }: AppEditorProps) {
         <Modal className="w-[calc(100vw-2rem)] max-w-4xl">
           <Dialog className="flex max-h-[inherit] flex-col overflow-hidden text-left">
             {({ close }) => (
-              // Each opening starts from the app as it is now, or from an empty form.
               <AppEditorForm
                 key={form.app?.key ?? "new"}
                 {...form}
@@ -93,26 +82,16 @@ export function AppEditor({ open, onClose, ...form }: AppEditorProps) {
 type AppEditorProps = {
   open: boolean;
   app?: AppSummary;
-  /** Which declarations this Workspace has the editor show: `app-data-permissions`,
-   * `app-installation-setup` and `app-notifications` on. */
   declares: AppDeclarations;
-  /** A secret regenerated for this app, shown in the editor's notice strip. */
   issued: IssuedSecret | null;
   onClose: () => void;
-  /** Sends the submission: the whole registration, or the change without the key, with the data
-   * groups and setup page declared when their sections are shown. Throws when refused. */
   onSubmit: (submission: AppEditorSubmission) => Promise<void>;
   onRegenerate: (app: AppSummary) => Promise<void>;
   onDelete: (app: AppSummary) => Promise<void>;
-  /** Replace or reset the app's logo at once, outside Save. Throw when refused. */
   onUploadLogo: (app: AppSummary, file: File) => Promise<void>;
   onResetLogo: (app: AppSummary) => Promise<void>;
-  /** Approves the app's saved permissions at `revision`, the one shown, for this Workspace, at
-   * once. Throws when refused. */
   onApprovePermissions: (app: AppSummary, revision: number) => Promise<void>;
-  /** Reads the apps again for the installation's setup status; throws when it can't. */
   onRefreshSetup: () => Promise<void>;
-  /** Marketplace review requests; each throws when refused. */
   onRequestPublish: (app: AppSummary) => Promise<void>;
   onWithdrawPublish: (app: AppSummary) => Promise<void>;
   onRequestUnpublish: (app: AppSummary) => Promise<void>;
@@ -147,7 +126,6 @@ function AppEditorForm({
   const [draft, setDraft] = useState<AppDraft>(() => (app ? draftOf(app) : EMPTY_APP_DRAFT));
   const permissions = app?.permissions;
   const [groups, setGroups] = useState<AppPermissionGroup[]>(() => permissions?.declared ?? []);
-  // A newer declaration (the list was read again after a refused approval) replaces the selection.
   const [shownRevision, setShownRevision] = useState(permissions?.revision);
   if (permissions && permissions.revision !== shownRevision) {
     setShownRevision(permissions.revision);
@@ -188,10 +166,6 @@ function AppEditorForm({
   const [active, setActive] = useActiveSection(scroller, sections);
   const reducedMotion = useReducedMotion() ?? false;
   const tooLong = whenToUseLength(draft) > APP_WHEN_TO_USE_MAX_LENGTH;
-  // The form is dirty when what it sends differs from what it opened with or was last saved as (a
-  // save that keeps the editor open moves the baseline). A saved app's permissions and events are
-  // compared with its stored declaration instead, as the permissions section's own "unsaved" note
-  // does: a newer declaration read meanwhile replaces them without being an edit.
   const snapshot = () =>
     JSON.stringify({
       draft,
@@ -217,11 +191,9 @@ function AppEditorForm({
     void guard(async () => void (await save(false)));
   }
 
-  /** Validates and sends the form; whether it was saved. Refusals show beside their fields. */
   async function save(stayOpen: boolean): Promise<boolean> {
     setFormError("");
     const input = inputOf(draft);
-    // A change never carries the key (it is the client ID), and a blank one asks for a made key.
     const { key, ...rest } = input;
     const refused = refusedAppFields(editing || key === "" ? rest : input);
     const setupRefused = declares.setup ? refusedSetupFields(setupDraft) : [];
@@ -252,7 +224,6 @@ function AppEditorForm({
     }
   }
 
-  /** Saves the form first, as Raft does, then asks for publication. */
   async function saveThenRequestPublish(current: AppSummary) {
     let saved = false;
     await guard(async () => void (saved = await save(true)));
@@ -264,15 +235,12 @@ function AppEditorForm({
   );
   const hasRedirect = draft.redirectUris.some((uri) => uri.trim() !== "");
   const fields = { draft, change, errors, editing };
-  // One card for the installation both sections refer to, in the first of them shown.
   const installationId = permissions?.installationId ?? setup?.installation?.installationId;
   const installationCard = installationId !== undefined && (
     <InstallationCard installationId={installationId} />
   );
 
   return (
-    // The rules below are the registry's own, shown inline beside each field; the browser's bubbles
-    // would show only the first and in its own words.
     <form noValidate onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-3 border-b border-secondary px-6 py-4">
         <AppLogo name={draft.name || "?"} url={app?.logoUrl} size="sm" />
