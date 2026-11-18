@@ -27,7 +27,17 @@ end
 
 local function save(state, state_key)
   state_key = state_key or KEYS[1]
-  redis.call("SET", state_key, cjson.encode(state), "EX", 86400)
+  local ttl = 86400
+  if state.external then ttl = 2592000 end
+  redis.call("SET", state_key, cjson.encode(state), "EX", ttl)
+end
+
+local function external_last_seen(state)
+  local last_seen = tonumber(state.lastSeen)
+  if last_seen and last_seen > 0 then return last_seen end
+  local observed = state.process and tonumber(state.process.observedAt)
+  if observed and observed > 0 then return observed end
+  return cjson.null
 end
 
 -- A control failure recorded while the display still saw a live process parks its reason
@@ -122,12 +132,14 @@ local function snapshot(state, workspace_id, computer_id, agent_id, now)
     stop_detail = state.stopDetail or cjson.null
     stop_message = state.stopMessage or cjson.null
   end
+  local last_seen = nil
+  if computer_id == "" then last_seen = external_last_seen(state) end
   return cjson.encode({
     protocolMajor = 1, workspaceId = workspace_id, computerId = computer_id,
     agentId = agent_id, revision = state.revision, activityKind = kind,
     detailKind = detail_kind, detail = detail, entries = entries, expiresAt = expires_at,
     contextUsage = context_usage, fastMode = fast_mode, stopReason = stop_reason,
-    stopDetail = stop_detail, stopMessage = stop_message
+    stopDetail = stop_detail, stopMessage = stop_message, lastSeenAtMs = last_seen
   })
 end
 

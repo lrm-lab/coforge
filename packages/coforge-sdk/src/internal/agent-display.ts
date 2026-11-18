@@ -58,6 +58,7 @@ export type AgentDisplaySnapshot = {
    * and `entries` always empty — never what the Agent is doing. Absent on a full snapshot.
    */
   statusOnly?: true;
+  lastSeenAtMs?: number | null;
 };
 
 const activityKinds = new Set<AgentActivityKind>([
@@ -101,6 +102,7 @@ export function parseAgentDisplaySnapshot(data: unknown): AgentDisplaySnapshot {
   const stopDetail = parseStopDetail(item.stopDetail);
   const stopMessage = parseStopDetail(item.stopMessage);
   const statusOnly = parseStatusOnly(item);
+  const lastSeenAtMs = parseLastSeenAtMs(item.lastSeenAtMs);
   return {
     protocolMajor: 1,
     workspaceId: item.workspaceId,
@@ -118,7 +120,15 @@ export function parseAgentDisplaySnapshot(data: unknown): AgentDisplaySnapshot {
     ...(stopDetail !== undefined ? { stopDetail } : {}),
     ...(stopMessage !== undefined ? { stopMessage } : {}),
     ...(statusOnly ? { statusOnly } : {}),
+    ...(lastSeenAtMs !== undefined ? { lastSeenAtMs } : {}),
   } as AgentDisplaySnapshot;
+}
+
+function parseLastSeenAtMs(value: unknown): AgentDisplaySnapshot["lastSeenAtMs"] {
+  if (value === undefined || value === null) return value;
+  if (!Number.isSafeInteger(value) || (value as number) < 1)
+    throw new Error("invalid Agent display snapshot");
+  return value as number;
 }
 
 /** The status floor may carry the kind and its deadline, never Activity content: a `statusOnly`

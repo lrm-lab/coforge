@@ -152,6 +152,60 @@ describe("external Agent display", () => {
     expect(next?.expiresAt).toBe(now + WINDOW);
   });
 
+  test("the last-seen time outlives the window and the last credential, and never goes back", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    expect((await subject.snapshot(scope)).lastSeenAtMs).toBeNull();
+    const firstSeen = now;
+    expect((await presence(subject, firstSeen))?.lastSeenAtMs).toBe(firstSeen);
+    now += 30_000;
+    const renewedAt = now;
+    await presence(subject, renewedAt);
+    expect(await presence(subject, firstSeen)).toBeUndefined();
+    expect((await subject.snapshot(scope)).lastSeenAtMs).toBe(renewedAt);
+    now += WINDOW + 1;
+    const lapsed = await subject.snapshot(scope);
+    expect(lapsed.activityKind).toBe("offline");
+    expect(lapsed.lastSeenAtMs).toBe(renewedAt);
+    await presence(subject, 0);
+    expect((await subject.snapshot(scope)).lastSeenAtMs).toBe(renewedAt);
+    now += 5_000;
+    const reported = await status(subject, "working", now - 1_000);
+    expect(reported?.lastSeenAtMs).toBe(now);
+  });
+
+  test("a state written before last-seen existed keeps its time through the offline sync", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    const seenAt = now;
+    await presence(subject, seenAt);
+    const [key] = (await redis.send("KEYS", ["*:state"])) as string[];
+    const legacy = JSON.parse((await redis.send("GET", [key!])) as string);
+    delete legacy.lastSeen;
+    await redis.send("SET", [key!, JSON.stringify(legacy)]);
+    now += 1_000;
+    await presence(subject, 0);
+    expect((await subject.snapshot(scope)).lastSeenAtMs).toBe(seenAt);
+  });
+
+  test("an external display outlives the managed display's one-day expiry", async () => {
+    await redis.send("FLUSHDB", []);
+    const subject = display();
+    await presence(subject, now);
+    const keys = (await redis.send("KEYS", ["*:state"])) as string[];
+    expect(keys).toHaveLength(1);
+    expect(Number(await redis.send("TTL", [keys[0]!]))).toBeGreaterThan(86_400);
+    now += WINDOW + 1;
+    await subject.snapshot(scope);
+    expect(Number(await redis.send("TTL", [keys[0]!]))).toBeGreaterThan(86_400);
+  });
+
+  test("a managed Agent's display carries no last-seen time", async () => {
+    await redis.send("FLUSHDB", []);
+    const managed = await display().snapshot({ ...scope, computerId: "computer-a" });
+    expect(managed).not.toHaveProperty("lastSeenAtMs");
+  });
+
   test("an older seen never shortens the lease", async () => {
     await redis.send("FLUSHDB", []);
     const subject = display();

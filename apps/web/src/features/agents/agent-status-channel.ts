@@ -40,9 +40,10 @@ export const agentStatusChannelFor = (workspaceId: string, agentId: string, visi
 
 /**
  * The status floor a private Agent also publishes on the shared Workspace status channel: its
- * kind, stop reason and expiry — never `detail`, `detailKind`, `entries`, `contextUsage` or
- * `fastMode`, so every member learns whether it is online, working, thinking, errored or
- * offline while its Activity stays private. `statusOnly` marks it so a client that also
+ * kind, stop reason, expiry and an external Agent's last-seen time — never `detail`,
+ * `detailKind`, `entries`, `contextUsage` or `fastMode`, so every member learns whether it is
+ * online, working, thinking, errored or offline, and since when, while its Activity stays
+ * private. `statusOnly` marks it so a client that also
  * receives the full snapshot on the Agent's own channel never lets this one stand in for it.
  */
 export function agentStatusOnlySnapshot(snapshot: AgentDisplaySnapshot): AgentDisplaySnapshot {
@@ -58,6 +59,7 @@ export function agentStatusOnlySnapshot(snapshot: AgentDisplaySnapshot): AgentDi
     entries: [],
     expiresAt: snapshot.expiresAt,
     ...(snapshot.stopReason !== undefined ? { stopReason: snapshot.stopReason } : {}),
+    ...(snapshot.lastSeenAtMs !== undefined ? { lastSeenAtMs: snapshot.lastSeenAtMs } : {}),
     statusOnly: true,
   };
 }

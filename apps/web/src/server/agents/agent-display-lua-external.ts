@@ -24,6 +24,13 @@ local function external_process(status, seen, lease_until)
   }
 end
 
+local function external_seen(state, seen)
+  state.external = true
+  local last = tonumber(state.lastSeen) or (state.process and tonumber(state.process.observedAt)) or 0
+  if seen > last then last = seen end
+  if last > 0 then state.lastSeen = last end
+end
+
 local function external_finish(state, now, before_kind, before_detail)
   local kind, detail = external_shown(state, now)
   local changed = kind ~= before_kind or detail ~= before_detail
@@ -46,6 +53,7 @@ if seen > 0 then
 else
   state.seenFence = now
 end
+external_seen(state, seen)
 local lease_until = seen + window
 if seen > 0 and external_live(state, now) and state.process.leaseUntil > lease_until then
   lease_until = state.process.leaseUntil
@@ -89,6 +97,7 @@ else
   end
 end
 local before_kind, before_detail = external_shown(state, now)
+external_seen(state, now)
 if reported then state.reportedAt = occurred end
 state.activity = {
   launchId = EXTERNAL_INSTANCE, daemonInstanceId = EXTERNAL_INSTANCE, sequence = 0,

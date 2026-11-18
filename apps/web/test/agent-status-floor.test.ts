@@ -86,6 +86,26 @@ test("a statusOnly snapshot parses only without Activity content", () => {
   }
 });
 
+test("an external Agent's last-seen time rides the floor and is validated at the boundary", () => {
+  const external = display({
+    computerId: "",
+    activityKind: "offline",
+    expiresAt: null,
+    detailKind: "",
+    detail: "",
+    entries: [],
+    lastSeenAtMs: 1_700_000_000_000,
+  });
+  expect(parseAgentDisplaySnapshot(external).lastSeenAtMs).toBe(1_700_000_000_000);
+  const floor = agentStatusOnlySnapshot(external);
+  expect(floor.lastSeenAtMs).toBe(1_700_000_000_000);
+  expect(parseAgentDisplaySnapshot(floor)).toEqual(floor);
+  expect(parseAgentDisplaySnapshot({ ...external, lastSeenAtMs: null }).lastSeenAtMs).toBeNull();
+  expect(parseAgentDisplaySnapshot(display())).not.toHaveProperty("lastSeenAtMs");
+  for (const lastSeenAtMs of [0, -1, 1.5, "1700000000000", Number.NaN])
+    expect(() => parseAgentDisplaySnapshot({ ...external, lastSeenAtMs })).toThrow();
+});
+
 test("status floors keep the newest revision per Agent and a full display path ignores them", () => {
   const floor = (revision: number, activityKind: "working" | "online" = "working") =>
     agentStatusOnlySnapshot(display({ revision, activityKind }));
