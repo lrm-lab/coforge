@@ -18,6 +18,29 @@ const paste = (text: string) => `(() => {
   target.dispatchEvent(event);
   return event.defaultPrevented;
 })()`;
+const holdUploads = `(() => {
+  if (window.__heldUploads) return true;
+  window.__heldUploads = [];
+  const open = XMLHttpRequest.prototype.open;
+  const send = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function (method, url, ...rest) {
+    this.__url = String(url);
+    return open.call(this, method, url, ...rest);
+  };
+  XMLHttpRequest.prototype.send = function (body) {
+    if (!this.__url?.endsWith("/api/attachments")) return send.call(this, body);
+    window.__heldUploads.push(() => send.call(this, body));
+  };
+  return true;
+})()`;
+const heldUploads = `window.__heldUploads.length`;
+const releaseUploads = `window.__heldUploads.splice(0).forEach((release) => release()) ?? true`;
+const composerReady = `${pageHydrated} && document.querySelector('${field}') !== null`;
+const draft = `document.querySelector('${field}').value`;
+const trayHas = (name: string) =>
+  `(document.querySelector('form:has(${field})')?.innerText ?? "").includes(${JSON.stringify(name)})`;
+const onChannel = (id: string) =>
+  `${composerReady} && location.pathname.endsWith(${JSON.stringify(id)})`;
 const trayFiles = `[...document.querySelectorAll("form *")].filter((el) => el.children.length === 0 && /^message-\\d{8}-\\d{6}\\.md$/.test(el.textContent.trim())).length`;
 
 test("a message past the limit goes out as a Markdown file with a preview; the limit itself does not", async () => {
@@ -108,5 +131,83 @@ test("a message past the limit goes out as a Markdown file with a preview; the l
     await browser("close").catch(() => undefined);
     await db.workspace.delete({ where: { id: workspace.id } }).catch(() => {});
     await db.$disconnect();
+  }
+}, 120_000);
+
+test("a file still uploading stays in the draft across a channel switch, then goes out once", async () => {
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+  const { browser, evaluate } = browserSession(browserPath, `draft-files-${process.pid}`);
+  const suffix = String(process.pid);
+  const slug = `e2e-draft-files-${suffix}`;
+  const workspace = await new PrismaWorkspaceCatalogStore(db).createForUser({
+    slug,
+    name: "E2E draft files",
+    userId: DEV_BROWSER_USER.id,
+  });
+  const path = `${Bun.env.TMPDIR ?? "/tmp"}/draft-file-${suffix}.txt`;
+  const name = `draft-file-${suffix}.txt`;
+  let conversationId = "";
+  try {
+    const [channel, other] = await Promise.all(
+      ["kept", "other"].map((label) =>
+        db.conversation.create({
+          data: {
+            workspaceId: workspace.id,
+            channelName: `${label}-${suffix}`,
+            members: { create: [{ userId: DEV_BROWSER_USER.id }] },
+          },
+        }),
+      ),
+    );
+    conversationId = channel!.id;
+    const otherId = other!.id;
+    const messages = () =>
+      db.message.findMany({ where: { conversationId }, include: { attachments: true } });
+    await Bun.write(path, "kept\n");
+
+    await browser("set", "viewport", "1440", "900");
+    await browser("open", `${origin}/en/w/${slug}/channel/${conversationId}`);
+    await browser("wait", "--fn", composerReady);
+    expect(await evaluate<boolean>(holdUploads)).toBe(true);
+    await browser("upload", 'input[type="file"]', path);
+    await browser("wait", "--fn", `${heldUploads} === 1 && ${trayHas(name)}`);
+    await browser("fill", field, "With the notes.");
+
+    await browser("click", `a[href$="/channel/${otherId}"]`);
+    await browser("wait", "--fn", `${onChannel(otherId)} && !${trayHas(name)}`);
+    await browser("click", `a[href$="/channel/${conversationId}"]`);
+    await browser("wait", "--fn", onChannel(conversationId));
+    await Bun.sleep(500);
+    expect(await evaluate<boolean>(trayHas(name))).toBe(true);
+    expect(await evaluate<string>(draft)).toBe("With the notes.");
+
+    expect(await evaluate<boolean>(releaseUploads)).toBe(true);
+    await browser(
+      "wait",
+      "--fn",
+      `![...document.querySelectorAll("form:has(${field}) [aria-label]")].some((tile) => tile.getAttribute("aria-label").includes("Uploading"))`,
+    );
+    await browser("press", "Enter");
+    await browser("wait", "--fn", `${draft} === "" && !${trayHas(name)}`);
+    for (
+      const deadline = Date.now() + 30_000;
+      (await messages()).length === 0;
+      await Bun.sleep(200)
+    )
+      if (Date.now() > deadline) throw new Error("the message never arrived");
+    await Bun.sleep(1_500);
+    const sent = await messages();
+    expect(
+      sent.map((message) => [message.body, message.attachments.map((file) => file.fileName)]),
+    ).toEqual([["With the notes.", [name]]]);
+    expect(await db.attachment.count({ where: { conversationId } })).toBe(1);
+  } finally {
+    if (conversationId) await deleteAttachmentRows(db, { conversationId }).catch(() => {});
+    await browser("close").catch(() => undefined);
+    await db.workspace.delete({ where: { id: workspace.id } }).catch(() => {});
+    await db.$disconnect();
+    await Bun.file(path)
+      .delete()
+      .catch(() => {});
   }
 }, 120_000);

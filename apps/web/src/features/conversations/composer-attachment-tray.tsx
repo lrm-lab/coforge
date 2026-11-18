@@ -6,7 +6,7 @@ export function ComposerAttachmentTray({
   retry,
   remove,
 }: {
-  attachments: PendingAttachment[];
+  attachments: readonly PendingAttachment[];
   retry: (item: PendingAttachment) => Promise<void>;
   remove: (localIds: readonly string[]) => void;
 }) {

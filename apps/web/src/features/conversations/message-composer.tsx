@@ -182,7 +182,7 @@ export function MessageComposer({
     },
   });
   const { attachments, setAttachments, uploading, anyFailed, room, addFiles, tray } =
-    useComposerAttachments(scope?.uploadTo ?? (() => Promise.resolve(conversationId)));
+    useComposerAttachments(draftKey, scope?.uploadTo ?? (() => Promise.resolve(conversationId)));
   const [asTask, setAsTask] = useState(false);
   const [taskPriority, setTaskPriority] = useLastTaskPriority();
   useEffect(() => setAsTask(false), [draftKey]);
@@ -265,7 +265,7 @@ export function MessageComposer({
     setKeptAsText(NO_NAMES);
     clearComposerDraft(draftKey);
     completion.close();
-    setAttachments([]);
+    setAttachments(() => []);
     setAsTask(false);
     focusComposer();
     outbox.send(message, uploaded);

@@ -1,5 +1,14 @@
-import { useRef, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
+import {
+  draftAttachments,
+  finishUpload,
+  removeDraftAttachments,
+  startUpload,
+  subscribeDraftAttachments,
+  updateDraftAttachments,
+  wasRemoved,
+} from "./composer-attachment-drafts";
 import { uploadAttachment, type PendingAttachment } from "./composer-attachments";
 import {
   cannotAttach,
@@ -10,48 +19,51 @@ import {
 } from "./upload-failure";
 import { localId } from "./composer-behavior";
 
-export function useComposerAttachments(uploadTo: () => Promise<string>) {
-  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
-  const inFlight = useRef(new Map<string, AbortController>());
-  const removed = useRef(new Set<string>());
+export function useComposerAttachments(draftKey: string, uploadTo: () => Promise<string>) {
+  const subscribe = useCallback(
+    (listener: () => void) => subscribeDraftAttachments(draftKey, listener),
+    [draftKey],
+  );
+  const attachments = useSyncExternalStore(
+    subscribe,
+    () => draftAttachments(draftKey),
+    () => draftAttachments(draftKey),
+  );
   const uploading = attachments.some(stillUploading);
   const attached = attachments.filter((item) => !cannotAttach(item.failure)).length;
   const room = Math.max(0, MAX_ATTACHMENTS - attached);
   const anyFailed = attachments.some((item) => item.failure) || attached > MAX_ATTACHMENTS;
 
-  async function uploadOne(pending: PendingAttachment) {
-    setAttachments((current) =>
-      current.map((item) =>
-        item.localId === pending.localId ? { ...item, failure: undefined, progress: 0 } : item,
-      ),
+  function setAttachments(
+    update: (current: readonly PendingAttachment[]) => readonly PendingAttachment[],
+  ) {
+    updateDraftAttachments(draftKey, update);
+  }
+
+  function patch(key: string, localId: string, change: Partial<PendingAttachment>) {
+    updateDraftAttachments(key, (current) =>
+      current.map((item) => (item.localId === localId ? { ...item, ...change } : item)),
     );
-    const controller = new AbortController();
-    inFlight.current.set(pending.localId, controller);
+  }
+
+  async function uploadOne(pending: PendingAttachment) {
+    const key = draftKey;
+    patch(key, pending.localId, { failure: undefined, progress: 0 });
+    const signal = startUpload(pending.localId);
     try {
       const id = await uploadAttachment(
         await uploadTo(),
         pending.file,
-        (progress) =>
-          setAttachments((current) =>
-            current.map((item) =>
-              item.localId === pending.localId ? { ...item, progress } : item,
-            ),
-          ),
-        controller.signal,
+        (progress) => patch(key, pending.localId, { progress }),
+        signal,
       );
-      setAttachments((current) =>
-        current.map((item) =>
-          item.localId === pending.localId ? { ...item, id, progress: 100 } : item,
-        ),
-      );
+      patch(key, pending.localId, { id, progress: 100 });
     } catch (error) {
-      if (controller.signal.aborted) return;
+      if (signal.aborted) return;
       const failure = error instanceof UploadRefused ? error.failure : "failed";
-      setAttachments((current) =>
-        current.map((item) => (item.localId === pending.localId ? { ...item, failure } : item)),
-      );
+      patch(key, pending.localId, { failure });
     } finally {
-      inFlight.current.delete(pending.localId);
+      finishUpload(pending.localId);
     }
   }
 
@@ -66,16 +78,12 @@ export function useComposerAttachments(uploadTo: () => Promise<string>) {
     }));
     setAttachments((current) => [...current, ...pendingItems]);
     for (const pending of pendingItems) {
-      if (!pending.failure && !removed.current.has(pending.localId)) await uploadOne(pending);
+      if (!pending.failure && !wasRemoved(pending.localId)) await uploadOne(pending);
     }
   }
 
   function remove(localIds: readonly string[]) {
-    for (const id of localIds) {
-      removed.current.add(id);
-      inFlight.current.get(id)?.abort();
-    }
-    setAttachments((current) => current.filter((item) => !localIds.includes(item.localId)));
+    removeDraftAttachments(draftKey, localIds);
   }
 
   return {
