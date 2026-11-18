@@ -15,7 +15,7 @@ const command = z.discriminatedUnion("operation", [
   z.object({ operation: z.literal("submit"), draft: z.unknown() }).strict(),
   z
     .object({
-      operation: z.enum(["accept", "dismiss"]),
+      operation: z.enum(["accept", "dismiss", "verify"]),
       id: z.uuid(),
       edit: z
         .object({

@@ -9,6 +9,8 @@ import { readableMemoryEvidence } from "#src/server/db/repositories/team-memory-
 import { head, type Row } from "#src/server/db/repositories/team-memory-projections.server";
 import { teamMemory } from "./composition.server";
 import { TeamMemoryError } from "./memory";
+import { memorySuggestionPreviews } from "./suggestion-previews.server";
+import { memoryEvidenceLinks } from "./evidence-links.server";
 
 type Reviewer = { workspaceId: string; userId: string };
 type Suggestion = { id: string; kind: string; payload: Prisma.JsonValue };
@@ -25,7 +27,7 @@ export async function submitMemorySuggestion(db: PrismaClient, actor: Reviewer, 
     throw new TeamMemoryError("invalid");
   if (command.reviewToken || command.maintenanceToken) throw new TeamMemoryError("invalid");
   return db.$transaction(async (tx) => {
-    await teamMemoryAccess(tx, actor);
+    await teamMemoryAccess(tx, actor, true);
     if (command.operation === "update") {
       const target = await tx.teamMemoryEntry.findFirst({
         where: {
@@ -58,72 +60,98 @@ export async function submitMemorySuggestion(db: PrismaClient, actor: Reviewer, 
 }
 
 export async function listMemorySuggestions(db: PrismaClient, actor: Reviewer, after?: string) {
-  return db.$transaction(async (tx) => {
-    await teamMemoryAccess(tx, actor);
-    const rows = await tx.teamMemorySuggestion.findMany({
-      where: {
-        workspaceId: actor.workspaceId,
-        status: "pending",
-        ...(after ? { id: { gt: after } } : {}),
-      },
-      select: { id: true, kind: true, payload: true, createdAt: true },
-      orderBy: { id: "asc" },
-      take: 21,
-    });
-    const page = rows.slice(0, 20);
-    const refs = page.flatMap((row) => {
-      if (row.kind !== "task") return [];
-      const draft = row.payload as unknown as TeamMemoryDraft;
-      return draft.evidence ?? [];
-    });
-    const current = refs.length
-      ? await tx.task.findMany({
-          where: {
-            id: { in: refs.map(({ id }) => id) },
-            workspaceId: actor.workspaceId,
-            status: "done",
-            deletedAt: null,
-            conversation: {
-              channelName: { not: null },
-              visibility: "public",
-              hiddenFromWorkspaceAt: null,
+  return db.$transaction(
+    async (tx) => {
+      await teamMemoryAccess(tx, actor);
+      const rows = await tx.teamMemorySuggestion.findMany({
+        where: {
+          workspaceId: actor.workspaceId,
+          status: { in: ["pending", "verification"] },
+          ...(after ? { id: { gt: after } } : {}),
+        },
+        select: { id: true, kind: true, payload: true, status: true, createdAt: true },
+        orderBy: { id: "asc" },
+        take: 21,
+      });
+      const page = rows.slice(0, 20);
+      const refs = page.flatMap((row) => {
+        if (row.kind !== "task") return [];
+        const draft = row.payload as unknown as TeamMemoryDraft;
+        return draft.evidence ?? [];
+      });
+      const current = refs.length
+        ? await tx.task.findMany({
+            where: {
+              id: { in: refs.map(({ id }) => id) },
+              workspaceId: actor.workspaceId,
+              status: "done",
+              deletedAt: null,
+              conversation: {
+                channelName: { not: null },
+                visibility: "public",
+                hiddenFromWorkspaceAt: null,
+              },
             },
-          },
-          select: { id: true, revision: true },
-          take: refs.length,
-        })
-      : [];
-    const readable = new Set(current.map(({ id, revision }) => `${id}:${revision}`));
-    return {
-      rows: page.filter(
+            select: { id: true, revision: true },
+            take: refs.length,
+          })
+        : [];
+      const readable = new Set(current.map(({ id, revision }) => `${id}:${revision}`));
+      const available = page.filter(
         (row) =>
           row.kind !== "task" ||
           (row.payload as unknown as TeamMemoryDraft).evidence?.every(({ id, revision }) =>
             readable.has(`${id}:${revision}`),
           ),
-      ),
-      next: rows.length > 20 ? rows[19]?.id : undefined,
-    };
-  });
+      );
+      const previews = await memorySuggestionPreviews(tx, actor.workspaceId, available);
+      const evidenceLinks = await memoryEvidenceLinks(
+        tx,
+        actor.workspaceId,
+        previews.flatMap((row) => [
+          ...row.evidence,
+          ...row.snapshots.flatMap(({ evidence }) => evidence ?? []),
+        ]),
+      );
+      return {
+        rows: previews,
+        evidenceLinks,
+        next: rows.length > 20 ? rows[19]?.id : undefined,
+      };
+    },
+    { isolationLevel: "RepeatableRead" },
+  );
 }
 
 export async function reviewMemorySuggestion(
   db: PrismaClient,
   actor: Reviewer,
   id: string,
-  decision: "accept" | "dismiss",
+  decision: "accept" | "dismiss" | "verify",
   edit?: Edit,
 ) {
-  return db.$transaction(
+  const { batchId, ...result } = await db.$transaction(
     async (tx) => {
-      await teamMemoryAccess(tx, actor);
       const key = { id, workspaceId: actor.workspaceId };
+      let currentTask = false;
+      if (decision === "accept") {
+        await teamMemoryAccess(tx, actor);
+        const draft = await tx.teamMemorySuggestion.findUnique({ where: key });
+        if (draft?.kind === "task" && ["pending", "verification"].includes(draft.status))
+          currentTask = await lockTaskSuggestionSource(tx, actor.workspaceId, draft);
+      }
+      await teamMemoryAccess(tx, actor, true);
       const [locked] = await tx.$queryRaw<{ id: string }[]>`
       SELECT id FROM team_memory_suggestions
       WHERE id = ${id}::uuid AND workspace_id = ${actor.workspaceId}::uuid FOR UPDATE`;
       if (!locked) throw new TeamMemoryError("not_found");
       const row = await tx.teamMemorySuggestion.findUniqueOrThrow({ where: key });
-      if (row.status !== "pending") return { status: row.status, entryId: row.appliedEntryId };
+      if (row.status !== "pending" && row.status !== "verification")
+        return { status: row.status, entryId: row.appliedEntryId };
+      if (decision === "verify") {
+        await tx.teamMemorySuggestion.update({ where: key, data: { status: "verification" } });
+        return { status: "verification", entryId: null };
+      }
       const decided = { decidedAt: new Date(), decidedByUserId: actor.userId };
       if (decision === "dismiss") {
         await tx.teamMemorySuggestion.update({
@@ -132,7 +160,10 @@ export async function reviewMemorySuggestion(
         });
         return { status: "dismissed", entryId: null };
       }
-      const command = await suggestedCommand(tx, actor.workspaceId, row, edit);
+      const command =
+        row.kind !== "task" || currentTask
+          ? await suggestedCommand(tx, actor.workspaceId, row, edit)
+          : undefined;
       if (!command) {
         await tx.teamMemorySuggestion.update({ where: key, data: { ...decided, status: "stale" } });
         return { status: "stale", entryId: null };
@@ -148,10 +179,40 @@ export async function reviewMemorySuggestion(
         where: key,
         data: { ...decided, status: "accepted", appliedEntryId: entryId },
       });
-      return { status: "accepted", entryId };
+      return { status: "accepted", entryId, batchId: row.scanId };
     },
     { timeout: 10_000 },
   );
+  if (batchId)
+    console.info(
+      JSON.stringify({
+        event: "team_memory.review_scan_accepted",
+        workspace_id: actor.workspaceId,
+        scan_id: batchId,
+        suggestion_id: id,
+        accepted: 1,
+      }),
+    );
+  return result;
+}
+
+async function lockTaskSuggestionSource(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  row: Suggestion,
+) {
+  const source = (row.payload as unknown as TeamMemoryDraft).evidence?.[0];
+  if (!source) return false;
+  // Workspace deletion also takes its conversation locks before the Workspace row.
+  const [task] = await tx.$queryRaw<{ id: string }[]>`
+    SELECT t.id FROM tasks t JOIN conversations c
+      ON c.id = t."conversationId" AND c."workspaceId" = t."workspaceId"
+    WHERE t.id = ${source.id}::uuid AND t."workspaceId" = ${workspaceId}::uuid
+      AND t."deletedAt" IS NULL AND t.status = 'done' AND t.revision = ${source.revision ?? 0}
+      AND c."channelName" IS NOT NULL AND c.visibility = 'public'
+      AND c."hiddenFromWorkspaceAt" IS NULL
+    FOR SHARE OF t, c`;
+  return !!task;
 }
 
 async function suggestedCommand(
@@ -187,17 +248,6 @@ async function suggestedCommand(
   }
   if (row.kind === "task") {
     const draft = row.payload as unknown as TeamMemoryDraft;
-    const source = draft.evidence?.[0];
-    if (!source) return undefined;
-    const [task] = await tx.$queryRaw<{ id: string }[]>`
-      SELECT t.id FROM tasks t JOIN conversations c
-        ON c.id = t."conversationId" AND c."workspaceId" = t."workspaceId"
-      WHERE t.id = ${source.id}::uuid AND t."workspaceId" = ${workspaceId}::uuid
-        AND t."deletedAt" IS NULL AND t.status = 'done' AND t.revision = ${source.revision ?? 0}
-        AND c."channelName" IS NOT NULL AND c.visibility = 'public'
-        AND c."hiddenFromWorkspaceAt" IS NULL
-      FOR SHARE OF t, c`;
-    if (!task) return undefined;
     return decodeTeamMemoryCommand({
       ...draft,
       ...edit,

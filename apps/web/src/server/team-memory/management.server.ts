@@ -3,6 +3,7 @@ import type { PrismaClient } from "#src/generated/prisma/client";
 import { humanLabel } from "#src/lib/human-label";
 import { teamMemory } from "./composition.server";
 import { TeamMemoryError } from "./memory";
+import { memoryEvidenceLinks } from "./evidence-links.server";
 
 export async function manageTeamMemory(
   db: PrismaClient,
@@ -37,7 +38,7 @@ export async function manageTeamMemory(
     const projectIds = [
       ...new Set(result.entries.flatMap((entry) => (entry.projectId ? [entry.projectId] : []))),
     ];
-    const [people, agents, projects] = await Promise.all([
+    const [people, agents, projects, evidenceLinks] = await Promise.all([
       userIds.length
         ? db.user.findMany({
             where: { id: { in: userIds } },
@@ -59,10 +60,18 @@ export async function manageTeamMemory(
             take: 10,
           })
         : [],
+      command.operation === "get"
+        ? memoryEvidenceLinks(
+            db,
+            actor.workspaceId,
+            result.entries.flatMap(({ evidence }) => evidence ?? []),
+          )
+        : {},
     ]);
     return {
       kind: "ready" as const,
       result,
+      evidenceLinks,
       names: Object.fromEntries([
         ...people.map((person) => [person.id, humanLabel(person)]),
         ...agents.map((agent) => [agent.id, agent.displayName || agent.name]),
