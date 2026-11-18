@@ -215,7 +215,7 @@ export function PiChatComposer({
                 isDisabled={pending || !draft.text.trim() || (busy && !controls)}
                 isLoading={pending}
               >
-                {busy
+                {busy && controls
                   ? mode === "steer"
                     ? m.pi_chat_steer()
                     : m.pi_chat_follow_up()
