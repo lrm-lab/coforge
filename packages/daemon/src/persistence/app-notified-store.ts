@@ -8,11 +8,13 @@ const logger = getLogger(["coforge", "daemon", "inbox"]);
 
 /** The App Inbox items one Agent was already told about, kept where the next daemon reads it. */
 export interface AppNotifiedStore {
-  read(agentId: string): Promise<readonly string[]>;
-  add(agentId: string, itemIds: readonly string[]): Promise<void>;
+  read(agentId: string, sessionId: string | undefined): Promise<readonly string[]>;
+  add(agentId: string, sessionId: string | undefined, itemIds: readonly string[]): Promise<void>;
   remove(agentId: string, itemId: string): Promise<void>;
   clear(agentId: string): Promise<void>;
 }
+
+type Record = { sessionId: string | undefined; itemIds: readonly string[] };
 
 export class FileAppNotifiedStore implements AppNotifiedStore {
   readonly #queues = new Map<string, Promise<unknown>>();
@@ -30,42 +32,36 @@ export class FileAppNotifiedStore implements AppNotifiedStore {
     return join(this.stateDirectory, "app-notified", this.workspaceId, agentId, "items.json");
   }
 
-  async read(agentId: string): Promise<readonly string[]> {
-    const path = this.#path(agentId);
-    const file = Bun.file(path);
-    if (!(await file.exists())) return [];
-    const text = await file.text();
-    try {
-      const value = JSON.parse(text) as { version?: unknown; itemIds?: unknown } | null;
-      if (value?.version !== 1 || !Array.isArray(value.itemIds))
-        throw new Error("app notified records are corrupt");
-      return value.itemIds.filter((itemId): itemId is string => isItemId(itemId));
-    } catch (error) {
-      await this.#quarantine(agentId, path, error);
-      return [];
-    }
+  async read(agentId: string, sessionId: string | undefined): Promise<readonly string[]> {
+    if (sessionId === undefined) return [];
+    const record = await this.#load(agentId);
+    return record.sessionId === sessionId ? record.itemIds : [];
   }
 
-  add(agentId: string, itemIds: readonly string[]): Promise<void> {
+  add(agentId: string, sessionId: string | undefined, itemIds: readonly string[]): Promise<void> {
+    if (sessionId === undefined) return Promise.resolve();
     return this.#serial(agentId, async () => {
-      const current = new Set(await this.read(agentId));
+      const record = await this.#load(agentId);
+      const current = new Set(record.sessionId === sessionId ? record.itemIds : []);
       const before = current.size;
       for (const itemId of itemIds) if (isItemId(itemId)) current.add(itemId);
-      if (current.size === before) return;
-      await this.#write(agentId, current);
+      if (current.size === before && record.sessionId === sessionId) return;
+      await this.#write(agentId, { sessionId, itemIds: [...current] });
     });
   }
 
   remove(agentId: string, itemId: string): Promise<void> {
     return this.#serial(agentId, async () => {
-      const current = new Set(await this.read(agentId));
+      const record = await this.#load(agentId);
+      if (record.sessionId === undefined) return;
+      const current = new Set(record.itemIds);
       if (!current.delete(itemId)) return;
-      await this.#write(agentId, current);
+      await this.#write(agentId, { sessionId: record.sessionId, itemIds: [...current] });
     });
   }
 
   clear(agentId: string): Promise<void> {
-    return this.#serial(agentId, () => this.#write(agentId, new Set()));
+    return this.#serial(agentId, () => this.#write(agentId, { sessionId: undefined, itemIds: [] }));
   }
 
   #serial(agentId: string, operation: () => Promise<void>): Promise<void> {
@@ -78,10 +74,33 @@ export class FileAppNotifiedStore implements AppNotifiedStore {
     return next;
   }
 
-  async #write(agentId: string, itemIds: ReadonlySet<string>): Promise<void> {
+  async #load(agentId: string): Promise<Record> {
+    const path = this.#path(agentId);
+    const file = Bun.file(path);
+    if (!(await file.exists())) return { sessionId: undefined, itemIds: [] };
+    const text = await file.text();
+    try {
+      const value = JSON.parse(text) as {
+        version?: unknown;
+        sessionId?: unknown;
+        itemIds?: unknown;
+      } | null;
+      if (value?.version !== 1 || !Array.isArray(value.itemIds))
+        throw new Error("app notified records are corrupt");
+      return {
+        sessionId: isSessionId(value.sessionId) ? value.sessionId : undefined,
+        itemIds: value.itemIds.filter((itemId): itemId is string => isItemId(itemId)),
+      };
+    } catch (error) {
+      await this.#quarantine(agentId, path, error);
+      return { sessionId: undefined, itemIds: [] };
+    }
+  }
+
+  async #write(agentId: string, record: Record): Promise<void> {
     await writePrivateJsonRecord(
       this.#path(agentId),
-      { version: 1, itemIds: [...itemIds] },
+      { version: 1, sessionId: record.sessionId, itemIds: record.itemIds },
       { durable: true },
     );
   }
@@ -105,3 +124,6 @@ export class FileAppNotifiedStore implements AppNotifiedStore {
 
 const isItemId = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0 && value.length <= 128;
+
+const isSessionId = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0 && value.length <= 256;

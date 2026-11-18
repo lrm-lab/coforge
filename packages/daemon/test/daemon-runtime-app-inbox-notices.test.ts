@@ -116,7 +116,7 @@ describe("DaemonRuntime App Inbox notices", () => {
     }
   });
 
-  test("an item announced before a restart is not announced again", async () => {
+  test("a restart tells the Agent again only for a session it has not seen", async () => {
     const stateDirectory = join(tempRoot, `coforge-inbox-restart-${crypto.randomUUID()}`);
     const credentials = new InMemoryDaemonCredentialStore();
     await credentials.save(connection.workspaceId, connection.computerId, "token-a");
@@ -168,7 +168,7 @@ describe("DaemonRuntime App Inbox notices", () => {
         title: "Check the build",
         summary: "Reminder due",
       });
-      await first.startAgent("agent-a", config);
+      await first.startAgent("agent-a", config, "session-a");
       await Bun.sleep(10);
       expect(notices).toHaveLength(1);
       // A second idle transition announces nothing either: the item was told once.
@@ -181,12 +181,23 @@ describe("DaemonRuntime App Inbox notices", () => {
     const second = build();
     try {
       await second.start(connection);
-      await second.startAgent("agent-a", config);
+      await second.startAgent("agent-a", config, "session-a");
       await Bun.sleep(10);
       await second.drainAppInboxNotices("agent-a");
       expect(notices).toHaveLength(1);
     } finally {
       await second.stop();
+    }
+
+    const third = build();
+    try {
+      await third.start(connection);
+      await third.startAgent("agent-a", config, "session-b");
+      await Bun.sleep(10);
+      await third.drainAppInboxNotices("agent-a");
+      expect(notices).toHaveLength(2);
+    } finally {
+      await third.stop();
       await rm(stateDirectory, { recursive: true, force: true });
     }
   });

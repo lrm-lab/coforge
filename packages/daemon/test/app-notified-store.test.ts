@@ -6,6 +6,7 @@ import { FileAppNotifiedStore } from "#src/persistence/app-notified-store";
 
 const workspaceId = "019b0381-1111-7111-8111-111111111111";
 const agentId = "019b0381-3333-7333-8333-333333333333";
+const session = "session-one";
 const directories: string[] = [];
 
 afterEach(() => {
@@ -21,33 +22,53 @@ function store() {
 
 test("what an Agent was told about is read back by the next daemon", async () => {
   const { directory, store: first } = store();
-  await first.add(agentId, ["item-1", "item-2"]);
-  expect([...(await first.read(agentId))].sort()).toEqual(["item-1", "item-2"]);
+  await first.add(agentId, session, ["item-1", "item-2"]);
+  expect([...(await first.read(agentId, session))].sort()).toEqual(["item-1", "item-2"]);
   const restarted = new FileAppNotifiedStore(directory, workspaceId);
-  expect([...(await restarted.read(agentId))].sort()).toEqual(["item-1", "item-2"]);
+  expect([...(await restarted.read(agentId, session))].sort()).toEqual(["item-1", "item-2"]);
+});
+
+test("a record is only trusted for the session that wrote it", async () => {
+  const { directory, store: files } = store();
+  await files.add(agentId, session, ["item-1"]);
+  expect(await files.read(agentId, "session-two")).toEqual([]);
+  const restarted = new FileAppNotifiedStore(directory, workspaceId);
+  expect(await restarted.read(agentId, "session-two")).toEqual([]);
+  await restarted.add(agentId, "session-two", ["item-2"]);
+  expect(await restarted.read(agentId, "session-two")).toEqual(["item-2"]);
+  expect(await restarted.read(agentId, session)).toEqual([]);
+});
+
+test("without a session the store keeps nothing", async () => {
+  const { directory, store: files } = store();
+  await files.add(agentId, undefined, ["item-1"]);
+  expect(await files.read(agentId, undefined)).toEqual([]);
+  expect(existsSync(join(directory, "app-notified", workspaceId, agentId, "items.json"))).toBe(
+    false,
+  );
 });
 
 test("an item added twice is kept once", async () => {
   const { store: files } = store();
-  await files.add(agentId, ["item-1"]);
-  await files.add(agentId, ["item-1", "item-2"]);
-  expect([...(await files.read(agentId))].sort()).toEqual(["item-1", "item-2"]);
+  await files.add(agentId, session, ["item-1"]);
+  await files.add(agentId, session, ["item-1", "item-2"]);
+  expect([...(await files.read(agentId, session))].sort()).toEqual(["item-1", "item-2"]);
 });
 
 test("removing one item leaves the rest", async () => {
   const { store: files } = store();
-  await files.add(agentId, ["item-1", "item-2"]);
+  await files.add(agentId, session, ["item-1", "item-2"]);
   await files.remove(agentId, "item-1");
-  expect(await files.read(agentId)).toEqual(["item-2"]);
+  expect(await files.read(agentId, session)).toEqual(["item-2"]);
   await files.remove(agentId, "item-9");
-  expect(await files.read(agentId)).toEqual(["item-2"]);
+  expect(await files.read(agentId, session)).toEqual(["item-2"]);
 });
 
 test("clearing forgets every item", async () => {
   const { store: files } = store();
-  await files.add(agentId, ["item-1", "item-2"]);
+  await files.add(agentId, session, ["item-1", "item-2"]);
   await files.clear(agentId);
-  expect(await files.read(agentId)).toEqual([]);
+  expect(await files.read(agentId, session)).toEqual([]);
 });
 
 test("an unreadable file is set aside, and the Agent is told about its items again", async () => {
@@ -55,17 +76,19 @@ test("an unreadable file is set aside, and the Agent is told about its items aga
   const agentDirectory = join(directory, "app-notified", workspaceId, agentId);
   mkdirSync(agentDirectory, { recursive: true });
   writeFileSync(join(agentDirectory, "items.json"), "{ not json");
-  expect(await files.read(agentId)).toEqual([]);
+  expect(await files.read(agentId, session)).toEqual([]);
   expect(
     readdirSync(agentDirectory).some(
       (entry) => entry.startsWith("items.json.corrupt-") && existsSync(join(agentDirectory, entry)),
     ),
   ).toBe(true);
-  await files.add(agentId, ["item-1"]);
-  expect(await files.read(agentId)).toEqual(["item-1"]);
+  await files.add(agentId, session, ["item-1"]);
+  expect(await files.read(agentId, session)).toEqual(["item-1"]);
 });
 
 test("an Agent id that would leave the state directory is refused", async () => {
   const { store: files } = store();
-  await expect(files.read("../elsewhere")).rejects.toThrow("invalid app notified Agent scope");
+  await expect(files.read("../elsewhere", session)).rejects.toThrow(
+    "invalid app notified Agent scope",
+  );
 });
