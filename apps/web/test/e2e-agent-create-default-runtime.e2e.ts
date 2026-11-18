@@ -8,9 +8,28 @@ import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.s
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
+const dialog = `document.querySelector('[role="dialog"]')`;
+const usernameInput = `${dialog}?.querySelector('input[name="name"]')`;
+const placeholder = `${dialog}?.querySelector('[role="status"][aria-label="Loading…"]')`;
+const tab = (label: string) =>
+  `[...(${dialog}?.querySelectorAll('[role="radiogroup"] label') ?? [])].find((el) => el.textContent.trim() === ${JSON.stringify(label)})`;
+const localFormReady = `${dialog}?.querySelector('input[placeholder="Search models"]:not([disabled])') != null`;
+const delayServerFunctions = `(() => {
+  if (!window.__e2eFetch) {
+    window.__e2eFetch = window.fetch;
+    window.fetch = async (...args) => {
+      const url = String(args[0] instanceof Request ? args[0].url : args[0]);
+      if (window.__e2eHold && url.includes("/_serverFn/")) await window.__e2eHold;
+      return window.__e2eFetch(...args);
+    };
+  }
+  window.__e2eHold = new Promise((resolve) => { window.__e2eRelease = resolve; });
+  return true;
+})()`;
+
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-create-default-runtime");
 
-test("a new Agent starts on a runtime its Computer can run", async () => {
+test("a new Agent starts on a runtime its Computer can run, keeps its username across tabs and waits in its own shape", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `agent-default-${process.pid}`);
   const suffix = `${process.pid}-${Date.now().toString(36)}`;
@@ -34,6 +53,17 @@ test("a new Agent starts on a runtime its Computer can run", async () => {
     await evaluate(`document.documentElement.classList.add("dark-mode") ?? true`);
     await browser("screenshot", join(artifacts, `${name}-dark.png`));
     await evaluate(`document.documentElement.classList.remove("dark-mode") ?? true`);
+  };
+  const waitFor = (condition: string) => browser("wait", "--fn", condition);
+  const click = (element: string) => evaluate(`${element}.click() ?? true`);
+  const openNewAgent = async () => {
+    await browser("click", 'button[aria-label="New"]');
+    await browser("find", "role", "menuitem", "click", "--name", "New Agent", "--exact");
+    await waitFor(`${dialog} != null`);
+  };
+  const closeDialog = async () => {
+    await browser("press", "Escape");
+    await waitFor(`${dialog} == null`);
   };
   try {
     await db.workspaceComputer.create({ data: { workspaceId, computerId } });
@@ -73,6 +103,47 @@ test("a new Agent starts on a runtime its Computer can run", async () => {
       expect(page).not.toContain("CoForge Runtime");
       await shots(label);
     }
+    await browser("set", "viewport", "1440", "900");
+    await browser("open", `${origin}/en/w/${workspace.slug}`);
+    await waitFor(`${pageHydrated} && document.querySelector('button[aria-label="New"]') !== null`);
+    await openNewAgent();
+    await waitFor(`${tab("Local")} != null`);
+    await click(tab("Local"));
+    await waitFor(localFormReady);
+    await browser("fill", '[role="dialog"] input[name="name"]', "keep-me");
+    await click(tab("External"));
+    await waitFor(
+      `${usernameInput}?.value === "keep-me" && ${tab("External")}?.querySelector("input")?.checked`,
+    );
+    const placeholderOnReturn = JSON.parse(
+      await browser(
+        "eval",
+        `(async () => {
+      ${tab("Local")}.click();
+      let seen = false;
+      for (let frame = 0; frame < 10; frame++) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        if (${placeholder}) seen = true;
+      }
+      return seen;
+    })()`,
+      ),
+    );
+    expect(placeholderOnReturn).toBe(false);
+    await waitFor(localFormReady);
+    expect(await evaluate<string>(`${usernameInput}.value`)).toBe("keep-me");
+    await closeDialog();
+
+    await browser("set", "viewport", "1440", "1400");
+    await evaluate(delayServerFunctions);
+    await openNewAgent();
+    await waitFor(`${placeholder} != null && getComputedStyle(${placeholder}).opacity === "1"`);
+    const waitingHeight = await evaluate<number>(`${dialog}.getBoundingClientRect().height`);
+    await evaluate(`window.__e2eRelease() ?? true`);
+    await waitFor(localFormReady);
+    await browser("wait", "300");
+    const formHeight = await evaluate<number>(`${dialog}.getBoundingClientRect().height`);
+    expect(Math.abs(formHeight - waitingHeight)).toBeLessThanOrEqual(1);
   } finally {
     await browser("close").catch(() => undefined);
     await getComputerStatusCache()
