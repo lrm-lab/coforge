@@ -274,9 +274,9 @@ test("with nothing published between the reads and the subscriptions, every list
   const chatListCalls = proxy.calls
     .slice(callsFrom)
     .filter((call) => call.name === "loadChatLists");
-  expect(chatListCalls.length).toBeLessThanOrEqual(2);
-  expect(chatListCalls.every((call) => call.lists.length > 0)).toBe(true);
-  expect(chatListCalls.flatMap((call) => call.lists).sort()).toEqual([...CHAT_LIST_READS].sort());
+  expect(chatListCalls.map((call) => [...call.lists].sort())).toEqual([
+    [...CHAT_LIST_READS].sort(),
+  ]);
   expect({ ...proxy.reads, loadChatLists: 1 }).toEqual(readsOf(1));
 }, 300_000);
 
