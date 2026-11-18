@@ -243,7 +243,7 @@ function SortableTab({
       data-moving={moving || undefined}
       className={cx(
         "shrink-0 select-none [-webkit-touch-callout:none] data-dragging:z-20 data-dragging:transition-none data-moving:rounded-md data-moving:bg-primary_hover",
-        quiet && "border-transparent opacity-60 hover:opacity-100 aria-selected:opacity-100",
+        quiet && "border-transparent pb-0 opacity-60 hover:opacity-100 aria-selected:opacity-100",
       )}
       style={{
         transform: transform ? `translate3d(${transform.x}px, 0, 0)` : undefined,

@@ -21,10 +21,10 @@ export function PaneHeader({
 }) {
   return (
     <div
-      data-pane-header
+      data-pane-header={soft ? "soft" : ""}
       className={cx(
         "@container/pane flex shrink-0 flex-col",
-        soft && "relative z-10 bg-primary shadow-sm",
+        soft && "relative z-10 bg-primary shadow-[0_2px_4px_rgb(16_19_25/0.07)]",
       )}
     >
       <header
@@ -44,7 +44,7 @@ export function PaneHeader({
             "relative flex h-pane-bar min-w-0 gap-2 *:relative *:z-1",
             !soft &&
               "after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-border-secondary",
-            barAlign === "rule" ? "items-end" : "items-center",
+            barAlign === "rule" && !soft ? "items-end" : "items-center",
             className,
           )}
         >
