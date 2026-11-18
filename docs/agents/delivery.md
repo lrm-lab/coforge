@@ -108,6 +108,22 @@ A task is complete only after the relevant short checks pass and the change is o
 through its CR or pushed directly by a maintainer. If a check does not exist yet, state that clearly in
 the CR or the direct push's commit message.
 
+## Verify before pushing
+
+Run the checks cheapest-first and scoped to the diff, the way the
+[Claude Code team does](https://claude.dev/blog/how-the-claude-code-team-thinks-about-verification/):
+
+1. Before writing, read [the hard rules](git-hooks/hard-rules.md) the diff will meet: a file near the
+   size limit is split in a refactor commit first, and a move goes in a commit of its own.
+2. Commit, then run `bun scripts/ci/local-gate.ts` (seconds): hard rules, and strict lint of every
+   touched file — a warning already in a file you touch is yours to fix.
+3. Run the tests for what the diff touches (`mise run test:file -- <path>` from the package).
+4. See a UI or realtime change working in the app: [`verify-web`](../../.agents/skills/verify-web/SKILL.md).
+5. Run `mise run test`, `mise run check` and `mise run build` once, at the end.
+
+A fix after a failure re-runs only what it touched, then step 5 once. After three rounds that still
+fail, stop and bring the failure to Frank instead of trying a fourth.
+
 ## TDD and removal
 
 Develop behavioral changes with test-driven development. Agree the public test seam first, then work in

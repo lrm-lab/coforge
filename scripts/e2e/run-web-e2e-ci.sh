@@ -88,7 +88,8 @@ fi
 
 cd "$root"
 bun scripts/e2e/prepare-environment.ts
-export COFORGE_WORKER_JWT_KEY_ID=coforge-e2e
+export COFORGE_WORKER_JWT_KEY_ID
+COFORGE_WORKER_JWT_KEY_ID=$(bun "$root/scripts/e2e/worker-key-id.ts" "$root/.amp/e2e/worker-private.jwk")
 export COFORGE_WORKER_JWT_PRIVATE_JWK
 COFORGE_WORKER_JWT_PRIVATE_JWK=$(<"$root/.amp/e2e/worker-private.jwk")
 export COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY_FILE="$root/.amp/e2e/agent-runtime-credential-key"

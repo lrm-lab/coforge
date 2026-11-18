@@ -63,7 +63,7 @@ Details and the incidents behind these rules are in [delivery](docs/agents/deliv
 
 - Use `mise` as the repository's development tool and version manager.
 - Treat `mise.toml` as the source of truth for tool versions once present. Run `mise install`, then prefer `mise run <task>` or `mise exec -- <command>` over unpinned global tools.
-- Run `mise run test`, `mise run check`, and `mise run build` before submitting a change; CI runs them in that order.
+- Verify cheapest-first as [verify before pushing](docs/agents/delivery.md#verify-before-pushing) orders it: the local gate, the touched tests, then `mise run test`, `mise run check` and `mise run build` once; CI runs those three in that order. Stop after three failed fix rounds and bring the failure to Frank.
 - Reach the formatter through `mise run check` or the workspace's own script; never type a formatter binary yourself (package scripts may call it; a Claude Code hook denies the typed call). A default-config run ignores this repository's settings and rewrites files nobody touched.
 - Before adding, changing, or removing a mise task, or deciding whether a command belongs in mise or a package, read and follow [the mise task policy](docs/agents/mise-tasks.md) ([command surface](docs/agents/mise-tasks.md#command-surface)).
 - Do not silently change a runtime or tool version. Update `mise.toml`, affected lockfiles, and CI together.
