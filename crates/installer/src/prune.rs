@@ -83,9 +83,9 @@ pub fn prune_inactive_versions(
     let live = match live_executables(processes) {
         Ok(LiveExecutables::Known(live)) => live,
         Ok(LiveExecutables::Blocked(reason)) => {
-            report.warnings.push(format!(
-                "skipping version pruning because {reason}"
-            ));
+            report
+                .warnings
+                .push(format!("skipping version pruning because {reason}"));
             return Ok(report);
         }
         Err(error) => {

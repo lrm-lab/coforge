@@ -2,10 +2,11 @@ import type { AgentRuntimeEvent } from "@coforge/agent";
 import { asRecord, eventTime } from "@lrm/coforge-anvil";
 import type { JsonlProcess } from "@lrm/coforge-anvil/execution";
 import { getLogger } from "@logtape/logtape";
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { codexTurnOutcome } from "./turn-outcome";
 import type { CodexSessionState } from "./provider-support";
 
-const logger = getLogger(["coforge", "daemon", "code-agent", "codex"]);
+const logger = getLogger(["coforge", "daemon", "code-agent", RUNTIME_PROVIDER.CODEX]);
 
 export const TURN_END_COMPACTION_WAIT_MS = 10 * 60_000;
 export const TURN_END_COMPACTION_PROGRESS_MS = 5 * 60_000;
