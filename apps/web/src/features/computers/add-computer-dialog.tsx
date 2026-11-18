@@ -34,9 +34,6 @@ export function AddComputerDialog({
     onOpenChange(false);
   }
 
-  // A step swaps the controls under focus (Next becomes a disabled Done), and focus left on a
-  // control that goes away falls to the page: Escape then misses the dialog. Each step starts with
-  // focus on the dialog, as it opened.
   const dialogRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const dialog = dialogRef.current;
