@@ -51,6 +51,14 @@ import { formatAgentProfileParam } from "./profile-panel/profile-panel-search";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
 
+/**
+ * A person's right-hand panel (`profile=user:<id>`) on the Members page and in a conversation, the
+ * human counterpart of `AgentProfilePanel`: name and actions in the header's title row, Profile /
+ * Agents tabs in its second row. Profile holds who they are (description, email), their Workspace
+ * role and join date; Agents lists the Agents they created that the viewer may see. Owners and
+ * admins change the person's role and remove them here as in Settings → Members; a person edits
+ * their own profile in Settings → Account.
+ */
 export function PersonProfilePanel({
   userId,
   onClose,

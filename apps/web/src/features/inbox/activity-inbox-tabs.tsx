@@ -41,7 +41,7 @@ export function ActivityInboxTabs({
         type="button-gray"
         size="sm"
         aria-label={m.activity_inbox_filter_label()}
-        className="*:py-1 @max-[22rem]/pane:gap-1 @max-[22rem]/pane:*:px-1.5 @max-[22rem]/pane:*:text-sm"
+        className="in-data-pane-bar:*:py-1 @max-[22rem]/pane:gap-1 @max-[22rem]/pane:*:px-1.5 @max-[22rem]/pane:*:text-sm"
       >
         {FILTER_TABS.map((tab) => (
           <Tab

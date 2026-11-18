@@ -68,8 +68,8 @@ These rules apply to `src/features/conversations/`. Forwarding a message (the Fo
   empty-state avatar and `@name` thread context from
   `direct-threaded-conversation.tsx`.
 - DM and channel headers fill the shared `components/layout/tabbed-header.tsx`
-  row (identity, centered Chat/Tasks/Files tabs, actions); give it slots rather
-  than laying out a second tab row. Its tabs come from
+  (identity and actions in the title row, Chat/Tasks/Files in the second row of
+  `PaneHeader`); give it slots rather than laying out a tab row of their own. Its tabs come from
   `conversationHeaderTabs` (`conversation-header-tabs.tsx`).
 - The main stream's side room (and its "Full-width messages" device setting)
   is `MESSAGE_COLUMN_CLASS` in `features/settings/message-width.ts`; history

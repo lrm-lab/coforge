@@ -159,6 +159,15 @@ function buildSurfaces(ids) {
       },
     },
     ids.dmId && { key: "dm-conversation", url: url(`/dm/${ids.dmId}`) },
+    ids.dmId &&
+      ids.agentId && {
+        key: "dm-agent-profile",
+        url: url(`/dm/${ids.dmId}?profile=agent:${ids.agentId}`),
+      },
+    ids.channelId && {
+      key: "activity-open-channel",
+      url: url(`/activity?open=channel:${ids.channelId}`),
+    },
     { key: "tasks-board", url: url("/tasks?layout=board") },
     { key: "tasks-list", url: url("/tasks?layout=list") },
     { key: "computers-list", url: url("/computers") },

@@ -4,6 +4,14 @@ import { cx } from "#src/utils/cx";
 
 export type PaneBarAlign = "rule" | "center";
 
+/**
+ * The one header every pane uses (conversation, thread, person and Agent profiles, Activity list,
+ * Members), so side-by-side panes share their rules (task #136): a 48px title row
+ * (`h-pane-title`) and, when `bar` is given, a 38px second row (`h-pane-bar`) for tabs or the
+ * pane's own actions. `bar={null}` keeps an empty second row (loading and error states), so the
+ * band does not jump when content arrives. `barAlign="rule"` sets underline tabs on the row's
+ * bottom rule, letting the active tab's underline stand in for it; `"center"` centres pills.
+ */
 export function PaneHeader({
   children,
   bar,
