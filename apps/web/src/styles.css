@@ -144,6 +144,40 @@ body {
   strong {
     font-weight: 600;
   }
+
+  /* Headings wrap into lines of even length, and paragraphs never end on one word. The longhands
+   * leave `white-space`/`truncate` free to keep a line from wrapping at all. */
+  h1,
+  h2,
+  h3 {
+    text-wrap-style: balance;
+  }
+  p,
+  li,
+  blockquote,
+  figcaption {
+    text-wrap-style: pretty;
+  }
+
+  /* Chinese text, in any interface language (a Chinese message reads the same in the English
+   * interface): a thin gap where Han meets Latin letters or digits, so copy and messages need no
+   * typed spaces; and an opening bracket at the start of a line lines up with the text above
+   * instead of leaving half its width blank. Neither touches text with no Chinese in it. Not in code
+   * or anything being typed. Set once on the root and inherited, so the exclusions below (and the
+   * highlighted spans inside code) win. */
+  :root {
+    text-autospace: normal;
+    text-spacing-trim: trim-start;
+  }
+  code,
+  kbd,
+  samp,
+  pre,
+  input,
+  textarea,
+  [contenteditable]:not([contenteditable="false"]) {
+    text-autospace: no-autospace;
+  }
 }
 
 details summary::-webkit-details-marker {
