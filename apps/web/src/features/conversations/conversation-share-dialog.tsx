@@ -5,7 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
 import { Button } from "#src/components/base/buttons/button";
-import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { Dialog, Modal, ModalOverlay, SheetGrabber } from "#src/components/ui/modal";
 import { useAppToast } from "#src/components/ui/toast";
 import {
   UnsavedChangesDialog,
@@ -273,17 +273,17 @@ export function ConversationShareDialog({
         className="max-sm:px-0 max-sm:[--modal-pb:0px]"
       >
         <Modal
-          className={cn("w-full max-sm:rounded-t-2xl max-sm:rounded-b-none", layout.modalClassName)}
+          className={cn(
+            "w-full max-sm:relative max-sm:rounded-t-2xl max-sm:rounded-b-none",
+            layout.modalClassName,
+          )}
         >
+          <SheetGrabber className="inset-x-14" />
           <Dialog className="flex max-h-[inherit] flex-col overflow-y-auto text-left max-sm:h-[min(88dvh,var(--visual-viewport-height))]">
-            <div
-              aria-hidden="true"
-              className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-quaternary/40 sm:hidden"
-            />
             <DialogHeader
               title={copy.title}
               onClose={sending ? undefined : guard.requestClose}
-              className="px-4 pt-3 pb-3 sm:px-6 sm:pt-5"
+              className="px-4 pt-6 pb-3 sm:px-6 sm:pt-5"
             />
             {layout.arrange({
               target: (

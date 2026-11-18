@@ -113,7 +113,7 @@ export function dragDismisses(offset: number, velocity: number, height: number):
 
 const VELOCITY_WINDOW_MS = 100;
 
-function SheetGrabber() {
+export function SheetGrabber({ className }: { className?: string }) {
   const state = useContext(OverlayTriggerStateContext);
   const drag = useRef<{
     pointer: number;
@@ -159,7 +159,10 @@ function SheetGrabber() {
     <div
       aria-hidden="true"
       data-sheet-grabber
-      className="absolute inset-x-0 top-0 z-10 flex h-11 cursor-grab touch-none justify-center sm:hidden"
+      className={cx(
+        "absolute inset-x-0 top-0 z-10 flex h-11 cursor-grab touch-none justify-center sm:hidden",
+        className,
+      )}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
         event.currentTarget.setPointerCapture(event.pointerId);
