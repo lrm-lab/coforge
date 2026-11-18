@@ -147,7 +147,7 @@ test("an artifact's public link: turned on from the pill, served to a visitor, t
     await browser("wait", "--fn", artifactChromeReady);
     expect(await copiedLink()).toBe(pageOf(doc.id));
     const docUrl = await turnOn(doc.id);
-    expect(await copiedLink()).toBe(docUrl);
+    expect(await copiedLink()).toBe(pageOf(doc.id));
     const served = await fetch(docUrl, { redirect: "manual" });
     expect(served.status).toBe(302);
     expect(served.headers.get("set-cookie")).toBeNull();
@@ -176,6 +176,10 @@ test("an artifact's public link: turned on from the pill, served to a visitor, t
     await gone(docUrl);
     await turnOff();
     await gone(again);
+    await bot.push(doc.id, 1, { "plan.md": `We open signups on Tuesday (run ${tail}).` });
+    await browser("open", `${pageOf(doc.id)}?version=1`);
+    await browser("wait", "--fn", artifactChromeReady);
+    expect(await copiedLink()).toBe(`${pageOf(doc.id)}?version=1`);
 
     const webUrl = await turnOn(web.id);
     await visit(webUrl, `Signups ${tail}`);

@@ -5,18 +5,12 @@ import { isNotFound, isRedirect } from "@tanstack/react-router";
 
 import { AppError } from "#src/lib/app-error";
 
-// Where a visitor lands is decided by three server reads: whether they are signed in, the page
-// `/` opens for them (`null` when they are in no Workspace), and — after signing out to switch
-// account — the page a returning browser should sign in to again. All three are stood in for.
 let signedIn = false;
-// Whether the signed-in person has been asked for a name (`User.displayName` is set).
 let named = true;
 let startPage: string | null = null;
 
 await mockModuleForFile("#src/features/auth/current-user.functions", () => ({
   getAuthenticationStatus: async () => signedIn,
-  // The signed-in person is one with no email address (a phone-number sign-up), named by their
-  // name: having no email does not make them a signed-out visitor.
   getSignedInAccount: async () => (signedIn ? { account: "Ada Lovelace", named } : null),
 }));
 await mockModuleForFile("#src/features/profiles/profile.functions", () => ({
@@ -36,7 +30,6 @@ await mockModuleForFile("#src/features/workspaces/workspaces.functions", () => (
     current: { id: "workspace-1", slug: "acme", name: "Acme" },
   }),
 }));
-// The Workspace layout's other reads: they only have to answer for the layout to load.
 const workspaceReads = {
   "#src/features/notifications/notifications.functions": { getBrowserNotificationSettings: {} },
   "#src/features/agents/workspace-agents.functions": {
@@ -57,12 +50,17 @@ for (const [path, reads] of Object.entries(workspaceReads)) {
   }));
 }
 await mockModuleForFile("#src/features/settings/assumed-viewport.functions", () => ({
-  // Read from the request on a real server; nothing here is a phone.
   loadAssumedPhone: () => false,
 }));
-// The browser's zone from its cookie: read from the request, which a unit test has none of.
 await mockModuleForFile("#src/features/settings/time-zone-cookie.functions", () => ({
   loadCookieTimeZone: () => undefined,
+}));
+let visitorUrl: string | null | Error = null;
+await mockModuleForFile("#src/features/artifacts/artifact-visitor.functions", () => ({
+  artifactVisitorUrl: async () => {
+    if (visitorUrl instanceof Error) throw visitorUrl;
+    return visitorUrl;
+  },
 }));
 let joinPreview: unknown = null;
 const joinFunctions = await import("#src/features/workspaces/join-links.functions");
@@ -81,6 +79,7 @@ beforeEach(() => {
   named = true;
   startPage = null;
   joinPreview = null;
+  visitorUrl = null;
 });
 
 async function landing(
@@ -105,7 +104,6 @@ function redirectTarget(thrown: unknown): string | undefined {
   return thrown.options.href ?? String(thrown.options.to);
 }
 
-/** Where a redirect goes to (`/welcome`) and what it carries as `returnTo`. */
 function nameStepTarget(thrown: unknown): { to?: string; returnTo?: string } | undefined {
   if (!isRedirect(thrown)) return undefined;
   const search = thrown.options.search as { returnTo?: string } | undefined;
@@ -146,6 +144,7 @@ test("a Workspace URL a person in no Workspace cannot open sends them to create 
   signedIn = true;
   const thrown = await landing(workspaceLayout.options.beforeLoad, {
     params: { workspaceSlug: "gone" },
+    location: { href: "/w/gone" },
   });
   expect(redirectTarget(thrown)).toBe("/workspaces/new");
 });
@@ -155,8 +154,26 @@ test("a Workspace URL that is not theirs is still not found for a person with Wo
   startPage = "/w/acme";
   const thrown = await landing(workspaceLayout.options.beforeLoad, {
     params: { workspaceSlug: "gone" },
+    location: { href: "/w/gone" },
   });
   expect(isNotFound(thrown)).toBe(true);
+});
+
+const publicArtifactPage = {
+  params: { workspaceSlug: "acme" },
+  location: { href: "/w/acme/artifacts/0199e1f2-3c4d-7a5b-8c6d-7e8f9a0b1c2d" },
+};
+
+test("a public artifact's page sends a visitor who cannot read it to its public link", async () => {
+  visitorUrl = "https://a-0199e1f2.usercontent.example/p/token";
+  const thrown = await landing(workspaceLayout.options.beforeLoad, publicArtifactPage);
+  expect(redirectTarget(thrown)).toBe(visitorUrl);
+});
+
+test("an artifact's page the visitor gets no public link for goes on to open the Workspace", async () => {
+  signedIn = true;
+  const thrown = await landing(workspaceLayout.options.beforeLoad, publicArtifactPage);
+  expect(redirectTarget(thrown)).toBe("/workspaces/new");
 });
 
 test("the first-Workspace page shows for a signed-in person in no Workspace", async () => {
@@ -175,9 +192,6 @@ test("the first-Workspace page sends a person who has Workspaces back to theirs"
 test("the first-Workspace page asks a signed-out visitor to sign in", async () => {
   expect(redirectTarget(await landing(firstWorkspacePage.options.beforeLoad, {}))).toBe("/login");
 });
-
-// A signed-in person who has not been asked for a name is sent to `/welcome` once, from
-// every page that would otherwise make their personal Workspace or open one: the answer titles it.
 
 test("the first-Workspace page asks an unnamed person for their name first", async () => {
   signedIn = true;
@@ -232,4 +246,11 @@ test("the Workspace layout loads for a named person", async () => {
   });
   expect(isRedirect(result)).toBe(false);
   expect(result).toMatchObject({ user: { id: "user-1" } });
+});
+
+test("an artifact's page whose public link check fails still opens the Workspace", async () => {
+  signedIn = true;
+  visitorUrl = new Error("session store unavailable");
+  const thrown = await landing(workspaceLayout.options.beforeLoad, publicArtifactPage);
+  expect(redirectTarget(thrown)).toBe("/workspaces/new");
 });

@@ -23,6 +23,12 @@ These rules apply to `src/features/artifacts/`. They extend
   (`use-artifact-visibility.tsx`); narrowing and link changes confirm, and a person never sees a
   fixed "everyone, always" rule. Sending to people who cannot read it is held until the sender
   chooses to widen, share by link, or send anyway.
+- Copy link always copies the artifact's page link, with `?version=` while a version is pinned (as
+  Raft). While the artifact is public, a full load of that page link sends anyone who cannot read it
+  (signed out, outside the Workspace or the home) to the public view: the `/w/$workspaceSlug` layout
+  asks `artifactVisitorUrl` before opening the Workspace, and the answer is the token URL the
+  sandbox serves, or nothing alike for off, missing and deleted. So while public, the Workspace slug
+  and artifact id are as good as the token; turning the link off ends both.
 - The viewer's actions live in the page header and the ⋯ menu (`artifact-more-menu.tsx`); show an
   action only when the viewer may do it.
 - An artifact's own page owns the window: its route sets `staticData.standalone`, which makes

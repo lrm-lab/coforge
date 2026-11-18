@@ -7,9 +7,11 @@ import {
   artifactsDisabled,
   artifactsEnabled,
   artifactTier,
+  artifactReadView,
   canManageArtifactSharing,
   requireArtifactRead,
 } from "./artifact-access.server";
+import { publicPageLookup } from "./artifact-public-page.server";
 
 function mintToken(): string {
   const bytes = new Uint8Array(32);
@@ -18,6 +20,9 @@ function mintToken(): string {
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
+
+const publicLinkUrl = (origin: string, artifactId: string, token: string) =>
+  `${artifactPageOrigin(origin, artifactId)}/p/${token}`;
 
 export async function revokeArtifactPublicLinks(
   tx: Prisma.TransactionClient,
@@ -38,6 +43,40 @@ export class ArtifactPublicLinks {
     private readonly signals?: ArtifactSignals,
   ) {}
 
+  async visitorUrl(input: {
+    workspaceSlug: string;
+    artifactId: string;
+    reader: () => Promise<string | null>;
+  }): Promise<string | null> {
+    const origin = artifactSandboxOrigin();
+    if (!origin) return null;
+    const live = await this.db.artifactPublicLink.findFirst({
+      where: {
+        artifactId: input.artifactId,
+        revokedAt: null,
+        artifact: { workspace: { slug: input.workspaceSlug } },
+      },
+      select: {
+        token: true,
+        artifact: {
+          select: { workspaceId: true, homeKey: true, access: true, authorAgentId: true },
+        },
+      },
+    });
+    if (!live) return null;
+    const [servable, userId] = await Promise.all([
+      publicPageLookup(this.db, this.enabled)(live.token),
+      input.reader(),
+    ]);
+    if (!servable) return null;
+    if (
+      userId !== null &&
+      (await artifactReadView(this.db, live.artifact.workspaceId, { userId }, live.artifact))
+    )
+      return null;
+    return publicLinkUrl(origin, input.artifactId, live.token);
+  }
+
   async read(input: { workspaceId: string; artifactId: string; userId: string }) {
     if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     const artifact = await this.db.artifact.findFirst({
@@ -55,8 +94,7 @@ export class ArtifactPublicLinks {
     const live = artifact.publicLinks.at(0);
     return {
       available: origin !== null,
-      url:
-        origin && live ? `${artifactPageOrigin(origin, input.artifactId)}/p/${live.token}` : null,
+      url: origin && live ? publicLinkUrl(origin, input.artifactId, live.token) : null,
     };
   }
 
@@ -101,7 +139,7 @@ export class ArtifactPublicLinks {
         changed: live === null,
         result: {
           enabled: true as const,
-          url: `${artifactPageOrigin(origin, input.artifactId)}/p/${token}`,
+          url: publicLinkUrl(origin, input.artifactId, token),
         },
       };
     });

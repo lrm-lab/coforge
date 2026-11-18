@@ -6,10 +6,6 @@ import { publicPageLookup } from "#src/server/artifacts/artifact-public-page.ser
 import { rememberArtifactSandboxConfig } from "#src/server/artifacts/artifact-sandbox-config.server";
 import { conversationRealtimeChannel } from "#src/features/conversations/conversation-realtime";
 
-/**
- * Reading an artifact's public link (task #646): whoever can see the artifact sees whether it can
- * have one and the one it has; anyone else gets what a missing artifact gets.
- */
 const connectionString = Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL must point to local PostgreSQL");
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
@@ -25,7 +21,6 @@ let bystander: string;
 let outsider: string;
 let channelId: string;
 
-/** An artifact whose entry file is `index.<extension>`: its type is that file's. */
 const artifact = (extension: string) =>
   db.artifact.create({
     data: {
@@ -244,11 +239,9 @@ test("a public link shows the current version's entry and any one file of it", a
   });
   expect(await lookup(token, "site.css")).toMatchObject({ sha256: "css", entryPath: "home.html" });
   expect(await lookup(token, "img/a.png")).toMatchObject({ sha256: "png" });
-  // The current version only; and no file means no answer.
   expect(await lookup(token, "old.css")).toBeNull();
   expect(await lookup(token, "nope.css")).toBeNull();
   expect(await lookup("x".repeat(43))).toBeNull();
-  // Off while the experiment is off, and once the link is revoked.
   enabled = false;
   expect(await lookup(token, "site.css")).toBeNull();
   enabled = true;
@@ -293,4 +286,71 @@ test("a public link to a file entry is looked up with its kind and size", async 
     sha256: "pdf",
     sizeBytes: 4096,
   });
+});
+
+const servable = async () => {
+  const made = await db.artifact.create({
+    data: {
+      workspaceId,
+      homeKey: `conversation:${channelId}`,
+      name: `visit-${crypto.randomUUID()}`,
+      entryPath: "index.html",
+      currentVersion: 1,
+    },
+  });
+  await db.artifactVersion.create({
+    data: {
+      artifactId: made.id,
+      number: 1,
+      entryPath: "index.html",
+      changedPaths: [],
+      idempotencyKey: `visit-${made.id}`,
+      files: {
+        create: [
+          { artifactId: made.id, path: "index.html", sha256: "h", sizeBytes: 1, kind: "text" },
+        ],
+      },
+    },
+  });
+  return made.id;
+};
+
+test("the artifact's page link opens its public view for anyone who cannot read it, while it is public", async () => {
+  const artifactId = await servable();
+  const slug = `apl-${handle}`;
+  const visit = (userId: string | null, artifact = artifactId, workspaceSlug = slug) =>
+    links.visitorUrl({ workspaceSlug, artifactId: artifact, reader: async () => userId });
+  expect(await visit(null)).toBeNull();
+  const set = await links.set({ workspaceId, artifactId, userId: owner, enabled: true });
+  const url = set.enabled ? set.url : "";
+  expect(await visit(null)).toBe(url);
+  expect(await visit(outsider)).toBe(url);
+  expect(await visit(bystander)).toBe(url);
+  expect(await visit(reader)).toBeNull();
+  expect(await visit(owner)).toBeNull();
+  expect(await visit(null, crypto.randomUUID())).toBeNull();
+  expect(await visit(null, artifactId, `apl-other-${handle}`)).toBeNull();
+  switchedOn = false;
+  try {
+    expect(await visit(null)).toBeNull();
+  } finally {
+    switchedOn = true;
+  }
+  await db.conversation.update({
+    where: { id: channelId },
+    data: { hiddenFromWorkspaceAt: new Date() },
+  });
+  try {
+    expect(await visit(null)).toBeNull();
+  } finally {
+    await db.conversation.update({
+      where: { id: channelId },
+      data: { hiddenFromWorkspaceAt: null },
+    });
+  }
+  await links.set({ workspaceId, artifactId, userId: owner, enabled: false });
+  expect(await visit(null)).toBeNull();
+  await links.set({ workspaceId, artifactId, userId: owner, enabled: true });
+  await db.artifact.update({ where: { id: artifactId }, data: { deletedAt: new Date() } });
+  expect(await visit(null)).toBeNull();
 });

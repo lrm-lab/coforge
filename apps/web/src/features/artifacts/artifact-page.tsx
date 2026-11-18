@@ -284,15 +284,16 @@ function ArtifactPageFor({
     if (await copyText(text)) toast.success(done);
     else toast.error(m.conversation_copy_failed());
   };
-  const copyLink = async () => {
-    const shared = await link.current().catch(() => undefined);
-    if (shared === undefined) return void toast.error(m.conversation_copy_failed());
-    await copy(
-      shared ??
-        `${window.location.origin}${router.buildLocation(artifactPageRoute(workspaceSlug, artifactId)).publicHref}`,
+  const copyLink = () =>
+    copy(
+      `${window.location.origin}${
+        router.buildLocation({
+          ...artifactPageRoute(workspaceSlug, artifactId),
+          search: pinned === null ? {} : { version: pinned },
+        }).publicHref
+      }`,
       m.doc_link_copied(),
     );
-  };
   const backHome = () => {
     if (pane) pane.onClose();
     else void router.navigate(homeLinkProps(home, workspaceSlug));
