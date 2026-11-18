@@ -303,7 +303,17 @@ export function resolveContractBaseline(
   if (fetchTag) {
     Bun.spawnSync(
       ["git", "fetch", "--force", "origin", "refs/tags/web-production:refs/tags/web-production"],
-      { cwd, stdout: "ignore", stderr: "ignore" },
+      {
+        cwd,
+        stdout: "ignore",
+        stderr: "ignore",
+        timeout: 15_000,
+        env: {
+          ...process.env,
+          GIT_HTTP_LOW_SPEED_LIMIT: "1000",
+          GIT_HTTP_LOW_SPEED_TIME: "15",
+        },
+      },
     );
   }
   const tagCheck = Bun.spawnSync(
