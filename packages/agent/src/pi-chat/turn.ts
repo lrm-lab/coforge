@@ -45,6 +45,16 @@ export class PiChatTurn {
   progress() {
     return this.runtime.progress?.();
   }
+  approvals() {
+    return this.runtime.approvals?.() ?? [];
+  }
+  nativePage(cursor?: string) {
+    return this.runtime.nativePage?.(cursor);
+  }
+  decide(id: string, decision: "allow" | "deny") {
+    if (!this.runtime.decide) throw new Error("approval is no longer pending");
+    return this.runtime.decide(id, decision);
+  }
   enqueue(text: string, mode: "steer" | "followUp") {
     if (!this.runtime.enqueue) throw new Error("Pi input is unavailable");
     return this.runtime.enqueue(text, mode);

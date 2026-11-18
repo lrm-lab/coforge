@@ -9,7 +9,7 @@ import {
 } from "@lrm/coforge-sdk/internal/pi-chat";
 import { PI_SESSION_DIR } from "#src/paths";
 
-const reserved = new Set([PI_SESSION_DIR, ".chat-index"]);
+const reserved = new Set([PI_SESSION_DIR, ".chat-index", ".codex-chat-index"]);
 type Upload = {
   name: string;
   total: number;

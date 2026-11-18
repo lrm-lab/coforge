@@ -2,6 +2,7 @@ import {
   PI_CHAT_CAPABILITY,
   PI_CHAT_CONTROLS_CAPABILITY,
   PI_CHAT_FILES_CAPABILITY,
+  WORKBENCH_CODEX_CAPABILITY,
 } from "@lrm/coforge-sdk/internal/pi-chat-wire";
 import { RedisComputerCapabilityLease } from "#src/server/computers/computer-capability-lease.server";
 import { openRedisClient } from "#src/server/redis-client.server";
@@ -10,6 +11,14 @@ import { redisUrlFor } from "#src/server/redis-url.server";
 let lease: RedisComputerCapabilityLease | undefined;
 let controls: RedisComputerCapabilityLease | undefined;
 let files: RedisComputerCapabilityLease | undefined;
+let codex: RedisComputerCapabilityLease | undefined;
+export function getWorkbenchCodexLease() {
+  return (codex ??= new RedisComputerCapabilityLease(
+    openRedisClient(redisUrlFor("Codex workbench")),
+    WORKBENCH_CODEX_CAPABILITY,
+    "workbench-codex",
+  ));
+}
 export function getPiChatFilesLease() {
   return (files ??= new RedisComputerCapabilityLease(
     openRedisClient(redisUrlFor("Pi chat files")),

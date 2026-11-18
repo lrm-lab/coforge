@@ -59,6 +59,42 @@ function fixture() {
 }
 
 describe("Pi chat sessions", () => {
+  test("pins a Codex session to its native runtime across worker restarts", async () => {
+    const f = fixture();
+    const runtimes: (string | undefined)[] = [];
+    const factory = async (id?: string, _model?: unknown, runtime?: string) => {
+      runtimes.push(runtime);
+      return f.factory(id);
+    };
+    const sessions = new PiChatSessions(f.store, factory);
+    const first = await sessions.start({
+      requestId: crypto.randomUUID(),
+      message: "first",
+      runtime: "codex",
+    });
+    await sessions.stop(first.id);
+    await sessions.dispose();
+    expect(first.runtime).toBe("codex");
+    const restored = new PiChatSessions(f.store, factory);
+    try {
+      await expect(
+        restored.start({
+          sessionId: first.id,
+          requestId: crypto.randomUUID(),
+          message: "switch",
+          runtime: "pi",
+        }),
+      ).rejects.toThrow("runtime mismatch");
+      await restored.start({
+        sessionId: first.id,
+        requestId: crypto.randomUUID(),
+        message: "continue",
+      });
+      expect(runtimes).toEqual(["codex", "codex"]);
+    } finally {
+      await restored.dispose();
+    }
+  });
   test("reports a running session until its final state is saved and mutations are available", async () => {
     const f = fixture();
     const saving = Promise.withResolvers<void>();

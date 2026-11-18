@@ -7,6 +7,8 @@ import type {
   PiChatModel,
   PiChatQueue,
   PiChatProgress,
+  WorkbenchApproval,
+  WorkbenchRuntime,
 } from "@lrm/coforge-sdk/internal/pi-chat";
 import type { PiChatCheckpoint } from "./checkpoint";
 import { PiChatTurn } from "./turn";
@@ -24,12 +26,22 @@ export interface PiChatRuntime {
   queue?(): PiChatQueue;
   takeQueue?(): PiChatQueue;
   progress?(): PiChatProgress;
+  approvals?(): WorkbenchApproval[];
+  decide?(id: string, decision: "allow" | "deny"): Promise<void>;
+  nativePage?(cursor?: string): Promise<WorkbenchTranscriptPage>;
 }
+export type WorkbenchTranscriptPage = { messages: PiChatMessage[]; cursor?: string };
+export type WorkbenchCodex = {
+  open(id?: string): Promise<PiChatRuntime>;
+  history(id: string, cursor?: string): Promise<WorkbenchTranscriptPage>;
+  archive(id: string): Promise<void>;
+};
 export interface PiChatStore {
   list(): Promise<PiChatSession[]>;
   save(session: PiChatSession): Promise<void>;
   remove(id: string): Promise<void>;
   messages(id: string): Promise<PiChatMessage[]>;
+  codexHistory?(id: string, cursor?: string): Promise<WorkbenchTranscriptPage>;
   wasAccepted(requestId: string): Promise<boolean>;
   checkpoint(id: string): Promise<PiChatCheckpoint | undefined>;
   saveCheckpoint(id: string, checkpoint: PiChatCheckpoint): Promise<void>;
@@ -46,7 +58,11 @@ export class PiChatSessions {
   readonly #recovery: { row: PiChatSession; checkpoint: PiChatCheckpoint }[] = [];
   constructor(
     private readonly store: PiChatStore,
-    private readonly createRuntime: (id?: string, model?: PiChatModel) => Promise<PiChatRuntime>,
+    private readonly createRuntime: (
+      id?: string,
+      model?: PiChatModel,
+      runtime?: WorkbenchRuntime,
+    ) => Promise<PiChatRuntime>,
     private readonly onUpdate: (update: PiChatUpdate) => void = () => {},
     private readonly listModels: () => Promise<(PiChatModel & { name: string })[]> = async () => [],
   ) {
@@ -68,6 +84,19 @@ export class PiChatSessions {
         row.status = "stopped";
         await this.store.save(row);
         await this.store.clearCheckpoint(row.id);
+        continue;
+      }
+      if (row.runtime === "codex") {
+        if (
+          row.requestIds.includes(checkpoint.requestId) &&
+          !row.interruptedInputs?.some(({ id }) => id === checkpoint.requestId)
+        ) {
+          row.interruptedInputs = [
+            ...(row.interruptedInputs ?? []),
+            { id: checkpoint.requestId, text: checkpoint.message, mode: "followUp" },
+          ];
+          await this.store.save(row);
+        }
         continue;
       }
       // Native queues are volatile. A restart cannot prove whether an accepted queued input
@@ -118,10 +147,14 @@ export class PiChatSessions {
       .map((row) => ({ ...row }))
       .sort((a, b) => b.updatedAt - a.updatedAt);
   }
-  async read(id: string, before?: number) {
+  async read(id: string, before?: number, cursor?: string) {
     await this.#ready;
     const session = this.#record(id);
     const active = this.#active.get(id);
+    if (session.runtime === "codex" && this.store.codexHistory) {
+      const page = await (active?.nativePage(cursor) ?? this.store.codexHistory(id, cursor));
+      return { session: { ...session }, ...page, approvals: active?.approvals() ?? [] };
+    }
     const messages = active ? active.messages() : await this.store.messages(id);
     const end = Math.min(before ?? messages.length, messages.length);
     const start = Math.max(0, end - 50);
@@ -131,6 +164,7 @@ export class PiChatSessions {
       before: start,
       queue: active?.queue() ?? { steering: [], followUp: [] },
       progress: active?.progress(),
+      ...(active ? { approvals: active.approvals() } : {}),
     };
   }
   start(input: {
@@ -139,6 +173,7 @@ export class PiChatSessions {
     message: string;
     mode?: "steer" | "followUp";
     model?: PiChatModel;
+    runtime?: WorkbenchRuntime;
   }) {
     return this.#exclusive(async () => {
       if (this.#closing) throw new Error("chat worker is stopping");
@@ -148,11 +183,17 @@ export class PiChatSessions {
       if (old) {
         if (input.sessionId && input.sessionId !== old.id)
           throw new Error("request belongs to another session");
+        if (input.runtime && input.runtime !== (old.runtime ?? "pi"))
+          throw new Error("request belongs to another runtime");
         return { ...old };
       }
       if (await this.store.wasAccepted(input.requestId))
         throw new Error("request belongs to a deleted session");
-      if (input.sessionId) this.#record(input.sessionId);
+      const prior = input.sessionId ? this.#record(input.sessionId) : undefined;
+      const selected = prior ? (prior.runtime ?? "pi") : (input.runtime ?? "pi");
+      if (input.runtime && input.runtime !== selected) throw new Error("session runtime mismatch");
+      if (selected === "codex" && (input.model || input.mode))
+        throw new Error("Codex uses the computer's configured model");
       const active = input.sessionId ? this.#active.get(input.sessionId) : undefined;
       if (active && input.mode) {
         if (active.acceptingInput)
@@ -161,7 +202,7 @@ export class PiChatSessions {
       }
       if ((input.sessionId && this.#active.has(input.sessionId)) || this.#active.size >= 4)
         throw new Error("session is busy");
-      const runtime = await this.createRuntime(input.sessionId, input.model);
+      const runtime = await this.createRuntime(input.sessionId, input.model, selected);
       const previous = this.#records.get(runtime.id);
       const row: PiChatSession = {
         id: runtime.id,
@@ -170,6 +211,7 @@ export class PiChatSessions {
         status: "running",
         requestIds: [...(previous?.requestIds ?? []), input.requestId],
         model: runtime.model(),
+        ...(selected === "codex" ? { runtime: selected } : {}),
         interruptedInputs: previous?.interruptedInputs,
       };
       try {
@@ -303,21 +345,40 @@ export class PiChatSessions {
     });
   }
   async execute(command: PiChatCommand): Promise<PiChatResult> {
+    if ("sessionId" in command && command.sessionId) {
+      await this.#ready;
+      if ((this.#record(command.sessionId).runtime ?? "pi") !== (command.runtime ?? "pi"))
+        throw new Error("session runtime mismatch");
+    }
     switch (command.action) {
       case "files":
       case "file":
       case "upload":
         throw new Error("File commands require the private worker");
       case "list":
-        return { sessions: await this.list() };
+        return {
+          sessions: (await this.list()).filter((row) =>
+            command.includeCodex && !command.runtime
+              ? true
+              : (row.runtime ?? "pi") === (command.runtime ?? "pi"),
+          ),
+        };
       case "models":
         return { models: await this.listModels() };
       case "take_queue":
         return this.takeQueue(command.sessionId);
       case "read":
-        return this.read(command.sessionId, command.before);
+        return this.read(command.sessionId, command.before, command.cursor);
       case "start":
         return { session: await this.start(command) };
+      case "approval": {
+        return this.#exclusive(async () => {
+          const active = this.#active.get(command.sessionId);
+          if (!active?.acceptingInput) throw new Error("approval is no longer pending");
+          await active.decide(command.approvalId, command.decision);
+          return { ok: true };
+        });
+      }
       case "stop":
         return { session: await this.stop(command.sessionId) };
       case "rename":
