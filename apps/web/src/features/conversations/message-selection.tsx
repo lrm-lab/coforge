@@ -45,7 +45,6 @@ export function MessageSelectionHost({ children }: { children: ReactNode }) {
     () => {
       if (!document.querySelector("[role=dialog], [role=menu]")) exit();
     },
-    // Taken, so the chat's full screen, which yields to select mode, does not also see it.
     { enabled: active, preventDefault: true },
   );
   const value = useMemo(() => ({ state, toggle, exit }), [state, toggle, exit]);

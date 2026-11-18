@@ -4,10 +4,6 @@ import { ConversationListResizeHandle } from "#src/features/conversations/conver
 import { SIDEBAR_COLUMN } from "#src/features/conversations/conversation-list-width";
 import { cx } from "#src/utils/cx";
 
-/** The expanded sidebar's width: the width dragged on its edge (`SIDEBAR_COLUMN`), else 13.75rem,
- * 220px at the default text size. Written out whole for Tailwind; it repeats
- * `SIDEBAR_COLUMN.property`. Never under 13.75rem, whatever the text size, though the dragged width
- * is kept in pixels. */
 const SIDEBAR_WIDTH_CLASS = "w-(--sidebar-width,13.75rem) min-w-55";
 
 type ExpandedItemType = NavItemType & { icon: FC<{ className?: string }>; current?: boolean };

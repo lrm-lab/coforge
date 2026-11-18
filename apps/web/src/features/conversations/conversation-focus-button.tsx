@@ -6,8 +6,6 @@ import { HEADER_ICON_CLASS } from "./conversation-header-tabs";
 import type { FocusedPanel } from "./conversation-focus-model";
 import { useConversationFocus } from "./conversation-focus";
 
-/** A panel's full screen toggle, from `lg` where the panels stand side by side; none outside the
- * chat page. */
 export function ConversationFocusButton({ panel = "chat" }: { panel?: FocusedPanel }) {
   const focus = useConversationFocus();
   if (!focus) return null;
