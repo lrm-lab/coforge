@@ -19,7 +19,17 @@ async function refusalOf(response: Response) {
   return {
     message: typeof record.error === "string" ? record.error : `HTTP ${response.status}`,
     code: typeof record.code === "string" ? record.code : undefined,
+    uploadTo:
+      record.details && typeof record.details === "object"
+        ? (record.details as Record<string, unknown>).uploadTo
+        : undefined,
   };
+}
+
+function reuploadAction(uploadTo: unknown) {
+  return typeof uploadTo === "string"
+    ? `Upload the file again with \`coforge attachment upload --path <file> --target '${uploadTo}'\`, then reply with the new attachment id.`
+    : "Upload the file again to this task's conversation, then reply with the new attachment id.";
 }
 
 /**
@@ -60,9 +70,16 @@ export async function taskConversationRequest(
     });
   }
   if (!response.ok) {
-    const { message, code } = await refusalOf(response);
+    const { message, code, uploadTo } = await refusalOf(response);
     const failure = (name: string, retryable: boolean) =>
-      new CliError({ code: name, message, retryable });
+      new CliError({
+        code: name,
+        message,
+        retryable,
+        ...(name === "ATTACHMENT_IN_OTHER_CONVERSATION"
+          ? { suggestedNextAction: reuploadAction(uploadTo) }
+          : {}),
+      });
     if (response.status >= 500) throw failure("SERVER_5XX", true);
     if (response.status === 404 && !code) throw failure("NOT_FOUND", false);
     throw failure(code ? code.toUpperCase() : operationFailedCode(operation), false);

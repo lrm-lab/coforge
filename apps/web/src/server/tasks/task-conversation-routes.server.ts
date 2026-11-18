@@ -6,6 +6,7 @@ import {
 } from "#src/features/conversations/conversation.schemas";
 
 import { AppError } from "#src/lib/app-error";
+import { agentErrorResponse } from "#src/server/agents/agent-http-middleware.server";
 import {
   readAgentJsonBody,
   agentRouteDomainErrorResponse,
@@ -51,6 +52,8 @@ const asRef = (body: { channel: string; task_number: number }) => ({
 function failure(error: unknown) {
   if (error instanceof z.ZodError)
     return Response.json({ error: "invalid task request", code: "INVALID_INPUT" }, { status: 400 });
+  if (error instanceof AppError && error.code === "ATTACHMENT_IN_OTHER_CONVERSATION")
+    return agentErrorResponse(error);
   if (error instanceof AppError)
     return agentRouteDomainErrorResponse(error, "task request refused");
   console.error("[agent] Task conversation request failed", error);

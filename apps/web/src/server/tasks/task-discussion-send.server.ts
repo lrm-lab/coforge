@@ -1,5 +1,6 @@
 import { LIVE_TASK_WHERE } from "#src/server/tasks/task-view.server";
 import type { MentionSelectorInput } from "@lrm/coforge-sdk/internal";
+import type { Prisma } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import { userUploadedAttachmentWhere } from "#src/server/attachments/message-attachments.server";
@@ -12,6 +13,7 @@ import {
   writeMessageReferences,
 } from "#src/server/conversations/message-references.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
+import { attachmentInOtherConversation } from "./task-attachment-elsewhere.server";
 import type { Transaction } from "./task-board-ports.server";
 import { memberId } from "./task-board-ports.server";
 import { discussionOf, followTask, joinDiscussion } from "./task-discussion-store.server";
@@ -55,21 +57,33 @@ export async function postTaskMessage(
   const seat = await joinDiscussion(tx, workspaceId, conversationId, member);
 
   const attachmentIds = [...new Set(input.attachmentIds ?? [])];
+  const uploader: Prisma.AttachmentWhereInput = member.userId
+    ? userUploadedAttachmentWhere(member.userId)
+    : { uploaderAgentId: member.agentId };
   const available = attachmentIds.length
     ? await tx.attachment.findMany({
         where: {
           id: { in: attachmentIds },
           conversationId,
           workspaceId,
-          ...(member.userId
-            ? userUploadedAttachmentWhere(member.userId)
-            : { uploaderAgentId: member.agentId }),
+          ...uploader,
           messageId: null,
         },
         select: { id: true },
       })
     : [];
-  if (available.length !== attachmentIds.length) throw new AppError("ACCESS_DENIED");
+  if (available.length !== attachmentIds.length) {
+    const availableIds = new Set(available.map((attachment) => attachment.id));
+    throw (
+      (await attachmentInOtherConversation(tx, {
+        workspaceId,
+        conversationId,
+        missingIds: attachmentIds.filter((id) => !availableIds.has(id)),
+        uploader,
+        agentId: member.agentId,
+      })) ?? new AppError("ACCESS_DENIED")
+    );
+  }
 
   const stored = await storeMessageBody(
     tx,

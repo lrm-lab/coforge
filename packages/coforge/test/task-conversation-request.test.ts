@@ -109,3 +109,24 @@ test("the local client sends a task conversation request through the proxy", asy
   expect(await client.taskConversation({ route: "following" })).toEqual({ tasks: [] });
   expect(String(fetch.mock.calls[0]![0])).toBe(`${proxyUrl}${routes.following.path}`);
 });
+
+test("an attachment uploaded to another conversation names it and says where to upload it again", async () => {
+  answers(
+    Response.json(
+      {
+        error:
+          "attachment belongs to another conversation: attachment a1 was uploaded to #design; upload it again with --target '#design:#164'",
+        code: "ATTACHMENT_IN_OTHER_CONVERSATION",
+        details: { attachmentId: "a1", uploadedTo: "#design", uploadTo: "#design:#164" },
+      },
+      { status: 409 },
+    ),
+  );
+  const refused = await failure(send({ route: "reply", body: {} }));
+  expect(refused.code).toBe("ATTACHMENT_IN_OTHER_CONVERSATION");
+  expect(refused.message).toContain("attachment a1 was uploaded to #design");
+  expect(refused.retryable).toBe(false);
+  expect(refused.suggestedNextAction).toBe(
+    "Upload the file again with `coforge attachment upload --path <file> --target '#design:#164'`, then reply with the new attachment id.",
+  );
+});

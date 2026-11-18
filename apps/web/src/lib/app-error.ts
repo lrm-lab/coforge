@@ -18,6 +18,7 @@ export const APP_ERROR_CODES = [
   "INVALID_TARGET",
   "TARGET_NOT_ACCESSIBLE",
   "RATE_LIMITED",
+  "ATTACHMENT_IN_OTHER_CONVERSATION",
 ] as const;
 
 export type AppErrorCode = (typeof APP_ERROR_CODES)[number];
@@ -56,6 +57,7 @@ export const APP_ERROR_HTTP_STATUS: Record<AppErrorCode, number> = {
   // deliberately — the send reveals neither.
   TARGET_NOT_ACCESSIBLE: 403,
   RATE_LIMITED: 429,
+  ATTACHMENT_IN_OTHER_CONVERSATION: 409,
 };
 
 const APP_ERROR_PREFIX = "COFORGE_APP_ERROR:";

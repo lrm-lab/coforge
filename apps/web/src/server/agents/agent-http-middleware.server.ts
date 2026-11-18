@@ -59,6 +59,7 @@ const APP_ERROR_REASON: Record<AppErrorCode, string> = {
   INVALID_TARGET: "invalid target",
   TARGET_NOT_ACCESSIBLE: "target is not accessible",
   RATE_LIMITED: "rate limited",
+  ATTACHMENT_IN_OTHER_CONVERSATION: "attachment belongs to another conversation",
 };
 
 /**
