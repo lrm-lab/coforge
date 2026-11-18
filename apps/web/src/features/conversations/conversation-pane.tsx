@@ -71,25 +71,17 @@ export function ConversationPane({
   mentionCompletion = true,
   keepsReadCursor = true,
 }: ConversationPaneProps) {
-  // Days and times follow the viewer's locale and time zone (their saved one, else the browser's).
-  // The pane is only ever rendered in the browser, so the locale is known at once.
   const timeZone = useTimeZone();
   const dateLocale = getLocale();
   const toast = useAppToast();
-  // Reply-to-selection: the row hands over a finished quote, the composer puts it in the draft.
-  // The counter (never the text) is the identity of an insertion, so highlighting the same words
-  // twice inserts twice.
   const [quotedDraft, setQuotedDraft] = useState<{ id: number; text: string } | undefined>();
   const quoteSequenceRef = useRef(0);
-  // A read-only pane (a preview, an archived channel) offers nothing that writes a message.
   const canCompose = !readOnlyNotice;
   const quoteSelection = useCallback((text: string) => {
     if (!text) return;
     quoteSequenceRef.current += 1;
     setQuotedDraft({ id: quoteSequenceRef.current, text });
   }, []);
-  // Row event handlers keep one identity across renders (`useLatestCallback`), so the memoized
-  // rows skip a pane render that did not change them.
   const toggleReaction = useLatestCallback(
     onToggleReaction
       ? (messageId: string, emoji: string, active: boolean) => {
@@ -103,10 +95,6 @@ export function ConversationPane({
   const openPersonProfile = useLatestCallback(onOpenPersonProfile);
   const openTaskReference = useLatestCallback(onOpenTask);
   const openThread = useLatestCallback(onOpenThread);
-  // Saving (#127) is viewer-global state with a conversation-scoped write: the pane owns the
-  // conversation id, the Chat page's Saved context owns the list every star (and the Saved view)
-  // reads. Membership-gated exactly like the channel gates its row actions; outside the Chat
-  // page there is no context, so the rows simply offer no save.
   const savedMessages = useSavedMessages();
   const onToggleSave = useLatestCallback(
     savedMessages && conversation.senderMemberId
@@ -137,7 +125,6 @@ export function ConversationPane({
     enabled: !root && conversation.hasOlder,
     onLoadOlder,
   });
-  // The initial position and divider are captured once per conversation or thread open.
   const { boundary: openBoundary, openKey } = useConversationOpen(
     conversation,
     root?.id,
@@ -146,9 +133,6 @@ export function ConversationPane({
   );
   const isOwn = (message: { senderMemberId?: string | null }) =>
     isViewerMessage(message, conversation.senderMemberId);
-  // The viewer's messages the server has not confirmed yet (or failed to take), shown greyed at the
-  // foot of the stream until the real message replaces them (see `composer-outbox.ts`). Only a new
-  // send scrolls this pane to its latest messages.
   const { outbox, outboxEntries, outboxDraftKey, shownOutbox } = usePaneOutbox({
     conversation,
     rootId: root?.id,
@@ -160,11 +144,8 @@ export function ConversationPane({
       } else void showLatestMessages();
     },
   });
-  // The side pane's replies marker (the task popup puts the task in place of the root, so it has
-  // none). Pending replies count: the marker is there from the first send, not after it lands.
   const threadMarker =
     Boolean(root) && !inTaskPopup && conversation.messages.length + shownOutbox.length > 0;
-  // The first pending row continues the viewer's run of messages right above it, as a sent one would.
   const outboxContinues = outboxContinuesRun(
     conversation.messages,
     isOwn,
@@ -172,26 +153,12 @@ export function ConversationPane({
     dateLocale,
     timeZone,
   );
-  /** Message ids whose very long body the reader has opened in full. Kept here rather than in the
-   * row: a row is skipped and laid out again as it leaves and re-enters the viewport, and an
-   * expanded message must not re-collapse behind the reader. */
   const { expandedMessages, toggleExpandedMessage } = useMessageExpansion();
   const collapsible = conversation.collapseLongMessages === true;
-  // A thread, or the Task popup's discussion: a reply's composer and no stream notices.
   const narrow = Boolean(root) || inTaskPopup;
-  // The message column's side room follows the pane's own width (`MESSAGE_COLUMN_CLASS` gives it
-  // up in a narrow pane), so a thread beside a channel keeps none while one that fills the page, as
-  // on Activity, lines up as a channel does. Only the Task popup's discussion goes without: its
-  // dialog has margins of its own.
   const column = !inTaskPopup;
   const composerHost = useComposerHost(root?.id, inTaskPopup);
-  // A window replacement in flight (an "around" read) has no messages yet, but that is not an
-  // empty conversation: only a settled read may say so (stream-state.ts, #112/#113).
   const streamLoading = streamState(conversation.messages.length, streamRead) === "loading";
-  // Runs of consecutive system messages fold into one summary line (system-message-groups.ts),
-  // across days as Raft's do: a notice from a later day than its group's carries its date. A run
-  // never crosses the unread divider, so the message the pane opens on (the unread boundary) is
-  // always a group's first message or a row of its own.
   const visibleMessages = useMemo(
     () => conversation.messages.filter((message) => message.weeklyReportHidden !== true),
     [conversation.messages],
@@ -236,7 +203,6 @@ export function ConversationPane({
       onReadLatest,
     });
 
-  // The cards a thread asks include its root's, shown above the replies.
   const cardMessages = useMemo(
     () => (root ? [root, ...visibleMessages] : visibleMessages),
     [root, visibleMessages],
@@ -261,9 +227,6 @@ export function ConversationPane({
         <div className="group/history relative min-h-0 flex-1">
           <div
             ref={historyRef}
-            // The router matches restored scroll targets by a structural selector unless the
-            // element names itself, and every conversation renders the same structure — so
-            // without this the previous conversation's offset is applied to this one.
             data-scroll-restoration-id={`conversation-${conversation.conversationId}${root ? `-thread-${root.id}` : ""}`}
             aria-label={root ? m.conversation_thread() : m.conversation_history()}
             onScroll={trackReadingPosition}
@@ -273,7 +236,6 @@ export function ConversationPane({
             onKeyDown={bottomPin.read}
             className="h-full overflow-y-auto pb-9 [scrollbar-width:thin]"
           >
-            {/* The side room sits inside the scroller, so the scrollbar stays on the pane edge. */}
             <div className={column ? MESSAGE_COLUMN_CLASS : undefined}>
               {lead && <div data-scroll-lead>{lead}</div>}
               {root && !inTaskPopup && root.weeklyReportHidden !== true && (
@@ -314,9 +276,6 @@ export function ConversationPane({
                   emptyState={emptyState}
                 />
               ) : (
-                // Every loaded row is rendered, in normal flow. Nothing here computes a row's position
-                // or its height, so no measurement can shift a row under the reader and no scroll
-                // correction is needed while you read; the scrollbar is the real content height.
                 <ConversationMessageList
                   conversation={conversation}
                   root={root}

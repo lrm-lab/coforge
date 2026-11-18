@@ -15,7 +15,6 @@ import type { ForwardedMessageView } from "./message-forward";
 import { forwardSourceTarget } from "./message-forward-model";
 import type { MessageView } from "./message-view";
 
-/** Where the original was, as the card's right-hand label reads it. */
 function fromLabel({ sourceConversation, sourceThreadRootId }: ForwardedMessageView) {
   const thread = sourceThreadRootId !== undefined;
   if (sourceConversation.name === null) {
@@ -27,7 +26,6 @@ function fromLabel({ sourceConversation, sourceThreadRootId }: ForwardedMessageV
     : m.message_forward_from_channel({ name });
 }
 
-/** An original's attachments: the ones it names, or all of the message's when it is the only one. */
 function attachmentsOf(
   forwarded: ForwardedMessageView,
   attachments: MessageView["attachments"],
@@ -36,14 +34,6 @@ function attachmentsOf(
   return ids ? attachments.filter((attachment) => ids.includes(attachment.id)) : attachments;
 }
 
-/**
- * A forwarded message's card: the frozen originals in a bordered box under the forwarder's note,
- * oldest first, one or a selection of several. The row stream, Saved, search and Activity draw it
- * for a forward, and the Forward dialog draws the same card for what it is about to send, where
- * the originals are not accessible yet. The card holds the attachments, copies of the originals',
- * each under its own original. Its "from #x" label opens the (first) original ("Open source
- * message") only where the viewer can open it now; a selection comes from one conversation.
- */
 export function ForwardedMessageCard({
   forwarded,
   attachments,
@@ -64,8 +54,6 @@ export function ForwardedMessageCard({
       <div className="flex items-center justify-between gap-3 text-xs">
         <span className="inline-flex shrink-0 items-center gap-1 font-medium text-secondary">
           <FlipForward aria-hidden="true" className="size-3.5" />
-          {/* "Forwarded message" / "已转发 2 条消息": the kind of thing, lighter. The
-              space is the language's own (none in Chinese), so it lives in the message. */}
           {several ? (
             <span>
               {m.message_forward_badge_several()}
@@ -80,7 +68,6 @@ export function ForwardedMessageCard({
             </span>
           )}
         </span>
-        {/* As Raft's: where it came from is also the way back to it, when the viewer can open it. */}
         {target ? (
           <Link
             {...target}
@@ -115,8 +102,6 @@ function ForwardedOriginal({
 }) {
   const hydrated = useHydrated();
   const timeFormat = useTimeFormat();
-  // The snapshot keeps the original's body as stored, an image-only send's filename placeholder
-  // included; the row drops that placeholder, and so does the card.
   const body = attachmentMessageDisplayBody({ body: original.sourceBody, attachments });
   const rawBody =
     original.sourceRawBody === undefined
@@ -153,8 +138,7 @@ function ForwardedOriginal({
           </time>
         </p>
         {original.sourceRawBody !== undefined && original.sourceMentions
-          ? // The original's own words with their chips. A task it names is the source
-            rawBody && (
+          ? rawBody && (
               <ConversationIdProvider conversationId={undefined}>
                 <MessageBody body={rawBody} mentions={original.sourceMentions} />
               </ConversationIdProvider>

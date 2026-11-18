@@ -37,48 +37,19 @@ import { ReviewLanding } from "./attachment-review-address";
 import type { MessageView } from "./message-view";
 import type { ReadState } from "./conversation-pane-layout";
 
-// The conversation pane reads the day with the rows it groups.
 export { dayLabel };
 export { groupsWithPrevious } from "./message-view";
 
-/** A row is a plain flow item: its height is whatever its content needs, and nothing — neither
- * this file nor the conversation around it — estimates that height in advance.
- *
- * Off-screen skipping (`content-visibility: auto` with `contain-intrinsic-size: auto 160px`) was
- * tried here and removed: it gives every never-rendered row a 160px placeholder, and prepending
- * older history at the top of the pane then forces a batch of those placeholders to resolve to
- * their real heights inside the viewport. The resulting shift re-triggers scroll anchoring, which
- * changes which rows count as near the viewport, which lays out more of them — a feedback loop
- * that pins the main thread until the renderer is killed. */
 export const ROW_CLASS = "flex flex-col";
-/** The margin above a row that starts a sender run (see `MessageRow`'s spacing): none under
- * another message row, whose gap is padding instead. */
 export const RUN_START_CLASS = "mt-2 first:mt-0 md:mt-4 [[data-message-row]+&]:mt-0";
-/**
- * A message's padding inside its hover background. Between two message rows the whole gap is
- * padding, split evenly, so two hover backgrounds meet halfway between the messages (task #255):
- * 2px each inside a sender run, 16px each between runs from `md` up, 12px on a phone. Next to
- * anything else (a divider, a notice, the list's start) a row keeps 4px below and 12px above its
- * sender heading, with the run's margin. The row is a direct child of its `li`, which carries
- * `data-message-row` (`messageRowKind`).
- */
 export const messagePaddingClass = (grouped: boolean) =>
   cn(
     grouped ? "pt-0.5" : "pt-3 md:[[data-message-row]+[data-message-row=start]>&]:pt-4",
     "pb-1 [li:has(+[data-message-row=continue])>&]:pb-0.5 [li:has(+[data-message-row=start])>&]:pb-3 md:[li:has(+[data-message-row=start])>&]:pb-4",
   );
-/** What a row is to the rows around it: a sender run's continuation, its start, or a start under a
- * divider (which keeps its own spacing). */
 export const messageRowKind = (grouped: boolean, divided = false) =>
   grouped ? "continue" : divided ? "divided" : "start";
 
-/**
- * One history row: optional day divider, then the message with its hover actions.
- *
- * Memoized: a conversation re-renders on every send, poll, page and pane change, and a row only
- * needs to when its own message or row state does. Callers keep its props stable (`useCallback`,
- * `useLatestCallback` for event handlers) so an unrelated change skips the row.
- */
 export const MessageRow = memo(function MessageRow({
   message,
   conversationId,
@@ -110,57 +81,24 @@ export const MessageRow = memo(function MessageRow({
   own: boolean;
   dayChanged: boolean;
   grouped: boolean;
-  /** Whether this message's very long body is showing in full. Owned by the conversation rather
-   * than the row, so a row that re-renders (or is skipped and rendered again as you scroll) never
-   * collapses behind the reader. */
   expanded: boolean;
-  /** Called with this row's message id, so one stable handler serves every row. */
   onToggleExpanded: (messageId: string) => void;
-  /** Whether a long body may fold at all (the viewer's "Collapse long messages" preference). */
   collapsible?: boolean;
-  /** The conversation's unread run begins at this row: draws the divider above. */
   unreadStartsHere?: boolean;
-  /** A position jump just landed on this row, so it wears the anchor highlight for a moment. The
-   * `#message-<id>` deep link gets that from `:target` below; a saved jump carries no hash
-   * (#713) and the pane highlights the row by id instead — same classes, either way. */
   highlighted?: boolean;
   dateLocale?: string;
-  /** Opens a root's thread. Present, the row offers its thread (the toolbar and sheet entries,
-   * and the preview card), each reading its own root's thread summary (`thread-summary.tsx`). */
   onOpenThread?: (rootId: string) => void;
-  /** Shows the Task the message became under it (`MessageTask`): the conversation's own stream
-   * does, a thread pane (whose root the Task popup already shows) does not. */
   showsTask?: boolean;
-  /** Toggles the viewer's own emoji reaction on a message; the conversation refreshes it. */
   onToggleReaction?: (messageId: string, emoji: string, active: boolean) => void;
-  /** Saves/unsaves this message for the viewer (#127): the conversation owns the write, the
-   * Chat page's Saved context supplies `saved`. Absent, the row offers no save action. */
   onToggleSave?: (messageId: string, saved: boolean) => Promise<void>;
-  /** Opens the Agent profile panel, on a given tab when one is named; present only where the
-   * conversation owns that slot (`features/agents/profile-panel/`'s `openAgentProfile`). Absent, the
-   * avatar/name render inert and the avatar has no hover card. */
   onOpenAgentProfile?: OpenAgentProfile;
-  /** Opens a person's profile panel from a person sender's avatar or name; absent, they render
-   * inert. Your own messages open yours too. */
   onOpenPersonProfile?: OpenPersonProfile;
-  /** The viewing user's id; a mention of them renders with the stronger "me" chip, and a reaction
-   * with them among its reactors is theirs. */
   viewerId?: string;
-  /** The conversation's member directory as handle → chip, so a plain `@handle` in the body
-   * (DM text, or a channel body written without the completion) still renders the member's
-   * display label. Absent, plain handles render as literal text. */
   plainMentions?: Map<string, ChipMention>;
-  /** Opens a task reference's detail popup (see `MessageBody`). */
   onOpenTask?: (number: number) => void;
-  /** Channel id → current name, for the channel links in the body (see `MessageBody`). */
   channelNames?: ReadonlyMap<string, string>;
-  /** Offers "reply to this selection" on a highlight inside this row's body: the row hands back
-   * the finished markdown quote, credited to the message it came from. Absent (e.g. the
-   * conversation has no composer to put it in), no affordance is offered and no selection is
-   * read at all. */
   onQuoteSelection?: (quote: string) => void;
   readState?: ReadState;
-  /** The "N seen" entry on an own message without ticks (a thread reply). */
   seenBy?: boolean;
 }) {
   const timeFormat = useTimeFormat();
@@ -175,20 +113,11 @@ export const MessageRow = memo(function MessageRow({
     message.senderKind === "user" && message.senderUserId && onOpenPersonProfile
       ? message.senderUserId
       : undefined;
-  // The sender's profile, an Agent's or a person's, when the conversation offers it.
   const openSenderProfile = openableAgentId
     ? () => onOpenAgentProfile?.(openableAgentId)
     : openablePersonId
       ? () => onOpenPersonProfile?.(openablePersonId)
       : undefined;
-  // A deleted sender is visually muted: a grey avatar tone and an `ARCHIVED` badge beside the name.
-  // Its profile still opens, read-only.
-  // An Agent's avatar in the stream carries the same online/working/thinking/error/offline dot the
-  // sidebar, conversation header and @-mention popup use, so you can tell whether the Agent that
-  // wrote a message is around right now without opening its profile. It reads that one Agent from
-  // the live store. The mascot stays a still sticker in the stream (`mascots.md`). A sender's face
-  // carries its status dot, a person's online state as an Agent's (Frank, 11-04, task #510); a
-  // deleted Agent shows no dot — not a presence state.
   const avatar =
     message.senderKind === "agent" && message.senderAgentId ? (
       <ActorAvatar
@@ -209,8 +138,6 @@ export const MessageRow = memo(function MessageRow({
         deleted={deleted}
       />
     );
-  // Reply-to-selection (`message-quote-selection.tsx`): the body's gestures read the highlight,
-  // and the bar offers quoting or copying it.
   const quoteSelection = useQuoteSelection({
     onQuoteSelection,
     author: displayName,
@@ -228,11 +155,9 @@ export const MessageRow = memo(function MessageRow({
       onToggleSave,
       inStream: showsTask,
     });
-  // Select mode (`message-selection.tsx`): only the conversation's own stream, which shows Tasks.
   const selection = useRowSelection({ message, conversationId, channelNames, inStream: showsTask });
   const writtenBody = attachmentMessageDisplayBody(message);
   const displayBody = useBodyWithArtifactTitles(writtenBody, message.artifactCards);
-  // A system notice renders as one muted line, not a person talking (`SystemMessageRow`).
   if (message.senderKind === "system")
     return (
       <SystemMessageRow
@@ -243,29 +168,18 @@ export const MessageRow = memo(function MessageRow({
         dateLocale={dateLocale}
       />
     );
-  // A forward's own text is its note; an empty one leaves only the card.
   const showsBody = !message.forwarded || writtenBody.trim() !== "";
-  // An own message's ticks follow its last word; one with no text keeps them at its bottom right.
   const textTicks =
     readState && !message.actionCard && displayBody.trim() ? (
       <OwnMessageTicks readState={readState} inline />
     ) : undefined;
   return (
-    // Spacing (docs/design/page-skeleton-and-density.md): a message keeps 12px between its
-    // content and its hover background at the sides; a same-sender continuation sits 4px under the
-    // row above whether that row has the sender heading or not, as in Raft. Two sender runs are
-    // 32px apart content to content from `md` up and 24px on a phone, where 32px read as a blank
-    // band between short messages (task #118). Between two message rows that gap is padding split
-    // evenly, so hover backgrounds meet halfway (`messagePaddingClass`, task #255). The row is
-    // inset 4px (24px column: 12px) so the content stays on the stream's column with the composer
-    // and the dividers.
     <li
       data-message-id={message.id}
       data-message-row={messageRowKind(grouped, dayChanged || unreadStartsHere)}
       className={cn(
         ROW_CLASS,
         !grouped && !dayChanged && !unreadStartsHere && RUN_START_CLASS,
-        // A continuation under a thread preview card starts 16px below the card (design spec).
         grouped && "[li:has([data-thread-preview])+&]:mt-3",
       )}
     >
@@ -309,13 +223,10 @@ export const MessageRow = memo(function MessageRow({
           )}
           {message.actionCard ? (
             <>
-              {/* The summary (and draft hint) stay accessible, in the viewer's language as the
-                  lists write it; the card renders them. */}
               <span className="sr-only">
                 {actionCardPreviewText(
                   message.actionCard.preview && {
                     ...message.actionCard.preview,
-                    // The whole note, which the preview cuts for lists.
                     hint: message.actionCard.draftHint,
                   },
                 ) || message.body}
@@ -323,10 +234,6 @@ export const MessageRow = memo(function MessageRow({
               <ActionCard card={message.actionCard} asker={message.senderName} />
             </>
           ) : showsBody ? (
-            // `relative` anchors the reply-to-selection affordance to the body it was highlighted
-            // out of; the gesture handlers live here rather than on the row so dragging from a
-            // message's text (its timestamp, say) cannot raise an offer for it. It is also the text
-            // the scroll anchor holds in place across a load (`data-scroll-anchor`).
             <div
               ref={quoteSelection.bodyRef}
               data-scroll-anchor
@@ -362,11 +269,8 @@ export const MessageRow = memo(function MessageRow({
               )}
             </div>
           ) : null}
-          {/* A file's review opened from this message lands here when its address is opened again;
-              a reply's thread is in the address already. */}
           <ReviewLanding value={message.threadRootId ? undefined : message.id}>
             {message.forwarded && (
-              // The attachments are the card's; the footer below draws none for a forward.
               <ForwardedMessageCard
                 forwarded={message.forwarded}
                 attachments={message.attachments}
