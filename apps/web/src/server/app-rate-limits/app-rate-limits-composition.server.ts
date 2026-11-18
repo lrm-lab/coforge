@@ -1,9 +1,11 @@
 import { openRedisClient } from "#src/server/redis-client.server";
 import {
+  NO_PEEKABLE_RATE_LIMIT,
   NO_RATE_LIMIT,
   RateLimitOutageLog,
   RedisAppRateLimit,
   type AppRateLimit,
+  type PeekableRateLimit,
 } from "./app-rate-limit.server";
 
 const WINDOW_MS = 60_000;
@@ -17,6 +19,11 @@ export const PUBLIC_ARTIFACT_LIMIT_PER_MINUTE = 120;
 /** The other files of public artifact pages (styles, scripts, images, fonts) a minute per client
  * IP: a page may be up to 200 files, and a reader opens several. */
 export const PUBLIC_ARTIFACT_FILE_LIMIT_PER_MINUTE = 2000;
+/** Misses a minute per client IP on a link-tier artifact's address (no such artifact, or not shared
+ * by link): one refusal for both, so a miss tells nothing. */
+export const PUBLIC_ARTIFACT_MISS_LIMIT_PER_MINUTE = 20;
+/** Misses a minute across every client past which a warning is logged; nothing is refused. */
+export const PUBLIC_ARTIFACT_MISS_GLOBAL_WARN_PER_MINUTE = 300;
 export const ARTIFACT_AGENT_WRITE_LIMIT_PER_MINUTE = 60;
 export const ARTIFACT_ZIP_LIMIT_PER_MINUTE = 10;
 /** Comment posts, comment image uploads and will-notify previews a minute per person. */
@@ -27,6 +34,8 @@ export type AppRateLimits = {
   installation: AppRateLimit;
   publicArtifact: AppRateLimit;
   publicArtifactFile: AppRateLimit;
+  publicArtifactMiss: PeekableRateLimit;
+  publicArtifactMissGlobal: AppRateLimit;
   artifactWrite: AppRateLimit;
   artifactZip: AppRateLimit;
   artifactPersonComment: AppRateLimit;
@@ -75,6 +84,18 @@ function createAppRateLimits(redisUrl: string | undefined): AppRateLimits {
       windowMs: WINDOW_MS,
       outageLog,
     }),
+    publicArtifactMiss: new RedisAppRateLimit(redis, {
+      keyPrefix: "coforge:ratelimit:public-artifact-miss:v1",
+      limit: PUBLIC_ARTIFACT_MISS_LIMIT_PER_MINUTE,
+      windowMs: WINDOW_MS,
+      outageLog,
+    }),
+    publicArtifactMissGlobal: new RedisAppRateLimit(redis, {
+      keyPrefix: "coforge:ratelimit:public-artifact-miss-global:v1",
+      limit: PUBLIC_ARTIFACT_MISS_GLOBAL_WARN_PER_MINUTE,
+      windowMs: WINDOW_MS,
+      outageLog,
+    }),
     artifactWrite: new RedisAppRateLimit(redis, {
       keyPrefix: "coforge:ratelimit:artifact-write:v1",
       limit: ARTIFACT_AGENT_WRITE_LIMIT_PER_MINUTE,
@@ -112,6 +133,8 @@ function unconfiguredLimits(outageLog: RateLimitOutageLog): AppRateLimits {
     installation: limit,
     publicArtifact: limit,
     publicArtifactFile: limit,
+    publicArtifactMiss: NO_PEEKABLE_RATE_LIMIT,
+    publicArtifactMissGlobal: limit,
     artifactWrite: limit,
     artifactZip: limit,
     artifactPersonComment: limit,
