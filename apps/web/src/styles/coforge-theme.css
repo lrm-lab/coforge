@@ -45,6 +45,7 @@
 
   --color-online: #1bb618;
   --color-offline: #afbccb;
+  --color-external: #5aa7e0;
 
   --color-avatar-deleted: #afbccb;
 
@@ -132,6 +133,7 @@
 
     --color-online: #42c83f;
     --color-offline: #778393;
+    --color-external: #4f9bd6;
     --color-avatar-deleted: #778393;
     --color-avatar-more: var(--color-sidebar-accent);
     --color-avatar-more-fg: var(--color-sidebar-accent-fg);

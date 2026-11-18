@@ -20,6 +20,7 @@ const NO_CAPTION: {
   alertText?: string;
   /** What gets the Agent going again, when a person has to act (`STOP_REASON_RECOVERY`). */
   recovery?: "retry" | "reset_session";
+  lastActiveAt?: number;
 } = {};
 
 /**
@@ -73,11 +74,13 @@ export function agentDisplay(display?: AgentDisplaySnapshot, options?: { stopped
               (display.detailKind === AGENT_ACTIVITY_DETAIL_KIND.SUBAGENT_ACTIVITY
                 ? SUBAGENT_WORKING
                 : "Working…"));
+  const externalAway = display.computerId === "" && kind === "offline" && !needsPerson;
   return {
     kind,
     label,
     isOnline: kind !== "offline",
-    tone: kind === "online" ? ("idle" as const) : kind,
+    tone: externalAway ? ("external" as const) : kind === "online" ? ("idle" as const) : kind,
+    ...(externalAway && display.lastSeenAtMs ? { lastActiveAt: display.lastSeenAtMs } : {}),
     pulse: isBusyTone(kind),
     // `alert`: someone has to act, so the word reads red, with a warning sign (`AgentStatusMarker`).
     ...(needsPerson

@@ -5,7 +5,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { AgentMascotAvatar } from "#src/features/agents/agent-mascot-avatar";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
-import { AgentStatusMarker } from "#src/features/agents/agent-status-marker";
+import { AgentStatusMarker, AgentStatusText } from "#src/features/agents/agent-status-marker";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import { useLiveAgent } from "#src/features/agents/workspace-agents-realtime";
 import { useWatchAgentDisplay } from "#src/features/agents/watched-agent-displays";
@@ -123,7 +123,7 @@ export function DirectConversationHeader({
                       : "min-w-0 flex-1 truncate text-sm text-tertiary",
                   )}
                 >
-                  {status.label}
+                  <AgentStatusText status={status} />
                 </p>
               </div>
             )}

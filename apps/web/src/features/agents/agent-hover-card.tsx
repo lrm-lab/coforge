@@ -14,7 +14,7 @@ import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 import { presentActivityRows } from "./agent-activity-presentation";
 import { agentDisplay } from "./agent-status-display";
-import { AgentStatusMarker } from "./agent-status-marker";
+import { AgentStatusMarker, AgentStatusText } from "./agent-status-marker";
 import { ActivityMarker } from "./activity-marker";
 import { RECENT_ACTIVITY_LIMIT } from "./agent-activity";
 import {
@@ -156,7 +156,9 @@ function AgentCard({
             {display && !view.alert && (
               <span className="flex min-w-0 items-center gap-1 text-xs text-tertiary">
                 <AgentStatusMarker status={view} className="size-1.5 shrink-0" />
-                <span className="truncate">{view.label}</span>
+                <span className="truncate">
+                  <AgentStatusText status={view} />
+                </span>
               </span>
             )}
           </div>

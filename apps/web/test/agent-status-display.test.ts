@@ -222,3 +222,48 @@ test("each runtime refusal reaches the error banner as its own sentence", () => 
     expect(view.alert).toBeUndefined();
   }
 });
+
+test("an external Agent out of its window reads as external since its last activity", () => {
+  const external = display({
+    computerId: "",
+    activityKind: "offline",
+    detailKind: "",
+    detail: "",
+    expiresAt: null,
+    lastSeenAtMs: 1_700_000_000_000,
+  });
+  expect(agentDisplay(external)).toMatchObject({
+    kind: "offline",
+    label: m.agent_status_offline(),
+    isOnline: false,
+    tone: "external",
+    lastActiveAt: 1_700_000_000_000,
+  });
+  const neverSeen = agentDisplay({ ...external, lastSeenAtMs: null });
+  expect(neverSeen.tone).toBe("external");
+  expect(neverSeen.lastActiveAt).toBeUndefined();
+  const stopped = agentDisplay(external, { stopped: true });
+  expect(stopped.tone).toBe("external");
+  expect(stopped.lastActiveAt).toBe(1_700_000_000_000);
+  expect(stopped.statusDetail).toBeDefined();
+});
+
+test("an external Agent inside its window reads like any online Agent", () => {
+  const online = agentDisplay(
+    display({
+      computerId: "",
+      activityKind: "online",
+      detailKind: "",
+      detail: "",
+      lastSeenAtMs: 1_700_000_000_000,
+    }),
+  );
+  expect(online).toMatchObject({ kind: "online", tone: "idle", isOnline: true });
+  expect(online.lastActiveAt).toBeUndefined();
+});
+
+test("a managed Agent offline keeps the plain offline dot", () => {
+  const view = agentDisplay(display({ activityKind: "offline", expiresAt: null }));
+  expect(view.tone).toBe("offline");
+  expect(view.lastActiveAt).toBeUndefined();
+});

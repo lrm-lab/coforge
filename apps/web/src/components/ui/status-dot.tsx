@@ -10,6 +10,7 @@ export type StatusTone =
   | "offline"
   | "error"
   | "output"
+  | "external"
   | "unknown";
 
 /** Presence greens/greys are the CoForge `online`/`offline` tokens (coforge-theme.css), which
@@ -26,6 +27,8 @@ export function statusToneClass(tone: StatusTone) {
       return "bg-error-solid";
     case "output":
       return "bg-utility-sky-500";
+    case "external":
+      return "bg-external";
     default:
       return "bg-offline";
   }
