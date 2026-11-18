@@ -38,15 +38,17 @@ export function ComposerEdgeOverlay({
             className="col-start-1 min-w-0"
           />
           {onShowLatest && (
-            <div className="col-start-2 pointer-events-auto mb-2 justify-self-center">
-              <NewMessagesPill
-                conversationId={conversationId}
-                rootId={threadRootId ?? undefined}
-                viewerId={viewerId}
-                unreadCount={unreadCount}
-                onlyNew={onlyNew}
-                onShowLatest={onShowLatest}
-              />
+            <div className="col-start-2 flex h-0 items-end justify-self-center">
+              <div className="pointer-events-auto -translate-y-2">
+                <NewMessagesPill
+                  conversationId={conversationId}
+                  rootId={threadRootId ?? undefined}
+                  viewerId={viewerId}
+                  unreadCount={unreadCount}
+                  onlyNew={onlyNew}
+                  onShowLatest={onShowLatest}
+                />
+              </div>
             </div>
           )}
           <div className={`${onShowLatest ? "col-start-3" : "col-start-2"} justify-self-end`}>
