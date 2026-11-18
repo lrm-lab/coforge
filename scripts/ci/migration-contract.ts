@@ -295,21 +295,33 @@ function pathsInRevision(revision: string, prefix: string[]): string[] {
   return git(tree).toString().split("\0").filter(Boolean);
 }
 
-function hasRevision(revision: string): boolean {
-  return (
-    Bun.spawnSync(["git", "rev-parse", "--verify", "--quiet", `${revision}^{commit}`], {
-      stdout: "ignore",
-      stderr: "ignore",
-    }).exitCode === 0
+export function resolveContractBaseline(
+  source: ChangeSource,
+  cwd?: string,
+  fetchTag = true,
+): { revision: string; label: string } {
+  if (fetchTag) {
+    Bun.spawnSync(
+      ["git", "fetch", "--force", "origin", "refs/tags/web-production:refs/tags/web-production"],
+      { cwd, stdout: "ignore", stderr: "ignore" },
+    );
+  }
+  const tagCheck = Bun.spawnSync(
+    ["git", "rev-parse", "--verify", "--quiet", "refs/tags/web-production^{commit}"],
+    { cwd, stdout: "pipe", stderr: "ignore" },
   );
-}
-
-function baseRevision(source: ChangeSource): { revision: string; label: string } {
-  if (hasRevision("refs/tags/web-production")) {
+  if (tagCheck.exitCode === 0) {
+    const sha = tagCheck.stdout.toString().trim().slice(0, 9);
+    console.info(`migration-contract: using refs/tags/web-production (${sha}) as baseline.`);
     return { revision: "refs/tags/web-production", label: "production (web-production)" };
   }
-  const fallback =
-    source.kind === "range" ? source.base : hasRevision("origin/main") ? "origin/main" : "HEAD";
+  const hasOriginMain =
+    Bun.spawnSync(["git", "rev-parse", "--verify", "--quiet", "origin/main^{commit}"], {
+      cwd,
+      stdout: "ignore",
+      stderr: "ignore",
+    }).exitCode === 0;
+  const fallback = source.kind === "range" ? source.base : hasOriginMain ? "origin/main" : "HEAD";
   console.warn(
     `migration-contract: web-production tag not found; falling back to ${fallback} as baseline.`,
   );
@@ -326,7 +338,7 @@ export function migrationContractViolations(source: ChangeSource) {
   }
   if (drops.length === 0) return [];
 
-  const base = baseRevision(source);
+  const base = resolveContractBaseline(source);
   const checkRevision = (revision: string, label: string) => {
     const prismaPaths = pathsInRevision(revision, ["apps/web/prisma"]).filter((p) =>
       PRISMA_PATH.test(p),
