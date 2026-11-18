@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from "react";
+import { Cloud01, Link01, Monitor01 } from "@untitledui/icons";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Heading, Radio, RadioGroup } from "react-aria-components";
@@ -55,9 +56,9 @@ export function NewAgentDialog({
 }
 
 const KINDS = [
-  { id: "cloud", label: m.agent_create_kind_cloud },
-  { id: "local", label: m.agent_create_kind_local },
-  { id: "external", label: m.agent_create_kind_external },
+  { id: "cloud", label: m.agent_create_kind_cloud, icon: Cloud01 },
+  { id: "local", label: m.agent_create_kind_local, icon: Monitor01 },
+  { id: "external", label: m.agent_create_kind_external, icon: Link01 },
 ] as const;
 
 type AgentKind = (typeof KINDS)[number]["id"];
@@ -112,7 +113,7 @@ function NewAgentForms({
               value={option.id}
               className={({ isSelected, isFocusVisible, isDisabled }) =>
                 cx(
-                  "flex h-8 cursor-pointer items-center justify-center rounded-md text-sm font-medium transition duration-100 ease-linear",
+                  "flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-md text-sm font-medium transition duration-100 ease-linear",
                   isSelected
                     ? "bg-primary text-primary shadow-xs ring-1 ring-primary"
                     : "text-tertiary hover:text-secondary",
@@ -121,6 +122,7 @@ function NewAgentForms({
                 )
               }
             >
+              <option.icon aria-hidden className="size-4 shrink-0" />
               {option.label()}
             </Radio>
           ))}
