@@ -140,6 +140,7 @@
   "apps_deleting": "正在删除…",
   "apps_delete_error": "无法删除应用，请重试。",
   "apps_register_submit": "注册应用",
+  "apps_register_short": "注册",
   "apps_save": "保存",
   "apps_saving": "保存中…",
   "apps_error_key": "请使用 3 到 64 个小写字母、数字或连字符并以字母开头，或者留空。",

@@ -140,6 +140,7 @@
   "apps_deleting": "Deleting…",
   "apps_delete_error": "Couldn't delete the app. Try again.",
   "apps_register_submit": "Register app",
+  "apps_register_short": "Register",
   "apps_save": "Save",
   "apps_saving": "Saving…",
   "apps_error_key": "Use 3 to 64 lowercase letters, digits or hyphens, starting with a letter, or leave it empty.",

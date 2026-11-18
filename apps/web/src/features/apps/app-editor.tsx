@@ -4,6 +4,7 @@ import { XClose } from "@untitledui/icons";
 import { Heading } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { PhoneFormBar } from "#src/components/ui/phone-form-bar";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Alert } from "#src/components/ui/alert";
@@ -53,6 +54,7 @@ export function AppEditor({ open, onClose, ...form }: AppEditorProps) {
   return (
     <>
       <ModalOverlay
+        page
         isOpen={open}
         isKeyboardDismissDisabled={saving}
         onOpenChange={(next) => {
@@ -123,6 +125,7 @@ function AppEditorForm({
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const editing = app !== undefined;
+  const formRef = useRef<HTMLFormElement>(null);
   const [draft, setDraft] = useState<AppDraft>(() => (app ? draftOf(app) : EMPTY_APP_DRAFT));
   const permissions = app?.permissions;
   const [groups, setGroups] = useState<AppPermissionGroup[]>(() => permissions?.declared ?? []);
@@ -241,8 +244,16 @@ function AppEditorForm({
   );
 
   return (
-    <form noValidate onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-3 border-b border-secondary px-6 py-4">
+    <form ref={formRef} noValidate onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+      <PhoneFormBar
+        heading={editing ? m.apps_edit_title({ name: app.name }) : m.apps_register_title()}
+        submitLabel={editing ? m.apps_save() : m.apps_register_short()}
+        pending={saving}
+        submitDisabled={tooLong}
+        onCancel={onClose}
+        onSubmit={() => formRef.current?.requestSubmit()}
+      />
+      <div className="flex shrink-0 items-center gap-3 border-b border-secondary px-6 py-4 max-sm:hidden">
         <AppLogo name={draft.name || "?"} url={app?.logoUrl} size="sm" />
         <Heading
           slot="title"
@@ -430,7 +441,7 @@ function AppEditorForm({
           )}
         </div>
       </div>
-      <DialogActions className="shrink-0 px-6 pt-4 pb-6">
+      <DialogActions className="shrink-0 px-6 pt-4 pb-6 max-sm:hidden">
         <DialogCancel type="button" isDisabled={saving} onPress={onClose}>
           {m.controls_cancel()}
         </DialogCancel>
