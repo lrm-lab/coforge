@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
-import { productionArtifactOrigins } from "#src/server/artifacts/artifact-composition.server";
+import { ArtifactOrigins } from "#src/server/artifacts/artifact-origins.server";
 
 const DEFAULTS = { scanWindow: 5000, batchSize: 500, maxMinutes: 12, pauseMs: 100 };
 
@@ -34,7 +34,7 @@ export async function backfillArtifactOrigins(
   options: ArtifactOriginBackfillOptions = {},
 ): Promise<ArtifactOriginBackfillSummary> {
   const { scanWindow, batchSize, maxMinutes, pauseMs } = { ...DEFAULTS, ...options };
-  const origins = productionArtifactOrigins(db);
+  const origins = new ArtifactOrigins(db);
   const deadline = Date.now() + maxMinutes * 60_000;
   const scope = options.workspaceId
     ? Prisma.sql`AND "workspaceId" = ${options.workspaceId}::uuid`
