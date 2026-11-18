@@ -1487,9 +1487,7 @@ test("send results hide the internal model cursor from Agent output", async () =
     view: async () => ({ bytes: new Uint8Array() }),
   });
 
-  expect(output).toBe(
-    'Message sent to @ada. Message ID: message-sent (to reply in this message\'s thread, use target "@ada:message-sent")',
-  );
+  expect(output).toBe("Message sent to @ada. Message ID: message-sent");
   expect(output).not.toContain("seenUpToSequence");
 });
 
@@ -1568,7 +1566,7 @@ test("message send prints the undelivered mentions and the queued line, then fai
       "  expires: n/a",
       "  recovery: if this was a literal name or prose, wrap it in inline/fenced code; otherwise verify the exact handle and send only a corrected follow-up mention; do not resend this message.",
       "",
-      'Message queued to #triage. Message ID: message-1 (to reply in this message\'s thread, use target "#triage:message-1")',
+      "Message queued to #triage. Message ID: message-1",
     ].join("\n"),
   );
   expect(failure.suggestedNextAction).toBe(
