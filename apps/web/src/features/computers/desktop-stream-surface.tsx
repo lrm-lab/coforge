@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { HotkeysProvider, useHotkeys } from "@tanstack/react-hotkeys";
 import {
   Minimize01 as Minimize,
@@ -13,6 +13,7 @@ import { useMediaQuery } from "#src/hooks/use-media-query";
 import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
+import { DESKTOP_CHROME_AUTOHIDE_MS, desktopChromeAutoHides } from "./desktop-chrome-autohide";
 import { desktopLandscapeFrameStyle } from "./desktop-landscape";
 import type { EmbeddedDesktopPhase } from "./embedded-desktop-session";
 
@@ -39,6 +40,8 @@ export function DesktopStreamSurface({
   const phone = useMediaQuery("(max-width: 639px)", false);
   const portrait = useMediaQuery("(orientation: portrait)", false);
   const [landscape, setLandscape] = useState(false);
+  const [chromeOpen, setChromeOpen] = useState(false);
+  const [chromeIdleToken, setChromeIdleToken] = useState(0);
 
   useEffect(() => {
     if (!maximized) setLandscape(false);
@@ -47,6 +50,22 @@ export function DesktopStreamSurface({
   useEffect(() => {
     if (landscape && (!portrait || !phone)) setLandscape(false);
   }, [landscape, portrait, phone]);
+
+  const autoHideChrome = desktopChromeAutoHides(landscape);
+
+  useEffect(() => {
+    if (autoHideChrome) setChromeOpen(false);
+  }, [autoHideChrome]);
+
+  const hideChrome = useEffectEvent(() => setChromeOpen(false));
+
+  useEffect(() => {
+    if (!autoHideChrome || !chromeOpen) return;
+    const id = window.setTimeout(() => hideChrome(), DESKTOP_CHROME_AUTOHIDE_MS);
+    return () => window.clearTimeout(id);
+  }, [autoHideChrome, chromeOpen, chromeIdleToken, hideChrome]);
+
+  const bumpChromeIdle = () => setChromeIdleToken((n) => n + 1);
 
   const showLandscapeToggle = maximized && phone && (portrait || landscape);
   const frameStyle =
@@ -60,6 +79,48 @@ export function DesktopStreamSurface({
             width: miniBox.width,
             height: miniBox.height,
           };
+
+  const chromeBar = maximized ? (
+    <div
+      className={cx(
+        "flex shrink-0 items-center justify-between gap-2 border-b border-secondary bg-primary px-3 py-2",
+        autoHideChrome && "absolute inset-x-0 top-0 z-10",
+      )}
+      onPointerDown={autoHideChrome ? bumpChromeIdle : undefined}
+    >
+      <p className="min-w-0 truncate text-sm font-medium text-primary">{title}</p>
+      <div className="flex shrink-0 items-center gap-1">
+        {showLandscapeToggle ? (
+          <ButtonUtility
+            size="sm"
+            color="tertiary"
+            icon={landscape ? Portrait : Landscape}
+            tooltip={landscape ? m.computer_desktop_portrait() : m.computer_desktop_landscape()}
+            aria-label={landscape ? m.computer_desktop_portrait() : m.computer_desktop_landscape()}
+            onClick={() => setLandscape((on) => !on)}
+          />
+        ) : null}
+        {allowMinimize ? (
+          <ButtonUtility
+            size="sm"
+            color="tertiary"
+            icon={Minimize}
+            tooltip={m.computer_desktop_minimize()}
+            aria-label={m.computer_desktop_minimize()}
+            onClick={onCollapse}
+          />
+        ) : null}
+        <ButtonUtility
+          size="sm"
+          color="tertiary"
+          icon={X}
+          tooltip={m.computer_desktop_sleep()}
+          aria-label={m.computer_desktop_sleep()}
+          onClick={onSleep}
+        />
+      </div>
+    </div>
+  ) : null;
 
   return (
     <HotkeysProvider scope="embedded-desktop" exclusive={{ allow: ["global"] }}>
@@ -85,44 +146,22 @@ export function DesktopStreamSurface({
         aria-modal={maximized ? true : undefined}
         aria-label={title}
       >
-        {maximized ? (
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-secondary px-3 py-2">
-            <p className="min-w-0 truncate text-sm font-medium text-primary">{title}</p>
-            <div className="flex shrink-0 items-center gap-1">
-              {showLandscapeToggle ? (
-                <ButtonUtility
-                  size="sm"
-                  color="tertiary"
-                  icon={landscape ? Portrait : Landscape}
-                  tooltip={
-                    landscape ? m.computer_desktop_portrait() : m.computer_desktop_landscape()
-                  }
-                  aria-label={
-                    landscape ? m.computer_desktop_portrait() : m.computer_desktop_landscape()
-                  }
-                  onClick={() => setLandscape((on) => !on)}
-                />
-              ) : null}
-              {allowMinimize ? (
-                <ButtonUtility
-                  size="sm"
-                  color="tertiary"
-                  icon={Minimize}
-                  tooltip={m.computer_desktop_minimize()}
-                  aria-label={m.computer_desktop_minimize()}
-                  onClick={onCollapse}
-                />
-              ) : null}
-              <ButtonUtility
-                size="sm"
-                color="tertiary"
-                icon={X}
-                tooltip={m.computer_desktop_sleep()}
-                aria-label={m.computer_desktop_sleep()}
-                onClick={onSleep}
-              />
-            </div>
-          </div>
+        {maximized && !autoHideChrome ? chromeBar : null}
+        {maximized && autoHideChrome && chromeOpen ? chromeBar : null}
+        {maximized && autoHideChrome && !chromeOpen ? (
+          <Button
+            type="button"
+            size="sm"
+            color="tertiary"
+            aria-label={m.computer_desktop_show_controls()}
+            onPress={() => {
+              setChromeOpen(true);
+              bumpChromeIdle();
+            }}
+            className="absolute inset-x-0 top-0 z-10 flex h-11 items-start justify-center rounded-none p-0 pt-1.5 before:rounded-none"
+          >
+            <span className="h-1 w-10 rounded-full bg-fg-quaternary" aria-hidden="true" />
+          </Button>
         ) : null}
         <div className={cx("relative min-h-0", maximized ? "flex-1" : "h-full w-full")}>
           <iframe
