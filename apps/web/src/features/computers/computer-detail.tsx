@@ -30,6 +30,7 @@ import {
 } from "./computer-detail-view";
 import { ComputerDetailWorkspaceInventory } from "./computer-detail-workspace-inventory";
 import { ComputerFileUploadPanel } from "./computer-file-upload-panel";
+import { computerRestartBusy } from "./computer-restart-run";
 import { runtimeRescanNotice } from "./runtime-rescan-notice";
 import { useComputerDetailLifecycle } from "./use-computer-detail-lifecycle";
 
@@ -164,11 +165,7 @@ export function ComputerDetail({
           onRestart && (computer.ownedByCurrentUser || computer.canManageAgents)
             ? {
                 pending: restartState === "pending",
-                disabled:
-                  !computer.online ||
-                  upgrading ||
-                  restartState === "pending" ||
-                  restartState === "accepted",
+                disabled: computerRestartBusy({ upgrading, restartState }),
                 onPress: runRestart,
               }
             : undefined

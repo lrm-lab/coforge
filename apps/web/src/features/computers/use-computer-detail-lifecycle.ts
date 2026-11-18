@@ -3,7 +3,7 @@ import { useQueries, useQueryClient } from "@tanstack/react-query";
 
 import { useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
-import { runComputerRestart } from "./computer-restart-run";
+import { runComputerRestart, type ComputerRestartState } from "./computer-restart-run";
 import { computerDetailUpgradeSlotsFor } from "./computer-detail-upgrade-slots";
 import { submitComputerDetailUpgrade } from "./computer-detail-submit-upgrade";
 import { computerUpgradeStatusQuery, upgradeRunning } from "./computer-upgrade-status";
@@ -40,9 +40,7 @@ export function useComputerDetailLifecycle(input: {
       mountedRef.current = false;
     };
   }, []);
-  const [restartState, setRestartState] = useState<
-    "idle" | "pending" | "accepted" | "completed" | "error"
-  >("idle");
+  const [restartState, setRestartState] = useState<ComputerRestartState>("idle");
   const [upgradeRequest, setUpgradeRequest] = useState<ComputerUpgradeRequest>({ state: "idle" });
   const storedUpgrade = input.upgrade ?? undefined;
   const followedUpgradeId =

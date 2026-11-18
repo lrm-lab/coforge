@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 
-import { runComputerRestart } from "#src/features/computers/computer-restart-run";
+import {
+  computerRestartBusy,
+  runComputerRestart,
+} from "#src/features/computers/computer-restart-run";
 import type { ComputerRestartStatus } from "#src/features/computers/computer.schemas";
 import { AppError } from "#src/lib/app-error";
 
@@ -64,4 +67,12 @@ test("an offline Computer is named as the reason", async () => {
     report,
   );
   expect(heard).toEqual(["failed:offline"]);
+});
+
+test("Restart waits only on work already under way, not on the Computer being offline", () => {
+  expect(computerRestartBusy({ upgrading: true, restartState: "idle" })).toBe(true);
+  expect(computerRestartBusy({ upgrading: false, restartState: "pending" })).toBe(true);
+  expect(computerRestartBusy({ upgrading: false, restartState: "accepted" })).toBe(true);
+  for (const restartState of ["idle", "completed", "error"] as const)
+    expect(computerRestartBusy({ upgrading: false, restartState })).toBe(false);
 });

@@ -4,6 +4,15 @@ import type { ComputerRestartStatus } from "./computer.schemas";
 
 export type ComputerRestartFailure = "deadline" | "offline" | "refused";
 
+export type ComputerRestartState = "idle" | "pending" | "accepted" | "completed" | "error";
+
+export function computerRestartBusy(input: {
+  upgrading: boolean;
+  restartState: ComputerRestartState;
+}) {
+  return input.upgrading || input.restartState === "pending" || input.restartState === "accepted";
+}
+
 export type ComputerRestartReport = {
   accepted: () => void;
   completed: () => void;
