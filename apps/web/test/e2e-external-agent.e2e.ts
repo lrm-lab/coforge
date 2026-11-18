@@ -65,6 +65,8 @@ test("external Agent: page credential, browser-approved login, presence, revoke 
     );
     expect(prompt).toContain(`${origin}/cli/install.sh`);
     expect(prompt).toContain(`coforge agent login --server ${origin} --agent ${agentName}`);
+    expect(prompt).toContain("message send --target '@");
+    expect(prompt).toContain("inbox check");
     const pageKey = await evaluate<string>(
       `document.querySelector('[data-testid="external-agent-credential"]').textContent.trim()`,
     );

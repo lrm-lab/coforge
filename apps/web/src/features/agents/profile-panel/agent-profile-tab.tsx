@@ -28,6 +28,7 @@ import { FactRow } from "./agent-fact-row";
 import { AppBotProfile } from "./app-bot-profile";
 import { AgentProfileActionsSection } from "./agent-profile-actions-section";
 import { ExternalAgentAccessSection } from "./external-agent-access-section";
+import { ExternalConnectionState } from "#src/features/agents/external-agent-setup";
 import { RoleField, VisibilityField } from "./agent-profile-info-fields";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { useAgentModelName } from "#src/features/agents/use-agent-model-name";
@@ -307,10 +308,23 @@ function AgentProfileTabBody({
             displayName={profile.displayName}
             workspaceSlug={profile.workspaceSlug}
             setup={profile.externalSetup}
+            connectTarget={profile.externalConnectTarget}
             credentials={profile.externalCredentials}
             timeZone={timeZone}
             onChanged={onRefreshExternal}
           />
+        ) : profile.externalSetup ? (
+          <section className="border-b border-secondary px-6 py-5">
+            <p className={SECTION_CAPTION_CLASS}>{m.external_agent_setup_section()}</p>
+            <div className="mt-3">
+              <ExternalConnectionState
+                setup={profile.externalSetup}
+                displayName={profile.displayName}
+                timeZone={timeZone}
+                askOwner={creatorName}
+              />
+            </div>
+          </section>
         ) : null
       ) : (
         <section className="border-b border-secondary px-6 py-5">

@@ -18,6 +18,7 @@ import {
   ExternalAgentCredentialBlock,
   ExternalAgentPromptBlock,
   ExternalConnectionState,
+  ExternalSetupStep,
   type ExternalSetup,
 } from "#src/features/agents/external-agent-setup";
 import { externalCredentialErrorMessage } from "#src/features/agents/external-agent-credential-error";
@@ -44,6 +45,7 @@ export function ExternalAgentAccessSection({
   displayName,
   workspaceSlug,
   setup,
+  connectTarget,
   credentials,
   timeZone,
   onChanged,
@@ -53,6 +55,7 @@ export function ExternalAgentAccessSection({
   displayName: string;
   workspaceSlug: string | null;
   setup: ExternalSetup;
+  connectTarget: string | null;
   credentials: readonly ExternalCredentialSummary[];
   timeZone: string | null;
   onChanged?: () => Promise<void> | void;
@@ -86,9 +89,19 @@ export function ExternalAgentAccessSection({
   }
 
   const steps = workspaceSlug ? (
-    <div className="space-y-3">
-      <ExternalAgentPromptBlock workspaceSlug={workspaceSlug} agentName={agentName} />
-      {freshKey ? <ExternalAgentCredentialBlock credentialKey={freshKey} /> : null}
+    <div className="space-y-4">
+      <ExternalSetupStep title={m.external_agent_prompt_label()}>
+        <ExternalAgentPromptBlock
+          workspaceSlug={workspaceSlug}
+          agentName={agentName}
+          me={connectTarget}
+        />
+      </ExternalSetupStep>
+      {freshKey ? (
+        <ExternalSetupStep title={m.external_agent_credential_label()}>
+          <ExternalAgentCredentialBlock credentialKey={freshKey} agentName={agentName} />
+        </ExternalSetupStep>
+      ) : null}
       {!freshKey && !connected && !pageCredential ? (
         <Button
           type="button"
@@ -113,7 +126,12 @@ export function ExternalAgentAccessSection({
     <section className="border-b border-secondary px-6 py-5" data-testid="external-agent-setup">
       <p className={SECTION_CAPTION_CLASS}>{m.external_agent_setup_section()}</p>
       <div className="mt-3 space-y-3">
-        <ExternalConnectionState setup={setup} displayName={displayName} timeZone={timeZone} />
+        <ExternalConnectionState
+          setup={setup}
+          displayName={displayName}
+          timeZone={timeZone}
+          hasCredential={credentials.length > 0 || freshKey !== null}
+        />
         {connected && steps ? (
           <div>
             <Button

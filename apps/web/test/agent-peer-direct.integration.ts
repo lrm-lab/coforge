@@ -7,6 +7,7 @@ import type { MessageRequestIdempotency } from "#src/server/conversations/messag
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { agentPeerDirectKey, isPeopleDirectKey } from "#src/features/conversations/direct-key";
 import { withPublishBatch } from "./helpers/fake-centrifugo";
+import { humanRef } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
 
 // Agent-to-Agent direct conversations: addressing, permission, the wake, and a target that is
 // always the other side's from the reader's seat. The person-and-Agent DM keeps its own tests.
@@ -251,4 +252,10 @@ test("an Agent the reader cannot see neither blocks the bare name nor shows that
   const sent = await repository.sendMessage(conversationId, senderMemberId, ada.id, "hi again");
   expect(sent.deliveryTarget).toBe(`@${usernames[0]}`);
   await send(alpha, `@${usernames[0]}`, "bare name still reaches the person");
+});
+
+test("the target an Agent writes to reach a person carries ~human only when an Agent shares the name", async () => {
+  expect(await humanRef(db, workspaceId, alpha.id, usernames[0]!)).toBe(`@${usernames[0]}`);
+  expect(await humanRef(db, workspaceId, alpha.id, usernames[1]!)).toBe(`@${usernames[1]}~human`);
+  await send(alpha, (await humanRef(db, workspaceId, alpha.id, usernames[1]!))!, "hi");
 });

@@ -21,6 +21,7 @@ import {
   ExternalAgentCredentialBlock,
   ExternalAgentPromptBlock,
   ExternalConnectionState,
+  ExternalSetupStep,
 } from "./external-agent-setup";
 import { agentProfileQuery } from "./profile-panel/agent-profile-queries";
 
@@ -178,16 +179,12 @@ function ExternalAgentConnectStep({
   return (
     <AgentCreateForm
       footer={
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-4 border-t border-secondary px-6 py-4">
-          <div className="min-w-0 basis-full sm:basis-auto sm:flex-1">
-            <ExternalConnectionState
-              setup={setup}
-              displayName={agent.displayName}
-              timeZone={null}
-            />
-          </div>
-          <div className="ml-auto flex shrink-0 items-center gap-3">
-            {online ? null : (
+        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-secondary px-6 py-4">
+          {online ? null : (
+            <>
+              <p className="min-w-0 flex-1 text-sm text-tertiary">
+                {m.external_agent_finish_later()}
+              </p>
               <Popconfirm
                 title={m.external_agent_discard_title({ name: agent.displayName })}
                 description={m.external_agent_discard_body()}
@@ -199,21 +196,41 @@ function ExternalAgentConnectStep({
                   await onDiscarded();
                 }}
               >
-                <Button type="button" size="md" color="secondary">
+                <Button type="button" size="md" color="tertiary">
                   {m.external_agent_cancel()}
                 </Button>
               </Popconfirm>
-            )}
-            <Button type="button" size="md" onPress={onDone}>
-              {m.external_agent_connect_done()}
-            </Button>
-          </div>
+            </>
+          )}
+          <Button type="button" size="md" color={online ? "primary" : "secondary"} onPress={onDone}>
+            {m.external_agent_connect_done()}
+          </Button>
         </div>
       }
     >
-      <div className="space-y-3 px-6 pt-5 pb-4">
-        <ExternalAgentPromptBlock workspaceSlug={workspaceSlug} agentName={agent.name} />
-        <ExternalAgentCredentialBlock credentialKey={agent.key} />
+      <div className="space-y-5 px-6 pt-5 pb-4">
+        <ExternalConnectionState
+          setup={setup}
+          displayName={agent.displayName}
+          timeZone={null}
+          onCreate
+        />
+        {online ? null : (
+          <>
+            {profile.data ? (
+              <ExternalSetupStep title={m.external_agent_step_prompt()}>
+                <ExternalAgentPromptBlock
+                  workspaceSlug={workspaceSlug}
+                  agentName={agent.name}
+                  me={profile.data.externalConnectTarget}
+                />
+              </ExternalSetupStep>
+            ) : null}
+            <ExternalSetupStep title={m.external_agent_step_credential()}>
+              <ExternalAgentCredentialBlock credentialKey={agent.key} agentName={agent.name} />
+            </ExternalSetupStep>
+          </>
+        )}
       </div>
     </AgentCreateForm>
   );

@@ -1,7 +1,10 @@
 import type { WorkspaceUserContext } from "#src/features/auth/function-auth";
 import { AgentDetailQuery } from "#src/server/agents/agent-detail.server";
 import { PrismaAgentDetailSource } from "#src/server/db/repositories/agent-detail.repositories.server";
-import { type AgentVisibilityViewer } from "#src/server/agents/agent-visibility.server";
+import {
+  canDirectMessageAgent,
+  type AgentVisibilityViewer,
+} from "#src/server/agents/agent-visibility.server";
 import { getAgentStatusCache } from "#src/server/agents/agent-status.server";
 import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.server";
 import { getAgentDisplay } from "#src/server/agents/agent-display.server";
@@ -12,6 +15,7 @@ import {
 } from "#src/server/agents/agent-runtime-config.server";
 import { workspaceUserAvatarUrl } from "#src/server/db/repositories/user-profile.repositories.server";
 import { PrismaExternalAgentCredentialRepository } from "#src/server/db/repositories/external-agent-credential.repositories.server";
+import { humanRef } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
 import {
   agentDisplayScope,
   externalSetups,
@@ -59,38 +63,54 @@ export async function loadAgentProfileDetail(context: WorkspaceUserContext, agen
   const { computer } = result;
   const externalDisplayScope =
     result.hosting === "external" ? agentDisplayScope(workspaceId, result) : undefined;
-  const [computerOnline, usage, externalCredentials, workspace, externalSetup, externalDisplay] =
-    await Promise.all([
-      computer
-        ? getComputerStatusCache()
-            .get({ workspaceId, computerId: computer.id })
-            .catch(() => undefined)
-        : undefined,
-      computer && runtimeConfig
-        ? userRuntimeUsage(db).usageOffer(
-            { userId: user.id, workspaceId },
-            { computerId: computer.id, provider: runtimeConfig.runtime },
-          )
-        : undefined,
-      result.hosting === "external" && (ownedByCurrentUser || canManageAgentRole)
-        ? new PrismaExternalAgentCredentialRepository(db)
-            .list(agentId)
-            .then((rows) => rows.filter((row) => !row.revokedAt))
-        : undefined,
-      result.hosting === "external"
-        ? db.workspace.findUnique({ where: { id: workspaceId }, select: { slug: true } })
-        : undefined,
-      result.hosting === "external"
-        ? externalSetups(new PrismaExternalAgentCredentialRepository(db), [agentId]).then(
-            (setups) => setups.get(agentId),
-          )
-        : undefined,
-      externalDisplayScope
-        ? getAgentDisplay()
-            .snapshot(externalDisplayScope)
-            .catch(() => undefined)
-        : undefined,
-    ]);
+  const managesExternal =
+    result.hosting === "external" && (ownedByCurrentUser || canManageAgentRole);
+  const [
+    computerOnline,
+    usage,
+    externalCredentials,
+    workspace,
+    externalSetup,
+    externalDisplay,
+    externalConnectTarget,
+  ] = await Promise.all([
+    computer
+      ? getComputerStatusCache()
+          .get({ workspaceId, computerId: computer.id })
+          .catch(() => undefined)
+      : undefined,
+    computer && runtimeConfig
+      ? userRuntimeUsage(db).usageOffer(
+          { userId: user.id, workspaceId },
+          { computerId: computer.id, provider: runtimeConfig.runtime },
+        )
+      : undefined,
+    managesExternal
+      ? new PrismaExternalAgentCredentialRepository(db)
+          .list(agentId)
+          .then((rows) => rows.filter((row) => !row.revokedAt))
+      : undefined,
+    result.hosting === "external"
+      ? db.workspace.findUnique({ where: { id: workspaceId }, select: { slug: true } })
+      : undefined,
+    result.hosting === "external"
+      ? externalSetups(new PrismaExternalAgentCredentialRepository(db), [agentId]).then((setups) =>
+          setups.get(agentId),
+        )
+      : undefined,
+    externalDisplayScope
+      ? getAgentDisplay()
+          .snapshot(externalDisplayScope)
+          .catch(() => undefined)
+      : undefined,
+    managesExternal &&
+    canDirectMessageAgent(user.id, {
+      visibility: normalizeAgentVisibility(result.visibility),
+      ownerId: result.owner.id,
+    })
+      ? humanRef(db, workspaceId, agentId, user.username)
+      : null,
+  ]);
   return {
     ...result,
     owner: {
@@ -117,6 +137,7 @@ export async function loadAgentProfileDetail(context: WorkspaceUserContext, agen
     ...(externalDisplay ? { display: externalDisplay } : {}),
     externalCredentials: externalCredentials ?? [],
     externalSetup: externalSetup ?? null,
+    externalConnectTarget: externalConnectTarget ?? null,
     workspaceSlug: workspace?.slug ?? null,
     computer: result.computer
       ? {
