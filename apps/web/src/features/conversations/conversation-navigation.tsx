@@ -53,20 +53,16 @@ export function useConversationListVisible() {
   return useContext(ConversationListContext)?.listVisible ?? true;
 }
 
-/** Hides the mobile conversation list so the chosen conversation's pane shows. */
 export function useCloseConversationList(): () => void {
   const navigation = useContext(ConversationListContext);
   return navigation?.closeList ?? (() => {});
 }
 
-/** Keep both panels mounted so returning to the list preserves scroll and drafts. */
 export function ConversationNavigation({ children }: { children: ReactNode }) {
   const { channels, directs, viewerId, readAt } = useSidebarLists();
   const agents = useVisibleAgentDirectory();
   const refreshAgentDirectory = useRefreshAgentDirectory();
   const workspaceId = useCurrentWorkspaceId();
-  // Every channel by id, from the Query cache the chat loader filled; kept live by
-  // `channel.created.v1` / `channel.updated.v1` (`useApplyChannelSignal`).
   const channelNames = useSuspenseQuery(channelNamesQuery(workspaceId ?? "")).data;
   const workspaceSlug = useWorkspaceSlug();
   const desktop = useBreakpoint("lg");
@@ -97,9 +93,6 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
     pathname === workspacePath(workspaceSlug) ||
     pathname === workspacePath(workspaceSlug, "/");
   useEffect(() => {
-    // Leaving the conversation list is a path change (tapping a row). Loader
-    // re-resolves (`invalidate`, hash replace) must not bounce the user back
-    // into the hidden conversation on mobile.
     let pathname = router.state.location.pathname;
     return router.subscribe("onResolved", () => {
       const next = router.state.location.pathname;
@@ -109,9 +102,6 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
     });
   }, [router]);
 
-  // The conversation this is becomes the one Chat reopens in this Workspace. While a move to another
-  // Workspace is pending the URL already names it but the Workspace in hand is still the old one:
-  // only a path inside the Workspace in hand is filed under its id.
   const rememberedPath = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!workspaceId || pathname === rememberedPath.current) return;
@@ -131,45 +121,29 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   const applyConversationActivity = useApplyConversationActivity();
   const applyMarkedEvent = useApplyMarkedEvent();
   const knownAgentIds = useMemo(() => new Set(agents.map((agent) => agent.id)), [agents]);
-  // One re-read of the Agents at a time.
   const rosterRefresh = useRef<Promise<void> | undefined>(undefined);
   const unread = useChannelUnread({
     workspaceId,
     userId: viewerId,
     channels: visibleChannels,
-    // The open channel's or DM's own events must not bump its badge: they are being read now.
     openConversationId: channel?.channelId ?? openDm?.dmId,
     openThreadRootId,
     listedConversationIds,
-    // A message brought a closed chat back, or a DM the list has not read yet: re-read that one
-    // list, not the page (a burst is read once).
     onClosedConversationActivity: (lists, event) => {
       void refreshSidebar(lists);
-      // A new Agent writing first: its DM row needs the Agent in the store, the viewer's own or
-      // another member's public one.
       if (unknownAgentOf(event, knownAgentIds) && !rosterRefresh.current)
-        // A failed read is retried by the next such message.
         rosterRefresh.current = refreshAgentDirectory()
           .catch(() => undefined)
           .finally(() => {
             rosterRefresh.current = undefined;
           });
     },
-    // A message in a chat the sidebar lists: its row is written from the event, not re-read.
     onConversationActivity: applyConversationActivity,
     onConversationMarked: applyMarkedEvent,
-    // A channel was created, changed or is gone: applied from the event, not re-read.
     onChannelSignal: applyChannelSignal,
-    // The viewer joined, left, closed, muted or pinned a chat elsewhere: only the lists named
-    // are stale.
     onSidebarListsChanged: (lists) => void refreshSidebar(lists),
     readPosition,
   });
-  // Every server read of the lists carries the persisted counts; local arithmetic restarts from
-  // them (sequence boundaries survive, so no event double-counts). Channels and DMs alike are
-  // keyed by conversation id, the id their realtime signal carries. A re-seed follows each server
-  // read (`readAt`) and each change of a count shown (a mark-unread), not a pin, a drag, or a
-  // closed row with nothing unread.
   const refresh = unread.replace;
   const seed = useMemo(() => {
     const lists: SeededList[] = [
@@ -193,16 +167,12 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
       .join(",");
     return { lists, entries, key: `${readAt.channels}:${readAt.dms}|${counts}` };
   }, [visibleChannels, directs, readAt.channels, readAt.dms]);
-  // A list not read again since the last seed keeps its live counts (`unreadIdsToKeep`).
   const lastSeed = useRef<readonly SeededList[] | undefined>(undefined);
   useEffect(() => {
     refresh(seed.entries, unreadIdsToKeep(seed.lists, lastSeed.current));
     lastSeed.current = seed.lists;
   }, [refresh, seed.key]);
-  // This renders on every live Agent or sidebar change; a new value each time would re-render
-  // every reader, the open conversation's panes included.
   const detailVisible = desktop || !showList;
-  // The phone's tab bar shows with the list, whichever address the list is over.
   useReportChatListOpen(showList);
   const listVisible = desktop || shellShowsList;
   const listControls = useMemo(
@@ -267,9 +237,6 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                     </div>
                   </>
                 )}
-                {/* 0.75rem under the header rule. Saved's icon is centered in the 2.25rem
-                  row and the bookmark path is inset another 0.125rem, so the rule
-                  sits 1.5rem above the bookmark. Bottom padding stays 1rem. */}
                 <div className="flex min-h-0 flex-1 flex-col overflow-y-auto pt-3 pb-4">
                   <ConversationDirectory
                     channels={visibleChannels}
@@ -330,7 +297,6 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   );
 }
 
-/** Sidebar changes kept on screen while their save is tried again (`createSidebar`). */
 function SavingChangesBadge() {
   const count = useSavesRetrying();
   if (count === 0) return null;

@@ -10,16 +10,12 @@ import type { FocusedPanel } from "./conversation-focus-model";
 import { CONVERSATION_LIST_COLUMN } from "./conversation-list-width";
 import { localLayoutStorage } from "./local-layout-storage";
 
-/** The narrowest the conversation and the thread/profile pane may be dragged; together, the
- * narrowest area that shows them side by side. */
 const MAIN_PANE_MIN_REM = 24;
 const SIDE_PANE_MIN_REM = 22;
-/** The list column's width before one is set (`LIST_COLUMN_CLASS`'s fallback). */
 const LIST_COLUMN_DEFAULT_REM = 18;
 
 const SIDE_PANE_ENTER = "animate-in fade-in slide-in-from-right-6 motion-enter-lg";
 
-/** The conversation beside its thread or profile pane, resizable while there is room for both. */
 export function ConversationSplit({
   main,
   side,
@@ -30,28 +26,18 @@ export function ConversationSplit({
   main: ReactNode;
   side: ReactNode;
   visibleSlot: ConversationSlot | undefined;
-  /** A thread shown without its conversation (Activity). */
   threadAlone: boolean;
   focused?: FocusedPanel;
 }) {
-  // The thread/profile pane's share of the width is the user's to set; remembered across visits,
-  // and kept separate per slot (`react-resizable-panels` derives its storage key from `panelIds`,
-  // so ["main","thread"] and ["main","profile"] never share or corrupt each other's saved size).
   const threadLayout = useDefaultLayout({
     id: "coforge-conversation",
     panelIds: visibleSlot ? ["main", visibleSlot] : ["main"],
     onlySaveAfterUserInteractions: true,
     storage: localLayoutStorage,
   });
-  // Panels are flex items sized by the library's inline styles, so a narrow viewport cannot
-  // collapse the split with CSS; unmount the resizable Group and stack full-width panes
-  // instead. Both panes stay mounted so drafts and scroll survive, matching the desktop slot.
   const wideViewport = useBreakpoint("md");
-  // Side by side only while both panes fit at their minimum width; below that the slot pane
-  // covers the conversation, as on a phone, instead of squeezing either into a strip.
   const splitRef = useRef<HTMLDivElement>(null);
   const [splitFits, setSplitFits] = useState(true);
-  // Whether the Chat list must give way to an open pane (`data-crowd-list`; `splitLayout`).
   const [listCrowds, setListCrowds] = useState(false);
   const measureSplit = useCallback(() => {
     const element = splitRef.current;
@@ -74,8 +60,6 @@ export function ConversationSplit({
     setListCrowds(layout.listCrowds);
   }, []);
   const splitShown = wideViewport && splitFits;
-  // Each layout renders its own measured wrapper, so observe again whenever the layout switches.
-  // Before paint, so a window too narrow for both panes never flashes the squeezed split.
   useLayoutEffect(() => {
     const element = splitRef.current;
     if (!element) return;
@@ -87,10 +71,6 @@ export function ConversationSplit({
     return () => observer.disconnect();
   }, [measureSplit, splitShown]);
   if (!splitShown || threadAlone) {
-    // Small screens have no room for a resizable split: the slot pane covers the main pane,
-    // which stays mounted (hidden) so returning keeps its scroll, drafts and read state. A thread
-    // shown alone fills the pane at every width without the conversation, which mounts afresh at
-    // its jump message once it is shown.
     return (
       <div
         ref={splitRef}
@@ -122,8 +102,6 @@ export function ConversationSplit({
     );
   }
   return (
-    // Measured, so the split knows when its panes stop fitting side by side. `data-crowd-list` (here
-    // and above) asks the conversation list to give way while a pane is open beside the chat.
     <div
       ref={splitRef}
       data-crowd-list={visibleSlot && listCrowds ? "" : undefined}
@@ -171,13 +149,6 @@ export function ConversationSplit({
   );
 }
 
-/**
- * Whether the conversation and its open pane fit side by side, and whether the Chat list beside
- * them (`beside`, on a desktop) must give way for it. Judged from the whole Chat area less the
- * list's set width, never from the pane's own width, which grows when the list hides: that would
- * bring the list back, and round again. Where even the whole area is too narrow (a large text
- * size), the list still gives way, so the open pane covers the conversation as on a phone.
- */
 export function splitLayout({
   rem,
   pane,
@@ -194,7 +165,6 @@ export function splitLayout({
   return { splitFits: (listCrowds ? beside.area : besideList) >= needed, listCrowds };
 }
 
-/** The Chat list's width as set (`CONVERSATION_LIST_COLUMN`), whether or not it is showing. */
 function listColumnWidth(rem: number) {
   const set = getComputedStyle(document.documentElement).getPropertyValue(
     CONVERSATION_LIST_COLUMN.property,
