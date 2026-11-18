@@ -311,19 +311,54 @@ const RELATIVE_PAGE_SCRIPT = `
         }
       }).catch(() => {});
     }
+    function coforgeWriteLocalClipboard(text) {
+      if (!text) return Promise.resolve(false);
+      const write = navigator.clipboard?.writeText?.(text);
+      if (write) {
+        return write.then(() => true).catch(() => coforgeExecCommandCopy(text));
+      }
+      return Promise.resolve(coforgeExecCommandCopy(text));
+    }
+    function coforgeExecCommandCopy(text) {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;border:0;padding:0";
+      document.body.appendChild(area);
+      area.focus();
+      area.select();
+      let ok = false;
+      try {
+        ok = document.execCommand("copy");
+      } catch {
+        ok = false;
+      }
+      area.remove();
+      return ok;
+    }
     function coforgeDesktopCopyOut() {
-      return fetch(\`\${base}/clipboard\${query}\`)
-        .then((res) => (res.ok ? res.text() : ""))
-        .then((text) => {
-          if (!text) return;
-          return navigator.clipboard.writeText(text);
-        })
-        .catch(() => {});
+      const attempt = (left) =>
+        fetch(\`\${base}/clipboard\${query}\`)
+          .then((res) => (res.ok ? res.text() : ""))
+          .then((text) => {
+            if (text) return coforgeWriteLocalClipboard(text);
+            if (left <= 0) return false;
+            return new Promise((resolve) => {
+              window.setTimeout(() => {
+                void attempt(left - 1).then(resolve);
+              }, 120);
+            });
+          })
+          .catch(() => false);
+      return attempt(4);
     }
     document.addEventListener(
       "keydown",
       (ev) => {
         if (!rfb) return;
+        if ((ev.ctrlKey || ev.metaKey) && (ev.code === "KeyC" || ev.code === "KeyX") && !ev.repeat) {
+          ev.preventDefault();
+        }
         if (!(ev.ctrlKey || ev.metaKey) || ev.code !== "KeyV" || ev.repeat) return;
         ev.stopImmediatePropagation();
       },
@@ -336,10 +371,28 @@ const RELATIVE_PAGE_SCRIPT = `
         if ((ev.ctrlKey || ev.metaKey) && (ev.code === "KeyC" || ev.code === "KeyX") && !ev.repeat) {
           window.setTimeout(() => {
             void coforgeDesktopCopyOut();
-          }, 80);
+          }, 120);
         }
         if (ev.code !== "KeyV" && ev.code !== "ControlLeft" && ev.code !== "ControlRight" && ev.code !== "MetaLeft" && ev.code !== "MetaRight") return;
         if (ev.code === "KeyV" || ev.ctrlKey || ev.metaKey) ev.stopImmediatePropagation();
+      },
+      true,
+    );
+    document.addEventListener(
+      "copy",
+      (ev) => {
+        if (!rfb) return;
+        ev.preventDefault();
+        void coforgeDesktopCopyOut();
+      },
+      true,
+    );
+    document.addEventListener(
+      "cut",
+      (ev) => {
+        if (!rfb) return;
+        ev.preventDefault();
+        void coforgeDesktopCopyOut();
       },
       true,
     );
@@ -356,8 +409,8 @@ const RELATIVE_PAGE_SCRIPT = `
 /** Present once office→cloud paste sets the UTF-8 clipboard then sends Ctrl+V. */
 export const DESKTOP_PASTE_CLASSIC_MARKER = "coforgeDesktopPaste";
 
-/** Present once cloud→office copy reads UTF-8 CLIPBOARD into the local clipboard. */
-export const DESKTOP_CLIPBOARD_OUT_MARKER = "coforgeDesktopCopyOut";
+/** Present once cloud→office copy writes UTF-8 CLIPBOARD into the local clipboard. */
+export const DESKTOP_CLIPBOARD_OUT_MARKER = "coforgeWriteLocalClipboard";
 
 /** Present once the phone fit/pan toolbar is in the adapted page. */
 export const DESKTOP_PHONE_VIEW_MARKER = "coforge-desktop-phone-bar";

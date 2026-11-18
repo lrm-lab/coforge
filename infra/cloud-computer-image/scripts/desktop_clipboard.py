@@ -151,10 +151,27 @@ def set_clipboard(display_name: str, text: str, xauthority: str | None = None) -
     raise ClipboardError("owner_failed")
 
 
+def _property_bytes(value: object) -> bytes:
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value)
+    if isinstance(value, str):
+        return value.encode("latin-1", "surrogateescape")
+    return bytes(value)
+
+
+def _decode_clipboard(raw: bytes, target_kind: str) -> str:
+    if target_kind == "utf8":
+        return raw.decode("utf-8")
+    try:
+        return raw.decode("utf-8")
+    except UnicodeError:
+        return raw.decode("latin-1")
+
+
 def get_clipboard(display_name: str, xauthority: str | None = None) -> str:
     _require_display(display_name)
     _require_xlib()
-    from Xlib import X, display
+    from Xlib import X, Xatom, display
 
     auth = xauthority or os.environ.get("XAUTHORITY") or "/root/.Xauthority"
     os.environ["DISPLAY"] = display_name
@@ -168,34 +185,36 @@ def get_clipboard(display_name: str, xauthority: str | None = None) -> str:
             utf8 = d.intern_atom("UTF8_STRING")
             prop = d.intern_atom("COFORGE_CLIPBOARD_READ")
             win = root.create_window(0, 0, 1, 1, 0, d.screen().root_depth)
-            win.convert_selection(clipboard, utf8, prop, X.CurrentTime)
-            d.flush()
-            deadline = time.time() + 1
-            while time.time() < deadline:
-                ev = d.next_event()
-                if ev.type != X.SelectionNotify:
-                    continue
-                if ev.property == X.NONE:
-                    last_error = "empty"
-                    break
-                data = win.get_full_property(prop, X.AnyPropertyType)
-                if data is None:
-                    last_error = "read_failed"
-                    break
-                value = data.value
-                raw = bytes(value) if not isinstance(value, (bytes, bytearray)) else bytes(value)
-                try:
-                    text = raw.decode("utf-8")
-                except UnicodeError as exc:
-                    raise ClipboardError("not_utf8") from exc
-                if len(raw) > MAX_CLIPBOARD_BYTES:
-                    raise ClipboardError("too_large")
-                if len(text) == 0:
-                    last_error = "empty"
-                    break
-                return text
-            else:
-                last_error = "read_timeout"
+            for target, kind in ((utf8, "utf8"), (Xatom.STRING, "string")):
+                win.convert_selection(clipboard, target, prop, X.CurrentTime)
+                d.flush()
+                deadline = time.time() + 1
+                got_notify = False
+                while time.time() < deadline:
+                    ev = d.next_event()
+                    if ev.type != X.SelectionNotify:
+                        continue
+                    got_notify = True
+                    if ev.property == X.NONE:
+                        last_error = "empty"
+                        break
+                    data = win.get_full_property(prop, X.AnyPropertyType)
+                    if data is None:
+                        last_error = "read_failed"
+                        break
+                    raw = _property_bytes(data.value)
+                    try:
+                        text = _decode_clipboard(raw, kind)
+                    except UnicodeError as exc:
+                        raise ClipboardError("not_utf8") from exc
+                    if len(raw) > MAX_CLIPBOARD_BYTES:
+                        raise ClipboardError("too_large")
+                    if len(text) == 0:
+                        last_error = "empty"
+                        break
+                    return text
+                if not got_notify:
+                    last_error = "read_timeout"
         finally:
             d.close()
         time.sleep(0.05)
