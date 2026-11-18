@@ -143,7 +143,13 @@ The rules are in `docs/agent-cli/artifact-follows.md`. Their modules:
 - `artifact-download.server.ts` serves one file or a stored (uncompressed) zip whose blobs are all
   checked before the 200 (a missing one is `NOT_FOUND`) and then streamed one at a time, limited per person a minute (`artifactZip`), refused over
   `ARTIFACT_ZIP_LIMIT_BYTES` (`artifact-zip-too-large`), and the capped text preview of a
-  file; an image is never previewed, the page loads it from the versioned download URL. `artifact-visible.server.ts` is `visibleToReader`.
+  file; an image is never previewed, the page loads it from the versioned download URL.
+- `artifact-thumbnail.server.ts` shrinks one image file of a named version with `Bun.Image` to fit
+  640 px and answers WebP with the download's headers (`artifactFileHeaders`, `immutable`). It
+  decodes untrusted bytes in-process, so it refuses more than 25 megapixels from the header (about
+  100 MB of pixels at worst), reads and decodes two at a time, and answers `NOT_FOUND` for anything
+  it cannot decode (SVG, and on Linux AVIF and ICO). The gallery card loads an SVG entry from the
+  download URL instead and shows the kind tag when its image fails.
 - A share to a `conversation`-tier artifact with no live public link is held, sending nothing,
   when recipients cannot read it elsewhere; `unseen: "send"` overrides the hold. The caller passes
   the sender's post check (`mayPost`) with `send`, and the hold runs it on every target before

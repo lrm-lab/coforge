@@ -4,14 +4,16 @@ type Services = ReturnType<typeof productionArtifacts>;
 
 export function agentWrites(services: Services, workspaceId: string, agentId: string) {
   const scope = { workspaceId, actor: { agentId } };
-  const manifest = async (files: Record<string, string>, entryPath?: string) => ({
+  const manifest = async (files: Record<string, string | Uint8Array>, entryPath?: string) => ({
     files: await Promise.all(
-      Object.entries(files).map(async ([path, text]) => ({
+      Object.entries(files).map(async ([path, content]) => ({
         path,
         sha256: (
           await services.blobs.upload({
             workspaceId,
-            bytes: new TextEncoder().encode(text) as Uint8Array<ArrayBuffer>,
+            bytes: (typeof content === "string"
+              ? new TextEncoder().encode(content)
+              : content) as Uint8Array<ArrayBuffer>,
             actor: { agentId },
           })
         ).sha256,
@@ -24,7 +26,7 @@ export function agentWrites(services: Services, workspaceId: string, agentId: st
       conversationId: string;
       title: string;
       description?: string;
-      files: Record<string, string>;
+      files: Record<string, string | Uint8Array>;
       entry?: string;
     }) => {
       const { files, entry, ...rest } = input;

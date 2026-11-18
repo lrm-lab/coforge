@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { Code01 } from "@untitledui/icons";
 
 import { RelativeTime } from "#src/components/ui/relative-time";
@@ -8,7 +9,7 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { GallerySort } from "./artifact-gallery-model";
 import { GalleryCardVisibility } from "./artifact-gallery-visibility";
-import { artifactDownloadUrl } from "./artifact-download-url";
+import { artifactDownloadUrl, artifactThumbnailUrl } from "./artifact-download-url";
 import { ArtifactActor, kindName } from "./artifact-parts";
 import { artifactKindOfPath, type ArtifactPathKind } from "./artifact-path-kind";
 import { MarkdownPreview } from "./artifact-preview";
@@ -42,7 +43,7 @@ export function CardBadges({
 
 function Preview({ card }: { card: GalleryCard }) {
   const kind = artifactKindOfPath(card.entryPath);
-  if (kind === "image") return <ImagePreview card={card} />;
+  if (kind === "image") return <ImagePreview key={card.currentVersion} card={card} />;
   if (kind !== "markdown") return <KindTag kind={kind} />;
   return (
     <div
@@ -72,12 +73,16 @@ function KindTag({ kind }: { kind: ArtifactPathKind }) {
 
 function ImagePreview({ card }: { card: GalleryCard }) {
   const workspaceSlug = useWorkspaceSlug();
+  const [failed, setFailed] = useState(false);
+  if (failed) return <KindTag kind="image" />;
+  const file = { path: card.entryPath, version: card.currentVersion };
+  const url = card.entryPath.toLowerCase().endsWith(".svg")
+    ? artifactDownloadUrl
+    : artifactThumbnailUrl;
   return (
     <img
-      src={artifactDownloadUrl(workspaceSlug, card.id, {
-        path: card.entryPath,
-        version: card.currentVersion,
-      })}
+      src={url(workspaceSlug, card.id, file)}
+      onError={() => setFailed(true)}
       alt=""
       loading="lazy"
       decoding="async"

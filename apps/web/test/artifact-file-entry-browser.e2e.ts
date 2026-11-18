@@ -10,6 +10,7 @@ import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configu
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import { agentWrites } from "./helpers/artifact-agent-writes";
 import { PDF } from "./helpers/test-pdf";
+import { grayPng } from "./helpers/test-bitmap";
 import {
   browserSession,
   devBrowserWorkspace,
@@ -60,11 +61,12 @@ test("an artifact whose entry is a PDF, a CSV or an image opens as that file", a
     await experiments.write(workspaceId, "artifacts", true);
     await mkdir(shots, { recursive: true });
     await browser("set", "viewport", "1920", "898");
-    const make = (title: string, entry: string, text: string) =>
-      bot.create({ conversationId: channel.id, title, entry, files: { [entry]: text } });
+    const make = (title: string, entry: string, content: string | Uint8Array) =>
+      bot.create({ conversationId: channel.id, title, entry, files: { [entry]: content } });
     const paper = await make(`Paper ${tail}`, "paper.pdf", PDF);
     const sheet = await make(`Sheet ${tail}`, "people.csv", "name,team\nAlice,Ops\nBob,Web\n");
     const logo = await make(`Logo ${tail}`, "logo.svg", SVG);
+    const photo = await make(`Photo ${tail}`, "photo.png", await grayPng(1600, 800));
 
     await browser("open", page(paper.id));
     await waitFor(
@@ -107,7 +109,7 @@ test("an artifact whose entry is a PDF, a CSV or an image opens as that file", a
     );
     expect(
       await evaluate<string>(
-        `new URL(document.querySelector('main img[alt="logo.svg"]').src).pathname + new URL(document.querySelector('main img[alt="logo.svg"]').src).search`,
+        `(() => { const src = new URL(document.querySelector('main img[alt="logo.svg"]').src); return src.pathname + src.search; })()`,
       ),
     ).toBe(
       `/api/workspaces/${encodeURIComponent(workspace.slug)}/artifacts/${logo.id}/download?path=logo.svg&version=1`,
@@ -123,9 +125,25 @@ test("an artifact whose entry is a PDF, a CSV or an image opens as that file", a
         `${card(`Paper ${tail}`)}?.querySelector("span[data-artifact-kind]:not([aria-hidden])")?.getAttribute("data-artifact-kind") ?? null`,
       ),
     ).toBe("pdf");
-    await waitFor(
-      `(() => { const img = ${card(`Logo ${tail}`)}?.querySelector('img[data-artifact-kind="image"]'); return !!img && img.complete && img.naturalWidth > 0; })()`,
-    );
+    const cardImage = (title: string) =>
+      `${card(title)}?.querySelector('img[data-artifact-kind="image"]')`;
+    const loaded = (title: string) =>
+      `(() => { const img = ${cardImage(title)}; return !!img && img.complete && img.naturalWidth > 0; })()`;
+    const shown = (title: string) =>
+      evaluate<{ src: string; width: number }>(
+        `(() => { const img = ${cardImage(title)}; const src = new URL(img.src); return { src: src.pathname + src.search, width: img.naturalWidth }; })()`,
+      );
+    await waitFor(loaded(`Logo ${tail}`));
+    await waitFor(loaded(`Photo ${tail}`));
+    const files = `/api/workspaces/${encodeURIComponent(workspace.slug)}/artifacts`;
+    expect(await shown(`Logo ${tail}`)).toEqual({
+      src: `${files}/${logo.id}/download?path=logo.svg&version=1`,
+      width: 120,
+    });
+    expect(await shown(`Photo ${tail}`)).toEqual({
+      src: `${files}/${photo.id}/thumbnail?path=photo.png&version=1`,
+      width: 640,
+    });
     await browser("screenshot", join(shots, "93-gallery-kinds.png"));
 
     const roster = await make(`Roster ${tail}`, "roster.csv", "name,team\nAlice,Ops\nBob,Web\n");

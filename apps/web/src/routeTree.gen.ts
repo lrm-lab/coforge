@@ -191,6 +191,7 @@ import { Route as ApiWorkspacesWorkspaceIdAppsAppKeyLogoRouteImport } from './ro
 import { Route as ApiWorkspacesWorkspaceIdUsersUserIdAvatarRouteImport } from './routes/api/workspaces/$workspaceId/users/$userId/avatar'
 import { Route as ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteImport } from './routes/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images'
 import { Route as ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRouteImport } from './routes/api/workspaces/$workspaceSlug/artifacts/$artifactId/download'
+import { Route as ApiWorkspacesWorkspaceSlugArtifactsArtifactIdThumbnailRouteImport } from './routes/api/workspaces/$workspaceSlug/artifacts/$artifactId/thumbnail'
 import { Route as ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRouteImport } from './routes/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
 import { Route as ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRouteImport } from './routes/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation'
 import { Route as WWorkspaceSlugProjectsProjectSlugTreeSplatRouteImport } from './routes/w.$workspaceSlug/projects.$projectSlug_.tree.$'
@@ -1206,6 +1207,12 @@ const ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute =
     path: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiWorkspacesWorkspaceSlugArtifactsArtifactIdThumbnailRoute =
+  ApiWorkspacesWorkspaceSlugArtifactsArtifactIdThumbnailRouteImport.update({
+    id: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/thumbnail',
+    path: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/thumbnail',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute =
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRouteImport.update({
     id: '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html',
@@ -1484,6 +1491,7 @@ export interface FileRoutesByFullPath {
   '/api/workspaces/$workspaceId/users/$userId/avatar': typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
   '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteWithChildren
   '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute
+  '/api/workspaces/$workspaceSlug/artifacts/$artifactId/thumbnail': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdThumbnailRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute
   '/w/$workspaceSlug/projects/$projectSlug/tree/$': typeof WWorkspaceSlugProjectsProjectSlugTreeSplatRoute
@@ -1679,6 +1687,7 @@ export interface FileRoutesByTo {
   '/api/workspaces/$workspaceId/users/$userId/avatar': typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
   '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteWithChildren
   '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute
+  '/api/workspaces/$workspaceSlug/artifacts/$artifactId/thumbnail': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdThumbnailRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute
   '/w/$workspaceSlug/projects/$projectSlug/tree/$': typeof WWorkspaceSlugProjectsProjectSlugTreeSplatRoute
@@ -1879,6 +1888,7 @@ export interface FileRoutesById {
   '/api/workspaces/$workspaceId/users/$userId/avatar': typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
   '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteWithChildren
   '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute
+  '/api/workspaces/$workspaceSlug/artifacts/$artifactId/thumbnail': typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdThumbnailRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute
   '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation': typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute
   '/w/$workspaceSlug/projects/$projectSlug_/tree/$': typeof WWorkspaceSlugProjectsProjectSlugTreeSplatRoute
@@ -2078,6 +2088,7 @@ export interface FileRouteTypes {
     | '/api/workspaces/$workspaceId/users/$userId/avatar'
     | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images'
     | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download'
+    | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/thumbnail'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation'
     | '/w/$workspaceSlug/projects/$projectSlug/tree/$'
@@ -2273,6 +2284,7 @@ export interface FileRouteTypes {
     | '/api/workspaces/$workspaceId/users/$userId/avatar'
     | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images'
     | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download'
+    | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/thumbnail'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation'
     | '/w/$workspaceSlug/projects/$projectSlug/tree/$'
@@ -2472,6 +2484,7 @@ export interface FileRouteTypes {
     | '/api/workspaces/$workspaceId/users/$userId/avatar'
     | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/comment-images'
     | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/download'
+    | '/api/workspaces/$workspaceSlug/artifacts/$artifactId/thumbnail'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
     | '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/presentation'
     | '/w/$workspaceSlug/projects/$projectSlug_/tree/$'
@@ -2627,6 +2640,7 @@ export interface RootRouteChildren {
   ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute: typeof ApiWorkspacesWorkspaceIdUsersUserIdAvatarRoute
   ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRoute: typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteWithChildren
   ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute: typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute
+  ApiWorkspacesWorkspaceSlugArtifactsArtifactIdThumbnailRoute: typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdThumbnailRoute
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute: typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute: typeof ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute
   ApiAgentV1AppsOwnedIndexRoute: typeof ApiAgentV1AppsOwnedIndexRoute
@@ -3918,6 +3932,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/workspaces/$workspaceSlug/artifacts/$artifactId/thumbnail': {
+      id: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/thumbnail'
+      path: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/thumbnail'
+      fullPath: '/api/workspaces/$workspaceSlug/artifacts/$artifactId/thumbnail'
+      preLoaderRoute: typeof ApiWorkspacesWorkspaceSlugArtifactsArtifactIdThumbnailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html': {
       id: '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
       path: '/api/workspaces/$workspaceSlug/weekly-reports/$reportId/html'
@@ -4435,6 +4456,8 @@ const rootRouteChildren: RootRouteChildren = {
     ApiWorkspacesWorkspaceSlugArtifactsArtifactIdCommentImagesRouteWithChildren,
   ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute:
     ApiWorkspacesWorkspaceSlugArtifactsArtifactIdDownloadRoute,
+  ApiWorkspacesWorkspaceSlugArtifactsArtifactIdThumbnailRoute:
+    ApiWorkspacesWorkspaceSlugArtifactsArtifactIdThumbnailRoute,
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute:
     ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdHtmlRoute,
   ApiWorkspacesWorkspaceSlugWeeklyReportsReportIdPresentationRoute:

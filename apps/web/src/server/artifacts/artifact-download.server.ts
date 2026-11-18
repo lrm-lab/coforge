@@ -3,6 +3,10 @@ import { artifactKindOfPath } from "#src/features/artifacts/artifact-path-kind";
 import { ARTIFACT_ZIP_LIMIT_BYTES } from "#src/features/artifacts/artifact-zip-limit";
 import { AppError } from "#src/lib/app-error";
 import type { AppRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
+import {
+  IMMUTABLE_IMAGE_CACHE_CONTROL,
+  PRIVATE_NO_STORE,
+} from "#src/server/http/cache-control.server";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
 import { artifactContentType } from "./artifact-content-types.server";
 import { artifactRateLimitedResponse } from "./artifact-rate-limited-response.server";
@@ -25,10 +29,10 @@ type Request = {
 
 const attachment = (name: string) => `attachment; filename*=UTF-8''${encodeURIComponent(name)}`;
 
-const headers = (type: string, name: string, pinned = false) => ({
+export const artifactFileHeaders = (type: string, name: string, pinned = false) => ({
   "Content-Type": type,
   "Content-Disposition": attachment(name),
-  "Cache-Control": pinned ? "private, max-age=31536000, immutable" : "private, no-store",
+  "Cache-Control": pinned ? IMMUTABLE_IMAGE_CACHE_CONTROL : PRIVATE_NO_STORE,
   "X-Content-Type-Options": "nosniff",
 });
 
@@ -45,7 +49,7 @@ export async function artifactDownload(sources: Sources, input: Request): Promis
     const bytes = await sources.blobs.read(input.workspaceId, file.sha256);
     if (!bytes) throw new AppError("NOT_FOUND");
     return new Response(bytes.slice().buffer as ArrayBuffer, {
-      headers: headers(
+      headers: artifactFileHeaders(
         artifactContentType(file.path, file.kind),
         file.path.slice(file.path.lastIndexOf("/") + 1),
         input.version !== undefined,
@@ -65,7 +69,7 @@ export async function artifactDownload(sources: Sources, input: Request): Promis
   if (read.files.some((file) => !stored.has(file.sha256))) throw new AppError("NOT_FOUND");
   const title = read.artifact.title || read.artifact.name;
   return new Response(zipStream(sources.blobs, input.workspaceId, read.files), {
-    headers: headers("application/zip", `${title}.zip`),
+    headers: artifactFileHeaders("application/zip", `${title}.zip`),
   });
 }
 
@@ -117,8 +121,7 @@ export async function artifactFilePreview(
   });
   const file = read.files.find((entry) => entry.path === input.path);
   if (!file) throw new AppError("NOT_FOUND");
-  const contentType = artifactContentType(file.path, file.kind);
-  const shown = { path: file.path, sizeBytes: file.sizeBytes, contentType };
+  const shown = { path: file.path, sizeBytes: file.sizeBytes };
   const asText =
     file.kind === "text" &&
     artifactKindOfPath(file.path) !== "image" &&

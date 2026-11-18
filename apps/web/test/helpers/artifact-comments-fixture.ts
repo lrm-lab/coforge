@@ -113,10 +113,12 @@ export async function commentsFixture(prefix: string) {
   const sha256 = (bytes: Uint8Array<ArrayBuffer>) =>
     new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
 
-  async function manifestOf(agentId: string, files: Record<string, string>) {
+  async function manifestOf(agentId: string, files: Record<string, string | Uint8Array>) {
     const named: { path: string; sha256: string }[] = [];
     for (const [path, content] of Object.entries(files)) {
-      const bytes = new TextEncoder().encode(content) as Uint8Array<ArrayBuffer>;
+      const bytes = (
+        typeof content === "string" ? new TextEncoder().encode(content) : content
+      ) as Uint8Array<ArrayBuffer>;
       await blobs.upload({ workspaceId, bytes, actor: { agentId } });
       named.push({ path, sha256: sha256(bytes) });
     }
@@ -127,8 +129,8 @@ export async function commentsFixture(prefix: string) {
 
   async function make(
     title: string,
-    files: Record<string, string> = { "plan.md": "one\ntwo\nthree\n" },
-    options: { target?: string; by?: string; unread?: boolean } = {},
+    files: Record<string, string | Uint8Array> = { "plan.md": "one\ntwo\nthree\n" },
+    options: { target?: string; by?: string; unread?: boolean; entry?: string } = {},
   ) {
     const by = options.by ?? agents.writer;
     const created = await post(by, {
@@ -137,7 +139,7 @@ export async function commentsFixture(prefix: string) {
       title,
       target: options.target ?? `#${docsChannel}`,
       files: await manifestOf(by, files),
-      entry: "plan.md",
+      entry: options.entry ?? "plan.md",
     });
     if (created.status !== 200) throw new Error(`create failed: ${JSON.stringify(created.body)}`);
     const artifactId = created.body.id as string;

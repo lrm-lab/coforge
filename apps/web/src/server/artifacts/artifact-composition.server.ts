@@ -19,6 +19,7 @@ import { artifactsEnabled, type ArtifactActor } from "./artifact-access.server";
 import { ArtifactReads, type ArtifactMessageCard } from "./artifact-reads.server";
 import { ArtifactShares } from "./artifact-shares.server";
 import { artifactDownload, artifactFilePreview } from "./artifact-download.server";
+import { artifactThumbnail } from "./artifact-thumbnail.server";
 import { ArtifactGallery } from "./artifact-gallery.server";
 import { ArtifactCommentDrafts } from "./artifact-comment-drafts.server";
 import { ArtifactPersonComments } from "./artifact-person-comments.server";
@@ -92,6 +93,8 @@ export function productionArtifacts(db: PrismaClient) {
       ),
     filePreview: (input: Parameters<typeof artifactFilePreview>[1]) =>
       artifactFilePreview({ reads: artifacts.reads, blobs }, input),
+    thumbnail: (input: Parameters<typeof artifactThumbnail>[1]) =>
+      artifactThumbnail({ reads: artifacts.reads, blobs }, input),
   };
 }
 

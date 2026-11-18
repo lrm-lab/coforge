@@ -168,7 +168,6 @@ test("a file preview gives text for text and nothing for an image or the rest", 
   expect(await preview(artifact, f.bob, "pic.png")).toEqual({
     path: "pic.png",
     sizeBytes: 16,
-    contentType: "image/png",
     text: null,
   });
   expect(await preview(artifact, f.bob, "logo.svg")).toMatchObject({ text: null });
