@@ -117,8 +117,8 @@ function PiChatContent(props: Props) {
           aria-label={m.pi_chat_sessions()}
           className={cn(
             "w-full min-w-0 flex-col lg:flex lg:w-[18rem] lg:shrink-0 lg:border-r lg:border-secondary",
-            sessionId ? (filePanel?.open ? "hidden 2xl:flex" : "hidden") : "flex",
-            filePanel?.open && sessionId && "lg:hidden 2xl:flex",
+            sessionId ? (filePanel?.open ? "hidden lg:flex" : "hidden") : "flex",
+            filePanel?.open && sessionId && "max-lg:hidden lg:flex",
           )}
         >
           <PageHeader

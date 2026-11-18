@@ -399,7 +399,12 @@ function ArtifactPageFor({
                 }
               />
               <div className="relative flex min-h-0 flex-1">
-                <div className="relative flex min-w-0 flex-1 flex-col">
+                <div
+                  className={cn(
+                    "relative flex min-w-0 flex-1 flex-col",
+                    (panel === "comments" || panel === "files") && "max-sm:hidden",
+                  )}
+                >
                   {incoming !== null && incoming > latest && (
                     <ArtifactUpdateBanner
                       artifactId={artifactId}
@@ -502,6 +507,7 @@ function ArtifactPageFor({
       </ArtifactDraftsProvider>
     </ArtifactCommentingContext.Provider>
   );
+
   return pane ? (
     <PaneFrame full={pane.full}>{body}</PaneFrame>
   ) : (

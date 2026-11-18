@@ -316,7 +316,13 @@ function ConversationPageBody(props: ConversationPageProps & ConversationPageBod
   return (
     <ArtifactsBesideChat>
       <div className="@container/page flex min-h-0 min-w-0 flex-1">
-        <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", open && docFull && "hidden")}>
+        <div
+          className={cn(
+            "flex min-h-0 min-w-0 flex-1 flex-col",
+            open && "max-md:hidden",
+            open && docFull && "hidden",
+          )}
+        >
           <ConversationPageMain {...props} documents={documents} />
         </div>
         {open && <ConversationArtifactPane search={{ doc, docFull }} />}
