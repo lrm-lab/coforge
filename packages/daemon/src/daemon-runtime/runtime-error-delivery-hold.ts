@@ -11,11 +11,13 @@ import {
   type RuntimeErrorClassification,
 } from "#src/agent-runtime/runtime-error-classification";
 import {
+  isZeroEvidenceReason,
   RUNTIME_ERROR_FENCE_EXEMPT_CLASSES,
   RUNTIME_ERROR_RECOVERY_EFFECTS,
   RuntimeErrorDeliveryBackoff,
   RuntimeErrorFingerprintFence,
   RuntimeErrorClassFence,
+  ZERO_EVIDENCE_CRASH_STREAK_CAP,
   type RuntimeErrorClassFenceState,
   type RuntimeErrorFingerprintFenceState,
   type RuntimeErrorRecoverySignal,
@@ -79,6 +81,7 @@ export class RuntimeErrorDeliveryHold {
   readonly #ports: RuntimeErrorDeliveryHoldPorts;
   readonly #backoff = new RuntimeErrorDeliveryBackoff();
   readonly #fence = new RuntimeErrorFingerprintFence();
+  readonly #zeroEvidence = new RuntimeErrorFingerprintFence(ZERO_EVIDENCE_CRASH_STREAK_CAP);
   /** The one release timer per waiting Agent, and the provider whose failure it waits on (absent
    * when none was recorded, which a lifted limit cannot resolve). */
   readonly #releaseTimers = new Map<
@@ -109,9 +112,11 @@ export class RuntimeErrorDeliveryHold {
     fingerprint: string,
     provider?: string,
   ): RuntimeErrorFingerprintFenceState | undefined {
-    const fence = RUNTIME_ERROR_FENCE_EXEMPT_CLASSES.has(classification.errorClass)
-      ? undefined
-      : this.#fence.note(agentId, fingerprint);
+    const fence = isZeroEvidenceReason(classification.errorReason)
+      ? this.#zeroEvidence.note(agentId, "zero_evidence_turn_completed")
+      : RUNTIME_ERROR_FENCE_EXEMPT_CLASSES.has(classification.errorClass)
+        ? undefined
+        : this.#fence.note(agentId, fingerprint);
     if (fence?.fenced) {
       this.#holdFenced(agentId);
       return fence;
@@ -236,6 +241,10 @@ export class RuntimeErrorDeliveryHold {
     if (!classFence?.fenced) return { built };
     this.#holdFenced(agentId);
     return { built, fence: { ...classFence, event: "agent_runtime:class_fence_tripped" } };
+  }
+
+  resetZeroEvidence(agentId: string): void {
+    this.#zeroEvidence.reset(agentId);
   }
 
   /** Applies the signal's `RUNTIME_ERROR_RECOVERY_EFFECTS`. With no backoff nothing is released,

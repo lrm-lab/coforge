@@ -211,13 +211,11 @@ export class AgentLaunchCoordinator {
           launch.turnEvidence?.markExempt();
           try {
             await session.sendMessage("/compact");
-          } catch (error) {
+            if (session.hasLiveTurn !== false) await turnFinished;
+          } finally {
             launch.turnEvidence?.reset();
             this.turnEndCompaction.noteTurnFinished(agentId);
-            throw error;
           }
-          if (session.hasLiveTurn !== false) await turnFinished;
-          else this.turnEndCompaction.noteTurnFinished(agentId);
         }
       },
       onSettled: (agentId) => {

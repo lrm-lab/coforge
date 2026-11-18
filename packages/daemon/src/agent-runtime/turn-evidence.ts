@@ -31,6 +31,11 @@ export class TurnEvidenceLedger {
     this.#exempt = true;
   }
 
+  noteMessageSent(): void {
+    this.#turnObserved = true;
+    this.#assistantTextEvents += 1;
+  }
+
   observe(event: AgentRuntimeEvent): void {
     if (event.conversation) return;
     switch (event.type) {

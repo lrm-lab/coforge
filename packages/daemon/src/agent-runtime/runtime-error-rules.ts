@@ -349,14 +349,19 @@ export const CLASSIFICATION_RULES: readonly ClassificationRule[] = [
   },
   {
     errorClass: RUNTIME_ERROR_CLASS.PROVIDER_SERVER,
+    errorReason: "zero_evidence_turn_completed",
+    retryDecision: RETRY,
+    matches: (message) => /\b(?:codex_)?zero_evidence_turn_completed\b/i.test(message),
+  },
+  {
+    errorClass: RUNTIME_ERROR_CLASS.PROVIDER_SERVER,
     errorReason: "provider_server_error",
     retryDecision: RETRY,
     matches: (message) =>
       /\b5\d{2}\b/.test(message) ||
       /\b(?:internal server|upstream|provider) error\b/i.test(message) ||
       /\bservice unavailable\b/i.test(message) ||
-      /\bbad gateway\b/i.test(message) ||
-      /\b(?:codex_)?zero_evidence_turn_completed\b/i.test(message),
+      /\bbad gateway\b/i.test(message),
   },
   {
     errorClass: RUNTIME_ERROR_CLASS.NOT_FOUND,
