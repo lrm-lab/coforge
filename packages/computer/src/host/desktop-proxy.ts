@@ -66,7 +66,7 @@ export function parseDesktopRoute(
   const suffix = match[2] ?? "/";
   const parts = suffix.split("/").filter((part) => part.length > 0);
   // `/fill` types into the shared desktop. `/<agent>/fill` types into that Agent's screen.
-  // `/inspect` lists visible fields. `/clipboard` sets the X CLIPBOARD as UTF-8.
+  // `/inspect` lists visible fields. `/clipboard` GET/POST reads or sets UTF-8 CLIPBOARD.
   // Bodies are forwarded as-is and are not desktop assets.
   if (
     parts.length === 1 &&

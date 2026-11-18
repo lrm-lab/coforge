@@ -291,19 +291,16 @@
       sendKey(code, true);
       sendKey(code, false);
     });
+    rfb.addEventListener("clipboard", () => {
+      void coforgeDesktopCopyOut();
+    });
     function coforgeDesktopPaste(text) {
-      try {
-        rfb._clipboardServerCapabilitiesFormats = {};
-        rfb._clipboardServerCapabilitiesActions = {};
-        rfb.clipboardPasteFrom(text);
-      } catch {
-      }
-      const push = fetch(`${base}/clipboard${query}`, {
+      return fetch(`${base}/clipboard${query}`, {
         method: "POST",
         body: text,
         headers: { "Content-Type": "text/plain;charset=utf-8" },
-      }).catch(() => {});
-      return push.then(() => {
+      }).then((res) => {
+        if (!res.ok) return;
         try {
           rfb.sendKey(0xffe3, "ControlLeft", true);
           rfb.sendKey(0x0076, "KeyV", true);
@@ -311,7 +308,16 @@
           rfb.sendKey(0xffe3, "ControlLeft", false);
         } catch {
         }
-      });
+      }).catch(() => {});
+    }
+    function coforgeDesktopCopyOut() {
+      return fetch(`${base}/clipboard${query}`)
+        .then((res) => (res.ok ? res.text() : ""))
+        .then((text) => {
+          if (!text) return;
+          return navigator.clipboard.writeText(text);
+        })
+        .catch(() => {});
     }
     document.addEventListener(
       "keydown",
@@ -326,6 +332,11 @@
       "keyup",
       (ev) => {
         if (!rfb) return;
+        if ((ev.ctrlKey || ev.metaKey) && (ev.code === "KeyC" || ev.code === "KeyX") && !ev.repeat) {
+          window.setTimeout(() => {
+            void coforgeDesktopCopyOut();
+          }, 80);
+        }
         if (ev.code !== "KeyV" && ev.code !== "ControlLeft" && ev.code !== "ControlRight" && ev.code !== "MetaLeft" && ev.code !== "MetaRight") return;
         if (ev.code === "KeyV" || ev.ctrlKey || ev.metaKey) ev.stopImmediatePropagation();
       },

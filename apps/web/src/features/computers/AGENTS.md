@@ -64,9 +64,10 @@ These rules apply to `src/features/computers/`.
   system soft keyboard, Esc/Ctrl/Tab/arrows, long-press right-click, two-finger scroll and
   pinch to toggle fit/pan; the cloud image dock stays visible with larger touch targets.
   Action-card takeover follows the same phone overlay / wide popup
-  split. Focused plain-text paste on that desktop page is forwarded into the remote
-  clipboard by the host adapter (`packages/computer` `host/desktop-page.ts`); files and
-  images are not. That origin is the deployment site; Caddy confirms the signed-in owner
+  split. Focused plain-text paste on that desktop page posts UTF-8 to `/clipboard` then
+  injects Ctrl+V (`packages/computer` `host/desktop-page.ts`); classic Latin-1
+  ClientCutText is not used. Copy inside the desktop is read back via GET
+  `/clipboard` into the local clipboard. Files and images are not. That origin is the deployment site; Caddy confirms the signed-in owner
   before proxying to the Swarm host. The address carries no token. Without the variable the
   control is absent. Formatting a cloud computer removes its service and disk,
   then places the same computer again. The owner must type its name; the server
