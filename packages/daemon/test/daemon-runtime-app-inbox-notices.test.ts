@@ -116,6 +116,81 @@ describe("DaemonRuntime App Inbox notices", () => {
     }
   });
 
+  test("an item announced before a restart is not announced again", async () => {
+    const stateDirectory = join(tempRoot, `coforge-inbox-restart-${crypto.randomUUID()}`);
+    const credentials = new InMemoryDaemonCredentialStore();
+    await credentials.save(connection.workspaceId, connection.computerId, "token-a");
+    const notices: string[] = [];
+    const build = () =>
+      new DaemonRuntime(
+        connection,
+        () => ({
+          provider: "pi",
+          createAgentSession: async () => ({
+            ...sessionSpy(),
+            notify: async (notice) => {
+              notices.push(notice);
+            },
+          }),
+        }),
+        credentials,
+        {
+          create: () => ({
+            async start() {},
+            async ready() {},
+            async stop() {},
+            async requestAgentApiKey() {
+              return `sk_agent_${"a".repeat(43)}`;
+            },
+            async revokeAgentApiKey() {},
+            async sendAgentDeliveryAck() {},
+            async agentMessage() {
+              throw new Error("must not read cloud");
+            },
+          }),
+        },
+        undefined,
+        emptyCodeAgentDiscovery,
+        stateDirectory,
+      );
+
+    const first = build();
+    try {
+      await first.start(connection);
+      await first.mintAppItem("agent-a", {
+        appId: "system.reminder",
+        notificationClass: "due",
+        sourceRef: {
+          kind: "reminder",
+          id: "123e4567-e89b-42d3-a456-426614174000",
+          revision: "1",
+        },
+        title: "Check the build",
+        summary: "Reminder due",
+      });
+      await first.startAgent("agent-a", config);
+      await Bun.sleep(10);
+      expect(notices).toHaveLength(1);
+      // A second idle transition announces nothing either: the item was told once.
+      await first.drainAppInboxNotices("agent-a");
+      expect(notices).toHaveLength(1);
+    } finally {
+      await first.stop();
+    }
+
+    const second = build();
+    try {
+      await second.start(connection);
+      await second.startAgent("agent-a", config);
+      await Bun.sleep(10);
+      await second.drainAppInboxNotices("agent-a");
+      expect(notices).toHaveLength(1);
+    } finally {
+      await second.stop();
+      await rm(stateDirectory, { recursive: true, force: true });
+    }
+  });
+
   test("a completed fenced Stop blocks a due reminder from waking the Agent", async () => {
     const stateDirectory = join(tempRoot, `coforge-inbox-stopped-${crypto.randomUUID()}`);
     const credentials = new InMemoryDaemonCredentialStore();

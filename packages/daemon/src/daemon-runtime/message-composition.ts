@@ -5,6 +5,7 @@ import type { DaemonConnectionClient } from "#src/connection/daemon-connection-c
 import { unreadNoticeComposer } from "./important-unread-compose";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { AgentConsumedSeqStore } from "#src/persistence/agent-consumed-seq-store";
+import { FileAppNotifiedStore } from "#src/persistence/app-notified-store";
 import type { AgentContexts } from "./agent-contexts";
 import type { AgentDeliveryGate } from "./agent-delivery-gate";
 import {
@@ -169,6 +170,7 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
   const inboxCoordinator = new InboxCoordinator({
     workspaceId: connection.workspaceId,
     stateDirectory: ports.stateDirectory,
+    notifiedAppItems: new FileAppNotifiedStore(ports.stateDirectory, connection.workspaceId),
     consumedSeqs: ports.consumedSeqs,
     messageAttention,
     deliveryGate: ports.deliveryGate,
