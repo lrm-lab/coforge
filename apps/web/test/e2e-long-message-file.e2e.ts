@@ -39,6 +39,8 @@ const composerReady = `${pageHydrated} && document.querySelector('${field}') !==
 const draft = `document.querySelector('${field}').value`;
 const trayHas = (name: string) =>
   `(document.querySelector('form:has(${field})')?.innerText ?? "").includes(${JSON.stringify(name)})`;
+const sendReady = `document.querySelector('form:has(${field}) button[aria-label="Send"]')?.disabled === false`;
+const trayLabels = `[...document.querySelectorAll("form:has(${field}) [aria-label]")].map((tile) => tile.getAttribute("aria-label")).join(" | ")`;
 const onChannel = (id: string) =>
   `${composerReady} && location.pathname.endsWith(${JSON.stringify(id)})`;
 const trayFiles = `[...document.querySelectorAll("form *")].filter((el) => el.children.length === 0 && /^message-\\d{8}-\\d{6}\\.md$/.test(el.textContent.trim())).length`;
@@ -182,10 +184,13 @@ test("a file still uploading stays in the draft across a channel switch, then go
     expect(await evaluate<string>(draft)).toBe("With the notes.");
 
     expect(await evaluate<boolean>(releaseUploads)).toBe(true);
-    await browser(
-      "wait",
-      "--fn",
-      `![...document.querySelectorAll("form:has(${field}) [aria-label]")].some((tile) => tile.getAttribute("aria-label").includes("Uploading"))`,
+    await browser("wait", "--fn", `${sendReady} === true`).catch(async (error) => {
+      throw new Error(`Send never opened; tray: ${await evaluate<string>(trayLabels)}`, {
+        cause: error,
+      });
+    });
+    expect(await evaluate<boolean>(`document.querySelector('${field}').focus() ?? true`)).toBe(
+      true,
     );
     await browser("press", "Enter");
     await browser("wait", "--fn", `${draft} === "" && !${trayHas(name)}`);
