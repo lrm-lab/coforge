@@ -154,6 +154,8 @@ services:
       COFORGE_OIDC_SIGNING_JWKS_FILE: /run/secrets/coforge_oidc_signing_jwks
       # Feature flags on staging (docs/feature-flags.md); the definitions are the config below.
       COFORGE_FEATURE_FLAGS_FILE: /etc/coforge/feature-flags.json
+      COFORGE_TEAM_MEMORY_RECALL: "true"
+      COFORGE_TEAM_MEMORY_REVIEW: "true"
       # Avatars and project icons are published as anonymous, never-expiring URLs on their own
       # domain and bucket, so a browser caches one copy of each. Both settings go live
       # together: the URL without the bucket refuses to boot. The Web role reads that bucket
@@ -227,7 +229,12 @@ services:
       centrifugo:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/health"]
+      test:
+        - CMD-SHELL
+        - >-
+          test "$${COFORGE_TEAM_MEMORY_RECALL}" = true &&
+          test "$${COFORGE_TEAM_MEMORY_REVIEW}" = true &&
+          exec wget -q -O /dev/null http://127.0.0.1:3000/health
       interval: 10s
       timeout: 3s
       retries: 12
