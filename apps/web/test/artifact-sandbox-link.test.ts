@@ -2,9 +2,9 @@ import { expect, test } from "bun:test";
 import { ArtifactSandbox } from "#src/server/artifacts/artifact-sandbox.server";
 import { MemoryTicketNonces } from "#src/server/artifacts/artifact-sandbox-nonces.server";
 import { PublicArtifactMissGuard } from "#src/server/artifacts/artifact-public-miss-guard.server";
-import type { PublicPage } from "#src/server/artifacts/artifact-public-page.server";
+import type { LinkLookup, PublicPage } from "#src/server/artifacts/artifact-public-page.server";
 import type { PeekableRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
-import { FRAME } from "./helpers/artifact-sandbox-open";
+import { FRAME, subresource } from "./helpers/artifact-sandbox-open";
 
 const A = "11111111-1111-4111-8111-111111111111";
 const B = "22222222-2222-4222-8222-222222222222";
@@ -20,6 +20,9 @@ const found: PublicPage = {
   sha256: "sha",
   sizeBytes: 10,
 };
+
+const ABSENT: LinkLookup = { shared: false, page: null };
+const shared = (page: PublicPage | null): LinkLookup => ({ shared: true, page });
 
 function counter(limit: number): PeekableRateLimit {
   const counts = new Map<string, number>();
@@ -39,8 +42,8 @@ function counter(limit: number): PeekableRateLimit {
 }
 
 function linkSandbox(
-  linkPage: ((artifactId: string, path?: string) => Promise<PublicPage | null>) | undefined,
-  client = "192.0.2.1",
+  linkPage: ((artifactId: string, path?: string) => Promise<LinkLookup>) | undefined,
+  client: string | null = "192.0.2.1",
   missGuard = new PublicArtifactMissGuard({
     perClient: counter(20),
     global: counter(300),
@@ -56,12 +59,12 @@ function linkSandbox(
     now: () => new Date("2026-11-19T08:00:00Z"),
     linkPage,
     missGuard,
-    publicClientAddress: () => client,
+    publicClientAddress: () => client ?? undefined,
   });
 }
 
 test("a link-tier page opens with no ticket and no reader, unframed, on its own artifact's origin", async () => {
-  const service = linkSandbox(async (id) => (id === A ? found : null));
+  const service = linkSandbox(async (id) => (id === A ? shared(found) : ABSENT));
   const redirect = await service.serve(new Request(`${ORIGIN}/l`));
   expect(redirect.status).toBe(302);
   expect(redirect.headers.get("location")).toBe("/l/page/index.html");
@@ -82,7 +85,7 @@ test("without a link lookup the route does not exist", async () => {
 });
 
 test("a miss is the same 404 whether the artifact is absent or not shared, and the 21st from one client is a 429", async () => {
-  const service = linkSandbox(async () => null);
+  const service = linkSandbox(async () => ABSENT);
   for (let i = 0; i < 20; i++)
     expect((await service.serve(new Request(`${ORIGIN}/l`))).status).toBe(404);
   const refused = await service.serve(new Request(`${ORIGIN}/l`));
@@ -96,10 +99,10 @@ test("another client still opens a page after one client is refused", async () =
     global: counter(300),
     now: () => 0,
   });
-  const first = linkSandbox(async () => null, "192.0.2.1", guard);
+  const first = linkSandbox(async () => ABSENT, "192.0.2.1", guard);
   for (let i = 0; i < 21; i++) await first.serve(new Request(`${ORIGIN}/l`));
   expect((await first.serve(new Request(`${ORIGIN}/l`))).status).toBe(429);
-  const second = linkSandbox(async () => found, "192.0.2.2", guard);
+  const second = linkSandbox(async () => shared(found), "192.0.2.2", guard);
   expect((await second.serve(new Request(`${ORIGIN}/l`))).status).toBe(302);
 });
 
@@ -112,7 +115,26 @@ test("the ticket path never consults the miss guard, so members are not counted"
       throw new Error("consulted");
     },
   } as unknown as PublicArtifactMissGuard;
-  const service = linkSandbox(async () => found, "192.0.2.1", guard);
+  const service = linkSandbox(async () => shared(found), "192.0.2.1", guard);
   const bad = await service.serve(new Request(`${ORIGIN}/_coforge/open?ticket=nope`));
   expect(bad.status).toBe(404);
+});
+
+test("a shared page's missing files are plain 404s that never count, so its reader is never refused", async () => {
+  const service = linkSandbox(async (_id, path) => shared(path === undefined ? found : null));
+  for (let i = 0; i < 25; i++)
+    expect(
+      (
+        await service.serve(
+          new Request(`${ORIGIN}/l/page/missing-${i}.png`, { headers: subresource("image") }),
+        )
+      ).status,
+    ).toBe(404);
+  expect((await service.serve(new Request(`${ORIGIN}/l`))).status).toBe(302);
+});
+
+test("a request with no client address is never counted, so unattributed visitors cannot lock each other out", async () => {
+  const service = linkSandbox(async () => ABSENT, null);
+  for (let i = 0; i < 25; i++)
+    expect((await service.serve(new Request(`${ORIGIN}/l`))).status).toBe(404);
 });

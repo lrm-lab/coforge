@@ -22,7 +22,7 @@ import {
 } from "./artifact-public-files.server";
 import { publicMarkdownResponse } from "./artifact-public-markdown.server";
 import type { PublicArtifactMissGuard } from "./artifact-public-miss-guard.server";
-import type { PublicPage } from "./artifact-public-page.server";
+import type { LinkLookup, PublicPage } from "./artifact-public-page.server";
 import { artifactPageOrigin, sandboxTarget } from "./artifact-sandbox-config.server";
 import {
   ARTIFACT_HTML_LIMIT,
@@ -63,7 +63,7 @@ type SandboxDependencies = {
   secret(): Promise<string>;
   now(): Date;
   publicPage?(token: string, path?: string): Promise<PublicPage | null>;
-  linkPage?(artifactId: string, path?: string): Promise<PublicPage | null>;
+  linkPage?(artifactId: string, path?: string): Promise<LinkLookup>;
   missGuard?: PublicArtifactMissGuard;
   viewerName?: (workspaceId: string, userId: string) => Promise<string>;
   publicRateLimit?: AppRateLimit;
@@ -73,7 +73,7 @@ type SandboxDependencies = {
 
 type PublicRef = {
   base: string;
-  load(path?: string): Promise<PublicPage | null>;
+  load(path?: string): Promise<{ page: PublicPage | null; miss: boolean }>;
   guarded: boolean;
 };
 
@@ -297,14 +297,25 @@ export class ArtifactSandbox {
   private linkRef(host: ArtifactHost): PublicRef | null {
     const linkPage = this.deps.linkPage;
     return linkPage
-      ? { base: "/l", load: (path) => linkPage(host.artifactId, path), guarded: true }
+      ? {
+          base: "/l",
+          load: async (path) => {
+            const { shared, page } = await linkPage(host.artifactId, path);
+            return { page, miss: !shared };
+          },
+          guarded: true,
+        }
       : null;
   }
 
   private tokenRef(token: string): PublicRef | null {
     const publicPage = this.deps.publicPage;
     return publicPage
-      ? { base: `/p/${token}`, load: (path) => publicPage(token, path), guarded: false }
+      ? {
+          base: `/p/${token}`,
+          load: async (path) => ({ page: await publicPage(token, path), miss: false }),
+          guarded: false,
+        }
       : null;
   }
 
@@ -331,7 +342,7 @@ export class ArtifactSandbox {
     ref: PublicRef,
     path: string | undefined,
   ): Promise<PublicPage | Response | null> {
-    const client = (this.deps.publicClientAddress ?? clientAddress)(request) ?? "unknown";
+    const client = (this.deps.publicClientAddress ?? clientAddress)(request);
     const guard = ref.guarded ? this.deps.missGuard : undefined;
     const refusal = await guard?.refusal(client);
     if (refusal) {
@@ -339,8 +350,8 @@ export class ArtifactSandbox {
       response.headers.set("Retry-After", String(refusal.retryAfterSeconds));
       return response;
     }
-    const page = await ref.load(path);
-    if (!page) await guard?.miss(client);
+    const { page, miss } = await ref.load(path);
+    if (miss) await guard?.miss(client);
     return page;
   }
 

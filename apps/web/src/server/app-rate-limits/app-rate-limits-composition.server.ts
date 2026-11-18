@@ -19,10 +19,7 @@ export const PUBLIC_ARTIFACT_LIMIT_PER_MINUTE = 120;
 /** The other files of public artifact pages (styles, scripts, images, fonts) a minute per client
  * IP: a page may be up to 200 files, and a reader opens several. */
 export const PUBLIC_ARTIFACT_FILE_LIMIT_PER_MINUTE = 2000;
-/** Misses a minute per client IP on a link-tier artifact's address (no such artifact, or not shared
- * by link): one refusal for both, so a miss tells nothing. */
 export const PUBLIC_ARTIFACT_MISS_LIMIT_PER_MINUTE = 20;
-/** Misses a minute across every client past which a warning is logged; nothing is refused. */
 export const PUBLIC_ARTIFACT_MISS_GLOBAL_WARN_PER_MINUTE = 300;
 export const ARTIFACT_AGENT_WRITE_LIMIT_PER_MINUTE = 60;
 export const ARTIFACT_ZIP_LIMIT_PER_MINUTE = 10;

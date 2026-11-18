@@ -19,12 +19,14 @@ export class PublicArtifactMissGuard {
     },
   ) {}
 
-  async refusal(client: string): Promise<{ retryAfterSeconds: number } | null> {
+  async refusal(client: string | undefined): Promise<{ retryAfterSeconds: number } | null> {
+    if (client === undefined) return null;
     const decision = await this.deps.perClient.peek(client);
     return decision.allowed ? null : { retryAfterSeconds: decision.retryAfterSeconds };
   }
 
-  async miss(client: string): Promise<void> {
+  async miss(client: string | undefined): Promise<void> {
+    if (client === undefined) return this.#reportGuessing("unattributed");
     await this.deps.perClient.admit(client);
     const decision = await this.deps.global.admit(GLOBAL_KEY);
     if (!decision.allowed) this.#reportGuessing(client);

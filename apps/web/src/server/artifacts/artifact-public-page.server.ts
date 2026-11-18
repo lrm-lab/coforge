@@ -51,17 +51,21 @@ export function publicPageLookup(
   };
 }
 
+export type LinkLookup = { shared: boolean; page: PublicPage | null };
+
 export function linkPageLookup(
   db: PrismaClient,
   enabled: (workspaceId: string) => Promise<boolean> = (workspaceId) =>
     artifactsEnabled(db, workspaceId),
 ) {
-  return async (artifactId: string, path?: string): Promise<PublicPage | null> => {
+  return async (artifactId: string, path?: string): Promise<LinkLookup> => {
     const artifact = await db.artifact.findFirst({
       where: { id: artifactId, access: "link" },
       select: PAGE_ARTIFACT_SELECT,
     });
-    return artifact ? publicPageOf(db, enabled, artifact, path) : null;
+    return artifact
+      ? { shared: true, page: await publicPageOf(db, enabled, artifact, path) }
+      : { shared: false, page: null };
   };
 }
 
