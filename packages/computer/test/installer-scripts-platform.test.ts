@@ -76,6 +76,8 @@ async function runPowerShellWithEnv(
     COFORGE_INSTALLER_TEST_MODE: "1",
     NO_PROXY: "127.0.0.1",
     no_proxy: "127.0.0.1",
+    NO_COLOR: "1",
+    TERM: "dumb",
   };
   for (const name of [
     "http_proxy",

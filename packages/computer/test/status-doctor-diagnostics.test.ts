@@ -115,6 +115,8 @@ test("status and doctor detect an unfinished installer-transaction.json and reco
     probeCoordinator: async () => ({ loaded: true, pid: 100 }),
     readServiceDefinition: async () => null,
     probeDaemonSnapshot: async () => ({ reachable: true, runtimes: [] }),
+    listWorkspaceAgents: { supported: true, list: async () => [] },
+    listLeftoverUpgradeJobs: { supported: true, list: async () => [] },
   });
 
   expect(status.install.readable).toBe(true);
@@ -147,6 +149,8 @@ test("status and doctor detect an unfinished installer-transaction.json and reco
     probeCoordinator: async () => ({ loaded: true, pid: 100 }),
     readServiceDefinition: async () => null,
     probeDaemonSnapshot: async () => ({ reachable: true, runtimes: [] }),
+    listWorkspaceAgents: { supported: true, list: async () => [] },
+    listLeftoverUpgradeJobs: { supported: true, list: async () => [] },
   });
   expect(corruptStatus.install.readable && corruptStatus.install.unfinishedTransaction).toEqual({
     valid: false,
