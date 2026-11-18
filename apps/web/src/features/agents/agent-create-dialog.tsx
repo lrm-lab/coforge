@@ -63,6 +63,7 @@ function preferredRuntime(computer: AgentCreateComputerOption | undefined) {
 type LocalAgentFormOptions = {
   computers: AgentCreateComputerOption[];
   onLoadRuntimeCatalog: (computerId: string) => Promise<RuntimeCatalog[]>;
+  cachedRuntimeCatalog?: (computerId: string) => RuntimeCatalog[] | undefined;
   defaults?: { name?: string; description?: string; computerId?: string };
   computerLocked?: boolean;
   visibilityLocked?: boolean;
@@ -76,6 +77,7 @@ export function LocalAgentForm({
   computers,
   onCreate,
   onLoadRuntimeCatalog,
+  cachedRuntimeCatalog,
   defaults,
   computerLocked = false,
   visibilityLocked = false,
@@ -112,6 +114,13 @@ export function LocalAgentForm({
     },
   });
   const computer = computers.find((candidate) => candidate.id === computerId);
+  const cachedCatalog = cachedRuntimeCatalog?.(computerId);
+  const runtimeOptionsFor = (id: string, catalogs: RuntimeCatalog[]) => ({
+    ...runtimeOptionsFromRuntimes(
+      computers.find((candidate) => candidate.id === id)?.runtimes ?? [],
+    ),
+    catalogs,
+  });
   useEffect(() => {
     onBusyChange(submitting);
     return () => onBusyChange(false);
@@ -265,12 +274,8 @@ export function LocalAgentForm({
                 />
               )
             }
-            onLoad={async (id) => ({
-              ...runtimeOptionsFromRuntimes(
-                computers.find((computer) => computer.id === id)?.runtimes ?? [],
-              ),
-              catalogs: await onLoadRuntimeCatalog(id),
-            })}
+            onLoad={async (id) => runtimeOptionsFor(id, await onLoadRuntimeCatalog(id))}
+            initialOptions={cachedCatalog && runtimeOptionsFor(computerId, cachedCatalog)}
           />
           <AgentOptionCard
             label={m.agent_form_visibility_private()}

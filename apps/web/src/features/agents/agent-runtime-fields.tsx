@@ -56,6 +56,7 @@ export function AgentRuntimeFields({
   initial,
   credentialConfigured = false,
   onLoad,
+  initialOptions,
   onDirtyChange,
   providerNotice,
 }: {
@@ -64,6 +65,7 @@ export function AgentRuntimeFields({
   initial?: RuntimeSelection;
   credentialConfigured?: boolean;
   onLoad: (computerId: string) => Promise<RuntimeOptions>;
+  initialOptions?: RuntimeOptions;
   onDirtyChange?: (dirty: boolean) => void;
   providerNotice?: (provider: RuntimeProvider) => ReactNode;
 }) {
@@ -87,7 +89,7 @@ export function AgentRuntimeFields({
   const [manualDirty, setManualDirty] = useState(false);
   const [optionsByComputer, setOptionsByComputer] = useState<
     Record<string, RuntimeOptions | undefined>
-  >({});
+  >(() => (initialOptions ? { [computerId]: initialOptions } : {}));
   const [failedComputerId, setFailedComputerId] = useState<string>();
   const [retry, setRetry] = useState(0);
   const loading = useRef(new Set<string>());

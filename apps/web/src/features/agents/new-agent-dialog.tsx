@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Cloud01, Link01, Monitor01 } from "@untitledui/icons";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type UseQueryResult } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Heading, Radio, RadioGroup } from "react-aria-components";
 
@@ -21,6 +21,7 @@ import {
   AgentCreateModal,
 } from "./agent-create-frame";
 import { LocalAgentForm } from "./agent-create-dialog";
+import type { RuntimeCatalog } from "./agent-runtime-fields";
 import { useCreateAgent } from "./use-create-agent";
 import { CloudAgentForm } from "./cloud-agent-form";
 import { ExternalAgentForm } from "./external-agent-form";
@@ -78,6 +79,8 @@ function NewAgentForms({
   onBusyChange: (busy: boolean) => void;
 }) {
   const cloud = useCloudAgentComputer();
+  const computers = useAgentCreateComputers();
+  const catalogs = useAgentCreateCatalogs(computers.data?.[0]?.id);
   const [chosen, setChosen] = useState<AgentKind>();
   const [submitting, setSubmitting] = useState(false);
   const usernameDraft = useAgentUsernameDraft();
@@ -156,6 +159,8 @@ function NewAgentForms({
           conversationReplacesPage={conversationReplacesPage}
           onBusyChange={onBusyChange}
           usernameDraft={usernameDraft}
+          computers={computers}
+          catalogs={catalogs}
         />
       )}
     </div>
@@ -167,26 +172,20 @@ function NewLocalAgent({
   conversationReplacesPage,
   onBusyChange,
   usernameDraft,
+  computers,
+  catalogs,
 }: {
   onClose: () => void;
   conversationReplacesPage: boolean;
   onBusyChange: (busy: boolean) => void;
   usernameDraft: AgentUsernameDraft;
+  computers: UseQueryResult<CreateComputer[]>;
+  catalogs: AgentCreateCatalogs;
 }) {
-  const workspaceId = useCurrentWorkspaceId();
-  const loadComputers = useServerFn(listComputers);
-  const loadRuntimeCatalog = useServerFn(getComputerRuntimeCatalog);
   const create = useCreateAgent();
   const refreshSidebar = useRefreshSidebar({ throwOnError: false });
   const openDirect = useOpenDirectConversation();
   const closeList = useCloseConversationList();
-  const computers = useQuery({
-    queryKey: ["computers", "agent-create", workspaceId],
-    queryFn: () => loadComputers(),
-    staleTime: 0,
-    gcTime: 0,
-  });
-
   if (!computers.data)
     return (
       <AgentCreateForm
@@ -212,7 +211,8 @@ function NewLocalAgent({
   return (
     <LocalAgentForm
       computers={computers.data}
-      onLoadRuntimeCatalog={(computerId) => loadRuntimeCatalog({ data: { computerId } })}
+      onLoadRuntimeCatalog={catalogs.load}
+      cachedRuntimeCatalog={catalogs.cached}
       submitLabel={m.agent_create_submit_chat()}
       onCreate={async (input) => {
         const created = await create(input);
@@ -241,4 +241,40 @@ function Loading({ className, children }: { className: string; children?: ReactN
       <span className="sr-only">{m.agent_env_loading()}</span>
     </div>
   );
+}
+
+type CreateComputer = Awaited<ReturnType<typeof listComputers>>[number];
+
+const createOrder = (computer: CreateComputer) =>
+  (computer.online ? 0 : 2) + (computer.kind === "cloud" ? 1 : 0);
+
+function useAgentCreateComputers() {
+  const workspaceId = useCurrentWorkspaceId();
+  const load = useServerFn(listComputers);
+  return useQuery({
+    queryKey: ["computers", "agent-create", workspaceId],
+    queryFn: async () => [...(await load())].sort((a, b) => createOrder(a) - createOrder(b)),
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
+type AgentCreateCatalogs = ReturnType<typeof useAgentCreateCatalogs>;
+
+function useAgentCreateCatalogs(defaultComputerId: string | undefined) {
+  const workspaceId = useCurrentWorkspaceId();
+  const load = useServerFn(getComputerRuntimeCatalog);
+  const queryClient = useQueryClient();
+  const query = (computerId: string) => ({
+    queryKey: ["runtime-catalog", "agent-create", workspaceId, computerId],
+    queryFn: (): Promise<RuntimeCatalog[]> => load({ data: { computerId } }),
+    staleTime: 0,
+  });
+  useQuery({ ...query(defaultComputerId ?? ""), enabled: Boolean(defaultComputerId) });
+  return {
+    load: (computerId: string) =>
+      queryClient.ensureQueryData({ ...query(computerId), revalidateIfStale: true }),
+    cached: (computerId: string) =>
+      queryClient.getQueryData<RuntimeCatalog[]>(query(computerId).queryKey),
+  };
 }
