@@ -13,10 +13,10 @@ import { browserSession, localBrowserE2e, pageWaiter } from "./helpers/browser-e
  *
  * Opt-in like the other browser E2Es: real local Web (`COFORGE_DEV_SKIP_AUTH=1`) + `agent-browser`
  * against the dev database. It empties the dev user's description for the run and restores it.
- * Screenshots are written under `.amp/e2e/account-settings-plain/`.
+ * Screenshots are written under `.artifacts/e2e/account-settings-plain/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/account-settings-plain");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/account-settings-plain");
 
 test("Account settings shows the person plainly: no banner, no empty fields", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

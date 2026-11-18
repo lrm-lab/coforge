@@ -16,7 +16,7 @@ import { pickTaskPriority } from "./helpers/browser-e2e";
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the dev user a member of
  * its Workspace (seed-dev). Each run seeds a fresh channel, Agent and direct message. Screenshots
- * are written under `.amp/e2e/tasks-create-and-scope/`.
+ * are written under `.artifacts/e2e/tasks-create-and-scope/`.
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
@@ -26,7 +26,7 @@ if (!browserPath) throw new Error("agent-browser is required");
 const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/tasks-create-and-scope");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/tasks-create-and-scope");
 
 test("the Tasks page shows channel Tasks only, and a channel's Tasks tab creates them one after another", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

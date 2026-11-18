@@ -15,7 +15,7 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * public channel the viewer has not joined, which asks before joining; and the phone's two steps.
  * Needs a local built Web with skip-auth, PostgreSQL, Redis, local Centrifugo, the Web's local file
  * storage directory (`COFORGE_FILE_STORAGE_DIR`) and agent-browser. No model runs. The suite
- * removes its own Workspace, writer and stored files. Screenshots live in .amp/e2e/message-forward/.
+ * removes its own Workspace, writer and stored files. Screenshots live in .artifacts/e2e/message-forward/.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
@@ -26,7 +26,7 @@ if (!storageRoot) throw new Error("COFORGE_FILE_STORAGE_DIR is required");
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const files = new LocalFileStorage(storageRoot);
 const proxy = sameOriginProxy(origin, centrifugoOrigin);
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/message-forward");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/message-forward");
 const { browser, evaluate } = browserSession(browserPath, `message-forward-${process.pid}`);
 
 const suffix = String(process.pid);

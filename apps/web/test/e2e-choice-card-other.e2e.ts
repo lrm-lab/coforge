@@ -30,10 +30,10 @@ import {
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its Agent, a
  * second member and seven cards are seeded per run and removed after it. Screenshots (light, dark,
- * Chinese, a phone, answered, someone else's card) are written under `.amp/e2e/choice-card-other/`.
+ * Chinese, a phone, answered, someone else's card) are written under `.artifacts/e2e/choice-card-other/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/choice-card-other");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/choice-card-other");
 
 test("the asked person answers a choice card in its own last row", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

@@ -22,10 +22,10 @@ import {
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its Agent, a
  * second member and the cards are seeded per run and removed after it. Screenshots are written
- * under `.amp/e2e/choice-card-long-text/`.
+ * under `.artifacts/e2e/choice-card-long-text/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/choice-card-long-text");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/choice-card-long-text");
 
 /** `text` repeated and cut to exactly `length` characters: the server's limit, not past it. */
 const exactly = (text: string, length: number) =>

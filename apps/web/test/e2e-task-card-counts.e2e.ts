@@ -10,10 +10,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * A board card's foot says how much talk a Task holds, from the board's own read (task #598): its
  * comments and sent files, and nothing for a Task with none. Seeds a channel, two Tasks and one
  * Task's discussion, and removes them after the run. Screenshots, light, dark and phone, are
- * written under `.amp/e2e/task-card-counts/`.
+ * written under `.artifacts/e2e/task-card-counts/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-card-counts");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-card-counts");
 
 test("a card shows its comments and files, and a quiet card shows neither", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

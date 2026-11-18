@@ -20,10 +20,10 @@ import {
  * A Task's discussion card on Activity opens the Task's popup alone, over Activity, not its
  * channel's chat behind it (Frank, 11-04, #task_v2). Opt-in like the other browser E2Es; the
  * channel, Agent and Task are seeded per run and removed after it. Screenshots go under
- * `.amp/e2e/activity-task-alone/`.
+ * `.artifacts/e2e/activity-task-alone/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-task-alone");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/activity-task-alone");
 
 test("a Task card on Activity opens the Task's popup, not its channel's chat", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

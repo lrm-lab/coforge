@@ -1,7 +1,7 @@
 import { join } from "node:path";
 
 export function grokReportPath(name: string) {
-  return new URL(`../../../../.amp/e2e/grok-native/${name}`, import.meta.url);
+  return new URL(`../../../../.artifacts/e2e/grok-native/${name}`, import.meta.url);
 }
 
 export type ChatRequest = {

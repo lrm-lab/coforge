@@ -22,7 +22,7 @@ const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
 const shots =
   Bun.env.COFORGE_E2E_SHOTS_DIR ??
-  join(import.meta.dir, "../../../.amp/e2e/artifact-comment-drafts");
+  join(import.meta.dir, "../../../.artifacts/e2e/artifact-comment-drafts");
 const locale = Bun.env.COFORGE_E2E_LOCALE ?? "en";
 const [width, height] = (Bun.env.COFORGE_E2E_VIEWPORT ?? "1280x860").split("x");
 

@@ -23,10 +23,10 @@ import {
  * Opt-in like the other browser E2Es: real local Web started as it is and
  * `agent-browser`. Two Projects, a channel
  * in the first and its Tasks are seeded per run and removed after it. Screenshots are written
- * under `.amp/e2e/project-tasks/`.
+ * under `.artifacts/e2e/project-tasks/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/project-tasks");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/project-tasks");
 
 test("a Project page lists its Tasks as a tree, and a Task's popup moves it between Projects", async () => {
   // Sub-tasks are Tasks v2, part of the Workspace's `taskConversations` experiment.

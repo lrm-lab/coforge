@@ -26,13 +26,13 @@ import {
  *
  * Opt-in like the other browser E2Es (`agent-browser`, `openssl`, local database and Redis); it
  * deletes what it created and leaves `summary.json` and the Web log in
- * `.amp/e2e/onboarding-wizard/`.
+ * `.artifacts/e2e/onboarding-wizard/`.
  *
  *   DATABASE_URL=... REDIS_URL=redis://127.0.0.1:6380 bun test ./test/onboarding-wizard.e2e.ts
  */
 const { databaseUrl } = requireLocalServices();
 const webPort = Number(Bun.env.COFORGE_E2E_ONBOARDING_WEB_PORT ?? 8797);
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/onboarding-wizard");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/onboarding-wizard");
 
 const people = {
   finisher: {

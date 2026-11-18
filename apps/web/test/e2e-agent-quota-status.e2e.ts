@@ -13,10 +13,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * must, are red with a warning sign,
  * not a dot, in the DM header, a channel's member list and the Computer's roster, in English and
  * Chinese; the Agent's profile shows them whole. Seeds a Computer, an Agent and the display the Daemon would report, and removes them
- * after the run. Screenshots, light, dark and phone, are under `.amp/e2e/agent-quota-status/`.
+ * after the run. Screenshots, light, dark and phone, are under `.artifacts/e2e/agent-quota-status/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-quota-status");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/agent-quota-status");
 
 test("a quota-exhausted Agent's status reads as a warning", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

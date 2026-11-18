@@ -8,7 +8,7 @@ import { getComputerStatusCache } from "#src/server/centrifugo/computer-status.s
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/cloud-agent-create-state");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/cloud-agent-create-state");
 
 const dialog = `document.querySelector('[role="dialog"]')`;
 const dialogText = `(${dialog}?.textContent ?? "")`;

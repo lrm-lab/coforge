@@ -18,7 +18,7 @@ const env = await startSandboxBrowserEnv(["data"], ({ id }) => ({ [id.data!]: da
 });
 const { browser, linkFor, inApp, ID } = env;
 afterAll(() => env.stop());
-const outputs = join(import.meta.dir, "../../../.amp/e2e/artifact-sandbox-files");
+const outputs = join(import.meta.dir, "../../../.artifacts/e2e/artifact-sandbox-files");
 
 type Message = Record<string, any>;
 

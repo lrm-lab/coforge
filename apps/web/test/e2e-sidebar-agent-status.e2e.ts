@@ -19,7 +19,7 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * the sidebar lists too (an `isExtra` Agent). An online heartbeat leaves the face as it is. Needs a
  * local built Web with skip-auth, PostgreSQL, local Centrifugo and agent-browser. No model runs.
  * The suite removes its own Workspace, people and Computer. Screenshots and labels live in
- * .amp/e2e/sidebar-agent-status/.
+ * .artifacts/e2e/sidebar-agent-status/.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
@@ -27,7 +27,7 @@ if (!centrifugoOrigin || !["localhost", "127.0.0.1"].includes(new URL(centrifugo
   throw new Error("COFORGE_E2E_CENTRIFUGO_URL must target local Centrifugo");
 const proxy = sameOriginProxy(origin, centrifugoOrigin);
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/sidebar-agent-status");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/sidebar-agent-status");
 const { browser, evaluate } = browserSession(browserPath, `sidebar-agent-status-${process.pid}`);
 const centrifugo = createCentrifugoServerApi();
 let workspaceId: string;

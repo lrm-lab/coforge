@@ -15,7 +15,7 @@ import { hydratedElement } from "./helpers/browser-e2e";
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel is seeded
  * deterministically and reset on every run. Screenshots are written under
- * `.amp/e2e/message-search/`.
+ * `.artifacts/e2e/message-search/`.
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
@@ -25,7 +25,7 @@ if (!browserPath) throw new Error("agent-browser is required");
 const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/message-search");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/message-search");
 
 /** Deterministic id (seed-dev's sha256→UUID shape), so a rerun updates instead of duplicating. */
 function seededUuid(key: string): string {

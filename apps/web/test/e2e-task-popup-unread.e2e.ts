@@ -20,10 +20,10 @@ import {
  * A Task popup's discussion opens on the reader's first unread under the "New messages" divider,
  * as a channel does (task #99), and the open moves their read position: the next open has none.
  * Opt-in like the other browser E2Es; the channel, Agent and Task are seeded per run and removed
- * after. Screenshots go under `.amp/e2e/task-popup-unread/`.
+ * after. Screenshots go under `.artifacts/e2e/task-popup-unread/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-popup-unread");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-popup-unread");
 
 test("a Task popup's discussion opens on its first unread under a New messages divider", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

@@ -22,10 +22,10 @@ import { seedChannel } from "./helpers/open-unread-e2e";
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its peer and
  * its messages are seeded deterministically and reset on every run. Screenshots are written under
- * `.amp/e2e/hidden-tab-read/`.
+ * `.artifacts/e2e/hidden-tab-read/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/hidden-tab-read");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/hidden-tab-read");
 
 /** What the page says about itself: on screen or not, and whether its window has focus. */
 const pageState = (state: { visible: boolean; focused: boolean }) => `

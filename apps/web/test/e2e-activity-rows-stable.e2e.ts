@@ -25,7 +25,7 @@ import { daysNamed, seedChannel } from "./helpers/activity-inbox-e2e";
  * key, so a rerun replaces its rows.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-rows-stable");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/activity-rows-stable");
 
 const OBSERVE_ROWS = `(() => {
   window.__rowsRemoved = [];

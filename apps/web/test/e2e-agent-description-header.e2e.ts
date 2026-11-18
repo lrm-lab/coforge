@@ -18,10 +18,10 @@ import {
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its Agent and
  * the Agent's message are seeded per run and removed after it. Screenshots (light, dark, a phone)
- * are written under `.amp/e2e/agent-description-header/`.
+ * are written under `.artifacts/e2e/agent-description-header/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-description-header");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/agent-description-header");
 
 test("an Agent's message header shows the first line of its description", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

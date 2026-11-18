@@ -174,7 +174,7 @@ The opt-in `apps/web/test/pi-chat-daemon.integration.ts` runs with an isolated
 `PI_CHAT_TEST_REDIS_URL`. It verifies live thinking/partial answers before model
 completion, real file tools, request deduplication and native reload after a
 worker restart. Its model and WSS adapter are controlled fixtures; Redis and Pi
-are real. It writes `.amp/e2e/pi-chat-daemon.json` as repeatable evidence.
+are real. It writes `.artifacts/e2e/pi-chat-daemon.json` as repeatable evidence.
 
 UI acceptance and the manual checklist are in [Validation](validation.md).
 

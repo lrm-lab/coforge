@@ -20,7 +20,7 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
 const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
-const shots = join(import.meta.dir, "../../../.amp/e2e/artifact-comments");
+const shots = join(import.meta.dir, "../../../.artifacts/e2e/artifact-comments");
 
 test("people comment on an artifact, see each other live, resolve, and use the phone sheet", async () => {
   await installFeatureFlags(

@@ -6,7 +6,7 @@ import { setupAgentReplying, visible } from "./helpers/agent-replying-fixture";
  * component. Both draw the same face group, at most three overlapping mascots, and the same
  * sentence rules, with only the verb differing. Opt-in like the other browser E2Es; see
  * `helpers/agent-replying-fixture.ts`. Screenshots are written under
- * `.amp/e2e/agent-replying-group/`.
+ * `.artifacts/e2e/agent-replying-group/`.
  */
 const fx = setupAgentReplying({ artifactsName: "agent-replying-group" });
 const { suffix, agentName, evaluate, until } = fx;

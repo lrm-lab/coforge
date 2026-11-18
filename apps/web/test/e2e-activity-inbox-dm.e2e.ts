@@ -26,10 +26,10 @@ import {
  * whose setup it shares (`helpers/activity-inbox-e2e.ts`).
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. Screenshots are written
- * under `.amp/e2e/activity-inbox/` (`member-dm.png`).
+ * under `.artifacts/e2e/activity-inbox/` (`member-dm.png`).
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-inbox");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/activity-inbox");
 
 test("a direct message with a member, and the one with themself, list with the member's face and name", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

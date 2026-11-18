@@ -24,12 +24,12 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * (`COFORGE_E2E_CENTRIFUGO_URL`), and `agent-browser`. The labels, their group, the channel and its
  * Tasks are seeded per run and removed after it. The member's view is read in a Workspace the run
  * makes (a seeded owner, the dev user a member), so the shared dev account's role never changes.
- * Screenshots go under `.amp/e2e/label-settings/`.
+ * Screenshots go under `.artifacts/e2e/label-settings/`.
  */
 const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/label-settings");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/label-settings");
 
 test("an owner manages the Workspace's labels on their own page; a member reads it", async () => {
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);

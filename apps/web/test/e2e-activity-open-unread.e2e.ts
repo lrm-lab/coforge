@@ -31,10 +31,10 @@ import { CentrifugoConversationRealtime } from "#src/server/conversations/conver
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channels, their peer
  * and their messages are seeded deterministically and reset on every run. Screenshots of each
- * open are written under `.amp/e2e/activity-open-unread/`.
+ * open are written under `.artifacts/e2e/activity-open-unread/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-open-unread");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/activity-open-unread");
 
 test("a channel and a thread opened from Activity land on the first message unread for the viewer", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

@@ -31,10 +31,10 @@ import {
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the dev user an owner of
  * its Workspace with a Computer attached (seed-dev) and its Claude Code runtime. The channels, the
  * Agent and its DM are removed after each run. Screenshots are written under
- * `.amp/e2e/members-create-agent-lands-in-dm/`.
+ * `.artifacts/e2e/members-create-agent-lands-in-dm/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/members-create-agent-lands-in-dm");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/members-create-agent-lands-in-dm");
 
 const selectedRow = (dmId: string) => `(() => {
   const row = document.querySelector('a[aria-current="page"][href$="/dm/${dmId}"]');

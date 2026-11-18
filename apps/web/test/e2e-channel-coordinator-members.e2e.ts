@@ -17,7 +17,7 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  *
  * Needs a local built Web with skip-auth, PostgreSQL, local Centrifugo and agent-browser. No
  * model runs. The suite removes its own Workspace, people, Computer and channel. Screenshots
- * live in `.amp/e2e/channel-coordinator-members/`.
+ * live in `.artifacts/e2e/channel-coordinator-members/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
@@ -25,7 +25,7 @@ if (!centrifugoOrigin || !["localhost", "127.0.0.1"].includes(new URL(centrifugo
   throw new Error("COFORGE_E2E_CENTRIFUGO_URL must target local Centrifugo");
 const proxy = sameOriginProxy(origin, centrifugoOrigin);
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/channel-coordinator-members");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/channel-coordinator-members");
 const { browser, evaluate, waitFor, clickText } = browserSession(
   browserPath,
   `channel-coordinator-members-${process.pid}`,

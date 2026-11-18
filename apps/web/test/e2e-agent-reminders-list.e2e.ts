@@ -13,10 +13,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * rule as a sentence, the place by name and face and never a raw target or id, one row each.
  * Seeds an Agent with many reminders of every kind, its direct conversation and a channel, and
  * removes them after the run. Screenshots, desktop and phone, light and dark, English and
- * Chinese, are under `.amp/e2e/agent-reminders-list/`.
+ * Chinese, are under `.artifacts/e2e/agent-reminders-list/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-reminders-list");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/agent-reminders-list");
 const MINUTE = 60_000;
 const RUNTIME = {
   runtime: "claude-code",

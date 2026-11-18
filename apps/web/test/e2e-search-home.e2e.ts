@@ -17,7 +17,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
  * from the old `/search` address.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. Seeds are deterministic
- * and reset on every run. Screenshots are written under `.amp/e2e/search-home/`.
+ * and reset on every run. Screenshots are written under `.artifacts/e2e/search-home/`.
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
@@ -27,7 +27,7 @@ if (!browserPath) throw new Error("agent-browser is required");
 const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/search-home");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/search-home");
 /** A Frequently used row: an entity link inside that section of the dialog. */
 const FREQUENT = '[role="dialog"] [aria-labelledby="search-frequent-heading"] [data-search-entity]';
 /** The dialog's search box. */

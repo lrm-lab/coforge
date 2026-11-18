@@ -14,7 +14,7 @@ import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const sandboxOrigin = Bun.env.COFORGE_ARTIFACT_SANDBOX_ORIGIN;
 if (!sandboxOrigin) throw new Error("COFORGE_ARTIFACT_SANDBOX_ORIGIN is required");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/artifact-public-link");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/artifact-public-link");
 
 test("an artifact's public link: turned on from the pill, served to a visitor, turned off", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

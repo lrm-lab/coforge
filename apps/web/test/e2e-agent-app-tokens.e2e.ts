@@ -23,7 +23,7 @@ import { PrismaDaemonApiKeyRepository } from "#src/server/db/repositories/daemon
  * Opt-in like the other E2Es. Needs a local Web started with `COFORGE_OIDC_ISSUER` (and its
  * signing keyset) set, `COFORGE_E2E_WEB_URL` pointing at it and `DATABASE_URL` at its database.
  * Creates its own people, Workspace, Computer, Agent and app, and removes them. Writes
- * `.amp/e2e/agent-app-tokens/run.md` (no token in it: only what the CLI printed, redacted).
+ * `.artifacts/e2e/agent-app-tokens/run.md` (no token in it: only what the CLI printed, redacted).
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
@@ -31,7 +31,7 @@ if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
 const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-app-tokens");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/agent-app-tokens");
 const cli = join(import.meta.dir, "../../../packages/coforge/src/cli.ts");
 
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

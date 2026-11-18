@@ -3,7 +3,7 @@
 Run repository builds before starting the native browser scenario, never in
 parallel with it against the same Web output directory. A concurrent build
 removed assets from underneath the running server, producing ENOENT and leaving
-the SSR message form unhydrated. Restart the managed Web service after rebuilding
+the SSR message form unhydrated. Restart `scripts/e2e/start-e2e-web.sh` after rebuilding
 and verify the new RPC endpoint responds before invoking the installed Computer.
 An old running build can return HTML for a newly added endpoint; that is not
 evidence of a protobuf or authorization defect.

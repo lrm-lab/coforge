@@ -16,10 +16,10 @@ import {
  * A Task popup writes each label's whole name (task #coforge-designer-team:#7): its label menu
  * does not repeat the label, so the popup is the one place a long name shows in full. Seeds a
  * channel, a Task and two labels as long as a name may be (32), and removes them after the run.
- * Screenshots, desktop and phone, light and dark, are under `.amp/e2e/task-label-full-name/`.
+ * Screenshots, desktop and phone, light and dark, are under `.artifacts/e2e/task-label-full-name/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-label-full-name");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-label-full-name");
 
 test("a Task popup shows a long label name whole", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

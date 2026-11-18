@@ -21,12 +21,12 @@ import { inPane, rowItems } from "./helpers/activity-inbox-e2e";
  * Opt-in like the other browser E2Es: real local Web (`COFORGE_DEV_SKIP_AUTH=1`, a seeded
  * database), `agent-browser`, local PostgreSQL, and `COFORGE_FILE_STORAGE_DIR` (the Web service's
  * file storage). Everything it writes lives in a Workspace of its own that it deletes afterwards.
- * Screenshots are written under `.amp/e2e/image-comments/`.
+ * Screenshots are written under `.artifacts/e2e/image-comments/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const storageRoot = Bun.env.COFORGE_FILE_STORAGE_DIR;
 if (!storageRoot) throw new Error("COFORGE_FILE_STORAGE_DIR is required");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/image-comments");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/image-comments");
 const image = join(import.meta.dir, "../public/apple-touch-icon.png");
 
 test("an image takes comments in its lightbox, and a link into one opens it there", async () => {

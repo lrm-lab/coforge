@@ -162,7 +162,7 @@ function productionBuild(): Promise<void> {
     const build = Bun.spawn([process.execPath, "run", "build"], {
       cwd: webRoot,
       // `bun test` runs with NODE_ENV=test, which would compile React's development JSX runtime
-      // into a server that then has none (as `managed-web.sh` does, build for production).
+      // into a server that then has none (as `start-e2e-web.sh` does, build for production).
       env: { ...process.env, NODE_ENV: "production" },
       stdin: "ignore",
       stdout: "pipe",

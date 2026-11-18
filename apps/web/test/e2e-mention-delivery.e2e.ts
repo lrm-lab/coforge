@@ -43,12 +43,15 @@ import { PiJsonlFixtureProvider } from "@lrm/coforge-daemon/test/fixtures/pi-jso
  * would exercise.
  */
 const databaseUrl = requireEnvironment("DATABASE_URL");
-// The standard stack (the managed infra compose) publishes Web on 8789 and Centrifugo on 8000;
+// The standard stack (the E2E infra compose) publishes Web on 8789 and Centrifugo on 8000;
 // hosts where those host ports are taken point these elsewhere through the environment.
 const serverHttpUrl = process.env.COFORGE_E2E_SERVER_HTTP_URL ?? "http://127.0.0.1:8789";
 const centrifugoWsUrl =
   process.env.COFORGE_E2E_CENTRIFUGO_WS_URL ?? "ws://127.0.0.1:8000/connection/websocket";
-const workspaceRoot = join(import.meta.dir, `../../../.amp/e2e/mention-${crypto.randomUUID()}`);
+const workspaceRoot = join(
+  import.meta.dir,
+  `../../../.artifacts/e2e/mention-${crypto.randomUUID()}`,
+);
 const daemonStateDirectory = `${workspaceRoot}-state`;
 
 test("a tracked @mention is delivered to a running Agent and refused for a stopped one, read back through the sender's public query", async () => {
@@ -241,10 +244,10 @@ test("a tracked @mention is delivered to a running Agent and refused for a stopp
       reasonCategory: "not_launched",
     });
 
-    await mkdir(join(import.meta.dir, "../../../.amp/in/artifacts"), { recursive: true });
+    await mkdir(join(import.meta.dir, "../../../.artifacts/evidence"), { recursive: true });
     const artifactPath = join(
       import.meta.dir,
-      `../../../.amp/in/artifacts/mention-delivery-${suffix}.json`,
+      `../../../.artifacts/evidence/mention-delivery-${suffix}.json`,
     );
     await Bun.write(
       artifactPath,

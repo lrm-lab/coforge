@@ -33,7 +33,7 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * Needs a local built Web with skip-auth, PostgreSQL, local Centrifugo and agent-browser, with
  * motion allowed (the run turns `prefers-reduced-motion` off). No model runs. The suite removes
  * its own Workspace, people and Computer. Screenshots, light and dark, and the measured numbers
- * live in .amp/e2e/mascot-motion/.
+ * live in .artifacts/e2e/mascot-motion/.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
@@ -41,7 +41,7 @@ if (!centrifugoOrigin || !["localhost", "127.0.0.1"].includes(new URL(centrifugo
   throw new Error("COFORGE_E2E_CENTRIFUGO_URL must target local Centrifugo");
 const proxy = sameOriginProxy(origin, centrifugoOrigin);
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/mascot-motion");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/mascot-motion");
 const { browser, evaluate } = browserSession(browserPath, `mascot-motion-${process.pid}`);
 const centrifugo = createCentrifugoServerApi();
 

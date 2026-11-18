@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# The environment every E2E runner shares: the managed stack's credentials, the Worker issuer and
+# The environment every E2E runner shares: the E2E stack's credentials, the Worker issuer and
 # key material, and the Centrifugo API URL with the two secrets the Web and the tests call it with.
 #
 # Source it (`source "$root/scripts/e2e/e2e-env.sh"`), do not run it: it exports into the caller's
 # shell and stops the run when a secret the stack writes is missing. A runner that *creates* those
-# files first (`managed-web.sh` runs `prepare-environment.ts`) sources it after that.
+# files first (`start-e2e-web.sh` runs `prepare-environment.ts`) sources it after that.
 #
 #   DATABASE_URL, REDIS_URL, COFORGE_WORKER_JWT_PRIVATE_JWK, COFORGE_WORKER_JWT_KEY_ID,
 #   COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY_FILE, COFORGE_CENTRIFUGO_API_URL,
 #   COFORGE_CENTRIFUGO_API_KEY, COFORGE_CENTRIFUGO_PROXY_SECRET
 #
 # `e2e_root` and `e2e_secrets` are set for a runner that needs the paths (the Web Push pair, the
-# `.amp/e2e` artifacts). One style in one place: a new required value is added here, not in each
+# `.artifacts/e2e` artifacts). One style in one place: a new required value is added here, not in each
 # of the four runners that used to spell this block out.
 e2e_root=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 e2e_secrets="${COFORGE_E2E_SECRETS:-$e2e_root/infra/secrets}"
 for file in redis_password centrifugo_http_api_key centrifugo_proxy_secret postgres_password; do
-  test -s "$e2e_secrets/$file" || { printf 'Run amp orb services ensure first.\n' >&2; exit 1; }
+  test -s "$e2e_secrets/$file" || { printf 'Run scripts/e2e/start-e2e-infra.sh first.\n' >&2; exit 1; }
 done
 
 export DATABASE_URL
@@ -24,10 +24,10 @@ DATABASE_URL="postgresql://coforge:$(<"$e2e_secrets/postgres_password")@127.0.0.
 export REDIS_URL
 REDIS_URL="redis://:$(<"$e2e_secrets/redis_password")@127.0.0.1:6379"
 export COFORGE_WORKER_JWT_PRIVATE_JWK
-COFORGE_WORKER_JWT_PRIVATE_JWK=$(<"$e2e_root/.amp/e2e/worker-private.jwk")
+COFORGE_WORKER_JWT_PRIVATE_JWK=$(<"$e2e_root/.artifacts/e2e/worker-private.jwk")
 export COFORGE_WORKER_JWT_KEY_ID
-COFORGE_WORKER_JWT_KEY_ID=$(bun "$e2e_root/scripts/e2e/worker-key-id.ts" "$e2e_root/.amp/e2e/worker-private.jwk")
-export COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY_FILE="$e2e_root/.amp/e2e/agent-runtime-credential-key"
+COFORGE_WORKER_JWT_KEY_ID=$(bun "$e2e_root/scripts/e2e/worker-key-id.ts" "$e2e_root/.artifacts/e2e/worker-private.jwk")
+export COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY_FILE="$e2e_root/.artifacts/e2e/agent-runtime-credential-key"
 # The standard stack publishes Centrifugo on 8000; a host where that port is taken passes
 # COFORGE_CENTRIFUGO_API_URL instead, and the Web/WebSocket URLs the same way.
 export COFORGE_CENTRIFUGO_API_URL="${COFORGE_CENTRIFUGO_API_URL:-http://127.0.0.1:8000/api}"

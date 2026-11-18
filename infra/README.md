@@ -62,9 +62,10 @@ replace tags with reviewed immutable image digests before release.
 
 ## Agent direct-message E2E
 
-The orb service declaration starts an isolated `coforge-e2e` Compose project,
-publishes its PostgreSQL port only on loopback, migrates and builds the Web
-backend, and enables the fixed development test identity. Generated secrets
+`scripts/e2e/start-e2e-infra.sh` starts an isolated `coforge-e2e` Compose
+project and publishes its PostgreSQL port only on loopback.
+`scripts/e2e/start-e2e-web.sh` migrates and builds the Web backend, serves it on
+port 8789 and enables the fixed development test identity. Generated secrets
 and the E2E database are local-only and must not be reused for production.
 
 Run the complete slice with:

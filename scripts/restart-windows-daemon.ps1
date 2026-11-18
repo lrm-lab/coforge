@@ -387,12 +387,12 @@ $Name`: Web backend is not reachable at $webUrl
     Write-Host "    centrifugo=$centrifugo"
     Invoke-Bun -Arguments @((Join-Path $Root "scripts\e2e\build-computer-fixture.ts")) | Out-Null
 
-    $fixtureBin = Join-Path $Root ".amp\e2e\bin\coforge-computer.exe"
+    $fixtureBin = Join-Path $Root ".artifacts\e2e\bin\coforge-computer.exe"
     if (-not (Test-Path -LiteralPath $fixtureBin)) {
-      $alt = Join-Path $Root ".amp\e2e\bin\coforge-computer"
+      $alt = Join-Path $Root ".artifacts\e2e\bin\coforge-computer"
       if (Test-Path -LiteralPath $alt) { $fixtureBin = $alt }
     }
-    $packageDir = Join-Path $Root ".amp\e2e\native-package"
+    $packageDir = Join-Path $Root ".artifacts\e2e\native-package"
     $manifest = Join-Path $packageDir "manifest.json"
     if (-not (Test-Path -LiteralPath $fixtureBin) -or -not (Test-Path -LiteralPath $manifest)) {
       throw "$Name`: fixture build did not produce $fixtureBin and $manifest"

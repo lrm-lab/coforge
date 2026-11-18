@@ -6,7 +6,7 @@ import { setupAgentReplying } from "./helpers/agent-replying-fixture";
  * Browser E2E (task #4): the language saved in Settings is the person's on every page of the
  * Workspace. An address in the other language (a link someone shared) switches to the saved one on
  * Members as it does on Settings, rather than Settings alone. Screenshots are written under
- * `.amp/e2e/saved-language/`.
+ * `.artifacts/e2e/saved-language/`.
  */
 const fx = setupAgentReplying({ artifactsName: "saved-language" });
 

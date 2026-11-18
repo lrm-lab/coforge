@@ -12,11 +12,11 @@ import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
  * older day by its date, each above that day's first row, so an old run of entries never reads as
  * happening now. Needs a local built Web with skip-auth, PostgreSQL and agent-browser. No model
  * runs. The suite removes its own Workspace and Computer. Screenshots are written under
- * .amp/e2e/agent-activity-days/.
+ * .artifacts/e2e/agent-activity-days/.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-activity-days");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/agent-activity-days");
 const { browser, evaluate } = browserSession(browserPath, `agent-activity-days-${process.pid}`);
 const DAY = 24 * 60 * 60 * 1000;
 let workspaceId: string;

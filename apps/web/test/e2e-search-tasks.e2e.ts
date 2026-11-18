@@ -10,10 +10,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * channel's 3 with the channel the viewer is in first, and `#channel:#3` is exactly one.
  *
  * Opt-in like the other browser E2Es: real local Web, `agent-browser` and the dev seed, whose
- * #general and #product both hold a Task 3. The screenshot goes to `.amp/e2e/search-tasks/`.
+ * #general and #product both hold a Task 3. The screenshot goes to `.artifacts/e2e/search-tasks/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/search-tasks");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/search-tasks");
 
 test("search finds Tasks by title, by number across channels and by full reference", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

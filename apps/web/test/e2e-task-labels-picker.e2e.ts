@@ -22,10 +22,10 @@ import {
  *
  * Opt-in like the other browser E2Es: real local Web and `agent-browser`. The channel, its Tasks
  * and the run's labels are seeded per run and removed after it. Screenshots are written under
- * `.amp/e2e/task-labels-picker/`.
+ * `.artifacts/e2e/task-labels-picker/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-labels-picker");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-labels-picker");
 
 test("labels go on and off a Task, are made from a name, show on cards and filter a board", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

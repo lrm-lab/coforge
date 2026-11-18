@@ -27,7 +27,7 @@ import { CHAT_LIST_READS, type ChatListRead } from "#src/features/conversations/
  * an owner of its Workspace (seed-dev). The browser talks to a proxy in this test that counts the
  * list reads, can hold the channel list's answer, and forwards `/connection/*` to Centrifugo,
  * noting which channels the browser has asked to subscribe to.
- * Counts are written to `.amp/e2e/sidebar-subscribe-reads/reads.json`.
+ * Counts are written to `.artifacts/e2e/sidebar-subscribe-reads/reads.json`.
  */
 const upstreamOrigin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!upstreamOrigin || !["localhost", "127.0.0.1"].includes(new URL(upstreamOrigin).hostname))
@@ -41,7 +41,7 @@ if (!browserPath) throw new Error("agent-browser is required");
 const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/sidebar-subscribe-reads");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/sidebar-subscribe-reads");
 
 /** The server functions counted: the one that reads Chat's lists (`loadChatLists`, each list
  * taking the position of the signal channel that keeps it live before it reads) and the Activity

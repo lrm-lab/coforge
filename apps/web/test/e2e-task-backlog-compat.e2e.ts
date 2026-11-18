@@ -14,7 +14,7 @@ import {
 } from "./helpers/browser-e2e";
 
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-backlog-compat");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-backlog-compat");
 
 test("Backlog read compatibility stays invisible until data exists and never offers writes", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

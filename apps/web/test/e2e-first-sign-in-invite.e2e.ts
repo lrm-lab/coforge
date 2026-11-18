@@ -30,13 +30,13 @@ import {
  *   makes the personal Workspace.
  *
  * Opt-in like the other browser E2Es (see `e2e-first-sign-in-name.e2e.ts`); it deletes what it
- * created and leaves screenshots and `summary.json` in `.amp/e2e/first-sign-in-invite/`.
+ * created and leaves screenshots and `summary.json` in `.artifacts/e2e/first-sign-in-invite/`.
  *
  *   REDIS_URL=redis://127.0.0.1:6380 bun test ./test/e2e-first-sign-in-invite.e2e.ts
  */
 const { databaseUrl } = requireLocalServices();
 const webPort = Number(Bun.env.COFORGE_E2E_FIRST_SIGN_IN_INVITE_WEB_PORT ?? 8796);
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/first-sign-in-invite");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/first-sign-in-invite");
 
 const people = {
   invitee: { sub: "e2e-fsi-invitee", email: "e2e-fsi-invitee@coforge.test", name: "Ivy Invitee" },

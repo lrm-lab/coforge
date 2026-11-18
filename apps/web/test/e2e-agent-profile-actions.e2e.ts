@@ -15,10 +15,10 @@ import {
  * An Agent's profile keeps Message, Start or Stop, and Restart in its header while the panel has
  * room for them; when it does not, Message stays and the other two go in one menu.
  * Screenshots, light, dark and
- * phone, are written under `.amp/e2e/agent-profile-actions/`.
+ * phone, are written under `.artifacts/e2e/agent-profile-actions/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-profile-actions");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/agent-profile-actions");
 
 test("a narrow profile keeps its actions in one menu", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

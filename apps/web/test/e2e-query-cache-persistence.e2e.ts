@@ -20,7 +20,7 @@ import { serverFunctionIds, serverFunctionOf } from "./helpers/server-function-i
  * conversation) until the test lets them through; the proxy's origin is also a fresh IndexedDB,
  * so a run starts with nothing stored. It stands in for `/auth/logout`, which would leave for
  * Authing. Each run seeds a channel with messages and removes it afterwards. Screenshots are
- * written under `.amp/e2e/query-cache-persistence/`.
+ * written under `.artifacts/e2e/query-cache-persistence/`.
  */
 const upstreamOrigin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!upstreamOrigin || !["localhost", "127.0.0.1"].includes(new URL(upstreamOrigin).hostname))
@@ -30,7 +30,7 @@ if (!browserPath) throw new Error("agent-browser is required");
 const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/query-cache-persistence");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/query-cache-persistence");
 
 /** The reads Chat makes for what the browser keeps: its lists (the sidebar's, the channel names,
  * the sections, all in one call) and the conversation. */

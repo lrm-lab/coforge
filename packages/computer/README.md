@@ -148,8 +148,8 @@ testing, set `COFORGE_E2E_WEB_URL` to the local Web URL and optionally
 mise exec -- bun scripts/e2e/build-computer-fixture.ts
 ```
 
-This private build injects those endpoints into `.amp/e2e/bin/coforge-computer`
-and `.amp/e2e/bin/coforge-daemon`, separate from release output. It does not add
+This private build injects those endpoints into `.artifacts/e2e/bin/coforge-computer`
+and `.artifacts/e2e/bin/coforge-daemon`, separate from release output. It does not add
 a runtime server switch to official binaries. The existing
 `scripts/e2e/run-computer-setup.sh` harness builds these fixtures, uses an isolated
 HOME, and runs setup without `--server`; it still requires explicit

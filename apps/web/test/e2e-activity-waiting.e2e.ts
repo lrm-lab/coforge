@@ -15,10 +15,10 @@ import { browserSession, cpuThrottle, localBrowserE2e, pageHydrated } from "./he
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its Agent and
  * peer and all the cards are seeded per run and removed after it. Screenshots are written under
- * `.amp/e2e/activity-waiting/`.
+ * `.artifacts/e2e/activity-waiting/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-waiting");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/activity-waiting");
 
 test("a choice card asking the viewer waits in Activity until they answer it", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

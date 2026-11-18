@@ -20,11 +20,11 @@ import {
 /**
  * Jump to latest over a Task discussion that fits (Frank, 11-06, task #coforge-ui:#10): a pane
  * that grows back sends no scroll event, so its resize must say the reader is at the latest.
- * Screenshots go under `.amp/e2e/task-popup-jump/`.
+ * Screenshots go under `.artifacts/e2e/task-popup-jump/`.
  */
 const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL!;
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-popup-jump");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-popup-jump");
 
 test("a discussion that fits again drops Jump to latest", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

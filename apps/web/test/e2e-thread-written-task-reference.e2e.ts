@@ -17,10 +17,10 @@ import {
  * the form as typed), shows the Task's chip, as a stored `<@task:N>` does, not a bare "#N" (task
  * #coforge-designer-team:#97). The Tasks were made long before the window, so only the reference reads them.
  * The same holds in the stream, and for another channel's Task written `#other:#N`, which reads
- * as that Task's chip under its channel's name. Screenshots go under `.amp/e2e/thread-written-task-reference/`.
+ * as that Task's chip under its channel's name. Screenshots go under `.artifacts/e2e/thread-written-task-reference/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/thread-written-task-reference");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/thread-written-task-reference");
 
 test("a reply naming this channel's Task as `#channel:#N` shows its chip", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

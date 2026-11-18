@@ -151,7 +151,7 @@ test("Profile controls and Skills cross Web, WSS, native child and Session persi
         await browser(
           "screenshot",
           "--screenshot-dir",
-          join(import.meta.dir, "../../../.amp/in/artifacts"),
+          join(import.meta.dir, "../../../.artifacts/evidence"),
         ),
       );
     }

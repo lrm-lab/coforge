@@ -27,12 +27,12 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * The write flag (`task-ref-tokens`) is off, so the message is seeded with its stored tokens. Opt-in
  * like the other browser E2Es: real local Web, `agent-browser`, and Centrifugo behind a same-origin
  * proxy (`COFORGE_E2E_CENTRIFUGO_URL`). Screenshots, light, dark and phone, are written under
- * `.amp/e2e/cross-task-reference/`.
+ * `.artifacts/e2e/cross-task-reference/`.
  */
 const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/cross-task-reference");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/cross-task-reference");
 
 test("another conversation's Task reads as its live label, or as a Task the reader can't view", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

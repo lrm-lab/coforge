@@ -24,7 +24,7 @@ import {
  *
  * Opt-in like the other browser E2Es: local built Web, PostgreSQL, Centrifugo, agent-browser. Own
  * Workspace, Agents and Computer, removed afterwards. Screenshots are written
- * under `.amp/e2e/dm-agent-unread/`.
+ * under `.artifacts/e2e/dm-agent-unread/`.
  */
 registerDmUnreadHooks();
 

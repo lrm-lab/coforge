@@ -16,7 +16,7 @@ import { sameOriginProxy } from "./same-origin-proxy";
  * `e2e-dm-agent-unread-realtime.e2e.ts`): the local stack's sessions and proxies, a fresh Agent with
  * its DM per case (`newPeer`), the Agent's real send, the DM row probe, and the Workspace, Agents
  * and Computer the cases own, removed afterwards. Each test file calls `registerDmUnreadHooks()`.
- * Screenshots are written under `.amp/e2e/dm-agent-unread/`.
+ * Screenshots are written under `.artifacts/e2e/dm-agent-unread/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 export const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
@@ -24,7 +24,7 @@ if (!centrifugoOrigin || !["localhost", "127.0.0.1"].includes(new URL(centrifugo
   throw new Error("COFORGE_E2E_CENTRIFUGO_URL must target local Centrifugo");
 export const proxy = sameOriginProxy(origin, centrifugoOrigin);
 export const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-export const artifacts = join(import.meta.dir, "../../../.amp/e2e/dm-agent-unread");
+export const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/dm-agent-unread");
 export const { browser, evaluate } = browserSession(browserPath, `dm-agent-unread-${process.pid}`);
 const dms = new PrismaDirectConversationRepository(db, { oneRequest: true });
 const centrifugo = createCentrifugoServerApi();

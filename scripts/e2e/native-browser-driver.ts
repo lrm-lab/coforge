@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 
-export const evidenceDirectory = resolve(import.meta.dir, "../../.amp/in/artifacts");
-export const failureSnapshotPath = resolve(import.meta.dir, "../../.amp/e2e/native-browser-failure.txt");
+export const evidenceDirectory = resolve(import.meta.dir, "../../.artifacts/evidence");
+export const failureSnapshotPath = resolve(import.meta.dir, "../../.artifacts/e2e/native-browser-failure.txt");
 
 export async function controlComputer(action: "stop" | "start") {
   const executable = Bun.which("coforge-computer");

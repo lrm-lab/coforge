@@ -19,13 +19,13 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the dev user an owner of
  * its Workspace with a Computer attached (seed-dev). Each run seeds a fresh channel with one fresh
  * Agent in it and another outside it, and removes them afterwards. Screenshots are written under
- * `.amp/e2e/channel-members-page/`.
+ * `.artifacts/e2e/channel-members-page/`.
  */
 const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 // Who is online reaches the page over Centrifugo, so it is reached through the page's own origin.
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/channel-members-page");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/channel-members-page");
 
 test("the settings panel shows a channel's members as a page, adds and removes one", async () => {
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);

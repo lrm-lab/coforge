@@ -133,7 +133,7 @@ try {
       "Local proxy intentionally returns 502; proves SDK model-request proxy routing, not successful model output or OS service-manager environment injection. No real credential used or recorded.",
   };
   await Bun.write(
-    new URL("../../.amp/in/artifacts/proxy-inheritance.json", import.meta.url),
+    new URL("../../.artifacts/evidence/proxy-inheritance.json", import.meta.url),
     JSON.stringify(evidence, null, 2),
   );
   console.log(JSON.stringify(evidence, null, 2));

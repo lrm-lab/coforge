@@ -14,7 +14,7 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * `#message-` link says the same (task #34).
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const dir = join(import.meta.dir, "../../../.amp/e2e/message-link-gone");
+const dir = join(import.meta.dir, "../../../.artifacts/e2e/message-link-gone");
 const MISSING = "00000000-0000-4000-8000-000000000001";
 const toasts = `[...document.querySelectorAll("[data-toast]")].map((t) => t.textContent)`;
 

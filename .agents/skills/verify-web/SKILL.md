@@ -11,11 +11,11 @@ reaches a page over realtime. It stands in for the built-in `run` and `/verify` 
 
 ## Start
 
-1. The managed stack must be up (`amp orb services ensure`): Postgres 5432, Redis 6379, Centrifugo 8000.
+1. The E2E stack must be up (`scripts/e2e/start-e2e-infra.sh`): Postgres 5432, Redis 6379, Centrifugo 8000.
    A worktree without `infra/secrets` uses the main clone's; do not copy or link them in.
 2. Run `scripts/e2e/verify-web.sh` from the worktree root, in the background. Wait for its
    `VERIFY READY <worktree> <url>` line (a build takes a few minutes); the URL is also in
-   `.amp/verify/url` while it runs. Open `<url>/<locale>/w/dev-user`; you are signed in as Dev User.
+   `.artifacts/verify/url` while it runs. Open `<url>/<locale>/w/dev-user`; you are signed in as Dev User.
 
 What the script settles, so you do not have to, and so several Agents can verify at once:
 
@@ -23,7 +23,7 @@ What the script settles, so you do not have to, and so several Agents can verify
 - Its own port block (front door, Web, Centrifugo), derived from the worktree name and moved on if
   taken (claimed under `$TMPDIR/coforge-verify-ports`), and its own Centrifugo container
   (`coforge-verify-<worktree>-<hash>-centrifugo`, its own Redis prefix) pointed at this Web; the
-  managed stack's Centrifugo on 8000 is not used. The Web's own Redis keys and channels (cache
+  E2E stack's Centrifugo on 8000 is not used. The Web's own Redis keys and channels (cache
   flushes, rate limits) are still shared with every other run.
 - The Worker key id is derived from this worktree's key (`scripts/e2e/worker-key-id.ts`).
 - The page's one origin is the front door, with `/connection/*` proxied to Centrifugo; artifact

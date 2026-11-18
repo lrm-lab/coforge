@@ -20,10 +20,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The Workspace, channel,
  * Agent, asked peer and card are seeded per run and removed after it. Screenshots are written
- * under `.amp/e2e/choice-card-dismiss/`.
+ * under `.artifacts/e2e/choice-card-dismiss/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/choice-card-dismiss");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/choice-card-dismiss");
 
 test("someone else's choice card names whom it waits on and offers nothing to answer", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

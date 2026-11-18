@@ -16,10 +16,10 @@ import {
  * Deleting a Task from its popup offers Undo for a short while (Frank, 11-04, task #507): a toast
  * says which Task went, and Undo brings it back on the server and on the page. Opt-in like the
  * other browser E2Es; the channel and Task are seeded per run and removed after it. Screenshots go
- * under `.amp/e2e/task-delete-undo/`.
+ * under `.artifacts/e2e/task-delete-undo/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-delete-undo");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-delete-undo");
 
 test("a Task deleted from its popup comes back with Undo", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

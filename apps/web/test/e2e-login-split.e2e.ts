@@ -22,7 +22,7 @@ import {
  * "email code" link and its way back, that the brand panel is there at 1440 and gone at 768 and
  * 390 (where the form must still fit the width), that the form's card keeps one width at 1440 and
  * 1920, and that the agent shuts its eyes while a password is typed, then shoots the page at 1440,
- * 768 and 390, light and dark, under `.amp/e2e/login-split/`.
+ * 768 and 390, light and dark, under `.artifacts/e2e/login-split/`.
  *
  * Opt-in like the other browser E2Es, and brings its own servers (`e2e-sign-in-harness.ts`):
  *
@@ -30,7 +30,7 @@ import {
  */
 requireLocalServices();
 const webPort = Number(Bun.env.COFORGE_E2E_SIGN_IN_WEB_PORT ?? 8798);
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/login-split");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/login-split");
 const people: Record<string, Person> = {};
 
 test("the split sign-in page: tabs, fields, email-code link and screenshots", async () => {

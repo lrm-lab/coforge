@@ -24,13 +24,15 @@ device authorization still requires browser approval; subsequent runs reuse the
 normal saved login and run through the final reply without manual interaction.
 
 Run in a disposable **OS user**, not a fake HOME. Prepare the normal E2E services,
-a running systemd user manager, and trusted local HTTPS. In this orb, Caddy 2.10.2
+a running systemd user manager, and trusted local HTTPS. On the test host, Caddy 2.10.2
 uses `tls internal` on `https://localhost:8791`, reverse-proxying port 8790; export
 its readable root certificate path as `NODE_EXTRA_CA_CERTS`. No TLS validation
 is disabled in Computer. Keep this TLS proxy running for the installed services.
 
 ```sh
-amp orb services ensure
+scripts/e2e/start-e2e-infra.sh
+scripts/e2e/start-e2e-web.sh &
+bun scripts/e2e/same-origin-proxy.ts &
 export XDG_RUNTIME_DIR="/run/user/$(id -u)"
 systemctl --user is-system-running
 # OPENROUTER_API_KEY is supplied securely by the environment.
@@ -47,8 +49,8 @@ Pi and DeepSeek V4.1 Flash through the UI, creates a uniquely named Agent, sends
 unique `NATIVE_E2E_...` marker request, and requires an exact reply from the Agent's
 message row both before and after reload. Created Agents/messages are retained
 in the disposable Workspace for manual inspection; browser sessions always close.
-Failure snapshots go to `.amp/e2e/native-browser-failure.txt`; a successful reload
-screenshot goes to `.amp/in/artifacts/native-browser-reply.png`. Browser Chromium
+Failure snapshots go to `.artifacts/e2e/native-browser-failure.txt`; a successful reload
+screenshot goes to `.artifacts/evidence/native-browser-reply.png`. Browser Chromium
 ignores the local test certificate error; native Computer still validates its
 explicitly trusted CA. Do not use this harness against shared environments.
 
@@ -76,5 +78,5 @@ loopback HTTP/1.0 feed. It runs only inside `coforge-linux`: it first stops the
 orb -m coforge-linux bash -lc '<checkout>/scripts/e2e/installer-linux.sh'
 ```
 
-The artifact is `<checkout>/.amp/e2e/installer-linux/<UTC>/summary.md`;
+The artifact is `<checkout>/.artifacts/e2e/installer-linux/<UTC>/summary.md`;
 exit 0 means every row passed.

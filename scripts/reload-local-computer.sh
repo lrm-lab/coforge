@@ -133,8 +133,8 @@ echo "    web=$COFORGE_E2E_WEB_URL"
 echo "    centrifugo=$COFORGE_E2E_CENTRIFUGO_ENDPOINT"
 run_bun "$root/scripts/e2e/build-computer-fixture.ts"
 
-fixture_bin="$root/.amp/e2e/bin/coforge-computer"
-package_dir="$root/.amp/e2e/native-package"
+fixture_bin="$root/.artifacts/e2e/bin/coforge-computer"
+package_dir="$root/.artifacts/e2e/native-package"
 manifest="$package_dir/manifest.json"
 if [ ! -x "$fixture_bin" ] || [ ! -f "$manifest" ]; then
   echo "$name: fixture build did not produce $fixture_bin and $manifest" >&2

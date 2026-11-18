@@ -9,7 +9,7 @@ import { setupAgentReplying } from "./helpers/agent-replying-fixture";
  * (text, Markdown, CSV, JSON, PDF, HTML, code, a zip, a long name), in light and dark. The cards
  * render from the attachment rows alone, so no file is stored. Opt-in like the other browser
  * E2Es; see `helpers/agent-replying-fixture.ts`. Screenshots are written under
- * `.amp/e2e/attachment-card/`.
+ * `.artifacts/e2e/attachment-card/`.
  */
 const fx = setupAgentReplying({ artifactsName: "attachment-card" });
 const { suffix, until } = fx;

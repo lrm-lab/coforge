@@ -11,10 +11,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * The Agent's runtime configuration dialog on a phone (task #coforge-ui:#21): with the environment
  * variables folded under "More", only the dialog's own rhythm sits between that line and the
  * buttons. Seeds a Computer and an Agent and removes them after the run. Screenshots, light and
- * dark, are under `.amp/e2e/agent-runtime-dialog-spacing/`.
+ * dark, are under `.artifacts/e2e/agent-runtime-dialog-spacing/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-runtime-dialog-spacing");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/agent-runtime-dialog-spacing");
 
 test("the runtime configuration dialog keeps its closed More close to the buttons", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

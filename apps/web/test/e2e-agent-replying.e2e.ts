@@ -23,7 +23,7 @@ import { setupAgentReplying, announced, visible } from "./helpers/agent-replying
  * `agent-browser`, and the dev user an owner of its Workspace (seed-dev). The browser talks to a
  * proxy in this test that forwards `/connection/*` to Centrifugo and the rest to the Web. Each run
  * seeds a Computer, an Agent, two channels and a second member, and removes them afterwards.
- * Screenshots are written under `.amp/e2e/agent-replying/`. The setup is shared in `helpers/agent-replying-fixture.ts`.
+ * Screenshots are written under `.artifacts/e2e/agent-replying/`. The setup is shared in `helpers/agent-replying-fixture.ts`.
  *
  * A reply intent ends where the Agent's message arrives in the browser's cache, not where it is
  * shown (`useConversationQuery`'s `mergeUpdates` tells the reply-intent store). Two consequences,

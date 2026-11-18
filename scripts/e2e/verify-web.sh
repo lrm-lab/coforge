@@ -7,7 +7,7 @@ hash=$(printf '%s' "$worktree" | cksum | cut -d' ' -f1)
 slug=$(printf '%s' "$worktree" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '_' | cut -c1-32)_$hash
 database="coforge_verify_$slug"
 container="coforge-verify-${slug//_/-}-centrifugo"
-state="$root/.amp/verify"
+state="$root/.artifacts/verify"
 centrifugo_image="${CENTRIFUGO_IMAGE:-centrifugo/centrifugo:v6.9.2}"
 
 fail() {
@@ -96,8 +96,8 @@ NODE_ENV=production bun run build
 bun run ./scripts/seed-dev-data.ts
 export COFORGE_ARTIFACT_SANDBOX_ORIGIN="http://localhost:$front"
 export COFORGE_FILE_STORAGE_DIR="$state/files"
-COFORGE_WEB_PUSH_PUBLIC_KEY=$(<"$root/.amp/e2e/web-push-public-key") \
-  COFORGE_WEB_PUSH_PRIVATE_KEY_FILE="$root/.amp/e2e/web-push-private-key" \
+COFORGE_WEB_PUSH_PUBLIC_KEY=$(<"$root/.artifacts/e2e/web-push-public-key") \
+  COFORGE_WEB_PUSH_PRIVATE_KEY_FILE="$root/.artifacts/e2e/web-push-private-key" \
   COFORGE_WEB_PUSH_SUBJECT=https://coforge.cn \
   COFORGE_DEV_SKIP_AUTH=1 COFORGE_E2E_ALLOW_DEVICE_AUTH=0 NODE_ENV=development \
   HOST=127.0.0.1 PORT=$web_port \

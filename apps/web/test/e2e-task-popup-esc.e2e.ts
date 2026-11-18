@@ -20,10 +20,10 @@ import {
  *
  * Opt-in like the other browser E2Es: real local Web started as it is, and `agent-browser`. The channel and its
  * Tasks are seeded per run and removed after it. Screenshots are written under
- * `.amp/e2e/task-popup-esc/`.
+ * `.artifacts/e2e/task-popup-esc/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-popup-esc");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-popup-esc");
 
 test("Esc steps back to the popup a sub-task or a parent was opened from", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

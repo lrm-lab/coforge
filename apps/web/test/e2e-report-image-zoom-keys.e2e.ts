@@ -7,10 +7,10 @@ import { seedWeeklyReport } from "./helpers/weekly-report-fixture";
 /**
  * An image zoomed from a report being edited answers + and - while the caret is still in the
  * editor behind it, and the keys type nothing into the report. The zoomed frame is under
- * `.amp/e2e/report-image-zoom-keys/`.
+ * `.artifacts/e2e/report-image-zoom-keys/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/report-image-zoom-keys");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/report-image-zoom-keys");
 
 test("a zoomed image in an edited report zooms by + and - and leaves the text alone", async () => {
   const { path, remove } = await seedWeeklyReport(databaseUrl, {

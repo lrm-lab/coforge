@@ -13,7 +13,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
  * opening at the latest.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`; rows are seeded with
- * deterministic ids, so reruns restore them. Screenshots go to `.amp/e2e/link-landing/`.
+ * deterministic ids, so reruns restore them. Screenshots go to `.artifacts/e2e/link-landing/`.
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
@@ -23,7 +23,7 @@ if (!browserPath) throw new Error("agent-browser is required");
 const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/link-landing");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/link-landing");
 
 /** Deterministic id (seed-dev's sha256→UUID shape), so a rerun updates instead of duplicating. */
 function seededUuid(key: string, prefix?: string): string {

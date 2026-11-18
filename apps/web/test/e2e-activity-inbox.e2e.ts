@@ -37,10 +37,10 @@ import {
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its peer and
  * its messages are seeded deterministically and reset on every run. Screenshots of the wide
  * layout, with and without a conversation open are
- * written under `.amp/e2e/activity-inbox/`.
+ * written under `.artifacts/e2e/activity-inbox/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-inbox");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/activity-inbox");
 
 test("the Activity page lists, filters, marks Done and opens inbox items", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

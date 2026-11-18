@@ -14,7 +14,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the dev user an owner of
  * its Workspace (seed-dev). #general is restored before and after. Screenshots are written under
- * `.amp/e2e/hide-general/`.
+ * `.artifacts/e2e/hide-general/`.
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
@@ -24,7 +24,7 @@ if (!browserPath) throw new Error("agent-browser is required");
 const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/hide-general");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/hide-general");
 
 test("an owner hides #general from its panel and restores it from Settings → Members", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

@@ -1,6 +1,6 @@
 # Native setup investigation
 
-The managed Web service now disables the automatic device-authorization double.
+`scripts/e2e/start-e2e-web.sh` now disables the automatic device-authorization double.
 Verify discovery advertises `/api/workspaces`, not `/api/e2e/workspaces`, and
 the device-code grant. Browser identity is still the explicitly configured
 development user; this does not verify the external identity provider login.

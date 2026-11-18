@@ -8,7 +8,7 @@ import { setupAgentReplying } from "./helpers/agent-replying-fixture";
  * thread, a phone, or the 440–550px panes checked here) they take their own row under it, so the
  * text is never squeezed into a narrow column. Opt-in like the other browser E2Es (it reuses the
  * replying fixture's channel and thread); see `helpers/agent-replying-fixture.ts`. Screenshots are
- * written under `.amp/e2e/notification-banner/`.
+ * written under `.artifacts/e2e/notification-banner/`.
  */
 const fx = setupAgentReplying({ artifactsName: "notification-banner" });
 const { suffix, browser, evaluate, until } = fx;

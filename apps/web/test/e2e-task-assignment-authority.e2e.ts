@@ -9,10 +9,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
 
 /** Built-Web E2E for Task assignment permissions, in agent-browser. Requires local DATABASE_URL,
  * COFORGE_E2E_WEB_URL and the skip-auth dev seed. Creates and removes one Workspace and two
- * fixture users. Artifacts: .amp/e2e/task-assignment/{member-light,admin-dark}.png. */
+ * fixture users. Artifacts: .artifacts/e2e/task-assignment/{member-light,admin-dark}.png. */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-assignment");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-assignment");
 const { browser, evaluate, waitFor } = browserSession(
   browserPath,
   `assign-authority-${process.pid}`,

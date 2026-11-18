@@ -33,13 +33,13 @@ secrets="$root/infra/secrets"
 need_secrets() {
   for file in redis_password postgres_password; do
     test -s "$secrets/$file" || {
-      printf 'Run amp orb services ensure first.\n' >&2
+      printf 'Run scripts/e2e/start-e2e-infra.sh first.\n' >&2
       exit 1
     }
   done
 }
 need_secrets
-# The same two values the other runners read from the managed stack's secrets; -x is deliberately
+# The same two values the other runners read from the E2E stack's secrets; -x is deliberately
 # not used, so a caller who already exported them keeps theirs.
 export DATABASE_URL="${DATABASE_URL:-postgresql://coforge:$(<"$secrets/postgres_password")@127.0.0.1:5432/coforge}"
 export REDIS_URL="${REDIS_URL:-redis://:$(<"$secrets/redis_password")@127.0.0.1:6379}"
@@ -80,11 +80,11 @@ test -f "$tests/$name" || {
   printf 'No such browser e2e: %s (run the script with no argument to list them).\n' "$name" >&2
   exit 1
 }
-# The same two values the other runners read from the managed stack's secrets; -x is deliberately
+# The same two values the other runners read from the E2E stack's secrets; -x is deliberately
 # not used, so a caller who already exported them keeps theirs.
 export DATABASE_URL="${DATABASE_URL:-postgresql://coforge:$(<"$secrets/postgres_password")@127.0.0.1:5432/coforge}"
 export REDIS_URL="${REDIS_URL:-redis://:$(<"$secrets/redis_password")@127.0.0.1:6379}"
-# 8788 is the dev server's port (`bun run dev` in apps/web). The standard managed stack
+# 8788 is the dev server's port (`bun run dev` in apps/web). The standard E2E stack
 # publishes Web on 8789 instead: pass
 # COFORGE_E2E_WEB_URL=http://127.0.0.1:8789 when the page under test is served by that one.
 export COFORGE_E2E_WEB_URL="${COFORGE_E2E_WEB_URL:-http://127.0.0.1:8788}"

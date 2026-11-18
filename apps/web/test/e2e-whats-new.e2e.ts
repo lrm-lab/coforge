@@ -17,10 +17,10 @@ import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
  * their release time, so to run before it start the Web with `COFORGE_E2E_WHATS_NEW_NOW` (honoured
  * only with the dev sign-in bypass) and pass the same value here. Without it the test checks only
  * what the real time allows. The dev user's dismissals and join time are restored after the
- * run. Screenshots go under `.amp/e2e/whats-new/`.
+ * run. Screenshots go under `.artifacts/e2e/whats-new/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/whats-new");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/whats-new");
 const pinned = process.env.COFORGE_E2E_WHATS_NEW_NOW;
 const now = pinned ? new Date(pinned) : new Date();
 

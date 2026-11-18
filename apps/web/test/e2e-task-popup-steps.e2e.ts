@@ -20,10 +20,10 @@ import {
  *
  * Opt-in like the other browser E2Es: real local Web started as it is, and `agent-browser`. The channels, the Agent
  * and the Tasks are seeded per run and removed after it. Screenshots, light, dark and a phone, are
- * written under `.amp/e2e/task-popup/`.
+ * written under `.artifacts/e2e/task-popup/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-popup");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-popup");
 
 test("a Task popup opened from another steps back to it", async () => {
   // The server under test runs with the same file (COFORGE_FEATURE_FLAGS_FILE).

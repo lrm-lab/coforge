@@ -15,7 +15,7 @@ const endpoint =
 // version, a loopback release feed compiled in, and a separate package directory per release.
 const version = Bun.env.COFORGE_E2E_VERSION ?? `0.0.0-e2e.${Date.now()}`;
 const releaseFeed = Bun.env.COFORGE_E2E_RELEASE_FEED_URL ?? "https://releases-staging.coforge.cn";
-const binDirectory = resolve(root, ".amp/e2e/bin");
+const binDirectory = resolve(root, ".artifacts/e2e/bin");
 await mkdir(binDirectory, { recursive: true });
 // Bun's Windows compile appends `.exe` when the outfile has no extension; name the
 // outfile with `.exe` up front so the path we read back matches what was written.
@@ -70,7 +70,7 @@ const binaryPath = resolve(
 
 // A host-platform test package, not a publishable six-platform release. Feed it
 // through the same verified local-package installer used by bootstrap.
-const directory = resolve(root, Bun.env.COFORGE_E2E_PACKAGE_DIR ?? ".amp/e2e/native-package");
+const directory = resolve(root, Bun.env.COFORGE_E2E_PACKAGE_DIR ?? ".artifacts/e2e/native-package");
 await mkdir(directory, { recursive: true });
 const bytes = new Uint8Array(await Bun.file(binaryPath).arrayBuffer());
 const gzip = Bun.gzipSync(bytes);

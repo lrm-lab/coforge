@@ -18,10 +18,10 @@ import {
  * always; "Waiting on #N" while a blocker is open and its sub-tasks' progress, each only when
  * there is one. Desktop and phone, light and dark. Opt-in like the other browser E2Es; the
  * channel is seeded per run and removed after it, and the Workspace's Tasks v2 switch is put
- * back. Screenshots go under `.amp/e2e/message-task-pill/`.
+ * back. Screenshots go under `.artifacts/e2e/message-task-pill/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/message-task-pill");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/message-task-pill");
 
 test("a message's Task shows as the chip its words name Tasks with, its details in the peek", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

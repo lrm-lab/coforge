@@ -8,10 +8,10 @@ import { seedWeeklyReport } from "./helpers/weekly-report-fixture";
  * A weekly report's present mode answers the keyboard wherever focus is: the arrows turn its
  * pages, and Escape leaves it, with focus left on the page behind it and with focus on one of its
  * own buttons (inside its dialog). Seeds a two-page report and removes it after. The last frame
- * is under `.amp/e2e/report-present-keys/`.
+ * is under `.artifacts/e2e/report-present-keys/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/report-present-keys");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/report-present-keys");
 
 test("present mode turns its pages by the arrows and leaves on Escape", async () => {
   const { path, remove } = await seedWeeklyReport(databaseUrl, {

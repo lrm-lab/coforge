@@ -32,12 +32,12 @@ import {
  * sandbox origin. Opt-in like every `.e2e.ts`:
  *   COFORGE_E2E_WEB_URL=... DATABASE_URL=... bun test ./test/e2e-artifact-viewer-parity.e2e.ts
  * against a Web started with `COFORGE_FEATURE_FLAGS_FILE=/tmp/coforge-flags-docs.json`.
- * Screenshots go under `.amp/e2e/artifact-viewer-parity/`.
+ * Screenshots go under `.artifacts/e2e/artifact-viewer-parity/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugo = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugo) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
-const shots = join(import.meta.dir, "../../../.amp/e2e/artifact-viewer-parity");
+const shots = join(import.meta.dir, "../../../.artifacts/e2e/artifact-viewer-parity");
 
 test("the viewer's own window and header, its presence list, the gallery's visibility group, the send dialog", async () => {
   await installFeatureFlags(

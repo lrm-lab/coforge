@@ -13,7 +13,7 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the server started as it
  * is. Each run seeds its own Workspace. Screenshots are written under
- * `.amp/e2e/send-as-task-stream/`.
+ * `.artifacts/e2e/send-as-task-stream/`.
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
@@ -28,7 +28,7 @@ if (!centrifugoOrigin || !["localhost", "127.0.0.1"].includes(new URL(centrifugo
   throw new Error("COFORGE_E2E_CENTRIFUGO_URL must target local Centrifugo");
 const centrifugoApiKey = Bun.env.COFORGE_CENTRIFUGO_API_KEY;
 if (!centrifugoApiKey) throw new Error("COFORGE_CENTRIFUGO_API_KEY is required");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/send-as-task-stream");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/send-as-task-stream");
 
 test("a message sent as a Task shows its Task in the stream", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

@@ -11,10 +11,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * A reference in message text stands out from the text around it: mentions, a channel and a link
  * are not the body's colour, and a mention of the viewer is a solid chip. Seeds an Agent and a
  * message and removes them after the run. Screenshots, light, dark and phone, are written under
- * `.amp/e2e/message-reference-color/`.
+ * `.artifacts/e2e/message-reference-color/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/message-reference-color");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/message-reference-color");
 
 test("mentions, channels and links keep their colour in message text", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

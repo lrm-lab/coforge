@@ -34,11 +34,11 @@ import {
  * with nothing ticked, and its pager still turns. The composer is never hidden.
  *
  * Opt-in like the other browser E2Es; the channel, Agent, a second member and the cards are seeded
- * per run and removed after it. Screenshots are written under `.amp/e2e/questions-card/`; the
+ * per run and removed after it. Screenshots are written under `.artifacts/e2e/questions-card/`; the
  * phone is `e2e-questions-card-phone.e2e.ts`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/questions-card");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/questions-card");
 
 test("a questions card is answered in the stream, question by question, then sent at once", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

@@ -18,10 +18,10 @@ import {
  * title does not repeat the status the first chip shows, and the chips are one row of blocks, as
  * in New task (task #54), a long owner's name truncating in its block rather than wrapping. A
  * desktop keeps close on the right and the status before the title. Screenshots, light and dark,
- * at 390 and 320 wide, are written under `.amp/e2e/task-popup-phone-bar/`.
+ * at 390 and 320 wide, are written under `.artifacts/e2e/task-popup-phone-bar/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-popup-phone-bar");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-popup-phone-bar");
 
 type Box = { left: number; right: number; top: number; width: number; height: number };
 

@@ -13,7 +13,7 @@ if (!browserPath) throw new Error("agent-browser is required");
 const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/confirm-sheet");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/confirm-sheet");
 
 test("a confirmation is a bottom sheet on a phone", async () => {
   const db = new PrismaClient({

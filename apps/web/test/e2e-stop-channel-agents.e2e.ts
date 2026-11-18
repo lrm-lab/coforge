@@ -17,7 +17,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
  * its Workspace with a Computer attached (seed-dev), whose status is marked online in Redis for the
  * resume (a stopped Agent on an offline Computer stays stopped). Each run seeds a fresh channel with two
  * fresh Agents and removes them afterwards. Screenshots are written under
- * `.amp/e2e/stop-channel-agents/`.
+ * `.artifacts/e2e/stop-channel-agents/`.
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
@@ -29,7 +29,7 @@ const redisUrl = Bun.env.REDIS_URL;
 if (!redisUrl) throw new Error("REDIS_URL must name the local Redis the Web service uses");
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/stop-channel-agents");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/stop-channel-agents");
 
 test("a member stops every Agent in a channel, then resumes them with new guidance", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

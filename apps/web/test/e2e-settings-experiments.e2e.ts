@@ -11,10 +11,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * Workspace group after Applications, above the System group.
  *
  * Opt-in like the other browser E2Es: real local Web and `agent-browser`. The screenshot goes to
- * `.amp/e2e/settings-experiments/`.
+ * `.artifacts/e2e/settings-experiments/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/settings-experiments");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/settings-experiments");
 
 test("settings: the experiments address opens the page, its entry in the Workspace group", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

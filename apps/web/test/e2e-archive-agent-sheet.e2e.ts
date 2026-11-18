@@ -12,7 +12,7 @@ import {
 } from "./helpers/browser-e2e";
 
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/archive-agent-sheet");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/archive-agent-sheet");
 
 test("the archive Agent confirmation is a bottom sheet on a phone", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

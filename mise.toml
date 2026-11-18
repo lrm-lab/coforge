@@ -98,11 +98,12 @@ description = "Run the Web integration suites CI cannot, against a scratch Postg
 run = 'bun "{{config_root}}/scripts/test/isolated-test-run.ts" ./scripts/test/run-web-integration.sh'
 
 [tasks."test:e2e:agent-direct-message"]
-description = "Run the managed Agent direct-message end-to-end slice"
+description = "Run the Agent direct-message end-to-end slice against the E2E stack"
 run = """
-amp orb services ensure >/dev/null || {
-  curl --fail --silent http://127.0.0.1:8000/health >/dev/null
-  curl --fail --silent http://127.0.0.1:8789/health >/dev/null
+./scripts/e2e/start-e2e-infra.sh >/dev/null
+curl --fail --silent http://127.0.0.1:8789/health >/dev/null || {
+  echo "Start the E2E Web first: scripts/e2e/start-e2e-web.sh" >&2
+  exit 1
 }
 bun "{{config_root}}/scripts/test/isolated-test-run.ts" ./scripts/e2e/run-agent-direct-message.sh
 """

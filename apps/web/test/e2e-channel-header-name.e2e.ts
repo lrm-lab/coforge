@@ -11,7 +11,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
  * cut on its own line and never pushes the actions out.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the dev user an owner of
- * its Workspace (seed-dev). Screenshots are written under `.amp/e2e/channel-header-name/`.
+ * its Workspace (seed-dev). Screenshots are written under `.artifacts/e2e/channel-header-name/`.
  */
 const webOrigin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!webOrigin || !["localhost", "127.0.0.1"].includes(new URL(webOrigin).hostname))
@@ -21,7 +21,7 @@ if (!browserPath) throw new Error("agent-browser is required");
 const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/channel-header-name");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/channel-header-name");
 
 test("the channel name keeps its room and the description stays out of the header", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

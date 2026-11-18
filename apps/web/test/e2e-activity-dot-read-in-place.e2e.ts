@@ -26,12 +26,12 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  *
  * Opt-in like the other browser E2Es: a real local Web and Centrifugo (`COFORGE_E2E_CENTRIFUGO_URL`,
  * reached through the page's own origin), the dev user, `agent-browser`. The member and the DM are
- * seeded per run and removed after it. Screenshots go under `.amp/e2e/activity-dot-read-in-place/`.
+ * seeded per run and removed after it. Screenshots go under `.artifacts/e2e/activity-dot-read-in-place/`.
  */
 const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-dot-read-in-place");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/activity-dot-read-in-place");
 
 test("a DM message read where it arrives leaves the Activity dot dark", async () => {
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);

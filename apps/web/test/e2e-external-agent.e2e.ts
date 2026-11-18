@@ -12,7 +12,7 @@ import {
 } from "./helpers/browser-e2e";
 
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/external-agent");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/external-agent");
 
 test("external Agent: page credential, browser-approved login, presence, revoke and replace", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

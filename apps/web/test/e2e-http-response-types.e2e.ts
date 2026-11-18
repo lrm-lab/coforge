@@ -7,12 +7,12 @@ import { join } from "node:path";
  * served with the seeded development browser user, PostgreSQL and COFORGE_DEV_SKIP_AUTH=1.
  * Agent requests have no API keys and must remain unauthorized.
  * Run with COFORGE_E2E_WEB_URL and a path: bun test ./test/e2e-http-response-types.e2e.ts.
- * Writes the observed HTTP contracts to .amp/e2e/http-response-types/responses.json.
+ * Writes the observed HTTP contracts to .artifacts/e2e/http-response-types/responses.json.
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
   throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/http-response-types");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/http-response-types");
 const assets = join(import.meta.dir, "../.output/public/assets");
 
 test("built HTTP routes preserve plain-text health and error responses", async () => {

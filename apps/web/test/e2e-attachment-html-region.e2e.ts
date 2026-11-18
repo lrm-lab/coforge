@@ -17,7 +17,7 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * a meta refresh, a `<noscript>` built to turn into a refresh if it were ever re-serialized, and a
  * nested frame with its own refresh. Each would write `PWNED` into the page or take the frame
  * away from the bridge; the region quotes read back from the database show neither happened.
- * Screenshots: .amp/e2e/attachment-html-region/. */
+ * Screenshots: .artifacts/e2e/attachment-html-region/. */
 const databaseUrl = Bun.env.DATABASE_URL;
 const web = Bun.env.COFORGE_E2E_WEB_URL;
 const centrifugo = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
@@ -58,7 +58,7 @@ body { margin: 0; font: 16px/1.5 sans-serif; }
 </body></html>`;
 const regionBody = `Pricing is unclear ${suffix}`;
 const pointBody = `Refunds need a date ${suffix}`;
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/attachment-html-region");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/attachment-html-region");
 const space = "coforge-ui task130 html region";
 const objectKey = `e2e/html-region/${suffix}/original`;
 let conversationId = "";

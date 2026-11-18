@@ -21,7 +21,8 @@ const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 const sandboxOrigin = Bun.env.COFORGE_ARTIFACT_SANDBOX_ORIGIN;
 if (!sandboxOrigin) throw new Error("COFORGE_ARTIFACT_SANDBOX_ORIGIN is required");
 const shots =
-  Bun.env.COFORGE_E2E_SHOTS_DIR ?? join(import.meta.dir, "../../../.amp/e2e/artifact-file-preview");
+  Bun.env.COFORGE_E2E_SHOTS_DIR ??
+  join(import.meta.dir, "../../../.artifacts/e2e/artifact-file-preview");
 
 test("a non-entry page runs on the artifact's origin and a PDF shows from it", async () => {
   await installFeatureFlags(

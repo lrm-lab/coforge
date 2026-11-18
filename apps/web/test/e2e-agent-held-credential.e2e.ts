@@ -15,10 +15,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * the profile banner name it as the stop, and the banner offers Retry, which is the panel's plain
  * Start (never a Stop first: a Stop would drop what the hold kept). Seeds an online Computer, an
  * Agent and the display the Daemon would report; screenshots, light, dark and phone, are under
- * `.amp/e2e/agent-held-credential/`.
+ * `.artifacts/e2e/agent-held-credential/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-held-credential");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/agent-held-credential");
 
 test("a live Agent held on its credential asks a person, and Retry is a Start", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

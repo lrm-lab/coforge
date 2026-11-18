@@ -21,10 +21,10 @@ import {
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its Agent and
  * the messages are seeded per run and removed after it. Screenshots (light, dark, a narrow window,
- * a phone) are written under `.amp/e2e/message-hover-toolbar/`.
+ * a phone) are written under `.artifacts/e2e/message-hover-toolbar/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/message-hover-toolbar");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/message-hover-toolbar");
 
 test("a hovered message's action bar covers none of the message", async () => {
   const db = new PrismaClient({

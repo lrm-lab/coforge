@@ -17,10 +17,10 @@ import {
  * number and channel sit under it, and there is no drag handle (the menu moves a task). From `sm`
  * up the row stays one line with its handle. On a desktop the row's channel pill and the board
  * card's first line name the channel by its group avatar and bare name, never `#name` (task #84).
- * Screenshots go under `.amp/e2e/phone-task-row/`.
+ * Screenshots go under `.artifacts/e2e/phone-task-row/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/phone-task-row");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/phone-task-row");
 
 test("a phone's task row gives the title the width, two lines, and no drag handle", async () => {
   const db = new PrismaClient({

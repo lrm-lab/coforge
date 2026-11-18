@@ -12,11 +12,7 @@ apps/web/src/generated/
 # Prisma's output path outside src/, which should not exist: it is not tracked, but a
 # blanket `git add -A` swept it into a commit once (#790 review). Ignore it either way.
 apps/web/generated/
-.amp/portals/*
-.amp/e2e/
-.amp/verify/
-.amp/transfer/
-.amp/in/artifacts/
+.artifacts/
 apps/web/preview/
 infra/secrets/
 .env

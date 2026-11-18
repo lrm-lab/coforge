@@ -23,10 +23,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * deleted artifact only that it was deleted. On a phone the picker is two steps.
  *
  * Opt-in like the other browser E2Es: real local Web with the `artifacts` experiment switched on
- * per Workspace. Screenshots go under `.amp/e2e/artifact-send/`.
+ * per Workspace. Screenshots go under `.artifacts/e2e/artifact-send/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/artifact-send");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/artifact-send");
 
 test("an artifact sent to a channel arrives as its card; shut and deleted ones say so", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

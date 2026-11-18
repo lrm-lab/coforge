@@ -5,16 +5,10 @@ type ProxySocketData = {
   pending: Array<string | Uint8Array<ArrayBuffer>>;
 };
 
-// One origin for a browser e2e page, as the managed stack and production have: the Web client
-// opens `${location.host}/connection/websocket`, which goes to Centrifugo, and everything else to
-// the Web. The defaults are the managed stack's (`.amp/services.yaml`); the CI runner
-// (`run-web-e2e-ci.sh`) sets its own ports.
 const webOrigin = Bun.env.E2E_PROXY_WEB_ORIGIN ?? "http://127.0.0.1:8789";
 const centrifugoOrigin = Bun.env.E2E_PROXY_CENTRIFUGO_ORIGIN ?? "ws://127.0.0.1:8000";
 const port = Number(Bun.env.E2E_PROXY_PORT ?? 8790);
-// Loopback by default: the Web behind it skips sign-in, so it must not answer the LAN. The .amp
-// e2e-proxy service sets E2E_PROXY_HOST=0.0.0.0 because its portal reaches the orb from off it.
-const hostname = Bun.env.E2E_PROXY_HOST ?? "127.0.0.1";
+const hostname = "127.0.0.1";
 
 export async function forwardWebRequest(request: Request, origin: string) {
   const url = new URL(request.url);

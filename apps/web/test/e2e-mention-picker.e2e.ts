@@ -26,7 +26,7 @@ import { quietCentrifugo } from "./helpers/fake-centrifugo";
  * and a seeded database, `bun run seed:dev`), `agent-browser`, and local PostgreSQL. Everything it
  * writes lives in a Workspace of its own that it deletes afterwards. It needs no Centrifugo: a send
  * merges the server's answer into the page directly. Screenshots and `summary.json` (each sent
- * message as stored) are written under `.amp/e2e/mention-picker/`.
+ * message as stored) are written under `.artifacts/e2e/mention-picker/`.
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
@@ -36,7 +36,7 @@ if (!browserPath) throw new Error("agent-browser is required");
 const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/mention-picker");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/mention-picker");
 
 test("people are mentioned by the name they are shown by: picked, kept across a reload, hand-typed then confirmed, and told apart by id", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

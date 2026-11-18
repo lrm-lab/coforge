@@ -13,10 +13,10 @@ import { browserSession, localBrowserE2e, pageWaiter } from "./helpers/browser-e
  *
  * Opt-in like the other browser E2Es: real local Web (`COFORGE_DEV_SKIP_AUTH=1`) + `agent-browser`
  * against the dev database. It creates nothing and clears the preference key it sets.
- * Screenshots are written under `.amp/e2e/sidebar-shortcut/`.
+ * Screenshots are written under `.artifacts/e2e/sidebar-shortcut/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/sidebar-shortcut");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/sidebar-shortcut");
 
 test("Cmd/Ctrl+B toggles the sidebar, except in a rich-text editor", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

@@ -38,7 +38,7 @@ import {
  * the test holds the Computer's `daemon:` control channel with a real daemon-key Centrifugo
  * connection — the live presence the online check requires — and plays the daemon's reports
  * through the server's own report receivers, so no runtime on any machine is signed in or out.
- * Screenshots: .amp/e2e/runtime-sign-in/. */
+ * Screenshots: .artifacts/e2e/runtime-sign-in/. */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugo = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugo) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
@@ -47,7 +47,7 @@ const redis = new RedisClient(redisUrlFor("runtime sign-in E2E"));
 const proxy = sameOriginProxy(origin, centrifugo);
 const auth = userRuntimeAuth(db);
 const suffix = String(process.pid);
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/runtime-sign-in");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/runtime-sign-in");
 const agentName = `signout-agent-${suffix}`;
 let workspaceId = "";
 let computerId = "";

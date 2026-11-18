@@ -25,10 +25,10 @@ import {
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The Agent, channel and
  * cards are seeded per run and removed after it. Confirm and declined frames, desktop and phone,
- * are written under `.amp/e2e/card-ignore-fold/`.
+ * are written under `.artifacts/e2e/card-ignore-fold/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/card-ignore-fold");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/card-ignore-fold");
 
 test("Don't answer asks once, then sends the decline and grays the card", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

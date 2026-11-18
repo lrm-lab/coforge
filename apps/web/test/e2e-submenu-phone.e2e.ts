@@ -19,10 +19,10 @@ import {
  * the menu.
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel and its Task
- * are seeded per run and removed after it. Screenshots are written under `.amp/e2e/submenu-phone/`.
+ * are seeded per run and removed after it. Screenshots are written under `.artifacts/e2e/submenu-phone/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/submenu-phone");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/submenu-phone");
 
 test("a submenu opens inside the viewport on a phone and beside its menu on a desktop", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

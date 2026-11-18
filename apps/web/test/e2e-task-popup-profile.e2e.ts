@@ -20,10 +20,10 @@ import {
  * A profile opened from inside a Task popup opens over it, not under it in the channel's side slot
  * (Frank, 11-04, task #519): it takes presses, and Escape or a press outside closes it before the
  * popup. Opt-in like the other browser E2Es; the channel, Agent and Task are seeded per run and
- * removed after it. Screenshots go under `.amp/e2e/task-popup-profile/`.
+ * removed after it. Screenshots go under `.artifacts/e2e/task-popup-profile/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-popup-profile");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-popup-profile");
 
 test("a profile opened in a Task popup opens over the popup", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

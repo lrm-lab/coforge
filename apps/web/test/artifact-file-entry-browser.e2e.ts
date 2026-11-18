@@ -22,7 +22,8 @@ const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 const sandboxOrigin = Bun.env.COFORGE_ARTIFACT_SANDBOX_ORIGIN;
 if (!sandboxOrigin) throw new Error("COFORGE_ARTIFACT_SANDBOX_ORIGIN is required");
 const shots =
-  Bun.env.COFORGE_E2E_SHOTS_DIR ?? join(import.meta.dir, "../../../.amp/e2e/artifact-file-entry");
+  Bun.env.COFORGE_E2E_SHOTS_DIR ??
+  join(import.meta.dir, "../../../.artifacts/e2e/artifact-file-entry");
 
 const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60"><rect width="120" height="60" fill="#2f6f4f"/></svg>`;
 

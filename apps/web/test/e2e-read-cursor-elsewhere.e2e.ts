@@ -22,7 +22,7 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * Centrifugo, `agent-browser`, and the dev user an owner of its Workspace (seed-dev). Both browsers
  * talk to a proxy in this test that forwards `/connection/*` to Centrifugo and the rest to the Web.
  * Each run seeds two channels and a second member who writes in them, and removes them afterwards.
- * Screenshots are written under `.amp/e2e/read-cursor-elsewhere/`.
+ * Screenshots are written under `.artifacts/e2e/read-cursor-elsewhere/`.
  */
 const upstreamOrigin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!upstreamOrigin || !["localhost", "127.0.0.1"].includes(new URL(upstreamOrigin).hostname))
@@ -34,7 +34,7 @@ if (!browserPath) throw new Error("agent-browser is required");
 const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/read-cursor-elsewhere");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/read-cursor-elsewhere");
 
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const proxy = sameOriginProxy(upstreamOrigin!, centrifugoOrigin!);

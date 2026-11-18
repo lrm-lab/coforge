@@ -11,14 +11,14 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * Real conversation entry with trailing task-conversion notices and delayed Task badges.
  * Needs a local built Web with skip-auth, PostgreSQL, Redis, local Centrifugo and agent-browser with default notification permission. No model runs.
  * Each case creates and removes its own channel; the suite removes its own Workspace and writer.
- * Screenshots and measured scroll positions live in .amp/e2e/conversation-entry-position/.
+ * Screenshots and measured scroll positions live in .artifacts/e2e/conversation-entry-position/.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin || !["localhost", "127.0.0.1"].includes(new URL(centrifugoOrigin).hostname))
   throw new Error("COFORGE_E2E_CENTRIFUGO_URL must target local Centrifugo");
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/conversation-entry-position");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/conversation-entry-position");
 const lateRows = join(artifacts, "late-thread-rows.js");
 const { browser, evaluate } = browserSession(browserPath, `entry-position-${process.pid}`);
 // The late-rows script has to be one of the session's launch init scripts: agent-browser only

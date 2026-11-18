@@ -13,7 +13,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
  *
  * Opt-in like the other browser E2Es: real local Web (`COFORGE_DEV_SKIP_AUTH=1`) + `agent-browser`
  * against the dev database, whose seeded Activity has a card to open. It creates nothing and
- * clears the preference keys it sets. Screenshots are written under `.amp/e2e/list-column-resize/`.
+ * clears the preference keys it sets. Screenshots are written under `.artifacts/e2e/list-column-resize/`.
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
@@ -23,7 +23,7 @@ if (!browserPath) throw new Error("agent-browser is required");
 const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/list-column-resize");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/list-column-resize");
 
 test("the Activity list resizes beside the open conversation and keeps its own width", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

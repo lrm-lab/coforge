@@ -14,11 +14,11 @@ import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
  * The suite sends a message from the page, then advances the Agent's read position and publishes
  * `conversation.read.v1` exactly as the server does when the Agent reads. Realtime needs the
  * same-origin proxy (`scripts/e2e/same-origin-proxy.ts`): run with
- * `COFORGE_E2E_WEB_URL=http://127.0.0.1:8790`. Screenshots live in .amp/e2e/direct-agent-read-live/.
+ * `COFORGE_E2E_WEB_URL=http://127.0.0.1:8790`. Screenshots live in .artifacts/e2e/direct-agent-read-live/.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/direct-agent-read-live");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/direct-agent-read-live");
 const { browser, evaluate } = browserSession(browserPath, `agent-read-${process.pid}`);
 let slug = "";
 let workspaceId = "";

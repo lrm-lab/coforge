@@ -14,12 +14,12 @@ import { chromePath, launchHeadlessChrome, until } from "./helpers/headless-chro
  *
  * Opt-in like the other browser E2Es: the real local Web and a headless Chrome over DevTools. The
  * Agent and channel are seeded per run and removed after it. Light, dark and phone frames, with
- * the pointer on the description, are written under `.amp/e2e/agent-description-no-tooltip/`.
+ * the pointer on the description, are written under `.artifacts/e2e/agent-description-no-tooltip/`.
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 const databaseUrl = Bun.env.DATABASE_URL;
 const chrome = chromePath();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-description-no-tooltip");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/agent-description-no-tooltip");
 
 /** Under the header's 160-character cap, and too wide for the line, so it is cut. */
 /** A model as an Agent's settings name it, shown on the author line when the setting is on. */

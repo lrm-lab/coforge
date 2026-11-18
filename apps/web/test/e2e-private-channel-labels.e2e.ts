@@ -16,10 +16,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  *
  * Opt-in like the other browser E2Es: real local Web (`COFORGE_DEV_SKIP_AUTH=1`, a seeded
  * database), `agent-browser` and local PostgreSQL. Everything it writes lives in a Workspace of its
- * own that it deletes afterwards. Screenshots are written under `.amp/e2e/private-channel-labels/`.
+ * own that it deletes afterwards. Screenshots are written under `.artifacts/e2e/private-channel-labels/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/private-channel-labels");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/private-channel-labels");
 
 test("a private channel goes without `#` wherever another page names it", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

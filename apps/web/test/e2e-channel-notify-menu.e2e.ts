@@ -18,10 +18,10 @@ import {
  * the row (dimmed, the muted icon).
  *
  * Opt-in like the other browser E2Es (real local Web and `agent-browser`). The channel is seeded
- * per run and removed after it. Screenshots go under `.amp/e2e/channel-notify-menu/`.
+ * per run and removed after it. Screenshots go under `.artifacts/e2e/channel-notify-menu/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/channel-notify-menu");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/channel-notify-menu");
 
 test("a channel's notification level is chosen from its row menu and its settings", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

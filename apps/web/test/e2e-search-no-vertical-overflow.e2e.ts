@@ -14,7 +14,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
  * Workspace with at least four Agents and six channels, one Agent named Atlas (seed-dev).
  * Frequently used is browser-local, so the test writes it into this session's storage. Each
  * viewport is short enough that the list overflows its scroll box, which the test checks first.
- * Screenshots are written under `.amp/e2e/search-overflow/`.
+ * Screenshots are written under `.artifacts/e2e/search-overflow/`.
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
@@ -24,7 +24,7 @@ if (!browserPath) throw new Error("agent-browser is required");
 const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/search-overflow");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/search-overflow");
 
 test("search never scrolls the document, empty or with results", async () => {
   const db = new PrismaClient({

@@ -17,7 +17,7 @@ const env = await startSandboxBrowserEnv(["bridge"], ({ id }) => ({
 }));
 const { browser, linkFor, inApp, ID } = env;
 afterAll(() => env.stop());
-const outputs = join(import.meta.dir, "../../../.amp/e2e/artifact-sandbox-files");
+const outputs = join(import.meta.dir, "../../../.artifacts/e2e/artifact-sandbox-files");
 
 test("the page runtime answers the bridge: who, which artifact, clipboard in a click, a confirmed link, the composer, theme, errors, find", async () => {
   const tab = await browser.open(inApp(await linkFor("bridge"), "bridge"), {

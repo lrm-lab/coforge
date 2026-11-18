@@ -20,10 +20,10 @@ import {
  *
  * Opt-in like the other browser E2Es: real local Web started as it is, and `agent-browser`. The
  * channel and its Tasks are seeded per run and removed after it. Screenshots, light and dark,
- * desktop and phone, are written under `.amp/e2e/task-add-existing-subtask/`.
+ * desktop and phone, are written under `.artifacts/e2e/task-add-existing-subtask/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-add-existing-subtask");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-add-existing-subtask");
 
 test("an existing Task is put under the open one, and one under another parent is moved", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

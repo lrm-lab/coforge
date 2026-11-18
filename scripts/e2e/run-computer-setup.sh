@@ -46,17 +46,17 @@ for variable in OPENROUTER_API_KEY NODE_EXTRA_CA_CERTS; do
   if [[ -n "${!variable:-}" ]]; then systemctl --user import-environment "$variable"; fi
 done
 bun "$root/scripts/e2e/build-computer-fixture.ts"
-version=$(mise exec -- bun -e 'console.log((await Bun.file(Bun.argv[1]).json()).version)' "$root/.amp/e2e/native-package/manifest.json")
+version=$(mise exec -- bun -e 'console.log((await Bun.file(Bun.argv[1]).json()).version)' "$root/.artifacts/e2e/native-package/manifest.json")
 (CDPATH='' cd -- "$root/crates/installer" && mise exec -- cargo build --locked --release)
-"$root/target/release/coforge-installer" install --version "$version" --from-directory "$root/.amp/e2e/native-package" --allow-downgrade
+"$root/target/release/coforge-installer" install --version "$version" --from-directory "$root/.artifacts/e2e/native-package" --allow-downgrade
 # The installer, not the Computer, registers the supervisor service. Doing it with this checkout's
 # build keeps `setup` from fetching an installer from the fixture's baked release feed.
 "$root/target/release/coforge-installer" start
 
 # First use waits for the real browser device-code approval. Repeated runs reuse
 # the normal credential store. No automatic approval or direct runtime start.
-"$HOME/.coforge/computer/install/active/coforge-computer" setup --workspace "$COFORGE_E2E_WORKSPACE_SLUG" --json | tee "$root/.amp/e2e/native-setup-result.json"
+"$HOME/.coforge/computer/install/active/coforge-computer" setup --workspace "$COFORGE_E2E_WORKSPACE_SLUG" --json | tee "$root/.artifacts/e2e/native-setup-result.json"
 systemctl --user is-active coforge-daemon.service
 export COFORGE_E2E_REGISTRATION
-COFORGE_E2E_REGISTRATION=$(mise exec -- bun -e 'console.log((await Bun.file(Bun.argv[1]).json()).config_path)' "$root/.amp/e2e/native-setup-result.json")
+COFORGE_E2E_REGISTRATION=$(mise exec -- bun -e 'console.log((await Bun.file(Bun.argv[1]).json()).config_path)' "$root/.artifacts/e2e/native-setup-result.json")
 exec mise exec -- bun test "$root/scripts/e2e/native-browser.e2e.ts"

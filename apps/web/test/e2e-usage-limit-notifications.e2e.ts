@@ -14,14 +14,14 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * the list marks them seen, Dismiss hides one, and a close on the owner's channel takes the card
  * away live; a member, who is not shown usage limits, still has the bell, empty. Seeds a Computer,
  * its Agents and the events, and removes them (and restores the owner's role) after the run.
- * Screenshots, light, dark and phone, are written under `.amp/e2e/usage-limit-notifications/`.
+ * Screenshots, light, dark and phone, are written under `.artifacts/e2e/usage-limit-notifications/`.
  */
 const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 const centrifugoApiKey = Bun.env.COFORGE_CENTRIFUGO_API_KEY;
 if (!centrifugoOrigin || !centrifugoApiKey)
   throw new Error("COFORGE_E2E_CENTRIFUGO_URL and COFORGE_CENTRIFUGO_API_KEY are required");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/usage-limit-notifications");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/usage-limit-notifications");
 
 test("usage-limit cards count, get seen, get dismissed and leave live", async () => {
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);

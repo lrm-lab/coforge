@@ -14,7 +14,7 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * name that stack. Creates one channel with a Markdown, a CSV and two `.ts` files (TypeScript and an
  * MPEG transport stream, both labelled `video/mp2t`) and a log past the line-comment limit, and
  * deletes them afterwards.
- * Screenshots: .amp/e2e/attachment-comment-anchors/. */
+ * Screenshots: .artifacts/e2e/attachment-comment-anchors/. */
 const databaseUrl = Bun.env.DATABASE_URL;
 const web = Bun.env.COFORGE_E2E_WEB_URL;
 const centrifugo = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
@@ -51,7 +51,7 @@ const large = "x".repeat(96 * 1024 + 1);
 const lineBody = `Line 30 needs a type ${suffix}`;
 const sectionBody = `Setup needs a version ${suffix}`;
 const rowBody = `Row 45 looks wrong ${suffix}`;
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/attachment-comment-anchors");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/attachment-comment-anchors");
 const space = "coforge-ui task111 anchors";
 const objectKeys: string[] = [];
 let conversationId = "";

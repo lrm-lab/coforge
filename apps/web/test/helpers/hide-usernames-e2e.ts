@@ -12,7 +12,7 @@ import { browserSession, localBrowserE2e } from "./browser-e2e";
  * ("Dev Viewer"), with three members (Ada, Grace and Lin) whose usernames are
  * unmistakable, and the browser helpers. What it
  * created is removed afterwards and the dev user's name put back. Screenshots and `summary.json`
- * are written under `.amp/e2e/hide-usernames/<part>/`.
+ * are written under `.artifacts/e2e/hide-usernames/<part>/`.
  */
 export async function hideUsernamesRun(
   part: string,
@@ -24,7 +24,7 @@ export async function hideUsernamesRun(
     browserPath,
     `hide-usernames-${part}-${process.pid}`,
   );
-  const artifacts = join(import.meta.dir, "../../../../.amp/e2e/hide-usernames", part);
+  const artifacts = join(import.meta.dir, "../../../../.artifacts/e2e/hide-usernames", part);
 
   /** Waits for a page condition, failing with the condition and the page text after 15 s. */
   const waitFor = (condition: string) => {

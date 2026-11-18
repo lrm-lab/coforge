@@ -9,10 +9,10 @@ import { seedWeeklyReport } from "./helpers/weekly-report-fixture";
  * help (task #710): the autosave of a member's report and the Save of a format. A refusal that
  * would come again, the report being gone, says so in words and keeps no retry; a dropped
  * connection keeps "Try again". Seeds a draft report per test and removes it after. Screenshots,
- * light, dark and phone, are under `.amp/e2e/report-autosave-failure/`.
+ * light, dark and phone, are under `.artifacts/e2e/report-autosave-failure/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/report-autosave-failure");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/report-autosave-failure");
 const GONE = "This report no longer exists, or is no longer yours.";
 const KEEP_TEXT = "Your text is still in the editor. Copy it before you leave.";
 

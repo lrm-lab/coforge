@@ -11,11 +11,11 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * the Computer is offline before it is pressed, and a press says at once that the Agent starts when
  * the Computer reconnects, with no "Starting…" left spinning. Desktop and phone. Needs a local built
  * Web with skip-auth, PostgreSQL, Redis and agent-browser; no Daemon connects, so the Computer is
- * offline. Removes its own Workspace and Computer. Screenshots in .amp/e2e/agent-start-offline/.
+ * offline. Removes its own Workspace and Computer. Screenshots in .artifacts/e2e/agent-start-offline/.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-start-offline");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/agent-start-offline");
 const { browser, evaluate } = browserSession(browserPath, `agent-start-offline-${process.pid}`);
 let workspaceId: string;
 let workspaceSlug: string;

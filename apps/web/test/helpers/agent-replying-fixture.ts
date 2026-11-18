@@ -56,7 +56,7 @@ const base64 = (bytes: Uint8Array) => {
 
 /**
  * Registers the calling file's `beforeAll`/`afterAll` and returns what its tests use. `artifactsName`
- * names both the browser session and the screenshot directory `.amp/e2e/<name>/`, so files run
+ * names both the browser session and the screenshot directory `.artifacts/e2e/<name>/`, so files run
  * independently. The seeded ids are filled in by `beforeAll`; read them inside tests.
  */
 export function setupAgentReplying({ artifactsName }: { artifactsName: string }) {
@@ -73,7 +73,7 @@ export function setupAgentReplying({ artifactsName }: { artifactsName: string })
   requireEnvironment("COFORGE_CENTRIFUGO_API_URL");
   requireEnvironment("COFORGE_CENTRIFUGO_API_KEY");
   const proxySecret = requireEnvironment("COFORGE_CENTRIFUGO_PROXY_SECRET");
-  const artifacts = join(import.meta.dir, "../../../../.amp/e2e", artifactsName);
+  const artifacts = join(import.meta.dir, "../../../../.artifacts/e2e", artifactsName);
 
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const redis = new Bun.RedisClient(redisUrl);

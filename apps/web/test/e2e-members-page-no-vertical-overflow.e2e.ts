@@ -9,14 +9,14 @@ import { join } from "node:path";
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the dev user in a
  * Workspace with at least four Agents (seed-dev). The viewport is short enough that the list
  * overflows its scroll box, which the test checks first. A screenshot is written under
- * `.amp/e2e/members-page-overflow/`.
+ * `.artifacts/e2e/members-page-overflow/`.
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
   throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
 const browserPath = Bun.which("agent-browser");
 if (!browserPath) throw new Error("agent-browser is required");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/members-page-overflow");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/members-page-overflow");
 
 test("Members never scrolls the document, with or without an Agent's profile open", async () => {
   const session = `members-page-overflow-${process.pid}`;

@@ -8,7 +8,7 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-model-size-fields");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/agent-model-size-fields");
 
 test("only an Agent whose runtime reads them shows the model size fields", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

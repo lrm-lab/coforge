@@ -89,7 +89,8 @@ test("platform assistant native sessions isolate members and resume only their o
     expect(requests[3]).toContain("bob-private-marker");
     expect(requests[3]).not.toContain("alice-private-marker");
     expect(requests.every((body) => body.includes("Command toolbox"))).toBe(true);
-    const artifacts = new URL("../../../.amp/e2e/workspace-assistant/", import.meta.url).pathname;
+    const artifacts = new URL("../../../.artifacts/e2e/workspace-assistant/", import.meta.url)
+      .pathname;
     await mkdir(artifacts, { recursive: true });
     await Bun.write(
       join(artifacts, "native-report.json"),

@@ -29,12 +29,12 @@ import { serverFunctionIds, serverFunctionOf } from "./helpers/server-function-i
  * as it opens. The pane lands on the first new message under the "New messages" divider, and
  * the divider stays there. Opt-in like the other browser E2Es: real local Web, Centrifugo
  * (`COFORGE_E2E_CENTRIFUGO_URL`, behind a same-origin proxy, so messages arrive live) and
- * `agent-browser`. A screenshot is written under `.amp/e2e/activity-open-unread/`.
+ * `agent-browser`. A screenshot is written under `.artifacts/e2e/activity-open-unread/`.
  */
 const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-open-unread");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/activity-open-unread");
 
 test("a channel read in Chat and opened from Activity after messages came shows its divider", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

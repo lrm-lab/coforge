@@ -104,7 +104,7 @@ COFORGE_GROK_E2E_COMMAND=/path/to/grok mise run test:file -- ./test/grok-native.
 
 The tests isolate `GROK_HOME`, use a local model endpoint and placeholder test
 credentials, and consume no provider credits. Reports live under
-`.amp/e2e/grok-native/`: `report.json` covers standing instructions, tool mapping,
+`.artifacts/e2e/grok-native/`: `report.json` covers standing instructions, tool mapping,
 compaction and cancellation; `acp-lifecycle.json` covers live interjection, a real
 background command's autonomous follow-up, and history after process restart;
 `restore-missing.json` records that resuming a never-created session ID starts a

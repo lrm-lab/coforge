@@ -34,14 +34,14 @@ import {
  *
  * Opt-in like the other browser E2Es, and it needs `agent-browser`, `openssl`, the local dev
  * database and a local Redis; it deletes what it created. It leaves a repeatable artifact in
- * `.amp/e2e/first-sign-in-name/`: screenshots (the page at 1440 px and 390 px among them), the Web
+ * `.artifacts/e2e/first-sign-in-name/`: screenshots (the page at 1440 px and 390 px among them), the Web
  * server's log and `summary.json`.
  *
  *   REDIS_URL=redis://127.0.0.1:6380 bun test ./test/e2e-first-sign-in-name.e2e.ts
  */
 const { databaseUrl } = requireLocalServices();
 const webPort = Number(Bun.env.COFORGE_E2E_FIRST_SIGN_IN_WEB_PORT ?? 8795);
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/first-sign-in-name");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/first-sign-in-name");
 
 const people = {
   // Signs in for the first time with a provider name that reads as a name.

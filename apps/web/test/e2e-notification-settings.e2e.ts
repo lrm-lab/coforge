@@ -16,10 +16,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * Opt-in like the other browser E2Es: real local Web and `agent-browser`. The browser's push
  * subscription is stubbed by an init script to one of two seeded devices, so the page has a
  * device of its own. The dev user's settings and the devices are put back after the run.
- * Screenshots are written under `.amp/e2e/notification-settings/`.
+ * Screenshots are written under `.artifacts/e2e/notification-settings/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/notification-settings");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/notification-settings");
 
 test("notification settings: this device, a pause of one's own, and settings that save at once", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

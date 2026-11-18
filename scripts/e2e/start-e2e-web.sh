@@ -7,8 +7,8 @@ bun "$root/scripts/e2e/prepare-environment.ts"
 # shellcheck source=scripts/e2e/e2e-env.sh
 source "$root/scripts/e2e/e2e-env.sh"
 export COFORGE_WEB_PUSH_PUBLIC_KEY
-COFORGE_WEB_PUSH_PUBLIC_KEY=$(<"$root/.amp/e2e/web-push-public-key")
-export COFORGE_WEB_PUSH_PRIVATE_KEY_FILE="$root/.amp/e2e/web-push-private-key"
+COFORGE_WEB_PUSH_PUBLIC_KEY=$(<"$root/.artifacts/e2e/web-push-public-key")
+export COFORGE_WEB_PUSH_PRIVATE_KEY_FILE="$root/.artifacts/e2e/web-push-private-key"
 export COFORGE_WEB_PUSH_SUBJECT=https://coforge.cn
 export COFORGE_DEV_SKIP_AUTH=1
 export COFORGE_E2E_ALLOW_DEVICE_AUTH=0

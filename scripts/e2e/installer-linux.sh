@@ -26,7 +26,7 @@
 # Build inputs are built fresh in the VM from a snapshot of this checkout (the working tree,
 # uncommitted files included). Nothing under the Mac's target/ or node_modules/ is used.
 #
-# Where it writes: <checkout>/.amp/e2e/installer-linux/<UTC timestamp>/
+# Where it writes: <checkout>/.artifacts/e2e/installer-linux/<UTC timestamp>/
 #   summary.md        scenario -> expected -> observed -> PASS/FAIL table
 #   summary.tsv       the same rows, tab separated
 #   environment.txt   commit, dirty file count, tool versions
@@ -45,7 +45,7 @@ fi
 
 REPO=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
-OUT="$REPO/.amp/e2e/installer-linux/$STAMP"
+OUT="$REPO/.artifacts/e2e/installer-linux/$STAMP"
 WORK="$HOME/coforge-installer-e2e"
 SRC="$WORK/src"
 BIN="$WORK/bin"
@@ -96,7 +96,7 @@ step build-sync bash -c "
   set -e
   mkdir -p '$SRC'
   find '$SRC' -mindepth 1 -maxdepth 1 ! -name node_modules ! -name .git -exec rm -rf {} +
-  (cd '$REPO' && tar --exclude=node_modules --exclude=./.worktrees --exclude=./target --exclude=./.amp --exclude=./.git -cf - .) | tar -C '$SRC' -xf -
+  (cd '$REPO' && tar --exclude=node_modules --exclude=./.worktrees --exclude=./target --exclude=./.artifacts --exclude=./.git -cf - .) | tar -C '$SRC' -xf -
   cd '$SRC'
   git init -q 2>/dev/null || true
   git add -A >/dev/null 2>&1

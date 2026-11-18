@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
-secrets="$root/infra/secrets"
+here=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+main=$(dirname "$(git -C "$here" rev-parse --path-format=absolute --git-common-dir)")
+secrets="$main/infra/secrets"
 mkdir -p "$secrets"
 for name in redis_password centrifugo_http_api_key centrifugo_proxy_secret postgres_password; do
   if [[ ! -s "$secrets/$name" ]]; then
@@ -11,5 +12,4 @@ for name in redis_password centrifugo_http_api_key centrifugo_proxy_secret postg
   fi
 done
 
-exec sudo -n docker compose -p coforge-e2e \
-  -f "$root/infra/docker-compose.yml" up --remove-orphans
+docker compose -p coforge-e2e -f "$main/infra/docker-compose.yml" up --detach --wait --remove-orphans

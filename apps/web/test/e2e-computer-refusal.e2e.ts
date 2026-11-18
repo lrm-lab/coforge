@@ -11,10 +11,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  * A Computer CoForge refuses for good says why, on the list and on its page, and what moves it on
  * (task #603): the owner of a local Computer gets the command, of a cloud Computer Reconnect, and
  * anyone else is pointed at the owner. Once the refusal is cleared the page reads as before.
- * Screenshots at desktop and phone, light and dark, under `.amp/e2e/computer-refusal/`.
+ * Screenshots at desktop and phone, light and dark, under `.artifacts/e2e/computer-refusal/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/computer-refusal");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/computer-refusal");
 const prefix = Bun.env.SHOT_PREFIX ?? "refusal";
 
 test("a refused Computer says why on the list and its page, and recovers when cleared", async () => {

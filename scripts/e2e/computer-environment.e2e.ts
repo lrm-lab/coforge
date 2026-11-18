@@ -26,8 +26,8 @@ if (Bun.env.COFORGE_E2E_ALLOW_DEVICE_AUTH !== "1" || !serverUrl || !workspace) {
     "Set COFORGE_E2E_ALLOW_DEVICE_AUTH=1, COFORGE_E2E_WEB_URL and COFORGE_E2E_WORKSPACE_SLUG for the local test stack",
   );
 }
-const computer = join(root, ".amp/e2e/bin/coforge-computer");
-const localDaemon = join(root, ".amp/e2e/bin/coforge-daemon");
+const computer = join(root, ".artifacts/e2e/bin/coforge-computer");
+const localDaemon = join(root, ".artifacts/e2e/bin/coforge-daemon");
 const productionDaemon = join(root, "packages/daemon/dist/coforge-daemon");
 
 test("compiled Computer setup and environment rejection against the real local stack", async () => {

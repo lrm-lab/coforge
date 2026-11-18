@@ -16,10 +16,10 @@ import {
  * A finished Task's owner menu does not offer "Unassigned": the server refuses to leave a Done
  * Task with no one (task #709), so the option would only fail. A Task still to do keeps it.
  * Seeds a channel, an Agent and two Tasks, removed after the run. Screenshots, light and phone,
- * are under `.amp/e2e/task-done-owner-menu/`.
+ * are under `.artifacts/e2e/task-done-owner-menu/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-done-owner-menu");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-done-owner-menu");
 
 test("a Done Task's owner menu has no Unassigned", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

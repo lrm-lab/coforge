@@ -18,7 +18,7 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * so their rendered height differs from the content-visibility estimate. Live rows are published
  * straight to the private Agent's Activity channel. Needs a local built Web with skip-auth,
  * PostgreSQL, local Centrifugo and agent-browser. No model runs. The suite removes its own Workspace and Computer. Screenshots and
- * measurements live in .amp/e2e/agent-activity-bottom-pin/.
+ * measurements live in .artifacts/e2e/agent-activity-bottom-pin/.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
@@ -27,7 +27,7 @@ if (!centrifugoOrigin || !["localhost", "127.0.0.1"].includes(new URL(centrifugo
 // The page reaches Centrifugo on its own origin, as behind the production proxy.
 const proxy = sameOriginProxy(origin, centrifugoOrigin);
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-activity-bottom-pin");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/agent-activity-bottom-pin");
 const { browser, evaluate } = browserSession(browserPath, `activity-bottom-pin-${process.pid}`);
 const ROWS = 120;
 let workspaceId: string;

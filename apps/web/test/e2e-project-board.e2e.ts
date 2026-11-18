@@ -25,10 +25,10 @@ import {
  * parent's progress, not cards; the DM Task is on All tasks. Screenshots at desktop (light, dark)
  * and phone. The run's Projects, conversations and people are removed after it; the labels stay
  * (the Workspace keeps a label once made).
- * Screenshots are written under `.amp/e2e/project-board/`.
+ * Screenshots are written under `.artifacts/e2e/project-board/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/project-board");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/project-board");
 
 test("a Project's board and All tasks show top-level Tasks as cards, the viewer's DM Task included", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

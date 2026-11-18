@@ -16,7 +16,7 @@ import {
 } from "./helpers/browser-e2e";
 
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/artifact-share");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/artifact-share");
 
 test("an artifact's who-can-see: the home, the Workspace, and who loses access", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

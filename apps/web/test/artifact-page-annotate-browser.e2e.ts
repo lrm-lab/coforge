@@ -22,7 +22,7 @@ const env = await startSandboxBrowserEnv(["annotate"], ({ id }) => ({
 }));
 const { browser, linkFor, inApp } = env;
 afterAll(() => env.stop());
-const outputs = join(import.meta.dir, "../../../.amp/e2e/artifact-sandbox-files");
+const outputs = join(import.meta.dir, "../../../.artifacts/e2e/artifact-sandbox-files");
 
 type Annotation = { kind: string; [key: string]: any };
 type Rect = { x: number; y: number; right: number; top: number };

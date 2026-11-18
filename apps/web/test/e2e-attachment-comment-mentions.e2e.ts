@@ -15,7 +15,7 @@ import { inPane, rowItems } from "./helpers/activity-inbox-e2e";
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const storageRoot = Bun.env.COFORGE_FILE_STORAGE_DIR;
 if (!storageRoot) throw new Error("COFORGE_FILE_STORAGE_DIR is required");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/attachment-comment-mentions");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/attachment-comment-mentions");
 
 test("a file's comment mentions a member of its conversation, and Activity opens a comment at its place", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

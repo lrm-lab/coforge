@@ -25,10 +25,10 @@ import {
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the dev user an owner of
  * its Workspace with a Computer attached (seed-dev) and its Claude Code runtime. The channel, the
  * Agent and its memberships are removed after the run. Screenshots are written under
- * `.amp/e2e/agent-create-refreshes-members/`.
+ * `.artifacts/e2e/agent-create-refreshes-members/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-create-refreshes-members");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/agent-create-refreshes-members");
 const MEMBERS_FRESH_MS = 30_000;
 
 test("an Agent created from a channel's Add members view shows on an already-read Members page", async () => {

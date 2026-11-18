@@ -86,7 +86,7 @@ test("live OpenRouter Pi delivery writes an Agent reply to canonical DB", async 
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: dbUrl }) });
   const redis = new Bun.RedisClient(required("REDIS_URL"));
   const suffix = crypto.randomUUID();
-  const root = join(import.meta.dir, `../../../.amp/e2e/openrouter-${suffix}`);
+  const root = join(import.meta.dir, `../../../.artifacts/e2e/openrouter-${suffix}`);
   const state = `${root}-state`;
   let runtime: DaemonRuntime | undefined;
   let workspace: { id: string; slug: string } | undefined;

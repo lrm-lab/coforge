@@ -17,8 +17,8 @@ import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
  * Opt-in like the other E2Es. Needs a local Web started with `COFORGE_DEV_SKIP_AUTH=1` and
  * `COFORGE_OIDC_ISSUER` set, `COFORGE_E2E_WEB_URL` pointing at it and `DATABASE_URL` at its
  * database. The dev user's consent is recorded as the consent page records it, so the code comes
- * without a click; the click itself is the browser step in `.amp/e2e/oidc-token/transcript.md`.
- * Registers its own app and removes it. Writes `.amp/e2e/oidc-token/http.md` (tokens truncated).
+ * without a click; the click itself is the browser step in `.artifacts/e2e/oidc-token/transcript.md`.
+ * Registers its own app and removes it. Writes `.artifacts/e2e/oidc-token/http.md` (tokens truncated).
  */
 const origin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
@@ -26,7 +26,7 @@ if (!origin || !["localhost", "127.0.0.1"].includes(new URL(origin).hostname))
 const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/oidc-token");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/oidc-token");
 
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const suffix = crypto.randomUUID().slice(0, 8);

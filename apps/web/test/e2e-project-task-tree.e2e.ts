@@ -26,12 +26,12 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  *
  * Opt-in like the other browser E2Es: real local Web and `agent-browser`. Two Projects, three
  * channels (one private to another person) and their Tasks are seeded per run and removed after
- * it. Screenshots are written under `.amp/e2e/project-task-tree/`.
+ * it. Screenshots are written under `.artifacts/e2e/project-task-tree/`.
  */
 const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/project-task-tree");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/project-task-tree");
 
 test("a Project's Tasks tab lists its Tasks as a tree", async () => {
   // Live updates reach the page only through Centrifugo on the page's own origin.

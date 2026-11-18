@@ -27,7 +27,7 @@ const delayServerFunctions = `(() => {
   return true;
 })()`;
 
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-create-default-runtime");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/agent-create-default-runtime");
 
 test("a new Agent starts on a runtime its Computer can run, keeps its username across tabs and waits in its own shape", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

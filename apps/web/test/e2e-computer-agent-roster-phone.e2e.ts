@@ -11,11 +11,11 @@ import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
  * @handle truncates, so a generated handle longer than the screen (a Workspace assistant's
  * `assistant-<uuid>`) neither pushes the page sideways nor squeezes the row's name to nothing. The Select and Create Agent buttons move under the heading when they do not fit beside
  * it. Run with `mise run test:e2e:web e2e-computer-agent-roster-phone`. Screenshots live in
- * .amp/e2e/computer-agent-roster-phone/. The suite removes its own Computer and Agents.
+ * .artifacts/e2e/computer-agent-roster-phone/. The suite removes its own Computer and Agents.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/computer-agent-roster-phone");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/computer-agent-roster-phone");
 const { browser, evaluate } = browserSession(browserPath, `computer-roster-${process.pid}`);
 let slug = "";
 let computerId = "";

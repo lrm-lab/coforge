@@ -35,14 +35,14 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * (`http://localhost:<port>` beside `127.0.0.1`), a `COFORGE_SESSION_SECRET`, which signs the
  * sandbox's links, and a Centrifugo the Web is reachable from (`COFORGE_E2E_CENTRIFUGO_URL`),
  * which carries the banner. Its texts carry the run's tail, since bytes are stored once per
- * Workspace by their hash. Screenshots go under `.amp/e2e/artifact-page/`.
+ * Workspace by their hash. Screenshots go under `.artifacts/e2e/artifact-page/`.
  */
 const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
 const sandboxOrigin = Bun.env.COFORGE_ARTIFACT_SANDBOX_ORIGIN;
 if (!sandboxOrigin) throw new Error("COFORGE_ARTIFACT_SANDBOX_ORIGIN is required");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/artifact-page");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/artifact-page");
 
 test("an artifact's page: a web page, the page that is not there, an old link, a failed read", async () => {
   await installFeatureFlags(

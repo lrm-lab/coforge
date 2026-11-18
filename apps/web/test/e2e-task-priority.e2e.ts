@@ -15,10 +15,10 @@ import {
 /**
  * A Task's priority on the web (task #618): its popup shows it and changes it, on a desktop's
  * sidebar and a phone's chips, and a channel's new Task form sets it. Screenshots, light, dark and
- * phone, are written under `.amp/e2e/task-priority/`.
+ * phone, are written under `.artifacts/e2e/task-priority/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-priority");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-priority");
 
 test("a Task's popup and the new Task form set its priority", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

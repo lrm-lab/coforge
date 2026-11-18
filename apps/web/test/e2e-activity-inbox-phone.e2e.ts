@@ -32,10 +32,10 @@ import {
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel, its peer and
  * its messages are seeded deterministically and reset on every run. Screenshots of the list
  * (`phone.png`) and of a conversation open (`phone-open.png`) are written under
- * `.amp/e2e/activity-inbox/`.
+ * `.artifacts/e2e/activity-inbox/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-inbox");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/activity-inbox");
 
 const tabBar = `document.querySelector('nav[aria-label="Primary navigation"]')`;
 /** The tab the bar marks current, by its visible label. */

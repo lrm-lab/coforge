@@ -7,7 +7,7 @@ import { setupAgentReplying } from "./helpers/agent-replying-fixture";
  * start to its centred, clipped button ("eagent-ops"). The model label gives way first, then the
  * name, which ends in an ellipsis; the time stays in the row. Opt-in like the
  * other browser E2Es; see `helpers/agent-replying-fixture.ts`. Screenshots are written under
- * `.amp/e2e/message-sender-name/`.
+ * `.artifacts/e2e/message-sender-name/`.
  */
 const fx = setupAgentReplying({ artifactsName: "message-sender-name" });
 const { suffix, db, evaluate, until } = fx;

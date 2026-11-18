@@ -11,7 +11,7 @@ import { getRuntimeAuthCapabilityLease } from "#src/server/computers/runtime-aut
 /** Opt-in E2E for a runtime popover's account band (task #196) on the private stack the other
  * browser E2Es use (built Web with development skip-auth, PostgreSQL, Redis, ego-browser). No
  * daemon runs and nothing is signed in or out: the login states are seeded on the Computer.
- * Screenshots: .amp/e2e/runtime-account-band/. */
+ * Screenshots: .artifacts/e2e/runtime-account-band/. */
 const databaseUrl = Bun.env.DATABASE_URL;
 const web = Bun.env.COFORGE_E2E_WEB_URL;
 const browser = Bun.which("ego-browser");
@@ -22,7 +22,7 @@ if (!web || new URL(web).hostname !== "127.0.0.1")
 if (!browser) throw new Error("ego-browser is required");
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const suffix = String(process.pid);
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/runtime-account-band");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/runtime-account-band");
 const space = "coforge-chores task196 runtime account band";
 const runtimes = [
   ["claude-code", "Claude Code", "max"],

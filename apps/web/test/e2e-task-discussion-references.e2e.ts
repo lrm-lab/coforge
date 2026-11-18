@@ -20,10 +20,10 @@ import {
  * A Task's own discussion names other Tasks of its board (Frank, 11-04): in the Tasks page's popup,
  * which has no channel stream behind it, those references show their Task's status and title, not
  * a bare "#N". Opt-in like the other browser E2Es; the channel is seeded per run and removed after.
- * Screenshots go under `.amp/e2e/task-discussion-references/`.
+ * Screenshots go under `.artifacts/e2e/task-discussion-references/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-discussion-references");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-discussion-references");
 
 test("a Task discussion's references to the board's other Tasks show their titles", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

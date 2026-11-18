@@ -18,7 +18,7 @@ digest (`scripts/ci/web-integration-images.test.ts`).
 The shards are balanced by the seconds recorded beside each file in the list. The run page's
 summary has a table per shard (file, result, seconds). A failed shard uploads
 `web-e2e-shard-<n>` for a week: each file's output, the Web's, Centrifugo's and the front door's
-logs, and the screenshots the tests wrote under `.amp/e2e/`.
+logs, and the screenshots the tests wrote under `.artifacts/e2e/`.
 
 A manual dispatch can instead soak one file: the `file` input (a name under `apps/web/test`,
 listed or not) and `repeat` (1-99) run only that file, that many times in a row, on one runner
@@ -36,7 +36,7 @@ do not close on Escape, popovers off screen, forbidden classes, page exceptions 
 errors. Any finding fails the run; the report (`findings.md`, `index.html`) and its screenshots
 are in the shard's output under `ui-sweep/`. This is where page-layout checks live, rather than
 in one browser e2e per page (task #coforge-designer-team:#128). Run it locally against a
-`managed-web.sh` stack with `UI_SWEEP_BASE=http://127.0.0.1:<port> bun run --cwd apps/web ui:sweep`.
+`start-e2e-web.sh` stack with `UI_SWEEP_BASE=http://127.0.0.1:<port> bun run --cwd apps/web ui:sweep`.
 
 ## What is on the list
 

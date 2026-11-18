@@ -15,13 +15,13 @@ const e2eInfra = await readFile(new URL("./start-e2e-infra.sh", import.meta.url)
 const e2eWeb = await readFile(new URL("./start-e2e-web.sh", import.meta.url), "utf8");
 
 test("Computer setup harness exercises the compiled CLI and real daemon path", () => {
-  expect(harness).toContain(".amp/e2e/native-package");
+  expect(harness).toContain(".artifacts/e2e/native-package");
   expect(harness).not.toContain("__install-local");
   // The installer is built from this checkout, then installs the local package before setup runs.
   expect(harness.indexOf("cargo build --locked --release")).toBeGreaterThan(-1);
   expect(harness).toContain('coforge-installer" install --version "$version" --from-directory');
   // The local build may be older than the installed Computer, so it names the downgrade it means.
-  expect(harness).toContain('--from-directory "$root/.amp/e2e/native-package" --allow-downgrade');
+  expect(harness).toContain('--from-directory "$root/.artifacts/e2e/native-package" --allow-downgrade');
   expect(harness.indexOf("cargo build --locked --release")).toBeLessThan(
     harness.indexOf("--from-directory"),
   );
@@ -50,7 +50,7 @@ test("Computer setup infrastructure keeps the normal fixed Centrifugo port", () 
   expect(e2eInfra).not.toContain("CENTRIFUGO_PORT");
 });
 
-test("managed Web seeds the fixed development user after database migration", () => {
+test("the E2E Web seeds the fixed development user after database migration", () => {
   const migration = e2eWeb.indexOf("db:migrate:deploy");
   const seed = e2eWeb.indexOf("seed-dev-data.ts");
 
@@ -58,7 +58,7 @@ test("managed Web seeds the fixed development user after database migration", ()
   expect(seed).toBeGreaterThan(migration);
 });
 
-test("managed Web loads the stable local Web Push key pair", () => {
+test("the E2E Web loads the stable local Web Push key pair", () => {
   expect(e2eWeb).toContain("COFORGE_WEB_PUSH_PUBLIC_KEY");
   expect(e2eWeb).toContain("COFORGE_WEB_PUSH_PRIVATE_KEY_FILE");
 });

@@ -21,12 +21,12 @@ import {
  * An image opened from a Task popup's discussion on a phone opens its review without the page
  * looking for a message it does not hold ("Messages could not be loaded", Frank, 11-07). Opt-in
  * like the other browser E2Es; needs `COFORGE_FILE_STORAGE_DIR`. Screenshots go under
- * `.amp/e2e/task-image-open/`.
+ * `.artifacts/e2e/task-image-open/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const storageRoot = Bun.env.COFORGE_FILE_STORAGE_DIR;
 if (!storageRoot) throw new Error("COFORGE_FILE_STORAGE_DIR is required");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/task-image-open");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/task-image-open");
 const image = join(import.meta.dir, "../public/apple-touch-icon.png");
 
 test("an image in a Task popup's discussion opens without a load error", async () => {

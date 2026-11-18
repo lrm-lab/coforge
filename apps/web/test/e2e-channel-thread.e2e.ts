@@ -25,7 +25,10 @@ import {
 import { PiJsonlFixtureProvider } from "@lrm/coforge-daemon/test/fixtures/pi-jsonl-fixture-provider";
 
 const databaseUrl = requireEnvironment("DATABASE_URL");
-const workspaceRoot = join(import.meta.dir, `../../../.amp/e2e/channel-${crypto.randomUUID()}`);
+const workspaceRoot = join(
+  import.meta.dir,
+  `../../../.artifacts/e2e/channel-${crypto.randomUUID()}`,
+);
 const daemonStateDirectory = `${workspaceRoot}-state`;
 
 test("channel threads cross real WSS and Agent HTTP transport without notification crosstalk", async () => {

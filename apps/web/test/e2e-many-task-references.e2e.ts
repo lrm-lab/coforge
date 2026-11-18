@@ -16,10 +16,10 @@ import {
  * A channel whose loaded messages name more Tasks than one read takes (task #coforge-ui:#26): an
  * early message names #1 to #220, the newest names #221 to #230. Every one shows as its Task's
  * chip, the newest included, not as a bare number. Opt-in like the other browser E2Es; the channel
- * is seeded per run and removed after it. Screenshots go under `.amp/e2e/many-task-references/`.
+ * is seeded per run and removed after it. Screenshots go under `.artifacts/e2e/many-task-references/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/many-task-references");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/many-task-references");
 const TASKS = 230;
 
 test("a window naming more than 200 Tasks shows each as its chip, the newest too", async () => {

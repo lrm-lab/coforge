@@ -16,10 +16,10 @@ import {
  * its tabs it closes; with the caret in one of its inline edit fields the field leaves edit mode
  * and the panel stays; with its header menu open the menu closes and the panel stays, and the next
  * Escape closes the panel. Seeds an Agent and removes it after. The last frame is under
- * `.amp/e2e/agent-profile-esc/`.
+ * `.artifacts/e2e/agent-profile-esc/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-profile-esc");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/agent-profile-esc");
 
 test("Escape closes the Agent profile panel unless a field or a menu has it", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

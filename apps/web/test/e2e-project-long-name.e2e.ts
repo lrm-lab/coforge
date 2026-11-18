@@ -20,10 +20,10 @@ import {
  *
  * Opt-in like the other browser E2Es: real local Web and `agent-browser`. The Project, a channel
  * and a Task are seeded per run and removed after it. Screenshots are written under
- * `.amp/e2e/project-long-name/`.
+ * `.artifacts/e2e/project-long-name/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/project-long-name");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/project-long-name");
 
 test("a long Project name truncates in a Task's popup and on its card", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

@@ -10,7 +10,7 @@ async function shot(
   name: string,
 ) {
   const { mkdir, writeFile } = await import("node:fs/promises");
-  const dir = `${import.meta.dir}/../../../.amp/e2e/questions-card-phone`;
+  const dir = `${import.meta.dir}/../../../.artifacts/e2e/questions-card-phone`;
   await mkdir(dir, { recursive: true });
   const { data } = await page.command<{ data: string }>("Page.captureScreenshot", {});
   await writeFile(`${dir}/${name}.png`, Buffer.from(data, "base64"));
@@ -29,7 +29,7 @@ import { devBrowserWorkspace } from "./helpers/browser-e2e";
  *
  * Opt-in like the other browser E2Es: the real local Web and a headless Chrome as a touch phone.
  * The people, Agent, channel and cards are seeded per run and removed after it. Frames are written
- * under `.amp/e2e/questions-card-phone/`.
+ * under `.artifacts/e2e/questions-card-phone/`.
  */
 const LONG_OPTION = "Add a search icon to the header of all three pages";
 const origin = Bun.env.COFORGE_E2E_WEB_URL;

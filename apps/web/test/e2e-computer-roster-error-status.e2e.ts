@@ -16,10 +16,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The Computer and its
  * Agents are seeded per run and removed after it. Screenshots are written under
- * `.amp/e2e/computer-roster-error-status/`.
+ * `.artifacts/e2e/computer-roster-error-status/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/computer-roster-error-status");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/computer-roster-error-status");
 const ERROR =
   "Access denied: the runtime could not read ~/.kiro/credentials.json because its permissions changed after the last login. Sign in again with `kiro-cli login`, or restore read access for the daemon's user, then restart this Agent.";
 

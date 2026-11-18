@@ -1,4 +1,4 @@
-// Opt-in after the managed E2E setup; requires authenticated kiro-cli and consumes usage.
+// Opt-in after the E2E setup; requires authenticated kiro-cli and consumes usage.
 import { emptyCatalogs } from "./fixtures/empty-catalogs";
 import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";

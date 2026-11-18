@@ -13,14 +13,14 @@ import { png } from "./helpers/test-png";
  * (task #191): the image read is held at the proxy, the frame measured, then released and measured
  * again once the image has loaded. Needs a local built Web with skip-auth, PostgreSQL, Redis,
  * local Centrifugo and agent-browser. No model runs. The suite removes its own Workspace and
- * writer. Screenshots and measured boxes live in .amp/e2e/image-reserved-size/.
+ * writer. Screenshots and measured boxes live in .artifacts/e2e/image-reserved-size/.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin || !["localhost", "127.0.0.1"].includes(new URL(centrifugoOrigin).hostname))
   throw new Error("COFORGE_E2E_CENTRIFUGO_URL must target local Centrifugo");
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/image-reserved-size");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/image-reserved-size");
 const { browser, evaluate } = browserSession(browserPath, `image-reserved-size-${process.pid}`);
 const [imageWidth, imageHeight] = [600, 400];
 let workspaceId: string;

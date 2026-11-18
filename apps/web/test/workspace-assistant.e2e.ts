@@ -18,7 +18,7 @@ if (
   new URL(databaseUrl).hostname !== "127.0.0.1"
 )
   throw new Error("Local COFORGE_E2E_WEB_URL and DATABASE_URL are required");
-const artifacts = new URL("../../../.amp/e2e/workspace-assistant/", import.meta.url).pathname;
+const artifacts = new URL("../../../.artifacts/e2e/workspace-assistant/", import.meta.url).pathname;
 
 test("the running Web serves independent platform assistants and delegated native commands", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

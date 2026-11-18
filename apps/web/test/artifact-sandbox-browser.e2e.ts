@@ -26,7 +26,7 @@ import { until } from "./helpers/headless-chrome";
  * The public hosts its CSP names are pinned as text only (this test never reaches them).
  *
  * What the browser sends for a page's requests (`Sec-Fetch-*`) is recorded at the sandbox server
- * and written, with what the page saw, to `.amp/e2e/artifact-sandbox-files/summary.json` (and a
+ * and written, with what the page saw, to `.artifacts/e2e/artifact-sandbox-files/summary.json` (and a
  * screenshot), the record of the run.
  *
  * The two ways out left open, resource hints and a WebRTC constructor taken from a frame the page
@@ -184,7 +184,7 @@ test("the known gap: a page that makes a frame takes a clean WebRTC constructor 
   summary.frameWebRtc = { peer: probe.peer, reachedStun: hits.includes("/stun") };
 });
 
-const outputs = join(import.meta.dir, "../../../.amp/e2e/artifact-sandbox-files");
+const outputs = join(import.meta.dir, "../../../.artifacts/e2e/artifact-sandbox-files");
 const summary: Record<string, unknown> = {};
 
 type Message = Record<string, any>;

@@ -13,7 +13,7 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
  * `e2e-attachment-comments.e2e.ts`: local built Web with development skip-auth, seeded dev user,
  * PostgreSQL, Redis, Centrifugo and ego-browser; DATABASE_URL, COFORGE_E2E_WEB_URL,
  * COFORGE_E2E_CENTRIFUGO_URL and COFORGE_FILE_STORAGE_DIR name that private stack. Creates one
- * file/channel, deletes both afterwards. Screenshots: .amp/e2e/attachment-comment-join/. */
+ * file/channel, deletes both afterwards. Screenshots: .artifacts/e2e/attachment-comment-join/. */
 const databaseUrl = Bun.env.DATABASE_URL;
 const web = Bun.env.COFORGE_E2E_WEB_URL;
 const centrifugo = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
@@ -32,7 +32,7 @@ const proxy = sameOriginProxy(web, centrifugo);
 
 const suffix = String(process.pid);
 const filename = `notes-${suffix}.txt`;
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/attachment-comment-join");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/attachment-comment-join");
 const space = "coforge-backend task228 comment after join";
 let conversationId = "";
 let objectKey = "";

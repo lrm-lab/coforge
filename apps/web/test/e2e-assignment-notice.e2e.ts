@@ -10,7 +10,7 @@ import { setupAgentReplying } from "./helpers/agent-replying-fixture";
  * assignee, not the stream (Frank: "直接不显示reason"), so neither the line nor its tooltip shows
  * it. A Task's creation notice to its assignee names who it went to (an older one, which stored no
  * assignee, keeps its "you"). Worst case: the longest reason the CLI takes. Screenshots at 1440 and
- * 390, light and dark, are written under `.amp/e2e/assignment-notice/`.
+ * 390, light and dark, are written under `.artifacts/e2e/assignment-notice/`.
  */
 const fx = setupAgentReplying({ artifactsName: "assignment-notice" });
 const { suffix, evaluate, until } = fx;

@@ -10,13 +10,13 @@ import { sameOriginProxy } from "./helpers/same-origin-proxy";
 /**
  * An Agent DM's header keeps the avatar whole beside a long name. Seeds an Agent with no Computer
  * and removes it after the run. Screenshots, light, dark and phone, are written under
- * `.amp/e2e/agent-dm-header/`.
+ * `.artifacts/e2e/agent-dm-header/`.
  */
 const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 // The Agent's status reaches the page over Centrifugo, so through the page's own origin.
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-dm-header");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/agent-dm-header");
 
 test("a long Agent name leaves the header's avatar whole", async () => {
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin);

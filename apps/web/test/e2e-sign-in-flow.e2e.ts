@@ -34,13 +34,13 @@ import {
  * Opt-in like the other browser E2Es, but it brings its own servers (`e2e-sign-in-harness.ts`): a
  * stand-in for Authing's v3 sign-in API and the Web's production build with real sign-in pointed at it. It
  * needs `agent-browser`, `openssl`, the local dev database and a local Redis, and deletes what it
- * created. Screenshots and the Web server's log are written under `.amp/e2e/sign-in-flow/`.
+ * created. Screenshots and the Web server's log are written under `.artifacts/e2e/sign-in-flow/`.
  *
  *   REDIS_URL=redis://127.0.0.1:6380 bun test ./test/e2e-sign-in-flow.e2e.ts
  */
 const { databaseUrl } = requireLocalServices();
 const webPort = Number(Bun.env.COFORGE_E2E_SIGN_IN_WEB_PORT ?? 8798);
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/sign-in-flow");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/sign-in-flow");
 
 const people = {
   alice: { sub: "e2e-sign-in-alice", email: "e2e-alice@coforge.test", name: "Alice E2E" },

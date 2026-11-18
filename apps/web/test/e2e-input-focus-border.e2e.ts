@@ -14,7 +14,7 @@ if (!browserPath) throw new Error("agent-browser is required");
 const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/input-focus-border");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/input-focus-border");
 
 const tokenColor = (token: string) => `(() => {
   const probe = document.createElement("i");

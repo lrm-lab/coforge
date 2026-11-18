@@ -9,7 +9,7 @@ import { authorizeDevice, DEVICE_CLIENT_ID, pollDeviceToken } from "./device-aut
 import { e2eDevice, e2eToken, oauthDiscovery as e2eDiscovery } from "./e2e-device-auth.server";
 
 /**
- * The end-to-end harness (scripts/e2e/managed-web.sh) sets this to drive an unattended install
+ * The end-to-end harness (scripts/e2e/start-e2e-web.sh) sets this to drive an unattended install
  * against a fixed code, which no real device flow can offer. It selects the test double rather
  * than gating the feature: before this existed the flag was the only way to have a device
  * endpoint at all, which is why staging - where it is correctly unset - answered `login` with a

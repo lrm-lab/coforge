@@ -13,7 +13,7 @@ import {
 } from "./helpers/browser-e2e";
 
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/avatars-everywhere");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/avatars-everywhere");
 
 test("names carry their faces", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

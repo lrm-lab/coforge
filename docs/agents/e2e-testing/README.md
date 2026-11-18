@@ -1,8 +1,9 @@
 # Live OpenRouter integration test
 
-Run `bun scripts/test/isolated-test-run.ts scripts/e2e/run-openrouter-live.sh` from an Amp orb with the repository's
-E2E services and a real `OPENROUTER_API_KEY` supplied through the environment.
-The runner starts the declared services and reads their generated credentials.
+Start the E2E Web (`scripts/e2e/start-e2e-web.sh`), then run
+`bun scripts/test/isolated-test-run.ts scripts/e2e/run-openrouter-live.sh` with a real
+`OPENROUTER_API_KEY` supplied through the environment. The runner starts the E2E
+infrastructure and reads its generated credentials.
 Never replace the caller's key with a diagnostic placeholder, print credentials,
 or claim a real model call based only on credential presence.
 

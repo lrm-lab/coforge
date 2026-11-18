@@ -9,10 +9,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
 /**
  * A member card shows its Agent's name and "No computer assigned" in full at the widths people use. Seeds an
  * Agent with no Computer and removes it after the run. Screenshots, light, dark and phone, are
- * written under `.amp/e2e/member-card-meta/`.
+ * written under `.artifacts/e2e/member-card-meta/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/member-card-meta");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/member-card-meta");
 
 test("a member card never cuts its name or Computer line", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

@@ -8,10 +8,10 @@ import { seedWeeklyReport } from "./helpers/weekly-report-fixture";
 /**
  * The Record side panel fills the page where the document is hidden behind it, and stays a side
  * column beside the document on a wide screen. Seeds a draft report and removes it after the run.
- * Screenshots, light and dark, are written under `.amp/e2e/record-side-panel-phone/`.
+ * Screenshots, light and dark, are written under `.artifacts/e2e/record-side-panel-phone/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/record-side-panel-phone");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/record-side-panel-phone");
 
 test("the Record side panel fills the page below the width it can sit beside the document", async () => {
   const { report, path, remove } = await seedWeeklyReport(databaseUrl, {

@@ -33,9 +33,9 @@ const webUrl = "http://127.0.0.1:8789";
 const workspaceId = "10000000-0000-4000-8000-000000000001";
 const workspaceSlug = "e2e-workspace";
 const repositoryRoot = join(import.meta.dir, "../../..");
-const workspaceRoot = join(repositoryRoot, ".amp/e2e/workspace-root");
-const daemonStateDirectory = join(repositoryRoot, ".amp/e2e/daemon-state");
-const artifactDirectory = join(repositoryRoot, ".amp/e2e/agent-introduction");
+const workspaceRoot = join(repositoryRoot, ".artifacts/e2e/workspace-root");
+const daemonStateDirectory = join(repositoryRoot, ".artifacts/e2e/daemon-state");
+const artifactDirectory = join(repositoryRoot, ".artifacts/e2e/agent-introduction");
 const fixture = join(
   repositoryRoot,
   "packages/daemon/test/fixtures/agent-introduction-e2e-runtime.ts",
@@ -402,7 +402,7 @@ test("a new Agent introduces itself to its creator by DM on its first start, unt
           commit: Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: repositoryRoot })
             .stdout.toString()
             .trim(),
-          environment: `local managed stack ${webUrl}`,
+          environment: `local E2E stack ${webUrl}`,
           recordedAt: new Date().toISOString(),
           steps,
           observations,

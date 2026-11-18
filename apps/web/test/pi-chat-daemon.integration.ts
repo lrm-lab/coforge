@@ -1,6 +1,6 @@
 /** Opt-in native Pi → Daemon WSS adapter → Web → private browser-channel contract.
  * Requires PI_CHAT_TEST_REDIS_URL pointing to an isolated local Redis.
- * Run through scripts/test/isolated-test-run.ts. Writes .amp/e2e/pi-chat-daemon.json.
+ * Run through scripts/test/isolated-test-run.ts. Writes .artifacts/e2e/pi-chat-daemon.json.
  * The model and Centrifugo transport are local controlled fixtures; Pi/tools and Redis are real.
  */
 import { expect, test } from "bun:test";
@@ -286,7 +286,7 @@ test("thinking, file tools and partial answers arrive before completion and hist
     const file = join(root, "sessions", scope.workspaceId, scope.userId, "stream-proof.txt");
     expect(await Bun.file(file).text()).toBe("native file output");
     await Bun.write(
-      resolve("../../.amp/e2e/pi-chat-daemon.json"),
+      resolve("../../.artifacts/e2e/pi-chat-daemon.json"),
       JSON.stringify(
         {
           passed: true,

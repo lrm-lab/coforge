@@ -13,7 +13,7 @@ import {
  * to the window, so at every common window size nothing scrolls and the feature card is whole on
  * screen; on a phone it is a column that scrolls. It stays light in the dark theme, reads in
  * English too (as text; Chinese is the designer's lettering), and its agents keep still for someone who asked for less motion. Shoots 1440, 1920,
- * 768 and 390, Chinese and English, light and dark, under `.amp/e2e/landing-page/`.
+ * 768 and 390, Chinese and English, light and dark, under `.artifacts/e2e/landing-page/`.
  *
  * Opt-in like the other browser E2Es, and brings its own servers (`e2e-sign-in-harness.ts`), so
  * the page is seen signed out:
@@ -22,7 +22,7 @@ import {
  */
 requireLocalServices();
 const webPort = Number(Bun.env.COFORGE_E2E_SIGN_IN_WEB_PORT ?? 8798);
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/landing-page");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/landing-page");
 const people: Record<string, Person> = {};
 
 /** Window sizes people sign in from, the toolbar's share taken: none of them scrolls. */

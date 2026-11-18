@@ -12,11 +12,11 @@ import { png } from "./helpers/test-png";
  * its own shape within 360×288, a 176×132 box when its size is unknown, and several in a grid at
  * most 360 wide whose wide images take a row of their own. Run with `mise run test:e2e:web
  * e2e-message-image-gallery`. Screenshots and measured boxes live in
- * .amp/e2e/message-image-gallery/. The suite removes its own Workspace and writer.
+ * .artifacts/e2e/message-image-gallery/. The suite removes its own Workspace and writer.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/message-image-gallery");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/message-image-gallery");
 const { browser, evaluate } = browserSession(browserPath, `image-gallery-${process.pid}`);
 let workspaceId: string;
 let workspaceSlug: string;

@@ -2,7 +2,7 @@ import { chmod, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 const root = join(import.meta.dir, "../..");
-const directory = join(root, ".amp/e2e");
+const directory = join(root, ".artifacts/e2e");
 const path = join(directory, "worker-private.jwk");
 const runtimeCredentialKeyPath = join(directory, "agent-runtime-credential-key");
 const webPushPublicKeyPath = join(directory, "web-push-public-key");

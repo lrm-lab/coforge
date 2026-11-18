@@ -9,10 +9,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
 /**
  * The Tasks page's toolbar on a phone: Filter, the Board/List switch and New task all fit, none
  * over another. Below `sm` the switch shows its icons only, still named for a screen reader; from
- * `sm` up it keeps its words. Screenshots go under `.amp/e2e/tasks-toolbar-phone/`.
+ * `sm` up it keeps its words. Screenshots go under `.artifacts/e2e/tasks-toolbar-phone/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/tasks-toolbar-phone");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/tasks-toolbar-phone");
 
 type Box = { left: number; right: number; width: number };
 

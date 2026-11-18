@@ -18,10 +18,10 @@ import {
  * page; a Task popup left open over select mode takes the next Escape alone, with focus stranded
  * on the page; with select mode off it closes on Escape.
  * Seeds a channel with messages, a second member and a Task, and removes them after. The last
- * frame is under `.amp/e2e/escape-layers/`.
+ * frame is under `.artifacts/e2e/escape-layers/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/escape-layers");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/escape-layers");
 
 test("Escape leaves select mode and the Task popup one layer at a time", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

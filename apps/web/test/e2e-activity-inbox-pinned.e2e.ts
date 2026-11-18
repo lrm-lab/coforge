@@ -32,10 +32,10 @@ const todayRows = JSON.stringify('ol[aria-label="Today"] > li');
  * (`helpers/activity-inbox-e2e.ts`).
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. Screenshots are written
- * under `.amp/e2e/activity-inbox/` (`pinned.png`).
+ * under `.artifacts/e2e/activity-inbox/` (`pinned.png`).
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/activity-inbox");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/activity-inbox");
 
 test("a pinned channel lists under Pinned, before the day's rows; Done takes it out; new activity lists it again", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

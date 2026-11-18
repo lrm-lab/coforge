@@ -21,7 +21,7 @@ import { referencedAssets, staticClosureOf } from "../scripts/bundle-size-report
  * and the seeded dev user as a Workspace owner. Each run seeds two channels and a direct message with
  * uniquely named content, saves one message, and removes them afterwards. The server HTML of each
  * page, a screenshot of each page in the browser, and the sizes measured are written under
- * `.amp/e2e/chat-client-render/`.
+ * `.artifacts/e2e/chat-client-render/`.
  *
  *   COFORGE_E2E_WEB_URL=http://127.0.0.1:8788 REDIS_URL=redis://127.0.0.1:6380 \
  *     bun test ./test/e2e-chat-client-render.e2e.ts
@@ -34,7 +34,7 @@ if (!browserPath) throw new Error("agent-browser is required");
 const databaseUrl = Bun.env.DATABASE_URL;
 if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/chat-client-render");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/chat-client-render");
 
 test("a chat page's server HTML holds no conversation, and the browser shows them", async () => {
   const assets = join(import.meta.dir, "../.output/public/assets");

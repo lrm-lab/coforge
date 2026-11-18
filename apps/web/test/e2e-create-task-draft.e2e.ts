@@ -13,10 +13,10 @@ import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser
  *
  * Opt-in like the other browser E2Es: real local Web and `agent-browser`. A Workspace where the
  * dev user is a plain member, a peer, a channel and a label are seeded per run and removed after
- * it. Screenshots are written under `.amp/e2e/create-task-draft/`.
+ * it. Screenshots are written under `.artifacts/e2e/create-task-draft/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/create-task-draft");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/create-task-draft");
 
 test("a member creates a Task with themselves as owner and a label", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

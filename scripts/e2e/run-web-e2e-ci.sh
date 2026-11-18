@@ -15,7 +15,7 @@
 # Shards are balanced by the seconds the list records (longest first, each to the lighter shard),
 # so both finish together. Every file runs once, in its own `bun test` process, with no retry: a
 # file that fails is a red run. Each file's output, the Web's and Centrifugo's logs and the
-# screenshots the tests write under .amp/e2e/ end up in $E2E_OUTPUT (default .amp/e2e-ci/), which
+# screenshots the tests write under .artifacts/e2e/ end up in $E2E_OUTPUT (default .artifacts/e2e-ci/), which
 # the workflow uploads when the run fails.
 #
 # Two things the opt-in runners do not do and these files need: the full dev seed
@@ -28,7 +28,7 @@ shard=${1:?shard number (1-based)}
 shards=${2:?number of shards}
 root=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)
 list="$root/scripts/e2e/web-e2e-ci.txt"
-output="${E2E_OUTPUT:-$root/.amp/e2e-ci}"
+output="${E2E_OUTPUT:-$root/.artifacts/e2e-ci}"
 web_port=8788
 # The pages' one origin (`same-origin-proxy.ts`): /connection/* to Centrifugo, the rest to the Web.
 front_port=8790
@@ -89,13 +89,13 @@ fi
 cd "$root"
 bun scripts/e2e/prepare-environment.ts
 export COFORGE_WORKER_JWT_KEY_ID
-COFORGE_WORKER_JWT_KEY_ID=$(bun "$root/scripts/e2e/worker-key-id.ts" "$root/.amp/e2e/worker-private.jwk")
+COFORGE_WORKER_JWT_KEY_ID=$(bun "$root/scripts/e2e/worker-key-id.ts" "$root/.artifacts/e2e/worker-private.jwk")
 export COFORGE_WORKER_JWT_PRIVATE_JWK
-COFORGE_WORKER_JWT_PRIVATE_JWK=$(<"$root/.amp/e2e/worker-private.jwk")
-export COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY_FILE="$root/.amp/e2e/agent-runtime-credential-key"
+COFORGE_WORKER_JWT_PRIVATE_JWK=$(<"$root/.artifacts/e2e/worker-private.jwk")
+export COFORGE_AGENT_CREDENTIAL_ENCRYPTION_KEY_FILE="$root/.artifacts/e2e/agent-runtime-credential-key"
 
 # Host networking: the container's 127.0.0.1 is the runner's, so the proxies reach the Web there.
-# The checked-in config points them at the managed stack's :8789; the environment overrides that.
+# The checked-in config points them at the E2E stack's :8789; the environment overrides that.
 web="http://127.0.0.1:$web_port"
 docker rm -f coforge-e2e-centrifugo >/dev/null 2>&1 || true
 docker run -d --name coforge-e2e-centrifugo --network host \
@@ -111,17 +111,17 @@ docker run -d --name coforge-e2e-centrifugo --network host \
   -e CENTRIFUGO_CHANNEL_PROXY_SUBSCRIBE_ENDPOINT="$web/api/internal/centrifugo-subscribe" \
   -e CENTRIFUGO_CHANNEL_PROXY_SUB_REFRESH_ENDPOINT="$web/api/internal/centrifugo-sub-refresh" \
   "$centrifugo_image" centrifugo -c /centrifugo/config.yaml >/dev/null
-# The screenshots are the subdirectories of .amp/e2e/; the files beside them are this run's keys,
+# The screenshots are the subdirectories of .artifacts/e2e/; the files beside them are this run's keys,
 # which stay out of the uploaded output.
 trap 'docker logs coforge-e2e-centrifugo > "$output/logs/centrifugo.log" 2>&1 || true
   mkdir -p "$output/screenshots"
-  find "$root/.amp/e2e" -mindepth 1 -maxdepth 1 -type d -exec cp -R {} "$output/screenshots/" \; 2>/dev/null || true
+  find "$root/.artifacts/e2e" -mindepth 1 -maxdepth 1 -type d -exec cp -R {} "$output/screenshots/" \; 2>/dev/null || true
   [ -n "${web_pid:-}" ] && kill "$web_pid" 2>/dev/null || true
   [ -n "${front_pid:-}" ] && kill "$front_pid" 2>/dev/null || true
   docker rm -f coforge-e2e-centrifugo >/dev/null 2>&1 || true' EXIT
 
 # Built with NODE_ENV=production, served with NODE_ENV=development and skip-auth: the order
-# managed-web.sh uses (docs/agents/testing.md says why the other order fails every file).
+# start-e2e-web.sh uses (docs/agents/testing.md says why the other order fails every file).
 bun run --cwd packages/coforge-sdk generate
 cd "$root/apps/web"
 bun run db:migrate:deploy

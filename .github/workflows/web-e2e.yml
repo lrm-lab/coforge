@@ -79,7 +79,7 @@ jobs:
       # The same for the files that launch Chrome themselves (apps/web/test/helpers/headless-chrome.ts);
       # the runner points COFORGE_E2E_CHROME at the Chrome agent-browser installed.
       COFORGE_E2E_CHROME_ARGS: --no-sandbox
-      E2E_OUTPUT: ${{ github.workspace }}/.amp/e2e-ci
+      E2E_OUTPUT: ${{ github.workspace }}/.artifacts/e2e-ci
 
     steps:
       - name: Check out source

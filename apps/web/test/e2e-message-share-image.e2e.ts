@@ -12,14 +12,14 @@ import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
  * "Generate image" in select mode: picked messages, an image attachment among them, become one
  * share image; a long selection becomes several pages. The preview is the real PNG (its blob is
  * read back). Needs a local built Web with skip-auth and `COFORGE_FILE_STORAGE_DIR`. The suite
- * removes its own Workspace, writer and stored file. Screenshots live in `.amp/e2e/message-share-image/`.
+ * removes its own Workspace, writer and stored file. Screenshots live in `.artifacts/e2e/message-share-image/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const storageRoot = Bun.env.COFORGE_FILE_STORAGE_DIR;
 if (!storageRoot) throw new Error("COFORGE_FILE_STORAGE_DIR is required");
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
 const files = new LocalFileStorage(storageRoot);
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/message-share-image");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/message-share-image");
 const { browser, evaluate } = browserSession(browserPath, `share-image-${process.pid}`);
 const prefix = Bun.env.SHOT_PREFIX ?? "share";
 const suffix = String(process.pid);

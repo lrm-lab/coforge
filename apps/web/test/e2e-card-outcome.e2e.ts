@@ -19,10 +19,10 @@ import {
  * `data-question-card`, on a questions card as on a choice card; a card nobody will answer is
  * gray, its prompts still there. Read when mounted later, a handled card is compact
  * (`data-question-card-view`). Seeds an Agent asking a second person five cards; screenshots in
- * light, dark and on a phone go to `.amp/e2e/card-outcome/`.
+ * light, dark and on a phone go to `.artifacts/e2e/card-outcome/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/card-outcome");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/card-outcome");
 
 test("someone else's card says whether it waits, was answered, ignored or withdrawn", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });

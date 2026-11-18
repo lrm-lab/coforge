@@ -7,7 +7,7 @@ import { setupAgentReplying } from "./helpers/agent-replying-fixture";
  * `$…$`, `\(…\)`, `$$` on lines of its own, `\[…\]`, ```math), prices stay text, and a formula KaTeX
  * cannot read shows its source as code. Light and dark. Opt-in like the other browser E2Es; see
  * `helpers/agent-replying-fixture.ts`. Screenshots are written under
- * `.amp/e2e/message-formulas/`.
+ * `.artifacts/e2e/message-formulas/`.
  */
 const fx = setupAgentReplying({ artifactsName: "message-formulas" });
 const { suffix, until, evaluate } = fx;

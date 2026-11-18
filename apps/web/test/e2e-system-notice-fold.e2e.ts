@@ -25,10 +25,10 @@ import {
  *
  * Opt-in like the other browser E2Es: real local Web + `agent-browser`. The channel and its
  * messages are seeded per run and removed after it. Screenshots (light folded and open, dark,
- * a phone) are written under `.amp/e2e/system-notice-fold/`.
+ * a phone) are written under `.artifacts/e2e/system-notice-fold/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/system-notice-fold");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/system-notice-fold");
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MINUTE_MS = 60_000;
 /** Notices wider than a phone; the ASCII token is what pushes the row sideways if the clip fails. */

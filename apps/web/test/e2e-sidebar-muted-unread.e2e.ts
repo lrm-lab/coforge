@@ -17,10 +17,10 @@ import {
  * dimmed and not bold; an "@" still shows. A loud channel beside it for comparison.
  *
  * Opt-in like the other browser E2Es (real local Web and `agent-browser`). The channels are
- * seeded per run and removed after it. Screenshots go under `.amp/e2e/sidebar-muted-unread/`.
+ * seeded per run and removed after it. Screenshots go under `.artifacts/e2e/sidebar-muted-unread/`.
  */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
-const artifacts = join(import.meta.dir, "../../../.amp/e2e/sidebar-muted-unread");
+const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/sidebar-muted-unread");
 
 test("a muted channel shows its unread as a quiet number beside the muted icon", async () => {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
