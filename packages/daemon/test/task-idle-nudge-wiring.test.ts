@@ -58,23 +58,22 @@ test("no session means no ask, and a busy turn means no ask", async () => {
 
 test("a quiet turn asks the reminder only when nothing is still running", () => {
   const asked: string[] = [];
-  const ports = (waiting: boolean) =>
-    ({
-      activityPublisher: { lastBusy: () => undefined, publish: () => {} },
-      drafts: { quietTurn: () => ({}) },
-      systemCleaner: { onAgentWorkingToIdle: () => {} },
-      idleNudge: { maybeAsk: (agentId: string) => asked.push(agentId) },
-    }) as unknown as RuntimeTurnPorts;
+  const ports = {
+    activityPublisher: { lastBusy: () => undefined, publish: () => {} },
+    drafts: { quietTurn: () => ({}) },
+    systemCleaner: { onAgentWorkingToIdle: () => {} },
+    idleNudge: { maybeAsk: (agentId: string) => asked.push(agentId) },
+  } as unknown as RuntimeTurnPorts;
   const launch = (waiting: boolean) => ({
     launchId: "launch-1",
     clientSeq: 0,
     stopping: false,
     backgroundTasks: { quietDetail: () => (waiting ? "Waiting for 1 background task" : undefined) },
   });
-  showQuietTurn(ports(false), "agent-a", launch(false) as never, () => {});
+  showQuietTurn(ports, "agent-a", launch(false) as never, () => {});
   expect(asked).toEqual(["agent-a"]);
   asked.length = 0;
-  showQuietTurn(ports(true), "agent-a", launch(true) as never, () => {});
+  showQuietTurn(ports, "agent-a", launch(true) as never, () => {});
   expect(asked).toEqual([]);
 });
 

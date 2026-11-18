@@ -139,8 +139,8 @@ export async function createSession(options: CreateSessionOptions) {
   const extensionDefinesBash = services.resourceLoader
     .getExtensions()
     .extensions.some((extension) => extension.tools.has("bash"));
-  const customTools = [
-    ...(options.environment && !extensionDefinesBash
+  const customTools =
+    options.environment && !extensionDefinesBash
       ? [
           createBashTool(cwd, {
             shellPath: services.settingsManager.getShellPath(),
@@ -181,8 +181,7 @@ export async function createSession(options: CreateSessionOptions) {
             },
           }),
         ]
-      : []),
-  ];
+      : [];
   const created = await createAgentSessionFromServices({
     services,
     sessionManager,

@@ -231,7 +231,7 @@ export class MentionDeliveryTracker {
   settleTurnEnd(agentId: string, conversationId?: string): void {
     const pending = this.#entries.pending(agentId);
     if (!pending) return;
-    for (const deliveryId of [...pending]) {
+    for (const deliveryId of Array.from(pending)) {
       const tracked = this.#entries.get(deliveryId);
       if (!tracked || tracked.undelivered) continue;
       const { message } = tracked;

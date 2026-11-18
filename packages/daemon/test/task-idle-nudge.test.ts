@@ -295,7 +295,7 @@ test("a gate skip logs why the Agent was not asked", async () => {
 });
 
 test("a repeated decline for the same agent and reason is throttled to one line per ten minutes", async () => {
-  const { records } = await captureDaemonLogs(async (records) => {
+  const { records } = await captureDaemonLogs(async () => {
     const h = harness({ respond: async () => ({ send: false, reason: "stale" }) });
     h.nudge.maybeAsk("agent-a");
     await settle();
