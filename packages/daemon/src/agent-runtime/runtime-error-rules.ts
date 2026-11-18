@@ -95,8 +95,9 @@ export const RUNTIME_BALANCE_EXHAUSTED_PATTERNS = [
 export const RUNTIME_WINDOW_LIMIT_PATTERNS = [
   /\busage limit reached\b/i,
   /\byou(?:'|’)ve reached\b[^.]{0,80}\b(?:usage limit|today's limit)\b/i,
-  // Codex 0.165 prints this, not "you've reached". "You've hit your session limit" stays out.
+  // Codex 0.165 prints this, not "you've reached".
   /\byou(?:'|’)ve hit your usage limit\b/i,
+  /\byou(?:'|’)ve hit your session limit\b/i,
   // Devin's session/prompt ResourceExhausted (-32011) words its weekly window this way; its
   // organization/monthly cap is balance wording above instead.
   /\bweekly usage quota has been exhausted\b/i,
