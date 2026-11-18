@@ -2,16 +2,17 @@ import { expect, test } from "bun:test";
 
 const migration = await Bun.file(
   new URL(
-    "../prisma/migrations/20261118110000_split_legacy_antigravity_model_reasoning/migration.sql",
+    "../prisma/migrations/20261118150000_split_legacy_antigravity_model_runtime_key/migration.sql",
     import.meta.url,
   ),
 ).text();
 
-test("legacy antigravity model migration splits only the known suffixed ids with lock_timeout and rollback", () => {
+test("legacy antigravity model migration splits only the known suffixed ids through the stored runtime key", () => {
   expect(migration).toContain("SET lock_timeout = '5s';");
   expect(migration).toContain("-- Rollback:");
   expect(migration).toContain("RESET lock_timeout;");
-  expect(migration).toContain("\"runtimeConfig\"->>'provider' = 'antigravity'");
+  expect(migration).toContain("\"runtimeConfig\"->>'runtime' = 'antigravity'");
+  expect(migration).not.toContain("\"runtimeConfig\"->>'provider' = 'antigravity'");
   expect(migration).toContain("COALESCE(\"runtimeConfig\"->>'reasoning', '') = ''");
   for (const model of [
     "gemini-3.8-flash-high",
