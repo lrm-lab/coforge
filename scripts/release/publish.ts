@@ -2,7 +2,7 @@
 /**
  * Publishes one unified Computer release version to the local-distribution feed on Alibaba Cloud
  * OSS: compile every target, assemble the version tree (build-release.ts), upload every object
- * it lists, read each one back and compare bytes, and only then write the feed's mutable
+ * it lists, check each one against the size and CRC-64 OSS reports, and only then write the feed's mutable
  * `latest` pointer - in that fixed order. docs/release/local-distribution.md ("Local Computer
  * distribution model"):
  * "`latest` is the feed's only mutable object, and it is written last - every object under the
@@ -72,6 +72,7 @@ import {
   putObject,
   readObjectIfPresent,
 } from "./oss-objects";
+import { uploadObjects, verifyUploadedObjects } from "./publish-objects";
 export { ossError, readObjectIfPresent };
 
 export const LATEST_OBJECT_KEY = "latest";
@@ -168,10 +169,6 @@ export interface UploadResult {
   latestKey: string;
 }
 
-/** Uploads every object under the new version tree, reads each one back and compares its bytes
- * to the local copy, and only then writes the mutable `latest` pointer - see the file banner for
- * why that order matters. Any failure (an upload, a read-back mismatch) throws before `latest`
- * is ever written, and stops uploading/verifying the objects after it. */
 /**
  * What every phase of a publication shares: the OSS client, the feed origin it probes, and the
  * progress line sink. Threading this one object keeps the phases below to their own arguments.
@@ -184,7 +181,7 @@ type FeedContext = {
   feed: FeedLayout;
 };
 
-type UploadContext = FeedContext & {
+export type UploadContext = FeedContext & {
   outputDirectory: string;
   requestTimeoutMs?: number;
 };
@@ -232,40 +229,6 @@ function planUpload(
     files,
     uploads: objectsOnly ? uploadOrder.filter((file) => file !== manifestKey) : uploadOrder,
   };
-}
-
-/** Phase 1: put every object up, verifying — rather than re-uploading — the ones a finalize pass finds. */
-async function uploadObjects(context: UploadContext, plan: UploadPlan): Promise<void> {
-  for (const relativePath of plan.uploads) {
-    const bytes = await readFile(join(context.outputDirectory, relativePath));
-    if (plan.allowExisting && (await objectExists(context.client, relativePath))) {
-      const remote = await getObject(context.client, relativePath);
-      if (!bytesEqual(bytes, remote)) {
-        throw new Error(
-          `OSS object mismatch: ${relativePath} is up but does not match the freshly compiled bytes`,
-        );
-      }
-      context.log(`already present, verified ${relativePath}`);
-      continue;
-    }
-    await putObject(context.client, relativePath, bytes, context.requestTimeoutMs);
-    context.log(`uploaded ${relativePath}`);
-  }
-}
-
-/** Phase 2: every object must read back byte-for-byte identical to what was compiled. */
-async function verifyUploadedBytes(
-  context: UploadContext,
-  files: readonly string[],
-): Promise<void> {
-  for (const relativePath of files) {
-    const local = await readFile(join(context.outputDirectory, relativePath));
-    const remote = await getObject(context.client, relativePath);
-    if (!bytesEqual(local, remote)) {
-      throw new Error(`OSS read-back mismatch: ${relativePath} does not match the uploaded bytes`);
-    }
-    context.log(`verified ${relativePath}`);
-  }
 }
 
 /**
@@ -350,9 +313,7 @@ export async function uploadReleaseTree(
     log: options.log ?? ((): void => undefined),
     feed,
     outputDirectory,
-    ...(options.requestTimeoutMs !== undefined
-      ? { requestTimeoutMs: options.requestTimeoutMs }
-      : {}),
+    requestTimeoutMs: options.requestTimeoutMs,
   };
   const plan = planUpload(tree, options, feed);
   // A finalize pass is publishing a version the feed has already seen, so it must not assert.
@@ -369,8 +330,8 @@ export async function uploadReleaseTree(
     });
   }
 
-  await uploadObjects(context, plan);
-  await verifyUploadedBytes(context, plan.files);
+  const digests = await uploadObjects(context, plan.uploads, plan.allowExisting);
+  await verifyUploadedObjects(context, plan.files, digests);
   for (const key of plan.files) {
     await verifyPrivateOrigin(context, key);
   }

@@ -48,7 +48,7 @@ afterEach(async () => {
 /* 1. Ordering: latest is written last, and only after every object is verified                 */
 /* ------------------------------------------------------------------------------------------- */
 
-test("publication uploads every object, verifies it by reading the bytes back, and writes latest last", async () => {
+test("publication uploads every object, checks each one's size and CRC-64, and writes latest last", async () => {
   const outputDirectory = await tempDir("coforge-publish-tree-");
   const tree = await fixtureTree("9.9.9-publish-ok", outputDirectory);
   const fake = startFakeOssServer();
@@ -69,7 +69,7 @@ test("publication uploads every object, verifies it by reading the bytes back, a
     { method: "GET", key: LATEST_OBJECT_KEY },
     ...tree.files.filter((key) => key !== manifestKey).map((key) => ({ method: "PUT", key })),
     { method: "PUT", key: manifestKey },
-    ...tree.files.map((key) => ({ method: "GET", key })),
+    ...tree.files.map((key) => ({ method: "HEAD", key })),
     ...tree.files.map((key) => ({ method: "ANONYMOUS_GET", key })),
     { method: "HEAD", key: LATEST_OBJECT_KEY },
     { method: "PUT", key: LATEST_OBJECT_KEY },
@@ -351,30 +351,31 @@ test("the dev-number search gives up after 500 numbers instead of probing foreve
 });
 
 /* ------------------------------------------------------------------------------------------- */
-/* 2. Read-back verification                                                                     */
+/* 2. Size and checksum verification                                                             */
 /* ------------------------------------------------------------------------------------------- */
 
-test("a tampered read-back fails the publish and never writes latest", async () => {
+test("an object whose stored size and checksum differ fails the publish and never writes latest", async () => {
   const outputDirectory = await tempDir("coforge-publish-tree-");
   const tree = await fixtureTree("9.9.9-readback-fail", outputDirectory);
   const tamperedKey = tree.files.find((file) => file.endsWith("manifest.json"));
   if (!tamperedKey) throw new Error("fixture tree has no manifest.json");
-  const fake = startFakeOssServer({ tamperReadbackKeys: new Set([tamperedKey]) });
+  const fake = startFakeOssServer({ corruptStoredKeys: new Set([tamperedKey]) });
   const connection = fixtureConnection(fake);
   const client = await createOssClient(connection, CREDENTIALS);
 
   await expect(uploadReleaseTree(outputDirectory, tree, { client, connection })).rejects.toThrow(
-    /OSS read-back mismatch: .*manifest\.json/,
+    /OSS object mismatch: .*manifest\.json has crc64=/,
   );
 
   expect(fake.calls.some((call) => call.method === "PUT" && call.key === LATEST_OBJECT_KEY)).toBe(
     false,
   );
-  // Every object was still uploaded before the mismatch was caught - only the read-back phase,
-  // which runs after every upload, is where this fails.
   expect(
     fake.calls.filter((call) => call.method === "PUT" && call.key !== LATEST_OBJECT_KEY).length,
   ).toBe(tree.files.length);
+  expect(
+    fake.calls.filter((call) => call.method === "GET" && call.key !== LATEST_OBJECT_KEY),
+  ).toEqual([]);
 });
 
 /* ------------------------------------------------------------------------------------------- */
@@ -392,7 +393,7 @@ test("public origin blocks activation even after signed OSS verification succeed
   await expect(uploadReleaseTree(directory, tree, { client, connection })).rejects.toThrow(
     /Private origin verification failed/,
   );
-  expect(fake.calls).toContainEqual({ method: "GET", key });
+  expect(fake.calls).toContainEqual({ method: "HEAD", key });
   expect(fake.calls.some((call) => call.method === "PUT" && call.key === "latest")).toBe(false);
 });
 
