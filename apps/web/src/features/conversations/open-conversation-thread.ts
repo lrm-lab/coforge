@@ -118,6 +118,17 @@ export function useOpenConversationTask() {
   return { openTaskNumber, openTask, closeTask };
 }
 
+export const clearedJumpMessageNavigation = {
+  to: ".",
+  replace: true,
+  resetScroll: false,
+  hash: true,
+  search: (previous: { message?: string; file?: string }) => ({
+    ...previous,
+    message: keepsLandingForReview(previous) ? previous.message : undefined,
+  }),
+} as const;
+
 export function useConversationPositionJump() {
   const router = useRouter();
   const jumpMessageId = useSearch({
@@ -125,15 +136,7 @@ export function useConversationPositionJump() {
     select: (search) => (typeof search.message === "string" ? search.message : undefined),
   });
   const clearJumpMessage = useCallback(() => {
-    void router.navigate({
-      to: ".",
-      replace: true,
-      resetScroll: false,
-      search: (previous: { message?: string; file?: string }) => ({
-        ...previous,
-        message: keepsLandingForReview(previous) ? previous.message : undefined,
-      }),
-    });
+    void router.navigate(clearedJumpMessageNavigation);
   }, [router]);
   return { jumpMessageId, clearJumpMessage };
 }
