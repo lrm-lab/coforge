@@ -206,3 +206,112 @@ test("a correction shows the exact referenced revision and blocks withdrawn draf
     status: "stale",
   });
 });
+
+test("a Task reopening can hold its Conversation lock while a reviewer waits on it", async () => {
+  const actor = { workspaceId, userId };
+  const conversation = await db.conversation.create({
+    data: {
+      workspaceId,
+      channelName: `review-lock-${crypto.randomUUID()}`,
+      visibility: "public",
+      members: { create: { userId } },
+    },
+    include: { members: true },
+  });
+  const task = await db.task.create({
+    data: {
+      workspaceId,
+      conversationId: conversation.id,
+      number: 1,
+      title: "Public accepted Task",
+      creatorMemberId: conversation.members[0]!.id,
+      status: "done",
+    },
+  });
+  const suggestion = await db.teamMemorySuggestion.create({
+    data: {
+      workspaceId,
+      kind: "task",
+      sourceKey: `task:${task.id}:${task.revision}`,
+      payload: {
+        title: task.title,
+        content: "Previously accepted",
+        source: "Task review",
+        applicability: "",
+        kind: "fact",
+        evidence: [{ kind: "task", id: task.id, revision: task.revision }],
+      },
+    },
+  });
+  expect((await listMemorySuggestions(db, actor)).evidenceLinks[`task:${task.id}`]).toMatchObject({
+    conversationId: conversation.id,
+    taskNumber: task.number,
+  });
+  let acceptance: ReturnType<typeof reviewMemorySuggestion> | undefined;
+  try {
+    await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM conversations WHERE id = ${conversation.id}::uuid FOR NO KEY UPDATE`;
+      const [blocker] = await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
+      acceptance = reviewMemorySuggestion(db, actor, suggestion.id, "accept");
+      void acceptance.catch(() => {});
+      const until = Date.now() + 2_000;
+      while (true) {
+        const [waiting] = await db.$queryRaw<{ waiting: boolean }[]>`
+          SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE ${blocker!.pid}::int = ANY(pg_blocking_pids(pid))) AS waiting`;
+        if (waiting?.waiting) break;
+        if (Date.now() >= until) throw new Error("Reviewer did not wait on the Conversation lock");
+        await Bun.sleep(10);
+      }
+      await tx.task.update({
+        where: { id: task.id },
+        data: { status: "todo", revision: { increment: 1 } },
+      });
+    });
+    expect(await acceptance).toMatchObject({ status: "stale" });
+    expect(
+      (await listMemorySuggestions(db, actor)).rows.some(({ id }) => id === suggestion.id),
+    ).toBe(false);
+  } finally {
+    await acceptance?.catch(() => {});
+    await db.conversation.delete({ where: { id: conversation.id } });
+  }
+});
+
+test("a queued maintenance merge cannot revive a superseded revision", async () => {
+  const actor = { workspaceId, userId };
+  const memory = teamMemory(db);
+  const write = async (
+    title: string,
+    content: string,
+    relations?: { kind: "supersedes"; id: string; revision: number }[],
+  ) => {
+    const draft = {
+      operation: "create" as const,
+      requestId: crypto.randomUUID(),
+      title,
+      content,
+      source: "Release acceptance",
+      kind: "fact" as const,
+      applicability: "release supersession check",
+      relations,
+    };
+    const review = await memory.execute(actor, draft);
+    return (await memory.execute(actor, { ...draft, reviewToken: review.reviewToken })).entries[0]!;
+  };
+  const early = await write("Early statement", "Same tentative conclusion");
+  await write("Parallel statement", "Same tentative conclusion");
+  await scanTeamMemorySuggestions(db, workspaceId, userId);
+  const queued = (await listMemorySuggestions(db, actor)).rows.find(
+    (row) => row.kind === "duplicate" && row.snapshots.some(({ id }) => id === early.id),
+  )!;
+  expect(queued).toBeDefined();
+  await write("Updated statement", "The earlier conclusion is withdrawn", [
+    { kind: "supersedes", id: early.id, revision: early.revision },
+  ]);
+  expect(await reviewMemorySuggestion(db, actor, queued.id, "accept")).toMatchObject({
+    status: "stale",
+  });
+  expect(
+    (await memory.execute(actor, { operation: "get", id: early.id })).entries[0]?.revision,
+  ).toBe(early.revision);
+});

@@ -1,4 +1,8 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
+import {
+  activeMemoryCandidateIds,
+  currentMemoryCandidate,
+} from "#src/server/db/repositories/team-memory-head-filters.server";
 import { teamMemoryAccess } from "#src/server/db/repositories/team-memory-access.repositories.server";
 import { readableMemoryEvidence } from "#src/server/db/repositories/team-memory-evidence.server";
 import { head, type Row } from "#src/server/db/repositories/team-memory-projections.server";
@@ -61,7 +65,13 @@ export async function scanTeamMemorySuggestions(
       take: PAGE_SIZE + 1,
     });
     const projectId = found[0]?.projectId ?? null;
-    const window = found.filter((row) => row.projectId === projectId).slice(0, PAGE_SIZE);
+    const page = found.filter((row) => row.projectId === projectId).slice(0, PAGE_SIZE);
+    const eligible = await activeMemoryCandidateIds(
+      tx,
+      workspaceId,
+      page.map(({ id }) => id),
+    );
+    const window = page.filter(({ id }) => eligible.has(id));
     const entries = window.map((entry) => head(entry as Row));
     const withEvidence = entries.filter((entry) => entry.evidence?.length);
     const references = withEvidence.flatMap((entry) => entry.evidence ?? []);
@@ -102,8 +112,9 @@ export async function scanTeamMemorySuggestions(
         AS bucket(hash text, kind text, applicability text)
       CROSS JOIN LATERAL (
         SELECT id, revision, title, content, kind, applicability, project_id AS "projectId", pinned
-        FROM team_memory_entries
+        FROM team_memory_entries candidate
         WHERE workspace_id = ${workspaceId}::uuid AND status = 'active' AND NOT pinned
+          AND ${currentMemoryCandidate}
           AND COALESCE(project_id, '00000000-0000-0000-0000-000000000000'::uuid) =
             COALESCE(${projectId}::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
           AND kind = bucket.kind AND applicability = bucket.applicability
@@ -152,7 +163,7 @@ export async function scanTeamMemorySuggestions(
     const suggested = fresh.length
       ? (await tx.teamMemorySuggestion.createMany({ data: fresh, skipDuplicates: true })).count
       : 0;
-    const last = found.length > window.length ? window.at(-1) : undefined;
+    const last = found.length > page.length ? page.at(-1) : undefined;
     await tx.teamMemoryReviewScan.update({
       where: { workspaceId },
       data: {
