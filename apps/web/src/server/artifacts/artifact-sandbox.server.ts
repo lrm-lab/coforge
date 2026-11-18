@@ -382,7 +382,7 @@ export class ArtifactSandbox {
       request,
       ref,
       path,
-      path === undefined ? host.artifactId : undefined,
+      use === "frame" ? host.artifactId : undefined,
     );
     if (loaded instanceof Response) return loaded;
     const page = loaded;

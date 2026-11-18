@@ -144,16 +144,18 @@ test("a request with no client address is never counted, so unattributed visitor
     expect((await service.serve(new Request(`${ORIGIN}/l`))).status).toBe(404);
 });
 
-test("one artifact's anonymous page opens are capped across clients; its files and other artifacts are not", async () => {
+test("one artifact's anonymous page loads are capped across clients, however the page is reached; its files are not", async () => {
   const limit: AppRateLimit = counter(3);
   const service = (client: string) => linkSandbox(async () => shared(found), client, limit);
-  for (let i = 0; i < 3; i++)
-    expect((await service(`192.0.2.${i}`).serve(new Request(`${ORIGIN}/l`))).status).toBe(302);
-  const capped = await service("192.0.2.50").serve(new Request(`${ORIGIN}/l`));
+  const load = (client: string) =>
+    service(client).serve(new Request(`${ORIGIN}/l/page/index.html`, { headers: FRAME }));
+  for (let i = 0; i < 3; i++) expect((await load(`192.0.2.${i}`)).status).toBe(200);
+  const capped = await load("192.0.2.50");
   expect(capped.status).toBe(429);
   expect(capped.headers.get("retry-after")).toBe("30");
   const file = await service("192.0.2.50").serve(
     new Request(`${ORIGIN}/l/page/style.css`, { headers: subresource("style") }),
   );
   expect(file.status).not.toBe(429);
+  expect((await service("192.0.2.50").serve(new Request(`${ORIGIN}/l`))).status).toBe(302);
 });
