@@ -84,7 +84,7 @@ export function memorySearchScore(
   const content = normalized(text);
   const wanted = normalized(query).trim();
   const terms = new Set(wanted.match(/[\p{L}\p{N}_.:/-]+/gu) ?? []);
-  for (const word of [...terms]) {
+  for (const word of Array.from(terms)) {
     if (/[\p{Script=Han}]/u.test(word))
       for (let index = 0; index < word.length - 1; index++) terms.add(word.slice(index, index + 2));
   }
