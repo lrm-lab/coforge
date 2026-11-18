@@ -117,6 +117,7 @@ export const agentControlStateSchema = z
     startedAtMs: z.number().int().nonnegative().optional(),
     deadlineAtMs: z.number().int().nonnegative().optional(),
     stopSentAtMs: z.number().int().nonnegative().optional(),
+    deadlineExtendedOfflineAtMs: z.number().int().nonnegative().optional(),
     updatedAtMs: z.number().nonnegative().optional(),
   })
   .strict();

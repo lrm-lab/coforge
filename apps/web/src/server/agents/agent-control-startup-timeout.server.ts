@@ -38,7 +38,13 @@ export async function settleStartupTimeout(
   input: { outcome: StartupStopOutcome; now: number; controlSequence?: number },
 ): Promise<boolean> {
   const state = agent.state;
-  const { stopSentAtMs: _stopSentAtMs, errorCode: _errorCode, failedStreak, ...fields } = state;
+  const {
+    stopSentAtMs: _stopSentAtMs,
+    errorCode: _errorCode,
+    deadlineExtendedOfflineAtMs: _extendedOfflineAtMs,
+    failedStreak,
+    ...fields
+  } = state;
   const next: AgentControlState = {
     ...fields,
     phase: "failed",
@@ -114,8 +120,14 @@ export class AgentControlStartupTimeout {
       const extended = {
         ...state,
         deadlineAtMs: now + startupDeadlineMs(state.provider),
+        deadlineExtendedOfflineAtMs: now,
       };
       return (await store.replace(agent, extended)) ? "waiting" : "lost";
+    }
+    if (state.deadlineExtendedOfflineAtMs !== undefined) {
+      const { deadlineExtendedOfflineAtMs: _extended, ...rest } = state;
+      const rearmed = { ...rest, deadlineAtMs: now + startupDeadlineMs(state.provider) };
+      return (await store.replace(agent, rearmed)) ? "waiting" : "lost";
     }
     const fenced = {
       ...state,

@@ -60,6 +60,7 @@ const agentWith = (state: AgentControlState): AgentControlAgent => ({
 
 function fixture(state: AgentControlState = startingState, online = true) {
   const store = pendingOpStore(agentWith(state));
+  const connection = { online };
   const clock = { now: START };
   const stops: Uint8Array[] = [];
   const events: unknown[] = [];
@@ -81,10 +82,10 @@ function fixture(state: AgentControlState = startingState, online = true) {
       const { encodeAgentStopIntent } = await import("@lrm/coforge-sdk/internal");
       stops.push(encodeAgentStopIntent({ ...next, controlEpoch: next.epoch }));
     },
-    computerOnline: async () => online,
+    computerOnline: async () => connection.online,
     clock: () => clock.now,
   });
-  return { ...store, clock, stops, events, reasons, notified, timeout, signal };
+  return { ...store, clock, connection, stops, events, reasons, notified, timeout, signal };
 }
 
 async function captureWarnings<T>(work: () => Promise<T>) {
@@ -157,7 +158,28 @@ test("an offline Computer only pushes the deadline out by another window, withou
     phase: "starting",
     startedAtMs: START,
     deadlineAtMs: START + 2 * WINDOW,
+    deadlineExtendedOfflineAtMs: START + WINDOW,
   });
+});
+
+test("a Computer that comes back a second before the pushed-out deadline gets a full window, not a Stop", async () => {
+  const f = fixture(startingState, false);
+  f.clock.now = START + WINDOW;
+  expect(await f.timeout.settle("a")).toBe("waiting");
+  f.connection.online = true;
+  f.clock.now = START + 2 * WINDOW - 1;
+  expect(await f.timeout.settle("a")).toBe("skipped");
+  f.clock.now = START + 2 * WINDOW;
+  expect(await f.timeout.settle("a")).toBe("waiting");
+  expect(f.stops).toHaveLength(0);
+  expect(f.current().state).toMatchObject({
+    phase: "starting",
+    deadlineAtMs: START + 3 * WINDOW,
+  });
+  expect(f.current().state?.deadlineExtendedOfflineAtMs).toBeUndefined();
+  f.clock.now = START + 3 * WINDOW;
+  expect(await f.timeout.settle("a")).toBe("stop_sent");
+  expect(f.stops).toHaveLength(1);
 });
 
 test("a Computer that comes back inside the pushed-out window still settles from the Daemon's started", async () => {
