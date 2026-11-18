@@ -3,10 +3,12 @@ import {
   decodeAgentServerFeatures,
   decodeAppConfigSync,
   decodeAgentStaleRuntimeStop,
+  decodeReminderDue,
   type AgentConfigSync,
   type AgentServerFeatures,
   type AppConfigSync,
   type AgentStaleRuntimeStop,
+  type ReminderDue,
 } from "@lrm/coforge-sdk/internal";
 import { ListenerSlot } from "./listener-slot";
 import { ReadyPublicationHold } from "./ready-publication-hold";
@@ -17,6 +19,7 @@ export class ServerPublications {
   readonly features = new ListenerSlot<(sync: AgentServerFeatures) => void>();
   readonly agentConfig = new ListenerSlot<(sync: AgentConfigSync) => void>();
   readonly staleRuntimeStop = new ListenerSlot<(intent: AgentStaleRuntimeStop) => void>();
+  readonly reminderDue = new ListenerSlot<(due: ReminderDue) => void>();
 
   onAppConfigSync(callback: (sync: AppConfigSync) => void): () => void {
     return this.appConfig.set(callback);
@@ -34,11 +37,16 @@ export class ServerPublications {
     return this.staleRuntimeStop.set(callback);
   }
 
+  onReminderDue(callback: (due: ReminderDue) => void): () => void {
+    return this.reminderDue.set(callback);
+  }
+
   clear(): void {
     this.appConfig.clear();
     this.features.clear();
     this.agentConfig.clear();
     this.staleRuntimeStop.clear();
+    this.reminderDue.clear();
   }
 
   route(
@@ -46,6 +54,15 @@ export class ServerPublications {
     scope: { workspaceId: string; computerId: string },
     ready: ReadyPublicationHold,
   ): boolean {
+    try {
+      const due = decodeReminderDue(data);
+      if (due.workspaceId !== scope.workspaceId || due.computerId !== scope.computerId)
+        return false;
+      ready.deliver(this.reminderDue, due);
+      return true;
+    } catch {
+      // Try the next publication kind.
+    }
     try {
       const stop = decodeAgentStaleRuntimeStop(data);
       if (stop.workspaceId !== scope.workspaceId || stop.computerId !== scope.computerId)

@@ -23,7 +23,6 @@ export type AgentStartCoordinatorPorts = {
   assertAgentNotStopping(agentId: string): void;
   migrations?: AgentMigrationRunner;
   requestAppConfigSnapshot(agentId: string): void;
-  requestReminderSnapshot(agentId: string): void;
   inputDrain: AgentInputDrain;
   introducedAgents: Set<string>;
   agentLaunches: Map<string, Promise<AgentRuntime>>;
@@ -60,8 +59,6 @@ export function startAgent(
     return Promise.reject(error);
   }
   ports.requestAppConfigSnapshot(agentId);
-  // Before it is ready: the reminders are installed in time for the one already due.
-  ports.requestReminderSnapshot(agentId);
   const existingLaunch = ports.agentLaunches.get(agentId);
   const activeRuntime = existingLaunch ? undefined : ports.agentProcessManager.runtime(agentId);
   // What an earlier cold start still owes is paid by a launch that spawns a process, never by one

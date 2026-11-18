@@ -2,16 +2,22 @@
 
 Rules for `src/agent-reminder/`. They extend `packages/daemon/AGENTS.md`.
 
-- The cloud schedule is authoritative. This directory mirrors it with
-  version-fenced timers, bounded durable fire receipts, and exact-revision
-  acknowledgement.
-- Never persist the schedule mirror itself; only fire receipts are durable.
-- Never wake an Agent for a reminder before the cloud accepts the fire.
-- `stop()` is synchronous: it cancels timers and fences out every later result.
-  Work it cannot cancel (a fire request, a receipt write) keeps running, and the
-  runtime's `stop` awaits `awaitIdle()` under a bound. Every path that arms a
-  timer checks `#running` first, including one reached after an `await`.
-- Exhausted retries are recorded once but are not terminal. A fire the cloud never
-  accepted reconciles every ~5 minutes (jittered, same request id, `attempt`
-  unchanged); a wake after the cloud fired retries every 60 seconds. Only a cloud
-  decline, a consumed receipt or an accepted wake ends a receipt.
+- The server times every reminder. This daemon advertises `reminder-due:v1`
+  next to `reminder:v1` and never arms a timer or sends a fire request.
+  `ReminderSync` publications are consumed and ignored.
+- One `ReminderDue` names one occurrence. The receiver writes it to the
+  Agent's Due record before sending the Due ACK. It delivers only after the
+  server accepts that ACK. A refused ACK ends the occurrence as `refused`.
+- Delivery means the `system.reminder` App Inbox item is stored. Waking the
+  Agent is best-effort: a refused, held or impossible notice leaves the item
+  for the next drain or launch. An Agent under a fenced Stop is not started.
+- A repeated Due only repeats its ACK. On every connection, `restore()` ACKs
+  `received` records again and delivers `acknowledged` ones.
+- Records go once `expiresAt` passes, except `acknowledged` ones, which the
+  server has already handed over. An expired Due is neither ACKed nor
+  delivered.
+- The Due ACK and the user's `ack`/`dismiss` are separate. Only an occurrence
+  this daemon delivered is synced as acknowledged
+  (`ReminderAcknowledgementSync`); an item with no record is removed locally.
+- `stop()` is synchronous and fences out later steps. Runtime `stop` awaits
+  `awaitIdle()` under a bound.

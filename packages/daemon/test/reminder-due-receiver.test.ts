@@ -180,8 +180,8 @@ test("a later occurrence of the same reminder is its own delivery, and the late 
     { version: 7, late: false },
     { version: 8, late: true },
   ]);
-  expect(await receiver.isDelivered(agentId, due().job.reminderId, 8)).toBe(true);
-  expect(await receiver.isDelivered(agentId, due().job.reminderId, 9)).toBe(false);
+  expect(await receiver.acknowledge(agentId, due().job.reminderId, 8)).toBe(true);
+  expect(await receiver.acknowledge(agentId, due().job.reminderId, 9)).toBe(false);
 });
 
 test("the store refuses a corrupt file and a record from another scope", async () => {

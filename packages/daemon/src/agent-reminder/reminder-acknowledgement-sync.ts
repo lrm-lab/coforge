@@ -1,6 +1,5 @@
 import { getLogger } from "@logtape/logtape";
 import { reminderAcknowledgementIdempotencyKey } from "@lrm/coforge-sdk/internal";
-import type { ReminderReceipt } from "./reminder-receipt";
 
 const logger = getLogger(["coforge", "daemon", "reminder"]);
 const RETRY_CAP_MS = 5 * 60_000;
@@ -14,7 +13,7 @@ export type ReminderAcknowledgementSyncRequest = {
 };
 
 export function reminderAcknowledgementRequest(
-  receipt: Pick<ReminderReceipt, "agentId" | "reminderId" | "version">,
+  receipt: { agentId: string; reminderId: string; version: number },
   operation: "ack" | "dismiss",
 ): ReminderAcknowledgementSyncRequest {
   return {

@@ -71,7 +71,7 @@ test("an App config sync for this Computer reaches its slot and nothing else", a
   const syncs: AppConfigSync[] = [];
   let other = 0;
   transport.onAppConfigSync((sync) => syncs.push(sync));
-  transport.onReminderSync(() => other++);
+  transport.onReminderDue(() => other++);
   transport.onAgentWorkspaceReset(() => other++);
   try {
     await transport.start("secret", config);

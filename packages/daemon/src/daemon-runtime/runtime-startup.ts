@@ -44,7 +44,7 @@ import { readyCapabilities } from "./ready-capabilities";
 import { RuntimeReadyWaitWatch } from "./runtime-ready-wait";
 import { subscribeRuntimeAuth } from "./runtime-auth-subscription";
 import { subscribeRuntimeReconnect } from "./runtime-reconnect";
-import type { ReminderSnapshotAsks } from "./reminder-snapshot-asks";
+import type { ReminderDueReceiver } from "#src/agent-reminder/reminder-due-receiver";
 import { subscribeProviderScans } from "./provider-scan-handlers";
 import type { ResetCreditConsumeResult } from "./reset-credit-consume";
 import { subscribeWorkspaceQueries } from "./workspace-query-handlers";
@@ -119,9 +119,7 @@ export type RuntimeStartupPorts = {
     recoveredRestartRequestIds?: string[];
     recoveredUpgradeRequestIds?: string[];
   };
-  reminderSnapshots: Pick<ReminderSnapshotAsks, "request" | "connected">;
-  /** Every Agent whose reminders matter now: running, idle, or still launching. */
-  reminderAgentIds(): string[];
+  reminders: Pick<ReminderDueReceiver, "restore">;
   resyncAppConfigs(): void;
   activityPublisher: Pick<AgentActivityPublisher<ActivityLaunch>, "enable">;
   coldIdleSweep: Pick<ColdIdleSweep, "start">;
@@ -199,11 +197,8 @@ export class RuntimeStartup {
     if (unsubscribe) this.#subscriptions.push(unsubscribe);
   }
 
-  /** A connection, the first one or a reconnect: every Agent's reminders are asked for again. */
-  #askRunningAgentReminders(): void {
-    this.ports.reminderSnapshots.connected();
-    for (const agentId of this.ports.reminderAgentIds())
-      this.ports.reminderSnapshots.request(agentId, "connection");
+  #restoreReminderDues(): void {
+    void this.ports.reminders.restore();
   }
 
   async #open(connection: DaemonConfig, signal: AbortSignal): Promise<void> {
@@ -259,7 +254,7 @@ export class RuntimeStartup {
               .then((report) => ports.codeAgentInventory.refreshStaleCatalogs(report, transport))
               .catch(() => {});
           },
-          requestRunningReminderSnapshots: () => this.#askRunningAgentReminders(),
+          restoreReminderDues: () => this.#restoreReminderDues(),
           resyncAppConfigs: () => ports.resyncAppConfigs(),
           replayAgentControl: () => ports.agentControl.replay(),
           replayAgentSessions: () => ports.agentSessions.replay(),
@@ -371,7 +366,7 @@ export class RuntimeStartup {
         };
       }, signal);
       await ports.upgradeResults.report();
-      this.#askRunningAgentReminders();
+      this.#restoreReminderDues();
       ports.resyncAppConfigs();
       const { buffered, dropped } = publications.release();
       this.#readyWait?.settle();

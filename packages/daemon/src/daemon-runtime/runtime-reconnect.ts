@@ -8,8 +8,7 @@ export type RuntimeReconnectPorts = {
   workspaceId: string;
   computerId: string;
   refreshInventory: (transport: DaemonConnectionClient) => void;
-  /** Asks every running Agent's reminders again: the old connection's answers are gone. */
-  requestRunningReminderSnapshots: () => void;
+  restoreReminderDues: () => void;
   resyncAppConfigs: () => void;
   replayAgentControl: () => Promise<void>;
   replayAgentSessions: () => Promise<void>;
@@ -23,7 +22,7 @@ export function subscribeRuntimeReconnect(
 ): (() => void) | undefined {
   return transport.onReconnect?.(() => {
     ports.refreshInventory(transport);
-    ports.requestRunningReminderSnapshots();
+    ports.restoreReminderDues();
     ports.resyncAppConfigs();
     void ports
       .replayAgentControl()

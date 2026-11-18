@@ -1,5 +1,5 @@
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
-import type { ReminderScheduler } from "#src/agent-reminder/reminder-scheduler";
+import type { ReminderDueReceiver } from "#src/agent-reminder/reminder-due-receiver";
 import type { AgentInboxCoordinator } from "./agent-inbox-coordinator";
 import type { AgentMessageAttentionIndex } from "./agent-message-attention-index";
 import type {
@@ -29,7 +29,7 @@ export type RuntimeAgentApiRemindersPorts = {
   workspaceId: string;
   computerId: string;
   messageAttention: AgentMessageAttentionIndex;
-  reminders: ReminderScheduler;
+  reminders: ReminderDueReceiver;
   inboxCoordinator: AgentInboxCoordinator;
 };
 
@@ -165,5 +165,14 @@ export async function acceptReminderDue(
     title: reminderAppInboxPreview(job.title),
     summary: reminderAppInboxSummary(job, late),
   });
-  return ports.inboxCoordinator.notifyAppItem(job.ownerAgentId, item);
+  return ports.inboxCoordinator.notifyAppItem(job.ownerAgentId, item).catch((error: unknown) => {
+    logger.warn("Reminder item was kept but its notice was not written", {
+      event: "reminder.due_notice_failed",
+      agent_id: job.ownerAgentId,
+      reminder_id: job.reminderId,
+      reminder_version: job.version,
+      error,
+    });
+    return false;
+  });
 }

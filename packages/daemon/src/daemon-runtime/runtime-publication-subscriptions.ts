@@ -10,7 +10,7 @@ import type {
   AgentTurnInterruptIntent,
   AgentWorkspaceResetRequest,
   DaemonConnectRejectionReason,
-  ReminderSync,
+  ReminderDue,
   AppConfigSync,
   AgentServerFeatures,
   AgentConfigSync,
@@ -50,7 +50,7 @@ export type RuntimePublicationSubscriptionPorts = {
   stopRuntime: () => Promise<void>;
   purgeProcJobs?: () => Promise<void>;
   connectionRefused: (reason: DaemonConnectRejectionReason) => void;
-  applyReminderSync: (sync: ReminderSync) => Promise<void>;
+  receiveReminderDue: (due: ReminderDue) => Promise<void>;
   applyAppConfigSync: (sync: AppConfigSync) => void;
   applyAgentServerFeatures: (sync: AgentServerFeatures) => void;
   acceptAppRegistrationNotice: (notice: AppRegistrationNotice) => Promise<void>;
@@ -234,13 +234,13 @@ export class RuntimePublicationSubscriptions {
       }),
     );
     subscribe(
-      transport.onReminderSync?.(
-        (sync) =>
-          void this.ports.applyReminderSync(sync).catch((error: unknown) => {
-            logger.warn("Reminder sync was not applied", {
-              event: "reminder.sync_apply_failed",
-              agent_id: sync.agentId,
-              operation: sync.operation,
+      transport.onReminderDue?.(
+        (due) =>
+          void this.ports.receiveReminderDue(due).catch((error: unknown) => {
+            logger.warn("Reminder due was not received", {
+              event: "reminder.due_receive_failed",
+              agent_id: due.agentId,
+              occurrence_id: due.occurrenceId,
               error_type: diagnosticErrorName(error),
             });
           }),

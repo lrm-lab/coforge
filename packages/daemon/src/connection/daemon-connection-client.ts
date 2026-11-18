@@ -74,10 +74,8 @@ import type {
   AgentMessageRequest,
   AgentReminderOperationRequest,
   AgentReminderOperationResponse,
-  ReminderFireRequest,
-  ReminderFireResponse,
-  ReminderSnapshotRequest,
-  ReminderSync,
+  ReminderDue,
+  ReminderDueAckRequest,
   AppConfigSnapshotRequest,
   AppConfigSync,
   AgentServerFeatures,
@@ -188,7 +186,7 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   onAgentActivityProbe?(callback: (probe: AgentActivityProbe) => void): () => void;
   onAgentInboxPurge?(callback: (purge: AgentInboxPurge) => void): () => void;
   onAgentMessage?(callback: (message: AgentMessageDelivery) => void): () => void;
-  onReminderSync?(callback: (sync: ReminderSync) => void): () => void;
+  onReminderDue?(callback: (due: ReminderDue) => void): () => void;
   onAppConfigSync?(callback: (sync: AppConfigSync) => void): () => void;
   onAgentServerFeatures?(callback: (features: AgentServerFeatures) => void): () => void;
   onAgentConfigSync?(callback: (sync: AgentConfigSync) => void): () => void;
@@ -196,9 +194,8 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   onAgentMigrationLease?(callback: (lease: ReceivedAgentMigrationLease) => void): () => void;
   onAgentMigrationCancel?(callback: (cancel: AgentMigrationCancel) => void): () => void;
   agentMigrationServer?(): AgentMigrationServer;
-  requestSnapshot?(request: ReminderSnapshotRequest): Promise<ReminderSync>;
   requestAppConfigSnapshot?(request: AppConfigSnapshotRequest): Promise<AppConfigSync>;
-  fireReminder?(request: ReminderFireRequest): Promise<ReminderFireResponse>;
+  acknowledgeReminderDue?(request: ReminderDueAckRequest): Promise<boolean>;
   agentReminder?(
     request: AgentReminderOperationRequest,
     agentApiKey: string,

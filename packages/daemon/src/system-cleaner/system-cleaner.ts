@@ -8,7 +8,7 @@ import {
   systemCleanerItemId,
 } from "#src/agent-app-inbox/registry";
 import { AGENT_MIGRATION_IGNORE_FILE } from "#src/agent-migration/selection-rules";
-import { defaultClock, type ReminderClock } from "#src/agent-reminder/reminder-scheduler";
+import { defaultClock, type ReminderClock } from "#src/agent-reminder/reminder-clock";
 import { isSafePathScope } from "#src/persistence/path-scope";
 import { parseCleanerConfig, sameConfig, type CleanerConfig } from "./system-cleaner-config";
 import {
