@@ -6,7 +6,6 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Input } from "#src/components/base/input/input";
 import { Select } from "#src/components/base/select/select";
-import { StatusDot } from "#src/components/ui/status-dot";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { PHONE_PAGE_HEADER, PhoneFormBar } from "#src/components/ui/phone-form-bar";
 import {
@@ -21,6 +20,7 @@ import {
   useDialogControlSize,
 } from "#src/components/ui/dialog-actions";
 import { DialogHeader } from "#src/components/application/modals/dialog-header";
+import { ComputerStatusIcon } from "#src/features/computers/computer-status-icon";
 import { m } from "#src/paraglide/messages";
 import { agentEnvironmentNameError, agentEnvironmentRowsChanged } from "./agent-form";
 import {
@@ -35,6 +35,8 @@ export type AgentEnvironmentState = { loaded: boolean; values: Record<string, st
 
 export type AgentRuntimeComputerOption = {
   id: string;
+  kind: string;
+  name: string;
   displayName: string;
   online?: boolean;
 };
@@ -141,15 +143,7 @@ export function AgentRuntimeConfigForm({
                 id={computer.id}
                 label={computer.displayName}
                 aria-label={`${computer.displayName}, ${computer.online ? m.computer_status_online() : m.computer_status_offline()}`}
-                icon={
-                  <StatusDot
-                    tone={computer.online ? "online" : "offline"}
-                    label={
-                      computer.online ? m.computer_status_online() : m.computer_status_offline()
-                    }
-                    className="size-2"
-                  />
-                }
+                icon={<ComputerStatusIcon computer={computer} online={Boolean(computer.online)} />}
               />
             ))}
           </Select>

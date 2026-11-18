@@ -14,7 +14,7 @@ import {
 } from "#src/components/ui/dialog-actions";
 import { Select } from "#src/components/base/select/select";
 import { TextArea } from "#src/components/base/textarea/textarea";
-import { StatusDot } from "#src/components/ui/status-dot";
+import { ComputerStatusIcon } from "#src/features/computers/computer-status-icon";
 import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { AGENT_VISIBILITY } from "./agent-visibility";
@@ -46,6 +46,7 @@ import { workspacePath } from "#src/features/workspaces/workspace-url";
 
 type AgentCreateComputerOption = RuntimeSignInComputer & {
   id: string;
+  kind: string;
   name: string;
   displayName: string;
   online?: boolean;
@@ -248,15 +249,7 @@ export function LocalAgentForm({
                 id={computer.id}
                 label={computer.displayName.trim() || computer.name}
                 aria-label={`${computer.displayName.trim() || computer.name}, ${computer.online ? m.computer_status_online() : m.computer_status_offline()}`}
-                icon={
-                  <StatusDot
-                    tone={computer.online ? "online" : "offline"}
-                    label={
-                      computer.online ? m.computer_status_online() : m.computer_status_offline()
-                    }
-                    className="size-2"
-                  />
-                }
+                icon={<ComputerStatusIcon computer={computer} online={Boolean(computer.online)} />}
               />
             ))}
             {!computerLocked && (

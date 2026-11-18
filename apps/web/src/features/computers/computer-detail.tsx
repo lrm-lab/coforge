@@ -353,6 +353,7 @@ export function ComputerDetail({
           computers={[
             {
               id: computer.id,
+              kind: computer.kind,
               name: computer.name,
               displayName: computer.displayName,
               online: computer.online,
