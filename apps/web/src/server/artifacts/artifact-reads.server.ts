@@ -23,6 +23,7 @@ import {
   requireArtifactRead,
   requireConversationHome,
   type ArtifactActor,
+  type ArtifactHomeKind,
   type ArtifactViewer,
 } from "./artifact-access.server";
 
@@ -112,6 +113,10 @@ const accessRuleInput = (
   authorAgentOwnerId: (row.authorAgentId ? owners.get(row.authorAgentId) : undefined) ?? null,
 });
 
+export type ArtifactOrigin =
+  | { messageId: string; conversationId: string; homeKind: ArtifactHomeKind }
+  | { hidden: true };
+
 export class ArtifactReads {
   constructor(
     private readonly db: PrismaClient,
@@ -133,6 +138,7 @@ export class ArtifactReads {
           access: true,
           currentVersion: true,
           authorAgentId: true,
+          originMessageId: true,
         },
       }),
       artifactViewer(this.db, workspaceId, reader),
@@ -146,8 +152,17 @@ export class ArtifactReads {
     const canChange = canManageArtifactSharingWithRole(reader, viewer.role, {
       authorAgentOwnerId,
     });
+    const { originMessageId, ...shown } = artifact;
+    const originHome = artifactHomeConversationId(view.homeKey ?? "");
+    const origin: ArtifactOrigin | null =
+      originMessageId === null
+        ? null
+        : originHome === undefined
+          ? { hidden: true }
+          : { messageId: originMessageId, conversationId: originHome, homeKind: view.homeKind };
     return {
-      ...artifact,
+      ...shown,
+      origin,
       homeKey: view.homeKey,
       access: view.tier,
       homeKind: view.homeKind,

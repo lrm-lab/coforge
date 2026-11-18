@@ -97,3 +97,18 @@ test("a committed message that links the artifact names its origin through the s
   for (let i = 0; i < 50 && (await originOf(id)) === null; i++) await Bun.sleep(20);
   expect(await originOf(id)).toBe(message.id);
 });
+
+test("a read names the origin to someone who can read its conversation and only says one exists to anyone else", async () => {
+  const id = await f.make("Seen plan", undefined, { target: `#${f.privateChannel}` });
+  const read = (userId: string) =>
+    f.artifacts.reads.read({ workspaceId: f.workspaceId, artifactId: id, reader: { userId } });
+  await f.db.$executeRaw`UPDATE "artifacts" SET "access" = 'workspace' WHERE "id" = ${id}::uuid`;
+  expect((await read(f.alice)).artifact.origin).toBeNull();
+  const messageId = await note({ artifactId: id, conversationId: privateId });
+  expect((await read(f.alice)).artifact.origin).toEqual({
+    messageId,
+    conversationId: privateId,
+    homeKind: "channel",
+  });
+  expect((await read(f.bob)).artifact.origin).toEqual({ hidden: true });
+});
