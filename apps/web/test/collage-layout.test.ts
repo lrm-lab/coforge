@@ -4,7 +4,6 @@ import { collageLayout, type CollageSlot } from "#src/features/conversations/col
 
 const sizes = (slots: readonly CollageSlot[]) => slots.map((slot) => slot.size);
 const centre = (slot: CollageSlot) => [slot.left + slot.size / 2, slot.top + slot.size / 2];
-/** How far two slots overlap along each axis, as a fraction of the frame. */
 const overlap = (a: CollageSlot, b: CollageSlot) => [
   Math.min(a.left + a.size, b.left + b.size) - Math.max(a.left, b.left),
   Math.min(a.top + a.size, b.top + b.size) - Math.max(a.top, b.top),
@@ -21,8 +20,6 @@ test("One member fills the circle", () => {
   expect([only.left, only.top, only.size, only.overflow]).toEqual([0, 0, 1, false]);
 });
 
-// Frank's references (2026-10-23): member stickers about 55-60% of the frame, overlapping each
-// other like stickers on a sheet; a later member is drawn over an earlier one.
 test("Two members overlap diagonally, the second lower right and drawn over the first", () => {
   const [first, second] = collageLayout(2) as [CollageSlot, CollageSlot];
   expect(second.left).toBeGreaterThan(first.left);
@@ -41,7 +38,6 @@ test("Three members: one at the top centre behind, two overlapping at the bottom
   expect(right.top).toBeGreaterThan(top.top + 0.25);
   expect(centre(left)[0]).toBeLessThan(0.4);
   expect(centre(right)[0]).toBeGreaterThan(0.6);
-  // The bottom pair overlap each other and both tuck under the top one's lower edge.
   expect(overlap(left, right)[0]).toBeGreaterThan(0.05);
   expect(overlap(top, left)[1]).toBeGreaterThan(0);
   expect(overlap(top, right)[1]).toBeGreaterThan(0);
@@ -58,7 +54,6 @@ test("Four members form a tight 2 by 2: top-left, top-right, bottom-left, bottom
   expect(b.left).toBeGreaterThan(a.left + 0.25);
   expect(d.left).toBeGreaterThan(c.left + 0.25);
   expect(c.top).toBeGreaterThan(a.top + 0.25);
-  // Neighbours overlap a little, so the four read as one cluster.
   expect(overlap(a, b)[0]).toBeGreaterThan(0);
   expect(overlap(a, c)[1]).toBeGreaterThan(0);
   expect(overlap(c, d)[0]).toBeGreaterThan(0);

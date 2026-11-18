@@ -50,7 +50,6 @@ function FollowingAgentRow({
   canUnfollow: boolean;
   onOpenProfile?: (agentId: string) => void;
   onUnfollow: (agentId: string) => Promise<void>;
-  /** The list's dialog, where focus goes once this row is gone. */
   listFocus: () => HTMLElement | null;
 }) {
   const toast = useAppToast();
@@ -73,7 +72,6 @@ function FollowingAgentRow({
             tooltip={m.conversation_thread_unfollow_agent({ name: agent.displayName })}
             onClick={() =>
               void onUnfollow(agent.id).then(
-                // The row and its button go; focus stays in the list rather than on the page.
                 () => listFocus()?.focus(),
                 () => toast.error(m.conversation_thread_following_agents_unfollow_error()),
               )
@@ -85,11 +83,6 @@ function FollowingAgentRow({
   );
 }
 
-/**
- * Channel thread header control: the first three following Agents' avatars plus a count,
- * opening the Agents currently following this Thread. Hidden until someone follows. A channel
- * member can stop one Agent following; the Agent stays in the channel.
- */
 export function ThreadFollowingAgents({
   channelId,
   threadRootId,
@@ -117,10 +110,7 @@ export function ThreadFollowingAgents({
     );
   }
 
-  // Only a load with nothing to show is a failure: a failed background refetch keeps the list
-  // it already has.
   const failed = query.isError && !query.data;
-  // Shown once someone follows; a failure still gets a trigger, so its message can be read.
   if (!failed && count === 0) return null;
 
   return (
@@ -133,8 +123,6 @@ export function ThreadFollowingAgents({
             ? m.conversation_thread_following_agents_error()
             : m.conversation_thread_following_agents_count({ count })
         }
-        // Base Button wraps children in an inline `span[data-text]`; make it the flex row that
-        // holds the avatar stack and the count.
         className="px-1.5 [&>[data-text]]:flex [&>[data-text]]:items-center [&>[data-text]]:gap-1.5"
       >
         {failed ? (
@@ -143,7 +131,6 @@ export function ThreadFollowingAgents({
           <>
             <span aria-hidden="true" className="flex -space-x-1">
               {agents.slice(0, 3).map((agent) => (
-                // The popover's rows carry each Agent's status.
                 <AgentStackFace key={agent.id} agent={agent} />
               ))}
             </span>
