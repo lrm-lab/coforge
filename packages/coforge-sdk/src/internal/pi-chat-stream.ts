@@ -15,6 +15,7 @@ export function applyPiChatEvent(current: PiChatResult, event: PiChatEvent): PiC
     stream: event.stream,
     progress: settled ? undefined : (event.progress ?? current.progress),
     queue: settled ? { steering: [], followUp: [] } : (event.queue ?? current.queue),
+    approvals: settled ? [] : (event.approvals ?? current.approvals),
   };
 }
 

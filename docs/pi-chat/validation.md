@@ -32,3 +32,9 @@ UI acceptance follows [the repository policy](../agents/testing.md). Before depl
   local answer links, mobile drawer Escape/overlay, and upgrade capability refresh.
 - [ ] Check unavailable configuration, an old host/image, offline Computer,
   model authentication failure, worker restart and keyboard/IME behavior.
+- [ ] On a personal Computer, open a Codex chat without an Agent record, run a second turn,
+  reopen it at the same native thread, and stop an active turn. Verify that a different Computer
+  or Workspace cannot access the original thread.
+- [ ] Allow once and deny in separate Codex command approval runs. Stop with an approval
+  pending and verify the stale button cannot authorize a command. Exercise cold transcript paging
+  and an interrupted first turn. Confirm existing Pi sessions still open on the cloud Computer.

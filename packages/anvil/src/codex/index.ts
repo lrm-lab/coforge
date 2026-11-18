@@ -14,3 +14,5 @@ export * from "./session-rollout";
 export * from "./recycle-briefing";
 export * from "./context-usage";
 export * from "./subagent-threads";
+
+export * from "./workbench";

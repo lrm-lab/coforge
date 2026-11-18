@@ -1,5 +1,6 @@
 export * from "./src/daemon-public-api";
 export { daemonAgentProxyRuntime } from "./src/agent-proxy-daemon-runtime";
+export { createWorkbenchCodex } from "./src/pi-chat/workbench-codex";
 export {
   listMachineRunningProcJobs,
   removeWorkspaceProcJobLedger,

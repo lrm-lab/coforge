@@ -1,7 +1,10 @@
 # AI workbench
 
-The **AI workbench** at `/w/<workspace>/pi-chat` opens independent native Pi
-conversations in the current user's cloud Computer. It supports new chats,
+The **AI workbench** at `/w/<workspace>/pi-chat` opens private native sessions
+on Computers owned by the signed-in Workspace member. Pi runs on the member's
+cloud Computer. Codex can run on any attached Computer that reports a compatible
+installation. The workbench opens native sessions without creating Workspace Agents.
+The Pi experience supports new chats,
 search, rename, deletion, stopping a turn, earlier-message paging, Markdown,
 model selection, native steering/follow-up queues, thinking returned by the model,
 a collapsible file sidebar with previews, downloads, uploads and chat references,
@@ -47,10 +50,14 @@ File browsing and transfer are described in [Working files](files.md).
 ## Execution and data
 
 The Web application authenticates every Server Function and rechecks current
-Workspace membership and ownership of the selected cloud Computer. Commands use
+Workspace membership and ownership of the selected Computer. Commands use
 versioned CoForge RPC on that Workspace Daemon's existing outbound WSS connection.
 The server checks the `pi-chat:v1` ready capability and live connection before
 publishing; it never connects to the internal host's desktop HTTP origin.
+
+See [native Codex sessions](codex.md) for setup, approvals and recovery.
+
+### Pi
 
 The Daemon owns an independent child running the same Computer binary's internal
 `__pi-chat` mode. This child uses the Pi SDK directly and opens no TCP listener or

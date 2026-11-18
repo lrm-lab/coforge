@@ -29,8 +29,12 @@ export type PiChatRead =
 export class PiChatGateway {
   constructor(
     private readonly ports: {
-      canUse(scope: PiChatScope): Promise<boolean>;
-      online(scope: PiChatScope, command: PiChatCommand): Promise<boolean>;
+      canUse(scope: PiChatScope): Promise<boolean | { kind: string }>;
+      online(
+        scope: PiChatScope,
+        command: PiChatCommand,
+        access: true | { kind: string },
+      ): Promise<boolean>;
       publish(request: PiChatRequest): Promise<void>;
       results: PiChatResults;
     },
@@ -42,10 +46,12 @@ export class PiChatGateway {
     command: PiChatCommand,
   ) {
     const scope = { ...identity, computerId };
-    if (!(await this.ports.canUse(scope))) throw new AppError("ACCESS_DENIED");
+    const access = await this.ports.canUse(scope);
+    if (!access) throw new AppError("ACCESS_DENIED");
     const request: PiChatRequest = { ...scope, requestId: crypto.randomUUID(), command };
     try {
-      if (!(await this.ports.online(scope, command))) throw new Error("Pi chat daemon unavailable");
+      if (!(await this.ports.online(scope, command, access)))
+        throw new Error("Pi chat daemon unavailable");
       await this.ports.results.begin(request);
       await this.ports.publish(request);
     } catch {

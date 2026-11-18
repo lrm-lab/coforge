@@ -27,6 +27,30 @@ test("Pi chat commands use the authenticated scope and a versioned, bounded wire
     ),
   ).toThrow();
 });
+test("native Codex starts and approval decisions retain their exact workbench scope", () => {
+  const start = {
+    ...scope,
+    requestId: crypto.randomUUID(),
+    command: {
+      action: "start" as const,
+      requestId: crypto.randomUUID(),
+      message: "Inspect this directory",
+      runtime: "codex" as const,
+    },
+  };
+  const approval = {
+    ...scope,
+    requestId: crypto.randomUUID(),
+    command: {
+      action: "approval" as const,
+      sessionId: crypto.randomUUID(),
+      approvalId: crypto.randomUUID(),
+      decision: "deny" as const,
+    },
+  };
+  expect(decodePiChatRequest(encodePiChatRequest(start))).toEqual(start);
+  expect(decodePiChatRequest(encodePiChatRequest(approval))).toEqual(approval);
+});
 test("large Unicode tool results cross WSS as bounded frames and reassemble without loss", () => {
   const body = { messages: [{ text: "工具输出 🛠️\n".repeat(100_000) }] };
   const frames = piChatFrames(scope, crypto.randomUUID(), "result", body);

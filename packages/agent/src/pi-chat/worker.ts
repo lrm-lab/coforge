@@ -10,27 +10,21 @@ import {
 } from "@lrm/coforge-sdk/internal/pi-chat";
 import { createPiChatRuntime, listPiChatModels } from "./runtime";
 import { FilePiChatStore } from "./storage";
-import { PiChatSessions } from "./sessions";
+import { PiChatSessions, type WorkbenchCodex } from "./sessions";
 
 /** JSONL over docker-exec stdio; this worker opens no network port or Daemon connection. */
 export async function runPiChatWorker(
   root: string,
   workspaceId: string,
   userId: string,
-  options: { shutdownTimeoutMs?: number; stream?: boolean } = {},
+  options: {
+    shutdownTimeoutMs?: number;
+    stream?: boolean;
+    codex?: (directory: string, notify: (update: PiChatUpdate) => void) => WorkbenchCodex;
+  } = {},
 ) {
   const directory = join(root, z.uuid().parse(workspaceId), z.uuid().parse(userId));
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  const store = await FilePiChatStore.open(directory);
-  const cwd = store.cwd;
-  // OS-released SQLite ownership also fences workers left alive by a host restart.
-  const owner = new Database(join(cwd, ".chat-owner.sqlite"));
-  try {
-    owner.exec("PRAGMA busy_timeout = 0; BEGIN EXCLUSIVE");
-  } catch (error) {
-    owner.close();
-    throw error;
-  }
   const write = process.stdout.write.bind(process.stdout);
   const streamId = crypto.randomUUID();
   let sequence = 0;
@@ -60,9 +54,23 @@ export async function runPiChatWorker(
     if (update.session || update.deleted) flushUpdates();
     else updateTimer ??= setTimeout(flushUpdates, 40);
   };
+  const codex = options.codex?.(directory, notify);
+  const store = await FilePiChatStore.open(directory, codex);
+  const cwd = store.cwd;
+  const owner = new Database(join(cwd, ".chat-owner.sqlite"));
+  try {
+    owner.exec("PRAGMA busy_timeout = 0; BEGIN EXCLUSIVE");
+  } catch (error) {
+    owner.close();
+    throw error;
+  }
   const sessions = new PiChatSessions(
     store,
-    (id, model) => createPiChatRuntime(cwd, id, undefined, notify, model),
+    (id, model, runtime) => {
+      if (runtime !== "codex") return createPiChatRuntime(cwd, id, undefined, notify, model);
+      if (!codex) return Promise.reject(new Error("Codex runtime is unavailable"));
+      return codex.open(id);
+    },
     notify,
     () => listPiChatModels(cwd),
   );
@@ -101,7 +109,9 @@ export async function runPiChatWorker(
         const command = request.command;
         const execution =
           command.action === "files" || command.action === "file" || command.action === "upload"
-            ? files.execute(command)
+            ? command.runtime === "codex"
+              ? Promise.reject(new Error("Codex workbench file browsing is unavailable"))
+              : files.execute(command)
             : sessions.execute(command);
         const task = execution.then(
           (result) => {
@@ -112,7 +122,9 @@ export async function runPiChatWorker(
           (error: unknown) => {
             const message =
               error instanceof Error &&
-              /^(session (not found|is busy)|request belongs)/.test(error.message)
+              /^(session (not found|is busy)|request belongs|Codex runtime is unavailable)/.test(
+                error.message,
+              )
                 ? error.message
                 : "Pi request failed. Check the cloud computer model configuration.";
             write(`${JSON.stringify({ id: request.id, error: message })}\n`);

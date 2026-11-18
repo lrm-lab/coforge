@@ -28,6 +28,7 @@ if (Bun.argv[2] === "__pi-chat") {
   const { join } = await import("node:path");
   const { resolveComputerStateDirectory } = await import("./paths");
   const { configurePiChatLogging, runPiChatWorker } = await import("@coforge/agent");
+  const { createWorkbenchCodex } = await import("@lrm/coforge-daemon");
   // Logs go to stderr through LogTape; stdout stays the JSONL protocol channel. The worker's own
   // logging is best effort and must never take the worker down with it.
   await configurePiChatLogging().catch(() => {});
@@ -36,7 +37,10 @@ if (Bun.argv[2] === "__pi-chat") {
     homeDirectory: homedir(),
     environment: Bun.env,
   });
-  await runPiChatWorker(join(state, "pi-chat"), workspaceId, userId, { stream });
+  await runPiChatWorker(join(state, "pi-chat"), workspaceId, userId, {
+    stream,
+    codex: createWorkbenchCodex,
+  });
 } else if (Bun.argv[2] === "__agent-cli") {
   const { runAgentCli } = await import("@lrm/coforge/runner");
   await runAgentCli(Bun.argv.slice(3));

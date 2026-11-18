@@ -16,6 +16,7 @@ import {
   getPiChatCapabilityLease,
   getPiChatControlsLease,
   getPiChatFilesLease,
+  getWorkbenchCodexLease,
 } from "#src/server/pi-chat/pi-chat-capability.server";
 import { getComputerFileUploadCapabilityLease } from "#src/server/computers/computer-file-upload-capability.server";
 import { getResetCreditCapabilityLease } from "#src/server/computers/reset-credit-capability.server";
@@ -40,6 +41,7 @@ export function daemonCapabilityLeases() {
     getPiChatCapabilityLease(),
     getPiChatControlsLease(),
     getPiChatFilesLease(),
+    getWorkbenchCodexLease(),
     getComputerFileUploadCapabilityLease(),
     getAgentContextViewCapabilityLease(),
     getResetCreditCapabilityLease(),
