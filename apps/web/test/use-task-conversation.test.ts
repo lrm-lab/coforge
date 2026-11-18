@@ -5,7 +5,7 @@ import { loadTaskConversation } from "#src/features/conversations/conversations.
 import {
   catchUpTaskConversation,
   loadTaskBackTo,
-} from "#src/features/conversations/use-task-conversation";
+} from "#src/features/conversations/task-conversation-window";
 
 type Page = Awaited<ReturnType<typeof loadTaskConversation>>;
 type Message = Page["messages"][number];
