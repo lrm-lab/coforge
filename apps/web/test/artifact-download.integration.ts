@@ -151,25 +151,29 @@ const preview = (artifactId: string, userId: string, path: string, version?: num
     { workspaceId: f.workspaceId, artifactId, userId, path, version },
   );
 
-test("a file preview gives text for text, a data URL for an image, nothing for the rest", async () => {
+test("a file preview gives text for text and nothing for an image or the rest", async () => {
   const artifact = await f.make("Previews", {
     "plan.md": "# Plan\n",
     "notes.txt": "line one\nline two\n",
     "pic.png": "not really a png",
+    "logo.svg": "<svg xmlns='http://www.w3.org/2000/svg'/>",
     "blob.bin": "\u0000\u0001binary",
     "big.txt": "x".repeat(2_000_000),
   });
   expect(await preview(artifact, f.bob, "notes.txt")).toMatchObject({
     path: "notes.txt",
     text: "line one\nline two\n",
-    dataUrl: null,
     sizeBytes: 18,
   });
-  const image = await preview(artifact, f.bob, "pic.png");
-  expect(image.text).toBeNull();
-  expect(image.dataUrl).toStartWith("data:image/png;base64,");
-  expect(await preview(artifact, f.bob, "blob.bin")).toMatchObject({ text: null, dataUrl: null });
-  expect(await preview(artifact, f.bob, "big.txt")).toMatchObject({ text: null, dataUrl: null });
+  expect(await preview(artifact, f.bob, "pic.png")).toEqual({
+    path: "pic.png",
+    sizeBytes: 16,
+    contentType: "image/png",
+    text: null,
+  });
+  expect(await preview(artifact, f.bob, "logo.svg")).toMatchObject({ text: null });
+  expect(await preview(artifact, f.bob, "blob.bin")).toMatchObject({ text: null });
+  expect(await preview(artifact, f.bob, "big.txt")).toMatchObject({ text: null });
   await expect(preview(artifact, f.bob, "missing.txt")).rejects.toMatchObject({
     code: "NOT_FOUND",
   });

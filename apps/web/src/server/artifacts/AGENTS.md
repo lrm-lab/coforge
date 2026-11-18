@@ -142,8 +142,8 @@ The rules are in `docs/agent-cli/artifact-follows.md`. Their modules:
   lists versions with what each changed.
 - `artifact-download.server.ts` serves one file or a stored (uncompressed) zip whose blobs are all
   checked before the 200 (a missing one is `NOT_FOUND`) and then streamed one at a time, limited per person a minute (`artifactZip`), refused over
-  `ARTIFACT_ZIP_LIMIT_BYTES` (`artifact-zip-too-large`), and the capped text/image preview of a
-  file. `artifact-visible.server.ts` is `visibleToReader`.
+  `ARTIFACT_ZIP_LIMIT_BYTES` (`artifact-zip-too-large`), and the capped text preview of a
+  file; an image is never previewed, the page loads it from the versioned download URL. `artifact-visible.server.ts` is `visibleToReader`.
 - A share to a `conversation`-tier artifact with no live public link is held, sending nothing,
   when recipients cannot read it elsewhere; `unseen: "send"` overrides the hold. The caller passes
   the sender's post check (`mayPost`) with `send`, and the hold runs it on every target before

@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Download01 } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
@@ -81,7 +81,8 @@ export function ArtifactFile({
   version: number;
   path: string;
 }) {
-  if (artifactKindOfPath(path) === "pdf")
+  const kind = artifactKindOfPath(path);
+  if (kind === "pdf")
     return (
       <ArtifactPdfFrame
         key={`${version}:${path}`}
@@ -90,7 +91,36 @@ export function ArtifactFile({
         path={path}
       />
     );
+  if (kind === "image")
+    return (
+      <ImageFile key={`${version}:${path}`} artifactId={artifactId} version={version} path={path} />
+    );
   return <FilePreview artifactId={artifactId} version={version} path={path} />;
+}
+
+function ImageFile({
+  artifactId,
+  version,
+  path,
+}: {
+  artifactId: string;
+  version: number;
+  path: string;
+}) {
+  const workspaceSlug = useWorkspaceSlug();
+  const [failed, setFailed] = useState(false);
+  if (failed) return <p className="p-6 text-sm text-error-primary">{m.av_file_failed()}</p>;
+  return (
+    <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto p-4">
+      <img
+        src={artifactDownloadUrl(workspaceSlug, artifactId, { path, version })}
+        alt={path}
+        decoding="async"
+        onError={() => setFailed(true)}
+        className="max-h-full max-w-full object-contain"
+      />
+    </div>
+  );
 }
 
 function FilePreview({
@@ -116,21 +146,9 @@ function FilePreview({
   );
 }
 
-function FileBody({
-  path,
-  preview,
-}: {
-  path: string;
-  preview: { text: string | null; dataUrl: string | null };
-}) {
+function FileBody({ path, preview }: { path: string; preview: { text: string | null } }) {
   const kind = artifactKindOfPath(path);
   const { commenting } = useArtifactCommenting();
-  if (preview.dataUrl)
-    return (
-      <div className="flex flex-1 items-start justify-center p-4">
-        <img src={preview.dataUrl} alt={path} className="max-h-full max-w-full object-contain" />
-      </div>
-    );
   if (preview.text === null)
     return <p className="p-6 text-sm text-tertiary">{m.av_file_no_preview()}</p>;
   if (kind === "markdown") return <ArtifactMarkdown path={path} text={preview.text} />;

@@ -104,7 +104,6 @@ function zipStream(
 }
 
 const PREVIEW_TEXT_LIMIT_BYTES = 1024 * 1024;
-const PREVIEW_IMAGE_LIMIT_BYTES = 5 * 1024 * 1024;
 
 export async function artifactFilePreview(
   sources: Omit<Sources, "zipLimit">,
@@ -120,16 +119,12 @@ export async function artifactFilePreview(
   if (!file) throw new AppError("NOT_FOUND");
   const contentType = artifactContentType(file.path, file.kind);
   const shown = { path: file.path, sizeBytes: file.sizeBytes, contentType };
-  const image = artifactKindOfPath(file.path) === "image";
-  const asImage = image && file.sizeBytes <= PREVIEW_IMAGE_LIMIT_BYTES;
-  const asText = !image && file.kind === "text" && file.sizeBytes <= PREVIEW_TEXT_LIMIT_BYTES;
-  if (!asText && !asImage) return { ...shown, text: null, dataUrl: null };
+  const asText =
+    file.kind === "text" &&
+    artifactKindOfPath(file.path) !== "image" &&
+    file.sizeBytes <= PREVIEW_TEXT_LIMIT_BYTES;
+  if (!asText) return { ...shown, text: null };
   const bytes = await sources.blobs.read(input.workspaceId, file.sha256);
   if (!bytes) throw new AppError("NOT_FOUND");
-  if (asText) return { ...shown, text: new TextDecoder().decode(bytes), dataUrl: null };
-  return {
-    ...shown,
-    text: null,
-    dataUrl: `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`,
-  };
+  return { ...shown, text: new TextDecoder().decode(bytes) };
 }

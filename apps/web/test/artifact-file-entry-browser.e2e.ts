@@ -102,7 +102,16 @@ test("an artifact whose entry is a PDF, a CSV or an image opens as that file", a
     );
 
     await browser("open", page(logo.id));
-    await waitFor(`${pageHydrated} && document.querySelector('main img[alt="logo.svg"]') != null`);
+    await waitFor(
+      `(() => { const img = document.querySelector('main img[alt="logo.svg"]'); return ${pageHydrated} && !!img && img.complete && img.naturalWidth > 0; })()`,
+    );
+    expect(
+      await evaluate<string>(
+        `new URL(document.querySelector('main img[alt="logo.svg"]').src).pathname + new URL(document.querySelector('main img[alt="logo.svg"]').src).search`,
+      ),
+    ).toBe(
+      `/api/workspaces/${encodeURIComponent(workspace.slug)}/artifacts/${logo.id}/download?path=logo.svg&version=1`,
+    );
     await browser("screenshot", join(shots, "92-image-entry.png"));
 
     await browser("open", `${webOrigin}/zh-CN/w/${workspace.slug}/artifacts`);
@@ -142,11 +151,7 @@ test("an artifact whose entry is a PDF, a CSV or an image opens as that file", a
     const facts = await evaluate<string[]>(
       `[${titles.map(card).join(",")}].map((card) => card?.querySelector("[data-artifact-facts]")?.textContent ?? null)`,
     );
-    expect(facts).toEqual([
-      "共 1 页",
-      "2 行 × 2 列 · name、team",
-      `${new TextEncoder().encode(SVG).length} B`,
-    ]);
+    expect(facts).toEqual(["共 1 页", "2 行 × 2 列 · name、team", "120 × 60 像素"]);
     await browser("screenshot", join(shots, "94-chat-card-facts.png"));
   } finally {
     await experiments.write(workspaceId, "artifacts", before);
