@@ -50,7 +50,7 @@ test("channel header cluster renders 24px faces with a 1px outline, spec +N chip
   );
 
   expect(html).toContain("avatar-portrait");
-  expect(html).toContain("size-6 avatar-stack-face ring-1 ring-avatar-ring");
+  expect(html).toContain("size-6 avatar-stack-face ring-1 ring-avatar-outline");
   expect(html).not.toContain("avatar-header");
   expect(html).not.toContain("ring-2");
   expect(html).not.toContain("ring-[1.5px]");

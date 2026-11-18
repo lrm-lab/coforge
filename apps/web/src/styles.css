@@ -290,7 +290,7 @@ html[data-drag-cursor] [data-drop-blocked] * {
     inset: 0;
     overflow: hidden;
     border-radius: 9999px;
-    box-shadow: 0 0 0 1px var(--color-avatar-ring);
+    box-shadow: 0 0 0 1px var(--color-avatar-outline);
   }
 
   .avatar-sticker {
@@ -306,7 +306,7 @@ html[data-drag-cursor] [data-drop-blocked] * {
   }
 
   .avatar-group.avatar-group-header {
-    --avatar-group-size: 1.5rem;
+    --avatar-group-size: 2rem;
   }
 
   .avatar-group.avatar-group-xs {
