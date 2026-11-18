@@ -53,7 +53,7 @@
   "computer_status_online": "在线",
   "computer_restart_action": "重启",
   "computer_restart_requesting": "正在请求…",
-  "computer_restart_accepted": "已请求重启。",
+  "computer_restart_accepted": "正在重启 Computer",
   "computer_restart_completed": "Computer 已重启。",
   "computer_restart_offline": "电脑当前未连接，无法重启。",
   "computer_restart_failed": "重启没有成功，请重试。",

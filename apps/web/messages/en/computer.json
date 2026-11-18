@@ -53,7 +53,7 @@
   "computer_status_online": "Online",
   "computer_restart_action": "Restart",
   "computer_restart_requesting": "Requesting…",
-  "computer_restart_accepted": "Restart requested.",
+  "computer_restart_accepted": "Restarting the Computer",
   "computer_restart_completed": "Computer restarted.",
   "computer_restart_offline": "The Computer isn't connected, so it can't be restarted.",
   "computer_restart_failed": "Restart didn't go through. Try again.",

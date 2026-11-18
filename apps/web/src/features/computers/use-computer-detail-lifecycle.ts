@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 
 import { useAppToast } from "#src/components/ui/toast";
-import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
+import { runComputerRestart } from "./computer-restart-run";
 import { computerDetailUpgradeSlotsFor } from "./computer-detail-upgrade-slots";
 import { submitComputerDetailUpgrade } from "./computer-detail-submit-upgrade";
 import { computerUpgradeStatusQuery, upgradeRunning } from "./computer-upgrade-status";
@@ -106,51 +106,41 @@ export function useComputerDetailLifecycle(input: {
   const runRestart = () => {
     if (!input.onRestart) return;
     setRestartState("pending");
-    const requestId = crypto.randomUUID();
-    // The restart poll outlives navigation; only touch state while still mounted.
-    const settle = (update: () => void) => {
-      if (mountedRef.current) update();
+    const settle = (state: typeof restartState) => {
+      if (mountedRef.current) setRestartState(state);
     };
-    void input
-      .onRestart(requestId)
-      .then(async (initial) => {
-        if (initial.status !== "accepted") return initial;
-        settle(() => {
-          setRestartState("accepted");
-          toast.success(m.computer_restart_accepted());
-        });
-        if (!input.onReadRestartStatus) return initial;
-        for (let poll = 0; poll < input.restartMaxPolls; poll += 1) {
-          await new Promise((resolve) => window.setTimeout(resolve, input.restartPollIntervalMs));
-          const result = await input.onReadRestartStatus(requestId);
-          if (result.status !== "accepted") return result;
-        }
-        return { requestId, status: "failed" as const, reason: "timeout" as const };
-      })
-      .then(
-        (result) =>
-          settle(() => {
-            if (result.status === "completed") {
-              setRestartState("completed");
-              toast.success(m.computer_restart_completed());
-            } else if (result.status === "accepted") {
-              setRestartState("accepted");
-            } else {
-              setRestartState("error");
-              toast.error(m.computer_restart_error());
-            }
-          }),
-        // Refused rather than late: say why, not that the deadline passed.
-        (error: unknown) =>
-          settle(() => {
-            setRestartState("error");
-            toast.error(
-              isAppErrorCode(error, "COMPUTER_OFFLINE")
-                ? m.computer_restart_offline()
-                : m.computer_restart_failed(),
-            );
-          }),
-      );
+    let progress: ReturnType<typeof toast.progress> | undefined;
+    const failure = {
+      deadline: m.computer_restart_error,
+      offline: m.computer_restart_offline,
+      refused: m.computer_restart_failed,
+    };
+    void runComputerRestart(
+      {
+        requestId: crypto.randomUUID(),
+        restart: input.onRestart,
+        readStatus: input.onReadRestartStatus,
+        pollIntervalMs: input.restartPollIntervalMs,
+        maxPolls: input.restartMaxPolls,
+      },
+      {
+        accepted: () => {
+          settle("accepted");
+          if (input.onReadRestartStatus) progress = toast.progress(m.computer_restart_accepted());
+          else toast.success(m.computer_restart_accepted());
+        },
+        completed: () => {
+          settle("completed");
+          if (progress) progress.done(m.computer_restart_completed());
+          else toast.success(m.computer_restart_completed());
+        },
+        failed: (reason) => {
+          settle("error");
+          if (progress) progress.fail(failure[reason]());
+          else toast.error(failure[reason]());
+        },
+      },
+    );
   };
   return {
     ...slots,
