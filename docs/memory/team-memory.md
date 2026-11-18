@@ -67,6 +67,9 @@ with the originating scan ID, so operations can count accepted suggestions per b
 
 ## Upgrade and retained data
 
+Staging Web enables both task recall and memory review. Its container health check requires both
+environment flags to be `true` and the Web readiness endpoint to respond.
+
 Stop existing dedicated Memory Agent processes, then deploy Web/backend migrations before updating Computers. Migrations archive registered legacy
 Memory Agents, revoke their API keys and leave their channel memberships; ordinary Agents and
 historical messages remain. Reserved protocol fields are never reused, and a new Computer rejects
