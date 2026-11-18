@@ -42,24 +42,7 @@ async function sweep() {
           WHERE m.workspace_id = w.id AND m.status = 'active' AND NOT m.pinned
         )
       ORDER BY s.scanned_at ASC NULLS FIRST, w.id ASC LIMIT 8`;
-    await Promise.allSettled(
-      workspaces.map(async ({ id }) => {
-        try {
-          const result = await scanTeamMemorySuggestions(db, id);
-          console.info(
-            JSON.stringify({ event: "team_memory.review_scanned", workspace_id: id, ...result }),
-          );
-        } catch (error) {
-          console.error(
-            JSON.stringify({
-              event: "team_memory.review_scan_failed",
-              workspace_id: id,
-              error_type: error instanceof Error ? error.name : "unknown",
-            }),
-          );
-        }
-      }),
-    );
+    await Promise.allSettled(workspaces.map(({ id }) => scanTeamMemorySuggestions(db, id)));
   } finally {
     ticking = false;
   }

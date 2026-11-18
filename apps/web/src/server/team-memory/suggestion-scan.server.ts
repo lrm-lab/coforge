@@ -1,4 +1,4 @@
-import type { PrismaClient } from "#src/generated/prisma/client";
+import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import {
   activeMemoryCandidateIds,
   currentMemoryCandidate,
@@ -6,6 +6,7 @@ import {
 import { teamMemoryAccess } from "#src/server/db/repositories/team-memory-access.repositories.server";
 import { readableMemoryEvidence } from "#src/server/db/repositories/team-memory-evidence.server";
 import { head, type Row } from "#src/server/db/repositories/team-memory-projections.server";
+import { TeamMemoryError } from "./memory";
 import { duplicateMemorySuggestions, normalizedMemoryContent } from "./suggestions";
 
 export const TEAM_MEMORY_SCAN_INTERVAL_MS = 24 * 60 * 60 * 1_000;
@@ -17,6 +18,43 @@ export async function scanTeamMemorySuggestions(
   workspaceId: string,
   userId?: string,
   now = new Date(),
+) {
+  const trigger = userId ? "manual" : "scheduled";
+  try {
+    const result = await scanWorkspaceMemory(db, workspaceId, userId, now);
+    if (result.scanId)
+      console.info(
+        JSON.stringify({
+          event: "team_memory.review_scanned",
+          workspace_id: workspaceId,
+          trigger,
+          ...result,
+        }),
+      );
+    return result;
+  } catch (error) {
+    const code =
+      error instanceof TeamMemoryError || error instanceof Prisma.PrismaClientKnownRequestError
+        ? error.code
+        : undefined;
+    console.error(
+      JSON.stringify({
+        event: "team_memory.review_scan_failed",
+        workspace_id: workspaceId,
+        trigger,
+        error_type: error instanceof Error ? error.name : "unknown",
+        code,
+      }),
+    );
+    throw error;
+  }
+}
+
+async function scanWorkspaceMemory(
+  db: PrismaClient,
+  workspaceId: string,
+  userId: string | undefined,
+  now: Date,
 ) {
   return db.$transaction(async (tx) => {
     if (userId) await teamMemoryAccess(tx, { workspaceId, userId }, true);
