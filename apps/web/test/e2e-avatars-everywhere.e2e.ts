@@ -12,11 +12,6 @@ import {
   pageHydrated,
 } from "./helpers/browser-e2e";
 
-/**
- * Wherever a line names someone, their face is before the name (Frank, 11-04, task #521). Opt-in
- * like the other browser E2Es; the channel, Agent and Task are seeded per run and removed after
- * it. Screenshots go under `.amp/e2e/avatars-everywhere/`.
- */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/avatars-everywhere");
 
@@ -88,12 +83,10 @@ test("names carry their faces", async () => {
       await browser("wait", "500");
     };
 
-    // Task History: each entry's actor, and the owner a change names, by face.
     await browser("set", "viewport", "1280", "900");
     await openHistory();
     await shoot("history");
     const history = `${dialog}.querySelector("ol")`;
-    // The creator (the person) and the new owner (the Agent, its mascot) each have a face.
     expect(
       await evaluate<number>(`${history}.querySelectorAll("img").length`),
     ).toBeGreaterThanOrEqual(3);
@@ -101,8 +94,6 @@ test("names carry their faces", async () => {
     await openHistory();
     await shoot("history-phone");
 
-    // The Task's discussion: its notices name people by face too, though the popup sits outside
-    // the channel stream (task #coforge-ui:#20).
     await browser("set", "viewport", "1280", "900");
     await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}?task=${number}`);
     const discussionNotice = `${dialog}?.querySelector('[data-message="system"]')`;
@@ -122,7 +113,6 @@ test("names carry their faces", async () => {
     expect(await evaluate<number>(`${assigned}.querySelectorAll("img").length`)).toBe(2);
     await shoot("task-discussion");
 
-    // A system notice: who added whom, each by face, in the one muted line.
     const notices = await db.conversation.create({
       data: {
         workspaceId,
@@ -156,7 +146,6 @@ test("names carry their faces", async () => {
         },
       },
     });
-    // A message's @mentions: each chip reads `@name` alone, no face (Frank, 11-05, task #533).
     const [meIn, agentIn] = await Promise.all([
       db.conversationMember.findFirstOrThrow({
         where: { conversationId: notices.id, userId: DEV_BROWSER_USER.id },
@@ -174,8 +163,6 @@ test("names carry their faces", async () => {
         body: `Can @${agent.name} pair with @${DEV_BROWSER_USER.username} on this?`,
       },
     });
-    // An Agent renamed since its notice (task #coforge-ui:#19): found by its member row, not
-    // the old handle; and someone no longer here: their initial on a coloured tile.
     const renamed = await db.message.create({
       data: {
         workspaceId,
@@ -224,7 +211,6 @@ test("names carry their faces", async () => {
       await browser("wait", "--fn", `${pageHydrated} && ${noticeRow} != null`);
       await browser("wait", "500");
       expect(await evaluate<number>(`${noticeRow}.querySelectorAll("img").length`)).toBe(2);
-      // A name the notice draws as a label, its face before it, has no `@` (task #591).
       expect(await evaluate<boolean>(`${noticeRow}.textContent.includes("@")`)).toBe(false);
       expect(
         await evaluate<number>(`[...${chips}].filter((chip) => chip.querySelector("img")).length`),
@@ -237,7 +223,6 @@ test("names carry their faces", async () => {
       expect(await evaluate<number>(`${chips}.length`)).toBe(2);
       const renamedRow = `document.querySelector('[data-message-id="${renamed.id}"] [data-message="system"]')`;
       expect(await evaluate<number>(`${renamedRow}.querySelectorAll("img").length`)).toBe(1);
-      // The initial's tile is painted, not transparent.
       expect(
         await evaluate<string>(
           `getComputedStyle(${renamedRow}.querySelector("[data-avatar] > div:not(:has(img))")).backgroundColor`,
@@ -245,8 +230,6 @@ test("names carry their faces", async () => {
       ).not.toBe("rgba(0, 0, 0, 0)");
       await shoot(name);
     }
-    // A notice in a thread names its people by face too: the thread pane sits beside the
-    // conversation, outside its message list (task #coforge-ui:#25).
     const root = await db.message.create({
       data: {
         workspaceId,
@@ -280,7 +263,6 @@ test("names carry their faces", async () => {
         },
       },
     });
-    // A person's reply too: a thread of notices alone shows no preview to open it by.
     await db.message.create({
       data: {
         workspaceId,
