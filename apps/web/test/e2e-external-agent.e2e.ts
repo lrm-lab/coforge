@@ -58,7 +58,7 @@ test("external Agent: page credential, browser-approved login, presence, revoke 
     await browser(
       "wait",
       "--fn",
-      `document.querySelector('[data-testid="external-agent-credential"]') !== null`,
+      `document.querySelector('[data-testid="external-agent-credential"]') !== null && document.querySelector('[data-testid="external-agent-prompt"]') !== null`,
     );
     const prompt = await evaluate<string>(
       `document.querySelector('[data-testid="external-agent-prompt"]').textContent`,

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -41,6 +41,7 @@ export function ExternalAgentForm({
   usernameDraft?: AgentUsernameDraft;
 }) {
   const create = useServerFn(createExternalAgent);
+  const queryClient = useQueryClient();
   const refreshDirectory = useRefreshAgentDirectory();
   const refreshSidebar = useRefreshSidebar({ throwOnError: false });
   const openDirect = useOpenDirectConversation();
@@ -91,7 +92,10 @@ export function ExternalAgentForm({
             description,
           },
         });
-        await refreshLists();
+        await Promise.all([
+          refreshLists(),
+          queryClient.prefetchQuery(agentProfileQuery(result.agent.id)),
+        ]);
         setCreatedAgent({
           id: result.agent.id,
           name: result.agent.name,
