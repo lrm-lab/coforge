@@ -3,6 +3,7 @@ import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { credentialsSchema, type tokensSchema } from "./github-account-shapes.server";
 import {
+  GitHubOAuthRejected,
   GitHubUnauthorized,
   failureReason,
   unavailable,
@@ -35,19 +36,33 @@ export class GitHubUserTokens {
     const prepared = await this.locked(userId, async (tx) => {
       const row = await tx.gitHubConnection.findUnique({ where: { userId } });
       if (!row) return { ok: false as const, status: "disconnected" as const, login: null };
+      let stage: "read" | "exchange" | "store" = "read";
+      let reason = "unauthorized";
       try {
-        if (!row.credentials || row.clientId !== this.config.clientId)
+        if (!row.credentials) {
+          reason = "no_credentials";
           throw new GitHubUnauthorized();
+        }
+        if (row.clientId !== this.config.clientId) {
+          reason = "client_mismatch";
+          throw new GitHubUnauthorized();
+        }
         let tokens = credentialsSchema.parse(
           JSON.parse(await this.sealed.open(userId, "tokens", row.credentials)),
         );
         let current = row;
         if (row.expiresAt.getTime() <= this.now() + refreshWithinMs) {
-          if (row.refreshExpiresAt.getTime() <= this.now()) throw new GitHubUnauthorized();
+          if (row.refreshExpiresAt.getTime() <= this.now()) {
+            reason = "refresh_token_expired";
+            throw new GitHubUnauthorized();
+          }
+          stage = "exchange";
+          reason = "bad_refresh_token";
           const refreshed = await this.github.exchange({
             grant_type: "refresh_token",
             refresh_token: tokens.refresh_token,
           });
+          stage = "store";
           current = await tx.gitHubConnection.update({
             where: { userId },
             data: await this.storedTokens(userId, refreshed),
@@ -63,8 +78,23 @@ export class GitHubUserTokens {
       } catch (error) {
         if (error instanceof GitHubUnauthorized) {
           await tx.gitHubConnection.update({ where: { userId }, data: { credentials: null } });
-          return { ok: false as const, status: "reauthorize" as const, login: row.login };
+          return {
+            ok: false as const,
+            status: "reauthorize" as const,
+            login: row.login,
+            cleared: { reason, row },
+          };
         }
+        if (stage !== "read" && !(error instanceof GitHubOAuthRejected))
+          console.warn(
+            JSON.stringify({
+              event: "github.refresh_uncertain",
+              userId,
+              stage,
+              reason: failureReason(error),
+              at: new Date(this.now()).toISOString(),
+            }),
+          );
         // Commit a rotated token even if the subsequent read fails. The action runs
         // after this transaction, so a transient GitHub failure cannot undo a refresh.
         return {
@@ -73,7 +103,11 @@ export class GitHubUserTokens {
       }
     });
     if ("error" in prepared) throw prepared.error;
-    if (!prepared.ok) return prepared;
+    if (!prepared.ok) {
+      if ("cleared" in prepared && prepared.cleared)
+        this.logCleared(userId, "refresh", prepared.cleared.reason, prepared.cleared.row);
+      return prepared;
+    }
     // The advisory lock only covers the token read/refresh above. GitHub reads run here,
     // outside any transaction, so a slow API call never blocks a concurrent disconnect().
     try {
@@ -95,16 +129,37 @@ export class GitHubUserTokens {
     userId: string,
     seen: { updatedAt: Date; credentials: string | null },
   ) {
-    await this.locked(userId, async (tx) => {
+    const cleared = await this.locked(userId, async (tx) => {
       const row = await tx.gitHubConnection.findUnique({ where: { userId } });
       if (
         !row ||
         row.updatedAt.getTime() !== seen.updatedAt.getTime() ||
         row.credentials !== seen.credentials
       )
-        return;
+        return undefined;
       await tx.gitHubConnection.update({ where: { userId }, data: { credentials: null } });
+      return row;
     });
+    if (cleared) this.logCleared(userId, "call_401", "unauthorized", cleared);
+  }
+
+  private logCleared(
+    userId: string,
+    site: "refresh" | "call_401",
+    reason: string,
+    row: { expiresAt: Date; refreshExpiresAt: Date; updatedAt: Date },
+  ) {
+    console.warn(
+      JSON.stringify({
+        event: "github.credentials_cleared",
+        userId,
+        site,
+        reason,
+        expiresAt: row.expiresAt.toISOString(),
+        refreshExpiresAt: row.refreshExpiresAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+      }),
+    );
   }
 
   locked<T>(userId: string, action: (tx: Prisma.TransactionClient) => Promise<T>) {
