@@ -61,6 +61,7 @@ class DesktopClipboardTests(unittest.TestCase):
             killed.append(pid)
 
         with (
+            mock.patch.object(self.module, "_require_display"),
             mock.patch.object(self.module, "_require_xlib"),
             mock.patch.object(self.module, "_pid_running", side_effect=lambda pid: pid == 4242),
             mock.patch.object(self.module, "get_clipboard", return_value="你好"),
@@ -81,6 +82,7 @@ class DesktopClipboardTests(unittest.TestCase):
 
     def test_owner_failed_when_spawn_dies(self):
         with (
+            mock.patch.object(self.module, "_require_display"),
             mock.patch.object(self.module, "_require_xlib"),
             mock.patch.object(self.module, "_pid_running", return_value=False),
             mock.patch.object(self.module, "get_clipboard", side_effect=self.module.ClipboardError("empty")),
@@ -92,10 +94,13 @@ class DesktopClipboardTests(unittest.TestCase):
             self.assertEqual(failed.exception.code, "owner_failed")
 
     def test_get_clipboard_requires_xlib(self):
-        with mock.patch.object(
-            self.module,
-            "_require_xlib",
-            side_effect=self.module.ClipboardError("xlib_missing"),
+        with (
+            mock.patch.object(self.module, "_require_display"),
+            mock.patch.object(
+                self.module,
+                "_require_xlib",
+                side_effect=self.module.ClipboardError("xlib_missing"),
+            ),
         ):
             with self.assertRaises(self.module.ClipboardError) as missing:
                 self.module.get_clipboard(":1")
