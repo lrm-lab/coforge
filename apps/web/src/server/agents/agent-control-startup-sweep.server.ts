@@ -21,7 +21,7 @@ import { createAgentStopReasonRecorder } from "./agent-stop-reason.server";
 export const STARTUP_SWEEP_INTERVAL_MS = 30_000;
 export const STARTUP_SWEEP_BATCH_LIMIT = 50;
 export const STARTUP_SWEEP_BATCHES_PER_TICK = 4;
-const STARTUP_SWEEP_LOCK_TTL_MS = 25_000;
+const STARTUP_SWEEP_LOCK_TTL_MS = 120_000;
 const STARTUP_SWEEP_LOCK_KEY = "coforge:agent-control:startup-sweep:lock";
 
 export interface AgentControlStartupSweepLock {
@@ -50,6 +50,7 @@ export class RedisAgentControlStartupSweepLock implements AgentControlStartupSwe
 export class AgentControlStartupSweep {
   private timer: ReturnType<typeof setInterval> | undefined;
   private ticking = false;
+  private cursor: StartupCandidateCursor | undefined;
 
   constructor(
     private readonly deps: {
@@ -80,16 +81,15 @@ export class AgentControlStartupSweep {
       const instanceId = this.deps.instanceId ?? "startup-sweep";
       if (!(await this.deps.lock.acquire(instanceId))) return;
       const now = (this.deps.clock ?? Date.now)();
-      let cursor: StartupCandidateCursor | undefined;
       for (let batch = 0; batch < STARTUP_SWEEP_BATCHES_PER_TICK; batch++) {
         const page = await this.deps.store.listStartupCandidates(
           now,
           STARTUP_SWEEP_BATCH_LIMIT,
-          cursor,
+          this.cursor,
         );
         for (const agentId of page.ids) await this.settleOne(agentId);
-        cursor = page.next;
-        if (!cursor) break;
+        this.cursor = page.next;
+        if (!this.cursor) break;
       }
     } catch (error) {
       console.error(

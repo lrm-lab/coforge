@@ -37,6 +37,16 @@ export class PrismaAgentControlStore implements AgentControlStore, AgentControlS
       FROM agents
       WHERE "controlState"->>'phase' = 'starting'
         AND "deletedAt" IS NULL
+        AND "computerId" IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM workspace_memberships m
+          WHERE m."userId" = agents."ownerId" AND m."workspaceId" = agents."workspaceId"
+        )
+        AND EXISTS (
+          SELECT 1 FROM workspace_computers wc
+          WHERE wc."computerId" = agents."computerId"
+            AND wc."workspaceId" = agents."workspaceId"
+        )
         AND ("controlState"->>'deadlineAtMs' IS NULL
           OR ("controlState"->>'deadlineAtMs')::bigint <= ${now})
         AND (COALESCE(("controlState"->>'deadlineAtMs')::bigint, 0), id)

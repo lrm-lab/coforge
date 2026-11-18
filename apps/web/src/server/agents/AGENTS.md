@@ -68,7 +68,12 @@ these modules have their own rules in `src/server/centrifugo/AGENTS.md`.
 - The latest command wins: `begin()` supersedes any non-terminal operation with
   a different `requestId`, and `recover()` (Daemon `ready` reconciliation)
   never supersedes, only republishes. Do not add a pending-operation rejection
-  or an abandonment/age concept.
+  or an abandonment/age concept. The one clock a Start runs against is its own
+  startup window: `-startup-timeout` settles a `starting` operation whose
+  launch outlives the provider's window (`startupWindow` in
+  `agent-control-types`), and `-startup-sweep` finds those expired operations
+  every 30 seconds. That is the launch's bound, not an age-based settlement of
+  an operation that may still be progressing — do not generalize it.
 - A superseded caller's `drive()` resolves `phase: "superseded"` instead of
   throwing; `executeAgentControl` throws only on `failed`. `publishStop()`
   throws on supersede because its callers need a confirmed stop.
