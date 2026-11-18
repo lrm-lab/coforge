@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { isLongMessage, longMessageAsFile } from "@lrm/coforge-sdk/internal";
 import { m } from "#src/paraglide/messages";
+import { composerUploadsSettled } from "./composer-send-gate";
 
 /**
  * Text longer than a message may be goes out as a Markdown file (task #138, shared rule in
@@ -33,9 +34,10 @@ export function useLongMessage({
   const submitRef = useRef(submit);
   submitRef.current = submit;
   useEffect(() => {
-    if (!sendWhenUploaded || uploading) return;
+    const settled = composerUploadsSettled({ waiting: sendWhenUploaded, uploading, anyFailed });
+    if (settled === "idle" || settled === "waiting") return;
     setSendWhenUploaded(false);
-    if (!anyFailed) submitRef.current();
+    if (settled === "send") submitRef.current();
   }, [sendWhenUploaded, uploading, anyFailed]);
 
   /** The file a long text becomes; its preview is kept for a send with no words of its own. */
@@ -64,10 +66,14 @@ export function useLongMessage({
     return true;
   }
 
+  function sendAfterUploads() {
+    setSendWhenUploaded(true);
+  }
+
   /** What a send with an empty field says: the preview of a long text it carries, if any. */
   function emptyBody(files: readonly { file: File }[]) {
     return files.map((item) => previews.current.get(item.file)).find(Boolean);
   }
 
-  return { divert, pasted, emptyBody };
+  return { divert, sendAfterUploads, pasted, emptyBody };
 }

@@ -11,6 +11,7 @@ import { ComposerField, focusDraftEnd } from "./composer-field";
 import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
 import { ComposerNotice } from "./composer-notice";
 import { useLongMessage } from "./use-long-message";
+import { composerSendDisabled, composerSendPress } from "./composer-send-gate";
 import { ComposerAttachmentTray } from "./composer-attachment-tray";
 import { useComposerAttachments } from "./use-composer-attachments";
 import { useComposerPaste } from "./use-composer-paste";
@@ -257,8 +258,13 @@ export function MessageComposer({
     (text) => longMessage.pasted(text),
   );
   const taskMode = !inThread && Boolean(canSendAsTask);
-  const sendDisabled =
-    composerDisabled || uploading || anyFailed || (!body.trim() && attachments.length === 0);
+  const sendState = {
+    hydrated,
+    uploading,
+    anyFailed,
+    hasContent: Boolean(body.trim()) || attachments.length > 0,
+  };
+  const sendDisabled = composerSendDisabled(sendState);
   const placeholder = composerPlaceholder(inThread, target);
   const longMessage = useLongMessage({ body, setBody, addFiles, uploading, anyFailed, submit });
 
@@ -291,7 +297,10 @@ export function MessageComposer({
 
   /** Sends the draft: as a Task while the send menu (or an edited-back unsent Task) armed it. */
   function submit() {
-    if (sendDisabled || longMessage.divert()) return;
+    const press = composerSendPress(sendState);
+    if (press === "ignored") return;
+    if (press === "after-uploads") return longMessage.sendAfterUploads();
+    if (longMessage.divert()) return;
     const text =
       body.trim() || longMessage.emptyBody(attachments) || attachments[0]?.file.name || "";
     const sendAsTask = taskMode && asTask;
