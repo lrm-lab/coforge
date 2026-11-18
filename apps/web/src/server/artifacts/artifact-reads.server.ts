@@ -114,7 +114,7 @@ const accessRuleInput = (
 });
 
 export type ArtifactOrigin =
-  | { messageId: string; conversationId: string; homeKind: ArtifactHomeKind }
+  | { messageId: string; conversationId: string; homeKind: Exclude<ArtifactHomeKind, "workspace"> }
   | { hidden: true };
 
 export class ArtifactReads {
@@ -157,7 +157,7 @@ export class ArtifactReads {
     const origin: ArtifactOrigin | null =
       originMessageId === null
         ? null
-        : originHome === undefined
+        : originHome === undefined || view.homeKind === "workspace"
           ? { hidden: true }
           : { messageId: originMessageId, conversationId: originHome, homeKind: view.homeKind };
     return {
