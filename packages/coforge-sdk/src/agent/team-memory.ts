@@ -143,7 +143,13 @@ function decodeEffectiveAt(value: unknown): string | null {
     !Number.isFinite(Date.parse(value))
   )
     throw new Error("invalid_memory_effectiveAt");
-  return new Date(value).toISOString();
+  const normalized = new Date(value).toISOString();
+  const canonical = value.replace(
+    /(?:\.(\d{1,3}))?Z$/,
+    (_match, fraction = "") => `.${fraction.padEnd(3, "0")}Z`,
+  );
+  if (normalized !== canonical) throw new Error("invalid_memory_effectiveAt");
+  return normalized;
 }
 
 export function decodeTeamMemoryCommand(value: unknown): TeamMemoryCommand {

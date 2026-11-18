@@ -60,14 +60,14 @@ async function search(
       archived || includeSuperseded
         ? Prisma.empty
         : Prisma.sql`
-      AND (effective_at IS NULL OR effective_at <= CURRENT_TIMESTAMP)
+      AND (effective_at IS NULL OR effective_at <= CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
       AND NOT EXISTS (
         SELECT 1 FROM team_memory_entries AS replacement
         WHERE replacement.workspace_id = candidate.workspace_id
           AND replacement.status = 'active'
           AND replacement.project_id IS NOT DISTINCT FROM candidate.project_id
           AND replacement.applicability = candidate.applicability
-          AND (replacement.effective_at IS NULL OR replacement.effective_at <= CURRENT_TIMESTAMP)
+          AND (replacement.effective_at IS NULL OR replacement.effective_at <= CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
           ${includeHumanAuthors ? Prisma.empty : Prisma.sql`AND replacement.author_agent_id IS NOT NULL`}
           AND replacement.relations @> jsonb_build_array(
             jsonb_build_object('kind', 'supersedes', 'id', candidate.id, 'revision', candidate.revision))

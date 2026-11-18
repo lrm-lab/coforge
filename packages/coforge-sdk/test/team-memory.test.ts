@@ -82,6 +82,9 @@ test("structured team memory evidence and version relationships survive decoding
     relations: draft.relations,
     effectiveAt: "2026-11-18T00:00:00.000Z",
   });
+  expect(() => decodeTeamMemoryCommand({ ...draft, effectiveAt: "2026-02-30T00:00:00Z" })).toThrow(
+    "invalid_memory_effectiveAt",
+  );
   expect(() =>
     decodeTeamMemoryCommand({ ...draft, evidence: [{ kind: "message", id: "bad" }] }),
   ).toThrow("invalid_memory_evidence");

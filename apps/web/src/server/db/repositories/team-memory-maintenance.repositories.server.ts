@@ -150,6 +150,14 @@ export async function consumeTeamMemoryMaintenance(
 ): Promise<void> {
   if (!actor.agentId || !["update", "merge", "archive"].includes(command.operation) || !target)
     throw new TeamMemoryError("forbidden");
+  if (
+    ("relations" in command && command.relations !== undefined) ||
+    ("effectiveAt" in command && command.effectiveAt !== undefined) ||
+    [target, ...sources].some(
+      (entry) => Array.isArray(entry.relations) && entry.relations.length > 0,
+    )
+  )
+    throw new TeamMemoryError("forbidden");
   const state = await tx.teamMemoryMaintenance.findUnique({
     where: { workspaceId: actor.workspaceId },
   });

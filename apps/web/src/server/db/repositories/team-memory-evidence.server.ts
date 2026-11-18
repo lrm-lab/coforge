@@ -35,13 +35,29 @@ export async function readableMemoryEvidence(
             id: { in: artifactIds },
             workspaceId,
             deletedAt: null,
-            OR: [{ access: "workspace" }, { homeKey: "workspace" }],
           },
-          select: { id: true, currentVersion: true },
+          select: { id: true, currentVersion: true, homeKey: true, access: true },
           take: artifactIds.length,
         })
       : [],
   ]);
+  const homeIds = artifacts.flatMap(({ access, homeKey }) =>
+    access !== "workspace" &&
+    /^conversation:[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(homeKey)
+      ? [homeKey.slice("conversation:".length)]
+      : [],
+  );
+  const publicHomes = new Set(
+    homeIds.length
+      ? (
+          await tx.conversation.findMany({
+            where: { id: { in: homeIds }, workspaceId, ...conversation },
+            select: { id: true },
+            take: homeIds.length,
+          })
+        ).map(({ id }) => `conversation:${id}`)
+      : [],
+  );
   return evidence.filter(({ kind, id, revision }) => {
     if (kind === "task")
       return tasks.some((task) => task.id === id && (revision ?? 0) <= task.revision);
@@ -50,7 +66,12 @@ export async function readableMemoryEvidence(
         (message) => message.id === id && (revision ?? message.sequence) === message.sequence,
       );
     return artifacts.some(
-      (artifact) => artifact.id === id && (revision ?? 0) <= artifact.currentVersion,
+      (artifact) =>
+        artifact.id === id &&
+        (revision ?? 0) <= artifact.currentVersion &&
+        (artifact.access === "workspace" ||
+          artifact.homeKey === "workspace" ||
+          publicHomes.has(artifact.homeKey)),
     );
   });
 }
