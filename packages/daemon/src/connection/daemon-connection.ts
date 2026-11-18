@@ -138,7 +138,7 @@ import {
   decodeAppRegistrationNotice,
   type AppRegistrationNotice,
 } from "@lrm/coforge-sdk/internal/app-registration-notice";
-import { logRejectedControl } from "./control-rejection-log";
+import { RejectedControl } from "./control-rejection-log";
 import { sendShutdownNoticeOver } from "./shutdown-notice";
 import { reportAgentSessionWithRetry } from "./agent-session-report";
 import { getLogger } from "@logtape/logtape";
@@ -230,6 +230,7 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
   readonly #agentWorkspaceReset = new ListenerSlot<(request: AgentWorkspaceResetRequest) => void>();
   readonly #agentMessage = new ListenerSlot<(message: AgentMessageDelivery) => void>();
   readonly #serverPublications = new ServerPublications();
+  readonly rejectedControl = new RejectedControl();
   readonly #appRegistrationNotice = new ListenerSlot<(notice: AppRegistrationNotice) => void>();
   readonly #agentMigrationLease = new ListenerSlot<(lease: ReceivedAgentMigrationLease) => void>();
   readonly #agentMigrationCancel = new ListenerSlot<(cancel: AgentMigrationCancel) => void>();
@@ -875,19 +876,7 @@ export class DaemonConnection extends DaemonConnectionAgentHttp implements Daemo
         },
       },
     ];
-    const rejections: {
-      kind: string;
-      error: unknown;
-    }[] = [];
-    for (const { kind, decode } of decoders) {
-      try {
-        decode();
-        return;
-      } catch (error) {
-        rejections.push({ kind, error });
-      }
-    }
-    logRejectedControl({ workspaceId, computerId }, data, rejections);
+    this.rejectedControl.decodeFirst(decoders, data, { workspaceId, computerId });
   }
   async sendAgentControlResult(result: AgentControlResult) {
     await this.#rpc(AGENT_CONTROL_RESULT_METHOD, encodeAgentControlResult(result));
