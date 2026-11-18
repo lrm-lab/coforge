@@ -365,7 +365,7 @@ test("DaemonRuntime treats a live zero-evidence turn as retryable failure and gu
 
 test("zero_evidence_turn_completed trips CRASH_STREAK_CAP=5 without tripping WakeLoopGuard at turn 3", () => {
   const gate = new AgentDeliveryGate();
-  const hold = new RuntimeErrorDeliveryHold({ deliveryGate: gate });
+  const hold = new RuntimeErrorDeliveryHold({ deliveryGate: gate, flush: () => {} });
   const classification = classifyRuntimeError({
     message:
       "Agent runtime completed a turn with no assistant text or tool calls (zero_evidence_turn_completed).",
