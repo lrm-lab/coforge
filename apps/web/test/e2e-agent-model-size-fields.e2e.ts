@@ -7,12 +7,6 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 
-/**
- * The runtime dialog's context window and maximum output fields show only where they do anything
- * (task #coforge-designer-team:#124): an Agent on Pi with the Computer's own providers has them,
- * one on Claude Code does not. Seeds a Computer and two Agents and removes them after the run.
- * Screenshots, desktop and phone, light and dark, are under `.amp/e2e/agent-model-size-fields/`.
- */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const artifacts = join(import.meta.dir, "../../../.amp/e2e/agent-model-size-fields");
 
@@ -68,7 +62,6 @@ test("only an Agent whose runtime reads them shows the model size fields", async
           model: "",
           modelProvider: "",
           reasoning: "",
-          // Saved before the fields were limited: read back without an error either way.
           contextWindow: 200_000,
         },
       },
@@ -96,7 +89,6 @@ test("only an Agent whose runtime reads them shows the model size fields", async
     const profile = `[...document.querySelectorAll("button")].find((b) => b.querySelector("h1"))`;
     const pencil = `document.querySelector('button[aria-label="Edit runtime configuration"]')`;
     await browser("wait", "--fn", `${pageHydrated} && (${pencil} != null || ${profile} != null)`);
-    // A phone opens the profile from the header; a desktop shows it beside the chat already.
     if (!(await evaluate<boolean>(`${pencil} != null`))) await press(profile);
     await browser("wait", "--fn", `${pencil} != null`);
     await press(pencil);
