@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button as AriaButton } from "react-aria-components";
-import { ChevronDown, ChevronRight, XClose } from "@untitledui/icons";
+import { ChevronDown, ChevronRight } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { plainMentionsByHandle } from "#src/features/conversations/message-markdown";
+import { SECTION_LABEL_CLASS } from "#src/features/conversations/review-chrome";
+import { ReviewPanelHeader } from "#src/features/conversations/review-panel-header";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import {
   ArtifactCommentComposer,
@@ -112,19 +114,12 @@ export function ArtifactCommentPanel({
     );
   return (
     <ArtifactSidePanel label={m.av_cm_title()} onClose={onClose}>
-      <header className="flex shrink-0 items-center gap-2 border-b border-secondary py-2 pr-2 pl-4">
-        <h2 className="min-w-0 flex-1 truncate text-md font-semibold text-primary">
-          {m.av_cm_title()}
-        </h2>
+      <ReviewPanelHeader
+        title={m.av_cm_title()}
+        close={{ label: m.av_cm_close(), onPress: onClose }}
+      >
         <ReviewFilterMenu filter={review} />
-        <ButtonUtility
-          icon={XClose}
-          size="xs"
-          color="tertiary"
-          tooltip={m.av_cm_close()}
-          onClick={onClose}
-        />
-      </header>
+      </ReviewPanelHeader>
       <div
         ref={listElement}
         className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
@@ -179,7 +174,7 @@ export function ArtifactCommentPanel({
                 className="flex flex-col gap-3"
               >
                 {titled && (
-                  <h3 className="text-xs font-semibold text-tertiary tabular-nums">
+                  <h3 className={cn(SECTION_LABEL_CLASS, "tabular-nums")}>
                     {section.version === shownVersion
                       ? m.av_cm_version_viewing({ version: section.version })
                       : m.av_cm_version_section({
@@ -204,13 +199,13 @@ export function ArtifactCommentPanel({
               <section>
                 <AriaButton
                   aria-expanded={resolvedOpen}
-                  className="flex w-full cursor-pointer items-center gap-1 rounded-md py-1 text-left text-xs font-semibold text-tertiary outline-focus-ring hover:text-secondary focus-visible:outline-2"
+                  className="flex h-6 w-full cursor-pointer items-center gap-1 rounded-md text-left text-xs font-medium text-tertiary outline-focus-ring transition-colors duration-150 hover:text-secondary focus-visible:outline-2"
                   onPress={() => setResolvedOpen((open) => !open)}
                 >
                   {resolvedOpen ? (
-                    <ChevronDown aria-hidden="true" className="size-4" />
+                    <ChevronDown aria-hidden="true" className="size-3.5" />
                   ) : (
-                    <ChevronRight aria-hidden="true" className="size-4" />
+                    <ChevronRight aria-hidden="true" className="size-3.5" />
                   )}
                   {m.av_cm_resolved_group({ count: groups.resolved.length })}
                 </AriaButton>
@@ -251,7 +246,7 @@ function ThreadGroup({
 }) {
   return (
     <section>
-      {title && <h3 className="mb-2 truncate text-xs font-semibold text-tertiary">{title}</h3>}
+      {title && <h3 className={cn(SECTION_LABEL_CLASS, "mb-2 truncate")}>{title}</h3>}
       <ul className="flex flex-col gap-2">
         {threads.map((thread) => (
           <CommentThreadView

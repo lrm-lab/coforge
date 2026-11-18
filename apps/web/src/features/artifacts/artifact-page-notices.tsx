@@ -3,8 +3,9 @@ import { ChevronDown, ChevronUp, SearchLg, XClose } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Input } from "#src/components/base/input/input";
 import { Alert } from "#src/components/ui/alert";
+import { cn } from "#src/lib/utils";
+import { FLOATING_SURFACE_CLASS } from "#src/features/conversations/review-chrome";
 import { m } from "#src/paraglide/messages";
 
 export function PageErrorBanner({
@@ -36,7 +37,7 @@ export function PageErrorBanner({
 export function PageExpiredCard({ onReload }: { onReload: () => void }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-primary p-6 text-center">
-      <p className="text-sm font-semibold text-primary">{m.doc_page_expired_title()}</p>
+      <p className="text-sm font-medium text-primary">{m.doc_page_expired_title()}</p>
       <p className="text-sm text-secondary">{m.doc_page_expired_body()}</p>
       <Button size="sm" color="secondary" onClick={onReload}>
         {m.doc_page_expired_reload()}
@@ -58,25 +59,29 @@ export function PageFindBar({
   return (
     <div
       role="search"
-      className="absolute top-3 right-4 z-10 flex items-center gap-1 rounded-xl border border-secondary bg-primary p-1.5 shadow-lg"
+      className={cn(
+        "absolute top-3 right-4 z-10 flex items-center gap-1 p-1 outline-focus-ring focus-within:outline-2 focus-within:outline-offset-2",
+        FLOATING_SURFACE_CLASS,
+      )}
     >
-      <Input
-        aria-label={m.doc_page_find_placeholder()}
-        placeholder={m.doc_page_find_placeholder()}
-        icon={SearchLg}
-        size="sm"
-        autoFocus
-        value={query}
-        onChange={(next) => {
-          setQuery(next);
-          onFind(next, 0);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") onFind(query, event.shiftKey ? -1 : 1);
-          if (event.key === "Escape") onClose();
-        }}
-        wrapperClassName="w-52"
-      />
+      <label className="flex h-8 w-52 items-center gap-2 pl-2">
+        <SearchLg aria-hidden="true" className="size-4 shrink-0 text-fg-quaternary" />
+        <input
+          aria-label={m.doc_page_find_placeholder()}
+          placeholder={m.doc_page_find_placeholder()}
+          autoFocus
+          value={query}
+          className="min-w-0 flex-1 bg-transparent text-sm text-primary outline-hidden placeholder:text-field-placeholder"
+          onChange={(event) => {
+            setQuery(event.target.value);
+            onFind(event.target.value, 0);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") onFind(query, event.shiftKey ? -1 : 1);
+            if (event.key === "Escape") onClose();
+          }}
+        />
+      </label>
       <span className="min-w-10 text-center text-xs text-tertiary tabular-nums">
         {m.doc_page_find_count({ active: found.active, total: found.total })}
       </span>

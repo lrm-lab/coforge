@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Edit03, Trash01 } from "@untitledui/icons";
 
-import { Badge } from "#src/components/base/badges/badges";
-import { Button } from "#src/components/base/buttons/button";
+import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { MessageBody } from "#src/features/conversations/message-body";
+import { COMMENT_BODY_CLASS } from "#src/features/conversations/review-chrome";
 import type { ChipMention } from "#src/features/conversations/message-reference-chips";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { formatList } from "#src/lib/format-list";
@@ -87,13 +87,32 @@ export function DraftCard({
         flagged ? "border-error" : "border-dashed border-primary",
       )}
     >
-      <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
-        <Badge size="sm" color="gray" type="modern">
-          {m.av_dr_tag()}
-        </Badge>
-        <span className="text-xs text-quaternary tabular-nums">
+      <div className="-my-1 flex min-h-8 min-w-0 items-center gap-2">
+        <span className="min-w-0 flex-1 text-xs text-tertiary tabular-nums">
           {m.av_cm_version({ version: draft.version })}
         </span>
+        {!editing && (
+          <>
+            <ButtonUtility
+              icon={Edit03}
+              size="xs"
+              color="tertiary"
+              tooltip={m.av_cm_edit()}
+              isDisabled={quiet}
+              data-draft-edit=""
+              onClick={() => setEditing(true)}
+            />
+            <ButtonUtility
+              icon={Trash01}
+              size="xs"
+              color="tertiary"
+              tooltip={m.av_cm_delete()}
+              isDisabled={quiet}
+              data-draft-delete=""
+              onClick={() => (hasImages(draft) ? setConfirming(true) : void actions.remove(draft))}
+            />
+          </>
+        )}
       </div>
       {draft.replyTo !== null ? (
         <p className="text-xs text-tertiary [overflow-wrap:anywhere]">
@@ -128,7 +147,7 @@ export function DraftCard({
       ) : (
         <>
           {draft.body && (
-            <div className="message-text min-w-0 text-sm text-primary [overflow-wrap:anywhere]">
+            <div className={cn(COMMENT_BODY_CLASS, "message-text min-w-0")}>
               <MessageBody body={draft.body} plainMentions={plainMentions} />
             </div>
           )}
@@ -156,33 +175,9 @@ export function DraftCard({
         </p>
       )}
       {daysLeft !== null && (
-        <p className="text-xs text-warning-primary">
+        <p className={cn("text-xs", daysLeft === 0 ? "text-warning-primary" : "text-tertiary")}>
           {daysLeft === 0 ? m.av_dr_expires_today() : m.av_dr_expires({ count: daysLeft })}
         </p>
-      )}
-      {!editing && (
-        <div className="flex justify-end gap-1">
-          <Button
-            size="xs"
-            color="tertiary"
-            iconLeading={Edit03}
-            isDisabled={quiet}
-            data-draft-edit=""
-            onPress={() => setEditing(true)}
-          >
-            {m.av_cm_edit()}
-          </Button>
-          <Button
-            size="xs"
-            color="tertiary"
-            iconLeading={Trash01}
-            isDisabled={quiet}
-            data-draft-delete=""
-            onPress={() => (hasImages(draft) ? setConfirming(true) : void actions.remove(draft))}
-          >
-            {m.av_cm_delete()}
-          </Button>
-        </div>
       )}
       <ConfirmDialog
         open={confirming}

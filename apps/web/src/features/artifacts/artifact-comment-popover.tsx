@@ -3,6 +3,7 @@ import { XClose } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { FLOATING_SURFACE_CLASS } from "#src/features/conversations/review-chrome";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { describeAnchor } from "./artifact-comment-anchor";
@@ -45,7 +46,10 @@ export function ArtifactCommentPopover({
       aria-label={m.av_cm_selection_label()}
       data-comment-popover=""
       style={{ top, left }}
-      className="absolute z-20 w-[22rem] max-w-[calc(100%-1rem)] origin-top rounded-xl border border-secondary bg-primary shadow-lg animate-in fade-in zoom-in-[0.97] motion-enter-sm"
+      className={cn(
+        "absolute z-20 w-88 max-w-[calc(100%-1rem)] origin-top animate-in fade-in zoom-in-[0.97] motion-enter-sm",
+        FLOATING_SURFACE_CLASS,
+      )}
       onKeyDown={(event) => {
         if (event.key === "Escape" && !event.defaultPrevented) {
           event.stopPropagation();
@@ -68,13 +72,13 @@ export function ArtifactCommentPopover({
           anchor,
           suggestion,
           header: (
-            <div className="flex items-start gap-1">
-              <div className="min-w-0 flex-1 py-1 text-xs text-tertiary">
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1 space-y-1 pt-1.5 text-xs text-tertiary">
                 {trail && (
                   <TrailLine trail={trail} onStep={(index) => onRetarget?.(trail.step(index))} />
                 )}
                 <p className="line-clamp-3 [overflow-wrap:anywhere]">
-                  {place && <span className="block font-medium text-secondary">{place}</span>}
+                  {place && <span className="block text-secondary">{place}</span>}
                   {excerpt && <span className="block">{excerpt}</span>}
                 </p>
               </div>
@@ -89,7 +93,7 @@ export function ArtifactCommentPopover({
           ),
         }}
         focusRequest={1}
-        className="border-t-0 pt-2"
+        className="border-t-0"
         onPosted={onClose}
       />
     </div>

@@ -10,11 +10,9 @@ import {
 import { Button as AriaButton } from "react-aria-components";
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { MarkerPin01, MessageSquare01, XClose } from "@untitledui/icons";
+import { XClose } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Empty, EmptyMedia, EmptyTitle } from "#src/components/ui/empty";
-import { cn } from "#src/lib/utils";
+import { Skeleton } from "#src/components/ui/skeleton";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 import { postAttachmentComment } from "./attachment-comments.functions";
@@ -22,16 +20,16 @@ import { useCommentAudience } from "./attachment-comment-audience";
 import { CommentRow, useCommentDraft, useCommentPages } from "./attachment-comment-thread";
 import { dragCarriesFiles } from "./composer-behavior";
 import { ComposerField } from "./composer-field";
-import { COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS } from "./composer-frame";
 import { useConversationHostChannels } from "./conversation-host";
 import { attachmentCommentsQueryKey } from "./conversation-query-keys";
 import { useMentionCandidates } from "./mention-candidates";
+import { COMMENT_FIELD_CLASS } from "./review-chrome";
+import { ReviewPanelHeader } from "./review-panel-header";
 import { useReferenceCompletion } from "./use-reference-completion";
 import { anchorRangeLabel, type AttachmentCommentAnchor } from "./attachment-comment-anchors";
 import { ANCHOR_HIGHLIGHT_MS, type AnchorSurface } from "./attachment-anchoring";
 import type { AttachmentCommentView } from "#src/server/attachments/attachment-comments.server";
 
-/** How a comment's place reads: `§ heading`, a video's time, or its lines or rows. */
 function anchorLabel(anchor: AttachmentCommentAnchor): string {
   const range = anchorRangeLabel(anchor);
   if (anchor.type === "md-section") return m.attachment_comments_anchor_section({ title: range });
@@ -47,7 +45,6 @@ function anchorLabel(anchor: AttachmentCommentAnchor): string {
     : m.attachment_comments_anchor_rows({ range });
 }
 
-/** Turns away files dragged over the comment field: a comment carries none. */
 function refuseFileDrop(event: DragEvent) {
   if (!dragCarriesFiles(event.dataTransfer.types)) return;
   event.preventDefault();
@@ -56,21 +53,15 @@ function refuseFileDrop(event: DragEvent) {
 
 type Placed = { comment: AttachmentCommentView; order: number | null };
 
-/** A place as Raft labels it: a grey pin chip, which a jump or a remove button can carry. */
 function AnchorChip({ label, children }: { label: string; children?: ReactNode }) {
   return (
-    <span className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-md bg-quaternary px-1.5 py-0.5 text-xs font-semibold text-primary">
-      <MarkerPin01 className="size-3.5 shrink-0 text-fg-quaternary" aria-hidden="true" />
+    <span className="inline-flex h-6 max-w-full min-w-0 items-center gap-1 rounded-md bg-secondary px-1.5 text-xs font-medium text-secondary">
       <span className="min-w-0 truncate">{label}</span>
       {children}
     </span>
   );
 }
 
-/**
- * Where a comment points: a chip that jumps to it, or a note that the place is gone from the file,
- * then the text the place holds, quoted under a rule as Raft does.
- */
 function AnchorPlace({
   anchor,
   found,
@@ -79,17 +70,16 @@ function AnchorPlace({
 }: {
   anchor: AttachmentCommentAnchor;
   found: boolean;
-  /** Whether the preview has been read, so a place not found is lost rather than unknown yet. */
   known: boolean;
   onJump?: (anchor: AttachmentCommentAnchor) => void;
 }) {
   const place = anchorLabel(anchor);
   const quote = "quote" in anchor.data ? anchor.data.quote : undefined;
   return (
-    <div className="mt-1 min-w-0 space-y-1.5">
+    <div className="min-w-0 space-y-1">
       {found ? (
         <AriaButton
-          className="block max-w-full cursor-pointer rounded-md outline-brand focus-visible:outline-2"
+          className="block max-w-full cursor-pointer rounded-md outline-focus-ring transition-colors duration-150 hover:[&>span]:bg-tertiary focus-visible:outline-2"
           aria-label={m.attachment_comments_anchor_jump({ place })}
           onPress={() => onJump?.(anchor)}
         >
@@ -101,7 +91,7 @@ function AnchorPlace({
         </p>
       )}
       {quote && (
-        <blockquote className="border-l-2 border-secondary pl-2.5 text-sm whitespace-pre-wrap text-tertiary">
+        <blockquote className="border-l border-primary pl-3 text-sm whitespace-pre-wrap text-tertiary">
           {quote}
         </blockquote>
       )}
@@ -109,12 +99,6 @@ function AnchorPlace({
   );
 }
 
-/**
- * Only mounted while its file is open. A draft survives switching preview/comments on a phone.
- * Whole-file comments, and those whose place is gone, come first; with the preview's `surface`,
- * comments on a place that is still found follow in document order. Raft lists them this way
- * (checked on app.raft.build, 2026-10-26).
- */
 export function AttachmentCommentsPane({
   attachmentId,
   fileName,
@@ -127,14 +111,9 @@ export function AttachmentCommentsPane({
 }: {
   attachmentId: string;
   fileName: string;
-  /** The place the next comment is about, chosen in the preview; absent for the whole file. */
   pendingAnchor?: AttachmentCommentAnchor | null;
-  /** Changes each time the preview asks to start a comment, with or without a place. */
   focusRequest?: number;
-  /** A comment to bring into view and mark as a jump does, once: where a link into it opened the
-   * file. */
   focusCommentId?: string;
-  /** Drops `anchor` if it is still the pending one. */
   onClearAnchor?: (anchor: AttachmentCommentAnchor) => void;
   surface?: AnchorSurface | null;
   onJump?: (anchor: AttachmentCommentAnchor) => void;
@@ -144,7 +123,6 @@ export function AttachmentCommentsPane({
   const queryKey = attachmentCommentsQueryKey(attachmentId);
   const { query, comments: all } = useCommentPages(attachmentId);
   const state = query.data?.pages[0];
-  // Placed once per load of comments or new preview, not on every keystroke in the draft.
   const { comments, located, rest } = useMemo(() => {
     const found: Placed[] = [];
     const others: Placed[] = [];
@@ -160,7 +138,6 @@ export function AttachmentCommentsPane({
     attachmentId,
     canComment,
     async (body, idempotencyKey, mentions) => {
-      // A place chosen while this posts is the next comment's.
       const anchor = pendingAnchor;
       await post({
         data: { attachmentId, body, anchor: anchor ?? undefined, idempotencyKey, mentions },
@@ -170,8 +147,6 @@ export function AttachmentCommentsPane({
     () => queryClient.invalidateQueries({ queryKey, exact: true }),
     () => completion.textareaRef.current?.focus(),
   );
-  // The thread composer's field: `#` lists the Workspace's channels, `@` those of the file's own
-  // conversation who would be notified. Picking one pins them, so the comment notifies exactly them.
   const { audience, mentionables, plainMentions, notifies } = useCommentAudience(
     attachmentId,
     all.at(-1)?.id,
@@ -183,11 +158,9 @@ export function AttachmentCommentsPane({
     onChange: draft.setBody,
     onPickMention: draft.pinMention,
   });
-  // A place chosen in the preview is what the reader is about to write about.
   useEffect(() => {
     if (pendingAnchor || focusRequest) completion.textareaRef.current?.focus();
   }, [pendingAnchor, focusRequest, completion.textareaRef]);
-  // The comment last jumped from stays marked as long as its place is.
   const [jumped, setJumped] = useState<string | null>(null);
   const clearJumped = useRef(0);
   useEffect(() => () => clearTimeout(clearJumped.current), []);
@@ -196,8 +169,6 @@ export function AttachmentCommentsPane({
     clearTimeout(clearJumped.current);
     clearJumped.current = window.setTimeout(() => setJumped(null), ANCHOR_HIGHLIGHT_MS);
   };
-  // A comment a link names: its page of comments is read first when it is older than those
-  // loaded, then it is scrolled to and marked, once, not again by each of the pane's rereads.
   const list = useRef<HTMLDivElement>(null);
   const reached = useRef<string>(undefined);
   const reach = useEffectEvent((id: string) => {
@@ -205,14 +176,11 @@ export function AttachmentCommentsPane({
       reached.current = id;
       jumpTo(id);
       list.current?.querySelector(`[data-comment-id="${id}"]`)?.scrollIntoView({ block: "center" });
-      // Older pages only once no read is under way: paging cancels a refetch of the newest page,
-      // which is where a comment just made is.
     } else if (query.hasNextPage && !query.isFetching) void query.fetchNextPage();
   });
   useEffect(() => {
     if (focusCommentId && reached.current !== focusCommentId) reach(focusCommentId);
   }, [focusCommentId, all, query.hasNextPage, query.isFetching]);
-  // A read that failed says so; why commenting was off before it is no longer known.
   const disabledReason = query.isError ? undefined : state?.disabledReason;
   const notifyHint = useMemo(() => {
     if (!notifies) return undefined;
@@ -221,7 +189,7 @@ export function AttachmentCommentsPane({
       ? m.attachment_comments_will_notify({
           names: new Intl.ListFormat(getLocale(), { type: "conjunction" }).format(names),
         })
-      : m.attachment_comments_will_notify_nobody();
+      : undefined;
   }, [notifies, draft.wire]);
   const disabledText =
     disabledReason === "archived"
@@ -232,41 +200,43 @@ export function AttachmentCommentsPane({
           ? m.attachment_comments_read_only()
           : null;
   const renderComment = ({ comment, order }: Placed) => (
-    <CommentRow
-      key={comment.id}
-      highlighted={comment.id === jumped}
-      comment={comment}
-      plainMentions={plainMentions}
-      viewerId={audience?.viewerId}
-      place={
-        comment.anchor && (
-          <AnchorPlace
-            anchor={comment.anchor}
-            found={order !== null}
-            known={Boolean(surface)}
-            onJump={(anchor) => {
-              jumpTo(comment.id);
-              onJump?.(anchor);
-            }}
-          />
-        )
-      }
-    />
+    <li key={comment.id}>
+      <CommentRow
+        highlighted={comment.id === jumped}
+        comment={comment}
+        plainMentions={plainMentions}
+        viewerId={audience?.viewerId}
+        place={
+          comment.anchor && (
+            <AnchorPlace
+              anchor={comment.anchor}
+              found={order !== null}
+              known={Boolean(surface)}
+              onJump={(anchor) => {
+                jumpTo(comment.id);
+                onJump?.(anchor);
+              }}
+            />
+          )
+        }
+      />
+    </li>
   );
   return (
     <section
       aria-label={m.attachment_comments_title()}
       className="flex h-full min-h-0 min-w-0 flex-col bg-primary"
     >
-      {/* The dialog's top bar names the file; space, not a rule, sets the list off. */}
-      <header className="shrink-0 px-4 pt-4 pb-2">
-        <h2 className="text-sm font-semibold text-primary">{m.attachment_comments_title()}</h2>
-      </header>
-      <div ref={list} className="min-h-0 flex-1 overflow-y-auto px-2 pb-3" aria-live="polite">
+      <ReviewPanelHeader title={m.attachment_comments_title()} />
+      <div ref={list} className="min-h-0 flex-1 overflow-y-auto p-3" aria-live="polite">
         {query.isPending ? (
-          <p className="text-sm text-tertiary">{m.attachment_comments_loading()}</p>
+          <div aria-busy="true" className="space-y-2">
+            <span className="sr-only">{m.attachment_comments_loading()}</span>
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+          </div>
         ) : query.isError ? (
-          <div className="space-y-2">
+          <div className="flex flex-col items-start gap-2">
             <p role="alert" className="text-sm text-error-primary">
               {m.attachment_comments_load_failed()}
             </p>
@@ -275,60 +245,51 @@ export function AttachmentCommentsPane({
             </Button>
           </div>
         ) : comments.length === 0 ? (
-          <Empty className="h-full p-4">
-            <EmptyMedia className="mb-3 text-fg-tertiary">
-              <MessageSquare01 className="size-8" aria-hidden="true" />
-            </EmptyMedia>
-            <EmptyTitle className="text-sm text-secondary">
-              {m.attachment_comments_empty()}
-            </EmptyTitle>
-          </Empty>
+          <p className="text-sm text-tertiary">{m.attachment_comments_empty()}</p>
         ) : (
-          <div className="flex flex-col">
+          <div className="flex flex-col gap-2">
             {query.hasNextPage && (
               <Button
-                size="sm"
+                size="xs"
                 color="tertiary"
+                className="self-center"
                 isLoading={query.isFetchingNextPage}
                 onClick={() => void query.fetchNextPage()}
               >
                 {m.attachment_comments_older()}
               </Button>
             )}
-            {rest.map(renderComment)}
-            {located.map(renderComment)}
+            <ul className="flex flex-col gap-2">
+              {rest.map(renderComment)}
+              {located.map(renderComment)}
+            </ul>
           </div>
         )}
       </div>
       <form
-        className="shrink-0 space-y-2 px-4 pt-1 pb-4"
+        className="shrink-0 space-y-2 border-t border-secondary p-3"
         onSubmit={(event) => {
           event.preventDefault();
           void draft.submit();
         }}
-        // A comment takes no files: a file dropped here is refused rather than opened by the
-        // browser in place of the page.
         onDragOver={refuseFileDrop}
         onDrop={refuseFileDrop}
       >
-        {disabledText && <p className="text-sm text-tertiary">{disabledText}</p>}
+        {disabledText && <p className="text-xs text-tertiary">{disabledText}</p>}
         {pendingAnchor && (
           <div className="flex min-w-0">
             <AnchorChip label={anchorLabel(pendingAnchor)}>
-              <ButtonUtility
-                icon={XClose}
-                size="xs"
-                color="tertiary"
-                className="-my-1 -mr-1 shrink-0"
-                tooltip={m.attachment_comments_anchor_remove()}
-                onClick={() => onClearAnchor?.(pendingAnchor)}
-              />
+              <AriaButton
+                aria-label={m.attachment_comments_anchor_remove()}
+                className="-mr-1 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-sm text-fg-quaternary outline-focus-ring transition-colors duration-150 hover:bg-primary_hover hover:text-fg-quaternary_hover focus-visible:outline-2"
+                onPress={() => onClearAnchor?.(pendingAnchor)}
+              >
+                <XClose aria-hidden="true" className="size-3.5" />
+              </AriaButton>
             </AnchorChip>
           </div>
         )}
-        {canComment && notifyHint && <p className="text-xs text-tertiary">{notifyHint}</p>}
-        {/* The thread composer's box and field, without its margins: the pane pads it. */}
-        <div className={cn(COMPOSER_FOCUS_CLASS, COMPOSER_FRAME_CLASS, "m-0 md:mx-0")}>
+        <div className={COMMENT_FIELD_CLASS}>
           <ComposerField
             completion={completion}
             value={draft.body}
@@ -338,16 +299,16 @@ export function AttachmentCommentsPane({
             onSubmit={() => void draft.submit()}
             sendDisabled={!canComment || !draft.body.trim() || draft.sending}
             isDisabled={!canComment}
-            // Read-only, not disabled, while sending: a disabled field drops focus to the page, and
-            // the dialog would no longer hear Escape.
             isReadOnly={draft.sending}
             maxLength={8_000}
           />
         </div>
-        {draft.sendFailed && (
-          <p role="alert" className="text-sm text-error-primary">
+        {draft.sendFailed ? (
+          <p role="alert" className="text-xs text-error-primary">
             {m.attachment_comments_post_failed()}
           </p>
+        ) : (
+          canComment && notifyHint && <p className="text-xs text-tertiary">{notifyHint}</p>
         )}
       </form>
     </section>

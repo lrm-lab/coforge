@@ -8,6 +8,7 @@ var TRAIL_NAME_MAX = ${TRAIL_NAME_MAX};
 var TRAIL_ANCESTORS_MAX = ${TRAIL_ANCESTORS_MAX};
 var ACCENT = "#7f56d9";
 var annotate = { picking: false, selecting: false, showMarks: false, revision: 0, marks: [], draft: null };
+var BADGE_SIZE = 24;
 var BADGE_SHADOW = "0 1px 3px rgba(0,0,0,.35)";
 var BADGE_FLASH_SHADOW = BADGE_SHADOW + ",0 0 0 5px rgba(127,86,217,.4)";
 var placed = [];
@@ -27,6 +28,10 @@ var hoverBox = null;
 var hoverElement = null;
 var hoverFrame = 0;
 var lastPointer = null;
+function badgeLeft(left, viewportWidth) {
+  if (left >= viewportWidth) return left;
+  return Math.max(0, Math.min(left, viewportWidth - BADGE_SIZE));
+}
 function paintTarget(parent, target, strong) {
   var style = target.boxStyle(strong);
   target.rects().forEach(function (rect) { paintBox(parent, rect, style); });
@@ -83,11 +88,12 @@ function drawMarks() {
   if (!annotate.showMarks) return;
   var measured = placed.map(function (entry) { return { entry: entry, rect: entry.target.rects()[0] }; });
   var taken = {};
+  var viewportWidth = document.documentElement.clientWidth;
   measured.forEach(function (item) {
     if (!item.rect) return;
     var mark = item.entry.mark;
     var at = item.entry.target.badgeAt(item.rect);
-    var left = Math.max(0, at.left + window.scrollX);
+    var left = badgeLeft(at.left, viewportWidth) + window.scrollX;
     var top = Math.max(0, at.top + window.scrollY);
     var key = Math.round(left / 12) + ":" + Math.round(top / 12);
     while (taken[key]) {
@@ -101,8 +107,8 @@ function drawMarks() {
     badge.textContent = mark.draft ? "" : String(Math.min(mark.count, 999));
     badge.setAttribute("aria-label", mark.label);
     if (mark.draft) badge.setAttribute("data-draft", "");
-    var look = mark.draft ? "border:2px dashed " + ACCENT + ";background:#fff" : "border:2px solid #fff;background:" + ACCENT;
-    badge.style.cssText = "position:absolute;pointer-events:auto;cursor:pointer;margin:0;padding:0;width:24px;height:24px;border-radius:12px;" + look + ";color:#fff;font:600 11px/20px system-ui,sans-serif;text-align:center;left:" + left + "px;top:" + top + "px";
+    var look = mark.draft ? "border:2px dashed #fff;background:" + ACCENT + ";opacity:.75" : "border:2px solid #fff;background:" + ACCENT;
+    badge.style.cssText = "position:absolute;pointer-events:auto;cursor:pointer;margin:0;padding:0;width:" + BADGE_SIZE + "px;height:" + BADGE_SIZE + "px;border-radius:" + BADGE_SIZE / 2 + "px;" + look + ";color:#fff;font:600 11px/20px system-ui,sans-serif;text-align:center;left:" + left + "px;top:" + top + "px";
     badge.style.boxShadow = mark.id === flashId ? BADGE_FLASH_SHADOW : BADGE_SHADOW;
     badges.set(mark.id, badge);
     parent.appendChild(badge);

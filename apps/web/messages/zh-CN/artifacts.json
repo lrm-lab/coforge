@@ -162,7 +162,6 @@
   "av_rename_save": "保存",
   "av_rename_failed": "无法重命名。",
   "av_menu_files": "文件",
-  "av_files_summary": "共 {count} 个文件，{size}",
   "av_files_close": "关闭文件",
   "av_file_entry": "入口",
   "av_file_download": "下载文件 {name}",
@@ -226,11 +225,9 @@
   "doc_send_selected": "已选 {count} 个",
   "av_cm_title": "评论",
   "av_cm_close": "关闭评论",
-  "av_cm_toggle": "评论这个文档",
-  "av_cm_menu": "评论选项",
-  "av_cm_show_all": "全部评论（{count}）",
+  "av_cm_toggle": "评论",
   "av_cm_empty": "还没有人评论",
-  "av_cm_group_whole": "整份文档",
+  "av_cm_group_whole": "整个 Artifact",
   "av_cm_resolved_group": "已解决（{count}）",
   "av_cm_older": "加载更早的评论",
   "av_cm_older_failed": "更早的评论没能加载。",
@@ -258,7 +255,7 @@
   "av_cm_resolved_toast": "讨论已标为解决",
   "av_cm_reopened_toast": "讨论已重新打开",
   "av_cm_action_failed": "操作没有成功，请再试一次。",
-  "av_cm_placeholder": "写下你的评论",
+  "av_cm_placeholder": "添加评论",
   "av_cm_reply_placeholder": "写下你的回复",
   "av_cm_field_label": "评论",
   "av_cm_replying_to": "正在回复 {name}",
@@ -271,12 +268,11 @@
   "av_cm_images_max": "一条评论最多附带 {count} 张图片。",
   "av_cm_image_failed": "这张图片没能上传。",
   "av_cm_will_notify": "将通知 {names}",
-  "av_cm_wont_notify": "不会通知任何人",
   "av_cm_on_file": "正在评论 {path}",
-  "av_cm_clear_target": "改为评论整份文档",
+  "av_cm_clear_target": "改为评论整个 Artifact",
   "av_cm_err_too_long": "评论过长，请控制在 {count} 个字符以内。",
   "av_cm_err_too_many_mentions": "一条评论最多提及 {count} 位成员或 Agent。",
-  "av_cm_err_cannot_see": "{names} 看不到这个文档，无法被提及。请删掉这个提及，或先把文档分享给对方。",
+  "av_cm_err_cannot_see": "{names} 看不到这个 Artifact，无法被提及。请删掉这个提及，或先把它分享给对方。",
   "av_cm_err_rate_limited": "评论太频繁了，请 {seconds} 秒后再试。",
   "av_cm_err_send": "评论没有发出，请再试一次。",
   "av_cm_mention_people": "成员",
@@ -287,7 +283,7 @@
   "av_cm_add_comment": "评论",
   "av_cm_selection_label": "评论所选内容",
   "av_cm_anchor_cancel": "取消",
-  "av_cm_margin_label": "文档旁的评论",
+  "av_cm_margin_label": "Artifact 旁的评论",
   "av_cm_marker": "{name} 的评论",
   "av_cm_marker_replies": [
     {
@@ -326,7 +322,6 @@
   "av_dr_save": "存为草稿",
   "av_dr_send": "发送",
   "av_dr_group": "我的草稿",
-  "av_dr_tag": "草稿",
   "av_dr_marker": "你的草稿",
   "av_dr_mark_label": "“{quote}”上的草稿",
   "av_dr_mark_unnamed": "草稿",
@@ -382,8 +377,8 @@
       "declarations": ["input count", "local countPlural = count: plural"],
       "selectors": ["countPlural"],
       "match": {
-        "countPlural=one": "每份文档最多存 {count} 条草稿。发出或删掉一些再存。",
-        "countPlural=other": "每份文档最多存 {count} 条草稿。发出或删掉一些再存。"
+        "countPlural=one": "每个 Artifact 最多存 {count} 条草稿。发出或删掉一些再存。",
+        "countPlural=other": "每个 Artifact 最多存 {count} 条草稿。发出或删掉一些再存。"
       }
     }
   ],
@@ -414,9 +409,9 @@
       }
     }
   ],
-  "av_dr_why_mention": "{names} 没有这份文档的权限。移除这个 @ 或删除草稿。",
+  "av_dr_why_mention": "{names} 没有这个 Artifact 的权限。移除这个 @ 或删除草稿。",
   "av_dr_why_too_many": "@ 超过了 {count} 个的上限，请减少一些。",
-  "av_dr_why_file": "这个文件已从文档中移除，草稿发不出去了，请删除它。",
+  "av_dr_why_file": "这个文件已从 Artifact 中移除，草稿发不出去了，请删除它。",
   "av_dr_why_version": "草稿所在的版本已被删除，请删除这条草稿。",
   "av_dr_why_reply": "要回复的评论已被删除，请删除这条草稿。",
   "av_dr_why_invalid": "这条草稿暂时发不出去，修改或删除后再试。",
@@ -425,6 +420,6 @@
   "av_dr_filter_review": "{name} 的评审",
   "av_dr_filter_clear": "显示全部评论",
   "av_dr_review_failed": "这次评审的评论加载失败。",
-  "av_dr_review_missing": "这份文档里找不到这次评审。",
+  "av_dr_review_missing": "这个 Artifact 里找不到这次评审。",
   "av_dr_review_summary": "评审摘要"
 }

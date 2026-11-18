@@ -12,26 +12,6 @@ import { PrismaWorkspaceCatalogStore } from "#src/server/workspaces/catalog.serv
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
 import { inPane, rowItems } from "./helpers/activity-inbox-e2e";
 
-/**
- * Mentioning people in a file's comments, and opening a comment from Activity, in a real browser.
- *
- * - The comment field's `@` lists the members of the conversation the file is in (a channel's
- *   people, never the viewer or someone outside it), the line above it says whom the comment
- *   will notify, choosing one keeps who was meant with the
- *   draft across a reload, and sending stores a real mention of them and notifies them
- *   (`pending_mention_actions`, read back from the database); the comment then shows the person's
- *   name, not its stored token.
- * - A comment a member posts to the viewer is an Activity item: clicking it opens the file's
- *   conversation at its message and the file's review at the comments, scrolled to and marked on
- *   that comment, with `file` and `comment` in the address. A reload, and the same address in
- *   Chat on a phone, reopen it straight at the comments; closing the review takes both off the
- *   address without adding a history entry.
- *
- * Opt-in like the other browser E2Es: real local Web (`COFORGE_DEV_SKIP_AUTH=1`, a seeded
- * database), `agent-browser`, local PostgreSQL, and `COFORGE_FILE_STORAGE_DIR` (the Web service's
- * file storage). Everything it writes lives in a Workspace of its own that it deletes afterwards.
- * Screenshots are written under `.amp/e2e/attachment-comment-mentions/`.
- */
 const { origin, browserPath, databaseUrl } = localBrowserE2e();
 const storageRoot = Bun.env.COFORGE_FILE_STORAGE_DIR;
 if (!storageRoot) throw new Error("COFORGE_FILE_STORAGE_DIR is required");
@@ -53,7 +33,6 @@ test("a file's comment mentions a member of its conversation, and Activity opens
   const listbox = `document.querySelector('[role="listbox"]')`;
   const listText = `(${listbox}?.textContent ?? "")`;
   const fieldValue = `document.querySelector('[role="dialog"] textarea')?.value`;
-  /** Resolves once `read` answers, so a check waits for the row a send commits. */
   async function until<T>(what: string, read: () => Promise<T | null | undefined>) {
     const deadline = Date.now() + 20_000;
     for (;;) {
@@ -82,7 +61,6 @@ test("a file's comment mentions a member of its conversation, and Activity opens
       await db.workspaceMembership.create({
         data: { workspaceId: workspace.id, userId: user.id },
       });
-    // A channel of the viewer and the peer alone: the outsider is in the Workspace, not in it.
     const channel = await db.conversation.create({
       data: {
         workspaceId: workspace.id,
@@ -120,8 +98,6 @@ test("a file's comment mentions a member of its conversation, and Activity opens
     });
     await mkdir(artifacts, { recursive: true });
     const preview = `button[aria-label="Preview ${fileName}"]`;
-    /** Opens the file's comments: from its card, or, after a reload, in the review the address
-     * reopened. */
     const openComments = async (reopened = false) => {
       await browser(
         "wait",
@@ -129,14 +105,12 @@ test("a file's comment mentions a member of its conversation, and Activity opens
         `${pageHydrated} && Boolean(document.querySelector('${preview}'))`,
       );
       if (!reopened) await browser("click", preview);
-      // A text preview is read before the dialog opens; a click while it animates in is lost.
       await browser(
         "wait",
         "--fn",
         `(() => { const dialog = document.querySelector('[role="dialog"]'); return Boolean(dialog?.querySelector('button[aria-label="Comments"]') && !dialog.closest("[data-entering]")); })()`,
       );
       await browser("click", '[role="dialog"] button[aria-label="Comments"]');
-      // The field takes names once the comments, and with them whether one may comment, are read.
       await browser(
         "wait",
         "--fn",
@@ -144,20 +118,21 @@ test("a file's comment mentions a member of its conversation, and Activity opens
       );
     };
 
-    // 1. `@` in the comment field lists the channel's other member, and no one else. Above the
-    // field, whom the comment will notify: no one yet, as the viewer uploaded the file.
     const dialogText = `document.querySelector('[role="dialog"]').textContent`;
     await browser("set", "viewport", "1440", "900");
     await browser("open", `${origin}${workspacePath}/channel/${conversationId}`);
     await openComments();
-    // Opening the file by hand puts it, and the message it is in, in the address.
     expect(
       await evaluate<Record<string, string | null>>(`(() => {
         const search = new URLSearchParams(location.search);
         return { file: search.get("file"), message: search.get("message") };
       })()`),
     ).toEqual({ file: attachment.id, message: message.id });
-    await browser("wait", "--fn", `${dialogText}.includes("Won't notify anyone.")`);
+    await browser(
+      "wait",
+      "--fn",
+      `Boolean(document.querySelector('${dialogField}:not([disabled])'))`,
+    );
     await browser("screenshot", join(artifacts, "0-no-comments.png"));
     await browser("focus", dialogField);
     await browser("keyboard", "type", "@");
@@ -165,7 +140,6 @@ test("a file's comment mentions a member of its conversation, and Activity opens
     await browser("wait", "--fn", `${listText}.includes("Comment Peer")`);
     expect(await evaluate<string>(listText)).not.toContain("Comment Outsider");
     await browser("screenshot", join(artifacts, "1-list-of-members.png"));
-    // Choosing writes the name; the draft keeps who was meant across a reload.
     await browser("press", "Enter");
     await browser("wait", "--fn", `${fieldValue} === "@Comment Peer "`);
     await browser("wait", "--fn", `${dialogText}.includes("Will notify: Comment Peer")`);
@@ -176,7 +150,6 @@ test("a file's comment mentions a member of its conversation, and Activity opens
     await browser("wait", "--fn", `${fieldValue} === "@Comment Peer please check"`);
     await browser("wait", "--fn", `${dialogText}.includes("Will notify: Comment Peer")`);
 
-    // 2. Sending stores a real mention of the person and notifies them.
     await browser("focus", dialogField);
     await browser("press", "Enter");
     const posted = await until("the posted comment", () =>
@@ -197,7 +170,6 @@ test("a file's comment mentions a member of its conversation, and Activity opens
     expect(notified.map((row) => [row.targetUserId, row.reason])).toEqual([
       [peer!.id, "mentioned"],
     ]);
-    // The row reads the person by name, never as the stored token.
     await browser(
       "wait",
       "--fn",
@@ -212,8 +184,6 @@ test("a file's comment mentions a member of its conversation, and Activity opens
     await browser("press", "Escape");
     await browser("wait", "--fn", `!document.querySelector('[role="dialog"]')`);
 
-    // 3. The peer comments on the viewer: ten earlier comments, then one that mentions them, then
-    // four more, so the one an Activity item opens at is below the fold of the comments panel.
     const comments = new AttachmentComments(new PrismaAttachmentCommentStore(db));
     const peerActor = { workspaceId: workspace.id, userId: peer!.id };
     const post = (body: string, mention = false) =>
@@ -234,17 +204,12 @@ test("a file's comment mentions a member of its conversation, and Activity opens
     for (let index = 1; index <= 4; index += 1) await post(`Later remark ${index}`);
 
     const row = `[...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes("Mention target ${suffix}"))`;
-    // The comment is in view, inside its panel, and marked as a jump marks it.
     const reached = `(() => { const row = document.querySelector('[role="dialog"] [data-comment-id="${target.id}"]'); const box = row?.getBoundingClientRect(); const list = row?.closest('[aria-live="polite"]')?.getBoundingClientRect(); return Boolean(box && list && box.top >= list.top && box.bottom <= list.bottom && row.className.includes("bg-tertiary")); })()`;
     await browser("set", "viewport", "1440", "560");
     await browser("open", `${origin}${workspacePath}/activity`);
     await browser("wait", "--fn", `${pageHydrated} && Boolean(${row})`);
-    // A real click, as a person makes: a scripted `click()` on this row's link went to Chat
-    // instead of opening beside the list (11-10, cause not yet known; the link's Chat target
-    // still opens the comment).
     await evaluate(`(${row}.querySelector("a").setAttribute("data-e2e-open", ""), true)`);
     await browser("click", "[data-e2e-open]");
-    // The conversation opens beside the list at the file's message, with the file's review over it.
     await browser("wait", "--fn", inPane(message.id));
     await browser("wait", "--fn", reached);
     const address = await evaluate<Record<string, string | null>>(`(() => {
@@ -259,11 +224,9 @@ test("a file's comment mentions a member of its conversation, and Activity opens
     });
     await browser("screenshot", join(artifacts, "3-activity-opens-comment.png"));
 
-    // 4. A reload reopens the review at the same comment.
     await browser("reload");
     await browser("wait", "--fn", reached);
 
-    // 5. Closing the review takes both off the address and replaces the entry.
     const entries = await evaluate<number>("history.length");
     await browser("press", "Escape");
     await browser("wait", "--fn", `!document.querySelector('[role="dialog"]')`);
@@ -277,7 +240,6 @@ test("a file's comment mentions a member of its conversation, and Activity opens
       `channel:${conversationId}`,
     );
 
-    // 6. The same address in Chat, on a phone, opens straight into the comments.
     await browser("set", "viewport", "390", "844");
     await browser(
       "open",
@@ -289,7 +251,6 @@ test("a file's comment mentions a member of its conversation, and Activity opens
         `document.querySelector('${dialogField}').getClientRects().length > 0`,
       ),
     ).toBe(true);
-    // Taken once the dialog has finished opening over the page.
     await browser("wait", "--fn", `!document.querySelector("[data-entering]")`);
     await browser("screenshot", join(artifacts, "4-phone-comments.png"));
     await browser("press", "Escape");
@@ -299,7 +260,6 @@ test("a file's comment mentions a member of its conversation, and Activity opens
       `!document.querySelector('[role="dialog"]') && !location.search.includes("file=")`,
     );
   } catch (failure) {
-    // What the page looked like when it went wrong.
     await browser("screenshot", join(artifacts, "failure.png")).catch(() => undefined);
     throw failure;
   } finally {

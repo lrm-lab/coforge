@@ -126,12 +126,6 @@ test("a person saves drafts, undoes and redoes, sends them as one review, and a 
     await waitFor(`${pageHydrated} && document.querySelector(".ProseMirror") != null`, 60_000);
 
     await click("button[aria-pressed]");
-    await browser(
-      "eval",
-      `document.querySelector("button[aria-pressed]").parentElement.querySelector("button:not([aria-pressed])").click()`,
-    );
-    await waitFor(`document.querySelector('[role="menuitem"]') != null`);
-    await click('[role="menuitem"]');
     await waitFor(`document.querySelector("aside") != null`);
 
     const lead = await services.comments.post({

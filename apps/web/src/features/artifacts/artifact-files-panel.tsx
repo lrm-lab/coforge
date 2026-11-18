@@ -1,9 +1,10 @@
-import { Download01, Home02, XClose } from "@untitledui/icons";
+import { Download01, Home02 } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { cn } from "#src/lib/utils";
+import { ReviewPanelHeader } from "#src/features/conversations/review-panel-header";
 import { m } from "#src/paraglide/messages";
 import { artifactDownloadUrl } from "./artifact-download-url";
 import { ArtifactSidePanel } from "./artifact-side-panel";
@@ -34,31 +35,19 @@ export function ArtifactFilesPanel({
   onClose: () => void;
 }) {
   const workspaceSlug = useWorkspaceSlug();
-  const total = files.reduce((sum, file) => sum + file.sizeBytes, 0);
   const current = openPath ?? entryPath;
   return (
     <ArtifactSidePanel label={m.av_menu_files()} onClose={onClose}>
-      <div className="flex items-start gap-2 border-b border-secondary px-4 py-3">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold text-primary">{m.av_menu_files()}</h2>
-          <p className="text-xs text-tertiary">
-            {m.av_files_summary({ count: files.length, size: formatBytes(total) })}
-          </p>
-        </div>
-        <ButtonUtility
-          icon={XClose}
-          size="xs"
-          color="tertiary"
-          tooltip={m.av_files_close()}
-          onClick={onClose}
-        />
-      </div>
+      <ReviewPanelHeader
+        title={m.av_menu_files()}
+        close={{ label: m.av_files_close(), onPress: onClose }}
+      />
       <ul className="min-h-0 flex-1 overflow-y-auto p-2">
         {files.map((file) => (
           <li key={file.path}>
             <div
               className={cn(
-                "flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-primary_hover",
+                "flex h-9 items-center gap-2 rounded-md pr-0.5 pl-2 transition-colors duration-150 hover:bg-primary_hover",
                 file.path === current && "bg-active",
               )}
             >

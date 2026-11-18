@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 
 import type { ChipMention } from "#src/features/conversations/message-reference-chips";
+import { SECTION_LABEL_CLASS } from "#src/features/conversations/review-chrome";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { clip } from "./artifact-text-anchor";
 import { useCommentDrafts, type DraftRefusal } from "./artifact-comment-drafts-context";
@@ -65,7 +67,7 @@ export function DraftGroup({
   if (drafts.length === 0) return null;
   return (
     <section data-draft-group="">
-      <h3 className="mb-2 truncate text-xs font-semibold text-tertiary">{m.av_dr_group()}</h3>
+      <h3 className={cn(SECTION_LABEL_CLASS, "mb-2 truncate")}>{m.av_dr_group()}</h3>
       <DraftList
         artifactId={artifactId}
         comments={comments}

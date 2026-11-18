@@ -39,7 +39,7 @@ export function ArtifactUnavailable({
   const Title = onClose ? "h2" : "h1";
   return (
     <Root className="flex h-full min-w-0 flex-1 flex-col items-center justify-center gap-3 bg-primary px-6 text-center">
-      <Title className="text-md font-semibold text-primary">
+      <Title className="text-md font-medium text-primary">
         {gone ? m.doc_unavailable_title() : m.doc_load_failed_title()}
       </Title>
       <p className="max-w-sm text-sm text-tertiary">
