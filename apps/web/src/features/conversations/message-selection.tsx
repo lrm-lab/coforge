@@ -5,6 +5,7 @@ import { Checkbox } from "#src/components/base/checkbox/checkbox";
 import { useAppToast } from "#src/components/ui/toast";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { m } from "#src/paraglide/messages";
+import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
 import { canForwardMessage, type ForwardSourceMessage } from "./message-forward-model";
 import { messagePlainText } from "./selection-copy";
 import {
@@ -43,7 +44,7 @@ export function MessageSelectionHost({ children }: { children: ReactNode }) {
   useHotkey(
     "Escape",
     () => {
-      if (!document.querySelector("[role=dialog], [role=menu]")) exit();
+      if (!document.querySelector(OPEN_OVERLAY_SELECTOR)) exit();
     },
     { enabled: active, preventDefault: true },
   );
