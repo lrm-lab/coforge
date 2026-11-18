@@ -119,6 +119,7 @@ public static extern bool IsWow64Process2(System.IntPtr hProcess, out ushort pPr
           elseif ($nativeMachine -eq 0x8664) { $detected = "AMD64" }
         }
       } catch {
+        $detected = $null
       }
     }
     if (-not [string]::IsNullOrEmpty($detected)) { $detected } else { [string]$env:PROCESSOR_ARCHITECTURE }
