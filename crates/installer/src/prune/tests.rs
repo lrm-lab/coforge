@@ -197,3 +197,31 @@ fn tolerates_best_effort_removal_failure_and_continues_pruning_other_versions() 
         ["0.1.0", "0.3.0", "0.4.0", "README.txt"]
     );
 }
+
+#[test]
+fn skips_pruning_when_any_process_is_unlinked_or_unreadable() {
+    for mode in ["unlinked", "unreadable"] {
+        let root = Scratch::new(&format!("prune-{mode}"));
+        let lock = MachineMutationLock::acquire(root.path()).unwrap();
+        let store = VersionStore::new(root.path(), "linux-x64");
+        for version in ["0.1.0", "0.2.0", "0.3.0"] {
+            install_version(&store, &lock, version);
+        }
+        write_active(root.path(), "0.3.0", Some("0.2.0"));
+
+        let clock = VirtualClock::new();
+        let table = FakeTable::new(&clock);
+        let exe = store.computer_path("0.1.0");
+        table.spawn(100, 1, &exe.to_string_lossy());
+        if mode == "unlinked" {
+            table.unlink(100);
+        } else {
+            table.become_unreadable(100);
+        }
+
+        let report = prune_inactive_versions(&lock, &store, &table, &[]).unwrap();
+        assert!(report.removed.is_empty(), "{mode}: {:?}", report.removed);
+        assert_eq!(report.warnings.len(), 1, "{mode}: {:?}", report.warnings);
+        assert_eq!(stored_versions(root.path()), ["0.1.0", "0.2.0", "0.3.0"]);
+    }
+}
