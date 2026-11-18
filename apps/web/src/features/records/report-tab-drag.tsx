@@ -1,4 +1,4 @@
-import { createContext, useContext, useId, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useId, useRef, useState, type ReactNode, useMemo } from "react";
 import {
   DndContext,
   KeyboardSensor,
@@ -33,6 +33,9 @@ const TAB_DRAG_ANNOUNCEMENTS: Announcements = {
 const TABS = "tabs";
 const RippleContext = createContext<DragRipple | null>(null);
 
+const MOUSE_SENSOR_OPTIONS = { activationConstraint: { distance: 6 } };
+const TOUCH_SENSOR_OPTIONS = { activationConstraint: { delay: 250, tolerance: 5 } };
+
 export function ReportTabDrag({
   order,
   onMove,
@@ -48,13 +51,17 @@ export function ReportTabDrag({
   useDocumentDragCursor(active !== null);
   const dndId = useId();
   const ripple = useDragRipple({ axis: "x", amplitude: 8, signature: order.join("\n") });
-  const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
-    useSensor(KeyboardSensor, {
+  const keyboardOptions = useMemo(
+    () => ({
       coordinateGetter: ripple.keyboardCoordinates,
       keyboardCodes: { start: ["Space"], end: ["Space", "Enter"], cancel: ["Escape"] },
     }),
+    [ripple.keyboardCoordinates],
+  );
+  const sensors = useSensors(
+    useSensor(MouseSensor, MOUSE_SENSOR_OPTIONS),
+    useSensor(TouchSensor, TOUCH_SENSOR_OPTIONS),
+    useSensor(KeyboardSensor, keyboardOptions),
   );
   const follow = ({ active: tab }: DragMoveEvent) =>
     ripple.move(tab.rect.current.translated, [TABS]);

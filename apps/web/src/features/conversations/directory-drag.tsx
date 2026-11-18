@@ -51,6 +51,9 @@ type DragData =
 
 const GROUPS = "groups";
 
+const MOUSE_SENSOR_OPTIONS = { activationConstraint: { distance: 6 } };
+const TOUCH_SENSOR_OPTIONS = { activationConstraint: { delay: 250, tolerance: 5 } };
+
 export function useDirectoryDrag({
   layout,
   natural,
@@ -76,13 +79,17 @@ export function useDirectoryDrag({
     keyboardFallback: sortableKeyboardCoordinates,
     signature: useMemo(() => JSON.stringify([sectionIds, layout]), [sectionIds, layout]),
   });
-  const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
-    useSensor(KeyboardSensor, {
+  const keyboardOptions = useMemo(
+    () => ({
       coordinateGetter: ripple.keyboardCoordinates,
       keyboardCodes: { start: ["Space"], end: ["Space"], cancel: ["Escape"] },
     }),
+    [ripple.keyboardCoordinates],
+  );
+  const sensors = useSensors(
+    useSensor(MouseSensor, MOUSE_SENSOR_OPTIONS),
+    useSensor(TouchSensor, TOUCH_SENSOR_OPTIONS),
+    useSensor(KeyboardSensor, keyboardOptions),
   );
   const placedRow = (key: string, section: DirectorySectionId, gap: number) =>
     moveInDirectory(layout, natural, key, section, gap);

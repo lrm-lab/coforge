@@ -37,6 +37,9 @@ import { cx } from "#src/utils/cx";
 
 export type ReorderableTabMeta = { label: () => string; icon?: FC<{ className?: string }> };
 
+const MOUSE_SENSOR_OPTIONS = { activationConstraint: { distance: 6 } };
+const TOUCH_SENSOR_OPTIONS = { activationConstraint: { delay: 250, tolerance: 5 } };
+
 export function ReorderableTabStrip<T extends string>({
   tabs,
   meta,
@@ -59,8 +62,8 @@ export function ReorderableTabStrip<T extends string>({
   "aria-label": string;
 }) {
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(MouseSensor, MOUSE_SENSOR_OPTIONS),
+    useSensor(TouchSensor, TOUCH_SENSOR_OPTIONS),
   );
   const dragged = useRef(false);
   const tabsRef = useRef<HTMLDivElement>(null);
