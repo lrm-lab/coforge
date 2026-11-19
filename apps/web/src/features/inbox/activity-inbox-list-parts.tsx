@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { Fragment, type ReactNode, useRef } from "react";
 import type { Pin01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -6,9 +6,45 @@ import { useEndOfList } from "#src/lib/use-end-of-list";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 
-/** A list section's label (Pinned, All conversations): a tertiary subheading on the rows' inset,
- * with the section's mark when it has one. */
-export function ActivityInboxSectionHeading({
+export type ActivitySection = {
+  key: string;
+  label: string;
+  heading?: string;
+  icon?: typeof Pin01;
+  count?: number;
+  dated?: boolean;
+  rows: ReactNode[];
+  footer?: ReactNode;
+};
+
+export function ActivityInboxSections({ sections }: { sections: ActivitySection[] }) {
+  return (
+    <>
+      {sections.map((section, index) => (
+        <Fragment key={section.key}>
+          {(section.icon || index > 0 || section.dated) && (
+            <ActivityInboxSectionHeading
+              icon={section.icon}
+              label={section.heading ?? section.label}
+              count={section.count}
+              className={cn(index > 0 && "pt-4")}
+            />
+          )}
+          <ol
+            aria-label={section.label}
+            data-undated={section.dated === false ? "" : undefined}
+            className="relative flex flex-col"
+          >
+            {section.rows}
+          </ol>
+          {section.footer}
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
+function ActivityInboxSectionHeading({
   icon: Icon,
   label,
   count,
@@ -16,7 +52,6 @@ export function ActivityInboxSectionHeading({
 }: {
   icon?: typeof Pin01;
   label: string;
-  /** How many the section holds, after its label. */
   count?: number;
   className?: string;
 }) {
@@ -39,10 +74,6 @@ export function ActivityInboxSectionHeading({
   );
 }
 
-/**
- * Asks for the next page as the end of the list scrolls into view. A failed page stops asking and
- * offers a retry instead, so a broken request is never repeated in a loop.
- */
 export function ActivityInboxLoadMore({
   hasNextPage,
   isFetchingNextPage,
@@ -69,6 +100,29 @@ export function ActivityInboxLoadMore({
       ) : isFetchingNextPage ? (
         <span className="text-tertiary">{m.activity_inbox_loading_more()}</span>
       ) : null}
+    </div>
+  );
+}
+
+export function ActivityInboxActionError({
+  onRetry,
+  onDismiss,
+}: {
+  onRetry: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div
+      role="alert"
+      className="flex shrink-0 items-center gap-3 border-b border-secondary px-page py-2 text-sm text-error-primary"
+    >
+      <span className="min-w-0 flex-1">{m.activity_inbox_action_error()}</span>
+      <Button size="sm" color="link-gray" onClick={onRetry}>
+        {m.activity_inbox_retry()}
+      </Button>
+      <Button size="sm" color="link-gray" onClick={onDismiss}>
+        {m.activity_inbox_dismiss()}
+      </Button>
     </div>
   );
 }

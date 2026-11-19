@@ -1,7 +1,5 @@
 import {
-  Fragment,
   type CSSProperties,
-  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -64,7 +62,12 @@ import { activityItemTime } from "./activity-item-time";
 import { daySectionKey, useActivityDays } from "./activity-inbox-days";
 import { ActivityInboxTabs } from "./activity-inbox-tabs";
 import { ActivityInboxMoreMenu } from "./activity-inbox-more-menu";
-import { ActivityInboxLoadMore, ActivityInboxSectionHeading } from "./activity-inbox-list-parts";
+import {
+  ActivityInboxActionError,
+  ActivityInboxLoadMore,
+  ActivityInboxSections,
+  type ActivitySection,
+} from "./activity-inbox-list-parts";
 import { useActivityListKeyboard, waitingRowKey } from "./use-activity-list-keyboard";
 import { useActivityBulkActions } from "./use-activity-bulk-actions";
 import { WaitingChoiceRow } from "./waiting-choice-row";
@@ -436,18 +439,7 @@ export function ActivityInboxView({
         </>
       )}
       {failure && (
-        <div
-          role="alert"
-          className="flex shrink-0 items-center gap-3 border-b border-secondary px-page py-2 text-sm text-error-primary"
-        >
-          <span className="min-w-0 flex-1">{m.activity_inbox_action_error()}</span>
-          <Button size="sm" color="link-gray" onClick={failure.retry}>
-            {m.activity_inbox_retry()}
-          </Button>
-          <Button size="sm" color="link-gray" onClick={() => setFailure(null)}>
-            {m.activity_inbox_dismiss()}
-          </Button>
-        </div>
+        <ActivityInboxActionError onRetry={failure.retry} onDismiss={() => setFailure(null)} />
       )}
       <div
         ref={listScroll}
@@ -459,26 +451,7 @@ export function ActivityInboxView({
         ) : empty ? (
           <ActivityInboxEmpty filter={filter} onShowAll={() => onFilterChange("all")} />
         ) : (
-          sections.map((section, index) => (
-            <Fragment key={section.key}>
-              {(section.icon || index > 0 || section.dated) && (
-                <ActivityInboxSectionHeading
-                  icon={section.icon}
-                  label={section.heading ?? section.label}
-                  count={section.count}
-                  className={cn(index > 0 && "pt-4")}
-                />
-              )}
-              <ol
-                aria-label={section.label}
-                data-undated={section.dated === false ? "" : undefined}
-                className="relative flex flex-col"
-              >
-                {section.rows}
-              </ol>
-              {section.footer}
-            </Fragment>
-          ))
+          <ActivityInboxSections sections={sections} />
         )}
         <ActivityInboxLoadMore
           hasNextPage={query.hasNextPage}
@@ -574,14 +547,3 @@ export function ActivityInboxView({
 }
 
 const WAITING_SHOWN = 3;
-
-type ActivitySection = {
-  key: string;
-  label: string;
-  heading?: string;
-  icon?: typeof Pin01;
-  count?: number;
-  dated?: boolean;
-  rows: ReactNode[];
-  footer?: ReactNode;
-};
