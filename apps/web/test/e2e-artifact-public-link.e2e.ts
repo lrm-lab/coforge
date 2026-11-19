@@ -8,7 +8,10 @@ import { productionArtifacts } from "#src/server/artifacts/artifact-composition.
 import { agentWrites } from "./helpers/artifact-agent-writes";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { artifactPageOrigin } from "#src/server/artifacts/artifact-sandbox-config.server";
-import { encodeArtifactShortId } from "#src/features/artifacts/artifact-short-id";
+import {
+  encodeArtifactShortId,
+  publicArtifactPath,
+} from "#src/features/artifacts/artifact-short-id";
 import { artifactChrome, artifactChromeReady } from "./helpers/artifact-chrome";
 import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
 
@@ -148,7 +151,7 @@ test("an artifact's public link: turned on from the pill, served to a visitor, t
     await browser("wait", "--fn", artifactChromeReady);
     expect(await copiedLink()).toBe(pageOf(encodeArtifactShortId(doc.id)));
     const docUrl = await turnOn(doc.id);
-    expect(await copiedLink()).toBe(docUrl);
+    expect(await copiedLink()).toBe(`${origin}${publicArtifactPath(doc.id)}`);
     const served = await fetch(docUrl, { redirect: "manual" });
     expect(served.status).toBe(302);
     expect(served.headers.get("set-cookie")).toBeNull();

@@ -56,7 +56,7 @@ import { PaneFrame } from "./artifact-parts";
 import { ArtifactUnavailable, LoadingBody, isGone } from "./artifact-page-states";
 import { artifactHomeConversation, refreshArtifact } from "./artifact-queries";
 import { artifactPageRoute } from "./artifact-search";
-import { encodeArtifactShortId } from "./artifact-short-id";
+import { encodeArtifactShortId, publicArtifactPath } from "./artifact-short-id";
 import { ArtifactWebPage } from "./artifact-web-page";
 import { VisibilityPill } from "./artifact-visibility-pill";
 import { useConversationName } from "./use-conversation-name";
@@ -255,8 +255,9 @@ function ArtifactPageFor({
     const shared = await link.current().catch(() => undefined);
     if (shared === undefined) return void toast.error(m.conversation_copy_failed());
     await copy(
-      shared ??
-        `${window.location.origin}${router.buildLocation(artifactPageRoute(workspaceSlug, encodeArtifactShortId(artifactId))).publicHref}`,
+      shared !== null
+        ? `${window.location.origin}${publicArtifactPath(artifactId)}`
+        : `${window.location.origin}${router.buildLocation(artifactPageRoute(workspaceSlug, encodeArtifactShortId(artifactId))).publicHref}`,
       m.doc_link_copied(),
     );
   };
