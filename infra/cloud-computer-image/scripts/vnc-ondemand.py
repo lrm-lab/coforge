@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Accept VNC on VNC_PORT and start TigerVNC+XFCE only while someone is connected.
+"""Accept VNC on VNC_PORT with a shared desktop that stays up for the container.
 
-The desktop is not running at boot. The first client starts it; after the last
-client leaves and VNC_IDLE_SECONDS passes, the desktop exits.
+The shared desktop starts when this process starts. Opening the browser only
+connects to it. Set VNC_IDLE_SECONDS to a positive number to restore the old
+idle shutdown (for experiments); the default 0 keeps the desktop up.
 """
 import importlib.util
 import os
@@ -15,7 +16,7 @@ import time
 
 LISTEN_PORT = int(os.environ.get("VNC_PORT", "5901"))
 BACKEND_PORT = int(os.environ.get("VNC_BACKEND_PORT", "5991"))
-IDLE_SECONDS = int(os.environ.get("VNC_IDLE_SECONDS", "600"))
+IDLE_SECONDS = int(os.environ.get("VNC_IDLE_SECONDS", "0"))
 GEOMETRY = os.environ.get("VNC_GEOMETRY", "1920x1080")
 DISPLAY = os.environ.get("VNC_DISPLAY", ":1")
 
@@ -27,6 +28,10 @@ lock = threading.Lock()
 
 def log(message: str) -> None:
     print(f"[vnc] {message}", flush=True)
+
+
+def idle_shutdown_enabled() -> bool:
+    return IDLE_SECONDS > 0
 
 
 def write_password() -> None:
@@ -172,12 +177,38 @@ def start_server() -> None:
     ensure_desktop()
 
 
+def prepare_shared_desktop(*, start_server=start_server) -> None:
+    """Bring the shared desktop up at process start (always-on)."""
+    with lock:
+        start_server()
+
+
+def consider_idle_stop(
+    *,
+    clients: int,
+    last_used: float,
+    now: float,
+    port_open=port_open,
+    stop_server=stop_server,
+) -> bool:
+    """Stop the desktop after idle only when VNC_IDLE_SECONDS is positive."""
+    if not idle_shutdown_enabled():
+        return False
+    if clients != 0 or now - last_used < IDLE_SECONDS:
+        return False
+    if not port_open(BACKEND_PORT):
+        return False
+    log(f"no clients for {IDLE_SECONDS}s, stopping desktop")
+    stop_server()
+    return True
+
+
 def splice(left: socket.socket, right: socket.socket) -> None:
     """Copy until either side closes. Never block forever on a full send buffer.
 
     A framebuffer update can stall sendall() while the peer receive window is
-    full. That thread then misses the browser hangup, so clients never hits
-    zero and idle_loop never stops the desktop.
+    full. That thread then misses the browser hangup and leaves the sockets
+    half-open.
     """
     sockets = [left, right]
     pending: dict[socket.socket, bytes] = {left: b"", right: b""}
@@ -229,7 +260,6 @@ def splice(left: socket.socket, right: socket.socket) -> None:
                 pass
 
 
-
 def handle(client: socket.socket) -> None:
     global clients, last_used
     backend = None
@@ -256,21 +286,22 @@ def idle_loop() -> None:
     while True:
         time.sleep(5)
         with lock:
-            if clients != 0 or time.time() - last_used < IDLE_SECONDS:
-                continue
-            if not port_open(BACKEND_PORT):
-                continue
-            log(f"no clients for {IDLE_SECONDS}s, stopping desktop")
-            stop_server()
+            consider_idle_stop(
+                clients=clients,
+                last_used=last_used,
+                now=time.time(),
+            )
 
 
 def main() -> None:
-    threading.Thread(target=idle_loop, daemon=True).start()
+    prepare_shared_desktop()
+    if idle_shutdown_enabled():
+        threading.Thread(target=idle_loop, daemon=True).start()
     listener = socket.socket()
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     listener.bind(("0.0.0.0", LISTEN_PORT))
     listener.listen(8)
-    log(f"listening on :{LISTEN_PORT}; desktop starts on connect")
+    log(f"listening on :{LISTEN_PORT}; shared desktop stays up")
     while True:
         client, _addr = listener.accept()
         threading.Thread(target=handle, args=(client,), daemon=True).start()

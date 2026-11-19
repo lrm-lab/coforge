@@ -61,8 +61,8 @@ if [[ -x /usr/local/bin/render-lenovo-proxy.sh ]]; then
   fi
 fi
 
-# The shared desktop stays down until a VNC or browser client connects.
-# Each Agent's screen is started by vnc-websocket on demand, and held through
+# The shared desktop starts with the container and stays up. Each Agent's
+# screen is still started by vnc-websocket on demand, and held through
 # 127.0.0.1:6091 while that Agent is running.
 # VNC_ENABLE=0 skips both listeners. VNC_WS_ENABLE=0 keeps raw VNC only.
 if [[ "${VNC_ENABLE:-1}" != "0" ]]; then

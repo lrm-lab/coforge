@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shared-desktop ondemand helpers: RFB health and restart-when-unhealthy."""
+"""Shared-desktop helpers: always-on lifecycle, RFB health, restart-when-unhealthy."""
 import os
 import socket
 import threading
@@ -34,6 +34,48 @@ def _serve_once(payload: bytes) -> int:
 
 
 class VncOndemandTest(unittest.TestCase):
+    def test_idle_shutdown_is_off_by_default(self):
+        self.assertFalse(ondemand.idle_shutdown_enabled())
+
+    def test_consider_idle_stop_never_stops_when_shutdown_disabled(self):
+        calls: list[str] = []
+        previous = ondemand.IDLE_SECONDS
+        ondemand.IDLE_SECONDS = 0
+        try:
+            stopped = ondemand.consider_idle_stop(
+                clients=0,
+                last_used=0,
+                now=10_000,
+                port_open=lambda _port: True,
+                stop_server=lambda: calls.append("stop"),
+            )
+        finally:
+            ondemand.IDLE_SECONDS = previous
+        self.assertFalse(stopped)
+        self.assertEqual(calls, [])
+
+    def test_consider_idle_stop_stops_only_when_explicitly_enabled(self):
+        calls: list[str] = []
+        previous = ondemand.IDLE_SECONDS
+        ondemand.IDLE_SECONDS = 600
+        try:
+            stopped = ondemand.consider_idle_stop(
+                clients=0,
+                last_used=0,
+                now=10_000,
+                port_open=lambda _port: True,
+                stop_server=lambda: calls.append("stop"),
+            )
+        finally:
+            ondemand.IDLE_SECONDS = previous
+        self.assertTrue(stopped)
+        self.assertEqual(calls, ["stop"])
+
+    def test_prepare_shared_desktop_starts_at_boot(self):
+        calls: list[str] = []
+        ondemand.prepare_shared_desktop(start_server=lambda: calls.append("start"))
+        self.assertEqual(calls, ["start"])
+
     def test_backend_ready_accepts_rfb_banner(self):
         port = _serve_once(b"RFB 003.008\n")
         self.assertTrue(ondemand.backend_ready(port))
