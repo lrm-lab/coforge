@@ -50,6 +50,14 @@ function limitResetNote(classified: RuntimeErrorClassification): string {
   return classified.retryNotBefore ? ` (limit resets at ${classified.retryNotBefore})` : "";
 }
 
+const THINKING_LEVEL_UNSUPPORTED = /\bthinking level is unsupported\b/i;
+
+function thinkingLevelNote(message: string): string {
+  return THINKING_LEVEL_UNSUPPORTED.test(message)
+    ? " This model does not support the selected thinking level. Change the model or the thinking level, save, then start the Agent again."
+    : "";
+}
+
 /** The class and reason a failure reports: the classification's for a provider's normalized
  * limit, else a provider's own free-form class/code and reason hints as-is, else the
  * classification's. `classify` runs at most once, and only when its result is used. */
@@ -89,7 +97,7 @@ export function buildRuntimeErrorActivity(
 ): AgentActivity {
   // A provider's own error message is shown as reported; only the crash summary built at
   // process exit is redacted and capped.
-  const detail = `${event.message}${limitResetNote(classified)}`;
+  const detail = `${event.message}${limitResetNote(classified)}${thinkingLevelNote(event.message)}`;
   return {
     detailKind: AGENT_ACTIVITY_DETAIL_KIND.RUNTIME_ERROR,
     level: "error",

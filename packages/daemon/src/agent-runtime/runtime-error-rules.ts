@@ -107,7 +107,7 @@ export const RUNTIME_WINDOW_LIMIT_PATTERNS = [
  * from the reference Computer's `classifyStickyTerminalFailure` model wording. Other model
  * failures ("model not found") stay terminal-but-wakeable. */
 export const RUNTIME_OFFLINE_MODEL_PATTERN =
-  /\b(?:model\b.*\bnot supported|unsupported\b.*\bmodel)\b/i;
+  /\b(?:model\b.*\bnot supported|unsupported\b.*\bmodel|thinking level is unsupported)\b/i;
 
 /** An HTTP status the failure text itself names: "HTTP 401", "status code: 429",
  * "API Error 503", "401 Unauthorized" or "401:" — mirrored from the reference Computer's
@@ -305,7 +305,9 @@ export const CLASSIFICATION_RULES: readonly ClassificationRule[] = [
     matches: (message) =>
       /\bmodel\b[^.]{0,40}\b(?:not supported|unsupported|not available|not found|does not exist)\b/i.test(
         message,
-      ) || /\bunsupported\b[^.]{0,40}\bmodel\b/i.test(message),
+      ) ||
+      /\bunsupported\b[^.]{0,40}\bmodel\b/i.test(message) ||
+      /\bthinking level is unsupported\b/i.test(message),
   },
   {
     // TERMINAL here means only "no delivery backoff" (see RUNTIME_ERROR_RETRY_DECISION.TERMINAL's
