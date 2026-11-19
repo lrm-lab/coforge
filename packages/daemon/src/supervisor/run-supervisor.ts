@@ -44,6 +44,7 @@ import {
 import { COFORGE_DAEMON_SERVER_URL } from "#src/connection/built-server";
 import { launchComputerUpgrade } from "#src/platform/computer-upgrade-launcher";
 import { sweepLeftoverComputerUpgradeJobs } from "#src/platform/computer-upgrade-sweep";
+import { DaemonDiskJanitor } from "#src/platform/daemon-disk-janitor";
 import { startLoginShellPathImport } from "./login-shell-path-import";
 import { markStartup, startupTiming } from "#src/platform/startup-timing";
 import {
@@ -53,10 +54,7 @@ import {
   type ComputerUpgradeReceipt,
 } from "#src/platform/computer-upgrade-receipts";
 
-/** How often a Coordinator checks for a receipt from a job it is watching. */
 const UPGRADE_RECEIPT_POLL_MS = 2_000;
-
-/** How long a Workspace start waits for its process to answer. */
 const WORKSPACE_READINESS_MS = 30_000;
 
 export async function runMachineSupervisor(
@@ -85,15 +83,17 @@ export async function runMachineSupervisor(
         markStartup("lock");
         const logger = getLogger(["coforge", "daemon", "supervisor"]);
         const loginShellPath = startLoginShellPathImport(stateDirectory);
+        const diskJanitor = new DaemonDiskJanitor({
+          stateDirectory,
+          includeWorkspacesSubdir: true,
+        });
+        diskJanitor.start();
         try {
           logger.info("Coordinator process started", {
             event: "coordinator:started",
             ...startupTiming(),
           });
-          // Best-effort: a leftover one-shot upgrade job never respawns but can hold a stale
-          // `launchctl list` entry and plist across restarts until this sweep clears it.
-          // Windows: do not await — accumulated upgrade-result files drove serial schtasks
-          // /Delete calls that exceeded the ~10s local handshake budget and failed upgrades.
+          // Windows: do not await — accumulated upgrade receipts drove serial schtasks /Delete calls past the 10s handshake budget.
           const leftoverSweep = sweepLeftoverComputerUpgradeJobs({
             platform: process.platform,
             stateDirectory,
@@ -106,6 +106,7 @@ export async function runMachineSupervisor(
           if (process.platform !== "win32") await leftoverSweep;
           await runWithSupervisorLock(socketPath, stateDirectory, createBindings(stateDirectory));
         } finally {
+          diskJanitor.stop();
           await loginShellPath.stop();
           lock.release();
           logger.info("Coordinator process stopped", { event: "coordinator:stopped" });

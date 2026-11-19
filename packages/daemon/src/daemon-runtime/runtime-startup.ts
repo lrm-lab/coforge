@@ -1,6 +1,7 @@
 import type { CredentialInvalidHolds } from "./credential-invalid-holds";
 import { getLogger } from "@logtape/logtape";
 import { mkdirSync } from "node:fs";
+import { basename, dirname } from "node:path";
 import type { RuntimeAuthAdapter, RuntimeAuthProvider } from "@lrm/coforge-anvil";
 import {
   WORKSPACE_PROTOCOL_MAJOR,
@@ -50,6 +51,7 @@ import { subscribeContextViewQueries } from "./context-view-query-handlers";
 import type { ProviderQuotaState } from "./provider-quota-state";
 import { subscribeAgentSideAskQueries, type AgentSideAskSource } from "./agent-side-ask-handler";
 import { RuntimeManageRunner, subscribeRuntimeManageQueries } from "./runtime-manage-handler";
+import { DaemonDiskJanitor } from "#src/platform/daemon-disk-janitor";
 import { SideQuestionRunner } from "#src/agent-runtime/agent-side-ask";
 import type { AgentContextViewService } from "#src/agent-context-view/agent-context-view-service";
 import type { ContextViewIndexEntry } from "#src/agent-context-view/context-view-store";
@@ -131,6 +133,7 @@ export class RuntimeStartup {
   #piChat?: PiChatRelay;
   #sideAsk?: SideQuestionRunner;
   #runtimeManage?: RuntimeManageRunner;
+  #diskJanitor?: DaemonDiskJanitor;
   #authControl: RuntimeAuthController | undefined;
   #readyWait: RuntimeReadyWaitWatch | undefined;
   #publications: RuntimePublicationSubscriptions | undefined;
@@ -166,6 +169,8 @@ export class RuntimeStartup {
     this.#sideAsk = undefined;
     this.#runtimeManage?.stopAll();
     this.#runtimeManage = undefined;
+    this.#diskJanitor?.stop();
+    this.#diskJanitor = undefined;
     const piChat = this.#piChat;
     this.#piChat = undefined;
     const piChatClosed = piChat?.close();
@@ -391,6 +396,14 @@ export class RuntimeStartup {
       this.#started = true;
       ports.activityPublisher.enable();
       ports.sweeps.start();
+      if (
+        !signal.aborted &&
+        !ports.isStopping() &&
+        basename(dirname(ports.stateDirectory)) !== "workspaces"
+      ) {
+        this.#diskJanitor ??= new DaemonDiskJanitor({ stateDirectory: ports.stateDirectory });
+        this.#diskJanitor.start();
+      }
       ports.machineStatus.start();
       ports.procJobs?.startSweep();
       const codeAgentReport = ports.codeAgentInventory.reportRuntimes(transport);
@@ -405,6 +418,8 @@ export class RuntimeStartup {
       this.#sideAsk = undefined;
       this.#runtimeManage?.stopAll();
       this.#runtimeManage = undefined;
+      this.#diskJanitor?.stop();
+      this.#diskJanitor = undefined;
       this.unsubscribeAll();
       ports.upgradeResults.stop();
       this.#started = false;

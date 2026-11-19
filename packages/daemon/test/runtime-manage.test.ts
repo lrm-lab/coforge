@@ -295,7 +295,7 @@ describe("RuntimeManageRunner and query subscription", () => {
     await handler?.(makeRequest({ action: "plan" }));
     expect(sent).toHaveLength(1);
     expect(sent[0]?.status).toBe("planned");
-    unsubscribe();
+    unsubscribe?.();
   });
 
   test("handles Homebrew Node npm installs, Linux brew cask guard, Claude app bundle, relative paths, and already-installed without pm", async () => {
