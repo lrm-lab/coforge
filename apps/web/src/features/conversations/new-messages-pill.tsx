@@ -1,8 +1,9 @@
 import { ArrowDown } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
-import { UnreadBadge } from "#src/components/ui/unread-marker";
+import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
 import { m } from "#src/paraglide/messages";
+import { cx } from "#src/utils/cx";
 import { usePushedNewMessages } from "./pushed-new-messages";
 
 export function NewMessagesPill({
@@ -32,11 +33,15 @@ export function NewMessagesPill({
   return (
     <span className="pointer-events-auto relative inline-flex">
       <Button
-        size="sm"
-        color={count > 0 ? "primary" : "secondary"}
+        size="xs"
+        color="secondary"
+        iconLeading={count > 0 ? <UnreadDot className="size-1.5 max-md:hidden" /> : undefined}
         iconTrailing={ArrowDown}
         onClick={onShowLatest}
-        className="rounded-full whitespace-nowrap shadow-md max-md:p-2 max-md:*:data-text:sr-only max-md:after:absolute max-md:after:-inset-1 max-md:after:content-['']"
+        className={cx(
+          "h-8 rounded-full py-0 text-xs font-medium whitespace-nowrap shadow-xs ring-secondary max-md:w-8 max-md:p-0 max-md:*:data-text:sr-only max-md:after:absolute max-md:after:-inset-1.5 max-md:after:content-['']",
+          count > 0 && "text-primary tabular-nums hover:text-primary",
+        )}
       >
         {label}
       </Button>
