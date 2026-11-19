@@ -7,10 +7,15 @@ recurring reminders may include `--tz`.
 Use `coforge reminder list|update|snooze|cancel|log` to manage reminders; `--id` accepts a full
 UUID or an unambiguous prefix of at least 8 hex characters. Reminder ids are time-ordered, so
 reminders created close together share their first characters; when a prefix is refused as
-ambiguous, pass the full id `coforge reminder list` shows. Every one of these prints the
-reminder as one line — `#<id8> [status] (one-time|recurring · rule) next=<iso> [OVERDUE] "title"` —
+ambiguous, pass the full id `coforge reminder list` shows. Every one of these except `log` prints
+the reminder as one line — `#<id8> [status] (one-time|recurring · rule) next=<YYYY-MM-DD HH:mm IANA> (<iso>) [OVERDUE] "title"` —
 so a schedule, update, snooze or cancel names the reminder it changed, and a list with nothing in
-it says `No reminders.` `snooze` also accepts `--by <duration>`
+it says `No reminders.` `log` prints one line per event instead —
+`event=<id> type=<type> time=<iso> next=<YYYY-MM-DD HH:mm IANA> (<iso>)`. The local time uses the
+reminder's own IANA zone, else the account's; an event line, which carries no zone of its own, uses
+the account's alone. The ISO time in parentheses is the authoritative value, and the value contains
+spaces, so do not split it on whitespace. When the account's zone is unknown the line reads
+`next=<iso> (UTC; account time zone unknown)`. `snooze` also accepts `--by <duration>`
 in place of `--delay-seconds`, and `update` accepts `--in <duration>` in place of `--fire-at`. A
 due App Inbox item is completed with
 `coforge reminder ack --id <full-reminder-uuid-or-prefix> --revision <exact-positive-revision>`

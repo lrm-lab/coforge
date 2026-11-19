@@ -24,10 +24,37 @@ function reminder(overrides: Partial<ReminderSummaryRecord> = {}): ReminderSumma
 
 test("a reminder row names its id8, cadence, next fire time and title", () => {
   expect(formatReminderRow(reminder(), now)).toBe(
-    '#abcdef12 [scheduled] (one-time) next=2026-10-30T09:00:00Z "Check the deploy"',
+    '#abcdef12 [scheduled] (one-time) next=2026-10-30T09:00:00Z (UTC; account time zone unknown) "Check the deploy"',
   );
-  expect(formatReminderRow(reminder({ repeat: "daily" }), now)).toBe(
-    '#abcdef12 [scheduled] (recurring · daily) next=2026-10-30T09:00:00Z "Check the deploy"',
+  expect(formatReminderRow(reminder(), now, undefined, "Asia/Shanghai")).toBe(
+    '#abcdef12 [scheduled] (one-time) next=2026-10-30 17:00 Asia/Shanghai (2026-10-30T09:00:00Z) "Check the deploy"',
+  );
+  expect(formatReminderRow(reminder({ repeat: "daily" }), now, undefined, "Asia/Shanghai")).toBe(
+    '#abcdef12 [scheduled] (recurring · daily) next=2026-10-30 17:00 Asia/Shanghai (2026-10-30T09:00:00Z) "Check the deploy"',
+  );
+});
+
+test("the reminder's own zone wins, then the account's, and an unusable zone falls back to the ISO time", () => {
+  expect(
+    formatReminderRow(
+      reminder({ repeat: "daily", timezone: "America/New_York" }),
+      now,
+      undefined,
+      "Asia/Shanghai",
+    ),
+  ).toBe(
+    '#abcdef12 [scheduled] (recurring · daily (America/New_York)) next=2026-10-30 05:00 America/New_York (2026-10-30T09:00:00Z) "Check the deploy"',
+  );
+  expect(
+    formatReminderRow(
+      reminder({ repeat: "daily", timezone: "Not/A_Zone" }),
+      now,
+      undefined,
+      "Asia/Shanghai",
+    ),
+  ).toContain("next=2026-10-30 17:00 Asia/Shanghai (2026-10-30T09:00:00Z)");
+  expect(formatReminderRow(reminder(), now, undefined, "Not/A_Zone")).toContain(
+    "next=2026-10-30T09:00:00Z (UTC; account time zone unknown)",
   );
 });
 
@@ -46,17 +73,63 @@ test("an empty list says so plainly", () => {
   ).toBe("No reminders.");
 });
 
+test("a log line's next fire time uses the account's zone, and stays bare when there is none", () => {
+  const event = { eventId: "evt-1", type: "scheduled", time: "2026-10-29T10:00:00Z" };
+  expect(
+    formatReminderResponse("log", {
+      accepted: true,
+      displayTimezone: "Asia/Shanghai",
+      reminders: [],
+      events: [{ ...event, nextFireAt: "2026-10-30T09:00:00Z" }],
+    } as never),
+  ).toBe(
+    "event=evt-1 type=scheduled time=2026-10-29T10:00:00Z next=2026-10-30 17:00 Asia/Shanghai (2026-10-30T09:00:00Z)",
+  );
+  expect(
+    formatReminderResponse("log", {
+      accepted: true,
+      reminders: [],
+      events: [{ ...event, nextFireAt: "2026-10-30T09:00:00Z" }],
+    } as never),
+  ).toBe(
+    "event=evt-1 type=scheduled time=2026-10-29T10:00:00Z next=2026-10-30T09:00:00Z (UTC; account time zone unknown)",
+  );
+  expect(
+    formatReminderResponse("log", { accepted: true, reminders: [], events: [event] } as never),
+  ).toBe("event=evt-1 type=scheduled time=2026-10-29T10:00:00Z next=-");
+});
+
+test("a local time keeps midnight at 00:00 and follows the zone across DST", () => {
+  expect(
+    formatReminderRow(reminder({ fireAt: "2026-10-29T16:00:00Z", timezone: "Asia/Shanghai" }), now),
+  ).toContain("next=2026-10-30 00:00 Asia/Shanghai (2026-10-29T16:00:00Z)");
+  expect(
+    formatReminderRow(
+      reminder({ fireAt: "2027-03-14T10:00:00Z", timezone: "America/Los_Angeles" }),
+      now,
+    ),
+  ).toContain("next=2027-03-14 03:00 America/Los_Angeles (2027-03-14T10:00:00Z)");
+  expect(
+    formatReminderRow(
+      reminder({ fireAt: "2027-11-07T09:00:00Z", timezone: "America/Los_Angeles" }),
+      now,
+    ),
+  ).toContain("next=2027-11-07 01:00 America/Los_Angeles (2027-11-07T09:00:00Z)");
+});
+
 test("a schedule names the reminder it produced instead of saying Accepted", () => {
-  // The response reads the wall clock for OVERDUE; pin it before the reminder's fire time.
   setSystemTime(now);
   try {
     expect(
       formatReminderResponse("schedule", {
         accepted: true,
+        displayTimezone: "Asia/Shanghai",
         reminders: [reminder()],
         events: [],
       } as never),
-    ).toBe('#abcdef12 [scheduled] (one-time) next=2026-10-30T09:00:00Z "Check the deploy"');
+    ).toBe(
+      '#abcdef12 [scheduled] (one-time) next=2026-10-30 17:00 Asia/Shanghai (2026-10-30T09:00:00Z) "Check the deploy"',
+    );
   } finally {
     setSystemTime();
   }
@@ -96,7 +169,7 @@ test("formats usable reminder lists, empty logs, and receipt acknowledgements", 
   });
   // The reference client's row: id8, status, cadence, next fire time, OVERDUE, quoted title.
   expect(output).toBe(
-    `#${reminderId.slice(0, 8)} [scheduled] (recurring · every:1d (Asia/Shanghai)) next=2026-09-09T01:00:00Z [OVERDUE] "Deploy"`,
+    `#${reminderId.slice(0, 8)} [scheduled] (recurring · every:1d (Asia/Shanghai)) next=2026-09-09 09:00 Asia/Shanghai (2026-09-09T01:00:00Z) [OVERDUE] "Deploy"`,
   );
   expect(
     await run(["reminder", "log", "--id", reminderId], {

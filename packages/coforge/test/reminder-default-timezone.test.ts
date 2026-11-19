@@ -79,6 +79,6 @@ test("formatReminderRow displays the reminder's resolved timezone in receipts an
       beforeItFires,
     ),
   ).toBe(
-    '#12345678 [scheduled] (recurring · daily 09:00 (America/Los_Angeles)) next=2026-11-19T17:00:00.000Z "Standup"',
+    '#12345678 [scheduled] (recurring · daily 09:00 (America/Los_Angeles)) next=2026-11-19 09:00 America/Los_Angeles (2026-11-19T17:00:00.000Z) "Standup"',
   );
 });
