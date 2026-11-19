@@ -20,24 +20,30 @@ export type ArtifactFileEntry = { path: string; sha256: string; sizeBytes: numbe
 /** The server's answer to `read`. */
 export type ArtifactReadAnswer = {
   artifact: { id: string; title: string; currentVersion: number };
-  version: { number: number; note?: string | null; label?: string | null } | null;
+  version: {
+    number: number;
+    note?: string | null;
+    label?: string | null;
+    publisher?: { kind: string; name: string } | null;
+    createdAt?: string | null;
+  } | null;
+  url?: string | null;
+  home?: string | null;
+  origin?: { messageId: string; target?: string | null; threadRootId?: string | null } | null;
+  viewing?: string[] | null;
   entryPath?: string | null;
   entryKind?: string;
   files?: ArtifactFileEntry[];
   text: string;
-  /** What others pushed since the Agent last looked; null for an older version, absent from an
-   * older server. */
   unseen?: ArtifactUnseen | null;
-  /** The comments of others the Agent has not read, whichever version is shown; null when the
-   * server could not say, absent from an older one. */
   unseenComments?: UnseenCommentsAnswer | null;
 };
 
-/** The server's answer to `move`. */
 export type ArtifactMovedAnswer = {
   artifact: { id: string; title: string };
   from: string;
   to: string;
+  url?: string | null;
 };
 
 export type ArtifactDeletedAnswer = {
@@ -49,6 +55,7 @@ export type ArtifactSavedAnswer = TellingAnswer & {
   artifact: { id: string; title: string; entryPath?: string };
   created: boolean;
   attachment: { id: string; fileName: string };
+  url?: string | null;
 };
 
 export function formatArtifactSaved(answer: ArtifactSavedAnswer): string {
@@ -57,14 +64,16 @@ export function formatArtifactSaved(answer: ArtifactSavedAnswer): string {
     created
       ? `Saved attachment "${foldUntrustedLine(attachment.fileName)}" as artifact "${foldUntrustedLine(artifact.title)}" (id ${artifact.id}), version 1. Nothing was posted in the conversation.`
       : `Attachment "${foldUntrustedLine(attachment.fileName)}" was already saved as artifact "${foldUntrustedLine(artifact.title)}" (id ${artifact.id}): nothing was made.`,
+    ...(answer.url ? [`Open: ${answer.url}`] : []),
     ...(created ? formatTelling(artifact.id, answer) : []),
     `Read it: ${readCommand(artifact.id)}`,
   ].join("\n");
 }
 
-export function formatArtifactMoved({ artifact }: ArtifactMovedAnswer): string {
+export function formatArtifactMoved({ artifact, url }: ArtifactMovedAnswer): string {
   return [
     `Moved "${foldUntrustedLine(artifact.title)}" (id ${artifact.id}) to the Workspace: every member and every Agent of it can now see it, with its comments and every version.`,
+    ...(url ? [`Open: ${url}`] : []),
     "Only a person can move it back to its conversation (Who can see, on its page); you cannot.",
   ].join("\n");
 }
@@ -73,16 +82,12 @@ export function formatArtifactDeleted({ artifact }: ArtifactDeletedAnswer): stri
   return `Deleted "${foldUntrustedLine(artifact.title)}" (id ${artifact.id}) with every version and comment. No one can open it any more, and this cannot be undone.`;
 }
 
-/** How many files `read` lists unless asked for all. */
 const READ_FILES_SHOWN = 10;
 
-/** A list answer: the rows alone, or a page of them with the cursor of the next one. */
 type ListAnswer = ListRow[] | { artifacts: ListRow[]; nextCursor?: string | null };
 
 const readCommand = (id: string) => `coforge artifact read ${id}`;
 
-/** The readable artifacts of a home, newest first: one line each (title, id, version, when), how
- * to read one, and, when more exist, the command for the next page. */
 export function formatArtifactList(
   answer: ListAnswer,
   nextPage?: (cursor: string) => string,
@@ -105,8 +110,6 @@ const size = (bytes: number) =>
       ? `${(bytes / 1024).toFixed(1)} KiB`
       : `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
 
-/** The artifact's version line and its files; then the entry file's text, unless it went to a
- * file. */
 export function formatArtifactRead(
   read: ArtifactReadAnswer,
   withText: boolean,
@@ -114,9 +117,21 @@ export function formatArtifactRead(
 ): string {
   const { artifact, version } = read;
   const shown = version?.number ?? 0;
+  const publisher = version?.publisher?.name
+    ? ` by ${foldUntrustedLine(version.publisher.name)}`
+    : "";
+  const publishedAt = version?.createdAt ? `, ${version.createdAt}` : "";
   const lines = [
-    `Artifact "${artifact.title}" (id ${artifact.id}), version ${shown} of ${artifact.currentVersion}${version?.label ? `, labelled "${version.label}"` : ""}.`,
+    `Artifact "${artifact.title}" (id ${artifact.id}), version ${shown} of ${artifact.currentVersion}${version?.label ? `, labelled "${version.label}"` : ""}${publisher}${publishedAt}.`,
   ];
+  if (read.url) lines.push(`Open: ${read.url}`);
+  if (read.home) lines.push(`Home: ${foldUntrustedLine(read.home)}`);
+  if (read.origin)
+    lines.push(
+      `From: message ${read.origin.messageId}${read.origin.target ? ` in ${foldUntrustedLine(read.origin.target)}` : ""}`,
+    );
+  if (read.viewing && read.viewing.length > 0)
+    lines.push(`Viewing now: ${read.viewing.map(foldUntrustedLine).join(", ")}`);
   const files = read.files ?? [];
   if (files.length > 0) {
     if (read.entryPath)

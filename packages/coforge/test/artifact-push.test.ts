@@ -267,3 +267,29 @@ test("a push the server answers with nothing keeps the pulled version and says n
   expect(said).not.toContain("holds what the directory holds");
   expect(said).toContain(`coforge artifact pull ${ID}`);
 });
+
+test("push prints Open URL when the server returns url on create and update", async () => {
+  const url = `https://app.example/w/acme/artifacts/${ID}`;
+  const server = fakeServer({ "a.md": "a" });
+  const dir = join(root, "with-url");
+  await mkdir(dir);
+  await writeFile(join(dir, "a.md"), "hello");
+  const transport = {
+    ...server.transport,
+    artifact: async (request: AgentArtifactRequest) => {
+      const answer = (await server.transport.artifact(request)) as Record<string, unknown>;
+      return request.operation === "push" && answer.status !== "missing"
+        ? { ...answer, url }
+        : answer;
+    },
+  };
+  const createdSaid = (await runArtifact(
+    invoke(["push", dir, "--target", "#launch", "--title", "Plan"]),
+    transport,
+  )) as string;
+  expect(createdSaid).toContain(`Open: ${url}`);
+
+  await writeFile(join(dir, "a.md"), "hello v2");
+  const updatedSaid = (await runArtifact(invoke(["push", dir]), transport)) as string;
+  expect(updatedSaid).toContain(`Open: ${url}`);
+});

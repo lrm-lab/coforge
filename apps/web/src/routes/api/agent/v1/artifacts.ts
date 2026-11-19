@@ -18,6 +18,11 @@ import {
   productionArtifacts,
 } from "#src/server/artifacts/artifact-composition.server";
 import { getAppRateLimits } from "#src/server/app-rate-limits/app-rate-limits-composition.server";
+import { artifactApplicationOrigin } from "#src/server/artifacts/artifact-sandbox-config.server";
+import {
+  centrifugoServerApiConfigured,
+  createCentrifugoServerApi,
+} from "#src/server/centrifugo/server-api.server";
 
 export async function handleAgentArtifactPost(
   request: Request,
@@ -40,6 +45,18 @@ export const Route = createFileRoute("/api/agent/v1/artifacts")({
     handlers: {
       POST: ({ request, context: { principal, db } }) => {
         const { documents, blobs } = productionArtifacts(db);
+        const requestOrigin = () => {
+          const configured = artifactApplicationOrigin();
+          if (configured) return configured;
+          try {
+            return new URL(request.url).origin;
+          } catch {
+            return null;
+          }
+        };
+        const presence = centrifugoServerApiConfigured()
+          ? (channel: string) => createCentrifugoServerApi().presence(channel)
+          : undefined;
         return handleAgentArtifactPost(request, principal, {
           db,
           documents,
@@ -49,6 +66,8 @@ export const Route = createFileRoute("/api/agent/v1/artifacts")({
           signals: productionArtifactSignals(),
           attachments: productionArtifactAttachments(db),
           writeLimit: getAppRateLimits().artifactWrite,
+          appOrigin: requestOrigin,
+          presence,
         });
       },
     },

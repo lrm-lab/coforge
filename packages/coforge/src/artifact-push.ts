@@ -34,17 +34,15 @@ type SaveAnswer = TellingAnswer & {
   number?: number;
   merged?: string[];
   missing?: string[];
+  url?: string | null;
 };
 
-/** A push over a version of an artifact, and a push that makes one. */
 type PushRequest = Extract<AgentArtifactRequest, { operation: "push"; artifact: string }>;
 type CreateRequest = Extract<AgentArtifactRequest, { operation: "push"; artifact?: undefined }>;
 
 const toManifest = (files: LocalFile[]): AgentArtifactFile[] =>
   files.map(({ path, sha256 }) => ({ path, sha256 }));
 
-/** `coforge artifact push`: the files of a directory that differ from its state, or a new
- * artifact made from a directory that has none. */
 export async function runPush(
   invocation: ArtifactDirectoryInvocation,
   draft: Extract<ArtifactDirectoryDraft, { operation: "push" }>,
@@ -96,6 +94,7 @@ export async function runPush(
       created,
       [
         `Created artifact "${created.title}" (id ${created.id}, name ${created.name}), version ${created.currentVersion}, from ${local.size} file${local.size === 1 ? "" : "s"}.`,
+        ...(created.url ? [`Open: ${created.url}`] : []),
         ...formatTelling(created.id, created),
         `Read it: coforge artifact read ${created.id}`,
         `Send changes later: coforge artifact push ${shellWord(draft.dir)}`,
@@ -130,8 +129,6 @@ export async function runPush(
   } catch (error) {
     throw baseMoved(error, state, draft.dir);
   }
-  // "Nothing" names no version: the server holds what this push names, but maybe in a version
-  // newer than the base, so the directory stays as pulled until the next pull.
   if (answer.status === "nothing" && answer.titleChanged)
     return asJson(
       invocation,
@@ -163,6 +160,7 @@ export async function runPush(
   ].filter(Boolean);
   const message = [
     `${answer.status === "replayed" ? "Already pushed as" : "Pushed"} version ${version}${pushed.length ? `: ${pushed.join("; ")}` : ""}.`,
+    ...(answer.url ? [`Open: ${answer.url}`] : []),
     ...(merged.length > 0
       ? [
           `Merged with what others saved since version ${state.version}: ${merged.join(", ")}. Their files are now in the directory.`,
@@ -178,6 +176,7 @@ type Created = TellingAnswer & {
   name: string;
   title: string;
   currentVersion: number;
+  url?: string | null;
 };
 
 async function createFromDirectory(

@@ -34,6 +34,11 @@ import { noteReadPosition, readWithPosition } from "./artifact-read-positions.se
 import type { FileManifest } from "./artifact-manifest.server";
 import type { ArtifactDocuments } from "./artifact-documents.server";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
+import {
+  artifactReadContext,
+  artifactWebUrl,
+  type ArtifactPresencePort,
+} from "./agent-artifact-context.server";
 
 export type AgentArtifactServices = {
   db: PrismaClient;
@@ -55,6 +60,8 @@ export type AgentArtifactServices = {
   signals?: ArtifactSignals | undefined;
   attachments?: ArtifactAttachmentPort | undefined;
   writeLimit?: AppRateLimit | undefined;
+  appOrigin?: (() => string | null) | undefined;
+  presence?: ArtifactPresencePort | undefined;
 };
 
 const { id, version, baseVersion, title, description, note, label } = artifactInputs;
@@ -196,19 +203,26 @@ export async function runAgentArtifactOperation(
         version: input.version,
       });
       const current = (read.version?.number ?? 0) === read.artifact.currentVersion;
-      const unseen = await readWithPosition(services.db, {
-        artifactId: read.artifact.id,
-        agentId,
-        workspaceId,
-        shown: read.version?.number ?? 0,
-        current: read.artifact.currentVersion,
-      });
-      const unseenComments = current
-        ? await unseenCommentsOf(services.db, principal, read.artifact.id)
-        : null;
+      const [unseen, unseenComments, context] = await Promise.all([
+        readWithPosition(services.db, {
+          artifactId: read.artifact.id,
+          agentId,
+          workspaceId,
+          shown: read.version?.number ?? 0,
+          current: read.artifact.currentVersion,
+        }),
+        current ? unseenCommentsOf(services.db, principal, read.artifact.id) : null,
+        artifactReadContext(services.db, {
+          workspaceId,
+          artifact: read.artifact,
+          appOrigin: services.appOrigin,
+          presence: services.presence,
+        }),
+      ]);
       const entryPath = read.version?.entryPath ?? read.artifact.entryPath;
       return {
         ...read,
+        ...context,
         entryPath,
         entryKind: artifactKindOfPath(entryPath),
         unseen,
@@ -236,7 +250,11 @@ export async function runAgentArtifactOperation(
         });
         if (created.currentVersion > 0)
           await noteReadPosition(services.db, { artifactId: created.id, agentId, version: 1 });
-        return { ...created, ...(await followedByCreate(writes, principal, created)) };
+        const [followed, url] = await Promise.all([
+          followedByCreate(writes, principal, created),
+          artifactWebUrl(services.db, workspaceId, created.id, services.appOrigin),
+        ]);
+        return { ...created, ...followed, ...(url ? { url } : {}) };
       }
       const {
         artifact,
@@ -258,11 +276,18 @@ export async function runAgentArtifactOperation(
             noteReadPosition(services.db, { artifactId: artifact, agentId, version: number }),
         },
       );
+      const [followed, url] = await Promise.all([
+        followedByPush(writes, principal, artifact, saved, input),
+        saved.status === "missing"
+          ? null
+          : artifactWebUrl(services.db, workspaceId, artifact, services.appOrigin),
+      ]);
       return {
         ...saved,
         ...(saved.status === "nothing" ? { unchanged: true } : {}),
         ...(saved.status === "replayed" ? { replayed: true } : {}),
-        ...(await followedByPush(writes, principal, artifact, saved, input)),
+        ...followed,
+        ...(url ? { url } : {}),
       };
     }
     case "move": {
@@ -277,12 +302,19 @@ export async function runAgentArtifactOperation(
           errorId: "artifact-request",
           hint: "to is not accepted: an Agent can only move an artifact to workspace",
         });
-      return services.documents.moveToWorkspace(
+      const moved = await services.documents.moveToWorkspace(
         { workspaceId, actor: { agentId } },
         {
           artifactId: input.artifact,
         },
       );
+      const url = await artifactWebUrl(
+        services.db,
+        workspaceId,
+        input.artifact,
+        services.appOrigin,
+      );
+      return { ...moved, ...(url ? { url } : {}) };
     }
     case "delete": {
       const input = parsed.data as z.infer<typeof RULES.delete>;
@@ -308,9 +340,19 @@ export async function runAgentArtifactOperation(
         principal,
         (parsed.data as z.infer<typeof RULES.save>).attachment,
       );
-      if (!saved.created) return saved;
+      const url = await artifactWebUrl(
+        services.db,
+        workspaceId,
+        saved.artifact.id,
+        services.appOrigin,
+      );
+      if (!saved.created) return { ...saved, ...(url ? { url } : {}) };
       await noteReadPosition(services.db, { artifactId: saved.artifact.id, agentId, version: 1 });
-      return { ...saved, ...(await followedByCreate(writes, principal, saved.artifact)) };
+      return {
+        ...saved,
+        ...(await followedByCreate(writes, principal, saved.artifact)),
+        ...(url ? { url } : {}),
+      };
     }
     case "image":
       return readCommentImage(

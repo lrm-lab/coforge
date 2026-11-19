@@ -9,6 +9,7 @@ import {
   type ActorConversationHomeRead,
 } from "#src/server/conversations/channel-read-access.server";
 import { isWorkspaceAdminRole } from "#src/features/workspaces/workspace-roles";
+import { actorNames, actorOf } from "./artifact-actor-names.server";
 import { epochTimestamp, visibleToReaderSql } from "./artifact-visible.server";
 import {
   artifactAuthorOwnerId,
@@ -217,15 +218,33 @@ export class ArtifactReads {
         description: true,
         merged: true,
         createdAt: true,
+        publisherAgentId: true,
+        publisherUserId: true,
       },
     });
     if (!version) throw new AppError("NOT_FOUND");
-    const files = await this.db.artifactFile.findMany({
-      where: { versionId: version.id },
-      select: { path: true, sha256: true, sizeBytes: true, kind: true },
-      orderBy: { path: "asc" },
-    });
-    return { artifact, version, files, viewer, authorAgentOwnerId };
+    const [files, names] = await Promise.all([
+      this.db.artifactFile.findMany({
+        where: { versionId: version.id },
+        select: { path: true, sha256: true, sizeBytes: true, kind: true },
+        orderBy: { path: "asc" },
+      }),
+      actorNames(this.db, input.workspaceId, {
+        userIds: version.publisherUserId ? [version.publisherUserId] : [],
+        agentIds: version.publisherAgentId ? [version.publisherAgentId] : [],
+      }),
+    ]);
+    const { publisherAgentId, publisherUserId, ...shownVersion } = version;
+    return {
+      artifact,
+      version: {
+        ...shownVersion,
+        publisher: actorOf(names, { userId: publisherUserId, agentId: publisherAgentId }),
+      },
+      files,
+      viewer,
+      authorAgentOwnerId,
+    };
   }
 
   async file(input: {

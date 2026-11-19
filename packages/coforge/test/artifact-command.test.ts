@@ -396,3 +396,66 @@ test("a push over a version the artifact moved past keeps the server's code and 
   expect(error.retryable).toBe(false);
   expect(error.correlationId).toBe("c1");
 });
+
+test("read accepts --rev as well as --version, and rejects conflicting values", () => {
+  expect(parseArgs(["artifact", "read", ID, "--rev", "2"])).toEqual({
+    command: "artifact",
+    request: { operation: "read", artifact: ID, version: 2 },
+  });
+  expect(parseArgs(["artifact", "read", ID, "--rev", "2", "--version", "2"])).toEqual({
+    command: "artifact",
+    request: { operation: "read", artifact: ID, version: 2 },
+  });
+  expect(() => parseArgs(["artifact", "read", ID, "--rev", "2", "--version", "3"])).toThrow(
+    CliError,
+  );
+});
+
+test("read prints Open URL, home, origin, viewing now, and publisher metadata when returned", async () => {
+  const url = `https://app.example/w/acme/artifacts/${ID}`;
+  const { transport } = transportAnswering({
+    artifact: { id: ID, title: "Plan", currentVersion: 3 },
+    version: {
+      number: 3,
+      label: null,
+      publisher: { kind: "agent", name: "Writer" },
+      createdAt: "2026-11-18T10:00:00.000Z",
+    },
+    url,
+    home: "#launch",
+    origin: { messageId: "m-1", target: "#launch" },
+    viewing: ["Alice", "Bob"],
+    files: [],
+    text: "# Plan\n",
+  });
+  const said = (await runArtifact(invocation(["read", ID]), transport)) as string;
+  expect(said).toContain("by Writer, 2026-11-18T10:00:00.000Z");
+  expect(said).toContain(`Open: ${url}`);
+  expect(said).toContain("Home: #launch");
+  expect(said).toContain("From: message m-1 in #launch");
+  expect(said).toContain("Viewing now: Alice, Bob");
+});
+
+test("move and save print Open URL when returned", async () => {
+  const url = `https://app.example/w/acme/artifacts/${ID}`;
+  const moved = transportAnswering({
+    artifact: { id: ID, name: "plan", title: "Plan", currentVersion: 2 },
+    from: "conversation",
+    to: "workspace",
+    url,
+  });
+  const movedSaid = (await runArtifact(
+    invocation(["move", ID, "--to", "workspace"]),
+    moved.transport,
+  )) as string;
+  expect(movedSaid).toContain(`Open: ${url}`);
+
+  const saved = transportAnswering({
+    artifact: { id: ID, title: "report.pdf", entryPath: "report.pdf" },
+    created: true,
+    attachment: { id: "att-1", fileName: "report.pdf" },
+    url,
+  });
+  const savedSaid = (await runArtifact(invocation(["save", "att-1"]), saved.transport)) as string;
+  expect(savedSaid).toContain(`Open: ${url}`);
+});

@@ -22,14 +22,14 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
     example: "coforge artifact list --target '#launch'",
   },
   "artifact read": {
-    syntax: "coforge artifact read <id> [--version <n>] [--files] [--output <path>] [--json]",
+    syntax: "coforge artifact read <id> [--rev <n>] [--files] [--output <path>] [--json]",
     flags: [
-      "--version  an earlier version; the current one by default",
+      "--rev  an earlier version; the current one by default (--version is accepted as an alias)",
       "--files  list every file of the version (the first few by default)",
       "--output  write the text to this file instead of printing it",
     ],
     guidance:
-      "Prints the version line, the entry and the version's files, what others pushed since you last read the current version, then `---` and the entry's text. To change files, `pull` the artifact instead.",
+      "Prints the version line, Open URL, home, origin, live viewers, the entry and the version's files, what others pushed since you last read the current version, then `---` and the entry's text. To change files, `pull` the artifact instead.",
     example: "coforge artifact read 0f8c…e1 --output plan.md",
   },
   "artifact pull": {

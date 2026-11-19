@@ -74,7 +74,7 @@ type RequestOperation = "list" | "read" | "move" | "delete" | "follow" | "unfoll
 
 const FLAGS: Record<RequestOperation, FlagSpec> = {
   list: { text: ["--target", "--query", "--after"], count: ["--limit"], positionals: 0 },
-  read: { text: ["--output"], count: ["--version"], bool: ["--files"], positionals: 1 },
+  read: { text: ["--output"], count: ["--version", "--rev"], bool: ["--files"], positionals: 1 },
   move: { text: ["--to"], positionals: 1 },
   delete: { positionals: 1 },
   save: { positionals: 1 },
@@ -148,18 +148,23 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
         },
         ...options,
       };
-    case "read":
+    case "read": {
+      const rev = count["--rev"];
+      const version = count["--version"];
+      if (rev !== undefined && version !== undefined && rev !== version)
+        throw invalidArgument(command, "Pass either --rev or --version, not both");
       return {
         command: "artifact",
         request: {
           operation: "read",
           artifact: artifact!,
-          ...optional("version", count["--version"]),
+          ...optional("version", rev ?? version),
         },
         ...optional("output", text["--output"]),
         ...(switches.has("--files") ? { allFiles: true } : {}),
         ...options,
       };
+    }
     case "move":
       return {
         command: "artifact",
