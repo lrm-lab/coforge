@@ -89,7 +89,6 @@ The architecture invariants every change must respect are in
 | [docs/agents/command-code-acp.md](docs/agents/command-code-acp.md) | Command Code ACP model catalog, per-model efforts and tool titles |
 | [docs/agents/codex-app-server.md](docs/agents/codex-app-server.md) | Codex app-server reset credit, catalog fallback, retry, resume recovery, turn signals, idle recycle and context usage |
 | [docs/computer/container-host.md](docs/computer/container-host.md) | The Computer `host/` runtime: Swarm service per cloud Computer, volumes, update jobs and heartbeats |
-| [docs/research/](docs/research/README.md) | Evidence-backed research reports |
 | [apps/web/README.md](apps/web/README.md) | Web app setup and scripts |
 | [apps/web/assets/mascots/README.md](apps/web/assets/mascots/README.md) | Agent mascot Rive file: generator, runtime contract, static avatars, Rive CLI pin |
 | [apps/web/src/components/ui/README.md](apps/web/src/components/ui/README.md) | UI component inventory and exceptions |

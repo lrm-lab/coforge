@@ -40,8 +40,10 @@ Compare with [`docs/release/`](../../release/README.md).
   tree, or the command name inside the daemon bundle, so a reviewer can
   re-derive them.
 - Record the version you actually examined, with its artifact target, release
-  id, hash, and observation date, in each research note or CR that cites the
-  reference. A conclusion holds for that version; when a later release is out,
-  re-check it there rather than carrying it forward unverified.
+  id, hash, and observation date, in the task thread, CR description, or
+  scratch artifact that cites the reference (do not commit research notes to
+  this repository). A conclusion holds only for that snapshot; always
+  re-verify against the latest shipped release, live behavior, and current
+  source rather than carrying prior notes forward.
 - Never mix evidence from different releases, an npm package, or an
   unverified artifact into one conclusion.

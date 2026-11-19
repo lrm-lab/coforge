@@ -15,6 +15,7 @@ Before editing files for a substantial task:
 
 - Do not turn an unresolved question into code or a repository convention. Present the options and trade-offs in `#coforge`, then record the decision in the CR description before implementation; use Frank's approval only when the decision meets a gate below.
 - This repository keeps no ADRs, no separate architecture document, and no implementation-slice notes. Do not create decision logs, even when a skill suggests one (`no-decision-docs` blocks `docs/adr/` and `docs/architecture.md`). The architecture invariants below and the owning directory's `AGENTS.md` are the maintained rules.
+- This repository keeps no `docs/research/` directory and no research or audit note files (`no-research-docs` blocks any tracked file under `docs/research/`). Record findings in the task thread, CR description, or scratch artifacts instead of committing them to the repository.
 
 ## Documentation and agent instructions
 

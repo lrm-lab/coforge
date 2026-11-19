@@ -126,6 +126,20 @@ test("an added docs/adr file or docs/architecture.md is blocked; an existing one
   ]);
 });
 
+test("any tracked file under docs/research/ is blocked across the whole tree", () => {
+  expect(
+    found({
+      "docs/research/README.md": "# Research\n",
+      "docs/research/nested/audit.md": "# Audit\n",
+      "docs/research-notes.md": "# Not under docs/research/\n",
+      "docs/agents/reference-cli-research/README.md": "# Reference guide\n",
+    }),
+  ).toEqual([
+    "no-research-docs docs/research/README.md: a research or audit note under docs/research/",
+    "no-research-docs docs/research/nested/audit.md: a research or audit note under docs/research/",
+  ]);
+});
+
 const repo = useTestRepo();
 
 test("a commit with a Next.js directive, a next dependency or a new ADR is blocked, and a clean one passes", () => {
@@ -170,4 +184,24 @@ test("range mode judges the tree at the head", () => {
   expect(result.exitCode).toBe(1);
   expect(result.stderr).toContain("no-nextjs");
   expect(result.stderr).toContain("apps/web/src/a.ts");
+});
+
+test("a commit or range leaving any file under docs/research/ is blocked until removed", () => {
+  const base = repo.seed({ "README.md": "# Repo\n", "docs/research/old.md": "# Old\n" });
+
+  repo.write({ "README.md": "# Updated\n" });
+  const blocked = repo.commitAll();
+  expect(blocked.exitCode).not.toBe(0);
+  expect(blocked.stderr).toContain("no-research-docs (1)");
+  expect(blocked.stderr).toContain("docs/research/old.md");
+
+  repo.seed({ "README.md": "# Still has research\n" });
+  const rangeBlocked = repo.range(base);
+  expect(rangeBlocked.exitCode).toBe(1);
+  expect(rangeBlocked.stderr).toContain("no-research-docs (1)");
+  expect(rangeBlocked.stderr).toContain("docs/research/old.md");
+
+  repo.ok("rm", "-q", "docs/research/old.md");
+  expect(repo.commitAll()).toMatchObject({ exitCode: 0, stderr: "" });
+  expect(repo.range(base).stderr).toBe("");
 });

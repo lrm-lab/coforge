@@ -1,12 +1,17 @@
 // The hard rules judged on the whole tree a change leaves, not on its diff: the web module maps
-// and the documentation index must be complete, and Next.js must not come in. Pure functions of
+// and the documentation index must be complete, and Next.js and docs/research/ must not exist. Pure functions of
 // the tracked paths and a file reader, so the tests need no repository; hard-rules.ts supplies both.
 // `no-decision-docs` judges the change's added files. See docs/agents/git-hooks/hard-rules.md.
 import { dirname, posix } from "node:path";
 import type { ChangeSource } from "../git-hooks/staged-file-size";
 import { linkPath, markdownLinks } from "./markdown-links";
 
-export type TreeRule = "module-map" | "docs-index" | "no-nextjs" | "no-decision-docs";
+export type TreeRule =
+  | "module-map"
+  | "docs-index"
+  | "no-nextjs"
+  | "no-decision-docs"
+  | "no-research-docs";
 export type TreeViolation = { rule: TreeRule; location: string; found: string };
 export type Tree = { paths: string[]; read: (paths: string[]) => Map<string, string> };
 
@@ -19,6 +24,8 @@ export const TREE_FIX: Record<TreeRule, string> = {
     'The Web app is TanStack Start: remove the `next` dependency, the `"use server"` directive or `getServerSideProps` (AGENTS.md, Toolchain).',
   "no-decision-docs":
     "This repository keeps no ADRs and no separate architecture document: record the decision in the CR description, and the maintained rules in AGENTS.md.",
+  "no-research-docs":
+    "This repository keeps no docs/research/ directory or research/audit notes: delete the files and record findings in the task thread, CR description, or scratch artifacts.",
 };
 
 const MAPS = [
@@ -169,6 +176,16 @@ function decisionDocs(added: string[]): TreeViolation[] {
     }));
 }
 
+function researchDocs({ paths }: Tree): TreeViolation[] {
+  return paths
+    .filter((path) => /^docs\/research(\/|$)/.test(path))
+    .map((location) => ({
+      rule: "no-research-docs" as const,
+      location,
+      found: "a research or audit note under docs/research/",
+    }));
+}
+
 export function treeViolations(
   tree: Tree,
   added: string[],
@@ -179,6 +196,7 @@ export function treeViolations(
     ...docsIndex(tree),
     ...nextjs(tree, serverDirectiveHits),
     ...decisionDocs(added),
+    ...researchDocs(tree),
   ];
 }
 

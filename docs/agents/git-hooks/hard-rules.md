@@ -55,8 +55,9 @@ one `hard-rules: <message>` line, prefixed `::error::` on GitHub Actions.
 | `docs-index` | Where the root `AGENTS.md` and `README.md` exist: a file or directory directly under `docs/` is not linked from `README.md` (a link to the path or anything inside it counts), or a nested `AGENTS.md` is linked from neither `README.md` nor an ancestor `AGENTS.md`. Links in code are not links. |
 | `no-nextjs` | Any tracked `package.json` lists `next` in its dependencies, dev, peer or optional dependencies, or a file under `apps/web/src` contains `"use server"` or `getServerSideProps`. |
 | `no-decision-docs` | The change adds a file under `docs/adr/` or `docs/architecture.md`: the repository keeps no decision logs. |
+| `no-research-docs` | Any tracked file lives under `docs/research/`: the repository keeps no research or audit notes. |
 
-The last four rules read the tree the change leaves (the index, or the range head) through
+The last five rules read the tree the change leaves (the index, or the range head) through
 `scripts/ci/tree-rules.ts`, not the diff, so a commit that leaves any of them broken is blocked even
 if it did not cause it; `no-decision-docs` alone judges the files the change adds.
 
