@@ -57,7 +57,7 @@ describe("desktop page adaptation", () => {
     expect(html).not.toContain("msg.remove()");
   });
 
-  test("a reconnect page that already has phone gestures, keyboard, fab and copy-out is left alone", () => {
+  test("a reconnect page that already has phone gestures, keyboard, fab viewport and copy-out is left alone", () => {
     const current = `<!DOCTYPE html>
 <script type="module">
     import RFB from "./core/rfb.js";
@@ -65,6 +65,7 @@ describe("desktop page adaptation", () => {
     function coforgeWriteLocalClipboard(text) {}
     function coforgeDesktopCopyOut() {}
     function coforgeAttachPhoneGestures() {}
+    function placePhoneFabInViewport() {}
     const phone = params.get("view") === "phone";
 </script>
 <button type="button" id="coforge-desktop-phone-fab"></button>
@@ -73,6 +74,27 @@ describe("desktop page adaptation", () => {
 <button type="button" id="coforge-desktop-reconnect"></button>
 `;
     expect(adaptDesktopHtml(current)).toBe(current);
+  });
+
+  test("a FAB page without viewport reclamp is rewritten", () => {
+    const stale = `<!DOCTYPE html>
+<script type="module">
+    import RFB from "./core/rfb.js";
+    function coforgeDesktopPaste(text) {}
+    function coforgeWriteLocalClipboard(text) {}
+    function coforgeDesktopCopyOut() {}
+    function coforgeAttachPhoneGestures() {}
+    function coforgeAttachPhoneFab() {}
+    const phone = params.get("view") === "phone";
+</script>
+<button type="button" id="coforge-desktop-phone-fab"></button>
+<div id="coforge-desktop-phone-bar"></div>
+<textarea id="coforge-desktop-keyboard-input"></textarea>
+<button type="button" id="coforge-desktop-reconnect"></button>
+`;
+    const html = adaptDesktopHtml(stale);
+    expect(html).toContain("placePhoneFabInViewport");
+    expect(html).not.toBe(stale);
   });
 
   test("a phone fit/pan page without gestures is rewritten for keys and touch", () => {
@@ -163,6 +185,8 @@ describe("desktop page adaptation", () => {
     expect(html).toContain("coforgeAttachPhoneKeyboard");
     expect(html).toContain("0x01000000");
     expect(html).toContain("0xff08");
+    expect(html).toContain("placePhoneFabInViewport");
+    expect(html).toMatch(/openKeyboard\(\);\s*setPhoneTrayOpen\(false\)/);
   });
 
   test("a reconnect page that still uses extended clipboard paste is rewritten", () => {
