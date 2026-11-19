@@ -24,6 +24,7 @@ const REMINDER_REFUSAL_STATUS: Record<ReminderRefusal["code"], number> = {
   NOT_FOUND: 404,
   CONFLICT: 409,
   TEMPORARILY_UNAVAILABLE: 503,
+  RATE_LIMITED: 429,
 };
 
 function optionalRealtimePorts(): {

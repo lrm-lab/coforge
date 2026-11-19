@@ -33,7 +33,8 @@ export type ReminderRefusalCode =
   | "NOT_FOUND"
   | "ACCESS_DENIED"
   | "CONFLICT"
-  | "TEMPORARILY_UNAVAILABLE";
+  | "TEMPORARILY_UNAVAILABLE"
+  | "RATE_LIMITED";
 
 /**
  * A refusal the domain can name. The WebSocket path has always put the message in `reason`; the
