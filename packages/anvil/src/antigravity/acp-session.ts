@@ -17,6 +17,8 @@ import { parseAntigravityQuotaLimit } from "./quota";
 
 export const ANTIGRAVITY_ACP_TIMEOUT_MS = 120_000;
 
+export const ANTIGRAVITY_MAX_INPUT_BYTES = 185_000;
+
 const STDERR_TAIL_LINES = 40;
 
 const ANTIGRAVITY_SESSION_MISSING_CODE = -32002;
@@ -207,6 +209,7 @@ function antigravitySessionProfile(
       return { sessionId: opened, resumable: resuming && !replaced, replacedSessionId: replaced };
     },
     turn: () => new AntigravityAcpTurnEvents(host),
+    maxInputBytes: ANTIGRAVITY_MAX_INPUT_BYTES,
     annotateFailure: (event, error) => {
       if (!(error instanceof RequestError)) return event;
       const providerLimit = parseAntigravityQuotaLimit(event.message);

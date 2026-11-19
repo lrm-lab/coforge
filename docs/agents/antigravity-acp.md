@@ -42,6 +42,10 @@ Part of [the documentation index](../../README.md). The Antigravity adapter runs
   `-32602` steer error reports `notice-undelivered` so the daemon redelivers once idle.
   A steer whose answer never arrives holds the turn open until interrupt — there is no watchdog
   on the merged turn's length.
+- Inputs exceeding 185,000 UTF-8 bytes (`ANTIGRAVITY_MAX_INPUT_BYTES`) are rejected before
+  `session/prompt` dispatch (for both initial turns and busy-turn steers) so `agy` does not
+  silently truncate long prompts; the error classifies as `input_too_large` and leaves the
+  session healthy for subsequent inputs.
 - A terminal RPC failure after prompt submission is an accepted failed turn, not an admission
   refusal. Both standalone in-band `⚠ Individual quota reached… Resets in …` warnings (with no
   `usage` and no tool/thought activity) and RPC prompt errors carrying that reset sentence emit a

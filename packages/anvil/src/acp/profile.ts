@@ -132,6 +132,7 @@ export type AcpSessionProfile = Readonly<{
   /** How long an input may wait for the runtime to accept it before the session closes as
    * ambiguous; absent for a runtime whose inputs always settle. */
   admissionTimeoutMs?: number;
+  maxInputBytes?: number;
   /** Interrupts the live turn without `session/cancel`, for a runtime that does not implement
    * it. */
   cancelTurn?(transport: AcpConnection): Promise<void>;

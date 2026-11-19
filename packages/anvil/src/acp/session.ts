@@ -15,6 +15,7 @@ import type { AcpConnection } from "./connection";
 import type { AcpNativeTurn, AcpSessionProfile } from "./profile";
 import { acpPromptFailure, acpSteerResponseFailure } from "./prompt-failure";
 import {
+  acpRejectInput,
   type AcpNativeTurnState,
   type AcpSessionInput,
   rememberCompletedPrompt,
@@ -158,10 +159,12 @@ export class AcpSession implements AgentSession {
   }
 
   notify(text: string, options?: AgentNoticeOptions): Promise<void> {
-    if (this.#disposed || this.#failed || this.#interrupting)
-      return Promise.reject(
-        new Error(`${this.profile.label} cannot accept input before submission`),
-      );
+    const rejected = acpRejectInput(
+      text,
+      this.profile,
+      this.#disposed || this.#failed || this.#interrupting,
+    );
+    if (rejected) return Promise.reject(rejected);
     const admission = Promise.withResolvers<void>();
     const prior = this.#lastAdmission;
     this.#lastAdmission = admission.promise.catch(() => undefined);
