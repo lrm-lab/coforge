@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Terminal toolkit, Node, and a slim XFCE desktop. TigerVNC stays stopped until
-# a client connects. Port 5901 is raw VNC. Port 6080 is the browser WebSocket.
+# Terminal toolkit, Node, and a slim XFCE desktop. The shared desktop stays up
+# for the container life. Port 5901 is raw VNC. Port 6080 is the browser WebSocket.
 # novnc's Python stack (numpy, websockify, oslo) is removed after install; the
 # image serves /usr/share/novnc itself.
 set -eux

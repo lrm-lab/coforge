@@ -17,3 +17,7 @@ image. Complements [container host](../../docs/computer/container-host.md) and
   this repository.
 - Changing the entrypoint, desktop/VNC ports, or `systemctl` shim must stay
   compatible with `packages/computer` `host/` placement and the desktop proxy.
+- The shared desktop (display `:1`) starts with the container and stays up.
+  Agent screens remain on-demand. Do not reintroduce idle shutdown of the
+  shared desktop without an explicit product decision (`VNC_IDLE_SECONDS=0`
+  is the default).
