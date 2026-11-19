@@ -263,6 +263,37 @@ test("reminder help names the flags its parser accepts", async () => {
     parseArgs(["reminder", "update", "--id", "abcd1234", "--cadence", "none"]),
   ).not.toThrow();
   expect(() => parseArgs(["reminder", "snooze", "--id", "abcd1234", "--by", "15m"])).not.toThrow();
+
+  expect(() =>
+    parseArgs([
+      "reminder",
+      "schedule",
+      "--title",
+      "t",
+      "--target",
+      "@ada",
+      "--msg-id",
+      "abcd1234",
+      "--delay-seconds",
+      "15m",
+      "--repeat",
+      "every:1d",
+    ]),
+  ).not.toThrow();
+  expect(() =>
+    parseArgs([
+      "reminder",
+      "schedule",
+      "--title",
+      "t",
+      "--target",
+      "@ada",
+      "--msg-id",
+      "abcd1234",
+      "--repeat",
+      "every:1d",
+    ]),
+  ).not.toThrow();
 });
 
 test("every reminder help example parses as written", () => {

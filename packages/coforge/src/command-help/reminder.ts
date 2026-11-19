@@ -7,7 +7,7 @@ export const reminderHelp: Readonly<Record<string, HelpEntry>> = {
   },
   "reminder schedule": {
     syntax:
-      "coforge reminder schedule --title <title> (--target <target>|--channel <target>) (--message-id <id>|--msg-id <id>) (--delay-seconds <n|duration>|--fire-at <iso>|--repeat <rule>) [--tz <zone>]",
+      "coforge reminder schedule --title <title> (--target <target>|--channel <target>) (--message-id <id>|--msg-id <id>) (--delay-seconds <n|duration>|--fire-at <iso>|--repeat <rule>) [--repeat <rule>] [--tz <zone>]",
     example:
       "coforge reminder schedule --title 'Check the deploy' --target '#general' --msg-id 01a1f2ec --delay-seconds 15m",
   },
