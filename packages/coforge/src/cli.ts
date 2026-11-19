@@ -157,4 +157,33 @@ export async function runAgentCli(argv: readonly string[]): Promise<void> {
   }
 }
 
-if (import.meta.main) await runAgentCli(Bun.argv.slice(2));
+type ErrorEmitter = Readonly<{
+  on(event: "error", listener: (error: NodeJS.ErrnoException) => void): unknown;
+  off(event: "error", listener: (error: NodeJS.ErrnoException) => void): unknown;
+}>;
+
+export function installStdoutEpipeGuard(
+  stdout: ErrorEmitter = process.stdout,
+  onEpipe: () => void = () => process.exit(0),
+): () => void {
+  let handled = false;
+  const onError = (error: NodeJS.ErrnoException) => {
+    if (error?.code === "EPIPE") {
+      if (!handled) {
+        handled = true;
+        onEpipe();
+      }
+      return;
+    }
+    throw error;
+  };
+  stdout.on("error", onError);
+  return () => {
+    stdout.off("error", onError);
+  };
+}
+
+if (import.meta.main) {
+  installStdoutEpipeGuard();
+  await runAgentCli(Bun.argv.slice(2));
+}

@@ -1,5 +1,6 @@
 import { statfsSync } from "node:fs";
 import { freemem, totalmem } from "node:os";
+import { mergeImportantAvailableBytes, readMacosImportantAvailableBytes } from "./volume-capacity";
 
 /** What a machine has left, in bytes; `undefined` when it could not be read or made no sense. */
 export type MachineSample = { availableBytes: number; totalBytes: number } | undefined;
@@ -9,6 +10,7 @@ export type MachineStatusIo = {
   readFile(path: string): Promise<string>;
   /** `statfsSync` on the path, in bytes; absent where the runtime cannot do it. */
   disk(path: string): { availableBytes: number; totalBytes: number } | undefined;
+  importantDiskAvailableBytes?(path: string): Promise<number | undefined>;
   totalMemory(): number;
   /** macOS only: `os.freemem`, used when `vm_stat` cannot be read. */
   freeMemory(): number;
@@ -32,6 +34,9 @@ export function hostMachineStatusIo(): MachineStatusIo {
         return undefined;
       }
     },
+    ...(process.platform === "darwin"
+      ? { importantDiskAvailableBytes: (path: string) => readMacosImportantAvailableBytes(path) }
+      : {}),
     totalMemory: totalmem,
     freeMemory: freemem,
     vmStat: () => runAsync(["/usr/bin/vm_stat"]),
@@ -63,8 +68,12 @@ export async function readDiskStatus(
   directory: string,
   io: MachineStatusIo,
 ): Promise<MachineSample> {
-  const sample = io.disk(directory);
-  return sample ? valid(sample) : undefined;
+  const base = io.disk(directory);
+  const sample = base ? valid(base) : undefined;
+  if (!sample) return undefined;
+  if (!io.importantDiskAvailableBytes) return sample;
+  const important = await io.importantDiskAvailableBytes(directory).catch(() => undefined);
+  return valid(mergeImportantAvailableBytes(sample, important));
 }
 
 const MEMINFO = /^(MemTotal|MemAvailable):\s+(\d+)\s+kB$/gm;

@@ -1,5 +1,6 @@
-import { lstat, statfs } from "node:fs/promises";
+import { lstat } from "node:fs/promises";
 import type { ReminderClock } from "#src/agent-reminder/reminder-clock";
+import { readVolumeCapacity } from "#src/platform/volume-capacity";
 
 export type MemoryMeasurement =
   | Readonly<{ kind: "measured"; bytes: number; incomplete?: boolean }>
@@ -54,14 +55,11 @@ export async function measureMemoryFile(path: string): Promise<MemoryMeasurement
 }
 
 export async function measureDiskSpace(path: string): Promise<DiskMeasurement> {
-  try {
-    const info = await statfs(path);
-    return {
-      kind: "measured",
-      availableBytes: info.bavail * info.bsize,
-      totalBytes: info.blocks * info.bsize,
-    };
-  } catch {
-    return { kind: "not_established", reason: "read_failed" };
-  }
+  const capacity = await readVolumeCapacity(path);
+  if (!capacity) return { kind: "not_established", reason: "read_failed" };
+  return {
+    kind: "measured",
+    availableBytes: capacity.availableBytes,
+    totalBytes: capacity.totalBytes,
+  };
 }

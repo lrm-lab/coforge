@@ -1,6 +1,10 @@
 import type { AgentRuntimeEvent } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
-import { AGENT_ACTIVITY_DETAIL_KIND } from "@lrm/coforge-sdk/internal";
+import {
+  AGENT_ACTIVITY_DETAIL_KIND,
+  redactCredentials,
+  truncateCodePointsWithEllipsis,
+} from "@lrm/coforge-sdk/internal";
 import { isBusyActivityDetailKind } from "./agent-activity-publisher";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
@@ -387,7 +391,7 @@ export function stalledTurnNotice(
       outcome: "indicator",
     });
     try {
-      host.publish(agentId, `Agent runtime has produced no progress for ${minutes} minutes.`);
+      host.publish(agentId, formatStalledTurnDetail(minutes, openTool?.name));
     } catch (error) {
       logger.error("Agent runtime stall notice failed to publish", {
         event: "agent_runtime:turn_stalled_publish_failed",
@@ -399,4 +403,23 @@ export function stalledTurnNotice(
       });
     }
   };
+}
+
+function sanitizeStalledToolName(name: string | undefined): string {
+  if (!name) return "";
+  const redacted = redactCredentials(name);
+  let out = "";
+  for (let i = 0; i < redacted.length; i += 1) {
+    const code = redacted.charCodeAt(i);
+    out += code < 32 || code === 127 || (code >= 0x80 && code <= 0x9f) ? " " : redacted[i]!;
+  }
+  const collapsed = out.replace(/\s+/g, " ").trim();
+  return truncateCodePointsWithEllipsis(collapsed, 80);
+}
+
+export function formatStalledTurnDetail(minutes: number, openToolName?: string): string {
+  const tool = sanitizeStalledToolName(openToolName);
+  return tool
+    ? `Agent runtime has produced no progress for ${minutes} minutes (stuck on ${tool}).`
+    : `Agent runtime has produced no progress for ${minutes} minutes.`;
 }
