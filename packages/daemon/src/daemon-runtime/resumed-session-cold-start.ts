@@ -82,7 +82,12 @@ export async function coldStartRejectedReplay(
   )
     return false;
   // Read before the exit clears the attention.
-  const unread = ports.messageAttention.check(agentId);
+  const unread = ports.messageAttention.check(agentId).map((attention) => ({
+    ...attention,
+    deliveries: ports.messageAttention
+      .pendingWindow(agentId, attention.target, attention.pendingCount)
+      .map(({ delivery }) => delivery),
+  }));
   // A delivery held now is in `unread` too; only those held later are counted from the parking.
   const held = new Set(ports.deliveryGate.pending(agentId).map(({ deliveryId }) => deliveryId));
   return ports.runtimeRelease.endAndReplace(

@@ -17,6 +17,10 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
 - After a successful current-generation `notify`, ordinary live Message delivery and concrete
   wake/resume batches report `Message received` Activity with detail kind `message_received`.
   Summary-only recovery and deduplicated inputs do not report it.
+- Keep a bounded in-memory identity set for ordinary messages included in an accepted notice.
+  A provider-confirmed resume can use it within the same daemon. An unconfirmed launch,
+  a fresh context, or a daemon restart has no prior notice identities to use. This set
+  leaves the consumed cursor and reliable-message retry schedule independent.
 - `runtime.ts` publishes that best-effort Activity before the live delivery
   ACK. An observer failure must not reject accepted input.
 - `agent-activity-publisher.ts` is the one place Activity gets its launch and sequence metadata,
@@ -116,11 +120,12 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   [tracked mention delivery](daemon-mention-delivery.md).
   Deliveries that wait for the next launch (in the cooldown, in a failed
   launch's input queue, a batched wake launch in flight, or kept by an offline
-  Agent) wait in `AgentDeliveryGate`, already ACKed. The next launch presents
-  them in one notice, or a server recovery notice covers those whose target it
-  announces (`recover` returns those targets; a message it finds already read announces nothing); the rest are
-  presented as for a launch without recovery. `flush` gives
-  them `receive`'s treatment (consumed, malformed). An explicit Stop, or a
+  Agent) wait in `AgentDeliveryGate`, already ACKed. A successful recovery notice covers held
+  ordinary deliveries whose conversation and message identities it explicitly announced.
+  A summary with counts alone leaves held deliveries eligible to be presented. A locally
+  carried summary can supply the identities it counted. A partial recovery snapshot still
+  announces the unread messages outside its enumeration budget.
+  `flush` checks consumed and previously announced identities. An explicit Stop, or a
   launch abandoned because its recovery notice was rejected, discards them;
   the next Start recovers them from the cloud read boundary.
 - `stalled-recovery.ts` owns when a message restarts a stalled provider instead

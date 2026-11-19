@@ -13,7 +13,10 @@ export type AgentInputCompletion = {
 export type AgentRecoveryContext = Pick<
   AgentStartIntent,
   "wakeMessage" | "resumeMessages" | "unreadSummary" | "unreadConversationIds" | "openTasks"
->;
+> & {
+  summaryIncludesResumeMessages?: true;
+  countedDeliveries?: readonly AgentMessageDelivery[];
+};
 export function recoveryHasContent(context: AgentRecoveryContext | undefined): boolean {
   return Boolean(
     context &&
@@ -97,5 +100,6 @@ export function recoveryOf(intent: AgentStartIntent): AgentRecoveryContext {
     unreadSummary: intent.unreadSummary,
     unreadConversationIds: intent.unreadConversationIds,
     openTasks: intent.openTasks,
+    summaryIncludesResumeMessages: true,
   };
 }

@@ -61,6 +61,7 @@ export type DeliveryNoticeHost = Pick<
   generation(agentId: string): ReturnType<typeof noticeGeneration>;
   messageReceived(agentId: string, conversation?: AgentConversationScope): void;
   acceptNotice(signal: AbortSignal, send: () => Promise<void>): Promise<void>;
+  recordAccepted(deliveries: readonly AgentMessageDelivery[]): boolean;
 };
 
 /**
@@ -177,7 +178,9 @@ export function writeDeliveryNotice(
     .then(() => {
       if (this.isCurrentGeneration(message.agentId, generation)) {
         markNotified(generation, [message]);
-        this.previewSeen.record(message.agentId, view.whole);
+        const included = new Set(view.rows.flatMap((row) => [...row.newIds]));
+        if (this.recordAccepted(announced.filter((item) => included.has(item.messageId))))
+          this.previewSeen.record(message.agentId, view.whole);
         this.noticeActionClocks.noteNoticeAccepted(message.agentId);
         this.messageReceived(message.agentId);
       }

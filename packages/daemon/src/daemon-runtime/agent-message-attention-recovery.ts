@@ -7,29 +7,40 @@ import { recoveryWakeupText } from "./agent-recovery-notice";
 import type { AttentionDecisionOutcome } from "./agent-message-attention-decision-log";
 import type { MessageAttention } from "./agent-message-attention-index";
 import { foldMessageAttention, isDeliveryTarget } from "./message-attention-fields";
+import { isOrdinaryNotice, noticeMessageKey, type NoticeMessage } from "./accepted-message-notices";
 
 export type RecoveryPlan = Readonly<{
   byTarget: Map<string, MessageAttention>;
   recoveredMessages: readonly AgentRecoveryMessage[];
+  acceptedMessages: readonly NoticeMessage[];
   announced: ReadonlySet<string>;
   notice: string;
 }>;
+
+export type RecoveryNoticeOptions = {
+  snapshotMessages: readonly AgentRecoveryMessage[];
+  countedDeliveries?: readonly NoticeMessage[];
+  accepted(messages: readonly NoticeMessage[]): void;
+};
 
 export function planRecovery(input: {
   agentId: string;
   messages: readonly AgentRecoveryMessage[];
   unreadSummary: Readonly<Record<string, number>>;
+  unreadConversationIds: Readonly<Record<string, string>>;
+  snapshotMessages: readonly AgentRecoveryMessage[];
+  countedDeliveries?: readonly NoticeMessage[];
   openTasks?: AgentStartOpenTasks;
   currentAttention: ReadonlyMap<string, MessageAttention>;
   seenDeliveryIds: ReadonlySet<string>;
   seenMessageIds: ReadonlySet<string>;
   alreadyRead(agentId: string, message: AgentRecoveryMessage): boolean;
+  alreadyNotified(message: AgentRecoveryMessage): boolean;
   decide(message: AgentRecoveryMessage, outcome: AttentionDecisionOutcome): void;
 }): RecoveryPlan | undefined {
   const { agentId, messages, unreadSummary, decide } = input;
   const byTarget = new Map(input.currentAttention);
   const recoveredTargets = new Set<string>();
-  const suppliedTargets = new Set<string>();
   const recoveredMessages: AgentRecoveryMessage[] = [];
   for (const message of [...messages].sort(
     (left, right) =>
@@ -45,14 +56,14 @@ export function planRecovery(input: {
       !isValidMessageSender(message.latestSenderKind, message.latestSenderHandle)
     )
       throw new Error("invalid Agent recovery message");
-    suppliedTargets.add(message.target);
     if (input.alreadyRead(agentId, message)) {
       decide(message, "consumed");
       continue;
     }
     if (
       input.seenDeliveryIds.has(message.deliveryId) ||
-      input.seenMessageIds.has(message.messageId)
+      input.seenMessageIds.has(message.messageId) ||
+      input.alreadyNotified(message)
     ) {
       decide(message, "already_notified");
       continue;
@@ -62,10 +73,31 @@ export function planRecovery(input: {
     decide(message, "notified");
     foldMessageAttention(byTarget, message);
   }
-  const summaryOnly = Object.entries(unreadSummary).filter(
-    ([target, count]) => !suppliedTargets.has(target) && isDeliveryTarget(target) && count > 0,
-  );
+  const enumerated = new Map<string, Set<string>>();
+  for (const message of input.snapshotMessages) {
+    if (input.unreadConversationIds[message.target] !== message.conversationId) continue;
+    const keys = enumerated.get(message.target) ?? new Set<string>();
+    keys.add(noticeMessageKey(message));
+    enumerated.set(message.target, keys);
+  }
+  const summaryOnly: [string, number][] = [];
+  for (const [target, count] of Object.entries(unreadSummary)) {
+    const remaining = count - (enumerated.get(target)?.size ?? 0);
+    if (remaining > 0 && isDeliveryTarget(target)) summaryOnly.push([target, remaining]);
+  }
   if (!recoveredTargets.size && !summaryOnly.length) return undefined;
+  const countedByTarget = new Map<string, Map<string, NoticeMessage>>();
+  for (const message of input.countedDeliveries ?? []) {
+    if (!message.target || !isOrdinaryNotice(message)) continue;
+    const counted = countedByTarget.get(message.target) ?? new Map<string, NoticeMessage>();
+    counted.set(noticeMessageKey(message), message);
+    countedByTarget.set(message.target, counted);
+  }
+  const acceptedMessages: NoticeMessage[] = [...recoveredMessages];
+  for (const [target, count] of summaryOnly) {
+    const counted = countedByTarget.get(target);
+    if (counted && counted.size <= count) acceptedMessages.push(...counted.values());
+  }
   const announced = new Set([...recoveredTargets, ...summaryOnly.map(([target]) => target)]);
   const notice = recoveryWakeupText({
     agentId,
@@ -73,5 +105,5 @@ export function planRecovery(input: {
     summaryOnly,
     openTasks: input.openTasks,
   });
-  return { byTarget, recoveredMessages, announced, notice };
+  return { byTarget, recoveredMessages, acceptedMessages, announced, notice };
 }

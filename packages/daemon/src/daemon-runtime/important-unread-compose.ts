@@ -14,6 +14,7 @@ export type UnreadNoticeComposePorts = Readonly<{
   prefix(agentId: string): string;
   /** Whether the model was already shown this message in full: it is not shown again. */
   previewedInFull(agentId: string, target: string, sequence: number): boolean;
+  captureAcceptance?(agentId: string): (messages: readonly AgentMessageDelivery[]) => boolean;
 }>;
 
 /**
@@ -49,6 +50,13 @@ export function unreadNoticeComposer(ports: UnreadNoticeComposePorts) {
       (row) => !row.newIds.size && !row.heldIds.size && !row.previews.length,
     );
     if (!view.rows.length || saysNothing) return undefined;
-    return { text: notice, shown: view.whole };
+    const record = ports.captureAcceptance?.(agentId);
+    const included = new Set(view.rows.flatMap((row) => [...row.newIds]));
+    const accepted = announced.filter((item) => included.has(item.messageId));
+    return {
+      text: notice,
+      shown: view.whole,
+      ...(record ? { accepted: () => record(accepted) } : {}),
+    };
   };
 }

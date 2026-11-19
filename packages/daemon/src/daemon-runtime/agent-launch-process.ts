@@ -166,6 +166,8 @@ export async function launchAgentProcess(
     let launchedInstructions: string | undefined;
     let standingPromptEvaluated = false;
     let lazyFreshBindPending = false;
+    let noticeSessionId: string | undefined;
+    let noticeReplacedSessionId: string | undefined;
     const runtime = await ports.agentProcessManager.start(
       agentId,
       {
@@ -191,6 +193,24 @@ export async function launchAgentProcess(
         },
         runtimeId: launch.launchId,
         onSessionId: async (sessionId, replacedSessionId) => {
+          if (
+            sessionId &&
+            current() &&
+            !ports.stops.stopping(agentId) &&
+            (sessionId !== noticeSessionId ||
+              (replacedSessionId !== undefined && replacedSessionId !== noticeReplacedSessionId))
+          ) {
+            noticeSessionId = sessionId;
+            noticeReplacedSessionId = replacedSessionId;
+            ports.messageAttention.confirmNoticeContext(
+              agentId,
+              config.provider,
+              sessionId,
+              resumedSessionId === sessionId &&
+                request.replacedSessionId === undefined &&
+                replacedSessionId === undefined,
+            );
+          }
           await sessionIds.onSessionId?.(sessionId, replacedSessionId);
           if (
             standingPromptEvaluated &&

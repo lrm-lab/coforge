@@ -4,6 +4,47 @@ import { connection, FAILED_TURN, harness, REJECTED } from "./fixtures/provider-
 
 afterAll(() => rm(connection.workspaceRoot, { recursive: true, force: true }));
 
+test.each(["resume", "create"] as const)(
+  "the daemon distinguishes %s even when the provider reports the same session ID",
+  async (sessionMode) => {
+    const h = await harness({ reportAs: "stored-1" });
+    try {
+      await h.deliver(1);
+      expect(h.sessions[0]?.notices.join("\n")).toContain("#general 1 new message");
+      await h.sessions[0]?.options.onSessionId?.("stored-1");
+      await h.runtime.agentProcessManager.session("agent-a")?.dispose();
+      await h.until(() => h.runtime.runtime("agent-a") === undefined);
+
+      const messages = [1, 2].map((sequence) => ({
+        messageId: `message-${sequence}`,
+        deliveryId: `replay-${sequence}`,
+        conversationId: "conversation-a",
+        sequence,
+        target: "#general",
+        latestSenderKind: "human" as const,
+        latestSenderHandle: "ada",
+        latestSenderDescription: "",
+        body: `body-${sequence}`,
+      }));
+      await h.start({
+        sessionId: "stored-1",
+        sessionMode,
+        resumeMessages: messages,
+        unreadSummary: { "#general": 2 },
+        unreadConversationIds: { "#general": "conversation-a" },
+      });
+      await h.until(() => (h.sessions[1]?.notices.length ?? 0) > 0);
+
+      const expectedCount = sessionMode === "resume" ? 1 : 2;
+      expect(h.sessions[1]?.notices).toEqual([
+        expect.stringContaining(`#general ${expectedCount} new message`),
+      ]);
+    } finally {
+      await h.runtime.stop();
+    }
+  },
+);
+
 test("a resumed session whose replay the provider rejects is invalidated and cold-started", async () => {
   const h = await harness({ resume: "stored-1" });
   try {

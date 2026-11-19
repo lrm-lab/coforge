@@ -208,10 +208,10 @@ export class AgentContexts {
 
   /** Listeners told when an Agent's context starts over (a launch or a finished compaction), for
    * state that only the model's current context makes true. */
-  readonly #newContextListeners = new Set<(agentId: string) => void>();
+  readonly #newContextListeners = new Set<(agentId: string, runtime?: string) => void>();
 
   /** Registers a context-reset listener; returns its removal. */
-  onNewContext(listener: (agentId: string) => void): () => void {
+  onNewContext(listener: (agentId: string, runtime?: string) => void): () => void {
     this.#newContextListeners.add(listener);
     return () => this.#newContextListeners.delete(listener);
   }
@@ -237,7 +237,7 @@ export class AgentContexts {
     }
     for (const listener of this.#newContextListeners) {
       try {
-        listener(agentId);
+        listener(agentId, runtime);
       } catch {
         // A listener must never fail a launch or a compaction bookkeeping step.
       }

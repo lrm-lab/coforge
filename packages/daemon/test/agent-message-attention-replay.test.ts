@@ -73,7 +73,7 @@ test("a replacement session does not recover a message already consumed by the p
     };
     index.bindConversation("agent-1", message.target, message.conversationId);
     index.recordModelSeen("agent-1", message.target, message.sequence);
-    await index.recover("agent-1", [message], { "@ada": 1 });
+    await index.recover("agent-1", [message], { "@ada": 1 }, { "@ada": message.conversationId });
     expect(notices).toEqual([]);
   } finally {
     await rm(root, { recursive: true, force: true });

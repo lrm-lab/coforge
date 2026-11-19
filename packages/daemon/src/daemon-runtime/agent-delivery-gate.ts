@@ -240,13 +240,8 @@ export class AgentDeliveryGate {
     return this.#discardWhere(agentId, (message) => conversationIds.has(message.conversationId));
   }
 
-  /** Removes and returns the held deliveries for these targets, leaving the rest held: for a
-   * relaunch whose `recover()` pass told the Agent about exactly those targets. */
-  discardTargets(agentId: string, targets: ReadonlySet<string>): AgentMessageDelivery[] {
-    return this.#discardWhere(
-      agentId,
-      (message) => message.target !== undefined && targets.has(message.target),
-    );
+  discardAccepted(agentId: string, accepted: (message: AgentMessageDelivery) => boolean): void {
+    this.#discardWhere(agentId, accepted);
   }
 
   #discardWhere(

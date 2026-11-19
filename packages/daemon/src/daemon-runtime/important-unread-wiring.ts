@@ -94,7 +94,8 @@ export function composeImportantUnreadReminder(ports: ImportantUnreadWiringPorts
         // delivery that asked for the attempt hears the refusal.
         return Promise.resolve(session.notify(text)).then(async () => {
           await session.waitForContextViewCapture?.();
-          if (attempt?.shown?.length) ports.shown?.(agentId, attempt.shown);
+          const currentContext = attempt?.accepted?.() !== false;
+          if (currentContext && attempt?.shown?.length) ports.shown?.(agentId, attempt.shown);
         });
       },
       report: (agentId, notice) => ports.report(agentId, notice),

@@ -166,7 +166,11 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
       unread: (announced) => importantUnread.observeDeliveries(announced),
     },
   );
-  ports.contexts.onNewContext((agentId) => messageAttention.clearPreviewSeen(agentId));
+  ports.contexts.onNewContext((agentId, runtime) => {
+    messageAttention.clearPreviewSeen(agentId);
+    if (runtime === undefined) messageAttention.resetNoticeContext(agentId);
+    else messageAttention.beginNoticeContext(agentId);
+  });
   const inboxCoordinator = new InboxCoordinator({
     workspaceId: connection.workspaceId,
     stateDirectory: ports.stateDirectory,
@@ -196,6 +200,7 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
       prefix: (agentId) => ports.sync.noticePrefix(agentId),
       previewedInFull: (agentId, target, sequence) =>
         messageAttention.previewSeen.has(agentId, target, sequence),
+      captureAcceptance: (agentId) => messageAttention.captureNoticeAcceptance(agentId),
     }),
     // An accepted attempt showed the model these bodies; a later attempt does not repeat them.
     shown: (agentId, shown) => messageAttention.previewSeen.record(agentId, shown),

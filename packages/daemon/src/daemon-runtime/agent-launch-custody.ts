@@ -9,6 +9,7 @@ import type { AgentMessageAttentionIndex } from "./agent-message-attention-index
 import { stalledTurnObservation } from "./stalled-turn-indicator";
 import { noteTurnStarted } from "./turn-boundaries";
 import { recoveryHasContent, type AgentRecoveryContext } from "./runtime-launch-intent";
+import { isOrdinaryNotice, noticeMessageKey } from "./accepted-message-notices";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
@@ -63,16 +64,26 @@ export class AgentLaunchCustody {
       ...(context.resumeMessages ?? []),
     ];
     const hasRecoveryContent = recoveryHasContent(context);
-    let announced: ReadonlySet<string> = new Set();
+    const accepted = new Set<string>();
     try {
       if (hasRecoveryContent)
-        announced = await this.ports.messageAttention.recover(
+        await this.ports.messageAttention.recover(
           agentId,
           messages,
           context.unreadSummary ?? {},
           context.unreadConversationIds ?? {},
           undefined,
           context.openTasks,
+          {
+            snapshotMessages: context.summaryIncludesResumeMessages
+              ? (context.resumeMessages ?? [])
+              : [],
+            countedDeliveries: context.countedDeliveries,
+            accepted(messages) {
+              for (const message of messages)
+                if (isOrdinaryNotice(message)) accepted.add(noticeMessageKey(message));
+            },
+          },
         );
     } catch (error) {
       logger.warn("Agent recovery notice was not accepted; canonical unread state remains", {
@@ -82,12 +93,11 @@ export class AgentLaunchCustody {
       });
       throw error;
     }
-    // Reconcile whatever AgentDeliveryGate held across an unexpected exit now that this launch's
-    // recovery pass has run. The pass told the Agent about the targets it announced: a held
-    // delivery for one of those is redundant and dropped (each was acknowledged when held). Any
-    // other target, one the recovery named but found already read included, was not mentioned, so
-    // nothing has told the Agent about it: flush those now, treating the fresh session as idle.
-    this.ports.deliveryGate.discardTargets(agentId, announced);
+    if (accepted.size)
+      this.ports.deliveryGate.discardAccepted(
+        agentId,
+        (message) => isOrdinaryNotice(message) && accepted.has(noticeMessageKey(message)),
+      );
     this.flushSurvivingDeliveries(agentId);
     // App items (reminders, etc.) are a separate subsystem from canonical Message unread state
     // (`agent-app-inbox/`); `recover()` above never mentions them, so a held one is always

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { ProviderReplayWatch, carriedStart } from "#src/daemon-runtime/provider-replay-recovery";
+import { delivery } from "./fixtures/attention-delivery";
 import { FAILED_TURN, REJECTED } from "./fixtures/provider-replay-harness";
 import { captureDaemonLogs } from "./log-capture";
 const open = { replacedSessionId: undefined, reportedSessionId: undefined };
@@ -49,6 +50,7 @@ test("a turn that ended without a rejected replay, and one in flight, start noth
   gate.resolve(false);
 });
 test("a Start's own recovery, prompts and the unread counts fold into one carried start", () => {
+  const parked = { ...delivery("parked"), target: "#general" };
   const carried = carriedStart(
     {
       recovery: { unreadSummary: { "#ops": 3 }, unreadConversationIds: { "#ops": "c1" } },
@@ -58,12 +60,13 @@ test("a Start's own recovery, prompts and the unread counts fold into one carrie
       { target: "#ops", pendingCount: 1 },
       { target: "#general", pendingCount: 2 },
     ],
-    [{ target: "#general" }],
+    [parked],
   );
   expect(carried).toEqual({
     recovery: {
       unreadSummary: { "#ops": 4, "#general": 3 },
       unreadConversationIds: { "#ops": "c1" },
+      countedDeliveries: [parked],
     },
     resumePrompt: "Continue.",
   });

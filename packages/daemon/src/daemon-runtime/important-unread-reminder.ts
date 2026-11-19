@@ -24,6 +24,7 @@ export type ImportantUnreadRecord = Pick<ImportantUnreadNoticeStore, "save" | "c
 export type ImportantUnreadComposedNotice = Readonly<{
   text: string;
   shown?: readonly { target: string; sequence: number }[];
+  accepted?(): boolean;
 }>;
 
 /** What writing a notice means to the rest of the daemon: put it into the Agent's process, and

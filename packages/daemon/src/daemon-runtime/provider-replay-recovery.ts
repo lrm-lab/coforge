@@ -65,24 +65,36 @@ const carriedOf = ({ recovery, resumePrompt, introductionPrompt }: CarriedStart)
 });
 export function carriedStart(
   started: CarriedStart,
-  attention: readonly Pick<MessageAttention, "target" | "pendingCount">[],
-  parked: readonly Pick<AgentMessageDelivery, "target">[] = [],
+  attention: readonly (Pick<MessageAttention, "target" | "pendingCount"> & {
+    deliveries?: readonly AgentMessageDelivery[];
+  })[],
+  parked: readonly AgentMessageDelivery[] = [],
   carried: ReadonlyMap<string, number> = new Map(),
 ): CarriedStart {
   const counts = new Map<string, number>();
+  const countedDeliveries = [...(started.recovery?.countedDeliveries ?? []), ...parked];
   const add = (target: string | undefined, count: number) => {
     if (target && count > 0) counts.set(target, (counts.get(target) ?? 0) + count);
   };
   for (const [target, count] of Object.entries(started.recovery?.unreadSummary ?? {}))
     add(target, count);
-  for (const { target, pendingCount } of attention)
+  for (const { target, pendingCount, deliveries = [] } of attention) {
     add(target, pendingCount - (carried.get(target) ?? 0));
+    countedDeliveries.push(...deliveries);
+  }
   for (const { target } of parked) add(target, 1);
   const { recovery } = started;
   return carriedOf({
     ...started,
     ...(recovery || counts.size
-      ? { recovery: { ...recovery, unreadSummary: Object.fromEntries(counts) } }
+      ? {
+          recovery: {
+            ...recovery,
+            unreadSummary: Object.fromEntries(counts),
+            summaryIncludesResumeMessages: undefined,
+            countedDeliveries,
+          },
+        }
       : {}),
   });
 }
@@ -100,12 +112,17 @@ export function mergeCarried(own: CarriedStart, owed: CarriedStart): CarriedStar
   ];
   const conversationIds = { ...b?.unreadConversationIds, ...a?.unreadConversationIds };
   const openTasks = a?.openTasks ?? b?.openTasks;
+  const countedDeliveries = [
+    ...(a?.countedDeliveries ?? []).filter(({ target }) => !b?.unreadSummary?.[target ?? ""]),
+    ...(b?.countedDeliveries ?? []).filter(({ target }) => !a?.unreadSummary?.[target ?? ""]),
+  ];
   const recovery: AgentRecoveryContext = {
     ...(wakeMessage ? { wakeMessage } : {}),
     ...(resumeMessages.length ? { resumeMessages } : {}),
     ...(Object.keys(summary).length ? { unreadSummary: summary } : {}),
     ...(Object.keys(conversationIds).length ? { unreadConversationIds: conversationIds } : {}),
     ...(openTasks ? { openTasks } : {}),
+    ...(countedDeliveries.length ? { countedDeliveries } : {}),
   };
   return carriedOf({
     ...(a || b ? { recovery } : {}),
@@ -129,7 +146,7 @@ export class OwedRecovery {
   }
   owing(
     agentId: string,
-    queued: readonly Pick<AgentMessageDelivery, "target">[],
+    queued: readonly AgentMessageDelivery[],
   ):
     | {
         carried: CarriedStart;

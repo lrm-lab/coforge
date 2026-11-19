@@ -31,9 +31,16 @@ test("recover returns the targets it announced, and none when everything was alr
   // though the recovery names it, so it announces nothing and sends no notice.
   index.recordModelSeen("agent-1", "#research", 5);
   const before = notices.length;
-  expect(await index.recover("agent-1", [message("#research", 5)], { "#research": 1 })).toEqual(
-    new Set(),
-  );
+  expect(
+    await index.recover(
+      "agent-1",
+      [message("#research", 5)],
+      { "#research": 1 },
+      {
+        "#research": "conversation-#research",
+      },
+    ),
+  ).toEqual(new Set());
   expect(notices).toHaveLength(before);
 });
 
@@ -55,10 +62,11 @@ test("a replacement session receives the same recovery IDs while duplicates stay
     latestSenderDescription: "",
     body: "recover this body",
   };
-  await index.recover("agent-1", [message], { "@ada": 1 });
-  await index.recover("agent-1", [message], { "@ada": 1 });
+  const unreadIds = { "@ada": message.conversationId };
+  await index.recover("agent-1", [message], { "@ada": 1 }, unreadIds);
+  await index.recover("agent-1", [message], { "@ada": 1 }, unreadIds);
   index.clearAgent("agent-1");
-  await index.recover("agent-1", [message], { "@ada": 1 });
+  await index.recover("agent-1", [message], { "@ada": 1 }, unreadIds);
   expect(notices).toHaveLength(2);
   expect(notices.every((notice) => notice.startsWith("[CoForge inbox notice:"))).toBe(true);
   expect(notices.every((notice) => notice.includes("@ada 1 new message"))).toBe(true);

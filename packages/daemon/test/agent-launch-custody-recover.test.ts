@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { AgentMessageDelivery } from "@lrm/coforge-sdk/internal";
+import type { AgentMessageDelivery, AgentRecoveryMessage } from "@lrm/coforge-sdk/internal";
 import { AgentDeliveryGate } from "#src/daemon-runtime/agent-delivery-gate";
 import { AgentLaunchCustody } from "#src/daemon-runtime/agent-launch-custody";
 import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
@@ -33,13 +33,11 @@ function custody(held: AgentMessageDelivery[]) {
   const flushed: string[][] = [];
   const recovered: Array<Record<string, number>> = [];
   const messageAttention = {
-    // What the real index announces for these contexts: the targets they name.
     recover: async (
-      _: string,
-      messages: Array<{ target: string }>,
-      summary: Record<string, number>,
+      ...[, messages, summary, , , , options]: Parameters<AgentMessageAttentionIndex["recover"]>
     ) => {
       recovered.push(summary);
+      options?.accepted(messages);
       return new Set([
         ...messages.map((message) => message.target),
         ...Object.entries(summary).flatMap(([target, count]) => (count > 0 ? [target] : [])),
@@ -60,7 +58,7 @@ function custody(held: AgentMessageDelivery[]) {
   return { subject, deliveryGate, flushed, recovered };
 }
 
-test("a delivery held for a target the recovery does not name is flushed to the fresh session", async () => {
+test("summary-only recovery keeps every held delivery without an accepted identity", async () => {
   const { subject, deliveryGate, flushed, recovered } = custody([
     delivery("ops", "#ops"),
     delivery("general", "#general"),
@@ -69,31 +67,31 @@ test("a delivery held for a target the recovery does not name is flushed to the 
   await subject.recover("agent-1", { unreadSummary: { "#general": 1 } });
 
   expect(recovered).toEqual([{ "#general": 1 }]);
-  // The summary told of #general; nothing told of #ops, so only that one is presented.
-  expect(flushed).toEqual([["delivery-ops"]]);
+  expect(flushed).toEqual([["delivery-ops", "delivery-general"]]);
   expect(deliveryGate.pending("agent-1")).toEqual([]);
 });
 
-test("a delivery held for a target a resume message names is not presented again", async () => {
-  const { subject, flushed } = custody([delivery("general", "#general")]);
+test("only the held message identified by an accepted recovery notice is discarded", async () => {
+  const accepted = delivery("general", "#general");
+  const { subject, flushed } = custody([accepted, delivery("new", "#general")]);
 
   await subject.recover("agent-1", {
     resumeMessages: [
       {
-        messageId: "message-r",
+        messageId: accepted.messageId,
         deliveryId: "delivery-r",
         conversationId: "conversation-#general",
-        sequence: 2,
+        sequence: accepted.sequence,
         target: "#general",
         latestSenderKind: "human",
         latestSenderHandle: "ada",
         latestSenderDescription: "Ada",
         body: "hello",
-      },
+      } satisfies AgentRecoveryMessage,
     ],
   });
 
-  expect(flushed).toEqual([]);
+  expect(flushed).toEqual([["delivery-new"]]);
 });
 
 test("a summary count of zero names nothing", async () => {
@@ -107,15 +105,16 @@ test("a summary count of zero names nothing", async () => {
   expect(flushed).toEqual([["delivery-ops"]]);
 });
 
-test("discarding targets leaves the other held deliveries in order", () => {
+test("discarding accepted deliveries leaves the other held deliveries in order", () => {
   const queue = new AgentDeliveryGate();
   for (const message of [delivery("a", "#a"), delivery("b", "#b"), delivery("c", "#a")])
     queue.enqueue("agent-1", message);
 
-  const dropped = queue.discardTargets("agent-1", new Set(["#a"]));
-
-  expect(dropped.map((message) => message.deliveryId)).toEqual(["delivery-a", "delivery-c"]);
-  expect(queue.pending("agent-1").map((message) => message.deliveryId)).toEqual(["delivery-b"]);
+  queue.discardAccepted("agent-1", (message) => message.messageId === "message-b");
+  expect(queue.pending("agent-1").map((message) => message.deliveryId)).toEqual([
+    "delivery-a",
+    "delivery-c",
+  ]);
 });
 
 test("a delivery newer than a message the Agent already read is still presented", async () => {

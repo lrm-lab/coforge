@@ -231,11 +231,14 @@ describe("start open tasks propagation", () => {
       agentId: "agent-1",
       messages: [],
       unreadSummary: { "#general": 3 },
+      unreadConversationIds: {},
+      snapshotMessages: [],
       openTasks: sampleOpenTasks,
       currentAttention: new Map(),
       seenDeliveryIds: new Set(),
       seenMessageIds: new Set(),
       alreadyRead: () => false,
+      alreadyNotified: () => false,
       decide: () => {},
     });
     expect(summaryPlan?.notice).toContain("#general 3 new messages");
@@ -257,11 +260,14 @@ describe("start open tasks propagation", () => {
         },
       ],
       unreadSummary: { "#general": 1 },
+      unreadConversationIds: {},
+      snapshotMessages: [],
       openTasks: sampleOpenTasks,
       currentAttention: new Map(),
       seenDeliveryIds: new Set(),
       seenMessageIds: new Set(),
       alreadyRead: () => false,
+      alreadyNotified: () => false,
       decide: () => {},
     });
     expect(directPlan?.notice).toContain("#general");
