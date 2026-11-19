@@ -13,7 +13,6 @@ export { reminderAcknowledgementIdempotencyKey } from "./reminder-acknowledgemen
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
   AgentReminderOperationRequestSchema,
-  AgentReminderOperationResponseSchema,
   LocalReminderRequestSchema,
   ReminderFireRequestSchema,
   ReminderFireResponseSchema,
@@ -182,12 +181,12 @@ function scope<T extends ReminderScope>(value: T): T {
   identity(value);
   return value;
 }
-function operationScope<T extends ReminderOperationScope>(value: T): T {
+export function operationScope<T extends ReminderOperationScope>(value: T): T {
   if (!isScopeId(value.idempotencyKey)) throw new Error("invalid reminder scope");
   identity(value);
   return value;
 }
-function fields<T extends ReminderOperationFields>(value: T, canonicalTarget = false): T {
+export function fields<T extends ReminderOperationFields>(value: T, canonicalTarget = false): T {
   if (value.reminderId !== undefined && !isReminderId(value.reminderId))
     throw new Error("invalid reminder ID; full UUID required");
   if (value.messageId !== undefined && !isReminderMessageAnchor(value.messageId))
@@ -319,10 +318,9 @@ export function decodeAgentReminderOperationRequest(
   );
 }
 
-/** Whether a reminder record (a response's summary or a sync's job) carries the core every one
- * needs, checked in this order; `positive` and `instant` throw their own message for a malformed
- * value. */
-function hasReminderCore(value: ReminderJob): boolean {
+/** Whether a reminder record carries the core every one needs, checked in this order; `positive`
+ * and `instant` throw their own message for a malformed value. */
+export function hasReminderCore(value: ReminderJob): boolean {
   return Boolean(
     isReminderId(value.reminderId) &&
     isScopeId(value.ownerAgentId) &&
@@ -332,53 +330,6 @@ function hasReminderCore(value: ReminderJob): boolean {
     value.messageId &&
     instant(value.fireAt, "reminder fire time"),
   );
-}
-
-function summary(value: ReminderSummaryRecord): ReminderSummaryRecord {
-  fields(value, true);
-  if (
-    !hasReminderCore(value) ||
-    !instant(value.createdAt, "reminder created time") ||
-    value.repeat === "none" ||
-    (value.firedAt !== undefined && !instant(value.firedAt, "reminder fired time"))
-  )
-    throw new Error("invalid reminder summary");
-  return value;
-}
-function event(value: ReminderLogEvent): ReminderLogEvent {
-  if (
-    !isScopeId(value.eventId) ||
-    !isScopeId(value.type) ||
-    !instant(value.time, "reminder event time") ||
-    (value.nextFireAt !== undefined && !instant(value.nextFireAt, "next reminder fire time"))
-  )
-    throw new Error("invalid reminder event");
-  return value;
-}
-function response(value: AgentReminderOperationResponse) {
-  operationScope(value);
-  value.reminders.forEach(summary);
-  value.events.forEach(event);
-  return value;
-}
-export function encodeAgentReminderOperationResponse(value: AgentReminderOperationResponse) {
-  return bounded(
-    toBinary(
-      AgentReminderOperationResponseSchema,
-      create(AgentReminderOperationResponseSchema, toVersionedProto(response(value))),
-    ),
-  );
-}
-export function decodeAgentReminderOperationResponse(
-  bytes: Uint8Array,
-): AgentReminderOperationResponse {
-  const v = fromBinary(AgentReminderOperationResponseSchema, bounded(bytes));
-  return response({
-    ...fromVersionedProto<AgentReminderOperationResponse>(v),
-    reason: v.reason,
-    reminders: v.reminders.map((r) => summary(optional(r) as ReminderSummaryRecord)),
-    events: v.events.map((e) => event(optional(e) as ReminderLogEvent)),
-  } as AgentReminderOperationResponse);
 }
 
 export function validateReminderJob(value: ReminderJob): ReminderJob {
