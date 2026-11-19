@@ -30,6 +30,8 @@ test("decodeArtifactShortId accepts full UUIDs and rejects invalid values", () =
   expect(decodeArtifactShortId("l".repeat(22))).toBeNull();
   expect(decodeArtifactShortId("z".repeat(22))).toBeNull();
   expect(decodeArtifactShortId("a".repeat(23))).toBeNull();
+  expect(decodeArtifactShortId("AAAAAAAAAAAAAAAAAAAAAA")).toBeNull();
+  expect(decodeArtifactShortId("00000000-0000-0000-8000-000000000000")).toBeNull();
 });
 
 test("publicArtifactPath builds /a/<shortId>", () => {

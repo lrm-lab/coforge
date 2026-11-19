@@ -7,7 +7,6 @@ export type ArtifactLinkSharing = {
   loaded: boolean;
   available: boolean;
   url: string | null;
-  current: () => Promise<string | null>;
   apply: (enabled: boolean) => Promise<string | null>;
 };
 
@@ -27,7 +26,6 @@ export function useArtifactLinkSharing(artifactId: string, enabled: boolean): Ar
     loaded: data !== undefined,
     available: data?.available === true,
     url: data?.url ?? null,
-    current: async () => (await queryClient.fetchQuery(query)).url,
     apply: async (next) => {
       const result = await write.mutateAsync(next);
       return result.enabled ? result.url : null;

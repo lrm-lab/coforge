@@ -89,7 +89,7 @@ function ArtifactCardView({ artifactId }: { artifactId: string }) {
   return (
     <ArtifactCardFace
       card={card}
-      link={marks?.link}
+      showsWhoCanSee={marks != null}
       marks={marks ?? undefined}
       title={(title) => (
         <Link
@@ -112,12 +112,12 @@ type CardMarks = NonNullable<Awaited<ReturnType<typeof loadArtifactMarks>>[numbe
 
 export function ArtifactCardFace({
   card,
-  link,
+  showsWhoCanSee,
   marks,
   title: titleAs,
 }: {
   card: ArtifactCard;
-  link?: boolean;
+  showsWhoCanSee?: boolean;
   marks?: CardMarks;
   title?: (title: string) => ReactNode;
 }) {
@@ -127,7 +127,6 @@ export function ArtifactCardFace({
   const kind = kindLabel(card.entryPath);
   const facts = entryFactsLine(card.entryKind, card.entryFacts);
   const scope = useScopeOf()({
-    link: link === true,
     access: card.access,
     homeKey: card.homeKey ?? "",
   });
@@ -167,7 +166,7 @@ export function ArtifactCardFace({
         )}
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
           <ArtifactEditedLine actor={actorOf(card.author)} time={time(card.updatedAt)} />
-          {link !== undefined && (
+          {showsWhoCanSee && (
             <span className="flex items-center gap-1 text-xs text-tertiary">
               <scope.Icon aria-hidden="true" className="size-3.5 shrink-0" />
               <span className="max-w-32 truncate">{scope.label}</span>

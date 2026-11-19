@@ -257,10 +257,9 @@ function ArtifactPageFor({
     else toast.error(m.conversation_copy_failed());
   };
   const copyLink = async () => {
-    const shared = await link.current().catch(() => undefined);
-    if (shared === undefined) return void toast.error(m.conversation_copy_failed());
+    if (!current) return void toast.error(m.conversation_copy_failed());
     await copy(
-      shared !== null
+      current.artifact.access === "link"
         ? `${window.location.origin}${publicArtifactPath(artifactId)}`
         : `${window.location.origin}${router.buildLocation(artifactPageRoute(workspaceSlug, encodeArtifactShortId(artifactId))).publicHref}`,
       m.doc_link_copied(),
@@ -480,7 +479,6 @@ function ArtifactPageFor({
                   canChange={canChange}
                   tier={current?.artifact.access ?? "conversation"}
                   linkAvailable={link.available}
-                  link={link.url !== null}
                   onClose={() => setSendingTo(false)}
                 />
               )}

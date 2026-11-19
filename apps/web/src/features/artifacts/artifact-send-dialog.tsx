@@ -15,7 +15,7 @@ import { ARTIFACTS_KEY, artifactCardQuery } from "./artifact-queries";
 import type { VisibilityChoice } from "./artifact-scope";
 import { artifactSendLayout } from "./artifact-send-layout";
 import { ARTIFACT_SHARE_NOTE_MAX_LENGTH } from "./artifact-share-input";
-import { setArtifactAccess, setArtifactLinkSharing, shareArtifact } from "./artifacts.functions";
+import { setArtifactAccess, shareArtifact } from "./artifacts.functions";
 
 const sendCopy = (title: string): ShareDialogCopy => ({
   title: m.doc_send_title({ title }),
@@ -41,7 +41,6 @@ export function ArtifactSendDialog({
   canChange,
   tier,
   linkAvailable,
-  link,
   onClose,
 }: {
   artifactId: string;
@@ -49,7 +48,6 @@ export function ArtifactSendDialog({
   canChange: boolean;
   tier: VisibilityChoice;
   linkAvailable: boolean;
-  link: boolean;
   onClose: () => void;
 }) {
   const share = useServerFn(shareArtifact);
@@ -60,7 +58,7 @@ export function ArtifactSendDialog({
     mutationFn: () => setArtifactAccess({ data: { artifactId, access: "workspace" } }),
   });
   const openLink = useMutation({
-    mutationFn: () => setArtifactLinkSharing({ data: { artifactId, enabled: true } }),
+    mutationFn: () => setArtifactAccess({ data: { artifactId, access: "link" } }),
   });
   const fix = (change: () => Promise<unknown>) => async () => {
     try {
@@ -77,7 +75,7 @@ export function ArtifactSendDialog({
       ...(canChange && tier === "conversation"
         ? [{ label: m.av_send_make_visible(), run: fix(() => widen.mutateAsync()) }]
         : []),
-      ...(canChange && linkAvailable
+      ...(canChange && linkAvailable && tier !== "link"
         ? [{ label: m.av_send_turn_on_link(), run: fix(() => openLink.mutateAsync()) }]
         : []),
       {
@@ -92,7 +90,7 @@ export function ArtifactSendDialog({
   return (
     <ConversationShareDialog
       copy={sendCopy(title || m.doc_untitled())}
-      preview={card ? <ArtifactCardFace card={card} link={link} /> : null}
+      preview={card ? <ArtifactCardFace card={card} showsWhoCanSee /> : null}
       layout={artifactSendLayout}
       noteMaxLength={ARTIFACT_SHARE_NOTE_MAX_LENGTH}
       deliver={async ({ requestId, destinations, note }): Promise<ForwardMessageResult> => {

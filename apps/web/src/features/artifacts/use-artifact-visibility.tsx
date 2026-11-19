@@ -17,12 +17,11 @@ type Confirmation = { choice: VisibilityChoice; narrowing: boolean; linkOff: boo
 function confirmationFor(
   choice: VisibilityChoice,
   tier: VisibilityChoice,
-  link: boolean,
+  hasLegacyLink: boolean,
 ): Confirmation | null {
-  const narrowing = choice === "conversation" && tier !== "conversation";
-  const linkOff = choice !== "link" && link;
-  if (choice === "link") return link ? null : { choice, narrowing: false, linkOff: false };
-  return narrowing || linkOff ? { choice, narrowing, linkOff } : null;
+  const narrowing = choice === "conversation";
+  const linkOff = tier === "link" || (narrowing && hasLegacyLink);
+  return narrowing || linkOff || choice === "link" ? { choice, narrowing, linkOff } : null;
 }
 
 export type ArtifactVisibility = ReturnType<typeof useArtifactVisibility>;
@@ -45,7 +44,6 @@ export function useArtifactVisibility({
   const queryClient = useQueryClient();
   const workspaceName = useWorkspaceName();
   const [confirming, setConfirming] = useState<Confirmation | null>(null);
-  const current: VisibilityChoice = link.url ? "link" : tier;
   const loss = useQuery({
     queryKey: [...ARTIFACTS_KEY, "access-loss", artifactId],
     queryFn: () => loadArtifactAccessLoss({ data: { artifactId } }),
@@ -64,22 +62,19 @@ export function useArtifactVisibility({
           ? "ready"
           : "checking";
 
-  const apply = async ({ choice, narrowing, linkOff }: Confirmation) => {
-    if (linkOff && !narrowing) await link.apply(false);
-    if (choice === "link") await link.apply(true);
-    else if (choice !== tier)
-      await setArtifactAccess({
-        data: {
-          artifactId,
-          access: choice,
-          ...(narrowing && loss.data ? { expectedLost: loss.data.total } : {}),
-        },
-      });
+  const apply = async ({ choice, narrowing }: Confirmation) => {
+    await setArtifactAccess({
+      data: {
+        artifactId,
+        access: choice,
+        ...(narrowing && loss.data ? { expectedLost: loss.data.total } : {}),
+      },
+    });
     await queryClient.invalidateQueries({ queryKey: ARTIFACTS_KEY });
   };
 
   const request = (choice: VisibilityChoice) => {
-    if (choice === current) return;
+    if (choice === tier) return;
     const needed = confirmationFor(choice, tier, link.url !== null);
     if (needed) setConfirming(needed);
     else void apply({ choice, narrowing: false, linkOff: false }).catch(() => undefined);
@@ -172,7 +167,7 @@ export function useArtifactVisibility({
   );
 
   return {
-    current,
+    current: tier,
     label,
     request,
     dialog,

@@ -1,3 +1,5 @@
+import { artifactInputs } from "./artifact-inputs";
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 const BASE58_INDEX = new Map(Array.from(BASE58_ALPHABET, (char, index) => [char, BigInt(index)]));
@@ -19,6 +21,11 @@ export function encodeArtifactShortId(uuid: string): string {
 }
 
 export function decodeArtifactShortId(raw: string): string | null {
+  const decoded = decodeUuid(raw);
+  return decoded !== null && artifactInputs.id.safeParse(decoded).success ? decoded : null;
+}
+
+function decodeUuid(raw: string): string | null {
   if (UUID_PATTERN.test(raw)) return raw.toLowerCase();
   if (!SHORT_ID_EXACT.test(raw)) return null;
   let value = 0n;

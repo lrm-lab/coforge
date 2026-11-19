@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, notFound, redirect, useLocation } from "@tanstack/react-router";
 
 import {
   openLinkArtifact,
@@ -17,9 +17,7 @@ export const Route = createFileRoute("/a/$artifactId")({
   }),
   loader: async ({ params, location }) => {
     const artifactId = decodeArtifactShortId(params.artifactId);
-    if (!artifactId) {
-      return { artifact: null, signedIn: false, rateLimited: false, returnTo: location.href };
-    }
+    if (!artifactId) throw notFound();
     const access = await resolvePublicArtifactAccess({ data: { artifactId } });
     if (access.memberWorkspaceSlug) {
       throw redirect({
@@ -67,6 +65,7 @@ export const Route = createFileRoute("/a/$artifactId")({
   staleTime: 0,
   gcTime: 0,
   component: PublicArtifactRoute,
+  notFoundComponent: PublicArtifactNotFound,
 });
 
 function PublicArtifactRoute() {
@@ -79,4 +78,9 @@ function PublicArtifactRoute() {
       returnTo={returnTo}
     />
   );
+}
+
+function PublicArtifactNotFound() {
+  const returnTo = useLocation({ select: (location) => location.href });
+  return <PublicArtifactShell artifact={null} returnTo={returnTo} />;
 }

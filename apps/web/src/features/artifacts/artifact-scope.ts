@@ -28,8 +28,8 @@ export function useScopeLabels(): Record<VisibilityChoice, string> {
 export function useScopeOf() {
   const nameOf = useConversationName();
   const labels = useScopeLabels();
-  return (card: Pick<GalleryCard, "link" | "access" | "homeKey">) => {
-    const choice: VisibilityChoice = card.link ? "link" : card.access;
+  return (card: Pick<GalleryCard, "access" | "homeKey">) => {
+    const choice: VisibilityChoice = card.access;
     const conversationId = artifactHomeConversation(card.homeKey);
     const homeName = conversationId ? nameOf(conversationId) : undefined;
     return {

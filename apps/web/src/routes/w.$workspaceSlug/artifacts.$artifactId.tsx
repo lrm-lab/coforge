@@ -1,4 +1,4 @@
-import { createFileRoute, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, notFound, useRouterState } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { ArtifactPage } from "#src/features/artifacts/artifact-page";
@@ -19,19 +19,24 @@ export const Route = createFileRoute("/w/$workspaceSlug/artifacts/$artifactId")(
     comment: z.uuid().optional().catch(undefined),
     version: z.coerce.number().int().positive().optional().catch(undefined),
   }),
+  beforeLoad: ({ params }) => {
+    const artifactId = decodeArtifactShortId(params.artifactId);
+    if (!artifactId) throw notFound();
+    return { artifactId };
+  },
   errorComponent: PageLoadError,
+  notFoundComponent: NotFoundPage,
   component: ArtifactRoutePage,
 });
 
 function ArtifactRoutePage() {
-  const { artifactId: rawArtifactId } = Route.useParams();
-  const artifactId = decodeArtifactShortId(rawArtifactId);
+  const { artifactId } = Route.useRouteContext();
   const { review, comment, version } = Route.useSearch();
   const navigate = Route.useNavigate();
   const arrival = useRouterState({ select: (state) => state.location.state.__TSR_key });
   const on = useQuery(artifactsOnQuery(useCurrentWorkspaceId()));
   if (on.isPending) return null;
-  if (on.data === false || artifactId === null) return <NotFoundPage />;
+  if (on.data === false) return <NotFoundPage />;
   return (
     <ArtifactPage
       artifactId={artifactId}
