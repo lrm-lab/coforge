@@ -5,11 +5,6 @@ import { z } from "zod";
 
 import { useAppToast } from "#src/components/ui/toast";
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
-import {
-  conversationRealtimeChannel,
-  workspaceConversationChannel,
-} from "#src/features/conversations/conversation-realtime";
-import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { copyText } from "#src/lib/clipboard";
@@ -34,7 +29,7 @@ import {
   type PublishedPlaces,
 } from "./artifact-commenting";
 import { groupThreads } from "./artifact-comment-threads";
-import { useArtifactComments, syncCommentsChange } from "./artifact-comment-queries";
+import { useArtifactComments } from "./artifact-comment-queries";
 import { createComposerHolds } from "./artifact-composer-holds";
 import { useCommentHandoff } from "./use-comment-handoff";
 import { useOpenFile } from "./use-open-file";
@@ -60,19 +55,13 @@ import { artifactKindOfPath } from "./artifact-path-kind";
 import { PaneFrame } from "./artifact-parts";
 import { ArtifactUnavailable, LoadingBody, isGone } from "./artifact-page-states";
 import { artifactHomeConversation, refreshArtifact } from "./artifact-queries";
-import {
-  decodeArtifactAccessChangedEvent,
-  decodeArtifactCommentsChangedEvent,
-  decodeArtifactDataChangedEvent,
-  decodeArtifactVersionPublishedEvent,
-} from "./artifact-realtime";
 import { artifactPageRoute } from "./artifact-search";
 import { encodeArtifactShortId } from "./artifact-short-id";
-import { artifactDataEvents } from "./artifact-page-data-events";
 import { ArtifactWebPage } from "./artifact-web-page";
 import { VisibilityPill } from "./artifact-visibility-pill";
 import { useConversationName } from "./use-conversation-name";
 import { useArtifactActions } from "./use-artifact-actions";
+import { useArtifactPageRealtime } from "./use-artifact-page-realtime";
 import { useArtifactVisibility } from "./use-artifact-visibility";
 
 type ArtifactPlace = {
@@ -175,39 +164,14 @@ function ArtifactPageFor({
 
   const keepSeen = useKeepSeen(artifactId);
 
-  useRealtimeSubscription({
-    channel:
-      homeId === undefined || !workspaceId
-        ? undefined
-        : homeId
-          ? conversationRealtimeChannel(homeId)
-          : workspaceConversationChannel(workspaceId),
-    recoverable: true,
-    positioned: true,
-    onPublication: ({ data }) => {
-      const commentsChange = decodeArtifactCommentsChangedEvent(data);
-      if (commentsChange) {
-        if (commentsChange.artifactId === artifactId) {
-          void syncCommentsChange(queryClient, commentsChange);
-          keepSeen();
-        }
-        return;
-      }
-      const dataChange = decodeArtifactDataChangedEvent(data);
-      if (dataChange) {
-        if (dataChange.artifactId === artifactId) artifactDataEvents.emit(dataChange);
-        return;
-      }
-      const published = decodeArtifactVersionPublishedEvent(data);
-      if (published?.artifactId === artifactId) {
-        if (published.number > latest) setIncoming(published.number);
-        keepSeen();
-        void refreshArtifact(queryClient, artifactId, homeId ?? null, { document: false });
-        return;
-      }
-      if (decodeArtifactAccessChangedEvent(data)?.artifactId === artifactId)
-        void refreshArtifact(queryClient, artifactId, homeId ?? null);
-    },
+  useArtifactPageRealtime({
+    workspaceId,
+    artifactId,
+    homeId,
+    latest,
+    queryClient,
+    keepSeen,
+    onIncomingVersion: setIncoming,
   });
 
   const opened = useRecordOpen(artifactId, latest);
