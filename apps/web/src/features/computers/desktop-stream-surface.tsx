@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { HotkeysProvider, useHotkeys } from "@tanstack/react-hotkeys";
 import {
   Minimize01 as Minimize,
@@ -14,8 +14,13 @@ import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import { withCloudDesktopPhoneView } from "./cloud-desktop-url";
-import { DESKTOP_CHROME_AUTOHIDE_MS, desktopChromeAutoHides } from "./desktop-chrome-autohide";
+import {
+  DESKTOP_CHROME_AUTOHIDE_MS,
+  desktopChromeAutoHides,
+  desktopPhoneChromeInFab,
+} from "./desktop-chrome-autohide";
 import { desktopLandscapeFrameStyle } from "./desktop-landscape";
+import { desktopShellActionFromMessage } from "./desktop-shell-message";
 import type { EmbeddedDesktopPhase } from "./embedded-desktop-session";
 
 export function DesktopStreamSurface({
@@ -43,6 +48,7 @@ export function DesktopStreamSurface({
   const [landscape, setLandscape] = useState(false);
   const [chromeOpen, setChromeOpen] = useState(false);
   const [chromeIdleToken, setChromeIdleToken] = useState(0);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     if (!maximized) setLandscape(false);
@@ -52,7 +58,8 @@ export function DesktopStreamSurface({
     if (landscape && (!portrait || !phone)) setLandscape(false);
   }, [landscape, portrait, phone]);
 
-  const autoHideChrome = desktopChromeAutoHides(landscape);
+  const phoneFabChrome = desktopPhoneChromeInFab(phone, maximized);
+  const autoHideChrome = !phoneFabChrome && desktopChromeAutoHides(landscape);
 
   useEffect(() => {
     if (autoHideChrome) setChromeOpen(false);
@@ -69,6 +76,34 @@ export function DesktopStreamSurface({
   const bumpChromeIdle = () => setChromeIdleToken((n) => n + 1);
 
   const showLandscapeToggle = maximized && phone && (portrait || landscape);
+  const toggleLandscape = useEffectEvent(() => {
+    if (!showLandscapeToggle) return;
+    setLandscape((on) => !on);
+  });
+  const collapseDesktop = useEffectEvent(() => {
+    if (allowMinimize) onCollapse();
+  });
+
+  useEffect(() => {
+    if (!phoneFabChrome) return;
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== iframeRef.current?.contentWindow) return;
+      const action = desktopShellActionFromMessage(event.data);
+      if (!action) return;
+      if (action === "minimize") {
+        collapseDesktop();
+        return;
+      }
+      if (action === "sleep") {
+        onSleep();
+        return;
+      }
+      toggleLandscape();
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [phoneFabChrome, collapseDesktop, onSleep, toggleLandscape]);
+
   const streamUrl = phone ? withCloudDesktopPhoneView(url) : url;
   const frameStyle =
     maximized && landscape
@@ -82,47 +117,50 @@ export function DesktopStreamSurface({
             height: miniBox.height,
           };
 
-  const chromeBar = maximized ? (
-    <div
-      className={cx(
-        "flex shrink-0 items-center justify-between gap-2 border-b border-secondary bg-primary px-3 py-2",
-        autoHideChrome && "absolute inset-x-0 top-0 z-10",
-      )}
-      onPointerDown={autoHideChrome ? bumpChromeIdle : undefined}
-    >
-      <p className="min-w-0 truncate text-sm font-medium text-primary">{title}</p>
-      <div className="flex shrink-0 items-center gap-1">
-        {showLandscapeToggle ? (
+  const chromeBar =
+    maximized && !phoneFabChrome ? (
+      <div
+        className={cx(
+          "flex shrink-0 items-center justify-between gap-2 border-b border-secondary bg-primary px-3 py-2",
+          autoHideChrome && "absolute inset-x-0 top-0 z-10",
+        )}
+        onPointerDown={autoHideChrome ? bumpChromeIdle : undefined}
+      >
+        <p className="min-w-0 truncate text-sm font-medium text-primary">{title}</p>
+        <div className="flex shrink-0 items-center gap-1">
+          {showLandscapeToggle ? (
+            <ButtonUtility
+              size="sm"
+              color="tertiary"
+              icon={landscape ? Portrait : Landscape}
+              tooltip={landscape ? m.computer_desktop_portrait() : m.computer_desktop_landscape()}
+              aria-label={
+                landscape ? m.computer_desktop_portrait() : m.computer_desktop_landscape()
+              }
+              onClick={() => setLandscape((on) => !on)}
+            />
+          ) : null}
+          {allowMinimize ? (
+            <ButtonUtility
+              size="sm"
+              color="tertiary"
+              icon={Minimize}
+              tooltip={m.computer_desktop_minimize()}
+              aria-label={m.computer_desktop_minimize()}
+              onClick={onCollapse}
+            />
+          ) : null}
           <ButtonUtility
             size="sm"
             color="tertiary"
-            icon={landscape ? Portrait : Landscape}
-            tooltip={landscape ? m.computer_desktop_portrait() : m.computer_desktop_landscape()}
-            aria-label={landscape ? m.computer_desktop_portrait() : m.computer_desktop_landscape()}
-            onClick={() => setLandscape((on) => !on)}
+            icon={X}
+            tooltip={m.computer_desktop_sleep()}
+            aria-label={m.computer_desktop_sleep()}
+            onClick={onSleep}
           />
-        ) : null}
-        {allowMinimize ? (
-          <ButtonUtility
-            size="sm"
-            color="tertiary"
-            icon={Minimize}
-            tooltip={m.computer_desktop_minimize()}
-            aria-label={m.computer_desktop_minimize()}
-            onClick={onCollapse}
-          />
-        ) : null}
-        <ButtonUtility
-          size="sm"
-          color="tertiary"
-          icon={X}
-          tooltip={m.computer_desktop_sleep()}
-          aria-label={m.computer_desktop_sleep()}
-          onClick={onSleep}
-        />
+        </div>
       </div>
-    </div>
-  ) : null;
+    ) : null;
 
   return (
     <HotkeysProvider scope="embedded-desktop" exclusive={{ allow: ["global"] }}>
@@ -167,6 +205,7 @@ export function DesktopStreamSurface({
         ) : null}
         <div className={cx("relative min-h-0", maximized ? "flex-1" : "h-full w-full")}>
           <iframe
+            ref={iframeRef}
             aria-label={title}
             src={streamUrl}
             className="absolute inset-0 h-full w-full border-0 bg-black"

@@ -57,7 +57,7 @@ describe("desktop page adaptation", () => {
     expect(html).not.toContain("msg.remove()");
   });
 
-  test("a reconnect page that already has phone gestures, keyboard and copy-out is left alone", () => {
+  test("a reconnect page that already has phone gestures, keyboard, fab and copy-out is left alone", () => {
     const current = `<!DOCTYPE html>
 <script type="module">
     import RFB from "./core/rfb.js";
@@ -67,6 +67,7 @@ describe("desktop page adaptation", () => {
     function coforgeAttachPhoneGestures() {}
     const phone = params.get("view") === "phone";
 </script>
+<button type="button" id="coforge-desktop-phone-fab"></button>
 <div id="coforge-desktop-phone-bar"></div>
 <textarea id="coforge-desktop-keyboard-input"></textarea>
 <button type="button" id="coforge-desktop-reconnect"></button>
@@ -114,8 +115,31 @@ describe("desktop page adaptation", () => {
     expect(html).toContain("clipViewport = true");
     expect(html).toContain("dragViewport = true");
     expect(html).toContain('id="coforge-desktop-phone-bar"');
+    expect(html).toContain('id="coforge-desktop-phone-fab"');
+    expect(html).toContain("coforgeAttachPhoneFab");
+    expect(html).toContain('data-shell="minimize"');
+    expect(html).toContain('data-shell="sleep"');
     expect(html).toContain("适应屏幕");
     expect(html).toContain("实际大小");
+  });
+
+  test("a page with the old always-visible phone bar is rewritten for the FAB", () => {
+    const stale = `<!DOCTYPE html>
+<script type="module">
+    import RFB from "./core/rfb.js";
+    function coforgeDesktopPaste(text) {}
+    function coforgeWriteLocalClipboard(text) {}
+    function coforgeDesktopCopyOut() {}
+    function coforgeAttachPhoneGestures() {}
+    const phone = params.get("view") === "phone";
+</script>
+<div id="coforge-desktop-phone-bar"></div>
+<textarea id="coforge-desktop-keyboard-input"></textarea>
+<button type="button" id="coforge-desktop-reconnect"></button>
+`;
+    const html = adaptDesktopHtml(stale);
+    expect(html).toContain('id="coforge-desktop-phone-fab"');
+    expect(html).toContain("coforgeAttachPhoneFab");
   });
 
   test("a phone viewer gets modifier keys, long-press right-click, and two-finger scroll", () => {
