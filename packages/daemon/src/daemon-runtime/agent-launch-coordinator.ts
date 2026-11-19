@@ -137,10 +137,8 @@ export type AgentLaunchCoordinatorPorts = {
   ) => ActivityDraft;
   /** The App Inbox: each launch announces its items, and a replaced Session forgets who was told. */
   appInbox: Pick<AgentInboxCoordinator, "drainAppInboxNotices" | "forgetAnnouncedAppItems">;
-  /** Puts the Agent's MEMORY.md block at the front of a fresh session's queued input. */
   attachSessionMemory: (agentId: string) => Promise<boolean>;
-  /** A daemon-initiated relaunch after a process exit (the resumed-session cold start): the
-   * ordinary launch gate with wake bookkeeping, fire-and-forget. */
+  prependStandingPromptUpdate?: (agentId: string, instructions: string) => boolean;
   relaunchResumed(agentId: string, restart: AgentRestartConfig, request: LaunchRequest): void;
 };
 

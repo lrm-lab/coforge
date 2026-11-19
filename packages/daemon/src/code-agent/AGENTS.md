@@ -96,6 +96,11 @@ Rules for the provider seam and adapters in `src/code-agent/`. They extend
   separately. Never append them to the standing instructions.
 - When a session lacks older user-referenced context, the instructions direct the Agent to lexical
   `coforge message search`, then a target-scoped `message read --around`.
+- On a resumed session whose provider does not set `standingPromptRefreshesOnResume = true`
+  (`pi`, `coforge`, and `opencode` refresh natively), `standing-prompt-refresh.ts` compares the
+  built instructions' SHA-256 hash against the session's `AgentStandingPromptLedger` entry and
+  prepends `<standing-prompt-update>` once to the resumed session's first input when it changed;
+  an unknown baseline records without injecting.
 
 ## Assigned skills
 

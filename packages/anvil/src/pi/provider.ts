@@ -10,6 +10,7 @@ export class PiProvider implements CodeAgentProvider {
   readonly reportsCompaction = true;
   readonly compactionFailure = "sticks_to_session";
   readonly supportsSessionSummaryRecycle = true;
+  readonly standingPromptRefreshesOnResume = true;
   readonly #host: PiRuntimeHost;
   constructor(options: PiProviderOptions) {
     this.#host = options.host;

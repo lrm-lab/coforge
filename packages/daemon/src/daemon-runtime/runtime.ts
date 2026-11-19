@@ -8,7 +8,7 @@ import {
 } from "@lrm/coforge-anvil";
 import { OperatingSystemInfo } from "#src/platform/operating-system";
 import { assembleInputDrain } from "./assemble-input-drain";
-import { attachFreshSessionMemoryPort } from "./session-memory-hooks";
+import { launchInputPorts } from "./session-memory-hooks";
 import { LocalMemoryRuntime } from "./local-memory-runtime";
 import { rebindAgent } from "./agent-rebind";
 import { AgentLaunchCustody } from "./agent-launch-custody";
@@ -714,7 +714,7 @@ export class DaemonRuntime {
       launchFailureActivity: (agentId, provider, error) =>
         launchFailureActivity(agentId, provider, error, this.#drafts),
       appInbox: this.#inboxCoordinator,
-      attachSessionMemory: attachFreshSessionMemoryPort(this.#memoryHooks),
+      ...launchInputPorts(this.#memoryHooks),
       relaunchResumed: (agentId, restart, request) => {
         void this.#wakeAgent(agentId, restart, request).catch(() => {});
       },

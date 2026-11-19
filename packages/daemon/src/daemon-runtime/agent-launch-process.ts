@@ -4,6 +4,7 @@ import { agentRuntimeContextEnvironment } from "#src/code-agent/environment";
 import { parseAssignedSkillPacks } from "#src/code-agent/assigned-skills";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { openLaunchSessionMemory } from "./session-memory-launch";
+import { refreshLaunchStandingPrompt } from "#src/agent-runtime/standing-prompt-refresh";
 import { assertSessionNotSpent } from "./session-reset-guard";
 import { LaunchPhaseTiming } from "./launch-phase-timing";
 import { sessionIdReporter } from "./launch-session-report";
@@ -163,6 +164,8 @@ export async function launchAgentProcess(
     launchTagToken = crypto.randomUUID();
     setAgentLaunchTag(agentId, launchTagToken);
     let launchedInstructions: string | undefined;
+    let standingPromptEvaluated = false;
+    let lazyFreshBindPending = false;
     const runtime = await ports.agentProcessManager.start(
       agentId,
       {
@@ -187,7 +190,25 @@ export async function launchAgentProcess(
           COFORGE_AGENT_LAUNCH_ID: launch.launchId,
         },
         runtimeId: launch.launchId,
-        onSessionId: sessionIds.onSessionId,
+        onSessionId: async (sessionId, replacedSessionId) => {
+          await sessionIds.onSessionId?.(sessionId, replacedSessionId);
+          if (
+            standingPromptEvaluated &&
+            launchedInstructions !== undefined &&
+            sessionId &&
+            (replacedSessionId !== undefined || lazyFreshBindPending) &&
+            current() &&
+            !ports.stops.stopping(agentId)
+          ) {
+            lazyFreshBindPending = false;
+            ports.contexts.recordStandingPrompt(agentId, {
+              instructions: launchedInstructions,
+              provider: config.provider,
+              sessionId,
+              resumed: false,
+            });
+          }
+        },
         sessionMode: recycled ? "create" : reference.sessionMode,
         assignedSkillPacks: parseAssignedSkillPacks(launchConfig.assignedSkillPacks),
         identity: launchConfig.identity,
@@ -204,18 +225,6 @@ export async function launchAgentProcess(
       },
     );
     timing.phase("provider_session");
-    if (launchedInstructions !== undefined) {
-      const reportedSessionId = sessionIds.reportedSessionId();
-      ports.contexts.recordStandingPrompt(agentId, {
-        instructions: launchedInstructions,
-        provider: config.provider,
-        sessionId: reportedSessionId ?? requestedSessionId,
-        resumed:
-          resumedSessionId !== undefined &&
-          sessionIds.driverReplacedSessionId() === undefined &&
-          (reportedSessionId === undefined || reportedSessionId === resumedSessionId),
-      });
-    }
     if (claimAgentLaunchTagSweep(agentId)) sweepAgentLaunchTagStrays(agentId, "launch");
     await openLaunchSessionMemory({
       agentId,
@@ -233,6 +242,40 @@ export async function launchAgentProcess(
     if (ports.stops.stopping(agentId)) {
       await ports.agentProcessManager.stop(agentId);
       throw new Error(`Agent runtime is stopping: ${agentId}`);
+    }
+    if (launchedInstructions !== undefined) {
+      const instructions = launchedInstructions;
+      const reportedSessionId = sessionIds.reportedSessionId();
+      const activeSessionId = reportedSessionId ?? requestedSessionId;
+      const resumedSameSession =
+        recycled === undefined &&
+        resumedSessionId !== undefined &&
+        sessionIds.driverReplacedSessionId() === undefined &&
+        (reportedSessionId === undefined || reportedSessionId === resumedSessionId);
+      const refreshesOnResume =
+        resumedSameSession &&
+        ports.wakeRecycle.provider(config.provider).standingPromptRefreshesOnResume === true;
+      const bound = refreshLaunchStandingPrompt({
+        agentId,
+        launchId: launch.launchId,
+        provider: config.provider,
+        instructions,
+        activeSessionId,
+        resumedSameSession,
+        refreshesOnResume,
+        previous: ports.contexts.standingPrompt(agentId),
+        prependUpdate: (text) => ports.prependStandingPromptUpdate?.(agentId, text) ?? false,
+        record: (sessionId, resumed) => {
+          ports.contexts.recordStandingPrompt(agentId, {
+            instructions,
+            provider: config.provider,
+            sessionId,
+            resumed,
+          });
+        },
+      });
+      lazyFreshBindPending = !resumedSameSession && !bound;
+      standingPromptEvaluated = true;
     }
     ports.sendAgentStatus(agentId, "active");
     ports.activityPublisher.publish(agentId, launch, {

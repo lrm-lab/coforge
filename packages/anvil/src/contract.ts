@@ -78,6 +78,7 @@ export interface CodeAgentProvider {
    */
   readonly idleRecycleMinColdGapMs?: number;
   readonly supportsSessionSummaryRecycle?: boolean;
+  readonly standingPromptRefreshesOnResume?: boolean;
 }
 export type SessionResumeFacts = {
   lastActivityAtMs?: number;
