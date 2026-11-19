@@ -439,6 +439,7 @@ function ArtifactPageFor({
                       annotating={commentMode.mode}
                       onToggleAnnotate={commentMode.toggleMode}
                       onExitAnnotate={commentMode.exitMode}
+                      onTogglePanel={commentMode.togglePanel}
                     />
                   )}
                 </div>
