@@ -85,7 +85,8 @@ export const vendorChunkGroups: Rolldown.CodeSplittingGroup[] = [
 // Virtual modules (`\0vite/preload-helper.js`, `\0rolldown/runtime.js`) are not app code. A chunk
 // that holds both, such as the entry with Start's runtime, counts as an app chunk.
 export function assertLibraryChunksDoNotImportAppChunks(): Plugin {
-  const isAppModule = (id: string) => !id.includes("node_modules") && !id.startsWith("\0");
+  const isAppModule = (id: string) =>
+    !id.includes("node_modules") && (!id.startsWith("\0") || id.includes("paraglide"));
   return {
     name: "assert-library-chunks-do-not-import-app-chunks",
     applyToEnvironment: (environment) => environment.name === "client",

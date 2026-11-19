@@ -242,23 +242,75 @@ test("a push to main starts no deployment or publication", async () => {
   }
 });
 
-test("release callers select separate tracks and the Web image waits for the main-only gates", async () => {
+test("release callers select separate tracks and the Web image waits for main CI or the main-only gates", async () => {
   expect(deploy.jobs.gates.with.track).toBe("web");
-  // Web staging deploys only when an operator dispatches it from main; docs/release/github-actions.md.
   expect(Object.keys(deploy.on)).toEqual(["workflow_dispatch"]);
-  expect(deploy.jobs.gates.if).toBe("github.ref == 'refs/heads/main'");
-  // The newest pending dispatch replaces older pending ones; a running deployment is never cancelled.
+  expect(deploy.jobs["ci-status"].if).toBe("github.ref == 'refs/heads/main'");
+  expect(deploy.jobs["ci-status"].permissions).toEqual({ contents: "read", actions: "read" });
+  expect(deploy.jobs.gates.needs).toBe("ci-status");
+  expect(deploy.jobs.gates.if).toBe(
+    "github.ref == 'refs/heads/main' && needs.ci-status.outputs.passed != 'true'",
+  );
   expect(deploy.concurrency.queue).toBeUndefined();
   expect(deploy.concurrency["cancel-in-progress"]).toBe(false);
-  // Finding the base reads this repository's workflow runs.
   expect(ci.jobs.changes.permissions).toEqual({ contents: "read", actions: "read" });
   expect(deploy.jobs.gates.permissions).toEqual({ contents: "read", actions: "read" });
   expect(release.jobs.gates.permissions).toEqual({ contents: "read", actions: "read" });
-  expect(deploy.jobs.image.if).toBe("needs.gates.outputs.deploy == 'true'");
-  expect(deploy.jobs.image.needs).toBe("gates");
+  expect(deploy.jobs.image.needs).toEqual(["ci-status", "gates"]);
+  expect(deploy.jobs.image.if).toBe(
+    "always() && github.ref == 'refs/heads/main' && !cancelled() && (needs.ci-status.outputs.passed == 'true' || (needs.gates.result == 'success' && needs.gates.outputs.deploy == 'true'))",
+  );
   expect(release.jobs.gates.with.track).toBe("local");
-  // The release-notes check runs beside the gates; publishing waits for both.
   expect(release.jobs.publish.needs).toEqual(["gates", "notes-check"]);
+});
+
+test("staging Web deploy skips Validate only when CI already succeeded on main for the exact commit", async () => {
+  const step = (deploy.jobs["ci-status"].steps as Step[]).find((entry) => entry.id === "check")!;
+  const dir = await mkdtemp(join(tmpdir(), "coforge-deploy-ci-status-"));
+  try {
+    const calls = join(dir, "calls");
+    await Bun.write(
+      join(dir, "gh"),
+      `#!/bin/bash
+printf '%s\\n' "$2" >> "${calls}"
+[ "$3" = --jq ] && printf '%s' "$RUNS" | jq -r "$4"
+`,
+    );
+    await chmod(join(dir, "gh"), 0o755);
+    const check = async (name: string, runs: { event: string; conclusion: string }[]) => {
+      const output = join(dir, `output-${name}`);
+      const result = Bun.spawnSync(["bash", "-e", "-o", "pipefail", "-c", step.run!], {
+        env: {
+          ...Bun.env,
+          PATH: `${dir}:${Bun.env.PATH}`,
+          RUNS: JSON.stringify({ total_count: runs.length, workflow_runs: runs }),
+          REPOSITORY: "lrm-lab/coforge",
+          SHA: "a".repeat(40),
+          GITHUB_OUTPUT: output,
+        },
+      });
+      expect(result.exitCode).toBe(0);
+      return Bun.file(output).text();
+    };
+    expect(await check("push-ok", [{ event: "push", conclusion: "success" }])).toBe(
+      "passed=true\n",
+    );
+    expect(
+      await check("dispatch-ok", [{ event: "workflow_dispatch", conclusion: "success" }]),
+    ).toBe("passed=true\n");
+    expect(await check("pr-only", [{ event: "pull_request", conclusion: "success" }])).toBe(
+      "passed=false\n",
+    );
+    expect(await check("push-fail", [{ event: "push", conclusion: "failure" }])).toBe(
+      "passed=false\n",
+    );
+    expect(await check("empty", [])).toBe("passed=false\n");
+    expect(await Bun.file(calls).text()).toContain(
+      `repos/lrm-lab/coforge/actions/workflows/ci.yml/runs?branch=main&head_sha=${"a".repeat(40)}&status=completed&per_page=20\n`,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("the workflow diffs PRs from their merge base and includes both sides of a rename", async () => {

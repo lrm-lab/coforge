@@ -17,9 +17,32 @@ env:
   REMOTE_ROOT: /home/deploy/coforge-staging
 
 jobs:
+  ci-status:
+    name: Check main CI
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      passed: ${{ steps.check.outputs.passed }}
+    steps:
+      - name: Check whether main CI already passed for this commit
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          passed="$(gh api "repos/$REPOSITORY/actions/workflows/ci.yml/runs?branch=main&head_sha=$SHA&status=completed&per_page=20" \
+            --jq '[.workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch") and .conclusion == "success")] | length > 0')"
+          echo "passed=$passed" >> "$GITHUB_OUTPUT"
+
   gates:
     name: Validate
-    if: github.ref == 'refs/heads/main'
+    needs: ci-status
+    if: github.ref == 'refs/heads/main' && needs.ci-status.outputs.passed != 'true'
     permissions:
       contents: read
       actions: read
@@ -29,8 +52,8 @@ jobs:
 
   image:
     name: Build and push Docker image
-    needs: gates
-    if: needs.gates.outputs.deploy == 'true'
+    needs: [ci-status, gates]
+    if: always() && github.ref == 'refs/heads/main' && !cancelled() && (needs.ci-status.outputs.passed == 'true' || (needs.gates.result == 'success' && needs.gates.outputs.deploy == 'true'))
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 20

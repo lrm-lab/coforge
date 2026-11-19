@@ -60,8 +60,9 @@ with three scopes selected by `scripts/ci/selection.ts`:
   Web's frozen image install; lockfile changes still select full coverage.
   PowerShell installer changes run both PowerShell parsers and lint. Both
   installers are embedded in the Web image, so changing either also validates Web.
-- A dispatched Web deployment runs the complete Web track for its exact selected
-  main commit: Web, protocol, CI-policy, and deploy-script gates, then builds and
+- A dispatched Web deployment reuses a completed passing `CI` run on `main` for
+  its exact selected commit when one exists; otherwise it runs the complete Web
+  track (Web, protocol, CI-policy, and deploy-script gates), then builds and
   deploys the image.
 - Manual local publication always runs the complete local track for its exact
   selected main commit: protocol, Agent, CLI, Computer, Daemon, release scripts,
@@ -112,8 +113,9 @@ and the running deployment is never cancelled.
 Module-owned test/check/build commands remain unchanged. Local full validation
 still uses `mise run test`, `mise run check`, and `mise run build`; CI-policy
 regressions can be exercised alone with `bun run test:ci` and `bun run check:ci`.
-Track-specific pre-release validation is not replaced by a mutable "latest
-successful CI" result. Docker image builds and version/feed-specific
+Track-specific pre-release validation is never replaced by a mutable "latest
+successful CI" result; staging Web skips `Validate` only for the exact commit
+SHA that already passed `CI` on `main`. Docker image builds and version/feed-specific
 cross-compilation remain artifact builds. Web deployment relies on its Docker
 build instead of also building a disposable host bundle.
 
@@ -132,10 +134,9 @@ dependencies per target with [Swatinem/rust-cache](https://github.com/Swatinem/r
 saved only by a push to `main`; no other job reads it.
 
 Web and Daemon tests run one file at a time in one process, so their files are
-split across runners with `bun test --shard`
-([Bun's parallel test runner](https://bun.com/docs/test/parallel)): three for
-Web, two for the Daemon. `bun test --parallel` is not used: it hung a Web worker.
-A fourth Web runner builds and smokes the package.
+split across two runners each with `bun test --shard`
+([Bun's parallel test runner](https://bun.com/docs/test/parallel)). `bun test --parallel`
+is not used: it hung a Web worker. A third Web runner builds and smokes the package.
 
 The image job installs only Bun on the host; workspace dependencies are
 installed inside Docker. The image build uses no build cache, since other jobs

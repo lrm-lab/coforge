@@ -8,7 +8,7 @@ const strategy = ["url", "cookie", "preferredLanguage", "baseLocale"] as const;
 export const paraglideOptions = {
   project: "./project.inlang",
   outdir: "./src/paraglide",
-  outputStructure: "message-modules",
+  emitTsDeclarations: true,
   cookieName: "PARAGLIDE_LOCALE",
   strategy: [...strategy],
   // A page served without a locale prefix resolves its locale as the browser does, minus the URL,
