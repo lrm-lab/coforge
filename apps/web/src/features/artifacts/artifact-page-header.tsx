@@ -1,4 +1,4 @@
-import { Link, useRouter } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
   ChevronDown,
@@ -24,11 +24,7 @@ import { homeConversationOf, homeLinkProps, type ArtifactHome } from "./artifact
 import { RecentArtifactsMenu } from "./artifact-recent-menu";
 import { useArrivedFromGallery } from "./artifact-search";
 import { VersionMenu } from "./artifact-version-menu";
-import {
-  ARTIFACT_TITLE_VT_NAME,
-  runArtifactBackViewTransition,
-  useActiveArtifactTransitionId,
-} from "./artifact-view-transition";
+import { ARTIFACT_TITLE_VT_NAME, useActiveArtifactTransitionId } from "./artifact-view-transition";
 
 export const ARTIFACT_TITLE_ID = "artifact-page-title";
 
@@ -80,7 +76,7 @@ export function ArtifactPageHeader({
         pane ? "pr-2 pl-4" : "px-3 sm:px-4",
       )}
     >
-      {!pane && <BackToHome artifactId={artifactId} home={home} homeName={homeName} />}
+      {!pane && <BackToHome home={home} homeName={homeName} />}
       {entryPath === undefined ? (
         <span
           style={activeTitleTransition ? { viewTransitionName: ARTIFACT_TITLE_VT_NAME } : undefined}
@@ -181,17 +177,13 @@ export function ArtifactPageHeader({
 }
 
 function BackToHome({
-  artifactId,
   home,
   homeName,
 }: {
-  artifactId: string;
   home: ArtifactHome | undefined;
   homeName: string | undefined;
 }) {
   const workspaceSlug = useWorkspaceSlug();
-  const router = useRouter();
-  const reduced = usePrefersReducedMotion();
   const fromGallery = useArrivedFromGallery();
   const channel = home?.kind === "channel" ? homeConversationOf(home) : undefined;
   const label = fromGallery ? (
@@ -209,17 +201,6 @@ function BackToHome({
   return (
     <Link
       {...target}
-      viewTransition={!fromGallery && !reduced}
-      onClick={
-        fromGallery
-          ? (event) => {
-              event.preventDefault();
-              const frame = document.querySelector<HTMLElement>("[data-artifact-page-frame]");
-              const titleEl = document.getElementById(ARTIFACT_TITLE_ID);
-              runArtifactBackViewTransition(router, artifactId, { frame, title: titleEl });
-            }
-          : undefined
-      }
       className="flex h-8 min-w-0 shrink-0 items-center gap-1 rounded-lg px-2 text-sm text-tertiary outline-focus-ring transition-colors duration-150 hover:bg-primary_hover hover:text-secondary focus-visible:outline-2"
     >
       <ArrowLeft aria-hidden="true" className="size-4 shrink-0" />

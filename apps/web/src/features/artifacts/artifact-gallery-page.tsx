@@ -1,13 +1,10 @@
 import { useEffect, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { SearchLg, XClose } from "@untitledui/icons";
-import { LayoutGroup, motion } from "motion/react";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { Skeleton } from "#src/components/ui/skeleton";
-import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
-import { DURATION_S, EASE_IN_OUT } from "#src/utils/motion-tokens";
 import { m } from "#src/paraglide/messages";
 import { loadArtifactGallery } from "./artifact-gallery.functions";
 import { GalleryGridCard } from "./artifact-gallery-card";
@@ -49,7 +46,7 @@ function useGallery(filters: GalleryFilters) {
       }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor,
-    staleTime: 0,
+    staleTime: 30_000,
   });
 }
 
@@ -57,7 +54,6 @@ export function ArtifactGalleryPage() {
   const [filters, setFilters] = useState<GalleryFilters>(initialFilters);
   const [typed, setTyped] = useState("");
   const [view, setView] = useGalleryView();
-  const reduced = usePrefersReducedMotion();
   const scopeOf = useScopeOf();
   useEffect(() => {
     const timer = setTimeout(
@@ -117,18 +113,16 @@ export function ArtifactGalleryPage() {
             onSeeAll={() => update({ related: false })}
           />
         ) : (
-          <LayoutGroup id="artifact-gallery">
+          <>
             {view === "grid" ? (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(15.5rem,1fr))]">
                 {cards.map((card) => (
-                  <motion.div
+                  <GalleryGridCard
                     key={card.id}
-                    layout={reduced ? false : "position"}
-                    layoutId={reduced ? undefined : `gallery-item-${card.id}`}
-                    transition={{ layout: { duration: DURATION_S.md, ease: EASE_IN_OUT } }}
-                  >
-                    <GalleryGridCard card={card} sort={filters.sort} scope={scopeOf(card)} />
-                  </motion.div>
+                    card={card}
+                    sort={filters.sort}
+                    scope={scopeOf(card)}
+                  />
                 ))}
               </div>
             ) : (
@@ -151,7 +145,7 @@ export function ArtifactGalleryPage() {
                 )}
               </div>
             )}
-          </LayoutGroup>
+          </>
         )}
       </div>
     </main>

@@ -196,6 +196,8 @@ type AppShellProps = {
 export function AppShell(props: AppShellProps) {
   useAppHeight();
   const standalone = useIsStandalonePage();
+  const [chromeMounted, setChromeMounted] = useState(!standalone);
+  if (!standalone && !chromeMounted) setChromeMounted(true);
   useWorkspaceTabTitle(props.currentWorkspace.name);
   return (
     <SystemNotificationsProvider
@@ -204,12 +206,12 @@ export function AppShell(props: AppShellProps) {
     >
       <WhatsNewAnnouncer />
       <KeyboardShortcutsHost>
-        {standalone ? (
+        {chromeMounted ? (
+          <WorkspaceChrome {...props} standalone={standalone} />
+        ) : (
           <div className="flex h-[var(--app-height,100svh)] flex-col bg-primary pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left font-body antialiased">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">{props.children}</div>
           </div>
-        ) : (
-          <WorkspaceChrome {...props} />
         )}
       </KeyboardShortcutsHost>
     </SystemNotificationsProvider>
@@ -226,7 +228,8 @@ function WorkspaceChrome({
   children,
   recordsPreview = false,
   aiWorkbench = false,
-}: AppShellProps) {
+  standalone = false,
+}: AppShellProps & { standalone?: boolean }) {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
@@ -268,7 +271,7 @@ function WorkspaceChrome({
   const activityItem = navItems.find((item) => item.tab === "activity");
   const chatHref = chatItem?.href;
   const activityHref = activityItem?.href;
-  const tabBar = phone && chatHref && activityHref ? tabHome : null;
+  const tabBar = !standalone && phone && chatHref && activityHref ? tabHome : null;
   const selectWorkspace = useLatestCallback(onSelectWorkspace);
   const createWorkspace = useLatestCallback(onCreateWorkspace);
   const signOut = useLatestCallback(onSignOut);
@@ -308,59 +311,73 @@ function WorkspaceChrome({
       <ChatListOpenContext value={setChatListOpen}>
         <div
           className={cx(
-            "flex h-[var(--app-height,100svh)] flex-col bg-primary pt-safe-top pr-safe-right pl-safe-left font-body antialiased lg:bg-sidebar",
+            "flex h-[var(--app-height,100svh)] flex-col bg-primary pt-safe-top pr-safe-right pl-safe-left font-body antialiased",
+            !standalone && "lg:bg-sidebar",
             !tabBar && "pb-safe-bottom",
           )}
         >
           <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-            <ShellLinks>
-              <SidebarExpanded
-                activeUrl={activeUrl}
-                items={navItems}
-                header={
-                  <>
-                    <div className="flex min-w-0 flex-1">{workspaceSwitcher}</div>
-                    <SidebarToggle />
-                  </>
-                }
-                search={<SearchField />}
-                footer={
-                  <>
-                    <WhatsNewRow />
-                    <UserRow
-                      base={base}
-                      user={user}
-                      onSignOut={onSignOut}
-                      workspaceSlug={currentWorkspace.slug}
-                    />
-                  </>
-                }
-              />
-              <SidebarRail
-                activeUrl={activeUrl}
-                items={navItems}
-                header={
-                  <>
-                    <SidebarToggle expand />
-                    {phoneShell.workspaceSwitcher}
-                    <SearchRailButton />
-                  </>
-                }
-                footer={
-                  <>
-                    <WhatsNewRailButton />
-                    <NotificationBell
-                      workspaceSlug={currentWorkspace.slug}
-                      badgeRing="ring-sidebar"
-                    />
-                    <UserMenuCard compact base={base} user={user} onSignOut={onSignOut} />
-                  </>
-                }
-              />
-            </ShellLinks>
+            <div className={standalone ? "hidden" : "contents"}>
+              <ShellLinks>
+                <SidebarExpanded
+                  activeUrl={activeUrl}
+                  items={navItems}
+                  header={
+                    <>
+                      <div className="flex min-w-0 flex-1">{workspaceSwitcher}</div>
+                      <SidebarToggle />
+                    </>
+                  }
+                  search={<SearchField />}
+                  footer={
+                    <>
+                      <WhatsNewRow />
+                      <UserRow
+                        base={base}
+                        user={user}
+                        onSignOut={onSignOut}
+                        workspaceSlug={currentWorkspace.slug}
+                      />
+                    </>
+                  }
+                />
+                <SidebarRail
+                  activeUrl={activeUrl}
+                  items={navItems}
+                  header={
+                    <>
+                      <SidebarToggle expand />
+                      {phoneShell.workspaceSwitcher}
+                      <SearchRailButton />
+                    </>
+                  }
+                  footer={
+                    <>
+                      <WhatsNewRailButton />
+                      <NotificationBell
+                        workspaceSlug={currentWorkspace.slug}
+                        badgeRing="ring-sidebar"
+                      />
+                      <UserMenuCard compact base={base} user={user} onSignOut={onSignOut} />
+                    </>
+                  }
+                />
+              </ShellLinks>
+            </div>
 
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:p-2 lg:pl-0">
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary lg:overflow-hidden lg:rounded-xl lg:has-[[data-panel-cards]]:overflow-visible lg:has-[[data-panel-cards]]:rounded-none lg:has-[[data-panel-cards]]:bg-transparent">
+            <div
+              className={cx(
+                "flex min-h-0 min-w-0 flex-1 flex-col",
+                !standalone && "lg:p-2 lg:pl-0",
+              )}
+            >
+              <div
+                className={cx(
+                  "flex min-h-0 min-w-0 flex-1 flex-col bg-primary",
+                  !standalone &&
+                    "lg:overflow-hidden lg:rounded-xl lg:has-[[data-panel-cards]]:overflow-visible lg:has-[[data-panel-cards]]:rounded-none lg:has-[[data-panel-cards]]:bg-transparent",
+                )}
+              >
                 <ChatListShownContext value={phone && chatListOpen}>
                   {children}
                 </ChatListShownContext>
