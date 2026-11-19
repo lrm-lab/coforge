@@ -61,9 +61,7 @@ export type AgentLaunchCoordinatorPorts = {
   transport: () => DaemonConnectionClient;
   runtimeInstanceId: string;
   agentProcessManager: AgentProcessManager;
-  /** Which Agents are stopping, and any stop still in flight. */
   stops: Pick<AgentStopRegistry, "stopping" | "pendingStop">;
-  /** The Session each launch reported. */
   sessions: Pick<AgentStopRegistry, "sessionReference" | "rememberSession">;
   currentActivityLaunches: Map<string, ActivityLaunch>;
   activityPublisher: AgentActivityPublisher<ActivityLaunch>;
@@ -73,7 +71,6 @@ export type AgentLaunchCoordinatorPorts = {
   usageReport: AgentUsageReport;
   fastModeWarned: Set<string>;
   sync: AgentFeatureSync;
-  /** Applies the server-authored context-view gate for a newly fetched launch config. */
   contextViewGate: (agentId: string, enabled: boolean | undefined) => void;
   agentApiKeys: Map<string, string>;
   agentProxy?: AgentProxy;
@@ -137,7 +134,6 @@ export type AgentLaunchCoordinatorPorts = {
     provider: AgentRuntimeConfig["provider"],
     error: unknown,
   ) => ActivityDraft;
-  /** The App Inbox: each launch announces its items, and a replaced Session forgets who was told. */
   appInbox: Pick<AgentInboxCoordinator, "drainAppInboxNotices" | "forgetAnnouncedAppItems">;
   attachSessionMemory: (agentId: string) => Promise<boolean>;
   prependStandingPromptUpdate?: (agentId: string, instructions: string) => boolean;
