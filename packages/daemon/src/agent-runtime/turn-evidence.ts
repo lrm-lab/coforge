@@ -5,30 +5,32 @@ export const ZERO_EVIDENCE_TURN_REASON = "zero_evidence_turn_completed";
 export const ZERO_EVIDENCE_TURN_MESSAGE =
   "Agent runtime completed a turn with no assistant text or tool calls (zero_evidence_turn_completed).";
 
-/**
- * Tracks whether the current main-thread turn emitted any assistant text or tool calls before
- * reporting a clean `completed` status. Providers that finish a turn after turn-lifecycle signals
- * (`thinking-delta`, `progress`, `context-usage`, `service-tier`, `model_request_started`) with
- * zero assistant text events and zero tool calls (and no compaction, review, subagent or prior
- * error event) suffered a silent empty completion and must enter retryable error recovery rather
- * than settling as a valid quiet turn.
- */
 export class TurnEvidenceLedger {
   #turnObserved = false;
+  #opened = false;
+  readonly #bareCompletionIsEmpty: boolean;
   #assistantTextEvents = 0;
   #toolCalls = 0;
   #exempt = false;
 
+  constructor(options: { bareCompletionIsEmpty?: boolean } = {}) {
+    this.#bareCompletionIsEmpty = options.bareCompletionIsEmpty === true;
+  }
+
   reset(): void {
     this.#turnObserved = false;
+    this.#opened = false;
     this.#assistantTextEvents = 0;
     this.#toolCalls = 0;
     this.#exempt = false;
   }
 
-  /** Marks an internal maintenance turn (such as `/compact`) exempt from zero-evidence checks. */
   markExempt(): void {
     this.#exempt = true;
+  }
+
+  markOpened(): void {
+    if (this.#bareCompletionIsEmpty) this.#opened = true;
   }
 
   noteMessageSent(): void {
@@ -107,7 +109,7 @@ export class TurnEvidenceLedger {
   ): Extract<AgentRuntimeEvent, { type: "error" }> | undefined {
     const zeroEvidence =
       status === "completed" &&
-      this.#turnObserved &&
+      (this.#turnObserved || this.#opened) &&
       this.#assistantTextEvents === 0 &&
       this.#toolCalls === 0 &&
       !this.#exempt;

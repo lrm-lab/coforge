@@ -154,6 +154,7 @@ export class AgentLaunchCustody {
     noteTurnStarted(agentId, via);
     const launch = this.ports.currentActivityLaunches.get(agentId);
     if (!launch?.progress) return;
+    launch.turnEvidence?.markOpened();
     launch.progress.noteTurnStarted();
     launch.stalled?.start(agentId, stalledTurnObservation(launch));
   }

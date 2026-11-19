@@ -7,7 +7,7 @@ import {
 } from "#src/agent-runtime/subagent-progress-activity";
 import { ToolCallLedger } from "#src/agent-runtime/tool-call-ledger";
 import { TurnEvidenceLedger } from "#src/agent-runtime/turn-evidence";
-import { AGENT_ACTIVITY_DETAIL_KIND } from "@lrm/coforge-sdk/internal";
+import { AGENT_ACTIVITY_DETAIL_KIND, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeConfig, AgentRuntimeEvent } from "@lrm/coforge-anvil";
 import type { AgentRuntime } from "#src/agent-runtime/agent-process-manager";
 import type { ActivityLaunch } from "./activity-launch";
@@ -60,7 +60,9 @@ export function trackAgentLaunch(
     }
     return trajectory;
   };
-  const turnEvidence = new TurnEvidenceLedger();
+  const turnEvidence = new TurnEvidenceLedger({
+    bareCompletionIsEmpty: config.provider === RUNTIME_PROVIDER.DROID,
+  });
   launch.turnEvidence = turnEvidence;
   const trajectory = {
     accept: (event: AgentRuntimeEvent) => {
