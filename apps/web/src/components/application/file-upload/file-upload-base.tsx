@@ -8,7 +8,9 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { ProgressBar } from "#src/components/base/progress-indicators/progress-indicators";
 import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured-icon";
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { cx } from "#src/utils/cx";
+import { DURATION_S, EASE_IN_OUT } from "#src/utils/motion-tokens";
 
 /**
  * Returns a human-readable file size.
@@ -199,7 +201,7 @@ export const FileUploadDropZone = ({
             onDragEnd={handleDragOut}
             onDrop={handleDrop}
             className={cx(
-                "relative flex flex-col items-center gap-3 rounded-xl bg-primary px-6 py-4 text-tertiary ring-1 ring-secondary transition duration-100 ease-linear ring-inset",
+                "relative flex flex-col items-center gap-3 rounded-xl bg-primary px-6 py-4 text-tertiary ring-1 ring-secondary transition duration-100 ease-out ring-inset",
                 isDraggingOver && "ring-2 ring-brand",
                 isDisabled && "cursor-not-allowed bg-secondary",
                 className,
@@ -226,7 +228,7 @@ export const FileUploadDropZone = ({
                     </label>
                     <span className="text-sm max-md:hidden">or drag and drop</span>
                 </div>
-                <p className={cx("text-xs transition duration-100 ease-linear", isInvalid && "text-error-primary")}>
+                <p className={cx("text-xs transition duration-100 ease-out", isInvalid && "text-error-primary")}>
                     {hint || "SVG, PNG, JPG or GIF (max. 800x400px)"}
                 </p>
             </div>
@@ -255,14 +257,19 @@ export interface FileListItemProps {
     onRetry?: () => void;
 }
 
+const FILE_ITEM_LAYOUT_TRANSITION = { layout: { duration: DURATION_S.sm, ease: EASE_IN_OUT } };
+const REDUCED_FILE_ITEM_LAYOUT_TRANSITION = { layout: { duration: 0 } };
+
 export const FileListItemProgressBar = ({ name, size, progress, failed, type, fileIconVariant, onDelete, onRetry, className }: FileListItemProps) => {
     const isComplete = progress === 100;
+    const reduced = usePrefersReducedMotion();
 
     return (
         <motion.li
             layout="position"
+            transition={reduced ? REDUCED_FILE_ITEM_LAYOUT_TRANSITION : FILE_ITEM_LAYOUT_TRANSITION}
             className={cx(
-                "relative flex gap-3 rounded-xl bg-primary p-4 ring-1 ring-secondary transition-shadow duration-100 ease-linear ring-inset",
+                "relative flex gap-3 rounded-xl bg-primary p-4 ring-1 ring-secondary transition-shadow duration-100 ease-out ring-inset",
                 failed && "ring-2 ring-error",
                 className,
             )}
@@ -314,9 +321,14 @@ export const FileListItemProgressBar = ({ name, size, progress, failed, type, fi
 
 export const FileListItemProgressFill = ({ name, size, progress, failed, type, fileIconVariant, onDelete, onRetry, className }: FileListItemProps) => {
     const isComplete = progress === 100;
+    const reduced = usePrefersReducedMotion();
 
     return (
-        <motion.li layout="position" className={cx("relative flex gap-3 overflow-hidden rounded-xl bg-primary p-4", className)}>
+        <motion.li
+            layout="position"
+            transition={reduced ? REDUCED_FILE_ITEM_LAYOUT_TRANSITION : FILE_ITEM_LAYOUT_TRANSITION}
+            className={cx("relative flex gap-3 overflow-hidden rounded-xl bg-primary p-4", className)}
+        >
             {/* Progress fill. */}
             <div
                 style={{ transform: `translateX(-${100 - progress}%)` }}
@@ -329,7 +341,7 @@ export const FileListItemProgressFill = ({ name, size, progress, failed, type, f
             {/* Inner ring. */}
             <div
                 className={cx(
-                    "absolute inset-0 size-full rounded-[inherit] ring-1 ring-secondary transition duration-100 ease-linear ring-inset",
+                    "absolute inset-0 size-full rounded-[inherit] ring-1 ring-secondary transition duration-100 ease-out ring-inset",
                     failed && "ring-2 ring-error",
                 )}
             />

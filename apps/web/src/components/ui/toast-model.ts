@@ -1,5 +1,7 @@
 import type { Transition } from "motion/react";
 
+import { DURATION_S, EASE_OUT } from "#src/utils/motion-tokens";
+
 export type ToastIcon = "done" | "error" | "notice" | "progress" | "countdown";
 
 export type ToastAction = { label: string; onClick: () => void };
@@ -103,6 +105,6 @@ export function countdownRemainingMs(countdown: Countdown, now: number): number 
   return Math.max(0, countdown.durationMs - countdown.spentMs - running);
 }
 
-export const TOAST_FADE: Transition = { duration: 0.15 };
+export const TOAST_FADE: Transition = { duration: DURATION_S.reduced, ease: EASE_OUT };
 
 export const SWIPE_DISMISS_PX = 80;

@@ -17,6 +17,7 @@ import {
   cancelFlipAnimation,
   type SharedRect,
 } from "#src/lib/shared-element-rect";
+import { DURATION_MS, EASE_CSS } from "#src/utils/motion-tokens";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import { withCloudDesktopPhoneView } from "./cloud-desktop-url";
@@ -79,7 +80,10 @@ export function DesktopStreamSurface({
     const duration = phone ? 460 : 340;
     if (reduced) {
       if (prevPhase !== phase && typeof surface.animate === "function") {
-        surface.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: "ease" });
+        surface.animate([{ opacity: 0 }, { opacity: 1 }], {
+          duration: DURATION_MS.reduced,
+          easing: EASE_CSS.out,
+        });
       }
       setChromeRevealed(true);
       return;

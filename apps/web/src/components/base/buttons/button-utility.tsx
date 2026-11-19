@@ -94,7 +94,7 @@ export const ButtonUtility = ({
             aria-keyshortcuts={tooltipShortcut}
             {...props}
             className={cx(
-                "group relative inline-flex h-max cursor-pointer items-center justify-center rounded-md p-1.5 outline-focus-ring transition duration-100 ease-linear focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+                "group relative inline-flex h-max cursor-pointer items-center justify-center rounded-md p-1.5 outline-focus-ring transition duration-100 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
                 styles[color],
 
                 // A finger needs more than the glyph: at least 44px, without moving anything.

@@ -87,7 +87,7 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   does: "Atlas, Ben and Cam" with no serial comma, "Atlas、Ben 和 Cam" in Chinese. Both lines share
   `AgentFaces`, as on Raft (task #210): up to three 16px moving
   mascots overlapping by 5px (`AgentMascotView` in an `AvatarSticker`, acting out `working`), each
-  sliding and fading in over 200ms on Raft's slide easing as it joins (`starting:`, the slide only
+  sliding and fading in over `--duration-sm` (200ms) on `--ease-out-strong` as it joins (`starting:`, the slide only
   without reduced motion), then the sentence, which names everyone and carries no activity label. Above the
   composer it sits in a pill, as Frank drew it: a hairline-bordered rounded capsule,
   left-aligned. Everyone who can read the place sees who is typing, whether or not they can write there. It overlays
@@ -95,8 +95,8 @@ Part of [Agents UI](AGENTS.md). Rules for `src/features/agents/`.
   group, so the newest message is never covered while the pane follows it (scrolled up, it covers
   that strip) and the sentence truncates before the group; it renders nothing (and reads no roster)
   while nobody is typing or working. An Agent's own message arriving in that place ends one of its entries
-  ([reply intents](../../../../../docs/observability/reply-intent.md)). The pill eases in and out
-  (`replying-agents-line.css`) unless motion is reduced.
+  ([reply intents](../../../../../docs/observability/reply-intent.md)). The pill eases in (`--ease-out`) and out
+  (`--ease-in`) in `replying-agents-line.css`, falling back to a 150ms opacity fade when motion is reduced.
 - In a channel's main stream the same pill also counts the channel's other Agents that are working
   or thinking, anywhere and not only for this channel, as on Raft (`ChannelAgentsContext`, the Agents of
   the channel's member directory, so absent for a non-member; `pickBusyAgents` over the live

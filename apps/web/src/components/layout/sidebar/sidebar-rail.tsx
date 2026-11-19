@@ -22,8 +22,8 @@ export const SIDEBAR_RAIL_WIDTH = "3.5rem";
 const RAIL_TARGET =
   "group mx-auto flex size-11 items-center justify-center rounded-lg outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2";
 const RAIL_TILE =
-  "relative flex size-10 items-center justify-center rounded-lg transition-colors duration-100 ease-linear";
-const RAIL_ICON = "size-5 stroke-[2.4] transition-colors duration-100 ease-linear";
+  "relative flex size-10 items-center justify-center rounded-lg transition-colors duration-100 ease-out";
+const RAIL_ICON = "size-5 stroke-[2.4] transition-colors duration-100 ease-out";
 
 type RailItemType = NavItemType & {
   icon: FC<{ className?: string }>;

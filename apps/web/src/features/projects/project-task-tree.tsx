@@ -143,7 +143,10 @@ function TaskTreeItem({ node }: { node: FilteredNode<ProjectTask> }) {
               >
                 <ChevronRight
                   aria-hidden="true"
-                  className={cn("size-4 transition-transform", isExpanded && "rotate-90")}
+                  className={cn(
+                    "size-4 transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
+                    isExpanded && "rotate-90",
+                  )}
                 />
               </AriaButton>
             ) : (

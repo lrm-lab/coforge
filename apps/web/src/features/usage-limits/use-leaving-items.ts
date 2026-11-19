@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 
-/** How long a card that left stays mounted: no shorter than its `Fold` takes to shut (`--motion-out`). */
-export const NOTICE_LEAVE_MS = 200;
+import { DURATION_MS } from "#src/utils/motion-tokens";
+
+/** How long a card that left stays mounted: no shorter than its `Fold` takes to shut (`--duration-md-out`). */
+export const NOTICE_LEAVE_MS = DURATION_MS.mdOut;
 
 /**
  * `items` plus the ones that just left, marked `leaving` in their old place for `NOTICE_LEAVE_MS`,

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
-import { CONTINUOUS_EASING } from "#src/lib/shared-element-rect";
+import { DURATION_MS, EASE_CSS } from "#src/utils/motion-tokens";
 
 type IndicatorBox = {
   left: number;
@@ -128,8 +128,8 @@ export function useSlidingIndicator(
       if (Math.abs(start.left - next.left) < 0.5 && Math.abs(start.width - next.width) < 0.5)
         return;
       const anim = indicator.animate(computeStretchKeyframes(start, next, variant), {
-        duration: desktop ? 260 : 400,
-        easing: CONTINUOUS_EASING,
+        duration: desktop ? DURATION_MS.md : DURATION_MS.lg,
+        easing: EASE_CSS.inOut,
       });
       animRef.current = anim;
       anim.addEventListener("finish", () => {

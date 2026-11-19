@@ -7,7 +7,7 @@ import { conversationRoute } from "#src/features/conversations/last-conversation
 import { statusLabel, TaskStatusIcon } from "#src/features/tasks/task-status-icon";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
-import { CONTINUOUS_EASE_TUPLE } from "#src/lib/shared-element-rect";
+import { DURATION_S, EASE_IN, EASE_IN_OUT, EASE_OUT } from "#src/utils/motion-tokens";
 import { m } from "#src/paraglide/messages";
 import { SEARCH_HEADING_CLASS, SEARCH_ROW_CLASS } from "./search-entity-list";
 import { SearchMatches } from "./search-matches";
@@ -47,10 +47,14 @@ export function SearchTaskList({
                 layout={reduced ? false : "position"}
                 initial={reduced ? false : { opacity: 0 }}
                 animate={{ opacity: 1 }}
-                exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                exit={{
+                  opacity: 0,
+                  transition: { duration: DURATION_S.smOut, ease: EASE_IN },
+                }}
                 transition={{
-                  duration: reduced ? 0.12 : 0.2,
-                  ease: CONTINUOUS_EASE_TUPLE,
+                  duration: reduced ? DURATION_S.reduced : DURATION_S.sm,
+                  ease: EASE_OUT,
+                  layout: { duration: DURATION_S.sm, ease: EASE_IN_OUT },
                 }}
               >
                 <Link

@@ -5,7 +5,7 @@ import { Button as AriaButton } from "react-aria-components";
 import { cx } from "#src/utils/cx";
 
 const ROW_CLASS =
-  "flex h-14 w-full items-center gap-3 px-page text-left text-md font-medium outline-focus-ring transition-colors duration-100 ease-linear hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2";
+  "flex h-14 w-full items-center gap-3 px-page text-left text-md font-medium outline-focus-ring transition-colors duration-100 ease-out hover:bg-primary_hover focus-visible:outline-2 focus-visible:-outline-offset-2";
 
 /**
  * One row of a tab page's list (the Workspace tab, Me): an icon, the label, what the row carries

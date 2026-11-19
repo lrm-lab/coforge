@@ -41,16 +41,16 @@ const SCOPE_LABEL: Record<SearchScope, () => string> = {
 };
 
 const INACTIVE_CHIP_CLASS =
-  "relative inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-lg px-2.5 text-xs font-medium text-secondary ring-1 ring-secondary ring-inset outline-focus-ring transition-colors duration-100 ease-linear hover:bg-primary_hover hover:text-primary focus-visible:outline-2 focus-visible:-outline-offset-2 max-sm:h-9 max-sm:px-3 max-sm:after:absolute max-sm:after:inset-x-0 max-sm:after:-inset-y-1";
+  "relative inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-lg px-2.5 text-xs font-medium text-secondary ring-1 ring-secondary ring-inset outline-focus-ring transition-colors duration-100 ease-out hover:bg-primary_hover hover:text-primary focus-visible:outline-2 focus-visible:-outline-offset-2 max-sm:h-9 max-sm:px-3 max-sm:after:absolute max-sm:after:inset-x-0 max-sm:after:-inset-y-1";
 
 const ACTIVE_SHELL_CLASS =
   "inline-flex h-7 shrink-0 items-center rounded-lg bg-(--color-reference-bg) text-(--color-reference-text) ring-1 ring-(--color-reference-text)/35 ring-inset max-sm:h-9";
 
 const ACTIVE_TRIGGER_CLASS =
-  "relative inline-flex h-full cursor-pointer items-center gap-1.5 rounded-l-lg pl-2.5 pr-0.5 text-xs font-medium outline-focus-ring transition-colors duration-100 ease-linear hover:bg-(--color-reference-text)/10 focus-visible:outline-2 focus-visible:-outline-offset-2 max-sm:pl-3 max-sm:pr-0.5 max-sm:after:absolute max-sm:after:inset-x-0 max-sm:after:-inset-y-1";
+  "relative inline-flex h-full cursor-pointer items-center gap-1.5 rounded-l-lg pl-2.5 pr-0.5 text-xs font-medium outline-focus-ring transition-colors duration-100 ease-out hover:bg-(--color-reference-text)/10 focus-visible:outline-2 focus-visible:-outline-offset-2 max-sm:pl-3 max-sm:pr-0.5 max-sm:after:absolute max-sm:after:inset-x-0 max-sm:after:-inset-y-1";
 
 const ACTIVE_CLEAR_CLASS =
-  "relative inline-flex h-full cursor-pointer items-center justify-center rounded-r-lg pl-0.5 pr-2 text-(--color-reference-text)/80 outline-focus-ring transition-colors duration-100 ease-linear hover:bg-(--color-reference-text)/10 hover:text-(--color-reference-text) focus-visible:outline-2 focus-visible:-outline-offset-2 max-sm:pl-1 max-sm:pr-2.5 max-sm:after:absolute max-sm:after:-inset-x-1 max-sm:after:-inset-y-1";
+  "relative inline-flex h-full cursor-pointer items-center justify-center rounded-r-lg pl-0.5 pr-2 text-(--color-reference-text)/80 outline-focus-ring transition-colors duration-100 ease-out hover:bg-(--color-reference-text)/10 hover:text-(--color-reference-text) focus-visible:outline-2 focus-visible:-outline-offset-2 max-sm:pl-1 max-sm:pr-2.5 max-sm:after:absolute max-sm:after:-inset-x-1 max-sm:after:-inset-y-1";
 
 /** The channel a search is limited to, as the directory names it. */
 export function useSearchChannel(workspaceId: string, channelId: string | undefined) {
@@ -254,7 +254,7 @@ export const SearchFilterBar = memo(function SearchFilterBar({
             isSelected={active}
             onChange={() => onChange(toggleScope(filters, scope, sender?.kind))}
             className={cx(
-              "relative inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-lg text-xs font-medium ring-1 ring-inset outline-focus-ring transition-colors duration-100 ease-linear focus-visible:outline-2 focus-visible:-outline-offset-2 max-sm:h-9 max-sm:after:absolute max-sm:after:inset-x-0 max-sm:after:-inset-y-1",
+              "relative inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-lg text-xs font-medium ring-1 ring-inset outline-focus-ring transition-colors duration-100 ease-out focus-visible:outline-2 focus-visible:-outline-offset-2 max-sm:h-9 max-sm:after:absolute max-sm:after:inset-x-0 max-sm:after:-inset-y-1",
               active
                 ? "bg-(--color-reference-bg) pl-2.5 pr-2 text-(--color-reference-text) ring-(--color-reference-text)/35 hover:bg-(--color-reference-bg) max-sm:pl-3 max-sm:pr-2.5"
                 : "px-2.5 text-secondary ring-secondary hover:bg-primary_hover hover:text-primary max-sm:px-3",

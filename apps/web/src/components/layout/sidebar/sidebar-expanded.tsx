@@ -14,7 +14,7 @@ function ExpandedItem({ href, icon: Icon, label, current, badge }: ExpandedItemT
       href={href}
       aria-current={current ? "page" : undefined}
       className={cx(
-        "group flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium outline-focus-ring transition-colors duration-100 ease-linear focus-visible:outline-2 focus-visible:outline-offset-2",
+        "group flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium outline-focus-ring transition-colors duration-100 ease-out focus-visible:outline-2 focus-visible:outline-offset-2",
         current
           ? "bg-nav-bg-current font-semibold text-nav-fg-current"
           : "text-nav-fg hover:bg-sidebar-item-active hover:text-secondary",
@@ -23,7 +23,7 @@ function ExpandedItem({ href, icon: Icon, label, current, badge }: ExpandedItemT
       <Icon
         aria-hidden="true"
         className={cx(
-          "size-5 shrink-0 transition-colors duration-100 ease-linear",
+          "size-5 shrink-0 transition-colors duration-100 ease-out",
           current ? "text-nav-fg-current" : "text-nav-fg group-hover:text-secondary",
         )}
       />

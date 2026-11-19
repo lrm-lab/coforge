@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { DialogTrigger as AriaDialogTrigger } from "react-aria-components";
 import { useSelector } from "@tanstack/react-store";
 
@@ -66,14 +66,9 @@ export function ReplyingAgentsLine({
   const typingIds = useReplyingAgentIds(conversationId, threadRootId);
   const workingIds = useWorkingAgentIds(channel?.agentIds);
   const current = typingIds || workingIds ? `${typingIds}${GROUP_SEPARATOR}${workingIds}` : "";
-  // The pill eases out naming the Agents it last named and unmounts when that animation ends;
-  // with reduced motion there is none, so it goes at once.
   const [shown, setShown] = useState(current);
   if (current && current !== shown) setShown(current);
   const leaving = !current && shown !== "";
-  useEffect(() => {
-    if (leaving && window.matchMedia("(prefers-reduced-motion: reduce)").matches) setShown("");
-  }, [leaving]);
   const [shownTyping = "", shownWorking = ""] = shown.split(GROUP_SEPARATOR);
   return (
     <div className={className}>
@@ -167,7 +162,7 @@ function AgentFaces({ agents }: { agents: readonly ReplyingAgent[] }) {
           key={agent.id}
           size="xs"
           className={cx(
-            "size-4 transition-[translate,opacity] duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] starting:opacity-0 motion-safe:starting:-translate-x-1",
+            "size-4 transition-[translate,opacity] duration-(--duration-sm) ease-out-strong starting:opacity-0 motion-safe:starting:-translate-x-1",
             index > 0 && "-ml-[5px]",
           )}
         >

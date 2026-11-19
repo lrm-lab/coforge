@@ -22,7 +22,7 @@ export function Mark({ on, many, dim }: { on: boolean; many: boolean; dim?: bool
     <span
       aria-hidden="true"
       className={cn(
-        "mt-0.5 grid size-4.5 shrink-0 place-items-center text-white transition-[background-color,box-shadow] duration-100",
+        "mt-0.5 grid size-4.5 shrink-0 place-items-center text-white transition-[background-color,box-shadow] duration-100 ease-out",
         many ? "rounded-[0.3125rem]" : "rounded-full",
         on
           ? dim
@@ -35,8 +35,10 @@ export function Mark({ on, many, dim }: { on: boolean; many: boolean; dim?: bool
     >
       <Check
         className={cn(
-          "size-3 transition-[opacity,scale] duration-150",
-          on ? "scale-100 opacity-100" : "scale-50 opacity-0",
+          "size-3 transition-[opacity,scale] motion-reduce:transition-opacity motion-reduce:duration-150 motion-reduce:ease-out",
+          on
+            ? "scale-100 opacity-100 duration-[calc(var(--duration-sm)*1.5)] ease-overshoot"
+            : "scale-50 opacity-0 duration-(--duration-sm-out) ease-in motion-reduce:scale-100",
         )}
       />
     </span>

@@ -175,7 +175,7 @@ export const Tab = ({ label, children, badge, icon: Icon, className, ...otherPro
             {...otherProps}
             className={(prop) =>
                 cx(
-                    "z-10 flex h-max cursor-pointer items-center justify-center gap-2 rounded-md whitespace-nowrap text-quaternary transition duration-100 ease-linear",
+                    "z-10 flex h-max cursor-pointer items-center justify-center gap-2 rounded-md whitespace-nowrap text-quaternary transition duration-100 ease-out",
                     "group-orientation-vertical:justify-start",
                     fullWidth && "w-full flex-1",
                     sizes[size].base,

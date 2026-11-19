@@ -181,7 +181,7 @@ function SkillRow({ entry }: { entry: AgentSkillsScope["entries"][number] }) {
             <ChevronRight
               aria-hidden="true"
               className={cn(
-                "size-4 shrink-0 text-fg-quaternary transition-transform motion-reduce:transition-none",
+                "size-4 shrink-0 text-fg-quaternary transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
                 isExpanded && "rotate-90",
               )}
             />

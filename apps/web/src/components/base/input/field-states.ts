@@ -1,5 +1,5 @@
 export const FIELD_STATES = {
-  box: "rounded-lg bg-primary shadow-xs ring-1 ring-field-border ring-inset transition-shadow duration-100 ease-linear",
+  box: "rounded-lg bg-primary shadow-xs ring-1 ring-field-border ring-inset transition-shadow duration-100 ease-out",
   text: "text-field-text placeholder:text-field-placeholder",
   typing: "ring-2 ring-field-border-typing forced-colors:outline-2",
   focusTyping:

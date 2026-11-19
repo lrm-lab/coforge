@@ -13,6 +13,7 @@ import { useOpenDirectConversation } from "#src/features/conversations/open-dire
 import { useRefreshSidebar } from "#src/features/conversations/sidebar-lists";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
+import { DURATION_MS, EASE_CSS } from "#src/utils/motion-tokens";
 import {
   AgentCreateFooter,
   AgentCreateForm,
@@ -124,7 +125,7 @@ function NewAgentForms({
               value={option.id}
               className={({ isSelected, isFocusVisible, isDisabled }) =>
                 cx(
-                  "flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-md text-sm font-medium transition duration-100 ease-linear",
+                  "flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-md text-sm font-medium transition duration-150 ease-out-strong",
                   isSelected
                     ? "bg-primary text-primary shadow-xs ring-1 ring-primary"
                     : "text-tertiary hover:text-secondary",
@@ -297,7 +298,7 @@ function useAgentCreateCatalogs(defaultComputerId: string | undefined) {
   };
 }
 
-const HEIGHT_TRANSITION = { duration: 200, easing: "cubic-bezier(0.23, 1, 0.32, 1)" };
+const HEIGHT_TRANSITION = { duration: DURATION_MS.md, easing: EASE_CSS.inOut };
 
 function useDialogHeightTransition(key: unknown) {
   const ref = useRef<HTMLDivElement>(null);

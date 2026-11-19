@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { m } from "#src/paraglide/messages";
+import { DURATION_MS, EASE_CSS } from "#src/utils/motion-tokens";
 import { useAttachLoginArt, type LoginWelcome } from "./login-art-state";
 import "./login-art.css";
 
@@ -63,8 +64,8 @@ export function LoginArt() {
         if (!el || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
         if (next && !lean) {
           lean = el.animate(LEAN, {
-            duration: 220,
-            easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+            duration: DURATION_MS.sm,
+            easing: EASE_CSS.outStrong,
             fill: "forwards",
           });
         } else if (!next && lean) {
@@ -82,7 +83,7 @@ export function LoginArt() {
         lean?.cancel();
         lean = null;
         setGreeting(kind);
-        const sway = el.animate(SWAY, { duration: SWAY_MS, easing: "ease-in-out" });
+        const sway = el.animate(SWAY, { duration: SWAY_MS, easing: EASE_CSS.inOut });
         // The provider stops waiting after `WELCOME_LIMIT_MS` whatever happens here.
         await sway.finished.then(() => wait(HOLD_MS)).catch(() => {});
       },
@@ -95,7 +96,7 @@ export function LoginArt() {
     const el = hop.current;
     if (!el || greeting !== null || el.getAnimations().length > 0) return;
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    el.animate(HOP, { duration: HOP_MS, easing: "ease-in-out" });
+    el.animate(HOP, { duration: HOP_MS, easing: EASE_CSS.inOut });
   };
 
   // The greeting's smile wins over eyes shut: pressing Enter in the field greets at once.

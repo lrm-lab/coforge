@@ -398,7 +398,7 @@ function UserRow({
   workspaceSlug: string;
 }) {
   return (
-    <div className="group/user flex h-10 items-center rounded-lg transition-colors duration-100 ease-linear hover:bg-sidebar-item-active has-[[aria-expanded=true]]:bg-sidebar-item-active has-[[aria-expanded=true]]:[--user-ring:var(--color-sidebar-item-active)]">
+    <div className="group/user flex h-10 items-center rounded-lg transition-colors duration-100 ease-out hover:bg-sidebar-item-active has-[[aria-expanded=true]]:bg-sidebar-item-active has-[[aria-expanded=true]]:[--user-ring:var(--color-sidebar-item-active)]">
       <UserMenuCard {...menu} />
       <NotificationBell
         workspaceSlug={workspaceSlug}
@@ -436,7 +436,7 @@ function UserMenuCard({
       {compact ? (
         <AriaButton
           aria-label={`${m.controls_current_user()}: ${user.name}`}
-          className="relative flex size-10 items-center justify-center rounded-full outline-focus-ring transition duration-100 ease-linear focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="relative flex size-10 items-center justify-center rounded-full outline-focus-ring transition duration-100 ease-out focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           {avatar}
         </AriaButton>
@@ -446,7 +446,7 @@ function UserMenuCard({
           className="flex h-full min-w-0 flex-1 items-center gap-2.5 rounded-lg pl-2.5 text-left outline-focus-ring focus-visible:outline-2 focus-visible:outline-offset-2"
         >
           {avatar}
-          <span className="min-w-0 truncate text-sm font-medium text-nav-fg transition-colors duration-100 ease-linear group-hover/user:text-secondary">
+          <span className="min-w-0 truncate text-sm font-medium text-nav-fg transition-colors duration-100 ease-out group-hover/user:text-secondary">
             {user.name}
           </span>
         </AriaButton>

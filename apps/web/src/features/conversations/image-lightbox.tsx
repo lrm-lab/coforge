@@ -17,12 +17,12 @@ import { Empty, EmptyTitle } from "#src/components/ui/empty";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import {
-  CONTINUOUS_EASING,
   animateFlipFromRect,
   animateFlipToRect,
   cancelFlipAnimation,
   type SharedRect,
 } from "#src/lib/shared-element-rect";
+import { DURATION_MS } from "#src/utils/motion-tokens";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { takesComments } from "./attachment-preview-kind";
@@ -151,8 +151,12 @@ export function ImageLightbox({
               dragProgress > 0
                 ? `rgb(0 0 0 / ${Math.max(0.08, 0.6 * (1 - dragProgress * 0.85))})`
                 : "rgb(0 0 0 / 0.6)",
-            transitionDuration: closing ? (desktop ? "180ms" : "240ms") : "150ms",
-            transitionTimingFunction: CONTINUOUS_EASING,
+            transitionDuration: closing
+              ? desktop
+                ? "var(--duration-md-out)"
+                : "var(--duration-lg-out)"
+              : "var(--duration-sm-out)",
+            transitionTimingFunction: closing ? "var(--ease-in)" : "var(--ease-out)",
           }}
         />
         <Dialog
@@ -334,14 +338,17 @@ function LightboxContent({
       return;
     }
     if (img) {
-      img.style.transition = `transform 280ms ${CONTINUOUS_EASING}`;
+      img.style.transition = "transform calc(var(--duration-md) * 1.5) var(--ease-spring)";
       img.style.transform = "translate3d(0, 0, 0) scale(1)";
-      window.setTimeout(() => {
-        if (img.isConnected) {
-          img.style.transition = "";
-          img.style.transform = "";
-        }
-      }, 290);
+      window.setTimeout(
+        () => {
+          if (img.isConnected) {
+            img.style.transition = "";
+            img.style.transform = "";
+          }
+        },
+        Math.round(DURATION_MS.md * 1.5) + 20,
+      );
     }
     onDragProgress(0);
   };

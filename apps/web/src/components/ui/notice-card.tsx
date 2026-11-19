@@ -10,6 +10,8 @@ import { useCoarsePointer } from "#src/hooks/use-coarse-pointer";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { m } from "#src/paraglide/messages";
 
+import { DURATION_S, EASE_IN, EASE_IN_OUT, EASE_OUT } from "#src/utils/motion-tokens";
+
 import { SWIPE_DISMISS_PX, TOAST_FADE as FADE } from "./toast-model";
 
 type NoticeAction = { label: string; onPress: () => void };
@@ -46,8 +48,6 @@ function page(step: -1 | 1) {
   const index = Math.min(state.notices.length - 1, Math.max(0, state.index + step));
   if (index !== state.index) update({ ...state, index, step });
 }
-
-const SLIDE_EASE = [0.23, 1, 0.32, 1] as const;
 
 export function NoticeCardHost() {
   const { notices, index, step } = useSyncExternalStore(
@@ -86,9 +86,9 @@ export function NoticeCardHost() {
             exit={
               reduceMotion
                 ? { opacity: 0, transition: FADE }
-                : { opacity: 0, x: 48, transition: { duration: 0.22, ease: "easeOut" } }
+                : { opacity: 0, x: 48, transition: { duration: DURATION_S.mdOut, ease: EASE_IN } }
             }
-            transition={reduceMotion ? FADE : { duration: 0.28, ease: SLIDE_EASE }}
+            transition={reduceMotion ? FADE : { duration: DURATION_S.md, ease: EASE_OUT }}
             className="group pointer-events-auto relative touch-pan-y rounded-3xl border border-secondary bg-primary p-3 shadow-(--toast-shadow)"
           >
             {notices.length > 1 ? (
@@ -116,10 +116,22 @@ export function NoticeCardHost() {
                 animate={{ opacity: 1, x: 0, y: 0 }}
                 exit={
                   reduceMotion
-                    ? { opacity: 0 }
-                    : { opacity: 0, x: step * -16, y: step === 0 ? 8 : 0 }
+                    ? { opacity: 0, transition: FADE }
+                    : {
+                        opacity: 0,
+                        x: step * -16,
+                        y: step === 0 ? 8 : 0,
+                        transition:
+                          step === 0
+                            ? { duration: DURATION_S.smOut, ease: EASE_IN }
+                            : { duration: DURATION_S.sm, ease: EASE_IN_OUT },
+                      }
                 }
-                transition={reduceMotion ? FADE : { duration: 0.24, ease: SLIDE_EASE }}
+                transition={
+                  reduceMotion
+                    ? FADE
+                    : { duration: DURATION_S.sm, ease: step === 0 ? EASE_OUT : EASE_IN_OUT }
+                }
               >
                 <div className="flex gap-3">
                   <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-secondary">

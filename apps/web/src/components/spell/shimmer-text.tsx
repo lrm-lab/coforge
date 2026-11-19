@@ -1,6 +1,8 @@
 "use client";
 
 import { motion } from "motion/react";
+
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { cn } from "#src/lib/utils";
 
 type Variant =
@@ -64,6 +66,7 @@ export function ShimmerText({
   duration = 1.5,
   delay = 1.5,
 }: ShimmerTextProps) {
+  const reduced = usePrefersReducedMotion();
   return (
     <div className="group overflow-hidden">
       <div>
@@ -87,16 +90,24 @@ export function ShimmerText({
           initial={{
             backgroundPositionX: "250%",
           }}
-          animate={{
-            backgroundPositionX: ["-100%", "250%"],
-          }}
-          transition={{
-            duration: duration,
-            delay: delay,
-            repeat: Infinity,
-            repeatDelay: 1.5,
-            ease: "linear",
-          }}
+          animate={
+            reduced
+              ? { backgroundPositionX: "250%" }
+              : {
+                  backgroundPositionX: ["-100%", "250%"],
+                }
+          }
+          transition={
+            reduced
+              ? { duration: 0 }
+              : {
+                  duration: duration,
+                  delay: delay,
+                  repeat: Infinity,
+                  repeatDelay: 1.5,
+                  ease: "linear",
+                }
+          }
         >
           <span>{children}</span>
         </motion.div>

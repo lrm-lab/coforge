@@ -274,7 +274,7 @@ function ExternalAgentChoice({
             value={agent.agentId}
             className={({ isSelected, isFocusVisible }) =>
               cx(
-                "flex cursor-pointer flex-col rounded-lg border px-3 py-2 transition duration-100 ease-linear",
+                "flex cursor-pointer flex-col rounded-lg border px-3 py-2 transition duration-100 ease-out",
                 isSelected
                   ? "border-brand bg-secondary"
                   : "border-secondary hover:bg-primary_hover",

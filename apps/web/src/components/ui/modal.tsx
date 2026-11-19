@@ -99,8 +99,8 @@ export function Modal({ className, children, ...props }: ComponentProps<typeof O
       className={(state) =>
         cx(
           "rounded-4xl sm:rounded-4xl ring-1 ring-modal-edge",
-          state.isEntering && "sm:fade-in",
-          state.isExiting && "sm:fade-out",
+          state.isEntering && "sm:fade-in max-sm:motion-enter-lg",
+          state.isExiting && "sm:fade-out max-sm:motion-leave-lg",
           typeof className === "function" ? className(state) : className,
           "max-sm:relative max-sm:w-full max-sm:max-w-none max-sm:rounded-t-4xl max-sm:rounded-b-none max-sm:pb-safe-bottom",
           "max-sm:zoom-in-100 max-sm:zoom-out-100 max-sm:slide-in-from-bottom max-sm:slide-out-to-bottom",
@@ -136,7 +136,10 @@ export function SheetGrabber({ className }: { className?: string }) {
   const sheetOf = (grabber: Element) => grabber.parentElement as HTMLElement;
 
   function settle(sheet: HTMLElement) {
-    sheet.style.transition = "transform var(--motion-in) var(--ease-snap)";
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    sheet.style.transition = reduced
+      ? "transform 150ms var(--ease-out)"
+      : "transform calc(var(--duration-md) * 1.5) var(--ease-spring)";
     sheet.style.transform = "";
     sheet.style.animation = "";
   }

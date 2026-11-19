@@ -141,7 +141,7 @@ export const InputBase = ({
                 <Tooltip title={tooltip} placement="top">
                     <TooltipTrigger
                         className={cx(
-                            "absolute cursor-pointer text-fg-quaternary transition duration-100 ease-linear group-invalid/input:hidden hover:text-fg-quaternary_hover focus:text-fg-quaternary_hover",
+                            "absolute cursor-pointer text-fg-quaternary transition duration-100 ease-out group-invalid/input:hidden hover:text-fg-quaternary_hover focus:text-fg-quaternary_hover",
                             sizes[inputSize].iconTrailing,
                             context?.tooltipClassName,
                             tooltipClassName,
@@ -172,7 +172,7 @@ export const InputBase = ({
                     aria-pressed={isPasswordVisible}
                     onClick={() => setIsPasswordVisible(!isPasswordVisible)}
                     className={cx(
-                        "absolute flex cursor-pointer items-center justify-center text-fg-quaternary transition duration-100 ease-linear hover:text-fg-quaternary_hover focus:text-fg-quaternary_hover focus:outline-hidden",
+                        "absolute flex cursor-pointer items-center justify-center text-fg-quaternary transition duration-100 ease-out hover:text-fg-quaternary_hover focus:text-fg-quaternary_hover focus:outline-hidden",
                         sizes[inputSize].iconTrailing,
                     )}
                 >

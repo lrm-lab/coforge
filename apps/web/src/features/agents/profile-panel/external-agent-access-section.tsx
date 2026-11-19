@@ -141,7 +141,10 @@ export function ExternalAgentAccessSection({
               iconTrailing={
                 <ChevronDown
                   aria-hidden="true"
-                  className={cx("size-3.5 transition-transform", stepsOpen && "rotate-180")}
+                  className={cx(
+                    "size-3.5 transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
+                    stepsOpen && "rotate-180",
+                  )}
                 />
               }
               onPress={() => setStepsOpen((open) => !open)}

@@ -86,7 +86,7 @@ export function DirectorySection({
       <div className={cx(DIRECTORY_INSET, "group/section")}>
         <div
           className={cx(
-            "flex h-9 items-center gap-1 rounded-md pr-2 pl-2 transition-colors duration-100 ease-linear",
+            "flex h-9 items-center gap-1 rounded-md pr-2 pl-2 transition-colors duration-100 ease-out",
             onToggle ? "group-hover/section:bg-primary_hover" : "cursor-pointer",
           )}
         >
@@ -110,7 +110,7 @@ export function DirectorySection({
                   <ChevronRight
                     aria-hidden="true"
                     className={cx(
-                      "size-4 shrink-0 transition-transform duration-100 ease-linear",
+                      "size-4 shrink-0 transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
                       expanded && "rotate-90",
                     )}
                   />

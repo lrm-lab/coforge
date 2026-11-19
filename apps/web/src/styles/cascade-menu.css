@@ -8,8 +8,6 @@
   --cascade-menu-shadow:
     0 18px 34px rgba(15, 23, 42, 0.12), 0 2px 4px rgba(15, 23, 42, 0.05),
     inset 0 1px 0 rgba(255, 255, 255, 0.74);
-  --cascade-menu-ease-pop: cubic-bezier(0.2, 1.45, 0.35, 1);
-  --cascade-menu-ease-folder: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .dark-mode {
@@ -76,31 +74,31 @@
   -webkit-backdrop-filter: blur(18px) saturate(135%);
   will-change: transform, opacity;
   transition:
-    background-color 500ms ease,
-    border-color 500ms ease,
-    box-shadow 500ms ease,
-    color 500ms ease;
+    background-color var(--duration-sm) var(--ease-out),
+    border-color var(--duration-sm) var(--ease-out),
+    box-shadow var(--duration-sm) var(--ease-out),
+    color var(--duration-sm) var(--ease-out);
 }
 
 .cascade-menu-level[data-cascade-level="root"] {
   transform-origin: top left;
   animation:
-    cascade-level-fade-in 170ms ease both,
-    cascade-root-pop-in 360ms var(--cascade-menu-ease-pop) both;
+    cascade-level-fade-in var(--duration-sm-out) var(--ease-out) both,
+    cascade-root-pop-in var(--duration-sm) var(--ease-out) both;
 }
 
 .cascade-menu-level[data-cascade-level="submenu"] {
   transform-origin: left top;
   animation:
-    cascade-level-fade-in 170ms ease both,
-    cascade-submenu-pop-right 360ms var(--cascade-menu-ease-pop) both;
+    cascade-level-fade-in var(--duration-sm-out) var(--ease-out) both,
+    cascade-submenu-pop-right var(--duration-sm) var(--ease-out) both;
 }
 
 .cascade-menu-level[data-cascade-level="submenu"][data-placement="left"] {
   transform-origin: right top;
   animation:
-    cascade-level-fade-in 170ms ease both,
-    cascade-submenu-pop-left 360ms var(--cascade-menu-ease-pop) both;
+    cascade-level-fade-in var(--duration-sm-out) var(--ease-out) both,
+    cascade-submenu-pop-left var(--duration-sm) var(--ease-out) both;
 }
 
 .cascade-menu-title {
@@ -109,7 +107,7 @@
   line-height: 1.3;
   color: var(--cascade-menu-quiet);
   padding: 4px 8px 2px;
-  transition: color 500ms ease;
+  transition: color var(--duration-sm) var(--ease-out);
 }
 
 .cascade-menu-list {
@@ -133,8 +131,8 @@
   color: var(--cascade-menu-ink);
   background-color: transparent;
   transition:
-    background-color 120ms ease,
-    color 500ms ease;
+    background-color 120ms var(--ease-out),
+    color 120ms var(--ease-out);
 }
 
 .cascade-menu-row[data-cascade-state="hovered"],
@@ -154,7 +152,7 @@
   align-items: center;
   justify-content: center;
   color: var(--cascade-menu-quiet);
-  transition: color 500ms ease;
+  transition: color 120ms var(--ease-out);
 }
 
 .cascade-menu-chevron {
@@ -163,7 +161,7 @@
   height: 16px;
   flex-shrink: 0;
   color: var(--cascade-menu-chevron);
-  transition: color 500ms ease;
+  transition: color 120ms var(--ease-out);
 }
 
 .dark-mode [data-monochrome-icon="true"] {
@@ -175,8 +173,8 @@
   transform-box: fill-box;
   transform-origin: center bottom;
   transition:
-    transform 460ms var(--cascade-menu-ease-folder),
-    opacity 460ms var(--cascade-menu-ease-folder);
+    transform var(--duration-sm) var(--ease-out-strong),
+    opacity var(--duration-sm) var(--ease-out-strong);
 }
 
 .cascade-folder-front-closed {
@@ -203,12 +201,12 @@
   .cascade-menu-level[data-cascade-level="root"],
   .cascade-menu-level[data-cascade-level="submenu"],
   .cascade-menu-level[data-cascade-level="submenu"][data-placement="left"] {
-    animation: cascade-level-fade-in 120ms ease both;
+    animation: cascade-level-fade-in 150ms var(--ease-out) both;
   }
 
   .cascade-folder-front-closed,
   .cascade-folder-front-open {
-    transition: opacity 150ms ease;
+    transition: opacity 150ms var(--ease-out);
     transform: none;
   }
 }

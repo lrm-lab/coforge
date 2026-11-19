@@ -503,7 +503,10 @@ function MemberGroup({
         >
           <ChevronDown
             aria-hidden="true"
-            className={cn("size-4 shrink-0 transition-transform", !expanded && "-rotate-90")}
+            className={cn(
+              "size-4 shrink-0 transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
+              !expanded && "-rotate-90",
+            )}
           />
           <span>
             {label} · <span className="tabular-nums">{count}</span>

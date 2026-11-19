@@ -16,6 +16,7 @@ const twMerge = extendTailwindMerge({
         "modern-mockup-outer-md",
         "modern-mockup-outer-lg",
       ],
+      ease: ["out-strong", "overshoot", "spring"],
     },
   },
 });

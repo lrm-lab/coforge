@@ -31,7 +31,7 @@
 
 .image-uploading {
   opacity: 0.5;
-  animation: rte-upload-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation: rte-upload-pulse 2s var(--ease-in-out) infinite;
 }
 
 @keyframes rte-upload-pulse {
@@ -54,7 +54,7 @@
   background: color-mix(in srgb, black 75%, transparent);
   border-radius: var(--radius-lg);
   opacity: 0;
-  transition: opacity 0.15s;
+  transition: opacity 150ms var(--ease-out);
   z-index: 1;
 }
 
@@ -70,7 +70,7 @@
   height: 1.75rem;
   border-radius: var(--radius-md);
   color: white;
-  transition: background 0.15s;
+  transition: background-color 150ms var(--ease-out);
 }
 
 .image-toolbar button:hover {

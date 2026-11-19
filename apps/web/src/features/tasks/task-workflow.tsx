@@ -32,7 +32,7 @@ import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
-import { CONTINUOUS_EASE_TUPLE } from "#src/lib/shared-element-rect";
+import { DURATION_S, EASE_IN_OUT } from "#src/utils/motion-tokens";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { DropState } from "./task-drop-target";
@@ -238,7 +238,7 @@ export function TaskWorkflow<T extends TaskView>({
                           layout={canAnimate ? "position" : false}
                           layoutId={canAnimate ? `task-item-${id}-${task.id}` : undefined}
                           transition={{
-                            layout: { duration: 0.28, ease: CONTINUOUS_EASE_TUPLE },
+                            layout: { duration: DURATION_S.md, ease: EASE_IN_OUT },
                           }}
                           data-task-drag-node
                           aria-busy={pending?.id === task.id}

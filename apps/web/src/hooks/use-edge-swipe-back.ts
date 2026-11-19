@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
+import { DURATION_MS } from "#src/utils/motion-tokens";
 
 const EDGE_MIN_X = 16;
 const EDGE_MAX_X = 64;
 const COMMIT_DX = 10;
 const COMPLETE_PROGRESS = 0.32;
 const COMPLETE_VELOCITY = 0.45;
-const SETTLE_DURATION_MS = 320;
+const SETTLE_DURATION_MS = Math.round(DURATION_MS.md * 1.5);
 
 export function shouldCompleteSwipeBack(progress: number, velocityPxPerMs: number): boolean {
   return progress >= COMPLETE_PROGRESS || velocityPxPerMs >= COMPLETE_VELOCITY;

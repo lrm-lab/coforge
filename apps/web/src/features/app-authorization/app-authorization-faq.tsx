@@ -27,7 +27,7 @@ export function AuthorizationFaq() {
                   <ChevronRight
                     aria-hidden="true"
                     className={cn(
-                      "mt-0.5 size-4 shrink-0 text-fg-quaternary transition-transform motion-reduce:transition-none",
+                      "mt-0.5 size-4 shrink-0 text-fg-quaternary transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
                       isExpanded && "rotate-90",
                     )}
                   />

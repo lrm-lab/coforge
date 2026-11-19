@@ -194,7 +194,7 @@ export function WhatArrives({ summary, preview }: { summary: ReactNode; preview:
         <ChevronDown
           aria-hidden="true"
           className={cn(
-            "size-4 shrink-0 text-quaternary transition-transform duration-150 ease-out motion-reduce:transition-none",
+            "size-4 shrink-0 text-quaternary transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
             open && "rotate-180",
           )}
         />

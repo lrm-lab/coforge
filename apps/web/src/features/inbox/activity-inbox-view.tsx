@@ -24,12 +24,8 @@ import { LIST_BESIDE_CLASSES } from "#src/features/conversations/conversation-li
 import { ConversationListResizeHandle } from "#src/features/conversations/conversation-list-resize-handle";
 import { LIST_COLUMN } from "#src/features/conversations/conversation-list-width";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import {
-  animateFlipFromRect,
-  consumeSharedRect,
-  CONTINUOUS_EASE_TUPLE,
-  CONTINUOUS_EASING,
-} from "#src/lib/shared-element-rect";
+import { animateFlipFromRect, consumeSharedRect } from "#src/lib/shared-element-rect";
+import { DURATION_S, EASE_IN, EASE_OUT } from "#src/utils/motion-tokens";
 import { cn } from "#src/lib/utils";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { m } from "#src/paraglide/messages";
@@ -355,13 +351,17 @@ export function ActivityInboxView({
     ? reduced
       ? {
           opacity: pane ? 0 : 1,
-          transition: "opacity 150ms ease",
+          transition: "opacity 150ms var(--ease-out)",
         }
       : {
           transform: pane
             ? `translate3d(${(1 - swipe.dragProgress) * -10}%, 0, 0) scale(${0.95 + 0.05 * swipe.dragProgress})`
             : "translate3d(0, 0, 0) scale(1)",
-          transition: !swipe.dragging ? `transform 420ms ${CONTINUOUS_EASING}` : undefined,
+          transition: !swipe.dragging
+            ? swipe.settling
+              ? "transform calc(var(--duration-md) * 1.5) var(--ease-spring)"
+              : `transform ${pane ? "var(--duration-lg)" : "var(--duration-lg-out)"} var(--ease-in-out)`
+            : undefined,
         }
     : undefined;
   const phoneScrimOpacity = phone && !reduced && pane ? 0.24 * (1 - swipe.dragProgress) : 0;
@@ -466,7 +466,9 @@ export function ActivityInboxView({
           aria-hidden="true"
           style={{
             opacity: phoneScrimOpacity,
-            transition: !swipe.dragging ? `opacity 420ms ${CONTINUOUS_EASING}` : undefined,
+            transition: !swipe.dragging
+              ? `opacity ${pane ? "var(--duration-lg) var(--ease-out)" : "var(--duration-lg-out) var(--ease-in)"}`
+              : undefined,
           }}
           className="pointer-events-none absolute inset-0 z-30 bg-black"
         />
@@ -501,13 +503,19 @@ export function ActivityInboxView({
                     ? { x: `${swipe.dragProgress * 100}%` }
                     : { x: 0 }
               }
-              exit={reduced ? { opacity: 0 } : { x: "100%" }}
+              exit={
+                reduced
+                  ? { opacity: 0, transition: { duration: DURATION_S.reduced } }
+                  : { x: "100%", transition: { duration: DURATION_S.lgOut, ease: EASE_IN } }
+              }
               transition={
                 swipe.dragging
                   ? { duration: 0 }
                   : reduced
-                    ? { duration: 0.15 }
-                    : { duration: 0.42, ease: CONTINUOUS_EASE_TUPLE }
+                    ? { duration: DURATION_S.reduced }
+                    : swipe.settling
+                      ? { type: "spring", stiffness: 380, damping: 32 }
+                      : { duration: DURATION_S.lg, ease: EASE_OUT }
               }
               className="absolute inset-0 z-20 flex min-h-0 min-w-0 touch-pan-y bg-primary shadow-2xl will-change-transform"
             >

@@ -93,7 +93,10 @@ export function CollapsibleSection({
           iconLeading={
             <ChevronDown
               aria-hidden="true"
-              className={cn("size-4 transition-transform", open && "rotate-180")}
+              className={cn(
+                "size-4 transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
+                open && "rotate-180",
+              )}
             />
           }
           className="min-w-0 flex-1 justify-start px-2 text-left text-sm font-medium text-primary"
@@ -133,7 +136,7 @@ export function RecordLink({
       resetScroll={false}
       onClick={onSelect}
       className={cn(
-        "flex min-w-0 items-center gap-2 rounded-xl border p-2 text-sm transition duration-100 ease-linear focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
+        "flex min-w-0 items-center gap-2 rounded-xl border p-2 text-sm transition duration-100 ease-out focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
         selected
           ? "border-chat-selected-border bg-chat-selected-bg font-medium text-brand-secondary"
           : "border-transparent text-secondary hover:bg-primary_hover",

@@ -17,7 +17,7 @@ import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { computerIcon } from "#src/features/computers/computer-identity";
 import { conversationRoute } from "#src/features/conversations/last-conversation";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
-import { CONTINUOUS_EASE_TUPLE } from "#src/lib/shared-element-rect";
+import { DURATION_S, EASE_IN, EASE_IN_OUT, EASE_OUT } from "#src/utils/motion-tokens";
 import { m } from "#src/paraglide/messages";
 import type { SearchEntity } from "./search-entities";
 
@@ -140,10 +140,14 @@ export function SearchEntityList({
                 layout={reduced ? false : "position"}
                 initial={reduced ? false : { opacity: 0 }}
                 animate={{ opacity: 1 }}
-                exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                exit={{
+                  opacity: 0,
+                  transition: { duration: DURATION_S.smOut, ease: EASE_IN },
+                }}
                 transition={{
-                  duration: reduced ? 0.12 : 0.2,
-                  ease: CONTINUOUS_EASE_TUPLE,
+                  duration: reduced ? DURATION_S.reduced : DURATION_S.sm,
+                  ease: EASE_OUT,
+                  layout: { duration: DURATION_S.sm, ease: EASE_IN_OUT },
                 }}
               >
                 <SearchEntityRow

@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
-import { CONTINUOUS_EASE_TUPLE } from "#src/lib/shared-element-rect";
+import { DURATION_S, EASE_IN_OUT } from "#src/utils/motion-tokens";
 import { m } from "#src/paraglide/messages";
 import { CardBadges } from "./artifact-gallery-card";
 import { useScopeOf, type GalleryCard } from "./artifact-scope";
@@ -43,7 +43,7 @@ function GalleryListRow({
       ref={rowRef}
       layout={reduced ? false : "position"}
       layoutId={reduced ? undefined : `gallery-item-${card.id}`}
-      transition={{ layout: { duration: 0.28, ease: CONTINUOUS_EASE_TUPLE } }}
+      transition={{ layout: { duration: DURATION_S.md, ease: EASE_IN_OUT } }}
       style={activeTransition ? { viewTransitionName: ARTIFACT_FRAME_VT_NAME } : undefined}
       className="relative border-b border-secondary hover:bg-primary_hover"
     >

@@ -17,6 +17,8 @@ import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 
+import { DURATION_S, EASE_IN, EASE_OUT, EASE_OUT_STRONG } from "#src/utils/motion-tokens";
+
 import {
   countdownRemainingMs,
   pauseCountdown,
@@ -28,9 +30,6 @@ import {
   type Toast,
   type ToastIcon,
 } from "./toast-model";
-
-const SETTLE_EASE = [0.25, 0.1, 0.25, 1] as const;
-const RESIZE_EASE = [0.32, 0.72, 0, 1] as const;
 
 function useCountdown(toast: Toast, held: boolean, onElapsed: () => void) {
   const countdown = useRef<Countdown | null>(null);
@@ -154,7 +153,7 @@ function IconTile({
 }
 
 const controlClassName =
-  "h-7 shrink-0 rounded-lg outline-focus-ring transition-colors duration-100 ease-linear focus-visible:outline-2 focus-visible:outline-offset-2";
+  "h-7 shrink-0 rounded-lg outline-focus-ring transition-colors duration-100 ease-out focus-visible:outline-2 focus-visible:outline-offset-2";
 
 export function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {
   const reduceMotion = usePrefersReducedMotion();
@@ -217,21 +216,21 @@ export function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: () =>
               pointerEvents: "none",
               y: -6,
               filter: "blur(6px)",
-              transition: { duration: 0.22, ease: "easeIn" },
+              transition: { duration: DURATION_S.smOut, ease: EASE_IN },
             }
       }
       transition={
         reduceMotion
           ? TOAST_FADE
           : {
-              duration: 0.5,
-              ease: SETTLE_EASE,
-              opacity: { duration: 0.4, ease: SETTLE_EASE },
+              duration: DURATION_S.sm,
+              ease: EASE_OUT,
+              opacity: { duration: DURATION_S.smOut, ease: EASE_OUT },
             }
       }
       className={cx(
         "pointer-events-auto relative col-start-1 row-start-1 flex min-h-10 max-w-full touch-pan-y items-start overflow-hidden rounded-2xl border border-secondary bg-linear-to-b from-bg-primary to-bg-secondary shadow-(--toast-shadow)",
-        !reduceMotion && "transition-[width] duration-380 ease-[cubic-bezier(0.32,0.72,0,1)]",
+        !reduceMotion && "transition-[width] duration-(--duration-md) ease-in-out",
       )}
     >
       <span className="absolute top-[calc(0.5rem-1px)] left-[calc(0.5rem-1px)] size-6">
@@ -241,8 +240,19 @@ export function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: () =>
             className="absolute inset-0"
             initial={reduceMotion ? { opacity: 0 } : { opacity: 0, rotate: -40, scale: 0.5 }}
             animate={{ opacity: 1, rotate: 0, scale: 1, filter: "blur(0px)" }}
-            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.5, filter: "blur(4px)" }}
-            transition={reduceMotion ? TOAST_FADE : { duration: 0.3, ease: RESIZE_EASE }}
+            exit={
+              reduceMotion
+                ? { opacity: 0, transition: TOAST_FADE }
+                : {
+                    opacity: 0,
+                    scale: 0.5,
+                    filter: "blur(4px)",
+                    transition: { duration: DURATION_S.smOut, ease: EASE_IN },
+                  }
+            }
+            transition={
+              reduceMotion ? TOAST_FADE : { duration: DURATION_S.sm, ease: EASE_OUT_STRONG }
+            }
           >
             <IconTile icon={toast.icon} countdown={countdown} durationMs={toast.durationMs} />
           </motion.span>
@@ -261,17 +271,19 @@ export function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: () =>
             animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
             exit={
               reduceMotion
-                ? { opacity: 0, pointerEvents: "none" }
+                ? { opacity: 0, pointerEvents: "none", transition: TOAST_FADE }
                 : {
                     opacity: 0,
                     y: -5,
                     filter: "blur(4px)",
                     pointerEvents: "none",
-                    transition: { duration: 0.18 },
+                    transition: { duration: DURATION_S.smOut, ease: EASE_IN },
                   }
             }
             transition={
-              reduceMotion ? TOAST_FADE : { delay: 0.1, duration: 0.3, ease: SETTLE_EASE }
+              reduceMotion
+                ? TOAST_FADE
+                : { delay: 0.1, duration: DURATION_S.sm, ease: EASE_OUT_STRONG }
             }
           >
             <span className="line-clamp-2 min-w-0 py-1 text-sm font-medium [overflow-wrap:anywhere] text-primary">
@@ -310,7 +322,7 @@ export function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: () =>
           className="pointer-events-none absolute inset-y-0 -left-1/2 w-1/2 -skew-x-12 bg-linear-to-r from-transparent via-(--toast-sheen) to-transparent"
           initial={{ x: "0%" }}
           animate={{ x: "320%" }}
-          transition={{ duration: 0.9, ease: "easeOut", delay: 0.15 }}
+          transition={{ duration: 0.9, ease: EASE_OUT, delay: 0.15 }}
         />
       ) : null}
     </motion.div>

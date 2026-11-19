@@ -24,7 +24,7 @@ export type DragRippleAxis = "x" | "y";
 export type RippleTarget = { list: string; gap: number };
 type Point = { x: number; y: number };
 
-const SETTLE = cssSpring(0.25, 0.1);
+const SETTLE = cssSpring(0.3, 0.1);
 const LIFT = cssSpring(0.18, 0.4);
 const LEAVE_MARGIN = 24;
 const LIFT_ROOM = 64;
@@ -322,7 +322,7 @@ export function useDragRipple({
     }
     return {
       transform: translate(along(axis, offset)),
-      transition: `transform ${SETTLE.css} ${delay}ms`,
+      transition: `transform var(--duration-sm) var(--ease-in-out) ${delay}ms`,
     };
   };
 
@@ -336,7 +336,10 @@ export function useDragRipple({
       if (current.target.list === list && (after ? index - 1 : index) >= current.target.gap)
         offset += current.extent;
     }
-    return { transform: translate(along(axis, offset)), transition: `transform ${SETTLE.css}` };
+    return {
+      transform: translate(along(axis, offset)),
+      transition: "transform var(--duration-sm) var(--ease-in-out)",
+    };
   };
 
   const itemStyle = (list: string, key: string): CSSProperties | undefined => {
@@ -417,13 +420,13 @@ export function DragRippleLine({
       )}
       style={{
         transform: translate(along(ripple.axis, at - 0.5)),
-        transition: `transform ${SETTLE.css}`,
+        transition: "transform var(--duration-sm) var(--ease-in-out)",
       }}
     >
       <span
         className="block size-full bg-current opacity-15"
         style={{
-          animation: `${horizontal ? "drag-ripple-grow-y" : "drag-ripple-grow-x"} ${SETTLE.css} both`,
+          animation: `${horizontal ? "drag-ripple-grow-y" : "drag-ripple-grow-x"} var(--duration-sm) var(--ease-out) both`,
         }}
       />
     </span>

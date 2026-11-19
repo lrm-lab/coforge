@@ -1,3 +1,5 @@
+import { EASE_CSS } from "#src/utils/motion-tokens";
+
 export type SharedRect = {
   top: number;
   left: number;
@@ -11,9 +13,6 @@ type StoredEntry = {
   at: number;
   element?: WeakRef<Element>;
 };
-
-export const CONTINUOUS_EASING = "cubic-bezier(0.32, 0.72, 0, 1)";
-export const CONTINUOUS_EASE_TUPLE = [0.32, 0.72, 0, 1] as const;
 
 const ENTRY_TTL_MS = 4000;
 const store = new Map<string, StoredEntry>();
@@ -147,7 +146,7 @@ export function animateFlipFromRect(
   }
   const animation = target.animate([startFrame, endFrame], {
     duration: options.duration,
-    easing: options.easing ?? CONTINUOUS_EASING,
+    easing: options.easing ?? EASE_CSS.out,
   });
   activeAnimations.set(target, animation);
   animation.addEventListener("finish", () => {
@@ -186,7 +185,7 @@ export function animateFlipToRect(
   }
   const animation = target.animate([startFrame, endFrame], {
     duration: options.duration,
-    easing: options.easing ?? CONTINUOUS_EASING,
+    easing: options.easing ?? EASE_CSS.in,
     fill: "forwards",
   });
   activeAnimations.set(target, animation);

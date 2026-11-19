@@ -12,7 +12,7 @@ const STRIP = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map((digit, cell) => (
   </span>
 ));
 
-const SPRING = { visualDuration: 0.4, bounce: 0.15 } as const;
+const SPRING = { visualDuration: 0.3, bounce: 0.15 } as const;
 
 /** Where a column's strip sits for a running count of its place: that count taken round ten. */
 const stripOffset = (count: number) => `${-((((count % 10) + 10) % 10) / STRIP.length) * 100}%`;

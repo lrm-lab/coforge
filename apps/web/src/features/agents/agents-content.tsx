@@ -11,8 +11,8 @@ import {
   animateFlipFromRect,
   cancelFlipAnimation,
   consumeSharedRect,
-  CONTINUOUS_EASE_TUPLE,
 } from "#src/lib/shared-element-rect";
+import { DURATION_S, EASE_IN, EASE_OUT } from "#src/utils/motion-tokens";
 import { Plus, SearchLg as Search, Users01 as UsersRound, UsersPlus } from "@untitledui/icons";
 import { Spinner } from "#src/components/ui/spinner";
 
@@ -388,7 +388,7 @@ export function AgentsContent({
           >
             <div
               ref={profileWrapRef}
-              className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary animate-in fade-in slide-in-from-right-6 duration-[280ms] ease-continuous motion-reduce:duration-150"
+              className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary animate-in fade-in slide-in-from-right-6 motion-enter"
             >
               {profile}
             </div>
@@ -417,13 +417,19 @@ export function AgentsContent({
                       ? { x: `${swipe.dragProgress * 100}%` }
                       : { x: 0 }
                 }
-                exit={reduced ? { opacity: 0 } : { x: "100%" }}
+                exit={
+                  reduced
+                    ? { opacity: 0, transition: { duration: DURATION_S.reduced } }
+                    : { x: "100%", transition: { duration: DURATION_S.lgOut, ease: EASE_IN } }
+                }
                 transition={
                   swipe.dragging
                     ? { duration: 0 }
                     : reduced
-                      ? { duration: 0.15 }
-                      : { duration: 0.38, ease: CONTINUOUS_EASE_TUPLE }
+                      ? { duration: DURATION_S.reduced }
+                      : swipe.settling
+                        ? { type: "spring", stiffness: 380, damping: 32 }
+                        : { duration: DURATION_S.lg, ease: EASE_OUT }
                 }
                 className="absolute inset-0 z-20 flex min-h-0 min-w-0 touch-pan-y flex-col bg-primary shadow-2xl will-change-transform"
               >

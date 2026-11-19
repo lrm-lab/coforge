@@ -6,6 +6,7 @@ import { Bell01, Check, Plus } from "@untitledui/icons";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Button } from "#src/components/base/buttons/button";
 import { cx } from "#src/utils/cx";
+import { DURATION_MS } from "#src/utils/motion-tokens";
 import { m } from "#src/paraglide/messages";
 import { executeMentionActions } from "./channels.functions";
 
@@ -33,7 +34,7 @@ const COMPLETED_STATUS = { notify: "queued", add: "delivered" } as const;
 
 /** How long an added row stays to show it was added, then how long it takes to fade out. */
 const ADDED_VISIBLE_MS = 450;
-const ADDED_REMOVE_MS = 750;
+const ADDED_REMOVE_MS = ADDED_VISIBLE_MS + DURATION_MS.smOut;
 
 /**
  * Above the composer, one row per person or Agent the reader's last message mentioned but who is
@@ -140,7 +141,7 @@ export function PendingMentionStrip({
             <li
               key={mention.resolutionId}
               className={cx(
-                "flex flex-wrap items-center gap-x-2 gap-y-1 transition-opacity duration-300 motion-reduce:transition-none",
+                "flex flex-wrap items-center gap-x-2 gap-y-1 transition-opacity duration-(--duration-sm-out) ease-in motion-reduce:ease-out",
                 leaving.has(mention.resolutionId) && "opacity-0",
               )}
             >

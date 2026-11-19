@@ -165,7 +165,7 @@ export function ConversationRow({
       onPress={handlePress}
       onHoverChange={hover.set}
       className={cx(
-        "flex w-full cursor-pointer items-center p-2 outline-focus-ring transition duration-100 ease-linear select-none [-webkit-user-drag:none] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2",
+        "flex w-full cursor-pointer items-center p-2 outline-focus-ring transition duration-100 ease-out select-none [-webkit-user-drag:none] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2",
         card ? "rounded-xl border" : "rounded-md",
         lastMessage ? "gap-2" : "max-h-9 gap-1.5",
         current ? (card ? "bg-chat-selected-bg" : "bg-sidebar-accent") : "hover:bg-primary_hover",

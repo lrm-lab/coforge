@@ -111,7 +111,7 @@ export function ProjectFileTree({
                   <ChevronRight
                     aria-hidden="true"
                     className={cn(
-                      "size-3.5 transition-transform motion-reduce:transition-none",
+                      "size-3.5 transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
                       isExpanded && "rotate-90",
                     )}
                   />

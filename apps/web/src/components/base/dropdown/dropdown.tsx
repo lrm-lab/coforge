@@ -598,7 +598,7 @@ const DropdownDotsButton = (props: AriaButtonProps & RefAttributes<HTMLButtonEle
       aria-label="Open menu"
       className={(state) =>
         cx(
-          "cursor-pointer rounded-md text-fg-quaternary outline-focus-ring transition duration-100 ease-linear",
+          "cursor-pointer rounded-md text-fg-quaternary outline-focus-ring transition duration-100 ease-out",
           (state.isPressed || state.isHovered) && "text-fg-quaternary_hover",
           (state.isPressed || state.isFocusVisible) && "outline-2 outline-offset-2",
           typeof props.className === "function" ? props.className(state) : props.className,

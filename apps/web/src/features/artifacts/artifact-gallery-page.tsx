@@ -7,7 +7,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
-import { CONTINUOUS_EASE_TUPLE } from "#src/lib/shared-element-rect";
+import { DURATION_S, EASE_IN_OUT } from "#src/utils/motion-tokens";
 import { m } from "#src/paraglide/messages";
 import { loadArtifactGallery } from "./artifact-gallery.functions";
 import { GalleryGridCard } from "./artifact-gallery-card";
@@ -127,7 +127,7 @@ export function ArtifactGalleryPage() {
                     key={card.id}
                     layout={reduced ? false : "position"}
                     layoutId={reduced ? undefined : `gallery-item-${card.id}`}
-                    transition={{ layout: { duration: 0.28, ease: CONTINUOUS_EASE_TUPLE } }}
+                    transition={{ layout: { duration: DURATION_S.md, ease: EASE_IN_OUT } }}
                   >
                     <GalleryGridCard card={card} sort={filters.sort} scope={scopeOf(card)} />
                   </motion.div>

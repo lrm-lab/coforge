@@ -10,7 +10,7 @@ import { ArtifactIcon } from "#src/features/artifacts/artifact-parts";
 import { artifactPageRoute } from "#src/features/artifacts/artifact-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
-import { CONTINUOUS_EASE_TUPLE } from "#src/lib/shared-element-rect";
+import { DURATION_S, EASE_IN, EASE_IN_OUT } from "#src/utils/motion-tokens";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { ActivityArtifactItem } from "#src/server/inbox/activity-inbox.server";
@@ -60,10 +60,10 @@ export const ActivityArtifactRow = memo(function ActivityArtifactRow({
       initial={false}
       exit={
         reduced
-          ? { opacity: 0, transition: { duration: 0.15 } }
-          : { opacity: 0, x: -16, transition: { duration: 0.18, ease: CONTINUOUS_EASE_TUPLE } }
+          ? { opacity: 0, transition: { duration: DURATION_S.reduced } }
+          : { opacity: 0, x: -16, transition: { duration: DURATION_S.smOut, ease: EASE_IN } }
       }
-      transition={{ layout: { duration: 0.24, ease: CONTINUOUS_EASE_TUPLE } }}
+      transition={{ layout: { duration: DURATION_S.md, ease: EASE_IN_OUT } }}
       data-activity-row={item.key}
       data-activity-artifact={item.artifact.id}
       className={cn(ACTIVITY_ROW_ITEM_CLASS, "select-none [-webkit-touch-callout:none]")}

@@ -15,12 +15,12 @@ import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import {
-  CONTINUOUS_EASING,
   animateFlipFromRect,
   animateFlipToRect,
   cancelFlipAnimation,
   isRectInViewport,
 } from "#src/lib/shared-element-rect";
+import { EASE_CSS } from "#src/utils/motion-tokens";
 import { channelLabel } from "#src/features/conversations/channel-visibility";
 import { isImeComposing } from "#src/lib/ime";
 import { m } from "#src/paraglide/messages";
@@ -104,7 +104,7 @@ export function SearchDialog({
         { opacity: 0, transform: "translate3d(0, -10px, 0) scale(0.985)" },
         { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" },
       ],
-      { duration, easing: CONTINUOUS_EASING },
+      { duration, easing: EASE_CSS.out },
     );
     return () => anim.cancel();
   }, [desktop, intent.originRect, intent.source, reduced]);
@@ -241,7 +241,7 @@ export function SearchDialog({
                   size="sm"
                   color="tertiary"
                   className={cx(
-                    "transition-[transform,opacity] duration-200 ease-(--ease-continuous) sm:hidden",
+                    "transition-[transform,opacity] duration-(--duration-sm) ease-out sm:hidden",
                     bodyHidden && "translate-x-2 opacity-0",
                   )}
                   tooltip={m.controls_close()}

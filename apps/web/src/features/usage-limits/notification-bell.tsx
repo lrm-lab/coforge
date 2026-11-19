@@ -197,7 +197,7 @@ export function NotificationBell({
           <UnreadBadge
             count={unseen}
             className={cn(
-              "pointer-events-none absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 ring-2 transition-colors duration-100 ease-linear",
+              "pointer-events-none absolute -top-0.5 -right-0.5 h-4 min-w-4 px-1 ring-2 transition-colors duration-100 ease-out",
               badgeRing,
             )}
           />

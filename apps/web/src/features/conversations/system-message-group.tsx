@@ -86,7 +86,10 @@ export const SystemMessageGroup = memo(function SystemMessageGroup({
             iconTrailing={
               <ChevronDown
                 aria-hidden="true"
-                className={cn("size-3.5 shrink-0 transition-transform", expanded && "rotate-180")}
+                className={cn(
+                  "size-3.5 shrink-0 transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
+                  expanded && "rotate-180",
+                )}
               />
             }
           >

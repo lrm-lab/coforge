@@ -19,7 +19,8 @@ import { Link as AriaLink } from "react-aria-components";
 import { Badge } from "#src/components/base/badges/badges";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
-import { CONTINUOUS_EASE_TUPLE, rememberSharedRect } from "#src/lib/shared-element-rect";
+import { rememberSharedRect } from "#src/lib/shared-element-rect";
+import { DURATION_S, EASE_IN, EASE_IN_OUT } from "#src/utils/motion-tokens";
 import { collageLayout } from "#src/features/conversations/collage-layout";
 import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { MessagePreview } from "#src/features/conversations/message-preview";
@@ -135,10 +136,10 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
       initial={false}
       exit={
         reduced
-          ? { opacity: 0, transition: { duration: 0.15 } }
-          : { opacity: 0, x: -16, transition: { duration: 0.18, ease: CONTINUOUS_EASE_TUPLE } }
+          ? { opacity: 0, transition: { duration: DURATION_S.reduced } }
+          : { opacity: 0, x: -16, transition: { duration: DURATION_S.smOut, ease: EASE_IN } }
       }
-      transition={{ layout: { duration: 0.24, ease: CONTINUOUS_EASE_TUPLE } }}
+      transition={{ layout: { duration: DURATION_S.md, ease: EASE_IN_OUT } }}
       data-activity-row={item.key}
       className={cn(ACTIVITY_ROW_ITEM_CLASS, "select-none [-webkit-touch-callout:none]")}
     >

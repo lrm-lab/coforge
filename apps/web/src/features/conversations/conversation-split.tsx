@@ -8,11 +8,11 @@ import {
   animateFlipFromRect,
   cancelFlipAnimation,
   consumeSharedRect,
-  CONTINUOUS_EASE_TUPLE,
 } from "#src/lib/shared-element-rect";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { ConversationSlot } from "#src/features/agents/profile-panel/profile-panel-slot";
+import { DURATION_S, EASE_IN, EASE_OUT } from "#src/utils/motion-tokens";
 
 import { useReportChatListCrowd } from "./chat-list-crowd";
 import type { FocusedPanel } from "./conversation-focus-model";
@@ -23,8 +23,7 @@ const MAIN_PANE_MIN_REM = 24;
 const SIDE_PANE_MIN_REM = 22;
 const LIST_COLUMN_DEFAULT_REM = 18;
 
-const SIDE_PANE_ENTER =
-  "animate-in fade-in slide-in-from-right-6 duration-[280ms] ease-continuous motion-reduce:duration-150";
+const SIDE_PANE_ENTER = "animate-in fade-in slide-in-from-right-6 motion-enter";
 
 export function ConversationSplit({
   main,
@@ -120,9 +119,15 @@ export function ConversationSplit({
               ref={sideWrapRef}
               initial={reduced ? { opacity: 0 } : { x: "100%" }}
               animate={reduced ? { opacity: 1 } : { x: 0 }}
-              exit={reduced ? { opacity: 0 } : { x: "100%" }}
+              exit={
+                reduced
+                  ? { opacity: 0, transition: { duration: DURATION_S.reduced } }
+                  : { x: "100%", transition: { duration: DURATION_S.lgOut, ease: EASE_IN } }
+              }
               transition={
-                reduced ? { duration: 0.15 } : { duration: 0.38, ease: CONTINUOUS_EASE_TUPLE }
+                reduced
+                  ? { duration: DURATION_S.reduced }
+                  : { duration: DURATION_S.lg, ease: EASE_OUT }
               }
               className="absolute inset-0 z-10 flex min-h-0 min-w-0 flex-col bg-primary shadow-xl will-change-transform"
             >

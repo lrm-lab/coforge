@@ -21,11 +21,7 @@ import { SearchField } from "#src/features/search/search-field";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useEdgeSwipeBack } from "#src/hooks/use-edge-swipe-back";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
-import {
-  animateFlipFromRect,
-  consumeSharedRect,
-  CONTINUOUS_EASING,
-} from "#src/lib/shared-element-rect";
+import { animateFlipFromRect, consumeSharedRect } from "#src/lib/shared-element-rect";
 import { ChatHeaderBusyAgents } from "./chat-header-busy-agents";
 import { ChatListCrowdContext } from "./chat-list-crowd";
 import { ConversationFocusContext, useConversationFocusState } from "./conversation-focus";
@@ -234,7 +230,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
     ? reduced
       ? {
           opacity: showList ? 1 : 0,
-          transition: animatingStack ? "opacity 150ms ease" : undefined,
+          transition: animatingStack ? "opacity 150ms var(--ease-out)" : undefined,
         }
       : {
           transform: showList
@@ -242,7 +238,9 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
             : `translate3d(${(1 - swipe.dragProgress) * -10}%, 0, 0) scale(${0.95 + 0.05 * swipe.dragProgress})`,
           transition:
             !swipe.dragging && (animatingStack || swipe.settling)
-              ? `transform ${swipe.settling ? 300 : 420}ms ${CONTINUOUS_EASING}`
+              ? swipe.settling
+                ? "transform calc(var(--duration-md) * 1.5) var(--ease-spring)"
+                : `transform ${showList ? "var(--duration-lg-out)" : "var(--duration-lg)"} var(--ease-in-out)`
               : undefined,
         }
     : undefined;
@@ -250,7 +248,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
     ? reduced
       ? {
           opacity: showList ? 0 : 1,
-          transition: animatingStack ? "opacity 150ms ease" : undefined,
+          transition: animatingStack ? "opacity 150ms var(--ease-out)" : undefined,
         }
       : {
           transform: showList
@@ -258,7 +256,9 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
             : `translate3d(${swipe.dragProgress * 100}%, 0, 0)`,
           transition:
             !swipe.dragging && (animatingStack || swipe.settling)
-              ? `transform ${swipe.settling ? 300 : 420}ms ${CONTINUOUS_EASING}`
+              ? swipe.settling
+                ? "transform calc(var(--duration-md) * 1.5) var(--ease-spring)"
+                : `transform ${showList ? "var(--duration-lg-out) var(--ease-in)" : "var(--duration-lg) var(--ease-out)"}`
               : undefined,
         }
     : undefined;
@@ -354,7 +354,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                         opacity: scrimOpacity,
                         transition:
                           !swipe.dragging && animatingStack
-                            ? `opacity 420ms ${CONTINUOUS_EASING}`
+                            ? `opacity ${showList ? "var(--duration-lg-out) var(--ease-in)" : "var(--duration-lg) var(--ease-out)"}`
                             : undefined,
                       }}
                       className="pointer-events-none absolute inset-0 z-30 bg-black"

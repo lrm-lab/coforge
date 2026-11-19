@@ -109,11 +109,24 @@
     "Segoe UI Emoji", "Noto Color Emoji";
   --font-display: var(--font-body);
 
-  --ease-snap: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-continuous: cubic-bezier(0.32, 0.72, 0, 1);
-  --animate-spin: spin 0.7s linear infinite;
+  --ease-out: cubic-bezier(0, 0, 0.58, 1);
+  --ease-out-strong: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.42, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.42, 0, 0.58, 1);
+  --ease-overshoot: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-spring: var(--ease-out-strong);
+  --default-transition-timing-function: var(--ease-out);
 
-  --animate-progress-indeterminate: progress-indeterminate 1.4s ease-in-out infinite;
+  --duration-sm: 200ms;
+  --duration-sm-out: 150ms;
+  --duration-md: 300ms;
+  --duration-md-out: 200ms;
+  --duration-lg: 400ms;
+  --duration-lg-out: 280ms;
+
+  --animate-spin: spin 0.7s linear infinite;
+  --animate-pulse: pulse 2s var(--ease-in-out) infinite;
+  --animate-progress-indeterminate: progress-indeterminate 1.4s linear infinite;
 
   @keyframes progress-indeterminate {
     0% {
@@ -424,65 +437,80 @@ html[data-drag-cursor] [data-drop-blocked] * {
   }
 }
 
-:root {
-  --motion-in-sm: 150ms;
-  --motion-out-sm: 100ms;
-  --motion-in: 200ms;
-  --motion-out: 150ms;
-  --motion-in-lg: 250ms;
-  --motion-out-lg: 200ms;
+@supports (animation-timing-function: linear(0, 1)) {
+  :root {
+    --ease-spring: linear(0, 0.32, 0.78, 1.04, 1.09, 1.06, 1.02, 1, 0.99, 0.99, 1);
+  }
 }
 
 @utility motion-enter-sm {
   && {
-    animation-duration: var(--motion-in-sm);
-    transition-duration: var(--motion-in-sm);
-    animation-timing-function: var(--ease-snap);
-    transition-timing-function: var(--ease-snap);
+    animation-duration: var(--duration-sm);
+    transition-duration: var(--duration-sm);
+    animation-timing-function: var(--ease-out);
+    transition-timing-function: var(--ease-out);
+  }
+}
+@utility motion-enter-strong {
+  && {
+    animation-duration: var(--duration-sm);
+    transition-duration: var(--duration-sm);
+    animation-timing-function: var(--ease-out-strong);
+    transition-timing-function: var(--ease-out-strong);
   }
 }
 @utility motion-enter {
   && {
-    animation-duration: var(--motion-in);
-    transition-duration: var(--motion-in);
-    animation-timing-function: var(--ease-snap);
-    transition-timing-function: var(--ease-snap);
+    animation-duration: var(--duration-md);
+    transition-duration: var(--duration-md);
+    animation-timing-function: var(--ease-out);
+    transition-timing-function: var(--ease-out);
   }
 }
 @utility motion-enter-lg {
   && {
-    animation-duration: var(--motion-in-lg);
-    transition-duration: var(--motion-in-lg);
-    animation-timing-function: var(--ease-snap);
-    transition-timing-function: var(--ease-snap);
+    animation-duration: var(--duration-lg);
+    transition-duration: var(--duration-lg);
+    animation-timing-function: var(--ease-out);
+    transition-timing-function: var(--ease-out);
   }
 }
 @utility motion-leave-sm {
   && {
-    animation-duration: var(--motion-out-sm);
-    transition-duration: var(--motion-out-sm);
-    animation-timing-function: var(--ease-snap);
-    transition-timing-function: var(--ease-snap);
+    animation-duration: var(--duration-sm-out);
+    transition-duration: var(--duration-sm-out);
+    animation-timing-function: var(--ease-in);
+    transition-timing-function: var(--ease-in);
   }
 }
 @utility motion-leave {
   && {
-    animation-duration: var(--motion-out);
-    transition-duration: var(--motion-out);
-    animation-timing-function: var(--ease-snap);
-    transition-timing-function: var(--ease-snap);
+    animation-duration: var(--duration-md-out);
+    transition-duration: var(--duration-md-out);
+    animation-timing-function: var(--ease-in);
+    transition-timing-function: var(--ease-in);
   }
 }
 @utility motion-leave-lg {
   && {
-    animation-duration: var(--motion-out-lg);
-    transition-duration: var(--motion-out-lg);
-    animation-timing-function: var(--ease-snap);
-    transition-timing-function: var(--ease-snap);
+    animation-duration: var(--duration-lg-out);
+    transition-duration: var(--duration-lg-out);
+    animation-timing-function: var(--ease-in);
+    transition-timing-function: var(--ease-in);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  :root {
+    --ease-overshoot: var(--ease-out);
+    --ease-spring: var(--ease-out);
+    --duration-sm: 150ms;
+    --duration-sm-out: 150ms;
+    --duration-md: 150ms;
+    --duration-md-out: 150ms;
+    --duration-lg: 150ms;
+    --duration-lg-out: 150ms;
+  }
   .animate-in,
   .animate-out {
     --tw-enter-translate-x: 0 !important;
@@ -497,6 +525,7 @@ html[data-drag-cursor] [data-drop-blocked] * {
   [data-entering],
   [data-exiting] {
     translate: none !important;
+    scale: none !important;
   }
 }
 
@@ -569,12 +598,18 @@ html[data-drag-cursor] [data-drop-blocked] * {
   height: var(--hl-h, 0px);
   transform: translate3d(var(--hl-x, 0px), var(--hl-y, 0px), 0);
   transition:
-    transform 170ms var(--ease-continuous),
-    opacity 110ms ease;
+    transform var(--duration-sm) var(--ease-in-out),
+    opacity 110ms var(--ease-out);
 }
 
 .coforge-popover :is([role="menu"], [role="listbox"])[data-sliding-hl="snap"]::before {
-  transition: opacity 110ms ease;
+  transition: opacity 110ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coforge-popover :is([role="menu"], [role="listbox"])::before {
+    transition: opacity 150ms var(--ease-out);
+  }
 }
 
 .coforge-popover
@@ -589,7 +624,7 @@ html[data-drag-cursor] [data-drop-blocked] * {
 @media (prefers-reduced-motion: no-preference) {
   .coforge-popover
     :is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"], [role="option"]) {
-    animation: coforge-menu-item-in 160ms var(--ease-continuous) backwards;
+    animation: coforge-menu-item-in var(--duration-sm) var(--ease-out-strong) backwards;
   }
   .coforge-popover
     :is(
@@ -667,8 +702,8 @@ html[data-drag-cursor] [data-drop-blocked] * {
 
 ::view-transition-group(artifact-frame),
 ::view-transition-group(artifact-title) {
-  animation-duration: 380ms;
-  animation-timing-function: var(--ease-continuous);
+  animation-duration: var(--duration-lg);
+  animation-timing-function: var(--ease-in-out);
 }
 
 ::view-transition-old(artifact-frame),
@@ -676,8 +711,8 @@ html[data-drag-cursor] [data-drop-blocked] * {
   width: 100%;
   height: 100%;
   overflow: clip;
-  animation-duration: 380ms;
-  animation-timing-function: var(--ease-continuous);
+  animation-duration: var(--duration-lg);
+  animation-timing-function: var(--ease-in-out);
 }
 
 ::view-transition-old(artifact-title),
@@ -688,10 +723,14 @@ html[data-drag-cursor] [data-drop-blocked] * {
   object-position: left center;
 }
 
-::view-transition-old(root),
+::view-transition-old(root) {
+  animation-duration: var(--duration-md-out);
+  animation-timing-function: var(--ease-in);
+}
+
 ::view-transition-new(root) {
-  animation-duration: 240ms;
-  animation-timing-function: var(--ease-continuous);
+  animation-duration: var(--duration-md);
+  animation-timing-function: var(--ease-out);
 }
 
 @media (max-width: 1023px) {

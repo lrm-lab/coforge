@@ -91,7 +91,7 @@
 .home-text-link,
 .home-lang,
 .home-icon-link {
-  transition: color 150ms ease;
+  transition: color 150ms var(--ease-out);
 }
 
 .home-button {
@@ -105,7 +105,7 @@
   color: #fff;
   font-weight: 600;
   box-shadow: 0 calc(6 * var(--u)) calc(14 * var(--u)) calc(-6 * var(--u)) rgb(93 54 220 / 0.55);
-  transition: background-color 150ms ease;
+  transition: background-color 150ms var(--ease-out);
 }
 
 @media (hover: hover) {
@@ -457,7 +457,7 @@
 @media (prefers-reduced-motion: no-preference) {
   .home-agent {
     will-change: transform;
-    animation: home-float 4.8s ease-in-out infinite;
+    animation: home-float 4.8s var(--ease-in-out) infinite;
   }
 
   .home-agent--purple,
@@ -475,7 +475,7 @@
   }
 
   .home-agent .home-agent-closed {
-    animation: home-blink 4.8s ease-in-out infinite;
+    animation: home-blink 4.8s var(--ease-in-out) infinite;
   }
 
   .home-agent--purple .home-agent-closed {
@@ -575,7 +575,7 @@
   );
   opacity: 0;
   pointer-events: none;
-  transition: opacity 300ms;
+  transition: opacity var(--duration-md) var(--ease-out);
   will-change: transform;
 }
 

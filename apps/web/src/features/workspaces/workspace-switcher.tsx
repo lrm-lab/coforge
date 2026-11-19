@@ -55,7 +55,7 @@ export function WorkspaceSwitcher({
         <AriaButton
           aria-label={m.workspace_switcher()}
           className={cx(
-            "flex h-8 min-w-0 shrink-0 items-center rounded-lg outline-focus-ring transition-colors duration-100 ease-linear hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2",
+            "flex h-8 min-w-0 shrink-0 items-center rounded-lg outline-focus-ring transition-colors duration-100 ease-out hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-offset-2",
             // gap-3: the name starts on the nav labels' line.
             markOnly ? "w-8 justify-center" : "max-w-full shrink gap-3 px-1.5 text-left",
           )}
@@ -97,7 +97,7 @@ export function WorkspaceSwitcher({
                   {(state) => (
                     <div
                       className={cx(
-                        "relative flex items-center gap-2 rounded-md px-2.5 py-2 outline-focus-ring transition duration-100 ease-linear",
+                        "relative flex items-center gap-2 rounded-md px-2.5 py-2 outline-focus-ring transition duration-100 ease-out",
                         "group-hover:bg-primary_hover",
                         state.isFocused && "bg-primary_hover",
                         state.isFocusVisible && "outline-2 -outline-offset-2",

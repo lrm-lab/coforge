@@ -1,7 +1,7 @@
 export const POPOVER_MOTION = [
   "coforge-popover",
-  "transition-[translate,scale,opacity] duration-[220ms] max-lg:duration-[350ms] ease-continuous",
-  "exiting:duration-[160ms] max-lg:exiting:duration-[240ms]",
+  "transition-[translate,scale,opacity] duration-(--duration-sm) max-lg:duration-(--duration-md) ease-out",
+  "exiting:duration-(--duration-sm-out) max-lg:exiting:duration-(--duration-md-out) exiting:ease-in",
   "entering:opacity-0 exiting:opacity-0",
   "entering:scale-[0.88] exiting:scale-[0.92]",
   "motion-reduce:duration-150 motion-reduce:entering:scale-100 motion-reduce:exiting:scale-100",

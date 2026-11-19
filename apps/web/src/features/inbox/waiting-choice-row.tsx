@@ -15,7 +15,7 @@ import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import type { WaitingChoiceCard } from "#src/server/conversations/waiting-choice-cards.server";
 import { followInternalLinkClick } from "#src/features/conversations/internal-app-href";
-import { CONTINUOUS_EASE_TUPLE } from "#src/lib/shared-element-rect";
+import { DURATION_S, EASE_IN, EASE_IN_OUT } from "#src/utils/motion-tokens";
 import { cn } from "#src/lib/utils";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
@@ -60,10 +60,10 @@ export function WaitingChoiceRow({
       initial={false}
       exit={
         reduced
-          ? { opacity: 0, transition: { duration: 0.15 } }
-          : { opacity: 0, x: -16, transition: { duration: 0.18, ease: CONTINUOUS_EASE_TUPLE } }
+          ? { opacity: 0, transition: { duration: DURATION_S.reduced } }
+          : { opacity: 0, x: -16, transition: { duration: DURATION_S.smOut, ease: EASE_IN } }
       }
-      transition={{ layout: { duration: 0.24, ease: CONTINUOUS_EASE_TUPLE } }}
+      transition={{ layout: { duration: DURATION_S.md, ease: EASE_IN_OUT } }}
       data-activity-row={waitingRowKey(card.messageId)}
       className={ACTIVITY_ROW_ITEM_CLASS}
     >

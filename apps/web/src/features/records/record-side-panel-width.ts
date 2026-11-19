@@ -3,7 +3,7 @@
 const SIDE_PANEL_WIDTH_STORAGE_KEY = "coforge.records.side-panel-width";
 export const DEFAULT_SIDE_PANEL_WIDTH = 384;
 export const MIN_SIDE_PANEL_WIDTH = 280;
-export const SIDE_PANEL_WIDTH_TRANSITION = "width 220ms cubic-bezier(0.32, 0.72, 0, 1)";
+export const SIDE_PANEL_WIDTH_TRANSITION = "width var(--duration-md) var(--ease-in-out)";
 
 /** Its drag edge; below `lg` the panel has the column to itself, so there is nothing to drag. */
 export const SIDE_PANEL_RESIZE_HANDLE_CLASS =

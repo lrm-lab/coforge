@@ -42,7 +42,7 @@ export const ToggleBase = ({ className, isHovered, isDisabled, isFocusVisible, i
     return (
         <div
             className={cx(
-                "cursor-pointer rounded-full bg-tertiary ring-[0.5px] ring-secondary outline-focus-ring transition duration-150 ease-linear ring-inset",
+                "cursor-pointer rounded-full bg-tertiary ring-[0.5px] ring-secondary outline-focus-ring transition duration-150 ease-out ring-inset",
                 isSelected && "bg-brand-solid",
                 isSelected && isHovered && "bg-brand-solid_hover",
                 isDisabled && "cursor-not-allowed opacity-50",
@@ -56,10 +56,11 @@ export const ToggleBase = ({ className, isHovered, isDisabled, isFocusVisible, i
         >
             <div
                 style={{
-                    transition: "transform 0.15s ease-in-out, translate 0.15s ease-in-out, border-color 0.1s linear, background-color 0.1s linear",
+                    transition:
+                        "transform calc(var(--duration-sm) * 1.5) var(--ease-overshoot), translate calc(var(--duration-sm) * 1.5) var(--ease-overshoot), border-color 120ms var(--ease-out), background-color 120ms var(--ease-out)",
                 }}
                 className={cx(
-                    "rounded-full bg-fg-white shadow-sm",
+                    "rounded-full bg-fg-white shadow-sm motion-reduce:transition-none!",
 
                     slim && "shadow-xs",
                     slim && "border border-toggle-border",

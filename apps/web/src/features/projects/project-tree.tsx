@@ -106,7 +106,7 @@ export function ProjectTree({ slug, path }: { slug: string; path: string }) {
                   <ChevronRight
                     aria-hidden="true"
                     className={cn(
-                      "size-4 shrink-0 transition-transform",
+                      "size-4 shrink-0 transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
                       isExpanded && "rotate-90",
                     )}
                   />

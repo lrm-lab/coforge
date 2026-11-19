@@ -23,7 +23,7 @@ export function SearchField() {
       onHoverStart={preloadSearchDialog}
       onFocus={preloadSearchDialog}
       onPress={() => openSearch({ originRect: captureElementRect(ref.current), source: "pointer" })}
-      className="flex h-9 w-full items-center gap-3 rounded-lg bg-primary px-3 text-sm text-field-placeholder shadow-xs ring-1 ring-field-border outline-focus-ring transition-colors duration-100 ease-linear ring-inset hover:bg-primary_hover focus-visible:outline-2 focus-visible:outline-offset-2"
+      className="flex h-9 w-full items-center gap-3 rounded-lg bg-primary px-3 text-sm text-field-placeholder shadow-xs ring-1 ring-field-border outline-focus-ring transition-colors duration-100 ease-out ring-inset hover:bg-primary_hover focus-visible:outline-2 focus-visible:outline-offset-2"
     >
       <SearchLg aria-hidden="true" className="size-5 shrink-0 text-fg-quaternary" />
       <span className="min-w-0 flex-1 truncate text-left">{m.search_title()}</span>

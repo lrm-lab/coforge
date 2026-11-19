@@ -139,7 +139,7 @@ export function TaskGroup({
               <ChevronDown
                 aria-hidden="true"
                 className={cn(
-                  "ml-auto size-4 shrink-0 text-fg-quaternary transition-transform",
+                  "ml-auto size-4 shrink-0 text-fg-quaternary transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
                   // A board column at desktop width gives the room to its title; clicking the
                   // heading still folds it, and a folded column is plainly short.
                   board && "md:hidden",

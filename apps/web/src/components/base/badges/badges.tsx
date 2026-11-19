@@ -366,7 +366,7 @@ export const BadgeWithButton = <T extends BadgeTypes>(props: BadgeWithButtonProp
                 aria-label={buttonLabel}
                 onClick={props.onButtonClick}
                 className={cx(
-                    "flex cursor-pointer items-center justify-center p-0.5 outline-focus-ring transition duration-100 ease-linear focus-visible:outline-2",
+                    "flex cursor-pointer items-center justify-center p-0.5 outline-focus-ring transition duration-100 ease-out focus-visible:outline-2",
                     colors.styles[color].addonButton,
                     type === "pill-color" ? "rounded-full" : "rounded-[3px]",
                 )}

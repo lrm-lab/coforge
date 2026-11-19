@@ -1,6 +1,9 @@
 import { AnimatePresence, motion } from "motion/react";
 import type React from "react";
 
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
+import { DURATION_S, EASE_IN, EASE_OUT } from "#src/utils/motion-tokens";
+
 export interface BlurRevealProps {
   children: string;
   className?: string;
@@ -32,10 +35,11 @@ export function BlurReveal({
   once = true,
   letterSpacing,
 }: BlurRevealProps) {
+  const reducedMotion = usePrefersReducedMotion();
   const MotionTag = motion[as as keyof typeof motion] as typeof motion.div;
 
-  const stagger = 0.03 / speedReveal;
-  const baseDuration = 0.3 / speedSegment;
+  const stagger = reducedMotion ? 0 : 0.03 / speedReveal;
+  const baseDuration = reducedMotion ? DURATION_S.reduced : 0.3 / speedSegment;
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -43,7 +47,7 @@ export function BlurReveal({
       opacity: 1,
       transition: {
         staggerChildren: stagger,
-        delayChildren: delay,
+        delayChildren: reducedMotion ? 0 : delay,
       },
     },
     exit: {
@@ -55,16 +59,24 @@ export function BlurReveal({
   };
 
   const itemVariants = {
-    hidden: { opacity: 0, filter: "blur(12px)", y: 10 },
+    hidden: reducedMotion ? { opacity: 0 } : { opacity: 0, filter: "blur(12px)", y: 10 },
     visible: {
       opacity: 1,
       filter: "blur(0px)",
       y: 0,
       transition: {
         duration: baseDuration,
+        ease: EASE_OUT,
       },
     },
-    exit: { opacity: 0, filter: "blur(12px)", y: 10 },
+    exit: reducedMotion
+      ? { opacity: 0, transition: { duration: DURATION_S.reduced, ease: EASE_OUT } }
+      : {
+          opacity: 0,
+          filter: "blur(12px)",
+          y: 10,
+          transition: { duration: DURATION_S.smOut, ease: EASE_IN },
+        },
   };
 
   return (

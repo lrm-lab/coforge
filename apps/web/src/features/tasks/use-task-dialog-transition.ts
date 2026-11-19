@@ -12,7 +12,6 @@ import {
   animateFlipFromRect,
   animateFlipToRect,
   cancelFlipAnimation,
-  CONTINUOUS_EASING,
   measureRememberedElement,
   peekSharedRect,
 } from "#src/lib/shared-element-rect";
@@ -183,7 +182,7 @@ export function useTaskDialogTransition({
           borderRadius: `${Math.round(dragProgress * 20)}px`,
           transition: dragging
             ? undefined
-            : `transform 320ms ${CONTINUOUS_EASING}, border-radius 320ms ${CONTINUOUS_EASING}`,
+            : "transform calc(var(--duration-md) * 1.5) var(--ease-spring), border-radius calc(var(--duration-md) * 1.5) var(--ease-spring)",
         }
       : undefined;
 
