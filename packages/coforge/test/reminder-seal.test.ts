@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { parseArgs, run, type ReminderResponse } from "../index";
 import { CliError } from "#src/cli-error";
+import { shortReminderId } from "#src/reminder-format";
 
 const reminderId = "123e4567-e89b-42d3-a456-426614174000";
 
@@ -10,12 +11,6 @@ const transport = (reminder: (request: { operation: string }) => ReminderRespons
   send: async () => undefined,
   view: async () => ({ bytes: new Uint8Array() }),
   reminder: async (request: { operation: string }) => reminder(request),
-});
-
-const listing = (reminders: unknown[]) => () => ({
-  accepted: true,
-  reminders,
-  events: [],
 });
 
 test("seal and unseal parse their own flag sets", () => {
@@ -134,18 +129,35 @@ test("the owner is at most 120 characters and the release condition at most 500"
   expect(() => seal("o", "u".repeat(501))).toThrow("invalid reminder seal condition");
 });
 
-test("an ambiguous --id prefix is INVALID_ARG for a seal, not a second lookup", async () => {
+test("an ambiguous --id prefix is INVALID_ARG and names both candidates, for seal and unseal", async () => {
   const other = "123e4567-e89b-42d3-a456-426614174999";
-  const error = await run(
-    ["reminder", "seal", "--id", "123e4567", "--owner", "@ada", "--until", "x"],
-    transport(
-      listing([
+  const ids = [reminderId, other];
+  const requests: string[] = [];
+  const listed = transport((request) => {
+    requests.push(request.operation);
+    return {
+      accepted: true,
+      reminders: [
         { reminderId, version: 1, status: "scheduled" },
         { reminderId: other, version: 1, status: "scheduled" },
-      ]),
-    ),
-  ).catch((caught: unknown) => caught);
-  expect(error).toBeInstanceOf(CliError);
-  expect((error as CliError).code).toBe("INVALID_ARG");
-  expect((error as CliError).message).toBe("Reminder prefix 123e4567 is ambiguous");
+      ],
+      events: [],
+    };
+  });
+  for (const operation of ["seal", "unseal"] as const) {
+    requests.length = 0;
+    const error = await run(
+      operation === "seal"
+        ? ["reminder", "seal", "--id", "123e4567", "--owner", "@ada", "--until", "x"]
+        : ["reminder", "unseal", "--id", "123e4567"],
+      listed,
+    ).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(CliError);
+    expect((error as CliError).code).toBe("INVALID_ARG");
+    expect((error as CliError).retryable).toBe(false);
+    expect((error as CliError).message).toContain("matches 2 reminders");
+    expect((error as CliError).message).toContain(shortReminderId(reminderId, ids));
+    expect((error as CliError).message).toContain(shortReminderId(other, ids));
+    expect(requests).toEqual(["list"]);
+  }
 });

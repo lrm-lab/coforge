@@ -244,23 +244,17 @@ export async function resolveReminderRequestId(
   if (!scope || !request.reminderId) return request;
   if (isReminderId(request.reminderId)) return request;
   const prefix = request.reminderId;
-  let resolved: string;
   try {
-    resolved = await resolveReminderId(transport, prefix, scope);
+    return { ...request, reminderId: await resolveReminderId(transport, prefix, scope) };
   } catch (error) {
     if (
       (request.operation === "seal" || request.operation === "unseal") &&
       error instanceof CliError &&
       error.code === "AMBIGUOUS"
     )
-      throw new CliError({
-        code: "INVALID_ARG",
-        message: `Reminder prefix ${prefix} is ambiguous`,
-        retryable: false,
-      });
+      throw new CliError({ code: "INVALID_ARG", message: error.message, retryable: false });
     throw error;
   }
-  return { ...request, reminderId: resolved };
 }
 
 export async function resolveReminderId(
