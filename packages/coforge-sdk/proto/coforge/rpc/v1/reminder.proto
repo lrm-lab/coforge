@@ -68,6 +68,9 @@ message ReminderJob {
   string target = 5;
   string message_id = 6;
   string fire_at = 7;
+  optional string kind = 8;
+  optional string trigger_key = 9;
+  optional string details = 10;
 }
 
 message ReminderSync {

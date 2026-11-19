@@ -7,3 +7,9 @@ export type ReminderJob = {
   messageId: string;
   fireAt: string;
 };
+
+export type ReminderTriggerJob = Omit<ReminderJob, "messageId"> & {
+  kind: "trigger";
+  triggerKey: string;
+  details?: string;
+};

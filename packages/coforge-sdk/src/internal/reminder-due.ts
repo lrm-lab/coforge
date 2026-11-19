@@ -13,8 +13,15 @@ import {
   type ReminderIdentity,
   type ReminderJob,
 } from "./reminder";
+import type { ReminderTriggerJob } from "./reminder-job";
+import {
+  parseReminderTriggerKey,
+  validateReminderTriggerDetails,
+  validateReminderTriggerTitle,
+} from "./reminder-trigger";
 
 export const REMINDER_DUE_CAPABILITY = "reminder-due:v1" as const;
+export const REMINDER_DUE_V2_CAPABILITY = "reminder-due:v2" as const;
 export const REMINDER_DUE_MESSAGE_TYPE = "reminder:due:v1" as const;
 export const REMINDER_DUE_ACK_METHOD = RPC_METHODS.reminderDueAck;
 
@@ -24,6 +31,7 @@ export type ReminderDue = DueIdentity & {
   expiresAt: string;
   messageType: typeof REMINDER_DUE_MESSAGE_TYPE;
 };
+export type ReminderTriggerDue = Omit<ReminderDue, "job"> & { job: ReminderTriggerJob };
 export type ReminderDueAckRequest = DueIdentity & {
   requestId: string;
   reminderId: string;
@@ -40,10 +48,38 @@ function identity(value: DueIdentity) {
     throw new Error("invalid reminder due identity");
 }
 
-function due(value: ReminderDue): ReminderDue {
+const isTriggerJob = (job: ReminderDue["job"] | ReminderTriggerJob): job is ReminderTriggerJob =>
+  "kind" in job && job.kind !== undefined;
+
+function validateTriggerJob(job: ReminderTriggerJob) {
+  const { kind, reminderId, ownerAgentId, title, target, triggerKey, details, version, fireAt } =
+    job;
+  if (
+    kind !== "trigger" ||
+    "messageId" in job ||
+    !isReminderId(reminderId) ||
+    !isScopeId(ownerAgentId) ||
+    !Number.isInteger(version) ||
+    version < 1 ||
+    version > 0xffffffff ||
+    !validateReminderTriggerTitle(title) ||
+    target !== `reminder:${reminderId}` ||
+    !parseReminderTriggerKey(triggerKey, { allowReserved: true }).ok ||
+    (details !== undefined && !validateReminderTriggerDetails(details)) ||
+    !Number.isFinite(Date.parse(fireAt))
+  )
+    throw new Error("invalid reminder trigger job");
+}
+
+function due<T extends ReminderDue | ReminderTriggerDue>(value: T): T {
   identity(value);
   if (!value.job) throw new Error("missing reminder due job");
-  validateReminderJob(value.job);
+  if (isTriggerJob(value.job)) validateTriggerJob(value.job);
+  else {
+    if (Object.keys(value.job).some((key) => key === "triggerKey" || key === "details"))
+      throw new Error("invalid reminder job");
+    validateReminderJob(value.job);
+  }
   if (
     value.job.ownerAgentId !== value.agentId ||
     value.messageType !== REMINDER_DUE_MESSAGE_TYPE ||
@@ -69,19 +105,32 @@ function ack<T extends ReminderDueAckRequest>(value: T): T {
 
 const bounded = (bytes: Uint8Array) => boundedPayload(bytes, 65_536, "ReminderDue");
 
-export function encodeReminderDue(value: ReminderDue): Uint8Array {
+export function encodeReminderDue(value: ReminderDue | ReminderTriggerDue): Uint8Array {
   return bounded(toBinary(ReminderDueSchema, create(ReminderDueSchema, due(value))));
 }
 
-export function decodeReminderDue(bytes: Uint8Array): ReminderDue {
+export function decodeReminderDueV2(bytes: Uint8Array): ReminderDue | ReminderTriggerDue {
   const { $typeName: _, job, ...value } = fromBinary(ReminderDueSchema, bounded(bytes));
   if (!job) throw new Error("missing reminder due job");
-  const { $typeName: _jobType, ...fields } = job;
+  const { $typeName: _jobType, messageId, kind, triggerKey, details, ...core } = job;
+  const messageType = value.messageType as typeof REMINDER_DUE_MESSAGE_TYPE;
+  if (kind === undefined) return due({ ...value, messageType, job: { ...core, messageId } });
   return due({
     ...value,
-    job: fields,
-    messageType: value.messageType as typeof REMINDER_DUE_MESSAGE_TYPE,
+    messageType,
+    job: {
+      ...core,
+      kind: kind as "trigger",
+      triggerKey: triggerKey ?? "",
+      ...(details !== undefined ? { details } : {}),
+    },
   });
+}
+
+export function decodeReminderDue(bytes: Uint8Array): ReminderDue {
+  const decoded = decodeReminderDueV2(bytes);
+  if (isTriggerJob(decoded.job)) throw new Error("reminder trigger due needs reminder-due:v2");
+  return decoded as ReminderDue;
 }
 
 export function encodeReminderDueAckRequest(value: ReminderDueAckRequest): Uint8Array {
