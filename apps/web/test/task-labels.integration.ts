@@ -2,11 +2,6 @@ import { expect, test } from "bun:test";
 import { Labels } from "#src/server/tasks/labels.server";
 import { setup } from "./fixtures/task-dependencies";
 
-/**
- * Workspace task labels against real PostgreSQL: attaching them, the five-label cap, the unknown
- * name refusal, and who may create, rename and delete one.
- */
-
 test("a task carries its labels, case-insensitively, and an amend adds and removes them", async () => {
   const { db, run, make, show, principals, refusal } = await setup();
   try {
@@ -24,7 +19,6 @@ test("a task carries its labels, case-insensitively, and an amend adds and remov
       { id: design.id, name: "Design", color: "blue" },
     ]);
 
-    // The reply (and the `task.changed.v1` built from it) carries the labels the Task now has.
     const amended = await run("alice", { operation: "amend", number: number!, labels: ["BUG"] });
     expect((amended.tasks[0]!.labels ?? []).map((label) => label.name)).toEqual(["Bug", "Design"]);
     expect(((await show(number!)).tasks[0]!.labels ?? []).map((label) => label.name)).toEqual([
@@ -37,7 +31,6 @@ test("a task carries its labels, case-insensitively, and an amend adds and remov
       "Bug",
     ]);
 
-    // Taking off a label the task does not carry is a no-op, not an error.
     await run("alice", { operation: "amend", number: number!, removeLabels: ["Design"] });
     expect(((await show(number!)).tasks[0]!.labels ?? []).map((label) => label.name)).toEqual([
       "Bug",
@@ -51,7 +44,6 @@ test("a task carries its labels, case-insensitively, and an amend adds and remov
       removed: [],
     });
 
-    // `list --label` filters: every named label must be on the Task.
     await labels.create(workspaceId, principals.alice.userId!, { name: "Both" });
     await run("alice", { operation: "amend", number: number!, labels: ["Both"] });
     const onlyDesign = (await make("alice", 1, { labels: ["Design"] }))[0]!;
@@ -63,7 +55,6 @@ test("a task carries its labels, case-insensitively, and an amend adds and remov
     const unknownFilter = await refusal(run("alice", { operation: "list", labels: ["Nope"] }));
     expect(unknownFilter.code).toBe("INVALID_INPUT");
 
-    // A label no Workspace label names is refused and never created; the hint names the ones it has.
     const unknown = await refusal(
       run("alice", { operation: "amend", number: number!, labels: ["Nope"] }),
     );
@@ -107,7 +98,6 @@ test("any member creates a label; only an owner or admin renames or deletes one"
     const labels = new Labels(db);
 
     const fromBob = await labels.create(workspaceId, bobId, { name: "Client" });
-    // The same name in another case is the same label, not a second one.
     expect((await labels.create(workspaceId, bobId, { name: "client" })).id).toBe(fromBob.id);
     expect(await db.label.count({ where: { workspaceId } })).toBe(1);
 
@@ -131,7 +121,6 @@ test("any member creates a label; only an owner or admin renames or deletes one"
       (await refusal(labels.create(workspaceId, aliceId, { name: "Bad", color: "chartreuse" })))
         .code,
     ).toBe("INVALID_INPUT");
-    // A leading `-` is the CLI's "take it off", so such a name could never be attached there.
     expect((await refusal(labels.create(workspaceId, aliceId, { name: "-Design" }))).code).toBe(
       "INVALID_INPUT",
     );
@@ -141,12 +130,10 @@ test("any member creates a label; only an owner or admin renames or deletes one"
 
     const [number] = await make("alice", 1, { labels: ["Clients"] });
     const taskId = (await show(number!)).tasks[0]!.id;
-    // Deleting for good is the second step (task #508): a live label is archived first.
     const live = await refusal(labels.delete(workspaceId, aliceId, fromBob.id));
     expect(live).toMatchObject({ code: "INVALID_INPUT", errorId: "task-label-not-archived" });
     expect(await db.taskLabel.count({ where: { taskId } })).toBe(1);
     await labels.update(workspaceId, aliceId, fromBob.id, { archived: true });
-    // A member still may not, archived or not.
     expect((await refusal(labels.delete(workspaceId, bobId, fromBob.id))).code).toBe(
       "ACCESS_DENIED",
     );
@@ -169,14 +156,12 @@ test("a member reads every label for Settings → Labels, the archived ones and 
     await make("alice", 2, { labels: ["Gone"] });
     await labels.update(workspaceId, aliceId, gone.id, { archived: true });
 
-    // What loadLabelSettings reads, as a plain member (task #508).
     const all = await labels.list(workspaceId, bobId, { archived: true });
     expect(all.map((label) => [label.name, Boolean(label.archivedAt), label.taskCount])).toEqual([
       ["Gone", true, 2],
       ["Kept", false, 0],
     ]);
     expect(all.find((label) => label.id === gone.id)!.lastUsedAt).not.toBeNull();
-    // The pickers' read still leaves the archived ones out.
     expect((await labels.list(workspaceId, bobId)).map((label) => label.id)).toEqual([kept.id]);
   } finally {
     await db.$disconnect();
@@ -209,14 +194,10 @@ test("archiving a label takes it off every task, frees its slot, and is for an o
 
     await labels.update(workspaceId, aliceId, created[0]!.id, { archived: true });
     expect(await labelNames()).toEqual(["Five", "Four", "Three", "Two"]);
-    // The row stays, so restoring the label brings it back.
     expect(await db.taskLabel.count({ where: { taskId } })).toBe(5);
 
-    // The archived label no longer counts towards the five, so a fifth active one fits.
     await run("alice", { operation: "amend", number: number!, labels: ["Six"] });
     expect(await labelNames()).toEqual(["Five", "Four", "Six", "Three", "Two"]);
-    // `list --label` on an archived label matches no Task, and `--label none` counts a Task whose
-    // only label was archived as having none.
     const listed = async (...names: string[]) =>
       (await run("alice", { operation: "list", labels: names })).tasks.map((task) => task.number);
     expect(await listed("One")).toEqual([]);
@@ -230,7 +211,6 @@ test("archiving a label takes it off every task, frees its slot, and is for an o
       { archived: true },
     );
     expect(await listed("none")).toContain(solo);
-    // An archived label cannot be attached again.
     expect((await refusal(make("alice", 1, { labels: ["One"] }))).code).toBe("INVALID_INPUT");
   } finally {
     await db.$disconnect();
@@ -265,7 +245,6 @@ test("an Agent creates a label; only an owner or admin Agent renames, archives o
     const restored = await labels.update(workspaceId, adminAgent, made.id, { archived: false });
     expect(restored.archivedAt).toBeNull();
 
-    // A deleted Agent is no longer one of the Workspace's actors.
     await db.agent.update({ where: { id: memberAgent.agentId }, data: { deletedAt: new Date() } });
     const gone = await refusal(labels.create(workspaceId, memberAgent, { name: "Late" }));
     expect(gone.code).toBe("ACCESS_DENIED");
@@ -286,7 +265,6 @@ test("Settings → Labels: recolor and rename stick, a restore keeps the label o
 
     const recolored = await labels.update(workspaceId, aliceId, docs.id, { color: "indigo" });
     expect(recolored).toMatchObject({ name: "Docs", color: "indigo" });
-    // A name taken in another case is refused and leaves the label as it was.
     const taken = await refusal(labels.update(workspaceId, aliceId, docs.id, { name: "bug" }));
     expect(taken).toMatchObject({ code: "CONFLICT", errorId: "task-label-name-taken" });
     await labels.update(workspaceId, aliceId, docs.id, { name: "Guides" });
@@ -295,7 +273,6 @@ test("Settings → Labels: recolor and rename stick, a restore keeps the label o
       color: "indigo",
     });
 
-    // Archived, then restored: the label and its two tasks come back as they were.
     await labels.update(workspaceId, aliceId, bug.id, { archived: true });
     await labels.update(workspaceId, aliceId, bug.id, { archived: false });
     expect((await labels.list(workspaceId, aliceId)).find((l) => l.id === bug.id)).toMatchObject({
@@ -303,13 +280,10 @@ test("Settings → Labels: recolor and rename stick, a restore keeps the label o
       archivedAt: null,
     });
 
-    // Someone else restored it while a page still listed it archived: the delete is refused and
-    // the label stays.
     const meanwhile = await refusal(labels.delete(workspaceId, aliceId, bug.id));
     expect(meanwhile).toMatchObject({ code: "INVALID_INPUT", errorId: "task-label-not-archived" });
     expect(await db.label.findUnique({ where: { id: bug.id } })).not.toBeNull();
 
-    // Archived again, a delete for good takes it off both tasks.
     await labels.update(workspaceId, aliceId, bug.id, { archived: true });
     await labels.delete(workspaceId, aliceId, bug.id);
     expect(await db.label.findUnique({ where: { id: bug.id } })).toBeNull();

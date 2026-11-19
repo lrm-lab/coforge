@@ -6,14 +6,6 @@ import { ActivityInbox } from "#src/server/inbox/activity-inbox.server";
 import { attachmentCommentsFixture } from "./helpers/attachment-comments-fixture";
 import { isConversation } from "./helpers/activity-inbox-fixture";
 
-/**
- * An image's comments are the file comments every attachment has: a member's comment on an image
- * is an Activity item for its uploader that names the file and opens the image at that comment,
- * and a reply opens at the comment it answers. Never one for the author.
- *
- * Needs `CHANNEL_TEST_DATABASE_URL` (the fixture throws without it).
- */
-
 test("a comment on an image is an Activity item that opens the image at that comment", async () => {
   const f = await attachmentCommentsFixture();
   try {
@@ -32,7 +24,6 @@ test("a comment on an image is an Activity item that opens the image at that com
       (await inbox.list(f.workspace.id, userId, { filter: "all" })).items
         .filter(isConversation)
         .find((candidate) => candidate.attachmentComment);
-    // A comment that starts no thread still names the file it is on.
     const item = await itemOf(f.owner.id);
     expect(item?.attachmentComment).toMatchObject({
       attachmentId: f.attachment.id,
@@ -46,9 +37,7 @@ test("a comment on an image is an Activity item that opens the image at that com
       attachmentId: f.attachment.id,
       commentId: comment.id,
     });
-    // The author is told nothing about their own comment.
     expect(await itemOf(f.member.id)).toBeUndefined();
-    // A reply to it, once the uploader has answered, opens at the root comment it answers.
     const reply = await comments.post(f.actor, {
       attachmentId: f.attachment.id,
       body: "Thanks",

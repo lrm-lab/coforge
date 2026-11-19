@@ -23,14 +23,6 @@ import {
 import { sameOriginProxy } from "./helpers/same-origin-proxy";
 import { serverFunctionIds, serverFunctionOf } from "./helpers/server-function-ids";
 
-/**
- * QA's path on staging (task #358), all within the page: a channel read in Chat, another channel
- * opened, messages come into the first, and Activity's Unread view opens it, with more arriving
- * as it opens. The pane lands on the first new message under the "New messages" divider, and
- * the divider stays there. Opt-in like the other browser E2Es: real local Web, Centrifugo
- * (`COFORGE_E2E_CENTRIFUGO_URL`, behind a same-origin proxy, so messages arrive live) and
- * `agent-browser`. A screenshot is written under `.artifacts/e2e/activity-open-unread/`.
- */
 const { origin: webOrigin, browserPath, databaseUrl } = localBrowserE2e();
 const centrifugoOrigin = Bun.env.COFORGE_E2E_CENTRIFUGO_URL;
 if (!centrifugoOrigin) throw new Error("COFORGE_E2E_CENTRIFUGO_URL is required");
@@ -44,8 +36,6 @@ test("a channel read in Chat and opened from Activity after messages came shows 
   const { origin } = proxy;
   try {
     const { workspaceId, workspace } = await devBrowserWorkspace(db);
-    // Short enough that the window never evicts its live end, as on #teste-testa, so what comes
-    // in while the channel is open reaches the pane.
     const read = Array.from({ length: 40 }, (_, index) => ({
       from: "peer" as const,
       body: `E2E open-cached read ${index + 1}`,
@@ -72,21 +62,17 @@ test("a channel read in Chat and opened from Activity after messages came shows 
     const send = (sequence: number, body: string) =>
       postLive(db, realtime, { channelId: channel.channelId, workspaceId, sequence, body });
     const first = await send(read.length + 1, "E2E open-cached probe");
-    // An Agent's receipt, as on staging's #teste-testa.
     await send(read.length + 2, "E2E open-cached probe received");
 
     await clickActivityLink(browser);
     const unreadTab = `[...document.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent.startsWith("Unread"))`;
-    // SSR draws the tabs before React can hear a click; wait for hydration first.
     await browser("wait", "--fn", `${unreadTab} !== undefined && ${hydratedElement(unreadTab)}`);
     await browser("eval", `${unreadTab}.click()`);
     await browser("wait", "--fn", `${row("E2E open-cached probe received")} !== null`);
     await browser("find", "text", "E2E open-cached probe received", "click");
-    // More comes in while the channel opens.
     await send(read.length + 3, "E2E open-cached during");
     await browser("wait", "--fn", inPane(first));
     await browser("wait", "--fn", dividerBetween(channel.ids.at(-1)!, first));
-    // The pane reads what it shows; the divider stays over the first new message.
     await waitFor(
       async () =>
         (await db.conversationMember.findUniqueOrThrow({ where: { id: channel.viewer.id } }))
@@ -106,9 +92,6 @@ test("a channel opened from Activity round after round shows each round's divide
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate } = browserSession(browserPath, `activity-open-rounds-${process.pid}`);
   const realtime = new CentrifugoConversationRealtime(createCentrifugoServerApi());
-  // Each open's read of where unread starts answers late, as on a slow network: a window held from
-  // the last round paints before it, so its first picture has the divider only if the pane takes
-  // the Activity row's own first unread (task #102). Without the delay this hung on CI's timing.
   const openRead = serverFunctionIds(["loadConversationOpen"]);
   const proxy = sameOriginProxy(webOrigin, centrifugoOrigin, {
     async afterUpstream(url) {
@@ -142,11 +125,6 @@ test("a channel opened from Activity round after round shows each round's divide
     };
     await openActivity();
 
-    // QA's rounds on staging's #video-gen (task #358): another conversation open beside the
-    // Unread view, three messages into the channel (QA's came four seconds apart; a second apart
-    // still has the router read ahead before the round's last message, and fails the same way
-    // with the task #102 fix undone), and the channel opened from its card; then back to the other conversation. Some rounds come while the window kept from
-    // the last is still fresh, one after it has gone stale, one after the page loaded again.
     let before = channel.ids.at(-1)!;
     let sequence = read.length;
     for (const [round, pause, reload] of [
@@ -154,22 +132,17 @@ test("a channel opened from Activity round after round shows each round's divide
       [2, 0, false],
       [3, 32_000, false],
       [4, 0, false],
-      // A page loaded again opens the channel on the browser's stored copy of its window (task #253).
       [5, 0, true],
       [6, 0, false],
     ] as const) {
       if (reload) await openActivity();
       await tab("All");
       await browser("wait", "--fn", `${row("E2E open-rounds elsewhere")} !== null`);
-      // The card's own link: a click the list's re-render after the view switch cannot miss.
       await browser(
         "eval",
         `[...document.querySelectorAll(${rowItems})].find((item) => item.textContent.includes("E2E open-rounds elsewhere")).querySelector("a").click()`,
       );
       await browser("wait", "--fn", inPane(elsewhere.ids[0]!));
-      // Gone stale without waiting it out: the page's clock moves ahead (Query's 30s `staleTime`
-      // and the router's read-ahead go by `Date.now()`). Round 3 then reads the same Server
-      // Functions it did after a real 32s wait (task #128). A reload (round 5) resets the clock.
       if (pause)
         await browser(
           "eval",
@@ -186,8 +159,6 @@ test("a channel opened from Activity round after round shows each round's divide
             body: `E2E open-rounds r${round} b${n}`,
           }),
         );
-        // The pointer rests on the channel's card as it comes in, as a reader's does: the router
-        // reads ahead what the card opens (`defaultPreload: "intent"`) while more is still coming.
         if (n === 1) {
           await browser("wait", "--fn", `${row(`E2E open-rounds r${round} b1`)} !== null`);
           await browser("find", "text", `E2E open-rounds r${round} b1`, "hover");
@@ -195,22 +166,17 @@ test("a channel opened from Activity round after round shows each round's divide
         await browser("wait", "1000");
       }
       await browser("wait", "--fn", `${row(`E2E open-rounds r${round} b3`)} !== null`);
-      // The pane's first picture of the channel, as the last message read first appears in it:
-      // the burst's first message is already there, under the divider.
       await browser(
         "eval",
         `(() => { window.__firstPicture = undefined; const observer = new MutationObserver(() => { if (!${inPane(before)}) return; window.__firstPicture = ${dividerBetween(before, burst[0]!)}; window.__firstPictureSeen = ${firstPictureSeen(channel.channelId)}; observer.disconnect(); }); observer.observe(document.body, { childList: true, subtree: true }); return true; })()`,
       );
       await browser("find", "text", `E2E open-rounds r${round} b3`, "click");
       await browser("wait", "--fn", `window.__firstPicture !== undefined`);
-      // What the first picture held, printed every round so a CI failure says which round and why
-      // (task #102): the target the row opened, the pane's last messages, what follows the divider.
       console.log(
         `round ${round}: first picture ${await evaluate<boolean>(`window.__firstPicture`)}, expected the divider after ${before.slice(-6)} and before ${burst[0]!.slice(-6)}`,
         await evaluate<string>(`JSON.stringify(window.__firstPictureSeen)`),
       );
       expect(await evaluate<boolean>(`window.__firstPicture`)).toBe(true);
-      // Every message of the burst is in the window, and the pane reads through it.
       await waitFor(
         async () =>
           (await db.conversationMember.findUniqueOrThrow({ where: { id: channel.viewer.id } }))

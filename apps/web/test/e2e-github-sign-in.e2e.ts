@@ -15,23 +15,6 @@ import {
   type Person,
 } from "./e2e-sign-in-harness";
 
-/**
- * Signing in with GitHub on CoForge's own page, end to end. The browser goes to GitHub's authorize
- * page with CoForge's redirect URI and comes back with a code, which the Web server has Authing
- * exchange (`signin-by-mobile`); the person is then signed in like any other. A new person is
- * asked for a name, a returning one goes to the page they came for, and a code Authing cannot
- * exchange sends the person back to the sign-in page with a message. The ways back refused before
- * Authing is asked (a state other than the browser's, no start of ours, a refusal on GitHub's page)
- * and a deployment without GitHub sign-in are unit tests
- * (`authentication-tests/github-sign-in-refusals.test.ts`).
- *
- * Opt-in like the other browser E2Es, and brings its own servers (`e2e-sign-in-harness.ts`,
- * `e2e-fake-github.ts`). It needs `agent-browser`, `openssl`, the local dev database and a local
- * Redis, and deletes what it created. Screenshots and the Web server's log are written under
- * `.artifacts/e2e/github-sign-in/`.
- *
- *   REDIS_URL=redis://127.0.0.1:6380 bun test ./test/e2e-github-sign-in.e2e.ts
- */
 const { databaseUrl } = requireLocalServices();
 const webPort = Number(Bun.env.COFORGE_E2E_SIGN_IN_WEB_PORT ?? 8798);
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/github-sign-in");
@@ -44,7 +27,6 @@ const people = {
   },
 } satisfies Record<string, Person>;
 type PersonKey = keyof typeof people;
-/** A GitHub account Authing has not seen: its first sign-in makes the person. */
 const fresh: Person = { sub: "e2e-github-sign-in-fresh", nickname: "Fresh Octo" };
 
 const githubButton = "Continue with GitHub";
@@ -79,7 +61,6 @@ test("signing in with GitHub", async () => {
     const { origin, fake } = stack;
     const onSignInHere = onSignInPage(origin);
     const onNameStepHere = onNameStep(origin);
-    /** The sign-in page's message about GitHub, or null. */
     const githubError = `(document.querySelector("main [role=alert]")?.textContent ?? null)`;
     async function openSignIn(path = "/login") {
       await browser("cookies", "clear");
@@ -90,7 +71,6 @@ test("signing in with GitHub", async () => {
     const returnedToSignIn = (message: string) =>
       `location.pathname.endsWith("/login") && ${githubError} === ${JSON.stringify(message)}`;
 
-    // The button is below both tabs' forms, full width.
     await openSignIn();
     expect(await hasGitHubButton()).toBe(true);
     expect(
@@ -100,7 +80,6 @@ test("signing in with GitHub", async () => {
     ).toBe(true);
     await browser("screenshot", join(artifacts, "1-login.png"));
 
-    // A new person: sent to GitHub with CoForge's redirect URI, back with a code, to the name step.
     github.respondWith({ kind: "approve", person: people.octo });
     await pressGitHub();
     await waitFor(onNameStepHere);
@@ -124,8 +103,6 @@ test("signing in with GitHub", async () => {
     ).toBeNull();
     await browser("screenshot", join(artifacts, "2-name-step.png"));
 
-    // Answering the name step makes the personal Workspace; the same person signing in with GitHub
-    // again goes straight to the page they came for.
     await submitName("Octo Cat");
     await waitFor(`location.pathname.includes("/w/")`);
     const membership = await db.workspaceMembership.findFirstOrThrow({
@@ -143,9 +120,6 @@ test("signing in with GitHub", async () => {
     expect(fake.signIns.map((entry) => entry.person)).toEqual(["octo", "octo"]);
     expect(fake.registered).toEqual([]);
 
-    // Login with CoForge asking a signed-in person to sign in again (`prompt=login`) must not lose
-    // that on the way out to GitHub: refusing there comes back to a sign-in page that is still
-    // asking, not on to the page they were going to.
     github.respondWith({ kind: "deny" });
     await browser("open", `${origin}/login?prompt=login&returnTo=${encodeURIComponent(returnTo)}`);
     await waitFor(onSignInHere);
@@ -159,7 +133,6 @@ test("signing in with GitHub", async () => {
     ).toBe(returnTo);
     await browser("screenshot", join(artifacts, "2b-prompt-login-denied.png"));
 
-    // A GitHub account Authing has not seen is made on its first sign-in, and is a new person.
     github.respondWith({ kind: "approve", person: fresh });
     await openSignIn();
     await pressGitHub();
@@ -169,7 +142,6 @@ test("signing in with GitHub", async () => {
 
     const signInsBefore = fake.signIns.length;
 
-    // A code Authing cannot exchange is a failure, with no one signed in.
     github.respondWith({ kind: "approve", person: null });
     await openSignIn();
     await pressGitHub();
@@ -178,7 +150,6 @@ test("signing in with GitHub", async () => {
     expect(await fake.revocations(signInsBefore)).toHaveLength(signInsBefore);
     expect(await evaluate<boolean>(`!!document.querySelector("[data-toast]")`)).toBe(false);
 
-    // The page and its button read in Simplified Chinese too.
     await browser("cookies", "clear");
     await browser("open", `${origin}/zh-CN/login`);
     await waitFor(`!!${button("使用 GitHub 账号登录")}`);
@@ -190,7 +161,6 @@ test("signing in with GitHub", async () => {
     await db.$disconnect();
   }
 
-  // The log names the step that failed and holds neither the code nor a token.
   const log = await Bun.file(join(artifacts, "web.log")).text();
   expect(log).toContain('"stage":"github_sign_in"');
   for (const code of github.issued) expect(log).not.toContain(code);

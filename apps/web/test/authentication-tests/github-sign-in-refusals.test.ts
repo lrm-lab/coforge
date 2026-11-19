@@ -7,10 +7,6 @@ import {
   githubSignInStartHandler,
 } from "#src/server/auth/github-sign-in-http.server";
 
-// The ways back from GitHub that are refused before Authing is asked anything, and a deployment
-// without GitHub sign-in. The browser e2e (e2e-github-sign-in) keeps the round trips that need
-// GitHub's page and Authing; these are decided here.
-
 const sessionSecret = "test-session-secret-at-least-32-characters";
 const config: GitHubSignInConfig = {
   clientId: "e2e-client",
@@ -26,7 +22,6 @@ const authingConfig = {
 };
 const returnTo = "/w/acme/channel/general";
 
-/** Authing that fails the test if it is asked anything. */
 const untouchedAuthing = new Proxy(
   {},
   {
