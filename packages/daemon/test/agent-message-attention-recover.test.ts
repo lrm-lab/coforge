@@ -36,3 +36,32 @@ test("recover returns the targets it announced, and none when everything was alr
   );
   expect(notices).toHaveLength(before);
 });
+
+test("a replacement session receives the same recovery IDs while duplicates stay deduplicated", async () => {
+  const notices: string[] = [];
+  const index = new AgentMessageAttentionIndex(
+    "workspace-1",
+    { session: () => session((notice) => notices.push(notice)) },
+    async () => {},
+  );
+  const message = {
+    messageId: "message-recovery",
+    deliveryId: "delivery-recovery",
+    conversationId: "conversation-1",
+    sequence: 1,
+    target: "@ada",
+    latestSenderKind: "human" as const,
+    latestSenderHandle: "ada",
+    latestSenderDescription: "",
+    body: "recover this body",
+  };
+  await index.recover("agent-1", [message], { "@ada": 1 });
+  await index.recover("agent-1", [message], { "@ada": 1 });
+  index.clearAgent("agent-1");
+  await index.recover("agent-1", [message], { "@ada": 1 });
+  expect(notices).toHaveLength(2);
+  expect(notices.every((notice) => notice.startsWith("[CoForge inbox notice:"))).toBe(true);
+  expect(notices.every((notice) => notice.includes("@ada 1 new message"))).toBe(true);
+  expect(notices.every((notice) => !notice.includes("recover this body"))).toBe(true);
+  expect(index.modelSeenSequence("agent-1", "@ada")).toBe(0);
+});

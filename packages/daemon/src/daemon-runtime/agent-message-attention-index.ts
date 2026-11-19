@@ -1,9 +1,6 @@
 import {
   AGENT_MESSAGE_ACK_METHOD,
-  SEEN_EXACT_SEQS_LIMIT,
   diagnosticErrorName,
-  mergeSeenExactSeqs,
-  threadRootTarget,
   type AgentMessageDelivery,
   type AgentMessageDeliveryAck,
   type AgentRecoveryMessage,
@@ -15,7 +12,6 @@ import { getLogger } from "@logtape/logtape";
 import { NoticeActionClocks } from "./notice-action-clocks";
 import { type AgentDeliveryQueue, writeDeliveryNotice } from "./delivery-notice-writer";
 import { rememberDelivery } from "./delivery-generation-memory";
-import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 import { hasDeliveryScope } from "./message-attention-fields";
 import {
@@ -24,28 +20,18 @@ import {
   type NoticeGeneration,
 } from "./agent-wakeup-unavailable-error";
 import { PreviewSeen } from "./inbox-preview-rows";
-import { LatestThreadReadIndex } from "./latest-thread-read-index";
 import {
   logAttentionDecision,
   type AttentionDecisionMessage,
   type AttentionDecisionOutcome,
 } from "./agent-message-attention-decision-log";
-import { noteFrontierSource, type FrontierSource } from "./agent-message-attention-frontier-source";
 import { planRecovery } from "./agent-message-attention-recovery";
-import type { AgentConsumedSeqPort } from "#src/persistence/agent-consumed-seq-store";
+import { AgentConsumedAttention } from "./agent-consumed-attention";
 import { PendingAttention } from "./agent-message-attention-pending";
 import {
   attentionRecorded,
-  consumedSnapshot,
-  byNumber,
-  containsSorted,
-  firstAbove,
-  isAscending,
   isCardEvent,
   markFlushed,
-  sameThreadRoot,
-  type ConsumedAgent,
-  type ConsumedTarget,
   type PendingWindowEntry,
 } from "./agent-message-attention-index-helpers";
 const logger = getLogger(["coforge", "daemon", "message-attention"]);
@@ -62,15 +48,10 @@ export type MessageAttention = Readonly<{
 export class AgentMessageAttentionIndex {
   readonly #generations = new Map<string, NoticeGeneration>();
   readonly #attention = new Map<string, Map<string, MessageAttention>>();
-  readonly #consumedByAgent = new Map<string, ConsumedAgent>();
   readonly noticeActionClocks = new NoticeActionClocks();
-  readonly #latestThreadReads = new LatestThreadReadIndex();
-  readonly #conversationTargets = new Map<string, Map<string, Set<string>>>();
-  readonly #attentionConversation = new Map<string, Map<string, string>>();
   readonly #pendingSequences = new Map<string, Map<string, Set<number>>>();
   readonly previewSeen = new PreviewSeen();
   readonly #pendingWindow = new Map<string, Map<string, PendingWindowEntry[]>>();
-  readonly #consumedSeqs?: AgentConsumedSeqPort;
   readonly #workspaceId: string;
   readonly #runtimes: Pick<AgentProcessManager, "session"> &
     Partial<Pick<AgentProcessManager, "runtime">>;
@@ -79,6 +60,12 @@ export class AgentMessageAttentionIndex {
     pendingSequences: this.#pendingSequences,
     pendingWindow: this.#pendingWindow,
     previewSeen: this.previewSeen,
+  });
+  readonly #consumption = new AgentConsumedAttention({
+    store: () => this.hold.consumedSeqs,
+    previewSeen: this.previewSeen,
+    settlePending: (agentId, target, settled) =>
+      this.#pending.settle(agentId, target, settled, (id, name) => this.clear(id, name)),
   });
   constructor(
     workspaceId: string,
@@ -98,7 +85,6 @@ export class AgentMessageAttentionIndex {
   ) {
     this.#workspaceId = workspaceId;
     this.#runtimes = runtimes;
-    this.#consumedSeqs = hold.consumedSeqs;
   }
   async receive(message: AgentMessageDelivery): Promise<void> {
     if (message.workspaceId !== this.#workspaceId)
@@ -165,7 +151,7 @@ export class AgentMessageAttentionIndex {
     logAttentionDecision(
       message,
       outcome,
-      this.#consumedByAgent.get(message.agentId),
+      this.#consumption.peek(message.agentId),
       message.target ?? "",
     );
   }
@@ -190,7 +176,7 @@ export class AgentMessageAttentionIndex {
   }
   #recordAttention(message: AgentMessageDelivery & { target: string }): MessageAttention {
     const current = this.#pending.record(message);
-    this.#recordConversation(message.agentId, message.target, message.conversationId);
+    this.#consumption.recordConversation(message.agentId, message.target, message.conversationId);
     this.#pending.recordWindow(message.agentId, message.target, message);
     return current;
   }
@@ -260,7 +246,7 @@ export class AgentMessageAttentionIndex {
     if (this.#generations.get(agentId) !== generation) return announced;
     this.#attention.set(agentId, byTarget);
     for (const message of recoveredMessages) {
-      this.#recordConversation(agentId, message.target, message.conversationId);
+      this.#consumption.recordConversation(agentId, message.target, message.conversationId);
       rememberDelivery(generation, message.deliveryId, message.messageId);
       generation.notified.add(message.deliveryId);
       const pendingByTarget = this.#pendingSequences.get(agentId) ?? new Map<string, Set<number>>();
@@ -332,85 +318,52 @@ export class AgentMessageAttentionIndex {
       requestId: message.requestId,
     });
   }
-  recordExactSeen(agentId: string, shown: ReadonlyMap<string, readonly number[]>): void {
-    this.#consumedState(agentId);
-    let changed = false;
-    for (const [target, sequences] of shown) {
-      if (!target || !this.#addExact(agentId, target, sequences)) continue;
-      changed = true;
-      this.#settleSeen(agentId, target);
-    }
-    if (changed) this.#persist(agentId);
+  recordExactSeen(...args: Parameters<AgentConsumedAttention["recordExactSeen"]>) {
+    return this.#consumption.recordExactSeen(...args);
   }
-  recordHistoryRead(
-    agentId: string,
-    read: {
-      spelling: string;
-      target: string;
-      shown: readonly number[];
-      through: number;
-      review?: {
-        sequence: number;
-      };
-      scope?: Pick<AgentHistoryConsumptionScope, "conversationId" | "channelType" | "target">;
-    },
-  ): void {
-    this.#consumedState(agentId);
-    const { target } = read;
-    let changed = this.#setAlias(agentId, read.spelling, target);
-    if (read.through > 0)
-      changed = this.#advanceFrontier(agentId, target, read.through, "history_read") || changed;
-    changed = this.#addExact(agentId, target, read.shown) || changed;
-    this.#settleSeen(agentId, target);
-    if (read.review) {
-      this.#takeReadOrder(agentId, target, read.review.sequence);
-      changed = true;
-    }
-    if (read.scope) this.#settleScope(agentId, read.scope, read.shown, target);
-    if (changed) this.#persist(agentId);
+  recordHistoryRead(...args: Parameters<AgentConsumedAttention["recordHistoryRead"]>) {
+    return this.#consumption.recordHistoryRead(...args);
   }
-  recordSendContext(
-    agentId: string,
-    target: string,
-    through: number,
-    review?: {
-      sequence: number;
-    },
-  ): void {
-    if (!Number.isInteger(through) || through < 1) return;
-    const changed = this.#advanceFrontier(agentId, target, through, "send_context");
-    if (review) this.#takeReadOrder(agentId, target, review.sequence);
-    if (changed || review) this.#persist(agentId);
+  recordSendContext(...args: Parameters<AgentConsumedAttention["recordSendContext"]>) {
+    return this.#consumption.recordSendContext(...args);
   }
-  seenExactSequences(agentId: string, target: string): readonly number[] {
-    return (
-      this.previewSeen.mergeExact(
-        agentId,
-        target,
-        this.#consumedState(agentId).targets.get(target)?.exactSeqs,
-        SEEN_EXACT_SEQS_LIMIT,
-      ) ?? NO_SEQUENCES
-    );
+  seenExactSequences(...args: Parameters<AgentConsumedAttention["seenExactSequences"]>) {
+    return this.#consumption.seenExactSequences(...args);
   }
-  hasExactSeen(agentId: string, target: string): boolean {
-    return (
-      (this.#consumedState(agentId).targets.get(target)?.exactSeqs?.length ?? 0) > 0 ||
-      (this.previewSeen.recorded(agentId, target)?.size ?? 0) > 0
-    );
+  hasExactSeen(...args: Parameters<AgentConsumedAttention["hasExactSeen"]>) {
+    return this.#consumption.hasExactSeen(...args);
+  }
+  resolveTarget(...args: Parameters<AgentConsumedAttention["resolveTarget"]>) {
+    return this.#consumption.resolveTarget(...args);
+  }
+  recordTargetAlias(...args: Parameters<AgentConsumedAttention["recordTargetAlias"]>) {
+    return this.#consumption.recordTargetAlias(...args);
+  }
+  hasSeen(...args: Parameters<AgentConsumedAttention["hasSeen"]>) {
+    return this.#consumption.hasSeen(...args);
+  }
+  bindConversation(...args: Parameters<AgentConsumedAttention["bindConversation"]>) {
+    return this.#consumption.bindConversation(...args);
+  }
+  modelSeenSequence(...args: Parameters<AgentConsumedAttention["modelSeenSequence"]>) {
+    return this.#consumption.modelSeenSequence(...args);
+  }
+  recordModelSeen(...args: Parameters<AgentConsumedAttention["recordModelSeen"]>) {
+    return this.#consumption.recordModelSeen(...args);
+  }
+  recordReadContext(...args: Parameters<AgentConsumedAttention["recordReadContext"]>) {
+    return this.#consumption.recordReadContext(...args);
+  }
+  readOrder(...args: Parameters<AgentConsumedAttention["readOrder"]>) {
+    return this.#consumption.readOrder(...args);
+  }
+  latestThreadReadUnderParent(
+    ...args: Parameters<AgentConsumedAttention["latestThreadReadUnderParent"]>
+  ) {
+    return this.#consumption.latestThreadReadUnderParent(...args);
   }
   clearPreviewSeen(agentId: string): void {
     this.previewSeen.clear(agentId);
-  }
-  resolveTarget(agentId: string, target: string): string {
-    return this.#consumedState(agentId).aliases.get(target) ?? target;
-  }
-  recordTargetAlias(agentId: string, spelling: string, canonical: string): void {
-    this.#consumedState(agentId);
-    if (this.#setAlias(agentId, spelling, canonical)) this.#persist(agentId);
-  }
-  hasSeen(agentId: string, target: string, sequence: number): boolean {
-    const entry = this.#consumedState(agentId).targets.get(target);
-    return (entry?.seq ?? 0) >= sequence || containsSorted(entry?.exactSeqs, sequence);
   }
   #consumed(
     message: AgentMessageDelivery & {
@@ -421,141 +374,6 @@ export class AgentMessageAttentionIndex {
     if (message.conversationId)
       this.bindConversation(message.agentId, message.target, message.conversationId);
     return this.hasSeen(message.agentId, message.target, message.sequence);
-  }
-  bindConversation(agentId: string, target: string, conversationId: string): void {
-    const entry = this.#targetState(agentId, target);
-    const recorded = entry.conversationId;
-    if (recorded === conversationId) return;
-    entry.conversationId = conversationId;
-    if (recorded !== undefined) {
-      logger.info("Agent consumed cursor reset for a recreated conversation", {
-        event: "agent.message.consumed_cursor_reset",
-        agent_id: agentId,
-        target,
-        previous_conversation_id: recorded,
-        conversation_id: conversationId,
-        model_seen_seq: entry.seq ?? 0,
-      });
-      delete entry.seq;
-      delete entry.exactSeqs;
-      delete entry.reviewedSeq;
-      noteFrontierSource(entry, "reset");
-      this.#latestThreadReads.clear(agentId);
-    }
-    this.#persist(agentId);
-  }
-  #addExact(agentId: string, target: string, sequences: readonly number[]): boolean {
-    if (!sequences.length) return false;
-    const entry = this.#targetState(agentId, target);
-    const existing = entry.exactSeqs ?? NO_SEQUENCES;
-    const incoming = isAscending(sequences) ? sequences : [...sequences].sort(byNumber);
-    const merged = mergeSeenExactSeqs(entry.seq ?? 0, existing, incoming);
-    if (merged.length === existing.length && merged.every((value, i) => value === existing[i]))
-      return false;
-    entry.exactSeqs = merged;
-    return true;
-  }
-  #advanceFrontier(
-    agentId: string,
-    target: string,
-    sequence: number,
-    source: FrontierSource,
-  ): boolean {
-    const entry = this.#targetState(agentId, target);
-    if (sequence <= (entry.seq ?? 0)) return false;
-    entry.seq = sequence;
-    noteFrontierSource(entry, source);
-    const exact = entry.exactSeqs;
-    if (exact?.length) {
-      const kept = exact.slice(firstAbove(exact, sequence));
-      if (!kept.length) delete entry.exactSeqs;
-      else if (kept.length !== exact.length) entry.exactSeqs = kept;
-    }
-    this.#settlePending(agentId, target, (pending) => pending <= sequence);
-    return true;
-  }
-  #settleSeen(agentId: string, target: string): void {
-    const entry = this.#consumedState(agentId).targets.get(target);
-    const frontier = entry?.seq ?? 0;
-    const exact = entry?.exactSeqs;
-    this.#settlePending(
-      agentId,
-      target,
-      (sequence) => sequence <= frontier || containsSorted(exact, sequence),
-    );
-  }
-  #settleScope(
-    agentId: string,
-    scope: Pick<AgentHistoryConsumptionScope, "conversationId" | "channelType" | "target">,
-    shown: readonly number[],
-    settled: string,
-  ): void {
-    if (shown.length === 0) return;
-    const targets = this.#conversationTargets.get(agentId)?.get(scope.conversationId);
-    if (!targets) return;
-    const scopeRoot = threadRootTarget(scope.target);
-    if (scope.channelType === "thread" && scopeRoot === undefined) return;
-    for (const target of targets) {
-      if (target === settled) continue;
-      const root = threadRootTarget(target);
-      if (scope.channelType === "dm" ? root !== undefined : !sameThreadRoot(root, scopeRoot!))
-        continue;
-      this.#settlePending(agentId, target, (sequence) => containsSorted(shown, sequence));
-    }
-  }
-  #settlePending(agentId: string, target: string, settled: (sequence: number) => boolean): void {
-    this.#pending.settle(agentId, target, settled, (id, name) => this.clear(id, name));
-  }
-  #recordConversation(agentId: string, target: string, conversationId: string): void {
-    const byTarget = this.#attentionConversation.get(agentId) ?? new Map<string, string>();
-    this.#attentionConversation.set(agentId, byTarget);
-    if (byTarget.get(target) === conversationId) return;
-    byTarget.set(target, conversationId);
-    const byConversation = this.#conversationTargets.get(agentId) ?? new Map<string, Set<string>>();
-    this.#conversationTargets.set(agentId, byConversation);
-    const targets = byConversation.get(conversationId) ?? new Set<string>();
-    targets.add(target);
-    byConversation.set(conversationId, targets);
-  }
-  #forgetConversation(agentId: string, target: string): void {
-    const byTarget = this.#attentionConversation.get(agentId);
-    const conversationId = byTarget?.get(target);
-    if (conversationId === undefined) return;
-    byTarget!.delete(target);
-    const byConversation = this.#conversationTargets.get(agentId);
-    const targets = byConversation?.get(conversationId);
-    targets?.delete(target);
-    if (targets?.size === 0) byConversation!.delete(conversationId);
-  }
-  #setAlias(agentId: string, spelling: string, canonical: string): boolean {
-    if (!spelling || !canonical || spelling === canonical) return false;
-    const { aliases } = this.#consumedState(agentId);
-    let target = aliases.get(canonical) ?? canonical;
-    if (target === spelling) {
-      aliases.delete(canonical);
-      target = canonical;
-    }
-    if (aliases.get(spelling) === target) return false;
-    aliases.set(spelling, target);
-    for (const [other, named] of aliases) if (named === spelling) aliases.set(other, target);
-    return true;
-  }
-  #takeReadOrder(agentId: string, target: string, sequence: number): void {
-    const state = this.#consumedState(agentId);
-    const entry = this.#targetState(agentId, target);
-    if (Number.isInteger(sequence) && sequence > 0)
-      entry.reviewedSeq = Math.max(entry.reviewedSeq ?? 0, sequence);
-    entry.readOrder = ++state.lastReadOrder;
-    this.#latestThreadReads.record(agentId, target, entry);
-  }
-  #persist(agentId: string): void {
-    const store = this.#consumedSeqs;
-    if (!store) return;
-    const state = this.#consumedState(agentId);
-    store.write(agentId, consumedSnapshot(state));
-  }
-  modelSeenSequence(agentId: string, target: string): number {
-    return this.#consumedState(agentId).targets.get(target)?.seq ?? 0;
   }
   unreadDeliveries(agentId: string): {
     target: string;
@@ -572,50 +390,6 @@ export class AgentMessageAttentionIndex {
   pendingWindow(agentId: string, target: string, limit: number): readonly PendingWindowEntry[] {
     return this.#pending.pendingWindow(agentId, target, limit);
   }
-  recordModelSeen(agentId: string, target: string, sequence: number): void {
-    if (!Number.isInteger(sequence) || sequence < 1) return;
-    if (this.#advanceFrontier(agentId, target, sequence, "model_seen")) this.#persist(agentId);
-  }
-  recordReadContext(agentId: string, target: string, sequence = 0): void {
-    this.#takeReadOrder(agentId, target, sequence);
-    this.#persist(agentId);
-  }
-  readOrder(agentId: string, target: string): number | undefined {
-    return this.#consumedState(agentId).targets.get(target)?.readOrder;
-  }
-  latestThreadReadUnderParent(
-    agentId: string,
-    parentTarget: string,
-  ):
-    | {
-        target: string;
-        order: number;
-      }
-    | undefined {
-    return this.#latestThreadReads.get(agentId, parentTarget, this.#consumedState(agentId).targets);
-  }
-  #consumedState(agentId: string): ConsumedAgent {
-    const existing = this.#consumedByAgent.get(agentId);
-    if (existing) return existing;
-    const state: ConsumedAgent = { targets: new Map(), aliases: new Map(), lastReadOrder: 0 };
-    this.#consumedByAgent.set(agentId, state);
-    if (this.#consumedSeqs) {
-      const saved = this.#consumedSeqs.read(agentId);
-      for (const [target, entry] of Object.entries(saved.targets))
-        state.targets.set(target, { ...entry });
-      state.aliases = new Map(Object.entries(saved.aliases));
-      state.lastReadOrder = saved.nextReadOrder - 1;
-    }
-    return state;
-  }
-  #targetState(agentId: string, target: string): ConsumedTarget {
-    const { targets } = this.#consumedState(agentId);
-    const existing = targets.get(target);
-    if (existing) return existing;
-    const entry: ConsumedTarget = {};
-    targets.set(target, entry);
-    return entry;
-  }
   clearAgent(
     agentId: string,
     {
@@ -624,14 +398,11 @@ export class AgentMessageAttentionIndex {
       cancelNotices?: boolean;
     } = {},
   ): void {
-    this.#consumedByAgent.delete(agentId);
-    this.#latestThreadReads.clear(agentId);
+    this.#consumption.clearAgent(agentId);
     if (cancelNotices)
       this.#generations.get(agentId)?.cancellation.abort(new Error("Agent notice was cancelled"));
     this.#generations.delete(agentId);
     this.#attention.delete(agentId);
-    this.#conversationTargets.delete(agentId);
-    this.#attentionConversation.delete(agentId);
     this.#pendingSequences.delete(agentId);
     this.#pendingWindow.delete(agentId);
   }
@@ -646,7 +417,7 @@ export class AgentMessageAttentionIndex {
     for (const target of keys) if (lost(target)) this.clear(agentId, target);
   }
   clear(agentId: string, target: string): void {
-    this.#forgetConversation(agentId, target);
+    this.#consumption.forgetConversation(agentId, target);
     this.#pendingSequences.get(agentId)?.delete(target);
     this.#pendingWindow.get(agentId)?.delete(target);
     const byTarget = this.#attention.get(agentId);
@@ -658,4 +429,3 @@ export class AgentMessageAttentionIndex {
     if (!attention || attention.latestSequence <= sequence) this.clear(agentId, target);
   }
 }
-const NO_SEQUENCES: readonly number[] = [];
