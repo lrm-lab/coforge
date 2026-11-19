@@ -10,13 +10,9 @@ const FILTER_TABS: ReadonlyArray<{
   { id: "all", label: () => m.activity_inbox_filter_all() },
   { id: "unread", label: () => m.activity_inbox_filter_unread() },
   { id: "mentions", label: () => m.activity_inbox_filter_mentions() },
+  { id: "artifacts", label: () => m.ag_title() },
 ];
 
-/**
- * All / Unread / Mentions as quiet pills, Linear's: the open one on a soft grey fill. Unread
- * and Mentions carry how many rows have something unread and an unread mention as a small muted
- * number; the numbers are the same whichever tab is showing, and a zero shows nothing.
- */
 export function ActivityInboxTabs({
   filter,
   onFilterChange,
@@ -37,8 +33,6 @@ export function ActivityInboxTabs({
       }}
       className="w-max shrink-0"
     >
-      {/* In a list column dragged narrow the tabs sit closer, with less padding, and step down a
-          size, so the three still fit with their counts (English "Mentions" and "99+" included). */}
       <TabList
         type="button-gray"
         size="sm"
@@ -49,7 +43,6 @@ export function ActivityInboxTabs({
           <Tab
             key={tab.id}
             id={tab.id}
-            // Linear's filter pills (Frank, 11-09): the open one a soft grey fill in primary text.
             className={({ isSelected }) =>
               cn("gap-1.5 font-medium", isSelected ? "text-primary" : "text-tertiary")
             }

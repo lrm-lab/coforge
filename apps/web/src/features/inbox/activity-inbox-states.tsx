@@ -23,7 +23,9 @@ export function ActivityInboxEmpty({
       ? m.activity_inbox_empty_mentions_title()
       : filter === "unread"
         ? m.activity_inbox_empty_unread_title()
-        : m.activity_inbox_empty_title();
+        : filter === "artifacts"
+          ? m.ag_empty()
+          : m.activity_inbox_empty_title();
   const description =
     filter === "mentions"
       ? m.activity_inbox_empty_mentions_description()

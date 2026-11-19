@@ -299,6 +299,7 @@ export function ActivityInboxView({
       counts={{
         unread: query.isPlaceholderData ? undefined : firstPage?.unreadItemCount,
         mentions: query.isPlaceholderData ? undefined : firstPage?.unreadMentionItemCount,
+        artifacts: query.isPlaceholderData ? undefined : firstPage?.unreadArtifactItemCount,
       }}
     />
   );

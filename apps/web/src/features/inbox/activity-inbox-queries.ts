@@ -74,7 +74,7 @@ export type ActivityCompletionItem = Pick<
 type ActivityCompletionPage<Item extends ActivityCompletionItem = ActivityCompletionItem> = Pick<
   ActivityInboxPage,
   "unreadItemCount" | "unreadMentionItemCount" | "activeItemCount"
-> & { items: Item[]; pinned?: Item[] };
+> & { unreadArtifactItemCount?: number; items: Item[]; pinned?: Item[] };
 
 export async function cancelActivityInboxListReads(
   queryClient: QueryClient,
@@ -96,6 +96,7 @@ function withoutItem<
   Item extends ActivityCompletionItem,
   Page extends ActivityCompletionPage<Item>,
 >(data: InfiniteData<Page>, item: ActivityCompletionItem): InfiniteData<Page> {
+  const unreadArtifact = item.key.startsWith("artifact:") && item.unreadCount > 0 ? 1 : 0;
   return {
     ...data,
     pages: data.pages.map((page) => ({
@@ -107,6 +108,9 @@ function withoutItem<
         0,
         page.unreadMentionItemCount - (item.unreadMention ? 1 : 0),
       ),
+      ...(page.unreadArtifactItemCount !== undefined
+        ? { unreadArtifactItemCount: Math.max(0, page.unreadArtifactItemCount - unreadArtifact) }
+        : {}),
       activeItemCount: Math.max(0, page.activeItemCount - 1),
     })),
   };

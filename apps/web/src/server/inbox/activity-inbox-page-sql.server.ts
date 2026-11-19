@@ -49,6 +49,7 @@ export type ActivityPageRow = {
 };
 
 function viewSql(filter: ActivityInboxFilter) {
+  if (filter === "artifacts") return Prisma.sql`FALSE`;
   if (filter === "unread") return Prisma.sql`items."hasUnread"`;
   if (filter === "mentions") return Prisma.sql`items."firstMentionMessageId" IS NOT NULL`;
   return Prisma.sql`items."pinOrder" IS NULL`;

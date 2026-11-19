@@ -111,6 +111,8 @@ export class ActivityInbox {
         counts.unreadMentionItemCount +
         artifactCounts.unreadMentionItemCount -
         without((row) => row.unreadMention === true),
+      unreadArtifactItemCount:
+        artifactCounts.unreadItemCount - without((row) => row.hasUnread === true),
       activeItemCount: counts.activeItemCount + artifactCounts.activeItemCount - missing.length,
       nextCursor: last
         ? ({

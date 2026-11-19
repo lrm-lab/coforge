@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const ACTIVITY_INBOX_FILTERS = ["all", "unread", "mentions"] as const;
+export const ACTIVITY_INBOX_FILTERS = ["all", "unread", "mentions", "artifacts"] as const;
 export type ActivityInboxFilter = (typeof ACTIVITY_INBOX_FILTERS)[number];
 
 export const activityInboxCursorSchema = z.object({
