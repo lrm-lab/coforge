@@ -6,7 +6,10 @@ model Reminder {
   computerId        String                     @db.Uuid
   title             String
   target            String
-  messageId         String                     @db.Uuid
+  messageId         String?                    @db.Uuid
+  kind              String                     @default("scheduled")
+  triggerKey        String?                    @db.VarChar(64)
+  details           String?
   fireAt            DateTime
   repeat            String?
   timezone          String?
@@ -23,6 +26,7 @@ model Reminder {
   fireReceipts      ReminderFireReceipt[]
   operationReceipts ReminderOperationReceipt[]
   occurrences       ReminderOccurrence[]
+  pendingTriggers   ReminderTrigger[]
 
   @@unique([id, workspaceId])
   @@index([workspaceId, ownerAgentId, status, fireAt])

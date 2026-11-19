@@ -50,6 +50,8 @@ model Workspace {
   agentManualEvents      AgentManualEvent[]
   reminders              Reminder[]
   reminderEvents         ReminderEvent[]
+  reminderTriggers       ReminderTrigger[]
+  reminderTriggerEvents  ReminderTriggerEvent[]
   attachments            Attachment[]
   attachmentUploadSessions AttachmentUploadSession[]
   tasks                  Task[]

@@ -76,6 +76,7 @@ model Agent {
   manualEvents              AgentManualEvent[]
   reminders                 Reminder[]
   reminderOperationReceipts ReminderOperationReceipt[]
+  reminderTriggers          ReminderTrigger[]
   preparedActionCards       ActionCard[]
   ownedApps                 App[]                      @relation("AppOwnerAgent")
   weeklyReportAssistant         WeeklyReportAssistant?

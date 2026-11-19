@@ -1,0 +1,50 @@
+/// Dedup and merge-window state of one condition key an Agent reports; one row per key.
+model ReminderTrigger {
+  id                 String                 @id @default(uuid(7)) @db.Uuid
+  workspaceId        String                 @db.Uuid
+  ownerAgentId       String                 @db.Uuid
+  key                String                 @db.VarChar(64)
+  level              String
+  mergeWindowSeconds Int
+  windowEndsAt       DateTime?
+  pendingCount       Int                    @default(0)
+  firstPendingAt     DateTime?
+  lastPendingAt      DateTime?
+  lastWokeAt         DateTime?
+  reminderId         String?                @db.Uuid
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  workspace          Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ownerAgent         Agent                  @relation(fields: [ownerAgentId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  reminder           Reminder?              @relation(fields: [reminderId], references: [id], onDelete: SetNull)
+  events             ReminderTriggerEvent[]
+
+  @@unique([workspaceId, ownerAgentId, key])
+  @@map("reminder_triggers")
+}
+
+/// One trigger call and its outcome: the `reminder log --key` source, the hourly wake and per-minute
+/// call counts, and the receipt a replayed request returns.
+model ReminderTriggerEvent {
+  id                String          @id @default(uuid(7)) @db.Uuid
+  triggerId         String          @db.Uuid
+  workspaceId       String          @db.Uuid
+  ownerAgentId      String          @db.Uuid
+  at                DateTime        @default(now())
+  level             String
+  outcome           String
+  title             String
+  requestId         String          @db.VarChar(128)
+  triggerCount      Int
+  firstTriggeredAt  DateTime
+  lastTriggeredAt   DateTime
+  nextWakeAllowedAt DateTime?
+  trigger           ReminderTrigger @relation(fields: [triggerId], references: [id], onDelete: Cascade)
+  workspace         Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([triggerId, requestId])
+  @@index([triggerId, at(sort: Desc)])
+  @@index([workspaceId, ownerAgentId, at])
+  @@index([at])
+  @@map("reminder_trigger_events")
+}
