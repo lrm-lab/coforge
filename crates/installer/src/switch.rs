@@ -18,6 +18,7 @@ use crate::clock::{Clock, poll_until};
 use crate::contract::{
     ACTIVE_STATE_SCHEMA_VERSION, ActiveState, DeadProcessIdentity, LifecycleServiceDefinition,
 };
+use crate::drain;
 use crate::lifecycle::ComputerLifecycle;
 use crate::prepare::ReleaseSource;
 use crate::processes::{
@@ -35,6 +36,8 @@ const PROBE_INTERVAL: Duration = Duration::from_millis(500);
 pub struct Ports<'a> {
     pub install_root: &'a Path,
     pub binary_directory: &'a Path,
+    /// Daemon state directory (`~/.coforge/daemon`) used for the file-based upgrade drain channel.
+    pub state_directory: Option<&'a Path>,
     pub store: &'a VersionStore,
     /// The release the transaction installs from: the feed, or a local directory.
     pub release: &'a dyn ReleaseSource,
@@ -64,6 +67,9 @@ pub(crate) struct Plan<'a> {
     /// The supervisor id the restarted one must not keep. `None` accepts any running supervisor
     /// of the target version.
     pub(crate) replaces: Option<&'a Option<String>>,
+    /// Upgrade request id used to drain busy Agents before stopping the supervisor; `None` skips
+    /// draining (rollback, recovery).
+    pub(crate) drain_id: Option<&'a str>,
 }
 
 /// One switch of the active version, with the processes it has stopped so far. The upgrade and
@@ -103,6 +109,15 @@ impl<'r, 'p> ActiveSwitch<'r, 'p> {
     pub(crate) fn switch(&mut self, target: &Target<'_>, plan: &Plan<'_>) -> Result<(), String> {
         let version = target.version;
         if plan.supervisor_running {
+            let drain_guard = match (plan.drain_id, self.ports.state_directory) {
+                (Some(drain_id), Some(state_directory)) => drain::drain_before_stop(
+                    state_directory,
+                    drain_id,
+                    self.ports.clock,
+                    self.stage,
+                ),
+                _ => None,
+            };
             match plan.running_runtimes {
                 Some(count) => self.say(&format!(
                     "Stopping ({count} Workspace runtime{})",
@@ -111,6 +126,11 @@ impl<'r, 'p> ActiveSwitch<'r, 'p> {
                 None => self.say("Stopping"),
             }
             self.stop_supervisor(plan.stop)?;
+            if let Some(guard) = drain_guard {
+                drop(guard);
+            } else if let Some(state_directory) = self.ports.state_directory {
+                drain::clear_drain_files(state_directory);
+            }
         } else {
             self.say("Computer supervisor is not running; no processes to restart");
         }

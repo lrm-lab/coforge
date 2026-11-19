@@ -1,7 +1,11 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { type RunnerHoldReason, thrownMessage } from "@lrm/coforge-sdk/internal";
+import {
+  RUNNER_HOLD_REASONS,
+  type RunnerHoldReason,
+  thrownMessage,
+} from "@lrm/coforge-sdk/internal";
 import { startDaemonLocalRpcServer, type DaemonHoldReport } from "#src/local-rpc";
 import { captureStopSignal } from "#src/platform/stop-signal";
 import { FileDaemonCredentialStore } from "#src/credentials/credential-store";
@@ -53,6 +57,7 @@ import {
   watchComputerUpgradeReceipt,
   type ComputerUpgradeReceipt,
 } from "#src/platform/computer-upgrade-receipts";
+import { UpgradeDrainWatcher } from "./upgrade-drain-watcher";
 
 const UPGRADE_RECEIPT_POLL_MS = 2_000;
 const WORKSPACE_READINESS_MS = 30_000;
@@ -158,18 +163,19 @@ async function runWithSupervisorLock(
     instance: workspaceInstance,
     handshake: (workspaceId, timeoutMs) => childClient(workspaceId).identity(timeoutMs),
   });
-  /** `askWorkspaceRunnerHold` against one Workspace daemon's local socket. */
   const holdWorkspaceRunners = (
     workspaceId: string,
     operation: "hold" | "release",
     reason: RunnerHoldReason | undefined,
     eventPrefix: string,
+    timeoutMs?: number,
   ) =>
     askWorkspaceRunnerHold({
       workspaceId,
       operation,
       reason,
       eventPrefix,
+      timeoutMs,
       hold: (operation, reason) => childClient(workspaceId).hold(operation, reason),
     });
   /**
@@ -435,21 +441,22 @@ async function runWithSupervisorLock(
     upgradeWatches.add(watch);
     void watch.finally(() => upgradeWatches.delete(watch));
   };
-  /**
-   * Fans a runner hold (or release) out to every running Workspace daemon under this Coordinator
-   * and merges their answers. This is the only Coordinator->Workspace call in the codebase; it
-   * reuses the per-Workspace `childClient` sockets the Coordinator already owns.
-   */
   const fanOutRunnerHold = async (
     operation: "hold" | "release",
     reason?: RunnerHoldReason,
+    options?: { timeoutMs?: number; workspaceIds?: readonly string[]; eventPrefix?: string },
   ): Promise<DaemonHoldReport> => {
-    const running = (await runtimes(await supervisor.snapshot())).filter(
-      (runtime) => runtime.processId > 0,
-    );
+    const workspaceIds =
+      options?.workspaceIds ??
+      (await runtimes(await supervisor.view()))
+        .filter((runtime) => runtime.processId > 0)
+        .map((runtime) => runtime.workspaceId);
+    const eventPrefix =
+      options?.eventPrefix ??
+      (reason === RUNNER_HOLD_REASONS.COMPUTER_UPGRADE ? "upgrade" : "restart");
     const reports = await Promise.all(
-      running.map(({ workspaceId }) =>
-        holdWorkspaceRunners(workspaceId, operation, reason, "restart"),
+      workspaceIds.map((workspaceId) =>
+        holdWorkspaceRunners(workspaceId, operation, reason, eventPrefix, options?.timeoutMs),
       ),
     );
     return {
@@ -464,20 +471,14 @@ async function runWithSupervisorLock(
       await supervisor.recover();
     } catch (error) {
       if (!(error instanceof WorkspaceRecoveryError)) throw error;
-      // Keep local control available for explicit stop/retry; other Workspaces were reconciled.
       getLogger(["coforge", "daemon", "supervisor"]).error(
         "Workspace recovery incomplete: {error}",
         { error },
       );
     }
-    // Best-effort crash recovery: an old receipt may already exist when this Coordinator starts.
     await settlePendingUpgradeOperations();
-    // Anything still pending is watched as a fallback for a job/Coordinator interrupted before
-    // the normal resume handshake.
     for (const operation of await pendingUpgradeOperations())
       watchPendingUpgrade(operation.workspaceId, operation.requestId, operation.requestedAt);
-    // Windows has no systemd/launchd Workspace restart; the Coordinator polls enabled bindings
-    // and re-runs ensureStarted when a child dies. Health latching stays in the child journal.
     const windowsReconcile = startWindowsWorkspaceReconcileLoop(() => supervisor.reconcile(), {
       onError: (error) => {
         if (error instanceof WorkspaceRecoveryError) {
@@ -490,6 +491,42 @@ async function runWithSupervisorLock(
         });
       },
     });
+    let cachedDrainWorkspaceIds: readonly string[] | undefined;
+    let cachedDrainWorkspaceIdsAtMs = 0;
+    const drainWorkspaceIds = async () => {
+      const now = Date.now();
+      if (cachedDrainWorkspaceIds && now - cachedDrainWorkspaceIdsAtMs < 2_000)
+        return cachedDrainWorkspaceIds;
+      const ids = (await runtimes(await supervisor.view()))
+        .filter((runtime) => runtime.processId > 0)
+        .map((runtime) => runtime.workspaceId);
+      cachedDrainWorkspaceIds = ids;
+      cachedDrainWorkspaceIdsAtMs = now;
+      return ids;
+    };
+    const upgradeDrainWatcher = new UpgradeDrainWatcher({
+      stateDirectory,
+      hold: async (reason) => ({
+        busyCount: (
+          await fanOutRunnerHold("hold", reason, {
+            eventPrefix: "upgrade",
+            timeoutMs: 2_000,
+            workspaceIds: await drainWorkspaceIds(),
+          })
+        ).busyAgents.length,
+      }),
+      release: async () => {
+        const workspaceIds = cachedDrainWorkspaceIds;
+        cachedDrainWorkspaceIds = undefined;
+        cachedDrainWorkspaceIdsAtMs = 0;
+        await fanOutRunnerHold("release", undefined, {
+          eventPrefix: "upgrade",
+          timeoutMs: 2_000,
+          workspaceIds,
+        });
+      },
+    });
+    upgradeDrainWatcher.start();
     try {
       rpc = await startDaemonLocalRpcServer({
         socketPath,
@@ -501,17 +538,10 @@ async function runWithSupervisorLock(
           delete: (w, c) => scopedCredentials(w).delete(w, c),
         },
         runtime: {
-          // Answers by the operator deadline too, so setup never times out while the Workspace
-          // finishes starting behind the answer.
           configure: async (config, options) => {
             const { pending } = await supervisor.configure(config, {
               deadline: Date.now() + OPERATOR_COMMAND_BUDGET_MS,
             });
-            // The setup's login goes ~20s after the Workspace daemon is up — a start still
-            // finishing behind `pending` is not one to retire under, so the scheduled call
-            // re-checks the Workspace daemon is actually running before it asks. Only a
-            // login-style setup leaves a login to retire: a one-shot attach leaves none and
-            // must not retire the login a `coforge-computer login` left behind (task #417).
             if (!pending && config.serverHttpUrl && options?.loginSetup) {
               retireSessions.get(config.workspaceId)?.stop();
               retireSessions.set(
@@ -555,20 +585,16 @@ async function runWithSupervisorLock(
       });
       await stopRequested;
     } finally {
+      upgradeDrainWatcher.stop();
       windowsReconcile?.stop();
     }
   } finally {
-    // Every upgrade receipt watch is Coordinator-owned and must not outlive this process: an
-    // uncancelled one is exactly the pending `Bun.sleep` that kept the Coordinator alive past its
-    // own shutdown. Aborting resolves each watch's current sleep immediately, so
-    // awaiting them here costs no meaningful time.
     upgradeWatchController.abort();
     await Promise.allSettled(upgradeWatches);
     for (const session of retireSessions.values()) session.stop();
     retireSessions.clear();
     let cleaned = false;
     try {
-      // Startup/adoption failure must not tear down other already-running units.
       if (rpc) await supervisor.shutdown();
       cleaned = true;
     } finally {

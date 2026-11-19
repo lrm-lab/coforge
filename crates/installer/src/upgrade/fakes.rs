@@ -498,6 +498,7 @@ impl Fixture {
         Ports {
             install_root: &self.root,
             binary_directory: &self.binary_directory,
+            state_directory: None,
             store: &self.store,
             release: &self.feed,
             lifecycle,

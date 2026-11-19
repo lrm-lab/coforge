@@ -17,16 +17,10 @@ export type DaemonHoldRequest = {
   reason?: RunnerHoldReason;
 };
 
-/**
- * Why a runner hold was asked for. A hold precedes a deliberate restart, so a Workspace daemon that
- * shuts down while held names the matching reason in its shutdown notice. A Computer upgrade is not
- * a hold: the installer's recovery journal is what names it.
- */
 export const RUNNER_HOLD_REASONS = {
-  /** The Coordinator restarting one Workspace daemon. */
   WORKSPACE_RESTART: "restart",
-  /** `coforge-computer restart` restarting the whole Coordinator. */
   COMPUTER_RESTART: "restart-supervisor",
+  COMPUTER_UPGRADE: "upgrade",
 } as const;
 export type RunnerHoldReason = (typeof RUNNER_HOLD_REASONS)[keyof typeof RUNNER_HOLD_REASONS];
 

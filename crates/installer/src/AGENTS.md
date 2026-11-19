@@ -37,6 +37,10 @@ How it works is in `src/current.rs` and `src/active.rs`; these are the rules.
   a silent stretch (ureq has no per-read timeout).
 - `src/digest.rs`: SHA-256 identities (size and lowercase checksum) of bytes and
   files, and the rule for a valid identity.
+- `src/drain.rs`: file-based upgrade drain channel (`upgrade-drain-request.json` and
+  `upgrade-drain-state.json` under `state_directory`). Requests a bounded runner hold before
+  stopping the running supervisor and removes the drain files via RAII drop after stop and before
+  starting the replacement supervisor.
 - `src/private_fs.rs`: private files and directories under the install root, and
   atomic replacement. Recursive directory creation with a mode (an existing
   directory keeps its own), a new file with an exact mode, a file replaced

@@ -1,8 +1,9 @@
 //! The upgrade transaction: `coforge-computer upgrade` from the machine lock to its receipt.
 //!
-//! The installer owns this transaction. Busy Agents are not held: the supervisor is stopped the way
-//! its service manager stops it, so there is no launch hold to pause or resume. There is no
-//! `rollback` operation: a rollback is only the second half of a failed upgrade.
+//! The installer owns this transaction. When a supervisor is running, the switch requests a
+//! bounded file-based runner drain (`drain.rs`) before stopping it so in-flight Agent turns can
+//! reach a quiet boundary, then clears the drain file before starting the replacement supervisor.
+//! There is no `rollback` operation: a rollback is only the second half of a failed upgrade.
 //!
 //! Nothing changes until the candidate is verified and the running supervisor is known to be
 //! healthy and under a service manager. The journal is written before the first process stops, and
@@ -263,6 +264,7 @@ impl Run<'_, '_> {
             replaces: from
                 .filter(|installed| installed.supervisor_running)
                 .map(|installed| &installed.supervisor_id),
+            drain_id: Some(self.request_id),
         };
         let previous = previous_after(from, &prepared.to);
         self.switch.switch(
@@ -324,6 +326,7 @@ impl Run<'_, '_> {
             running_runtimes: Some(from.running_runtimes()),
             stop: &stop,
             replaces: None,
+            drain_id: None,
         };
         let target = Target {
             version: &from.version,
@@ -466,6 +469,8 @@ fn unhealthy_message(status: &LifecycleStatus) -> String {
 
 mod preparation;
 
+#[cfg(test)]
+mod drain_tests;
 #[cfg(test)]
 pub(crate) mod fakes;
 #[cfg(test)]

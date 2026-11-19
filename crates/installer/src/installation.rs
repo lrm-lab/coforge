@@ -107,6 +107,7 @@ fn with_ports<T>(
     let ports = Ports {
         install_root: &setup.paths.install_root,
         binary_directory: &setup.paths.binary_directory,
+        state_directory: Some(&setup.paths.state_directory),
         store: &store,
         release,
         lifecycle: &lifecycle,

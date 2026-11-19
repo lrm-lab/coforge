@@ -14,6 +14,7 @@ pub mod compiled_feed;
 pub mod contract;
 mod current;
 pub mod digest;
+mod drain;
 pub mod feed;
 pub mod fetch;
 mod idle_timeout;

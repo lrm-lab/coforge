@@ -235,6 +235,7 @@ test("a shutdown nobody held for tells the server the Computer is stopping, afte
 test.each([
   [RUNNER_HOLD_REASONS.WORKSPACE_RESTART, "computer_restart"],
   [RUNNER_HOLD_REASONS.COMPUTER_RESTART, "computer_restart"],
+  [RUNNER_HOLD_REASONS.COMPUTER_UPGRADE, "computer_upgrade"],
 ] as const)("a shutdown held for %s names it as %s", async (hold, reason) => {
   const { runtime, notices } = await runtimeHarness();
 

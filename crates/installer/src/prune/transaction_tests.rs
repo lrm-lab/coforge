@@ -89,6 +89,7 @@ fn consecutive_upgrades_prune_versions_older_than_previous_while_preserving_roll
     let ports = Ports {
         install_root: &root,
         binary_directory: &bin,
+        state_directory: None,
         store: &store,
         release: &feed,
         lifecycle: &lifecycle,
@@ -160,6 +161,7 @@ fn upgrade_spares_an_inactive_version_whose_binary_is_still_running_in_process_t
     let ports = Ports {
         install_root: &root,
         binary_directory: &bin,
+        state_directory: None,
         store: &store,
         release: &feed,
         lifecycle: &lifecycle,
@@ -205,6 +207,7 @@ fn repair_prunes_inactive_historical_versions_under_the_mutation_lock() {
     let ports = Ports {
         install_root: &root,
         binary_directory: &bin,
+        state_directory: None,
         store: &store,
         release: &feed,
         lifecycle: &lifecycle,
@@ -267,6 +270,7 @@ fn recovery_prunes_inactive_historical_versions_after_settling_on_the_target() {
     let ports = Ports {
         install_root: &root,
         binary_directory: &bin,
+        state_directory: None,
         store: &store,
         release: &feed,
         lifecycle: &lifecycle,
