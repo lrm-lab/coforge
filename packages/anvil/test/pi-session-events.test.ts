@@ -169,4 +169,86 @@ describe("piSessionEvents", () => {
     ).toEqual([]);
     expect(events({ type: "agent_settled", aborted: false })).toEqual([]);
   });
+
+  test("reports context usage from assistant message_end when windowTokens is known", () => {
+    expect(
+      piSessionEvents(
+        {
+          type: "message_end",
+          message: {
+            role: "assistant",
+            stopReason: "stop",
+            usage: {
+              input: 100_000,
+              output: 2_000,
+              cacheRead: 40_000,
+              cacheWrite: 8_000,
+              totalTokens: 150_000,
+            },
+          },
+        } as unknown as PiSessionEvent,
+        200_000,
+      ),
+    ).toEqual([{ type: "context-usage", usedTokens: 150_000, windowTokens: 200_000 }]);
+
+    expect(
+      piSessionEvents(
+        {
+          type: "message_end",
+          message: {
+            role: "assistant",
+            stopReason: "stop",
+            usage: {
+              input: 80_000,
+              output: 1_500,
+              cacheRead: 20_000,
+              cacheWrite: 500,
+              totalTokens: 0,
+            },
+          },
+        } as unknown as PiSessionEvent,
+        200_000,
+      ),
+    ).toEqual([{ type: "context-usage", usedTokens: 102_000, windowTokens: 200_000 }]);
+
+    expect(
+      piSessionEvents(
+        {
+          type: "message_end",
+          message: {
+            role: "assistant",
+            stopReason: "aborted",
+            usage: { input: 50_000, output: 100, cacheRead: 0, cacheWrite: 0, totalTokens: 50_100 },
+          },
+        } as unknown as PiSessionEvent,
+        200_000,
+      ),
+    ).toEqual([]);
+
+    expect(
+      piSessionEvents(
+        {
+          type: "message_end",
+          message: {
+            role: "assistant",
+            stopReason: "stop",
+            usage: { input: 50_000, output: 100, cacheRead: 0, cacheWrite: 0, totalTokens: 50_100 },
+          },
+        } as unknown as PiSessionEvent,
+        undefined,
+      ),
+    ).toEqual([]);
+
+    expect(
+      piSessionEvents(
+        {
+          type: "message_end",
+          message: {
+            role: "user",
+          },
+        } as unknown as PiSessionEvent,
+        200_000,
+      ),
+    ).toEqual([]);
+  });
 });

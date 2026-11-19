@@ -17,8 +17,10 @@
 寿命，且最近一次上下文超过阈值（默认 128k token）的 native session 不再恢复：恢复会按全价重读
 整个上下文。冷却间隔由 provider 声明：Claude Code 60 分钟，Codex 30 分钟（这台 Mac 上 35 分钟内
 缓存几乎全中，OpenAI 默认缓存至少 30 分钟；Raft 1.0.53 虽把 codex 列进同一机制，但只读 Claude
-的会话记录）。未声明的 provider 仍是 60 分钟。只有实现了 `readSessionResumeFacts` 的 provider
-会被回收；seam 给不出的任何事实都按恢复处理。
+的会话记录）。未声明的 provider 仍是 60 分钟。支持 `readSessionResumeFacts` 或
+`supportsSessionSummaryRecycle`（Claude Code、Codex、Pi、CoForge、Grok、OpenCode、Antigravity；
+后者读取 Daemon 持久化的 `sessionSummary`，Codex 在 rollout 缺失时亦回退）的 provider 会被回收；
+缺失任一事实时一律恢复。
 
 - **停止**：`daemon-runtime/cold-idle-sweep.ts` 每个 sweep 周期（默认 10 分钟）检查一次运行中的
   Agent。Daemon 自身状态的每个空闲条件都成立（没有 live turn、排队投递或输入、未结算 mention、未结束的工具调用、

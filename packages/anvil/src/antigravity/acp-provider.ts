@@ -15,6 +15,7 @@ export class AntigravityAcpProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.ANTIGRAVITY;
   readonly compactionFailure = "does_not_stick";
   readonly reportsCompaction = false;
+  readonly supportsSessionSummaryRecycle = true;
   readonly #options: AntigravityAcpProviderOptions;
   readonly #host: AntigravityAcpRuntimeHost;
   readonly #command: readonly string[];

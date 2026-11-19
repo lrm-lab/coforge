@@ -76,7 +76,17 @@ export function observeRuntimeEvent(
     return;
   }
   if (event.type === AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE) {
-    if (!event.conversation && event.usedTokens > 0) launch.lastContextTokens = event.usedTokens;
+    if (!event.conversation && event.usedTokens > 0) {
+      launch.lastContextTokens = event.usedTokens;
+      if (!launch.stopping)
+        ports.sessionSummary?.contextUsage(
+          agentId,
+          config.provider,
+          event.usedTokens,
+          event.windowTokens,
+          event.occurredAt,
+        );
+    }
     const recorded = ports.usageReport.contextUsage(
       agentId,
       launch,
@@ -163,7 +173,18 @@ export function observeRuntimeEvent(
   if (phaseEdge) {
     const [phase, edge] = phaseEdge;
     if (edge === "start") ports.phaseBookkeeping.start(phase, agentId, launch, event.conversation);
-    else if (edge === "finish")
+    else if (edge === "finish") {
+      if (event.type === "compaction-finished" && !event.conversation) {
+        launch.lastContextTokens =
+          event.tokensAfter !== undefined && event.tokensAfter > 0 ? event.tokensAfter : undefined;
+        if (!launch.stopping)
+          ports.sessionSummary?.compaction(
+            agentId,
+            config.provider,
+            event.tokensAfter,
+            event.windowTokens,
+          );
+      }
       ports.phaseBookkeeping.finish(
         phase,
         agentId,
@@ -171,7 +192,7 @@ export function observeRuntimeEvent(
         event.conversation,
         compactionTokens(event),
       );
-    else
+    } else
       ports.phaseBookkeeping.interrupt(
         phase,
         agentId,
@@ -323,6 +344,7 @@ export function observeRuntimeEvent(
     } else {
       launch.turnEvidence?.reset();
     }
+    if (!launch.stopping) ports.sessionSummary?.turnCompleted(agentId, config.provider);
     ports.deliveryGate?.wakeLoop?.noteTurnCompleted(agentId, { status: effectiveStatus });
   }
   noteTurnFinished(agentId, effectiveStatus, event.conversation?.conversationId);

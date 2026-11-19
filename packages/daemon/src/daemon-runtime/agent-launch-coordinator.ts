@@ -145,19 +145,12 @@ export type AgentLaunchCoordinatorPorts = {
 };
 
 export class AgentLaunchCoordinator {
-  /** Launches that created their native session, not resumed one: the idle reminder asks with
-   * `freshSession` once per such launch, because that session has no memory of the Tasks. */
   readonly #freshLaunches = new Set<string>();
-  /** Consecutive qualifying early crashes of a resumed Session, across this runtime's launches. */
   readonly resumedEarlyCrash = new ResumedEarlyCrashStreak();
   readonly exits = new ExitStreak();
-  /** What a cold start of a rejected Session still owes the Agent's next launch. */
   readonly #owed: OwedRecovery;
-  /** Proactive native compaction at Working->Idle when context tokens exceed 250k. */
   readonly turnEndCompaction: TurnEndCompaction;
-  /** Event-driven warm/immediate recycle sweep for live idle sessions. */
   readonly #liveWarmSweep: ColdIdleSweep;
-  /** The task idle reminder's daemon side, built from this coordinator's own collaborators. */
   readonly idleNudge: TaskIdleNudge;
 
   constructor(readonly ports: AgentLaunchCoordinatorPorts) {
@@ -177,6 +170,8 @@ export class AgentLaunchCoordinator {
       agent: (agentId) => this.ports.runtimeRelease?.coldIdleAgent?.(agentId),
       provider: (provider) =>
         this.ports.wakeRecycle?.provider?.(provider) ?? ({ provider } as never),
+      readSummaryFacts: (agentId, sessionId) =>
+        this.ports.wakeRecycle?.readSummaryFacts?.(agentId, sessionId),
       stop: async (stop) => {
         await this.ports.runtimeRelease?.stopColdIdle?.(stop);
       },

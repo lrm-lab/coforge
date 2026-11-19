@@ -109,11 +109,8 @@ import { handleAgentMessage } from "./runtime-message-delivery";
 import { RuntimeTurn } from "./runtime-turn-management";
 import { abandonLaunch, scheduleStartupFailure } from "./agent-startup-failure";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
-import { ColdIdleSweep } from "./cold-idle-sweep";
-import { RuntimeSweeps } from "./runtime-sweeps";
+import { assembleRuntimeSweeps, createSessionSummaryObserver } from "./assemble-runtime-sweeps";
 import { assembleAgentConfigApply } from "./agent-config-apply-assembly";
-import { stalledRecoverySweep } from "./stalled-recovery-sweep";
-import { CatalogFreshnessSweep } from "./catalog-freshness-sweep";
 import { rememberUsage } from "./usage-memory";
 import { runtimeMachineStatus } from "./machine-status-reporter";
 import { agentActivityDrafts } from "./agent-activity-drafts";
@@ -255,25 +252,17 @@ export class DaemonRuntime {
     mentionDeliveries: () => this.#mentionDeliveries,
   });
 
-  readonly #sweeps = new RuntimeSweeps([
-    new ColdIdleSweep({
-      agentIds: () => this.#agentProcessManager.runningAgentIds(),
-      agent: (agentId) => this.#runtimeRelease.coldIdleAgent(agentId),
-      provider: (provider) => this.#createProvider(provider),
-      stop: (stop) => this.#runtimeRelease.stopColdIdle(stop),
-    }),
-    stalledRecoverySweep({
-      agentIds: () => this.#agentProcessManager.runningAgentIds(),
-      hasQueuedDeliveries: (agentId) => this.#deliveryGate.hasQueued(agentId),
-      runnerHold: () => this.#runnerHold !== undefined,
-      isStopping: (agentId) => this.#stopState.stopping(agentId),
-      release: this.#runtimeRelease,
-    }),
-    new CatalogFreshnessSweep({
-      transport: () => (this.#startup.started && !this.#stopping ? this.#transport : undefined),
-      recheck: (transport) => this.#codeAgentInventory.recheckCatalogs(transport),
-    }),
-  ]);
+  readonly #sweeps = assembleRuntimeSweeps({
+    processManager: () => this.#agentProcessManager,
+    runtimeRelease: () => this.#runtimeRelease,
+    createProvider: (provider) => this.#createProvider(provider),
+    contexts: () => this.#contexts,
+    deliveryGate: () => this.#deliveryGate,
+    runnerHold: () => this.#runnerHold !== undefined,
+    stopState: () => this.#stopState,
+    activeTransport: () => (this.#startup.started && !this.#stopping ? this.#transport : undefined),
+    inventory: () => this.#codeAgentInventory,
+  });
 
   readonly #configApply = assembleAgentConfigApply({
     runtimeRelease: () => this.#runtimeRelease,
@@ -294,6 +283,7 @@ export class DaemonRuntime {
     provider: (provider) => this.#createProvider(provider),
     inputQueue: (agentId) => this.#inputDrain.get(agentId),
     hasQueuedDeliveries: (agentId) => this.#deliveryGate.hasQueued(agentId),
+    readSummaryFacts: (agentId, sessionId) => this.#contexts.sessionResumeFacts(agentId, sessionId),
   });
 
   readonly #lifecycle = new AgentLifecycle();
@@ -610,6 +600,11 @@ export class DaemonRuntime {
       agentSessions: this.#agentSessions,
       systemCleaner: this.systemCleaner,
       configApply: this.#configApply,
+      sessionSummary: createSessionSummaryObserver(
+        this.#contexts,
+        (agentId) => this.#stopState.sessionId(agentId),
+        this.#createProvider,
+      ),
       collectSkillAgents: this.#collectSkillAgents,
       fastModeWarned: this.#fastModeWarned,
       activityDraft: this.#activity,

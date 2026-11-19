@@ -67,10 +67,44 @@ export type ColdIdleSweepPorts = Readonly<{
   agent(agentId: string): ColdIdleAgent | undefined;
   provider(provider: RuntimeProvider): CodeAgentProvider;
   stop(stop: ColdIdleStop): Promise<void>;
+  readSummaryFacts?(agentId: string, sessionId: string): SessionResumeFacts | undefined;
   now?(): number;
 }>;
 export function supportsSessionResume(provider: CodeAgentProvider): boolean {
-  return provider.readSessionResumeFacts !== undefined;
+  return (
+    provider.readSessionResumeFacts !== undefined || provider.supportsSessionSummaryRecycle === true
+  );
+}
+export async function resolveSessionResumeFacts(
+  provider: CodeAgentProvider,
+  options: Readonly<{
+    agentId: string;
+    sessionId: string;
+    envVars?: Readonly<Record<string, string>>;
+    readSummaryFacts?: (agentId: string, sessionId: string) => SessionResumeFacts | undefined;
+  }>,
+): Promise<SessionResumeFacts | undefined> {
+  const native = provider.readSessionResumeFacts
+    ? await provider.readSessionResumeFacts({
+        sessionId: options.sessionId,
+        ...(options.envVars ? { envVars: options.envVars } : {}),
+      })
+    : undefined;
+  if (native?.lastActivityAtMs !== undefined && native?.lastContextTokens !== undefined)
+    return native;
+  if (provider.supportsSessionSummaryRecycle !== true || !options.readSummaryFacts) return native;
+  const summary = options.readSummaryFacts(options.agentId, options.sessionId);
+  if (!summary) return native;
+  if (!native) return summary;
+  const lastActivityAtMs =
+    native.lastActivityAtMs !== undefined && summary.lastActivityAtMs !== undefined
+      ? Math.max(native.lastActivityAtMs, summary.lastActivityAtMs)
+      : (native.lastActivityAtMs ?? summary.lastActivityAtMs);
+  const lastContextTokens = native.lastContextTokens ?? summary.lastContextTokens;
+  return {
+    ...(lastActivityAtMs !== undefined ? { lastActivityAtMs } : {}),
+    ...(lastContextTokens !== undefined ? { lastContextTokens } : {}),
+  };
 }
 export class ColdIdleSweep {
   readonly #ports: ColdIdleSweepPorts;
@@ -232,9 +266,12 @@ export class ColdIdleSweep {
     view: ColdIdleSweepView,
     sessionId: string,
   ): Promise<SessionResumeFacts | undefined> {
-    return this.#ports
-      .provider(view.provider)
-      .readSessionResumeFacts?.({ sessionId, ...(view.envVars ? { envVars: view.envVars } : {}) });
+    return resolveSessionResumeFacts(this.#ports.provider(view.provider), {
+      agentId: view.agentId,
+      sessionId,
+      ...(view.envVars ? { envVars: view.envVars } : {}),
+      readSummaryFacts: this.#ports.readSummaryFacts,
+    });
   }
   #now(): number {
     return this.#ports.now?.() ?? Date.now();

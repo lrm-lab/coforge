@@ -9,6 +9,7 @@ export class PiProvider implements CodeAgentProvider {
   readonly provider: RuntimeProvider = RUNTIME_PROVIDER.PI;
   readonly reportsCompaction = true;
   readonly compactionFailure = "sticks_to_session";
+  readonly supportsSessionSummaryRecycle = true;
   readonly #host: PiRuntimeHost;
   constructor(options: PiProviderOptions) {
     this.#host = options.host;

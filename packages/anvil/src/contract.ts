@@ -77,6 +77,7 @@ export interface CodeAgentProvider {
    * the 60 minute default. The value is a vendor property, not a per-Agent setting.
    */
   readonly idleRecycleMinColdGapMs?: number;
+  readonly supportsSessionSummaryRecycle?: boolean;
 }
 export type SessionResumeFacts = {
   lastActivityAtMs?: number;

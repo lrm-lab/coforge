@@ -1,4 +1,5 @@
 import type { AgentRuntimeEvent } from "@coforge/agent";
+import { acpContextUsage } from "#src/acp-context-usage";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import {
   grokToolEnded,
@@ -10,7 +11,6 @@ import {
 
 import type { GrokTurnHost, GrokReplyIntentScanner } from "./host";
 
-/** Display state belongs to a native turn, including turns started by background work. */
 export class GrokTurnEvents {
   readonly #started = new Set<string>();
   readonly #ended = new Set<string>();
@@ -84,6 +84,8 @@ export class GrokTurnEvents {
           },
         ];
       }
+      case "usage_update":
+        return acpContextUsage(update);
       case "auto_compact_started":
         this.#compacting = true;
         return [{ type: "compaction-started" }];

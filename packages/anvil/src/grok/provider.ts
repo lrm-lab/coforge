@@ -13,6 +13,7 @@ export class GrokProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.GROK;
   readonly compactionFailure = "does_not_stick";
   readonly reportsCompaction = true;
+  readonly supportsSessionSummaryRecycle = true;
   readonly #host: GrokRuntimeHost;
   readonly #command: readonly string[];
   readonly #acpTimeoutMs: number;

@@ -25,3 +25,12 @@ test("a Grok call with no integer exit code reports none", () => {
     { type: "tool-end", id: "tool-1", isError: false },
   ]);
 });
+
+test("Grok usage_update emits context-usage for valid readings and ignores malformed ones", () => {
+  const turn = new GrokTurnEvents(fixtureGrokHost);
+  expect(turn.read({ sessionUpdate: "usage_update", used: 185_000, size: 256_000 })).toEqual([
+    { type: "context-usage", usedTokens: 185_000, windowTokens: 256_000 },
+  ]);
+  expect(turn.read({ sessionUpdate: "usage_update", used: -1, size: 256_000 })).toEqual([]);
+  expect(turn.read({ sessionUpdate: "usage_update", used: 100, size: 0 })).toEqual([]);
+});

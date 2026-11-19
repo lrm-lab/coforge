@@ -16,6 +16,7 @@ export class OpenCodeAcpProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.OPENCODE;
   readonly compactionFailure = "does_not_stick";
   readonly reportsCompaction = false;
+  readonly supportsSessionSummaryRecycle = true;
   readonly #host: OpenCodeAcpRuntimeHost;
   readonly #command: readonly string[];
   readonly #acpTimeoutMs: number | undefined;

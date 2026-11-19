@@ -1,7 +1,14 @@
 import { getLogger } from "@logtape/logtape";
 import { parseRuntimeProvider, thrownMessage } from "@lrm/coforge-sdk/internal";
+import type { SessionResumeFacts } from "@lrm/coforge-anvil";
 import { createCodeAgentProvider } from "#src/code-agent/registry";
 import { AgentContextLedger } from "#src/persistence/agent-context-ledger";
+import {
+  AgentSessionSummaryLedger,
+  type SessionSummaryActivityInput,
+  type SessionSummaryCompactionInput,
+  type SessionSummaryContextInput,
+} from "#src/persistence/agent-session-summary-ledger";
 import {
   AgentStandingPromptLedger,
   type StandingPromptRecord,
@@ -13,12 +20,9 @@ import type { AgentStateDb } from "#src/persistence/agent-state-db";
 
 const logger = getLogger(["coforge", "daemon", "agent-contexts"]);
 
-/** Consecutive compaction failures that make the session spent: Raft's
- * `SESSION_NEEDS_RESET_THRESHOLD` (`sessionCompactionFailureLedger.ts`). */
 export const SESSION_NEEDS_RESET_THRESHOLD = 3;
 const COMPACTION_FAILURES_KEY = "compactionFailures";
 
-/** The session and model a failure count belongs to; a different session or model starts over. */
 type CompactionFailureRecord = { sessionId?: string; model?: string; count: number };
 
 export type CompactionFailureKind =
@@ -26,7 +30,6 @@ export type CompactionFailureKind =
   | "compaction_recovery_exhausted"
   | "compaction_input_too_large";
 
-/** The adapter's own declaration; a provider this build does not know is never elided. */
 function reportsCompaction(provider: string): boolean {
   const known = parseRuntimeProvider(provider);
   if (!known) return false;
@@ -37,22 +40,12 @@ function reportsCompaction(provider: string): boolean {
   }
 }
 
-/**
- * Each Agent's context ledger, for the runtimes whose adapter declares a finished compaction
- * (`CodeAgentProvider.reportsCompaction`): only there does the daemon know when the Agent's
- * context was cut and what it must be told again. For any other runtime `ledger` is undefined and
- * nothing is ever left out of a read.
- */
 export class AgentContexts {
-  /** Whether this Agent's adapter reports a finished compaction; absent before its first launch. */
   readonly #reportsCompaction = new Map<string, boolean>();
-  /** Monotonic fallback context counter when the adapter has no SQLite compaction ledger. */
   readonly #memoryGenerations = new Map<string, number>();
 
   constructor(private readonly stateDb: (agentId: string) => AgentStateDb) {}
 
-  /** The session and model this launch continues: a count kept for another session or model is
-   * spent on nothing, so it starts over. */
   noteSession(agentId: string, sessionId: string | undefined, model: string): void {
     try {
       const db = this.stateDb(agentId).database;
@@ -63,12 +56,9 @@ export class AgentContexts {
         COMPACTION_FAILURES_KEY,
         JSON.stringify({ sessionId, model, count: 0 } satisfies CompactionFailureRecord),
       );
-    } catch {
-      // The count is a safety net, never a reason to fail the launch.
-    }
+    } catch {}
   }
 
-  /** Whether this session's compactions failed enough times that it must be reset. */
   needsSessionReset(agentId: string): boolean {
     try {
       return (
@@ -80,8 +70,6 @@ export class AgentContexts {
     }
   }
 
-  /** One compaction failure: the count belongs to the current session and model, so a new session
-   * or model starts over. An input too large is spent at once. */
   compactionFailed(
     agentId: string,
     kind: CompactionFailureKind = "compaction_failed",
@@ -96,9 +84,7 @@ export class AgentContexts {
         COMPACTION_FAILURES_KEY,
         JSON.stringify({ ...current, count: consecutive } satisfies CompactionFailureRecord),
       );
-    } catch {
-      // The count is a safety net, never a reason to fail the turn.
-    }
+    } catch {}
     const terminal =
       kind === "compaction_input_too_large" || consecutive >= SESSION_NEEDS_RESET_THRESHOLD;
     logger.warn("Context compaction failed", {
@@ -118,7 +104,6 @@ export class AgentContexts {
     return { consecutive, terminal };
   }
 
-  /** A finished compaction proves the session still compacts: the count starts over. */
   compactionSucceeded(agentId: string): void {
     try {
       const db = this.stateDb(agentId).database;
@@ -129,9 +114,7 @@ export class AgentContexts {
           COMPACTION_FAILURES_KEY,
           JSON.stringify({ ...current, count: 0 } satisfies CompactionFailureRecord),
         );
-    } catch {
-      // Nothing to reset when the state cannot be read.
-    }
+    } catch {}
   }
 
   #failures(db: AgentStateDb["database"]): CompactionFailureRecord | undefined {
@@ -149,7 +132,6 @@ export class AgentContexts {
 
   ledger(agentId: string): AgentContextLedger | undefined {
     if (!this.#reportsCompaction.get(agentId)) return undefined;
-    // Not kept: the database handle is closed when the Agent stops or is forgotten.
     return new AgentContextLedger(this.stateDb(agentId).database);
   }
 
@@ -184,6 +166,32 @@ export class AgentContexts {
     } catch {
       return undefined;
     }
+  }
+
+  sessionResumeFacts(agentId: string, sessionId: string): SessionResumeFacts | undefined {
+    try {
+      return new AgentSessionSummaryLedger(this.stateDb(agentId).database).resumeFacts(sessionId);
+    } catch {
+      return undefined;
+    }
+  }
+
+  recordSessionContextUsage(agentId: string, input: SessionSummaryContextInput): void {
+    try {
+      new AgentSessionSummaryLedger(this.stateDb(agentId).database).recordContextUsage(input);
+    } catch {}
+  }
+
+  recordSessionCompaction(agentId: string, input: SessionSummaryCompactionInput): void {
+    try {
+      new AgentSessionSummaryLedger(this.stateDb(agentId).database).recordCompaction(input);
+    } catch {}
+  }
+
+  recordSessionActivity(agentId: string, input: SessionSummaryActivityInput): void {
+    try {
+      new AgentSessionSummaryLedger(this.stateDb(agentId).database).recordActivity(input);
+    } catch {}
   }
 
   /** Current context generation from `AgentContextLedger.generation()`, falling back to in-memory

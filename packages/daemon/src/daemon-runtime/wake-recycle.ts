@@ -9,9 +9,9 @@ import {
   resolveWakeRecycleConfig,
   resolveWarmRecycleConfig,
 } from "#src/agent-runtime/wake-session-recycle";
-import type { CodeAgentProvider } from "@lrm/coforge-anvil";
+import type { CodeAgentProvider, SessionResumeFacts } from "@lrm/coforge-anvil";
 import { runtimeDisplayName } from "./session-invalidate-activity";
-import { supportsSessionResume } from "./cold-idle-sweep";
+import { resolveSessionResumeFacts, supportsSessionResume } from "./cold-idle-sweep";
 import {
   queueHasInputContent,
   type AgentInput,
@@ -37,6 +37,7 @@ export type WakeRecyclePorts = Readonly<{
   provider(provider: RuntimeProvider): CodeAgentProvider;
   inputQueue(agentId: string): AgentInputQueue | undefined;
   hasQueuedDeliveries(agentId: string): boolean;
+  readSummaryFacts?(agentId: string, sessionId: string): SessionResumeFacts | undefined;
 }>;
 export class WakeRecycle {
   readonly #ports: WakeRecyclePorts;
@@ -45,6 +46,9 @@ export class WakeRecycle {
   }
   provider(provider: RuntimeProvider): CodeAgentProvider {
     return this.#ports.provider(provider);
+  }
+  readSummaryFacts(agentId: string, sessionId: string): SessionResumeFacts | undefined {
+    return this.#ports.readSummaryFacts?.(agentId, sessionId);
   }
   async plan(request: WakeRecycleRequest): Promise<RecycledWake | undefined> {
     try {
@@ -71,9 +75,11 @@ export class WakeRecycle {
     const supported = supportsSessionResume(provider);
     const facts =
       config.enabled && supported && !request.hasResumePrompt
-        ? await provider.readSessionResumeFacts?.({
+        ? await resolveSessionResumeFacts(provider, {
+            agentId,
             sessionId,
             ...(request.envVars ? { envVars: request.envVars } : {}),
+            readSummaryFacts: this.#ports.readSummaryFacts,
           })
         : undefined;
     const decision = decideWakeRecycle({

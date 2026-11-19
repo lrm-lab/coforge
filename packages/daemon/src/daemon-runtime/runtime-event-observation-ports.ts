@@ -1,4 +1,4 @@
-import type { AgentActivity } from "@lrm/coforge-sdk/internal";
+import type { AgentActivity, RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import type { UsageSnapshot } from "@lrm/coforge-anvil";
 import type { AgentSessions } from "#src/agent-runtime/agent-session";
 import type { ActivityLaunch } from "./activity-launch";
@@ -21,8 +21,23 @@ export type Publish = (
   activity: ActivityDraft,
 ) => void;
 
-/** Everything the observation reads or writes that belongs to the runtime: existing collaborators
- * pass through by reference, one-off helpers arrive as functions. No daemon state is copied. */
+export type SessionSummaryObserver = Readonly<{
+  contextUsage(
+    agentId: string,
+    provider: RuntimeProvider,
+    usedTokens: number,
+    windowTokens: number,
+    occurredAt?: string,
+  ): void;
+  compaction(
+    agentId: string,
+    provider: RuntimeProvider,
+    tokensAfter?: number,
+    windowTokens?: number,
+  ): void;
+  turnCompleted(agentId: string, provider: RuntimeProvider): void;
+}>;
+
 export type RuntimeEventObservationPorts = Readonly<{
   activityPublisher: AgentActivityPublisher<ActivityLaunch>;
   deliveryGate: AgentDeliveryGate;
@@ -30,15 +45,13 @@ export type RuntimeEventObservationPorts = Readonly<{
   usageReport: AgentUsageReport;
   phaseBookkeeping: PhaseBookkeeping;
   runtimeErrorHold: RuntimeErrorDeliveryHold;
-  /** Told of a failure that shows the Agent's provider credential unusable. */
   credentialHolds: Pick<CredentialInvalidHolds, "record">;
   mentionDeliveries: MentionDeliveryTracker;
   agentSessions: AgentSessions;
   systemCleaner: SystemCleaner;
-  /** The task idle reminder, asked when an interrupted turn leaves the Agent idle. */
   idleNudge?: Pick<TaskIdleNudge, "maybeAsk">;
-  /** A pushed configuration, applied when an interrupted or failed turn leaves the Agent idle. */
   configApply?: Pick<AgentConfigApply, "settle">;
+  sessionSummary?: SessionSummaryObserver;
   collectSkillAgents: ReadonlySet<string>;
   fastModeWarned: Set<string>;
   isWorking(agentId: string): boolean;
@@ -53,7 +66,6 @@ export type RuntimeEventObservationPorts = Readonly<{
   interruptedActivity(agentId: string): ActivityDraft;
   showQuietTurn(agentId: string, launch: ActivityLaunch, publish: Publish): void;
   reconcileIdleTurn(agentId: string, launch: ActivityLaunch): boolean;
-  /** Writes the last-subagent wake notice as idle input; only providers that need it call it. */
   wakeFinishedSubagents?(agentId: string): void;
   rememberUsage(snapshot: UsageSnapshot): void;
   releaseTurnEndHolds(agentId: string): void;

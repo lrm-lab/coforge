@@ -164,10 +164,12 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   The models were gpt-6.1-sol and gpt-6.1-terra; OpenAI's default prompt cache is at least 30
   minutes. Raft 1.0.53 names codex in the same recycle, but it only reads Claude's session record,
   so a Codex session was not actually replaced. Reading the Codex rollout is the extra step.
-- A provider recycles only through the optional `readSessionResumeFacts` /
-  `readRecycleBriefing` seam on the provider contract; a provider without it never does. Any
-  fact the seam cannot supply means resume, never recycle. Provider transcript parsing stays in the
-  provider's own directory. The cold-idle sweep uses the same declared lifetime.
+- A provider recycles only when it declares `readSessionResumeFacts` or
+  `supportsSessionSummaryRecycle` on the provider contract (Claude Code, Codex, Pi, CoForge, Grok,
+  OpenCode, and Antigravity); a provider with neither never does. Native transcript facts win when
+  complete, and summary-enabled providers fall back to the daemon's persisted `sessionSummary`
+  ledger (`AgentStateDb` `meta`). Any missing fact means resume, never recycle. Provider transcript
+  parsing stays in the provider's own directory. The cold-idle sweep uses the same declared lifetime.
 - `daemon-runtime/cold-idle-sweep.ts` stops a live runtime when every guard of the daemon's own
   state holds (no live turn, queued delivery or input, open tool call, background task, launch,
   stop, stalled recovery, runner hold or migration) and the session qualifies for cold-idle or

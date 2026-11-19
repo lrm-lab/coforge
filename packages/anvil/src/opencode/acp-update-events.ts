@@ -1,14 +1,12 @@
 import type { AgentRuntimeEvent } from "@coforge/agent";
+import { acpContextUsage } from "#src/acp-context-usage";
 import { acpToolOutput, acpToolUpdateEnded } from "#src/acp-tool-output";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import type { OpenCodeAcpRuntimeHost } from "./acp-host";
 
-/** One turn's ACP `session/update` projection: text and thinking deltas pass through, tool calls
- * announce once and end once, shell tools feed reply-intent, and every call closes its ledger. */
 export class OpenCodeAcpTurnEvents {
   readonly #started = new Set<string>();
   readonly #ended = new Set<string>();
-  /** The output text already emitted per tool call: ACP resends the whole content each update. */
   readonly #output = new Map<string, string>();
   readonly #scanner;
   constructor(private readonly host: OpenCodeAcpRuntimeHost) {
@@ -63,10 +61,9 @@ export class OpenCodeAcpTurnEvents {
         }
         return events.length ? events : [{ type: "progress", source: "opencode_tool_call_update" }];
       }
+      case "usage_update":
+        return acpContextUsage(update);
       case "compaction_update":
-        // UNSTABLE in ACP: an agent sends this only after the client advertised
-        // `session.compaction` (see `acp/connection.ts`), and not every agent implements it. A
-        // repeated "in_progress" is de-duped into one episode by the daemon core.
         if (update.status === "in_progress") return [{ type: "compaction-started" }];
         if (update.status === "completed") return [{ type: "compaction-finished" }];
         if (update.status === "failed" || update.status === "cancelled")

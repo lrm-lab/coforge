@@ -1,11 +1,10 @@
 import type { AgentRuntimeEvent, createSession } from "@coforge/agent";
+import { AGENT_RUNTIME_EVENT_TYPE } from "#src/contract";
 import { asRecord, integerField, textContent } from "#src/json-record";
 
 type PiSession = Awaited<ReturnType<typeof createSession>>["session"];
-/** One event the Pi SDK session reports to its subscribers. */
 export type PiSessionEvent = Parameters<Parameters<PiSession["subscribe"]>[0]>[0];
 
-/** Assistant stream events that carry no renderable text yet still show the turn is live. */
 const CONTENT_FREE_MESSAGE_EVENTS = new Set([
   "start",
   "text_start",
@@ -14,12 +13,23 @@ const CONTENT_FREE_MESSAGE_EVENTS = new Set([
   "toolcall_delta",
 ]);
 
-/**
- * The runtime events one Pi session event reports on its own: text and thinking deltas, tools,
- * compaction transitions, and content-free progress. The events that drive the run's outcome
- * (`agent_start` after cancellation, an assistant `message_end`, `agent_settled`) report nothing
- * here and stay with the session.
- */
+function nonNegativeFinite(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function piMessageContextTokens(usage: unknown): number {
+  const record = asRecord(usage);
+  if (!record) return 0;
+  const total = nonNegativeFinite(record.totalTokens);
+  if (total > 0) return total;
+  return (
+    nonNegativeFinite(record.input) +
+    nonNegativeFinite(record.output) +
+    nonNegativeFinite(record.cacheRead) +
+    nonNegativeFinite(record.cacheWrite)
+  );
+}
+
 export function piSessionEvents(event: PiSessionEvent, windowTokens?: number): AgentRuntimeEvent[] {
   switch (event.type) {
     case "message_update": {
@@ -31,7 +41,20 @@ export function piSessionEvents(event: PiSessionEvent, windowTokens?: number): A
         ? [{ type: "progress", source: "pi_message_event" }]
         : [];
     }
-    // Content-free lifecycle frames (a new turn or message beginning) still show the turn is live.
+    case "message_end": {
+      if (
+        event.message.role !== "assistant" ||
+        event.message.stopReason === "error" ||
+        event.message.stopReason === "aborted"
+      )
+        return [];
+      if (windowTokens === undefined || !Number.isFinite(windowTokens) || windowTokens <= 0)
+        return [];
+      const usedTokens = piMessageContextTokens(event.message.usage);
+      return usedTokens > 0
+        ? [{ type: AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE, usedTokens, windowTokens }]
+        : [];
+    }
     case "turn_start":
     case "message_start":
       return [{ type: "progress", source: "pi_turn_lifecycle" }];
@@ -49,11 +72,6 @@ export function piSessionEvents(event: PiSessionEvent, windowTokens?: number): A
     case "compaction_start":
       return [{ type: "compaction-started" }];
     case "compaction_end": {
-      // A compaction that produced no result failed or is queued for a retry (`willRetry`): its
-      // completion is not confirmed, so it reports what an unfinished one reports instead of a
-      // "finished" nobody can point at. Pi says which of the two it was, and why it compacted:
-      // an abort is the person or the daemon stopping it, a failure is summarization failing,
-      // and only the second counts toward the session being spent (task #548).
       if (event.aborted || !event.result)
         return [
           {
@@ -86,7 +104,6 @@ export function piSessionEvents(event: PiSessionEvent, windowTokens?: number): A
           type: "tool-end",
           id: event.toolCallId,
           isError: event.isError,
-          // A shell tool's exit code is in its structured result (pi-coding-agent 1.4.0 `bash`).
           exitCode: integerField(asRecord(asRecord(event.result)?.structuredContent)?.exit_code),
           durationMs: event.durationMs,
         },
