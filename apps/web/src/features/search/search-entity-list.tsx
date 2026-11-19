@@ -24,7 +24,7 @@ import type { SearchEntity } from "./search-entities";
 export const SEARCH_HEADING_CLASS = "px-2 py-1 text-xs text-tertiary";
 
 export const SEARCH_ROW_CLASS =
-  "flex w-full min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-left outline-hidden transition-colors hover:bg-secondary focus-visible:bg-brand-primary_alt group-data-[input-focused]/search:data-[search-first]:bg-brand-primary_alt";
+  "flex w-full min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 text-left outline-hidden transition-colors hover:bg-secondary_hover focus-visible:bg-chat-selected-bg group-data-[input-focused]/search:data-[search-first]:bg-chat-selected-bg";
 
 export function SearchEntityRow({
   entity,
