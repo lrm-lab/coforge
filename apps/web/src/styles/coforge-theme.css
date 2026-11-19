@@ -67,6 +67,10 @@
   --color-unread-capsule-muted: oklch(0.15 0.01 260 / 0.09);
   --color-unread-capsule-muted-fg: var(--color-text-tertiary);
   --color-unread-capsule-muted-divider: oklch(0.15 0.01 260 / 0.24);
+
+  --radius-xs: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-4xl: 2rem;
 }
 
 :root:not(.dark-mode) {
