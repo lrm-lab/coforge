@@ -14,7 +14,7 @@ import {
   type RuntimeAuthStatus,
 } from "#src/contract";
 import { antigravityGeminiDirArgs } from "./acp-args";
-import { createAntigravityBrowserShim } from "./auth-browser-shim";
+import { createAntigravityBrowserShim, noopAntigravityBrowserShim } from "./auth-browser-shim";
 
 /** `agy acp --login` waits on a person pasting a code: the same bound Claude's login gets. */
 const ANTIGRAVITY_LOGIN_TIMEOUT_MS = 16 * 60 * 1_000;
@@ -152,7 +152,13 @@ export async function antigravityTerminalLogin(
       reason: "process_failed",
       detail: "agy acp --help did not answer; the installed agy may be too old or broken.",
     };
-  const browserShim = await createAntigravityBrowserShim(host.environment);
+  const browserShim = await createAntigravityBrowserShim(host.environment).catch(() =>
+    noopAntigravityBrowserShim(host.environment),
+  );
+  if (interaction.signal?.aborted) {
+    await browserShim.dispose();
+    return { status: "cancelled" };
+  }
   let tree: OwnedProcessTree;
   try {
     tree = host.processTreeSpawner.spawn(
@@ -178,6 +184,7 @@ export async function antigravityTerminalLogin(
   let announcedUrl = false;
   let codePromptSeen = false;
   let missingAuthUrl = false;
+  let finished = false;
   let stderrHint: string | undefined;
   let authUrlWaitTimer: ReturnType<typeof setTimeout> | undefined;
   let shimPollTimer: ReturnType<typeof setInterval> | undefined;
@@ -191,15 +198,27 @@ export async function antigravityTerminalLogin(
     clearInterval(shimPollTimer);
     shimPollTimer = undefined;
   };
+  const clearAuthUrlWaitTimer = () => {
+    if (!authUrlWaitTimer) return;
+    clearTimeout(authUrlWaitTimer);
+    authUrlWaitTimer = undefined;
+  };
   const timer = setTimeout(() => {
+    finished = true;
+    stopShimPolling();
+    clearAuthUrlWaitTimer();
     terminate();
     settled.resolve("timeout");
   }, options.timeoutMs ?? ANTIGRAVITY_LOGIN_TIMEOUT_MS);
   const abort = () => {
+    finished = true;
+    stopShimPolling();
+    clearAuthUrlWaitTimer();
     terminate();
     settled.resolve("cancelled");
   };
-  interaction.signal?.addEventListener("abort", abort, { once: true });
+  if (interaction.signal?.aborted) abort();
+  else interaction.signal?.addEventListener("abort", abort, { once: true });
   void child.exited
     .then((code) => (exitCode = code))
     .catch(() => undefined)
@@ -225,7 +244,7 @@ export async function antigravityTerminalLogin(
   const askForCode = async (message: string) => {
     for (
       let attempt = 0;
-      attempt < ANTIGRAVITY_LOGIN_MAX_CODES && !interactionFailed;
+      attempt < ANTIGRAVITY_LOGIN_MAX_CODES && !interactionFailed && !finished;
       attempt += 1
     ) {
       if (interaction.signal?.aborted) return;
@@ -240,6 +259,7 @@ export async function antigravityTerminalLogin(
         }
         return fail((error as Error).message);
       }
+      if (finished || interaction.signal?.aborted) return;
       if (codeWrites >= ANTIGRAVITY_LOGIN_MAX_CODES)
         return fail("agy acp --login did not accept the authorization code");
       codeWrites += 1;
@@ -252,7 +272,7 @@ export async function antigravityTerminalLogin(
       }
       return;
     }
-    if (!interactionFailed)
+    if (!interactionFailed && !finished)
       fail(
         codeWrites > 0
           ? "agy acp --login did not accept the authorization code"
@@ -260,38 +280,45 @@ export async function antigravityTerminalLogin(
       );
   };
   const inspectAuthUrl = (url: string) => {
-    if (announcedUrl || untrustedLink) return;
+    if (finished || interaction.signal?.aborted || announcedUrl || untrustedLink) return;
     const trusted = googleAccountsUrl(url);
     if (trusted) {
       announcedUrl = true;
       stopShimPolling();
-      if (authUrlWaitTimer) {
-        clearTimeout(authUrlWaitTimer);
-        authUrlWaitTimer = undefined;
-      }
+      clearAuthUrlWaitTimer();
       emit({
         kind: "auth_url",
         verificationUrl: trusted,
         instructions: LOGIN_INSTRUCTIONS,
       });
-      if (codePromptSeen) requestCode(CODE_PROMPT_MESSAGE);
+      if (!finished && !interaction.signal?.aborted && codePromptSeen)
+        requestCode(CODE_PROMPT_MESSAGE);
     } else {
       untrustedLink = true;
       stopShimPolling();
+      clearAuthUrlWaitTimer();
       terminate();
     }
   };
   const pollBrowserShim = async (): Promise<void> => {
-    if (announcedUrl || untrustedLink) return;
+    if (
+      !browserShim.active ||
+      finished ||
+      interaction.signal?.aborted ||
+      announcedUrl ||
+      untrustedLink
+    )
+      return;
     if (shimPollInFlight) {
       await shimPollInFlight;
-      if (announcedUrl || untrustedLink) return;
+      if (finished || interaction.signal?.aborted || announcedUrl || untrustedLink) return;
     }
     const run = (async () => {
       const captured = await browserShim.readCapturedUrls();
+      if (finished || interaction.signal?.aborted) return;
       for (const url of captured) {
         inspectAuthUrl(url);
-        if (announcedUrl || untrustedLink) break;
+        if (finished || announcedUrl || untrustedLink) break;
       }
     })();
     shimPollInFlight = run;
@@ -302,6 +329,7 @@ export async function antigravityTerminalLogin(
     }
   };
   const requestCode = (message: string) => {
+    if (finished || interaction.signal?.aborted) return;
     if (announcedUrl) {
       void askForCode(message);
       return;
@@ -311,14 +339,23 @@ export async function antigravityTerminalLogin(
       authUrlWaitTimer = setTimeout(() => {
         authUrlWaitTimer = undefined;
         void pollBrowserShim().then(() => {
-          if (!announcedUrl && !untrustedLink && !interactionFailed) failMissingAuthUrl();
+          if (
+            !finished &&
+            !interaction.signal?.aborted &&
+            !announcedUrl &&
+            !untrustedLink &&
+            !interactionFailed
+          )
+            failMissingAuthUrl();
         });
       }, ANTIGRAVITY_LOGIN_URL_WAIT_MS);
     }
   };
-  shimPollTimer = setInterval(() => {
-    if (!shimPollInFlight) void pollBrowserShim();
-  }, ANTIGRAVITY_LOGIN_SHIM_POLL_MS);
+  if (browserShim.active) {
+    shimPollTimer = setInterval(() => {
+      if (!shimPollInFlight) void pollBrowserShim();
+    }, ANTIGRAVITY_LOGIN_SHIM_POLL_MS);
+  }
   const watch = async (
     stream: AsyncIterable<Uint8Array>,
     inspect: (text: string) => void,
@@ -355,6 +392,9 @@ export async function antigravityTerminalLogin(
 
   try {
     const outcome = await settled.promise;
+    finished = true;
+    stopShimPolling();
+    clearAuthUrlWaitTimer();
     if (outcome === "cancelled" || interaction.signal?.aborted) return { status: "cancelled" };
     if (interactionFailed)
       return {
@@ -364,7 +404,10 @@ export async function antigravityTerminalLogin(
       };
     if (outcome === "timeout") return { status: "failed", reason: "timed_out" };
     await reading;
-    await pollBrowserShim();
+    if (browserShim.active && !untrustedLink && !announcedUrl) {
+      const captured = await browserShim.readCapturedUrls();
+      if (captured.some((url) => !googleAccountsUrl(url))) untrustedLink = true;
+    }
     if (untrustedLink)
       return {
         status: "failed",
@@ -390,9 +433,10 @@ export async function antigravityTerminalLogin(
       detail: "agy acp --login finished without signing in",
     };
   } finally {
+    finished = true;
     stopShimPolling();
     clearTimeout(timer);
-    if (authUrlWaitTimer) clearTimeout(authUrlWaitTimer);
+    clearAuthUrlWaitTimer();
     interaction.signal?.removeEventListener("abort", abort);
     await tree.terminate(true).catch(() => undefined);
     await browserShim.dispose();

@@ -124,10 +124,11 @@ function nonNegativeNumber(value: unknown): number | undefined {
 }
 
 function balanceText(value: unknown): string | undefined {
-  const numeric = nonNegativeNumber(value);
-  if (numeric !== undefined) return String(numeric);
   const raw = text(value);
-  return raw && raw.length <= 40 ? raw : undefined;
+  if (!raw || raw.length > 40) return undefined;
+  const parsed = Number(raw);
+  if (Number.isFinite(parsed) && parsed < 0) return undefined;
+  return raw;
 }
 
 function parseCredits(
@@ -158,7 +159,9 @@ function parseCredits(
       ? String(numericAmount)
       : (balanceText(record.balance) ??
         balanceText(record.available) ??
-        balanceText(record.remaining));
+        balanceText(record.available_credits) ??
+        balanceText(record.remaining) ??
+        balanceText(record.remaining_credits));
   const explicitHas =
     typeof record.hasCredits === "boolean"
       ? record.hasCredits

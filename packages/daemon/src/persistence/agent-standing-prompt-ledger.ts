@@ -1,5 +1,4 @@
 import type { Database } from "bun:sqlite";
-import { createHash } from "node:crypto";
 import { readMeta, writeMeta } from "./agent-state-db";
 
 const STANDING_PROMPT_KEY = "standingPrompt";
@@ -36,7 +35,7 @@ export type StandingPromptWriteResult = Readonly<{
 }>;
 
 export function standingPromptHash(instructions: string): string {
-  return createHash("sha256").update(instructions, "utf8").digest("base64url");
+  return new Bun.CryptoHasher("sha256").update(instructions, "utf8").digest("base64url");
 }
 
 function parseStandingPromptRecord(raw: string | undefined): StandingPromptRecord | undefined {

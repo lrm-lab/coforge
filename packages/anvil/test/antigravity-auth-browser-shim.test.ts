@@ -114,3 +114,61 @@ test("headless login captures a Google OAuth URL launched via $BROWSER and rejec
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("browser shim returns an inactive no-op on win32 and drops unterminated lines", async () => {
+  const { createAntigravityBrowserShim } = await import("#src/antigravity/auth-browser-shim");
+  const { writeFile } = await import("node:fs/promises");
+  const winShim = await createAntigravityBrowserShim({ PATH: "/usr/bin" }, "win32");
+  expect(winShim.active).toBe(false);
+  expect(winShim.environment).toEqual({ PATH: "/usr/bin" });
+  expect(await winShim.readCapturedUrls()).toEqual([]);
+
+  const posixShim = await createAntigravityBrowserShim({ PATH: "/usr/bin" }, "linux");
+  try {
+    expect(posixShim.active).toBe(true);
+    const dir = posixShim.environment.PATH!.split(":")[0]!;
+    await writeFile(
+      join(dir, "captured-urls.txt"),
+      "https://accounts.google.com/ok\nhttps://accounts.google.com/partial",
+    );
+    expect(await posixShim.readCapturedUrls()).toEqual(["https://accounts.google.com/ok"]);
+  } finally {
+    await posixShim.dispose();
+  }
+});
+
+test("aborting login right after --help probe does not hang or spawn --login", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "agy-shim-abort-"));
+  try {
+    const controller = new AbortController();
+    let loginSpawned = false;
+    const base = headlessAuthHost(dir, { AGY_ACP_FIXTURE_SIGNED_OUT: "1" });
+    const baseSpawn = base.processTreeSpawner.spawn.bind(base.processTreeSpawner);
+    const host: AntigravityAuthHost = {
+      ...base,
+      processTreeSpawner: {
+        spawn: (command, cwd, env) => {
+          if (command.includes("--login")) loginSpawned = true;
+          const tree = baseSpawn(command, cwd, env);
+          if (command.includes("--help")) {
+            void tree.child.exited.then(() => controller.abort());
+          }
+          return tree;
+        },
+      },
+    };
+    const adapter = new AntigravityRuntimeAuthAdapter(host);
+    const result = await adapter.startLogin(
+      { workingDirectory: dir, timeoutMs: 5_000 },
+      {
+        signal: controller.signal,
+        onEvent: () => undefined,
+        prompt: async () => "unused",
+      },
+    );
+    expect(result).toEqual({ status: "cancelled" });
+    expect(loginSpawned).toBe(false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

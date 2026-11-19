@@ -495,4 +495,16 @@ test("ignores negative or malformed credit fields", async () => {
       }),
     }),
   ).rejects.toBeInstanceOf(UsageUnsupportedError);
+
+  await expect(
+    readUsage({
+      COFORGE_ANTIGRAVITY_USAGE_OUTPUT: JSON.stringify({
+        status: "SUCCESS",
+        command: {
+          name: "usage",
+          data: { groups: [], credits: { balance: "-5" } },
+        },
+      }),
+    }),
+  ).rejects.toBeInstanceOf(UsageUnsupportedError);
 });

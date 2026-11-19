@@ -205,12 +205,15 @@ export async function launchAgentProcess(
     );
     timing.phase("provider_session");
     if (launchedInstructions !== undefined) {
+      const reportedSessionId = sessionIds.reportedSessionId();
       ports.contexts.recordStandingPrompt(agentId, {
         instructions: launchedInstructions,
         provider: config.provider,
-        sessionId: sessionIds.reportedSessionId() ?? requestedSessionId,
+        sessionId: reportedSessionId ?? requestedSessionId,
         resumed:
-          resumedSessionId !== undefined && sessionIds.driverReplacedSessionId() === undefined,
+          resumedSessionId !== undefined &&
+          sessionIds.driverReplacedSessionId() === undefined &&
+          (reportedSessionId === undefined || reportedSessionId === resumedSessionId),
       });
     }
     if (claimAgentLaunchTagSweep(agentId)) sweepAgentLaunchTagStrays(agentId, "launch");

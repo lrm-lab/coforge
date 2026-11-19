@@ -6,9 +6,21 @@ const SHIM_BINARIES = ["xdg-open", "open", "browser-shim"] as const;
 const CAPTURE_FILENAME = "captured-urls.txt";
 
 export interface AntigravityBrowserShim {
+  readonly active: boolean;
   readonly environment: Readonly<Record<string, string>>;
   readCapturedUrls(): Promise<string[]>;
   dispose(): Promise<void>;
+}
+
+export function noopAntigravityBrowserShim(
+  baseEnvironment: Readonly<Record<string, string>>,
+): AntigravityBrowserShim {
+  return {
+    active: false,
+    environment: baseEnvironment,
+    readCapturedUrls: async () => [],
+    dispose: async () => undefined,
+  };
 }
 
 function shellQuote(value: string): string {
@@ -35,13 +47,7 @@ export async function createAntigravityBrowserShim(
   baseEnvironment: Readonly<Record<string, string>>,
   platform: NodeJS.Platform = process.platform,
 ): Promise<AntigravityBrowserShim> {
-  if (platform === "win32") {
-    return {
-      environment: baseEnvironment,
-      readCapturedUrls: async () => [],
-      dispose: async () => undefined,
-    };
-  }
+  if (platform === "win32") return noopAntigravityBrowserShim(baseEnvironment);
   const directory = await mkdtemp(join(tmpdir(), "coforge-agy-browser-"));
   try {
     await chmod(directory, 0o700);
@@ -62,15 +68,16 @@ export async function createAntigravityBrowserShim(
     };
     let disposed = false;
     return {
+      active: true,
       environment,
       readCapturedUrls: async () => {
         if (disposed) return [];
         try {
           const content = await readFile(captureFile, "utf8");
-          return content
-            .split(/\r?\n/u)
-            .map((line) => line.trim())
-            .filter((line) => line.length > 0);
+          if (disposed) return [];
+          const lines = content.split(/\r?\n/u);
+          if (!content.endsWith("\n")) lines.pop();
+          return lines.map((line) => line.trim()).filter((line) => line.length > 0);
         } catch {
           return [];
         }

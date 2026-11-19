@@ -12,12 +12,12 @@ Part of [the documentation index](../../README.md). The Antigravity adapter runs
 - The floor is agy 1.5.8 (`acp-version.ts`), from agy's changelog: `session/cancel` ends a prompt
   without stopping the next one from 1.5.1, the `auto` mode arrives in 1.5.4, and `usage_update`
   context readings in 1.5.8. Behavior below was verified live on 1.5.10.
-- Standing instructions ride the `session/new`/`session/load` envelope as
+- Standing instructions ride the `session/new`/`session/resume`/`session/load` envelope as
   `_meta.antigravity.systemPrompt.append`, appended to agy's own system prompt; agy still reads
-  the Agent workspace's `AGENTS.md`/`GEMINI.md`. A `session/load` applies the append it carries,
-  so a resumed session picks up changed instructions. `disabledTools` in the same envelope is the
-  optional host tool filter. `mcpServers` is intentionally kept empty (`[]`) because agy persists
-  ACP `mcpServers` entries and headers in plaintext inside
+  the Agent workspace's `AGENTS.md`/`GEMINI.md`. `session/resume` and `session/load` apply the
+  append they carry, so a resumed session picks up changed instructions. `disabledTools` in the
+  same envelope is the optional host tool filter. `mcpServers` is intentionally kept empty (`[]`)
+  because agy persists ACP `mcpServers` entries and headers in plaintext inside
   `<gemini-dir>/antigravity-cli/conversations/<id>.db`.
 - Sessions launch with `--dangerously-skip-permissions` and still select `auto` via
   `session/set_mode` when `modes.availableModes` lists it (Gemini Enterprise accounts are not
@@ -36,7 +36,7 @@ Part of [the documentation index](../../README.md). The Antigravity adapter runs
   that.
 - Interrupt is the shared `session/cancel`: the running prompt answers `cancelled` and the same
   process takes the next prompt. A session survives the process: a killed `agy acp` resumes
-  through `session/load` on a fresh process.
+  through `session/resume` (or `session/load`) on a fresh process.
 - Input during a live turn is a second `session/prompt` — the server's steer path, so delivery
   is `direct`. The steered prompt resolves `end_turn` with the merged turn's usage when the turn
   ends, and the first prompt resolves `end_turn` too — not `cancelled`. A steered turn is one

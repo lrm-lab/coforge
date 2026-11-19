@@ -14,8 +14,8 @@ Read [Antigravity ACP behavior](../../../../docs/agents/antigravity-acp.md) when
   abort during that probe is still a cancelled sign-in). A signed-in status carries
   `session/new`'s `_meta.antigravity.tier.name` ("Google AI Ultra") as the account's
   `planLabel`; agy exposes no account email, so there is no `maskedLabel`.
-  `session/new` and `session/load` `-32000 "Authentication required"` are `runtime_login_required`,
-  `-32800` is a cancelled sign-in. A Computer without a desktop (`canOpenBrowser`: Linux needs
+  `session/new`, `session/resume` and `session/load` `-32000 "Authentication required"` are
+  `runtime_login_required`, `-32800` is a cancelled sign-in. A Computer without a desktop (`canOpenBrowser`: Linux needs
   `DISPLAY`/`WAYLAND_DISPLAY`, `COFORGE_COMPUTER_CLOUD=1` never qualifies) signs in through
   `agy acp --login` instead (`auth-terminal.ts`): the adapter probes `agy acp --help` for the
   flag, relays only an `accounts.google.com` link as `auth_url`, feeds the pasted code or
