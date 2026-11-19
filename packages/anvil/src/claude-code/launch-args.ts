@@ -12,6 +12,11 @@ export const CLAUDE_DISALLOWED_TOOLS = [
   "CronCreate",
   "CronList",
   "CronDelete",
+  "Artifact",
+  "ArtifactComments",
+  "ArtifactData",
+  "ArtifactCheck",
+  "SendFeedback",
 ] as const;
 
 /** The full argv of one long-lived Claude Code Agent launch: fresh (`createSessionId`) or resumed. */

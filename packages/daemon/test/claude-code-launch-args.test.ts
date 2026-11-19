@@ -16,7 +16,8 @@ import { discoverExternalCodeAgents } from "#src/code-agent/runtime-probe";
 import { agentEnvironment } from "#src/code-agent/environment";
 
 const BASE = ["claude", "-p"];
-const DISALLOWED = "EnterPlanMode,ExitPlanMode,ScheduleWakeup,CronCreate,CronList,CronDelete";
+const DISALLOWED =
+  "EnterPlanMode,ExitPlanMode,ScheduleWakeup,CronCreate,CronList,CronDelete,Artifact,ArtifactComments,ArtifactData,ArtifactCheck,SendFeedback";
 const COMMON = [
   "--dangerously-skip-permissions",
   "--permission-mode",
