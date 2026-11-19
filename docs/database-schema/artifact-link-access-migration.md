@@ -23,9 +23,12 @@ environment, never in arguments.
 `apply` requires a path that does not exist yet: the journal is the only record that
 makes rollback possible, so it is created owner-only and never overwritten. Each
 artifact is migrated in its own transaction under its artifact row lock, and its
-journal record is written and synced inside that transaction, before it commits. A
-journal write that fails rolls the artifact's tier change and its access event back, so
-a run that dies leaves a journal that names exactly what committed and nothing else.
+journal record is written in full and synced inside that transaction, before it
+commits; the header is written the same way. A journal write that fails rolls the
+artifact's tier change and its access event back. A run that dies between such a write
+and the commit leaves a record whose transaction never committed, so the journal is not
+a list of exactly what committed: rollback skips those records by the event id the
+journal names.
 
 A rollback record restores an artifact only when, inside the same row lock: its tier is
 still `link`, this migration's access event is still the newest and the event count has

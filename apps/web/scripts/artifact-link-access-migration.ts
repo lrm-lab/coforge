@@ -44,7 +44,9 @@ async function syncDirectory(path: string) {
 async function createJournal(path: string) {
   const file = await open(path, "wx", 0o600);
   try {
-    await file.write(`${JSON.stringify({ version: 1, appliedAt: new Date().toISOString() })}\n`);
+    await file.writeFile(
+      `${JSON.stringify({ version: 1, appliedAt: new Date().toISOString() })}\n`,
+    );
     await file.sync();
   } finally {
     await file.close();
@@ -105,7 +107,7 @@ async function main() {
       const journal = await applyLinkAccessMigration(db, async (record) => {
         const file = await open(command.journalPath, "a", 0o600);
         try {
-          await file.write(`${JSON.stringify(record)}\n`);
+          await file.writeFile(`${JSON.stringify(record)}\n`);
           await file.sync();
         } finally {
           await file.close();

@@ -1,4 +1,5 @@
 import type { ArtifactPathKind } from "#src/features/artifacts/artifact-path-kind";
+import { publicArtifactPath } from "#src/features/artifacts/artifact-short-id";
 import { artifactKindOfPath } from "#src/features/artifacts/artifact-path-kind";
 import { NO_RATE_LIMIT } from "#src/server/app-rate-limits/app-rate-limit.server";
 import { clientAddress } from "#src/server/http/public-origin.server";
@@ -207,7 +208,7 @@ export class ArtifactPublicServing {
   private redirectToApp(page: PublicPage, path: string | undefined): Response {
     const app = this.deps.appOrigin?.();
     if (path !== undefined || !app) return sandboxRefusal(404, "Not found.");
-    return sandboxRedirect(`${app}/w/${page.workspaceSlug}/artifacts/${page.artifactId}`);
+    return sandboxRedirect(`${app}${publicArtifactPath(page.artifactId)}`);
   }
 
   private async servePublicFileOf(

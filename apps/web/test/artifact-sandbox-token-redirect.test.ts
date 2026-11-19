@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { ArtifactSandbox } from "#src/server/artifacts/artifact-sandbox.server";
 import { MemoryTicketNonces } from "#src/server/artifacts/artifact-sandbox-nonces.server";
 import type { PublicPage } from "#src/server/artifacts/artifact-public-page.server";
+import { encodeArtifactShortId } from "#src/features/artifacts/artifact-short-id";
 import { FRAME } from "./helpers/artifact-sandbox-open";
 
 const A = "11111111-1111-4111-8111-111111111111";
@@ -35,12 +36,12 @@ const sandbox = (lookup: () => Promise<PublicPage | null>, appOrigin: string | n
     publicClientAddress: () => "192.0.2.1",
   });
 
-test("an old public link to a link-tier artifact only redirects to the app page", async () => {
+test("an old public link to a link-tier artifact redirects to the artifact's public page", async () => {
   const response = await sandbox(async () => page("link")).serve(
     new Request(`${ORIGIN}/p/${TOKEN}`),
   );
   expect(response.status).toBe(302);
-  expect(response.headers.get("location")).toBe(`${APP}/w/acme/artifacts/${A}`);
+  expect(response.headers.get("location")).toBe(`${APP}/a/${encodeArtifactShortId(A)}`);
   expect(response.headers.get("referrer-policy")).toBe("no-referrer");
 });
 
