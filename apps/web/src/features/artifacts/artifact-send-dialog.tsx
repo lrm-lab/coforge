@@ -12,6 +12,7 @@ import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
 import { ArtifactCardFace } from "./artifact-card";
 import { ARTIFACTS_KEY, artifactCardQuery } from "./artifact-queries";
+import type { VisibilityChoice } from "./artifact-scope";
 import { artifactSendLayout } from "./artifact-send-layout";
 import { ARTIFACT_SHARE_NOTE_MAX_LENGTH } from "./artifact-share-input";
 import { setArtifactAccess, setArtifactLinkSharing, shareArtifact } from "./artifacts.functions";
@@ -46,7 +47,7 @@ export function ArtifactSendDialog({
   artifactId: string;
   title: string;
   canChange: boolean;
-  tier: "conversation" | "workspace";
+  tier: VisibilityChoice;
   linkAvailable: boolean;
   link: boolean;
   onClose: () => void;

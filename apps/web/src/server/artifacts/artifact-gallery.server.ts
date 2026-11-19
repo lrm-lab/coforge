@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { containsPattern, searchTerms } from "#src/lib/search-terms";
 import {
-  artifactTier,
+  artifactAccessTier,
   artifactViewer,
   type ArtifactViewer,
   artifactsDisabled,
@@ -174,12 +174,7 @@ export class ArtifactGallery {
       ...(input.scope?.kind === "workspace"
         ? [Prisma.sql`(a."access" IN ('workspace', 'link') OR a."homeKey" = 'workspace')`]
         : []),
-      ...(input.scope?.kind === "link"
-        ? [
-            Prisma.sql`EXISTS (SELECT 1 FROM "artifact_public_links" l
-              WHERE l."artifactId" = a."id" AND l."revokedAt" IS NULL)`,
-          ]
-        : []),
+      ...(input.scope?.kind === "link" ? [Prisma.sql`a."access" = 'link'`] : []),
       ...(input.authorAgentIds?.length
         ? [
             Prisma.sql`a."authorAgentId" IN (${Prisma.join(
@@ -225,14 +220,10 @@ export class ArtifactGallery {
 
   private async cards(userId: string, ids: readonly string[]) {
     if (ids.length === 0) return [];
-    const [rows, positions, links, counts, unseen] = await Promise.all([
+    const [rows, positions, counts, unseen] = await Promise.all([
       this.db.artifact.findMany({ where: { id: { in: [...ids] } }, select: CARD_SELECT }),
       this.db.artifactViewerPosition.findMany({
         where: { userId, artifactId: { in: [...ids] } },
-      }),
-      this.db.artifactPublicLink.findMany({
-        where: { artifactId: { in: [...ids] }, revokedAt: null },
-        select: { artifactId: true },
       }),
       this.db.artifactComment.groupBy({
         by: ["artifactId"],
@@ -243,21 +234,20 @@ export class ArtifactGallery {
     ]);
     const byId = new Map(rows.map((row) => [row.id, row]));
     const position = new Map(positions.map((row) => [row.artifactId, row]));
-    const linked = new Set(links.map((row) => row.artifactId));
     const total = new Map(counts.map((row) => [row.artifactId, row._count._all]));
     return ids.flatMap((id) => {
       const row = byId.get(id);
       if (!row) return [];
       const { authorAgentId, ...shown } = row;
       const place = position.get(id);
-      const tier = artifactTier(row);
+      const tier = artifactAccessTier(row);
       return [
         {
           ...shown,
-          homeKey: tier === "workspace" ? "workspace" : row.homeKey,
+          homeKey: tier === "conversation" ? row.homeKey : "workspace",
           access: tier,
           author: authorAgentId ? { agentId: authorAgentId } : null,
-          link: linked.has(id),
+          link: tier === "link",
           openedAt: place?.openedAt ?? null,
           commentCount: total.get(id) ?? 0,
           hasUpdates: place !== undefined && place.seenVersion < row.currentVersion,

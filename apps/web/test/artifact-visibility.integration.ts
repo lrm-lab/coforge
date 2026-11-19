@@ -442,7 +442,18 @@ test("an owner opens an artifact to anyone with the link; members still read it,
 
   expect(await change("link")).toMatchObject({ from: "conversation", to: "link" });
   expect((await db.artifact.findUniqueOrThrow({ where: { id: shared.id } })).access).toBe("link");
-  expect((await read(shared.id, { userId: people.bob })).artifact.access).toBe("workspace");
+  const linkRead = await read(shared.id, { userId: people.bob });
+  expect(linkRead.artifact.access).toBe("link");
+  expect(linkRead.artifact.homeKey).toBe("workspace");
+  const page = await artifacts.reads.listPage({
+    workspaceId,
+    reader: { userId: people.bob },
+    limit: 50,
+  });
+  expect(page.artifacts.find((row) => row.id === shared.id)).toMatchObject({
+    access: "link",
+    homeKey: "workspace",
+  });
   expect(await change("link")).toMatchObject({ from: "link", to: "link" });
   expect(await events()).toEqual([{ from: "conversation", to: "link", actorUserId: people.alice }]);
   await expect(change("link", people.bob)).rejects.toMatchObject({ code: "ACCESS_DENIED" });

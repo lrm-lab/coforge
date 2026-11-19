@@ -28,6 +28,8 @@ beforeAll(async () => {
   ids.gamma = await f.make("Gamma secret", undefined, { target: `#${f.privateChannel}` });
   ids.delta = await f.make("Delta report", undefined, { by: f.agents.other });
   await f.db.artifact.update({ where: { id: ids.delta }, data: { access: "workspace" } });
+  ids.link = await f.make("Link plan", undefined, { target: `#${f.privateChannel}` });
+  await f.db.artifact.update({ where: { id: ids.link }, data: { access: "link" } });
   await f.db.artifactPublicLink.create({
     data: { artifactId: ids.beta!, token: `tok-${crypto.randomUUID()}`, createdByUserId: f.alice },
   });
@@ -45,8 +47,9 @@ test("a person sees only the artifacts they may read", async () => {
     "Beta notes",
     "Delta report",
     "Gamma secret",
+    "Link plan",
   ]);
-  expect(await titles(f.bob)).toEqual(["Alpha plan", "Beta notes", "Delta report"]);
+  expect(await titles(f.bob)).toEqual(["Alpha plan", "Beta notes", "Delta report", "Link plan"]);
 });
 
 test("a title search needs every word, in any case", async () => {
@@ -58,8 +61,11 @@ test("the conversation filter has two pseudo-scopes", async () => {
   expect(
     await titles(f.alice, { scope: { kind: "conversation", conversationId: docsId } }),
   ).toEqual(["Alpha plan", "Beta notes", "Delta report"]);
-  expect(await titles(f.alice, { scope: { kind: "workspace" } })).toEqual(["Delta report"]);
-  expect(await titles(f.alice, { scope: { kind: "link" } })).toEqual(["Beta notes"]);
+  expect(await titles(f.alice, { scope: { kind: "workspace" } })).toEqual([
+    "Delta report",
+    "Link plan",
+  ]);
+  expect(await titles(f.alice, { scope: { kind: "link" } })).toEqual(["Link plan"]);
   await expect(
     page(f.bob, { scope: { kind: "conversation", conversationId: await privateId() } }),
   ).rejects.toMatchObject({ code: "NOT_FOUND" });
@@ -84,7 +90,7 @@ test("the cards carry visibility, version, author and counts", async () => {
   const beta = cards.find((card) => card.id === ids.beta)!;
   expect(beta).toMatchObject({
     access: "conversation",
-    link: true,
+    link: false,
     currentVersion: 1,
     author: { agentId: f.agents.writer },
     openedAt: null,
@@ -98,6 +104,11 @@ test("the cards carry visibility, version, author and counts", async () => {
     homeKey: "workspace",
     link: false,
   });
+  expect(cards.find((card) => card.id === ids.link)).toMatchObject({
+    access: "link",
+    homeKey: "workspace",
+    link: true,
+  });
 });
 
 test("recently opened puts what the person opened first, newest first, never-opened last", async () => {
@@ -107,10 +118,11 @@ test("recently opened puts what the person opened first, newest first, never-ope
   expect(opened.artifacts.map((card) => card.title)).toEqual([
     "Delta report",
     "Alpha plan",
+    "Link plan",
     "Beta notes",
   ]);
   expect(opened.artifacts[0]!.openedAt).toBeInstanceOf(Date);
-  expect(opened.artifacts[2]!.openedAt).toBeNull();
+  expect(opened.artifacts[3]!.openedAt).toBeNull();
 });
 
 test("opening an artifact answers with the roster that already lists the opener", async () => {
@@ -129,7 +141,7 @@ test("a page is stable and a cursor continues it, in both sorts", async () => {
     expect(first.artifacts).toHaveLength(2);
     expect(first.nextCursor).toBeDefined();
     const second = await page(f.bob, { sort, limit: 2, cursor: first.nextCursor });
-    expect(second.artifacts).toHaveLength(1);
+    expect(second.artifacts).toHaveLength(2);
     expect(second.nextCursor).toBeUndefined();
     const all = await page(f.bob, { sort, limit: 10 });
     expect([...first.artifacts, ...second.artifacts].map((card) => card.id)).toEqual(
@@ -147,6 +159,7 @@ test("related to me: my Agents' artifacts, those I commented on, follow or was m
     "Beta notes",
     "Delta report",
     "Gamma secret",
+    "Link plan",
   ]);
   expect(await titles(f.bob, { related: true })).toEqual([]);
   await f.personComments(ids.alpha!, f.bob, { body: "looks good" });
@@ -208,10 +221,11 @@ test("marks come only for the artifacts the person may read", async () => {
   const marks = await gallery.marks({
     workspaceId: f.workspaceId,
     userId: f.bob,
-    artifactIds: [ids.alpha!, ids.beta!, ids.gamma!],
+    artifactIds: [ids.alpha!, ids.beta!, ids.gamma!, ids.link!],
   });
-  expect(marks.map((mark) => mark.id).sort()).toEqual([ids.alpha!, ids.beta!].sort());
-  expect(marks.find((mark) => mark.id === ids.beta)).toMatchObject({ link: true });
+  expect(marks.map((mark) => mark.id).sort()).toEqual([ids.alpha!, ids.beta!, ids.link!].sort());
+  expect(marks.find((mark) => mark.id === ids.beta)).toMatchObject({ link: false });
+  expect(marks.find((mark) => mark.id === ids.link)).toMatchObject({ link: true });
 });
 
 test("marks cost the same queries for one artifact or many", async () => {
@@ -259,27 +273,36 @@ test("a gallery page costs a fixed number of queries however many artifacts the 
     for (let index = 0; index < 5; index++) await f.make(`Extra ${index}`);
     const after = [await queriesOf({}), await queriesOf({ related: true, query: "a" })];
     expect(after).toEqual(before);
-    expect(before).toEqual([7, 7]);
+    expect(before).toEqual([6, 6]);
   } finally {
     await countingDb.$disconnect();
   }
 });
 
-test("the link tier reads and lists like the workspace tier", async () => {
-  const id = await f.make("Link-tier note", undefined, { target: `#${f.privateChannel}` });
-  await f.db.$executeRaw`UPDATE "artifacts" SET "access" = 'link' WHERE "id" = ${id}::uuid`;
-  try {
-    expect(await titles(f.bob)).toContain("Link-tier note");
-    expect(await titles(f.alice, { scope: { kind: "workspace" } })).toEqual([
-      "Delta report",
-      "Link-tier note",
-    ]);
-    expect(artifactTier({ homeKey: `conversation:${crypto.randomUUID()}`, access: "link" })).toBe(
-      "workspace",
-    );
-  } finally {
-    await f.db.artifact.delete({ where: { id } });
-  }
+test("the link tier reads as link and lists like the workspace tier", async () => {
+  const read = await f.artifacts.reads.read({
+    workspaceId: f.workspaceId,
+    artifactId: ids.link!,
+    reader: { userId: f.bob },
+  });
+  expect(read.artifact).toMatchObject({ access: "link", homeKey: "workspace" });
+  expect(
+    (
+      await f.artifacts.reads.read({
+        workspaceId: f.workspaceId,
+        artifactId: ids.link!,
+        reader: { userId: f.alice },
+      })
+    ).artifact,
+  ).toMatchObject({ access: "link", homeKey: `conversation:${await privateId()}` });
+  expect(await titles(f.bob)).toContain("Link plan");
+  expect(await titles(f.alice, { scope: { kind: "workspace" } })).toEqual([
+    "Delta report",
+    "Link plan",
+  ]);
+  expect(artifactTier({ homeKey: `conversation:${crypto.randomUUID()}`, access: "link" })).toBe(
+    "workspace",
+  );
 });
 
 test("the roster counts the others who have seen the latest version, apart from those still behind", async () => {

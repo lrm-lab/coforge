@@ -35,7 +35,7 @@ export type ArtifactAccessRow = {
 };
 
 export type ArtifactHomeView = {
-  tier: ArtifactTier;
+  tier: ArtifactAccessTier;
   homeKey: string | null;
   homeKind: ArtifactHomeKind;
   narrowable: boolean;
@@ -124,14 +124,15 @@ export function artifactHomeView(
   home: ActorConversationHomeRead | undefined,
 ): ArtifactHomeView {
   if (artifactTier(artifact) === "workspace") {
+    const tier = artifactAccessTier(artifact);
     const named =
       home !== undefined &&
       homeStands(home) &&
       canReadConversationHome(home) &&
       artifactHomeConversationId(artifact.homeKey) !== undefined;
     return named
-      ? { tier: "workspace", homeKey: artifact.homeKey, homeKind: home.kind, narrowable: true }
-      : { tier: "workspace", homeKey: "workspace", homeKind: "workspace", narrowable: false };
+      ? { tier, homeKey: artifact.homeKey, homeKind: home.kind, narrowable: true }
+      : { tier, homeKey: "workspace", homeKind: "workspace", narrowable: false };
   }
   if (home === undefined)
     return { tier: "conversation", homeKey: null, homeKind: "workspace", narrowable: true };

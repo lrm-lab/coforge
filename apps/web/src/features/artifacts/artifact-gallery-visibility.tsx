@@ -6,7 +6,7 @@ import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { m } from "#src/paraglide/messages";
 import { useArtifactLinkSharing } from "./artifact-link-sharing";
 import { artifactCardQuery, artifactHomeConversation } from "./artifact-queries";
-import type { useScopeOf } from "./artifact-scope";
+import type { VisibilityChoice, useScopeOf } from "./artifact-scope";
 import { VisibilityMenu, useArtifactVisibility } from "./use-artifact-visibility";
 
 type CardScope = ReturnType<ReturnType<typeof useScopeOf>>;
@@ -17,7 +17,7 @@ export function GalleryCardVisibility({
   scope,
 }: {
   artifactId: string;
-  tier: "conversation" | "workspace";
+  tier: VisibilityChoice;
   scope: CardScope;
 }) {
   const [open, setOpen] = useState(false);
@@ -56,7 +56,7 @@ function VisibilityPopover({
   onIdle,
 }: {
   artifactId: string;
-  tier: "conversation" | "workspace";
+  tier: VisibilityChoice;
   homeName: string | undefined;
   open: boolean;
   onIdle: () => void;

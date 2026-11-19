@@ -17,6 +17,7 @@ import {
   artifactHomeView,
   artifactReadableFromHome,
   artifactTier,
+  artifactAccessTier,
   artifactsDisabled,
   artifactViewer,
   canManageArtifactSharingWithRole,
@@ -101,7 +102,7 @@ function card(
     entryFacts: entryFacts as ArtifactEntryFacts | null,
     homeKey,
     entryKind: artifactKindOfPath(row.entryPath),
-    access: artifactTier(row),
+    access: artifactAccessTier(row),
     canChange,
     author: authorAgentId ? { agentId: authorAgentId } : null,
   };

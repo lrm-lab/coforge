@@ -16,10 +16,10 @@ type Confirmation = { choice: VisibilityChoice; narrowing: boolean; linkOff: boo
 
 function confirmationFor(
   choice: VisibilityChoice,
-  tier: "conversation" | "workspace",
+  tier: VisibilityChoice,
   link: boolean,
 ): Confirmation | null {
-  const narrowing = choice === "conversation" && tier === "workspace";
+  const narrowing = choice === "conversation" && tier !== "conversation";
   const linkOff = choice !== "link" && link;
   if (choice === "link") return link ? null : { choice, narrowing: false, linkOff: false };
   return narrowing || linkOff ? { choice, narrowing, linkOff } : null;
@@ -36,7 +36,7 @@ export function useArtifactVisibility({
   narrowable,
 }: {
   artifactId: string;
-  tier: "conversation" | "workspace";
+  tier: VisibilityChoice;
   link: ArtifactLinkSharing;
   homeName: string | undefined;
   canChange: boolean;
