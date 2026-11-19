@@ -6,9 +6,12 @@
 import type {
   LifecycleFailure,
   RunningProcJobSummary,
+  RuntimeCliDowngrade,
   WorkspaceCloudConnectionReport,
+  WorkspaceCrashHistory,
   WorkspaceHealthState,
 } from "@lrm/coforge-daemon";
+import type { ProcessMemorySample } from "./process-memory";
 
 export type SupportedStatusPlatform = "darwin" | "linux" | "win32";
 
@@ -63,6 +66,7 @@ export type SupervisorStatus = {
   serviceDefinition?: ServiceDefinitionStatus;
   /** Recorded and loaded external systemd supervisor unit on Linux, with its OOMPolicy. */
   externalSupervisor?: ExternalSupervisorStatus;
+  memory?: ProcessMemorySample;
 };
 
 export type PendingRequest =
@@ -123,6 +127,7 @@ export type WorkspaceStatus = {
   versionSkew?: true;
   /** Present when `workspace-daemon-lock.sqlite` is held by an untracked or contending PID. */
   lockContention?: { holderPid: number | null };
+  memory?: ProcessMemorySample;
   /** Set while a start or restart of this Workspace is queued or running. */
   underWay?: true;
   /** The last operator command that failed after it had already answered; `at` is ISO. */
@@ -268,6 +273,9 @@ export interface StatusPorts {
     computerId?: string;
     serverHttpUrl?: string | null;
   }): Promise<WorkspaceCredentialState>;
+  sampleProcessMemory?(pid: number): Promise<ProcessMemorySample | undefined>;
+  readWorkspaceCrashHistory?(workspaceId: string): Promise<WorkspaceCrashHistory>;
+  readRuntimeCliDowngrades?(workspaceIds?: readonly string[]): Promise<RuntimeCliDowngrade[]>;
   /** Workspace id to slug, from the local Workspace registrations; empty when unreadable. */
   readWorkspaceSlugs(): Promise<ReadonlyMap<string, string>>;
 }

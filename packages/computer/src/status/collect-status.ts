@@ -101,6 +101,10 @@ async function collectSupervisor(
     collectServiceDefinition(ports),
     ports.readExternalSupervisor ? ports.readExternalSupervisor().catch(() => null) : null,
   ]);
+  const memory =
+    coordinator.pid !== null && ports.sampleProcessMemory
+      ? await ports.sampleProcessMemory(coordinator.pid).catch(() => undefined)
+      : undefined;
   const versionSkew =
     snapshot.reachable &&
     snapshot.version !== undefined &&
@@ -122,6 +126,7 @@ async function collectSupervisor(
       : { reachable: false, error: snapshot.error },
     ...(serviceDefinition ? { serviceDefinition } : {}),
     ...(externalSupervisor ? { externalSupervisor } : {}),
+    ...(memory ? { memory } : {}),
   };
 }
 
@@ -173,7 +178,7 @@ async function collectWorkspaces(
         const pid = snapshotPid ?? osJobPid;
         const pidSource =
           snapshotPid !== null ? "daemon-snapshot" : osJobPid !== null ? "os-job" : null;
-        const [health, handshake, workspaceLock] = await Promise.all([
+        const [health, handshake, workspaceLock, memory] = await Promise.all([
           ports.readWorkspaceHealth(binding.workspaceId),
           pid === null
             ? Promise.resolve(null)
@@ -191,6 +196,9 @@ async function collectWorkspaces(
           ports.readWorkspaceLock
             ? ports.readWorkspaceLock(binding.workspaceId).catch(() => null)
             : Promise.resolve(null),
+          pid !== null && ports.sampleProcessMemory
+            ? ports.sampleProcessMemory(pid).catch(() => undefined)
+            : Promise.resolve(undefined),
         ]);
         const running = pid !== null;
         const cloudConnection = handshake?.cloudConnection ?? null;
@@ -215,6 +223,7 @@ async function collectWorkspaces(
           ...(version ? { version } : {}),
           ...(versionSkew ? { versionSkew: true as const } : {}),
           ...(lockContended ? { lockContention: { holderPid: workspaceLock.holderPid } } : {}),
+          ...(memory ? { memory } : {}),
           ...(runtime?.underWay ? { underWay: true as const } : {}),
           ...(binding.lastFailure
             ? {

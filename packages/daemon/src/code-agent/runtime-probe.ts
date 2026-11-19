@@ -45,6 +45,7 @@ import {
   externalRuntimeDisplayName,
   versionGateFor,
 } from "./runtime-version-floors";
+import { recordRuntimeCliObservations } from "./runtime-version-tracker";
 
 const logger = getLogger(["coforge", "daemon", "runtime-inventory"]);
 
@@ -205,7 +206,7 @@ function unusableRuntime(
 /** A live probe that read a refused version must erase this provider's cached runtime. A later
  * miss would otherwise restore an older, still-supported entry for a different executable. */
 type DiscoveredExternalAgent =
-  | { runtime: RuntimeMetadata; cacheKey?: string }
+  | { runtime: RuntimeMetadata; executable?: string; cacheKey?: string }
   | { dropProvider: ExternalCodeAgentProvider; unusable: RuntimeMetadata };
 
 export async function discoverExternalCodeAgents(
@@ -245,9 +246,6 @@ export async function discoverExternalCodeAgents(
           const cacheKey = cache ? await fileStatCacheKey([executable]) : undefined;
           const cached = cacheKey ? cache?.[provider] : undefined;
           if (cacheKey && cached?.key === cacheKey && cached.runtime) {
-            // A cache entry written by an older daemon build must be re-validated against the
-            // current minimum before it is trusted; the executable itself has not changed, so a
-            // too-old cached version would only reproduce the same gate on a live re-probe.
             if (cachedBelowFloor(provider, name, cached.runtime))
               return {
                 runtime: unusableRuntime(provider, cached.runtime.version, "version_unsupported"),
@@ -258,7 +256,7 @@ export async function discoverExternalCodeAgents(
               executable_name: name,
               outcome: "ok",
             });
-            return { runtime: cached.runtime, cacheKey: undefined };
+            return { runtime: cached.runtime, executable, cacheKey: undefined };
           }
           const probed = await probeRuntimeVersion(
             provider,
@@ -268,16 +266,12 @@ export async function discoverExternalCodeAgents(
             environment,
             versionProbeTimeoutMs,
           );
-          if (probed.kind === "runtime") return { runtime: probed.runtime, cacheKey };
-          // The binary on disk was read and refused. Drop the cached runtime now; returning
-          // nothing would leave an older supported entry for the next probe miss to restore.
+          if (probed.kind === "runtime") return { runtime: probed.runtime, executable, cacheKey };
           if (probed.kind === "rejected")
             return {
               dropProvider: provider,
               unusable: unusableRuntime(provider, probed.version, "version_unsupported"),
             };
-          // A CLI that cannot be read stays in the inventory, unusable, with its own reason and
-          // the redacted stderr line: hiding it is what left the Computer page saying nothing.
           return {
             runtime: unusableRuntime(
               provider,
@@ -321,6 +315,7 @@ export async function discoverExternalCodeAgents(
     cacheKey: string;
     runtime: RuntimeMetadata;
   }[] = [];
+  const observations: { provider: string; version: string; executablePath: string }[] = [];
   for (const result of results) {
     if (!result) continue;
     if ("dropProvider" in result) {
@@ -329,6 +324,13 @@ export async function discoverExternalCodeAgents(
       continue;
     }
     runtimes.push(result.runtime);
+    if (result.executable && result.runtime.version && !result.runtime.unavailableCode) {
+      observations.push({
+        provider: result.runtime.provider,
+        version: result.runtime.version,
+        executablePath: result.executable,
+      });
+    }
     if (result.cacheKey)
       probed.push({
         provider: result.runtime.provider,
@@ -336,8 +338,6 @@ export async function discoverExternalCodeAgents(
         runtime: result.runtime,
       });
   }
-  // Persist only this discovery's own changes. Writing the whole snapshot it read earlier would
-  // restore a provider another discovery dropped in between.
   if (cacheDirectory && (dropped.size > 0 || probed.length > 0)) {
     await updateInventoryCache(cacheDirectory, (current) => {
       for (const provider of dropped) delete current[provider];
@@ -349,6 +349,20 @@ export async function discoverExternalCodeAgents(
             : { key: entry.cacheKey, runtime: entry.runtime };
       }
     });
+  }
+  if (cacheDirectory && observations.length > 0) {
+    const downgrades = await recordRuntimeCliObservations(cacheDirectory, observations);
+    for (const downgrade of downgrades) {
+      logger.warning("Code Agent CLI downgraded from previously observed version", {
+        event: "code_agent_runtime:cli_downgraded",
+        provider: downgrade.provider,
+        previous_version: downgrade.previousVersion,
+        current_version: downgrade.currentVersion,
+        previous_path: downgrade.previousPath,
+        current_path: downgrade.currentPath,
+        outcome: "warning",
+      });
+    }
   }
   return runtimes;
 }

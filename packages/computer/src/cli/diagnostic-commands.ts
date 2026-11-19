@@ -25,12 +25,20 @@ export function registerDiagnosticCommands(
     });
   program
     .command("doctor")
-    .description("Check the local Computer installation and configured Workspaces. Read-only.")
+    .description(
+      "Check the local Computer installation and configured Workspaces. Read-only unless --cleanup is passed.",
+    )
     .option("--json", "write one stable JSON result to stdout")
-    .action(async (options: { json?: boolean }) => {
+    .option("--cleanup", "remove stale locks, detached PID files, and aged temporary files")
+    .action(async (options: { json?: boolean; cleanup?: boolean }) => {
       const json = options.json ?? false;
       setJson(json);
-      setExitCode(await requireDoctor(dependencies).run({ json }));
+      setExitCode(
+        await requireDoctor(dependencies).run({
+          json,
+          ...(options.cleanup ? { cleanup: true } : {}),
+        }),
+      );
     });
 }
 

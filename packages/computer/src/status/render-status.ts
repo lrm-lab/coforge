@@ -1,6 +1,7 @@
 import { workspaceHealthRecoveryCommand, workspaceParkedMessage } from "@lrm/coforge-daemon";
 import { truncateCodePoints } from "@lrm/coforge-sdk/internal";
 import { terminalText } from "#src/terminal-output";
+import { formatMemorySummary } from "./process-memory";
 import type {
   ComputerStatusReport,
   PendingRequest,
@@ -86,6 +87,9 @@ function renderSupervisor(report: ComputerStatusReport): string[] {
     ...renderExternalSupervisor(supervisor),
     ...renderServiceDefinition(supervisor),
     `  PID:                   ${supervisor.pid ?? "-"}`,
+    ...(supervisor.memory
+      ? [`  Memory:                ${formatMemorySummary(supervisor.memory)}`]
+      : []),
     `  Socket:                ${terminalText(supervisor.socketPath)}`,
     `  Local RPC:             ${
       supervisor.rpc.reachable
@@ -158,6 +162,7 @@ function renderWorkspace(workspace: WorkspaceStatus, activeVersion: string | nul
   lines.push(
     `  ${terminalText(workspace.workspaceId)}  server=${workspace.serverHttpUrl ? terminalText(workspace.serverHttpUrl) : "-"}  enabled=${workspace.enabled ? "yes" : "no"}  running=${workspace.running ? "yes" : "no"}  pid=${pid}  cloud=${workspace.cloudConnection?.state ?? "-"}`,
   );
+  if (workspace.memory) lines.push(`    memory: ${formatMemorySummary(workspace.memory)}`);
   const cloudDetail = renderCloudConnection(workspace.cloudConnection);
   if (cloudDetail) lines.push(`    cloud: ${cloudDetail}`);
   if (workspace.versionSkew && workspace.version) {

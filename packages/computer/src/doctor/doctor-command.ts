@@ -1,11 +1,20 @@
+import type { RuntimeCliDowngrade, WorkspaceCrashHistory } from "@lrm/coforge-daemon";
 import { terminalText } from "#src/terminal-output";
 import { collectComputerStatus } from "#src/status/collect-status";
 import type {
   ComputerStatusReport,
+  StatusBinding,
   StatusPorts,
   WorkspaceCredentialState,
   WorkspaceStatus,
 } from "#src/status/types";
+import type { DoctorCleanupResult } from "./doctor-cleanup";
+import {
+  checkCrashHistory,
+  checkMemory,
+  checkRuntimeCliDowngrades,
+  nextDiagnosticDoctorCommand,
+} from "./doctor-diagnostics-checks";
 
 export type DoctorCheck = { name: string; ok: boolean; detail: string };
 
@@ -14,27 +23,82 @@ export type DoctorReport = {
   generatedAt: string;
   ok: boolean;
   checks: DoctorCheck[];
+  cleanup?: DoctorCleanupResult;
+};
+
+export type DoctorRunOptions = {
+  json: boolean;
+  cleanup?: boolean;
 };
 
 export interface DoctorCommand {
-  /** Returns the diagnostic exit code: zero when every check passes, one otherwise. */
-  run(options: { json: boolean }): Promise<number>;
+  run(options: DoctorRunOptions): Promise<number>;
 }
+
+export type DoctorReportOptions = {
+  credentialsByWorkspace?: ReadonlyMap<string, WorkspaceCredentialState>;
+  runtimeCliDowngrades?: readonly RuntimeCliDowngrade[];
+  crashHistoryByWorkspace?: ReadonlyMap<string, WorkspaceCrashHistory>;
+  cleanup?: DoctorCleanupResult;
+};
+
+export type DoctorCommandExtras = {
+  runCleanup?: (status: ComputerStatusReport) => Promise<DoctorCleanupResult>;
+};
 
 export function createDoctorCommand(
   io: { stdout: (line: string) => void },
   readStatus: (() => Promise<ComputerStatusReport>) | StatusPorts,
+  extras?: DoctorCommandExtras,
 ): DoctorCommand {
   const ports = typeof readStatus === "function" ? undefined : readStatus;
   const read =
     typeof readStatus === "function" ? readStatus : () => collectComputerStatus(readStatus);
   return {
     async run(options) {
-      const [status, credentialsByWorkspace] = await Promise.all([
-        read(),
-        ports?.probeWorkspaceCredential ? probeCredentials(ports) : Promise.resolve(undefined),
+      let cleanup: DoctorCleanupResult | undefined;
+      let initialStatus: ComputerStatusReport | undefined;
+      if (options.cleanup && extras?.runCleanup) {
+        initialStatus = await read();
+        cleanup = await extras.runCleanup(initialStatus);
+      }
+      const statusPromise =
+        initialStatus && cleanup && cleanup.removed.length === 0
+          ? Promise.resolve(initialStatus)
+          : read();
+      const needsBindings = Boolean(
+        ports?.probeWorkspaceCredential ||
+        ports?.readWorkspaceCrashHistory ||
+        ports?.readRuntimeCliDowngrades,
+      );
+      const [status, loadedBindings] = await Promise.all([
+        statusPromise,
+        ports && needsBindings
+          ? ports.loadBindings().catch(() => ({ ok: false as const, error: "load failed" }))
+          : Promise.resolve(undefined),
       ]);
-      const report = createDoctorReport(status, { credentialsByWorkspace });
+      const bindings = loadedBindings?.ok ? loadedBindings.bindings : [];
+      const enabledWorkspaceIds = bindings
+        .filter((binding) => binding.enabled)
+        .map((binding) => binding.workspaceId);
+      const [credentialsByWorkspace, runtimeCliDowngrades, crashHistoryByWorkspace] =
+        await Promise.all([
+          ports?.probeWorkspaceCredential && bindings.length > 0
+            ? probeCredentials(ports, bindings)
+            : Promise.resolve(undefined),
+          ports?.readRuntimeCliDowngrades
+            ? ports.readRuntimeCliDowngrades(enabledWorkspaceIds).catch(() => [])
+            : Promise.resolve(undefined),
+          ports?.readWorkspaceCrashHistory && enabledWorkspaceIds.length > 0
+            ? readCrashHistory(ports, enabledWorkspaceIds)
+            : Promise.resolve(undefined),
+        ]);
+      const report = createDoctorReport(status, {
+        credentialsByWorkspace,
+        runtimeCliDowngrades,
+        crashHistoryByWorkspace,
+        cleanup,
+      });
       if (options.json) {
         io.stdout(renderDoctorJson(report));
       } else {
@@ -47,12 +111,11 @@ export function createDoctorCommand(
 
 async function probeCredentials(
   ports: StatusPorts,
+  bindings: readonly StatusBinding[],
 ): Promise<ReadonlyMap<string, WorkspaceCredentialState>> {
   if (!ports.probeWorkspaceCredential) return new Map();
-  const loaded = await ports.loadBindings();
-  if (!loaded.ok) return new Map();
   const entries = await Promise.all(
-    loaded.bindings.map(
+    bindings.map(
       async (binding) =>
         [
           binding.workspaceId,
@@ -63,11 +126,30 @@ async function probeCredentials(
   return new Map(entries);
 }
 
+async function readCrashHistory(
+  ports: StatusPorts,
+  workspaceIds: readonly string[],
+): Promise<ReadonlyMap<string, WorkspaceCrashHistory>> {
+  if (!ports.readWorkspaceCrashHistory) return new Map();
+  const entries = await Promise.all(
+    workspaceIds.map(
+      async (workspaceId) =>
+        [
+          workspaceId,
+          await ports.readWorkspaceCrashHistory!(workspaceId).catch(() => ({
+            recentCrashes: [],
+          })),
+        ] as const,
+    ),
+  );
+  return new Map(entries);
+}
+
 export function createDoctorReport(
   status: ComputerStatusReport,
-  options?: { credentialsByWorkspace?: ReadonlyMap<string, WorkspaceCredentialState> },
+  options?: DoctorReportOptions,
 ): DoctorReport {
-  const checks = [
+  const checks: DoctorCheck[] = [
     checkInstall(status),
     checkSupervisor(status),
     checkLocks(status),
@@ -75,11 +157,18 @@ export function createDoctorReport(
     checkWorkspaces(status, options?.credentialsByWorkspace),
     checkLeftoverJobs(status),
   ];
+  const memoryCheck = checkMemory(status);
+  if (memoryCheck) checks.push(memoryCheck);
+  const downgradeCheck = checkRuntimeCliDowngrades(options?.runtimeCliDowngrades);
+  if (downgradeCheck) checks.push(downgradeCheck);
+  const crashCheck = checkCrashHistory(status, options?.crashHistoryByWorkspace);
+  if (crashCheck) checks.push(crashCheck);
   return {
     schemaVersion: 1,
     generatedAt: status.generatedAt,
     ok: checks.every((check) => check.ok),
     checks,
+    ...(options?.cleanup ? { cleanup: options.cleanup } : {}),
   };
 }
 
@@ -88,16 +177,30 @@ export function renderDoctorJson(report: DoctorReport): string {
 }
 
 export function renderDoctorHuman(report: DoctorReport): string[] {
-  return [
+  const lines = [
     "CoForge Computer doctor",
     ...report.checks.flatMap((check) => {
-      const lines = [`${check.ok ? "✓" : "✗"} ${check.name}: ${terminalText(check.detail)}`];
+      const checkLines = [`${check.ok ? "✓" : "✗"} ${check.name}: ${terminalText(check.detail)}`];
       const next = check.ok ? undefined : nextDoctorCommand(check.name, check.detail);
-      if (next) lines.push(`  Next: ${next}`);
-      return lines;
+      if (next) checkLines.push(`  Next: ${next}`);
+      return checkLines;
     }),
-    `Result: ${report.ok ? "healthy" : "action required"}`,
   ];
+  if (report.cleanup) {
+    lines.push(
+      `Cleanup: removed ${report.cleanup.removed.length} stale item${report.cleanup.removed.length === 1 ? "" : "s"}${
+        report.cleanup.skipped.length > 0 ? `, skipped ${report.cleanup.skipped.length}` : ""
+      }`,
+    );
+    for (const entry of report.cleanup.removed) {
+      lines.push(`  - removed (${entry.kind}): ${terminalText(entry.path)}`);
+    }
+    for (const skipped of report.cleanup.skipped) {
+      lines.push(`  - skipped: ${terminalText(skipped.path)} (${terminalText(skipped.reason)})`);
+    }
+  }
+  lines.push(`Result: ${report.ok ? "healthy" : "action required"}`);
+  return lines;
 }
 
 function checkInstall(status: ComputerStatusReport): DoctorCheck {
@@ -269,7 +372,7 @@ function nextDoctorCommand(name: string, detail: string): string | undefined {
     return "coforge-computer status";
   }
   if (name === "leftover-upgrade-jobs") return "coforge-computer restart --supervisor";
-  return undefined;
+  return nextDiagnosticDoctorCommand(name, detail);
 }
 
 function checkLoginShellPath(status: ComputerStatusReport): DoctorCheck {

@@ -11,6 +11,7 @@ import {
   listMachineRunningProcJobs,
   LocalDaemonLauncher,
   readLoginShellPath,
+  readRuntimeCliDowngrades,
   resolveDaemonExecutablePath,
   workspaceHealthJournalPath,
   workspaceSocketPath,
@@ -19,6 +20,7 @@ import {
   detachedPid,
   systemdPresent,
 } from "@lrm/coforge-daemon";
+import { sampleProcessMemory } from "./process-memory";
 import { readSupervisorOomPolicy } from "@lrm/coforge-daemon/src/daemon-host/external-supervisor";
 import { installerJournalPath } from "@lrm/coforge-daemon/src/platform/installer-journal";
 import { readWorkspaceDaemonLockHolder } from "@lrm/coforge-daemon/src/supervisor/workspace-daemon-lock";
@@ -281,10 +283,48 @@ export function createStatusPorts(input: CreateStatusPortsInput): StatusPorts {
         const directory = workspaceStateDirectory(input.stateDirectory, workspaceId);
         return await new WorkspaceHealthJournal(workspaceHealthJournalPath(directory)).state();
       } catch {
-        // A missing or unreadable health journal is not evidence of a problem - it reads as a
-        // fresh, healthy Workspace, the same way `WorkspaceHealthJournal` itself treats it.
         return { status: "ok" };
       }
+    },
+    sampleProcessMemory: (pid) => sampleProcessMemory(pid, { platform: input.platform }),
+    async readWorkspaceCrashHistory(workspaceId) {
+      try {
+        const directory = workspaceStateDirectory(input.stateDirectory, workspaceId);
+        return await new WorkspaceHealthJournal(
+          workspaceHealthJournalPath(directory),
+        ).recentCrashes();
+      } catch {
+        return { recentCrashes: [] };
+      }
+    },
+    async readRuntimeCliDowngrades(workspaceIds) {
+      const directories = new Set<string>([input.stateDirectory]);
+      if (workspaceIds !== undefined) {
+        for (const workspaceId of workspaceIds) {
+          directories.add(workspaceStateDirectory(input.stateDirectory, workspaceId));
+        }
+      } else {
+        const loaded = await new FileBindingStore(input.stateDirectory, input.serverUrl)
+          .load()
+          .catch(() => []);
+        for (const binding of loaded) {
+          if (!binding.enabled) continue;
+          directories.add(workspaceStateDirectory(input.stateDirectory, binding.workspaceId));
+        }
+      }
+      const results = await Promise.all(
+        Array.from(directories, (dir) => readRuntimeCliDowngrades(dir).catch(() => [])),
+      );
+      const byProvider = new Map<string, (typeof results)[number][number]>();
+      for (const list of results) {
+        for (const item of list) {
+          const existing = byProvider.get(item.provider);
+          if (!existing || item.detectedAt > existing.detectedAt) {
+            byProvider.set(item.provider, item);
+          }
+        }
+      }
+      return Array.from(byProvider.values()).sort((a, b) => a.provider.localeCompare(b.provider));
     },
   };
 }

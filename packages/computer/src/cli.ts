@@ -25,6 +25,7 @@ import { COFORGE_COMPUTER_VERSION as VERSION } from "./version";
 import { createStatusPorts } from "#src/status/create-status-ports";
 import { createStatusCommand, type StatusCommand } from "#src/status/status-command";
 import { createDoctorCommand, type DoctorCommand } from "#src/doctor/doctor-command";
+import { runDoctorCleanup } from "#src/doctor/doctor-cleanup";
 import { registerDiagnosticCommands } from "#src/cli/diagnostic-commands";
 import { registerLifecycleCommands } from "#src/cli/lifecycle-commands";
 import {
@@ -424,6 +425,17 @@ export async function runComputer(options: { callerIsAgentHosted?: boolean } = {
             releaseFeedUrl: COFORGE_RELEASE_FEED_URL,
             serverUrl: COFORGE_SERVER_URL,
           }),
+          {
+            runCleanup: (status) =>
+              runDoctorCleanup({
+                stateDirectory,
+                coordinatorRunning:
+                  status.supervisor.loaded ||
+                  status.supervisor.rpc.reachable ||
+                  Boolean(status.supervisor.detached),
+                machineMutationLock: status.locks.machineMutationLock,
+              }),
+          },
         ),
         foreground: {
           run: async () => {

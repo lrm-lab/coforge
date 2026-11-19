@@ -93,10 +93,13 @@ machine still exits 0; the one exception is an unreadable or corrupt
 
 Use `coforge-computer doctor` (or `doctor --json`) for a concise health check
 of the active install, supervisor RPC, machine locks, login-shell PATH import,
-enabled Workspaces, and leftover upgrade jobs. A machine with no Workspace
-binding is reported as requiring setup. Failed checks include the next local
-command to run. It is read-only and exits 1 when any diagnostic check fails;
-`--json` emits one stable report object.
+enabled Workspaces, leftover upgrade jobs, process memory usage, accidental
+Code Agent CLI downgrades, and recent unexpected exit history. A machine with
+no Workspace binding is reported as requiring setup. Failed checks include the
+next local command to run. It is read-only by default and exits 1 when any
+diagnostic check fails; `--json` emits one stable report object, and
+`--cleanup` safely removes stale supervisor locks, stale `detached.pid` files,
+and aged leftover temporary files before reporting.
 
 The executable runs on Bun and uses [Commander.js](https://github.com/tj/commander.js)
 for commands, arguments, validation, generated help, suggestions, and version

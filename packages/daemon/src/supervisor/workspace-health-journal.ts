@@ -23,6 +23,13 @@ export type WorkspaceHealthState =
   | { status: "degraded"; reason: string; crashCount: number; since: string }
   | { status: "parked"; reason: DaemonConnectRejectionReason; since: string };
 
+export type WorkspaceCrashHistory = {
+  recentCrashes: string[];
+  degradedAt?: string;
+  degradedCrashCount?: number;
+  degradedReason?: string;
+};
+
 type PersistedWorkspaceHealth = {
   schemaVersion: 1;
   /** True from `recordStart()` until the same run calls `recordGracefulStop()`. A later run that
@@ -234,6 +241,30 @@ export class WorkspaceHealthJournal {
       };
     }
     return { status: "ok" };
+  }
+
+  async recentCrashes(): Promise<WorkspaceCrashHistory> {
+    const record = await this.#read();
+    if (record.parked) return { recentCrashes: [] };
+    const pruned = pruneWindow(record.crashes, this.now());
+    const recentCrashes = [...pruned].sort((a, b) => a - b).map((at) => new Date(at).toISOString());
+    if (record.terminal) {
+      return {
+        recentCrashes,
+        degradedAt: new Date(record.terminal.at).toISOString(),
+        degradedCrashCount: pruned.length,
+        degradedReason: record.terminal.reason,
+      };
+    }
+    if (record.degraded) {
+      return {
+        recentCrashes,
+        degradedAt: new Date(record.degraded.at).toISOString(),
+        degradedCrashCount: record.degraded.crashCount,
+        degradedReason: CRASH_LOOP_REASON,
+      };
+    }
+    return { recentCrashes };
   }
 
   async #read(): Promise<PersistedWorkspaceHealth> {
