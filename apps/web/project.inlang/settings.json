@@ -49,7 +49,6 @@
       "./messages/{locale}/computer-refusal.json",
       "./messages/{locale}/computer.json",
       "./messages/{locale}/computer-desktop.json",
-      "./messages/{locale}/computer-file-upload.json",
       "./messages/{locale}/workspace.json",
       "./messages/{locale}/landing.json",
       "./messages/{locale}/cloud-agents.json",

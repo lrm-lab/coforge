@@ -113,7 +113,6 @@ import { Route as ApiAppInstallationsInstallationIdWorkspaceRouteImport } from '
 import { Route as ApiComputerAttachPollRouteImport } from './routes/api/computer/attach/poll'
 import { Route as ApiComputerAttachStartRouteImport } from './routes/api/computer/attach/start'
 import { Route as ApiComputersComputerIdCreatorAvatarRouteImport } from './routes/api/computers/$computerId/creator-avatar'
-import { Route as ApiComputersComputerIdFileUploadsRouteImport } from './routes/api/computers/$computerId/file-uploads'
 import { Route as ApiE2eWorkspacesSlugRouteImport } from './routes/api/e2e/workspaces.$slug'
 import { Route as ApiHostsJobsClaimRouteImport } from './routes/api/hosts/jobs/claim'
 import { Route as ApiIntegrationsGithubCallbackRouteImport } from './routes/api/integrations/github/callback'
@@ -754,12 +753,6 @@ const ApiComputersComputerIdCreatorAvatarRoute =
   ApiComputersComputerIdCreatorAvatarRouteImport.update({
     id: '/api/computers/$computerId/creator-avatar',
     path: '/api/computers/$computerId/creator-avatar',
-    getParentRoute: () => rootRouteImport,
-  } as any)
-const ApiComputersComputerIdFileUploadsRoute =
-  ApiComputersComputerIdFileUploadsRouteImport.update({
-    id: '/api/computers/$computerId/file-uploads',
-    path: '/api/computers/$computerId/file-uploads',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiE2eWorkspacesSlugRoute = ApiE2eWorkspacesSlugRouteImport.update({
@@ -1427,7 +1420,6 @@ export interface FileRoutesByFullPath {
   '/api/computer/attach/poll': typeof ApiComputerAttachPollRoute
   '/api/computer/attach/start': typeof ApiComputerAttachStartRoute
   '/api/computers/$computerId/creator-avatar': typeof ApiComputersComputerIdCreatorAvatarRoute
-  '/api/computers/$computerId/file-uploads': typeof ApiComputersComputerIdFileUploadsRoute
   '/api/e2e/workspaces/$slug': typeof ApiE2eWorkspacesSlugRoute
   '/api/hosts/jobs/claim': typeof ApiHostsJobsClaimRoute
   '/api/integrations/github/callback': typeof ApiIntegrationsGithubCallbackRoute
@@ -1626,7 +1618,6 @@ export interface FileRoutesByTo {
   '/api/computer/attach/poll': typeof ApiComputerAttachPollRoute
   '/api/computer/attach/start': typeof ApiComputerAttachStartRoute
   '/api/computers/$computerId/creator-avatar': typeof ApiComputersComputerIdCreatorAvatarRoute
-  '/api/computers/$computerId/file-uploads': typeof ApiComputersComputerIdFileUploadsRoute
   '/api/e2e/workspaces/$slug': typeof ApiE2eWorkspacesSlugRoute
   '/api/hosts/jobs/claim': typeof ApiHostsJobsClaimRoute
   '/api/integrations/github/callback': typeof ApiIntegrationsGithubCallbackRoute
@@ -1828,7 +1819,6 @@ export interface FileRoutesById {
   '/api/computer/attach/poll': typeof ApiComputerAttachPollRoute
   '/api/computer/attach/start': typeof ApiComputerAttachStartRoute
   '/api/computers/$computerId/creator-avatar': typeof ApiComputersComputerIdCreatorAvatarRoute
-  '/api/computers/$computerId/file-uploads': typeof ApiComputersComputerIdFileUploadsRoute
   '/api/e2e/workspaces/$slug': typeof ApiE2eWorkspacesSlugRoute
   '/api/hosts/jobs/claim': typeof ApiHostsJobsClaimRoute
   '/api/integrations/github/callback': typeof ApiIntegrationsGithubCallbackRoute
@@ -2030,7 +2020,6 @@ export interface FileRouteTypes {
     | '/api/computer/attach/poll'
     | '/api/computer/attach/start'
     | '/api/computers/$computerId/creator-avatar'
-    | '/api/computers/$computerId/file-uploads'
     | '/api/e2e/workspaces/$slug'
     | '/api/hosts/jobs/claim'
     | '/api/integrations/github/callback'
@@ -2229,7 +2218,6 @@ export interface FileRouteTypes {
     | '/api/computer/attach/poll'
     | '/api/computer/attach/start'
     | '/api/computers/$computerId/creator-avatar'
-    | '/api/computers/$computerId/file-uploads'
     | '/api/e2e/workspaces/$slug'
     | '/api/hosts/jobs/claim'
     | '/api/integrations/github/callback'
@@ -2430,7 +2418,6 @@ export interface FileRouteTypes {
     | '/api/computer/attach/poll'
     | '/api/computer/attach/start'
     | '/api/computers/$computerId/creator-avatar'
-    | '/api/computers/$computerId/file-uploads'
     | '/api/e2e/workspaces/$slug'
     | '/api/hosts/jobs/claim'
     | '/api/integrations/github/callback'
@@ -2614,7 +2601,6 @@ export interface RootRouteChildren {
   ApiAppInstallationsInstallationIdSetupRoute: typeof ApiAppInstallationsInstallationIdSetupRoute
   ApiAppInstallationsInstallationIdWorkspaceRoute: typeof ApiAppInstallationsInstallationIdWorkspaceRoute
   ApiComputersComputerIdCreatorAvatarRoute: typeof ApiComputersComputerIdCreatorAvatarRoute
-  ApiComputersComputerIdFileUploadsRoute: typeof ApiComputersComputerIdFileUploadsRoute
   ApiE2eWorkspacesSlugRoute: typeof ApiE2eWorkspacesSlugRoute
   ApiHostsJobsClaimRoute: typeof ApiHostsJobsClaimRoute
   ApiIntegrationsGithubCallbackRoute: typeof ApiIntegrationsGithubCallbackRoute
@@ -3409,13 +3395,6 @@ declare module '@tanstack/react-router' {
       path: '/api/computers/$computerId/creator-avatar'
       fullPath: '/api/computers/$computerId/creator-avatar'
       preLoaderRoute: typeof ApiComputersComputerIdCreatorAvatarRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/computers/$computerId/file-uploads': {
-      id: '/api/computers/$computerId/file-uploads'
-      path: '/api/computers/$computerId/file-uploads'
-      fullPath: '/api/computers/$computerId/file-uploads'
-      preLoaderRoute: typeof ApiComputersComputerIdFileUploadsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/e2e/workspaces/$slug': {
@@ -4434,8 +4413,6 @@ const rootRouteChildren: RootRouteChildren = {
     ApiAppInstallationsInstallationIdWorkspaceRoute,
   ApiComputersComputerIdCreatorAvatarRoute:
     ApiComputersComputerIdCreatorAvatarRoute,
-  ApiComputersComputerIdFileUploadsRoute:
-    ApiComputersComputerIdFileUploadsRoute,
   ApiE2eWorkspacesSlugRoute: ApiE2eWorkspacesSlugRoute,
   ApiHostsJobsClaimRoute: ApiHostsJobsClaimRoute,
   ApiIntegrationsGithubCallbackRoute: ApiIntegrationsGithubCallbackRoute,

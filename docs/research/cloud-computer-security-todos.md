@@ -55,13 +55,9 @@
   同名窗口复用 vs 同源 tabnabbing；若桌面统一走站点源，再定是否可 `noopener` 或换复用方式。
   相关：`cloud-desktop-url.ts`；`docs/computer/container-host.md`。
 
-- [ ] **上传失败/关机后的对象残留清扫**（已知运维项）
-  相关：`computer-file-upload.server.ts`；`computers/AGENTS.md`。
-
 ## 已确认不必当作漏洞改的（记录以免重复开单）
 
 - 默认云机对非 owner 的 runtime 管理（sign-in / usage / reset credit）已有隐藏 + `canManage` 测试覆盖。
-- 文件上传：owner 门禁、basename 防穿越、服务端固定 object key。
 - Agent 启动剥离 `COFORGE_DAEMON_API_KEY`；凭证文件 0600；claim report 后 DB 侧清 job key。
 - Caddy 路径下的桌面：会话 + 云机 owner + UUID 校验 + VNC token 不进浏览器 URL（问题在「产品默认不走这条路」）。
 

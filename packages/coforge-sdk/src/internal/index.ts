@@ -454,7 +454,6 @@ export * from "./agent-message-delivery";
 export * from "./agent-skills";
 export * from "./agent-workspace-files";
 export * from "./agent-workspace-scan";
-export * from "./computer-file-upload";
 export * from "./agent-control";
 export * from "./agent-migration";
 export * from "./reminder";

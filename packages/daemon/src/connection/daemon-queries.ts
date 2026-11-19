@@ -21,9 +21,6 @@ import {
   encodeAgentContextViewResult,
   isAgentContextViewRequest,
   AGENT_CONTEXT_VIEW_RESULT_METHOD,
-  decodeComputerFilePullRequest,
-  encodeComputerFilePullResult,
-  COMPUTER_FILE_PULL_RESULT_METHOD,
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import {
@@ -92,7 +89,6 @@ export class DaemonQueries {
   readonly scan;
   readonly deletion;
   readonly agentContextView;
-  readonly computerFilePull;
   readonly piChat;
   constructor(rpc: Rpc) {
     this.memory = new DaemonQuery(
@@ -145,12 +141,6 @@ export class DaemonQueries {
         });
       },
     );
-    this.computerFilePull = new DaemonQuery(
-      decodeComputerFilePullRequest,
-      encodeComputerFilePullResult,
-      COMPUTER_FILE_PULL_RESULT_METHOD,
-      rpc,
-    );
     this.piChat = new DaemonQuery(
       decodePiChatRequest,
       encodePiChatFrame,
@@ -168,7 +158,6 @@ export class DaemonQueries {
       this.file,
       this.deletion,
       this.agentContextView,
-      this.computerFilePull,
     ].some((query) => query.receive(bytes, scope));
   }
 }
