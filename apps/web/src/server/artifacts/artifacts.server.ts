@@ -326,6 +326,10 @@ export class Artifacts {
               where: { id: locked.id },
               data: { title: settings.result.title },
             });
+            await tx.artifactVersion.updateMany({
+              where: { artifactId: locked.id, number: current },
+              data: { title: settings.result.title },
+            });
             return { status: "nothing", titleChanged: { from: currentSettings.title } } as const;
           }
           if (!filesChanged && !settingsChanged && !input.label)

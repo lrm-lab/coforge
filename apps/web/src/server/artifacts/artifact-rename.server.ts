@@ -18,7 +18,7 @@ export class ArtifactRenames {
 
   async rename(input: { workspaceId: string; artifactId: string; userId: string; title: string }) {
     const title = input.title.trim();
-    if (!title || title.length > ARTIFACT_TITLE_MAX)
+    if (!title || [...title].length > ARTIFACT_TITLE_MAX)
       throw new AppError("INVALID_INPUT", { errorId: "artifact-title" });
     const read = await this.reads.artifact(input.workspaceId, input.artifactId, {
       userId: input.userId,

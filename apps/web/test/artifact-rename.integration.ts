@@ -59,6 +59,47 @@ test("an empty, an over-long or an unchanged title changes nothing", async () =>
   expect((await stored(artifact)).title).toBe("Steady");
 });
 
+test("a rename counts Unicode characters the same way creation does", async () => {
+  const artifact = await f.make("Emoji limit");
+  const atLimit = "😀".repeat(300);
+  expect(await rename(artifact, f.alice, atLimit)).toMatchObject({ title: atLimit, changed: true });
+  await expect(rename(artifact, f.alice, "😀".repeat(301))).rejects.toMatchObject({
+    code: "INVALID_INPUT",
+    errorId: "artifact-title",
+  });
+});
+
+test("an Agent title-only push updates the current version title too and later pushes do not re-announce a rename", async () => {
+  const artifact = await f.make("Before agent rename");
+  await f.post(f.agents.reader, { operation: "follow", artifact });
+  const renamed = await f.post(f.agents.other, {
+    operation: "push",
+    artifact,
+    baseVersion: 1,
+    idempotencyKey: f.key(),
+    title: "After agent rename",
+  });
+  expect(renamed.status).toBe(200);
+  expect(renamed.body).toMatchObject({
+    status: "nothing",
+    titleChanged: { from: "Before agent rename" },
+  });
+  const afterRename = await stored(artifact);
+  expect(afterRename).toMatchObject({ title: "After agent rename", currentVersion: 1 });
+  expect(afterRename.versions).toEqual([{ number: 1, title: "After agent rename" }]);
+
+  const before = (await f.noticesOf(f.agents.reader)).length;
+  const pushed = await f.pushText(artifact, f.agents.writer, "changed\n");
+  expect(pushed.status).toBe(200);
+  const afterPush = await stored(artifact);
+  expect(afterPush.versions.map((v) => v.title)).toEqual([
+    "After agent rename",
+    "After agent rename",
+  ]);
+  const notices = (await f.noticesOf(f.agents.reader)).slice(before);
+  expect(notices.every((notice) => !notice.body.includes("Old title"))).toBe(true);
+});
+
 test("someone who cannot read the artifact cannot rename it", async () => {
   const artifact = await f.make("Private", undefined, { target: `#${f.privateChannel}` });
   await expect(rename(artifact, f.bob, "Mine now")).rejects.toMatchObject({ code: "NOT_FOUND" });
