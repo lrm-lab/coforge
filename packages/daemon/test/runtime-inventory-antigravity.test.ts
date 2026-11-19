@@ -12,7 +12,12 @@ import {
   loadCachedCodeAgentCatalogs,
 } from "#src/code-agent/runtime-inventory";
 import { discoverExternalCodeAgents } from "#src/code-agent/runtime-probe";
-import type { ExternalCodeAgentProbe } from "#src/code-agent/runtime-executable";
+import {
+  externalCodeAgent,
+  resolveExternalCodeAgentExecutable,
+  type ExternalCodeAgentProbe,
+} from "#src/code-agent/runtime-executable";
+import { cachedBelowFloor } from "#src/code-agent/runtime-version-floors";
 import {
   ANTIGRAVITY_DISCOVERY_BUDGET_MS,
   CATALOG_DISCOVERY_BUDGET_MS,
@@ -102,6 +107,57 @@ describe("Antigravity CLI version gate", () => {
     await expect(discoverExternalCodeAgents(agyProbe("unknown\n"))).resolves.toEqual([
       { provider: "antigravity", version: "unknown", displayName: "Antigravity CLI" },
     ]);
+  });
+
+  test("evicts a cached Antigravity runtime below the ACP floor", () => {
+    expect(
+      cachedBelowFloor("antigravity", "agy", {
+        provider: "antigravity",
+        version: "1.5.7",
+        displayName: "Antigravity CLI",
+      }),
+    ).toBe(true);
+    expect(
+      cachedBelowFloor("antigravity", "agy", {
+        provider: "antigravity",
+        version: "1.5.8",
+        displayName: "Antigravity CLI",
+      }),
+    ).toBe(false);
+  });
+
+  test("discovers agy from ~/.local/bin on POSIX and %LOCALAPPDATA%/agy/bin on Windows when absent from PATH", async () => {
+    const posixPath = "/home/tester/.local/bin/agy";
+    const posixProbe: ExternalCodeAgentProbe = {
+      which: () => undefined,
+      exists: (candidate) => candidate === posixPath,
+      spawn: () => ({ stdout: new Blob(["1.5.10\n"]).stream(), exited: Promise.resolve(0) }),
+    };
+    await expect(
+      resolveExternalCodeAgentExecutable(
+        externalCodeAgent.antigravity,
+        posixProbe,
+        "",
+        { HOME: "/home/tester" },
+        "linux",
+      ),
+    ).resolves.toBe(posixPath);
+
+    const winPath = join("C:\\Users\\tester\\AppData\\Local", "agy", "bin", "agy.exe");
+    const winProbe: ExternalCodeAgentProbe = {
+      which: () => undefined,
+      exists: (candidate) => candidate === winPath,
+      spawn: () => ({ stdout: new Blob(["1.5.10\n"]).stream(), exited: Promise.resolve(0) }),
+    };
+    await expect(
+      resolveExternalCodeAgentExecutable(
+        externalCodeAgent.antigravity,
+        winProbe,
+        "",
+        { LOCALAPPDATA: "C:\\Users\\tester\\AppData\\Local" },
+        "win32",
+      ),
+    ).resolves.toBe(winPath);
   });
 });
 

@@ -83,6 +83,18 @@ function grokInstalledExecutableCandidates(
   ];
 }
 
+function antigravityInstalledExecutableCandidates(
+  environment: Readonly<Record<string, string | undefined>>,
+  platform: NodeJS.Platform,
+): string[] {
+  if (platform === "win32") {
+    const localAppData = environment.LOCALAPPDATA;
+    return localAppData ? [join(localAppData, "agy", "bin", "agy.exe")] : [];
+  }
+  const home = homeDirectory(environment);
+  return home ? [join(home, ".local", "bin", "agy")] : [];
+}
+
 /** DeepSeek Harness: advertised like any external CLI once it is on PATH. Its key lives in the
  * user's own `~/.dsh`, so the Computer reports no sign-in state for it, as for OpenCode; the
  * version is restricted to the verified 0.2.1 preview line by the inventory probe
@@ -146,7 +158,7 @@ export const externalCodeAgents = [
   {
     provider: RUNTIME_PROVIDER.ANTIGRAVITY,
     executable: "agy",
-    installedExecutableCandidates: noInstalledExecutableCandidates,
+    installedExecutableCandidates: antigravityInstalledExecutableCandidates,
   },
   commandCodeAgent,
   dshCodeAgent,
