@@ -24,6 +24,7 @@ const found: PublicPage = {
   sizeBytes: 10,
   access: "link",
   workspaceSlug: "acme",
+  version: 3,
 };
 
 const ABSENT: LinkLookup = { shared: false, page: null };

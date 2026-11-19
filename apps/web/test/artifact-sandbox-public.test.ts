@@ -28,6 +28,7 @@ type Lookup = {
   sizeBytes: number;
   access: string;
   workspaceSlug: string;
+  version: number;
 };
 
 function publicSandbox(
@@ -62,6 +63,7 @@ const page = (overrides: Partial<Lookup> = {}): Lookup => ({
   sizeBytes: 10,
   access: "conversation",
   workspaceSlug: "acme",
+  version: 3,
   ...overrides,
 });
 

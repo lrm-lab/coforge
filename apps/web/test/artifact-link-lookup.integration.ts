@@ -45,5 +45,6 @@ test("a revoked public token finds nothing even when its artifact is link-tier a
   expect(await publicPageLookup(f.db, async () => true)(token)).toMatchObject({
     access: "link",
     workspaceSlug: expect.any(String),
+    version: expect.any(Number),
   });
 });

@@ -18,6 +18,7 @@ const SHARED: LinkLookup = {
     sizeBytes: 10,
     access: "link",
     workspaceSlug: "acme",
+    version: 3,
   },
 };
 const ABSENT: LinkLookup = { shared: false, page: null };
@@ -64,6 +65,7 @@ test("a shared artifact opens for anyone: its title, kind and its own origin's a
     title: "Plan",
     kind: "html",
     url: `https://a-${A}.sandbox.example/l`,
+    version: 3,
   });
 });
 

@@ -15,6 +15,7 @@ export type PublicPage = {
   sizeBytes: number;
   access: string;
   workspaceSlug: string;
+  version: number;
 };
 
 type PageArtifact = {
@@ -109,5 +110,6 @@ async function publicPageOf(
     sizeBytes: file.sizeBytes,
     access: artifact.access,
     workspaceSlug: artifact.workspace.slug,
+    version: artifact.currentVersion,
   };
 }

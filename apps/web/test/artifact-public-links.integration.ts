@@ -243,6 +243,7 @@ test("a public link shows the current version's entry and any one file of it", a
     sizeBytes: 1,
     access: "conversation",
     workspaceSlug: `apl-${handle}`,
+    version: 2,
   });
   expect(await lookup(token, "site.css")).toMatchObject({ sha256: "css", entryPath: "home.html" });
   expect(await lookup(token, "img/a.png")).toMatchObject({ sha256: "png" });

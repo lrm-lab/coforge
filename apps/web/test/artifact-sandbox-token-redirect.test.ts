@@ -19,6 +19,7 @@ const page = (access: string): PublicPage => ({
   sizeBytes: 10,
   access,
   workspaceSlug: "acme",
+  version: 3,
 });
 
 const sandbox = (lookup: () => Promise<PublicPage | null>, appOrigin: string | null = APP) =>
