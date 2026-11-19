@@ -6,7 +6,9 @@ import { artifactRateLimitedResponse } from "./artifact-rate-limited-response.se
 
 const WINDOW_SECONDS = 60;
 
-const WRITE_OPERATIONS: ReadonlySet<AgentArtifactRequest["operation"]> = new Set([
+export type ArtifactWriteOperation = AgentArtifactRequest["operation"] | "upload";
+
+const WRITE_OPERATIONS: ReadonlySet<ArtifactWriteOperation> = new Set([
   "push",
   "comment",
   "review",
@@ -15,6 +17,7 @@ const WRITE_OPERATIONS: ReadonlySet<AgentArtifactRequest["operation"]> = new Set
   "move",
   "delete",
   "save",
+  "upload",
 ]);
 
 export class ArtifactRateLimited extends Error {
@@ -41,7 +44,7 @@ export class ArtifactRateLimited extends Error {
 export async function admitArtifactWrite(
   limit: AppRateLimit | undefined,
   agentId: string,
-  operation: AgentArtifactRequest["operation"],
+  operation: ArtifactWriteOperation,
 ): Promise<void> {
   if (!limit || !WRITE_OPERATIONS.has(operation)) return;
   const decision = await limit.admit(agentId);

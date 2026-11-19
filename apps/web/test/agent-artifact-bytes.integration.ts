@@ -209,6 +209,68 @@ test("an upload is refused for a bad sha256, a missing or oversized length, and 
   expect(await db.artifactBlob.count({ where: { workspaceId, sha256: sha } })).toBe(0);
 });
 
+test("uploads are rate limited per Agent without reading the body, and downloads are not", async () => {
+  const bytes = text("rate limited upload");
+  const sha = sha256(bytes);
+  let left = 1;
+  const writeLimit = {
+    admit: async () =>
+      left-- > 0 ? { allowed: true as const } : { allowed: false as const, retryAfterSeconds: 23 },
+  };
+  const first = await handleAgentArtifactUpload(
+    new Request(`${BASE}/uploads/${sha}`, {
+      method: "PUT",
+      headers: { "content-length": String(bytes.length) },
+      body: bytes,
+    }),
+    sha,
+    principal(),
+    { ...services(), writeLimit },
+  );
+  expect(first.status).toBe(204);
+
+  let pulled = false;
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull() {
+        pulled = true;
+        throw new Error("the body must not be read when rate limited");
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  const limited = await handleAgentArtifactUpload(
+    new Request(`${BASE}/uploads/${sha}`, {
+      method: "PUT",
+      headers: { "content-length": String(bytes.length) },
+      body,
+    }),
+    sha,
+    principal(),
+    { ...services(), writeLimit },
+  );
+  expect(limited.status).toBe(429);
+  expect(limited.headers.get("retry-after")).toBe("23");
+  expect(limited.headers.get("cache-control")).toBe("no-store");
+  const payload = (await limited.json()) as Record<string, any>;
+  expect(payload).toMatchObject({
+    code: "RATE_LIMITED",
+    retryable: true,
+    details: { operation: "upload", retryAfterSeconds: 23 },
+  });
+  expect(payload.error).toContain("artifact-rate-limited");
+  expect(pulled).toBe(false);
+
+  const id = await made({ "ok.md": text("# ok\n") });
+  const download = await handleAgentArtifactDownload(
+    new Request(`http://local${agentApiRoutes.cloud.artifactFiles.download.path(id, "ok.md")}`),
+    { artifact: id, path: "ok.md" },
+    principal(),
+    { ...services(), writeLimit },
+  );
+  expect(download.status).toBe(200);
+});
+
 test("an upload takes a Workspace without the experiment as every artifact call does", async () => {
   enabled = false;
   try {

@@ -6,6 +6,8 @@ import {
 import { AppError } from "#src/lib/app-error";
 import { errorResponse } from "#src/server/agents/agent-http-error.server";
 import { agentErrorResponse } from "#src/server/agents/agent-http-middleware.server";
+import type { AppRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
+import { admitArtifactWrite, ArtifactRateLimited } from "./agent-artifact-rate-limit.server";
 import { artifactsDisabled, type ArtifactActor } from "./artifact-access.server";
 import { resolveArtifactReference } from "./artifact-reference.server";
 import { ArtifactStorageFull, type StoredArtifactBlobs } from "./artifact-blobs.server";
@@ -17,6 +19,7 @@ export type AgentArtifactFileServices = {
   blobs: Pick<StoredArtifactBlobs, "upload" | "open">;
   enabled: (workspaceId: string) => Promise<boolean>;
   readActor?: ArtifactActor | undefined;
+  writeLimit?: AppRateLimit | undefined;
 };
 
 const REFERENCE_MAX_CHARS = 2000;
@@ -32,6 +35,7 @@ export async function handleAgentArtifactUpload(
   try {
     const { workspaceId, agentId } = principal;
     if (!(await services.enabled(workspaceId))) throw artifactsDisabled();
+    await admitArtifactWrite(services.writeLimit, agentId, "upload");
     if (!ARTIFACT_SHA256_PATTERN.test(sha256))
       throw new AppError("INVALID_INPUT", {
         errorId: "artifact-blob-sha256",
@@ -52,6 +56,7 @@ export async function handleAgentArtifactUpload(
     });
     return new Response(null, { status: 204 });
   } catch (error) {
+    if (error instanceof ArtifactRateLimited) return error.response();
     if (error instanceof ArtifactStorageFull)
       return tooLarge("the Workspace holds too many uploaded files no version uses yet", true);
     return agentErrorResponse(error);
