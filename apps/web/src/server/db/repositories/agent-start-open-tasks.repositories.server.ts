@@ -5,16 +5,14 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
-import {
-  agentReadableBody,
-  MESSAGE_MENTIONS_SELECT,
-} from "#src/server/conversations/mentions.server";
+import { MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/mentions.server";
 import {
   directTargets,
   type DirectTargetOf,
   type TargetConversation,
 } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
 import { ownTaskScope } from "#src/server/tasks/task-list.server";
+import { readAgentTaskText } from "#src/server/tasks/task-view.server";
 
 const START_OPEN_TASK_STATUSES = ["in_progress", "todo"] as const;
 const MAX_WIRE_TITLE_UNITS = 512;
@@ -112,7 +110,7 @@ export async function readAgentStartOpenTasks(
         })();
     return {
       ref: `${board}:#${row.number}`,
-      title: boundStartOpenTaskTitle(agentReadableBody(row.title, row.message?.mentions ?? [])),
+      title: boundStartOpenTaskTitle(readAgentTaskText(row.title, row.message?.mentions ?? [])),
       status: row.status === "in_progress" ? "in_progress" : "todo",
     };
   });

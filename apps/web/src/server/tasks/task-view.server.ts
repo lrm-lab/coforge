@@ -26,6 +26,7 @@ import {
   agentReadableBody,
   browserMessageMention,
   type BrowserMessageMentionRow,
+  type MessageMentionRef,
 } from "#src/server/conversations/mentions.server";
 import { browserSenderName } from "#src/server/conversations/sender-display.server";
 import { peopleReadableBody } from "#src/server/conversations/message-preview-line.server";
@@ -238,6 +239,10 @@ export function taskMember(
  */
 export type TaskReader = "people" | "agent";
 
+export function readAgentTaskText(text: string, mentions: readonly MessageMentionRef[]): string {
+  return agentReadableBody(text, mentions);
+}
+
 /** Text holding a Task message's mention tokens (its title, a recorded title change), as `reader`
  * reads it: mention, task and channel tokens become the text a person or an Agent writes. */
 export function readTaskText(
@@ -246,7 +251,7 @@ export function readTaskText(
   mentions: readonly BrowserMessageMentionRow[],
 ): string {
   return reader === "agent"
-    ? agentReadableBody(text, mentions)
+    ? readAgentTaskText(text, mentions)
     : peopleReadableBody(text, mentions.map(browserMessageMention));
 }
 
