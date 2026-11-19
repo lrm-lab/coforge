@@ -1,11 +1,14 @@
 import { expect, test } from "bun:test";
+import { realpathSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { listAgentSkills } from "#src/code-agent/agent-skills";
 
+const tempRoot = realpathSync(tmpdir());
+
 test("Antigravity global skills honor GEMINI_HOME when set and still skip antigravity-cli/skills", async () => {
-  const root = await mkdtemp(join(tmpdir(), "antigravity-gemini-home-skills-"));
+  const root = await mkdtemp(join(tempRoot, "antigravity-gemini-home-skills-"));
   const cwd = join(root, "agent");
   const home = join(root, "home");
   const geminiHome = join(root, "custom-gemini");
