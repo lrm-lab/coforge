@@ -37,6 +37,16 @@ export const CHECKS_EXPR = `
   }
 
   const all = document.querySelectorAll("body *");
+
+  const DECLARED_VERTICAL_ONLY_SCROLLER = /(^|\\s)overflow-y-(auto|scroll)(\\s|$)/;
+  let sidewaysScrollerCount = 0;
+  for (const el of all) {
+    const cls = typeof el.className === "string" ? el.className : "";
+    if (!DECLARED_VERTICAL_ONLY_SCROLLER.test(cls) || /(^|\\s)overflow-x-(auto|scroll)(\\s|$)/.test(cls)) continue;
+    if (el.clientWidth === 0 || el.scrollWidth <= el.clientWidth + 1 || sidewaysScrollerCount >= 8) continue;
+    findings.push({ check: "vertical-list-scrolls-sideways", detail: \`scrollWidth \${el.scrollWidth} > clientWidth \${el.clientWidth}\`, locator: locator(el) });
+    sidewaysScrollerCount++;
+  }
   let oversizedCount = 0;
   let clippedCount = 0;
   for (const el of all) {
