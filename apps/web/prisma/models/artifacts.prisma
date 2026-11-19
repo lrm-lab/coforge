@@ -6,8 +6,9 @@ model Artifact {
   /// The conversation it was made in: conversation:<conversationId>. A legacy `workspace` value
   /// reads as workspace-wide.
   homeKey         String
-  /// The visibility tier: `conversation` (the home's readers) or `workspace` (every member and
-  /// Agent). Each change is an `artifact_access_events` row.
+  /// The visibility tier: `conversation` (the home's readers), `workspace` (every member and
+  /// Agent), or `link` (anyone holding a live public link, and still the home's readers). Each
+  /// change is an `artifact_access_events` row.
   access          String            @default("conversation")
   /// Unique within its home; the web URL uses a separate short id.
   name            String
@@ -133,7 +134,8 @@ model ArtifactAccessEvent {
   artifactId   String   @db.Uuid
   actorUserId  String?  @db.Uuid
   actorAgentId String?  @db.Uuid
-  /// The tier before and after: conversation | workspace
+  /// The tier before and after: conversation | workspace | link. A row with neither actor is a
+  /// system migration, such as the link-tier backfill.
   from         String
   to           String
   createdAt    DateTime @default(now())

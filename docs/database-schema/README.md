@@ -29,3 +29,4 @@ Agent execution `run`/`event` data out of the messaging core.
 - [Release catalog](release-catalog.md): The release catalog's notes table, kept apart from every CoForge domain table.
 
 - [Attachment comment maintenance](attachment-comment-migration.md): Read-only preflight and reversible local-copy rehearsal for legacy comment threads.
+- [Link access migration](artifact-link-access-migration.md): Moving artifacts that already have a public link onto the `link` tier, and the journal-only rollback.

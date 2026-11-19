@@ -31,6 +31,9 @@ out" a move, not a split:
 - `artifact-blob-sweep.server.ts` — the hourly blob sweep registration.
 - `artifact-origins.server.ts` — `ArtifactOrigins`, which needs only the database and no
   storage, so the origin backfill and the message hook build it directly.
+- `artifact-link-access-migration.server.ts` — the one-off link-access migration that
+  `scripts/artifact-link-access-migration.ts` runs: plan, apply with a journal, and a
+  rollback that acts only on the journal's own events.
 
 Everything else is internal: `artifacts.server.ts` (the `Artifacts` use
 cases), the merge/read/write/signals/documents/public-links/blobs

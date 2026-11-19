@@ -43,6 +43,7 @@ The architecture invariants every change must respect are in
 | [docs/pi-chat/README.md](docs/pi-chat/README.md) | Independent cloud Pi conversations, signed host access, native history, deployment and acceptance |
 | [docs/database-schema/](docs/database-schema/README.md) | Database schema and conversation/delivery model |
 | [Attachment comment maintenance](docs/database-schema/attachment-comment-migration.md) | Read-only preflight, private local-copy rehearsal, journal recovery and integration checks |
+| [Link access migration](docs/database-schema/artifact-link-access-migration.md) | Moving artifacts that already have a public link onto the `link` tier, and the journal-only rollback |
 | [docs/memory/](docs/memory/) | Local Agent memory and native workspace team knowledge, review, revisions and retirement |
 | [docs/architecture/](docs/architecture/) | Task-scoped Agent sessions: one Agent identity, a disposable execution session per delegated Task |
 | [docs/records/](docs/records/) | Weekly report behaviour specs: present mode, reading and editing |
