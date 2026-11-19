@@ -46,7 +46,6 @@ import type { ReminderDueReceiver } from "#src/agent-reminder/reminder-due-recei
 import { subscribeProviderScans } from "./provider-scan-handlers";
 import type { ResetCreditConsumeResult } from "./reset-credit-consume";
 import { subscribeWorkspaceQueries } from "./workspace-query-handlers";
-import { subscribeComputerFileQueries } from "./computer-file-query-handlers";
 import { subscribeContextViewQueries } from "./context-view-query-handlers";
 import type { AgentContextViewService } from "#src/agent-context-view/agent-context-view-service";
 import type { ContextViewIndexEntry } from "#src/agent-context-view/context-view-store";
@@ -289,12 +288,6 @@ export class RuntimeStartup {
           isStopping: () => ports.isStopping(),
         }),
       );
-      for (const unsubscribe of subscribeComputerFileQueries(transport, {
-        connection,
-        currentTransport: () => ports.transport(),
-        isStopping: () => ports.isStopping(),
-      }))
-        this.#subscribe(unsubscribe);
       for (const unsubscribe of subscribeProviderScans(transport, {
         connection,
         runtime: {

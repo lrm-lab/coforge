@@ -45,8 +45,6 @@ import type {
   AgentContextViewRequest,
   AgentContextViewResult,
   AgentContextViewAvailability,
-  ComputerFilePullRequest,
-  ComputerFilePullResult,
   ComputerUpgradeResult,
   AgentCredentialRestored,
   AgentMentionDeliveryTransition,
@@ -157,8 +155,6 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
     result: AgentContextViewResult,
     agentApiKey?: string,
   ): Promise<AgentContextViewUploadMetadata | void>;
-  onComputerFilePull?(callback: (request: ComputerFilePullRequest) => Promise<void>): () => void;
-  sendComputerFilePullResult?(result: ComputerFilePullResult): Promise<void>;
   onUsageScan?(callback: (request: DaemonRuntimeUsageScanRequest) => Promise<void>): () => void;
   sendUsageScanResult?(response: DaemonRuntimeUsageScanResponse): Promise<void>;
   onResetCreditConsume?(

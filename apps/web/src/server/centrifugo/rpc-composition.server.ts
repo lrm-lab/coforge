@@ -15,7 +15,6 @@ import { PI_CHAT_FRAME_METHOD } from "@lrm/coforge-sdk/internal/pi-chat-wire";
 import { createPiChatFrameMethod } from "#src/server/pi-chat/pi-chat-frame-receiver.server";
 import { canUsePiChat, getPiChatResults } from "#src/server/pi-chat/pi-chat-production.server";
 import { workspaceQueryResultMethods } from "./workspace-query-result-methods.server";
-import { computerFilePullResultMethods } from "./computer-file-upload-results.server";
 
 import {
   CentrifugoRpcHandler,
@@ -327,7 +326,6 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
         [COMPUTER_UPGRADE_RESULT_METHOD]:
           createComputerUpgradeResultMethod(getComputerUpgradeStore()),
         ...workspaceQueryResultMethods(true, unavailableMethod),
-        ...computerFilePullResultMethods(),
         [AGENT_CONTROL_RESULT_METHOD]: createAgentControlResultMethod(control),
         ...daemonReportMethods(db),
         [AGENT_START_METHOD]: createAgentStartMethod(
@@ -383,7 +381,6 @@ export function createCentrifugoRpcHandler(db: PrismaClient | null = getDatabase
         createDaemonRuntimeResetCreditConsumeResultMethod(),
       [COMPUTER_UPGRADE_RESULT_METHOD]: unavailableMethod,
       ...workspaceQueryResultMethods(false, unavailableMethod),
-      ...computerFilePullResultMethods(false),
       [AGENT_CONTROL_RESULT_METHOD]: unavailableMethod,
       ...daemonReportMethods(null),
       [AGENT_SESSION_METHOD]: unavailableMethod,
