@@ -3,6 +3,7 @@ import { parseArgs, run } from "../index";
 import type { MessageTransport } from "../index";
 import { CLI_USAGE, cliUsage } from "../src/usage";
 import { commandHelp } from "../src/command-help";
+import { reminderHelp } from "../src/command-help/reminder";
 import { parseAppArgs } from "../src/app-commands";
 
 const transport = {} as unknown as MessageTransport;
@@ -18,8 +19,19 @@ test("every command prints its own --help instead of the whole usage", async () 
 
   // The family help answers when the subcommand has no entry of its own.
   const reminder = await run(["reminder", "--help"], transport);
-  expect(reminder).toContain("coforge reminder schedule|list|cancel|log|update|snooze");
-  expect(reminder).toContain("unseal");
+  for (const operation of [
+    "schedule",
+    "list",
+    "cancel",
+    "log",
+    "update",
+    "snooze",
+    "ack",
+    "dismiss",
+    "seal",
+    "unseal",
+  ])
+    expect(reminder).toContain(operation);
 });
 
 test("message read takes its flags in any order", () => {
@@ -236,11 +248,8 @@ test("reminder help names the flags its parser accepts", async () => {
   expect(snooze).toContain("--fire-at <iso>");
   expect(snooze).not.toContain("--until <iso>");
 
-  const list = await run(["reminder", "list", "--help"], transport);
-  expect(list).not.toContain("--json");
-
-  for (const command of ["cancel", "log", "ack", "dismiss", "seal", "unseal"]) {
-    const text = await run(["reminder", command, "--help"], transport);
+  for (const key of Object.keys(reminderHelp)) {
+    const text = await run(key.split(" ").concat("--help"), transport);
     expect(text).not.toContain("--json");
   }
 
@@ -302,16 +311,8 @@ test("every reminder help example parses as written", () => {
       .replace(/^coforge /, "")
       .match(/'[^']*'|\S+/g)!
       .map((token) => token.replace(/^'|'$/g, ""));
-  for (const words of [
-    ["reminder"],
-    ["reminder", "schedule"],
-    ["reminder", "list"],
-    ["reminder", "update"],
-    ["reminder", "snooze"],
-    ["reminder", "seal"],
-    ["reminder", "ack"],
-  ]) {
-    const example = commandHelp(words)
+  for (const key of Object.keys(reminderHelp)) {
+    const example = commandHelp(key.split(" "))
       ?.split("\n")
       .find((line) => line.startsWith("Example: "));
     expect(example).toBeDefined();
