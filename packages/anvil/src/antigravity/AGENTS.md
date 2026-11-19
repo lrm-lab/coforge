@@ -31,3 +31,7 @@ Read [Antigravity ACP behavior](../../../../docs/agents/antigravity-acp.md) when
   file-based token store when it sees them (logs "Using file-based token storage because %s
   detected"; not in the public docs). The Daemon strips them from inherited and declared inputs
   before an Agent's own overrides; an explicit override still applies.
+- Session and catalog `agy acp` spawns pass `--dangerously-skip-permissions` and
+  `--process-per-session` (`acp-args.ts`); auth probes, `authenticate`, `logout` and `acp --login`
+  omit those two flags. Session, catalog, auth and `acp --login` spawns forward a non-empty
+  `GEMINI_HOME` from their launch environment as `--gemini-dir <GEMINI_HOME>`.

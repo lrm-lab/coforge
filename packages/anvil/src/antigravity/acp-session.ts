@@ -10,6 +10,7 @@ import type { AcpRuntimeProfile, AcpSessionProfile } from "#src/acp/profile";
 import { AcpSession } from "#src/acp/session";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import type { AntigravityAcpRuntimeHost } from "./acp-host";
+import { antigravityAcpSessionExtraArgs } from "./acp-args";
 import { ANTIGRAVITY_AUTH_REQUIRED_CODE } from "./auth";
 import { AntigravityAcpTurnEvents } from "./acp-update-events";
 
@@ -115,10 +116,12 @@ function antigravitySessionProfile(
     label: "Antigravity",
     openTransport: (sink) => {
       const stderrTail: string[] = [];
+      const environment = host.buildEnvironment(options);
       const transport = acpProcess(ANTIGRAVITY_ACP_PROFILE, {
         command,
+        extraArgs: antigravityAcpSessionExtraArgs(environment),
         cwd: options.agentWorkspaceDirectory,
-        environment: host.buildEnvironment(options),
+        environment,
         clientInfo: host.clientInfo,
         processTreeSpawner: host.processTreeSpawner,
         onUpdate: (method, params) => {

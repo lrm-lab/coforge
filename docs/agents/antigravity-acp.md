@@ -2,9 +2,13 @@
 
 Part of [the documentation index](../../README.md). The Antigravity adapter runs one persistent `agy acp` process per Agent session.
 
-- The runtime is `agy acp`, the ACP server inside the `agy` CLI — one persistent ACP process
-  per Agent session. It shares agy's own sign-in: no separate credential store, and the SSH
-  session-marker rules below apply to every `agy` process the Daemon starts.
+- The runtime is `agy acp --dangerously-skip-permissions --process-per-session`, the ACP server
+  inside the `agy` CLI — one persistent ACP process per Agent session (and for model-catalog
+  probes). `--process-per-session` runs an isolated per-session worker so HTTP MCP is advertised.
+  Whenever `GEMINI_HOME` is non-empty in the launch environment, every `agy acp` invocation
+  (session, catalog, auth and `agy acp --login`) forwards `--gemini-dir <GEMINI_HOME>` because
+  `agy` ignores `GEMINI_HOME` on its own. It shares agy's own sign-in: no separate credential
+  store, and the SSH session-marker rules below apply to every `agy` process the Daemon starts.
 - The floor is agy 1.5.8 (`acp-version.ts`), from agy's changelog: `session/cancel` ends a prompt
   without stopping the next one from 1.5.1, the `auto` mode arrives in 1.5.4, and `usage_update`
   context readings in 1.5.8. Behavior below was verified live on 1.5.10.
@@ -13,10 +17,11 @@ Part of [the documentation index](../../README.md). The Antigravity adapter runs
   the Agent workspace's `AGENTS.md`/`GEMINI.md`. A `session/load` applies the append it carries,
   so a resumed session picks up changed instructions. `disabledTools` in the same envelope is the
   optional host tool filter.
-- Every open selects the `auto` mode when `modes.availableModes` lists it (Gemini Enterprise
-  accounts are not offered it); otherwise it skips `session/set_mode` and logs the agy version and
-  the mode IDs. `auto` still asks before commands that leave agy's terminal sandbox; the shared
-  permission handler answers `allow_once` while the Agent is live.
+- Sessions launch with `--dangerously-skip-permissions` and still select `auto` via
+  `session/set_mode` when `modes.availableModes` lists it (Gemini Enterprise accounts are not
+  offered it); otherwise they skip `session/set_mode` and log the agy version and mode IDs. Any
+  remaining `session/request_permission` prompt is answered with `allow_once` while the Agent is
+  live.
 - Model and effort replay on every open, because a loaded session starts at agy's defaults. They
   apply by `category` (`model`, then `thought_level`) through `session/set_config_option`, skipped
   when already current, and the shared ACP rule decides failures. The `thought_level` choices follow the model just applied:

@@ -16,6 +16,7 @@ import {
 import { asRecord, nonEmptyString } from "#src/json-record";
 import { runtimeAuthAccount } from "#src/runtime-auth-status";
 import { ANTIGRAVITY_ACP_PROFILE } from "./acp-session";
+import { antigravityGeminiDirArgs } from "./acp-args";
 import { antigravityTerminalLogin } from "./auth-terminal";
 
 /** `session/new`'s refusal before a user signs in to this server's own account. */
@@ -107,13 +108,7 @@ export class AntigravityRuntimeAuthAdapter implements RuntimeAuthAdapter {
     }
     const timeoutMs = options.timeoutMs ?? ANTIGRAVITY_AUTH_TIMEOUT_MS;
     interaction.onEvent({ kind: "info", message: RUNTIME_AUTH_INFO_ANTIGRAVITY_BROWSER_LOGIN });
-    const transport = acpProcess(ANTIGRAVITY_ACP_PROFILE, {
-      command: this.host.command,
-      cwd: options.workingDirectory,
-      environment: this.host.environment,
-      clientInfo: this.host.clientInfo,
-      processTreeSpawner: this.host.processTreeSpawner,
-    });
+    const transport = this.#openProcess(options.workingDirectory);
     const controller = new AbortController();
     const dispose = () => void transport.process.dispose();
     controller.signal.addEventListener("abort", dispose, { once: true });
@@ -163,31 +158,26 @@ export class AntigravityRuntimeAuthAdapter implements RuntimeAuthAdapter {
     timeoutMs?: number;
   }): Promise<RuntimeAuthLogoutResult> {
     const timeoutMs = options.timeoutMs ?? ANTIGRAVITY_AUTH_PROBE_TIMEOUT_MS;
-    const transport = acpProcess(ANTIGRAVITY_ACP_PROFILE, {
-      command: this.host.command,
-      cwd: options.workingDirectory,
-      environment: this.host.environment,
-      clientInfo: this.host.clientInfo,
-      processTreeSpawner: this.host.processTreeSpawner,
+    return this.#withProcess(options.workingDirectory, async (transport) => {
+      try {
+        await acpBounded(
+          transport.connection.agent.request("logout", {}),
+          timeoutMs,
+          "agy acp logout timed out",
+        );
+        const authStatus = await this.#loggedIn(transport).catch(() => loggedOut);
+        if (authStatus.state === "logged_in") {
+          return { status: "failed", reason: "still_logged_in" };
+        }
+        return { status: "logged_out", authStatus };
+      } catch (error) {
+        return {
+          status: "failed",
+          reason: error instanceof AcpTimeoutError ? "timed_out" : "process_failed",
+          detail: error instanceof Error ? error.message : String(error),
+        };
+      }
     });
-    try {
-      await acpBounded(
-        transport.connection.agent.request("logout", {}),
-        timeoutMs,
-        "agy acp logout timed out",
-      );
-      const authStatus = await this.#loggedIn(transport).catch(() => loggedOut);
-      if (authStatus.state === "logged_in") return { status: "failed", reason: "still_logged_in" };
-      return { status: "logged_out", authStatus };
-    } catch (error) {
-      return {
-        status: "failed",
-        reason: error instanceof AcpTimeoutError ? "timed_out" : "process_failed",
-        detail: error instanceof Error ? error.message : String(error),
-      };
-    } finally {
-      await transport.process.dispose();
-    }
   }
 
   /** Whether the server takes `session/new` — `-32000` means signed out, anything else a real
@@ -225,17 +215,22 @@ export class AntigravityRuntimeAuthAdapter implements RuntimeAuthAdapter {
     }
   }
 
-  async #withProcess<T>(
-    cwd: string,
-    work: (transport: ReturnType<typeof acpProcess>) => Promise<T>,
-  ): Promise<T> {
-    const transport = acpProcess(ANTIGRAVITY_ACP_PROFILE, {
+  #openProcess(cwd: string) {
+    return acpProcess(ANTIGRAVITY_ACP_PROFILE, {
       command: this.host.command,
+      extraArgs: antigravityGeminiDirArgs(this.host.environment),
       cwd,
       environment: this.host.environment,
       clientInfo: this.host.clientInfo,
       processTreeSpawner: this.host.processTreeSpawner,
     });
+  }
+
+  async #withProcess<T>(
+    cwd: string,
+    work: (transport: ReturnType<typeof acpProcess>) => Promise<T>,
+  ): Promise<T> {
+    const transport = this.#openProcess(cwd);
     try {
       return await work(transport);
     } finally {

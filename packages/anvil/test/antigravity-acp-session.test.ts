@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { AgentRuntimeEvent, AgentSession } from "@coforge/agent";
+import { antigravityGeminiDirArgs } from "#src/antigravity/acp-args";
 import { AntigravityAcpProvider } from "#src/antigravity/acp-provider";
 import { RuntimeModelNotFoundError } from "#src/contract";
 import { fixturePerTurnHost } from "./fixtures/runtime-host";
@@ -12,10 +13,19 @@ const TEST_ACP_TIMEOUT_MS = 10_000;
 
 type Modes = readonly Record<string, string>[];
 
-function host(environment: Record<string, string>, fed: string[] = []) {
+function host(
+  environment: Record<string, string>,
+  fed: string[] = [],
+  spawnedCommands: (readonly string[])[] = [],
+) {
   return {
     clientInfo: { name: "agy-acp-fixture", version: "1" },
-    processTreeSpawner: fixturePerTurnHost.processTreeSpawner,
+    processTreeSpawner: {
+      spawn: (command: readonly string[], cwd: string, env: Readonly<Record<string, string>>) => {
+        spawnedCommands.push(command);
+        return fixturePerTurnHost.processTreeSpawner.spawn(command, cwd, env);
+      },
+    },
     buildEnvironment: () => environment,
     versionReader: async () => "1.5.10",
     catalogCommandRunner: async () => ({ output: "{}", exitCode: 0 }),
@@ -32,19 +42,26 @@ function host(environment: Record<string, string>, fed: string[] = []) {
   };
 }
 
-async function fixture(modes?: Modes) {
+async function fixture(modes?: Modes, extraEnv: Record<string, string> = {}) {
   const cwd = await mkdtemp(join(tmpdir(), "anvil-agy-acp-"));
   const log = join(cwd, "rpc.jsonl");
   const fed: string[] = [];
+  const spawnedCommands: (readonly string[])[] = [];
+  const baseCommand = [
+    process.execPath,
+    new URL("./fixtures/antigravity-acp.ts", import.meta.url).pathname,
+  ];
   const provider = new AntigravityAcpProvider({
     acpTimeoutMs: TEST_ACP_TIMEOUT_MS,
-    command: [process.execPath, new URL("./fixtures/antigravity-acp.ts", import.meta.url).pathname],
+    command: baseCommand,
     host: host(
       {
+        ...extraEnv,
         AGY_ACP_FIXTURE_LOG: log,
         ...(modes ? { AGY_ACP_FIXTURE_MODES: JSON.stringify(modes) } : {}),
       },
       fed,
+      spawnedCommands,
     ),
   });
   const requests = async () =>
@@ -52,7 +69,15 @@ async function fixture(modes?: Modes) {
       .split("\n")
       .filter(Boolean)
       .map((line) => JSON.parse(line));
-  return { provider, cwd, requests, fed, cleanup: () => rm(cwd, { recursive: true, force: true }) };
+  const spawnedArgs = () => spawnedCommands.map((cmd) => cmd.slice(baseCommand.length));
+  return {
+    provider,
+    cwd,
+    requests,
+    fed,
+    spawnedArgs,
+    cleanup: () => rm(cwd, { recursive: true, force: true }),
+  };
 }
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -69,9 +94,9 @@ async function withSession(
     session: AgentSession;
     events: AgentRuntimeEvent[];
   }) => Promise<void>,
-  setup: { modes?: Modes; open?: (cwd: string) => object } = {},
+  setup: { modes?: Modes; env?: Record<string, string>; open?: (cwd: string) => object } = {},
 ) {
-  const f = await fixture(setup.modes);
+  const f = await fixture(setup.modes, setup.env);
   try {
     const session = await f.provider.createAgentSession((setup.open ?? options)(f.cwd) as never);
     const events: AgentRuntimeEvent[] = [];
@@ -437,3 +462,44 @@ test.each(["inband-with-usage", "inband-embedded"])(
     });
   },
 );
+
+test("a launch spawns agy acp with --dangerously-skip-permissions and --process-per-session", async () => {
+  await withSession(async ({ f }) => {
+    expect(f.spawnedArgs()).toEqual([
+      ["acp", "--dangerously-skip-permissions", "--process-per-session"],
+    ]);
+  });
+});
+
+test("a launch forwards a non-empty GEMINI_HOME as --gemini-dir and skips blank values", async () => {
+  await withSession(
+    async ({ f }) => {
+      expect(f.spawnedArgs()).toEqual([
+        [
+          "acp",
+          "--dangerously-skip-permissions",
+          "--process-per-session",
+          "--gemini-dir",
+          "/tmp/custom-gemini-home",
+        ],
+      ]);
+    },
+    { env: { GEMINI_HOME: "  /tmp/custom-gemini-home  " } },
+  );
+  await withSession(
+    async ({ f }) => {
+      expect(f.spawnedArgs()).toEqual([
+        ["acp", "--dangerously-skip-permissions", "--process-per-session"],
+      ]);
+    },
+    { env: { GEMINI_HOME: "   " } },
+  );
+});
+
+test("GEMINI_HOME lookup is case-insensitive on Windows and exact on POSIX", () => {
+  expect(antigravityGeminiDirArgs({ gemini_home: "C:\\gemini" }, "win32")).toEqual([
+    "--gemini-dir",
+    "C:\\gemini",
+  ]);
+  expect(antigravityGeminiDirArgs({ gemini_home: "/tmp/gemini" }, "linux")).toEqual([]);
+});

@@ -50,3 +50,39 @@ test("each model carries the thought_level choices agy publishes once that model
     await rm(cwd, { recursive: true, force: true });
   }
 });
+
+test("catalog discovery passes session flags and forwards GEMINI_HOME as --gemini-dir", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "anvil-agy-catalog-"));
+  try {
+    const spawned: (readonly string[])[] = [];
+    const capturingHost = {
+      ...fixtureAntigravityHost,
+      processTreeSpawner: {
+        spawn: (cmd: readonly string[], dir: string, env: Readonly<Record<string, string>>) => {
+          spawned.push(cmd);
+          return fixtureAntigravityHost.processTreeSpawner.spawn(cmd, dir, env);
+        },
+      },
+    };
+    await discoverAntigravityAcpCatalog(command, cwd, {}, capturingHost, 10_000);
+    await discoverAntigravityAcpCatalog(
+      command,
+      cwd,
+      { GEMINI_HOME: "/tmp/custom-gemini" },
+      capturingHost,
+      10_000,
+    );
+    expect(spawned.map((cmd) => cmd.slice(command.length))).toEqual([
+      ["acp", "--dangerously-skip-permissions", "--process-per-session"],
+      [
+        "acp",
+        "--dangerously-skip-permissions",
+        "--process-per-session",
+        "--gemini-dir",
+        "/tmp/custom-gemini",
+      ],
+    ]);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});

@@ -13,6 +13,7 @@ import {
   type RuntimeAuthSecretSink,
   type RuntimeAuthStatus,
 } from "#src/contract";
+import { antigravityGeminiDirArgs } from "./acp-args";
 
 /** `agy acp --login` waits on a person pasting a code: the same bound Claude's login gets. */
 const ANTIGRAVITY_LOGIN_TIMEOUT_MS = 16 * 60 * 1_000;
@@ -138,7 +139,7 @@ export async function antigravityTerminalLogin(
   let tree: OwnedProcessTree;
   try {
     tree = host.processTreeSpawner.spawn(
-      [...host.command, "acp", "--login"],
+      [...host.command, "acp", "--login", ...antigravityGeminiDirArgs(host.environment)],
       options.workingDirectory,
       host.environment,
     );

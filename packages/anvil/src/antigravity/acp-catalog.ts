@@ -10,6 +10,7 @@ import { acpBounded, acpProcess, type AcpConnection } from "#src/acp/connection"
 import { scrubStderrHint } from "#src/stderr-hint";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import { ANTIGRAVITY_ACP_PROFILE } from "./acp-session";
+import { antigravityAcpSessionExtraArgs } from "./acp-args";
 import type { AntigravityAcpRuntimeHost } from "./acp-host";
 import { assertAntigravityAcpVersionSupported } from "./acp-version";
 import { withoutSshSessionVariables } from "./ssh-environment";
@@ -30,10 +31,12 @@ export async function discoverAntigravityAcpCatalog(
   let stderrHint: string | undefined;
   try {
     await assertAntigravityAcpVersionSupported(command, host.versionReader);
+    const launchEnvironment = withoutSshSessionVariables({ ...environment, PWD: cwd });
     transport = acpProcess(ANTIGRAVITY_ACP_PROFILE, {
       command,
+      extraArgs: antigravityAcpSessionExtraArgs(launchEnvironment),
       cwd,
-      environment: withoutSshSessionVariables({ ...environment, PWD: cwd }),
+      environment: launchEnvironment,
       clientInfo: host.clientInfo,
       processTreeSpawner: host.processTreeSpawner,
       onStderr: (line) => {

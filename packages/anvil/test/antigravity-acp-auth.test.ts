@@ -467,3 +467,66 @@ test("a session/new -32000 maps to a RuntimeLoginRequiredError on the launch pat
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("auth status, desktop login and logout forward GEMINI_HOME as --gemini-dir without session flags", async () => {
+  const dir = await cwd();
+  try {
+    const spawned: (readonly string[])[] = [];
+    const base = authHost(dir, { GEMINI_HOME: "/tmp/agy-auth-gemini" }, true);
+    const adapter = new AntigravityRuntimeAuthAdapter({
+      ...base,
+      processTreeSpawner: {
+        spawn: (cmd, workDir, env) => {
+          spawned.push(cmd);
+          return base.processTreeSpawner.spawn(cmd, workDir, env);
+        },
+      },
+    });
+    await adapter.readStatus({ workingDirectory: dir });
+    await adapter.startLogin(
+      { workingDirectory: dir },
+      { onEvent: () => {}, prompt: async () => "" },
+    );
+    await adapter.logout({ workingDirectory: dir });
+    expect(spawned.map((cmd) => cmd.slice(base.command.length))).toEqual([
+      ["acp", "--gemini-dir", "/tmp/agy-auth-gemini"],
+      ["acp", "--gemini-dir", "/tmp/agy-auth-gemini"],
+      ["acp", "--gemini-dir", "/tmp/agy-auth-gemini"],
+    ]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("headless terminal login forwards GEMINI_HOME as --gemini-dir", async () => {
+  const dir = await cwd();
+  try {
+    const spawned: (readonly string[])[] = [];
+    const base = authHost(
+      dir,
+      { AGY_ACP_FIXTURE_SIGNED_OUT: "1", GEMINI_HOME: "/tmp/agy-headless-gemini" },
+      false,
+    );
+    const adapter = new AntigravityRuntimeAuthAdapter({
+      ...base,
+      processTreeSpawner: {
+        spawn: (cmd, workDir, env) => {
+          spawned.push(cmd);
+          return base.processTreeSpawner.spawn(cmd, workDir, env);
+        },
+      },
+    });
+    const result = await adapter.startLogin(
+      { workingDirectory: dir },
+      { onEvent: () => {}, prompt: async () => "good-code" },
+    );
+    expect(result.status).toBe("logged_in");
+    expect(spawned.map((cmd) => cmd.slice(base.command.length))).toEqual([
+      ["acp", "--help"],
+      ["acp", "--login", "--gemini-dir", "/tmp/agy-headless-gemini"],
+      ["acp", "--gemini-dir", "/tmp/agy-headless-gemini"],
+    ]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
