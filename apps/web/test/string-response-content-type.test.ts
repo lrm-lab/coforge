@@ -113,7 +113,10 @@ const SCANNED = ["apps/web/src/**/*.ts", "apps/web/src/**/*.tsx"];
 
 async function webSources(): Promise<Record<string, string>> {
   const files = SCANNED.flatMap((pattern) => [...new Bun.Glob(pattern).scanSync({ cwd: repoRoot })])
-    .filter((file) => !file.includes("node_modules") && !/\.test\.tsx?$/.test(file))
+    .filter(
+      (file) =>
+        !file.includes("node_modules") && !/\.test\.tsx?$/.test(file) && !file.endsWith(".d.ts"),
+    )
     .sort();
   const sources = await Promise.all(files.map((file) => Bun.file(join(repoRoot, file)).text()));
   return Object.fromEntries(files.map((file, index) => [file, sources[index]]));
