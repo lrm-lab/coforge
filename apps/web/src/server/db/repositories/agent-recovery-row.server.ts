@@ -24,6 +24,9 @@ export type AgentRecoveryRow = {
   globalRank: number;
   nonMemberMention: boolean;
   attachmentId: string | null;
+  conversationKind?: string | null;
+  directKey?: string | null;
+  appKey?: string | null;
 };
 
 export async function recoverySecondPass(

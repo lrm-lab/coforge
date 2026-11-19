@@ -7,6 +7,12 @@ import {
   canSeeAgent,
 } from "#src/server/agents/agent-visibility.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
+import {
+  APP_EVENTS_KIND,
+  appEventTarget,
+  appIdFromEventDirectKey,
+  systemEventTargetFromDirectKey,
+} from "#src/server/app-agent-events/app-event-target.server";
 import { parsePeerTarget } from "./agent-peer-target.server";
 import type { AgentRecoveryRow } from "./agent-recovery-row.server";
 import { MESSAGE_ANCHOR } from "./direct-conversation-anchor.server";
@@ -183,45 +189,70 @@ export async function directRefs(
     `@${name}${kind === "human" ? (agents.has(name) ? "~human" : "") : memberNames.has(name) ? "~agent" : ""}`;
 }
 
-/** What `conversationTarget` reads of a conversation to name it from a reader's seat. */
 export type TargetConversation = {
+  kind?: string | null;
   channelName: string | null;
   directKey?: string | null;
-  /** Present on an attachment's comment conversation: its file. */
   attachmentCommentThread?: { attachmentId: string } | null;
   members: { user?: { username: string } | null; agent?: { id: string; name: string } | null }[];
-  /** The task this conversation is the discussion of: it is named by its board and the task. */
   taskDiscussionOf?: { number: number; conversation: TargetConversation } | null;
 };
 
-/** The target of a direct conversation from the reader's seat (`directTargets`); `undefined` for a
- * conversation with no person and no Agent peer, which only an App's events are. */
 export type DirectTargetOf = (conversation: TargetConversation) => string | undefined;
 
-/** `directRefs` for each direct conversation in the batch: its person, or its Agent peer. */
 export async function directTargets(
-  db: Db,
+  db: Db & Partial<Pick<PrismaClient, "app">>,
   workspaceId: string,
   readerAgentId: string,
   conversations: readonly TargetConversation[],
 ): Promise<DirectTargetOf> {
   const seatOf = (conversation: TargetConversation): DirectSeat | undefined => {
-    if (conversation.channelName || conversation.taskDiscussionOf) return undefined;
+    if (
+      conversation.channelName ||
+      conversation.taskDiscussionOf ||
+      conversation.kind === APP_EVENTS_KIND
+    )
+      return undefined;
     const username = conversation.members.find((member) => member.user)?.user?.username;
     if (username) return { name: username, kind: "human" };
     const peerId = agentPeerOf(conversation.directKey ?? null, readerAgentId);
     const name = conversation.members.find((member) => member.agent?.id === peerId)?.agent?.name;
     return name === undefined ? undefined : { name, kind: "agent" };
   };
-  const refOf = await directRefs(
-    db,
-    workspaceId,
-    readerAgentId,
-    conversations.flatMap(
-      (conversation) => seatOf(conversation.taskDiscussionOf?.conversation ?? conversation) ?? [],
+  const appIds = [
+    ...new Set(
+      conversations.flatMap((conversation) => {
+        if (conversation.kind !== APP_EVENTS_KIND) return [];
+        const appId = appIdFromEventDirectKey(conversation.directKey);
+        return appId ? [appId] : [];
+      }),
     ),
-  );
+  ];
+  const [refOf, apps] = await Promise.all([
+    directRefs(
+      db,
+      workspaceId,
+      readerAgentId,
+      conversations.flatMap(
+        (conversation) => seatOf(conversation.taskDiscussionOf?.conversation ?? conversation) ?? [],
+      ),
+    ),
+    appIds.length && db.app
+      ? db.app.findMany({
+          where: { id: { in: appIds } },
+          select: { id: true, key: true },
+        })
+      : Promise.resolve([] as { id: string; key: string }[]),
+  ]);
+  const appKeyById = new Map(apps.map((app) => [app.id, app.key]));
   return (conversation) => {
+    if (conversation.kind === APP_EVENTS_KIND) {
+      const systemTarget = systemEventTargetFromDirectKey(conversation.directKey);
+      if (systemTarget) return systemTarget;
+      const appId = appIdFromEventDirectKey(conversation.directKey);
+      const appKey = appId ? appKeyById.get(appId) : undefined;
+      return appKey ? appEventTarget(appKey) : undefined;
+    }
     const seat = seatOf(conversation);
     return seat && refOf(seat);
   };

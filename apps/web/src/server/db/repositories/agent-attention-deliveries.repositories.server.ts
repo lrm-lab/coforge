@@ -198,7 +198,10 @@ export function unreadAgentMessagesFragment(
         ORDER BY ou."username" NULLS LAST LIMIT 1) AS "otherUsername",
       -- The other member is an Agent: a conversation between two Agents.
       COALESCE(c."directKey" ~ '^agent:[0-9a-f-]+[|]agent:[0-9a-f-]+$', FALSE) AS "agentPeer",
-      ac."attachmentId"
+      ac."attachmentId",
+      c."kind" AS "conversationKind",
+      c."directKey" AS "directKey",
+      app_evt."key" AS "appKey"
     FROM (
       SELECT cm."id", cm."sequence", cm."body", cm."conversationId", cm."threadRootId",
         cm."senderMemberId", cm."createdAt"
@@ -307,6 +310,10 @@ export function unreadAgentMessagesFragment(
       AND am."workspaceId" = ${workspaceId}::uuid AND am."agentId" = ${agentId}::uuid
       AND am."leftAt" IS NULL
     JOIN "conversations" c ON c."id" = m."conversationId"
+    LEFT JOIN "apps" app_evt
+      ON c."kind" = 'app_events'
+      AND c."directKey" LIKE 'app:%'
+      AND app_evt."id"::text = split_part(split_part(c."directKey", '|', 1), ':', 2)
     LEFT JOIN "messages" r ON r."id" = m."threadRootId"
     LEFT JOIN "thread_reads" tr ON tr."memberId" = am."id" AND tr."rootMessageId" = m."threadRootId"
     LEFT JOIN "attachment_comments" ac ON ac."messageId" = m."id"

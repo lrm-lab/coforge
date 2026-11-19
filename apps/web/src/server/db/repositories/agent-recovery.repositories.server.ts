@@ -10,6 +10,11 @@ import {
 import { recoveryRefs, directTargets } from "./agent-peer-direct.repositories.server";
 import { readAgentStartOpenTasks } from "./agent-start-open-tasks.repositories.server";
 import { Prisma } from "#src/generated/prisma/client";
+import {
+  APP_EVENTS_KIND,
+  appEventTarget,
+  systemEventTargetFromDirectKey,
+} from "#src/server/app-agent-events/app-event-target.server";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/mentions.server";
 import {
@@ -207,11 +212,19 @@ export async function readPendingAgentDeliveries(
       ...agentDeliveryView(message, agentId, taskViews.get(delivery.deliveryId)),
       ...(delivery.reason === "choice" ? { body: answerBody(actionCard, target, choosers) } : {}),
       ...(delivery.reason ? { reason: delivery.reason } : {}),
+      ...(delivery.conversation.kind === APP_EVENTS_KIND ? { source: "app" as const } : {}),
       ...(delivery.message.pendingMentionActions.length && !memberOf.has(delivery.conversationId)
         ? { nonMemberMention: true }
         : {}),
     };
   });
+}
+function appEventRowTarget(
+  row: Pick<AgentRecoveryRow, "conversationKind" | "directKey" | "appKey">,
+): string | undefined {
+  if (row.conversationKind !== APP_EVENTS_KIND) return undefined;
+  if (row.appKey) return appEventTarget(row.appKey);
+  return systemEventTargetFromDirectKey(row.directKey);
 }
 export async function readAgentRecoveryContext(
   ports: DirectConversationPorts,
@@ -236,7 +249,7 @@ export async function readAgentRecoveryContext(
     SELECT "id", "sequence", "body", "conversationId", "threadRootId", "senderMemberId", "createdAt",
       "deliveryId", "senderAgentName", "senderAgentDescription", "senderUsername",
       "senderUserDescription", "channelName", "otherUsername", "agentPeer", "unreadCount", "globalRank",
-      "nonMemberMention", "attachmentId"
+      "nonMemberMention", "attachmentId", "conversationKind", "directKey", "appKey"
     FROM ranked
     WHERE "globalRank" <= ${AGENT_RECOVERY_MESSAGE_LIMIT} OR "targetRank" = 1
     ORDER BY "globalRank"`,
@@ -248,14 +261,17 @@ export async function readAgentRecoveryContext(
   const { mentionsByMessage, forwardsByMessage } = await recoverySecondPass(ports.db, rows);
   const directRefOf = await recoveryRefs(ports.db, workspaceId, agentId, rows);
   for (const row of rows) {
-    if (!row.channelName && !row.otherUsername && !row.attachmentId)
+    const appTarget = appEventRowTarget(row);
+    if (!row.channelName && !row.otherUsername && !row.attachmentId && !appTarget)
       throw new Error("Agent conversation has no other member to target");
     const target = deliveryTarget(
-      row.attachmentId
-        ? `attachment:${row.attachmentId}`
-        : row.channelName
-          ? `#${row.channelName}`
-          : directRefOf(row),
+      appTarget
+        ? appTarget
+        : row.attachmentId
+          ? `attachment:${row.attachmentId}`
+          : row.channelName
+            ? `#${row.channelName}`
+            : directRefOf(row),
       row.threadRootId,
     );
     if (!isRecoverableAgentTarget(target)) continue;

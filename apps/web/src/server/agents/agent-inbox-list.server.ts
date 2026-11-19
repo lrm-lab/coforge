@@ -1,5 +1,9 @@
 import { directConversationSql } from "#src/server/conversations/active-member.server";
 import {
+  appEventTarget,
+  systemEventTargetFromDirectKey,
+} from "#src/server/app-agent-events/app-event-target.server";
+import {
   AGENT_INBOX_PAGE_SIZE,
   type AgentInboxItem,
   type AgentInboxListResponse,
@@ -12,12 +16,11 @@ import { AgentMuteHints } from "#src/server/conversations/agent-mute-hint.server
 
 type UnreadRow = {
   conversationId: string;
-  /** The followed thread this row is about; null for a conversation. */
   threadRootId: string | null;
   channelName: string | null;
   peer: string | null;
-  /** Whether `peer` is a person or an Agent; null with `peer`. */
   peerKind: "human" | "agent" | null;
+  appTarget?: string | null;
   muted: boolean;
   readSeq: number;
   unread: number;
@@ -26,8 +29,11 @@ type UnreadRow = {
   latestAt: Date;
 };
 
-/** The Agent's memberships in conversations that can have unread: still a member, the channel
- * neither archived nor hidden from the Workspace, and not an App event conversation. */
+type AppEventUnreadRow = Omit<UnreadRow, "appTarget"> & {
+  directKey: string | null;
+  appKey: string | null;
+};
+
 const activeMemberships = (workspaceId: string, agentId: string) => Prisma.sql`
   SELECT m.id AS "memberId", m."conversationId", c."channelName", c."directKey",
          (m."notificationLevel" = 'muted') AS muted, m."agentReadThroughSequence" AS "readSeq",
@@ -38,17 +44,6 @@ const activeMemberships = (workspaceId: string, agentId: string) => Prisma.sql`
     AND m."leftAt" IS NULL AND c."archivedAt" IS NULL AND c."hiddenFromWorkspaceAt" IS NULL
     AND c.kind IS NULL`;
 
-/**
- * What the Agent has not read, one row per conversation, in one statement however many
- * conversations or messages there are: an index range probe per conversation
- * (`messages(conversationId, threadRootId, sequence)`) over the Agent's own active memberships.
- *
- * Our own definition of unread, not Raft's: the top-level messages other people wrote after the
- * Agent's read position (`agentReadThroughSequence`, the one `message read` advances). Thread
- * replies are followed through their threads and left out, as are the Agent's own messages, system
- * notices (no sender member, the same rule `HUMAN_UNREAD_BASE_SQL` uses), App event conversations,
- * archived channels and channels hidden from the Workspace.
- */
 async function unreadConversations(
   db: Pick<PrismaClient, "$queryRaw">,
   workspaceId: string,
@@ -131,6 +126,44 @@ async function unreadThreads(
  *   keeps conversations whose latest unread message is older. A page that ends inside a run of
  *   equal times is extended to the end of the run, so nothing is skipped or repeated.
  */
+async function unreadAppEvents(
+  db: Pick<PrismaClient, "$queryRaw">,
+  workspaceId: string,
+  agentId: string,
+): Promise<UnreadRow[]> {
+  const rows = await db.$queryRaw<AppEventUnreadRow[]>`
+    SELECT m."conversationId", NULL::uuid AS "threadRootId", NULL::text AS "channelName",
+           NULL::text AS peer, NULL::text AS "peerKind", FALSE AS muted,
+           m."agentReadThroughSequence" AS "readSeq", u.unread, 0::int AS mentions,
+           u."latestSeq", u."latestAt",
+           c."directKey" AS "directKey", app_evt.key AS "appKey"
+    FROM "conversation_members" m
+    JOIN "conversations" c ON c.id = m."conversationId" AND c."workspaceId" = m."workspaceId"
+    LEFT JOIN "apps" app_evt
+      ON c."directKey" LIKE 'app:%'
+      AND app_evt.id::text = split_part(split_part(c."directKey", '|', 1), ':', 2)
+    CROSS JOIN LATERAL (
+      SELECT count(*)::int AS unread,
+             max(x.sequence)::int AS "latestSeq",
+             max(x."createdAt") AS "latestAt"
+      FROM "messages" x
+      JOIN "agent_message_deliveries" d
+        ON d."messageId" = x.id AND d."agentId" = m."agentId"
+       AND (d."expiresAt" IS NULL OR d."expiresAt" > (now() AT TIME ZONE 'UTC'))
+      WHERE x."conversationId" = m."conversationId" AND x."threadRootId" IS NULL
+        AND x.sequence > m."agentReadThroughSequence"
+    ) u
+    WHERE m."workspaceId" = ${workspaceId}::uuid AND m."agentId" = ${agentId}::uuid
+      AND m."leftAt" IS NULL
+      AND c."archivedAt" IS NULL AND c."hiddenFromWorkspaceAt" IS NULL
+      AND c.kind = 'app_events' AND c."channelName" IS NULL AND c."directKey" IS NOT NULL
+      AND u.unread > 0`;
+  return rows.flatMap(({ directKey, appKey, ...rest }) => {
+    const appTarget = appKey ? appEventTarget(appKey) : systemEventTargetFromDirectKey(directKey);
+    return appTarget ? [{ ...rest, appTarget }] : [];
+  });
+}
+
 export async function listAgentInbox(
   db: Pick<
     PrismaClient,
@@ -153,6 +186,7 @@ export async function listAgentInbox(
     await Promise.all([
       unreadConversations(db, workspaceId, agentId),
       unreadThreads(db, workspaceId, agentId),
+      unreadAppEvents(db, workspaceId, agentId),
     ])
   ).flat();
   const totals = {
@@ -184,13 +218,15 @@ export async function listAgentInbox(
   );
   const items = page.map((row): AgentInboxItem => ({
     kind: row.threadRootId ? "thread" : row.channelName === null ? "dm" : "channel",
-    target: row.threadRootId
-      ? threadReferenceText(row.channelName!, row.threadRootId)
-      : row.channelName === null
-        ? row.peer && row.peerKind
-          ? refOf({ name: row.peer, kind: row.peerKind })
-          : "@unknown"
-        : `#${row.channelName}`,
+    target: row.appTarget
+      ? row.appTarget
+      : row.threadRootId
+        ? threadReferenceText(row.channelName!, row.threadRootId)
+        : row.channelName === null
+          ? row.peer && row.peerKind
+            ? refOf({ name: row.peer, kind: row.peerKind })
+            : "@unknown"
+          : `#${row.channelName}`,
     unread: row.unread,
     mentions: row.mentions,
     latestAt: row.latestAt.toISOString(),

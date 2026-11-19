@@ -26,7 +26,8 @@ type HintRow = {
 type HintDb = Pick<
   PrismaClient,
   "$queryRaw" | "conversation" | "user" | "agent" | "workspaceMembership"
->;
+> &
+  Partial<Pick<PrismaClient, "app">>;
 
 export async function listWakeHints(
   db: HintDb,
@@ -61,7 +62,7 @@ export async function listWakeHints(
   if (rows.length === 0) return [];
   const conversations = await db.conversation.findMany({
     where: { workspaceId, id: { in: [...new Set(rows.map((row) => row.conversationId))] } },
-    select: { id: true, kind: true, ...TARGET_CONVERSATION_SELECT },
+    select: { id: true, ...TARGET_CONVERSATION_SELECT },
   });
   const targetOf = await directTargets(db, workspaceId, agentId, conversations);
   const byId = new Map(conversations.map((conversation) => [conversation.id, conversation]));

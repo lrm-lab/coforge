@@ -19,12 +19,31 @@ export const systemEventTarget = (source: SystemEventSource) => `@app.${source}`
 export const systemEventDirectKey = (source: SystemEventSource, agentId: string) =>
   `system:${source}|agent:${agentId}`;
 
+export function systemEventSourceFromDirectKey(
+  directKey: string | null | undefined,
+): SystemEventSource | undefined {
+  if (!directKey?.startsWith("system:")) return undefined;
+  const source = directKey.split("|", 1)[0]!.slice("system:".length);
+  return isSystemEventSource(source) ? source : undefined;
+}
+
+export function systemEventTargetFromDirectKey(
+  directKey: string | null | undefined,
+): string | undefined {
+  const source = systemEventSourceFromDirectKey(directKey);
+  return source ? systemEventTarget(source) : undefined;
+}
+
 export const appEventTarget = (appKey: string) => `@app.${appKey}`;
 
-/** The key of the dedicated conversation of an app and an Agent (`Conversation.directKey`); it
- * matches no direct conversation between people or with a person, so no list holds it. */
 export const appEventDirectKey = (appId: string, agentId: string) =>
   `app:${appId}|agent:${agentId}`;
+
+export function appIdFromEventDirectKey(directKey: string | null | undefined): string | undefined {
+  if (!directKey?.startsWith("app:")) return undefined;
+  const appId = directKey.split("|", 1)[0]!.slice("app:".length);
+  return appId || undefined;
+}
 
 /** `Conversation.kind` of an app's dedicated conversation with an Agent. */
 export const APP_EVENTS_KIND = "app_events";

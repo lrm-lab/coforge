@@ -70,6 +70,7 @@ export type AgentRecoveryContext = {
 };
 export type PendingAgentDelivery = AgentRecoveryContext["resumeMessages"][number] & {
   mentionsAgent?: boolean;
+  source?: "app";
 };
 export type AgentMentionReport = {
   pendingMentionActions: PendingMentionActionView[];

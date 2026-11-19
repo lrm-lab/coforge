@@ -17,6 +17,10 @@ import {
   type MessageMentionRef,
 } from "#src/server/conversations/mentions.server";
 import { channelTarget } from "#src/server/conversations/agent-delivery.server";
+import {
+  APP_EVENTS_KIND,
+  systemEventTargetFromDirectKey,
+} from "#src/server/app-agent-events/app-event-target.server";
 import type { DirectTargetOf, TargetConversation } from "./agent-peer-direct.repositories.server";
 const TASK_METADATA_SELECT = {
   select: {
@@ -75,7 +79,13 @@ export function conversationTarget(
   if (conversation.attachmentCommentThread)
     return `attachment:${conversation.attachmentCommentThread.attachmentId}`;
   if (conversation.channelName) return channelTarget(conversation.channelName);
-  return targetOf(conversation) ?? `@${undefined}`;
+  const direct = targetOf(conversation);
+  if (direct) return direct;
+  if (conversation.kind === APP_EVENTS_KIND) {
+    const systemTarget = systemEventTargetFromDirectKey(conversation.directKey);
+    if (systemTarget) return systemTarget;
+  }
+  return `@${undefined}`;
 }
 export const CONVERSATION_TARGET_MEMBERS = {
   where: { OR: [{ userId: { not: null } }, { agentId: { not: null } }] },
@@ -86,6 +96,7 @@ export const CONVERSATION_TARGET_MEMBERS = {
   take: 2,
 } satisfies Prisma.Conversation$membersArgs;
 export const TARGET_CONVERSATION_SELECT = {
+  kind: true,
   channelName: true,
   directKey: true,
   attachmentCommentThread: { select: { attachmentId: true } },
