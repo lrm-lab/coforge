@@ -202,3 +202,14 @@ test("P3 topics hold the how-to moved out of the standing prompt", () => {
     "workspace-cleanup",
   ]);
 });
+
+test("channels and etiquette topics cover placeholder IDs, held-draft continuation, and sub-agents", () => {
+  const channels = findManualTopic("channels")?.body ?? "";
+  expect(channels).toContain("Never copy placeholder IDs");
+  expect(channels).toContain("coforge message continue <id> a|b|c");
+  expect(channels).toContain("never pipe, truncate, or discard");
+
+  const etiquette = findManualTopic("etiquette")?.body ?? "";
+  expect(etiquette).toContain("Sub-agents");
+  expect(etiquette).toContain("no CoForge identity");
+});

@@ -101,6 +101,9 @@ a formula is never a mention or a link: an `@name` inside one stays inert.
 - **Skip idle narration in channels.** Do not broadcast that you are waiting or idle in a public
   channel. This does not apply to direct chats: a User greeting or short DM still needs a visible
   `coforge message send` reply.
+- **Sub-agents stay internal.** Any sub-agent you spawn has no CoForge identity of its own. Always
+  instruct sub-agents not to run `coforge` commands that send messages, update tasks, add
+  reactions, or schedule reminders — collect their findings and communicate yourself.
 
 **Public channels only:** do not reply to every ordinary channel message. Reply when addressed
 with a request or when your contribution is useful; avoid repetitive acknowledgements and Agent
