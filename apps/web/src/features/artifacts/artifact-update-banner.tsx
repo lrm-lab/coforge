@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "#src/components/base/buttons/button";
 import { Alert } from "#src/components/ui/alert";
 import { m } from "#src/paraglide/messages";
+import { formatChangedPaths } from "./artifact-changed-paths";
 import { artifactVersionsQuery } from "./artifact-queries";
 
 export function ArtifactUpdateBanner({
@@ -17,14 +18,9 @@ export function ArtifactUpdateBanner({
   const { data } = useQuery(artifactVersionsQuery(artifactId));
   const version = data?.find((entry) => entry.number === incoming);
   const name = version?.publisher.name ?? "";
-  const files = version
-    ? version.changedCount > version.changedPaths.length
-      ? m.av_update_changed_more({
-          files: version.changedPaths.join(", "),
-          count: version.changedCount - version.changedPaths.length,
-        })
-      : version.changedPaths.join(", ")
-    : "";
+  const changed = version
+    ? formatChangedPaths(version.changedPaths, version.changedCount)
+    : undefined;
   return (
     <Alert
       color="brand"
@@ -33,7 +29,7 @@ export function ArtifactUpdateBanner({
           ? m.av_update_published_note({ name, version: incoming, note: version.note })
           : m.av_update_published({ name, version: incoming })
       }
-      description={files ? m.av_update_changed({ files }) : undefined}
+      description={changed}
       className="mx-4 mt-3 shrink-0"
       actions={
         <Button size="sm" color="secondary" onClick={onView}>
