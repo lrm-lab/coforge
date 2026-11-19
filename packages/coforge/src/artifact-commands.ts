@@ -183,11 +183,13 @@ export function parseArtifactArgs(args: readonly string[]): ArtifactInvocation {
 export async function runArtifact(
   invocation: ArtifactInvocation,
   transport: ArtifactTransport,
-  readStdin: () => Promise<string> = readStdinText,
+  readStdin?: () => Promise<string>,
+  stdinIsTTY = readStdin === undefined ? Boolean(process.stdin.isTTY) : false,
 ): Promise<unknown> {
   if (!transport.artifact) throw new Error("Artifact transport is unavailable");
   if ("directory" in invocation) return runArtifactDirectory(invocation, transport);
-  if ("comment" in invocation) return runArtifactComment(invocation, transport, readStdin);
+  if ("comment" in invocation)
+    return runArtifactComment(invocation, transport, readStdin ?? readStdinText, stdinIsTTY);
   const request = invocation.request;
   const json = invocation.json === true;
   const result = await transport.artifact(request).catch((error: unknown) => {

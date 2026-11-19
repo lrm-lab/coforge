@@ -71,18 +71,40 @@ test("push sends only the files that differ, over the pulled version, and record
   expect(server.requests).toEqual([]);
 });
 
-test("push leaves out hidden files and the state file unless told, and the state file always", async () => {
-  const { server, dir } = await pulled({ "a.md": "a" });
+test("push leaves out hidden files unless told, always skips tool entries, and keeps tracking hidden files in state", async () => {
+  const { server, dir } = await pulled({
+    "a.md": "a",
+    ".env.example": "KEY=1",
+    ".well-known/info.txt": "v1",
+  });
   await writeFile(join(dir, ".secret"), "s");
+  await writeFile(join(dir, ".DS_Store"), "finder");
   await mkdir(join(dir, ".git"));
   await writeFile(join(dir, ".git", "config"), "g");
+  await mkdir(join(dir, "node_modules", "pkg"), { recursive: true });
+  await writeFile(join(dir, "node_modules", "pkg", "index.js"), "module.exports = 1;");
+  await symlink(join(dir, "a.md"), join(dir, "node_modules", "link"));
+  await writeFile(join(dir, ".env.example"), "KEY=2");
+  await writeFile(join(dir, ".well-known", "info.txt"), "v2");
+  await writeFile(join(dir, ".well-known", "untracked.txt"), "u");
   await writeFile(join(dir, "visible.md"), "v");
+
   await run(server, ["push", dir]);
-  expect(Object.keys(server.currentFiles()).sort()).toEqual(["a.md", "visible.md"]);
+  expect(Object.keys(server.currentFiles()).sort()).toEqual([
+    ".env.example",
+    ".well-known/info.txt",
+    "a.md",
+    "visible.md",
+  ]);
+  expect(server.currentFiles()[".env.example"]).toBe(sha256("KEY=2"));
+  expect(server.currentFiles()[".well-known/info.txt"]).toBe(sha256("v2"));
+
   await run(server, ["push", dir, "--include-hidden"]);
   expect(Object.keys(server.currentFiles()).sort()).toEqual([
-    ".git/config",
+    ".env.example",
     ".secret",
+    ".well-known/info.txt",
+    ".well-known/untracked.txt",
     "a.md",
     "visible.md",
   ]);

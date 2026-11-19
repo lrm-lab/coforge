@@ -1,5 +1,4 @@
 import { isRecord } from "#src/internal/json-record";
-import { hasControlCharacter } from "#src/internal/control-characters";
 import {
   ARTIFACT_COMMENT_IMAGES_MAX,
   isAnchorShape,
@@ -245,6 +244,14 @@ export function decodeAgentArtifactRequest(value: unknown): AgentArtifactRequest
 
 export const ARTIFACT_SHA256_PATTERN = /^[0-9a-f]{64}$/;
 
+const FORBIDDEN_PATH_CHARS = /[\\:%?#\p{Cc}\p{Cf}]/u;
+const GIT_SHORT_NAME = /^git~\d+$/i;
+
+function isGitDirectorySegment(segment: string): boolean {
+  const normalized = segment.replace(/[. ]+$/, "").toLowerCase();
+  return normalized === ".git" || GIT_SHORT_NAME.test(normalized);
+}
+
 export function artifactPathValid(path: string): boolean {
   if (!path || path.startsWith("/") || path.endsWith("/")) return false;
   return path
@@ -254,9 +261,8 @@ export function artifactPathValid(path: string): boolean {
         segment.length > 0 &&
         segment !== "." &&
         segment !== ".." &&
-        !segment.includes("\\") &&
-        !segment.includes(":") &&
-        !hasControlCharacter(segment),
+        !FORBIDDEN_PATH_CHARS.test(segment) &&
+        !isGitDirectorySegment(segment),
     );
 }
 

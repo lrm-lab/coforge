@@ -71,7 +71,8 @@ export async function runPush(
         `--delete ${path}: the file is still in the directory`,
         "Remove the file first, then push with --delete.",
       );
-  const local = await scanDirectory(dir, draft.includeHidden === true);
+  const tracked = state ? new Set(Object.keys(state.files)) : undefined;
+  const local = await scanDirectory(dir, draft.includeHidden === true, tracked);
   const settings = {
     ...(draft.title === undefined ? {} : { title: draft.title }),
     ...(draft.description === undefined ? {} : { description: draft.description }),

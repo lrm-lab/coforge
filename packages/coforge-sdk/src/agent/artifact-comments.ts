@@ -16,7 +16,7 @@ export const ARTIFACT_COMMENT_IMAGE_MAX_PIXELS = 40_000_000;
 export const ANCHOR_DATA_MAX_BYTES = 4096;
 
 export type AgentReviewComment = {
-  body: string;
+  body?: string;
   path?: string;
   anchor?: AgentArtifactAnchor;
   replyTo?: string;
@@ -39,8 +39,8 @@ const REVIEW_COMMENT_KEYS = ["body", "path", "anchor", "replyTo", "images"];
 
 export function isReviewCommentShape(value: unknown): value is AgentReviewComment {
   if (!isRecord(value)) return false;
-  if (typeof value.body !== "string") return false;
   if (!Object.keys(value).every((key) => REVIEW_COMMENT_KEYS.includes(key))) return false;
+  if (value.body !== undefined && typeof value.body !== "string") return false;
   if (value.path !== undefined && typeof value.path !== "string") return false;
   if (value.replyTo !== undefined && typeof value.replyTo !== "string") return false;
   if (
@@ -52,5 +52,8 @@ export function isReviewCommentShape(value: unknown): value is AgentReviewCommen
     )
   )
     return false;
+  const hasBody = typeof value.body === "string" && value.body.length > 0;
+  const hasImages = Array.isArray(value.images) && value.images.length > 0;
+  if (!hasBody && !hasImages) return false;
   return value.anchor === undefined || isAnchorShape(value.anchor);
 }

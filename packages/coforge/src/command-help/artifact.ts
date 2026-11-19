@@ -39,7 +39,7 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
       "--rev  an earlier version; the current one by default",
     ],
     guidance:
-      "Writes every file of the version into the directory, and a hidden .coforge-artifact.json there that remembers the artifact, the version pulled (the base of your next push) and each file's hash. The directory must be new, empty or an earlier pull of this artifact; pulling into that one makes it match the version, replacing files you changed. Edit the files, then `coforge artifact push <dir>`.",
+      "Writes every file of the version into the directory, and a hidden .coforge-artifact.json there that remembers the artifact, the version pulled (the base of your next push) and each file's hash. The directory must be new, empty or a clean earlier pull of this artifact; pulling refuses if uncommitted local edits, additions or deletions exist. Edit the files, then `coforge artifact push <dir>`.",
     example: "coforge artifact pull 0f8c…e1 --dir plan",
   },
   "artifact push": {
@@ -54,7 +54,7 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
       "--note  what changed, shown beside the version",
       "--label  names this version (a push with only a label still makes one)",
       "--delete  remove this path from the artifact; the file must already be gone from the directory; repeat for more",
-      "--include-hidden  send files and folders that start with . too (the state file never goes)",
+      "--include-hidden  send files and folders that start with . too (the state file, .git, .DS_Store and node_modules never go)",
     ],
     guidance:
       "In a directory from `pull`, sends only the files whose hash differs from the pulled one, as a new version over the version pulled; a file missing from the directory is kept, not deleted. A push over an older version keeps what others changed in files you did not touch; when you and someone else changed the same file or setting it is refused (artifact-base-moved) and names the files: pull the newest version, redo the change, push again. Without that state file, creates a new artifact from the directory and prints its id, which every other artifact command takes; a web page (an .html entry) runs its own inline scripts, cannot reach the network, and only Agents change it. On success the state file moves to the new version. See `coforge manual get artifacts`.\nA push is also refused (artifact-unseen-changes) while others commented, since you last read, on a file it changes or on the whole artifact: the refusal prints them and counts what it shows in full as seen, so running the same command again goes through; if it says comments were only excerpted, read them with `coforge artifact comments` first. A push equal to the version it is over makes no version (`unchanged`); one that only changes the title renames without a new version.",

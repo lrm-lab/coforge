@@ -21,8 +21,10 @@ import type { ArtifactDirectoryTransport } from "#src/artifact-directory-args";
 import {
   COMMENT_IMAGES_MAX,
   REVIEW_IMAGES_MAX,
+  prepareImage,
+  prepareImages,
   requireImageCount,
-  uploadImage,
+  uploadPreparedImages,
 } from "#src/artifact-images";
 import { CliError, invalidArg, withOutputMode } from "#src/cli-error";
 
@@ -33,11 +35,12 @@ export async function runArtifactComment(
   invocation: ArtifactCommentInvocation,
   transport: Pick<ArtifactDirectoryTransport, "artifact" | "artifactUpload">,
   readStdin: () => Promise<string>,
+  stdinIsTTY = false,
 ): Promise<unknown> {
   if (!transport.artifact) throw new Error("Artifact transport is unavailable");
   const json = invocation.json === true;
   const draft = invocation.comment;
-  const request = await buildRequest(draft, readStdin, transport);
+  const request = await buildRequest(draft, readStdin, transport, stdinIsTTY);
   const result = await transport.artifact(request).catch((error: unknown) => {
     throw error instanceof CliError ? withOutputMode(error, json ? "json" : "text") : error;
   });
@@ -60,6 +63,7 @@ async function buildRequest(
   draft: ArtifactCommentDraft,
   readStdin: () => Promise<string>,
   transport: Pick<ArtifactDirectoryTransport, "artifactUpload">,
+  stdinIsTTY: boolean,
 ): Promise<AgentArtifactRequest> {
   switch (draft.operation) {
     case "comments":
@@ -69,12 +73,13 @@ async function buildRequest(
     case "comment": {
       const { imagePaths = [], ...rest } = draft;
       requireImageCount(imagePaths.length, COMMENT_IMAGES_MAX, "a comment");
-      const body = (await readStdin()).trim();
+      const prepared = await prepareImages(imagePaths);
+      const body = stdinIsTTY && imagePaths.length > 0 ? "" : (await readStdin()).trim();
       if (!body && imagePaths.length === 0)
         throw invalidArg(
           "Write the comment on stdin, for example with a quoted here-document (<<'EOF'), or attach an image with --image <path>",
         );
-      const images = await Promise.all(imagePaths.map((path) => uploadImage(transport, path)));
+      const images = await uploadPreparedImages(transport, prepared);
       return {
         ...rest,
         ...(body ? { body } : {}),
@@ -95,17 +100,28 @@ async function buildRequest(
           COMMENT_IMAGES_MAX,
           `comments[${index}]`,
         );
-      const uploaded = await Promise.all(
-        comments.map(async (comment) =>
+      const preparedComments = await Promise.all(
+        comments.map(async (comment, index) =>
           Array.isArray(comment.images)
             ? {
-                ...comment,
-                images: await Promise.all(
-                  comment.images.map((path) => uploadImage(transport, String(path))),
+                comment,
+                prepared: await Promise.all(
+                  comment.images.map((path) => {
+                    if (typeof path !== "string")
+                      throw invalidArg(`comments[${index}]: image paths must be strings`);
+                    return prepareImage(path);
+                  }),
                 ),
               }
-            : comment,
+            : { comment, prepared: undefined },
         ),
+      );
+      await uploadPreparedImages(
+        transport,
+        preparedComments.flatMap((entry) => entry.prepared ?? []),
+      );
+      const uploaded = preparedComments.map(({ comment, prepared }) =>
+        prepared ? { ...comment, images: prepared.map(({ sha256 }) => sha256) } : comment,
       );
       return {
         ...draft,
@@ -146,8 +162,10 @@ function reviewComment(value: unknown, index: number): ReviewComment {
     if (!anchor)
       throw invalidArg(`comments[${index}]: lines takes a line N or a range a-b, not "${lines}"`);
   }
+  const hasImages = Array.isArray(rest.images) && rest.images.length > 0;
   return {
     ...rest,
+    ...(rest.body === undefined && hasImages ? { body: "" } : {}),
     ...(anchor === undefined ? {} : { anchor }),
     ...(replyTo === undefined
       ? {}

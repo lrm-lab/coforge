@@ -287,3 +287,62 @@ test("download refuses to write through a symbolic link", async () => {
     "INVALID_ARG",
   );
 });
+
+test("pull refuses to overwrite uncommitted local edits, additions or deletions", async () => {
+  const server = fakeServer({ "plan.md": "one", "keep.md": "keep" });
+  const modifiedDir = join(root, "modified");
+  await run(server, ["pull", ID, "--dir", modifiedDir]);
+  await writeFile(join(modifiedDir, "plan.md"), "local edit");
+  server.others({ "plan.md": "two" });
+  server.downloads.length = 0;
+
+  const modifiedError = await failure(run(server, ["pull", ID, "--dir", modifiedDir]));
+  expect(modifiedError.code).toBe("ARTIFACT_DIR_CONFLICT");
+  expect(modifiedError.message).toContain("plan.md");
+  expect(modifiedError.suggestedNextAction).toContain("coforge artifact push");
+  expect(await read("modified", "plan.md")).toEqual(Buffer.from("local edit"));
+  expect((await stateOf(modifiedDir)).version).toBe(1);
+  expect(server.downloads).toEqual([]);
+
+  const deletedDir = join(root, "deleted");
+  await run(server, ["pull", ID, "--dir", deletedDir, "--rev", "1"]);
+  await rm(join(deletedDir, "keep.md"));
+  server.downloads.length = 0;
+  const deletedError = await failure(run(server, ["pull", ID, "--dir", deletedDir]));
+  expect(deletedError.code).toBe("ARTIFACT_DIR_CONFLICT");
+  expect(deletedError.message).toContain("keep.md");
+  expect((await stateOf(deletedDir)).version).toBe(1);
+  expect(server.downloads).toEqual([]);
+
+  const addedDir = join(root, "added");
+  await run(server, ["pull", ID, "--dir", addedDir, "--rev", "1"]);
+  await writeFile(join(addedDir, "draft.md"), "untracked");
+  server.downloads.length = 0;
+  const addedError = await failure(run(server, ["pull", ID, "--dir", addedDir]));
+  expect(addedError.code).toBe("ARTIFACT_DIR_CONFLICT");
+  expect(addedError.message).toContain("draft.md");
+  expect(await read("added", "draft.md")).toEqual(Buffer.from("untracked"));
+  expect(server.downloads).toEqual([]);
+
+  const toolDir = join(root, "clean-with-tools");
+  await run(server, ["pull", ID, "--dir", toolDir, "--rev", "1"]);
+  await writeFile(join(toolDir, ".DS_Store"), "finder");
+  await mkdir(join(toolDir, ".git"));
+  await writeFile(join(toolDir, ".git", "HEAD"), "ref: refs/heads/main");
+  await mkdir(join(toolDir, "node_modules"));
+  await symlink(join(root, "missing-target"), join(toolDir, "node_modules", "broken-link"));
+  await run(server, ["pull", ID, "--dir", toolDir]);
+  expect(await read("clean-with-tools", "plan.md")).toEqual(Buffer.from("two"));
+  expect((await stateOf(toolDir)).version).toBe(2);
+
+  const hiddenServer = fakeServer({ "plan.md": "one", ".env.example": "A=1" });
+  const hiddenDir = join(root, "hidden-edit");
+  await run(hiddenServer, ["pull", ID, "--dir", hiddenDir]);
+  await writeFile(join(hiddenDir, ".env.example"), "A=2");
+  hiddenServer.others({ ".env.example": "A=3" });
+  hiddenServer.downloads.length = 0;
+  const hiddenError = await failure(run(hiddenServer, ["pull", ID, "--dir", hiddenDir]));
+  expect(hiddenError.code).toBe("ARTIFACT_DIR_CONFLICT");
+  expect(hiddenError.message).toContain(".env.example");
+  expect(hiddenServer.downloads).toEqual([]);
+});

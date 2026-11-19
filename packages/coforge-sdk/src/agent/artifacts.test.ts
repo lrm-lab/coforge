@@ -145,9 +145,42 @@ test("file bytes go up and come down on their own routes", () => {
 });
 
 test("an artifact file path is relative plain segments, and a sha256 is lowercase hex", () => {
-  for (const path of ["index.html", "css/site.css", "a..b.txt", "docs/v1.2/notes.md"])
+  for (const path of [
+    "index.html",
+    "css/site.css",
+    "a..b.txt",
+    "docs/v1.2/notes.md",
+    ".gitignore",
+    ".github/workflows/ci.yml",
+    "git-guide.md",
+  ])
     expect(artifactPathValid(path)).toBe(true);
-  for (const path of ["", "/abs", "dir/", "a//b", "./a", "a/../b", "a\\b", "c:x", "a\u0000b"])
+  for (const path of [
+    "",
+    "/abs",
+    "dir/",
+    "a//b",
+    "./a",
+    "a/../b",
+    "a\\b",
+    "c:x",
+    "a\u0000b",
+    "a\tb",
+    "a\nb",
+    "a\u200bb",
+    "a\u202eb",
+    "a\ufeffb",
+    "a%20b",
+    "a?b",
+    "a#b",
+    ".git",
+    ".GIT",
+    "sub/.git/config",
+    ".git./config",
+    "git~1",
+    "GIT~1",
+    "sub/git~1/HEAD",
+  ])
     expect(artifactPathValid(path)).toBe(false);
   expect(ARTIFACT_SHA256_PATTERN.test("a".repeat(64))).toBe(true);
   expect(ARTIFACT_SHA256_PATTERN.test("A".repeat(64))).toBe(false);
@@ -299,22 +332,35 @@ test("a comment may carry up to four image uploads and no text, and save and ima
   expect(decodeAgentArtifactRequest({ operation: "image", artifact: "a1" })).toBeNull();
 });
 
-test("a review comment may carry images", () => {
+test("a review comment may carry images with or without a body, and rejects empty comments without images", () => {
   const sha = "d".repeat(64);
-  expect(
-    decodeAgentArtifactRequest({
-      operation: "review",
-      artifact: "a1",
-      idempotencyKey: "k",
-      comments: [{ body: "x", images: [sha] }],
-    }),
-  ).not.toBeNull();
-  expect(
-    decodeAgentArtifactRequest({
-      operation: "review",
-      artifact: "a1",
-      idempotencyKey: "k",
-      comments: [{ body: "x", images: [1] }],
-    }),
-  ).toBeNull();
+  for (const comment of [
+    { body: "x", images: [sha] },
+    { images: [sha] },
+    { body: "", images: [sha] },
+  ])
+    expect(
+      decodeAgentArtifactRequest({
+        operation: "review",
+        artifact: "a1",
+        idempotencyKey: "k",
+        comments: [comment],
+      }),
+    ).not.toBeNull();
+  for (const comment of [
+    { body: "x", images: [1] },
+    { body: 1, images: [sha] },
+    { images: [] },
+    { body: "" },
+    { body: "", images: [] },
+    { path: "a.md" },
+  ])
+    expect(
+      decodeAgentArtifactRequest({
+        operation: "review",
+        artifact: "a1",
+        idempotencyKey: "k",
+        comments: [comment],
+      }),
+    ).toBeNull();
 });

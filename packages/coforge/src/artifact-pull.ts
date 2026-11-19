@@ -3,11 +3,13 @@ import { resolve } from "node:path";
 import {
   artifactPath,
   folderName,
+  localChanges,
   pullTarget,
   refuseCaseCollisions,
   removeInside,
   shellWord,
   writeState,
+  type LocalChanges,
 } from "#src/artifact-directory";
 import type {
   ArtifactDirectoryDraft,
@@ -20,7 +22,19 @@ import { asJson, pullFile, requireCall } from "#src/artifact-transfer";
 import { CliError, invalidArg } from "#src/cli-error";
 import { inPool } from "#src/pool";
 
-/** `coforge artifact pull`: every file of a version into a directory, with its state file. */
+const listPaths = (paths: readonly string[]) =>
+  paths.length <= 5
+    ? paths.join(", ")
+    : `${paths.slice(0, 5).join(", ")} (+${paths.length - 5} more)`;
+
+function formatLocalChanges(changes: LocalChanges): string {
+  return [
+    ...(changes.modified.length > 0 ? [`modified: ${listPaths(changes.modified)}`] : []),
+    ...(changes.added.length > 0 ? [`added: ${listPaths(changes.added)}`] : []),
+    ...(changes.deleted.length > 0 ? [`deleted: ${listPaths(changes.deleted)}`] : []),
+  ].join("; ");
+}
+
 export async function runPull(
   invocation: ArtifactDirectoryInvocation,
   draft: Extract<ArtifactDirectoryDraft, { operation: "pull" }>,
@@ -49,9 +63,23 @@ export async function runPull(
   const shown = draft.dir ?? folderName(title, id);
   const dir = resolve(cwd, shown);
   const previous = await pullTarget(dir, id);
+  if (previous && previous.version > 0) {
+    const changes = await localChanges(
+      dir,
+      previous,
+      files.map((file) => file.path),
+    );
+    const summary = formatLocalChanges(changes);
+    if (summary)
+      throw new CliError({
+        code: "ARTIFACT_DIR_CONFLICT",
+        message: `${shown} has uncommitted local changes (${summary}); pulling would overwrite them.`,
+        retryable: false,
+        suggestedNextAction: `Push them first (coforge artifact push ${shellWord(shown)}), or pull into a fresh directory (coforge artifact pull ${id} --dir <new dir>).`,
+        details: changes,
+      });
+  }
   await mkdir(dir, { recursive: true });
-  // Until the last file is in, the directory is a mix of versions: its state says so. It still
-  // names every file either version may have left, so a later pull removes the ones dropped.
   await writeState(dir, {
     artifact: id,
     version: 0,
@@ -73,7 +101,6 @@ export async function runPull(
     `Pulled ${files.length} file${files.length === 1 ? "" : "s"} of "${title}" (id ${id}), version ${version} of ${currentVersion}, into ${shown}.`,
     ...(answer.entryPath ? [`Entry: ${answer.entryPath}`] : []),
     `Edit the files there, then send what changed: coforge artifact push ${shellWord(shown)}`,
-    // Pulling the current version moves the Agent's read position, as a read does.
     ...(answer.unseen ? formatUnseen(answer.unseen) : []),
     ...formatUnseenComments(id, answer.unseenComments),
   ];
