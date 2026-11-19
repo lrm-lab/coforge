@@ -222,10 +222,16 @@ describe("desktop page adaptation", () => {
     expect(html).not.toContain('data-key="ControlLeft"');
     expect(html).toContain("coforgeAttachPhoneGestures");
     expect(html).toContain("applyPhoneViewportScale");
+    expect(html).toContain("viewportChangeSize");
+    expect(html).toContain("clipViewport = true");
+    expect(html).toContain("schedulePhoneViewportApply");
+    expect(html).toContain("ResizeObserver");
     expect(html).toContain("viewportChangePos");
     expect(html).toContain("capture: true");
     expect(html).toContain("touchstart");
     expect(html).toContain("buttonMask");
+    expect(html).toContain("travel <= 20");
+    expect(html).not.toContain("absX(clientX");
     expect(html).toContain("0xff1b");
   });
 

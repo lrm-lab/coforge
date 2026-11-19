@@ -36,3 +36,37 @@ export function phoneScaleFromPinch(
 export function phoneViewportCanPan(scale: number, fitScale: number, epsilon = 0.02): boolean {
   return scale > fitScale + epsilon;
 }
+
+/**
+ * noVNC clip viewport size in framebuffer pixels for a continuous CSS scale.
+ * Always pair with clipViewport=true and display.scale = scale.
+ */
+export function phoneViewportSize(
+  containerWidth: number,
+  containerHeight: number,
+  scale: number,
+): { width: number; height: number } {
+  const s = scale > 0 && Number.isFinite(scale) ? scale : 1;
+  return {
+    width: containerWidth / s,
+    height: containerHeight / s,
+  };
+}
+
+/**
+ * Canvas-local CSS pixels for RFB._handleMouseButton / _sendMouse.
+ * Do not pre-apply display.absX/absY — those run inside _sendMouse.
+ */
+export function phoneCanvasLocalPoint(
+  clientX: number,
+  clientY: number,
+  canvasLeft: number,
+  canvasTop: number,
+): { x: number; y: number } {
+  return { x: clientX - canvasLeft, y: clientY - canvasTop };
+}
+
+/** Finger travel that still counts as a tap (not a pan) when zoomed. */
+export function phoneGestureIsTap(totalDx: number, totalDy: number, slop = 20): boolean {
+  return Math.hypot(totalDx, totalDy) <= slop;
+}

@@ -125,8 +125,8 @@ export const RELATIVE_PAGE_SCRIPT = `
     let gesturesBound = false;
     function phoneFrameSize() {
       const display = rfb?._display;
-      const width = display?.width || 0;
-      const height = display?.height || 0;
+      const width = display?._fb_width || display?.width || 0;
+      const height = display?._fb_height || display?.height || 0;
       return { width, height };
     }
     function phoneFitScale() {
@@ -137,31 +137,59 @@ export const RELATIVE_PAGE_SCRIPT = `
       return Math.min(cw / width, ch / height, 1);
     }
     function phoneViewportCanPan() {
-      return phoneScale > phoneFitScale() + 0.02;
+      return phoneScale > 0 && phoneScale > phoneFitScale() + 0.02;
     }
     function syncPhoneModeButtons() {
-      const nearFit = phoneScale <= phoneFitScale() + 0.03;
+      const fit = phoneFitScale();
+      const nearFit = phoneScale > 0 && phoneScale <= fit + 0.03;
       phoneBar?.querySelectorAll('button[data-mode="fit"]').forEach((button) => {
         button.classList.toggle("is-active", nearFit);
       });
     }
     function applyPhoneViewportScale(scale) {
-      if (!rfb || !phone || !rfb._display) return;
-      const fit = phoneFitScale();
+      if (!rfb || !phone || !rfb._display) return false;
+      const { width, height } = phoneFrameSize();
+      const cw = screen?.clientWidth || 0;
+      const ch = screen?.clientHeight || 0;
+      if (width <= 0 || height <= 0 || cw <= 0 || ch <= 0) {
+        rfb.scaleViewport = true;
+        rfb.clipViewport = false;
+        return false;
+      }
+      const fit = Math.min(cw / width, ch / height, 1);
       const next = Math.min(1, Math.max(fit, Number.isFinite(scale) ? scale : fit));
       phoneScale = next;
       rfb.scaleViewport = false;
       rfb.dragViewport = false;
-      rfb.clipViewport = phoneViewportCanPan();
       try {
         rfb._display.scale = next;
       } catch {
       }
+      rfb.clipViewport = true;
+      try {
+        if (typeof rfb._display.viewportChangeSize === "function") {
+          rfb._display.viewportChangeSize(cw / next, ch / next);
+        }
+      } catch {
+      }
       syncPhoneModeButtons();
+      return true;
+    }
+    function schedulePhoneViewportApply(scale) {
+      const target = () => (Number.isFinite(scale) && scale > 0 ? scale : phoneScale || phoneFitScale());
+      const attempt = (left) => {
+        if (applyPhoneViewportScale(target())) return;
+        if (left <= 0) return;
+        requestAnimationFrame(() => attempt(left - 1));
+      };
+      attempt(30);
+      setTimeout(() => applyPhoneViewportScale(target()), 0);
+      setTimeout(() => applyPhoneViewportScale(target()), 50);
+      setTimeout(() => applyPhoneViewportScale(target()), 200);
     }
     function applyPhoneMode(mode) {
       if (!rfb || !phone) return;
-      applyPhoneViewportScale(mode === "fit" ? phoneFitScale() : phoneScale || phoneFitScale());
+      schedulePhoneViewportApply(mode === "fit" ? phoneFitScale() : phoneScale || phoneFitScale());
     }
     function sendKey(code, down) {
       if (!rfb) return;
@@ -232,12 +260,10 @@ export const RELATIVE_PAGE_SCRIPT = `
     }
     function remotePoint(clientX, clientY) {
       const canvas = screen?.querySelector("canvas");
-      if (!canvas || !rfb?._display) return null;
+      if (!canvas || !rfb) return null;
       const rect = canvas.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return null;
-      const x = rfb._display.absX(clientX - rect.left);
-      const y = rfb._display.absY(clientY - rect.top);
-      return { x, y };
+      return { x: clientX - rect.left, y: clientY - rect.top };
     }
     function sendMouse(clientX, clientY, buttonMask) {
       if (!rfb) return;
@@ -245,8 +271,8 @@ export const RELATIVE_PAGE_SCRIPT = `
       if (!point) return;
       try {
         if (typeof rfb._handleMouseButton === "function") {
-          rfb._handleMouseButton(point.x, point.y, 1, buttonMask);
-          rfb._handleMouseButton(point.x, point.y, 0, buttonMask);
+          rfb._handleMouseButton(point.x, point.y, true, buttonMask);
+          rfb._handleMouseButton(point.x, point.y, false, buttonMask);
           return;
         }
         if (typeof rfb._sendMouse === "function") {
@@ -376,7 +402,8 @@ export const RELATIVE_PAGE_SCRIPT = `
             longPressFired = false;
             return;
           }
-          if (!gesture.moved && !gesture.panning && !gesture.scrolling) {
+          const travel = Math.hypot(gesture.lastX - gesture.startX, gesture.lastY - gesture.startY);
+          if (!gesture.scrolling && travel <= 20) {
             ev.preventDefault();
             ev.stopPropagation();
             sendMouse(gesture.startX, gesture.startY, 0x1);
@@ -395,8 +422,15 @@ export const RELATIVE_PAGE_SCRIPT = `
       );
       window.addEventListener("resize", () => {
         if (!phone || !rfb) return;
-        applyPhoneViewportScale(phoneScale || phoneFitScale());
+        schedulePhoneViewportApply(phoneScale || phoneFitScale());
       });
+      if (typeof ResizeObserver === "function") {
+        const ro = new ResizeObserver(() => {
+          if (!phone || !rfb) return;
+          schedulePhoneViewportApply(phoneScale || phoneFitScale());
+        });
+        ro.observe(screen);
+      }
     }
 
     let session = 0;
@@ -416,10 +450,10 @@ export const RELATIVE_PAGE_SCRIPT = `
       rfb.addEventListener("connect", () => {
         showReconnect(false);
         if (msg) msg.hidden = true;
-        if (phone) applyPhoneViewportScale(phoneScale || phoneFitScale());
+        if (phone) schedulePhoneViewportApply(phoneScale || phoneFitScale());
       });
       rfb.addEventListener("desktopresize", () => {
-        if (phone) applyPhoneViewportScale(phoneScale || phoneFitScale());
+        if (phone) schedulePhoneViewportApply(phoneScale || phoneFitScale());
       });
       rfb.addEventListener("securityfailure", (ev) => {
         if (!msg) return;
