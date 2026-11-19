@@ -12,7 +12,11 @@ import { useScopeLabels, visibilityIcon, type VisibilityChoice } from "./artifac
 import { canCopyEmbed, type ArtifactLinkSharing } from "./artifact-link-sharing";
 import { loadArtifactAccessLoss, setArtifactAccess } from "./artifacts.functions";
 
-type Confirmation = { choice: VisibilityChoice; narrowing: boolean; linkOff: boolean };
+type Confirmation = {
+  choice: VisibilityChoice | "revoke-legacy-link";
+  narrowing: boolean;
+  linkOff: boolean;
+};
 
 function confirmationFor(
   choice: VisibilityChoice,
@@ -43,6 +47,7 @@ export function useArtifactVisibility({
 }) {
   const queryClient = useQueryClient();
   const workspaceName = useWorkspaceName();
+  const legacyLinkActive = tier !== "link" && link.url !== null;
   const [confirming, setConfirming] = useState<Confirmation | null>(null);
   const loss = useQuery({
     queryKey: [...ARTIFACTS_KEY, "access-loss", artifactId],
@@ -63,19 +68,23 @@ export function useArtifactVisibility({
           : "checking";
 
   const apply = async ({ choice, narrowing }: Confirmation) => {
-    await setArtifactAccess({
-      data: {
-        artifactId,
-        access: choice,
-        ...(narrowing && loss.data ? { expectedLost: loss.data.total } : {}),
-      },
-    });
+    if (choice === "revoke-legacy-link") {
+      await link.apply(false);
+    } else {
+      await setArtifactAccess({
+        data: {
+          artifactId,
+          access: choice,
+          ...(narrowing && loss.data ? { expectedLost: loss.data.total } : {}),
+        },
+      });
+    }
     await queryClient.invalidateQueries({ queryKey: ARTIFACTS_KEY });
   };
 
   const request = (choice: VisibilityChoice) => {
     if (choice === tier) return;
-    const needed = confirmationFor(choice, tier, link.url !== null);
+    const needed = confirmationFor(choice, tier, legacyLinkActive);
     if (needed) setConfirming(needed);
     else void apply({ choice, narrowing: false, linkOff: false }).catch(() => undefined);
   };
@@ -168,6 +177,11 @@ export function useArtifactVisibility({
 
   return {
     current: tier,
+    legacyLinkActive,
+    revokeLegacyLink: () => {
+      if (canChange && legacyLinkActive)
+        setConfirming({ choice: "revoke-legacy-link", narrowing: false, linkOff: true });
+    },
     label,
     request,
     dialog,

@@ -8,8 +8,9 @@ import { visibilityIcon } from "./artifact-scope";
 import { VisibilityMenu, type ArtifactVisibility } from "./use-artifact-visibility";
 
 export function VisibilityPill({ visibility }: { visibility: ArtifactVisibility }) {
-  const Icon = visibilityIcon[visibility.current];
-  const scope = visibility.label[visibility.current];
+  const visibleScope = visibility.legacyLinkActive ? "link" : visibility.current;
+  const Icon = visibilityIcon[visibleScope];
+  const scope = visibility.label[visibleScope];
   const inner = (
     <>
       <Icon aria-hidden="true" className="size-3.5 shrink-0" />

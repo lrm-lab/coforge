@@ -8,6 +8,7 @@ import {
   Download01,
   Edit03,
   Link01,
+  LinkBroken01,
   LinkExternal01,
   MessageSquare01,
   SearchLg,
@@ -65,13 +66,26 @@ export function ArtifactMoreMenu({
     <Dropdown.Root>
       <ButtonUtility icon={DotsHorizontal} size="xs" color="tertiary" tooltip={m.doc_more()} />
       <Dropdown.Popover placement="bottom end">
-        <Dropdown.Menu aria-label={m.doc_more()} onAction={(key) => onAction(key as MoreAction)}>
+        <Dropdown.Menu
+          aria-label={m.doc_more()}
+          onAction={(key) => {
+            if (key === "revoke-legacy-link") visibility.revokeLegacyLink();
+            else onAction(key as MoreAction);
+          }}
+        >
           {phone && canFind && (
             <Dropdown.Item id="find" icon={SearchLg} label={m.doc_page_find()} />
           )}
           {phone && <Dropdown.Item id="copy-link" icon={Link01} label={m.doc_copy_link()} />}
           {visibility.canEmbed && (
             <Dropdown.Item id="embed" icon={Code01} label={m.av_menu_embed()} />
+          )}
+          {visibility.canChange && visibility.legacyLinkActive && (
+            <Dropdown.Item
+              id="revoke-legacy-link"
+              icon={LinkBroken01}
+              label={m.av_vis_link_off_confirm()}
+            />
           )}
           <Dropdown.Item id="send" icon={Send01} label={m.doc_send_action()} />
           <Dropdown.SubmenuTrigger>

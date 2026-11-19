@@ -2,7 +2,10 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { ArtifactPublicLinks } from "#src/server/artifacts/artifact-public-links.server";
-import { publicPageLookup } from "#src/server/artifacts/artifact-public-page.server";
+import {
+  linkPageLookup,
+  publicPageLookup,
+} from "#src/server/artifacts/artifact-public-page.server";
 import { rememberArtifactSandboxConfig } from "#src/server/artifacts/artifact-sandbox-config.server";
 import { conversationRealtimeChannel } from "#src/features/conversations/conversation-realtime";
 
@@ -232,6 +235,7 @@ test("a public link shows the current version's entry and any one file of it", a
   const token = set.enabled ? set.url.slice(set.url.lastIndexOf("/") + 1) : "";
   let enabled = true;
   const lookup = publicPageLookup(db, async () => enabled);
+  const lookupById = linkPageLookup(db, async () => enabled);
 
   expect(await lookup(token)).toEqual({
     workspaceId,
@@ -253,8 +257,22 @@ test("a public link shows the current version's entry and any one file of it", a
   enabled = false;
   expect(await lookup(token, "site.css")).toBeNull();
   enabled = true;
+  expect(await lookupById(made.id)).toMatchObject({
+    shared: true,
+    page: { artifactId: made.id, access: "conversation", sha256: "home" },
+  });
+  expect(await lookupById(made.id, "site.css")).toMatchObject({
+    shared: true,
+    page: { sha256: "css" },
+  });
   await links.set({ workspaceId, artifactId: made.id, userId: owner, enabled: false });
   expect(await lookup(token, "site.css")).toBeNull();
+  expect(await lookupById(made.id)).toEqual({ shared: false, page: null });
+  expect(await lookupById(made.id, "site.css")).toEqual({ shared: false, page: null });
+  expect(
+    await db.artifact.findUniqueOrThrow({ where: { id: made.id }, select: { access: true } }),
+  ).toEqual({ access: "conversation" });
+  expect(await db.artifactAccessEvent.count({ where: { artifactId: made.id } })).toBe(0);
 });
 
 test("a public link to a file entry is looked up with its kind and size", async () => {
