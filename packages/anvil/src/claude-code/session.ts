@@ -323,9 +323,6 @@ export class ClaudeCodeAgentSession implements AgentSession {
     }
     if (record.type === "system" && record.parent_tool_use_id == null) {
       if (record.subtype === "status" && record.status === "compacting") {
-        // Report the raw signal every time; the daemon core de-dupes repeated "compacting"
-        // status lines into a single reported episode (agent-runtime/phase-tracker.ts).
-        // This flag only gates queued notification delivery below.
         this.#compacting = true;
         this.#emit({ type: "compaction-started", occurredAt: eventTime(record) });
       }
