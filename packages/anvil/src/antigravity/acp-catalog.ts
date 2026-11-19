@@ -29,6 +29,9 @@ export async function discoverAntigravityAcpCatalog(
   let transport: AcpConnection | undefined;
   let sessionId: string | undefined;
   let stderrHint: string | undefined;
+  let initialModel: { id: string; value: string } | undefined;
+  let initialEffort: { id: string; value: string } | undefined;
+  let switchedModel = false;
   try {
     await assertAntigravityAcpVersionSupported(command, host.versionReader);
     const launchEnvironment = withoutSshSessionVariables({ ...environment, PWD: cwd });
@@ -50,10 +53,17 @@ export async function discoverAntigravityAcpCatalog(
     );
     sessionId = nonEmptyString(asRecord(session)?.sessionId);
     if (!sessionId) throw new Error("agy acp model catalog unavailable");
-    const model = acpConfigOptions(session).find((entry) => entry.category === "model");
+    const initialOptions = acpConfigOptions(session);
+    const model = initialOptions.find((entry) => entry.category === "model");
     if (model?.type !== "select") throw new Error("agy acp model catalog unavailable");
+    if (typeof model.currentValue === "string" && model.currentValue)
+      initialModel = { id: model.id, value: model.currentValue };
+    const effort = initialOptions.find((entry) => entry.category === "thought_level");
+    if (effort?.type === "select" && typeof effort.currentValue === "string" && effort.currentValue)
+      initialEffort = { id: effort.id, value: effort.currentValue };
     const models = [];
     for (const entry of acpSelectEntries(model)) {
+      switchedModel = true;
       const efforts = await acpReadModelEfforts(
         transport,
         sessionId,
@@ -83,12 +93,35 @@ export async function discoverAntigravityAcpCatalog(
     });
     return undefined;
   } finally {
-    if (transport && sessionId && !transport.closed)
+    if (transport && sessionId && !transport.closed) {
+      if (switchedModel && initialModel) {
+        await acpBounded(
+          transport.connection.agent.request("session/set_config_option", {
+            sessionId,
+            configId: initialModel.id,
+            value: initialModel.value,
+          }),
+          timeoutMs,
+          "agy acp session/set_config_option timed out",
+        ).catch(() => undefined);
+        if (initialEffort) {
+          await acpBounded(
+            transport.connection.agent.request("session/set_config_option", {
+              sessionId,
+              configId: initialEffort.id,
+              value: initialEffort.value,
+            }),
+            timeoutMs,
+            "agy acp session/set_config_option timed out",
+          ).catch(() => undefined);
+        }
+      }
       await acpBounded(
         transport.connection.agent.request("session/close", { sessionId }),
         timeoutMs,
         "agy acp session/close timed out",
       ).catch(() => undefined);
+    }
     if (transport) await transport.dispose().catch(() => {});
   }
 }

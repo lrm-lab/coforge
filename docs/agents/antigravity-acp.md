@@ -57,6 +57,8 @@ Part of [the documentation index](../../README.md). The Antigravity adapter runs
   reply-intent scanner read.
 - `usage_update` (`used`/`size`) is reported as context usage after each model call.
 - The model catalog is `session/new`'s `model` select (`acp-catalog.ts`), not `agy models`. The
-  probe session switches through the models once to read each one's `thought_level` choices and
-  current value (`acpReadModelEfforts`, shared with Droid), then closes with `session/close`. Account usage reads
-  `agy -p /usage --output-format json`, which answers without a turn.
+  daemon runs the probe in a fresh temporary directory removed after the probe; the probe session
+  switches through the models once to read each one's `thought_level` choices and current value
+  (`acpReadModelEfforts`, shared with Droid), restores the initial model and `thought_level`, and
+  then closes with `session/close`. Account usage reads `agy -p /usage --output-format json`, which
+  answers without a turn (and is refused when `GEMINI_HOME` selects a non-default profile).

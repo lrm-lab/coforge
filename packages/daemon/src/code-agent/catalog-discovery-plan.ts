@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { antigravityAcpRuntimeHost } from "#src/code-agent/antigravity/acp-host";
 import { openCodeAcpRuntimeHost } from "#src/code-agent/opencode/acp-host";
 import { openCodeCatalogWithCachedEfforts } from "#src/code-agent/opencode/effort-read";
@@ -201,16 +204,20 @@ export async function planCatalogDiscoveries(
     if (executable)
       discoveries.push([
         RUNTIME_PROVIDER.ANTIGRAVITY,
-        () =>
-          discoverAntigravityAcpCatalog(
-            commands.antigravity ?? [executable],
-            cwd,
-            agentEnvironment(undefined, environment),
-            antigravityAcpRuntimeHost,
-          ).then((catalog) => ({
-            keyPaths: [executable],
-            catalog,
-          })),
+        async () => {
+          const probeCwd = await mkdtemp(join(tmpdir(), "coforge-agy-catalog-"));
+          try {
+            const catalog = await discoverAntigravityAcpCatalog(
+              commands.antigravity ?? [executable],
+              probeCwd,
+              agentEnvironment(undefined, environment),
+              antigravityAcpRuntimeHost,
+            );
+            return { keyPaths: [executable], catalog };
+          } finally {
+            await rm(probeCwd, { recursive: true, force: true }).catch(() => undefined);
+          }
+        },
       ]);
   }
   // The model list is session/new's model config option, the same select the session's own

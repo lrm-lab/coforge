@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -383,4 +384,38 @@ describe("Antigravity ACP model catalog in the inventory", () => {
       await rm(customGemini, { recursive: true, force: true });
     }
   });
+
+  test(
+    "isolates Antigravity catalog discovery in a temporary CWD and removes it afterwards",
+    async () => {
+      const workspace = await mkdtemp(join(tmpdir(), "coforge-antigravity-workspace-"));
+      const log = join(workspace, "rpc.jsonl");
+      try {
+        const inventory = await discoverCodeAgentInventory({
+          probe: agyProbe("1.5.10\n"),
+          commands: { antigravity: [process.execPath, ACP_FIXTURE] },
+          cwd: workspace,
+          environment: {
+            ...environment,
+            AGY_ACP_FIXTURE_CONFIG_OPTIONS: ACP_MODELS,
+            AGY_ACP_FIXTURE_LOG: log,
+          },
+          piModels: async () => [],
+        });
+        expect(inventory.catalogs.some((catalog) => catalog.provider === "antigravity")).toBe(true);
+        const lines = (await Bun.file(log).text())
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => JSON.parse(line) as { method: string; params?: { cwd?: string } });
+        const sessionNew = lines.find((entry) => entry.method === "session/new");
+        const probeCwd = sessionNew?.params?.cwd;
+        expect(probeCwd).toBeDefined();
+        expect(probeCwd).not.toBe(workspace);
+        expect(existsSync(probeCwd!)).toBe(false);
+      } finally {
+        await rm(workspace, { recursive: true, force: true });
+      }
+    },
+    PASS_BUDGET_MS,
+  );
 });

@@ -41,11 +41,21 @@ test("each model carries the thought_level choices agy publishes once that model
         recommended: false,
       }),
     ]);
-    const methods = (await readFile(log, "utf8"))
+    const calls = (await readFile(log, "utf8"))
       .split("\n")
       .filter(Boolean)
-      .map((line) => JSON.parse(line).method);
+      .map((line) => JSON.parse(line) as { method: string; params?: Record<string, unknown> });
+    const methods = calls.map((entry) => entry.method);
     expect(methods).toContain("session/close");
+    const closeIndex = methods.lastIndexOf("session/close");
+    const configBeforeClose = calls
+      .slice(0, closeIndex)
+      .filter((entry) => entry.method === "session/set_config_option")
+      .map((entry) => [entry.params?.configId, entry.params?.value]);
+    expect(configBeforeClose.slice(-2)).toEqual([
+      ["model", "gemini-4-carbon"],
+      ["thought_level", "medium"],
+    ]);
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }
