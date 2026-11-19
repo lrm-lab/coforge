@@ -43,8 +43,11 @@ const notFound = () =>
   });
 
 export function artifactPathOfFileName(fileName: string): string {
-  const cleaned = fileName
-    .replace(/[\\:/\u0000-\u001f\u007f]/g, "_")
+  const cleaned = Array.from(fileName, (ch) => {
+    const code = ch.charCodeAt(0);
+    return code <= 0x1f || code === 0x7f || ch === "\\" || ch === ":" || ch === "/" ? "_" : ch;
+  })
+    .join("")
     .replace(/^\.+$/, "_")
     .trim();
   const path = cleaned.slice(0, 1024);
