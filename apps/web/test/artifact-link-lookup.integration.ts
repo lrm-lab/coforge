@@ -45,7 +45,7 @@ test("a revoked public token finds nothing even when its artifact is link-tier a
   await f.db.artifactPublicLink.update({ where: { token }, data: { revokedAt: null } });
   expect(await publicPageLookup(f.db, async () => true)(token)).toMatchObject({
     access: "link",
-    workspaceSlug: expect.any(String),
+    artifactId: id,
     version: expect.any(Number),
   });
 });
