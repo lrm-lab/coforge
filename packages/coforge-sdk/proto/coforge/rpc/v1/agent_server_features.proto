@@ -12,4 +12,5 @@ message AgentServerFeatures {
   repeated string agent_ids = 6;
   optional bool agent_context_view = 7;
   string message_type = 8;
+  optional bool artifacts = 9;
 }

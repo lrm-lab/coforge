@@ -13,6 +13,7 @@ export type AgentServerFeatures = {
   revision: number;
   agentIds: string[];
   agentContextView?: boolean;
+  artifacts?: boolean;
 };
 
 function validate(value: AgentServerFeatures): void {
@@ -52,6 +53,7 @@ export function decodeAgentServerFeatures(bytes: Uint8Array): AgentServerFeature
     revision: Number(value.revision),
     agentIds: [...value.agentIds],
     agentContextView: value.agentContextView,
+    ...(value.artifacts !== undefined ? { artifacts: value.artifacts } : {}),
   };
   validate(result);
   return result;

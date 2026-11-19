@@ -21,6 +21,13 @@ describe("agent server feature publication", () => {
     expect(decodeAgentServerFeatures(encodeAgentServerFeatures(unknown))).toEqual(unknown);
   });
 
+  test("round trips explicit artifacts feature value", () => {
+    const withArtifacts = { ...value, artifacts: false };
+    expect(decodeAgentServerFeatures(encodeAgentServerFeatures(withArtifacts))).toEqual(
+      withArtifacts,
+    );
+  });
+
   test("rejects invalid scope and revision", () => {
     expect(() => encodeAgentServerFeatures({ ...value, workspaceId: "" })).toThrow();
     expect(() => encodeAgentServerFeatures({ ...value, revision: 0 })).toThrow();

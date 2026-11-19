@@ -12,6 +12,7 @@ type Dependencies = {
   };
   supports(workspaceId: string, computerId: string): Promise<boolean>;
   enabled(workspaceId: string): Promise<boolean>;
+  artifactsEnabled?(workspaceId: string): Promise<boolean>;
   publish(workspaceId: string, computerId: string, payload: Uint8Array): Promise<void>;
 };
 
@@ -28,10 +29,6 @@ export class AgentServerFeaturesBroadcaster {
     return run;
   }
 
-  /** The snapshot one Computer's daemon missed while it was away, resent on its ready. The
-   * resend is best-effort: a failed publish warns with the snapshot's revision and resolves,
-   * because the next flag change or ready republishes anyway and a ready must not be held
-   * hostage by it. */
   async publishComputer(workspaceId: string, computerId: string): Promise<void> {
     const run = this.#publishing.then(() => this.#publishComputer(workspaceId, computerId));
     this.#publishing = run.catch(() => {});
@@ -88,7 +85,12 @@ export class AgentServerFeaturesBroadcaster {
     if (placements.length === 0) return null;
     const head = placements[0]!;
     if (!(await this.dependencies.supports(head.workspaceId, head.computerId))) return null;
-    const enabled = await this.dependencies.enabled(head.workspaceId);
+    const [enabled, artifacts] = await Promise.all([
+      this.dependencies.enabled(head.workspaceId),
+      this.dependencies.artifactsEnabled
+        ? this.dependencies.artifactsEnabled(head.workspaceId)
+        : undefined,
+    ]);
     return {
       protocolMajor: 1,
       requestId: `flag_${crypto.randomUUID().replaceAll("-", "")}`,
@@ -97,6 +99,7 @@ export class AgentServerFeaturesBroadcaster {
       revision: ++revision,
       agentIds: placements.map((placement) => placement.agentId),
       agentContextView: enabled,
+      ...(artifacts !== undefined ? { artifacts } : {}),
     };
   }
 

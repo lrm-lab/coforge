@@ -364,7 +364,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const artifactsDisabled = () =>
   new AppError("ACCESS_DENIED", {
     errorId: "artifacts-disabled",
-    hint: "this Workspace has not enabled documents (Settings > Experiments, switched on by a Workspace owner or admin)",
+    hint: "this Workspace has not enabled Artifacts (Settings > Experiments, switched on by a Workspace owner or admin)",
   });
 
 export async function artifactsEnabled(db: PrismaClient, workspaceId: string): Promise<boolean> {

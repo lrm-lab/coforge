@@ -146,3 +146,29 @@ test("serializes overlapping snapshots so revisions follow reload order", async 
   await Promise.all([broadcaster.publishSnapshot(), broadcaster.publishSnapshot()]);
   expect(maximum).toBe(1);
 });
+
+test("includes artifacts feature state when artifactsEnabled is provided", async () => {
+  const payloads: Uint8Array[] = [];
+  const broadcaster = new AgentServerFeaturesBroadcaster({
+    db: {
+      agent: {
+        findMany: async () => [{ id: "a1", workspaceId: "w", computerId: "c" }],
+      },
+    } as never,
+    supports: async () => true,
+    enabled: async () => true,
+    artifactsEnabled: async (workspaceId) => workspaceId === "w",
+    publish: async (_workspaceId, _computerId, payload) => {
+      payloads.push(payload);
+    },
+  });
+  await broadcaster.publishComputer("w", "c");
+  expect(payloads).toHaveLength(1);
+  expect(decodeAgentServerFeatures(payloads[0]!)).toMatchObject({
+    workspaceId: "w",
+    computerId: "c",
+    agentIds: ["a1"],
+    agentContextView: true,
+    artifacts: true,
+  });
+});

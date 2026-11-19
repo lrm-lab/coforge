@@ -20,8 +20,8 @@ const FEATURE_NOTICES: Record<FeatureKey, { on: string; off: string }> = {
     off: "Task conversations turned off for new tasks (a task that already has a conversation keeps it)",
   },
   artifacts: {
-    on: "Documents turned on (`coforge artifact` creates and edits them)",
-    off: "Documents turned off (`coforge artifact` refuses; send files as attachments)",
+    on: "Artifacts turned on (`coforge artifact` creates and edits them)",
+    off: "Artifacts turned off (`coforge artifact` refuses; send files as attachments)",
   },
   agentContextView: {
     on: "Agent context view turned on",
@@ -29,7 +29,6 @@ const FEATURE_NOTICES: Record<FeatureKey, { on: string; off: string }> = {
   },
 };
 
-/** One notice phrase per switch the delivery shows changed since launch; empty when none did. */
 function featureChanges(
   launched: WireFeatures["features"],
   wire: WireFeatures["features"],
@@ -46,55 +45,46 @@ function featureChanges(
 }
 
 export type AgentFeatureSyncPorts = Readonly<{
-  /** The Agent has a live session and launch that a restart would replace. */
   live(agentId: string): boolean;
-  /** Keeps the delivery for the next launch, which presents it. */
   keep(message: AgentMessageDelivery): void;
-  /** Ends the session and launches it again from fresh launch config, awaiting that launch. */
   restart(agentId: string): Promise<void>;
-  /** Re-announces availability after a server-side gate turns the view on for a live Agent. */
   reportAvailability?(agentId: string): Promise<void>;
-  /** Publishes launch-time feature gates to other daemon subsystems. */
   observe?(agentId: string, features: WireFeatures["features"] | undefined): void;
 }>;
 
-/**
- * The standing prompt and exported feature switches of a live session cannot change, so a
- * feature that changed since the session launched restarts it: the delivery that reveals the
- * change is kept, the Agent relaunches with the fresh prompt, and its first input carries a
- * one-line notice. A delivery with no `features` (an older server) never restarts anything.
- */
 export class AgentFeatureSync {
   readonly #launched = new Map<string, WireFeatures["features"]>();
+  readonly #serverFeatures = new Map<string, WireFeatures["features"]>();
   readonly #notices = new Map<string, string>();
   readonly #serverRevisions = new Map<string, number>();
 
   constructor(private readonly ports: AgentFeatureSyncPorts) {}
 
-  /** What the session being launched now was told, from its launch config identity. */
   launched(agentId: string, identity: WireFeatures | undefined): void {
-    // A launch config that states no features (an older server, or a rollout mixing both) says
-    // nothing to compare against, so no delivery restarts the session over it.
     if (identity?.features) this.#launched.set(agentId, identity.features);
     else this.#launched.delete(agentId);
+    this.#serverFeatures.delete(agentId);
     this.ports.observe?.(agentId, identity?.features);
   }
 
-  /** Whether `message` shows a feature that changed since the session launched. Synchronous, so a
-   * delivery that shows none is handled with no extra turn of the event loop. */
+  #effectiveFeatures(message: AgentMessageDelivery): WireFeatures["features"] {
+    const pushed = this.#serverFeatures.get(message.agentId);
+    if (!pushed) return message.features;
+    return { ...pushed, ...message.features };
+  }
+
   changed(message: AgentMessageDelivery): boolean {
     const was = this.#launched.get(message.agentId);
     return Boolean(
       was !== undefined &&
       this.ports.live(message.agentId) &&
-      featureChanges(was, message.features).length > 0,
+      featureChanges(was, this.#effectiveFeatures(message)).length > 0,
     );
   }
 
-  /** Restarts the Agent over the change `changed` found; the delivery waits for the new launch. */
   async restart(message: AgentMessageDelivery): Promise<void> {
     const { agentId } = message;
-    const changes = featureChanges(this.#launched.get(agentId), message.features);
+    const changes = featureChanges(this.#launched.get(agentId), this.#effectiveFeatures(message));
     this.#notices.set(
       agentId,
       `${NOTICE_HEAD}${changes.length > 0 ? ` ${changes.join("; ")}` : ""}; ${NOTICE_TAIL}`,
@@ -103,13 +93,11 @@ export class AgentFeatureSync {
     try {
       await this.ports.restart(agentId);
     } catch (error) {
-      // The session keeps its old prompt, so the notice would say what is not true.
       this.#notices.delete(agentId);
       throw error;
     }
   }
 
-  /** The notice line to put before the Agent's next input, once; empty when none is owed. */
   noticePrefix(agentId: string): string {
     const notice = this.#notices.get(agentId);
     this.#notices.delete(agentId);
@@ -118,20 +106,30 @@ export class AgentFeatureSync {
 
   forget(agentId: string): void {
     this.#launched.delete(agentId);
+    this.#serverFeatures.delete(agentId);
     this.#notices.delete(agentId);
   }
 
-  /** Applies a server-side feature flip immediately to the targeted running Agents. */
   applyServerFeatures(sync: AgentServerFeatures): void {
     const scope = `${sync.workspaceId}:${sync.computerId}`;
     const previous = this.#serverRevisions.get(scope) ?? 0;
     if (sync.revision <= previous) return;
     this.#serverRevisions.set(scope, sync.revision);
+    const update: NonNullable<WireFeatures["features"]> = {
+      ...(sync.agentContextView !== undefined ? { agentContextView: sync.agentContextView } : {}),
+      ...(sync.artifacts !== undefined ? { artifacts: sync.artifacts } : {}),
+    };
+    const hasUpdate = Object.keys(update).length > 0;
     for (const agentId of sync.agentIds) {
-      if (sync.agentContextView !== undefined)
-        this.ports.observe?.(agentId, {
-          agentContextView: sync.agentContextView,
-        });
+      if (hasUpdate) {
+        if (sync.artifacts !== undefined) {
+          this.#serverFeatures.set(agentId, {
+            ...this.#serverFeatures.get(agentId),
+            artifacts: sync.artifacts,
+          });
+        }
+        this.ports.observe?.(agentId, update);
+      }
       if (sync.agentContextView === true && this.ports.live(agentId))
         void this.ports.reportAvailability?.(agentId).catch(() => {});
     }

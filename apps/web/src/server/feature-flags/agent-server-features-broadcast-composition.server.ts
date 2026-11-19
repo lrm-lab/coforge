@@ -5,6 +5,7 @@ import {
   daemonControlChannel,
   type CentrifugoServerApi,
 } from "#src/server/centrifugo/server-api.server";
+import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
 import { getAgentContextViewCapabilityLease } from "#src/server/computers/agent-context-view-capability.server";
 import { getDatabaseClient } from "#src/server/db/client.server";
 import { isFeatureEnabled, onFeatureFlagsChanged } from "./feature-flags.server";
@@ -19,6 +20,7 @@ export function createAgentServerFeaturesBroadcaster(
     supports: (workspaceId, computerId) =>
       getAgentContextViewCapabilityLease().supports(workspaceId, computerId),
     enabled: (workspaceId) => isFeatureEnabled("agentContextView", { workspaceId }),
+    artifactsEnabled: (workspaceId) => artifactsEnabled(db, workspaceId),
     publish: (workspaceId, computerId, payload) =>
       centrifugo.publish(daemonControlChannel(workspaceId, computerId), payload),
   });
