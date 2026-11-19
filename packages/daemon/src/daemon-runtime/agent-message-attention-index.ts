@@ -17,8 +17,7 @@ import { type AgentDeliveryQueue, writeDeliveryNotice } from "./delivery-notice-
 import { rememberDelivery } from "./delivery-generation-memory";
 import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
-import { attentionFlags, hasDeliveryScope, latestCreatedAtField } from "./message-attention-fields";
-import { printableSender } from "./agent-notice-sender";
+import { hasDeliveryScope } from "./message-attention-fields";
 import {
   acceptNotice,
   noticeGeneration,
@@ -34,9 +33,8 @@ import {
 import { noteFrontierSource, type FrontierSource } from "./agent-message-attention-frontier-source";
 import { planRecovery } from "./agent-message-attention-recovery";
 import type { AgentConsumedSeqPort } from "#src/persistence/agent-consumed-seq-store";
-import { PendingAttentionReads } from "./agent-message-attention-pending";
+import { PendingAttention } from "./agent-message-attention-pending";
 import {
-  PENDING_WINDOW_LIMIT,
   attentionRecorded,
   consumedSnapshot,
   byNumber,
@@ -76,7 +74,7 @@ export class AgentMessageAttentionIndex {
   readonly #workspaceId: string;
   readonly #runtimes: Pick<AgentProcessManager, "session"> &
     Partial<Pick<AgentProcessManager, "runtime">>;
-  readonly #pendingReads = new PendingAttentionReads({
+  readonly #pending = new PendingAttention({
     attention: this.#attention,
     pendingSequences: this.#pendingSequences,
     pendingWindow: this.#pendingWindow,
@@ -190,36 +188,10 @@ export class AgentMessageAttentionIndex {
   wasNotified(message: AgentMessageDelivery): boolean {
     return this.#generations.get(message.agentId)?.notified.has(message.deliveryId) === true;
   }
-  #recordAttention(
-    message: AgentMessageDelivery & {
-      target: string;
-    },
-  ): MessageAttention {
-    const target = message.target;
-    const latestSender = printableSender(message.latestSenderKind, message.latestSenderHandle);
-    const byTarget = this.#attention.get(message.agentId) ?? new Map<string, MessageAttention>();
-    const previous = byTarget.get(target);
-    const pendingByTarget =
-      this.#pendingSequences.get(message.agentId) ?? new Map<string, Set<number>>();
-    const pending = pendingByTarget.get(target) ?? new Set<number>();
-    pending.add(message.sequence);
-    pendingByTarget.set(target, pending);
-    this.#pendingSequences.set(message.agentId, pendingByTarget);
-    const current: MessageAttention = {
-      target,
-      pendingCount: (previous?.pendingCount ?? 0) + 1,
-      firstPendingSequence: previous?.firstPendingSequence ?? message.sequence,
-      latestSequence: Math.max(previous?.latestSequence ?? 0, message.sequence),
-      ...latestCreatedAtField(previous, message.createdAtMs),
-      ...(latestSender
-        ? { latestSenderKind: latestSender.kind, latestSenderHandle: latestSender.handle }
-        : {}),
-      flags: attentionFlags(target, message.nonMemberMention, previous),
-    };
-    byTarget.set(target, current);
-    this.#attention.set(message.agentId, byTarget);
-    this.#recordConversation(message.agentId, target, message.conversationId);
-    this.#recordPendingWindow(message.agentId, target, message);
+  #recordAttention(message: AgentMessageDelivery & { target: string }): MessageAttention {
+    const current = this.#pending.record(message);
+    this.#recordConversation(message.agentId, message.target, message.conversationId);
+    this.#pending.recordWindow(message.agentId, message.target, message);
     return current;
   }
   async flush(agentId: string, held: readonly AgentMessageDelivery[]): Promise<void> {
@@ -532,29 +504,7 @@ export class AgentMessageAttentionIndex {
     }
   }
   #settlePending(agentId: string, target: string, settled: (sequence: number) => boolean): void {
-    const pending = this.#pendingSequences.get(agentId)?.get(target);
-    if (pending) for (const sequence of pending) if (settled(sequence)) pending.delete(sequence);
-    const byTarget = this.#pendingWindow.get(agentId);
-    const entries = byTarget?.get(target);
-    if (byTarget && entries) {
-      const kept = entries.filter((entry) => !settled(entry.delivery.sequence));
-      if (kept.length === 0) byTarget.delete(target);
-      else if (kept.length !== entries.length) byTarget.set(target, kept);
-    }
-    const attention = this.#attention.get(agentId)?.get(target);
-    if (!attention) return;
-    if (!pending || pending.size === 0) {
-      this.clear(agentId, target);
-      return;
-    }
-    if (pending.size === attention.pendingCount) return;
-    let first = Infinity;
-    for (const sequence of pending) if (sequence < first) first = sequence;
-    this.#attention.get(agentId)?.set(target, {
-      ...attention,
-      pendingCount: pending.size,
-      firstPendingSequence: first,
-    });
+    this.#pending.settle(agentId, target, settled, (id, name) => this.clear(id, name));
   }
   #recordConversation(agentId: string, target: string, conversationId: string): void {
     const byTarget = this.#attentionConversation.get(agentId) ?? new Map<string, string>();
@@ -611,25 +561,16 @@ export class AgentMessageAttentionIndex {
     target: string;
     count: number;
   }[] {
-    return this.#pendingReads.unreadDeliveries(agentId);
+    return this.#pending.unreadDeliveries(agentId);
   }
   pendingMessageCount(agentId: string, target: string): number {
-    return this.#pendingReads.pendingMessageCount(agentId, target);
+    return this.#pending.pendingMessageCount(agentId, target);
   }
   pendingMaxSequence(agentId: string, target: string): number {
-    return this.#pendingReads.pendingMaxSequence(agentId, target);
+    return this.#pending.pendingMaxSequence(agentId, target);
   }
   pendingWindow(agentId: string, target: string, limit: number): readonly PendingWindowEntry[] {
-    return this.#pendingReads.pendingWindow(agentId, target, limit);
-  }
-  #recordPendingWindow(agentId: string, target: string, delivery: AgentMessageDelivery): void {
-    const byTarget = this.#pendingWindow.get(agentId) ?? new Map<string, PendingWindowEntry[]>();
-    const entries = byTarget.get(target) ?? [];
-    entries.push({ delivery, receivedAt: Date.now() });
-    if (entries.length > PENDING_WINDOW_LIMIT)
-      entries.splice(0, entries.length - PENDING_WINDOW_LIMIT);
-    byTarget.set(target, entries);
-    this.#pendingWindow.set(agentId, byTarget);
+    return this.#pending.pendingWindow(agentId, target, limit);
   }
   recordModelSeen(agentId: string, target: string, sequence: number): void {
     if (!Number.isInteger(sequence) || sequence < 1) return;
