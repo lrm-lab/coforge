@@ -193,7 +193,11 @@ export function toAgentMessage(
     ),
     createdAt: row.createdAt,
     target,
-    attachments: row.attachments.map(({ forwardPosition: _, ...attachment }) => attachment),
+    attachments: row.attachments.map((item) => {
+      const { forwardPosition, ...attachment } = item;
+      void forwardPosition;
+      return attachment;
+    }),
     ...(row._count?.replies ? { replyCount: row._count.replies } : {}),
     ...(task ? { task } : {}),
     ...(anchor ? { attachmentCommentAnchor: anchor } : {}),
