@@ -116,3 +116,64 @@ test("an update for a call that arrived already ended adds nothing", () => {
   ]);
   expect(events.filter((event) => event.type === "tool-end")).toHaveLength(1);
 });
+
+test("late rawInput on a shell tool_call_update feeds the reply-intent scanner", () => {
+  const fed: string[] = [];
+  const scanningHost = {
+    isShellToolName: (name: string) => name === "run_command",
+    createReplyIntentScanner: () => ({
+      feed: (entry: { callId: string; fragment: string }) => {
+        fed.push(entry.fragment);
+        return { type: "reply-intent-started" as const, id: entry.callId };
+      },
+      complete: () => {},
+      reset: () => [],
+    }),
+  };
+  const turn = new AntigravityAcpTurnEvents(scanningHost as never);
+  const startEvents = turn.read({
+    sessionUpdate: "tool_call",
+    status: "pending",
+    toolCallId: "call_late",
+    name: "run_command",
+    title: "send message",
+  });
+  expect(fed).toEqual([]);
+  expect(startEvents.some((e) => e.type === "reply-intent-started")).toBe(false);
+
+  const updateEvents = turn.read({
+    sessionUpdate: "tool_call_update",
+    status: "in_progress",
+    toolCallId: "call_late",
+    name: "run_command",
+    rawInput: { CommandLine: "coforge message send --text hi" },
+  });
+  expect(fed).toHaveLength(1);
+  expect(fed[0]).toContain("coforge message send");
+  expect(updateEvents).toContainEqual({ type: "reply-intent-started", id: "call_late" });
+});
+
+test("falls back to rawOutput when a completed tool_call_update carries no content text", () => {
+  const events = read([
+    {
+      sessionUpdate: "tool_call",
+      status: "in_progress",
+      toolCallId: "call_raw_out",
+      name: "run_command",
+      title: "pwd",
+      rawInput: { CommandLine: "pwd" },
+    },
+    {
+      sessionUpdate: "tool_call_update",
+      status: "completed",
+      toolCallId: "call_raw_out",
+      rawOutput: { output: "/workspace\n", exit_code: 0 },
+    },
+  ]);
+  expect(events).toContainEqual({
+    type: "tool-output",
+    id: "call_raw_out",
+    text: "/workspace\n",
+  });
+  expect(events).toContainEqual({ type: "tool-end", id: "call_raw_out", isError: false });
+});

@@ -16,7 +16,9 @@ Part of [the documentation index](../../README.md). The Antigravity adapter runs
   `_meta.antigravity.systemPrompt.append`, appended to agy's own system prompt; agy still reads
   the Agent workspace's `AGENTS.md`/`GEMINI.md`. A `session/load` applies the append it carries,
   so a resumed session picks up changed instructions. `disabledTools` in the same envelope is the
-  optional host tool filter.
+  optional host tool filter. `mcpServers` is intentionally kept empty (`[]`) because agy persists
+  ACP `mcpServers` entries and headers in plaintext inside
+  `<gemini-dir>/antigravity-cli/conversations/<id>.db`.
 - Sessions launch with `--dangerously-skip-permissions` and still select `auto` via
   `session/set_mode` when `modes.availableModes` lists it (Gemini Enterprise accounts are not
   offered it); otherwise they skip `session/set_mode` and log the agy version and mode IDs. Any

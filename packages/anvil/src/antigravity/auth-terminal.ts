@@ -47,6 +47,20 @@ function googleAccountsUrl(value: string): string | undefined {
   }
 }
 
+export function extractAntigravityAuthSecrets(code: string): string[] {
+  const secrets = new Set<string>([code]);
+  try {
+    const url = new URL(code);
+    const rawMatch = /(?:^|[?&])code=([^&#]+)/u.exec(url.search);
+    if (rawMatch?.[1]) secrets.add(rawMatch[1]);
+    const decoded = url.searchParams.get("code")?.trim();
+    if (decoded) secrets.add(decoded);
+  } catch {
+    return [...secrets];
+  }
+  return [...secrets];
+}
+
 /** Everything a short-lived auth child wrote, stdout and stderr together. */
 async function readAuthChild(child: OwnedChildProcess): Promise<string> {
   const decoder = new TextDecoder();
@@ -218,7 +232,7 @@ export async function antigravityTerminalLogin(
       if (codeWrites >= ANTIGRAVITY_LOGIN_MAX_CODES)
         return fail("agy acp --login did not accept the authorization code");
       codeWrites += 1;
-      options.onSecret?.(code);
+      for (const secret of extractAntigravityAuthSecrets(code)) options.onSecret?.(secret);
       try {
         child.stdin.write(`${code}\n`);
         await child.stdin.flush();

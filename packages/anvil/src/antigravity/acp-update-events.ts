@@ -5,17 +5,28 @@ import { asRecord, nonEmptyString } from "#src/json-record";
 import type { AntigravityAcpRuntimeHost } from "./acp-host";
 import { parseAntigravityInBandQuota } from "./quota";
 
-function antigravityToolCall(update: Readonly<Record<string, unknown>>) {
-  const name = nonEmptyString(update.name) ?? nonEmptyString(update.title);
-  if (!name) return undefined;
-  const rawInput = asRecord(update.rawInput);
-  const { CommandLine: command, Path: path } = rawInput ?? {};
-  const input = {
+function antigravityToolInput(raw: unknown) {
+  const rawInput = asRecord(raw);
+  if (!rawInput) return raw;
+  const { CommandLine: command, Path: path } = rawInput;
+  return {
     ...rawInput,
     ...(typeof command === "string" ? { command } : {}),
     ...(typeof path === "string" ? { file_path: path } : {}),
   };
-  return { name, input: rawInput ? input : update.rawInput };
+}
+
+function antigravityToolCall(update: Readonly<Record<string, unknown>>) {
+  const name = nonEmptyString(update.name) ?? nonEmptyString(update.title);
+  if (!name) return undefined;
+  return { name, input: antigravityToolInput(update.rawInput) };
+}
+
+function rawOutputText(rawOutput: unknown): string | undefined {
+  if (typeof rawOutput === "string") return rawOutput.length > 0 ? rawOutput : undefined;
+  const record = asRecord(rawOutput);
+  if (typeof record?.output === "string" && record.output.length > 0) return record.output;
+  return undefined;
 }
 
 const IN_BAND_ERROR = /^\s*⚠\s*(\S[^\n]*\(code \d{3}\):[^\n]*)\s*$/;
@@ -25,6 +36,8 @@ export class AntigravityAcpTurnEvents {
   #hadTurnActivity = false;
   readonly #started = new Set<string>();
   readonly #ended = new Set<string>();
+  readonly #shellCalls = new Set<string>();
+  readonly #scannedShellCalls = new Set<string>();
   readonly #output = new Map<string, string>();
   readonly #scanner;
   constructor(private readonly host: AntigravityAcpRuntimeHost) {
@@ -61,9 +74,13 @@ export class AntigravityAcpTurnEvents {
         const events: AgentRuntimeEvent[] = [
           { type: "tool-start", id, name: call.name, input: call.input },
         ];
-        if (this.host.isShellToolName(call.name) && call.input !== undefined) {
-          const intent = this.#scanner.feed({ callId: id, fragment: JSON.stringify(call.input) });
-          if (intent) events.push(intent);
+        if (this.host.isShellToolName(call.name)) {
+          this.#shellCalls.add(id);
+          if (call.input !== undefined) {
+            this.#scannedShellCalls.add(id);
+            const intent = this.#scanner.feed({ callId: id, fragment: JSON.stringify(call.input) });
+            if (intent) events.push(intent);
+          }
         }
         if (acpToolUpdateEnded(update.status)) events.push(...this.#progress(id, update));
         return events;
@@ -91,14 +108,30 @@ export class AntigravityAcpTurnEvents {
   }
   #progress(id: string, update: Readonly<Record<string, unknown>>): AgentRuntimeEvent[] {
     const events: AgentRuntimeEvent[] = [];
+    if (
+      this.#shellCalls.has(id) &&
+      !this.#scannedShellCalls.has(id) &&
+      update.rawInput !== undefined
+    ) {
+      this.#scannedShellCalls.add(id);
+      const input = antigravityToolInput(update.rawInput);
+      const intent = this.#scanner.feed({ callId: id, fragment: JSON.stringify(input) });
+      if (intent) events.push(intent);
+    }
     const output = acpToolOutput(this.#output.get(id) ?? "", update.content);
     if (output) {
       if (output.text) events.push({ type: "tool-output", id, text: output.text });
       this.#output.set(id, output.full);
     }
     if (acpToolUpdateEnded(update.status)) {
+      if (!output && !this.#output.has(id)) {
+        const fallback = rawOutputText(update.rawOutput);
+        if (fallback) events.push({ type: "tool-output", id, text: fallback });
+      }
       this.#ended.add(id);
       this.#output.delete(id);
+      this.#shellCalls.delete(id);
+      this.#scannedShellCalls.delete(id);
       this.#scanner.complete(id);
       events.push({ type: "tool-end", id, isError: update.status !== "completed" });
     }
