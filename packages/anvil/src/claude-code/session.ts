@@ -13,6 +13,7 @@ import { asRecord, eventTime } from "#src/json-record";
 import type { JsonlProcess } from "#src/jsonl-process";
 import type { SessionState, SessionInitialization, PendingNotice } from "./session-state";
 import { initializeClaudeSession } from "./initialize";
+import { compactBoundaryTokens } from "./compact-boundary";
 import { ClaudeStreamEvents } from "./stream-events";
 import { claudeAssistantEvents, claudeRefusalEvent, claudeToolResults } from "./message-events";
 import { ClaudeSubagentLineage } from "./subagent-lineage";
@@ -328,7 +329,11 @@ export class ClaudeCodeAgentSession implements AgentSession {
       }
       if (record.subtype === "compact_boundary") {
         this.#compacting = false;
-        this.#emit({ type: "compaction-finished", occurredAt: eventTime(record) });
+        this.#emit({
+          type: "compaction-finished",
+          occurredAt: eventTime(record),
+          ...compactBoundaryTokens(record),
+        });
         this.#flushNotices();
       }
       const relayed = relayTaskLifecycle(record, this.#tasks, this.#subagentLineage);

@@ -26,6 +26,8 @@ export type CompactionTokens = Readonly<{
   tokensBefore?: number;
   tokensAfter?: number;
   windowTokens?: number;
+  runtimePreTokens?: number;
+  runtimePostTokens?: number;
 }>;
 
 /** A context reading, and when the runtime sampled it. */
@@ -199,6 +201,8 @@ export class PhaseBookkeeping {
       ...(held ? { delayed_ms: Math.max(0, Date.now() - ended.endedAtMs) } : {}),
       tokens_before: ended.tokensBefore,
       tokens_after: tokensAfter,
+      runtime_pre_tokens: reported?.runtimePreTokens,
+      runtime_post_tokens: reported?.runtimePostTokens,
       window_tokens: reported?.windowTokens ?? result?.windowTokens ?? lastReading?.windowTokens,
       // Where the after number came from: the runtime's own compaction result, or one of our
       // context readings. The daily report splits its trend on this instead of guessing versions,

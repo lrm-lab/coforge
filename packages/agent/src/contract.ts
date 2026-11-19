@@ -191,6 +191,8 @@ export type AgentRuntimeEvent = {
       tokensBefore?: number;
       tokensAfter?: number;
       windowTokens?: number;
+      runtimePreTokens?: number;
+      runtimePostTokens?: number;
     }
   | {
       type: "service-tier";

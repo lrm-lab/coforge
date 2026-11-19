@@ -39,14 +39,22 @@ export const PHASE_BOUNDARY_EVENT_TYPES: ReadonlySet<AgentRuntimeEvent["type"]> 
 );
 
 /** The token numbers a compaction event carries on itself, for the one line its end logs. */
-export function compactionTokens(
-  event: AgentRuntimeEvent,
-): { tokensBefore?: number; tokensAfter?: number; windowTokens?: number } | undefined {
+export function compactionTokens(event: AgentRuntimeEvent):
+  | {
+      tokensBefore?: number;
+      tokensAfter?: number;
+      windowTokens?: number;
+      runtimePreTokens?: number;
+      runtimePostTokens?: number;
+    }
+  | undefined {
   if (event.type !== "compaction-finished") return undefined;
   return {
     tokensBefore: event.tokensBefore,
     tokensAfter: event.tokensAfter,
     windowTokens: event.windowTokens,
+    runtimePreTokens: event.runtimePreTokens,
+    runtimePostTokens: event.runtimePostTokens,
   };
 }
 
