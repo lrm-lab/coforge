@@ -28,6 +28,8 @@ test("no REDIS_URL admits every request and logs redis_unavailable once", async 
       expect(await limits.installation.admit("installation")).toEqual({ allowed: true });
       expect(await limits.publicArtifact.admit("address")).toEqual({ allowed: true });
       expect(await limits.publicArtifactFile.admit("address")).toEqual({ allowed: true });
+      expect(await limits.artifactWrite.admit("agent")).toEqual({ allowed: true });
+      expect(await limits.artifactUpload.admit("agent")).toEqual({ allowed: true });
     }
     expect(warn).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(warn.mock.calls[0]![0]))).toMatchObject({

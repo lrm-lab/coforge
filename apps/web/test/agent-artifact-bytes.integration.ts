@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { agentApiRoutes, ARTIFACT_UPLOAD_MAX_BYTES } from "@lrm/coforge-sdk/agent";
 import { PrismaClient } from "#src/generated/prisma/client";
-import { Artifacts } from "#src/server/artifacts/artifacts.server";
+import { ARTIFACT_AGENT_UPLOAD_LIMIT_PER_MINUTE } from "#src/server/app-rate-limits/app-rate-limits-composition.server";
+import { Artifacts, ARTIFACT_FILE_LIMIT } from "#src/server/artifacts/artifacts.server";
 import { StoredArtifactBlobs } from "#src/server/artifacts/artifact-blobs.server";
 import { ArtifactDocuments } from "#src/server/artifacts/artifact-documents.server";
 import {
@@ -209,11 +210,12 @@ test("an upload is refused for a bad sha256, a missing or oversized length, and 
   expect(await db.artifactBlob.count({ where: { workspaceId, sha256: sha } })).toBe(0);
 });
 
-test("uploads are rate limited per Agent without reading the body, and downloads are not", async () => {
+test("uploads use a dedicated per-Agent rate limit above the artifact file cap without reading the body, and downloads are not limited", async () => {
+  expect(ARTIFACT_AGENT_UPLOAD_LIMIT_PER_MINUTE).toBeGreaterThan(ARTIFACT_FILE_LIMIT);
   const bytes = text("rate limited upload");
   const sha = sha256(bytes);
   let left = 1;
-  const writeLimit = {
+  const uploadLimit = {
     admit: async () =>
       left-- > 0 ? { allowed: true as const } : { allowed: false as const, retryAfterSeconds: 23 },
   };
@@ -225,7 +227,7 @@ test("uploads are rate limited per Agent without reading the body, and downloads
     }),
     sha,
     principal(),
-    { ...services(), writeLimit },
+    { ...services(), uploadLimit },
   );
   expect(first.status).toBe(204);
 
@@ -247,7 +249,7 @@ test("uploads are rate limited per Agent without reading the body, and downloads
     }),
     sha,
     principal(),
-    { ...services(), writeLimit },
+    { ...services(), uploadLimit },
   );
   expect(limited.status).toBe(429);
   expect(limited.headers.get("retry-after")).toBe("23");
@@ -256,9 +258,15 @@ test("uploads are rate limited per Agent without reading the body, and downloads
   expect(payload).toMatchObject({
     code: "RATE_LIMITED",
     retryable: true,
-    details: { operation: "upload", retryAfterSeconds: 23 },
+    details: {
+      operation: "upload",
+      limit: ARTIFACT_AGENT_UPLOAD_LIMIT_PER_MINUTE,
+      windowSeconds: 60,
+      retryAfterSeconds: 23,
+    },
   });
   expect(payload.error).toContain("artifact-rate-limited");
+  expect(payload.error).toContain(`${ARTIFACT_AGENT_UPLOAD_LIMIT_PER_MINUTE} artifact uploads`);
   expect(pulled).toBe(false);
 
   const id = await made({ "ok.md": text("# ok\n") });
@@ -266,7 +274,7 @@ test("uploads are rate limited per Agent without reading the body, and downloads
     new Request(`http://local${agentApiRoutes.cloud.artifactFiles.download.path(id, "ok.md")}`),
     { artifact: id, path: "ok.md" },
     principal(),
-    { ...services(), writeLimit },
+    { ...services(), uploadLimit },
   );
   expect(download.status).toBe(200);
 });
