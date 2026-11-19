@@ -99,7 +99,7 @@ export class Artifacts {
     title?: string;
     description?: string;
     entryPath: string;
-    author: ArtifactPublisher;
+    author: ArtifactActor;
     idempotencyKey?: string;
     requestHash?: string;
     origin?: { messageId: string; attachmentId: string };

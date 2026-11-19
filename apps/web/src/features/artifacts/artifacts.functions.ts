@@ -157,3 +157,14 @@ export const shareArtifact = createServerFn({ method: "POST" })
       mayPost: (target) => assertUserMayPost(db, workspaceId, user.id, target),
     });
   });
+
+export const saveAttachmentAsArtifact = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(z.object({ attachmentId: id }).strict())
+  .handler(({ context, data }) =>
+    productionArtifacts(context.db).saveAttachment({
+      workspaceId: context.workspaceId,
+      userId: context.user.id,
+      attachmentId: data.attachmentId,
+    }),
+  );

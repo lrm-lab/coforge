@@ -1,25 +1,19 @@
 import type { Prisma } from "#src/generated/prisma/client";
-import type { ArtifactPublisher } from "./artifact-access.server";
+import type { ArtifactActor } from "./artifact-access.server";
 import type { ArtifactFileInput, ArtifactFileRow } from "./artifact-files.server";
 import type { ArtifactSettingName, ArtifactSettings } from "./artifact-merge.server";
 
-/**
- * Stores a push's new version in the caller's transaction: the version row with what it changed
- * and merged, the full file list it holds, and the artifact's current version, entry and settings
- * moved to it. The caller has decided everything (`Artifacts.push`) and holds the artifact's row.
- */
 export async function writeVersion(
   tx: Prisma.TransactionClient,
   input: {
     artifactId: string;
     number: number;
-    publisher: ArtifactPublisher;
+    publisher: ArtifactActor;
     note?: string;
     label?: string;
     settings: ArtifactSettings;
     added: readonly ArtifactFileInput[];
     deleted: readonly string[];
-    /** What came from others: files (by path) and settings (by name), as the unseen read lists them. */
     merged: { files: readonly string[]; settings: readonly ArtifactSettingName[] };
     idempotencyKey: string;
     files: Iterable<ArtifactFileRow>;
@@ -31,7 +25,8 @@ export async function writeVersion(
     data: {
       artifactId,
       number: input.number,
-      publisherAgentId: input.publisher.agentId,
+      publisherAgentId: input.publisher.agentId ?? null,
+      publisherUserId: input.publisher.userId ?? null,
       note: input.note ?? "",
       label: input.label ?? "",
       entryPath,

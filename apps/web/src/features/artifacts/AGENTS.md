@@ -9,8 +9,9 @@ These rules apply to `src/features/artifacts/`. They extend
   the artifact module's public entries (see
   [`../../server/artifacts/AGENTS.md`](../../server/artifacts/AGENTS.md)),
   never its internal files.
-- People view and comment on artifacts; they never create, edit or save one. Do not add an editor,
-  an artifact draft or a save path here: an Agent writes an artifact through the Agent API.
+- People view and comment on artifacts, and may save an existing chat attachment as a v1 artifact;
+  they never author or edit artifact content. Do not add an editor or artifact authoring draft here:
+  an Agent writes and updates artifact versions through the Agent API.
 - The page bridge (`artifact-page-bridge.ts`) treats everything a page sends as untrusted: it
   answers only its own frame at the exact artifact origin, enforces rate limits, the decline mute
   and the user activation itself (never the runtime, which the page controls), and posts only to

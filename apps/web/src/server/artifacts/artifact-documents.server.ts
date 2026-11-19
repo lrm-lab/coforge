@@ -32,7 +32,7 @@ export class ArtifactDocuments {
   ) {}
 
   async create(
-    scope: WriteScope,
+    scope: DocumentScope,
     input: {
       conversationId: string;
       title: string;

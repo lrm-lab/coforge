@@ -2,7 +2,7 @@ import type { Artifact, PrismaClient } from "#src/generated/prisma/client";
 import { artifactOpenableKind } from "#src/features/artifacts/artifact-path-kind";
 import { AppError } from "#src/lib/app-error";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
-import type { ArtifactPublisher } from "./artifact-access.server";
+import type { ArtifactActor } from "./artifact-access.server";
 import { idempotencyMismatch } from "./artifact-idempotency.server";
 import {
   ARTIFACT_BINARY_LIMIT,
@@ -22,7 +22,7 @@ export type CreateArtifactInput = {
   title?: string;
   description?: string;
   entryPath: string;
-  author: ArtifactPublisher;
+  author: ArtifactActor;
   idempotencyKey?: string;
   requestHash?: string;
   origin?: { messageId: string; attachmentId: string };
@@ -42,7 +42,7 @@ export async function createArtifact(
       title: input.title ?? "",
       description: input.description ?? "",
       entryPath: input.entryPath,
-      authorAgentId: input.author.agentId,
+      authorAgentId: input.author.agentId ?? null,
       ...(input.origin
         ? { originMessageId: input.origin.messageId, originAttachmentId: input.origin.attachmentId }
         : {}),

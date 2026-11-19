@@ -32,7 +32,10 @@ import { ArtifactRenames } from "./artifact-rename.server";
 import { ArtifactVersionHistory } from "./artifact-version-history.server";
 import { ArtifactViewerPositions } from "./artifact-viewer-positions.server";
 import type { ArtifactNoticePort } from "./artifact-notice-port.server";
-import type { ArtifactAttachmentPort } from "./agent-artifact-save.server";
+import {
+  saveAttachmentAsArtifact,
+  type ArtifactAttachmentPort,
+} from "./agent-artifact-save.server";
 import { AppError, isAppError } from "#src/lib/app-error";
 import { readAuthorizedAttachment } from "#src/server/attachments/attachment.server";
 import { createSystemAgentEvents } from "#src/server/app-agent-events/app-agent-events-composition.server";
@@ -64,11 +67,12 @@ export function productionArtifacts(db: PrismaClient) {
     productionArtifactSignals(),
     getAppRateLimits().artifactPersonComment,
   );
+  const documents = new ArtifactDocuments(db, artifacts, blobs);
   return {
     artifacts,
     blobs,
     drafts,
-    documents: new ArtifactDocuments(db, artifacts, blobs),
+    documents,
     visibility: artifacts.visibility,
     publicLinks: new ArtifactPublicLinks(
       db,
@@ -98,17 +102,31 @@ export function productionArtifacts(db: PrismaClient) {
       artifactFilePreview({ reads: artifacts.reads, blobs }, input),
     thumbnail: (input: Parameters<typeof artifactThumbnail>[1]) =>
       artifactThumbnail({ reads: artifacts.reads, blobs }, input),
+    saveAttachment: async (input: {
+      workspaceId: string;
+      userId: string;
+      attachmentId: string;
+    }) => {
+      if (!(await artifactsEnabled(db, input.workspaceId)))
+        throw new AppError("NOT_FOUND", { errorId: "artifacts-disabled" });
+      return saveAttachmentAsArtifact(
+        { db, documents, blobs, attachments: productionArtifactAttachments(db) },
+        { workspaceId: input.workspaceId, userId: input.userId },
+        input.attachmentId,
+      );
+    },
   };
 }
 
 export function productionArtifactAttachments(db: PrismaClient): ArtifactAttachmentPort {
   return {
-    async read({ workspaceId, agentId }, attachmentId) {
+    async read({ workspaceId, agentId, userId }, attachmentId) {
       try {
         const { attachment, open } = await readAuthorizedAttachment(db, {
           attachmentId,
           workspaceId,
           agentId,
+          userId,
         });
         if (!attachment.messageId) return null;
         return {

@@ -31,6 +31,7 @@ import {
   galleryRows,
   singleImageBox,
 } from "#src/lib/attachment-image-box";
+import { SaveAttachmentAsArtifactButton } from "#src/features/artifacts/artifact-attachment-save";
 import type { MessageView } from "./message-view";
 
 export function attachmentUrl(attachment: { id: string }) {
@@ -264,7 +265,7 @@ function AttachmentCard({ attachment }: { attachment: Attachment }) {
       </span>
     </span>
   );
-  return previewable ? (
+  const card = previewable ? (
     <AttachmentReviewDialog file={attachment}>
       {({ loading }) => (
         <Button
@@ -279,7 +280,6 @@ function AttachmentCard({ attachment }: { attachment: Attachment }) {
       )}
     </AttachmentReviewDialog>
   ) : (
-    // No preview: the card downloads the file, as on Raft, and it takes no comments.
     <Button
       color="tertiary"
       noTextPadding
@@ -289,5 +289,16 @@ function AttachmentCard({ attachment }: { attachment: Attachment }) {
     >
       {body}
     </Button>
+  );
+  return (
+    <div className="group/att relative min-w-0">
+      {card}
+      <div className="absolute top-1 right-1 z-10">
+        <SaveAttachmentAsArtifactButton
+          attachmentId={attachment.id}
+          sizeBytes={attachment.sizeBytes}
+        />
+      </div>
+    </div>
   );
 }

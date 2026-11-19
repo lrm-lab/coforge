@@ -1,9 +1,14 @@
 import { ARTIFACT_TITLE_MAX } from "#src/features/artifacts/artifact-title-limit";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { AppError, isAppError } from "#src/lib/app-error";
+import type { ArtifactActor } from "./artifact-access.server";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
 import type { ArtifactDocuments } from "./artifact-documents.server";
 import { ARTIFACT_TEXT_LIMIT, artifactPathValid } from "./artifact-files.server";
+
+export type ArtifactAttachmentPrincipal =
+  | { workspaceId: string; agentId: string; userId?: undefined }
+  | { workspaceId: string; userId: string; agentId?: undefined };
 
 export type ArtifactAttachment = {
   id: string;
@@ -16,7 +21,7 @@ export type ArtifactAttachment = {
 
 export type ArtifactAttachmentPort = {
   read: (
-    principal: { workspaceId: string; agentId: string },
+    principal: ArtifactAttachmentPrincipal,
     attachmentId: string,
   ) => Promise<ArtifactAttachment | null>;
 };
@@ -46,9 +51,15 @@ export function artifactPathOfFileName(fileName: string): string {
   return artifactPathValid(path) ? path : "attachment";
 }
 
+function actorOf(principal: ArtifactAttachmentPrincipal): ArtifactActor {
+  return principal.agentId !== undefined
+    ? { agentId: principal.agentId }
+    : { userId: principal.userId };
+}
+
 async function savedBefore(
   services: SaveServices,
-  scope: { workspaceId: string; actor: { agentId: string } },
+  scope: { workspaceId: string; actor: ArtifactActor },
   attachment: { id: string; fileName: string },
 ) {
   const existing = await services.db.artifact.findFirst({
@@ -75,10 +86,11 @@ async function savedBefore(
 
 export async function saveAttachmentAsArtifact(
   services: SaveServices,
-  principal: { workspaceId: string; agentId: string },
+  principal: ArtifactAttachmentPrincipal,
   attachmentId: string,
 ) {
-  const scope = { workspaceId: principal.workspaceId, actor: { agentId: principal.agentId } };
+  const actor = actorOf(principal);
+  const scope = { workspaceId: principal.workspaceId, actor };
   const attachment = UUID.test(attachmentId)
     ? await services.attachments?.read(principal, attachmentId.toLowerCase())
     : null;
@@ -93,7 +105,7 @@ export async function saveAttachmentAsArtifact(
   const blob = await services.blobs.upload({
     workspaceId: principal.workspaceId,
     bytes: await attachment.bytes(),
-    actor: { agentId: principal.agentId },
+    actor,
     unreferencedQuotaBytes: UNSAVED_UPLOADS_QUOTA_BYTES,
   });
   const path = artifactPathOfFileName(attachment.fileName);
