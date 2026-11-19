@@ -7,6 +7,19 @@ test("TaskBoard overview and project rows carry discussion reply and file counts
     const creator = await f.db.conversationMember.findFirstOrThrow({
       where: { conversationId: f.channel.id, userId: f.viewer.id },
     });
+    const earlierMessage = (sequence: number, threadRootId?: string) =>
+      f.db.message.create({
+        data: {
+          workspaceId: f.workspace.id,
+          conversationId: f.channel.id,
+          senderMemberId: creator.id,
+          sequence,
+          threadRootId,
+          body: "Earlier discussion",
+        },
+      });
+    const root = await earlierMessage(1);
+    await earlierMessage(2, root.id);
     // A task's own conversation: one reply carrying two files, plus an unsent upload that is not one.
     const discussion = await f.db.conversation.create({
       data: { workspaceId: f.workspace.id, kind: "task_thread" },
@@ -47,6 +60,7 @@ test("TaskBoard overview and project rows carry discussion reply and file counts
         number: 901,
         title: "Counted work",
         creatorMemberId: creator.id,
+        messageId: root.id,
         discussionConversationId: discussion.id,
       },
     });
@@ -62,10 +76,21 @@ test("TaskBoard overview and project rows carry discussion reply and file counts
 
     const overview = await f.board.overview(f.workspace.id, f.viewer.id);
     const row = overview.tasks.find(({ id }) => id === counted.id)!;
-    expect(row).toMatchObject({ replyCount: 1, fileCount: 2 });
+    const counts = {
+      replyCount: 1,
+      earlierDiscussion: { threadRootId: root.id, replyCount: 1 },
+      fileCount: 2,
+    };
+    expect(row).toMatchObject(counts);
     const quiet = overview.tasks.find(({ title }) => title === "Quiet work")!;
     expect(quiet).not.toHaveProperty("replyCount");
     expect(quiet).not.toHaveProperty("fileCount");
+    expect(
+      await f.board.overviewTask(
+        { workspaceId: f.workspace.id, userId: f.viewer.id },
+        { conversationId: f.channel.id, number: counted.number },
+      ),
+    ).toMatchObject(counts);
 
     // A Project board's cards carry the same counts.
     const project = await f.board.projectTasks(
@@ -73,8 +98,7 @@ test("TaskBoard overview and project rows carry discussion reply and file counts
       f.project.id,
     );
     expect(project.tasks.find(({ id }) => id === counted.id)).toMatchObject({
-      replyCount: 1,
-      fileCount: 2,
+      ...counts,
       parentTaskId: null,
     });
   } finally {
