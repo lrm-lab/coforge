@@ -3,6 +3,8 @@ import { Readable } from "node:stream";
 import Credential from "@alicloud/credentials";
 import OSS from "ali-oss";
 
+import { AppError } from "#src/lib/app-error";
+
 import {
   assertRemovablePrefix,
   type BulkFileRemoval,
@@ -13,28 +15,34 @@ import {
   type StoredFile,
 } from "./file-storage.server";
 
-/** DeleteMultipleObjects takes at most 1,000 keys per request, and ListObjectsV2 returns at most
- * 1,000 per page (https://help.aliyun.com/zh/oss/developer-reference/deletemultipleobjects,
- * https://help.aliyun.com/zh/oss/developer-reference/listobjectsv2). */
 const OSS_BATCH_MAX = 1000;
+
+const ACCOUNT_LEVEL_ERROR_CODES = new Set([
+  "UserDisable",
+  "AccessDenied",
+  "AccountProblem",
+  "InvalidAccessKeyId",
+  "InvalidSecurityToken",
+  "SecurityTokenExpired",
+]);
+
+async function unlessAccountUnavailable<T>(operation: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    const code = typeof error === "object" && error !== null ? Reflect.get(error, "code") : null;
+    if (typeof code !== "string" || !ACCOUNT_LEVEL_ERROR_CODES.has(code)) throw error;
+    console.warn(
+      JSON.stringify({ event: "object_storage:unavailable", error_name: code, operation }),
+    );
+    throw new AppError("TEMPORARILY_UNAVAILABLE");
+  }
+}
 
 type OssConfig = Extract<FileStorageConfig, { kind: "oss" }>;
 
-/**
- * Private Alibaba Cloud OSS bucket behind the {@link FileStorage} port, through the official
- * `ali-oss` SDK with V4 signing (V1 is being retired for buckets created after 2025-09-01).
- * Credentials come from a long-term AccessKey pair when one is configured, otherwise from the
- * `@alicloud/credentials` default chain, which on an ECS host means the instance RAM role's
- * STS token; the chain refreshes that token itself, and `refreshSTSToken` re-reads it so the
- * OSS client never signs with an expired one.
- */
 export async function createOssFileStorage(config: OssConfig): Promise<ManagedFileStorage> {
   const region = `oss-${config.region}`;
-  // Two clients, one credential source. Server-side traffic may use the region's internal
-  // endpoint (cheaper and faster from an Aliyun host); a presigned URL is handed to a browser or
-  // the CLI, which can only reach the public endpoint — an internal endpoint is reachable only
-  // from Aliyun products in the same region, so handing one to a browser is a guaranteed
-  // connection failure. A custom domain (CNAME) is publicly routable and applies to both.
   const customDomain = config.endpoint ? { endpoint: config.endpoint, cname: true } : null;
   const serverEndpoint = customDomain ?? { internal: config.internal };
   const presignEndpoint = customDomain ?? {};
@@ -82,23 +90,24 @@ export async function createOssFileStorage(config: OssConfig): Promise<ManagedFi
 }
 
 export class OssFileStorage implements FileStorage, BulkFileRemoval, ObjectCopy {
-  /** Server-side traffic (put/open/remove/head) may ride the internal endpoint; `presignPut`
-   * and `presignGet` sign on the public-endpoint client because its URL is consumed outside this server. */
   constructor(
     private readonly client: OSS,
     private readonly presignClient: OSS,
   ) {}
 
   async put(objectKey: string, file: Blob, contentType: string) {
-    await this.client.put(objectKey, Buffer.from(await file.arrayBuffer()), {
-      headers: { "Content-Type": contentType, "x-oss-forbid-overwrite": "true" },
-    });
+    const body = Buffer.from(await file.arrayBuffer());
+    await unlessAccountUnavailable("put", () =>
+      this.client.put(objectKey, body, {
+        headers: { "Content-Type": contentType, "x-oss-forbid-overwrite": "true" },
+      }),
+    );
   }
 
   async open(objectKey: string): Promise<StoredFile | null> {
     let result: Awaited<ReturnType<OSS["getStream"]>>;
     try {
-      result = await this.client.getStream(objectKey);
+      result = await unlessAccountUnavailable("open", () => this.client.getStream(objectKey));
     } catch (error) {
       if (isMissingObject(error)) return null;
       throw error;
@@ -112,36 +121,39 @@ export class OssFileStorage implements FileStorage, BulkFileRemoval, ObjectCopy 
     };
   }
 
-  /** Server-side CopyObject within the bucket; like `put`, it refuses to overwrite. */
   async copyObject(fromKey: string, toKey: string) {
-    await this.client.copy(toKey, fromKey, { headers: { "x-oss-forbid-overwrite": "true" } });
+    await unlessAccountUnavailable("copy", () =>
+      this.client.copy(toKey, fromKey, { headers: { "x-oss-forbid-overwrite": "true" } }),
+    );
   }
 
   async remove(objectKey: string) {
-    await this.client.delete(objectKey);
+    await unlessAccountUnavailable("remove", () => this.client.delete(objectKey));
   }
 
-  /** `deleteMulti` in quiet mode, a thousand keys per request; authorized by `oss:DeleteObject`. */
   async removeMany(objectKeys: readonly string[]) {
     for (let start = 0; start < objectKeys.length; start += OSS_BATCH_MAX)
-      await this.client.deleteMulti(objectKeys.slice(start, start + OSS_BATCH_MAX), {
-        quiet: true,
-      });
+      await unlessAccountUnavailable("remove_many", () =>
+        this.client.deleteMulti(objectKeys.slice(start, start + OSS_BATCH_MAX), { quiet: true }),
+      );
   }
 
-  /** Lists the prefix a page at a time (`listV2`, which needs `oss:ListObjects` on the bucket)
-   * and removes each page with one `deleteMulti`. */
   async removePrefix(prefix: string) {
     assertRemovablePrefix(prefix);
     let continuationToken: string | undefined;
     do {
-      const page = await this.client.listV2({
-        prefix,
-        "max-keys": OSS_BATCH_MAX,
-        ...(continuationToken ? { "continuation-token": continuationToken } : {}),
-      });
+      const page = await unlessAccountUnavailable("remove_prefix", () =>
+        this.client.listV2({
+          prefix,
+          "max-keys": OSS_BATCH_MAX,
+          ...(continuationToken ? { "continuation-token": continuationToken } : {}),
+        }),
+      );
       const keys = (page.objects ?? []).map((object) => object.name);
-      if (keys.length) await this.client.deleteMulti(keys, { quiet: true });
+      if (keys.length)
+        await unlessAccountUnavailable("remove_prefix", () =>
+          this.client.deleteMulti(keys, { quiet: true }),
+        );
       continuationToken = page.isTruncated ? page.nextContinuationToken : undefined;
     } while (continuationToken);
   }
@@ -149,7 +161,7 @@ export class OssFileStorage implements FileStorage, BulkFileRemoval, ObjectCopy 
   async head(objectKey: string) {
     let result: Awaited<ReturnType<OSS["head"]>>;
     try {
-      result = await this.client.head(objectKey);
+      result = await unlessAccountUnavailable("head", () => this.client.head(objectKey));
     } catch (error) {
       if (isMissingObject(error)) return null;
       throw error;
@@ -162,8 +174,6 @@ export class OssFileStorage implements FileStorage, BulkFileRemoval, ObjectCopy 
     };
   }
 
-  /** Sign on the server endpoint, preserving internal OSS routing. fetch owns cancellation
-   * through headers AND body; the SDK's streaming GET does not accept an AbortSignal. */
   async readPrefix(objectKey: string, input: { maxBytes: number; signal: AbortSignal }) {
     input.signal.throwIfAborted();
     if (!Number.isSafeInteger(input.maxBytes) || input.maxBytes <= 0)
@@ -216,24 +226,8 @@ export class OssFileStorage implements FileStorage, BulkFileRemoval, ObjectCopy 
     }
   }
 
-  /**
-   * V4-signs a PUT for `objectKey` that has not been written yet, guarded by
-   * `x-oss-forbid-overwrite`: OSS's own no-overwrite mechanism (there is no OSS equivalent of
-   * S3's `If-None-Match: *`). The caller must send back exactly the `Content-Type` and
-   * `x-oss-forbid-overwrite` headers this returns. Neither needs to be listed in
-   * `signatureUrlV4`'s `additionalHeaders` parameter: `ali-oss`'s V4 signer
-   * (`lib/common/signUtils.js#getCanonicalRequest`) always folds `content-type` and every
-   * `x-oss-*` header already present in `headers` into the canonical request, and
-   * `fixAdditionalHeaders` explicitly strips those same headers back out of whatever
-   * `additionalHeaders` list is passed — so passing one here would be a no-op at best. A
-   * conflict on OSS answers `409 FileAlreadyExists` (confirmed against this file's own fake-OSS
-   * test fixture), not the `412` an `If-None-Match` precondition would give; the caller
-   * of `presignPut` (the upload session route, and the CLI's PUT-outcome check) is where this
-   * repo's "already uploaded" check lives, and it checks for 409.
-   */
   async presignPut(objectKey: string, input: { contentType: string; expiresInSeconds: number }) {
     const headers = { "Content-Type": input.contentType, "x-oss-forbid-overwrite": "true" };
-    // Signed on the public-endpoint client: the consumer of this URL is a browser or the CLI.
     const url = await this.presignClient.signatureUrlV4(
       "PUT",
       input.expiresInSeconds,
@@ -244,7 +238,6 @@ export class OssFileStorage implements FileStorage, BulkFileRemoval, ObjectCopy 
   }
 
   async presignGet(objectKey: string, input: { expiresInSeconds: number }) {
-    // Public-endpoint client, as for `presignPut`: a Computer's daemon fetches this URL.
     return this.presignClient.signatureUrlV4("GET", input.expiresInSeconds, {}, objectKey);
   }
 }
