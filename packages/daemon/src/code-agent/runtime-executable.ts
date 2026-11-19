@@ -88,7 +88,9 @@ function antigravityInstalledExecutableCandidates(
   platform: NodeJS.Platform,
 ): string[] {
   if (platform === "win32") {
-    const localAppData = environment.LOCALAPPDATA;
+    const localAppData = Object.entries(environment).find(
+      ([key]) => key.toLowerCase() === "localappdata",
+    )?.[1];
     return localAppData ? [join(localAppData, "agy", "bin", "agy.exe")] : [];
   }
   const home = homeDirectory(environment);

@@ -26,7 +26,7 @@ export function antigravityGeminiDirectory(
     const home = environmentValue(environment, "USERPROFILE", "win32")?.trim();
     return home ? win32.join(home, ".gemini") : undefined;
   }
-  const home = (environment.HOME ?? environment.USERPROFILE)?.trim();
+  const home = environment.HOME?.trim() || environment.USERPROFILE?.trim();
   return home ? posix.join(home, ".gemini") : undefined;
 }
 

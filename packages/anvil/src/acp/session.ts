@@ -13,7 +13,7 @@ import { asRecord } from "#src/json-record";
 import { attachStderrExcerpt } from "#src/stderr-excerpt";
 import type { AcpConnection } from "./connection";
 import type { AcpNativeTurn, AcpSessionProfile } from "./profile";
-import { acpPromptFailure, acpSteerResponseFailure } from "./prompt-failure";
+import { acpPromptFailure, acpSteerResponseFailure, acpStopStatus } from "./prompt-failure";
 import {
   acpRejectInput,
   type AcpNativeTurnState,
@@ -210,6 +210,7 @@ export class AcpSession implements AgentSession {
 
   async #run(input: Input) {
     let status: "completed" | "interrupted" | "failed" = "failed";
+    let settledResponse: unknown;
     try {
       const meta = input.promptId ? this.profile.promptMeta?.(input.promptId) : undefined;
       const response = await this.#requireTransport().connection.agent.request("session/prompt", {
@@ -217,16 +218,9 @@ export class AcpSession implements AgentSession {
         prompt: [{ type: "text", text: input.text }],
         ...(meta ? { _meta: meta } : {}),
       });
-      const stop = this.profile.stopStatus?.(response.stopReason) ?? {
-        status:
-          response.stopReason === "end_turn"
-            ? ("completed" as const)
-            : response.stopReason === "cancelled"
-              ? ("interrupted" as const)
-              : ("failed" as const),
-      };
+      const stop = acpStopStatus(response.stopReason, this.profile);
       const inBand =
-        stop.status === "completed"
+        stop.status === "completed" && !this.profile.steer?.settlesTurn
           ? input.updates.inBandFailure?.(asRecord(response) ?? {})
           : undefined;
       if (inBand !== undefined) {
@@ -237,6 +231,7 @@ export class AcpSession implements AgentSession {
         );
       } else if (stop.status === "completed") {
         this.#accept(input);
+        settledResponse = response;
         status = "completed";
       } else if (stop.status === "interrupted") {
         input.admission.reject(
@@ -281,8 +276,8 @@ export class AcpSession implements AgentSession {
         // For every other runtime this block must stay synchronous — `completed` is emitted in
         // the same turn that settles the admission, so an awaiting caller never sees it later.
         if (this.profile.steer?.unboundedRequest) {
-          const steered = await this.#steering?.drain();
-          if (steered) status = steered;
+          const steered = await this.#steering?.drain(settledResponse, input.options);
+          if (steered && status === "completed") status = steered;
         }
         this.#active = undefined;
         if (input.promptId) rememberCompletedPrompt(this.#completedPrompts, input.promptId);

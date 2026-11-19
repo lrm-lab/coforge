@@ -206,6 +206,8 @@ for await (const line of console) {
       break;
     case "session/set_config_option": {
       const { configId, value } = request.params;
+      if (Bun.env.AGY_ACP_FIXTURE_HANG_CONFIG && value === Bun.env.AGY_ACP_FIXTURE_HANG_CONFIG)
+        break;
       const option = configOptions.find((entry) => entry.id === configId);
       if (!option) {
         fail(-32602, `Unknown config option: ${configId}`);
@@ -256,6 +258,26 @@ for await (const line of console) {
           content: { type: "text", text: "working" },
         });
         hold(() => {});
+        break;
+      }
+      if (text === "steer-keep-held") {
+        reply({ stopReason: "end_turn" });
+        break;
+      }
+      if (text === "inband-quota-both") {
+        update({
+          sessionUpdate: "agent_message_chunk",
+          content: {
+            type: "text",
+            text: "\n⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 2h30m.\n",
+          },
+        });
+        if (heldReply) {
+          const flush = heldReply;
+          heldReply = undefined;
+          flush();
+        }
+        reply({ stopReason: "end_turn" });
         break;
       }
       if (heldReply) {

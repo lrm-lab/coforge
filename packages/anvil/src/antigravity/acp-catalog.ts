@@ -32,6 +32,7 @@ export async function discoverAntigravityAcpCatalog(
   let initialModel: { id: string; value: string } | undefined;
   let initialEffort: { id: string; value: string } | undefined;
   let switchedModel = false;
+  let failed = false;
   try {
     await assertAntigravityAcpVersionSupported(command, host.versionReader);
     const launchEnvironment = withoutSshSessionVariables({ ...environment, PWD: cwd });
@@ -85,6 +86,7 @@ export async function discoverAntigravityAcpCatalog(
     if (models.length === 0) throw new Error("agy acp model catalog unavailable");
     return { provider: RUNTIME_PROVIDER.ANTIGRAVITY, models };
   } catch (error) {
+    failed = true;
     logger.warn("code_agent_catalog:discovery_failed", {
       provider: RUNTIME_PROVIDER.ANTIGRAVITY,
       error_code: diagnosticErrorCode(error),
@@ -93,32 +95,36 @@ export async function discoverAntigravityAcpCatalog(
     });
     return undefined;
   } finally {
-    if (transport && sessionId && !transport.closed) {
+    if (transport && sessionId && !transport.closed && !failed) {
+      const cleanupTimeoutMs = Math.min(timeoutMs, 5_000);
       if (switchedModel && initialModel) {
-        await acpBounded(
+        const restored = await acpBounded(
           transport.connection.agent.request("session/set_config_option", {
             sessionId,
             configId: initialModel.id,
             value: initialModel.value,
           }),
-          timeoutMs,
+          cleanupTimeoutMs,
           "agy acp session/set_config_option timed out",
-        ).catch(() => undefined);
-        if (initialEffort) {
+        ).then(
+          () => true,
+          () => false,
+        );
+        if (restored && initialEffort) {
           await acpBounded(
             transport.connection.agent.request("session/set_config_option", {
               sessionId,
               configId: initialEffort.id,
               value: initialEffort.value,
             }),
-            timeoutMs,
+            cleanupTimeoutMs,
             "agy acp session/set_config_option timed out",
           ).catch(() => undefined);
         }
       }
       await acpBounded(
         transport.connection.agent.request("session/close", { sessionId }),
-        timeoutMs,
+        cleanupTimeoutMs,
         "agy acp session/close timed out",
       ).catch(() => undefined);
     }

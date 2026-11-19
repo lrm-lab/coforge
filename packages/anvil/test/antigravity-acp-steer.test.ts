@@ -101,3 +101,28 @@ test("a steered prompt stopping with max_tokens fails the merged turn without no
     expect(completed(events).map((e) => e.status)).toEqual(["failed"]);
   });
 });
+
+test("an in-band quota warning seen before both prompts resolve emits exactly one error", async () => {
+  await withSession(async ({ session, events }) => {
+    const first = session.sendMessage("held-silent");
+    const steer = session.sendMessage("inband-quota-both");
+    await Promise.all([first, steer]);
+    await waitFor(() => completed(events).length > 0);
+    expect(completed(events).map((e) => e.status)).toEqual(["failed"]);
+    const errors = events.filter((e) => e.type === "error");
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.providerLimit?.kind).toBe("window_limit");
+  });
+});
+
+test("a completed steer does not overwrite a subsequent interrupt status", async () => {
+  await withSession(async ({ session, events }) => {
+    const first = session.sendMessage("held-silent");
+    await Bun.sleep(20);
+    await session.sendMessage("steer-keep-held");
+    await session.interrupt();
+    await first.catch(() => undefined);
+    await waitFor(() => completed(events).length > 0);
+    expect(completed(events).map((e) => e.status)).toEqual(["interrupted"]);
+  });
+});

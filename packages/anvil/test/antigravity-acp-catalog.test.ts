@@ -96,3 +96,28 @@ test("catalog discovery passes session flags and forwards GEMINI_HOME as --gemin
     await rm(cwd, { recursive: true, force: true });
   }
 });
+
+test("a timed-out catalog probe skips restore and close RPCs instead of multiplying the timeout", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "anvil-agy-catalog-timeout-"));
+  try {
+    const log = join(cwd, "rpc.jsonl");
+    const started = Date.now();
+    const catalog = await discoverAntigravityAcpCatalog(
+      command,
+      cwd,
+      { AGY_ACP_FIXTURE_LOG: log, AGY_ACP_FIXTURE_HANG_CONFIG: "gemini-4-hydrogen" },
+      fixtureAntigravityHost,
+      200,
+    );
+    const elapsed = Date.now() - started;
+    expect(catalog).toBeUndefined();
+    expect(elapsed).toBeLessThan(650);
+    const methods = (await readFile(log, "utf8"))
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line).method);
+    expect(methods).not.toContain("session/close");
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});

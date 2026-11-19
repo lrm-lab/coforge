@@ -28,6 +28,22 @@ export function acpPromptFailure(
   return profile.annotateFailure ? profile.annotateFailure(event, error) : event;
 }
 
+export function acpStopStatus(
+  stopReason: string,
+  profile: Pick<AcpSessionProfile, "stopStatus">,
+): { status: "completed" | "interrupted" | "failed"; error?: string } {
+  return (
+    profile.stopStatus?.(stopReason) ?? {
+      status:
+        stopReason === "end_turn"
+          ? "completed"
+          : stopReason === "cancelled"
+            ? "interrupted"
+            : "failed",
+    }
+  );
+}
+
 export function acpSteerResponseFailure(
   response: unknown,
   profile: Pick<AcpSessionProfile, "label" | "stopStatus">,
@@ -35,14 +51,7 @@ export function acpSteerResponseFailure(
 ): FailureEvent | undefined {
   const record = asRecord(response) ?? {};
   const stopReason = nonEmptyString(record.stopReason) ?? "unknown";
-  const stop = profile.stopStatus?.(stopReason) ?? {
-    status:
-      stopReason === "end_turn"
-        ? ("completed" as const)
-        : stopReason === "cancelled"
-          ? ("interrupted" as const)
-          : ("failed" as const),
-  };
+  const stop = acpStopStatus(stopReason, profile);
   if (stop.status === "completed") {
     const inBand = updates?.inBandFailure?.(record);
     if (inBand === undefined) return undefined;

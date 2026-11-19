@@ -45,7 +45,8 @@ export class AcpSteering {
   readonly #pending = new Set<Admission>();
   readonly #inflight = new Set<Promise<void>>();
   #chain: Promise<void> = Promise.resolve();
-  #turnStatus: "completed" | "failed" | undefined;
+  #turnStatus: "failed" | undefined;
+  #settledBySteer = false;
 
   constructor(
     private readonly label: string,
@@ -88,10 +89,26 @@ export class AcpSteering {
   /** Resolves when every `session/prompt`-as-steer in flight has settled. Only
    * `unboundedRequest` profiles put inserts here, and a steer offered while a drain waits still
    * joins the turn: keep waiting until the in-flight set stays empty. */
-  async drain(): Promise<"completed" | "failed" | undefined> {
+  async drain(
+    initialResponse?: unknown,
+    initialOptions?: AgentNoticeOptions,
+  ): Promise<"failed" | undefined> {
     while (this.#inflight.size > 0) await Promise.all(this.#inflight);
+    if (
+      !this.#turnStatus &&
+      !this.#settledBySteer &&
+      initialResponse !== undefined &&
+      this.profile.settlesTurn
+    ) {
+      const failure = this.ports.turnFailure?.(initialResponse);
+      if (failure) {
+        this.ports.emit(failure, initialOptions);
+        this.#turnStatus = "failed";
+      }
+    }
     const status = this.#turnStatus;
     this.#turnStatus = undefined;
+    this.#settledBySteer = false;
     return status;
   }
 
@@ -122,18 +139,22 @@ export class AcpSteering {
     this.#steers.clear();
     this.#earlyOutcomes.clear();
     this.#turnStatus = undefined;
+    this.#settledBySteer = false;
   }
 
   /** Rejects every notice still waiting to be sent, as a cancelled or disposed session does. */
   rejectPending(message: string): void {
     for (const admission of this.#pending) admission.reject(new Error(message));
     this.#pending.clear();
+    this.#turnStatus = undefined;
+    this.#settledBySteer = false;
   }
 
   clear(): void {
     this.#steers.clear();
     this.#earlyOutcomes.clear();
     this.#turnStatus = undefined;
+    this.#settledBySteer = false;
   }
 
   async #insert(
@@ -168,6 +189,7 @@ export class AcpSteering {
           this.ports.markResumable(options);
           const failure = this.ports.rpcFailure?.(error);
           if (failure) this.ports.emit(failure, options);
+          this.#settledBySteer = true;
           this.#turnStatus = "failed";
         } else {
           undeliver();
@@ -206,12 +228,11 @@ export class AcpSteering {
       this.#steers.set(taken.id, { text, options, injected: early === "injected" });
     }
     if (this.profile.settlesTurn) {
+      this.#settledBySteer = true;
       const failure = this.ports.turnFailure?.(response);
       if (failure) {
         this.ports.emit(failure, options);
         this.#turnStatus = "failed";
-      } else {
-        this.#turnStatus = "completed";
       }
     }
     admission.resolve();

@@ -22,6 +22,13 @@ function antigravityToolCall(update: Readonly<Record<string, unknown>>) {
   return { name, input: antigravityToolInput(update.rawInput) };
 }
 
+function hasToolInput(raw: unknown): boolean {
+  if (raw === undefined || raw === null) return false;
+  if (typeof raw === "string") return raw.length > 0;
+  const record = asRecord(raw);
+  return record ? Object.keys(record).length > 0 : true;
+}
+
 function rawOutputText(rawOutput: unknown): string | undefined {
   if (typeof rawOutput === "string") return rawOutput.length > 0 ? rawOutput : undefined;
   const record = asRecord(rawOutput);
@@ -76,7 +83,7 @@ export class AntigravityAcpTurnEvents {
         ];
         if (this.host.isShellToolName(call.name)) {
           this.#shellCalls.add(id);
-          if (call.input !== undefined) {
+          if (hasToolInput(call.input)) {
             this.#scannedShellCalls.add(id);
             const intent = this.#scanner.feed({ callId: id, fragment: JSON.stringify(call.input) });
             if (intent) events.push(intent);
@@ -111,7 +118,7 @@ export class AntigravityAcpTurnEvents {
     if (
       this.#shellCalls.has(id) &&
       !this.#scannedShellCalls.has(id) &&
-      update.rawInput !== undefined
+      hasToolInput(update.rawInput)
     ) {
       this.#scannedShellCalls.add(id);
       const input = antigravityToolInput(update.rawInput);
@@ -124,7 +131,7 @@ export class AntigravityAcpTurnEvents {
       this.#output.set(id, output.full);
     }
     if (acpToolUpdateEnded(update.status)) {
-      if (!output && !this.#output.has(id)) {
+      if (!this.#output.get(id)?.length) {
         const fallback = rawOutputText(update.rawOutput);
         if (fallback) events.push({ type: "tool-output", id, text: fallback });
       }

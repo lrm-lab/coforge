@@ -130,7 +130,14 @@ export async function listAgentSkills(options: {
       // `~/.gemini/antigravity-cli/skills/`). Neither needs a trusted workspace. Plugin-provided
       // skill directories are not scanned here.
       locals = [local(".agents/skills")];
-      if (home || env.GEMINI_HOME) globals = [native("GEMINI_HOME", ".gemini", "config/skills")];
+      if (env.GEMINI_HOME?.trim())
+        globals = [
+          {
+            path: resolve(cwd, env.GEMINI_HOME.trim(), "config/skills"),
+            label: "$GEMINI_HOME/config/skills",
+          },
+        ];
+      else if (home) globals = [personal(".gemini/config/skills")];
       break;
     case RUNTIME_PROVIDER.DSH:
       // dsh-skill-filesystem 0.2.1-rc.2's documented project/user roots; profile-supplied

@@ -124,7 +124,7 @@ test("late rawInput on a shell tool_call_update feeds the reply-intent scanner",
     createReplyIntentScanner: () => ({
       feed: (entry: { callId: string; fragment: string }) => {
         fed.push(entry.fragment);
-        return { type: "reply-intent-started" as const, id: entry.callId };
+        return { type: "reply-intent" as const, id: entry.callId, target: "#general" };
       },
       complete: () => {},
       reset: () => [],
@@ -139,7 +139,7 @@ test("late rawInput on a shell tool_call_update feeds the reply-intent scanner",
     title: "send message",
   });
   expect(fed).toEqual([]);
-  expect(startEvents.some((e) => e.type === "reply-intent-started")).toBe(false);
+  expect(startEvents.some((e) => e.type === "reply-intent")).toBe(false);
 
   const updateEvents = turn.read({
     sessionUpdate: "tool_call_update",
@@ -150,7 +150,11 @@ test("late rawInput on a shell tool_call_update feeds the reply-intent scanner",
   });
   expect(fed).toHaveLength(1);
   expect(fed[0]).toContain("coforge message send");
-  expect(updateEvents).toContainEqual({ type: "reply-intent-started", id: "call_late" });
+  expect(updateEvents).toContainEqual({
+    type: "reply-intent",
+    id: "call_late",
+    target: "#general",
+  });
 });
 
 test("falls back to rawOutput when a completed tool_call_update carries no content text", () => {
@@ -176,4 +180,44 @@ test("falls back to rawOutput when a completed tool_call_update carries no conte
     text: "/workspace\n",
   });
   expect(events).toContainEqual({ type: "tool-end", id: "call_raw_out", isError: false });
+});
+
+test("empty rawInput placeholder on tool_call still allows late shell scan and empty content text falls back to rawOutput", () => {
+  const fed: string[] = [];
+  const scanningHost = {
+    isShellToolName: (name: string) => name === "run_command",
+    createReplyIntentScanner: () => ({
+      feed: (entry: { callId: string; fragment: string }) => {
+        fed.push(entry.fragment);
+        return { type: "reply-intent" as const, id: entry.callId, target: "#general" };
+      },
+      complete: () => {},
+      reset: () => [],
+    }),
+  };
+  const turn = new AntigravityAcpTurnEvents(scanningHost as never);
+  turn.read({
+    sessionUpdate: "tool_call",
+    status: "pending",
+    toolCallId: "call_empty_placeholder",
+    name: "run_command",
+    rawInput: {},
+  });
+  expect(fed).toEqual([]);
+
+  const updateEvents = turn.read({
+    sessionUpdate: "tool_call_update",
+    status: "completed",
+    toolCallId: "call_empty_placeholder",
+    rawInput: { CommandLine: "coforge message send --text ok" },
+    content: [{ type: "content", content: { type: "text", text: "" } }],
+    rawOutput: { output: "sent\n" },
+  });
+  expect(fed).toHaveLength(1);
+  expect(fed[0]).toContain("coforge message send");
+  expect(updateEvents).toContainEqual({
+    type: "tool-output",
+    id: "call_empty_placeholder",
+    text: "sent\n",
+  });
 });
