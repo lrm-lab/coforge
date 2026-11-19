@@ -23,7 +23,9 @@ export const reminderHelp: Readonly<Record<string, HelpEntry>> = {
   },
   "reminder update": {
     syntax:
-      "coforge reminder update --id <id> (--fire-at <iso>|--in <duration>|--title <title>|--cadence <rule|none>|--repeat <rule|none> [--tz <zone>])",
+      "coforge reminder update --id <id> (--fire-at <iso>|--in <duration>|--title <title>|(--cadence <rule|none>|--repeat <rule|none>) [--tz <zone>])",
+    guidance:
+      "Change one thing at a time: a time, a title, or a cadence; --tz goes with the cadence change, whether you write --cadence or --repeat.",
     example: "coforge reminder update --id 01a1f2ec --in 15m",
   },
   "reminder snooze": {

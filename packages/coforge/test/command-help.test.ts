@@ -241,6 +241,8 @@ test("reminder help names the flags its parser accepts", async () => {
   const update = await run(["reminder", "update", "--help"], transport);
   expect(update).toContain("--fire-at <iso>");
   expect(update).toContain("--in <duration>");
+  expect(update).toContain("(--cadence <rule|none>|--repeat <rule|none>) [--tz <zone>]");
+  expect(update).toContain("--tz goes with the cadence change");
   expect(update).not.toContain("--at <iso>");
 
   const snooze = await run(["reminder", "snooze", "--help"], transport);
