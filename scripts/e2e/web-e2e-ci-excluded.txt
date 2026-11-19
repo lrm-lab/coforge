@@ -2,6 +2,7 @@
 agent-control.e2e.ts 待分拣
 artifact-file-entry-browser.e2e.ts 待分拣
 artifact-file-preview-browser.e2e.ts 待分拣
+artifact-lifecycle.e2e.ts 待分拣
 artifact-page-annotate-browser.e2e.ts 待分拣
 artifact-page-bridge-browser.e2e.ts 待分拣
 artifact-page-data-browser.e2e.ts 待分拣

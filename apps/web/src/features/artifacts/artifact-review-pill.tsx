@@ -440,7 +440,7 @@ export function ArtifactReviewPill({
           {count > 0 && !annotating && (
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute -top-1 -right-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-warning-solid px-1 text-[11px] font-semibold text-white tabular-nums shadow-xs"
+              className="pointer-events-none absolute -top-1 -right-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-warning-solid px-1 text-xs leading-none font-semibold text-white tabular-nums shadow-xs"
             >
               {count}
             </span>
