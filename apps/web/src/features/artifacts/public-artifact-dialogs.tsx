@@ -5,58 +5,10 @@ import { Select } from "#src/components/base/select/select";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
 import { DialogAction, DialogActions, DialogCancel } from "#src/components/ui/dialog-actions";
 import { useAppToast } from "#src/components/ui/toast";
-import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
 import { reportPublicArtifactAbuse } from "./artifact-sandbox.functions";
-import { buildForkPrompt } from "./artifact-short-id";
 
 type AbuseReason = "spam" | "phishing" | "harassment" | "copyright" | "other";
-
-export function PublicArtifactForkDialog({
-  title,
-  url,
-  onClose,
-}: {
-  title: string;
-  url: string;
-  onClose: () => void;
-}) {
-  const toast = useAppToast();
-  const prompt = buildForkPrompt({ title, url });
-
-  const copyPrompt = async () => {
-    if (await copyText(prompt)) {
-      toast.success(m.ap_fork_copied());
-      onClose();
-    } else {
-      toast.error(m.conversation_copy_failed());
-    }
-  };
-
-  return (
-    <ModalOverlay isOpen isDismissable onOpenChange={(open) => !open && onClose()}>
-      <Modal className="w-[calc(100vw-2rem)] max-w-md">
-        <Dialog aria-label={m.ap_fork_title()}>
-          <div className="w-full p-5 text-left">
-            <Heading slot="title" className="text-lg font-semibold text-primary">
-              {m.ap_fork_title()}
-            </Heading>
-            <p className="mt-2 text-sm text-secondary">{m.ap_fork_body()}</p>
-            <pre className="mt-3 max-h-40 overflow-auto rounded-lg border border-secondary bg-secondary p-3 font-mono text-xs whitespace-pre-wrap text-primary">
-              {prompt}
-            </pre>
-            <DialogActions className="mt-5">
-              <DialogCancel onPress={onClose}>{m.controls_cancel()}</DialogCancel>
-              <DialogAction onPress={() => void copyPrompt()}>
-                {m.ap_fork_copy_prompt()}
-              </DialogAction>
-            </DialogActions>
-          </div>
-        </Dialog>
-      </Modal>
-    </ModalOverlay>
-  );
-}
 
 export function PublicArtifactReportDialog({
   artifactId,

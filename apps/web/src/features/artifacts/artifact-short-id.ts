@@ -35,7 +35,3 @@ export function decodeArtifactShortId(raw: string): string | null {
 export function publicArtifactPath(artifactId: string): string {
   return `/a/${encodeArtifactShortId(artifactId)}`;
 }
-
-export function buildForkPrompt(input: { title: string; url: string }): string {
-  return `Please create a new artifact in this workspace forked from "${input.title}" (${input.url}). Preserve its structure and let me know when it is ready to customize.`;
-}

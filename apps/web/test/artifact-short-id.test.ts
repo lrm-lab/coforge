@@ -1,6 +1,5 @@
 import { expect, test } from "bun:test";
 import {
-  buildForkPrompt,
   decodeArtifactShortId,
   encodeArtifactShortId,
   publicArtifactPath,
@@ -33,13 +32,7 @@ test("decodeArtifactShortId accepts full UUIDs and rejects invalid values", () =
   expect(decodeArtifactShortId("a".repeat(23))).toBeNull();
 });
 
-test("publicArtifactPath builds /a/<shortId> and buildForkPrompt includes title and URL", () => {
+test("publicArtifactPath builds /a/<shortId>", () => {
   const path = publicArtifactPath(RANDOM_UUID);
   expect(path).toBe(`/a/${encodeArtifactShortId(RANDOM_UUID)}`);
-  const prompt = buildForkPrompt({
-    title: "Q4 Roadmap",
-    url: `https://coforge.example${path}`,
-  });
-  expect(prompt).toContain("Q4 Roadmap");
-  expect(prompt).toContain(`https://coforge.example${path}`);
 });

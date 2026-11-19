@@ -28,7 +28,7 @@ import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
 import { buildAiPromptUrl, formatArtifactForAi, type AiProvider } from "./artifact-ai-shortcuts";
 import { publicArtifactPath } from "./artifact-short-id";
-import { PublicArtifactForkDialog, PublicArtifactReportDialog } from "./public-artifact-dialogs";
+import { PublicArtifactReportDialog } from "./public-artifact-dialogs";
 
 const BANNER_DISMISSED_KEY = "coforge.artifacts.publicBannerDismissed";
 
@@ -72,7 +72,6 @@ export function PublicArtifactShell({
 }) {
   const toast = useAppToast();
   const navigate = useNavigate();
-  const [forking, setForking] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [phonePromptOpen, setPhonePromptOpen] = useState(() => !readBannerDismissed());
 
@@ -188,10 +187,15 @@ export function PublicArtifactShell({
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          <Button size="sm" color="primary" onPress={() => setForking(true)}>
-            <span className="hidden sm:inline">{m.ap_fork_in_coforge()}</span>
-            <span className="sm:hidden">{m.ap_fork()}</span>
-          </Button>
+          {signedIn ? (
+            <Button size="sm" color="secondary" onPress={() => void navigate({ to: "/" })}>
+              {m.ap_open_in_coforge()}
+            </Button>
+          ) : (
+            <Button size="sm" color="secondary" onPress={openSignIn}>
+              {m.ap_sign_in_to_view()}
+            </Button>
+          )}
 
           <Dropdown.Root>
             <ButtonUtility
@@ -258,9 +262,6 @@ export function PublicArtifactShell({
         className="min-h-0 w-full flex-1 border-0 bg-primary"
       />
 
-      {forking && (
-        <PublicArtifactForkDialog title={title} url={shareUrl} onClose={() => setForking(false)} />
-      )}
       {reporting && (
         <PublicArtifactReportDialog
           artifactId={artifact.artifactId}
