@@ -3,6 +3,10 @@ import { TurnEvidenceLedger } from "#src/agent-runtime/turn-evidence";
 import { AgentDeliveryGate } from "#src/daemon-runtime/agent-delivery-gate";
 import { RuntimeErrorDeliveryHold } from "#src/daemon-runtime/runtime-error-delivery-hold";
 import { classifyRuntimeError } from "#src/agent-runtime/runtime-error-classification";
+import {
+  buildRuntimeErrorActivity,
+  buildRuntimeErrorFenceActivity,
+} from "#src/agent-runtime/runtime-error-activity";
 
 const strictLedger = () => new TurnEvidenceLedger({ bareCompletionIsEmpty: true });
 
@@ -82,4 +86,32 @@ test("five bare empty turns in a row reach the zero-evidence cap", () => {
     attempts: 5,
     fenced: true,
   });
+});
+
+test("the cap's Activity names the zero-evidence stop, not a generic repeated-error stop", () => {
+  const hold = new RuntimeErrorDeliveryHold({
+    deliveryGate: new AgentDeliveryGate(),
+    flush: () => {},
+  });
+  const ledger = strictLedger();
+  const turns = Array.from({ length: 5 }, () => {
+    ledger.markOpened();
+    return ledger.finish("completed")!;
+  });
+  const last = turns[4]!;
+  const classified = classifyRuntimeError({ message: last.message });
+  const fence = turns.reduce<ReturnType<typeof hold.noteFailure>>(
+    (state) => hold.noteFailure("agent-a", classified, "zero_evidence_turn_completed") ?? state,
+    undefined,
+  );
+  const activity = buildRuntimeErrorFenceActivity(
+    buildRuntimeErrorActivity(last, classified),
+    fence!,
+    last,
+  );
+  expect(activity.level).toBe("error");
+  expect(activity.detail).toBe(
+    "The runtime ended 5 turns in a row without any output, so CoForge stopped restarting it. Restart the Agent to try again.",
+  );
+  expect(activity.runtimeError?.errorReason).toBe("runtime_error_fenced");
 });

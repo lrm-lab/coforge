@@ -247,6 +247,28 @@ test("a tool call emits start and a matching end", async () => {
   }
 });
 
+test("a turn the server closes with no update at all still reports a completed turn", async () => {
+  const f = await fixture();
+  try {
+    const session = await f.provider.createAgentSession(options(f.cwd) as never);
+    const events: AgentRuntimeEvent[] = [];
+    session.subscribe((event) => events.push(event));
+    const before = events.length;
+    await session.sendMessage("bare");
+    await waitFor(() => events.some((e) => e.type === "completed"));
+    expect(events.slice(before)).toEqual([
+      {
+        type: "session",
+        identity: { sessionId: "droid-acp-fixture-session", state: "resumable" },
+      },
+      { type: "completed", status: "completed" },
+    ]);
+    await session.dispose();
+  } finally {
+    await f.cleanup();
+  }
+});
+
 test("a crash fails the turn with the process's stderr tail and removes the instructions file", async () => {
   const f = await fixture();
   try {
