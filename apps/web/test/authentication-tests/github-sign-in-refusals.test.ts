@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 
-import type { GitHubSignInConfig } from "#src/server/auth/config.server";
+import { signInMethods, type GitHubSignInConfig } from "#src/server/auth/config.server";
 import { completeGitHubSignIn, startGitHubSignIn } from "#src/server/auth/github-sign-in.server";
 import {
   githubSignInCallbackHandler,
@@ -104,4 +104,18 @@ test("a deployment without GitHub sign-in answers both routes with 404", async (
     request: new Request("https://coforge.test/auth/github/callback?code=x&state=y"),
   });
   expect([start.status, callback.status]).toEqual([404, 404]);
+});
+
+test("a deployment without GitHub sign-in offers no GitHub button on /login", () => {
+  expect(
+    signInMethods({ COFORGE_GITHUB_SIGN_IN_CLIENT_ID: "", AUTHING_GITHUB_CONNECTION: "" }),
+  ).toEqual({
+    github: false,
+  });
+  expect(
+    signInMethods({
+      COFORGE_GITHUB_SIGN_IN_CLIENT_ID: "e2e-client",
+      AUTHING_GITHUB_CONNECTION: "github-mobile",
+    }),
+  ).toEqual({ github: true });
 });

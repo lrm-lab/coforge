@@ -4,18 +4,10 @@ import { z } from "zod";
 
 import { nextHrefAfterSignIn } from "#src/features/auth/return-to";
 import { declareNoStore } from "#src/features/no-store-response.server";
-import { readGitHubSignInConfigOrNull } from "#src/server/auth/config.server";
+import { signInMethods } from "#src/server/auth/config.server";
 import { signInWithPassword } from "#src/server/auth/password-sign-in.server";
 import { signInRequestContext } from "#src/server/auth/sign-in-request.server";
 
-/**
- * Signs in with the account (email or username) and password typed on `/login`. A POST like every
- * server function, so `createCsrfMiddleware` (`start.ts`) refuses a call from another origin
- * before this runs. On success the session cookie is on the response and `next` says where to go: the name step for a
- * first sign-in, else `returnTo` (only ever a page of this site) or the start page. `problem`
- * is `invalid_credentials` when Authing refused the account and password (or one of the reasons
- * `AuthingSignInResult` names), `failed` for anything else, which is logged.
- */
 export const signInWithAccountPassword = createServerFn({ method: "POST" })
   .validator(
     z.object({
@@ -39,14 +31,11 @@ export const signInWithAccountPassword = createServerFn({ method: "POST" })
     return {
       ok: true,
       next: nextHrefAfterSignIn(result.welcomed, data.returnTo),
-      // Whether the account had signed in before: the page greets it back, or welcomes it aboard.
       welcomed: result.welcomed,
     } as const;
   });
 
-/** Which ways of signing in `/login` offers beyond the code and the password: GitHub, when the
- * deployment configures it. */
 export const getSignInMethods = createServerFn({ method: "GET" }).handler(() => {
   declareNoStore();
-  return { github: readGitHubSignInConfigOrNull(process.env) !== null };
+  return signInMethods(process.env);
 });
