@@ -2,6 +2,7 @@ import type { AgentSessionOptions } from "@coforge/agent";
 import { stat } from "node:fs/promises";
 import {
   withoutClaudeCodeMarker,
+  withoutHostClaudeProviderEnv,
   withDefaultAutoCompactWindow,
   parseClaudeAutoCompactWindow,
   CLAUDE_AUTO_COMPACT_WINDOW_ENV,
@@ -19,18 +20,22 @@ import { createPromptFile } from "./prompt-file";
 import { claudeHistoryHost } from "./history-host";
 import { readClaudePlanTier } from "./plan-tier";
 
-/** A Claude Code Agent's child environment, and the auto-compact window it sets, if usable. */
-function claudeLaunchEnvironment(
+export function buildClaudeLaunchEnvironment(
   options: Pick<AgentSessionOptions, "environment" | "runtime" | "gitHooks">,
+  inherited: Readonly<Record<string, string | undefined>> = Bun.env,
 ): { environment: Record<string, string>; autoCompactWindow: number | undefined } {
   const environment = withoutClaudeCodeMarker(
-    agentEnvironment(options.environment, withDefaultAutoCompactWindow(Bun.env), undefined, {
-      envVars: options.runtime?.envVars,
-      provider: options.runtime?.provider,
-      gitHooks: options.gitHooks,
-    }),
+    agentEnvironment(
+      options.environment,
+      withDefaultAutoCompactWindow(withoutHostClaudeProviderEnv(inherited)),
+      undefined,
+      {
+        envVars: options.runtime?.envVars,
+        provider: options.runtime?.provider,
+        gitHooks: options.gitHooks,
+      },
+    ),
   );
-  // Set after composition so neither an inherited value nor an Agent envVar re-enables it.
   environment[CLAUDE_DISABLE_AUTO_MEMORY_ENV] = "1";
   return {
     environment,
@@ -63,7 +68,7 @@ async function withUsageCapabilityCache(
 export const claudeRuntimeHost: ClaudeRuntimeHost = {
   ...claudeHistoryHost,
   processTreeSpawner: processSpawner,
-  buildSessionEnvironment: claudeLaunchEnvironment,
+  buildSessionEnvironment: (options) => buildClaudeLaunchEnvironment(options),
   createPromptFile,
   createReplyIntentScanner: () => new ReplyIntentScanner(),
   isShellToolName,

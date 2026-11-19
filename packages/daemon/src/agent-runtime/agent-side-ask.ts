@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   CLAUDE_DISABLE_AUTO_MEMORY_ENV,
   withoutClaudeCodeMarker,
+  withoutHostClaudeProviderEnv,
 } from "@lrm/coforge-anvil/claude-code";
 import {
   AGENT_SIDE_ASK_ANSWER_MAX_CHARS,
@@ -235,7 +236,7 @@ export function buildClaudeSideAskEnv(
   inherited: Readonly<Record<string, string | undefined>> = Bun.env,
 ): Record<string, string> {
   const base = withoutClaudeCodeMarker(
-    agentEnvironment(undefined, inherited, process.platform, {
+    agentEnvironment(undefined, withoutHostClaudeProviderEnv(inherited), process.platform, {
       envVars,
       provider: RUNTIME_PROVIDER.CLAUDE_CODE,
     }),

@@ -171,10 +171,14 @@ describe("agent side ask formatting, prompt, env, and parser", () => {
         COFORGE_DAEMON_SOCKET: "/tmp/sock",
         SLOCK_API_KEY: "legacy-secret",
         CLAUDECODE: "1",
+        ANTHROPIC_API_KEY: "host-key",
+        CLAUDE_CODE_USE_BEDROCK: "1",
       },
     );
     expect(env.ANTHROPIC_BASE_URL).toBe("https://proxy.example.test");
     expect(env.CLAUDE_CODE_DISABLE_AUTO_MEMORY).toBe("1");
+    expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(env.CLAUDE_CODE_USE_BEDROCK).toBeUndefined();
     expect(env.COFORGE_AGENT_API_KEY).toBeUndefined();
     expect(env.COFORGE_DAEMON_SOCKET).toBeUndefined();
     expect(env.COFORGE_SECRET_OVERRIDE).toBeUndefined();

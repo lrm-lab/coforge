@@ -5,6 +5,7 @@ import { JsonlProcess } from "#src/jsonl-process";
 import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import { readClaudeCodeUsage } from "./usage";
 import { claudeLaunchCommand, isClaudeRootRefusal } from "./launch-args";
+import { assertClaudeStartupPromptWithinBudget } from "./startup-guard";
 import { readClaudeRecycleBriefing } from "./recycle-briefing";
 import { readClaudeSessionResumeFacts } from "./session-transcript";
 import { ClaudeCodeAgentSession } from "./session";
@@ -13,7 +14,6 @@ export class ClaudeCodeProvider implements CodeAgentProvider {
   readonly provider = RUNTIME_PROVIDER.CLAUDE_CODE;
   readonly compactionFailure = "does_not_stick";
   readonly reportsCompaction = true;
-  /** Claude's prompt cache is counted on for an hour, the recycle default before per-provider gaps. */
   readonly idleRecycleMinColdGapMs = 60 * 60_000;
   readonly #host: ClaudeRuntimeHost;
   readonly #command: readonly string[];
@@ -63,6 +63,11 @@ export class ClaudeCodeProvider implements CodeAgentProvider {
         });
       const initialFreshSessionId = options.sessionId ? undefined : crypto.randomUUID();
       const { environment, autoCompactWindow } = this.#host.buildSessionEnvironment(options);
+      assertClaudeStartupPromptWithinBudget(options.instructions, {
+        model: options.runtime?.model,
+        autoCompactWindow,
+        contextWindow: options.runtime?.contextWindow,
+      });
       const spawn = (sessionId?: string, freshSessionId?: string) =>
         new JsonlProcess(
           command(sessionId, freshSessionId),
@@ -93,8 +98,6 @@ export class ClaudeCodeProvider implements CodeAgentProvider {
       } finally {
         await prompt.remove();
       }
-      // Raft's isClaudeRootRefusal: dispose has drained stderr, so the refusal line and the
-      // exit code are both settled. The launch then fails with the reason a person can act on.
       if (process && isClaudeRootRefusal(process))
         throw new Error(
           "Claude Code cannot start with root or sudo privileges while permission checks " +

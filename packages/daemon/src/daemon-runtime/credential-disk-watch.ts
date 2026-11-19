@@ -2,6 +2,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { getLogger } from "@logtape/logtape";
 import type { AgentRuntimeConfig } from "@coforge/agent";
+import { withoutHostClaudeProviderEnv } from "@lrm/coforge-anvil/claude-code";
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import {
   isSharedKey,
   type CredentialInvalidLedger,
@@ -155,11 +157,13 @@ export class CredentialDiskWatch {
     // An Agent on a provider of its own does not use the Computer's login for its runtime.
     if (!isSharedKey(key) && config?.providerConfig) return;
     const provider = isSharedKey(key) ? key.slice("shared:".length) : config?.provider;
+    const baseEnv =
+      provider === RUNTIME_PROVIDER.CLAUDE_CODE
+        ? withoutHostClaudeProviderEnv(this.deps.baseEnv())
+        : this.deps.baseEnv();
     const parts = provider
       ? credentialPartsOf(provider, {
-          env: isSharedKey(key)
-            ? this.deps.baseEnv()
-            : { ...this.deps.baseEnv(), ...(config?.envVars ?? {}) },
+          env: isSharedKey(key) ? baseEnv : { ...baseEnv, ...config?.envVars },
           homeDir: this.#homeDir(),
           platform: this.#platform(),
           cwd: this.deps.cwd ?? process.cwd(),

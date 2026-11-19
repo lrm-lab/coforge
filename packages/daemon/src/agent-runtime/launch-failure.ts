@@ -61,41 +61,21 @@ function ownLaunchFailureTrace(error: unknown): LaunchFailureTrace | undefined {
   };
 }
 
-/**
- * Why a launch could not start, as a stable code: the `errorReason` of the launch failure's
- * `runtimeError` (class `LauncherError`), so a reader picks the explanation by code and never
- * parses `detail`. Each value except the fallback is the `code` of a typed launch error thrown
- * where the failure is known: `AgentAuthorizationError` below, `RuntimeExecutableNotFoundError`
- * in the spawner, and the typed errors in `@lrm/coforge-anvil`'s `contract.ts`.
- */
 export const LAUNCH_FAILURE_REASON = {
-  /** The daemon could not obtain the Agent's launch configuration and API key from the server. */
   AGENT_AUTHORIZATION_FAILED: "agent_authorization_failed",
-  /** The configured runtime is marked private and not shared with this Agent's owner. */
   RUNTIME_PRIVATE: "runtime_private",
-  /** The configured runtime is not installed on this Computer. */
   RUNTIME_NOT_INSTALLED: "runtime_not_installed",
-  /** The configured runtime is not usable on this Computer. */
   RUNTIME_UNUSABLE: "runtime_unusable",
-  /** The configured runtime is not available on this Computer (generic fallback). */
   RUNTIME_UNAVAILABLE: "runtime_unavailable",
-  /** The spawner could not find the runtime's executable on the Agent's PATH. */
   RUNTIME_NOT_FOUND: "runtime_not_found",
-  /** The runtime's CLI is older than the version CoForge supports. */
   RUNTIME_VERSION_TOO_OLD: "runtime_version_too_old",
-  /** The CLI could not start at all: a spawn failure, a non-zero exit, or a timeout. */
   RUNTIME_START_FAILED: "runtime_start_failed",
-  /** The runtime is not signed in on this Computer, or its stored login was rejected. */
   RUNTIME_LOGIN_REQUIRED: "runtime_login_required",
-  /** The runtime on this Computer does not offer the Agent's configured model. */
   MODEL_NOT_FOUND: "model_not_found",
-  /** The runtime cannot use the Agent's model provider setting. */
   MODEL_PROVIDER_NOT_CONFIGURED: "model_provider_not_configured",
-  /** An Agent environment variable names something the runtime cannot use. */
   AGENT_ENVIRONMENT_INVALID: "agent_environment_invalid",
-  /** Every attempt to start the Agent ran out the wake deadline (task #33). */
+  STARTUP_PROMPT_TOO_LARGE: "startup_prompt_too_large",
   STARTUP_DEADLINE_EXCEEDED: "startup_deadline_exceeded",
-  /** No typed error said why. */
   RUNTIME_SPAWN_FAILED: "runtime_spawn_failed",
 } as const;
 export type LaunchFailureReason =
@@ -114,21 +94,15 @@ const TYPED_REASONS: readonly LaunchFailureReason[] = [
   LAUNCH_FAILURE_REASON.MODEL_NOT_FOUND,
   LAUNCH_FAILURE_REASON.MODEL_PROVIDER_NOT_CONFIGURED,
   LAUNCH_FAILURE_REASON.AGENT_ENVIRONMENT_INVALID,
+  LAUNCH_FAILURE_REASON.STARTUP_PROMPT_TOO_LARGE,
   LAUNCH_FAILURE_REASON.STARTUP_DEADLINE_EXCEEDED,
 ];
 
-/** The reasons that carry the runtime's own words, no typed error having named the cause
- * (`launch-credential-refusal.ts`). */
 const TEXT_ONLY_LAUNCH_FAILURE_REASONS: readonly LaunchFailureReason[] = [
   LAUNCH_FAILURE_REASON.RUNTIME_START_FAILED,
   LAUNCH_FAILURE_REASON.RUNTIME_SPAWN_FAILED,
 ];
 
-/**
- * Reasons a managed Start does not retry: no attempt can succeed until a person changes something
- * on the Computer. The rest keep their attempts and backoff (`launch-failure-backoff.ts`), since a
- * transient cause may clear between them.
- */
 export const NON_RETRYABLE_LAUNCH_FAILURE_REASONS: readonly LaunchFailureReason[] = [
   LAUNCH_FAILURE_REASON.RUNTIME_LOGIN_REQUIRED,
   LAUNCH_FAILURE_REASON.RUNTIME_PRIVATE,
@@ -137,6 +111,7 @@ export const NON_RETRYABLE_LAUNCH_FAILURE_REASONS: readonly LaunchFailureReason[
   LAUNCH_FAILURE_REASON.RUNTIME_UNAVAILABLE,
   LAUNCH_FAILURE_REASON.AGENT_ENVIRONMENT_INVALID,
   LAUNCH_FAILURE_REASON.MODEL_PROVIDER_NOT_CONFIGURED,
+  LAUNCH_FAILURE_REASON.STARTUP_PROMPT_TOO_LARGE,
   LAUNCH_FAILURE_REASON.STARTUP_DEADLINE_EXCEEDED,
 ];
 
@@ -350,6 +325,10 @@ function launchFailureDetail(
         `${runtimeName} there, then start the Agent again.`
       );
     }
+    case LAUNCH_FAILURE_REASON.STARTUP_PROMPT_TOO_LARGE:
+      return error instanceof Error
+        ? error.message
+        : `${runtimeName} startup instructions exceed the model context window.`;
     case LAUNCH_FAILURE_REASON.STARTUP_DEADLINE_EXCEEDED:
       return STARTUP_DEADLINE_EXCEEDED_DETAIL;
     case LAUNCH_FAILURE_REASON.RUNTIME_SPAWN_FAILED:
@@ -360,10 +339,6 @@ function launchFailureDetail(
   }
 }
 
-/** Launch failure reasons whose `runtimeError` carries `providerMessage`: the classified
- * refusals a person must act on (#686, #682). Anything else — an untyped spawn failure above all
- * — keeps its text in the Computer log only, because the redactor knows credential shapes, not
- * arbitrary internals. */
 export const PROVIDER_MESSAGE_REASONS: readonly LaunchFailureReason[] = [
   LAUNCH_FAILURE_REASON.RUNTIME_LOGIN_REQUIRED,
   LAUNCH_FAILURE_REASON.RUNTIME_NOT_INSTALLED,
@@ -373,6 +348,7 @@ export const PROVIDER_MESSAGE_REASONS: readonly LaunchFailureReason[] = [
   LAUNCH_FAILURE_REASON.MODEL_NOT_FOUND,
   LAUNCH_FAILURE_REASON.MODEL_PROVIDER_NOT_CONFIGURED,
   LAUNCH_FAILURE_REASON.AGENT_ENVIRONMENT_INVALID,
+  LAUNCH_FAILURE_REASON.STARTUP_PROMPT_TOO_LARGE,
 ];
 
 /** The error Activity content for a launch that did not start: the sentence that explains it,

@@ -3,6 +3,7 @@ export * from "./provider";
 export * from "./auth";
 export * from "./catalog";
 export * from "./launch-args";
+export * from "./startup-guard";
 export * from "./usage";
 export * from "./version";
 export * from "./stream-events";
