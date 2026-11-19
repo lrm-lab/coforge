@@ -5,9 +5,11 @@ import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-rea
 import { ArtifactGalleryPage } from "#src/features/artifacts/artifact-gallery-page";
 import { artifactsOnQuery } from "#src/features/artifacts/artifact-queries";
 import { NotFoundPage } from "#src/features/errors/not-found-page";
+import { PageLoadError } from "#src/features/errors/page-load-error";
 
 export const Route = createFileRoute("/w/$workspaceSlug/artifacts/")({
   ssr: "data-only",
+  errorComponent: PageLoadError,
   component: ArtifactGalleryRoute,
 });
 

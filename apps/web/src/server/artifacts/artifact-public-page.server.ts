@@ -79,6 +79,22 @@ export function linkPageLookup(
   };
 }
 
+export async function memberArtifactWorkspaceSlug(
+  db: PrismaClient,
+  artifactId: string,
+  userId: string,
+): Promise<string | null> {
+  const artifact = await db.artifact.findFirst({
+    where: {
+      id: artifactId,
+      deletedAt: null,
+      workspace: { members: { some: { userId } } },
+    },
+    select: { workspace: { select: { slug: true } } },
+  });
+  return artifact?.workspace.slug ?? null;
+}
+
 async function publicPageOf(
   db: PrismaClient,
   enabled: (workspaceId: string) => Promise<boolean>,

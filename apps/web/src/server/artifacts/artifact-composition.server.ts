@@ -40,6 +40,7 @@ import { AppError, isAppError } from "#src/lib/app-error";
 import { readAuthorizedAttachment } from "#src/server/attachments/attachment.server";
 import { createSystemAgentEvents } from "#src/server/app-agent-events/app-agent-events-composition.server";
 export type { ArtifactMessageCard } from "./artifact-reads.server";
+export { memberArtifactWorkspaceSlug } from "./artifact-public-page.server";
 
 export const productionArtifactSignals = () =>
   centrifugoArtifactSignals(() => createCentrifugoServerApi());

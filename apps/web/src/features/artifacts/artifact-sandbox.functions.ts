@@ -6,6 +6,7 @@ import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { declareNoStore } from "#src/features/no-store-response.server";
 import { artifactInputs } from "./artifact-inputs";
 import {
+  memberArtifactWorkspaceSlug,
   productionArtifactAbuseReporter,
   productionArtifactLinkOpen,
   productionArtifactSandbox,
@@ -49,16 +50,12 @@ export const resolvePublicArtifactAccess = createServerFn({ method: "GET" })
     declareNoStore();
     const user = await optionalBrowserUser(getRequest().headers.get("cookie") ?? undefined);
     if (!user) return { signedIn: false, memberWorkspaceSlug: null as string | null };
-    const db = requireDatabaseClient();
-    const artifact = await db.artifact.findFirst({
-      where: {
-        id: data.artifactId,
-        deletedAt: null,
-        workspace: { memberships: { some: { userId: user.id } } },
-      },
-      select: { workspace: { select: { slug: true } } },
-    });
-    return { signedIn: true, memberWorkspaceSlug: artifact?.workspace.slug ?? null };
+    const memberWorkspaceSlug = await memberArtifactWorkspaceSlug(
+      requireDatabaseClient(),
+      data.artifactId,
+      user.id,
+    );
+    return { signedIn: true, memberWorkspaceSlug };
   });
 
 export const openLinkArtifact = createServerFn({ method: "GET" })

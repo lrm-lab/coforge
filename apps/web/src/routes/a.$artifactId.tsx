@@ -4,7 +4,10 @@ import {
   openLinkArtifact,
   resolvePublicArtifactAccess,
 } from "#src/features/artifacts/artifact-sandbox.functions";
-import { decodeArtifactShortId } from "#src/features/artifacts/artifact-short-id";
+import {
+  decodeArtifactShortId,
+  encodeArtifactShortId,
+} from "#src/features/artifacts/artifact-short-id";
 import { PublicArtifactShell } from "#src/features/artifacts/public-artifact-shell";
 import { isAppErrorCode } from "#src/lib/app-error";
 
@@ -21,7 +24,10 @@ export const Route = createFileRoute("/a/$artifactId")({
     if (access.memberWorkspaceSlug) {
       throw redirect({
         to: "/w/$workspaceSlug/artifacts/$artifactId",
-        params: { workspaceSlug: access.memberWorkspaceSlug, artifactId },
+        params: {
+          workspaceSlug: access.memberWorkspaceSlug,
+          artifactId: encodeArtifactShortId(artifactId),
+        },
       });
     }
     try {

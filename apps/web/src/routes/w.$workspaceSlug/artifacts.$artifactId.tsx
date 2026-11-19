@@ -9,6 +9,7 @@ import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-rea
 import { artifactsOnQuery } from "#src/features/artifacts/artifact-queries";
 import { decodeArtifactShortId } from "#src/features/artifacts/artifact-short-id";
 import { NotFoundPage } from "#src/features/errors/not-found-page";
+import { PageLoadError } from "#src/features/errors/page-load-error";
 
 export const Route = createFileRoute("/w/$workspaceSlug/artifacts/$artifactId")({
   ssr: "data-only",
@@ -18,6 +19,7 @@ export const Route = createFileRoute("/w/$workspaceSlug/artifacts/$artifactId")(
     comment: z.uuid().optional().catch(undefined),
     version: z.coerce.number().int().positive().optional().catch(undefined),
   }),
+  errorComponent: PageLoadError,
   component: ArtifactRoutePage,
 });
 
