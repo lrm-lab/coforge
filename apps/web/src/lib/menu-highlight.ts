@@ -55,6 +55,7 @@ export function installMenuHighlight(): () => void {
     if (!(target instanceof Element)) return;
     const item = target.closest<HTMLElement>(ITEM_SELECTOR);
     if (!item) return;
+    if (item.dataset.cascadeState === "skipped" || item.closest("[data-cascade-menu]")) return;
     const list = item.closest<HTMLElement>(LIST_SELECTOR);
     if (!list) return;
     if (activeList && activeList !== list) hideHighlight(activeList);

@@ -225,6 +225,7 @@ html[data-drag-cursor] [data-drop-blocked] * {
 }
 
 @import "./styles/coforge-theme.css";
+@import "./styles/cascade-menu.css";
 
 @layer utilities {
   [data-avatar].size-4 {

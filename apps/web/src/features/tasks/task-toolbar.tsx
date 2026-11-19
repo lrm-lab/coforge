@@ -1,7 +1,7 @@
 import { TASK_WRITE_STATUSES, type TaskStatus } from "@lrm/coforge-sdk/internal";
 import { useMemo, useRef, type ReactNode } from "react";
 import { Columns03, FilterLines, List } from "@untitledui/icons";
-import { SubmenuTrigger, Tag, TagGroup, TagList } from "react-aria-components";
+import { Tag, TagGroup, TagList } from "react-aria-components";
 
 import { ButtonGroup, ButtonGroupItem } from "#src/components/base/button-group/button-group";
 import { Button } from "#src/components/base/buttons/button";
@@ -326,7 +326,7 @@ function FilterSubmenu({
   onChange: (picked: string[]) => void;
 }) {
   return (
-    <SubmenuTrigger>
+    <Dropdown.SubmenuTrigger>
       <Dropdown.Item label={name} />
       <Dropdown.SubmenuPopover className="w-64">
         <PickerMenu
@@ -336,7 +336,7 @@ function FilterSubmenu({
           onSelectedKeysChange={onChange}
         />
       </Dropdown.SubmenuPopover>
-    </SubmenuTrigger>
+    </Dropdown.SubmenuTrigger>
   );
 }
 

@@ -9,7 +9,6 @@ import {
   Plus,
   XClose,
 } from "@untitledui/icons";
-import { SubmenuTrigger } from "react-aria-components";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { useAppToast } from "#src/components/ui/toast";
@@ -168,7 +167,7 @@ export function ConversationRowMenu({
         {children}
         <Dropdown.Popover placement="bottom start">
           <Dropdown.Menu aria-label={m.conversation_menu_label()} onAction={handleAction}>
-            <SubmenuTrigger>
+            <Dropdown.SubmenuTrigger>
               <Dropdown.Item
                 id="move-section"
                 icon={Folder}
@@ -202,7 +201,7 @@ export function ConversationRowMenu({
                   />
                 </Dropdown.Menu>
               </Dropdown.SubmenuPopover>
-            </SubmenuTrigger>
+            </Dropdown.SubmenuTrigger>
             {items.map((item) => (
               <Fragment key={item.id}>
                 {item.id === "close-chat" && <Dropdown.Separator />}
@@ -241,7 +240,7 @@ function NotifySubmenu({
   onAction: (key: unknown) => void;
 }) {
   return (
-    <SubmenuTrigger>
+    <Dropdown.SubmenuTrigger>
       <Dropdown.Item
         id="notify"
         icon={level === "muted" ? BellOff01 : Bell01}
@@ -263,6 +262,6 @@ function NotifySubmenu({
           ))}
         </Dropdown.Menu>
       </Dropdown.SubmenuPopover>
-    </SubmenuTrigger>
+    </Dropdown.SubmenuTrigger>
   );
 }

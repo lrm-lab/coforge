@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { SubmenuTrigger } from "react-aria-components";
 import { Check, ChevronDown, ChevronUp } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -193,7 +192,7 @@ export function MessageSeenByMenuEntry({
   return seenAt ? (
     <Dropdown.Item icon={SeenIcon} label={seenAt} />
   ) : readers.length || undelivered.length ? (
-    <SubmenuTrigger>
+    <Dropdown.SubmenuTrigger>
       <Dropdown.Item textValue={seenLabel(seen?.count)} icon={SeenIcon}>
         <span className="flex items-center">
           <SeenSummary count={seen?.count} undelivered={undelivered.length} />
@@ -223,7 +222,7 @@ export function MessageSeenByMenuEntry({
           ))}
         </Dropdown.Menu>
       </Dropdown.SubmenuPopover>
-    </SubmenuTrigger>
+    </Dropdown.SubmenuTrigger>
   ) : (
     <Dropdown.Item isDisabled icon={SeenIcon} label={seenLabel(seen?.count)} />
   );
