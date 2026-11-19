@@ -23,7 +23,6 @@ const found: PublicPage = {
   sha256: "sha",
   sizeBytes: 10,
   access: "link",
-  workspaceSlug: "acme",
   version: 3,
 };
 

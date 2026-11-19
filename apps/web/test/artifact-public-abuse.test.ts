@@ -18,7 +18,6 @@ test("ArtifactAbuseReporter records valid reports for link-shared artifacts", as
         sha256: "a".repeat(64),
         sizeBytes: 100,
         access: "link",
-        workspaceSlug: "acme",
         version: 1,
       },
     }),

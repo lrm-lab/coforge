@@ -242,7 +242,6 @@ test("a public link shows the current version's entry and any one file of it", a
     sha256: "home",
     sizeBytes: 1,
     access: "conversation",
-    workspaceSlug: `apl-${handle}`,
     version: 2,
     updatedAt: current.createdAt.toISOString(),
   });

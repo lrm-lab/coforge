@@ -19,7 +19,6 @@ const page = (access: string): PublicPage => ({
   sha256: "sha",
   sizeBytes: 10,
   access,
-  workspaceSlug: "acme",
   version: 3,
 });
 

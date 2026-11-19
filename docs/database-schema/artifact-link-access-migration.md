@@ -24,11 +24,11 @@ environment, never in arguments.
 makes rollback possible, so it is created owner-only and never overwritten. Each
 artifact is migrated in its own transaction under its artifact row lock, and its
 journal record is written in full and synced inside that transaction, before it
-commits; the header is written the same way. A journal write that fails rolls the
-artifact's tier change and its access event back. A run that dies between such a write
+commits; the header is written in full and synced before the first record. A journal
+write that fails rolls the artifact's tier change and its access event back. A run that dies between such a write
 and the commit leaves a record whose transaction never committed, so the journal is not
-a list of exactly what committed: rollback skips those records by the event id the
-journal names.
+a list of exactly what committed: rollback skips such a record because its tier never
+became `link` and no access event carries the recorded id.
 
 A rollback record restores an artifact only when, inside the same row lock: its tier is
 still `link`, this migration's access event is still the newest and the event count has

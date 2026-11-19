@@ -27,7 +27,6 @@ type Lookup = {
   sha256: string;
   sizeBytes: number;
   access: string;
-  workspaceSlug: string;
   version: number;
 };
 
@@ -62,7 +61,6 @@ const page = (overrides: Partial<Lookup> = {}): Lookup => ({
   sha256: "sha",
   sizeBytes: 10,
   access: "conversation",
-  workspaceSlug: "acme",
   version: 3,
   ...overrides,
 });

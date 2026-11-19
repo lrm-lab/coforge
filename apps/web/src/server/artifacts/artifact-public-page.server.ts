@@ -14,7 +14,6 @@ export type PublicPage = {
   sha256: string;
   sizeBytes: number;
   access: string;
-  workspaceSlug: string;
   version: number;
   updatedAt?: string;
 };
@@ -28,7 +27,6 @@ type PageArtifact = {
   entryPath: string;
   homeKey: string;
   access: string;
-  workspace: { slug: string };
 };
 
 const PAGE_ARTIFACT_SELECT = {
@@ -40,7 +38,6 @@ const PAGE_ARTIFACT_SELECT = {
   entryPath: true,
   homeKey: true,
   access: true,
-  workspace: { select: { slug: true } },
 } as const;
 
 export function publicPageLookup(
@@ -131,7 +128,6 @@ async function publicPageOf(
     sha256: file.sha256,
     sizeBytes: file.sizeBytes,
     access: artifact.access,
-    workspaceSlug: artifact.workspace.slug,
     version: artifact.currentVersion,
     updatedAt: version.createdAt.toISOString(),
   };
