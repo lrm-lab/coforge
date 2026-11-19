@@ -342,4 +342,45 @@ describe("Antigravity ACP model catalog in the inventory", () => {
       await rm(home, { recursive: true, force: true });
     }
   });
+
+  test("catalog cache key honors GEMINI_HOME and detects agy 1.5.x antigravity-oauth-token", async () => {
+    const stateDirectory = await mkdtemp(join(tmpdir(), "coforge-antigravity-gemini-home-state-"));
+    const binDirectory = await mkdtemp(join(tmpdir(), "coforge-antigravity-gemini-home-bin-"));
+    const home = await mkdtemp(join(tmpdir(), "coforge-antigravity-gemini-home-home-"));
+    const customGemini = await mkdtemp(join(tmpdir(), "coforge-antigravity-gemini-home-custom-"));
+    const agyPath = join(binDirectory, "agy");
+    try {
+      await Bun.write(agyPath, "#!/bin/sh\nexit 0\n");
+      const tokenPath = join(customGemini, "antigravity-cli", "antigravity-oauth-token");
+      await mkdir(join(customGemini, "antigravity-cli"), { recursive: true });
+      await Bun.write(tokenPath, "synthetic-token");
+      const env = { HOME: home, GEMINI_HOME: customGemini, PATH: "", PI_OFFLINE: "1" };
+      const options = {
+        probe: agyProbe("1.5.10\n", agyPath),
+        commands: { antigravity: [process.execPath, ACP_FIXTURE] as const },
+        environment: { ...env, AGY_ACP_FIXTURE_CONFIG_OPTIONS: ACP_MODELS },
+        piModels: async () => [],
+        cacheDirectory: stateDirectory,
+      };
+      const runtimes = [
+        { provider: "antigravity" as const, version: "1.5.10", displayName: "Antigravity CLI" },
+      ];
+      await discoverCodeAgentCatalogs(runtimes, options);
+      const cached = (await Bun.file(
+        join(stateDirectory, "code-agent-inventory-cache.json"),
+      ).json()) as { antigravity?: { key?: string } };
+      expect(cached.antigravity?.key).toMatch(/\|credentials$/);
+
+      await Bun.file(tokenPath).delete();
+      const afterSignOut = await loadCachedCodeAgentCatalogs(runtimes, options);
+      expect(afterSignOut.catalogs.some((catalog) => catalog.provider === "antigravity")).toBe(
+        false,
+      );
+    } finally {
+      await rm(stateDirectory, { recursive: true, force: true });
+      await rm(binDirectory, { recursive: true, force: true });
+      await rm(home, { recursive: true, force: true });
+      await rm(customGemini, { recursive: true, force: true });
+    }
+  });
 });

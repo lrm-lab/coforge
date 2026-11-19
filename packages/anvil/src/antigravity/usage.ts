@@ -9,6 +9,7 @@ import {
   type UsageWindow,
 } from "#src/contract";
 import { asRecord } from "#src/json-record";
+import { antigravityUsesDefaultState } from "./acp-args";
 import { withoutSshSessionVariables } from "./ssh-environment";
 
 /** Retained for callers that display the provider's normal usage-read budget. */
@@ -57,6 +58,8 @@ export async function readAntigravityUsage(
       throw new UsageUnavailableError();
     }
   }
+  const effectiveEnvironment = options.environment ?? host.readUsageEnvironment();
+  if (!antigravityUsesDefaultState(effectiveEnvironment)) throw new UsageUnavailableError();
   if (!host.readUsageAuthStatus || !(await host.readUsageAuthStatus()))
     throw new UsageUnavailableError();
   try {
@@ -64,11 +67,12 @@ export async function readAntigravityUsage(
       [...(options.command ?? ["agy"]), "-p", "/usage", "--output-format", "json"],
       workingDirectory,
       {
-        ...withoutSshSessionVariables(options.environment ?? host.readUsageEnvironment()),
+        ...withoutSshSessionVariables(effectiveEnvironment),
         CI: "1",
         TERM: "dumb",
         BROWSER: "false",
         AGY_NO_BROWSER: "1",
+        AGY_CLI_DISABLE_AUTO_UPDATE: "true",
       },
       options.timeoutMs ?? ANTIGRAVITY_USAGE_TIMEOUT_MS,
     );
@@ -85,7 +89,9 @@ export function parseAntigravityUsage(output: string): UsageSnapshot {
   const answer = asRecord(parseJson(output.slice(start)));
   if (!answer) throw new Error("Antigravity ACP returned no JSON usage answer");
   if (answer.status !== "SUCCESS") throw new UsageUnavailableError();
-  const data = asRecord(asRecord(answer.command)?.data);
+  const command = asRecord(answer.command);
+  if (command?.name !== undefined && command.name !== "usage") throw new UsageUnavailableError();
+  const data = asRecord(command?.data);
   const groups = quotaGroups(data?.groups);
   const officialDescription = text(data?.description);
   const group = groups.reduce<QuotaGroup | undefined>(
@@ -120,7 +126,9 @@ function quotaGroups(value: unknown): QuotaGroup[] {
         typeof bucket?.id !== "string" ||
         typeof bucket.window !== "string" ||
         typeof remaining !== "number" ||
-        !Number.isFinite(remaining)
+        !Number.isFinite(remaining) ||
+        remaining < 0 ||
+        remaining > 1
       )
         return [];
       const resetsAt = instant(bucket.reset_time);
@@ -156,16 +164,21 @@ function officialGroup(group: QuotaGroup): UsageOfficialGroup {
   };
 }
 
+function usedPercentFromRemaining(remaining: number): number {
+  if (remaining <= 0) return 100;
+  const rounded = Math.round((1 - remaining) * 10_000) / 100;
+  return Math.min(99.99, Math.max(0, rounded));
+}
+
 function officialBucket(bucket: QuotaBucket): UsageOfficialBucket {
   const minutes = WINDOW_MINUTES[bucket.window];
-  const used = Math.min(1, Math.max(0, 1 - bucket.remaining));
   return {
     id: bucket.id,
     ...(bucket.name ? { name: bucket.name } : {}),
     ...(bucket.description ? { description: bucket.description } : {}),
     window: bucket.window,
     remainingFraction: bucket.remaining,
-    usedPercent: Math.round(used * 10_000) / 100,
+    usedPercent: usedPercentFromRemaining(bucket.remaining),
     status: bucket.remaining <= 0 ? "limit_reached" : "ok",
     ...(minutes !== undefined ? { windowDurationMinutes: minutes } : {}),
     ...(bucket.resetsAt ? { resetsAt: bucket.resetsAt } : {}),
@@ -180,10 +193,9 @@ function usageWindow(group: QuotaGroup, window: string): UsageWindow | undefined
   const bucket = group.buckets.find((candidate) => candidate.window === window);
   const minutes = WINDOW_MINUTES[window];
   if (!bucket || minutes === undefined) return undefined;
-  const used = Math.min(1, Math.max(0, 1 - bucket.remaining));
   return {
     id: `antigravity-${bucket.id}`,
-    usedPercent: Math.round(used * 10_000) / 100,
+    usedPercent: usedPercentFromRemaining(bucket.remaining),
     status: bucket.remaining <= 0 ? "limit_reached" : "ok",
     windowDurationMinutes: minutes,
     ...(bucket.resetsAt ? { resetsAt: bucket.resetsAt } : {}),

@@ -312,3 +312,90 @@ test(
   },
   USAGE_BUDGET_MS,
 );
+
+test("a custom GEMINI_HOME refuses /usage without spawning agy", async () => {
+  let commandRuns = 0;
+  const host = {
+    ...fixtureAntigravityHost,
+    readAcpUsage: undefined,
+    readUsageAuthStatus: async () => true,
+    catalogCommandRunner: async () => {
+      commandRuns += 1;
+      throw new Error("should not run /usage under a non-default GEMINI_HOME");
+    },
+  };
+  await expect(
+    readAntigravityUsage(
+      tmpdir(),
+      { environment: { HOME: "/home/tester", GEMINI_HOME: "/srv/isolated-agy" } },
+      host,
+    ),
+  ).rejects.toBeInstanceOf(UsageUnavailableError);
+  expect(commandRuns).toBe(0);
+});
+
+test("readAntigravityUsage disables auto-update and allows GEMINI_HOME pointing at the default profile", async () => {
+  let seenEnv: Readonly<Record<string, string | undefined>> | undefined;
+  const host = {
+    ...fixtureAntigravityHost,
+    readAcpUsage: undefined,
+    readUsageAuthStatus: async () => true,
+    catalogCommandRunner: async (
+      _command: readonly string[],
+      _cwd: string,
+      environment: Readonly<Record<string, string | undefined>>,
+    ) => {
+      seenEnv = environment;
+      return {
+        output: usageOutput([
+          {
+            name: "Gemini Models",
+            buckets: [{ id: "gemini-5h", window: "5h", remaining_fraction: 0.00001 }],
+          },
+        ]),
+        exitCode: 0,
+      };
+    },
+  };
+  const snapshot = await readAntigravityUsage(
+    tmpdir(),
+    { environment: { HOME: "/home/tester", GEMINI_HOME: "/home/tester/.gemini/" } },
+    host,
+  );
+  expect(seenEnv?.AGY_CLI_DISABLE_AUTO_UPDATE).toBe("true");
+  expect(snapshot.primary?.usedPercent).toBe(99.99);
+  expect(snapshot.primary?.status).toBe("ok");
+  expect(snapshot.health).toBe("ok");
+});
+
+test("rejects mismatched command.name and out-of-range remaining_fraction values", async () => {
+  await expect(
+    readUsage({
+      COFORGE_ANTIGRAVITY_USAGE_OUTPUT: JSON.stringify({
+        status: "SUCCESS",
+        command: {
+          name: "other",
+          data: {
+            groups: [
+              {
+                name: "Gemini Models",
+                buckets: [{ id: "gemini-5h", window: "5h", remaining_fraction: 0.5 }],
+              },
+            ],
+          },
+        },
+      }),
+    }),
+  ).rejects.toBeInstanceOf(UsageUnavailableError);
+
+  await expect(
+    readUsage({
+      COFORGE_ANTIGRAVITY_USAGE_OUTPUT: usageOutput([
+        {
+          name: "Gemini Models",
+          buckets: [{ id: "gemini-5h", window: "5h", remaining_fraction: 1.5 }],
+        },
+      ]),
+    }),
+  ).rejects.toBeInstanceOf(UsageUnsupportedError);
+});

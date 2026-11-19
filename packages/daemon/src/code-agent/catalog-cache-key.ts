@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import { antigravityGeminiDirectory } from "@lrm/coforge-anvil/antigravity";
 import { piAgentDirectory } from "@lrm/coforge-anvil/pi";
 import { fileStatCacheKey } from "./runtime-inventory-cache";
 import { piRuntimeHost } from "./pi/host";
@@ -46,20 +47,28 @@ export async function catalogCacheKeyFor(
   // The account decides the model list, and its version can change what the account offers even
   // when an installer keeps the executable's mtime+size. Neither a refreshed token nor a rewritten
   // credential file changes who is signed in, so the account - not the file's stat - is the key.
-  return `${version ?? "unknown"}|${install}|${await antigravityAccount(environment)}`;
+  return `${version ?? "unknown"}|${install}|${await antigravityAccount(environment, platform)}`;
 }
 
 /** Who `agy` is signed in as, or that nobody is; what its model list depends on. */
 async function antigravityAccount(
   environment: Readonly<Record<string, string | undefined>>,
+  platform: NodeJS.Platform,
 ): Promise<string> {
-  const home = environment.HOME ?? environment.USERPROFILE;
-  if (!home) return "unknown";
-  const gemini = join(home, ".gemini");
+  const gemini = antigravityGeminiDirectory(environment, platform);
+  if (!gemini) return "unknown";
   const account = await Bun.file(join(gemini, "google_account_id"))
     .text()
     .catch(() => "");
   if (account.trim()) return account.trim();
-  const signedIn = await Bun.file(join(gemini, "oauth_creds.json")).exists();
+  const signedIn =
+    (await Bun.file(join(gemini, "oauth_creds.json")).exists()) ||
+    Boolean(
+      (
+        await Bun.file(join(gemini, "antigravity-cli", "antigravity-oauth-token"))
+          .text()
+          .catch(() => "")
+      ).trim(),
+    );
   return signedIn ? "credentials" : "signed-out";
 }

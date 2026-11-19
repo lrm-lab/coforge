@@ -6,4 +6,5 @@ export * from "./acp-host";
 export * from "./acp-version";
 export { UnsupportedOptionError, antigravitySystemPromptAppendDeclared } from "./acp-session";
 export { AntigravityAcpTurnEvents } from "./acp-update-events";
+export { antigravityGeminiDirectory, antigravityUsesDefaultState } from "./acp-args";
 export * from "./auth";
