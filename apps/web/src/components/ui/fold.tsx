@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 
 import { cn } from "#src/lib/utils";
 
-const CLIPPED_WITH_ROOM_FOR_AN_EDGE_FOCUS_RING =
-  "min-h-0 overflow-clip [overflow-clip-margin:--spacing(1)]";
+const FITS_ITS_COLUMN_AND_CLIPS_WITH_ROOM_FOR_AN_EDGE_FOCUS_RING =
+  "min-h-0 min-w-0 overflow-clip [overflow-clip-margin:--spacing(1)]";
 
 export function Fold({
   open,
@@ -24,7 +24,7 @@ export function Fold({
         className,
       )}
     >
-      <div className={CLIPPED_WITH_ROOM_FOR_AN_EDGE_FOCUS_RING}>{children}</div>
+      <div className={FITS_ITS_COLUMN_AND_CLIPS_WITH_ROOM_FOR_AN_EDGE_FOCUS_RING}>{children}</div>
     </div>
   );
 }
