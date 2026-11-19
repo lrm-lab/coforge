@@ -30,6 +30,7 @@ import { TaskSection, type RelationPicker } from "./task-section";
 import { ownsDiscussion, taskFollowMenuItem, useTaskFollow } from "./task-follow";
 import { isTaskStep } from "./task-popup-steps";
 import { statusLabel, taskStatusColor, type TaskControls } from "./task-workflow";
+import { useTaskDialogTransition } from "./use-task-dialog-transition";
 import { useTaskRelationAccess, type DetailCommand } from "./use-task-relations";
 
 /** A Task card's "More actions" button, as the menu shows it and as the card's stand-in for the
@@ -198,6 +199,22 @@ export function TaskDetailDialog({
     if (history) setHistory(false);
     else router.history.back();
   };
+  const {
+    reduced,
+    modalContentRef,
+    titleRef,
+    contentVisible,
+    dragStyle,
+    requestClose,
+    handleOpenChange,
+    headerDragProps,
+  } = useTaskDialogTransition({
+    taskId: task.id,
+    taskNumber: task.number,
+    open,
+    onOpenChange,
+  });
+
   useHotkey(
     "Escape",
     (event) => {
@@ -205,7 +222,7 @@ export function TaskDetailDialog({
       event.preventDefault();
       if (history) setHistory(false);
       else if (stepBack) stepBack();
-      else onOpenChange(false);
+      else requestClose();
     },
     { enabled: open, preventDefault: false },
   );
@@ -225,7 +242,12 @@ export function TaskDetailDialog({
   const lead = (
     <div className="flex flex-col gap-5 px-4 pt-4 pb-6 sm:px-8 sm:pt-6">
       <div className="flex flex-col gap-3">
-        <Heading slot="title" level={2} className="text-xl font-semibold break-words text-primary">
+        <Heading
+          ref={titleRef}
+          slot="title"
+          level={2}
+          className="text-xl font-semibold break-words text-primary"
+        >
           {task.title}
         </Heading>
         {!sidebar && <div className="-mx-4 sm:-mx-8 sm:[&_dl]:px-8">{section}</div>}
@@ -246,26 +268,24 @@ export function TaskDetailDialog({
     <>
       <TaskPopupOverlay
         isOpen={open}
-        onOpenChange={onOpenChange}
+        onOpenChange={handleOpenChange}
         keyboardDismiss={!step && !history}
       >
         <Modal
+          style={dragStyle}
           className={cn(
-            // On a phone the thread scrolls, never the sheet (the shared Modal scrolls there).
             "flex h-full w-full flex-col overflow-hidden rounded-none max-sm:overflow-hidden max-sm:shadow-none max-sm:safe-area-padding",
-            // With a discussion the popup is a workspace of one height, whatever the Task's text,
-            // so a long description never squeezes the discussion (Frank, 11-04). Without one it
-            // hugs the Task, up to the same cap.
+            !reduced && "animate-none!",
             thread ? "sm:h-[min(92vh,52rem)]" : "sm:h-auto sm:max-h-[min(92vh,64rem)]",
             sidebar ? "sm:w-[min(68rem,calc(100vw-2rem))]" : "sm:w-[min(48rem,calc(100vw-2rem))]",
           )}
         >
-          <div className="contents" onKeyDown={stepOnEscape}>
+          <div ref={modalContentRef} className="contents" onKeyDown={stepOnEscape}>
             <Dialog className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              {/* On a phone the bar is the page's top bar (task #70): close on the left, where a
-                  page's way out is, the Task's place centred, More on the right, each 44px to
-                  touch, as task #54's New task page. */}
-              <div className="flex shrink-0 items-center gap-1 pt-2 pr-3 pl-2 max-sm:h-11 max-sm:gap-0 max-sm:p-0 sm:pl-4">
+              <div
+                {...headerDragProps}
+                className="flex shrink-0 items-center gap-1 pt-2 pr-3 pl-2 max-sm:h-11 max-sm:touch-none max-sm:gap-0 max-sm:p-0 sm:pl-4"
+              >
                 <TaskTrail
                   task={task}
                   conversationName={conversationName}
@@ -313,11 +333,16 @@ export function TaskDetailDialog({
                   size="sm"
                   color="tertiary"
                   aria-label={m.tasks_close()}
-                  onClick={() => onOpenChange(false)}
+                  onClick={requestClose}
                   className={cn(PHONE_BAR_BUTTON, "max-sm:order-first")}
                 />
               </div>
-              <div className="flex min-h-0 flex-1 border-t border-secondary">
+              <div
+                className={cn(
+                  "flex min-h-0 flex-1 border-t border-secondary transition-opacity duration-200",
+                  contentVisible ? "opacity-100" : "opacity-0",
+                )}
+              >
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                   {history ? (
                     <TaskHistoryPage

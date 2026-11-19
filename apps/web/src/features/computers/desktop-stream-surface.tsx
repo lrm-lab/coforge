@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { HotkeysProvider, useHotkeys } from "@tanstack/react-hotkeys";
 import {
   Minimize01 as Minimize,
@@ -10,7 +10,13 @@ import {
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useMediaQuery } from "#src/hooks/use-media-query";
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
+import {
+  animateFlipFromRect,
+  cancelFlipAnimation,
+  type SharedRect,
+} from "#src/lib/shared-element-rect";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import { withCloudDesktopPhoneView } from "./cloud-desktop-url";
@@ -28,6 +34,7 @@ export function DesktopStreamSurface({
   url,
   title,
   miniBox,
+  originRect,
   allowMinimize = true,
   onCollapse,
   onWake,
@@ -37,6 +44,7 @@ export function DesktopStreamSurface({
   url: string;
   title: string;
   miniBox: DOMRect | null;
+  originRect?: SharedRect | null;
   allowMinimize?: boolean;
   onCollapse: () => void;
   onWake: () => void;
@@ -45,10 +53,14 @@ export function DesktopStreamSurface({
   const maximized = phase === "maximized";
   const phone = useMediaQuery("(max-width: 639px)", false);
   const portrait = useMediaQuery("(orientation: portrait)", false);
+  const reduced = usePrefersReducedMotion();
   const [landscape, setLandscape] = useState(false);
   const [chromeOpen, setChromeOpen] = useState(false);
   const [chromeIdleToken, setChromeIdleToken] = useState(0);
+  const [chromeRevealed, setChromeRevealed] = useState(true);
+  const surfaceRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const prevPhaseRef = useRef<Exclude<EmbeddedDesktopPhase, "sleeping"> | null>(null);
 
   useEffect(() => {
     if (!maximized) setLandscape(false);
@@ -57,6 +69,69 @@ export function DesktopStreamSurface({
   useEffect(() => {
     if (landscape && (!portrait || !phone)) setLandscape(false);
   }, [landscape, portrait, phone]);
+
+  useLayoutEffect(() => {
+    const surface = surfaceRef.current;
+    const prevPhase = prevPhaseRef.current;
+    prevPhaseRef.current = phase;
+    if (!surface || landscape) return;
+
+    const duration = phone ? 460 : 340;
+    if (reduced) {
+      if (prevPhase !== phase && typeof surface.animate === "function") {
+        surface.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: "ease" });
+      }
+      setChromeRevealed(true);
+      return;
+    }
+
+    if (phase === "maximized") {
+      const from: SharedRect | null =
+        originRect ??
+        (miniBox
+          ? {
+              left: miniBox.left,
+              top: miniBox.top,
+              width: miniBox.width,
+              height: miniBox.height,
+              radius: "6px",
+            }
+          : null);
+      if (!from) {
+        setChromeRevealed(true);
+        return;
+      }
+      setChromeRevealed(false);
+      const anim = animateFlipFromRect(surface, from, {
+        duration,
+        mode: "box",
+        includeRadius: true,
+      });
+      const timer = window.setTimeout(() => setChromeRevealed(true), Math.round(duration * 0.45));
+      return () => {
+        window.clearTimeout(timer);
+        if (anim) cancelFlipAnimation(surface);
+      };
+    }
+
+    if (prevPhase === "maximized" && miniBox) {
+      const fromViewport: SharedRect = {
+        left: 0,
+        top: 0,
+        width: window.innerWidth,
+        height: window.innerHeight,
+        radius: "0px",
+      };
+      const anim = animateFlipFromRect(surface, fromViewport, {
+        duration: phone ? 380 : 280,
+        mode: "box",
+        includeRadius: true,
+      });
+      return () => {
+        if (anim) cancelFlipAnimation(surface);
+      };
+    }
+  }, [landscape, miniBox, originRect, phase, phone, reduced]);
 
   const phoneFabChrome = desktopPhoneChromeInFab(phone, maximized);
   const autoHideChrome = !phoneFabChrome && desktopChromeAutoHides(landscape);
@@ -121,7 +196,8 @@ export function DesktopStreamSurface({
     maximized && !phoneFabChrome ? (
       <div
         className={cx(
-          "flex shrink-0 items-center justify-between gap-2 border-b border-secondary bg-primary px-3 py-2",
+          "flex shrink-0 items-center justify-between gap-2 border-b border-secondary bg-primary px-3 py-2 transition-opacity duration-200",
+          chromeRevealed ? "opacity-100" : "opacity-0",
           autoHideChrome && "absolute inset-x-0 top-0 z-10",
         )}
         onPointerDown={autoHideChrome ? bumpChromeIdle : undefined}
@@ -169,7 +245,14 @@ export function DesktopStreamSurface({
         onCollapse={allowMinimize ? onCollapse : onSleep}
         onSleep={onSleep}
       />
+      {maximized && (
+        <div
+          aria-hidden="true"
+          className={`fixed inset-0 ${OVERLAY_LAYER} bg-black/30 transition-opacity duration-300`}
+        />
+      )}
       <div
+        ref={surfaceRef}
         className={cx(
           "overflow-hidden bg-primary",
           maximized

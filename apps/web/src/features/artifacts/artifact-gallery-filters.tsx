@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Button as AriaButton, Dialog, DialogTrigger, Popover } from "react-aria-components";
 import { ChevronDown, Grid01, List, SearchLg, XClose } from "@untitledui/icons";
 
@@ -7,6 +7,7 @@ import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Input } from "#src/components/base/input/input";
 import { useWorkspaceDirectory } from "#src/features/conversations/workspace-directory-query";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
+import { useSlidingIndicator } from "#src/hooks/use-sliding-indicator";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { POPOVER_MOTION } from "#src/utils/popover-motion";
@@ -287,23 +288,52 @@ export function ViewSwitch({
   onChange: (view: GalleryView) => void;
 }) {
   const words = useBreakpoint("sm");
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const { indicatorRef, style, visible } = useSlidingIndicator(wrapRef, {
+    activeKey: view,
+    variant: "pill",
+  });
   return (
-    <ButtonGroup
-      size="sm"
-      aria-label={m.ag_view_grid()}
-      selectedKeys={[view]}
-      disallowEmptySelection
-      onSelectionChange={(keys) => {
-        const [key] = [...keys];
-        if (key === "grid" || key === "list") onChange(key);
-      }}
-    >
-      <ButtonGroupItem id="grid" iconLeading={Grid01} aria-label={m.ag_view_grid()}>
-        {words && m.ag_view_grid()}
-      </ButtonGroupItem>
-      <ButtonGroupItem id="list" iconLeading={List} aria-label={m.ag_view_list()}>
-        {words && m.ag_view_list()}
-      </ButtonGroupItem>
-    </ButtonGroup>
+    <div ref={wrapRef} className="relative inline-flex rounded-lg bg-primary">
+      {visible && (
+        <span
+          ref={indicatorRef}
+          aria-hidden="true"
+          style={style}
+          className={cn(
+            "pointer-events-none absolute top-0 left-0 bg-primary_hover",
+            view === "grid" ? "rounded-l-lg" : "rounded-r-lg",
+          )}
+        />
+      )}
+      <ButtonGroup
+        size="sm"
+        className="z-10"
+        aria-label={m.ag_view_grid()}
+        selectedKeys={[view]}
+        disallowEmptySelection
+        onSelectionChange={(keys) => {
+          const [key] = [...keys];
+          if (key === "grid" || key === "list") onChange(key);
+        }}
+      >
+        <ButtonGroupItem
+          id="grid"
+          iconLeading={Grid01}
+          aria-label={m.ag_view_grid()}
+          className="bg-transparent selected:bg-transparent"
+        >
+          {words && m.ag_view_grid()}
+        </ButtonGroupItem>
+        <ButtonGroupItem
+          id="list"
+          iconLeading={List}
+          aria-label={m.ag_view_list()}
+          className="bg-transparent selected:bg-transparent"
+        >
+          {words && m.ag_view_list()}
+        </ButtonGroupItem>
+      </ButtonGroup>
+    </div>
   );
 }

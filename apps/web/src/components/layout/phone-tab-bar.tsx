@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { Activity, Grid01, MessageChatSquare } from "@untitledui/icons";
 
 import type { TabHome } from "#src/components/layout/tab-home";
 import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
+import { useSlidingIndicator } from "#src/hooks/use-sliding-indicator";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
 import { cx } from "#src/utils/cx";
@@ -12,19 +13,11 @@ type Tab = {
   key: TabHome;
   label: string;
   href: string;
-  /** What sits above the label: an icon, or the signed-in person's avatar. */
   icon: ReactNode;
-  /** The Activity tab's unread marker, the one its sidebar row shows. */
   badge?: ReactNode;
-  /** The unread count in words: the badge is hidden from assistive tech, so the link says it. */
   unreadText?: string;
 };
 
-/**
- * The phone's bottom tab bar: Chat, Activity, Workspace and Me, each an icon over a short label,
- * the current one in the navigation's current ink. `AppShell` mounts it only on a tab home
- * (`tabHomeOf`); it clears the home indicator with its own bottom padding.
- */
 export function PhoneTabBar({
   current,
   chatHref,
@@ -36,13 +29,16 @@ export function PhoneTabBar({
   current: TabHome;
   chatHref: string;
   activityHref: string;
-  /** The Activity nav item's unread state: its count when the server counts, else whether the
-   * dot is lit. */
   activityUnread: { count?: number; lit: boolean };
-  /** The Workspace's path (`/w/<slug>`). */
   base: string;
   user: { name: string; avatarUrl?: string | null };
 }) {
+  const listRef = useRef<HTMLUListElement>(null);
+  const indicator = useSlidingIndicator(listRef, {
+    activeKey: current,
+    selector: '[aria-current="page"]',
+    variant: "underline",
+  });
   const tabs: Tab[] = [
     {
       key: "chat",
@@ -55,8 +51,6 @@ export function PhoneTabBar({
       label: m.navigation_activity(),
       href: activityHref,
       icon: <Activity aria-hidden="true" className="size-6" />,
-      // A small pill on the icon's corner, ringed in the bar's color, as on the collapsed rail, so
-      // "99+" leaves the icon readable.
       badge: activityUnread.count ? (
         <UnreadBadge
           count={activityUnread.count}
@@ -97,7 +91,17 @@ export function PhoneTabBar({
       aria-label={m.navigation_label()}
       className="shrink-0 border-t border-secondary bg-sidebar pb-safe-bottom"
     >
-      <ul className="grid grid-cols-4">
+      <ul ref={listRef} className="relative grid grid-cols-4">
+        {indicator.visible && (
+          <span
+            ref={indicator.indicatorRef}
+            aria-hidden="true"
+            style={indicator.style}
+            className="pointer-events-none absolute top-0 left-0 flex justify-center will-change-transform"
+          >
+            <span className="h-0.5 w-8 rounded-full bg-nav-fg-current" />
+          </span>
+        )}
         {tabs.map(({ key, label, href, icon, badge, unreadText }) => {
           const isCurrent = key === current;
           return (
@@ -106,7 +110,7 @@ export function PhoneTabBar({
                 href={href}
                 aria-current={isCurrent ? "page" : undefined}
                 className={cx(
-                  "flex h-14 flex-col items-center justify-center gap-0.5 text-xs outline-focus-ring focus-visible:outline-2 focus-visible:-outline-offset-2",
+                  "flex h-14 flex-col items-center justify-center gap-0.5 text-xs outline-focus-ring transition-colors duration-150 focus-visible:outline-2 focus-visible:-outline-offset-2",
                   isCurrent ? "font-semibold text-nav-fg-current" : "font-medium text-nav-fg",
                 )}
               >

@@ -1,5 +1,7 @@
+import type { Ref } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Link } from "@tanstack/react-router";
+import { motion } from "motion/react";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -10,8 +12,10 @@ import { ChannelPlace } from "#src/features/conversations/channel-name";
 import { DeclineQuestion } from "#src/features/conversations/question-card-decline";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import type { WaitingChoiceCard } from "#src/server/conversations/waiting-choice-cards.server";
 import { followInternalLinkClick } from "#src/features/conversations/internal-app-href";
+import { CONTINUOUS_EASE_TUPLE } from "#src/lib/shared-element-rect";
 import { cn } from "#src/lib/utils";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
@@ -19,32 +23,24 @@ import { ACTIVITY_ROW_ITEM_CLASS, ACTIVITY_ROW_LINK_CLASS } from "./activity-inb
 import { activityChatLink, waitingChoiceTarget } from "./activity-open-target";
 import { waitingRowKey } from "./use-activity-list-keyboard";
 
-/**
- * A choice card waiting on the viewer, laid out as an Activity row: the asking Agent's face, the
- * question, then where it was asked, by whom, and the numbered options. Opening it opens the
- * conversation at the card, to be answered there; a modified click opens it in Chat. The open
- * conversation's own row below marks it as open, so this one does not.
- */
 export function WaitingChoiceRow({
   card,
   tabStop,
   onOpen,
   onDeclined,
+  ref,
 }: {
   card: WaitingChoiceCard;
-  /** The list's one tab stop: the keyboard's selected row (`useActivityListKeyboard`). */
   tabStop: boolean;
   onOpen: (target: HostedConversationTarget) => void;
-  /** The decline went through, so the card no longer waits on the viewer: the list reads again. */
   onDeclined: () => void;
+  ref?: Ref<HTMLLIElement>;
 }) {
   const cancel = useServerFn(cancelActionCard);
   const workspaceSlug = useWorkspaceSlug();
+  const reduced = usePrefersReducedMotion();
   const target = waitingChoiceTarget(card);
-  // Where it was asked: its channel, or a Task's, as its group avatar and name, then "· Task #N"
-  // (task #55); a DM goes unnamed.
   const channel = card.task?.channel ?? card.channel;
-  // A private channel with its lock, as everywhere a channel is named (task #375).
   const taskLabel = card.task && m.activity_inbox_waiting_task({ number: card.task.number });
   const place =
     channel || taskLabel ? (
@@ -58,7 +54,19 @@ export function WaitingChoiceRow({
     .map((option, index) => `${choiceNumber(index)}. ${option.label}`)
     .join(" · ");
   return (
-    <li data-activity-row={waitingRowKey(card.messageId)} className={ACTIVITY_ROW_ITEM_CLASS}>
+    <motion.li
+      ref={ref}
+      layout={reduced ? false : "position"}
+      initial={false}
+      exit={
+        reduced
+          ? { opacity: 0, transition: { duration: 0.15 } }
+          : { opacity: 0, x: -16, transition: { duration: 0.18, ease: CONTINUOUS_EASE_TUPLE } }
+      }
+      transition={{ layout: { duration: 0.24, ease: CONTINUOUS_EASE_TUPLE } }}
+      data-activity-row={waitingRowKey(card.messageId)}
+      className={ACTIVITY_ROW_ITEM_CLASS}
+    >
       <Link
         {...activityChatLink(workspaceSlug, target)}
         tabIndex={tabStop ? 0 : -1}
@@ -126,6 +134,6 @@ export function WaitingChoiceRow({
           {m.question_card_decline()}
         </Button>
       </DeclineQuestion>
-    </li>
+    </motion.li>
   );
 }

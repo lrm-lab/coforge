@@ -1,5 +1,6 @@
 import {
   Fragment,
+  type CSSProperties,
   type ReactNode,
   useCallback,
   useLayoutEffect,
@@ -11,15 +12,24 @@ import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { MessageQuestionCircle, Pin01 } from "@untitledui/icons";
+import { AnimatePresence, motion } from "motion/react";
 
 import { Button } from "#src/components/base/buttons/button";
 import { PageHeader } from "#src/components/layout/page-header";
 import { TabHomeHeader } from "#src/components/layout/tab-home-header";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
+import { useEdgeSwipeBack } from "#src/hooks/use-edge-swipe-back";
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { LIST_BESIDE_CLASSES } from "#src/features/conversations/conversation-list-button";
 import { ConversationListResizeHandle } from "#src/features/conversations/conversation-list-resize-handle";
 import { LIST_COLUMN } from "#src/features/conversations/conversation-list-width";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import {
+  animateFlipFromRect,
+  consumeSharedRect,
+  CONTINUOUS_EASE_TUPLE,
+  CONTINUOUS_EASING,
+} from "#src/lib/shared-element-rect";
 import { cn } from "#src/lib/utils";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { m } from "#src/paraglide/messages";
@@ -316,16 +326,60 @@ export function ActivityInboxView({
         }
       />
     );
+  const reduced = usePrefersReducedMotion();
+  const phone = !desktop;
+  const paneWrapRef = useRef<HTMLDivElement>(null);
+  const swipe = useEdgeSwipeBack({
+    enabled: phone && Boolean(pane) && !reduced,
+    onBack: onClose,
+  });
+
+  useLayoutEffect(() => {
+    if (!phone || !pane || reduced || !paneWrapRef.current) return;
+    const header = paneWrapRef.current.querySelector("header");
+    const avatarRect = consumeSharedRect("activity-row-avatar");
+    const titleRect = consumeSharedRect("activity-row-title");
+    if (header && avatarRect) {
+      const avatarTarget = header.querySelector<HTMLElement>("[data-avatar], .avatar-group");
+      if (avatarTarget)
+        animateFlipFromRect(avatarTarget, avatarRect, { duration: 420, mode: "uniform" });
+    }
+    if (header && titleRect) {
+      const titleTarget = header.querySelector<HTMLElement>("h1, h2");
+      if (titleTarget)
+        animateFlipFromRect(titleTarget, titleRect, { duration: 420, mode: "uniform" });
+    }
+  }, [pane, phone, reduced]);
+
+  const phoneListStyle: CSSProperties | undefined = phone
+    ? reduced
+      ? {
+          opacity: pane ? 0 : 1,
+          transition: "opacity 150ms ease",
+        }
+      : {
+          transform: pane
+            ? `translate3d(${(1 - swipe.dragProgress) * -10}%, 0, 0) scale(${0.95 + 0.05 * swipe.dragProgress})`
+            : "translate3d(0, 0, 0) scale(1)",
+          transition: !swipe.dragging ? `transform 420ms ${CONTINUOUS_EASING}` : undefined,
+        }
+    : undefined;
+  const phoneScrimOpacity = phone && !reduced && pane ? 0.24 * (1 - swipe.dragProgress) : 0;
+
   const list = (
     <div
       data-activity-list
       {...headerProps}
+      inert={phone && pane ? true : undefined}
+      aria-hidden={phone && pane ? true : undefined}
+      style={phoneListStyle}
       className={cn(
-        "flex min-h-0 flex-col",
+        "relative flex min-h-0 flex-col bg-primary max-lg:absolute max-lg:inset-0 max-lg:z-10 max-lg:will-change-transform",
+        phone && pane && "pointer-events-none",
         pane
           ? cn(
-              "relative w-list-column shrink-0",
-              LIST_BESIDE_CLASSES[ACTIVITY_LIST_BESIDE_FROM].list,
+              "lg:relative lg:w-list-column lg:shrink-0",
+              desktop && LIST_BESIDE_CLASSES[ACTIVITY_LIST_BESIDE_FROM].list,
             )
           : "min-w-0 flex-1",
       )}
@@ -384,9 +438,11 @@ export function ActivityInboxView({
               <ol
                 aria-label={section.label}
                 data-undated={section.dated === false ? "" : undefined}
-                className="flex flex-col"
+                className="relative flex flex-col"
               >
-                {section.rows}
+                <AnimatePresence initial={false} mode="popLayout">
+                  {section.rows}
+                </AnimatePresence>
               </ol>
               {section.footer}
             </Fragment>
@@ -405,19 +461,65 @@ export function ActivityInboxView({
           visibleFrom={ACTIVITY_LIST_BESIDE_FROM}
         />
       )}
+      {phone && !reduced && (
+        <div
+          aria-hidden="true"
+          style={{
+            opacity: phoneScrimOpacity,
+            transition: !swipe.dragging ? `opacity 420ms ${CONTINUOUS_EASING}` : undefined,
+          }}
+          className="pointer-events-none absolute inset-0 z-30 bg-black"
+        />
+      )}
     </div>
   );
   return (
-    <div className="flex h-full min-h-0 min-w-0">
+    <div className="relative flex h-full min-h-0 min-w-0 overflow-hidden lg:overflow-visible">
       {list}
-      {pane && (
-        <ActivityConversationPane
-          key={`${pane.kind}:${pane.id}`}
-          target={pane}
-          onOpen={onOpen}
-          onClose={onClose}
-          flow={paneFlow}
-        />
+      {desktop ? (
+        pane && (
+          <ActivityConversationPane
+            key={`${pane.kind}:${pane.id}`}
+            target={pane}
+            onOpen={onOpen}
+            onClose={onClose}
+            flow={paneFlow}
+          />
+        )
+      ) : (
+        <AnimatePresence initial={false}>
+          {pane && (
+            <motion.div
+              ref={paneWrapRef}
+              key={`${pane.kind}:${pane.id}`}
+              {...swipe.bind}
+              initial={reduced ? { opacity: 0 } : { x: "100%" }}
+              animate={
+                reduced
+                  ? { opacity: 1 }
+                  : swipe.dragging
+                    ? { x: `${swipe.dragProgress * 100}%` }
+                    : { x: 0 }
+              }
+              exit={reduced ? { opacity: 0 } : { x: "100%" }}
+              transition={
+                swipe.dragging
+                  ? { duration: 0 }
+                  : reduced
+                    ? { duration: 0.15 }
+                    : { duration: 0.42, ease: CONTINUOUS_EASE_TUPLE }
+              }
+              className="absolute inset-0 z-20 flex min-h-0 min-w-0 touch-pan-y bg-primary shadow-2xl will-change-transform"
+            >
+              <ActivityConversationPane
+                target={pane}
+                onOpen={onOpen}
+                onClose={onClose}
+                flow={paneFlow}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       )}
       {taskAlone && (
         <ActivityTaskPopup

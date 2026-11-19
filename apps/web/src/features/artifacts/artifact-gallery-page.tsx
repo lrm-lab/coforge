@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { SearchLg, XClose } from "@untitledui/icons";
+import { LayoutGroup, motion } from "motion/react";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Input } from "#src/components/base/input/input";
 import { Skeleton } from "#src/components/ui/skeleton";
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
+import { CONTINUOUS_EASE_TUPLE } from "#src/lib/shared-element-rect";
 import { m } from "#src/paraglide/messages";
 import { loadArtifactGallery } from "./artifact-gallery.functions";
 import { GalleryGridCard } from "./artifact-gallery-card";
@@ -53,6 +56,7 @@ export function ArtifactGalleryPage() {
   const [filters, setFilters] = useState<GalleryFilters>(initialFilters);
   const [typed, setTyped] = useState("");
   const [view, setView] = useGalleryView();
+  const reduced = usePrefersReducedMotion();
   const scopeOf = useScopeOf();
   useEffect(() => {
     const timer = setTimeout(
@@ -115,16 +119,18 @@ export function ArtifactGalleryPage() {
             onSeeAll={() => update({ related: false })}
           />
         ) : (
-          <>
+          <LayoutGroup id="artifact-gallery">
             {view === "grid" ? (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(15.5rem,1fr))]">
                 {cards.map((card) => (
-                  <GalleryGridCard
+                  <motion.div
                     key={card.id}
-                    card={card}
-                    sort={filters.sort}
-                    scope={scopeOf(card)}
-                  />
+                    layout={reduced ? false : "position"}
+                    layoutId={reduced ? undefined : `gallery-item-${card.id}`}
+                    transition={{ layout: { duration: 0.28, ease: CONTINUOUS_EASE_TUPLE } }}
+                  >
+                    <GalleryGridCard card={card} sort={filters.sort} scope={scopeOf(card)} />
+                  </motion.div>
                 ))}
               </div>
             ) : (
@@ -147,7 +153,7 @@ export function ArtifactGalleryPage() {
                 )}
               </div>
             )}
-          </>
+          </LayoutGroup>
         )}
       </div>
     </main>

@@ -1,9 +1,10 @@
 import type { TaskView } from "@lrm/coforge-sdk/internal";
-import type { PointerEvent, ReactNode } from "react";
+import { useRef, type PointerEvent, type ReactNode } from "react";
 
 import { ProgressBarBase } from "#src/components/base/progress-indicators/progress-indicators";
 import { ChannelPlace } from "#src/features/conversations/channel-name";
 import { ProjectImage } from "#src/features/projects/project-image";
+import { rememberSharedRect } from "#src/lib/shared-element-rect";
 import { cn } from "#src/lib/utils";
 import { formatMonthDay } from "#src/lib/dates";
 import { useTimeZone } from "#src/lib/time-zone-context";
@@ -166,12 +167,23 @@ export function TaskCard({
    * come down on a button with no hover first, and whose press must land on what it started on. */
   onReach?: () => void;
 }) {
+  const cardRef = useRef<HTMLElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const rememberCard = () => {
+    if (cardRef.current) {
+      rememberSharedRect(`task-frame:${task.id}`, cardRef.current);
+      rememberSharedRect(`task-frame:${task.number}`, cardRef.current);
+    }
+    if (titleRef.current) {
+      rememberSharedRect(`task-title:${task.id}`, titleRef.current);
+      rememberSharedRect(`task-title:${task.number}`, titleRef.current);
+    }
+  };
   const onPointerEnter =
     onReach && ((event: PointerEvent) => event.pointerType === "mouse" && onReach());
   const blocked = task.blocked ? <TaskBlockedMark blockedBy={task.blockedBy} /> : null;
   const parent = task.parent ? <TaskParentMark parent={task.parent} /> : null;
   const subtasks = task.subtasks ? <TaskSubtaskMark subtasks={task.subtasks} /> : null;
-  // A phone's list row has no drag handle: the menu moves a task there.
   const handle =
     controls.handle && list ? (
       <span className="hidden sm:contents">{controls.handle}</span>
@@ -194,22 +206,20 @@ export function TaskCard({
       />
     );
   if (list) {
-    // From `sm` up, one line: priority, number, status, title, then the pills, the owner and the
-    // row's own controls. On a phone the title gets the width: up to two lines, with the priority
-    // and number under it.
     return (
       <article
+        ref={cardRef}
+        onClickCapture={rememberCard}
         onPointerEnter={onPointerEnter}
         className="relative flex min-h-10 items-center gap-3 px-4 py-1.5 transition-colors hover:bg-primary_hover"
       >
-        {/* A slot of its own, so the titles line up with or without a mark. */}
         <span className="hidden size-3.5 shrink-0 sm:flex">{priorityMark("size-3.5")}</span>
         <span className="hidden w-9 shrink-0 text-xs text-tertiary tabular-nums sm:block">
           #{task.number}
         </span>
         <TaskStatusIcon status={task.status} />
         <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium text-primary [overflow-wrap:anywhere]">
+          <h3 ref={titleRef} className="text-sm font-medium text-primary [overflow-wrap:anywhere]">
             {renderTitle(<span className="line-clamp-2 sm:line-clamp-1">{task.title}</span>)}
           </h3>
           <p className="flex items-center gap-1 text-xs text-tertiary tabular-nums sm:hidden">
@@ -257,16 +267,16 @@ export function TaskCard({
       </article>
     );
   }
-  // What still blocks it, named in a line of its own under the title.
   const waitingOn = openBlockers(task.blockedBy).find((blocker) => !blocker.hidden);
   const steps = task.subtasks;
   const [label, ...moreLabels] = task.labels ?? [];
   return (
     <article
+      ref={cardRef}
+      onClickCapture={rememberCard}
       onPointerEnter={onPointerEnter}
       className="group relative flex flex-col gap-2.5 rounded-xl border border-secondary bg-primary p-3 transition-colors hover:border-primary"
     >
-      {/* The channel leads: a number counts within its channel, so two cards can share one. */}
       <div className="flex h-5 items-center gap-1.5 text-xs tabular-nums">
         {source && (
           <span className="flex min-w-0 font-medium text-secondary">
@@ -276,7 +286,7 @@ export function TaskCard({
         <span className="shrink-0 text-quaternary">#{task.number}</span>
         {priorityMark("ml-auto size-3.5 text-fg-quaternary")}
       </div>
-      <h3 className="text-sm font-medium text-primary [overflow-wrap:anywhere]">
+      <h3 ref={titleRef} className="text-sm font-medium text-primary [overflow-wrap:anywhere]">
         {renderTitle(<span className="line-clamp-2">{task.title}</span>)}
       </h3>
       {waitingOn ? (

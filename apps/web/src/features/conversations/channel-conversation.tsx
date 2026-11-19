@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useOpenSearch } from "#src/features/search/search-dialog-context";
 import { useQuery } from "@tanstack/react-query";
 import { SearchLg, Settings01 as Settings } from "@untitledui/icons";
@@ -73,6 +73,16 @@ export function ChannelConversationHeader({
   const openSearch = useOpenSearch();
   const settingsOpen = controlledSettingsOpen ?? ownSettingsOpen;
   const setSettingsOpen = onSettingsOpenChange ?? setOwnSettingsOpen;
+  const [settingsMounted, setSettingsMounted] = useState(settingsOpen);
+  useEffect(() => {
+    if (settingsOpen) {
+      setSettingsMounted(true);
+      return;
+    }
+    if (!settingsMounted) return;
+    const timer = window.setTimeout(() => setSettingsMounted(false), 260);
+    return () => window.clearTimeout(timer);
+  }, [settingsMounted, settingsOpen]);
   const canInvite = Boolean(conversation.senderMemberId) && !conversation.archived;
   function openPanel(view: ChannelMembersView | null) {
     setMembersStart(view);
@@ -137,7 +147,7 @@ export function ChannelConversationHeader({
         }
         tabs={conversationHeaderTabs(tabs)}
       />
-      {settingsOpen && (
+      {settingsMounted && (
         <ChannelSettingsPanel
           conversation={conversation}
           open={settingsOpen}

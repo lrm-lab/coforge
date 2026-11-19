@@ -16,12 +16,18 @@ import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { ChannelPlace } from "#src/features/conversations/channel-name";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { cn } from "#src/lib/utils";
 import { PRESSABLE_CHIP_CLASS } from "#src/features/conversations/review-chrome";
 import { m } from "#src/paraglide/messages";
 import { homeConversationOf, homeLinkProps, type ArtifactHome } from "./artifact-home";
 import { useArrivedFromGallery } from "./artifact-search";
 import { VersionMenu } from "./artifact-version-menu";
+import {
+  ARTIFACT_TITLE_VT_NAME,
+  runArtifactBackViewTransition,
+  useActiveArtifactTransitionId,
+} from "./artifact-view-transition";
 
 export const ARTIFACT_TITLE_ID = "artifact-page-title";
 
@@ -57,6 +63,9 @@ export function ArtifactPageHeader({
   pane?: ArtifactPaneControls;
 }) {
   const Title = pane ? "h2" : "h1";
+  const reduced = usePrefersReducedMotion();
+  const activeTransitionId = useActiveArtifactTransitionId();
+  const activeTitleTransition = !pane && !reduced && activeTransitionId === artifactId;
   return (
     <header
       className={cn(
@@ -64,13 +73,21 @@ export function ArtifactPageHeader({
         pane ? "pr-2 pl-4" : "px-3 sm:px-4",
       )}
     >
-      {!pane && <BackToHome home={home} homeName={homeName} />}
+      {!pane && <BackToHome artifactId={artifactId} home={home} homeName={homeName} />}
       {entryPath === undefined ? (
-        <Skeleton className="h-4 w-40" />
+        <span
+          style={activeTitleTransition ? { viewTransitionName: ARTIFACT_TITLE_VT_NAME } : undefined}
+          className="inline-flex"
+        >
+          <Skeleton className="h-4 w-40" />
+        </span>
       ) : (
         <>
           <Title
             id={ARTIFACT_TITLE_ID}
+            style={
+              activeTitleTransition ? { viewTransitionName: ARTIFACT_TITLE_VT_NAME } : undefined
+            }
             className="min-w-0 truncate text-sm font-medium text-primary"
           >
             {title}
@@ -147,14 +164,17 @@ export function ArtifactPageHeader({
 }
 
 function BackToHome({
+  artifactId,
   home,
   homeName,
 }: {
+  artifactId: string;
   home: ArtifactHome | undefined;
   homeName: string | undefined;
 }) {
   const workspaceSlug = useWorkspaceSlug();
   const router = useRouter();
+  const reduced = usePrefersReducedMotion();
   const fromGallery = useArrivedFromGallery();
   const channel = home?.kind === "channel" ? homeConversationOf(home) : undefined;
   const label = fromGallery ? (
@@ -172,11 +192,14 @@ function BackToHome({
   return (
     <Link
       {...target}
+      viewTransition={!fromGallery && !reduced}
       onClick={
         fromGallery
           ? (event) => {
               event.preventDefault();
-              router.history.back();
+              const frame = document.querySelector<HTMLElement>("[data-artifact-page-frame]");
+              const titleEl = document.getElementById(ARTIFACT_TITLE_ID);
+              runArtifactBackViewTransition(router, artifactId, { frame, title: titleEl });
             }
           : undefined
       }

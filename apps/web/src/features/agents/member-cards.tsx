@@ -7,6 +7,7 @@ import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
+import { rememberSharedRect } from "#src/lib/shared-element-rect";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -57,6 +58,11 @@ export function PersonCard({ person, selected }: { person: DirectoryPerson; sele
               profile: formatPersonProfileParam(person.id),
               agentTab: undefined,
             })}
+            onClick={(event) => {
+              const cardEl =
+                event.currentTarget.closest<HTMLElement>('[role="row"]') ?? event.currentTarget;
+              rememberSharedRect("member-profile-origin", cardEl);
+            }}
             aria-label={m.member_person_open_profile({ name: person.displayName })}
             aria-current={selected ? "page" : undefined}
             className="rounded-sm outline-focus-ring outline-offset-4 hover:underline focus-visible:outline-2"
@@ -67,7 +73,6 @@ export function PersonCard({ person, selected }: { person: DirectoryPerson; sele
             <span className="sr-only">, {online ? m.member_online() : m.member_offline()}</span>
           )}
         </h2>
-        {/* Every member card offers it, the viewer's own too: that opens their DM with themself. */}
         <Button
           size="sm"
           color="secondary"
@@ -77,7 +82,6 @@ export function PersonCard({ person, selected }: { person: DirectoryPerson; sele
           {m.member_private_chat()}
         </Button>
       </div>
-      {/* Fixed two-line slot, as on Agent cards, so a row's footers line up; one column needs none. */}
       <p className="line-clamp-2 text-sm break-words text-secondary sm:min-h-10">
         {person.description}
       </p>
@@ -110,17 +114,13 @@ export function AgentCard({
   selected: boolean;
   createdOn: string;
   canEdit: boolean;
-  /** Present only for a viewer who may delete Agents. */
   onDelete?: () => void;
 }) {
-  // Every Agent's status, the viewer's own and the others' alike, as Raft's members list shows it
-  // (task #290): another member's Agent is an extra, whose display is read while a card shows it.
   useWatchAgentDisplay(member.id);
   const display = useLiveAgent(member.id)?.display;
   const navigate = useNavigate();
   const openDirectConversation = useOpenDirectConversation();
   const workspaceSlug = useWorkspaceSlug();
-  // Editing happens in the profile panel's Profile tab.
   const openProfileToEdit = () =>
     void navigate({
       to: "/w/$workspaceSlug/members",
@@ -157,6 +157,11 @@ export function AgentCard({
                 ...previous,
                 profile: formatAgentProfileParam(member.id),
               })}
+              onClick={(event) => {
+                const cardEl =
+                  event.currentTarget.closest<HTMLElement>('[role="row"]') ?? event.currentTarget;
+                rememberSharedRect("member-profile-origin", cardEl);
+              }}
               aria-label={m.agent_open_profile({ name: member.displayName })}
               aria-current={selected ? "page" : undefined}
               className="rounded-sm outline-focus-ring outline-offset-4 hover:underline focus-visible:outline-2"

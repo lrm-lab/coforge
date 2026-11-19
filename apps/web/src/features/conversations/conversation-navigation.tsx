@@ -1,4 +1,13 @@
-import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { useParams, useRouter, useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useSuspenseQuery } from "@tanstack/react-query";
@@ -10,6 +19,13 @@ import { Spinner } from "#src/components/ui/spinner";
 import { ConnectionStatusPill } from "#src/features/realtime/connection-status-pill";
 import { SearchField } from "#src/features/search/search-field";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
+import { useEdgeSwipeBack } from "#src/hooks/use-edge-swipe-back";
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
+import {
+  animateFlipFromRect,
+  consumeSharedRect,
+  CONTINUOUS_EASING,
+} from "#src/lib/shared-element-rect";
 import { ChatHeaderBusyAgents } from "./chat-header-busy-agents";
 import { ChatListCrowdContext } from "./chat-list-crowd";
 import { ConversationFocusContext, useConversationFocusState } from "./conversation-focus";
@@ -174,6 +190,80 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
     refresh(seed.entries, unreadIdsToKeep(seed.lists, lastSeed.current));
     lastSeed.current = seed.lists;
   }, [refresh, seed.key]);
+  const reduced = usePrefersReducedMotion();
+  const detailRef = useRef<HTMLDivElement>(null);
+  const prevShowListRef = useRef(showList);
+  const [animatingStack, setAnimatingStack] = useState(false);
+
+  useLayoutEffect(() => {
+    if (desktop) {
+      prevShowListRef.current = showList;
+      setAnimatingStack(false);
+      return;
+    }
+    if (prevShowListRef.current === showList) return;
+    prevShowListRef.current = showList;
+    setAnimatingStack(true);
+    const timer = window.setTimeout(() => setAnimatingStack(false), reduced ? 160 : 450);
+
+    if (!showList && !reduced && detailRef.current) {
+      const header = detailRef.current.querySelector("header");
+      const avatarRect = consumeSharedRect("chat-row-avatar");
+      const titleRect = consumeSharedRect("chat-row-title");
+      if (header && avatarRect) {
+        const avatarTarget = header.querySelector<HTMLElement>("[data-avatar], .avatar-group");
+        if (avatarTarget)
+          animateFlipFromRect(avatarTarget, avatarRect, { duration: 420, mode: "uniform" });
+      }
+      if (header && titleRect) {
+        const titleTarget = header.querySelector<HTMLElement>("h1, h2");
+        if (titleTarget)
+          animateFlipFromRect(titleTarget, titleRect, { duration: 420, mode: "uniform" });
+      }
+    }
+    return () => window.clearTimeout(timer);
+  }, [desktop, reduced, showList]);
+
+  const swipe = useEdgeSwipeBack({
+    enabled: !desktop && !showList && !reduced,
+    onBack: () => setBrowsing(true),
+  });
+
+  const phone = !desktop;
+  const listStyle: CSSProperties | undefined = phone
+    ? reduced
+      ? {
+          opacity: showList ? 1 : 0,
+          transition: animatingStack ? "opacity 150ms ease" : undefined,
+        }
+      : {
+          transform: showList
+            ? "translate3d(0, 0, 0) scale(1)"
+            : `translate3d(${(1 - swipe.dragProgress) * -10}%, 0, 0) scale(${0.95 + 0.05 * swipe.dragProgress})`,
+          transition:
+            !swipe.dragging && (animatingStack || swipe.settling)
+              ? `transform ${swipe.settling ? 300 : 420}ms ${CONTINUOUS_EASING}`
+              : undefined,
+        }
+    : undefined;
+  const detailStyle: CSSProperties | undefined = phone
+    ? reduced
+      ? {
+          opacity: showList ? 0 : 1,
+          transition: animatingStack ? "opacity 150ms ease" : undefined,
+        }
+      : {
+          transform: showList
+            ? "translate3d(100%, 0, 0)"
+            : `translate3d(${swipe.dragProgress * 100}%, 0, 0)`,
+          transition:
+            !swipe.dragging && (animatingStack || swipe.settling)
+              ? `transform ${swipe.settling ? 300 : 420}ms ${CONTINUOUS_EASING}`
+              : undefined,
+        }
+    : undefined;
+  const scrimOpacity = phone && !reduced && !showList ? 0.24 * (1 - swipe.dragProgress) : 0;
+
   const detailVisible = desktop || !showList;
   useReportChatListOpen(showList);
   const listVisible = desktop || shellShowsList;
@@ -198,13 +288,16 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                 data-chat-cards
                 data-focus={focus.focused}
                 data-crowd-list={listCrowded ? "" : undefined}
-                className="group/chat flex h-full min-w-0 flex-col bg-primary lg:flex-row lg:gap-2 lg:bg-transparent"
+                className="group/chat relative flex h-full min-w-0 flex-col overflow-hidden bg-primary lg:flex-row lg:gap-2 lg:overflow-visible lg:bg-transparent"
               >
                 <section
+                  inert={phone && !showList ? true : undefined}
+                  aria-hidden={phone && !showList ? true : undefined}
+                  style={listStyle}
                   className={cx(
-                    "relative min-h-0 flex-1 flex-col lg:flex lg:flex-none lg:overflow-hidden lg:rounded-xl lg:bg-primary",
+                    "relative flex min-h-0 flex-1 flex-col bg-primary max-lg:absolute max-lg:inset-0 max-lg:z-10 max-lg:will-change-transform lg:flex lg:flex-none lg:overflow-hidden lg:rounded-xl",
                     LIST_COLUMN_CLASS,
-                    showList ? "flex" : "hidden",
+                    phone && !showList && "pointer-events-none",
                     "lg:group-data-[crowd-list]/chat:hidden",
                     "lg:group-data-[focus]/chat:hidden",
                   )}
@@ -254,11 +347,30 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
                     />
                   </div>
                   <ConversationListResizeHandle />
+                  {phone && !reduced && (
+                    <div
+                      aria-hidden="true"
+                      style={{
+                        opacity: scrimOpacity,
+                        transition:
+                          !swipe.dragging && animatingStack
+                            ? `opacity 420ms ${CONTINUOUS_EASING}`
+                            : undefined,
+                      }}
+                      className="pointer-events-none absolute inset-0 z-30 bg-black"
+                    />
+                  )}
                 </section>
                 <div
+                  ref={detailRef}
+                  {...swipe.bind}
+                  inert={phone && showList ? true : undefined}
+                  aria-hidden={phone && showList ? true : undefined}
+                  style={detailStyle}
                   className={cx(
-                    "min-h-0 min-w-0 flex-1 flex-col lg:flex lg:overflow-hidden lg:rounded-xl lg:bg-primary",
-                    showList ? "hidden" : "flex",
+                    "flex min-h-0 min-w-0 flex-1 flex-col bg-primary max-lg:absolute max-lg:inset-0 max-lg:z-20 max-lg:touch-pan-y max-lg:will-change-transform lg:flex lg:overflow-hidden lg:rounded-xl",
+                    phone && (animatingStack || swipe.dragging) && "shadow-2xl",
+                    phone && showList && "pointer-events-none",
                   )}
                 >
                   {children}

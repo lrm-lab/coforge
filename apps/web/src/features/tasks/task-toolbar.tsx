@@ -1,5 +1,5 @@
 import { TASK_WRITE_STATUSES, type TaskStatus } from "@lrm/coforge-sdk/internal";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useRef, type ReactNode } from "react";
 import { Columns03, FilterLines, List } from "@untitledui/icons";
 import { SubmenuTrigger, Tag, TagGroup, TagList } from "react-aria-components";
 
@@ -16,6 +16,8 @@ import {
   type PickerOption,
 } from "#src/features/pickers/entity-picker";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
+import { useSlidingIndicator } from "#src/hooks/use-sliding-indicator";
+import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import {
   NO_OWNER,
@@ -338,7 +340,6 @@ function FilterSubmenu({
   );
 }
 
-/** Board or list, in the bar itself (Frank, 11-06: not behind a menu). */
 function LayoutSwitch({
   layout,
   onLayoutChange,
@@ -346,26 +347,53 @@ function LayoutSwitch({
   layout: TaskLayout;
   onLayoutChange: (layout: TaskLayout) => void;
 }) {
-  // A phone's toolbar has no room for the words: Filter, the two views and New task side by side
-  // need the icons alone, named for a screen reader.
   const words = useBreakpoint("sm");
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const { indicatorRef, style, visible } = useSlidingIndicator(wrapRef, {
+    activeKey: layout,
+    variant: "pill",
+  });
   return (
-    <ButtonGroup
-      size="sm"
-      aria-label={m.tasks_layout()}
-      selectedKeys={[layout]}
-      disallowEmptySelection
-      onSelectionChange={(keys) => {
-        const [key] = [...keys];
-        if (key === "board" || key === "list") onLayoutChange(key);
-      }}
-    >
-      <ButtonGroupItem id="board" iconLeading={Columns03} aria-label={m.tasks_layout_board()}>
-        {words && m.tasks_layout_board()}
-      </ButtonGroupItem>
-      <ButtonGroupItem id="list" iconLeading={List} aria-label={m.tasks_layout_list()}>
-        {words && m.tasks_layout_list()}
-      </ButtonGroupItem>
-    </ButtonGroup>
+    <div ref={wrapRef} className="relative inline-flex rounded-lg bg-primary">
+      {visible && (
+        <span
+          ref={indicatorRef}
+          aria-hidden="true"
+          style={style}
+          className={cn(
+            "pointer-events-none absolute top-0 left-0 bg-primary_hover",
+            layout === "board" ? "rounded-l-lg" : "rounded-r-lg",
+          )}
+        />
+      )}
+      <ButtonGroup
+        size="sm"
+        className="z-10"
+        aria-label={m.tasks_layout()}
+        selectedKeys={[layout]}
+        disallowEmptySelection
+        onSelectionChange={(keys) => {
+          const [key] = [...keys];
+          if (key === "board" || key === "list") onLayoutChange(key);
+        }}
+      >
+        <ButtonGroupItem
+          id="board"
+          iconLeading={Columns03}
+          aria-label={m.tasks_layout_board()}
+          className="bg-transparent selected:bg-transparent"
+        >
+          {words && m.tasks_layout_board()}
+        </ButtonGroupItem>
+        <ButtonGroupItem
+          id="list"
+          iconLeading={List}
+          aria-label={m.tasks_layout_list()}
+          className="bg-transparent selected:bg-transparent"
+        >
+          {words && m.tasks_layout_list()}
+        </ButtonGroupItem>
+      </ButtonGroup>
+    </div>
   );
 }

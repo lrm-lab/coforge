@@ -1,9 +1,10 @@
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Code01 } from "@untitledui/icons";
 
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { messageSlots } from "#src/lib/message-slots";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
@@ -16,6 +17,12 @@ import { MarkdownPreview } from "./artifact-preview";
 import { useArtifactActor } from "./artifact-queries";
 import { artifactPageRoute, galleryEntryState } from "./artifact-search";
 import type { GalleryCard, useScopeOf } from "./artifact-scope";
+import {
+  ARTIFACT_FRAME_VT_NAME,
+  ARTIFACT_TITLE_VT_NAME,
+  prepareArtifactViewTransition,
+  useActiveArtifactTransitionId,
+} from "./artifact-view-transition";
 
 export function CardBadges({
   card,
@@ -103,8 +110,17 @@ export function GalleryGridCard({
 }) {
   const workspaceSlug = useWorkspaceSlug();
   const actorOf = useArtifactActor();
+  const reduced = usePrefersReducedMotion();
+  const activeTransitionId = useActiveArtifactTransitionId();
+  const activeTransition = !reduced && activeTransitionId === card.id;
+  const frameRef = useRef<HTMLElement>(null);
+  const titleRef = useRef<HTMLSpanElement>(null);
   return (
-    <article className="relative flex flex-col overflow-hidden rounded-xl border border-secondary bg-primary transition-[border-color] duration-100 hover:border-primary has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-focus-ring">
+    <article
+      ref={frameRef}
+      style={activeTransition ? { viewTransitionName: ARTIFACT_FRAME_VT_NAME } : undefined}
+      className="relative flex flex-col overflow-hidden rounded-xl border border-secondary bg-primary transition-[border-color] duration-100 hover:border-primary has-[a:focus-visible]:outline-2 has-[a:focus-visible]:outline-focus-ring"
+    >
       <div className="h-32 border-b border-secondary">
         <Preview card={card} />
       </div>
@@ -113,9 +129,24 @@ export function GalleryGridCard({
           <Link
             {...artifactPageRoute(workspaceSlug, card.id)}
             state={galleryEntryState}
+            viewTransition={!reduced}
+            onClick={() => {
+              if (!reduced) {
+                prepareArtifactViewTransition(card.id, {
+                  frame: frameRef.current,
+                  title: titleRef.current,
+                });
+              }
+            }}
             className="min-w-0 truncate text-sm font-semibold text-primary outline-none before:absolute before:inset-0"
           >
-            {card.title || m.doc_untitled()}
+            <span
+              ref={titleRef}
+              style={activeTransition ? { viewTransitionName: ARTIFACT_TITLE_VT_NAME } : undefined}
+              className="inline-block max-w-full truncate align-bottom"
+            >
+              {card.title || m.doc_untitled()}
+            </span>
           </Link>
           <span className="shrink-0 text-xs text-tertiary tabular-nums">
             v{card.currentVersion}

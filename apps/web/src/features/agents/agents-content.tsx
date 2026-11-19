@@ -1,9 +1,18 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { GridList, GridListLoadMoreItem, ProgressBar } from "react-aria-components";
 import { Group, Panel, Separator, useDefaultLayout } from "react-resizable-panels";
 import { getRouteApi } from "@tanstack/react-router";
+import { AnimatePresence, motion } from "motion/react";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
+import { useEdgeSwipeBack } from "#src/hooks/use-edge-swipe-back";
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
+import {
+  animateFlipFromRect,
+  cancelFlipAnimation,
+  consumeSharedRect,
+  CONTINUOUS_EASE_TUPLE,
+} from "#src/lib/shared-element-rect";
 import { Plus, SearchLg as Search, Users01 as UsersRound, UsersPlus } from "@untitledui/icons";
 import { Spinner } from "#src/components/ui/spinner";
 
@@ -327,8 +336,33 @@ export function AgentsContent({
     </Tabs>
   );
 
+  const reduced = usePrefersReducedMotion();
+  const profileWrapRef = useRef<HTMLDivElement>(null);
+  const profileKey = profileAgentId ?? profilePersonId ?? "";
+  const swipe = useEdgeSwipeBack({
+    enabled: !splitOpen && profileOpen && !reduced,
+    onBack: closeAgentProfile,
+  });
+
+  useLayoutEffect(() => {
+    if (!splitOpen || !profileOpen || reduced || !profileWrapRef.current) return;
+    const origin = consumeSharedRect("member-profile-origin");
+    if (!origin) return;
+    const node = profileWrapRef.current;
+    node.style.animation = "none";
+    const anim = animateFlipFromRect(node, origin, {
+      duration: 280,
+      mode: "box",
+      includeRadius: true,
+    });
+    return () => {
+      if (anim) cancelFlipAnimation(node);
+      node.style.animation = "";
+    };
+  }, [profileKey, profileOpen, reduced, splitOpen]);
+
   return (
-    <main className="flex h-full min-w-0 bg-primary">
+    <main className="relative flex h-full min-w-0 overflow-hidden bg-primary md:overflow-visible">
       {splitOpen ? (
         <Group
           key="split"
@@ -352,13 +386,52 @@ export function AgentsContent({
             maxSize="60"
             className="flex min-h-0 min-w-0 flex-col"
           >
-            {profile}
+            <div
+              ref={profileWrapRef}
+              className="flex min-h-0 min-w-0 flex-1 flex-col bg-primary animate-in fade-in slide-in-from-right-6 duration-[280ms] ease-continuous motion-reduce:duration-150"
+            >
+              {profile}
+            </div>
           </Panel>
         </Group>
-      ) : profileOpen ? (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">{profile}</div>
       ) : (
-        directoryPane
+        <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+          <div
+            inert={profileOpen || undefined}
+            aria-hidden={profileOpen || undefined}
+            className="flex min-h-0 min-w-0 flex-1"
+          >
+            {directoryPane}
+          </div>
+          <AnimatePresence initial={false}>
+            {profileOpen && (
+              <motion.div
+                key={profileKey}
+                ref={profileWrapRef}
+                {...swipe.bind}
+                initial={reduced ? { opacity: 0 } : { x: "100%" }}
+                animate={
+                  reduced
+                    ? { opacity: 1 }
+                    : swipe.dragging
+                      ? { x: `${swipe.dragProgress * 100}%` }
+                      : { x: 0 }
+                }
+                exit={reduced ? { opacity: 0 } : { x: "100%" }}
+                transition={
+                  swipe.dragging
+                    ? { duration: 0 }
+                    : reduced
+                      ? { duration: 0.15 }
+                      : { duration: 0.38, ease: CONTINUOUS_EASE_TUPLE }
+                }
+                className="absolute inset-0 z-20 flex min-h-0 min-w-0 touch-pan-y flex-col bg-primary shadow-2xl will-change-transform"
+              >
+                {profile}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       )}
 
       <MemberDialogs dialog={dialog} onDialogChange={onDialogChange} allowed={canInviteMember} />

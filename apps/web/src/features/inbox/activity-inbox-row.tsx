@@ -10,13 +10,16 @@ import {
   ActivityUnreadDot,
   NARROW_HIDDEN,
 } from "./activity-row-parts";
-import { memo } from "react";
+import { memo, useRef, type Ref } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { BellOff01, Check, Hash01, Mail01 } from "@untitledui/icons";
+import { motion } from "motion/react";
 import { Link as AriaLink } from "react-aria-components";
 
 import { Badge } from "#src/components/base/badges/badges";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
+import { CONTINUOUS_EASE_TUPLE, rememberSharedRect } from "#src/lib/shared-element-rect";
 import { collageLayout } from "#src/features/conversations/collage-layout";
 import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { MessagePreview } from "#src/features/conversations/message-preview";
@@ -59,6 +62,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   tabStop,
   onOpen,
   clock = false,
+  ref,
 }: {
   item: ActivityConversationItem;
   filter: ActivityInboxFilter;
@@ -68,9 +72,13 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   tabStop: boolean;
   onOpen: (target: HostedConversationTarget) => void;
   clock?: boolean;
+  ref?: Ref<HTMLLIElement>;
 }) {
   const router = useRouter();
   const workspaceSlug = useWorkspaceSlug();
+  const reduced = usePrefersReducedMotion();
+  const iconRef = useRef<HTMLSpanElement>(null);
+  const titleRef = useRef<HTMLSpanElement>(null);
   const target = activityOpenTarget(item);
   const link = activityChatLink(workspaceSlug, target);
   const href = router.buildLocation(link).publicHref;
@@ -121,7 +129,16 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   }
 
   return (
-    <li
+    <motion.li
+      ref={ref}
+      layout={reduced ? false : "position"}
+      initial={false}
+      exit={
+        reduced
+          ? { opacity: 0, transition: { duration: 0.15 } }
+          : { opacity: 0, x: -16, transition: { duration: 0.18, ease: CONTINUOUS_EASE_TUPLE } }
+      }
+      transition={{ layout: { duration: 0.24, ease: CONTINUOUS_EASE_TUPLE } }}
       data-activity-row={item.key}
       className={cn(ACTIVITY_ROW_ITEM_CLASS, "select-none [-webkit-touch-callout:none]")}
     >
@@ -142,6 +159,9 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
                 onClick={(event) => {
                   if (event.button === 0 && !isModified(event)) {
                     event.preventDefault();
+                    if (iconRef.current) rememberSharedRect("activity-row-avatar", iconRef.current);
+                    if (titleRef.current)
+                      rememberSharedRect("activity-row-title", titleRef.current);
                     onOpen(target);
                   }
                   props.onClick?.(event);
@@ -158,21 +178,25 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
               : "group-hover:bg-primary_hover focus-visible:bg-primary_hover",
           )}
         >
-          <ActivityItemIcon item={item} />
+          <span ref={iconRef} className="flex shrink-0">
+            <ActivityItemIcon item={item} />
+          </span>
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="flex min-w-0 items-center gap-2">
               {unread && <ActivityUnreadDot />}
-              <ActivityRowTitle unread={unread}>
-                {task ? (
-                  task.title
-                ) : thread ? (
-                  <Preview message={thread.root} />
-                ) : place.kind === "channel" ? (
-                  <ChannelTitle name={title} visibility={place.visibility} hash={false} />
-                ) : (
-                  title
-                )}
-              </ActivityRowTitle>
+              <span ref={titleRef} className="min-w-0">
+                <ActivityRowTitle unread={unread}>
+                  {task ? (
+                    task.title
+                  ) : thread ? (
+                    <Preview message={thread.root} />
+                  ) : place.kind === "channel" ? (
+                    <ChannelTitle name={title} visibility={place.visibility} hash={false} />
+                  ) : (
+                    title
+                  )}
+                </ActivityRowTitle>
+              </span>
               <ActivityItemBadges item={item} filter={filter} />
               {time}
             </span>
@@ -219,7 +243,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
         </Dropdown.Popover>
       </Dropdown.Root>
       <ActivityDoneCheck tabStop={tabStop} current={current} onDone={() => actions.done(item)} />
-    </li>
+    </motion.li>
   );
 });
 

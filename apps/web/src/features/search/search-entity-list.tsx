@@ -3,6 +3,7 @@ import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 import { Link } from "@tanstack/react-router";
 import type { AgentDisplaySnapshot } from "@lrm/coforge-sdk/internal";
+import { AnimatePresence, motion } from "motion/react";
 
 import { AgentDisplayAvatar } from "#src/features/agents/agent-display-avatar";
 import { agentDisplay } from "#src/features/agents/agent-status-display";
@@ -15,6 +16,8 @@ import { Badge } from "#src/components/base/badges/badges";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { computerIcon } from "#src/features/computers/computer-identity";
 import { conversationRoute } from "#src/features/conversations/last-conversation";
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
+import { CONTINUOUS_EASE_TUPLE } from "#src/lib/shared-element-rect";
 import { m } from "#src/paraglide/messages";
 import type { SearchEntity } from "./search-entities";
 
@@ -122,22 +125,35 @@ export function SearchEntityList({
   onOpen: (entity: SearchEntity) => void;
 }) {
   const displays = useAgentDisplays();
+  const reduced = usePrefersReducedMotion();
   return GROUPS.map(({ kind, heading }) => {
     const rows = entities.filter((entity) => entity.kind === kind);
     if (rows.length === 0) return null;
     return (
       <section key={kind} aria-label={heading()} className="flex flex-col px-2 pt-2">
         <h2 className={SEARCH_HEADING_CLASS}>{heading()}</h2>
-        <ul className="flex flex-col">
-          {rows.map((entity) => (
-            <li key={`${entity.kind}:${entity.id}`}>
-              <SearchEntityRow
-                entity={entity}
-                display={displays.get(entity.id)}
-                onOpen={() => onOpen(entity)}
-              />
-            </li>
-          ))}
+        <ul className="relative flex flex-col">
+          <AnimatePresence initial={false} mode="popLayout">
+            {rows.map((entity) => (
+              <motion.li
+                key={`${entity.kind}:${entity.id}`}
+                layout={reduced ? false : "position"}
+                initial={reduced ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                transition={{
+                  duration: reduced ? 0.12 : 0.2,
+                  ease: CONTINUOUS_EASE_TUPLE,
+                }}
+              >
+                <SearchEntityRow
+                  entity={entity}
+                  display={displays.get(entity.id)}
+                  onOpen={() => onOpen(entity)}
+                />
+              </motion.li>
+            ))}
+          </AnimatePresence>
         </ul>
       </section>
     );

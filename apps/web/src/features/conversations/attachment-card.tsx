@@ -1,8 +1,20 @@
-import { useEffect, useEffectEvent, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { Download01 } from "@untitledui/icons";
 import { getReadableFileSize } from "#src/components/application/file-upload/file-upload-base";
 import { Button } from "#src/components/base/buttons/button";
 import { isDisplayableImageAttachment } from "#src/lib/inline-image";
+import {
+  captureElementRect,
+  isRectInViewport,
+  type SharedRect,
+} from "#src/lib/shared-element-rect";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { attachmentPreviewKind, previewKindFor } from "./attachment-preview-kind";
@@ -21,9 +33,6 @@ import {
 } from "#src/lib/attachment-image-box";
 import type { MessageView } from "./message-view";
 
-/** The authenticated backend fallback: forced downloads, and inline images once their signed
- * CDN preview URL has expired or fails to load (the route then redirects to a fresh one, or
- * streams the bytes when CDN delivery is not configured). */
 export function attachmentUrl(attachment: { id: string }) {
   return `/api/attachments/${attachment.id}`;
 }
@@ -31,8 +40,6 @@ export function attachmentUrl(attachment: { id: string }) {
 type Attachment = MessageView["attachments"][number];
 
 const isImage = (attachment: Attachment) => isDisplayableImageAttachment(attachment);
-/** A video or audio file plays in the message; without a delivery URL to stream from, only one
- * small enough to read whole (`MEDIA_PREVIEW_MAX_BYTES`), else it is a file card. */
 function playsInline(attachment: Attachment) {
   const kind = attachmentPreviewKind(attachment.fileName, attachment.contentType);
   if (kind !== "video" && kind !== "audio") return undefined;
@@ -41,12 +48,13 @@ function playsInline(attachment: Attachment) {
     : undefined;
 }
 
-/** One image as a button opening the lightbox: its thumbnail, else the original, else the route. */
 function ImageThumbnail({
   attachment,
   className,
   style,
   imgClassName,
+  hidden,
+  registerNode,
   onFailed,
   onOpen,
 }: {
@@ -54,6 +62,8 @@ function ImageThumbnail({
   className?: string;
   style?: CSSProperties;
   imgClassName: string;
+  hidden?: boolean;
+  registerNode?: (node: HTMLElement | null) => void;
   onFailed?: () => void;
   onOpen: () => void;
 }) {
@@ -65,47 +75,37 @@ function ImageThumbnail({
       aria-label={attachment.fileName}
       className={cn(
         "block h-auto overflow-hidden border border-image-frame-border bg-image-frame p-0 hover:bg-image-frame [&>span]:block [&>span]:size-full",
+        hidden && "opacity-0",
         className,
       )}
       style={style}
       onClick={onOpen}
     >
-      <LoadingImage
-        src={attachment.thumbnailUrl ?? attachment.previewUrl ?? href}
-        fallbackSrc={attachment.thumbnailUrl || attachment.previewUrl ? href : undefined}
-        onFailed={onFailed}
-        alt={attachment.fileName}
-        className="size-full"
-        imgClassName={cn("block size-full", imgClassName)}
-      />
+      <span ref={registerNode} className="block size-full">
+        <LoadingImage
+          src={attachment.thumbnailUrl ?? attachment.previewUrl ?? href}
+          fallbackSrc={attachment.thumbnailUrl || attachment.previewUrl ? href : undefined}
+          onFailed={onFailed}
+          alt={attachment.fileName}
+          className="size-full"
+          imgClassName={cn("block size-full", imgClassName)}
+        />
+      </span>
     </Button>
   );
 }
 
-/**
- * A message's attachments: its images first, laid out as Raft does (`attachment-image-box.ts`), a
- * lone one at its own shape and several in a grid, then each video as a player (`InlineVideo`),
- * then each audio file as a card with a player (`InlineAudio`), then a card for each other file. A
- * lone image that cannot be loaded, and a video or audio file too large to play without a delivery
- * URL, fall back to their file cards. The images open one lightbox, which
- * pages through all of them, as on Raft. The image shown is in the address (`file`), so a reload or
- * a copied address opens it again; a link into its comments opens it there, at its comments.
- * Closing the lightbox takes the address off.
- */
 export function MessageAttachments({ attachments }: { attachments: readonly Attachment[] }) {
   const [brokenId, setBrokenId] = useState<string>();
-  // The image open in the lightbox, by id: the message's images can change while it is open.
   const [viewingId, setViewingId] = useState<string | null>(null);
+  const thumbNodes = useRef<Map<string, HTMLElement>>(new Map());
   const images = attachments.filter(isImage);
   const viewing = images.findIndex((image) => image.id === viewingId);
   const address = useAttachmentReviewAddressAmong(images.map((image) => image.id));
-  // The image this copy of the message holds the address for, and whether a link opened it at its
-  // comments (an image opened or paged to by hand shows the image alone).
   const [linkedId, setLinkedId] = useState<string>();
   const [atComments, setAtComments] = useState(false);
   const followAddress = useEffectEvent((fileId: string | undefined) => {
     if (fileId === linkedId) return;
-    // Hand back the image followed before; another copy of the message may already follow this one.
     address.release();
     const next = fileId && address.follow() ? fileId : undefined;
     if (next === linkedId) return;
@@ -120,6 +120,18 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
     address.show(id);
   };
   useEffect(() => followAddress(address.fileId), [address.fileId]);
+  const registerThumb = useCallback((id: string) => {
+    return (node: HTMLElement | null) => {
+      if (node) thumbNodes.current.set(id, node);
+      else thumbNodes.current.delete(id);
+    };
+  }, []);
+  const getOriginRect = useCallback((id: string): SharedRect | null => {
+    const node = thumbNodes.current.get(id);
+    const target = node?.closest("button") ?? node;
+    const rect = captureElementRect(target);
+    return rect && isRectInViewport(rect) ? rect : null;
+  }, []);
   const videos: Attachment[] = [];
   const audios: Attachment[] = [];
   const files: Attachment[] = [];
@@ -141,6 +153,8 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
             className="max-w-full rounded-lg"
             style={singleImageBox(lone)}
             imgClassName="object-contain"
+            hidden={viewingId === lone.id}
+            registerNode={registerThumb(lone.id)}
             onFailed={() => setBrokenId(lone.id)}
             onOpen={() => view(lone.id)}
           />
@@ -162,15 +176,20 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
                   : "auto-rows-[8rem] @min-[360px]:auto-rows-[9rem]",
               )}
             >
-              {row.map(({ index, fit }) => (
-                <ImageThumbnail
-                  key={images[index]!.id}
-                  attachment={images[index]!}
-                  className="size-full rounded-lg"
-                  imgClassName={fit === "cover" ? "object-cover" : "object-contain"}
-                  onOpen={() => view(images[index]!.id)}
-                />
-              ))}
+              {row.map(({ index, fit }) => {
+                const img = images[index]!;
+                return (
+                  <ImageThumbnail
+                    key={img.id}
+                    attachment={img}
+                    className="size-full rounded-lg"
+                    imgClassName={fit === "cover" ? "object-cover" : "object-contain"}
+                    hidden={viewingId === img.id}
+                    registerNode={registerThumb(img.id)}
+                    onOpen={() => view(img.id)}
+                  />
+                );
+              })}
             </div>
           ))}
         </div>
@@ -181,6 +200,7 @@ export function MessageAttachments({ attachments }: { attachments: readonly Atta
           index={viewing}
           onIndexChange={(index) => view(images[index]!.id)}
           isOpen
+          getOriginRect={getOriginRect}
           onOpenChange={(open) => {
             if (open) return;
             setViewingId(null);

@@ -6,6 +6,7 @@ import { Monitor01 as Monitor } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
+import { captureElementRect, type SharedRect } from "#src/lib/shared-element-rect";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
 import { getCloudDesktopOrigin } from "./cloud-desktop-origin.functions";
@@ -45,6 +46,7 @@ export function AgentDesktopThumbnail({
   const [phase, setPhase] = useState<EmbeddedDesktopPhase>("sleeping");
   const slotRef = useRef<HTMLDivElement>(null);
   const [miniBox, setMiniBox] = useState<DOMRect | null>(null);
+  const [originRect, setOriginRect] = useState<SharedRect | null>(null);
 
   const url =
     enabled && origin.data ? cloudDesktopUrl(origin.data, computerId, agentId, title) : undefined;
@@ -96,6 +98,10 @@ export function AgentDesktopThumbnail({
   const streamOn = embeddedDesktopStreamActive(phase);
   const wakeLabel = online ? m.computer_desktop_wake() : m.computer_desktop_offline();
 
+  const captureSlot = () => {
+    if (slotRef.current) setOriginRect(captureElementRect(slotRef.current));
+  };
+
   return (
     <>
       <div ref={slotRef} className="relative h-14 w-[5.5rem] shrink-0">
@@ -109,6 +115,7 @@ export function AgentDesktopThumbnail({
               aria-label={wakeLabel}
               onPress={() => {
                 if (!canWake) return;
+                captureSlot();
                 setPhase((p) => reduceEmbeddedDesktop(p, "wake"));
               }}
               className={cx(
@@ -140,8 +147,15 @@ export function AgentDesktopThumbnail({
               url={url}
               title={title}
               miniBox={miniBox}
-              onCollapse={() => setPhase((p) => reduceEmbeddedDesktop(p, "collapse"))}
-              onWake={() => setPhase((p) => reduceEmbeddedDesktop(p, "wake"))}
+              originRect={originRect}
+              onCollapse={() => {
+                captureSlot();
+                setPhase((p) => reduceEmbeddedDesktop(p, "collapse"));
+              }}
+              onWake={() => {
+                captureSlot();
+                setPhase((p) => reduceEmbeddedDesktop(p, "wake"));
+              }}
               onSleep={() => setPhase((p) => reduceEmbeddedDesktop(p, "sleep"))}
             />,
             document.body,

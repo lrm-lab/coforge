@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { OVERLAY_LAYER } from "#src/lib/overlay-layer";
 import { useServerFn } from "@tanstack/react-start";
 import { Heading } from "react-aria-components";
@@ -22,21 +22,23 @@ import { useSidebarActions, useSidebarLists } from "./sidebar-lists";
 
 type DirectSettings = {
   conversationId: string;
-  /** What the DM is called: the other side's name. */
   name: string;
-  /** The viewer's own preference as the page read it. Absent means on. */
   collapseLongMessages?: boolean;
-  /** Re-reads the page after the preference changed, so the open stream folds at once. */
   onChanged: () => Promise<void>;
 };
 
-/**
- * The gear in a direct message's header and the panel it opens: the viewer's own preferences for
- * this DM, the same three (pin, mute, collapse long messages) for a DM with an Agent and one between
- * members. The panel mounts only while open, so a header outside Chat reads no sidebar until then.
- */
 export function DirectSettingsButton(props: DirectSettings) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      return;
+    }
+    if (!mounted) return;
+    const timer = window.setTimeout(() => setMounted(false), 260);
+    return () => window.clearTimeout(timer);
+  }, [mounted, open]);
   return (
     <>
       <ButtonUtility
@@ -47,7 +49,7 @@ export function DirectSettingsButton(props: DirectSettings) {
         tooltip={m.direct_settings_open()}
         onClick={() => setOpen(true)}
       />
-      {open && <DirectSettingsPanel {...props} open={open} onOpenChange={setOpen} />}
+      {mounted && <DirectSettingsPanel {...props} open={open} onOpenChange={setOpen} />}
     </>
   );
 }

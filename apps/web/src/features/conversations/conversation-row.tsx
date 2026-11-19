@@ -4,6 +4,7 @@ import { Link as AriaLink } from "react-aria-components";
 import { BellOff01, Edit03 } from "@untitledui/icons";
 
 import { UnreadCapsule, UnreadDot } from "#src/components/ui/unread-marker";
+import { rememberSharedRect } from "#src/lib/shared-element-rect";
 import { cx } from "#src/utils/cx";
 import { m } from "#src/paraglide/messages";
 import { MentionBadge } from "./mention-badge";
@@ -127,6 +128,8 @@ export function ConversationRow({
   const [hover] = useState(createRowHover);
   const listVisible = useConversationListVisible();
   const link = useRef<HTMLAnchorElement>(null);
+  const iconRef = useRef<HTMLSpanElement>(null);
+  const titleRef = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (current && listVisible)
       link.current?.scrollIntoView({ block: "nearest", behavior: "instant" });
@@ -137,17 +140,17 @@ export function ConversationRow({
   const hasCapsule = (unreadCount ?? 0) > 0 || (unreadThreadCount ?? 0) > 0;
   const hasManualDot = Boolean(showManualDot && !hasCapsule);
   const hasSecondLineBadges = Boolean(lastMessage?.mentioned || hasCapsule || hasManualDot);
+  const handlePress = () => {
+    if (iconRef.current) rememberSharedRect("chat-row-avatar", iconRef.current);
+    if (titleRef.current) rememberSharedRect("chat-row-title", titleRef.current);
+    closeList();
+  };
   return (
-    // The row is a React Aria link so the conversation menu's `MenuTrigger trigger="contextMenu"`
-    // can use it as its trigger; `render` hands the element to TanStack's `Link`, which owns
-    // navigation (React Aria's documented client-side routing pattern, react-aria.adobe.com/Link).
     <AriaLink
       ref={link}
       href={router.buildLocation(route).href}
-      // `href` is always set, so React Aria renders an `<a>`; the check narrows the props type.
       render={(props) => ("href" in props ? <Link {...props} {...route} /> : <span {...props} />)}
       aria-current={current ? "page" : undefined}
-      // Lets the section list measure its bottom space from a bordered card's avatar.
       data-row-card={card || undefined}
       aria-label={
         rowLabel({
@@ -159,18 +162,11 @@ export function ConversationRow({
           hasDraft,
         }) ?? (count ? `${label}, ${count.label}` : lastMessage ? label : undefined)
       }
-      // On mobile the list is a separate pane; choosing a row reveals the conversation even when
-      // the URL is unchanged (re-opening the channel already in the address bar), which the
-      // pathname-based reset in `ConversationNavigation` cannot see.
-      onPress={closeList}
+      onPress={handlePress}
       onHoverChange={hover.set}
       className={cx(
-        // `-webkit-user-drag: none`: a sidebar drag moves the row (see `directory-drag.tsx`), never
-        // the browser's own link drag.
         "flex w-full cursor-pointer items-center p-2 outline-focus-ring transition duration-100 ease-linear select-none [-webkit-user-drag:none] focus-visible:z-10 focus-visible:outline-2 focus-visible:outline-offset-2",
         card ? "rounded-xl border" : "rounded-md",
-        // A single-line row (Saved) lines up with a section title: its 16px icon on the chevron's
-        // x and its text on the title's (`gap-1.5`, as a non-collapsible title uses).
         lastMessage ? "gap-2" : "max-h-9 gap-1.5",
         current ? (card ? "bg-chat-selected-bg" : "bg-sidebar-accent") : "hover:bg-primary_hover",
         card && (current ? "border-chat-selected-border" : "border-transparent"),
@@ -178,9 +174,13 @@ export function ConversationRow({
     >
       <RowHoverContext.Provider value={hover}>
         {lastMessage ? (
-          <span className="flex shrink-0 items-center justify-center">{icon}</span>
+          <span ref={iconRef} className="flex shrink-0 items-center justify-center">
+            {icon}
+          </span>
         ) : (
-          <span className="flex h-5 w-4 shrink-0 items-center justify-center">{icon}</span>
+          <span ref={iconRef} className="flex h-5 w-4 shrink-0 items-center justify-center">
+            {icon}
+          </span>
         )}
       </RowHoverContext.Provider>
       {lastMessage ? (
@@ -188,6 +188,7 @@ export function ConversationRow({
           <span className="flex min-w-0 items-center gap-2">
             <span className="flex min-w-0 flex-1 items-center gap-1">
               <span
+                ref={titleRef}
                 className={cx(
                   "min-w-0 truncate text-sm",
                   dimmed

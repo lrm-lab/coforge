@@ -33,6 +33,7 @@ import {
 import { useActiveTabInView } from "#src/hooks/use-active-tab-in-view";
 import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
 import { m } from "#src/paraglide/messages";
+import { useSlidingIndicator } from "#src/hooks/use-sliding-indicator";
 import { cx } from "#src/utils/cx";
 
 export type ReorderableTabMeta = { label: () => string; icon?: FC<{ className?: string }> };
@@ -160,6 +161,11 @@ export function ReorderableTabStrip<T extends string>({
   };
   const LiftedIcon = lifted ? meta[lifted].icon : undefined;
   const stripList = rippleListProps(ripple, STRIP);
+  const indicator = useSlidingIndicator(tabsRef, {
+    activeKey: `${active}:${tabSet}`,
+    paused: lifted !== null,
+    variant: "underline",
+  });
 
   return (
     <DndContext
@@ -187,7 +193,14 @@ export function ReorderableTabStrip<T extends string>({
           selectedKey={active}
           className={cx("relative w-max shrink-0", className)}
         >
-          <TabList type="underline" size={size} aria-label={ariaLabel}>
+          <TabList
+            type="underline"
+            size={size}
+            aria-label={ariaLabel}
+            className={cx(
+              indicator.visible && "[&_[role=tab][aria-selected=true]]:border-transparent",
+            )}
+          >
             {shown.map((tab) => (
               <DraggableTab
                 key={tab}
@@ -204,6 +217,14 @@ export function ReorderableTabStrip<T extends string>({
               />
             ))}
           </TabList>
+          {indicator.visible && (
+            <span
+              ref={indicator.indicatorRef}
+              aria-hidden="true"
+              style={indicator.style}
+              className="pointer-events-none absolute bottom-0 left-0 z-20 h-0.5 rounded-full bg-fg-brand-primary_alt will-change-transform"
+            />
+          )}
           <DragRippleLine ripple={ripple} list={STRIP} className="text-primary" />
         </Tabs>
       </div>

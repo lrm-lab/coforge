@@ -23,6 +23,7 @@ import {
 } from "@dnd-kit/core";
 import { useHydrated } from "@tanstack/react-router";
 import { DotsGrid as GripVertical } from "@untitledui/icons";
+import { LayoutGroup, motion } from "motion/react";
 import { useCallback, useId, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
@@ -31,6 +32,7 @@ import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useDocumentDragCursor } from "#src/hooks/use-document-drag-cursor";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
+import { CONTINUOUS_EASE_TUPLE } from "#src/lib/shared-element-rect";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { DropState } from "./task-drop-target";
@@ -189,76 +191,88 @@ export function TaskWorkflow<T extends TaskView>({
           {m.tasks_mutation_error()}
         </p>
       )}
-      <div
-        className={
-          layout === "list"
-            ? "flex flex-col gap-4"
-            : groups.length > 1
-              ? "flex flex-col gap-3 md:h-full md:flex-row md:items-stretch md:justify-center-safe md:overflow-x-auto"
-              : "flex max-w-sm flex-col md:h-full"
-        }
-      >
-        {shownGroups.map((group) => (
-          <TaskGroup
-            key={group.status}
-            status={group.status}
-            count={paged?.[group.status]?.count ?? group.tasks.length}
-            loaded={group.tasks.length}
-            paged={paged?.[group.status]}
-            board={layout === "board"}
-            compact={groups.length > TASK_WRITE_STATUSES.length}
-            dropState={dropState(group.status)}
-            hidable={hides}
-            onHide={hides && onHiddenChange ? () => onHiddenChange(group.status, true) : undefined}
-            onAdd={add(group.status)}
-            onSortByPriority={(on) =>
-              setByPriority((current) => {
-                const next = new Set(current);
-                if (on) next.add(group.status);
-                else next.delete(group.status);
-                return next;
-              })
-            }
-            sortedByPriority={byPriority.has(group.status)}
-          >
-            {(shown) => (
-              <>
-                {ordered(group)
-                  .slice(0, shown)
-                  .map((task) => (
-                    <div
-                      key={task.id}
-                      data-task-drag-node
-                      aria-busy={pending?.id === task.id}
-                      className={cn(landing === task.id && "opacity-0")}
-                    >
-                      {renderTask(task, controls(task))}
-                    </div>
-                  ))}
-              </>
-            )}
-          </TaskGroup>
-        ))}
-        {hiddenGroups.length > 0 && (
-          <aside
-            aria-label={m.tasks_hidden_columns()}
-            className="flex shrink-0 flex-col gap-1 md:w-52"
-          >
-            <h2 className="flex h-10 items-center px-1 text-sm font-medium text-tertiary">
-              {m.tasks_hidden_columns()}
-            </h2>
-            {hiddenGroups.map((group) => (
-              <HiddenColumn
-                key={group.status}
-                status={group.status}
-                count={paged?.[group.status]?.count ?? group.tasks.length}
-                dropState={dropState(group.status)}
-                onShow={() => onHiddenChange?.(group.status, false)}
-              />
-            ))}
-          </aside>
-        )}
-      </div>
+      <LayoutGroup id={`tasks-${id}`}>
+        <div
+          className={
+            layout === "list"
+              ? "flex flex-col gap-4"
+              : groups.length > 1
+                ? "flex flex-col gap-3 md:h-full md:flex-row md:items-stretch md:justify-center-safe md:overflow-x-auto"
+                : "flex max-w-sm flex-col md:h-full"
+          }
+        >
+          {shownGroups.map((group) => (
+            <TaskGroup
+              key={group.status}
+              status={group.status}
+              count={paged?.[group.status]?.count ?? group.tasks.length}
+              loaded={group.tasks.length}
+              paged={paged?.[group.status]}
+              board={layout === "board"}
+              compact={groups.length > TASK_WRITE_STATUSES.length}
+              dropState={dropState(group.status)}
+              hidable={hides}
+              onHide={
+                hides && onHiddenChange ? () => onHiddenChange(group.status, true) : undefined
+              }
+              onAdd={add(group.status)}
+              onSortByPriority={(on) =>
+                setByPriority((current) => {
+                  const next = new Set(current);
+                  if (on) next.add(group.status);
+                  else next.delete(group.status);
+                  return next;
+                })
+              }
+              sortedByPriority={byPriority.has(group.status)}
+            >
+              {(shown) => (
+                <>
+                  {ordered(group)
+                    .slice(0, shown)
+                    .map((task) => {
+                      const canAnimate = !reduced && active === undefined && landing === undefined;
+                      return (
+                        <motion.div
+                          key={task.id}
+                          layout={canAnimate ? "position" : false}
+                          layoutId={canAnimate ? `task-item-${id}-${task.id}` : undefined}
+                          transition={{
+                            layout: { duration: 0.28, ease: CONTINUOUS_EASE_TUPLE },
+                          }}
+                          data-task-drag-node
+                          aria-busy={pending?.id === task.id}
+                          className={cn(landing === task.id && "opacity-0")}
+                        >
+                          {renderTask(task, controls(task))}
+                        </motion.div>
+                      );
+                    })}
+                </>
+              )}
+            </TaskGroup>
+          ))}
+          {hiddenGroups.length > 0 && (
+            <aside
+              aria-label={m.tasks_hidden_columns()}
+              className="flex shrink-0 flex-col gap-1 md:w-52"
+            >
+              <h2 className="flex h-10 items-center px-1 text-sm font-medium text-tertiary">
+                {m.tasks_hidden_columns()}
+              </h2>
+              {hiddenGroups.map((group) => (
+                <HiddenColumn
+                  key={group.status}
+                  status={group.status}
+                  count={paged?.[group.status]?.count ?? group.tasks.length}
+                  dropState={dropState(group.status)}
+                  onShow={() => onHiddenChange?.(group.status, false)}
+                />
+              ))}
+            </aside>
+          )}
+        </div>
+      </LayoutGroup>
       <DragOverlay dropAnimation={reduced ? null : dropAnimation} className="pointer-events-none">
         {active ? (
           <div

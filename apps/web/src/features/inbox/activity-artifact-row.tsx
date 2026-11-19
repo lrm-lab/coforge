@@ -1,6 +1,7 @@
-import { memo } from "react";
+import { memo, type Ref } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { Check, Mail01 } from "@untitledui/icons";
+import { motion } from "motion/react";
 import { Link as AriaLink } from "react-aria-components";
 
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
@@ -8,6 +9,8 @@ import { ActorName } from "#src/features/avatars/actor-name";
 import { ArtifactIcon } from "#src/features/artifacts/artifact-parts";
 import { artifactPageRoute } from "#src/features/artifacts/artifact-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
+import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
+import { CONTINUOUS_EASE_TUPLE } from "#src/lib/shared-element-rect";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { ActivityArtifactItem } from "#src/server/inbox/activity-inbox.server";
@@ -30,14 +33,17 @@ export const ActivityArtifactRow = memo(function ActivityArtifactRow({
   actions,
   tabStop,
   clock = false,
+  ref,
 }: {
   item: ActivityArtifactItem;
   filter: ActivityInboxFilter;
   actions: ActivityItemActions;
   tabStop: boolean;
   clock?: boolean;
+  ref?: Ref<HTMLLIElement>;
 }) {
   const workspaceSlug = useWorkspaceSlug();
+  const reduced = usePrefersReducedMotion();
   const { event, target } = item;
   const unread = item.unreadCount > 0;
   const link = artifactPageRoute(workspaceSlug, item.artifact.id);
@@ -48,7 +54,16 @@ export const ActivityArtifactRow = memo(function ActivityArtifactRow({
   };
   const href = useRouter().buildLocation({ ...link, search }).href;
   return (
-    <li
+    <motion.li
+      ref={ref}
+      layout={reduced ? false : "position"}
+      initial={false}
+      exit={
+        reduced
+          ? { opacity: 0, transition: { duration: 0.15 } }
+          : { opacity: 0, x: -16, transition: { duration: 0.18, ease: CONTINUOUS_EASE_TUPLE } }
+      }
+      transition={{ layout: { duration: 0.24, ease: CONTINUOUS_EASE_TUPLE } }}
       data-activity-row={item.key}
       data-activity-artifact={item.artifact.id}
       className={cn(ACTIVITY_ROW_ITEM_CLASS, "select-none [-webkit-touch-callout:none]")}
@@ -107,6 +122,6 @@ export const ActivityArtifactRow = memo(function ActivityArtifactRow({
         </Dropdown.Popover>
       </Dropdown.Root>
       <ActivityDoneCheck tabStop={tabStop} current={false} onDone={() => actions.done(item)} />
-    </li>
+    </motion.li>
   );
 });
