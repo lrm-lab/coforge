@@ -1,20 +1,20 @@
-import type {
-  AgentMessageDelivery,
-  AgentMessageDeliveryAck,
-  AgentRecoveryMessage,
-  MessageSenderKind,
+import {
+  AGENT_MESSAGE_ACK_METHOD,
+  SEEN_EXACT_SEQS_LIMIT,
+  diagnosticErrorName,
+  mergeSeenExactSeqs,
+  threadRootTarget,
+  type AgentMessageDelivery,
+  type AgentMessageDeliveryAck,
+  type AgentRecoveryMessage,
+  type AgentStartOpenTasks,
+  type MessageSenderKind,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentConversationScope } from "@coforge/agent";
 import { getLogger } from "@logtape/logtape";
 import { NoticeActionClocks } from "./notice-action-clocks";
 import { type AgentDeliveryQueue, writeDeliveryNotice } from "./delivery-notice-writer";
 import { rememberDelivery } from "./delivery-generation-memory";
-import {
-  AGENT_MESSAGE_ACK_METHOD,
-  SEEN_EXACT_SEQS_LIMIT,
-  mergeSeenExactSeqs,
-  threadRootTarget,
-} from "@lrm/coforge-sdk/internal";
 import type { AgentHistoryConsumptionScope } from "@lrm/coforge-sdk/agent";
 import type { AgentProcessManager } from "#src/agent-runtime/agent-process-manager";
 import { attentionFlags, hasDeliveryScope, latestCreatedAtField } from "./message-attention-fields";
@@ -34,7 +34,6 @@ import {
 import { noteFrontierSource, type FrontierSource } from "./agent-message-attention-frontier-source";
 import { planRecovery } from "./agent-message-attention-recovery";
 import type { AgentConsumedSeqPort } from "#src/persistence/agent-consumed-seq-store";
-import { diagnosticErrorName } from "@lrm/coforge-sdk/internal";
 import { PendingAttentionReads } from "./agent-message-attention-pending";
 import {
   PENDING_WINDOW_LIMIT,
@@ -257,8 +256,9 @@ export class AgentMessageAttentionIndex {
     agentId: string,
     messages: readonly AgentRecoveryMessage[],
     unreadSummary: Readonly<Record<string, number>>,
-    _unreadConversationIds: Readonly<Record<string, string>> = {},
+    _unreadIds: Readonly<Record<string, string>> = {},
     conversation?: AgentConversationScope,
+    openTasks?: AgentStartOpenTasks,
   ): Promise<ReadonlySet<string>> {
     const generation = this.#generation(agentId);
     const session = this.#runtimes.session(agentId);
@@ -267,6 +267,7 @@ export class AgentMessageAttentionIndex {
       agentId,
       messages,
       unreadSummary,
+      openTasks,
       currentAttention: this.#attention.get(agentId) ?? new Map<string, MessageAttention>(),
       seenDeliveryIds: generation.seenDeliveryIds,
       seenMessageIds: generation.seenMessageIds,

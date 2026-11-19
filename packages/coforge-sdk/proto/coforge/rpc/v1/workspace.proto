@@ -206,6 +206,7 @@ message AgentStartIntent {
   // the context window here (task #30). Additive: protocol_major stays 1.
   optional uint32 context_window = 26;
   optional uint32 max_output_tokens = 27;
+  optional AgentStartOpenTasks open_tasks = 28;
 }
 
 // Versioned server-to-daemon stop intent. A replacement is expressed as a
@@ -258,6 +259,17 @@ message AgentUnreadSummaryEntry {
   uint32 count = 2;
   // Canonical conversation for summary-only recovery; no message bodies needed.
   optional string conversation_id = 3;
+}
+
+message AgentStartOpenTask {
+  string ref = 1;
+  string title = 2;
+  string status = 3;
+}
+
+message AgentStartOpenTasks {
+  repeated AgentStartOpenTask tasks = 1;
+  uint32 more = 2;
 }
 
 message AgentRuntimeProviderConfig {

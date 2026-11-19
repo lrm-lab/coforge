@@ -99,11 +99,13 @@ export function mergeCarried(own: CarriedStart, owed: CarriedStart): CarriedStar
     ...(b?.resumeMessages ?? []).filter(({ deliveryId }) => !ownIds.has(deliveryId)),
   ];
   const conversationIds = { ...b?.unreadConversationIds, ...a?.unreadConversationIds };
+  const openTasks = a?.openTasks ?? b?.openTasks;
   const recovery: AgentRecoveryContext = {
     ...(wakeMessage ? { wakeMessage } : {}),
     ...(resumeMessages.length ? { resumeMessages } : {}),
     ...(Object.keys(summary).length ? { unreadSummary: summary } : {}),
     ...(Object.keys(conversationIds).length ? { unreadConversationIds: conversationIds } : {}),
+    ...(openTasks ? { openTasks } : {}),
   };
   return carriedOf({
     ...(a || b ? { recovery } : {}),

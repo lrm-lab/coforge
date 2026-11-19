@@ -1,7 +1,11 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { assertPositiveControlCounter, assertUint } from "./codec";
 import { safeUint64 } from "./agent-observation-codec";
-import { assertAgentRecoveryContext } from "./agent-recovery-context";
+import {
+  assertAgentRecoveryContext,
+  assertAgentStartOpenTasks,
+  normalizeAgentStartOpenTasks,
+} from "./agent-recovery-context";
 import { AGENT_START_MESSAGE_TYPE, AGENT_STOP_MESSAGE_TYPE, requireRuntimeProvider } from "./index";
 import type {
   AgentControlScope,
@@ -93,6 +97,7 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
         "providerId" in value.providerConfig ? value.providerConfig.providerId : undefined,
       )
     : undefined;
+  const openTasks = assertAgentStartOpenTasks(value.openTasks);
   return toBinary(
     AgentStartIntentSchema,
     create(AgentStartIntentSchema, {
@@ -122,6 +127,7 @@ export function encodeAgentStartIntent(value: AgentStartIntent): Uint8Array {
         count,
         conversationId: value.unreadConversationIds?.[target],
       })),
+      openTasks,
     }),
   );
 }
@@ -216,6 +222,7 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
       ? { createdAtMs: safeUint64(message.createdAtMs, "Agent recovery creation time") }
       : {}),
   });
+  const openTasks = normalizeAgentStartOpenTasks(v.openTasks);
   return {
     protocolMajor: v.protocolMajor,
     requestId: v.requestId,
@@ -261,6 +268,7 @@ export function decodeAgentStartIntent(bytes: Uint8Array): AgentStartIntent {
           ),
         }
       : {}),
+    ...(openTasks ? { openTasks } : {}),
   };
 }
 export function encodeAgentStopIntent(value: AgentStopIntent): Uint8Array {

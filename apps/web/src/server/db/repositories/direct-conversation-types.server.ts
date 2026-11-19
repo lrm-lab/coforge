@@ -1,4 +1,8 @@
-import type { MessageSenderKind, MessageTaskMetadata } from "@lrm/coforge-sdk/internal";
+import type {
+  AgentStartOpenTasks,
+  MessageSenderKind,
+  MessageTaskMetadata,
+} from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type { AttachmentView } from "#src/server/attachments/attachment-view.server";
 import type { noteAgentDmLimit } from "#src/server/conversations/agent-dm-limits.server";
@@ -62,6 +66,7 @@ export type AgentRecoveryContext = {
   >;
   unreadSummary: Readonly<Record<string, number>>;
   unreadConversationIds?: Readonly<Record<string, string>>;
+  openTasks?: AgentStartOpenTasks;
 };
 export type PendingAgentDelivery = AgentRecoveryContext["resumeMessages"][number] & {
   mentionsAgent?: boolean;

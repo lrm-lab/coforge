@@ -40,7 +40,7 @@ export function prependSessionMemory(
   const starter = queue.items.find(
     (item): item is Extract<AgentInput, { kind: "startup" }> => item.kind === "startup",
   );
-  if (starter) starter.text = agentStartupInput(false, block.complete);
+  if (starter) starter.text = agentStartupInput(false, block.complete, starter.openTasks);
   const behind = queue.items.filter((item) => item.kind !== "startup");
   if (starter && !queueHasInputContent(behind)) {
     // The starter is the session's whole first turn: the block rides in it, no second turn.

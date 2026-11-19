@@ -182,6 +182,7 @@ export class AgentControlPublisher {
             resumeMessages: recovery.resumeMessages,
             unreadSummary: recovery.unreadSummary,
             unreadConversationIds: recovery.unreadConversationIds,
+            ...(recovery.openTasks ? { openTasks: recovery.openTasks } : {}),
           }
         : {}),
       ...(resumePrompt !== undefined ? { resumePrompt } : {}),

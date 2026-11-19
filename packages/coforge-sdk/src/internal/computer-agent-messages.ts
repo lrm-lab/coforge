@@ -198,6 +198,17 @@ export type DaemonRuntimeCommandCodeEffortReadResponse = {
   efforts: string[];
   messageType?: DaemonRuntimeMessageType;
 };
+export const AGENT_START_OPEN_TASKS_MAX = 20;
+export type AgentStartOpenTaskStatus = "todo" | "in_progress";
+export type AgentStartOpenTask = {
+  ref: string;
+  title: string;
+  status: AgentStartOpenTaskStatus;
+};
+export type AgentStartOpenTasks = {
+  tasks: AgentStartOpenTask[];
+  more: number;
+};
 export type AgentStartIntent = {
   protocolMajor: number;
   requestId: string;
@@ -218,6 +229,7 @@ export type AgentStartIntent = {
   resumeMessages?: AgentRecoveryMessage[];
   unreadSummary?: Readonly<Record<string, number>>;
   unreadConversationIds?: Readonly<Record<string, string>>;
+  openTasks?: AgentStartOpenTasks;
   resumePrompt?: string;
   introductionPrompt?: string;
   fastMode?: boolean;

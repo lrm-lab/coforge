@@ -29,7 +29,7 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   [lifecycle doc](../../../../docs/observability/agent-status-and-activity/stop.md)); `release()` rejects at its own deadline.
 - A start for an already running Agent preserves its process, session, and
   config. It accepts only `wakeMessage`, `resumePrompt` and `introductionPrompt`
-  and ignores that start's `resumeMessages` and `unreadSummary`. A replay of the
+  and ignores that start's `resumeMessages`, `unreadSummary`, and `openTasks`. A replay of the
   same Start (equal epoch) never delivers its `resumePrompt` or
   `introductionPrompt` again.
 - A still-launching Agent is not reported as running; it accepts the full
@@ -40,8 +40,8 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   in place of session recovery; a process gets at most one, and one queued when a
   process crashes is its relaunch's; the server alone decides whether one is owed.
 - Restart recovery must not eagerly load all canonical Message history.
-- A resumed session without pending messages uses its session context first, reads memory and its assigned unfinished tasks only when that context does not establish its current work, and stays silent when no actionable work remains; it never repeats its introduction.
-- A fresh session without an introduction recovers from existing memory files and assigned unfinished tasks once. Reset Session, Full Reset, migration and a lost native session can all take this path; only files still present are read, and a fresh session never implies a new Agent.
+- A resumed session without pending messages uses its session context first, acts on any `openTasks` carried by the Start intent (otherwise reading memory and tasks only when context does not establish current work), and stays silent when no actionable work remains; it never repeats its introduction.
+- A fresh session without an introduction recovers from existing memory files and any `openTasks` carried by the Start intent (or assigned unfinished tasks) once. Reset Session, Full Reset, migration and a lost native session can all take this path; only files still present are read, and a fresh session never implies a new Agent.
 - `agent-desktop.ts` holds one Agent's screen on the image's localhost control
   port and releases it when that process ends. The hold's variables are that
   process's display, authority file, and per-agent XDG directories. A missing

@@ -6,4 +6,5 @@ export const recoverySecondPassStubs = {
   messageMention: { findMany: async () => [] },
   memoryHintRecord: { findMany: async () => [] },
   messageForward: { findMany: async () => [] },
+  task: { findMany: async () => [], count: async () => 0 },
 };

@@ -166,7 +166,11 @@ function startFreshSession(
     > => item.kind === "startup",
   );
   if (starter)
-    starter.text = agentStartupInput(false, context.memoryComplete && briefing.length > 0);
+    starter.text = agentStartupInput(
+      false,
+      context.memoryComplete && briefing.length > 0,
+      starter.openTasks,
+    );
   if (!briefing) return;
   const alone = !context.deliveriesQueued && !queueHasInputContent(queue.items);
   const turn = Promise.withResolvers<void>();

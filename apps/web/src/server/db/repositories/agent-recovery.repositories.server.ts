@@ -8,6 +8,7 @@ import {
   AGENT_FORWARD_SELECT,
 } from "./direct-conversation-agent-message.server";
 import { recoveryRefs, directTargets } from "./agent-peer-direct.repositories.server";
+import { readAgentStartOpenTasks } from "./agent-start-open-tasks.repositories.server";
 import { Prisma } from "#src/generated/prisma/client";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
 import { MESSAGE_MENTIONS_SELECT } from "#src/server/conversations/mentions.server";
@@ -221,7 +222,8 @@ export async function readAgentRecoveryContext(
     resumeMessages: AgentFacing<AgentRecoveryContext["resumeMessages"][number]>[];
   }
 > {
-  const rows = await ports.db.$queryRaw<AgentRecoveryRow[]>`
+  const [rows, openTasks] = await Promise.all([
+    ports.db.$queryRaw<AgentRecoveryRow[]>`
     WITH unread AS (
       ${unreadAgentMessagesFragment(workspaceId, agentId)}
     ), ranked AS (
@@ -237,7 +239,9 @@ export async function readAgentRecoveryContext(
       "nonMemberMention", "attachmentId"
     FROM ranked
     WHERE "globalRank" <= ${AGENT_RECOVERY_MESSAGE_LIMIT} OR "targetRank" = 1
-    ORDER BY "globalRank"`;
+    ORDER BY "globalRank"`,
+    readAgentStartOpenTasks(ports.db, workspaceId, agentId),
+  ]);
   const resumeMessages: AgentFacing<AgentRecoveryContext["resumeMessages"][number]>[] = [];
   const unreadSummary: Record<string, number> = {};
   const unreadConversationIds: Record<string, string> = {};
@@ -301,5 +305,6 @@ export async function readAgentRecoveryContext(
     resumeMessages,
     unreadSummary,
     ...(Object.keys(unreadConversationIds).length ? { unreadConversationIds } : {}),
+    ...(openTasks ? { openTasks } : {}),
   };
 }

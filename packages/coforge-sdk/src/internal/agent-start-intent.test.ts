@@ -388,3 +388,98 @@ test("a scope is refused when any part of it is missing or not a provider", () =
   ])
     expect(() => decodeAgentStartIntentScope(rejected(over)), JSON.stringify(over)).toThrow();
 });
+test("round-trips openTasks on a start intent and omits empty openTasks", () => {
+  const openTasks = {
+    tasks: [
+      { ref: "#coforge:#12", title: "Ship start open tasks", status: "in_progress" as const },
+      { ref: "dm:@ada:#3", title: "Review PR", status: "todo" as const },
+    ],
+    more: 4,
+  };
+  const decoded = decodeAgentStartIntent(encodeAgentStartIntent({ ...base, openTasks }));
+  expect(decoded.openTasks).toEqual(openTasks);
+  expect(
+    decodeAgentStartIntent(encodeAgentStartIntent({ ...base, openTasks: { tasks: [], more: 0 } })),
+  ).not.toHaveProperty("openTasks");
+  expect(decodeAgentStartIntent(encodeAgentStartIntent(base))).not.toHaveProperty("openTasks");
+});
+test("rejects malformed openTasks on encode", () => {
+  const task = { ref: "#coforge:#1", title: "Fix bug", status: "todo" as const };
+  expect(() =>
+    encodeAgentStartIntent({ ...base, openTasks: { tasks: [{ ...task, ref: "   " }], more: 0 } }),
+  ).toThrow("open tasks");
+  expect(() =>
+    encodeAgentStartIntent({
+      ...base,
+      openTasks: { tasks: [{ ...task, status: "done" as "todo" }], more: 0 },
+    }),
+  ).toThrow("open tasks");
+  expect(() => encodeAgentStartIntent({ ...base, openTasks: { tasks: [task], more: -1 } })).toThrow(
+    "open tasks",
+  );
+  expect(() => encodeAgentStartIntent({ ...base, openTasks: { tasks: [], more: 2 } })).toThrow(
+    "open tasks",
+  );
+  expect(() =>
+    encodeAgentStartIntent({
+      ...base,
+      openTasks: {
+        tasks: Array.from({ length: 21 }, (_, i) => ({ ...task, ref: `#coforge:#${i + 1}` })),
+        more: 0,
+      },
+    }),
+  ).toThrow("open tasks");
+});
+test("normalizes future statuses and overflow openTasks on decode", () => {
+  const tasks = [
+    ...Array.from({ length: 22 }, (_, i) => ({
+      ref: `#coforge:#${i + 1}`,
+      title: `Task ${i + 1}`,
+      status: i % 2 === 0 ? "in_progress" : "todo",
+    })),
+    { ref: "#coforge:#99", title: "Ignored future status", status: "blocked" },
+    { ref: "   ", title: "Ignored blank ref", status: "todo" },
+  ];
+  const bytes = toBinary(
+    AgentStartIntentSchema,
+    create(AgentStartIntentSchema, {
+      ...base,
+      messageType: AGENT_START_MESSAGE_TYPE,
+      openTasks: { tasks, more: 3 },
+    }),
+  );
+  const decoded = decodeAgentStartIntent(bytes);
+  expect(decoded.openTasks?.tasks).toHaveLength(20);
+  expect(decoded.openTasks?.more).toBe(5);
+  const allInvalid = toBinary(
+    AgentStartIntentSchema,
+    create(AgentStartIntentSchema, {
+      ...base,
+      messageType: AGENT_START_MESSAGE_TYPE,
+      openTasks: { tasks: [{ ref: "#coforge:#1", title: "Done", status: "done" }], more: 2 },
+    }),
+  );
+  expect(decodeAgentStartIntent(allInvalid)).not.toHaveProperty("openTasks");
+
+  const paddedAndEmoji = toBinary(
+    AgentStartIntentSchema,
+    create(AgentStartIntentSchema, {
+      ...base,
+      messageType: AGENT_START_MESSAGE_TYPE,
+      openTasks: {
+        tasks: [
+          {
+            ref: `${" ".repeat(260)}#coforge:#42`,
+            title: `${"x".repeat(511)}🚀tail`,
+            status: "in_progress",
+          },
+        ],
+        more: 0,
+      },
+    }),
+  );
+  const decodedEdge = decodeAgentStartIntent(paddedAndEmoji);
+  expect(decodedEdge.openTasks?.tasks).toEqual([
+    { ref: "#coforge:#42", title: "x".repeat(511), status: "in_progress" },
+  ]);
+});

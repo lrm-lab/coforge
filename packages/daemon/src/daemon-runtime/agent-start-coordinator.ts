@@ -186,7 +186,10 @@ export function startAgent(
           text: agentStartupInput(
             request.sessionMode !== "create" &&
               Boolean(request.sessionId ?? ports.sessions.sessionId(agentId)),
+            false,
+            recovery?.openTasks,
           ),
+          ...(recovery?.openTasks ? { openTasks: recovery.openTasks } : {}),
           completion,
         }))
       : undefined;

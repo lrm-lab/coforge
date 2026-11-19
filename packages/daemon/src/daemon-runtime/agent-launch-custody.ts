@@ -71,6 +71,8 @@ export class AgentLaunchCustody {
           messages,
           context.unreadSummary ?? {},
           context.unreadConversationIds ?? {},
+          undefined,
+          context.openTasks,
         );
     } catch (error) {
       logger.warn("Agent recovery notice was not accepted; canonical unread state remains", {

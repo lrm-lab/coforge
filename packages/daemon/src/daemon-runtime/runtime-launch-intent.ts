@@ -3,6 +3,7 @@ import type {
   AgentConfigSync,
   AgentMessageDelivery,
   AgentStartIntent,
+  AgentStartOpenTasks,
 } from "@lrm/coforge-sdk/internal";
 import type { RestartRuntimeFields } from "#src/agent-runtime/agent-process-manager";
 export type AgentInputCompletion = {
@@ -11,7 +12,7 @@ export type AgentInputCompletion = {
 };
 export type AgentRecoveryContext = Pick<
   AgentStartIntent,
-  "wakeMessage" | "resumeMessages" | "unreadSummary" | "unreadConversationIds"
+  "wakeMessage" | "resumeMessages" | "unreadSummary" | "unreadConversationIds" | "openTasks"
 >;
 export function recoveryHasContent(context: AgentRecoveryContext | undefined): boolean {
   return Boolean(
@@ -40,6 +41,7 @@ export type AgentInput =
   | {
       kind: "startup";
       text: string;
+      openTasks?: AgentStartOpenTasks;
       completion: AgentInputCompletion;
     }
   | {
@@ -94,5 +96,6 @@ export function recoveryOf(intent: AgentStartIntent): AgentRecoveryContext {
     resumeMessages: intent.resumeMessages,
     unreadSummary: intent.unreadSummary,
     unreadConversationIds: intent.unreadConversationIds,
+    openTasks: intent.openTasks,
   };
 }

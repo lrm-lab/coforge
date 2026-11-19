@@ -1,28 +1,51 @@
 import { taskHint } from "#src/daemon-runtime/inbox-notice-text";
 import { AgentSessionRecoveryError, type AgentRuntimeEvent } from "@lrm/coforge-anvil";
-import { AGENT_STARTUP_TIMEOUT_MS, startupTimeoutMs } from "@lrm/coforge-sdk/internal";
+import {
+  AGENT_STARTUP_TIMEOUT_MS,
+  startupTimeoutMs,
+  type AgentStartOpenTasks,
+} from "@lrm/coforge-sdk/internal";
+import {
+  formatStartOpenTaskLines,
+  hasStartOpenTasks,
+  OPEN_TASKS_RESUME_ACTION,
+} from "./start-open-tasks";
 
-/** The first turn when no real Message or explicit resume prompt is available. Standing
- * instructions already live in the provider's native system/developer prompt. `memoryInContext`:
- * the same turn carries all of MEMORY.md (a recycle briefing), so a fresh session is not told to
- * read it again. */
-export function agentStartupInput(resuming: boolean, memoryInContext = false): string {
-  return [
+export function agentStartupInput(
+  resuming: boolean,
+  memoryInContext = false,
+  openTasks?: AgentStartOpenTasks,
+): string {
+  const withOpenTasks = hasStartOpenTasks(openTasks);
+  const lead = [
     resuming
       ? "You are back online. No new messages are pending."
       : "You are starting a fresh session. No new messages are pending.",
     resuming
-      ? "Use your existing session context first. If it does not establish your current work, read MEMORY.md and notes/active-context.md if present, and check unfinished tasks assigned to you once."
-      : `To recover your work without previous session context, read ${memoryInContext ? "" : "MEMORY.md and "}notes/active-context.md if present, and check unfinished tasks assigned to you once.`,
+      ? withOpenTasks
+        ? "Use your existing session context first. If it does not establish your current work, read MEMORY.md and notes/active-context.md if present."
+        : "Use your existing session context first. If it does not establish your current work, read MEMORY.md and notes/active-context.md if present, and check unfinished tasks assigned to you once."
+      : withOpenTasks
+        ? `To recover your work without previous session context, read ${memoryInContext ? "" : "MEMORY.md and "}notes/active-context.md if present.`
+        : `To recover your work without previous session context, read ${memoryInContext ? "" : "MEMORY.md and "}notes/active-context.md if present, and check unfinished tasks assigned to you once.`,
     "Use only tools allowed by your role and skip unsupported recovery steps.",
+  ];
+  if (withOpenTasks) {
+    return `${lead.join(" ")}\n\nOpen tasks currently assigned to you:\n${formatStartOpenTaskLines(openTasks)}\n\n${OPEN_TASKS_RESUME_ACTION} Resume only actionable work already requested or assigned to you; do not invent work or scan unrelated channels and projects. Do not send a startup announcement or repeat your introduction.`;
+  }
+  return [
+    ...lead,
     "Open the task you are resuming for its current details and relevant team memory.",
     "Resume only actionable work already requested or assigned to you; do not invent work or scan unrelated channels and projects.",
     "If no actionable work remains, end this turn silently. Do not send a startup announcement or repeat your introduction.",
   ].join(" ");
 }
 
-/** Summary-only recovery is bounded catch-up, not an instruction to drain every inbox. */
-export function agentStartupCatchupInput(rows: readonly string[], fenced = false): string {
+export function agentStartupCatchupInput(
+  rows: readonly string[],
+  fenced = false,
+  openTasks?: AgentStartOpenTasks,
+): string {
   const command = fenced
     ? "message_read with the exact target"
     : "`coforge message read --target <target> --unread`";
@@ -30,6 +53,16 @@ export function agentStartupCatchupInput(rows: readonly string[], fenced = false
   const reading = fenced
     ? "with no before/after/around anchor, continuing while hasNewer is true"
     : "once, retrying only a failed read";
+  if (hasStartOpenTasks(openTasks)) {
+    return `[CoForge inbox notice:
+${rows.join("\n")}${fenced ? "" : taskHint(rows)}
+Read each listed conversation with ${command} ${reading}. Do not call ${check} in this catch-up mode. Continue working on any direct request, assignment, personal mention, review request, or task addressed to you; otherwise do not reply to what you read.
+
+Open tasks currently assigned to you:
+${formatStartOpenTaskLines(openTasks)}
+
+After catching up: ${OPEN_TASKS_RESUME_ACTION}]`;
+  }
   return `[CoForge inbox notice:
 ${rows.join("\n")}${fenced ? "" : taskHint(rows)}
 Read each listed conversation with ${command} ${reading}, then end this turn. Do not call ${check} in this catch-up mode. Continue working only if you find a direct request, assignment, personal mention, review request, or task addressed to you. Otherwise do not send a reply.]`;

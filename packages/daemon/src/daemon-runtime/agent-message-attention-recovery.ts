@@ -1,28 +1,25 @@
-import { isValidMessageSender, type AgentRecoveryMessage } from "@lrm/coforge-sdk/internal";
+import {
+  isValidMessageSender,
+  type AgentRecoveryMessage,
+  type AgentStartOpenTasks,
+} from "@lrm/coforge-sdk/internal";
 import { recoveryWakeupText } from "./agent-recovery-notice";
 import type { AttentionDecisionOutcome } from "./agent-message-attention-decision-log";
 import type { MessageAttention } from "./agent-message-attention-index";
 import { foldMessageAttention, isDeliveryTarget } from "./message-attention-fields";
 
-/** What the recovery notice announces, decided before the notice is written. */
 export type RecoveryPlan = Readonly<{
-  /** The attention the Agent holds once the notice is accepted. */
   byTarget: Map<string, MessageAttention>;
-  /** The supplied messages the notice announces: not already read, not already notified. */
   recoveredMessages: readonly AgentRecoveryMessage[];
-  /** Every target the notice announces, supplied or summary-only. */
   announced: ReadonlySet<string>;
   notice: string;
 }>;
 
-/**
- * Validates a recovery's messages and decides what its notice announces. Undefined when everything
- * named was already read or notified and no summary-only target remains.
- */
 export function planRecovery(input: {
   agentId: string;
   messages: readonly AgentRecoveryMessage[];
   unreadSummary: Readonly<Record<string, number>>;
+  openTasks?: AgentStartOpenTasks;
   currentAttention: ReadonlyMap<string, MessageAttention>;
   seenDeliveryIds: ReadonlySet<string>;
   seenMessageIds: ReadonlySet<string>;
@@ -74,6 +71,7 @@ export function planRecovery(input: {
     agentId,
     announced: recoveredMessages,
     summaryOnly,
+    openTasks: input.openTasks,
   });
   return { byTarget, recoveredMessages, announced, notice };
 }
