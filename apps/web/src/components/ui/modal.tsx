@@ -44,7 +44,7 @@ export function ModalOverlay({
           {
             "--visual-viewport-top": `${viewportTop}px`,
             "--spacing-safe-bottom":
-              "max(0px, calc(env(safe-area-inset-bottom, 0px) - (100dvh - var(--visual-viewport-height, 100dvh))))",
+              "max(0px, calc(env(safe-area-inset-bottom, 0px) - (var(--app-height, 100dvh) - var(--visual-viewport-height, var(--app-height, 100dvh)))))",
           } as CSSProperties
         }
         className={(state) =>
@@ -54,7 +54,7 @@ export function ModalOverlay({
             state.isExiting && "scrim-out",
             "max-sm:top-(--visual-viewport-top) max-sm:bottom-auto max-sm:h-(--visual-viewport-height) max-sm:min-h-0",
             !keyboardMayBeUp &&
-              "max-sm:[--visual-viewport-height:100dvh]! max-sm:[--visual-viewport-top:0px]!",
+              "max-sm:[--visual-viewport-height:var(--app-height,100dvh)]! max-sm:[--visual-viewport-top:0px]!",
             confirmation && "max-sm:px-0 max-sm:[--modal-pb:0px]",
             page &&
               "max-sm:items-stretch max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px]",

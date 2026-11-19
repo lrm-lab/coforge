@@ -1,0 +1,24 @@
+export type AppHeightReading = {
+  measured: number;
+  installed: boolean;
+  safeAreaTotal: number;
+  onScreenKeyboardMayBeUp: boolean;
+  applied: number | undefined;
+  tallestSeen: number | undefined;
+};
+
+export function appHeight(reading: AppHeightReading): number {
+  const { measured, installed, safeAreaTotal, onScreenKeyboardMayBeUp, applied, tallestSeen } =
+    reading;
+  if (onScreenKeyboardMayBeUp && applied !== undefined && measured < applied) return applied;
+  if (!installed || tallestSeen === undefined) return measured;
+  return tallestSeen - measured > safeAreaTotal ? tallestSeen : measured;
+}
+
+export function viewportShapeKey(landscape: boolean, screenWidth: number): string {
+  return `${landscape ? "landscape" : "portrait"}:${screenWidth}`;
+}
+
+export function tallestHeightSeen(previous: number | undefined, measured: number): number {
+  return Math.max(previous ?? 0, measured);
+}

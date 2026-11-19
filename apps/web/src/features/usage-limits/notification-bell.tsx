@@ -128,7 +128,7 @@ function NoticeSheet({ children }: { children: ReactNode }) {
       isDismissable
       className={({ isEntering, isExiting }) =>
         cn(
-          "fixed inset-0 z-50 flex items-end bg-modal-scrim/70",
+          "fixed inset-x-0 top-0 z-50 flex h-[var(--app-height,100dvh)] items-end bg-modal-scrim/70",
           isEntering && "motion-enter animate-in scrim-in",
           isExiting && "motion-leave animate-out scrim-out",
         )

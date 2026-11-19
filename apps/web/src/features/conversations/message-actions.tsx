@@ -185,7 +185,7 @@ export function MessageActionSheet({
       data-message-actions-popover
       className={(state) =>
         cn(
-          "fixed inset-0 z-50 flex min-h-dvh items-end justify-center bg-modal-scrim/70 outline-hidden backdrop-blur-[6px]",
+          "fixed inset-x-0 top-0 z-50 flex h-[var(--app-height,100dvh)] items-end justify-center bg-modal-scrim/70 outline-hidden backdrop-blur-[6px]",
           state.isEntering && "motion-enter animate-in scrim-in",
           state.isExiting && "motion-leave animate-out scrim-out",
         )

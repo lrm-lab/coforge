@@ -54,6 +54,7 @@ import type { CreateWorkspaceInput } from "#src/features/workspaces/create-works
 import { useReportActivityUnread, useWorkspaceTabTitle } from "#src/lib/browser-tab";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
+import { useAppHeight } from "#src/hooks/use-app-height";
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { useLatestCallback } from "#src/hooks/use-latest-callback";
 import { SearchField, SearchRailButton } from "#src/features/search/search-field";
@@ -193,6 +194,7 @@ type AppShellProps = {
 };
 
 export function AppShell(props: AppShellProps) {
+  useAppHeight();
   const standalone = useIsStandalonePage();
   useWorkspaceTabTitle(props.currentWorkspace.name);
   return (
@@ -203,7 +205,7 @@ export function AppShell(props: AppShellProps) {
       <WhatsNewAnnouncer />
       <KeyboardShortcutsHost>
         {standalone ? (
-          <div className="flex h-svh flex-col bg-primary pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left font-body antialiased">
+          <div className="flex h-[var(--app-height,100svh)] flex-col bg-primary pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left font-body antialiased">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">{props.children}</div>
           </div>
         ) : (
@@ -306,7 +308,7 @@ function WorkspaceChrome({
       <ChatListOpenContext value={setChatListOpen}>
         <div
           className={cx(
-            "flex h-svh flex-col bg-primary pt-safe-top pr-safe-right pl-safe-left font-body antialiased lg:bg-sidebar",
+            "flex h-[var(--app-height,100svh)] flex-col bg-primary pt-safe-top pr-safe-right pl-safe-left font-body antialiased lg:bg-sidebar",
             !tabBar && "pb-safe-bottom",
           )}
         >
