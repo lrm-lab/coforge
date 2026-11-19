@@ -21,6 +21,12 @@ Rules for `packages/daemon/src/daemon-runtime/`, linked from its `AGENTS.md`.
   A provider-confirmed resume can use it within the same daemon. An unconfirmed launch,
   a fresh context, or a daemon restart has no prior notice identities to use. This set
   leaves the consumed cursor and reliable-message retry schedule independent.
+- To trace replay, match `agent.message.attention_decision` by Agent, daemon PID,
+  conversation and message ID. Its decision basis distinguishes the read frontier,
+  an exact read, an accepted message identity and delivery-generation deduplication.
+  `agent.message.consumed_cursors_restored` and `agent.message.notice_context_resumed`
+  report which state was recovered. `agent.message.recovery_notice_accepted` counts
+  listed messages and summary unread separately after the runtime accepts the notice.
 - `runtime.ts` publishes that best-effort Activity before the live delivery
   ACK. An observer failure must not reject accepted input.
 - `agent-activity-publisher.ts` is the one place Activity gets its launch and sequence metadata,

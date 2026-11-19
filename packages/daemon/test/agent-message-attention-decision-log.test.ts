@@ -3,9 +3,6 @@ import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-at
 import { captureDaemonLogs } from "./log-capture";
 import { delivery, session } from "./fixtures/attention-delivery";
 
-/** What the decision line has to say for a phantom notice to be explainable afterwards: which
- * conversation the delivery names, which one the cursor counts in, and what last moved the cursor
- * (task #4). Every field here is diagnostics: no decision reads any of them. */
 const decisions = async (run: () => Promise<void>) =>
   (await captureDaemonLogs(run)).records
     .filter((record) => record.properties.event === "agent.message.attention_decision")
@@ -28,6 +25,8 @@ test("a consumed decision names both conversations and the frontier a notice mov
       model_seen_seq: 6,
       frontier_source: "model_seen",
       outcome: "consumed",
+      decision_basis: "read_frontier",
+      request_id: message.requestId,
     }),
   ]);
 });

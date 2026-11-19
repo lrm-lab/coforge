@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { AgentMessageAttentionIndex } from "#src/daemon-runtime/agent-message-attention-index";
+import { captureDaemonLogs } from "./log-capture";
 import { delivery, session } from "./fixtures/attention-delivery";
 
 const agentId = "agent-1";
@@ -36,13 +37,43 @@ test("an accepted message with a new delivery ID is deduplicated after confirmed
 
   index.clearAgent(agentId);
   index.beginNoticeContext(agentId);
-  confirm(true);
-  expect(await index.recover(agentId, [replay], {})).toEqual(new Set());
+  const { records } = await captureDaemonLogs(async () => {
+    confirm(true);
+    expect(await index.recover(agentId, [replay], {})).toEqual(new Set());
+  });
+  const events = records.map((record) => record.properties);
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      event: "agent.message.notice_context_resumed",
+      agent_id: agentId,
+      retained_message_count: 1,
+    }),
+  );
+  expect(events).toContainEqual(
+    expect.objectContaining({
+      event: "agent.message.attention_decision",
+      delivery_id: replay.deliveryId,
+      message_id: replay.messageId,
+      outcome: "already_notified",
+      decision_basis: "accepted_message",
+    }),
+  );
   expect(notices).toHaveLength(1);
 
   const next = { ...delivery("after-resume"), ...sender, target, sequence: 2 };
-  expect(await index.recover(agentId, [next], {})).toEqual(new Set([target]));
+  const duplicate = { ...next, deliveryId: "second-delivery-for-new-message" };
+  const accepted = await captureDaemonLogs(async () => {
+    expect(await index.recover(agentId, [next, duplicate], {})).toEqual(new Set([target]));
+  });
+  expect(accepted.records.map((record) => record.properties)).toContainEqual(
+    expect.objectContaining({
+      event: "agent.message.recovery_notice_accepted",
+      recovered_message_count: 1,
+      summary_unread_count: 0,
+    }),
+  );
   expect(notices).toHaveLength(2);
+  expect(notices[1]).toContain("#team 1 new message");
 });
 
 test("a replay remains visible before resume is confirmed", async () => {
@@ -71,9 +102,24 @@ test("an unread summary still reports the messages outside the recovery budget",
   index.clearAgent(agentId);
   index.beginNoticeContext(agentId);
   confirm(true);
-  expect(
-    await index.recover(agentId, [replay], { [target]: 2 }, { [target]: original.conversationId }),
-  ).toEqual(new Set([target]));
+  const { records } = await captureDaemonLogs(async () => {
+    expect(
+      await index.recover(
+        agentId,
+        [replay],
+        { [target]: 2 },
+        { [target]: original.conversationId },
+      ),
+    ).toEqual(new Set([target]));
+  });
+  expect(records.map((record) => record.properties)).toContainEqual(
+    expect.objectContaining({
+      event: "agent.message.recovery_notice_accepted",
+      agent_id: agentId,
+      recovered_message_count: 0,
+      summary_unread_count: 1,
+    }),
+  );
   expect(notices).toHaveLength(2);
   expect(notices[1]).toContain("#team 1 new message");
   expect(notices[1]).not.toContain("#team 2 new messages");

@@ -80,9 +80,6 @@ test("a replacement session does not recover a message already consumed by the p
   }
 });
 
-/** The phantom-notice shape end to end: a task read moves the durable cursor, the daemon
- * restarts, and the recovery pass the server still counts the message in must not notify —
- * and must say so in the decision log. */
 test("a recovery after restart does not notify a message the task read already consumed", async () => {
   const root = join(tmpdir(), `coforge-replay-${crypto.randomUUID()}`);
   try {
@@ -103,17 +100,24 @@ test("a recovery after restart does not notify a message the task read already c
     before.recordHistoryRead("agent-1", {
       spelling: "#team",
       target: "#team",
-      shown: [],
+      shown: [8],
       through: 5,
     });
 
-    // A new daemon process: volatile state gone, only the consumed-seqs file remains.
+    before.bindConversation("agent-1", "#review", "conversation-review");
+    before.recordHistoryRead("agent-1", {
+      spelling: "#review",
+      target: "#review",
+      shown: [],
+      through: 0,
+      review: { sequence: 6 },
+    });
     const after = new AgentMessageAttentionIndex(
       "workspace-1",
       ports,
       async () => {},
       () => {},
-      { ...hold, consumedSeqs: store },
+      { ...hold, consumedSeqs: new AgentConsumedSeqStore(root) },
     );
     const recovered = {
       messageId: "message-read-before-restart",
@@ -126,11 +130,24 @@ test("a recovery after restart does not notify a message the task read already c
       latestSenderDescription: "",
       body: "already read",
     };
-    const decisions = (
-      await captureDaemonLogs(() => after.recover("agent-1", [recovered], {}))
-    ).records
-      .filter((record) => record.properties.event === "agent.message.attention_decision")
-      .map((record) => record.properties);
+    const exact = {
+      ...recovered,
+      messageId: "message-exact-read",
+      deliveryId: "delivery-exact-read",
+      sequence: 8,
+    };
+    const { records } = await captureDaemonLogs(() =>
+      after.recover("agent-1", [recovered, exact], {}),
+    );
+    const events = records.map((record) => record.properties);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        event: "agent.message.consumed_cursors_restored",
+        agent_id: "agent-1",
+        target_count: 1,
+      }),
+    );
+    const decisions = events.filter((event) => event.event === "agent.message.attention_decision");
 
     expect(notices).toEqual([]);
     expect(decisions).toEqual([
@@ -139,7 +156,16 @@ test("a recovery after restart does not notify a message the task read already c
         target: "#team",
         sequence: 3,
         outcome: "consumed",
+        decision_basis: "read_frontier",
+        frontier_source: "loaded",
         model_seen_seq: 5,
+      }),
+      expect.objectContaining({
+        delivery_id: exact.deliveryId,
+        sequence: 8,
+        outcome: "consumed",
+        decision_basis: "exact_read",
+        exact_seen: true,
       }),
     ]);
   } finally {

@@ -1,3 +1,4 @@
+import { getLogger } from "@logtape/logtape";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { isCardEvent } from "./agent-message-attention-index-helpers";
 
@@ -18,6 +19,7 @@ type Context = {
 
 type NoticeMessages = Map<string, NoticeMessage>;
 
+const logger = getLogger(["coforge", "daemon", "message-attention"]);
 const ACCEPTED_NOTICE_LIMIT = 2048;
 
 export function noticeMessageKey(message: Pick<NoticeMessage, "conversationId" | "messageId">) {
@@ -56,6 +58,13 @@ export class AcceptedMessageNotices {
       resumed && previous?.provider === provider && previous.sessionId === sessionId
         ? previous.messages
         : new Map();
+    if (messages.size > 0)
+      logger.info("Agent resumed with accepted message identities", {
+        event: "agent.message.notice_context_resumed",
+        agent_id: agentId,
+        daemon_pid: process.pid,
+        retained_message_count: messages.size,
+      });
     if (pending) this.#record(messages, pending.values());
     this.#pending.delete(agentId);
     const context = { provider, sessionId, token: pending ?? {}, messages };

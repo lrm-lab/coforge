@@ -266,10 +266,20 @@ export class AgentConsumedAttention {
     const store = this.ports.store();
     if (store) {
       const saved = store.read(agentId);
-      for (const [target, entry] of Object.entries(saved.targets))
+      let readCursorCount = 0;
+      for (const [target, entry] of Object.entries(saved.targets)) {
         state.targets.set(target, { ...entry });
+        if ((entry.seq ?? 0) > 0 || entry.exactSeqs?.length) readCursorCount++;
+      }
       state.aliases = new Map(Object.entries(saved.aliases));
       state.lastReadOrder = saved.nextReadOrder - 1;
+      if (readCursorCount > 0)
+        logger.info("Agent read cursors restored from state", {
+          event: "agent.message.consumed_cursors_restored",
+          agent_id: agentId,
+          daemon_pid: process.pid,
+          target_count: readCursorCount,
+        });
     }
     return state;
   }

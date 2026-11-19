@@ -25,6 +25,7 @@ import {
   logAttentionDecision,
   type AttentionDecisionMessage,
   type AttentionDecisionOutcome,
+  type AttentionDedupBasis,
 } from "./agent-message-attention-decision-log";
 import { planRecovery, type RecoveryNoticeOptions } from "./agent-message-attention-recovery";
 import { AgentConsumedAttention } from "./agent-consumed-attention";
@@ -78,8 +79,6 @@ export class AgentMessageAttentionIndex {
       agentId: string,
       conversation?: AgentConversationScope,
     ) => void = () => {},
-    /** Daemon-owned delivery queue and synchronous busy marker; private, so nothing that holds the
-     * index can reach the deliveries waiting in it. The notice path borrows it (`AgentDeliveryQueue`). */
     private readonly hold: AgentDeliveryQueue = {
       shouldHold: () => false,
       enqueue: () => {},
@@ -94,7 +93,7 @@ export class AgentMessageAttentionIndex {
       throw new Error("agent message targets another Workspace");
     if (!hasDeliveryScope(message)) throw new Error("invalid agent message scope");
     if (this.#acceptedNotices.has(message.agentId, message)) {
-      this.logDecision(message, "already_notified");
+      this.logDecision(message, "already_notified", "accepted_message");
       await this.acknowledge(message);
       return;
     }
@@ -155,12 +154,17 @@ export class AgentMessageAttentionIndex {
     }
     return this.#generations.get(message.agentId) === generation ? "told" : "gone";
   }
-  logDecision(message: AttentionDecisionMessage, outcome: AttentionDecisionOutcome): void {
+  logDecision(
+    message: AttentionDecisionMessage,
+    outcome: AttentionDecisionOutcome,
+    basis?: AttentionDedupBasis,
+  ): void {
     logAttentionDecision(
       message,
       outcome,
       this.#consumption.peek(message.agentId),
       message.target ?? "",
+      basis,
     );
   }
   #alreadyRead(
@@ -197,7 +201,7 @@ export class AgentMessageAttentionIndex {
       if (!hasDeliveryScope(message)) continue;
       settled.push(message);
       if (this.#acceptedNotices.has(agentId, message)) {
-        this.logDecision(message, "already_notified");
+        this.logDecision(message, "already_notified", "accepted_message");
         continue;
       }
       if (this.#alreadyRead(agentId, message)) {
@@ -247,8 +251,8 @@ export class AgentMessageAttentionIndex {
       seenMessageIds: generation.seenMessageIds,
       alreadyRead: (id, message) => this.#alreadyRead(id, message),
       alreadyNotified: (message) => this.#acceptedNotices.has(agentId, message),
-      decide: (message, outcome) =>
-        this.logDecision({ ...message, workspaceId: this.#workspaceId, agentId }, outcome),
+      decide: (message, outcome, basis) =>
+        this.logDecision({ ...message, workspaceId: this.#workspaceId, agentId }, outcome, basis),
     });
     if (!plan) return new Set();
     const { byTarget, recoveredMessages, acceptedMessages, announced, notice } = plan;
@@ -263,6 +267,14 @@ export class AgentMessageAttentionIndex {
     }
     if (this.#generations.get(agentId) !== generation) return announced;
     if (!recordAccepted(acceptedMessages)) return announced;
+    logger.info("Agent accepted recovery notice", {
+      event: "agent.message.recovery_notice_accepted",
+      workspace_id: this.#workspaceId,
+      agent_id: agentId,
+      daemon_pid: process.pid,
+      recovered_message_count: plan.recoveredMessageCount,
+      summary_unread_count: plan.summaryUnreadCount,
+    });
     options?.accepted(acceptedMessages);
     this.#attention.set(agentId, byTarget);
     for (const message of recoveredMessages) {
