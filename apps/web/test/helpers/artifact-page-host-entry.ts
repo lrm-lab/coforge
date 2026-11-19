@@ -89,6 +89,7 @@ function bridgeFor(
         hooks.__copied = text;
         return true;
       },
+      downloadFile: () => {},
       confirm,
       openLink: (url) => {
         hooks.__opened = url;

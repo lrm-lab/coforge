@@ -39,6 +39,7 @@ function setup(overrides: Partial<PageBridgeHost> = {}) {
     confirms: [] as PageConfirm[],
     uploads: [] as string[],
     deleted: [] as string[],
+    downloads: [] as { name: string; sizeBytes: number }[],
   };
   const changed = new Set<(collection: string) => void>();
   const host: PageBridgeHost = {
@@ -72,6 +73,7 @@ function setup(overrides: Partial<PageBridgeHost> = {}) {
     theme: () => "dark",
     userActive: () => true,
     copyText: async () => true,
+    downloadFile: (file, name) => calls.downloads.push({ name, sizeBytes: file.size }),
     confirm: async (request) => {
       calls.confirms.push(request);
       return true;
@@ -135,7 +137,16 @@ describe("the page bridge", () => {
       hostContext: { theme: "dark" },
       experimental: {
         "coforge/runtime": {
-          namespaces: ["user", "artifact", "clipboard", "links", "comments", "db", "assets"],
+          namespaces: [
+            "user",
+            "artifact",
+            "clipboard",
+            "downloads",
+            "links",
+            "comments",
+            "db",
+            "assets",
+          ],
         },
       },
     });

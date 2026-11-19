@@ -26,6 +26,7 @@ function setup(overrides: Partial<PageBridgeHost> = {}) {
     theme: () => "light",
     userActive: () => true,
     copyText: async () => true,
+    downloadFile: () => {},
     confirm: async () => true,
     openLink: () => {},
     suggestComment: () => true,

@@ -160,6 +160,7 @@ var namespaces = {
   user: function () { return { get: function () { return call("user", "get"); } }; },
   artifact: function () { return { get: function () { return call("artifact", "get"); } }; },
   clipboard: function () { return { copy: function (text) { return call("clipboard", "copy", { text: String(text) }); } }; },
+  downloads: function () { return { save: function (file, name) { return call("downloads", "save", { file: file, name: name }); } }; },
   links: function () { return { open: function (url) { return request("ui/open-link", { url: String(url) }); } }; },
   comments: function () {
     return {

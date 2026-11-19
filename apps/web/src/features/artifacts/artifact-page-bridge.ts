@@ -16,6 +16,7 @@ import { createAnnotationChannel } from "./artifact-page-bridge-annotate";
 import { createAssetCalls } from "./artifact-page-bridge-assets";
 import { createCommentCalls, type PageCommentRequest } from "./artifact-page-bridge-comments";
 import { createDataCalls } from "./artifact-page-bridge-data";
+import { createDownloadCalls } from "./artifact-page-bridge-downloads";
 import {
   PAGE_METHOD_LEVELS,
   levelReaches,
@@ -50,6 +51,7 @@ export type PageBridgeHost = {
   theme(): PageTheme;
   userActive(): boolean;
   copyText(text: string): Promise<boolean>;
+  downloadFile(file: Blob, name: string): void;
   confirm(request: PageConfirm): Promise<boolean>;
   openLink(url: string): void;
   suggestComment(request: PageCommentRequest): boolean;
@@ -148,6 +150,7 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
       if (!host.userActive()) throw new BridgeRefusal(REFUSED, "Copy needs a click in the page");
       return { copied: await host.copyText(args.text) };
     },
+    ...createDownloadCalls(host),
     ...createCommentCalls(host),
   };
 

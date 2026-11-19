@@ -51,6 +51,17 @@ export function useArtifactPageBridge(input: {
             else toast.error(m.conversation_copy_failed());
             return copied;
           },
+          downloadFile: (file, name) => {
+            const url = URL.createObjectURL(file);
+            const anchor = document.createElement("a");
+            anchor.href = url;
+            anchor.download = name;
+            anchor.rel = "noopener";
+            document.body.append(anchor);
+            anchor.click();
+            anchor.remove();
+            window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+          },
           confirm: (request: PageConfirm) =>
             new Promise<boolean>((resolve) => {
               pending.current?.settle(false);

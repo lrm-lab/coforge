@@ -15,6 +15,8 @@ const who = user && (await user.get()); // { displayName, kind: "person" }
 - `artifact.get()` returns `{ id, title, version, entryPath }`.
 - `clipboard.copy(text)` copies text; call it from a click, a call outside one is refused. CoForge
   writes the clipboard and tells the reader.
+- `downloads.save(file, name)` saves a `Blob` (or text `string`, up to 25 MiB) to the reader's
+  downloads folder; call it from a click, a call outside one is refused.
 - `links.open(url)` asks to open an `http` or `https` address in a new tab. CoForge shows the
   address and the reader decides; a page whose requests are declined three times is muted.
 - `comments.open(anchor, { draft })` suggests a comment to the reader and resolves `true` when a
