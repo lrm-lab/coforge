@@ -6,7 +6,7 @@ import {
   type ReminderDueAckRequest,
 } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { nextOccurrence } from "#src/server/reminders/reminders.server";
+import { nextOccurrence, scheduledMessageId } from "#src/server/reminders/reminders.server";
 import {
   REMINDER_DUE_RETENTION_MS,
   type ReminderComputerScope,
@@ -60,7 +60,7 @@ export class PrismaReminderDueRepository implements ReminderDueStore {
       JOIN "agents" a ON a."id" = r."ownerAgentId" AND a."workspaceId" = r."workspaceId" AND a."computerId" = r."computerId"
       JOIN "workspace_memberships" m ON m."workspaceId" = a."workspaceId" AND m."userId" = a."ownerId"
       JOIN "workspace_computers" wc ON wc."workspaceId" = r."workspaceId" AND wc."computerId" = r."computerId"
-      WHERE r."status" = 'scheduled' AND r."fireAt" <= ${now} AND a."deletedAt" IS NULL
+      WHERE r."status" = 'scheduled' AND r."kind" = 'scheduled' AND r."fireAt" <= ${now} AND a."deletedAt" IS NULL
         AND ${REMINDER_DUE_CAPABILITY} = ANY(wc."readyCapabilities")
       ORDER BY r."fireAt", r."id" LIMIT ${BATCH_SIZE}`;
     for (const candidate of candidates) {
@@ -79,7 +79,7 @@ export class PrismaReminderDueRepository implements ReminderDueStore {
         if (!capable.length) return;
         const locked = await tx.$queryRaw<Array<{ id: string }>>`
           SELECT "id" FROM "reminders" WHERE "id" = ${candidate.id}::uuid
-          AND "status" = 'scheduled' AND "fireAt" <= ${now} FOR UPDATE SKIP LOCKED`;
+          AND "status" = 'scheduled' AND "kind" = 'scheduled' AND "fireAt" <= ${now} FOR UPDATE SKIP LOCKED`;
         if (!locked.length) return;
         const reminder = await tx.reminder.findUniqueOrThrow({ where: { id: candidate.id } });
         const next = reminder.repeat
@@ -99,7 +99,7 @@ export class PrismaReminderDueRepository implements ReminderDueStore {
             version: reminder.version,
             title: reminder.title,
             target: reminder.target,
-            messageId: reminder.messageId,
+            messageId: scheduledMessageId(reminder),
             fireAt: reminder.fireAt.toISOString(),
           },
         };

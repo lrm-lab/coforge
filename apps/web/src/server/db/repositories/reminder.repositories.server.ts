@@ -155,6 +155,7 @@ export class PrismaReminderRepository implements ReminderRepository {
             workspaceId: scope.workspaceId,
             ownerAgentId: scope.agentId,
             status: "scheduled",
+            kind: "scheduled",
           },
         });
         if (active >= MAX_ACTIVE_REMINDERS)
@@ -202,6 +203,7 @@ export class PrismaReminderRepository implements ReminderRepository {
       where: {
         workspaceId: scope.workspaceId,
         ownerAgentId: scope.agentId,
+        kind: "scheduled",
         ...(statuses
           ? { status: { in: statuses } }
           : all
@@ -223,6 +225,7 @@ export class PrismaReminderRepository implements ReminderRepository {
         workspaceId: scope.workspaceId,
         ownerAgentId: scope.agentId,
         computerId: scope.computerId,
+        kind: "scheduled",
       },
     });
     return row ? summary(row) : undefined;
@@ -249,6 +252,7 @@ export class PrismaReminderRepository implements ReminderRepository {
             workspaceId: scope.workspaceId,
             ownerAgentId: scope.agentId,
             computerId: scope.computerId,
+            kind: "scheduled",
           },
         });
         if (!existing) throw new ReminderRefusal("NOT_FOUND", "reminder not found");
@@ -266,6 +270,7 @@ export class PrismaReminderRepository implements ReminderRepository {
               workspaceId: scope.workspaceId,
               ownerAgentId: scope.agentId,
               status: "scheduled",
+              kind: "scheduled",
             },
           });
           if (active >= MAX_ACTIVE_REMINDERS)
@@ -393,6 +398,7 @@ export class PrismaReminderRepository implements ReminderRepository {
             workspaceId: scope.workspaceId,
             ownerAgentId: scope.agentId,
             computerId: scope.computerId,
+            kind: "scheduled",
           },
         });
         if (!reminder) return { result: this.obsolete(request) };

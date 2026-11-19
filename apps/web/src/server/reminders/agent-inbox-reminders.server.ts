@@ -9,6 +9,7 @@ import { AppError } from "#src/lib/app-error";
 import {
   DEFAULT_REMINDER_TIMEZONE,
   nextOccurrence,
+  scheduledMessageId,
   type ReminderPublisher,
 } from "./reminders.server";
 
@@ -29,7 +30,7 @@ type ReadableReminderRow = {
   id: string;
   title: string;
   target: string;
-  messageId: string;
+  messageId: string | null;
   fireAt: Date;
   status: string;
   version: number;
@@ -86,6 +87,7 @@ export async function readAgentInboxReminders(
         id: specificId,
         workspaceId: principal.workspaceId,
         ownerAgentId: principal.agentId,
+        kind: "scheduled",
       },
       select: {
         id: true,
@@ -115,7 +117,7 @@ export async function readAgentInboxReminders(
               id: row.id,
               title: row.title,
               target: row.target,
-              messageId: row.messageId,
+              messageId: scheduledMessageId(row),
               fireAt: row.fireAt.toISOString(),
               status: row.status,
               version: row.version,
@@ -140,6 +142,7 @@ export async function readAgentInboxReminders(
       where: {
         workspaceId: principal.workspaceId,
         ownerAgentId: principal.agentId,
+        kind: "scheduled",
         status: { in: ["scheduled", "fired"] },
         NOT: {
           status: "fired",
@@ -200,7 +203,7 @@ export async function readAgentInboxReminders(
     id: row.id,
     title: row.title,
     target: row.target,
-    messageId: row.messageId,
+    messageId: scheduledMessageId(row),
     fireAt: row.fireAt.toISOString(),
     status: row.status,
     version: row.version,
@@ -224,7 +227,7 @@ function buildUpsertSync(
     computerId: string;
     title: string;
     target: string;
-    messageId: string;
+    messageId: string | null;
   },
   newVersion: number,
   nextFireAt: Date,
@@ -243,7 +246,7 @@ function buildUpsertSync(
         version: newVersion,
         title: row.title,
         target: row.target,
-        messageId: row.messageId,
+        messageId: scheduledMessageId(row),
         fireAt: nextFireAt.toISOString(),
       },
     ],
@@ -302,6 +305,7 @@ export async function dismissDueAgentReminders(
               id: options.specificId,
               workspaceId: principal.workspaceId,
               ownerAgentId: principal.agentId,
+              kind: "scheduled",
             },
             select: {
               id: true,
@@ -331,6 +335,7 @@ export async function dismissDueAgentReminders(
           where: {
             workspaceId: principal.workspaceId,
             ownerAgentId: principal.agentId,
+            kind: "scheduled",
             ...bulkStatusWhere,
             NOT: {
               status: "fired",
@@ -392,6 +397,7 @@ export async function dismissDueAgentReminders(
               id: options.specificId,
               workspaceId: principal.workspaceId,
               ownerAgentId: principal.agentId,
+              kind: "scheduled",
             },
             select: selectFields,
           });
@@ -403,6 +409,7 @@ export async function dismissDueAgentReminders(
           where: {
             workspaceId: principal.workspaceId,
             ownerAgentId: principal.agentId,
+            kind: "scheduled",
             ...bulkStatusWhere,
             NOT: {
               status: "fired",

@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import {
   DEFAULT_REMINDER_TIMEZONE,
+  scheduledMessageId,
   type StoredReminder,
 } from "#src/server/reminders/reminders.server";
 
@@ -13,7 +14,7 @@ export const summary = (row: ReminderRow): StoredReminder => ({
   version: row.version,
   title: row.title,
   target: row.target,
-  messageId: row.messageId,
+  messageId: scheduledMessageId(row),
   fireAt: row.fireAt.toISOString(),
   status: row.status as StoredReminder["status"],
   ...(row.repeat ? { repeat: row.repeat } : {}),

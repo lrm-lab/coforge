@@ -18,6 +18,11 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { dateTimeFormat } from "#src/lib/dates";
 
+export function scheduledMessageId(row: { messageId: string | null }): string {
+  if (row.messageId === null) throw new Error("a trigger reminder has no source message");
+  return row.messageId;
+}
+
 export const MAX_ACTIVE_REMINDERS = 50;
 export const MAX_REMINDER_LOG_EVENTS = 100;
 export { DEFAULT_REMINDER_TIMEZONE };

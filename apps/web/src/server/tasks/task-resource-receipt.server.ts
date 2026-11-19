@@ -10,7 +10,7 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import { daemonControlChannel } from "#src/server/centrifugo/server-api.server";
-import { MAX_ACTIVE_REMINDERS } from "#src/server/reminders/reminders.server";
+import { MAX_ACTIVE_REMINDERS, scheduledMessageId } from "#src/server/reminders/reminders.server";
 import { hostMessageId, storedResourceReceipt } from "./task-view.server";
 import type { TaskBoardPorts, Member } from "./task-board-ports.server";
 import { commitTaskChange } from "./task-change.server";
@@ -98,6 +98,7 @@ export async function recordResourceReceipt(
         workspaceId,
         ownerAgentId: teardownOwner.id,
         status: "scheduled",
+        kind: "scheduled",
       },
     });
     if (activeReminders >= MAX_ACTIVE_REMINDERS) throw new AppError("CONFLICT");
@@ -168,7 +169,7 @@ export async function recordResourceReceipt(
               version: result.reminder.version,
               title: result.reminder.title,
               target: result.reminder.target,
-              messageId: result.reminder.messageId,
+              messageId: scheduledMessageId(result.reminder),
               fireAt: result.reminder.fireAt.toISOString(),
             },
           ],
@@ -185,7 +186,7 @@ export async function recordResourceReceipt(
       ownerAgentId: result.owner.id,
       owner: `@${result.owner.name}`,
       fireAt: result.reminder.fireAt.toISOString(),
-      messageId: result.reminder.messageId,
+      messageId: scheduledMessageId(result.reminder),
       targetChannelId: conversationId,
     },
   };

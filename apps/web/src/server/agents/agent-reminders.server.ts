@@ -7,6 +7,7 @@ import { paginated } from "#src/server/db/pagination.server";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
 import { managedAgentWhere } from "./agent-visibility.server";
 import { canReadChannel } from "#src/server/conversations/channel-read-access.server";
+import { scheduledMessageId } from "#src/server/reminders/reminders.server";
 import {
   channelListMembers,
   type ChannelListMember,
@@ -103,6 +104,7 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
             ownerAgentId: agentId,
             ownerAgent: managedAgentWhere(viewer),
             status: "scheduled",
+            kind: "scheduled",
           },
           // The one that fires next first (task #126).
           orderBy: [{ fireAt: "asc" }, { id: "asc" }],
@@ -121,7 +123,7 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
       const messages = await db.message.findMany({
         where: {
           workspaceId: viewer.workspaceId,
-          id: { in: rows.map((row) => row.messageId) },
+          id: { in: rows.map((row) => scheduledMessageId(row)) },
         },
         select: {
           id: true,
@@ -139,7 +141,7 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
       });
       const messagesById = new Map(messages.map((message) => [message.id, message]));
       const reminders: AgentReminderListItem[] = rows.map((row) => {
-        const message = messagesById.get(row.messageId);
+        const message = messagesById.get(scheduledMessageId(row));
         const conversation = message?.conversation;
         // A reminder anchored in a channel hidden from the Workspace links nowhere until restored,
         // and one in a private channel the viewer is not in names it nowhere (task #302).
@@ -159,7 +161,7 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
                 channelName: conversation.channelName,
                 visibility: channelVisibilityOf(conversation),
                 members: [] as ChannelListMember[],
-                messageId: row.messageId,
+                messageId: scheduledMessageId(row),
                 threadRootId: message.threadRootId,
               }
             : message &&
@@ -170,7 +172,7 @@ export function prismaAgentReminderReadStore(db: PrismaClient): AgentReminderRea
                   kind: "direct" as const,
                   conversationId: conversation.id,
                   person: null as ChannelListMember | null,
-                  messageId: row.messageId,
+                  messageId: scheduledMessageId(row),
                   threadRootId: message.threadRootId,
                 }
               : null;

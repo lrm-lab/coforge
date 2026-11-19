@@ -50,6 +50,7 @@ export async function acknowledgeReminder(
           workspaceId: scope.workspaceId,
           ownerAgentId: scope.agentId,
           computerId: scope.computerId,
+          kind: "scheduled",
         },
       });
       if (!reminder) throw new ReminderRefusal("NOT_FOUND", "reminder not found");
