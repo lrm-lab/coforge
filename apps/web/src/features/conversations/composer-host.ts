@@ -14,6 +14,7 @@ export type ComposerHost = {
   autoFocus: boolean;
   overhead?: ReactNode;
   composerRef?: RefObject<HTMLTextAreaElement | null>;
+  showAgentActivity?: boolean;
 };
 
 const UNHOSTED: ComposerHost = { autoFocus: true };

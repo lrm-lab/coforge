@@ -362,13 +362,13 @@ export function PiChatConversation({
           )}
         </div>
       )}
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div className="@container/pi-chat relative flex min-h-0 flex-1 flex-col">
         <div
           ref={position.scroll}
           onScroll={position.onScroll}
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-page [overflow-anchor:none]"
         >
-          <div ref={position.content} className="mx-auto max-w-[48rem] py-3">
+          <div ref={position.content} className="mx-auto max-w-[48rem] pt-3 pb-10">
             {((history.data?.before ?? 0) > 0 || Boolean(history.data?.cursor)) && (
               <div className="py-3">
                 <Button
@@ -413,16 +413,18 @@ export function PiChatConversation({
           </div>
         </div>
         {position.away && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-            <Button
-              color="secondary"
-              size="sm"
-              iconLeading={ArrowDown}
-              onClick={position.followLatest}
-              className="pointer-events-auto shadow-sm"
-            >
-              {m.pi_chat_latest()}
-            </Button>
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-page">
+            <div className="mx-auto flex max-w-[48rem] justify-end @[37.5rem]/pi-chat:justify-center">
+              <Button
+                color="secondary"
+                size="xs"
+                iconTrailing={ArrowDown}
+                onClick={position.followLatest}
+                className="pointer-events-auto relative h-8 rounded-full py-0 text-xs font-medium whitespace-nowrap shadow-xs ring-secondary max-md:w-8 max-md:p-0 max-md:*:data-text:sr-only max-md:after:absolute max-md:after:-inset-1.5 max-md:after:content-['']"
+              >
+                {m.pi_chat_latest()}
+              </Button>
+            </div>
           </div>
         )}
       </div>

@@ -96,8 +96,13 @@ export function ActivityConversationPane({
   const composerHost = useMemo(
     () =>
       composerRef
-        ? { autoFocus: false, overhead: <ActivityFlowHint />, composerRef }
-        : { autoFocus: true },
+        ? {
+            autoFocus: false,
+            overhead: <ActivityFlowHint />,
+            composerRef,
+            showAgentActivity: false,
+          }
+        : { autoFocus: true, showAgentActivity: false },
     [composerRef],
   );
   const done = flow?.done ?? false;

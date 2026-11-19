@@ -333,6 +333,7 @@ export function ConversationPane({
               conversationId={conversation.conversationId}
               threadRootId={root?.id ?? null}
               overhead={composerHost.overhead}
+              showAgentActivity={composerHost.showAgentActivity}
               viewerId={conversation.viewerId}
               unreadCount={conversation.unreadCount}
               onlyNew={inTaskPopup}
