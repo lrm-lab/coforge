@@ -47,6 +47,9 @@ available one version at a time through `get --revision`, without loading every 
 Entries can cite structured Workspace-readable tasks, messages and artifacts. Exact version
 relationships record replacement or disagreement. Search omits a replaced version while its
 replacement is active and effective. Historical reads still work, with current evidence access.
+In the Web team-memory detail and version pages, the decision relationships view shows nearby
+versions, replacements, conflicts and readable evidence. Select a node to highlight its links
+and open the exact recorded memory revision or its evidence.
 
 When Web enables `COFORGE_TEAM_MEMORY_RECALL=true`, an Agent opening, viewing or claiming a single task
 can receive up to five current memory excerpts from the task's Project and the Workspace.
