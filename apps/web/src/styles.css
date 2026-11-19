@@ -145,18 +145,6 @@ body {
     font-weight: 600;
   }
 
-  h1,
-  h2,
-  h3 {
-    text-wrap-style: balance;
-  }
-  p,
-  li,
-  blockquote,
-  figcaption {
-    text-wrap-style: pretty;
-  }
-
   :root {
     text-autospace: normal;
     text-spacing-trim: trim-start;
