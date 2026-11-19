@@ -205,10 +205,12 @@ export class AgentLaunchCoordinator {
         if (launch?.provider === RUNTIME_PROVIDER.CLAUDE_CODE) {
           const turnFinished = this.turnEndCompaction.waitForTurnFinish(agentId);
           launch.turnEvidence?.markExempt();
+          launch.idleCompaction = true;
           try {
             await session.sendMessage("/compact");
             if (session.hasLiveTurn !== false) await turnFinished;
           } finally {
+            launch.idleCompaction = undefined;
             launch.turnEvidence?.reset();
             this.turnEndCompaction.noteTurnFinished(agentId);
           }

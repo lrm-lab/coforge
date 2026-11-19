@@ -23,6 +23,8 @@ export const COMPACTION_LOG_ERROR_CHARS = 400;
 
 export const COMPACTION_BEFORE_STALE_MS = 15 * 60_000;
 
+export const IDLE_COMPACTION_READING_CAP_MS = 6 * 60 * 60_000;
+
 /** The token numbers a finished compaction reports for itself, when its runtime has them. */
 export type CompactionTokens = Readonly<{
   tokensBefore?: number;
@@ -47,6 +49,7 @@ type EndedCompaction = Readonly<{
   outcome: "finished" | "inferred" | "interrupted";
   tokensBefore?: number;
   beforeAgeMs?: number;
+  idle?: boolean;
   /** When the compaction ended. The daily report attributes the line by this, not by when the line
    * was written, since a held line is written at the end of the turn. */
   endedAtMs: number;
@@ -110,10 +113,11 @@ export class PhaseBookkeeping {
    * cannot be read back as its result. */
   readonly #compactionBefore = new Map<
     string,
-    { usedTokens?: number; seenAtMs?: number; ageMs?: number }
+    { usedTokens?: number; seenAtMs?: number; ageMs?: number; idle?: boolean }
   >();
   /** Compactions whose line waits for the turn's reading — see `EndedCompaction`. */
   readonly #endedCompactions = new Map<string, EndedCompaction>();
+  readonly #idleReadingCaps = new Map<string, ReturnType<typeof setTimeout>>();
   /** Failures seen while this compaction stayed open: the second one means its recovery did not
    * help, and Raft counts it as exhausted. */
   readonly #compactionAttempts = new Map<string, number>();
@@ -145,6 +149,7 @@ export class PhaseBookkeeping {
       outcome,
       tokensBefore: reported?.tokensBefore ?? started?.usedTokens,
       beforeAgeMs: reported?.tokensBefore === undefined ? started?.ageMs : undefined,
+      idle: started?.idle,
       endedAtMs: Date.now(),
       seenAtMs: started?.seenAtMs,
       // Whether this runtime has ever produced a reading for the Agent tells a missed reading
@@ -167,6 +172,10 @@ export class PhaseBookkeeping {
       ...ended,
       seenAtMs: reading?.observedAtMs ?? ended.seenAtMs,
     });
+    if (!ended.idle) return;
+    const cap = setTimeout(() => this.#flushEnded(agentId, true), IDLE_COMPACTION_READING_CAP_MS);
+    cap.unref?.();
+    this.#idleReadingCaps.set(agentId, cap);
   }
 
   /** A context reading arrived for an Agent: resolve a compaction that ended before it. */
@@ -177,16 +186,27 @@ export class PhaseBookkeeping {
       mustBeSmaller: false,
     });
     if (!result) return;
-    this.#endedCompactions.delete(agentId);
+    this.#dropEnded(agentId);
     this.#writeCompactionLine(agentId, ended, result, true);
   }
 
   /** The Agent's turn is over: a held compaction line is written now, saying what it lacks. */
   turnEnded(agentId: string): void {
+    if (this.#endedCompactions.get(agentId)?.idle) return;
+    this.#flushEnded(agentId);
+  }
+
+  #dropEnded(agentId: string): void {
+    this.#endedCompactions.delete(agentId);
+    clearTimeout(this.#idleReadingCaps.get(agentId));
+    this.#idleReadingCaps.delete(agentId);
+  }
+
+  #flushEnded(agentId: string, capped = false): void {
     const ended = this.#endedCompactions.get(agentId);
     if (!ended) return;
-    this.#endedCompactions.delete(agentId);
-    this.#writeCompactionLine(agentId, ended, undefined, true);
+    this.#dropEnded(agentId);
+    this.#writeCompactionLine(agentId, ended, undefined, true, capped);
   }
 
   #writeCompactionLine(
@@ -194,6 +214,7 @@ export class PhaseBookkeeping {
     ended: EndedCompaction,
     result: ContextReading | undefined,
     held = false,
+    capped = false,
   ): void {
     const { reported, interruption } = ended;
     const tokensAfter = reported?.tokensAfter ?? result?.usedTokens;
@@ -206,6 +227,7 @@ export class PhaseBookkeeping {
       // than by when it was written, and `delayed_ms` says how long it waited for its reading.
       compaction_ended_at: new Date(ended.endedAtMs).toISOString(),
       ...(held ? { delayed_ms: Math.max(0, Date.now() - ended.endedAtMs) } : {}),
+      ...(ended.idle ? { idle_compaction: true } : {}),
       tokens_before: ended.tokensBefore,
       tokens_before_age_ms: ended.beforeAgeMs,
       ...(ended.beforeAgeMs !== undefined && ended.beforeAgeMs > COMPACTION_BEFORE_STALE_MS
@@ -220,12 +242,20 @@ export class PhaseBookkeeping {
       // because a reading-derived number under the old code could only repeat the starting count.
       ...(tokensAfter === undefined
         ? {
-            tokens_after_unavailable:
-              ended.readingsExist || lastReading !== undefined
+            tokens_after_unavailable: capped
+              ? "no_reading_before_cap"
+              : ended.readingsExist || lastReading !== undefined
                 ? "no_reading_after_compaction"
                 : "runtime_reports_no_readings",
           }
-        : { tokens_source: reported?.tokensAfter !== undefined ? "runtime" : "reading" }),
+        : {
+            tokens_source:
+              reported?.tokensAfter !== undefined
+                ? "runtime"
+                : held && ended.idle
+                  ? "reading_after_more_work"
+                  : "reading",
+          }),
       // An interruption nobody explained stays visibly unexplained rather than reading as a plain
       // ending, and the runtime's own reason and failure text are bounded like every log field.
       ...(interruption
@@ -264,12 +294,13 @@ export class PhaseBookkeeping {
     if (phase === "compaction") {
       // A compaction that ended and never got its reading is written before this one opens, so
       // the older line cannot be lost behind the newer start.
-      this.turnEnded(agentId);
+      this.#flushEnded(agentId);
       const seen = this.ports.contextUsage?.(agentId);
       this.#compactionBefore.set(agentId, {
         usedTokens: seen?.usedTokens,
         seenAtMs: seen?.observedAtMs,
         ageMs: seen === undefined ? undefined : Math.max(0, Date.now() - seen.observedAtMs),
+        idle: launch.idleCompaction === true,
       });
     }
   }
@@ -378,7 +409,7 @@ export class PhaseBookkeeping {
   /** Forgets one Agent's open phases and stops their watchdogs. */
   dispose(agentId: string): void {
     // A held line is written before the Agent is forgotten: the compaction happened either way.
-    this.turnEnded(agentId);
+    this.#flushEnded(agentId);
     for (const tracker of Object.values(this.#phases)) tracker.dispose(agentId);
     // A relaunch is a new attempt at the same session's problem: it may say so again.
     this.#resetNoticeSent.delete(agentId);
@@ -386,7 +417,7 @@ export class PhaseBookkeeping {
 
   /** Forgets every Agent's open phases; used on full daemon shutdown. */
   disposeAll(): void {
-    for (const agentId of [...this.#endedCompactions.keys()]) this.turnEnded(agentId);
+    for (const agentId of this.#endedCompactions.keys()) this.#flushEnded(agentId);
     for (const tracker of Object.values(this.#phases)) tracker.disposeAll();
   }
 }
