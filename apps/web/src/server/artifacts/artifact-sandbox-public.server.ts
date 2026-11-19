@@ -167,6 +167,7 @@ export class ArtifactPublicServing {
             title: page.title,
             bytes,
             limit: ARTIFACT_HTML_LIMIT,
+            frameAncestor: this.frameAncestorOf(ref),
           })
         : pageFileResponse({
             method: request.method,
@@ -174,12 +175,16 @@ export class ArtifactPublicServing {
             bytes,
             use: use!,
             pageOrigin: host.pageOrigin,
-            frameAncestor: "'none'",
+            frameAncestor: this.frameAncestorOf(ref),
             hostOrigin: null,
             filePrefix: `${host.pageOrigin}${ref.base}/page/`,
             fileCache: PUBLIC_FILE_CACHE,
           })) ?? sandboxRefusal(404, "Not found.")
     );
+  }
+
+  private frameAncestorOf(ref: PublicRef): string {
+    return (ref.guarded && this.deps.appOrigin?.()) || "'none'";
   }
 
   private async admitPublic(

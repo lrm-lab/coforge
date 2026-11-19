@@ -56,11 +56,14 @@ export function publicMarkdownResponse(input: {
   title: string;
   bytes: Uint8Array | null;
   limit: number;
+  frameAncestor: string;
 }): Response | null {
   if (!input.bytes || input.bytes.byteLength > input.limit) return null;
   return publicReadingResponse(
     input.method,
     publicMarkdownPage(input.title, new TextDecoder().decode(input.bytes)),
+    "'none'",
+    input.frameAncestor,
   );
 }
 
@@ -68,12 +71,13 @@ export function publicReadingResponse(
   method: string,
   served: Uint8Array<ArrayBuffer>,
   imageSource = "'none'",
+  frameAncestor = "'none'",
 ): Response {
   return new Response(method === "HEAD" ? null : new Blob([served]), {
     status: 200,
     headers: {
       "Content-Type": "text/html; charset=utf-8",
-      "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; img-src ${imageSource}; frame-ancestors 'none'`,
+      "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; img-src ${imageSource}; frame-ancestors ${frameAncestor}`,
       "Content-Length": String(served.byteLength),
       "X-Content-Type-Options": "nosniff",
       "X-Robots-Tag": "noindex, nofollow",
