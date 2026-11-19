@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Image01, XClose } from "@untitledui/icons";
 import { ARTIFACT_COMMENT_IMAGES_MAX, COMMENT_BODY_MAX } from "@lrm/coforge-sdk/agent";
 import { readMessageReferences } from "@lrm/coforge-sdk/internal/message-references";
@@ -28,7 +28,7 @@ import { formatList } from "#src/lib/format-list";
 import { useDebouncedValue } from "#src/lib/use-debounced-value";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { postArtifactComment, previewArtifactCommentAudience } from "./artifact-comments.functions";
+import { previewArtifactCommentAudience } from "./artifact-comments.functions";
 import { ComposerActions } from "./artifact-comment-composer-actions";
 import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
 import { useArtifactCommenting } from "./artifact-commenting";
@@ -36,7 +36,7 @@ import { useHoldComposer } from "./artifact-composer-holds";
 import { draftFailure } from "./use-comment-drafts";
 import { COMMENT_MENTIONS_MAX, type CommentAnchor } from "./artifact-comment-inputs";
 import { uploadCommentImage } from "./artifact-comment-images";
-import { artifactMentionCandidatesQuery, syncOwnComments } from "./artifact-comment-queries";
+import { artifactMentionCandidatesQuery } from "./artifact-comment-queries";
 import { ARTIFACTS_KEY } from "./artifact-queries";
 
 export type CommentReplyTarget = { id: string; name: string };
@@ -174,7 +174,6 @@ export function ArtifactCommentComposer({
   className?: string;
   onPosted: () => void;
 }) {
-  const queryClient = useQueryClient();
   const workspaceSlug = useWorkspaceSlug();
   const drafts = useCommentDrafts();
   const { create: createDraft } = useCommentDraftActions();
@@ -183,9 +182,7 @@ export function ArtifactCommentComposer({
   const { body, wireBody, changeBody, resetBody, completion, audience, tooLong, mentionError } =
     useCommentDraftText(artifactId, target.kind === "anchor" ? (target.suggestion ?? "") : "");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [sending, setSending] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  const attempt = useRef({ signature: "", key: "" });
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -202,9 +199,7 @@ export function ArtifactCommentComposer({
   );
   const empty = body.trim() === "" && ready.length === 0;
   const invalid = empty || uploading || tooLong || mentionError !== null;
-  const cannotSend = invalid || sending || drafts.busy;
-  const cannotSave = invalid || saving || sending || drafts.busy || drafts.atLimit;
-  const hasDrafts = drafts.drafts.length > 0;
+  const cannotSave = invalid || saving || drafts.busy || drafts.atLimit;
   useHoldComposer(!empty || attachments.length > 0);
 
   function addFiles(files: readonly File[]) {
@@ -274,38 +269,6 @@ export function ArtifactCommentComposer({
     }
   }
 
-  async function submit() {
-    if (cannotSend) return;
-    setSending(true);
-    setFailure(null);
-    const comment = {
-      body: wireBody,
-      ...placement(target),
-      ...(ready.length ? { images: ready } : {}),
-    };
-    const version = target.kind === "reply" ? undefined : target.version;
-    const signature = JSON.stringify([comment, version ?? null]);
-    if (attempt.current.signature !== signature)
-      attempt.current = { signature, key: crypto.randomUUID() };
-    try {
-      const { id } = await postArtifactComment({
-        data: {
-          artifactId,
-          ...(version === undefined ? {} : { version }),
-          comment: { ...comment, idempotencyKey: attempt.current.key },
-        },
-      });
-      clear();
-      onPosted();
-      await syncOwnComments(queryClient, artifactId, "posted", [id]);
-    } catch (error) {
-      setFailure(commentWriteFailure(error, m.av_cm_err_send()));
-    } finally {
-      setSending(false);
-      completion.textareaRef.current?.focus();
-    }
-  }
-
   const names = audience.data?.notified ?? [];
   const notifyLine =
     audience.data && !empty && names.length
@@ -320,7 +283,7 @@ export function ArtifactCommentComposer({
       className={cn("shrink-0 space-y-2 border-t border-secondary p-3", className)}
       onSubmit={(event) => {
         event.preventDefault();
-        void submit();
+        void saveDraft();
       }}
     >
       {target.kind === "reply" ? (
@@ -354,9 +317,9 @@ export function ArtifactCommentComposer({
           placeholder={
             target.kind === "reply" ? m.av_cm_reply_placeholder() : m.av_cm_placeholder()
           }
-          onSubmit={() => void (hasDrafts ? saveDraft() : submit())}
-          sendDisabled={cannotSend}
-          isReadOnly={sending}
+          onSubmit={() => void saveDraft()}
+          sendDisabled={cannotSave}
+          isReadOnly={saving}
           mentionGroups="kind"
           alwaysStacked
           attachmentCount={attachments.length}
@@ -373,15 +336,7 @@ export function ArtifactCommentComposer({
             />
           )}
           actions={(className) => (
-            <ComposerActions
-              className={className}
-              hasDrafts={hasDrafts}
-              canSend={!cannotSend}
-              canSave={!cannotSave}
-              sending={sending}
-              saving={saving}
-              onSave={() => void saveDraft()}
-            />
+            <ComposerActions className={className} canSave={!cannotSave} saving={saving} />
           )}
           below={
             attachments.length > 0 && (

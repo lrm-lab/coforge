@@ -362,8 +362,6 @@
       }
     }
   ],
-  "av_dr_save": "Save draft",
-  "av_dr_send": "Send",
   "av_dr_group": "Your drafts",
   "av_dr_marker": "Your draft",
   "av_dr_mark_label": "Draft comment on “{quote}”",

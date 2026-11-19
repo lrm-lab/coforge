@@ -333,8 +333,8 @@ function ArtifactPageFor({
                   current && (
                     <ArtifactCommentButton
                       total={current.commentCount}
-                      active={commentMode.mode}
-                      onToggle={commentMode.toggle}
+                      active={panel === "comments"}
+                      onToggle={commentMode.togglePanel}
                     />
                   )
                 }
@@ -434,7 +434,13 @@ function ArtifactPageFor({
                       path={shownEntry(current)}
                     />
                   )}
-                  {current && <ArtifactReviewPill />}
+                  {current && (
+                    <ArtifactReviewPill
+                      annotating={commentMode.mode}
+                      onToggleAnnotate={commentMode.toggleMode}
+                      onExitAnnotate={commentMode.exitMode}
+                    />
+                  )}
                 </div>
                 {panel === "comments" && current && (
                   <ArtifactCommentPanel

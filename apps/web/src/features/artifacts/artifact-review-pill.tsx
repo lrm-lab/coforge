@@ -1,75 +1,104 @@
-import { useState } from "react";
-import { FlipBackward, FlipForward } from "@untitledui/icons";
+import { useEffect, useState } from "react";
+import { FlipBackward, FlipForward, MessageSquare01 } from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
-import { FLOATING_SURFACE_CLASS } from "#src/features/conversations/review-chrome";
+import {
+  FLOATING_SURFACE_CLASS,
+  TOOLBAR_BUTTON_ON_CLASS,
+} from "#src/features/conversations/review-chrome";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
 
-type Drafts = ReturnType<typeof useCommentDrafts>;
-
-export function ArtifactReviewPill() {
-  const current = useCommentDrafts();
-  const live = current.canUndo || current.canRedo || current.drafts.length > 0 ? current : null;
-  const [last, setLast] = useState<Drafts | null>(live);
-  if (live && last !== live) setLast(live);
-  const drafts = live ?? last;
-  if (!drafts) return null;
-  return <PillBar drafts={drafts} leaving={live === null} onLeft={() => setLast(null)} />;
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return true;
+  return target.closest('[role="dialog"], [aria-modal="true"]') !== null;
 }
 
-function PillBar({
-  drafts,
-  leaving,
-  onLeft,
+export function ArtifactReviewPill({
+  annotating,
+  onToggleAnnotate,
+  onExitAnnotate,
 }: {
-  drafts: Drafts;
-  leaving: boolean;
-  onLeft: () => void;
+  annotating: boolean;
+  onToggleAnnotate: () => void;
+  onExitAnnotate: () => void;
 }) {
+  const drafts = useCommentDrafts();
   const actions = useCommentDraftActions();
   const [discarding, setDiscarding] = useState(false);
   const count = drafts.drafts.length;
   const locked = drafts.busy;
+  const hasHistory = drafts.canUndo || drafts.canRedo;
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isEditableTarget(event.target)) return;
+      if (event.key === "Escape" && annotating) {
+        event.preventDefault();
+        onExitAnnotate();
+        return;
+      }
+      if (event.key === "c" || event.key === "C") {
+        event.preventDefault();
+        onToggleAnnotate();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [annotating, onToggleAnnotate, onExitAnnotate]);
+
   return (
     <>
       <div
         role="group"
         aria-label={m.av_dr_tools()}
         data-comment-tools=""
-        inert={leaving}
-        onAnimationEnd={(event) => {
-          if (leaving && event.target === event.currentTarget) onLeft();
-        }}
         className={cn(
-          "absolute bottom-4 left-1/2 z-20 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center gap-1 p-1",
+          "absolute right-4 bottom-4 z-20 flex max-w-[calc(100%-2rem)] items-center gap-1 p-1",
           FLOATING_SURFACE_CLASS,
-          leaving
-            ? "animate-out fade-out slide-out-to-bottom-1 fill-mode-forwards motion-leave-sm"
-            : "animate-in fade-in slide-in-from-bottom-1 motion-enter-sm",
+          annotating && "ring-2 ring-brand/30",
         )}
       >
-        <ButtonUtility
-          icon={FlipBackward}
+        <Button
           size="xs"
           color="tertiary"
-          tooltip={m.av_dr_undo()}
-          isDisabled={!drafts.canUndo || locked}
-          data-draft-undo=""
-          onClick={actions.undo}
-        />
-        <ButtonUtility
-          icon={FlipForward}
-          size="xs"
-          color="tertiary"
-          tooltip={m.av_dr_redo()}
-          isDisabled={!drafts.canRedo || locked}
-          data-draft-redo=""
-          onClick={actions.redo}
-        />
+          iconLeading={MessageSquare01}
+          aria-pressed={annotating}
+          data-annotate-toggle=""
+          className={cn(annotating && TOOLBAR_BUTTON_ON_CLASS)}
+          onPress={onToggleAnnotate}
+        >
+          {annotating ? m.av_cm_annotating() : m.av_cm_annotate()}
+        </Button>
+        {(hasHistory || count > 0) && (
+          <>
+            <Divider />
+            <ButtonUtility
+              icon={FlipBackward}
+              size="xs"
+              color="tertiary"
+              tooltip={m.av_dr_undo()}
+              isDisabled={!drafts.canUndo || locked}
+              data-draft-undo=""
+              onClick={actions.undo}
+            />
+            <ButtonUtility
+              icon={FlipForward}
+              size="xs"
+              color="tertiary"
+              tooltip={m.av_dr_redo()}
+              isDisabled={!drafts.canRedo || locked}
+              data-draft-redo=""
+              onClick={actions.redo}
+            />
+          </>
+        )}
         {count > 0 && (
           <>
             <Divider />

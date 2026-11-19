@@ -13,7 +13,7 @@ import {
 } from "#src/features/artifacts/artifact-gallery-model";
 import { canCopyEmbed } from "#src/features/artifacts/artifact-link-sharing";
 import { clearReviewSearch } from "#src/features/artifacts/artifact-search";
-import { nextPanelAfterToggle } from "#src/features/artifacts/use-comment-mode";
+import { nextPanelAfterCommentsToggle } from "#src/features/artifacts/use-comment-mode";
 
 const author = { kind: "user" as const, id: "u1", name: "Ada" };
 
@@ -35,12 +35,10 @@ const makeComment = (id: string, extra: Partial<ArtifactCommentView> = {}): Arti
     ...extra,
   }) as ArtifactCommentView;
 
-test("B1: toggling comment mode opens the comments panel on any viewport and closes only comments when turned off", () => {
-  expect(nextPanelAfterToggle(null, true)).toBe("comments");
-  expect(nextPanelAfterToggle("files", true)).toBe("comments");
-  expect(nextPanelAfterToggle("comments", false)).toBeNull();
-  expect(nextPanelAfterToggle("files", false)).toBe("files");
-  expect(nextPanelAfterToggle(null, false)).toBeNull();
+test("B1: toggling the header comments button opens or closes only the comments panel independently of annotate mode", () => {
+  expect(nextPanelAfterCommentsToggle(null)).toBe("comments");
+  expect(nextPanelAfterCommentsToggle("files")).toBe("comments");
+  expect(nextPanelAfterCommentsToggle("comments")).toBeNull();
 });
 
 test("B2: margin marker left position appears once the right gutter is at least 44px", () => {

@@ -76,10 +76,11 @@ These rules apply to `src/features/artifacts/`. They extend
   consume-once handoffs (`useCommentHandoff`): one is dropped when a newer one replaces it or its file or comment mode moves away, and a reveal is consumed only once the surface has located it against a settled index (`useSurfaceIndex.settled`), so a partial render does not spend it. Stable
   values, the thread list, the handoffs and the places are separate contexts
   (`artifact-commenting.ts`). The composer's target is one union (`ComposerTarget`).
-- Comment mode and the panel are separate states; their transitions live in `useCommentMode`.
-  The header's one comment button turns both on and turns both off, and `⋯` opens the comments panel
-  directly. The panel docks beside the page, but while the artifact area is
-  under 48rem (beside chat) it floats over the page's right side so the page keeps its width
+- Comment mode (canvas picking) and the comments panel are independent states in `useCommentMode`:
+  the header comment button and `⋯` toggle only the comments panel without hijacking canvas clicks,
+  while the bottom-right `ArtifactReviewPill` toggles canvas annotate mode (`C` / `Escape`)
+  alongside draft undo/redo/discard/send. The panel docks beside the page, but while the artifact
+  area is under 48rem (beside chat) it floats over the page's right side so the page keeps its width
   (Frank's choice over the docked-only panel); on a phone it fills the screen. A marker or
   thread link opens the panel alone; closing the panel keeps the mode. Everything
   is drawn beside the content (the observed content node is never touched); highlights use the CSS
@@ -131,10 +132,9 @@ These rules apply to `src/features/artifacts/`. They extend
   `use-submit-drafts.ts` owns send; both run under the store's one `exclusive` lock and busy state,
   so a send blocks draft edits and the reverse). The provider `artifact-drafts-provider.tsx` splits a
   state context (`useCommentDrafts`) from a stable actions context (`useCommentDraftActions`). The
-  composer saves a draft; once one exists, saving is its primary action, and its save and send
-  buttons sit in the composer box beside the image button. The review pill
-  (`artifact-review-pill.tsx`) is the one floating tool bar, shown while there is a draft or a step
-  to undo or redo: undo and redo (a 60-step
+  composer always saves a draft by default via a single primary button (`data-save-draft`), and
+  all pending drafts are submitted together from the floating review pill (`ArtifactReviewPill`),
+  which also hosts the canvas annotate toggle, undo and redo (a 60-step
   reducer, `artifact-draft-history.ts`, replaying server operations; drafts with images are not
   recorded; a step the server refuses for good is dropped with its toast, a transient failure keeps
   it; a restored draft keeps its creation time), discard all, send N. Mod+Z, Shift+Mod+Z and Mod+Y
