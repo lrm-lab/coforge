@@ -8,6 +8,7 @@ const EXTENSION_MIME_TYPES: Readonly<Record<string, string>> = {
   ".png": "image/png",
   ".gif": "image/gif",
   ".webp": "image/webp",
+  ".svg": "image/svg+xml",
   ".pdf": "application/pdf",
   ".txt": "text/plain",
   ".md": "text/markdown",

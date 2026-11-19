@@ -34,6 +34,9 @@ test("the leading bytes beat the extension, and the extension still decides when
     "text/markdown",
   );
   expect(attachmentMimeType("blob", undefined, Uint8Array.from(PNG))).toBe("image/png");
+  expect(attachmentMimeType("logo.svg", undefined, Uint8Array.from(ascii("<svg")))).toBe(
+    "image/svg+xml",
+  );
   expect(attachmentMimeType("photo.png", "image/x-custom", Uint8Array.from(JPEG))).toBe(
     "image/x-custom",
   );

@@ -123,6 +123,45 @@ test("storeAgentAttachment writes uploaderAgentId, never uploaderId, and skips c
   });
 });
 
+test("an Agent upload of an SVG sent as application/octet-stream is stored as image/svg+xml", async () => {
+  const putTypes: (string | undefined)[] = [];
+  const created: Record<string, unknown>[] = [];
+  const fakeDb = {
+    attachment: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        created.push(data);
+        return { id: data.id, contentType: data.contentType };
+      },
+    },
+  };
+  const result = await storeAgentAttachment(
+    fakeDb as never,
+    {
+      agentId: "agent-1",
+      conversationId: "conversation-1",
+      workspaceId: "workspace-1",
+      file: new File(
+        ['<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60"/>'],
+        "probe.svg",
+        {
+          type: "application/octet-stream",
+        },
+      ),
+      contentType: "application/octet-stream",
+    },
+    async () =>
+      ({
+        put: async (_key: string, _body: unknown, contentType?: string) => {
+          putTypes.push(contentType);
+        },
+        remove: async () => {},
+      }) as never,
+  );
+  expect(result.contentType).toBe("image/svg+xml");
+  expect(created[0]?.contentType).toBe("image/svg+xml");
+  expect(putTypes).toEqual(["image/svg+xml"]);
+});
+
 test("storeAgentAttachment rejects an empty file and an oversized file, without touching persistence", async () => {
   let touched = false;
   const fakeDb = {

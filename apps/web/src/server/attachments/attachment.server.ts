@@ -148,8 +148,9 @@ export async function storeAgentAttachment(
   const id = crypto.randomUUID();
   const objectKey = `workspaces/${input.workspaceId}/attachments/${id}/original`;
   const files = await storage();
-  await files.put(objectKey, input.file, input.contentType);
-  const dimensions = await readFileImageDimensions(input.file, input.contentType);
+  const contentType = storedAttachmentContentType(input.file.name, input.contentType);
+  await files.put(objectKey, input.file, contentType);
+  const dimensions = await readFileImageDimensions(input.file, contentType);
   try {
     return await db.attachment.create({
       data: {
@@ -160,7 +161,7 @@ export async function storeAgentAttachment(
         uploaderAgentId: input.agentId,
         objectKey,
         fileName: input.file.name || "attachment",
-        contentType: input.contentType,
+        contentType,
         sizeBytes: input.file.size,
         ...dimensions,
       },
