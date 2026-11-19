@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { COMMENT_PAGE_SIZE } from "#src/features/artifacts/artifact-comment-inputs";
 import { AppError } from "#src/lib/app-error";
+import type { ArtifactActor } from "./artifact-access.server";
 import { requireReadableArtifact } from "./artifact-comment-access.server";
 import {
   COMMENT_ORDER,
@@ -28,9 +29,15 @@ export async function listComments(
   db: PrismaClient,
   principal: Principal,
   input: { artifact: string; path?: string; all?: boolean; review?: string; after?: string },
+  readActor?: ArtifactActor,
 ) {
   const { workspaceId, agentId } = principal;
-  const artifact = await requireReadableArtifact(db, workspaceId, { agentId }, input.artifact);
+  const artifact = await requireReadableArtifact(
+    db,
+    workspaceId,
+    readActor ?? { agentId },
+    input.artifact,
+  );
   const cursor = input.after === undefined ? null : (parseCursor(input.after) ?? null);
   if (input.after !== undefined && !cursor)
     throw new AppError("INVALID_INPUT", {

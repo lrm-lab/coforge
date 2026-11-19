@@ -6,7 +6,7 @@ import { artifactInputs } from "#src/features/artifacts/artifact-inputs";
 import { AppError } from "#src/lib/app-error";
 import { errorType } from "#src/server/errors/error-type.server";
 import type { AppRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
-import { artifactsDisabled } from "./artifact-access.server";
+import { artifactsDisabled, type ArtifactActor } from "./artifact-access.server";
 import { admitArtifactWrite } from "./agent-artifact-rate-limit.server";
 import { resolveArtifactTarget } from "./agent-artifact-target.server";
 import {
@@ -14,7 +14,7 @@ import {
   type ArtifactAttachmentPort,
 } from "./agent-artifact-save.server";
 import { readCommentImage } from "./artifact-comment-images.server";
-import { agentPrincipal } from "./artifact-comment-principal.server";
+import { agentPrincipal, personPrincipal } from "./artifact-comment-principal.server";
 import { resolveArtifactReference } from "./artifact-reference.server";
 import { listComments, readUnseenComments } from "./artifact-comment-reads.server";
 import { followArtifact, unfollowArtifact } from "./artifact-follows.server";
@@ -62,6 +62,7 @@ export type AgentArtifactServices = {
   writeLimit?: AppRateLimit | undefined;
   appOrigin?: (() => string | null) | undefined;
   presence?: ArtifactPresencePort | undefined;
+  readActor?: ArtifactActor | undefined;
 };
 
 const { id, version, baseVersion, title, description, note, label } = artifactInputs;
@@ -136,7 +137,8 @@ async function resolvedReference(
       errorId: "artifact-request",
       hint: "artifact is too long",
     });
-  const scope = { workspaceId: principal.workspaceId, actor: { agentId: principal.agentId } };
+  const readActor: ArtifactActor = services.readActor ?? { agentId: principal.agentId };
+  const scope = { workspaceId: principal.workspaceId, actor: readActor };
   const { artifactId, version } = await resolveArtifactReference(
     request.artifact,
     async (name) => (await services.documents.listPage(scope, { title: name, limit: 6 })).artifacts,
@@ -173,6 +175,8 @@ export async function runAgentArtifactOperation(
       ...(field ? { hint: `${field} is not accepted` } : {}),
     });
   }
+  const readActor: ArtifactActor = services.readActor ?? { agentId };
+  const readScope = { workspaceId, actor: readActor };
   const scope = { workspaceId, actor: { agentId } };
   const writes = {
     db: services.db,
@@ -186,10 +190,10 @@ export async function runAgentArtifactOperation(
       const conversationId =
         target === undefined
           ? undefined
-          : await resolveArtifactTarget(services.db, principal, target);
+          : await resolveArtifactTarget(services.db, principal, target, readActor);
       if (after === undefined && Object.keys(page).length === 0)
-        return services.documents.list(scope, { conversationId });
-      return services.documents.listPage(scope, {
+        return services.documents.list(readScope, { conversationId });
+      return services.documents.listPage(readScope, {
         conversationId,
         ...page,
         ...(after !== undefined && { cursor: after }),
@@ -198,7 +202,7 @@ export async function runAgentArtifactOperation(
     }
     case "read": {
       const input = parsed.data as z.infer<typeof RULES.read>;
-      const read = await services.documents.load(scope, {
+      const read = await services.documents.load(readScope, {
         artifactId: input.artifact,
         version: input.version,
       });
@@ -325,7 +329,12 @@ export async function runAgentArtifactOperation(
       return { artifact, deleted: true as const };
     }
     case "comments":
-      return listComments(services.db, principal, parsed.data as z.infer<typeof RULES.comments>);
+      return listComments(
+        services.db,
+        principal,
+        parsed.data as z.infer<typeof RULES.comments>,
+        readActor,
+      );
     case "comment":
       return commentOnArtifact(writes, principal, parsed.data as z.infer<typeof RULES.comment>);
     case "review":
@@ -358,7 +367,9 @@ export async function runAgentArtifactOperation(
       return readCommentImage(
         services.db,
         services.blobs,
-        agentPrincipal(principal),
+        "userId" in readActor && readActor.userId
+          ? personPrincipal({ workspaceId, userId: readActor.userId })
+          : agentPrincipal(principal),
         parsed.data as z.infer<typeof RULES.image>,
       );
     case "follow":

@@ -5,6 +5,7 @@ import {
   agentAuthMiddleware,
   agentErrorResponse,
 } from "#src/server/agents/agent-http-middleware.server";
+import { agentChannelReader } from "#src/server/agents/workspace-assistant-authority.server";
 import {
   ArtifactRateLimited,
   runAgentArtifactOperation,
@@ -43,7 +44,7 @@ export const Route = createFileRoute("/api/agent/v1/artifacts")({
   server: {
     middleware: [agentAuthMiddleware],
     handlers: {
-      POST: ({ request, context: { principal, db } }) => {
+      POST: async ({ request, context: { principal, db } }) => {
         const { documents, blobs } = productionArtifacts(db);
         const requestOrigin = () => {
           const configured = artifactApplicationOrigin();
@@ -57,6 +58,7 @@ export const Route = createFileRoute("/api/agent/v1/artifacts")({
         const presence = centrifugoServerApiConfigured()
           ? (channel: string) => createCentrifugoServerApi().presence(channel)
           : undefined;
+        const readActor = await agentChannelReader(db, principal.workspaceId, principal.agentId);
         return handleAgentArtifactPost(request, principal, {
           db,
           documents,
@@ -68,6 +70,7 @@ export const Route = createFileRoute("/api/agent/v1/artifacts")({
           writeLimit: getAppRateLimits().artifactWrite,
           appOrigin: requestOrigin,
           presence,
+          readActor,
         });
       },
     },

@@ -6,6 +6,8 @@ import {
   visibleChannelIdByName,
 } from "#src/server/conversations/channel-read-access.server";
 
+import type { ArtifactActor } from "./artifact-access.server";
+
 const CHANNEL_TARGET = /^#([a-z0-9][a-z0-9_-]{0,63})(?::(\S+))?$/;
 const DM_TARGET = /^(?:dm:)?@([a-z0-9][a-z0-9_-]{0,63})(?:~(human|agent))?(?::(\S+))?$/;
 const TASK_NUMBER = /^#[1-9]\d*$/;
@@ -14,6 +16,7 @@ export async function resolveArtifactTarget(
   db: PrismaClient,
   principal: { workspaceId: string; agentId: string },
   target: string,
+  actor?: ArtifactActor,
 ): Promise<string> {
   const [, channel, channelSuffix] = CHANNEL_TARGET.exec(target) ?? [];
   const [, peer, peerKind, peerSuffix] = DM_TARGET.exec(target) ?? [];
@@ -34,6 +37,7 @@ export async function resolveArtifactTarget(
       hint: "name #channel or @name (@name~agent for an Agent), or a thread of one",
     });
   const { workspaceId, agentId } = principal;
+  const self: ArtifactActor = actor ?? { agentId };
   if (channel) {
     const id = await visibleChannelIdByName(db, workspaceId, channel);
     if (id === undefined) throw new AppError("NOT_FOUND");
@@ -53,14 +57,19 @@ export async function resolveArtifactTarget(
           select: { id: true },
         }),
   ]);
-  const otherAgent = agent && agent.id !== agentId ? agent : null;
-  if (user && otherAgent)
+  const otherUser = user && (!("userId" in self) || user.id !== self.userId) ? user : null;
+  const otherAgent = agent && (!("agentId" in self) || agent.id !== self.agentId) ? agent : null;
+  if (otherUser && otherAgent)
     throw new AppError("AMBIGUOUS_TARGET", {
       hint: `@${peer} is a person and an Agent: name @${peer}~human or @${peer}~agent`,
     });
-  const peerMember = user ? { userId: user.id } : otherAgent ? { agentId: otherAgent.id } : null;
+  const peerMember = otherUser
+    ? { userId: otherUser.id }
+    : otherAgent
+      ? { agentId: otherAgent.id }
+      : null;
   if (peerMember) {
-    const id = await directConversationIdBetween(db, workspaceId, { agentId }, peerMember);
+    const id = await directConversationIdBetween(db, workspaceId, self, peerMember);
     if (id !== undefined) return id;
   }
   throw new AppError("NOT_FOUND");

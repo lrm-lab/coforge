@@ -6,7 +6,7 @@ import {
 import { AppError } from "#src/lib/app-error";
 import { errorResponse } from "#src/server/agents/agent-http-error.server";
 import { agentErrorResponse } from "#src/server/agents/agent-http-middleware.server";
-import { artifactsDisabled } from "./artifact-access.server";
+import { artifactsDisabled, type ArtifactActor } from "./artifact-access.server";
 import { resolveArtifactReference } from "./artifact-reference.server";
 import { ArtifactStorageFull, type StoredArtifactBlobs } from "./artifact-blobs.server";
 import { artifactContentType } from "./artifact-content-types.server";
@@ -16,6 +16,7 @@ export type AgentArtifactFileServices = {
   artifacts: Pick<Artifacts, "reads">;
   blobs: Pick<StoredArtifactBlobs, "upload" | "open">;
   enabled: (workspaceId: string) => Promise<boolean>;
+  readActor?: ArtifactActor | undefined;
 };
 
 const REFERENCE_MAX_CHARS = 2000;
@@ -77,7 +78,7 @@ export async function handleAgentArtifactDownload(
       });
     if (!artifactPathValid(params.path) || params.artifact.length > REFERENCE_MAX_CHARS)
       throw new AppError("NOT_FOUND");
-    const reader = { agentId };
+    const reader = services.readActor ?? { agentId };
     const reference = await resolveArtifactReference(
       params.artifact,
       async (title) =>
