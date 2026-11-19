@@ -18,36 +18,35 @@ import {
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
 import { useActivityInboxRealtime } from "./use-activity-inbox-realtime";
 
-/**
- * Keeps the Activity list read: what reaches the viewer in realtime reads the list (or only its
- * first page, for a message) and the waiting cards again. Returns `refresh`, which reads the list
- * and the Chat sidebar again after a change of the viewer's own, and `refreshWaiting`, which reads
- * the waiting cards again.
- */
 export function useActivityInboxRefresh({
   userId,
   workspaceId,
   filter,
+  onRealtimeActivity,
 }: {
   userId: string;
   workspaceId: string;
   filter: ActivityInboxFilter;
+  onRealtimeActivity?: (refresh: () => void) => void;
 }) {
   const queryClient = useQueryClient();
   const refreshList = useCallback(
     () => queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_QUERY_PREFIX }),
     [queryClient],
   );
-  // A read here also changes the Chat sidebar's badges.
+  const refreshListsOnly = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_LISTS_KEY }),
+    [queryClient],
+  );
   const refreshSidebar = useRefreshSidebarLists();
   const refresh = useCallback(
     () => Promise.all([refreshList(), refreshSidebar()]).then(() => undefined),
     [refreshList, refreshSidebar],
   );
-  // A message reads only the first page again: the rows below it keep their place and are read
-  // again when the viewer scrolls to them, so a busy channel cannot make every loaded page a
-  // request. Anything else that reaches the inbox still refreshes it whole. A read of the list
-  // under way meanwhile cannot put the older first page back (`keepLaterFirstPage`).
+  const refreshAfterDone = useCallback(
+    () => Promise.all([refreshListsOnly(), refreshSidebar()]).then(() => undefined),
+    [refreshListsOnly, refreshSidebar],
+  );
   const loadFirstPage = useServerFn(loadActivityInbox);
   const refreshFirstPage = useCallback(() => {
     const queryKey = activityInboxQuery(workspaceId, filter).queryKey;
@@ -62,13 +61,7 @@ export function useActivityInboxRefresh({
       )
       .catch(() => undefined);
   }, [filter, loadFirstPage, queryClient, workspaceId]);
-  // What was published after the list's first page was read but before the subscription started
-  // reaches the list only through a read.
-  // Realtime refreshes the lists only: the nav dot hears the same events and reads itself.
-  const refreshLists = useCallback(
-    () => void queryClient.invalidateQueries({ queryKey: ACTIVITY_INBOX_LISTS_KEY }),
-    [queryClient],
-  );
+  const refreshLists = useCallback(() => void refreshListsOnly(), [refreshListsOnly]);
   const onSubscribed = useCallback(
     (recovery: SubscribedRecovery) =>
       void rereadQueryMissedBySubscribe<{ pages: ActivityInboxPage[] }>(
@@ -81,22 +74,24 @@ export function useActivityInboxRefresh({
       ),
     [filter, queryClient, refreshLists, userId, workspaceId],
   );
-  // A choice card posted, answered or withdrawn is announced to the person it asks as an Activity
-  // change, once per burst.
   const refreshWaiting = useCallback(
     () => void queryClient.invalidateQueries({ queryKey: WAITING_CHOICE_CARDS_KEY }),
     [queryClient],
   );
+  const refreshRealtimeActivity = useCallback(() => {
+    refreshLists();
+    refreshWaiting();
+  }, [refreshLists, refreshWaiting]);
   useActivityInboxRealtime({
     userId,
     workspaceId,
     onMessage: refreshFirstPage,
     onActivity: () => {
-      refreshLists();
-      refreshWaiting();
+      if (onRealtimeActivity) onRealtimeActivity(refreshRealtimeActivity);
+      else refreshRealtimeActivity();
     },
     onSubscribed,
     refreshOnPreferences: true,
   });
-  return { refresh, refreshWaiting };
+  return { refresh, refreshAfterDone, refreshWaiting };
 }

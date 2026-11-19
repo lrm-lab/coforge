@@ -39,14 +39,16 @@ export function useActivityItemActions({
   workspaceId,
   onChanged,
   onFailure,
-  onDoneStarted,
-  onDoneSettled,
+  enqueueDone,
 }: {
   workspaceId: string;
   onChanged: () => Promise<void>;
   onFailure: (failure: { retry: () => void } | null) => void;
-  onDoneStarted: (item: ActivityCompletionItem) => void;
-  onDoneSettled: (item: ActivityCompletionItem) => void;
+  enqueueDone: (
+    item: ActivityCompletionItem,
+    write: () => Promise<unknown>,
+    onFailed: () => void,
+  ) => void;
 }) {
   const queryClient = useQueryClient();
   const markChannelRead = useServerFn(markPublicChannelRead);
@@ -63,22 +65,12 @@ export function useActivityItemActions({
   const setMentionRead = useServerFn(setActivityMentionRead);
 
   return useMemo(() => {
-    function run(
-      action: () => Promise<unknown>,
-      lifecycle?: { start: () => void; settle: () => void },
-    ) {
+    function run(action: () => Promise<unknown>) {
       onFailure(null);
-      lifecycle?.start();
       void Promise.resolve()
         .then(action)
-        .catch(() => onFailure({ retry: () => run(action, lifecycle) }))
-        .finally(async () => {
-          try {
-            await onChanged();
-          } finally {
-            lifecycle?.settle();
-          }
-        });
+        .catch(() => onFailure({ retry: () => run(action) }))
+        .finally(() => void onChanged());
     }
 
     function read({
@@ -107,6 +99,20 @@ export function useActivityItemActions({
       return place.kind === "channel"
         ? markChannelRead({ data: { channelId: place.conversationId, throughSequence } })
         : markDirectRead({ data: { conversationId: place.conversationId, throughSequence } });
+    }
+
+    function done(item: ActivityInboxItem) {
+      onFailure(null);
+      enqueueDone(
+        item,
+        async () => {
+          await cancelActivityInboxListReads(queryClient, workspaceId);
+          await markDone({
+            data: doneTarget(item),
+          });
+        },
+        () => onFailure({ retry: () => done(item) }),
+      );
     }
 
     return {
@@ -151,24 +157,14 @@ export function useActivityItemActions({
           }),
         );
       },
-      done: (item: ActivityInboxItem) =>
-        run(
-          async () => {
-            await cancelActivityInboxListReads(queryClient, workspaceId);
-            await markDone({
-              data: doneTarget(item),
-            });
-          },
-          { start: () => onDoneStarted(item), settle: () => onDoneSettled(item) },
-        ),
+      done,
     };
   }, [
     queryClient,
     workspaceId,
     onChanged,
     onFailure,
-    onDoneStarted,
-    onDoneSettled,
+    enqueueDone,
     markChannelRead,
     markChannelThreadRead,
     markDirectRead,

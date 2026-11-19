@@ -52,6 +52,11 @@ export function useActivityListKeyboard(
     if (key) setSelected(key);
   }, []);
 
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const flowRef = useRef(flow);
+  flowRef.current = flow;
+
   const act = useCallback(
     (
       event: Pick<KeyboardEvent, "key" | "shiftKey" | "repeat">,
@@ -64,10 +69,10 @@ export function useActivityListKeyboard(
         const key = next?.getAttribute(ACTIVITY_ROW_ATTRIBUTE);
         if (!next || !key) return;
         next.querySelector<HTMLElement>("a")?.focus();
-        flow?.onMove(key);
+        flowRef.current?.onMove(key);
       };
       const key = row.getAttribute(ACTIVITY_ROW_ATTRIBUTE);
-      const item = items.find((candidate) => candidate.key === key);
+      const item = itemsRef.current.find((candidate) => candidate.key === key);
       switch (event.key) {
         case "ArrowDown":
         case "j":
@@ -93,7 +98,7 @@ export function useActivityListKeyboard(
           return false;
       }
     },
-    [actions, items, flow],
+    [actions],
   );
 
   const onKeyDown = useCallback(
@@ -109,20 +114,18 @@ export function useActivityListKeyboard(
     [act, startMessage],
   );
 
-  const onKeyDownCapture = useCallback(
-    (event: KeyboardEvent<HTMLElement>) => {
-      if (!flow || event.key !== "Enter" || event.defaultPrevented) return;
-      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
-      const target = event.target as HTMLElement;
-      const row = rowOf(target);
-      const key = row?.getAttribute(ACTIVITY_ROW_ATTRIBUTE);
-      if (!key || target !== row?.querySelector("a")) return;
-      if (!flow.onEnter(key)) return;
-      event.preventDefault();
-      event.stopPropagation();
-    },
-    [flow],
-  );
+  const onKeyDownCapture = useCallback((event: KeyboardEvent<HTMLElement>) => {
+    const activeFlow = flowRef.current;
+    if (!activeFlow || event.key !== "Enter" || event.defaultPrevented) return;
+    if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    const target = event.target as HTMLElement;
+    const row = rowOf(target);
+    const key = row?.getAttribute(ACTIVITY_ROW_ATTRIBUTE);
+    if (!key || target !== row?.querySelector("a")) return;
+    if (!activeFlow.onEnter(key)) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }, []);
 
   const onPaneKeyDown = useCallback(
     (event: KeyboardEvent<HTMLElement>) => {

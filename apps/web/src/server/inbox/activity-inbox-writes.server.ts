@@ -30,8 +30,8 @@ export async function markActivityDone(
   userId: string,
   item: ActivityItemDone,
 ) {
-  await requireWorkspaceMember(db, workspaceId, userId);
   if (item.kind === "artifact") {
+    await requireWorkspaceMember(db, workspaceId, userId);
     await db.$queryRaw(
       doneArtifactsSql(workspaceId, userId, {
         through: new Date(item.throughAt),
@@ -42,6 +42,7 @@ export async function markActivityDone(
     return;
   }
   if (item.kind === "mention_action") {
+    await requireWorkspaceMember(db, workspaceId, userId);
     await db.pendingMentionAction.updateMany({
       where: { id: item.resolutionId, workspaceId, targetUserId: userId, dismissedAt: null },
       data: { dismissedAt: new Date() },
@@ -49,22 +50,25 @@ export async function markActivityDone(
     await announceActivityAttention(db, realtime, workspaceId, userId);
     return;
   }
-  const member = await db.conversationMember.findFirst({
-    where: { conversationId: item.conversationId, workspaceId, userId, ...ACTIVE_MEMBER_WHERE },
-    select: {
-      id: true,
-      readThroughSequence: true,
-      unreadFromSequence: true,
-      conversation: { select: { channelName: true, kind: true } },
-    },
-  });
-  if (!member) throw new AppError("ACCESS_DENIED");
   const rootMessageId = item.kind === "thread" ? item.rootMessageId : null;
-  const latest = await db.message.findFirst({
-    where: { conversationId: item.conversationId, threadRootId: rootMessageId },
-    orderBy: { sequence: "desc" },
-    select: { sequence: true },
-  });
+  const [, member, latest] = await Promise.all([
+    requireWorkspaceMember(db, workspaceId, userId),
+    db.conversationMember.findFirst({
+      where: { conversationId: item.conversationId, workspaceId, userId, ...ACTIVE_MEMBER_WHERE },
+      select: {
+        id: true,
+        readThroughSequence: true,
+        unreadFromSequence: true,
+        conversation: { select: { channelName: true, kind: true } },
+      },
+    }),
+    db.message.findFirst({
+      where: { conversationId: item.conversationId, threadRootId: rootMessageId },
+      orderBy: { sequence: "desc" },
+      select: { sequence: true },
+    }),
+  ]);
+  if (!member) throw new AppError("ACCESS_DENIED");
   const boundary = Math.min(item.throughSequence, latest?.sequence ?? 0);
   if (boundary < 1) return;
   await db.$executeRaw(

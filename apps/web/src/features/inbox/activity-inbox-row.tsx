@@ -13,14 +13,11 @@ import {
 import { memo, useRef, type Ref } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import { BellOff01, Check, Hash01, Mail01 } from "@untitledui/icons";
-import { motion } from "motion/react";
 import { Link as AriaLink } from "react-aria-components";
 
 import { Badge } from "#src/components/base/badges/badges";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { rememberSharedRect } from "#src/lib/shared-element-rect";
-import { DURATION_S, EASE_IN, EASE_IN_OUT } from "#src/utils/motion-tokens";
 import { collageLayout } from "#src/features/conversations/collage-layout";
 import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { MessagePreview } from "#src/features/conversations/message-preview";
@@ -77,7 +74,6 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
 }) {
   const router = useRouter();
   const workspaceSlug = useWorkspaceSlug();
-  const reduced = usePrefersReducedMotion();
   const iconRef = useRef<HTMLSpanElement>(null);
   const titleRef = useRef<HTMLSpanElement>(null);
   const target = activityOpenTarget(item);
@@ -130,16 +126,8 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
   }
 
   return (
-    <motion.li
+    <li
       ref={ref}
-      layout={reduced ? false : "position"}
-      initial={false}
-      exit={
-        reduced
-          ? { opacity: 0, transition: { duration: DURATION_S.reduced } }
-          : { opacity: 0, x: -16, transition: { duration: DURATION_S.smOut, ease: EASE_IN } }
-      }
-      transition={{ layout: { duration: DURATION_S.md, ease: EASE_IN_OUT } }}
       data-activity-row={item.key}
       className={cn(ACTIVITY_ROW_ITEM_CLASS, "select-none [-webkit-touch-callout:none]")}
     >
@@ -244,7 +232,7 @@ export const ActivityInboxRow = memo(function ActivityInboxRow({
         </Dropdown.Popover>
       </Dropdown.Root>
       <ActivityDoneCheck tabStop={tabStop} current={current} onDone={() => actions.done(item)} />
-    </motion.li>
+    </li>
   );
 });
 

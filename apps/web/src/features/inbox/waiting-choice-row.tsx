@@ -1,7 +1,6 @@
-import type { Ref } from "react";
+import { memo, type Ref } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Link } from "@tanstack/react-router";
-import { motion } from "motion/react";
 import { ActorAvatar } from "#src/features/avatars/actor-avatar";
 
 import { Button } from "#src/components/base/buttons/button";
@@ -12,10 +11,8 @@ import { ChannelPlace } from "#src/features/conversations/channel-name";
 import { DeclineQuestion } from "#src/features/conversations/question-card-decline";
 import type { HostedConversationTarget } from "#src/features/conversations/conversation-page-search";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import type { WaitingChoiceCard } from "#src/server/conversations/waiting-choice-cards.server";
 import { followInternalLinkClick } from "#src/features/conversations/internal-app-href";
-import { DURATION_S, EASE_IN, EASE_IN_OUT } from "#src/utils/motion-tokens";
 import { cn } from "#src/lib/utils";
 import { isAppErrorCode } from "#src/lib/app-error";
 import { m } from "#src/paraglide/messages";
@@ -23,7 +20,7 @@ import { ACTIVITY_ROW_ITEM_CLASS, ACTIVITY_ROW_LINK_CLASS } from "./activity-inb
 import { activityChatLink, waitingChoiceTarget } from "./activity-open-target";
 import { waitingRowKey } from "./use-activity-list-keyboard";
 
-export function WaitingChoiceRow({
+export const WaitingChoiceRow = memo(function WaitingChoiceRow({
   card,
   tabStop,
   onOpen,
@@ -38,7 +35,6 @@ export function WaitingChoiceRow({
 }) {
   const cancel = useServerFn(cancelActionCard);
   const workspaceSlug = useWorkspaceSlug();
-  const reduced = usePrefersReducedMotion();
   const target = waitingChoiceTarget(card);
   const channel = card.task?.channel ?? card.channel;
   const taskLabel = card.task && m.activity_inbox_waiting_task({ number: card.task.number });
@@ -54,16 +50,8 @@ export function WaitingChoiceRow({
     .map((option, index) => `${choiceNumber(index)}. ${option.label}`)
     .join(" · ");
   return (
-    <motion.li
+    <li
       ref={ref}
-      layout={reduced ? false : "position"}
-      initial={false}
-      exit={
-        reduced
-          ? { opacity: 0, transition: { duration: DURATION_S.reduced } }
-          : { opacity: 0, x: -16, transition: { duration: DURATION_S.smOut, ease: EASE_IN } }
-      }
-      transition={{ layout: { duration: DURATION_S.md, ease: EASE_IN_OUT } }}
       data-activity-row={waitingRowKey(card.messageId)}
       className={ACTIVITY_ROW_ITEM_CLASS}
     >
@@ -75,7 +63,6 @@ export function WaitingChoiceRow({
           event.preventDefault();
           onOpen(target);
         }}
-        // The row's own hover, kept while the pointer is on its Ignore button (a sibling).
         className={cn(
           ACTIVITY_ROW_LINK_CLASS,
           "group-hover:bg-primary_hover focus-visible:bg-primary_hover",
@@ -96,7 +83,6 @@ export function WaitingChoiceRow({
             <RelativeTime
               value={card.createdAt}
               plain
-              // Gives way to the decline button wherever it shows (hover, focus).
               className="ml-auto shrink-0 pl-2 text-xs text-quaternary tabular-nums transition-opacity group-hover:opacity-0 not-any-pointer-coarse:group-focus-within:opacity-0"
             />
           </span>
@@ -107,8 +93,6 @@ export function WaitingChoiceRow({
           </span>
         </span>
       </Link>
-      {/* Not answering tells the Agent and cannot be taken back (Frank, 11-12): asked once,
-          where it was pressed, in the words the card's own decline uses. */}
       <DeclineQuestion
         asker={card.preparedBy.name}
         questions={card.questions?.length ?? 1}
@@ -117,7 +101,6 @@ export function WaitingChoiceRow({
           try {
             await cancel({ data: { messageId: card.messageId } });
           } catch (cause) {
-            // Answered or run out meanwhile: it no longer waits, so the list reads again.
             if (isAppErrorCode(cause, "CONFLICT")) return onDeclined();
             throw cause;
           }
@@ -134,6 +117,6 @@ export function WaitingChoiceRow({
           {m.question_card_decline()}
         </Button>
       </DeclineQuestion>
-    </motion.li>
+    </li>
   );
-}
+});

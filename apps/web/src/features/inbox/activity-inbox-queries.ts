@@ -116,6 +116,48 @@ function withoutItem<
   };
 }
 
+export function optimisticallyCompleteActivityItems(
+  queryClient: QueryClient,
+  workspaceId: string,
+  items: readonly ActivityCompletionItem[],
+): void {
+  if (items.length === 0) return;
+  queryClient.setQueriesData<InfiniteData<ActivityInboxPage>>(
+    { queryKey: [...ACTIVITY_INBOX_LISTS_KEY, workspaceId] },
+    (current) => (current ? projectPendingActivityCompletions(current, items) : current),
+  );
+  const completedKeys = new Set(items.map((item) => item.key));
+  const unreadCompleted = items.filter((item) => item.unreadCount > 0).length;
+  queryClient.setQueryData<ActivityNavAttention>(
+    activityNavAttentionQuery(workspaceId).queryKey,
+    (current) => {
+      if (!current) return current;
+      const nextUnreadKeys = current.unreadKeys?.filter((key) => !completedKeys.has(key));
+      const removedFromKeys =
+        current.unreadKeys && nextUnreadKeys
+          ? current.unreadKeys.length - nextUnreadKeys.length
+          : 0;
+      const decrement = removedFromKeys > 0 ? removedFromKeys : unreadCompleted;
+      const nextUnreadCount =
+        current.unreadCount !== undefined
+          ? Math.max(0, current.unreadCount - decrement)
+          : undefined;
+      const nextHasUnread =
+        nextUnreadCount !== undefined
+          ? nextUnreadCount > 0
+          : nextUnreadKeys
+            ? nextUnreadKeys.length > 0
+            : current.hasUnread;
+      return {
+        ...current,
+        hasUnread: nextHasUnread,
+        ...(nextUnreadCount !== undefined ? { unreadCount: nextUnreadCount } : {}),
+        ...(nextUnreadKeys !== undefined ? { unreadKeys: nextUnreadKeys } : {}),
+      };
+    },
+  );
+}
+
 export const WAITING_CHOICE_CARDS_KEY = ["waiting-choice-cards"] as const;
 
 export const waitingChoiceCardsQuery = (workspaceId: string) =>

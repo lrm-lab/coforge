@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useHydrated } from "@tanstack/react-router";
 
 import { dateTimeFormat } from "#src/lib/dates";
@@ -6,17 +6,6 @@ import { useRenderClock, useTimeZone } from "#src/lib/time-zone-context";
 import { m } from "#src/paraglide/messages";
 import { getLocale } from "#src/paraglide/runtime";
 
-/**
- * The days an Activity list falls on, newest first: each item goes under the day of its latest
- * message, in the viewer's time zone.
- *
- * Before hydration the days come from the render's clock (`useRenderClock`): the zone the server
- * knew and the moment it rendered, which the hydrating browser reads the same, so the list is
- * grouped from its first frame and nothing moves when it hydrates (task #68). With no zone known
- * yet (no saved zone, no cookie: a first visit) the whole list is one group with no heading until
- * hydration. After it, the viewer's zone and the browser's clock, read at once on mount (loader
- * data can be minutes old) and every minute after.
- */
 export function useActivityDays<T>(items: T[], at: (item: T) => string | Date) {
   const hydrated = useHydrated();
   const render = useRenderClock();
@@ -27,11 +16,12 @@ export function useActivityDays<T>(items: T[], at: (item: T) => string | Date) {
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, []);
-  if (!hydrated) return renderDays(items, at, render);
-  return groupByDay(items, at, zone, now);
+  return useMemo(
+    () => (hydrated ? groupByDay(items, at, zone, now) : renderDays(items, at, render)),
+    [hydrated, items, at, zone, now, render],
+  );
 }
 
-/** The days before hydration: from the render's zone and moment, or one undated group with none. */
 export function renderDays<T>(
   items: T[],
   at: (item: T) => string | Date,
@@ -42,17 +32,10 @@ export function renderDays<T>(
     : [{ key: "all", label: undefined, items }];
 }
 
-/** A day section's React key. The first day's is fixed, so the section (and its rows) survives the
- * list going from undated to named days at hydration (task #64); a later day is keyed by its date. */
 export function daySectionKey(index: number, dayKey: string) {
   return index === 0 ? "days" : dayKey;
 }
 
-/**
- * The items under the day each falls on, in the order the days first appear. A day is one group
- * wherever its items sit: the pages are read at different times and a row can move on a realtime
- * update, so the list is not always strictly newest first.
- */
 export function groupByDay<T>(
   items: T[],
   at: (item: T) => string | Date,
@@ -62,9 +45,9 @@ export function groupByDay<T>(
   const today = Temporal.Instant.fromEpochMilliseconds(now).toZonedDateTimeISO(zone).toPlainDate();
   const groups = new Map<string, { key: string; label: string | undefined; items: T[] }>();
   for (const item of items) {
-    const date = Temporal.Instant.fromEpochMilliseconds(new Date(at(item)).getTime())
-      .toZonedDateTimeISO(zone)
-      .toPlainDate();
+    const raw = at(item);
+    const ms = raw instanceof Date ? raw.getTime() : new Date(raw).getTime();
+    const date = Temporal.Instant.fromEpochMilliseconds(ms).toZonedDateTimeISO(zone).toPlainDate();
     const key = date.toString();
     const group = groups.get(key) ?? { key, label: dayName(date, today), items: [] };
     group.items.push(item);
@@ -78,7 +61,6 @@ function dayName(date: Temporal.PlainDate, today: Temporal.PlainDate) {
   if (ago <= 0) return m.activity_inbox_today();
   if (ago === 1) return m.activity_inbox_yesterday();
   return dateTimeFormat(getLocale(), {
-    // The weekday within this year, as Slack heads its days; the year only where it is not this one.
     ...(date.year === today.year ? { weekday: "long" } : { year: "numeric" }),
     month: "short",
     day: "numeric",

@@ -3,6 +3,7 @@ import {
   type CSSProperties,
   type ReactNode,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -10,7 +11,12 @@ import {
 } from "react";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { MessageQuestionCircle, Pin01 } from "@untitledui/icons";
 import { AnimatePresence, motion } from "motion/react";
 
@@ -34,10 +40,12 @@ import { markActivityInboxRead } from "./activity-inbox.functions";
 import { useActivityInboxRefresh } from "./use-activity-inbox-refresh";
 import {
   activityInboxQuery,
+  invalidateActivityInboxLists,
+  optimisticallyCompleteActivityItems,
   type ActivityCompletionItem,
   waitingChoiceCardsQuery,
 } from "./activity-inbox-queries";
-import { useActivityDoneProjection } from "./activity-inbox-done";
+import { createActivityDoneCoordinator, useActivityDoneProjection } from "./activity-inbox-done";
 import type { ActivityInboxFilter } from "./activity-inbox.schemas";
 import { ActivityInboxEmpty, ActivityInboxLoadError } from "./activity-inbox-states";
 import {
@@ -81,6 +89,7 @@ export function ActivityInboxView({
   const workspaceSlug = useWorkspaceSlug();
   const desktop = useBreakpoint("lg");
   const router = useRouter();
+  const queryClient = useQueryClient();
   const markAllRead = useServerFn(markActivityInboxRead);
   const {
     start: startDone,
@@ -147,19 +156,44 @@ export function ActivityInboxView({
   const taskAlone =
     opened?.taskAlone && opened.task !== undefined ? { ...opened, task: opened.task } : undefined;
   const pane = taskAlone ? undefined : opened;
-  const { refresh, refreshWaiting } = useActivityInboxRefresh({
+  const refreshAfterDoneRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const externalRealtimeRef = useRef<() => void>(() => undefined);
+  const doneCoordinator = useMemo(
+    () =>
+      createActivityDoneCoordinator({
+        onStart: (item) => {
+          onDoneStarted(item);
+          optimisticallyCompleteActivityItems(queryClient, workspaceId, [item]);
+        },
+        onSettle: settleDone,
+        onMarkOtherListsStale: () => void invalidateActivityInboxLists(queryClient, workspaceId),
+        onReconcile: () => refreshAfterDoneRef.current(),
+        onExternalRealtimeActivity: () => externalRealtimeRef.current(),
+      }),
+    [onDoneStarted, queryClient, settleDone, workspaceId],
+  );
+  useEffect(() => () => doneCoordinator.dispose(), [doneCoordinator]);
+  const onRealtimeActivity = useCallback(
+    (runRealtimeRefresh: () => void) => {
+      externalRealtimeRef.current = runRealtimeRefresh;
+      doneCoordinator.onRealtimeActivity();
+    },
+    [doneCoordinator],
+  );
+  const { refresh, refreshAfterDone, refreshWaiting } = useActivityInboxRefresh({
     userId: user.id,
     workspaceId,
     filter,
+    onRealtimeActivity,
   });
+  refreshAfterDoneRef.current = refreshAfterDone;
 
   const [failure, setFailure] = useState<{ retry: () => void } | null>(null);
   const actions = useActivityItemActions({
     workspaceId,
     onChanged: refresh,
     onFailure: setFailure,
-    onDoneStarted,
-    onDoneSettled: settleDone,
+    enqueueDone: doneCoordinator.enqueue,
   });
 
   const loadedAt = firstPage?.loadedAt;
@@ -440,9 +474,7 @@ export function ActivityInboxView({
                 data-undated={section.dated === false ? "" : undefined}
                 className="relative flex flex-col"
               >
-                <AnimatePresence initial={false} mode="popLayout">
-                  {section.rows}
-                </AnimatePresence>
+                {section.rows}
               </ol>
               {section.footer}
             </Fragment>

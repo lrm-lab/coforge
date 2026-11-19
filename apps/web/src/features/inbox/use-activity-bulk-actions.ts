@@ -7,6 +7,7 @@ import { m } from "#src/paraglide/messages";
 import { markActivityAllDone, undoActivityDone } from "./activity-inbox.functions";
 import {
   cancelActivityInboxListReads,
+  optimisticallyCompleteActivityItems,
   type ActivityCompletionItem,
 } from "./activity-inbox-queries";
 import type { ActivityDoneUndo } from "./activity-inbox.schemas";
@@ -33,6 +34,7 @@ export function useActivityBulkActions({
     function run(action: () => Promise<unknown>, rows: ActivityCompletionItem[] = []) {
       onFailure(null);
       rows.forEach(onDoneStarted);
+      optimisticallyCompleteActivityItems(queryClient, workspaceId, rows);
       void Promise.resolve()
         .then(action)
         .catch(() => onFailure({ retry: () => run(action, rows) }))
