@@ -10,19 +10,6 @@ import { gatedProxy } from "./helpers/gated-proxy";
 import { openReadLanded } from "./helpers/open-unread-e2e";
 import { serverFunctionIds } from "./helpers/server-function-ids";
 
-/**
- * The browser's copy of the Query cache in a real browser (`src/features/cache-persistence/`):
- * Chat opens from it while the network reads are still outstanding, then the reads bring it up to
- * date; signing out removes it; another person on the browser starts from nothing.
- *
- * Opt-in like the other browser E2Es: real local Web + `agent-browser`, the dev user an owner of
- * its Workspace (seed-dev). The browser talks to a proxy in this test that forwards to
- * `COFORGE_E2E_WEB_URL` and can hold the Chat reads (the sidebar lists, the channel names and the
- * conversation) until the test lets them through; the proxy's origin is also a fresh IndexedDB,
- * so a run starts with nothing stored. It stands in for `/auth/logout`, which would leave for
- * Authing. Each run seeds a channel with messages and removes it afterwards. Screenshots are
- * written under `.artifacts/e2e/query-cache-persistence/`.
- */
 const upstreamOrigin = Bun.env.COFORGE_E2E_WEB_URL;
 if (!upstreamOrigin || !["localhost", "127.0.0.1"].includes(new URL(upstreamOrigin).hostname))
   throw new Error("COFORGE_E2E_WEB_URL must target the local Web service");
@@ -33,8 +20,6 @@ if (!databaseUrl || new URL(databaseUrl).hostname !== "127.0.0.1")
   throw new Error("DATABASE_URL must target local PostgreSQL");
 const artifacts = join(import.meta.dir, "../../../.artifacts/e2e/query-cache-persistence");
 
-/** The reads Chat makes for what the browser keeps: its lists (the sidebar's, the channel names,
- * the sections, all in one call) and the conversation. */
 const CHAT_READS = ["loadChatLists", "loadPublicChannel"] as const;
 
 const chatReadIds = serverFunctionIds(CHAT_READS);
@@ -56,7 +41,6 @@ async function browser(...args: string[]) {
   if (code !== 0) throw new Error(`Browser ${args[0]} failed: ${stderr}`);
   return stdout;
 }
-/** Waits for `condition` in the page, failing with its text rather than at the test timeout. */
 const waitFor = (condition: string, ms = 20_000) =>
   Promise.race([
     browser("wait", "--fn", condition),
@@ -64,8 +48,6 @@ const waitFor = (condition: string, ms = 20_000) =>
       setTimeout(() => reject(new Error(`timed out waiting for ${condition}`)), ms),
     ),
   ]);
-/** Waits for an asynchronous condition in the page: `wait --fn` takes a Promise as truthy at once,
- * so it is polled through `evaluate`, which awaits it. */
 async function until(condition: string, ms = 20_000) {
   const deadline = Date.now() + ms;
   while (!(await evaluate<boolean>(condition))) {
@@ -73,7 +55,6 @@ async function until(condition: string, ms = 20_000) {
     await Bun.sleep(100);
   }
 }
-/** Runs an async expression in the page and parses the JSON it returns. */
 async function evaluate<T>(expression: string): Promise<T> {
   const printed = (
     await browser("eval", `(async () => JSON.stringify(await (${expression})))()`)
@@ -81,7 +62,6 @@ async function evaluate<T>(expression: string): Promise<T> {
   return JSON.parse(JSON.parse(printed)) as T;
 }
 
-/** The kept queries as IndexedDB holds them, opened without going through the app. */
 const withStore = (mode: IDBTransactionMode, body: string) => `(async () => {
   const db = await new Promise((resolve, reject) => {
     const request = indexedDB.open("coforge-query-cache");
@@ -109,17 +89,11 @@ const store = (key: string, value: unknown) =>
     ),
   );
 const visible = (text: string) => `document.body.innerText.includes(${JSON.stringify(text)})`;
-/** Whether IndexedDB holds a row under `key` now: what a read that was stored left there. */
 const stored = (key: string) =>
   withStore(
     "readonly",
     `return new Promise((r) => { const q = store.getKey(${JSON.stringify(key)}); q.onsuccess = () => r(q.result !== undefined); });`,
   );
-/**
- * Runs `body` with the Chat reads held, and always lets them through after. A failure inside
- * carries the record of the calls made meanwhile, so a run that shows a watched message too early
- * names the read that brought it.
- */
 async function whileHeld(watched: string[], body: () => Promise<void>) {
   proxy.hold(watched);
   try {
@@ -136,16 +110,10 @@ ${proxy.report()}`,
     proxy.release();
   }
 }
-/**
- * The page just opened is up: its own reads are done (no request for a moment), so what it stores
- * is stored and a click reaches it. Per load, unlike a row a previous load left behind (the daily
- * sweep's marker made every later wait return at once).
- */
 async function pageIsUp(ready: string) {
   await waitFor(ready, 60_000);
   await browser("wait", "--load", "networkidle");
 }
-/** The rail's Workspace-home link, independent of its translated navigation label. */
 const chatLink = () =>
   `[...document.querySelectorAll("a")].find((a) => a.getAttribute("href") === ${JSON.stringify(workspacePath)})`;
 
@@ -192,13 +160,10 @@ const channelKey = (viewerId: string) =>
   `${viewerId}/tanstack-query-["conversation","channel","${channelId}"]`;
 
 test("Chat opens from the browser's copy while its reads are outstanding, then the reads bring it up to date", async () => {
-  // A first visit: the browser reads the channel (Chat renders in the browser only), and the page
-  // stores what it read.
   await browser("open", `${proxy.origin}${workspacePath}/channel/${channelId}`);
   await waitFor(visible(first), 60_000);
   await until(stored(channelKey(DEV_BROWSER_USER.id)));
 
-  // Something new arrives while nobody has the channel open.
   const member = await db.conversationMember.findFirstOrThrow({
     where: { conversationId: channelId, userId: DEV_BROWSER_USER.id },
   });
@@ -212,14 +177,12 @@ test("Chat opens from the browser's copy while its reads are outstanding, then t
     },
   });
 
-  // A new page load away from Chat: nothing of the conversation is in memory.
   await browser("open", `${proxy.origin}${workspacePath}/members`);
   await pageIsUp(`!!(${chatLink()})`);
   await whileHeld([second], async () => {
     await browser("eval", "window.__stayedInThisDocument = true");
     await browser("eval", `${chatLink()}.click()`);
 
-    // The sidebar and the conversation are on screen from storage, with the reads still waiting.
     await waitFor(visible(first));
     await waitFor(`document.querySelector('a[href*="/channel/${channelId}"]') !== null`);
     proxy.mark("on screen from storage");
@@ -229,13 +192,11 @@ test("Chat opens from the browser's copy while its reads are outstanding, then t
     await browser("screenshot", join(artifacts, "from-the-browsers-copy.png"));
   });
 
-  // The reads then answer, and the page catches up.
   await waitFor(visible(second));
   await browser("screenshot", join(artifacts, "brought-up-to-date.png"));
 }, 300_000);
 
 test("a conversation read in one page load opens from the browser's copy without a divider over what was read", async () => {
-  // Something new arrives; opening the channel reads it (the server's cursor moves past it).
   const third = `Third message ${process.pid}`;
   const member = await db.conversationMember.findFirstOrThrow({
     where: { conversationId: channelId, userId: DEV_BROWSER_USER.id },
@@ -263,8 +224,6 @@ test("a conversation read in one page load opens from the browser's copy without
     if (Date.now() > deadline) throw new Error("the channel was not marked read through message 3");
     await Bun.sleep(200);
   }
-  // The browser keeps the channel's window with the third message (the page's writes wait for
-  // their burst to end). It keeps no read cursor: the divider is the open's own read (task #378).
   const storedThird = `(async () => JSON.stringify((await ${withStore(
     "readonly",
     `return new Promise((r) => { const q = store.get(${JSON.stringify(channelKey(DEV_BROWSER_USER.id))}); q.onsuccess = () => r(q.result); });`,
@@ -273,7 +232,6 @@ test("a conversation read in one page load opens from the browser's copy without
   await browser("open", `${proxy.origin}${workspacePath}/members`);
   await pageIsUp(`!!(${chatLink()})`);
 
-  // A new page load opens the channel from storage, with its reads held.
   await whileHeld([third], async () => {
     await browser("eval", `${chatLink()}.click()`);
     await waitFor(visible(third));
@@ -285,7 +243,6 @@ test("a conversation read in one page load opens from the browser's copy without
       ),
     ).toBe(false);
   });
-  // Nor once the open's own read has landed.
   await waitFor(openReadLanded(channelId));
   expect(
     await evaluate<boolean>(
@@ -323,7 +280,6 @@ test("a conversation read and left, then opened again in the same page load, sho
     if (Date.now() > readBy) throw new Error("the channel was not marked read through message 4");
     await Bun.sleep(200);
   }
-  // Away and back without a page load: the window comes from memory, not storage.
   await browser("eval", "window.__stayedInThisDocument = true");
   await browser(
     "eval",
@@ -355,16 +311,11 @@ test("signing out removes what the browser kept", async () => {
     `[...document.querySelectorAll('[role="menuitem"]')].find((i) => i.textContent.trim() === "Sign out").click()`,
   );
 
-  // The proxy stands in for Authing at `/auth/logout`: a page of this origin that is not the app,
-  // so nothing stores again. What is in IndexedDB now is what sign-out left.
   await waitFor(`document.body.innerText.includes("signed out")`);
   expect(await storedKeys()).toEqual([]);
 }, 120_000);
 
 test("another person on the same browser starts from nothing", async () => {
-  // What an earlier person left: a conversation under their own key, and a secret in it. The row is
-  // of the current stored-shape version and of a shape a restore opens, so only that it belongs to
-  // someone else keeps it from being read and removes it.
   const secret = `Someone else's secret ${process.pid}`;
   const health = await fetch(`${proxy.origin}/en/health`);
   expect(health.status).toBe(200);

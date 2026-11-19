@@ -3,14 +3,6 @@ import { join } from "node:path";
 
 const bundle = join(import.meta.dir, "../../.output/server/index.mjs");
 
-/**
- * This build's Server Function ids, by id, for the export names given. The id on the wire is the
- * hash the build gave the function - it does not encode the name, so it cannot be decoded back
- * out of the URL. The artifact the local Web is serving states the pairing, one line per function:
- * `NAME_createServerFn_handler = createServerRpc({ id: "<64 hex>" ...`. A name the build lacks
- * throws: an e2e that means to recognise a read must fail loudly if it cannot
- * (docs/agents/testing.md).
- */
 export function serverFunctionIds<const N extends string>(names: readonly N[]): Map<string, N> {
   const byName = new Map([...serverFunctionNames()].map(([id, name]) => [name, id]));
   const ids = new Map<string, N>();
@@ -22,7 +14,6 @@ export function serverFunctionIds<const N extends string>(names: readonly N[]): 
   return ids;
 }
 
-/** Every Server Function in this build, export name by id: what a test names in a request log. */
 export function serverFunctionNames(): Map<string, string> {
   let source: string;
   try {
@@ -39,7 +30,6 @@ export function serverFunctionNames(): Map<string, string> {
   return names;
 }
 
-/** The Server Function a request calls, by its export name among `ids`, if any. */
 export function serverFunctionOf<N extends string>(ids: ReadonlyMap<string, N>, url: URL) {
   return ids.get(url.pathname.split("/_serverFn/")[1] ?? "");
 }

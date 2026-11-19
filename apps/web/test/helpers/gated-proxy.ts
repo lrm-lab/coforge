@@ -7,12 +7,6 @@ type ProxySocket = {
   pending: Array<string | Uint8Array<ArrayBuffer>>;
 };
 
-/**
- * Forwards to the local Web service at `upstreamOrigin`, holding the Server Functions `heldReads`
- * names (by id) while `hold()` is on. From `hold()`
- * on it also records each Server Function call, held or let through, and whether an answer let
- * through carries a watched message: what a failed assertion under the gate reports.
- */
 const allServerFunctions = serverFunctionNames();
 
 export function gatedProxy(upstreamOrigin: string, heldReads: ReadonlyMap<string, string>) {
@@ -48,8 +42,6 @@ export function gatedProxy(upstreamOrigin: string, heldReads: ReadonlyMap<string
       const forwardHeaders = new Headers(request.headers);
       forwardHeaders.set("origin", upstream.origin);
       forwardHeaders.delete("referer");
-      // A streamed request body needs `duplex` (Fetch standard), which this `RequestInit` type
-      // does not declare yet.
       const init: RequestInit & { duplex: "half" } = {
         method: request.method,
         headers: forwardHeaders,
@@ -102,8 +94,6 @@ export function gatedProxy(upstreamOrigin: string, heldReads: ReadonlyMap<string
   });
   return {
     origin: `http://127.0.0.1:${server.port}`,
-    /** From now on the held reads wait for `release()`, and calls are recorded for `report()`,
-     * noting an answer that carries one of `watched`. */
     hold(watched: string[] = []) {
       log = { start: Date.now(), lines: [], watched };
       let release: () => void = () => {};
@@ -114,11 +104,8 @@ export function gatedProxy(upstreamOrigin: string, heldReads: ReadonlyMap<string
       gate?.release();
       gate = undefined;
     },
-    /** How many held reads are waiting right now. */
     held: () => heldNow.size,
-    /** Marks a point of the test in the record. */
     mark: (label: string) => note(`-- ${label}`),
-    /** The record since the last `hold()`. */
     report: () => log?.lines.join("\n") ?? "(nothing recorded)",
     stop: () => server.stop(true),
   };
