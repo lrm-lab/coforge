@@ -19,11 +19,36 @@ export const RELATIVE_PAGE_SCRIPT = `
       reconnect?.classList.toggle("is-visible", visible);
     };
     let phoneTrayOpen = false;
+    function placePhoneFabInViewport() {
+      if (!phoneFab) return;
+      const fabWidth = phoneFab.offsetWidth || 48;
+      const fabHeight = phoneFab.offsetHeight || 48;
+      const maxLeft = Math.max(0, window.innerWidth - fabWidth);
+      const maxTop = Math.max(0, window.innerHeight - fabHeight);
+      let left;
+      let top;
+      if (phoneFab.style.left || phoneFab.style.top) {
+        left = Number.parseFloat(phoneFab.style.left || "0");
+        top = Number.parseFloat(phoneFab.style.top || "0");
+        if (!Number.isFinite(left)) left = 0;
+        if (!Number.isFinite(top)) top = 0;
+      } else {
+        left = maxLeft - 14;
+        top = maxTop - 18;
+      }
+      left = Math.min(maxLeft, Math.max(0, left));
+      top = Math.min(maxTop, Math.max(0, top));
+      phoneFab.style.left = \`\${left}px\`;
+      phoneFab.style.top = \`\${top}px\`;
+      phoneFab.style.right = "auto";
+      phoneFab.style.bottom = "auto";
+    }
     function setPhoneTrayOpen(open) {
       if (!phone) return;
       phoneTrayOpen = open;
       phoneBar?.classList.toggle("is-open", open);
       phoneFab?.classList.toggle("is-visible", !open);
+      if (!open) placePhoneFabInViewport();
     }
     function notifyDesktopShell(action) {
       try {
@@ -37,10 +62,12 @@ export const RELATIVE_PAGE_SCRIPT = `
       let drag = null;
       const onMove = (ev) => {
         if (!drag) return;
-        const maxX = window.innerWidth - phoneFab.offsetWidth;
-        const maxY = window.innerHeight - phoneFab.offsetHeight;
-        const left = Math.min(maxX, Math.max(0, ev.clientX - drag.ox));
-        const top = Math.min(maxY, Math.max(0, ev.clientY - drag.oy));
+        const fabWidth = phoneFab.offsetWidth || 48;
+        const fabHeight = phoneFab.offsetHeight || 48;
+        const maxLeft = Math.max(0, window.innerWidth - fabWidth);
+        const maxTop = Math.max(0, window.innerHeight - fabHeight);
+        const left = Math.min(maxLeft, Math.max(0, ev.clientX - drag.ox));
+        const top = Math.min(maxTop, Math.max(0, ev.clientY - drag.oy));
         phoneFab.style.left = \`\${left}px\`;
         phoneFab.style.top = \`\${top}px\`;
         phoneFab.style.right = "auto";
@@ -54,6 +81,7 @@ export const RELATIVE_PAGE_SCRIPT = `
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
         if (!moved) setPhoneTrayOpen(true);
+        else placePhoneFabInViewport();
       };
       phoneFab.addEventListener("pointerdown", (ev) => {
         if (phoneTrayOpen) return;
@@ -78,6 +106,10 @@ export const RELATIVE_PAGE_SCRIPT = `
         },
         true,
       );
+      window.addEventListener("resize", () => {
+        if (!phoneTrayOpen) placePhoneFabInViewport();
+      });
+      placePhoneFabInViewport();
     }
     const KEYSYMS = {
       Escape: 0xff1b,
@@ -145,6 +177,7 @@ export const RELATIVE_PAGE_SCRIPT = `
       kbButton.addEventListener("click", (ev) => {
         ev.preventDefault();
         openKeyboard();
+        setPhoneTrayOpen(false);
       });
       kbInput.addEventListener("focus", () => kbButton.classList.add("is-active"));
       kbInput.addEventListener("blur", () => kbButton.classList.remove("is-active"));

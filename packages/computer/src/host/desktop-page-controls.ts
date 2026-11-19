@@ -10,6 +10,9 @@ export const DESKTOP_PHONE_VIEW_MARKER = "coforge-desktop-phone-bar";
 /** Present once the phone toolbar collapses to a draggable FAB. */
 export const DESKTOP_PHONE_FAB_MARKER = "coforge-desktop-phone-fab";
 
+/** Present once the FAB reclamps into the iframe viewport (fake landscape resize). */
+export const DESKTOP_PHONE_FAB_VIEWPORT_MARKER = "placePhoneFabInViewport";
+
 /** Present once phone modifier keys and touch gestures are in the adapted page. */
 export const DESKTOP_PHONE_GESTURES_MARKER = "coforgeAttachPhoneGestures";
 
