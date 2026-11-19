@@ -47,6 +47,7 @@ import { subscribeProviderScans } from "./provider-scan-handlers";
 import type { ResetCreditConsumeResult } from "./reset-credit-consume";
 import { subscribeWorkspaceQueries } from "./workspace-query-handlers";
 import { subscribeContextViewQueries } from "./context-view-query-handlers";
+import type { ProviderQuotaState } from "./provider-quota-state";
 import { subscribeAgentSideAskQueries, type AgentSideAskSource } from "./agent-side-ask-handler";
 import { SideQuestionRunner } from "#src/agent-runtime/agent-side-ask";
 import type { AgentContextViewService } from "#src/agent-context-view/agent-context-view-service";
@@ -95,6 +96,7 @@ export type RuntimeStartupPorts = {
   stateDirectory: string;
   contextView: Pick<AgentContextViewService, "find">;
   sideAsk?: AgentSideAskSource;
+  quotaState?: Pick<ProviderQuotaState, "summaryForAgent">;
   agentApiKey(agentId: string): string | undefined;
   resolveProviderSource?(agentId: string, entry: ContextViewIndexEntry): string | undefined;
   deleteWorkspace(
@@ -291,6 +293,7 @@ export class RuntimeStartup {
             source: ports.sideAsk,
             activityPublisher: ports.activityPublisher,
             credentialHolds: ports.credentialHolds,
+            quotaState: ports.quotaState,
             runner,
             currentTransport: () => ports.transport(),
             isStopping: () => ports.isStopping(),

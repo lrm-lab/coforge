@@ -157,16 +157,207 @@ describe("ClaudeRateLimitState: usage windows", () => {
       primary: { status: "ok", windowDurationMinutes: 300, resetsAt: IN_AN_HOUR_ISO },
       secondary: {
         status: "limit_reached",
+        quotaLevel: "exhausted",
         windowDurationMinutes: 10_080,
         resetsAt: IN_AN_HOUR_ISO,
       },
     });
     for (const info of [
-      { status: "allowed_warning", rateLimitType: "five_hour", resetsAt: IN_AN_HOUR_S },
       { status: "rejected", rateLimitType: "overage", resetsAt: IN_AN_HOUR_S },
       { status: "rejected", rateLimitType: "five_hour" },
     ])
       expect(limits.observe(rateLimitEvent(info), SESSION)).toBeUndefined();
+  });
+
+  test("allowed_warning and utilization thresholds surface warning and near_exhausted quota levels", () => {
+    const limits = state();
+    expect(
+      limits.observe(
+        rateLimitEvent({
+          status: "allowed_warning",
+          rateLimitType: "five_hour",
+          resetsAt: IN_AN_HOUR_S,
+          utilization: 0.82,
+        }),
+        SESSION,
+      ),
+    ).toEqual({
+      provider: "claude-code",
+      primary: {
+        status: "ok",
+        quotaLevel: "warning",
+        usedPercent: 82,
+        windowDurationMinutes: 300,
+        resetsAt: IN_AN_HOUR_ISO,
+      },
+    });
+    expect(
+      limits.observe(
+        rateLimitEvent({
+          status: "allowed_warning",
+          rateLimitType: "five_hour",
+          resetsAt: IN_AN_HOUR_S,
+          utilization: 0.93,
+        }),
+        SESSION,
+      ),
+    ).toEqual({
+      provider: "claude-code",
+      primary: {
+        status: "ok",
+        quotaLevel: "near_exhausted",
+        usedPercent: 93,
+        windowDurationMinutes: 300,
+        resetsAt: IN_AN_HOUR_ISO,
+      },
+    });
+    expect(
+      limits.observe(
+        rateLimitEvent({
+          status: "allowed_warning",
+          rateLimitType: "seven_day",
+          resetsAt: IN_AN_HOUR_S,
+          surpassedThreshold: true,
+        }),
+        SESSION,
+      ),
+    ).toEqual({
+      provider: "claude-code",
+      primary: {
+        status: "ok",
+        quotaLevel: "near_exhausted",
+        usedPercent: 93,
+        windowDurationMinutes: 300,
+        resetsAt: IN_AN_HOUR_ISO,
+      },
+      secondary: {
+        status: "ok",
+        quotaLevel: "near_exhausted",
+        windowDurationMinutes: 10_080,
+        resetsAt: IN_AN_HOUR_ISO,
+      },
+    });
+    expect(
+      limits.observe(
+        rateLimitEvent({
+          status: "allowed",
+          rateLimitType: "five_hour",
+          resetsAt: IN_AN_HOUR_S,
+          utilization: 0.91,
+        }),
+        SESSION,
+      ),
+    ).toEqual({
+      provider: "claude-code",
+      primary: {
+        status: "ok",
+        quotaLevel: "near_exhausted",
+        usedPercent: 91,
+        windowDurationMinutes: 300,
+        resetsAt: IN_AN_HOUR_ISO,
+      },
+      secondary: {
+        status: "ok",
+        quotaLevel: "near_exhausted",
+        windowDurationMinutes: 10_080,
+        resetsAt: IN_AN_HOUR_ISO,
+      },
+    });
+    expect(
+      limits.observe(
+        rateLimitEvent({
+          status: "allowed",
+          rateLimitType: "five_hour",
+          resetsAt: IN_AN_HOUR_S,
+          utilization: 0.4,
+        }),
+        SESSION,
+      ),
+    ).toEqual({
+      provider: "claude-code",
+      primary: {
+        status: "ok",
+        quotaLevel: "ok",
+        usedPercent: 40,
+        windowDurationMinutes: 300,
+        resetsAt: IN_AN_HOUR_ISO,
+      },
+      secondary: {
+        status: "ok",
+        quotaLevel: "near_exhausted",
+        windowDurationMinutes: 10_080,
+        resetsAt: IN_AN_HOUR_ISO,
+      },
+    });
+  });
+
+  test("handles utilization overshoot, numeric surpassedThreshold, and reset-less allowed_warning", () => {
+    const limits = state();
+    expect(
+      limits.observe(
+        rateLimitEvent({
+          status: "allowed_warning",
+          rateLimitType: "five_hour",
+          utilization: 1.05,
+        }),
+        SESSION,
+      )?.primary,
+    ).toEqual({
+      status: "ok",
+      quotaLevel: "near_exhausted",
+      usedPercent: 100,
+      windowDurationMinutes: 300,
+    });
+    expect(
+      limits.observe(
+        rateLimitEvent({
+          status: "allowed_warning",
+          rateLimitType: "five_hour",
+          resetsAt: IN_AN_HOUR_S,
+          utilization: 0.78,
+          surpassedThreshold: true,
+        }),
+        SESSION,
+      )?.primary,
+    ).toEqual({
+      status: "ok",
+      quotaLevel: "warning",
+      usedPercent: 78,
+      windowDurationMinutes: 300,
+      resetsAt: IN_AN_HOUR_ISO,
+    });
+    expect(
+      limits.observe(
+        rateLimitEvent({
+          status: "allowed",
+          rateLimitType: "five_hour",
+          resetsAt: IN_AN_HOUR_S,
+          surpassedThreshold: 0.75,
+        }),
+        SESSION,
+      )?.primary,
+    ).toEqual({
+      status: "ok",
+      quotaLevel: "warning",
+      windowDurationMinutes: 300,
+      resetsAt: IN_AN_HOUR_ISO,
+    });
+    expect(
+      limits.observe(
+        rateLimitEvent({
+          status: "allowed",
+          rateLimitType: "seven_day",
+          resetsAt: IN_AN_HOUR_S,
+          surpassedThreshold: 0.9,
+        }),
+        SESSION,
+      )?.secondary,
+    ).toEqual({
+      status: "ok",
+      quotaLevel: "near_exhausted",
+      windowDurationMinutes: 10_080,
+      resetsAt: IN_AN_HOUR_ISO,
+    });
   });
 
   test("a weekly-only account never fabricates a session window", () => {

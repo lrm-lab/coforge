@@ -23,6 +23,7 @@ export type UsageSnapshot = {
     id?: string;
     usedPercent?: number;
     status?: "ok" | "limit_reached" | "parse_unavailable";
+    quotaLevel?: "ok" | "warning" | "near_exhausted" | "exhausted";
     windowDurationMinutes: number;
     resetsAt?: string;
   };
@@ -30,6 +31,7 @@ export type UsageSnapshot = {
     id?: string;
     usedPercent?: number;
     status?: "ok" | "limit_reached" | "parse_unavailable";
+    quotaLevel?: "ok" | "warning" | "near_exhausted" | "exhausted";
     windowDurationMinutes: number;
     resetsAt?: string;
   };

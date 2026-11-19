@@ -72,7 +72,7 @@ export function observeRuntimeEvent(
     return;
   }
   if (event.type === AGENT_RUNTIME_EVENT_TYPE.USAGE) {
-    if (event.snapshot.provider === config.provider) ports.rememberUsage(event.snapshot);
+    if (event.snapshot.provider === config.provider) ports.rememberUsage(agentId, event.snapshot);
     return;
   }
   if (event.type === AGENT_RUNTIME_EVENT_TYPE.CONTEXT_USAGE) {

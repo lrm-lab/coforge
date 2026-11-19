@@ -16,6 +16,7 @@ import type { DaemonConnectionClient } from "#src/connection/daemon-connection-c
 import type { ActivityLaunch } from "./activity-launch";
 import type { AgentActivityPublisher } from "./agent-activity-publisher";
 import type { CredentialInvalidHolds } from "./credential-invalid-holds";
+import type { ProviderQuotaState } from "./provider-quota-state";
 import type { DaemonConfig } from "./runtime";
 
 const logger = getLogger(["coforge", "daemon", "side-ask"]);
@@ -34,6 +35,7 @@ export type AgentSideAskHandlerPorts = {
   source: AgentSideAskSource;
   activityPublisher: Pick<AgentActivityPublisher<ActivityLaunch>, "lastBusy">;
   credentialHolds: Pick<CredentialInvalidHolds, "isHeld">;
+  quotaState?: Pick<ProviderQuotaState, "summaryForAgent">;
   runner: Pick<SideQuestionRunner, "ask"> & Partial<Pick<SideQuestionRunner, "hasInFlight">>;
   currentTransport(): DaemonConnectionClient;
   isStopping(): boolean;
@@ -120,6 +122,7 @@ export function subscribeAgentSideAskQueries(
       const busy = ports.activityPublisher.lastBusy(request.agentId);
       const currentBusy = busy && launch && busy.launch === launch ? busy : undefined;
       const openTool = launch?.toolCalls?.oldestOpenTool();
+      const quotaWarning = ports.quotaState?.summaryForAgent(request.agentId, provider);
       const claudeState =
         provider === RUNTIME_PROVIDER.CLAUDE_CODE && sessionId
           ? await readClaudeState(sessionId, runtime.config.envVars).catch(() => undefined)
@@ -134,6 +137,7 @@ export function subscribeAgentSideAskQueries(
             }
           : {}),
         ...(openTool ? { openTool } : {}),
+        ...(quotaWarning ? { quotaWarning } : {}),
         ...(claudeState
           ? {
               todos: claudeState.openTodos,

@@ -283,6 +283,13 @@ function usageWindow(value: unknown): UsageSnapshot["primary"] | undefined {
         : window.status === "available"
           ? "ok"
           : undefined;
+  const quotaLevel =
+    window.quotaLevel === "ok" ||
+    window.quotaLevel === "warning" ||
+    window.quotaLevel === "near_exhausted" ||
+    window.quotaLevel === "exhausted"
+      ? window.quotaLevel
+      : undefined;
   return {
     windowDurationMinutes: window.windowDurationMinutes,
     ...(typeof window.resetsAt === "string" ? { resetsAt: window.resetsAt } : {}),
@@ -291,6 +298,7 @@ function usageWindow(value: unknown): UsageSnapshot["primary"] | undefined {
       ? { id: window.id }
       : {}),
     ...(status ? { status } : {}),
+    ...(quotaLevel ? { quotaLevel } : {}),
   };
 }
 

@@ -6,6 +6,7 @@ import type { AgentMessageAttentionIndex } from "./agent-message-attention-index
 import type { AgentOfflineResidency } from "./agent-offline-residency";
 import type { AgentContextViewService } from "#src/agent-context-view/agent-context-view-service";
 import type { ProcJobManager } from "#src/proc-jobs/proc-job-manager";
+import type { ProviderQuotaState } from "./provider-quota-state";
 
 export function forgetAgent(
   agentId: string,
@@ -19,8 +20,10 @@ export function forgetAgent(
   featureSync: AgentFeatureSync,
   dropOwedRecovery: (agentId: string) => void,
   procJobs?: Pick<ProcJobManager, "forgetAgent">,
+  quotaState?: Pick<ProviderQuotaState, "forgetAgent">,
 ): void {
   dropOwedRecovery(agentId);
+  quotaState?.forgetAgent(agentId);
   contextViewEnabled.delete(agentId);
   contextViewService.disable(agentId);
   void procJobs?.forgetAgent(agentId, "agent_deleted").catch(() => {});

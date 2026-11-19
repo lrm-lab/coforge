@@ -69,6 +69,7 @@ export type {
   AgentTurnProcessWindow,
   UsageOfficialBucket,
   UsageOfficialGroup,
+  UsageQuotaLevel,
   UsageSnapshot,
   UsageWindow,
 } from "#src/contract";

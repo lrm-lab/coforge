@@ -5,10 +5,10 @@ import { validUsageWindow } from "./runtime-activity-text";
 export function currentObservedUsage(
   observed: Map<RuntimeProvider, UsageSnapshot>,
   provider: RuntimeProvider,
+  now = Date.now(),
 ): UsageSnapshot | undefined {
   const snapshot = observed.get(provider);
   if (!snapshot) return undefined;
-  const now = Date.now();
   const primary = validUsageWindow(snapshot.primary, now);
   const secondary = validUsageWindow(snapshot.secondary, now);
   if (!primary && !secondary) {

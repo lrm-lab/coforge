@@ -22,6 +22,7 @@ export type {
 export type {
   UsageOfficialBucket,
   UsageOfficialGroup,
+  UsageQuotaLevel,
   UsageSnapshot,
   UsageWindow,
 } from "@coforge/agent";

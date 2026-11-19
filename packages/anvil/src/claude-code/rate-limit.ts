@@ -86,6 +86,38 @@ function resetTime(value: unknown): Date | undefined {
   return Number.isNaN(reset.getTime()) ? undefined : reset;
 }
 
+const WARNING_UTILIZATION_PERCENT = 75;
+const NEAR_EXHAUSTED_UTILIZATION_PERCENT = 90;
+
+function fractionToPercent(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return undefined;
+  return Math.min(100, Math.round(value * 100));
+}
+
+function quotaLevelOf(
+  status: "allowed" | "allowed_warning" | "rejected",
+  usedPercent: number | undefined,
+  surpassedThreshold: unknown,
+): NonNullable<UsageSnapshot["primary"]>["quotaLevel"] {
+  if (status === "rejected") return "exhausted";
+  const thresholdPercent = fractionToPercent(surpassedThreshold);
+  const effectivePercent =
+    usedPercent !== undefined && thresholdPercent !== undefined
+      ? Math.max(usedPercent, thresholdPercent)
+      : (usedPercent ?? thresholdPercent);
+  if (
+    (effectivePercent !== undefined && effectivePercent >= NEAR_EXHAUSTED_UTILIZATION_PERCENT) ||
+    (surpassedThreshold === true && usedPercent === undefined)
+  )
+    return "near_exhausted";
+  if (
+    status === "allowed_warning" ||
+    (effectivePercent !== undefined && effectivePercent >= WARNING_UTILIZATION_PERCENT)
+  )
+    return "warning";
+  return effectivePercent !== undefined ? "ok" : undefined;
+}
+
 function claudeRateLimitWindow(
   info: Record<string, unknown> | undefined,
   reset: Date | undefined,
@@ -95,20 +127,27 @@ function claudeRateLimitWindow(
       window: NonNullable<UsageSnapshot["primary"]>;
     }
   | undefined {
-  if (info?.status !== "allowed" && info?.status !== "rejected") return undefined;
+  const status = info?.status;
+  if (status !== "allowed" && status !== "allowed_warning" && status !== "rejected")
+    return undefined;
   const key =
-    info.rateLimitType === "five_hour"
+    info?.rateLimitType === "five_hour"
       ? "primary"
-      : info.rateLimitType === "seven_day"
+      : info?.rateLimitType === "seven_day"
         ? "secondary"
         : undefined;
-  if (!key || !reset) return undefined;
+  if (!key) return undefined;
+  if (!reset && status !== "allowed_warning") return undefined;
+  const usedPercent = fractionToPercent(info?.utilization);
+  const quotaLevel = quotaLevelOf(status, usedPercent, info?.surpassedThreshold);
   return {
     key,
     window: {
-      status: info.status === "rejected" ? "limit_reached" : "ok",
+      status: status === "rejected" ? "limit_reached" : "ok",
+      ...(quotaLevel ? { quotaLevel } : {}),
+      ...(usedPercent !== undefined ? { usedPercent } : {}),
       windowDurationMinutes: key === "primary" ? 300 : 10_080,
-      resetsAt: reset.toISOString(),
+      ...(reset ? { resetsAt: reset.toISOString() } : {}),
     },
   };
 }

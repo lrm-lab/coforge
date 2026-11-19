@@ -67,7 +67,7 @@ export type RuntimeEventObservationPorts = Readonly<{
   showQuietTurn(agentId: string, launch: ActivityLaunch, publish: Publish): void;
   reconcileIdleTurn(agentId: string, launch: ActivityLaunch): boolean;
   wakeFinishedSubagents?(agentId: string): void;
-  rememberUsage(snapshot: UsageSnapshot): void;
+  rememberUsage(agentId: string, snapshot: UsageSnapshot): void;
   releaseTurnEndHolds(agentId: string): void;
   drainAppInboxNotices(agentId: string): Promise<void>;
   failCollectorRunningSlots(agentId: string, failureReason: string): Promise<void>;

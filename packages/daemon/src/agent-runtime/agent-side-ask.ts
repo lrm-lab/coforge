@@ -29,6 +29,12 @@ export type SideAskStatusSnapshot = Readonly<{
   busyDetail?: string;
   busyElapsedMs?: number;
   openTool?: Readonly<{ name: string; silentForMs: number }>;
+  quotaWarning?: Readonly<{
+    level: "warning" | "near_exhausted" | "exhausted";
+    windowDurationMinutes: number;
+    usedPercent?: number;
+    resetsAt?: string;
+  }>;
   todos?: readonly ClaudeSideAskTodo[];
   openTodoCount?: number;
   totalTodos?: number;
@@ -127,6 +133,22 @@ export function formatSideAskStatus(snapshot: SideAskStatusSnapshot): string {
     const toolName = foldLine(snapshot.openTool.name, 80);
     if (toolName)
       lines.push(`Running tool: ${toolName} (${formatDuration(snapshot.openTool.silentForMs)})`);
+  }
+  if (snapshot.quotaWarning) {
+    const { level, windowDurationMinutes, usedPercent, resetsAt } = snapshot.quotaWarning;
+    const parts: string[] = [];
+    if (windowDurationMinutes > 0) {
+      parts.push(
+        windowDurationMinutes % 1_440 === 0
+          ? `${windowDurationMinutes / 1_440}d window`
+          : windowDurationMinutes % 60 === 0
+            ? `${windowDurationMinutes / 60}h window`
+            : `${windowDurationMinutes}m window`,
+      );
+    }
+    if (usedPercent !== undefined) parts.push(`${usedPercent}%`);
+    if (resetsAt) parts.push(`resets ${foldLine(resetsAt, 40)}`);
+    lines.push(parts.length > 0 ? `Quota: ${level} (${parts.join(", ")})` : `Quota: ${level}`);
   }
   if (snapshot.todos && snapshot.todos.length > 0) {
     const openCount = snapshot.openTodoCount ?? snapshot.todos.length;

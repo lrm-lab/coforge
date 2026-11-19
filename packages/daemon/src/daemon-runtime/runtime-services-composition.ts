@@ -27,6 +27,7 @@ import {
 } from "./upgrade-result-reporter";
 import type { RuntimePublicationSubscriptionPorts } from "./runtime-publication-subscriptions";
 import type { UnrefTimerSchedule } from "./unref-timer";
+import { ProviderQuotaState } from "./provider-quota-state";
 import { CLEANER_APP_ID } from "@lrm/coforge-sdk/internal";
 
 /** What the runtime supplies to one Workspace's reminder, cleaner, App config and migration work. */
@@ -67,6 +68,7 @@ export type RuntimeServices = {
   migrations: AgentMigrationRunner | undefined;
   upgradeResults: UpgradeResultReporter;
   procJobs: ProcJobManager;
+  quotaState: ProviderQuotaState;
 };
 
 /**
@@ -157,7 +159,8 @@ export function composeRuntimeServices(ports: RuntimeServicesPorts): RuntimeServ
     acknowledge: upgradeLifecycle.acknowledgeUpgradeResult,
     schedule: upgradeLifecycle.upgradeResultSchedule,
   });
-  return { reminders, systemCleaner, appConfigs, migrations, upgradeResults, procJobs };
+  const quotaState = new ProviderQuotaState();
+  return { reminders, systemCleaner, appConfigs, migrations, upgradeResults, procJobs, quotaState };
 }
 
 /** The migration runner's operations as the publication subscriptions call them; absent when the

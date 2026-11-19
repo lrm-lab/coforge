@@ -1,11 +1,7 @@
 import { createRuntimeAuthAdapter } from "#src/code-agent/registry";
 import { AgentStopRegistry } from "./agent-stop-registry";
 import type { RuntimeAuthAdapter, RuntimeAuthProvider } from "@lrm/coforge-anvil";
-import {
-  type AgentRuntimeConfig,
-  type CodeAgentProvider,
-  type UsageSnapshot,
-} from "@lrm/coforge-anvil";
+import { type AgentRuntimeConfig, type CodeAgentProvider } from "@lrm/coforge-anvil";
 import { OperatingSystemInfo } from "#src/platform/operating-system";
 import { assembleInputDrain } from "./assemble-input-drain";
 import { launchInputPorts } from "./session-memory-hooks";
@@ -93,7 +89,6 @@ import { startAgent } from "./agent-start-coordinator";
 import { deleteWorkspace } from "./runtime-lifecycle-operations";
 import { startupLifecycle } from "./runtime-upgrade-lifecycle";
 import { assertOwnIntent } from "./runtime-intent-validation";
-import { currentObservedUsage } from "./runtime-usage-observation";
 import { failCollectorRunningSlots } from "./runtime-collector-failure";
 import { runtimeEnvelope } from "./runtime-envelope";
 import { replaceTransport } from "./runtime-transport-lifecycle";
@@ -111,7 +106,6 @@ import { abandonLaunch, scheduleStartupFailure } from "./agent-startup-failure";
 import { revokeAgentApiKey } from "./agent-api-key-revoke";
 import { assembleRuntimeSweeps, createSessionSummaryObserver } from "./assemble-runtime-sweeps";
 import { assembleAgentConfigApply } from "./agent-config-apply-assembly";
-import { rememberUsage } from "./usage-memory";
 import { runtimeMachineStatus } from "./machine-status-reporter";
 import { agentActivityDrafts } from "./agent-activity-drafts";
 import { sendAgentStatus, type AgentStatusReportPorts } from "./agent-status-report";
@@ -371,7 +365,6 @@ export class DaemonRuntime {
     runtimeInstanceId: this.#runtimeInstanceId,
     startedAtMs: this.#startedAt,
   };
-  readonly #observedUsage = new Map<RuntimeProvider, UsageSnapshot>();
 
   readonly #usageReport = assembleUsageReport(
     (agentId) => this.#stopState.sessionId(agentId),
@@ -613,7 +606,7 @@ export class DaemonRuntime {
       showQuietTurn: this.#turn.showQuietTurn,
       reconcileIdleTurn: this.#turn.reconcileIdleTurn,
       wakeFinishedSubagents: (agentId) => this.#launchCoordinator.wakeFinishedSubagents(agentId),
-      rememberUsage: (snapshot) => rememberUsage(this.#observedUsage, snapshot),
+      rememberUsage: (agentId, snapshot) => this.#services.quotaState.observe(agentId, snapshot),
       releaseTurnEndHolds: this.#turn.releaseTurnEndHolds,
       isWorking: this.#turn.isWorking,
       drainAppInboxNotices: (agentId) => this.#inboxCoordinator.drainAppInboxNotices(agentId),
@@ -769,6 +762,7 @@ export class DaemonRuntime {
       stateDirectory: this.stateDirectory,
       contextView: this.#contextViewService,
       sideAsk: this,
+      quotaState: this.#services.quotaState,
       agentApiKey: (agentId) => this.agentApiKeys.get(agentId),
       resolveProviderSource: (agentId, entry) =>
         resolveContextViewProviderSource(this, agentId, entry),
@@ -885,7 +879,7 @@ export class DaemonRuntime {
         assertRunning: () => this.#assertRunning(),
         workspaceRoot: this.#connection.workspaceRoot,
         createProvider: (provider) => this.#createProvider(provider),
-        observedUsage: (provider) => currentObservedUsage(this.#observedUsage, provider),
+        observedUsage: (provider) => this.#services.quotaState.observedUsage(provider),
       },
       provider,
     );
@@ -1255,6 +1249,7 @@ export class DaemonRuntime {
       this.#sync,
       (agentId) => this.#launchCoordinator.dropOwedRecovery(agentId),
       this.#services.procJobs,
+      this.#services.quotaState,
     );
 
   get #revokeAgentApiKey() {

@@ -43,11 +43,13 @@ export type AgentRuntimeConfig = Readonly<{
   envVars?: Readonly<Record<string, string>>;
 }>;
 export type UsageWindowStatus = "ok" | "limit_reached" | "parse_unavailable";
+export type UsageQuotaLevel = "ok" | "warning" | "near_exhausted" | "exhausted";
 export type UsageHealth = "ok" | "rate_limited" | "reauth_required" | "unsupported" | "error";
 export type UsageWindow = Readonly<{
   id?: string;
   usedPercent?: number;
   status?: UsageWindowStatus;
+  quotaLevel?: UsageQuotaLevel;
   windowDurationMinutes: number;
   resetsAt?: string;
 }>;

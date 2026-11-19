@@ -147,6 +147,19 @@ describe("subscribeAgentSideAskQueries and DaemonQueries", () => {
         }),
       },
       credentialHolds: { isHeld: () => isHeld },
+      quotaState: {
+        summaryForAgent: (_agentId, activeProvider) =>
+          activeProvider === RUNTIME_PROVIDER.CODEX
+            ? {
+                provider: RUNTIME_PROVIDER.CODEX,
+                window: "primary",
+                windowDurationMinutes: 300,
+                level: "warning",
+                usedPercent: 84,
+                observedAtMs: 4_000,
+              }
+            : undefined,
+      },
       runner: {
         hasInFlight: () => false,
         ask: async () => {
@@ -176,6 +189,7 @@ describe("subscribeAgentSideAskQueries and DaemonQueries", () => {
     expect(results.at(-1)?.status).toBe("ok");
     expect(results.at(-1)?.answer).toContain("State: working (running_command, 4s) [codex]");
     expect(results.at(-1)?.answer).toContain("Running tool: Bash");
+    expect(results.at(-1)?.answer).toContain("Quota: warning (5h window, 84%)");
 
     await listener!(sampleRequest({ kind: "question" }));
     expect(results.at(-1)).toMatchObject({ status: "failed", reason: "unsupported_runtime" });

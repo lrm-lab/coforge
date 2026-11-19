@@ -498,11 +498,10 @@ test("Claude Code reports a synthetic API-error message as one error before the 
 });
 
 test("Claude Code exposes account rate-limit events as partial usage snapshots", async () => {
-  const agentWorkspaceDirectory = await mkdtemp(join(tmpdir(), "coforge-claude-usage-event-"));
-
+  const dir = await mkdtemp(join(tmpdir(), "coforge-claude-usage-event-"));
   try {
     const session = await claudeFixtureProvider().createAgentSession({
-      agentWorkspaceDirectory,
+      agentWorkspaceDirectory: dir,
       instructions: TEST_AGENT_INSTRUCTIONS,
     });
     const events: AgentRuntimeEvent[] = [];
@@ -516,6 +515,7 @@ test("Claude Code exposes account rate-limit events as partial usage snapshots",
         provider: "claude-code",
         primary: {
           status: "limit_reached",
+          quotaLevel: "exhausted",
           windowDurationMinutes: 300,
           resetsAt: "2026-09-04T03:00:00.000Z",
         },
@@ -524,7 +524,7 @@ test("Claude Code exposes account rate-limit events as partial usage snapshots",
 
     await session.dispose();
   } finally {
-    await rm(agentWorkspaceDirectory, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true });
   }
 });
 
