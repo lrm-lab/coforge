@@ -6,8 +6,10 @@ import { emptyCodeAgentDiscovery } from "./code-agent-discovery";
 
 /** A fake session whose `subscribe` listener the test drives directly, so it can
  * simulate a provider's busy/idle transitions (`progress` while a turn runs, `completed` at turn
- * end) without a real provider process. */
-export function deliveryGateSession() {
+ * end) without a real provider process. `liveTurn` reports the session's own liveness for the
+ * completion it emits, which the zero-evidence gate reads: an ACP session clears its turn before
+ * emitting `completed`, so a test that judges an empty turn passes `false`. */
+export function deliveryGateSession({ liveTurn }: { liveTurn?: boolean } = {}) {
   const listeners = new Set<(event: AgentRuntimeEvent) => void>();
   const exitListeners = new Set<() => void>();
   const notices: string[] = [];
@@ -15,6 +17,7 @@ export function deliveryGateSession() {
   const disposed = Promise.withResolvers<void>();
   return {
     session: {
+      ...(liveTurn === undefined ? {} : { hasLiveTurn: liveTurn }),
       async sendMessage() {
         // These tests exercise delivery after successful startup, not a provider still
         // waiting for its first model event.
@@ -92,6 +95,7 @@ export async function createDeliveryGateHarness({
   stateDirectory,
   onActivity,
   agentConfig = {},
+  liveTurn,
 }: {
   connection: DaemonConfig;
   config: AgentRuntimeConfig;
@@ -100,10 +104,11 @@ export async function createDeliveryGateHarness({
   stateDirectory?: string;
   onActivity?: (activity: AgentActivity) => void;
   agentConfig?: Partial<AgentRuntimeConfig>;
+  liveTurn?: boolean;
 }) {
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-a");
-  const fake = deliveryGateSession();
+  const fake = deliveryGateSession({ liveTurn });
   const statuses: AgentStatus[] = [];
   const rejections: { reason: string }[] = [];
   const runtime = new DaemonRuntime(
