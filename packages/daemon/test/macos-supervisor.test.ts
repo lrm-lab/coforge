@@ -8,13 +8,8 @@ import {
 } from "#src/supervisor/workspace-health-journal";
 import { workspaceStateDirectory } from "#src/supervisor/workspace-instance";
 
-/** What a Workspace writes to its `native-ready.json`. */
 type NativeReady = { workspacePid: number; agentPid: number; predecessorAlive: boolean };
 
-/** Reads one readiness file, or `undefined` while it is absent or half-written. The connection
- * fixture writes this file with a plain `Bun.write`, which is not atomic, so a read can land on a
- * partial document while it is being rewritten. "Not rewritten yet" is the normal state a poll sees,
- * not a failure — an unguarded `.json()` there turns a rewrite into a JSON parse error. */
 async function readNativeReady(path: string): Promise<NativeReady | undefined> {
   try {
     return (await Bun.file(path).json()) as NativeReady;
@@ -23,7 +18,6 @@ async function readNativeReady(path: string): Promise<NativeReady | undefined> {
   }
 }
 
-/** Polls a readiness file until `accepts` holds, or the deadline passes with `message`. */
 async function waitForNativeReady(
   path: string,
   accepts: (ready: NativeReady) => boolean,
@@ -42,10 +36,8 @@ test("a half-written readiness file reads as not-yet-ready rather than a parse e
   const directory = await mkdtemp("/tmp/cf-ready-");
   const path = join(directory, "native-ready.json");
   try {
-    // Mid-`Bun.write`, exactly what a poll can observe.
     await Bun.write(path, '{"workspacePid":12');
     expect(await readNativeReady(path)).toBeUndefined();
-    // The wait gives up on its own message, not on the JSON parse error underneath it.
     await expect(
       waitForNativeReady(path, () => true, Date.now() + 60, "Workspace A did not report readiness"),
     ).rejects.toThrow("Workspace A did not report readiness");
@@ -71,8 +63,6 @@ test.skipIf(process.platform !== "darwin")(
   "compiled macOS Coordinator configures two Workspaces and preserves scoped restart and stop across recovery",
   async () => {
     const root = await mkdtemp("/private/tmp/cf-mac-");
-    // Real Daemon runtime and local RPC; only the cloud transport and inventory
-    // are fixtures. No credentials, live cloud registrations or user jobs touched.
     const serverUrl = "http://127.0.0.1:1";
     const executable = join(root, "computer");
     const build = Bun.spawn(
@@ -106,7 +96,7 @@ test.skipIf(process.platform !== "darwin")(
           workspaceId,
           computerId: "fixture-computer",
           workspaceRoot: join(root, "data"),
-          daemonApiKey: "fixture-only",
+          daemonApiKey: `fixture-${workspaceId}-${root}`,
           serverHttpUrl: serverUrl,
         });
       await configure("a");
@@ -228,7 +218,7 @@ test.skipIf(process.platform !== "darwin")(
         workspaceId: "a",
         computerId: "fixture-computer",
         workspaceRoot: join(root, "data"),
-        daemonApiKey: "fixture-only",
+        daemonApiKey: `fixture-a-${root}`,
         serverHttpUrl: serverUrl,
       });
       const running = (await client.control("snapshot"))[0]!;
@@ -345,7 +335,7 @@ test.skipIf(process.platform !== "darwin")(
         workspaceId,
         computerId: "fixture-computer",
         workspaceRoot: join(root, `data-${workspaceId}`),
-        daemonApiKey: "fixture-only",
+        daemonApiKey: `fixture-${workspaceId}-${root}`,
         serverHttpUrl: serverUrl,
       });
     const processIds = async () =>
@@ -457,7 +447,7 @@ test.skipIf(process.platform !== "darwin")(
         workspaceId,
         computerId: "fixture-computer",
         workspaceRoot: join(root, `data-${workspaceId}`),
-        daemonApiKey: "fixture-only",
+        daemonApiKey: `fixture-${workspaceId}-${root}`,
         serverHttpUrl: serverUrl,
       });
     const alive = (pid: number) => {
@@ -581,7 +571,7 @@ test.skipIf(process.platform !== "darwin")(
         workspaceId: "a",
         computerId: "fixture-computer",
         workspaceRoot: join(root, "data-a"),
-        daemonApiKey: "fixture-only",
+        daemonApiKey: `fixture-a-${root}`,
         serverHttpUrl: serverUrl,
       });
       // Setup answers by the same budget: wait for its start too.

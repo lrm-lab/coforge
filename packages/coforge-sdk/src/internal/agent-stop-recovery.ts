@@ -37,6 +37,7 @@ export const STOP_REASON_RECOVERY: Readonly<Record<string, StopRecovery>> = {
   runtime_spawn_failed: RETRY,
   // The wakes outlived their deadline: nothing starts it again until a person does (task #33).
   startup_deadline_exceeded: RETRY,
+  startup_prompt_too_large: RETRY,
   // Runtime failures that end the process.
   launcher_error: RETRY,
   input_too_large: RESET_SESSION,

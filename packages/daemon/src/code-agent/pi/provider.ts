@@ -12,6 +12,7 @@ export class CoforgeProvider implements CodeAgentProvider {
   readonly compactionFailure = "sticks_to_session";
   readonly supportsSessionSummaryRecycle = true;
   readonly standingPromptRefreshesOnResume = true;
+  constructor(private readonly options?: Readonly<{ agentDir?: string }>) {}
   async createAgentSession(options: AgentSessionOptions): Promise<AgentSession> {
     const runtime = options.runtime;
     if (!runtime) throw new ModelProviderSettingError("CoForge runtime config is required");
@@ -35,7 +36,7 @@ export class CoforgeProvider implements CodeAgentProvider {
       {
         cwd: options.agentWorkspaceDirectory,
         agentId: options.agentId,
-        agentDir: getCoforgeAgentDir(options.agentWorkspaceDirectory),
+        agentDir: this.options?.agentDir ?? getCoforgeAgentDir(options.agentWorkspaceDirectory),
         sessionDir: getCoforgeSessionDir(options.agentWorkspaceDirectory),
         sessionId: options.sessionId,
         sessionMode: options.sessionMode,

@@ -741,14 +741,15 @@ test("built-in notifications are accepted before completion and steer the existi
       );
     },
   });
-  await mkdir(join(agentWorkspaceDirectory, ".builtin-runtime"));
+  const agentDir = join(agentWorkspaceDirectory, "host");
+  await mkdir(agentDir);
   await Bun.write(
-    join(agentWorkspaceDirectory, ".builtin-runtime/models.json"),
+    join(agentDir, "models.json"),
     JSON.stringify({
       providers: { openrouter: { baseUrl: `${server.url}v1` } },
     }),
   );
-  const session = await new CoforgeProvider().createAgentSession({
+  const session = await new CoforgeProvider({ agentDir }).createAgentSession({
     agentWorkspaceDirectory,
     instructions: TEST_AGENT_INSTRUCTIONS,
     runtime: {

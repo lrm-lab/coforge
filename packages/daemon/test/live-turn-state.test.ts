@@ -97,8 +97,8 @@ for (const provider of providers) {
   );
 }
 
-for (const provider of [piProvider(), new CoforgeProvider()]) {
-  test(`${provider.provider} distinguishes SDK preflight and live work from a settled prompt`, async () => {
+for (const kind of ["pi", "coforge"] as const) {
+  test(`${kind} distinguishes SDK preflight and live work from a settled prompt`, async () => {
     const root = await mkdtemp(join(realpathSync(tmpdir()), "coforge-sdk-live-turn-"));
     const started = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
@@ -125,21 +125,18 @@ for (const provider of [piProvider(), new CoforgeProvider()]) {
               baseUrl: `${server.url}v1`,
               models: [{ id: "custom", name: "Custom", api: "openai-completions" }],
             },
+            openrouter: { baseUrl: `${server.url}v1` },
           },
         }),
       );
-      await mkdir(join(root, ".builtin-runtime"));
-      await Bun.write(
-        join(root, ".builtin-runtime/models.json"),
-        JSON.stringify({ providers: { openrouter: { baseUrl: `${server.url}v1` } } }),
-      );
-      const builtIn = provider.provider === "coforge";
+      const builtIn = kind === "coforge";
+      const provider = builtIn ? new CoforgeProvider({ agentDir }) : piProvider();
       const session = await provider.createAgentSession({
         agentWorkspaceDirectory: root,
         instructions: "Test Agent instructions.",
         environment: { PI_CODING_AGENT_DIR: agentDir },
         runtime: {
-          provider: provider.provider,
+          provider: kind,
           modelProvider: builtIn ? "openrouter" : "openai",
           model: builtIn ? "deepseek/deepseek-v4-flash-0731" : "custom",
           reasoning: "",
