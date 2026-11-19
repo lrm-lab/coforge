@@ -379,6 +379,11 @@ configs:
             "state": "ENABLED",
             "variants": { "on": true, "off": false },
             "defaultVariant": "on"
+          },
+          "computer-offline-alerts": {
+            "state": "ENABLED",
+            "variants": { "on": true, "off": false },
+            "defaultVariant": "on"
           }
         }
       }

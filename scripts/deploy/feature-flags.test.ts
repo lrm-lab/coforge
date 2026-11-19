@@ -27,6 +27,11 @@ describe("feature flags in the deployed Compose files", () => {
         variants: { on: true, off: false },
         defaultVariant: "on",
       },
+      "computer-offline-alerts": {
+        state: "ENABLED",
+        variants: { on: true, off: false },
+        defaultVariant: "on",
+      },
     });
   });
 
