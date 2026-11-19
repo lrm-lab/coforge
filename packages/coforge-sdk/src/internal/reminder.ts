@@ -8,7 +8,7 @@ import { isScopeId } from "./scope-id";
 import { boundedPayload } from "./codec";
 import { MESSAGE_ANCHOR_SOURCE, RFC_UUID_PATTERN } from "./uuid";
 import { fromWireRequestId, toWireRequestId } from "./idempotency-key-wire";
-import { fromVersionedProto, toVersionedProto } from "./reminder-versioned-wire";
+import { fromVersionedProto, optional, toVersionedProto } from "./reminder-versioned-wire";
 export { reminderAcknowledgementIdempotencyKey } from "./reminder-acknowledgement";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
@@ -106,6 +106,7 @@ export type ReminderLogEvent = { eventId: string; type: string; time: string; ne
 export type AgentReminderOperationResponse = ReminderOperationScope & {
   accepted: boolean;
   reason?: string;
+  displayTimezone?: string;
   reminders: ReminderSummaryRecord[];
   events: ReminderLogEvent[];
 };
@@ -168,7 +169,7 @@ export function isValidReminderStatusFilter(value: string): boolean {
   return new Set(parts).size === parts.length;
 }
 
-function bounded(bytes: Uint8Array) {
+export function bounded(bytes: Uint8Array) {
   return boundedPayload(bytes, MAX_BYTES, "Reminder");
 }
 function identity(value: ReminderIdentity): void {
@@ -278,10 +279,6 @@ function operation<T extends AgentReminderOperationRequest>(value: T): T {
     throw new Error("invalid update reminder request");
   return value;
 }
-const optional = <T extends Record<string, unknown>>(value: T) =>
-  Object.fromEntries(
-    Object.entries(value).filter(([key, v]) => key !== "$typeName" && v !== undefined),
-  );
 
 /**
  * The request as it arrives over **JSON** — the same rules the codec applies (`operationScope`,

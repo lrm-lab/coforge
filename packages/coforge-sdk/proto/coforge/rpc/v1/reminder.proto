@@ -58,6 +58,7 @@ message AgentReminderOperationResponse {
   optional string reason = 7;
   repeated ReminderSummaryRecord reminders = 8;
   repeated ReminderLogEvent events = 9;
+  optional string display_timezone = 10;
 }
 
 message ReminderJob {

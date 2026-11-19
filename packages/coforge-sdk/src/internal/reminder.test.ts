@@ -5,7 +5,10 @@ import {
   parseReminderRecurrence,
   reminderAcknowledgementIdempotencyKey,
 } from "#src/internal/reminder";
-import { AgentReminderOperationRequestSchema } from "#src/internal/gen/coforge/rpc/v1/reminder_pb";
+import {
+  AgentReminderOperationRequestSchema,
+  AgentReminderOperationResponseSchema,
+} from "#src/internal/gen/coforge/rpc/v1/reminder_pb";
 import {
   REMINDER_SYNC_MESSAGE_TYPE,
   decodeAgentReminderOperationRequest,
@@ -85,6 +88,7 @@ test("preserves full multiline reminder titles across protocol seams", () => {
   const response = {
     ...operationScope,
     accepted: true,
+    displayTimezone: "Asia/Shanghai",
     reminders: [
       {
         ...job,
@@ -97,6 +101,28 @@ test("preserves full multiline reminder titles across protocol seams", () => {
   expect(
     decodeAgentReminderOperationResponse(encodeAgentReminderOperationResponse(response)),
   ).toEqual(response);
+});
+
+test("a response carries an optional, validated display time zone", () => {
+  const base = { ...operationScope, accepted: true, reminders: [], events: [] };
+  expect(
+    decodeAgentReminderOperationResponse(encodeAgentReminderOperationResponse(base))
+      .displayTimezone,
+  ).toBeUndefined();
+  expect(
+    decodeAgentReminderOperationResponse(
+      encodeAgentReminderOperationResponse({ ...base, displayTimezone: "Not/A_Zone" } as never),
+    ).displayTimezone,
+  ).toBeUndefined();
+  const bytes = toBinary(
+    AgentReminderOperationResponseSchema,
+    create(AgentReminderOperationResponseSchema, {
+      ...scope,
+      accepted: true,
+      displayTimezone: "Not/A_Zone",
+    }),
+  );
+  expect(decodeAgentReminderOperationResponse(bytes).displayTimezone).toBeUndefined();
 });
 
 test("round-trips and validates cloud reminder operations", () => {

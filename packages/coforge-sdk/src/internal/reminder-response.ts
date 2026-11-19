@@ -1,7 +1,7 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AgentReminderOperationResponseSchema } from "#src/internal/gen/coforge/rpc/v1/reminder_pb";
-import { boundedPayload } from "./codec";
 import {
+  bounded,
   fields,
   hasReminderCore,
   operationScope,
@@ -10,15 +10,18 @@ import {
   type ReminderSummaryRecord,
 } from "./reminder";
 import { instant } from "./reminder-grammar";
-import { fromVersionedProto, toVersionedProto } from "./reminder-versioned-wire";
+import { fromVersionedProto, optional, toVersionedProto } from "./reminder-versioned-wire";
 import { isScopeId } from "./scope-id";
 
-const MAX_BYTES = 65_536;
-const bounded = (bytes: Uint8Array) => boundedPayload(bytes, MAX_BYTES, "Reminder");
-const record = <T extends Record<string, unknown>>(value: T) =>
-  Object.fromEntries(
-    Object.entries(value).filter(([key, v]) => key !== "$typeName" && v !== undefined),
-  );
+function timeZone(value: string): string | undefined {
+  if (value.length === 0 || value.length > 64) return undefined;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format();
+  } catch {
+    return undefined;
+  }
+  return value;
+}
 
 function summary(value: ReminderSummaryRecord): ReminderSummaryRecord {
   fields(value, true);
@@ -43,18 +46,23 @@ function event(value: ReminderLogEvent): ReminderLogEvent {
   return value;
 }
 
-function response(value: AgentReminderOperationResponse) {
-  operationScope(value);
-  value.reminders.forEach(summary);
-  value.events.forEach(event);
-  return value;
+function withoutUnusableTimeZone(value: AgentReminderOperationResponse) {
+  const { displayTimezone, ...rest } = value;
+  const usable = displayTimezone === undefined ? undefined : timeZone(displayTimezone);
+  return usable === undefined ? rest : { ...rest, displayTimezone: usable };
 }
 
 export function encodeAgentReminderOperationResponse(value: AgentReminderOperationResponse) {
+  operationScope(value);
+  value.reminders.forEach(summary);
+  value.events.forEach(event);
   return bounded(
     toBinary(
       AgentReminderOperationResponseSchema,
-      create(AgentReminderOperationResponseSchema, toVersionedProto(response(value))),
+      create(
+        AgentReminderOperationResponseSchema,
+        toVersionedProto(withoutUnusableTimeZone(value)),
+      ),
     ),
   );
 }
@@ -63,10 +71,12 @@ export function decodeAgentReminderOperationResponse(
   bytes: Uint8Array,
 ): AgentReminderOperationResponse {
   const v = fromBinary(AgentReminderOperationResponseSchema, bounded(bytes));
-  return response({
-    ...fromVersionedProto<AgentReminderOperationResponse>(v),
-    reason: v.reason,
-    reminders: v.reminders.map((r) => summary(record(r) as ReminderSummaryRecord)),
-    events: v.events.map((e) => event(record(e) as ReminderLogEvent)),
-  } as AgentReminderOperationResponse);
+  return operationScope(
+    withoutUnusableTimeZone({
+      ...fromVersionedProto<AgentReminderOperationResponse>(v),
+      reason: v.reason,
+      reminders: v.reminders.map((r) => summary(optional(r) as ReminderSummaryRecord)),
+      events: v.events.map((e) => event(optional(e) as ReminderLogEvent)),
+    } as AgentReminderOperationResponse),
+  );
 }

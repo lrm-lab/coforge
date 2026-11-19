@@ -1,7 +1,7 @@
 import { REMINDER_PROTOCOL_MAJOR } from "./reminder";
 import { fromWireRequestId, toWireRequestId } from "./idempotency-key-wire";
 
-const optional = <T extends Record<string, unknown>>(value: T) =>
+export const optional = <T extends Record<string, unknown>>(value: T) =>
   Object.fromEntries(
     Object.entries(value).filter(([key, v]) => key !== "$typeName" && v !== undefined),
   );
