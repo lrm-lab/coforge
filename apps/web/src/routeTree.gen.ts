@@ -14,6 +14,7 @@ import { Route as HealthRouteImport } from './routes/health'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as DotwellKnownOauthAuthorizationServerRouteImport } from './routes/[.]well-known.oauth-authorization-server'
+import { Route as AArtifactIdRouteImport } from './routes/a.$artifactId'
 import { Route as ApiAgentApiKeysRouteImport } from './routes/api/agent-api-keys'
 import { Route as ApiAppAgentEventsRouteImport } from './routes/api.app-agent-events'
 import { Route as ApiAppAgentRequestsRouteImport } from './routes/api.app-agent-requests'
@@ -235,6 +236,11 @@ const DotwellKnownOauthAuthorizationServerRoute =
     path: '/.well-known/oauth-authorization-server',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AArtifactIdRoute = AArtifactIdRouteImport.update({
+  id: '/a/$artifactId',
+  path: '/a/$artifactId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAgentApiKeysRoute = ApiAgentApiKeysRouteImport.update({
   id: '/api/agent-api-keys',
   path: '/api/agent-api-keys',
@@ -1323,6 +1329,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/welcome': typeof WelcomeRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
+  '/a/$artifactId': typeof AArtifactIdRoute
   '/api/agent-api-keys': typeof ApiAgentApiKeysRoute
   '/api/app-agent-events': typeof ApiAppAgentEventsRoute
   '/api/app-agent-requests': typeof ApiAppAgentRequestsRouteWithChildren
@@ -1522,6 +1529,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/welcome': typeof WelcomeRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
+  '/a/$artifactId': typeof AArtifactIdRoute
   '/api/agent-api-keys': typeof ApiAgentApiKeysRoute
   '/api/app-agent-events': typeof ApiAppAgentEventsRoute
   '/api/app-agent-requests': typeof ApiAppAgentRequestsRouteWithChildren
@@ -1720,6 +1728,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/welcome': typeof WelcomeRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerRoute
+  '/a/$artifactId': typeof AArtifactIdRoute
   '/api/agent-api-keys': typeof ApiAgentApiKeysRoute
   '/api/app-agent-events': typeof ApiAppAgentEventsRoute
   '/api/app-agent-requests': typeof ApiAppAgentRequestsRouteWithChildren
@@ -1923,6 +1932,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/welcome'
     | '/.well-known/oauth-authorization-server'
+    | '/a/$artifactId'
     | '/api/agent-api-keys'
     | '/api/app-agent-events'
     | '/api/app-agent-requests'
@@ -2122,6 +2132,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/welcome'
     | '/.well-known/oauth-authorization-server'
+    | '/a/$artifactId'
     | '/api/agent-api-keys'
     | '/api/app-agent-events'
     | '/api/app-agent-requests'
@@ -2319,6 +2330,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/welcome'
     | '/.well-known/oauth-authorization-server'
+    | '/a/$artifactId'
     | '/api/agent-api-keys'
     | '/api/app-agent-events'
     | '/api/app-agent-requests'
@@ -2521,6 +2533,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   WelcomeRoute: typeof WelcomeRoute
   DotwellKnownOauthAuthorizationServerRoute: typeof DotwellKnownOauthAuthorizationServerRoute
+  AArtifactIdRoute: typeof AArtifactIdRoute
   ApiAgentApiKeysRoute: typeof ApiAgentApiKeysRoute
   ApiAppAgentEventsRoute: typeof ApiAppAgentEventsRoute
   ApiAppAgentRequestsRoute: typeof ApiAppAgentRequestsRouteWithChildren
@@ -2702,6 +2715,13 @@ declare module '@tanstack/react-router' {
       path: '/.well-known/oauth-authorization-server'
       fullPath: '/.well-known/oauth-authorization-server'
       preLoaderRoute: typeof DotwellKnownOauthAuthorizationServerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/a/$artifactId': {
+      id: '/a/$artifactId'
+      path: '/a/$artifactId'
+      fullPath: '/a/$artifactId'
+      preLoaderRoute: typeof AArtifactIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/agent-api-keys': {
@@ -4322,6 +4342,7 @@ const rootRouteChildren: RootRouteChildren = {
   WelcomeRoute: WelcomeRoute,
   DotwellKnownOauthAuthorizationServerRoute:
     DotwellKnownOauthAuthorizationServerRoute,
+  AArtifactIdRoute: AArtifactIdRoute,
   ApiAgentApiKeysRoute: ApiAgentApiKeysRoute,
   ApiAppAgentEventsRoute: ApiAppAgentEventsRoute,
   ApiAppAgentRequestsRoute: ApiAppAgentRequestsRouteWithChildren,

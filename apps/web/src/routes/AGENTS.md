@@ -13,6 +13,7 @@ These rules apply to `src/routes/`.
   slug is: `/w/<former>/…` goes to the same page under its current slug.
 - Pages opened before someone is in a Workspace — `login`, `welcome`, `join/$token`,
   `apps/share/$token` (a private app share link: the person picks a Workspace to install in),
+  `a/$artifactId` (public link-shared Artifact shell accepting short IDs or UUIDs),
   `oauth/verify`, `oidc/auth`, `workspaces/new` — stay outside `/w/$workspaceSlug`; sign-in,
   the name step, invite links, and creating a first Workspace share
   `features/auth/auth-split-layout.tsx`. A signed-in User in no Workspace is sent
