@@ -26,6 +26,7 @@ import {
   ShownThreadsContext,
   type ArtifactCommenting,
   type CommentRequests,
+  type PickedCommentAnchor,
   type PublishedPlaces,
 } from "./artifact-commenting";
 import { groupThreads } from "./artifact-comment-threads";
@@ -212,6 +213,7 @@ function ArtifactPageFor({
     () => groups.anchored.filter(({ root }) => root.version === shownVersion),
     [groups.anchored, shownVersion],
   );
+  const [pickedAnchor, setPickedAnchor] = useState<PickedCommentAnchor | null>(null);
   const commenting = useMemo<ArtifactCommenting>(
     () => ({
       artifactId,
@@ -220,6 +222,8 @@ function ArtifactPageFor({
       filePaths,
       commenting: commentMode.mode,
       panelOpen: panel === "comments",
+      pickedAnchor,
+      setPickedAnchor,
       revealThread,
       openThread: (commentId) => {
         setPanel("comments");
@@ -236,6 +240,7 @@ function ArtifactPageFor({
       filePaths,
       commentMode.mode,
       panel,
+      pickedAnchor,
       revealThread,
       postFocus,
       publishPlaces,

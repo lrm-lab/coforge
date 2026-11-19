@@ -1,11 +1,25 @@
 import { createContext, useContext } from "react";
 
-import type { AnchorStatus, PublishedPlace } from "./artifact-anchor-places";
+import type {
+  AnchorDraft,
+  AnchorStatus,
+  DraftTrail,
+  PublishedPlace,
+} from "./artifact-anchor-places";
 import type { CommentAnchor } from "./artifact-comment-inputs";
 import type { CommentThread } from "./artifact-comment-threads";
 import type { ComposerHolds } from "./artifact-composer-holds";
 
 export type CommentTarget = { version: number; path: string; anchor: CommentAnchor | null };
+
+export type PickedCommentAnchor = {
+  path: string;
+  version: number;
+  anchor: CommentAnchor;
+  trail?: DraftTrail | undefined;
+  onRetarget?: ((draft: AnchorDraft) => void) | undefined;
+  onClear: () => void;
+};
 
 export type ThreadPlaces = ReadonlyMap<string, PublishedPlace>;
 
@@ -16,6 +30,8 @@ export type ArtifactCommenting = {
   filePaths: readonly string[];
   commenting: boolean;
   panelOpen: boolean;
+  pickedAnchor: PickedCommentAnchor | null;
+  setPickedAnchor(anchor: PickedCommentAnchor | null): void;
   revealThread(target: CommentTarget): void;
   openThread(commentId: string): void;
   openPanel(): void;
