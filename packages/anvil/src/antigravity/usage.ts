@@ -93,6 +93,7 @@ export function parseAntigravityUsage(output: string): UsageSnapshot {
   if (command?.name !== undefined && command.name !== "usage") throw new UsageUnavailableError();
   const data = asRecord(command?.data);
   const groups = quotaGroups(data?.groups);
+  const credits = parseCredits(data);
   const officialDescription = text(data?.description);
   const group = groups.reduce<QuotaGroup | undefined>(
     (tightest, candidate) =>
@@ -102,15 +103,82 @@ export function parseAntigravityUsage(output: string): UsageSnapshot {
   const primary = group && usageWindow(group, "5h");
   const secondary = group && usageWindow(group, "weekly");
   const officialGroups = groups.map(officialGroup);
-  if (officialGroups.length === 0) throw new UsageUnsupportedError();
-  const exhausted = groups.some((item) => item.buckets.some((bucket) => bucket.remaining <= 0));
+  if (officialGroups.length === 0 && !credits) throw new UsageUnsupportedError();
+  const exhausted =
+    groups.length > 0
+      ? groups.some((item) => item.buckets.some((bucket) => bucket.remaining <= 0))
+      : Boolean(credits && !credits.hasCredits && !credits.unlimited);
   return {
     provider: RUNTIME_PROVIDER.ANTIGRAVITY,
     ...(officialDescription ? { officialDescription } : {}),
-    officialGroups,
+    ...(officialGroups.length > 0 ? { officialGroups } : {}),
     ...(primary ? { primary } : {}),
     ...(secondary ? { secondary } : {}),
+    ...(credits ? { credits } : {}),
     health: exhausted ? "rate_limited" : "ok",
+  };
+}
+
+function nonNegativeNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function balanceText(value: unknown): string | undefined {
+  const numeric = nonNegativeNumber(value);
+  if (numeric !== undefined) return String(numeric);
+  const raw = text(value);
+  return raw && raw.length <= 40 ? raw : undefined;
+}
+
+function parseCredits(
+  data: Record<string, unknown> | undefined,
+): UsageSnapshot["credits"] | undefined {
+  if (!data) return undefined;
+  const raw = data.ai_credits ?? data.credits ?? data.available_credits;
+  if (raw === undefined || raw === null) return undefined;
+  const bareAmount = nonNegativeNumber(raw);
+  if (bareAmount !== undefined) {
+    return {
+      hasCredits: bareAmount > 0,
+      unlimited: false,
+      balance: String(bareAmount),
+    };
+  }
+  const record = asRecord(raw);
+  if (!record) return undefined;
+  const unlimited = record.unlimited === true;
+  const numericAmount =
+    nonNegativeNumber(record.available) ??
+    nonNegativeNumber(record.available_credits) ??
+    nonNegativeNumber(record.remaining) ??
+    nonNegativeNumber(record.remaining_credits) ??
+    nonNegativeNumber(record.balance);
+  const balance =
+    numericAmount !== undefined
+      ? String(numericAmount)
+      : (balanceText(record.balance) ??
+        balanceText(record.available) ??
+        balanceText(record.remaining));
+  const explicitHas =
+    typeof record.hasCredits === "boolean"
+      ? record.hasCredits
+      : typeof record.has_credits === "boolean"
+        ? record.has_credits
+        : undefined;
+  if (!unlimited && explicitHas === undefined && balance === undefined) return undefined;
+  const parsedBalance = balance !== undefined ? Number(balance) : undefined;
+  const hasCredits =
+    explicitHas ??
+    (unlimited ||
+      (numericAmount !== undefined
+        ? numericAmount > 0
+        : parsedBalance !== undefined && Number.isFinite(parsedBalance)
+          ? parsedBalance > 0
+          : balance !== undefined));
+  return {
+    hasCredits,
+    unlimited,
+    ...(balance !== undefined ? { balance } : {}),
   };
 }
 

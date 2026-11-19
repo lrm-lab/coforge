@@ -399,3 +399,100 @@ test("rejects mismatched command.name and out-of-range remaining_fraction values
     }),
   ).rejects.toBeInstanceOf(UsageUnsupportedError);
 });
+
+test("parses ai_credits alongside quota groups into UsageSnapshot.credits", async () => {
+  const snapshot = await readUsage({
+    COFORGE_ANTIGRAVITY_USAGE_OUTPUT: JSON.stringify({
+      status: "SUCCESS",
+      command: {
+        name: "usage",
+        data: {
+          groups: [
+            {
+              name: "Gemini Models",
+              buckets: [{ id: "gemini-5h", window: "5h", remaining_fraction: 0.75 }],
+            },
+          ],
+          ai_credits: { available: 1250 },
+        },
+      },
+    }),
+  });
+  expect(snapshot.credits).toEqual({
+    hasCredits: true,
+    unlimited: false,
+    balance: "1250",
+  });
+  expect(snapshot.health).toBe("ok");
+});
+
+test("supports credits-only responses and unlimited or zero-credit balances", async () => {
+  const withCredits = await readUsage({
+    COFORGE_ANTIGRAVITY_USAGE_OUTPUT: JSON.stringify({
+      status: "SUCCESS",
+      command: {
+        name: "usage",
+        data: {
+          groups: [],
+          credits: { has_credits: true, unlimited: false, balance: "42.50" },
+        },
+      },
+    }),
+  });
+  expect(withCredits.officialGroups).toBeUndefined();
+  expect(withCredits.credits).toEqual({
+    hasCredits: true,
+    unlimited: false,
+    balance: "42.50",
+  });
+  expect(withCredits.health).toBe("ok");
+
+  const depleted = await readUsage({
+    COFORGE_ANTIGRAVITY_USAGE_OUTPUT: JSON.stringify({
+      status: "SUCCESS",
+      command: {
+        name: "usage",
+        data: {
+          groups: [],
+          ai_credits: 0,
+        },
+      },
+    }),
+  });
+  expect(depleted.officialGroups).toBeUndefined();
+  expect(depleted.credits).toEqual({
+    hasCredits: false,
+    unlimited: false,
+    balance: "0",
+  });
+  expect(depleted.health).toBe("rate_limited");
+
+  const unlimited = await readUsage({
+    COFORGE_ANTIGRAVITY_USAGE_OUTPUT: JSON.stringify({
+      status: "SUCCESS",
+      command: {
+        name: "usage",
+        data: {
+          groups: [],
+          ai_credits: { unlimited: true },
+        },
+      },
+    }),
+  });
+  expect(unlimited.credits).toEqual({ hasCredits: true, unlimited: true });
+  expect(unlimited.health).toBe("ok");
+});
+
+test("ignores negative or malformed credit fields", async () => {
+  await expect(
+    readUsage({
+      COFORGE_ANTIGRAVITY_USAGE_OUTPUT: JSON.stringify({
+        status: "SUCCESS",
+        command: {
+          name: "usage",
+          data: { groups: [], ai_credits: -5 },
+        },
+      }),
+    }),
+  ).rejects.toBeInstanceOf(UsageUnsupportedError);
+});
