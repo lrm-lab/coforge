@@ -30,15 +30,14 @@ Apply migrations with the normal deployment command from `apps/web`:
 
 ```sh
 bun run db:migrate:deploy
-bun run scripts/backfill-workspace-assistants.ts
 ```
 
-The backfill is repeatable and provisions all existing memberships in bounded pages.
-Web startup runs the same pass automatically, including for members who have not
-opened the app. It starts assistants that have not replied yet, without moving existing
-runtime history. New Workspace creators get an assistant immediately. Existing and newly joined members also get
+Web startup automatically provisions all existing memberships in bounded pages,
+including for members who have not opened the app. It starts assistants that
+have not replied yet, without moving existing runtime history. New Workspace
+creators get an assistant immediately. Existing and newly joined members also get
 one when joining by link (after membership commits), or when loading a Workspace
-or its Direct messages, covering a missed backfill.
+or its Direct messages.
 
 The assistant defaults to the account's default cloud Computer, reused across its
 Workspaces, with runtime **Pi**, model **Use provider default** and reasoning
