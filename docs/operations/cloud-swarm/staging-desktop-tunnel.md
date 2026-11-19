@@ -53,8 +53,8 @@ gh variable set STAGING_DESKTOP_TUNNEL_PUBLIC_KEY --env staging --repo lrm-lab/c
 
 `Deploy Web (staging)` appends that line to `deploy`'s `authorized_keys`
 (idempotent). The dedicated workflow
-`install-staging-desktop-tunnel-key.yml` does the same without a full deploy
-once it exists on `main`.
+`install-desktop-tunnel-key.yml` (`environment: staging`) does the same without
+a full deploy.
 
 ## Swarm manager: systemd unit
 

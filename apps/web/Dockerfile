@@ -35,7 +35,7 @@ RUN bun run --cwd apps/web build
 
 # One-off operational scripts the runtime image carries, each bundled with its dependencies into a
 # single file (the source tree and workspace deps are not in the final stage). Run as
-# `bun .ops/<name>.js` in the deployed container (.github/workflows/backfill-owner-agent-names.yml).
+# `bun .ops/<name>.js` in the deployed container (.github/workflows/ops-backfill.yml).
 RUN bun build apps/web/scripts/backfill-owner-agent-names.ts \
   --target bun --outfile apps/web/.ops/backfill-owner-agent-names.js
 RUN bun build apps/web/scripts/backfill-message-references.ts \

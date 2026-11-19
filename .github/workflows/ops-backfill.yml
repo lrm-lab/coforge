@@ -1,24 +1,23 @@
-name: Backfill message_references (task #465)
+name: Run Web data backfill
 
-# One-time (re-runnable) data task: resolve historical messages' stored reference tokens into
-# `message_references` rows by the ids they carry. See
-# apps/web/scripts/backfill-message-references.ts (bundled into the image at
-# .ops/backfill-message-references.js by apps/web/Dockerfile).
+# Unified operator workflow for re-runnable Web data backfills bundled into the deployed image
+# under /app/.ops/backfill-<script>.js (apps/web/Dockerfile). Runs inside the live Web container
+# over SSH using the chosen GitHub Environment's secrets.
 #
-# Dispatched by an operator. The DB is not reachable from CI, so — as the deploys do — this runs
-# the bundled script inside the already-deployed Web container over SSH, using the chosen GitHub
-# Environment's SSH secrets. Run `dry-run` first and read the counts and samples in the log.
-#
-# The production Environment has no required reviewer (task #498), so there is no human gate from
-# the platform: an `apply` or `rollback` to production must repeat a confirmation phrase.
-# Rollback deletes exactly the `(messageId, ordinal)` rows the run it names recorded.
-#
-# Every free-text input is validated against a strict shape in `Validate inputs` and quoted with
-# `printf %q` before it reaches the remote shell — a dispatch's text never runs on the deploy host.
+# Every free-text input is validated by apps/web/scripts/validate-backfill-inputs.sh and quoted
+# with `printf %q` before reaching the remote shell.
 
 on:
   workflow_dispatch:
     inputs:
+      script:
+        description: "Backfill script to run"
+        required: true
+        type: choice
+        options:
+          - artifact-origins
+          - message-references
+          - owner-agent-names
       environment:
         description: "Where to run"
         required: true
@@ -27,7 +26,7 @@ on:
           - staging
           - production
       mode:
-        description: "dry-run reports only; apply writes; rollback deletes that run's rows"
+        description: "dry-run reports only; apply writes; rollback (message-references only) deletes that run's rows"
         required: true
         type: choice
         options:
@@ -39,26 +38,31 @@ on:
         required: false
         type: string
       fromMessageId:
-        description: "Resume from this Message.id (uuid7, printed on a timed-out run)"
+        description: "Resume from this Message.id (uuid7; artifact-origins, message-references)"
         required: false
         type: string
+      scanWindow:
+        description: "Message ids scanned per window (artifact-origins)"
+        required: false
+        type: string
+        default: "5000"
       batchSize:
-        description: "Messages per batch"
+        description: "Messages per batch (artifact-origins, message-references)"
         required: false
         type: string
         default: "500"
       maxMinutes:
-        description: "Stop after this many minutes and print the resume cursor"
+        description: "Stop after this many minutes and print the resume cursor (artifact-origins, message-references)"
         required: false
         type: string
         default: "12"
       pauseMs:
-        description: "Pause between batches, milliseconds"
+        description: "Pause between batches, milliseconds (artifact-origins, message-references)"
         required: false
         type: string
         default: "100"
       runId:
-        description: "rollback: the apply run's id (message_reference_backfill_runs)"
+        description: "rollback: the apply run's id (message-references)"
         required: false
         type: string
 
@@ -66,16 +70,22 @@ permissions:
   contents: read
 
 concurrency:
-  group: backfill-message-references-${{ inputs.environment }}
+  group: ops-backfill-${{ inputs.script }}-${{ inputs.environment }}
   cancel-in-progress: false
 
 jobs:
   backfill:
-    name: Run the backfill
+    name: Run ${{ inputs.script }} (${{ inputs.environment }})
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     timeout-minutes: 15
     steps:
+      - name: Reject unsupported mode for the selected script
+        if: inputs.mode == 'rollback' && inputs.script != 'message-references'
+        run: |
+          echo "rollback mode is only supported for message-references." >&2
+          exit 1
+
       - name: Require the confirmation phrase for a production write
         if: inputs.environment == 'production' && inputs.mode != 'dry-run'
         env:
@@ -92,8 +102,10 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Validate inputs
+        if: inputs.script != 'owner-agent-names'
         env:
           FROM_ID: ${{ inputs.fromMessageId }}
+          SCAN_WINDOW: ${{ inputs.script == 'artifact-origins' && inputs.scanWindow || '' }}
           BATCH_SIZE: ${{ inputs.batchSize }}
           MAX_MINUTES: ${{ inputs.maxMinutes }}
           PAUSE_MS: ${{ inputs.pauseMs }}
@@ -139,29 +151,54 @@ jobs:
           fi
           echo "WEB_CONTAINER=$container" >> "$GITHUB_ENV"
 
+      - name: Back up agents.displayName before an apply
+        if: inputs.script == 'owner-agent-names' && inputs.mode == 'apply'
+        env:
+          DEPLOY_SSH_HOST: ${{ vars.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
+        run: |
+          ssh -i "$SSH_DIR/key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
+            -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=8 \
+            "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
+            "docker exec -i -w /app '$WEB_CONTAINER' bun /app/.ops/backfill-owner-agent-names.js --backup" \
+            > agents-displayName-backup.jsonl
+          wc -l agents-displayName-backup.jsonl
+
+      - name: Upload the backup
+        if: inputs.script == 'owner-agent-names' && inputs.mode == 'apply'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: agents-displayName-backup-${{ inputs.environment }}
+          path: agents-displayName-backup.jsonl
+          retention-days: 90
+
       - name: Run the backfill
         env:
           DEPLOY_SSH_HOST: ${{ vars.DEPLOY_SSH_HOST }}
           DEPLOY_SSH_USER: ${{ vars.DEPLOY_SSH_USER }}
+          SCRIPT: ${{ inputs.script }}
           MODE: ${{ inputs.mode }}
           FROM_ID: ${{ inputs.fromMessageId }}
+          SCAN_WINDOW: ${{ inputs.scanWindow }}
           BATCH_SIZE: ${{ inputs.batchSize }}
           MAX_MINUTES: ${{ inputs.maxMinutes }}
           PAUSE_MS: ${{ inputs.pauseMs }}
           RUN_ID: ${{ inputs.runId }}
         run: |
-          # One line of validated, %q-quoted args — no multi-line block the remote shell would split.
           args=""
           case "$MODE" in
-            dry-run) args="$args --dry-run";;
-            apply)   args="$args --apply";;
+            dry-run)  args="$args --dry-run";;
+            apply)    args="$args --apply";;
             rollback) args="$args --rollback --run-id $(printf %q "$RUN_ID")";;
           esac
-          [ -n "$FROM_ID" ] && args="$args --from-message-id $(printf %q "$FROM_ID")"
-          [ -n "$BATCH_SIZE" ] && args="$args --batch-size $(printf %q "$BATCH_SIZE")"
-          [ -n "$MAX_MINUTES" ] && args="$args --max-minutes $(printf %q "$MAX_MINUTES")"
-          [ -n "$PAUSE_MS" ] && args="$args --pause-ms $(printf %q "$PAUSE_MS")"
+          if [ "$SCRIPT" != "owner-agent-names" ]; then
+            [ -n "$FROM_ID" ] && args="$args --from-message-id $(printf %q "$FROM_ID")"
+            [ "$SCRIPT" = "artifact-origins" ] && [ -n "$SCAN_WINDOW" ] && args="$args --scan-window $(printf %q "$SCAN_WINDOW")"
+            [ -n "$BATCH_SIZE" ] && args="$args --batch-size $(printf %q "$BATCH_SIZE")"
+            [ -n "$MAX_MINUTES" ] && args="$args --max-minutes $(printf %q "$MAX_MINUTES")"
+            [ -n "$PAUSE_MS" ] && args="$args --pause-ms $(printf %q "$PAUSE_MS")"
+          fi
           ssh -i "$SSH_DIR/key" -o UserKnownHostsFile="$SSH_DIR/known_hosts" \
             -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=8 \
             "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
-            "docker exec -i -w /app '$WEB_CONTAINER' bun /app/.ops/backfill-message-references.js $args"
+            "docker exec -i -w /app '$WEB_CONTAINER' bun /app/.ops/backfill-$SCRIPT.js $args"

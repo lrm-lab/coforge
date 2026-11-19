@@ -41,7 +41,8 @@ gh variable set PRODUCTION_DESKTOP_TUNNEL_PUBLIC_KEY --env production --repo lrm
 
 `Deploy Web (production)` appends that line to `deploy`'s `authorized_keys`
 (idempotent). The dedicated workflow
-`install-production-desktop-tunnel-key.yml` does the same without a full deploy.
+`install-desktop-tunnel-key.yml` (`environment: production`) does the same
+without a full deploy.
 
 ## Swarm manager: systemd unit
 
