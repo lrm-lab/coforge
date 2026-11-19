@@ -64,7 +64,7 @@ describe("desktop page adaptation", () => {
     function coforgeDesktopPaste(text) {}
     function coforgeWriteLocalClipboard(text) {}
     function coforgeDesktopCopyOut() {}
-    function coforgeAttachPhoneGestures() {}
+    function applyPhoneViewportScale() {}
     function placePhoneFabInViewport() {}
     const phone = params.get("view") === "phone";
 </script>
@@ -74,6 +74,28 @@ describe("desktop page adaptation", () => {
 <button type="button" id="coforge-desktop-reconnect"></button>
 `;
     expect(adaptDesktopHtml(current)).toBe(current);
+  });
+
+  test("a page with the old two-level pinch gestures is rewritten for continuous zoom", () => {
+    const stale = `<!DOCTYPE html>
+<script type="module">
+    import RFB from "./core/rfb.js";
+    function coforgeDesktopPaste(text) {}
+    function coforgeWriteLocalClipboard(text) {}
+    function coforgeDesktopCopyOut() {}
+    function coforgeAttachPhoneGestures() {}
+    function placePhoneFabInViewport() {}
+    const phone = params.get("view") === "phone";
+</script>
+<button type="button" id="coforge-desktop-phone-fab"></button>
+<div id="coforge-desktop-phone-bar"></div>
+<textarea id="coforge-desktop-keyboard-input"></textarea>
+<button type="button" id="coforge-desktop-reconnect"></button>
+`;
+    const html = adaptDesktopHtml(stale);
+    expect(html).toContain("applyPhoneViewportScale");
+    expect(html).toContain("viewportChangePos");
+    expect(html).not.toBe(stale);
   });
 
   test("a FAB page without viewport reclamp is rewritten", () => {
@@ -133,9 +155,9 @@ describe("desktop page adaptation", () => {
   test("a phone viewer can fit the shared desktop or pan at native size", () => {
     const html = adaptDesktopHtml(oldPage);
     expect(html).toContain('params.get("view") === "phone"');
-    expect(html).toContain("scaleViewport = true");
-    expect(html).toContain("clipViewport = true");
-    expect(html).toContain("dragViewport = true");
+    expect(html).toContain("applyPhoneViewportScale");
+    expect(html).toContain("clipViewport");
+    expect(html).toContain("dragViewport = false");
     expect(html).toContain('id="coforge-desktop-phone-bar"');
     expect(html).toContain('id="coforge-desktop-phone-fab"');
     expect(html).toContain("coforgeAttachPhoneFab");
@@ -164,7 +186,7 @@ describe("desktop page adaptation", () => {
     expect(html).toContain("coforgeAttachPhoneFab");
   });
 
-  test("a phone viewer gets modifier keys, long-press right-click, and two-finger scroll", () => {
+  test("a phone viewer gets continuous pinch zoom, one-finger pan, and wheel when fitted", () => {
     const html = adaptDesktopHtml(oldPage);
     expect(html).toContain('id="coforge-desktop-keys"');
     expect(html).toContain('data-key="Escape"');
@@ -172,6 +194,9 @@ describe("desktop page adaptation", () => {
     expect(html).toContain('data-key="Tab"');
     expect(html).toContain('data-key="ArrowUp"');
     expect(html).toContain("coforgeAttachPhoneGestures");
+    expect(html).toContain("applyPhoneViewportScale");
+    expect(html).toContain("viewportChangePos");
+    expect(html).toContain("capture: true");
     expect(html).toContain("touchstart");
     expect(html).toContain("buttonMask");
     expect(html).toContain("0xff1b");

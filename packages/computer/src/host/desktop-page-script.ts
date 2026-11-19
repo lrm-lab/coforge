@@ -122,24 +122,54 @@ export const RELATIVE_PAGE_SCRIPT = `
       ArrowRight: 0xff53,
       ArrowDown: 0xff54,
     };
-    let phoneMode = "fit";
+    let phoneScale = 0;
     let ctrlHeld = false;
     let gesturesBound = false;
+    function phoneFrameSize() {
+      const display = rfb?._display;
+      const width = display?.width || 0;
+      const height = display?.height || 0;
+      return { width, height };
+    }
+    function phoneFitScale() {
+      const { width, height } = phoneFrameSize();
+      const cw = screen?.clientWidth || 0;
+      const ch = screen?.clientHeight || 0;
+      if (cw <= 0 || ch <= 0 || width <= 0 || height <= 0) return 1;
+      return Math.min(cw / width, ch / height, 1);
+    }
+    function phoneViewportCanPan() {
+      return phoneScale > phoneFitScale() + 0.02;
+    }
+    function syncPhoneModeButtons() {
+      const fit = phoneFitScale();
+      const nearFit = phoneScale <= fit + 0.03;
+      const nearNative = phoneScale >= 0.97;
+      phoneBar?.querySelectorAll("button[data-mode]").forEach((button) => {
+        const mode = button.dataset.mode;
+        button.classList.toggle(
+          "is-active",
+          (mode === "fit" && nearFit) || (mode === "pan" && nearNative && !nearFit),
+        );
+      });
+    }
+    function applyPhoneViewportScale(scale) {
+      if (!rfb || !phone || !rfb._display) return;
+      const fit = phoneFitScale();
+      const next = Math.min(1, Math.max(fit, Number.isFinite(scale) ? scale : fit));
+      phoneScale = next;
+      rfb.scaleViewport = false;
+      rfb.dragViewport = false;
+      rfb.clipViewport = phoneViewportCanPan();
+      try {
+        rfb._display.scale = next;
+      } catch {
+      }
+      syncPhoneModeButtons();
+    }
     function applyPhoneMode(mode) {
       if (!rfb || !phone) return;
-      phoneMode = mode;
-      if (mode === "pan") {
-        rfb.scaleViewport = false;
-        rfb.clipViewport = true;
-        rfb.dragViewport = true;
-      } else {
-        rfb.scaleViewport = true;
-        rfb.clipViewport = false;
-        rfb.dragViewport = false;
-      }
-      phoneBar?.querySelectorAll("button[data-mode]").forEach((button) => {
-        button.classList.toggle("is-active", button.dataset.mode === mode);
-      });
+      applyPhoneViewportScale(mode === "pan" ? 1 : phoneFitScale());
     }
     function sendKey(code, down) {
       if (!rfb) return;
@@ -241,91 +271,140 @@ export const RELATIVE_PAGE_SCRIPT = `
       gesturesBound = true;
       let longPressTimer = 0;
       let longPressFired = false;
-      let startX = 0;
-      let startY = 0;
-      let scrollY = 0;
-      let pinchStart = 0;
+      let oneFinger = null;
+      let pinch = null;
+      const touchOpts = { passive: false, capture: true };
       const clearLongPress = () => {
         if (longPressTimer) {
           clearTimeout(longPressTimer);
           longPressTimer = 0;
         }
       };
+      const panViewport = (dx, dy) => {
+        const display = rfb?._display;
+        if (!display || typeof display.viewportChangePos !== "function") return;
+        try {
+          display.viewportChangePos(-dx / Math.max(phoneScale, 0.01), -dy / Math.max(phoneScale, 0.01));
+        } catch {
+        }
+      };
       screen.addEventListener(
         "touchstart",
         (ev) => {
           if (!rfb) return;
-          if (ev.touches.length === 1) {
-            const touch = ev.touches[0];
-            longPressFired = false;
-            startX = touch.clientX;
-            startY = touch.clientY;
+          if (ev.touches.length >= 2) {
             clearLongPress();
-            longPressTimer = window.setTimeout(() => {
-              longPressFired = true;
-              sendMouse(touch.clientX, touch.clientY, 0x4);
-            }, 450);
-            return;
-          }
-          clearLongPress();
-          if (ev.touches.length === 2) {
+            oneFinger = null;
             ev.preventDefault();
-            scrollY = (ev.touches[0].clientY + ev.touches[1].clientY) / 2;
+            ev.stopPropagation();
             const dx = ev.touches[0].clientX - ev.touches[1].clientX;
             const dy = ev.touches[0].clientY - ev.touches[1].clientY;
-            pinchStart = Math.hypot(dx, dy);
+            pinch = {
+              startDistance: Math.hypot(dx, dy),
+              startScale: phoneScale || phoneFitScale(),
+            };
+            return;
           }
+          if (ev.touches.length !== 1) return;
+          pinch = null;
+          const touch = ev.touches[0];
+          longPressFired = false;
+          oneFinger = {
+            startX: touch.clientX,
+            startY: touch.clientY,
+            lastX: touch.clientX,
+            lastY: touch.clientY,
+            moved: false,
+            panning: false,
+            scrolling: false,
+          };
+          clearLongPress();
+          longPressTimer = window.setTimeout(() => {
+            if (!oneFinger || oneFinger.moved) return;
+            longPressFired = true;
+            sendMouse(oneFinger.startX, oneFinger.startY, 0x4);
+          }, 450);
         },
-        { passive: false },
+        touchOpts,
       );
       screen.addEventListener(
         "touchmove",
         (ev) => {
           if (!rfb) return;
-          if (ev.touches.length === 1 && longPressTimer) {
-            const touch = ev.touches[0];
-            if (Math.hypot(touch.clientX - startX, touch.clientY - startY) > 12) clearLongPress();
+          if (ev.touches.length >= 2 && pinch) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            const dx = ev.touches[0].clientX - ev.touches[1].clientX;
+            const dy = ev.touches[0].clientY - ev.touches[1].clientY;
+            const distance = Math.hypot(dx, dy);
+            if (!(pinch.startDistance > 0) || !(distance > 0)) return;
+            applyPhoneViewportScale(pinch.startScale * (distance / pinch.startDistance));
             return;
           }
-          if (ev.touches.length !== 2) return;
-          ev.preventDefault();
-          const midY = (ev.touches[0].clientY + ev.touches[1].clientY) / 2;
-          const dx = ev.touches[0].clientX - ev.touches[1].clientX;
-          const dy = ev.touches[0].clientY - ev.touches[1].clientY;
-          const distance = Math.hypot(dx, dy);
-          const scrollDelta = midY - scrollY;
-          if (Math.abs(scrollDelta) >= 24) {
-            sendMouse(ev.touches[0].clientX, ev.touches[0].clientY, scrollDelta > 0 ? 0x10 : 0x8);
-            scrollY = midY;
+          if (ev.touches.length !== 1 || !oneFinger) return;
+          const touch = ev.touches[0];
+          const totalDx = touch.clientX - oneFinger.startX;
+          const totalDy = touch.clientY - oneFinger.startY;
+          const stepDx = touch.clientX - oneFinger.lastX;
+          const stepDy = touch.clientY - oneFinger.lastY;
+          oneFinger.lastX = touch.clientX;
+          oneFinger.lastY = touch.clientY;
+          if (!oneFinger.moved && Math.hypot(totalDx, totalDy) > 12) {
+            oneFinger.moved = true;
+            clearLongPress();
+            if (phoneViewportCanPan()) oneFinger.panning = true;
+            else if (Math.abs(totalDy) >= Math.abs(totalDx)) oneFinger.scrolling = true;
           }
-          if (pinchStart > 0 && Math.abs(distance - pinchStart) >= 48) {
-            applyPhoneMode(distance > pinchStart ? "pan" : "fit");
-            pinchStart = distance;
+          if (oneFinger.panning) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            panViewport(stepDx, stepDy);
+            return;
+          }
+          if (oneFinger.scrolling && Math.abs(stepDy) >= 8) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            sendMouse(touch.clientX, touch.clientY, stepDy > 0 ? 0x10 : 0x8);
           }
         },
-        { passive: false },
+        touchOpts,
       );
       screen.addEventListener(
         "touchend",
         (ev) => {
+          if (ev.touches.length < 2) pinch = null;
+          if (ev.touches.length > 0) return;
           clearLongPress();
+          const gesture = oneFinger;
+          oneFinger = null;
+          if (!gesture) return;
           if (longPressFired) {
             ev.preventDefault();
             ev.stopPropagation();
             longPressFired = false;
+            return;
           }
-          if (ev.touches.length < 2) pinchStart = 0;
+          if (!gesture.moved && !gesture.panning && !gesture.scrolling) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            sendMouse(gesture.startX, gesture.startY, 0x1);
+          }
         },
-        { passive: false },
+        touchOpts,
       );
       screen.addEventListener(
         "touchcancel",
         () => {
           clearLongPress();
-          pinchStart = 0;
+          oneFinger = null;
+          pinch = null;
         },
-        { passive: true },
+        touchOpts,
       );
+      window.addEventListener("resize", () => {
+        if (!phone || !rfb) return;
+        applyPhoneViewportScale(phoneScale || phoneFitScale());
+      });
     }
 
     let session = 0;
@@ -336,7 +415,7 @@ export const RELATIVE_PAGE_SCRIPT = `
       rfb.scaleViewport = true;
       rfb.focusOnClick = true;
       if (phone) {
-        applyPhoneMode(phoneMode);
+        applyPhoneMode("fit");
         coforgeAttachPhoneGestures();
         coforgeAttachPhoneKeyboard();
         coforgeAttachPhoneFab();
@@ -347,9 +426,12 @@ export const RELATIVE_PAGE_SCRIPT = `
         showReconnect(false);
         if (msg) msg.hidden = true;
         if (phone) {
-          applyPhoneMode(phoneMode);
+          applyPhoneViewportScale(phoneScale || phoneFitScale());
           if (ctrlHeld) sendKey("ControlLeft", true);
         }
+      });
+      rfb.addEventListener("desktopresize", () => {
+        if (phone) applyPhoneViewportScale(phoneScale || phoneFitScale());
       });
       rfb.addEventListener("securityfailure", (ev) => {
         if (!msg) return;
