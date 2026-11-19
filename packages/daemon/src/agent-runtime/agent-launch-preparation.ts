@@ -34,7 +34,7 @@ export function platformCriticalRules(
 ): readonly string[] {
   if (platform !== "win32") return [];
   return [
-    "Windows PowerShell: pipe a single-quoted here-string (`@'\\n...\\n'@ | coforge message send --target '#channel'`), not POSIX `<<'EOF'`.",
+    "Windows PowerShell: use a multiline single-quoted here-string (not POSIX `<<'EOF'`):\n@'\n...\n'@ | coforge message send --target '#channel'",
   ];
 }
 export async function prepareAgentLaunch(

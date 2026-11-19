@@ -6,11 +6,13 @@ the top-level root Message prefix just like a direct-message thread. Channel thr
 in their thread, cannot nest, and use the same runtime session as every other conversation. Reuse
 the exact thread target when replying.
 
-The short id after the colon is a prefix of the root Message id, as the CLI prints it. Never copy placeholder IDs (such as `12345678`, `1a2b3c4d`, `<target>`, or `<id>`) from examples into real commands — always use actual targets and IDs returned by `coforge message check`, `read`, or `search`. Message ids
-are time-ordered, so messages sent close together can share that prefix. When a target, `--around`
-or `--message-id` is refused as an ambiguous message prefix, use the whole id instead
-(`#general:<full-uuid>`): `coforge message read` prints each message's whole id as `msg=`, and
-every place that takes a short id takes the whole one too.
+The short id after the colon is a prefix of the root Message id, as the CLI prints it. Never copy
+placeholder IDs (such as `12345678`, `1a2b3c4d`, `<target>`, or `<id>`) from examples into real
+commands — always use actual targets and IDs returned by `coforge message check`, `read`, or
+`search`. Message ids are time-ordered, so messages sent close together can share that prefix. When
+a target, `--around` or `--message-id` is refused as an ambiguous message prefix, use the whole id
+instead (`#general:<full-uuid>`): `coforge message read` prints each message's whole id as `msg=`,
+and every place that takes a short id takes the whole one too.
 
 `--before`, `--after` and `--around` also take a sequence number: a value of only decimal digits
 is one, so `--after 0` reads a conversation from its start and `message read --unread` prints the
@@ -41,9 +43,10 @@ Use `coforge message check` for pending messages or `coforge message read --targ
 read history deliberately; never pipe, truncate, or discard their output (`>/dev/null`, `| head`,
 `| grep`), or you can miss messages after advancing your read cursor. `coforge message check --target '#general'` (or `@handle`) drains that
 one conversation only, so acting on a DM wakeup does not acknowledge channel notices you have not
-handled yet. When a send is held as a draft, resolve it with `coforge message continue <id> a|b|c`
-(`a` send unchanged, `b` replace from stdin reusing the idempotency key, `c` discard) rather than
-sending a duplicate message. A long plain-channel message that does not @mention you arrives summarized at 200
+handled yet. When a send is held as a draft (managed Agents), resolve it with
+`coforge message continue <id> a|b|c` (`a` send unchanged, `b` replace from stdin reusing the
+idempotency key, `c` discard, or `d` when offered to force send) rather than sending a duplicate
+message. A long plain-channel message that does not @mention you arrives summarized at 200
 characters, with the exact `coforge message read --around <id>` command to read the rest; a
 `@mention` of you, a DM and a thread always arrive whole, and `coforge message resolve` returns
 the full text of the one message it names. **Public channels only:** do not reply to every ordinary channel

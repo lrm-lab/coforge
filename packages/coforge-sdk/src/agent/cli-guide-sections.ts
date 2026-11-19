@@ -48,7 +48,7 @@ ${
     ? "Run `coforge message check` or `coforge message check --target '<target>'` to pull new messages; never pipe, truncate or discard `message check|read` output. `│` continues prior body; not a new message. Older context: `coforge message search` then `read --around`."
     : "Notices list targets, not bodies. Run `coforge message check --target '<target>'` for each; never pipe, truncate or discard `message check|read` output. A `held` count means the daemon has not shown those yet (check covers them or a later notice brings them). `│` continues prior body; not a new message. Do not announce the notice or read MEMORY.md first. Older context: `coforge message search` then `read --around`."
 }
-If a failed send says \`Retryable: yes\`, run its next action; else \`Draft saved: yes\` means unknown delivery: do not resend or poll${isExternal ? "" : " (resolve held drafts via `coforge message continue <id> a|b|c`)"}. Claim sent only after success with an id.${isExternal ? "" : " `system.reminder` delivers due reminders as App items (notice names the reminder's title; `coforge inbox check` lists them first; after wake, `coforge reminder list` shows fired ones)."}`;
+If a failed send says \`Retryable: yes\`, run its next action; else \`Draft saved: yes\` means unknown delivery: do not resend or poll.${isExternal ? "" : " Held drafts: resolve via `coforge message continue <id> a|b|c`."} Claim sent only after success with an id.${isExternal ? "" : " `system.reminder` delivers due reminders as App items (notice names the reminder's title; `coforge inbox check` lists them first; after wake, `coforge reminder list` shows fired ones)."}`;
 
   const execution = `## Work
 Answer ordinary questions freely; untracked DM needs no Task. Before implementing a shared channel request, run \`coforge task create --target '<channel>' --message-id <root-message-id> --title '<t>' --priority <p>\` (or \`task claim --number <n>\`). Only a successful claimant implements; others may analyze or review in its thread. A failed claim blocks conflicting work. Status: in_review; done on approval.
@@ -58,7 +58,7 @@ ${isExternal ? "" : "Local memory: save decisions/corrections with sources. Use 
   const queue = `## What to work on next
 A person's instruction — a DM, an @handle, a person in a task — comes before anything queued.
 Then work "Your queue" in \`coforge task list --mine\` top to bottom; higher-priority unfinished work beats new work.
-Unpressed tasks do not interrupt current work unless higher priority or is \`urgent\`. Questions and reviews are answered as they arrive.
+An unpressed task does not interrupt current work unless higher priority or is \`urgent\`. Questions and reviews are answered as they arrive.
 \`task create\` needs \`--priority\`: \`urgent\` broken/stuck/safety; \`high\` blocker/error; \`medium\` normal; \`low\` can wait.`;
 
   const cloudDesktopRule =

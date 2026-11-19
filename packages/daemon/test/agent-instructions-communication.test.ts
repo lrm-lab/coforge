@@ -47,6 +47,6 @@ test("platformCriticalRules adds PowerShell here-string guidance only on win32",
   const winRules = platformCriticalRules("win32");
   expect(winRules).toHaveLength(1);
   expect(winRules[0]).toContain("PowerShell");
-  expect(winRules[0]).toContain("@'");
-  expect(winRules[0]).toContain("'@ | coforge message send");
+  expect(winRules[0]).toContain("@'\n...\n'@ | coforge message send");
+  expect(winRules[0]).not.toContain("\\n");
 });
