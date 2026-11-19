@@ -27,8 +27,9 @@ journal record is written in full and synced inside that transaction, before it
 commits; the header is written in full and synced before the first record. A journal
 write that fails rolls the artifact's tier change and its access event back. A run that dies between such a write
 and the commit leaves a record whose transaction never committed, so the journal is not
-a list of exactly what committed: rollback skips such a record because its tier never
-became `link` and no access event carries the recorded id.
+a list of exactly what committed. Rollback skips records whose migration event never
+committed, even if a later change put the artifact in the link tier: the lock compares the
+newest access event and the event count, not the tier alone.
 
 A rollback record restores an artifact only when, inside the same row lock: its tier is
 still `link`, this migration's access event is still the newest and the event count has
