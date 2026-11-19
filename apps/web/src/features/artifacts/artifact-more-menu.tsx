@@ -9,8 +9,10 @@ import {
   Download01,
   Edit03,
   Link01,
+  LinkExternal01,
   SearchLg,
   Send01,
+  Stars01,
   Trash01,
   Users01,
 } from "@untitledui/icons";
@@ -26,6 +28,9 @@ export type MoreAction =
   | "copy-link"
   | "embed"
   | "send"
+  | "copy-for-ai"
+  | "open-chatgpt"
+  | "open-claude"
   | "rename"
   | "files"
   | "download"
@@ -68,6 +73,27 @@ export function ArtifactMoreMenu({
             <Dropdown.Item id="embed" icon={Code01} label={m.av_menu_embed()} />
           )}
           <Dropdown.Item id="send" icon={Send01} label={m.doc_send_action()} />
+          <SubmenuTrigger>
+            <Dropdown.Item id="ai" icon={Stars01} label={m.av_menu_ai()} />
+            <Dropdown.SubmenuPopover className="w-52">
+              <Dropdown.Menu
+                aria-label={m.av_menu_ai()}
+                onAction={(key) => onAction(key as MoreAction)}
+              >
+                <Dropdown.Item id="copy-for-ai" icon={Copy01} label={m.av_menu_copy_for_ai()} />
+                <Dropdown.Item
+                  id="open-chatgpt"
+                  icon={LinkExternal01}
+                  label={m.av_menu_open_chatgpt()}
+                />
+                <Dropdown.Item
+                  id="open-claude"
+                  icon={LinkExternal01}
+                  label={m.av_menu_open_claude()}
+                />
+              </Dropdown.Menu>
+            </Dropdown.SubmenuPopover>
+          </SubmenuTrigger>
           {visibility.canChange && (
             <SubmenuTrigger>
               <Dropdown.Item id="who" icon={Users01} label={m.av_who_can_see()} />

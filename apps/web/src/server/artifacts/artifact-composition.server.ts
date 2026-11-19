@@ -14,6 +14,7 @@ import { productionTicketNonces } from "./artifact-sandbox-nonces.server";
 import { artifactApplicationOrigin, artifactSandboxOrigin } from "./artifact-sandbox-config.server";
 import { ArtifactPublicLinks } from "./artifact-public-links.server";
 import { linkPageLookup, publicPageLookup } from "./artifact-public-page.server";
+import { ArtifactAbuseReporter } from "./artifact-public-abuse.server";
 import { ArtifactLinkOpen } from "./artifact-link-open.server";
 import { PublicArtifactMissGuard } from "./artifact-public-miss-guard.server";
 import { getAppRateLimits } from "#src/server/app-rate-limits/app-rate-limits-composition.server";
@@ -179,6 +180,13 @@ export function productionArtifactLinkOpen(db: PrismaClient) {
     lookup: linkPageLookup(db),
     guard: productionLinkMissGuard(),
     origin: artifactSandboxOrigin(),
+  });
+}
+
+export function productionArtifactAbuseReporter(db: PrismaClient) {
+  return new ArtifactAbuseReporter({
+    perClient: getAppRateLimits().publicArtifact,
+    lookup: linkPageLookup(db),
   });
 }
 

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { artifactInputs } from "./artifact-inputs";
 import {
+  productionArtifactAbuseReporter,
   productionArtifactLinkOpen,
   productionArtifactSandbox,
 } from "#src/server/artifacts/artifact-composition.server";
@@ -45,6 +46,25 @@ export const openLinkArtifact = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     return productionArtifactLinkOpen(requireDatabaseClient()).open({
       artifactId: data.artifactId,
+      client: clientAddress(getRequest()),
+    });
+  });
+
+export const reportPublicArtifactAbuse = createServerFn({ method: "POST" })
+  .validator(
+    z
+      .object({
+        artifactId: artifactInputs.id,
+        reason: z.enum(["spam", "phishing", "harassment", "copyright", "other"]),
+        details: z.string().max(1000).optional(),
+      })
+      .strict(),
+  )
+  .handler(async ({ data }) => {
+    return productionArtifactAbuseReporter(requireDatabaseClient()).submit({
+      artifactId: data.artifactId,
+      reason: data.reason,
+      details: data.details,
       client: clientAddress(getRequest()),
     });
   });

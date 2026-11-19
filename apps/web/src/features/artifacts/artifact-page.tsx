@@ -314,6 +314,7 @@ function ArtifactPageFor({
     title,
     shownVersion,
     entryPath: entryPath ?? "",
+    body: current?.text,
     files,
     link,
     loaded: current !== undefined,

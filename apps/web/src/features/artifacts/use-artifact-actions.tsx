@@ -6,6 +6,7 @@ import { useAppToast } from "#src/components/ui/toast";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
+import { buildAiPromptUrl, formatArtifactForAi, type AiProvider } from "./artifact-ai-shortcuts";
 import { artifactDownloadUrl } from "./artifact-download-url";
 import { embedCode, type ArtifactLinkSharing } from "./artifact-link-sharing";
 import type { MoreAction } from "./artifact-more-menu";
@@ -20,6 +21,7 @@ export function useArtifactActions({
   title,
   shownVersion,
   entryPath,
+  body,
   files,
   link,
   loaded,
@@ -30,6 +32,7 @@ export function useArtifactActions({
   title: string;
   shownVersion: number;
   entryPath: string;
+  body?: string | null;
   files: readonly { path: string; sizeBytes: number }[];
   link: ArtifactLinkSharing;
   loaded: boolean;
@@ -53,6 +56,22 @@ export function useArtifactActions({
     else toast.error(m.conversation_copy_failed());
   };
 
+  const aiContext = () => ({
+    title,
+    version: shownVersion,
+    url: link.url ?? (typeof window === "undefined" ? undefined : window.location.href),
+    body,
+  });
+
+  const copyForAi = async () => {
+    if (await copyText(formatArtifactForAi(aiContext()))) toast.success(m.av_ai_copied());
+    else toast.error(m.conversation_copy_failed());
+  };
+
+  const openInAi = (provider: AiProvider) => {
+    window.open(buildAiPromptUrl(provider, aiContext()), "_blank", "noopener,noreferrer");
+  };
+
   const download = () => {
     const total = files.reduce((sum, file) => sum + file.sizeBytes, 0);
     const single = files.length <= 1;
@@ -73,6 +92,15 @@ export function useArtifactActions({
       case "embed":
         if (link.url) void copyEmbed(link.url);
         else setEmbedding(true);
+        return;
+      case "copy-for-ai":
+        void copyForAi();
+        return;
+      case "open-chatgpt":
+        openInAi("chatgpt");
+        return;
+      case "open-claude":
+        openInAi("claude");
         return;
       case "rename":
         setRenaming(true);
