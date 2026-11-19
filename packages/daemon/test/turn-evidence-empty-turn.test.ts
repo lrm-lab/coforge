@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
 import { TurnEvidenceLedger } from "#src/agent-runtime/turn-evidence";
 import { AgentDeliveryGate } from "#src/daemon-runtime/agent-delivery-gate";
-import { RuntimeErrorDeliveryHold } from "#src/daemon-runtime/runtime-error-delivery-hold";
+import {
+  RuntimeErrorDeliveryHold,
+  type RuntimeErrorDeliveryHoldPorts,
+} from "#src/daemon-runtime/runtime-error-delivery-hold";
 import { classifyRuntimeError } from "#src/agent-runtime/runtime-error-classification";
 import {
   buildRuntimeErrorActivity,
@@ -86,6 +89,51 @@ test("five bare empty turns in a row reach the zero-evidence cap", () => {
     attempts: 5,
     fenced: true,
   });
+});
+
+test("five empty turns through the runtime failure entry keep the Agent held at the fence", () => {
+  const held = new Map<
+    string,
+    ReturnType<RuntimeErrorDeliveryHoldPorts["deliveryGate"]["explicitHold"]>
+  >();
+  const hold = new RuntimeErrorDeliveryHold({
+    deliveryGate: {
+      hold: (id, reason) => {
+        held.set(id, reason);
+      },
+      release: (id) => {
+        held.delete(id);
+        return [];
+      },
+      endHoldForNextLaunch: (id) => void held.delete(id),
+      explicitHold: (id) => held.get(id),
+      credentialHeld: () => false,
+      pending: () => [],
+    },
+    flush() {
+      throw new Error("a fenced Agent must not have its deliveries flushed");
+    },
+  });
+  const ledger = strictLedger();
+  try {
+    for (let turn = 1; turn <= 5; turn += 1) {
+      ledger.markOpened();
+      const empty = ledger.finish("completed")!;
+      const classified = classifyRuntimeError({ message: empty.message });
+      const result = hold.noteRuntimeFailure(
+        "agent-a",
+        {},
+        { type: "error", message: empty.message },
+        classified,
+      );
+      if (turn < 5) expect(result.fence).toBeUndefined();
+      else expect(result.fence).toMatchObject({ attempts: 5 });
+      hold.noteTurnEnd("agent-a");
+    }
+    expect(held.get("agent-a")).toBe("fingerprint_fence");
+  } finally {
+    hold.disposeAll();
+  }
 });
 
 test("the cap's Activity names the zero-evidence stop, not a generic repeated-error stop", () => {
