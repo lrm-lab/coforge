@@ -183,6 +183,10 @@ for await (const line of console) {
           content: [],
         });
       }
+      if (text === "bare") {
+        reply({ stopReason: "end_turn" });
+        break;
+      }
       update({
         sessionUpdate: "agent_message_chunk",
         content: { type: "text", text: `echo ${text}` },

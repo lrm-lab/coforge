@@ -7,20 +7,30 @@ import { emptyCodeAgentDiscovery } from "./code-agent-discovery";
 /** A fake session whose `subscribe` listener the test drives directly, so it can
  * simulate a provider's busy/idle transitions (`progress` while a turn runs, `completed` at turn
  * end) without a real provider process. */
-export function deliveryGateSession() {
+export function deliveryGateSession(simulateDroidTurns = false) {
   const listeners = new Set<(event: AgentRuntimeEvent) => void>();
   const exitListeners = new Set<() => void>();
   const notices: string[] = [];
   const waiters: Array<{ length: number; resolve: () => void }> = [];
   const disposed = Promise.withResolvers<void>();
+  let liveTurn = false;
   return {
     session: {
+      get hasLiveTurn() {
+        return simulateDroidTurns ? liveTurn : undefined;
+      },
       async sendMessage() {
+        if (simulateDroidTurns) {
+          liveTurn = true;
+          for (const listener of listeners) listener({ type: "text-delta", text: "Ready" });
+          liveTurn = false;
+        }
         // These tests exercise delivery after successful startup, not a provider still
         // waiting for its first model event.
         for (const listener of listeners) listener({ type: "completed", status: "completed" });
       },
       async notify(notice: string) {
+        if (simulateDroidTurns) liveTurn = true;
         notices.push(notice);
         // Iterate backward while splicing so removing an earlier waiter never shifts a not-yet-
         // visited one out from under the loop.
@@ -49,6 +59,7 @@ export function deliveryGateSession() {
     /** Resolves once the runtime has asked this session to exit (process end observed). */
     disposed: disposed.promise,
     emit: (event: AgentRuntimeEvent) => {
+      if (simulateDroidTurns && event.type === "completed") liveTurn = false;
       for (const listener of listeners) listener(event);
     },
     /** Simulates the runtime process exiting unexpectedly (a crash), firing every `onExit`
@@ -103,12 +114,19 @@ export async function createDeliveryGateHarness({
 }) {
   const credentials = new InMemoryDaemonCredentialStore();
   await credentials.save(connection.workspaceId, connection.computerId, "token-a");
-  const fake = deliveryGateSession();
+  const fake = deliveryGateSession(provider === "droid");
   const statuses: AgentStatus[] = [];
   const rejections: { reason: string }[] = [];
+  let launches = 0;
   const runtime = new DaemonRuntime(
     connection,
-    () => ({ provider, createAgentSession: async () => fake.session }),
+    () => ({
+      provider,
+      async createAgentSession() {
+        launches += 1;
+        return fake.session;
+      },
+    }),
     credentials,
     {
       create: () => ({
@@ -145,6 +163,7 @@ export async function createDeliveryGateHarness({
     acks,
     statuses,
     rejections,
+    launches: () => launches,
     deliver: (sequence: number) =>
       runtime.handleAgentMessage({
         protocolMajor: 1,
