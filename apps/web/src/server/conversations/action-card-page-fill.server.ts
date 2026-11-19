@@ -3,9 +3,14 @@ import type { ActionCardView, ActionCardViewBase } from "./action-card-view.serv
 import { ACTIVE_AGENT_WHERE } from "#src/server/agents/active-agent.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
+import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
+import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { ActionCardError } from "./action-card-error.server";
 import { publishActionCardUpdate } from "./action-card-message.server";
+import { pageFillResultBody } from "./agent-message-view.server";
+import { wakeCardAuthor } from "./action-card-outcome-wake.server";
 import type { ConversationRealtime } from "./conversation-realtime.server";
+import { AgentDeliveryPublisher } from "./agent-delivery.server";
 import { loadPendingActionCard } from "./pending-action-card.server";
 import { postPageFill } from "./page-fill.server";
 
@@ -59,12 +64,17 @@ export async function resolvePageFillPayload(
   };
 }
 
-/** Types values into the Agent browser, then marks the card executed. The stored result is field ids only. */
+/** Types values into the Agent browser, then marks the card executed and wakes the Agent. The
+ * stored result is field ids only. */
 export async function commitPageFillCard(
   db: PrismaClient,
   realtime: ConversationRealtime | undefined,
   principal: { workspaceId: string; actorUserId: string },
   input: { messageId: string; values: Record<string, string>; cookie: string },
+  dependencies: {
+    publisher?: Pick<CentrifugoServerApi, "publishBatch">;
+    fillPage?: typeof postPageFill;
+  } = {},
 ): Promise<{ filled: string[] }> {
   const card = await loadPendingActionCard(
     db,
@@ -87,7 +97,8 @@ export async function commitPageFillCard(
   if (!agent?.computerId || !origin) {
     throw new AppError("TEMPORARILY_UNAVAILABLE", { errorId: "page-fill-desktop" });
   }
-  const result = await postPageFill({
+  const fillPage = dependencies.fillPage ?? postPageFill;
+  const result = await fillPage({
     origin,
     computerId: agent.computerId,
     agentId: card.preparedByAgentId,
@@ -106,5 +117,47 @@ export async function commitPageFillCard(
   });
   if (updated.count === 0) throw new AppError("CONFLICT");
   await publishActionCardUpdate(db, realtime, card.conversationId, input.messageId);
+  await wakeFilledAgent(db, dependencies.publisher, {
+    workspaceId: principal.workspaceId,
+    messageId: input.messageId,
+    conversationId: card.conversationId,
+    agentId: card.preparedByAgentId,
+    actorUserId: principal.actorUserId,
+    prompt: payload.prompt,
+    filled: result.filled,
+  });
   return result;
+}
+
+/** The fill is a delivery: the Agent that asked is woken with who filled which fields, so it can
+ * continue without re-reading the card on its own. */
+async function wakeFilledAgent(
+  db: PrismaClient,
+  publisher: Pick<CentrifugoServerApi, "publishBatch"> | undefined,
+  input: {
+    workspaceId: string;
+    messageId: string;
+    conversationId: string;
+    agentId: string;
+    actorUserId: string;
+    prompt?: string;
+    filled: string[];
+  },
+) {
+  const actor = await db.user.findUnique({
+    where: { id: input.actorUserId },
+    select: { username: true },
+  });
+  await wakeCardAuthor(
+    db,
+    new AgentDeliveryPublisher(publisher ?? createCentrifugoServerApi()),
+    { ...input, preparedByAgentId: input.agentId },
+    "choice",
+    (target) =>
+      pageFillResultBody(
+        { payload: { prompt: input.prompt }, result: { filled: input.filled } },
+        target,
+        actor ? { handle: actor.username } : null,
+      ),
+  );
 }

@@ -75,9 +75,9 @@ COFORGEACTION
 ```
 
 The person types into the card. The values are written into the page and are not stored on the
-card. Read the message again: `[action card: executed]` means the fields were filled. Then
-continue, for example by submitting the form. `[action card: pending]` means they have not
-filled it yet.
+card. When they confirm, you are woken with which fields were filled — continue, for example by
+submitting the form. You can also re-read the message: `[action card: executed]` means the
+fields were filled; `[action card: pending]` means they have not filled it yet.
 
 ## Opening the cloud desktop
 
@@ -90,8 +90,8 @@ coforge action prepare --target "@owner" <<'COFORGEACTION'
 COFORGEACTION
 ```
 
-The person opens your screen from the card, finishes the step, then marks it done. Prefer
-`page:fill` first; use takeover only when fill will not work.
+The person opens your screen from the card, finishes the step, then marks it done — you are
+woken when they do. Prefer `page:fill` first; use takeover only when fill will not work.
 
 ## Choices
 

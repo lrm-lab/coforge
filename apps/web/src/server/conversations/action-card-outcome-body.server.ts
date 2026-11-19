@@ -1,7 +1,7 @@
 /**
- * The three ways a `choice` or `questions` card ends for the Agent that asked it — answered,
- * declined, expired — read as one sentence shape: who, what happened, which card, where. Every
- * body an Agent gets about a card's outcome (the live wake and the offline replay) is built here.
+ * How a card ends for the Agent that asked it — answered, completed, declined, expired — reads as
+ * one sentence shape: who, what happened, which card, where. Every body an Agent gets about a
+ * card's outcome (the live wake and the offline replay) is built here.
  */
 
 export type CardOutcomeSubject = {
@@ -24,6 +24,10 @@ function cardNoun({ kind, prompt }: CardOutcomeSubject): string {
 /** `<who> answered your choice "<prompt>" in <target>`, to which the answer is appended. */
 export const cardAnsweredHead = (who: string, subject: CardOutcomeSubject): string =>
   `${who} answered your ${cardNoun(subject)} in ${subject.target}`;
+
+/** `<who> completed your action card "<prompt>" in <target>`, for fill and desktop takeover. */
+export const cardCompletedHead = (who: string, subject: CardOutcomeSubject): string =>
+  `${who} completed your ${cardNoun(subject)} in ${subject.target}`;
 
 export const cardDeclinedBody = (who: string, subject: CardOutcomeSubject): string =>
   `${who} declined your ${cardNoun(subject)} in ${subject.target}.`;

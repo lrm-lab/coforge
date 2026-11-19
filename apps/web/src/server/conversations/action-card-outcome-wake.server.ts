@@ -14,7 +14,8 @@ import { cardDeclinedBody, cardPerson } from "./action-card-outcome-body.server"
  * is written first and must fail loudly on an existing one (the Agent's own card message has no
  * delivery; another path having written it must not have its reason overwritten); the push is
  * skipped without a publisher, and the replay still carries the row. `choice` marks a card
- * someone answered or declined, `expired` one nobody answered — both are card events to the daemon.
+ * someone answered, completed (fill / desktop takeover), or declined; `expired` one nobody
+ * answered — both are card events to the daemon.
  */
 export async function wakeCardAuthor(
   db: PrismaClient,

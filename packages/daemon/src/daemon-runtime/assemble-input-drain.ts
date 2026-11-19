@@ -18,6 +18,7 @@ import {
   type TrackedMentionDelivery,
 } from "./mention-delivery-tracker";
 import type { agentActivityDrafts } from "./agent-activity-drafts";
+import { ordinaryDeliveryAlreadySeenExact } from "./delivery-seen-exact";
 import { deliveryWakeKey } from "./wake-loop-guard";
 
 /** The runtime's collaborators the input drain acts through. Every one is a thunk: the drain is
@@ -59,11 +60,7 @@ export function assembleInputDrain(ports: InputDrainCollaborators): AgentInputDr
             ? (ports.mentionDeliveries().willProcessLive?.(message) ?? true)
             : !attention.hasConsumed(message) &&
               !attention.wasNotified?.(message) &&
-              !(
-                message.target !== undefined &&
-                message.reason !== "card_event" &&
-                attention.seenExactSequences?.(agentId, message.target)?.includes(message.sequence)
-              );
+              !ordinaryDeliveryAlreadySeenExact(message, agentId, attention);
           let unparkedHeld: ReturnType<typeof gate.endWakeLoopHold> = [];
           let unparkedCarried: TrackedMentionDelivery[] = [];
           if (wakeKey && gate.wakeLoop && willProcess) {
