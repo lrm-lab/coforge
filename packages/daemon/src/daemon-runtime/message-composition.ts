@@ -249,8 +249,7 @@ export function composeMessages(ports: MessageCompositionPorts): MessageComposit
           },
         ),
       ),
-    noteCoforgeWriteOrHold: (agentId) =>
-      ports.deliveryGate?.wakeLoop?.noteCoforgeWriteOrHold(agentId),
+    noteCoforgeWriteOrHold: (agentId) => inboxCoordinator.noteCoforgeWriteOrHold(agentId),
   });
   return {
     mentionDeliveries,

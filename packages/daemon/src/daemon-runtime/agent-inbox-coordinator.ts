@@ -92,6 +92,7 @@ export class AgentInboxCoordinator {
 
   noteCoforgeWriteOrHold(agentId: string): void {
     this.ports.deliveryGate?.wakeLoop?.noteCoforgeWriteOrHold(agentId);
+    this.ports.currentActivityLaunch(agentId)?.turnEvidence?.noteMessageSent();
   }
 
   agentInbox(agentId: string): AgentInboxStateMachine {
