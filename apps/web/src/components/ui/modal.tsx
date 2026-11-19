@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   type ComponentProps,
   type CSSProperties,
@@ -24,19 +25,23 @@ export function ModalOverlay({
   className,
   confirmation,
   page,
+  instant = false,
   ...props
 }: Omit<ComponentProps<typeof OfficialModalOverlay>, "style"> & {
   confirmation?: boolean;
   page?: boolean;
+  instant?: boolean;
 }) {
   const trigger = useContext(OverlayTriggerStateContext);
   const open = props.isOpen ?? trigger?.isOpen ?? false;
   const viewportTop = useVisualViewportTop(open);
   const keyboardMayBeUp = useKeyboardFieldFocused(open);
   const wide = useBreakpoint("sm");
+  const form: "sheet" | "page" | null = confirmation ? "sheet" : page ? "page" : null;
+  const modalContext = useMemo(() => ({ form, instant }), [form, instant]);
   useKeepFocusedFieldInView(open);
   return (
-    <PhoneFormContext.Provider value={confirmation ? "sheet" : page ? "page" : null}>
+    <ModalContext.Provider value={modalContext}>
       <OfficialModalOverlay
         {...props}
         isDismissable={props.isDismissable ?? (Boolean(confirmation) && !wide)}
@@ -50,8 +55,9 @@ export function ModalOverlay({
         className={(state) =>
           cx(
             "bg-modal-scrim/70",
-            state.isEntering && "scrim-in",
-            state.isExiting && "scrim-out",
+            instant
+              ? "animate-none!"
+              : [state.isEntering && "scrim-in", state.isExiting && "scrim-out"],
             "max-sm:top-(--visual-viewport-top) max-sm:bottom-auto max-sm:h-(--visual-viewport-height) max-sm:min-h-0",
             !keyboardMayBeUp &&
               "max-sm:[--visual-viewport-height:var(--app-height,100dvh)]! max-sm:[--visual-viewport-top:0px]!",
@@ -62,19 +68,22 @@ export function ModalOverlay({
           )
         }
       />
-    </PhoneFormContext.Provider>
+    </ModalContext.Provider>
   );
 }
 
-const PhoneFormContext = createContext<"sheet" | "page" | null>(null);
+const ModalContext = createContext<{ form: "sheet" | "page" | null; instant: boolean }>({
+  form: null,
+  instant: false,
+});
 
 export function useConfirmationSheet(): boolean {
   const wide = useBreakpoint("sm");
-  return useContext(PhoneFormContext) === "sheet" && !wide;
+  return useContext(ModalContext).form === "sheet" && !wide;
 }
 
 export function Modal({ className, children, ...props }: ComponentProps<typeof OfficialModal>) {
-  const form = useContext(PhoneFormContext);
+  const { form, instant } = useContext(ModalContext);
   if (form !== "sheet")
     return (
       <OfficialModal
@@ -82,8 +91,9 @@ export function Modal({ className, children, ...props }: ComponentProps<typeof O
         className={(state) =>
           cx(
             "rounded-4xl sm:rounded-4xl ring-1 ring-modal-edge",
-            state.isEntering && "sm:fade-in",
-            state.isExiting && "fade-out",
+            instant
+              ? "animate-none!"
+              : [state.isEntering && "sm:fade-in", state.isExiting && "fade-out"],
             typeof className === "function" ? className(state) : className,
             form === "page" &&
               "max-sm:h-full max-sm:w-full max-sm:max-w-none max-sm:rounded-none max-sm:ring-0 max-sm:safe-area-padding",
@@ -99,8 +109,12 @@ export function Modal({ className, children, ...props }: ComponentProps<typeof O
       className={(state) =>
         cx(
           "rounded-4xl sm:rounded-4xl ring-1 ring-modal-edge",
-          state.isEntering && "sm:fade-in max-sm:motion-enter-lg",
-          state.isExiting && "sm:fade-out max-sm:motion-leave-lg",
+          instant
+            ? "animate-none!"
+            : [
+                state.isEntering && "sm:fade-in max-sm:motion-enter-lg",
+                state.isExiting && "sm:fade-out max-sm:motion-leave-lg",
+              ],
           typeof className === "function" ? className(state) : className,
           "max-sm:relative max-sm:w-full max-sm:max-w-none max-sm:rounded-t-4xl max-sm:rounded-b-none max-sm:pb-safe-bottom",
           "max-sm:zoom-in-100 max-sm:zoom-out-100 max-sm:slide-in-from-bottom max-sm:slide-out-to-bottom",

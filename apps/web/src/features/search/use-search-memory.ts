@@ -9,41 +9,35 @@ import {
   writeSearchHistory,
   writeSearchUsage,
   type SearchEntityKey,
-  type SearchUsage,
 } from "./search-memory";
 
-/**
- * Search's remembered history and usage for one Workspace and viewer. Storage is the
- * source of truth: every change reads it afresh before writing, so two open search tabs never
- * overwrite each other, and a change made in another tab is picked up from its `storage` event.
- * `loaded` is false until the first read after mount (the server render has no storage).
- */
+function readMemory(workspaceId: string, userId: string) {
+  return {
+    history: readSearchHistory(workspaceId, userId),
+    usage: readSearchUsage(workspaceId, userId),
+  };
+}
+
 export function useSearchMemory(workspaceId: string, userId: string) {
-  const [memory, setMemory] = useState<{
-    loaded: boolean;
-    history: string[];
-    usage: SearchUsage;
-  }>({ loaded: false, history: [], usage: {} });
+  const scope = `${workspaceId}:${userId}`;
+  const [memory, setMemory] = useState(() => ({
+    scope,
+    ...readMemory(workspaceId, userId),
+  }));
 
   const reload = useCallback(
-    () =>
-      setMemory({
-        loaded: true,
-        history: readSearchHistory(workspaceId, userId),
-        usage: readSearchUsage(workspaceId, userId),
-      }),
-    [workspaceId, userId],
+    () => setMemory({ scope, ...readMemory(workspaceId, userId) }),
+    [scope, workspaceId, userId],
   );
 
   useEffect(() => {
-    reload();
-    // Other tabs write drafts and layout sizes too; only this page's lists matter here.
+    if (memory.scope !== scope) reload();
     const onStorage = (event: StorageEvent) => {
       if (isSearchMemoryKey(event.key, workspaceId, userId)) reload();
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
-  }, [reload, workspaceId, userId]);
+  }, [memory.scope, scope, reload, workspaceId, userId]);
 
   const updateHistory = useCallback(
     (change: (history: string[]) => string[]) => {
@@ -53,7 +47,6 @@ export function useSearchMemory(workspaceId: string, userId: string) {
     [workspaceId, userId, reload],
   );
 
-  /** A result was opened: remember the search that found it and the place it opened. */
   const recordOpen = useCallback(
     (query: string, entity: SearchEntityKey | undefined) => {
       if (query.trim()) updateHistory((history) => withSearch(history, query));
@@ -73,5 +66,11 @@ export function useSearchMemory(workspaceId: string, userId: string) {
 
   const clearHistory = useCallback(() => updateHistory(() => []), [updateHistory]);
 
-  return { ...memory, recordOpen, removeSearch, clearHistory };
+  return {
+    history: memory.history,
+    usage: memory.usage,
+    recordOpen,
+    removeSearch,
+    clearHistory,
+  };
 }

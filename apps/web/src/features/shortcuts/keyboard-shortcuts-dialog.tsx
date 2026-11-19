@@ -42,7 +42,7 @@ export function KeyboardShortcutsDialog({
 }) {
   const apple = typeof navigator !== "undefined" && isApplePlatform();
   return (
-    <ModalOverlay isOpen={open} onOpenChange={onOpenChange} isDismissable>
+    <ModalOverlay isOpen={open} onOpenChange={onOpenChange} isDismissable instant>
       <Modal className="w-[calc(100vw-2rem)] max-w-lg">
         <Dialog className="text-left" data-keyboard-shortcuts>
           <>

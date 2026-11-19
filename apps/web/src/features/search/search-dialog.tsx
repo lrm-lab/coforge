@@ -12,19 +12,9 @@ import { Input as AriaInput } from "react-aria-components";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
-import { useBreakpoint } from "#src/hooks/use-breakpoint";
-import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
-import {
-  animateFlipFromRect,
-  animateFlipToRect,
-  cancelFlipAnimation,
-  isRectInViewport,
-} from "#src/lib/shared-element-rect";
-import { EASE_CSS } from "#src/utils/motion-tokens";
 import { channelLabel } from "#src/features/conversations/channel-visibility";
 import { isImeComposing } from "#src/lib/ime";
 import { m } from "#src/paraglide/messages";
-import { cx } from "#src/utils/cx";
 import type { SearchIntent } from "./search-dialog-context";
 import { SearchFilterBar, useSearchChannel } from "./search-filter-bar";
 import { clearedFilters, hasActiveFilter, type SearchFilters } from "./search-filters";
@@ -60,81 +50,14 @@ export function SearchDialog({
   onClose: () => void;
 }) {
   const memory = useSearchMemory(workspaceId, viewerId);
-  const reduced = usePrefersReducedMotion();
-  const desktop = useBreakpoint("sm");
   const [text, setText] = useState(intent.query ?? "");
   const [query, setQuery] = useState(text.trim());
   const [filters, setFilters] = useState<SearchFilters>(intent.filters ?? {});
   const [deferred, setDeferred] = useState(Boolean(intent.deferred));
   const scopedChannel = useSearchChannel(workspaceId, filters.channelId);
   const [composing, setComposing] = useState(false);
-  const hasOrigin = !reduced && Boolean(intent.originRect && isRectInViewport(intent.originRect));
-  const [bodyVisible, setBodyVisible] = useState(() => !hasOrigin);
-  const [closing, setClosing] = useState(false);
-  const closingRef = useRef(false);
-  const dialogRef = useRef<HTMLElement>(null);
   const box = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
-
-  useLayoutEffect(() => {
-    const modalEl = dialogRef.current?.parentElement;
-    if (!modalEl || reduced) {
-      setBodyVisible(true);
-      return;
-    }
-    const origin = intent.originRect;
-    if (origin && isRectInViewport(origin)) {
-      const duration = desktop ? 260 : 380;
-      animateFlipFromRect(modalEl, origin, {
-        duration,
-        mode: "box",
-        includeRadius: true,
-      });
-      const timer = window.setTimeout(() => setBodyVisible(true), Math.round(duration * 0.42));
-      return () => {
-        window.clearTimeout(timer);
-        cancelFlipAnimation(modalEl);
-      };
-    }
-    setBodyVisible(true);
-    if (typeof modalEl.animate !== "function") return;
-    const duration = intent.source === "keyboard" ? 180 : desktop ? 220 : 320;
-    const anim = modalEl.animate(
-      [
-        { opacity: 0, transform: "translate3d(0, -10px, 0) scale(0.985)" },
-        { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" },
-      ],
-      { duration, easing: EASE_CSS.out },
-    );
-    return () => anim.cancel();
-  }, [desktop, intent.originRect, intent.source, reduced]);
-
-  const requestDismiss = useCallback(() => {
-    if (closingRef.current) {
-      onClose();
-      return;
-    }
-    const modalEl = dialogRef.current?.parentElement;
-    const origin = intent.originRect;
-    if (reduced || !modalEl || !origin || !isRectInViewport(origin)) {
-      onClose();
-      return;
-    }
-    closingRef.current = true;
-    setClosing(true);
-    const anim = animateFlipToRect(modalEl, origin, {
-      duration: desktop ? 200 : 280,
-      mode: "box",
-      includeRadius: true,
-    });
-    if (!anim) {
-      onClose();
-      return;
-    }
-    const done = () => onClose();
-    anim.addEventListener("finish", done, { once: true });
-    anim.addEventListener("cancel", done, { once: true });
-  }, [desktop, intent.originRect, onClose, reduced]);
 
   useEffect(() => {
     const next = text.trim();
@@ -144,13 +67,15 @@ export function SearchDialog({
   }, [text, composing, query]);
 
   const onFocusRequest = useEffectEvent(() => selectBox(box.current));
-  useEffect(() => {
+  useLayoutEffect(() => {
     selectBox(box.current);
+  }, []);
+  useEffect(() => {
     document.addEventListener(SEARCH_FOCUS_EVENT, onFocusRequest);
     return () => document.removeEventListener(SEARCH_FOCUS_EVENT, onFocusRequest);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = list.current;
     if (!root) return;
     const mark = () => {
@@ -191,27 +116,18 @@ export function SearchDialog({
     setDeferred(false);
     setFilters(next);
   }, []);
-  const [inputFocused, setInputFocused] = useState(false);
+  const [inputFocused, setInputFocused] = useState(true);
   const searching = query || (hasActiveFilter(filters) && !deferred);
-  const bodyHidden = closing || !bodyVisible;
   return (
     <ModalOverlay
       isOpen
       isDismissable
-      onOpenChange={(open) => !open && requestDismiss()}
-      className={cx(
-        "bg-overlay/30 backdrop-blur-none transition-opacity duration-150 max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px] sm:items-start sm:[--modal-pt:12vh]",
-        closing && "opacity-0",
-      )}
+      instant
+      onOpenChange={(open) => !open && onClose()}
+      className="bg-overlay/30 backdrop-blur-none max-sm:px-0 max-sm:[--modal-pb:0px] max-sm:[--modal-pt:0px] sm:items-start sm:[--modal-pt:12vh]"
     >
-      <Modal
-        className={cx(
-          "flex w-full flex-col overflow-hidden max-sm:h-full max-sm:rounded-none sm:max-w-[40rem] dark:bg-secondary",
-          !reduced && "animate-none",
-        )}
-      >
+      <Modal className="flex w-full flex-col overflow-hidden max-sm:h-full max-sm:rounded-none sm:max-w-[40rem] dark:bg-secondary">
         <Dialog
-          ref={dialogRef}
           aria-label={m.search_title()}
           data-input-focused={inputFocused ? "" : undefined}
           className="group/search min-h-0 flex-1 overflow-hidden"
@@ -225,6 +141,7 @@ export function SearchDialog({
               <div className="flex items-center gap-3">
                 <SearchLg aria-hidden="true" className="size-5 shrink-0 text-fg-brand-primary" />
                 <AriaInput
+                  autoFocus
                   type="search"
                   aria-label={m.search_title()}
                   placeholder={m.search_placeholder()}
@@ -240,35 +157,19 @@ export function SearchDialog({
                   icon={XClose}
                   size="sm"
                   color="tertiary"
-                  className={cx(
-                    "transition-[transform,opacity] duration-(--duration-sm) ease-out sm:hidden",
-                    bodyHidden && "translate-x-2 opacity-0",
-                  )}
+                  className="sm:hidden"
                   tooltip={m.controls_close()}
                   aria-label={m.controls_close()}
-                  onClick={requestDismiss}
+                  onClick={onClose}
                 />
               </div>
-              <div
-                className={cx(
-                  "transition-opacity duration-150",
-                  bodyHidden && "pointer-events-none opacity-0",
-                )}
-              >
-                <SearchFilterBar
-                  workspaceId={workspaceId}
-                  filters={filters}
-                  onChange={changeFilters}
-                />
-              </div>
+              <SearchFilterBar
+                workspaceId={workspaceId}
+                filters={filters}
+                onChange={changeFilters}
+              />
             </div>
-            <div
-              ref={list}
-              className={cx(
-                "flex min-h-0 flex-1 flex-col overflow-y-auto transition-opacity duration-150",
-                bodyHidden && "pointer-events-none opacity-0",
-              )}
-            >
+            <div ref={list} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
               {searching ? (
                 <SearchResults
                   workspaceId={workspaceId}
@@ -291,7 +192,6 @@ export function SearchDialog({
                 <SearchHome
                   workspaceId={workspaceId}
                   channel={scopedChannel ? channelLabel(scopedChannel) : undefined}
-                  loaded={memory.loaded}
                   history={memory.history}
                   usage={memory.usage}
                   onSearch={(next) => {
@@ -314,14 +214,7 @@ export function SearchDialog({
                 />
               )}
             </div>
-            <div
-              className={cx(
-                "transition-opacity duration-150",
-                bodyHidden && "pointer-events-none opacity-0",
-              )}
-            >
-              <SearchKeyHints />
-            </div>
+            <SearchKeyHints />
           </div>
         </Dialog>
       </Modal>

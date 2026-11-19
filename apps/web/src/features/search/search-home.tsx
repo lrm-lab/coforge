@@ -19,14 +19,9 @@ import { SEARCH_HEADING_CLASS, SEARCH_ROW_CLASS, SearchEntityRow } from "./searc
 import { frequentEntities, type RememberedEntity, type SearchUsage } from "./search-memory";
 import { searchDirectoryQuery } from "./search-queries";
 
-/**
- * The search dialog with nothing typed and no filter: the viewer's recent searches and the places
- * they open most from search, or a prompt when there are neither yet.
- */
 export function SearchHome({
   workspaceId,
   channel,
-  loaded,
   history,
   usage,
   onSearch,
@@ -35,11 +30,7 @@ export function SearchHome({
   onOpen,
 }: {
   workspaceId: string;
-  /** The channel the search is limited to, by its label (`#name`, or a private one's), as "Search
-   * this channel" opens it. */
   channel?: string;
-  /** False until this browser's memory has been read after mount. */
-  loaded: boolean;
   history: readonly string[];
   usage: SearchUsage;
   onSearch: (query: string) => void;
@@ -50,8 +41,7 @@ export function SearchHome({
   const frequent = useFrequentEntities(workspaceId, usage);
   const displays = useAgentDisplays();
 
-  // Still reading: not yet "nothing remembered", so no empty state.
-  if (!loaded || frequent.pending) return null;
+  if (frequent.pending) return null;
 
   if (history.length === 0 && frequent.entities.length === 0 && !frequent.failed) {
     return (
@@ -138,10 +128,6 @@ export function SearchHome({
   );
 }
 
-/**
- * The remembered places, ranked, as the Workspace lists name them now. A place that is gone, or a
- * channel that has been archived, is left out; a DM with a member is named after that member.
- */
 function useFrequentEntities(
   workspaceId: string,
   usage: SearchUsage,
@@ -155,7 +141,6 @@ function useFrequentEntities(
         .map((channel) => [channel.id, channel]),
     );
     const agents = new Map(directory.agents.map((agent) => [agent.id, agent]));
-    // The viewer's DMs with members, by conversation id.
     const dms = new Map(
       directory.people.flatMap((person) => (person.dmId ? [[person.dmId, person]] : [])),
     );
@@ -169,7 +154,6 @@ function useFrequentEntities(
           return { kind, ...agents.get(id)! };
         case "dm": {
           const { id: peerId, name, avatarUrl } = dms.get(id)!;
-          // The viewer's DM with themself reads as their own name, marked as them.
           const label =
             peerId === directory.viewerId ? m.conversation_dm_self_name({ name }) : name;
           return { kind, id, peerId, name: label, avatarUrl };
@@ -177,9 +161,7 @@ function useFrequentEntities(
       }
     });
   }, [directory, usage]);
-  // With nothing remembered there is nothing to wait for.
   const remembered = Object.keys(usage).length > 0;
-  // A failed refetch keeps the cards it already has; only a list never loaded is a failure.
   return {
     entities,
     pending: remembered && isPending,
