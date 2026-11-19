@@ -69,11 +69,35 @@ describe("desktop page adaptation", () => {
     const phone = params.get("view") === "phone";
 </script>
 <button type="button" id="coforge-desktop-phone-fab"></button>
-<div id="coforge-desktop-phone-bar"></div>
+<div id="coforge-desktop-phone-bar"><div id="coforge-desktop-key-pad"></div></div>
 <textarea id="coforge-desktop-keyboard-input"></textarea>
 <button type="button" id="coforge-desktop-reconnect"></button>
 `;
     expect(adaptDesktopHtml(current)).toBe(current);
+  });
+
+  test("a page with the old text tray is rewritten for the compact icon pad", () => {
+    const stale = `<!DOCTYPE html>
+<script type="module">
+    import RFB from "./core/rfb.js";
+    function coforgeDesktopPaste(text) {}
+    function coforgeWriteLocalClipboard(text) {}
+    function coforgeDesktopCopyOut() {}
+    function applyPhoneViewportScale() {}
+    function placePhoneFabInViewport() {}
+    const phone = params.get("view") === "phone";
+</script>
+<button type="button" id="coforge-desktop-phone-fab"></button>
+<div id="coforge-desktop-phone-bar"><button type="button" data-mode="pan">实际大小</button></div>
+<textarea id="coforge-desktop-keyboard-input"></textarea>
+<button type="button" id="coforge-desktop-reconnect"></button>
+`;
+    const html = adaptDesktopHtml(stale);
+    expect(html).toContain("coforge-desktop-key-pad");
+    expect(html).toContain('aria-label="适应屏幕"');
+    expect(html).not.toContain("实际大小");
+    expect(html).not.toContain('data-key="ControlLeft"');
+    expect(html).not.toBe(stale);
   });
 
   test("a page with the old two-level pinch gestures is rewritten for continuous zoom", () => {
@@ -130,7 +154,7 @@ describe("desktop page adaptation", () => {
 `;
     const html = adaptDesktopHtml(stale);
     expect(html).toContain("coforgeAttachPhoneGestures");
-    expect(html).toContain('id="coforge-desktop-keys"');
+    expect(html).toContain('id="coforge-desktop-key-pad"');
   });
 
   test("a focused paste sends the local plain text into the remote clipboard", () => {
@@ -163,8 +187,9 @@ describe("desktop page adaptation", () => {
     expect(html).toContain("coforgeAttachPhoneFab");
     expect(html).toContain('data-shell="minimize"');
     expect(html).toContain('data-shell="sleep"');
-    expect(html).toContain("适应屏幕");
-    expect(html).toContain("实际大小");
+    expect(html).toContain('aria-label="适应屏幕"');
+    expect(html).toContain('data-mode="fit"');
+    expect(html).not.toContain("实际大小");
   });
 
   test("a page with the old always-visible phone bar is rewritten for the FAB", () => {
@@ -188,11 +213,13 @@ describe("desktop page adaptation", () => {
 
   test("a phone viewer gets continuous pinch zoom, one-finger pan, and wheel when fitted", () => {
     const html = adaptDesktopHtml(oldPage);
-    expect(html).toContain('id="coforge-desktop-keys"');
+    expect(html).toContain('id="coforge-desktop-key-pad"');
+    expect(html).toContain('id="coforge-desktop-arrows"');
     expect(html).toContain('data-key="Escape"');
-    expect(html).toContain('data-key="ControlLeft"');
     expect(html).toContain('data-key="Tab"');
     expect(html).toContain('data-key="ArrowUp"');
+    expect(html).toContain('data-key="ArrowDown"');
+    expect(html).not.toContain('data-key="ControlLeft"');
     expect(html).toContain("coforgeAttachPhoneGestures");
     expect(html).toContain("applyPhoneViewportScale");
     expect(html).toContain("viewportChangePos");
@@ -206,7 +233,7 @@ describe("desktop page adaptation", () => {
     const html = adaptDesktopHtml(oldPage);
     expect(html).toContain('id="coforge-desktop-keyboard-input"');
     expect(html).toContain('data-action="keyboard"');
-    expect(html).toContain(">键盘<");
+    expect(html).toContain('aria-label="键盘"');
     expect(html).toContain("coforgeAttachPhoneKeyboard");
     expect(html).toContain("0x01000000");
     expect(html).toContain("0xff08");

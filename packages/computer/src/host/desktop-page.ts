@@ -6,6 +6,7 @@ import {
   DESKTOP_PHONE_FAB_VIEWPORT_MARKER,
   DESKTOP_PHONE_GESTURES_MARKER,
   DESKTOP_PHONE_KEYBOARD_MARKER,
+  DESKTOP_PHONE_TRAY_LAYOUT_MARKER,
   DESKTOP_PHONE_VIEW_MARKER,
   withDesktopControls,
 } from "./desktop-page-controls";
@@ -17,6 +18,7 @@ export {
   DESKTOP_PHONE_FAB_VIEWPORT_MARKER,
   DESKTOP_PHONE_GESTURES_MARKER,
   DESKTOP_PHONE_KEYBOARD_MARKER,
+  DESKTOP_PHONE_TRAY_LAYOUT_MARKER,
   DESKTOP_PHONE_VIEW_MARKER,
 } from "./desktop-page-controls";
 
@@ -62,6 +64,7 @@ export function adaptDesktopHtml(html: string): string {
     html.includes(DESKTOP_PHONE_FAB_MARKER) &&
     html.includes(DESKTOP_PHONE_FAB_VIEWPORT_MARKER) &&
     html.includes(DESKTOP_PHONE_GESTURES_MARKER) &&
+    html.includes(DESKTOP_PHONE_TRAY_LAYOUT_MARKER) &&
     html.includes(DESKTOP_PHONE_KEYBOARD_MARKER)
   )
     return html;
