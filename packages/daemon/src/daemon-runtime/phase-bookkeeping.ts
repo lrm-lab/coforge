@@ -21,6 +21,8 @@ const logger = getLogger(["coforge", "daemon", "daemon-runtime"]);
  * diagnostic, not the error surface: the Activity and the launch failure path carry the rest. */
 export const COMPACTION_LOG_ERROR_CHARS = 400;
 
+export const COMPACTION_BEFORE_STALE_MS = 15 * 60_000;
+
 /** The token numbers a finished compaction reports for itself, when its runtime has them. */
 export type CompactionTokens = Readonly<{
   tokensBefore?: number;
@@ -44,6 +46,7 @@ export type ContextReading = Readonly<{
 type EndedCompaction = Readonly<{
   outcome: "finished" | "inferred" | "interrupted";
   tokensBefore?: number;
+  beforeAgeMs?: number;
   /** When the compaction ended. The daily report attributes the line by this, not by when the line
    * was written, since a held line is written at the end of the turn. */
   endedAtMs: number;
@@ -105,7 +108,10 @@ export class PhaseBookkeeping {
   readonly #phases: Readonly<Record<RuntimePhase, PhaseTracker>>;
   /** Where each open compaction started: the reading it saw then, so a reading from before it
    * cannot be read back as its result. */
-  readonly #compactionBefore = new Map<string, { usedTokens?: number; seenAtMs?: number }>();
+  readonly #compactionBefore = new Map<
+    string,
+    { usedTokens?: number; seenAtMs?: number; ageMs?: number }
+  >();
   /** Compactions whose line waits for the turn's reading — see `EndedCompaction`. */
   readonly #endedCompactions = new Map<string, EndedCompaction>();
   /** Failures seen while this compaction stayed open: the second one means its recovery did not
@@ -138,6 +144,7 @@ export class PhaseBookkeeping {
     const ended: EndedCompaction = {
       outcome,
       tokensBefore: reported?.tokensBefore ?? started?.usedTokens,
+      beforeAgeMs: reported?.tokensBefore === undefined ? started?.ageMs : undefined,
       endedAtMs: Date.now(),
       seenAtMs: started?.seenAtMs,
       // Whether this runtime has ever produced a reading for the Agent tells a missed reading
@@ -200,6 +207,10 @@ export class PhaseBookkeeping {
       compaction_ended_at: new Date(ended.endedAtMs).toISOString(),
       ...(held ? { delayed_ms: Math.max(0, Date.now() - ended.endedAtMs) } : {}),
       tokens_before: ended.tokensBefore,
+      tokens_before_age_ms: ended.beforeAgeMs,
+      ...(ended.beforeAgeMs !== undefined && ended.beforeAgeMs > COMPACTION_BEFORE_STALE_MS
+        ? { tokens_before_stale: true }
+        : {}),
       tokens_after: tokensAfter,
       runtime_pre_tokens: reported?.runtimePreTokens,
       runtime_post_tokens: reported?.runtimePostTokens,
@@ -258,6 +269,7 @@ export class PhaseBookkeeping {
       this.#compactionBefore.set(agentId, {
         usedTokens: seen?.usedTokens,
         seenAtMs: seen?.observedAtMs,
+        ageMs: seen === undefined ? undefined : Math.max(0, Date.now() - seen.observedAtMs),
       });
     }
   }
