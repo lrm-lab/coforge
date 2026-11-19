@@ -6,10 +6,6 @@ import { publicPageLookup } from "#src/server/artifacts/artifact-public-page.ser
 import { rememberArtifactSandboxConfig } from "#src/server/artifacts/artifact-sandbox-config.server";
 import { conversationRealtimeChannel } from "#src/features/conversations/conversation-realtime";
 
-/**
- * Reading an artifact's public link (task #646): whoever can see the artifact sees whether it can
- * have one and the one it has; anyone else gets what a missing artifact gets.
- */
 const connectionString = Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL must point to local PostgreSQL");
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
@@ -25,7 +21,6 @@ let bystander: string;
 let outsider: string;
 let channelId: string;
 
-/** An artifact whose entry file is `index.<extension>`: its type is that file's. */
 const artifact = (extension: string) =>
   db.artifact.create({
     data: {
@@ -212,6 +207,7 @@ test("a public link shows the current version's entry and any one file of it", a
       data: {
         artifactId: made.id,
         number,
+        createdAt: new Date(Date.UTC(2026, 0, number)),
         entryPath: "home.html",
         changedPaths: [],
         idempotencyKey: `k${number}`,
@@ -227,7 +223,11 @@ test("a public link shows the current version's entry and any one file of it", a
       },
     });
   await version(1, { "home.html": "old-home", "old.css": "old-css" });
-  await version(2, { "home.html": "home", "site.css": "css", "img/a.png": "png" });
+  const current = await version(2, {
+    "home.html": "home",
+    "site.css": "css",
+    "img/a.png": "png",
+  });
   const set = await links.set({ workspaceId, artifactId: made.id, userId: owner, enabled: true });
   const token = set.enabled ? set.url.slice(set.url.lastIndexOf("/") + 1) : "";
   let enabled = true;
@@ -244,14 +244,13 @@ test("a public link shows the current version's entry and any one file of it", a
     access: "conversation",
     workspaceSlug: `apl-${handle}`,
     version: 2,
+    updatedAt: current.createdAt.toISOString(),
   });
   expect(await lookup(token, "site.css")).toMatchObject({ sha256: "css", entryPath: "home.html" });
   expect(await lookup(token, "img/a.png")).toMatchObject({ sha256: "png" });
-  // The current version only; and no file means no answer.
   expect(await lookup(token, "old.css")).toBeNull();
   expect(await lookup(token, "nope.css")).toBeNull();
   expect(await lookup("x".repeat(43))).toBeNull();
-  // Off while the experiment is off, and once the link is revoked.
   enabled = false;
   expect(await lookup(token, "site.css")).toBeNull();
   enabled = true;

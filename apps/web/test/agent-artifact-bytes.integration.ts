@@ -17,11 +17,6 @@ import {
 import { LocalFileStorage } from "#src/server/files/file-storage.server";
 import { handleAgentArtifactPost } from "#src/routes/api/agent/v1/artifacts";
 
-/**
- * An Agent's file bytes over HTTP: `PUT .../artifacts/uploads/:sha256` stores and grants them
- * before a push names them, and `GET .../artifacts/:artifact/files/:path` gives any file of a
- * version back, exactly, to whoever may read the artifact.
- */
 const connectionString = Bun.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL must point to local PostgreSQL");
 const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
@@ -145,7 +140,6 @@ async function post(body: unknown) {
 }
 
 async function get(artifact: string, path: string, query = "") {
-  // The path travels as one percent-encoded segment, as the SDK's route builds it.
   const url = `http://local${agentApiRoutes.cloud.artifactFiles.download.path(artifact, path)}${query}`;
   const segment = url.split("/files/")[1]!.split("?")[0]!;
   return handleAgentArtifactDownload(
@@ -174,14 +168,11 @@ test("an upload stores the bytes, is granted to the Agent, and a repeat answers 
 test("an upload is refused for a bad sha256, a missing or oversized length, and bytes that are not the hash", async () => {
   const bytes = text("some bytes");
   const sha = sha256(bytes);
-  // The path's sha256 is 64 lowercase hex characters.
   for (const path of [sha.toUpperCase(), sha.slice(1), `${sha}0`, "not-hex"])
     expect(
       await put(path, { body: bytes, headers: { "content-length": String(bytes.length) } }),
     ).toMatchObject({ status: 400 });
-  // No Content-Length: 411, before anything is read.
   expect(await put(sha, { body: bytes })).toMatchObject({ status: 411 });
-  // Over 16 MiB: 413 without the body being read at all.
   let pulled = false;
   const body = new ReadableStream<Uint8Array>(
     {
@@ -190,7 +181,6 @@ test("an upload is refused for a bad sha256, a missing or oversized length, and 
         throw new Error("the body must not be read");
       },
     },
-    // Nothing is pulled until a reader asks.
     { highWaterMark: 0 },
   );
   expect(
@@ -200,7 +190,6 @@ test("an upload is refused for a bad sha256, a missing or oversized length, and 
     }),
   ).toMatchObject({ status: 413 });
   expect(pulled).toBe(false);
-  // The body must hash to the path.
   const mismatch = await put(sha256(text("other bytes")), {
     body: bytes,
     headers: { "content-length": String(bytes.length) },
@@ -294,7 +283,6 @@ test("an upload takes a Workspace without the experiment as every artifact call 
 });
 
 test("bytes no version uses yet are held up to 1 GiB; one more is refused, and held bytes always answer 204", async () => {
-  // Another Workspace's bytes do not count, nor do those a version names.
   const quotaWorkspace = (
     await db.workspace.create({
       data: {
@@ -341,11 +329,9 @@ test("bytes no version uses yet are held up to 1 GiB; one more is refused, and h
     await db.artifactBlob.createMany({
       data: [
         row("unused-1", ARTIFACT_UNREFERENCED_QUOTA_BYTES - room, false),
-        // A version's own bytes are not counted.
         row("used", 500 * 1024 * 1024, true),
       ],
     });
-    // 100 bytes of room: 100 more fit, 101 do not.
     const fits = new Uint8Array(room).fill(7);
     expect((await send(fits)).status).toBe(204);
     const over = new Uint8Array(1).fill(9);
@@ -355,7 +341,6 @@ test("bytes no version uses yet are held up to 1 GiB; one more is refused, and h
     expect(
       await db.artifactBlob.count({ where: { workspaceId: quotaWorkspace, sha256: sha256(over) } }),
     ).toBe(0);
-    // Bytes the Workspace holds already add nothing: uploading them again is a 204.
     expect((await send(fits)).status).toBe(204);
   } finally {
     await db.workspace.delete({ where: { id: quotaWorkspace } }).catch(() => undefined);
@@ -376,22 +361,22 @@ async function made(
     files: Object.entries(files).map(([path, bytes]) => ({ path, sha256: sha256(bytes) })),
     ...(extra.entry ? {} : { entry: Object.keys(files)[0] }),
   });
-  expect(created.status).toBe(200);
+  expect(created).toMatchObject({ status: 200 });
   return created.body.id as string;
 }
 
 test("a download gives a file's exact bytes with its type and length, and a version's own", async () => {
-  // All 256 byte values, so nothing is re-encoded on the way.
-  const binary = Uint8Array.from({ length: 256 }, (_, index) => index);
+  const allByteValues = Uint8Array.from({ length: 256 }, (_, index) => index);
   const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 255]);
+  const spacedFilename = "weird name + (1) & 100.md";
   const id = await made({
     "README.md": text("# Bytes\n"),
     "css/site.css": text("p { color: red }\n"),
     "data.csv": text("a,b\n1,2\n"),
     "notes.txt": text("plain\n"),
     "image.png": png,
-    "blob.bin": binary,
-    "weird name #1 100%.md": text("# Odd\n"),
+    "blob.bin": allByteValues,
+    [spacedFilename]: text("# Odd\n"),
     "ünï.txt": text("unicode\n"),
   });
   const expectFile = async (
@@ -411,11 +396,10 @@ test("a download gives a file's exact bytes with its type and length, and a vers
   await expectFile("data.csv", text("a,b\n1,2\n"), "text/csv; charset=utf-8");
   await expectFile("notes.txt", text("plain\n"), "text/plain; charset=utf-8");
   await expectFile("image.png", png, "image/png");
-  await expectFile("blob.bin", binary, "application/octet-stream");
-  await expectFile("weird name #1 100%.md", text("# Odd\n"), "text/markdown; charset=utf-8");
+  await expectFile("blob.bin", allByteValues, "application/octet-stream");
+  await expectFile(spacedFilename, text("# Odd\n"), "text/markdown; charset=utf-8");
   await expectFile("ünï.txt", text("unicode\n"), "text/plain; charset=utf-8");
 
-  // A later version replaces a file; the first still reads as it was.
   const changed = text("# Bytes, edited\n");
   await upload(changed);
   expect(
@@ -440,18 +424,14 @@ test("a download of a missing file, version or artifact is not found, as a read 
   expect(((await missingFile.json()) as { error: string }).error).toContain(
     "artifact-file-not-found",
   );
-  // The file exists in version 1 only when it was named there; a version that is not there is 404.
   expect((await get(id, "a.md", "?version=9")).status).toBe(404);
   expect((await get(id, "a.md", "?version=0")).status).toBe(400);
   expect((await get(id, "a.md", "?version=x")).status).toBe(400);
   expect((await get(crypto.randomUUID(), "a.md")).status).toBe(404);
   expect((await get("not-an-id", "a.md")).status).toBe(404);
-  // A path no artifact can hold is answered as missing, never passed on to the database.
   for (const path of ["a\u0000b", "../a.md", "/a.md"])
     expect((await get(id, path)).status).toBe(404);
 
-  // An artifact in a private channel the Agent is not a member of is not there for it, until
-  // its author widens it to the Workspace.
   const hush = await blobs.upload({
     workspaceId,
     bytes: text("hush\n"),
