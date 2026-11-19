@@ -134,6 +134,7 @@ export function productionArtifactAttachments(db: PrismaClient): ArtifactAttachm
           messageId: attachment.messageId,
           conversationId: attachment.conversationId,
           fileName: attachment.fileName,
+          contentType: attachment.contentType,
           sizeBytes: attachment.sizeBytes,
           bytes: async () => {
             const file = await open();

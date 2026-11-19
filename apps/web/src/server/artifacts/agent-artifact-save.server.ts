@@ -4,7 +4,11 @@ import { AppError, isAppError } from "#src/lib/app-error";
 import type { ArtifactActor } from "./artifact-access.server";
 import type { StoredArtifactBlobs } from "./artifact-blobs.server";
 import type { ArtifactDocuments } from "./artifact-documents.server";
-import { ARTIFACT_TEXT_LIMIT, artifactPathValid } from "./artifact-files.server";
+import {
+  ARTIFACT_BINARY_LIMIT,
+  ARTIFACT_TEXT_LIMIT,
+  artifactPathValid,
+} from "./artifact-files.server";
 
 export type ArtifactAttachmentPrincipal =
   | { workspaceId: string; agentId: string; userId?: undefined }
@@ -15,6 +19,7 @@ export type ArtifactAttachment = {
   messageId: string;
   conversationId: string;
   fileName: string;
+  contentType?: string | undefined;
   sizeBytes: number;
   bytes: () => Promise<Uint8Array<ArrayBuffer>>;
 };
@@ -36,11 +41,93 @@ type SaveServices = {
 const UNSAVED_UPLOADS_QUOTA_BYTES = 1024 * 1024 * 1024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const BINARY_EXTENSIONS = new Set([
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "webp",
+  "avif",
+  "ico",
+  "heic",
+  "heif",
+  "bmp",
+  "pdf",
+  "mp4",
+  "webm",
+  "mov",
+  "mp3",
+  "m4a",
+  "ogg",
+  "wav",
+  "woff",
+  "woff2",
+  "ttf",
+  "otf",
+  "zip",
+  "gz",
+  "tar",
+  "7z",
+  "rar",
+  "bz2",
+  "xz",
+  "zst",
+  "docx",
+  "xlsx",
+  "pptx",
+  "doc",
+  "xls",
+  "ppt",
+  "wasm",
+  "bin",
+  "exe",
+  "dmg",
+]);
+
+const BINARY_APPLICATION_TYPES = new Set([
+  "application/pdf",
+  "application/zip",
+  "application/gzip",
+  "application/x-gzip",
+  "application/x-tar",
+  "application/x-7z-compressed",
+  "application/x-bzip2",
+  "application/x-xz",
+  "application/zstd",
+  "application/msword",
+  "application/wasm",
+]);
+
 const notFound = () =>
   new AppError("NOT_FOUND", {
     errorId: "artifact-attachment-not-found",
     hint: "no attachment you can read has that id: `coforge message read` lists a message's attachments",
   });
+
+const attachmentNotSavable = () =>
+  new AppError("INVALID_INPUT", {
+    errorId: "artifact-attachment-not-savable",
+    hint: "an artifact file is at most 16 MiB (15 MiB when it is not text)",
+  });
+
+function isKnownBinaryAttachment(attachment: {
+  fileName: string;
+  contentType?: string | undefined;
+}): boolean {
+  const mime = attachment.contentType?.split(";")[0]?.trim().toLowerCase();
+  if (mime && mime !== "application/octet-stream") {
+    if (mime.startsWith("image/")) return mime !== "image/svg+xml";
+    if (mime.startsWith("video/") || mime.startsWith("audio/") || mime.startsWith("font/"))
+      return true;
+    if (mime.startsWith("application/vnd."))
+      return !mime.endsWith("+json") && !mime.endsWith("+xml");
+    return BINARY_APPLICATION_TYPES.has(mime);
+  }
+  const name = attachment.fileName.trim();
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) return false;
+  return BINARY_EXTENSIONS.has(name.slice(dot + 1).toLowerCase());
+}
 
 export function artifactPathOfFileName(fileName: string): string {
   const cleaned = Array.from(fileName, (ch) => {
@@ -100,17 +187,23 @@ export async function saveAttachmentAsArtifact(
   if (!attachment) throw notFound();
   const before = await savedBefore(services, scope, attachment);
   if (before) return before;
-  if (attachment.sizeBytes > ARTIFACT_TEXT_LIMIT)
-    throw new AppError("INVALID_INPUT", {
-      errorId: "artifact-attachment-not-savable",
-      hint: "an artifact file is at most 16 MiB (15 MiB when it is not text)",
+  const sizeLimit = isKnownBinaryAttachment(attachment)
+    ? ARTIFACT_BINARY_LIMIT
+    : ARTIFACT_TEXT_LIMIT;
+  if (attachment.sizeBytes > sizeLimit) throw attachmentNotSavable();
+  let blob: Awaited<ReturnType<SaveServices["blobs"]["upload"]>>;
+  try {
+    blob = await services.blobs.upload({
+      workspaceId: principal.workspaceId,
+      bytes: await attachment.bytes(),
+      actor,
+      unreferencedQuotaBytes: UNSAVED_UPLOADS_QUOTA_BYTES,
     });
-  const blob = await services.blobs.upload({
-    workspaceId: principal.workspaceId,
-    bytes: await attachment.bytes(),
-    actor,
-    unreferencedQuotaBytes: UNSAVED_UPLOADS_QUOTA_BYTES,
-  });
+  } catch (error) {
+    if (isAppError(error) && error.errorId === "artifact-file-too-large")
+      throw attachmentNotSavable();
+    throw error;
+  }
   const path = artifactPathOfFileName(attachment.fileName);
   try {
     const artifact = await services.documents.create(scope, {

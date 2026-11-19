@@ -253,6 +253,84 @@ test("an attachment is saved as an artifact once, homed in its message's convers
   ).toBe(404);
 });
 
+test("saving a non-text attachment over 15 MiB refuses as not-savable before reading bytes", async () => {
+  const conversation = await f.db.conversation.findFirstOrThrow({
+    where: { workspaceId: f.workspaceId, channelName: f.docsChannel },
+  });
+  const overBinary = 15 * 1024 * 1024 + 1;
+  let readCalls = 0;
+  const pdfId = crypto.randomUUID();
+  const fakeTextId = crypto.randomUUID();
+  const attachments = {
+    read: async (_principal: { agentId: string }, wanted: string) => {
+      if (wanted === pdfId)
+        return {
+          id: pdfId,
+          messageId: crypto.randomUUID(),
+          conversationId: conversation.id,
+          fileName: "deck.pdf",
+          contentType: "application/pdf",
+          sizeBytes: overBinary,
+          bytes: async () => {
+            readCalls += 1;
+            return new Uint8Array(overBinary) as Uint8Array<ArrayBuffer>;
+          },
+        };
+      if (wanted === fakeTextId)
+        return {
+          id: fakeTextId,
+          messageId: crypto.randomUUID(),
+          conversationId: conversation.id,
+          fileName: "mislabeled.txt",
+          contentType: "text/plain",
+          sizeBytes: overBinary,
+          bytes: async () => {
+            readCalls += 1;
+            return new Uint8Array(overBinary) as Uint8Array<ArrayBuffer>;
+          },
+        };
+      return null;
+    },
+  };
+  const refusedPdf = await f.post(f.agents.reader, { operation: "save", attachment: pdfId }, {
+    attachments,
+  } as never);
+  expect(refusedPdf.status).toBe(400);
+  expect(refusedPdf.body.error).toContain("artifact-attachment-not-savable");
+  expect(readCalls).toBe(0);
+
+  const refusedBinaryBytes = await f.post(
+    f.agents.reader,
+    { operation: "save", attachment: fakeTextId },
+    { attachments } as never,
+  );
+  expect(refusedBinaryBytes.status).toBe(400);
+  expect(refusedBinaryBytes.body.error).toContain("artifact-attachment-not-savable");
+  expect(readCalls).toBe(1);
+
+  const textId = crypto.randomUUID();
+  const textPayload = new Uint8Array(overBinary).fill(0x61) as Uint8Array<ArrayBuffer>;
+  const textAttachments = {
+    read: async (_principal: { agentId: string }, wanted: string) =>
+      wanted === textId
+        ? {
+            id: textId,
+            messageId: crypto.randomUUID(),
+            conversationId: conversation.id,
+            fileName: "large.txt",
+            contentType: "text/plain",
+            sizeBytes: textPayload.length,
+            bytes: async () => textPayload,
+          }
+        : null,
+  };
+  const savedText = await f.post(f.agents.reader, { operation: "save", attachment: textId }, {
+    attachments: textAttachments,
+  } as never);
+  expect(savedText.status).toBe(200);
+  expect(savedText.body).toMatchObject({ created: true });
+});
+
 test("an image comes back re-encoded without its metadata, and an undecodable one is refused", async () => {
   const sharp = (await import("sharp")).default;
   const withGps = await sharp({ create: { width: 8, height: 4, channels: 3, background: "red" } })
