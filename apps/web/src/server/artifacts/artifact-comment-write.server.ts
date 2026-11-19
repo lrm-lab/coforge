@@ -212,11 +212,16 @@ export async function editOwnComment(
   input: { artifactId: string; commentId: string; userId: string; body: string },
 ) {
   const row = await ownCommentRow(tx, input);
-  if (row.body === input.body) return undefined;
+  const body = input.body.trim();
+  if (!body) {
+    const images = await tx.artifactCommentImage.count({ where: { commentId: row.id } });
+    if (images === 0) throw new AppError("INVALID_INPUT", { errorId: "artifact-comment-body" });
+  }
+  if (row.body === body) return undefined;
   const editedAt = new Date();
   await tx.artifactComment.update({
     where: { id: row.id },
-    data: { body: input.body, editedAt },
+    data: { body, editedAt },
   });
   return { editedAt };
 }

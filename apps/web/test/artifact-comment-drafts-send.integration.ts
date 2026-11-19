@@ -66,7 +66,14 @@ test("sending writes every draft as one review in the order they were saved, and
   const aboutIt = async (agentId: string) =>
     (await h.f.noticesOf(agentId)).filter((notice) => notice.externalEventId.startsWith(artifact));
   expect(await aboutIt(h.f.agents.reader)).toHaveLength(1);
-  expect(await aboutIt(h.f.agents.writer)).toHaveLength(1);
+  const writerNotices = await aboutIt(h.f.agents.writer);
+  expect(writerNotices).toHaveLength(1);
+  expect(writerNotices[0]!.body).toContain("Someone reviewed an artifact you follow.");
+  expect(writerNotices[0]!.body).not.toContain("Another Agent");
+  expect(writerNotices[0]!.body).toContain(sent.reviewId);
+  expect(writerNotices[0]!.body).toContain(
+    `coforge artifact comments ${artifact} --review ${sent.reviewId}`,
+  );
   expect(await aboutIt(h.f.agents.other)).toHaveLength(0);
 
   const again = await h.drafts.submit({ ...h.place(artifact), draftIds: ids, clientKey: key });

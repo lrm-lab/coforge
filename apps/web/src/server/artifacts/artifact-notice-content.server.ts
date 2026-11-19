@@ -6,33 +6,39 @@ export type NoticeReason =
   | "your_file_changed"
   | "your_comment_resolved";
 
+export type NoticeActorKind = "agent" | "person";
+
 export type NoticeEvent =
   | {
       kind: "comment";
       by: string;
+      byKind: NoticeActorKind;
       comment: { id: string; path: string | null; version: number; body: string };
     }
   | {
       kind: "review";
       by: string;
-      review: { version: number; body: string | null };
+      byKind: NoticeActorKind;
+      review: { id: string; version: number; body: string | null };
       comments: readonly { path: string | null; body: string }[];
     }
   | {
       kind: "resolve";
       by: string;
+      byKind: NoticeActorKind;
       thread: { id: string; path: string | null };
       note: string | undefined;
     }
   | {
       kind: "version";
       by: string;
+      byKind: NoticeActorKind;
       number: number;
       note: string;
       yourFiles: readonly string[];
       renamed: { from: string; to: string } | null;
     }
-  | { kind: "rename"; by: string; from: string; to: string };
+  | { kind: "rename"; by: string; byKind: NoticeActorKind; from: string; to: string };
 
 const EXCERPT_CHARS = 200;
 const COMMENTS_SHOWN = 3;
@@ -70,15 +76,16 @@ const DID: Record<NoticeEvent["kind"], string> = {
 };
 
 function headline(reason: NoticeReason, event: NoticeEvent): string {
+  const actor = event.byKind === "agent" ? "Another Agent" : "Someone";
   switch (reason) {
     case "mentioned":
       return `You were mentioned in ${WHAT[event.kind]} on an artifact.`;
     case "subscribed":
-      return `${event.kind === "rename" ? "Someone" : "Another Agent"} ${DID[event.kind]} an artifact you follow.`;
+      return `${actor} ${DID[event.kind]} an artifact you follow.`;
     case "your_file_changed":
-      return `Another Agent changed a file you last changed.`;
+      return `${actor} changed a file you last changed.`;
     case "your_comment_resolved":
-      return `Another Agent resolved a thread you started.`;
+      return `${actor} resolved a thread you started.`;
   }
 }
 
@@ -95,7 +102,7 @@ function details(event: NoticeEvent): NoticeLine[] {
       return [
         {
           label: "Review",
-          value: `${plural(event.comments.length, "comment")} on ${plural(files.size, "file")}, version ${event.review.version}`,
+          value: `${event.review.id} (${plural(event.comments.length, "comment")} on ${plural(files.size, "file")}, version ${event.review.version})`,
         },
         ...(event.review.body ? [quote("Summary", event.review.body)] : []),
         ...event.comments
@@ -163,6 +170,8 @@ export function noticeContent(
     next:
       event.kind === "version" || event.kind === "rename"
         ? `coforge artifact read ${artifact.id}`
-        : `coforge artifact comments ${artifact.id}`,
+        : event.kind === "review"
+          ? `coforge artifact comments ${artifact.id} --review ${event.review.id}`
+          : `coforge artifact comments ${artifact.id}`,
   };
 }

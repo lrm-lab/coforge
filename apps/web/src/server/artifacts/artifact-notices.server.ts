@@ -12,6 +12,7 @@ import { followerIds } from "./artifact-follows.server";
 import { lastChangers, versionChanges } from "./artifact-file-authors.server";
 import {
   noticeContent,
+  type NoticeActorKind,
   type NoticeEvent,
   type NoticeReason,
 } from "./artifact-notice-content.server";
@@ -94,7 +95,12 @@ export class ArtifactNotices {
         {
           ...commentAudience(input.comment.body),
           key: input.comment.id,
-          event: (by) => ({ kind: "comment", by, comment: input.comment }),
+          event: (by, _agentId, byKind) => ({
+            kind: "comment",
+            by,
+            byKind,
+            comment: input.comment,
+          }),
         },
         resolved,
       ),
@@ -102,16 +108,23 @@ export class ArtifactNotices {
   }
 
   review(
-    input: (Context | PersonContext) & { reviewId: string } & Pick<
-        ReviewEvent,
-        "review" | "comments"
-      >,
+    input: (Context | PersonContext) & {
+      reviewId: string;
+      review: Omit<ReviewEvent["review"], "id">;
+      comments: ReviewEvent["comments"];
+    },
   ) {
     return this.guarded(() =>
       this.tell(input, {
         key: input.reviewId,
         texts: [input.review.body ?? "", ...input.comments.map((comment) => comment.body)],
-        event: (by) => ({ kind: "review", by, review: input.review, comments: input.comments }),
+        event: (by, _agentId, byKind) => ({
+          kind: "review",
+          by,
+          byKind,
+          review: { id: input.reviewId, ...input.review },
+          comments: input.comments,
+        }),
         followers: "subscribed",
       }),
     );
@@ -134,9 +147,10 @@ export class ArtifactNotices {
       this.tell(input, {
         key: `resolve:${input.threadId}:${input.resolvedAt.getTime()}`,
         texts: input.note ? [input.note] : [],
-        event: (by) => ({
+        event: (by, _agentId, byKind) => ({
           kind: "resolve",
           by,
+          byKind,
           thread: { id: input.threadId, path: input.threadPath },
           note: input.note,
         }),
@@ -155,7 +169,13 @@ export class ArtifactNotices {
       this.tell(input, {
         key: `rename:${input.key}`,
         texts: [],
-        event: (by) => ({ kind: "rename", by, from: input.from, to: input.to }),
+        event: (by, _agentId, byKind) => ({
+          kind: "rename",
+          by,
+          byKind,
+          from: input.from,
+          to: input.to,
+        }),
         followers: "subscribed",
       }),
     );
@@ -187,9 +207,10 @@ export class ArtifactNotices {
     return this.tell(input, {
       key: `version:${input.number}`,
       texts: [],
-      event: (by, agentId) => ({
+      event: (by, agentId, byKind) => ({
         kind: "version",
         by,
+        byKind,
         number: input.number,
         note: input.note,
         yourFiles: yourFiles.get(agentId) ?? [],
@@ -262,6 +283,7 @@ export class ArtifactNotices {
   ): Promise<NoticeReport> {
     const { artifact, workspaceId } = input;
     const { told, notTold } = resolved ?? (await this.recipients(input, plan));
+    const byKind: NoticeActorKind = "writerId" in input ? "agent" : "person";
     const writer =
       "writerId" in input
         ? await this.db.agent.findUniqueOrThrow({
@@ -275,7 +297,7 @@ export class ArtifactNotices {
           workspaceId,
           agentId: id,
           key: `${artifact.id}:${plan.key}`,
-          content: noticeContent(artifact, reason, plan.event(writer.name, id)),
+          content: noticeContent(artifact, reason, plan.event(writer.name, id, byKind)),
         });
         return [{ name, reason }, undefined] as const;
       } catch (error) {
@@ -324,5 +346,5 @@ type AudiencePlan = {
 
 type Plan = AudiencePlan & {
   key: string;
-  event: (by: string, agentId: string) => NoticeEvent;
+  event: (by: string, agentId: string, byKind: NoticeActorKind) => NoticeEvent;
 };

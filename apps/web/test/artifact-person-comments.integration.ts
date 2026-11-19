@@ -183,7 +183,38 @@ test("resolving a thread an Agent started tells that Agent", async () => {
   });
   await comments.resolve({ ...place(artifact), commentId: started.body.id });
   const told = await noticesAbout(f.agents.reader, artifact);
-  expect(told.map((notice) => notice.body).join("\n")).toContain("Alice");
+  const body = told.map((notice) => notice.body).join("\n");
+  expect(body).toContain("Alice");
+  expect(body).toContain("Someone resolved a thread you started.");
+  expect(body).not.toContain("Another Agent");
+});
+
+test("a person's comment notice attributes the comment to someone, not another Agent", async () => {
+  const artifact = await f.make("Human comment notice");
+  await post(artifact, "Human feedback.");
+  const told = await noticesAbout(f.agents.writer, artifact);
+  expect(told).toHaveLength(1);
+  expect(told[0]!.body).toContain("Someone commented on an artifact you follow.");
+  expect(told[0]!.body).not.toContain("Another Agent");
+});
+
+test("editing a comment refuses an empty body unless the comment carries an image", async () => {
+  const artifact = await f.make("Edit body guard");
+  const textOnly = await post(artifact, "Keep me non-empty.");
+  await expect(
+    comments.edit({ ...place(artifact), commentId: textOnly.id, body: "   " }),
+  ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId: "artifact-comment-body" });
+  const png = Uint8Array.from(
+    atob(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+    ),
+    (c) => c.charCodeAt(0),
+  ) as Uint8Array<ArrayBuffer>;
+  const { sha256 } = await comments.uploadImage({ ...place(artifact), bytes: png });
+  const withImage = await post(artifact, "Caption", { images: [sha256] });
+  await comments.edit({ ...place(artifact), commentId: withImage.id, body: "   " });
+  const shown = (await list(artifact)).comments.find((entry) => entry.id === withImage.id);
+  expect(shown).toMatchObject({ id: withImage.id, body: "" });
 });
 
 test("someone who cannot read the artifact is refused with nothing to learn from it", async () => {

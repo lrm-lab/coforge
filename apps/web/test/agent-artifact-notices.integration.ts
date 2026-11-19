@@ -108,6 +108,10 @@ test("a review tells each Agent once, a mention first", async () => {
   expect(await told(f.agents.writer, artifact)).toHaveLength(1);
   const [notice] = await told(f.agents.other, artifact);
   expect(notice!.body).toContain("3 comments on 1 file");
+  expect(notice!.body).toContain(answer.body.review.id);
+  expect(notice!.body).toContain(
+    `coforge artifact comments ${artifact} --review ${answer.body.review.id}`,
+  );
 
   const replay = await f.post(f.agents.reader, review);
   expect(replay.body.notified).toEqual(answer.body.notified);
