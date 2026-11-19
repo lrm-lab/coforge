@@ -14,6 +14,7 @@ import {
   type RuntimeAuthStatus,
 } from "#src/contract";
 import { antigravityGeminiDirArgs } from "./acp-args";
+import { createAntigravityBrowserShim } from "./auth-browser-shim";
 
 /** `agy acp --login` waits on a person pasting a code: the same bound Claude's login gets. */
 const ANTIGRAVITY_LOGIN_TIMEOUT_MS = 16 * 60 * 1_000;
@@ -21,6 +22,7 @@ const ANTIGRAVITY_LOGIN_TIMEOUT_MS = 16 * 60 * 1_000;
 const ANTIGRAVITY_LOGIN_PROBE_TIMEOUT_MS = 15_000;
 /** The paste prompt can print a beat before the link; give the link that long to arrive. */
 const ANTIGRAVITY_LOGIN_URL_WAIT_MS = 1_000;
+const ANTIGRAVITY_LOGIN_SHIM_POLL_MS = 50;
 const ANTIGRAVITY_LOGIN_MAX_CODES = 5;
 
 const ESCAPE = String.fromCharCode(27);
@@ -150,14 +152,16 @@ export async function antigravityTerminalLogin(
       reason: "process_failed",
       detail: "agy acp --help did not answer; the installed agy may be too old or broken.",
     };
+  const browserShim = await createAntigravityBrowserShim(host.environment);
   let tree: OwnedProcessTree;
   try {
     tree = host.processTreeSpawner.spawn(
       [...host.command, "acp", "--login", ...antigravityGeminiDirArgs(host.environment)],
       options.workingDirectory,
-      host.environment,
+      browserShim.environment,
     );
   } catch (error) {
+    await browserShim.dispose();
     if ((error as { code?: string }).code === "ENOENT")
       return { status: "unsupported", reason: "not_installed" };
     return {
@@ -176,10 +180,17 @@ export async function antigravityTerminalLogin(
   let missingAuthUrl = false;
   let stderrHint: string | undefined;
   let authUrlWaitTimer: ReturnType<typeof setTimeout> | undefined;
+  let shimPollTimer: ReturnType<typeof setInterval> | undefined;
+  let shimPollInFlight: Promise<void> | undefined;
   let promptsHandled = 0;
   let codeWrites = 0;
   const settled = Promise.withResolvers<"timeout" | "cancelled" | "exited">();
   const terminate = () => void tree.terminate(true).catch(() => undefined);
+  const stopShimPolling = () => {
+    if (!shimPollTimer) return;
+    clearInterval(shimPollTimer);
+    shimPollTimer = undefined;
+  };
   const timer = setTimeout(() => {
     terminate();
     settled.resolve("timeout");
@@ -248,6 +259,48 @@ export async function antigravityTerminalLogin(
           : "no authorization code was entered",
       );
   };
+  const inspectAuthUrl = (url: string) => {
+    if (announcedUrl || untrustedLink) return;
+    const trusted = googleAccountsUrl(url);
+    if (trusted) {
+      announcedUrl = true;
+      stopShimPolling();
+      if (authUrlWaitTimer) {
+        clearTimeout(authUrlWaitTimer);
+        authUrlWaitTimer = undefined;
+      }
+      emit({
+        kind: "auth_url",
+        verificationUrl: trusted,
+        instructions: LOGIN_INSTRUCTIONS,
+      });
+      if (codePromptSeen) requestCode(CODE_PROMPT_MESSAGE);
+    } else {
+      untrustedLink = true;
+      stopShimPolling();
+      terminate();
+    }
+  };
+  const pollBrowserShim = async (): Promise<void> => {
+    if (announcedUrl || untrustedLink) return;
+    if (shimPollInFlight) {
+      await shimPollInFlight;
+      if (announcedUrl || untrustedLink) return;
+    }
+    const run = (async () => {
+      const captured = await browserShim.readCapturedUrls();
+      for (const url of captured) {
+        inspectAuthUrl(url);
+        if (announcedUrl || untrustedLink) break;
+      }
+    })();
+    shimPollInFlight = run;
+    try {
+      await run;
+    } finally {
+      if (shimPollInFlight === run) shimPollInFlight = undefined;
+    }
+  };
   const requestCode = (message: string) => {
     if (announcedUrl) {
       void askForCode(message);
@@ -257,10 +310,15 @@ export async function antigravityTerminalLogin(
     if (!authUrlWaitTimer) {
       authUrlWaitTimer = setTimeout(() => {
         authUrlWaitTimer = undefined;
-        if (!announcedUrl && !interactionFailed) failMissingAuthUrl();
+        void pollBrowserShim().then(() => {
+          if (!announcedUrl && !untrustedLink && !interactionFailed) failMissingAuthUrl();
+        });
       }, ANTIGRAVITY_LOGIN_URL_WAIT_MS);
     }
   };
+  shimPollTimer = setInterval(() => {
+    if (!shimPollInFlight) void pollBrowserShim();
+  }, ANTIGRAVITY_LOGIN_SHIM_POLL_MS);
   const watch = async (
     stream: AsyncIterable<Uint8Array>,
     inspect: (text: string) => void,
@@ -276,24 +334,7 @@ export async function antigravityTerminalLogin(
     watch(child.stdout, (seen) => {
       if (!announcedUrl) {
         const url = LOGIN_URL.exec(seen)?.[1];
-        const trusted = url ? googleAccountsUrl(url) : undefined;
-        if (trusted) {
-          announcedUrl = true;
-          if (authUrlWaitTimer) {
-            clearTimeout(authUrlWaitTimer);
-            authUrlWaitTimer = undefined;
-          }
-          emit({
-            kind: "auth_url",
-            verificationUrl: trusted,
-            instructions: LOGIN_INSTRUCTIONS,
-          });
-          // The prompt may have printed before the link; answer it now that the URL is out.
-          if (codePromptSeen) requestCode(CODE_PROMPT_MESSAGE);
-        } else if (url) {
-          untrustedLink = true;
-          terminate();
-        }
+        if (url) inspectAuthUrl(url);
       }
       // agy re-prints the prompt for every rejected paste; each new occurrence asks again.
       const prompts = seen.match(CODE_PROMPTS)?.length ?? 0;
@@ -323,6 +364,7 @@ export async function antigravityTerminalLogin(
       };
     if (outcome === "timeout") return { status: "failed", reason: "timed_out" };
     await reading;
+    await pollBrowserShim();
     if (untrustedLink)
       return {
         status: "failed",
@@ -348,9 +390,11 @@ export async function antigravityTerminalLogin(
       detail: "agy acp --login finished without signing in",
     };
   } finally {
+    stopShimPolling();
     clearTimeout(timer);
     if (authUrlWaitTimer) clearTimeout(authUrlWaitTimer);
     interaction.signal?.removeEventListener("abort", abort);
     await tree.terminate(true).catch(() => undefined);
+    await browserShim.dispose();
   }
 }

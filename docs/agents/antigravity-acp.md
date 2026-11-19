@@ -67,3 +67,7 @@ Part of [the documentation index](../../README.md). The Antigravity adapter runs
   (`acpReadModelEfforts`, shared with Droid), restores the initial model and `thought_level`, and
   then closes with `session/close`. Account usage reads `agy -p /usage --output-format json`, which
   answers without a turn (and is refused when `GEMINI_HOME` selects a non-default profile).
+- Headless login (`agy acp --login`) runs with a temporary `0700` `PATH`/`BROWSER` shim
+  (`xdg-open`, `open`, `browser-shim`) scoped only to that child process and removed on exit. URLs
+  captured either from stdout or from the shim pass through the same `https://accounts.google.com`
+  allowlist before being emitted to the user.

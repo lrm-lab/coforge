@@ -81,6 +81,17 @@ if (process.argv.includes("--login")) {
   const url =
     Bun.env.AGY_ACP_FIXTURE_LOGIN_URL ??
     "https://accounts.google.com/o/oauth2/auth?client_id=fixture&state=s";
+  if (Bun.env.AGY_ACP_FIXTURE_LOGIN_USE_BROWSER) {
+    const opener =
+      Bun.env.AGY_ACP_FIXTURE_LOGIN_USE_BROWSER === "browser"
+        ? (Bun.env.BROWSER ?? "xdg-open")
+        : Bun.env.AGY_ACP_FIXTURE_LOGIN_USE_BROWSER;
+    const opened = Bun.spawnSync([opener, url], { env: Bun.env });
+    if (opened.exitCode !== 0) {
+      console.error(`failed to launch browser opener: ${opener}`);
+      process.exit(1);
+    }
+  }
   if (!Bun.env.AGY_ACP_FIXTURE_LOGIN_NO_URL)
     console.log(`Open this link in a browser to log in with Google:\n\n  ${url}\n`);
   const prompt = () =>
