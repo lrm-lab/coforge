@@ -411,3 +411,29 @@ test("permission requests arriving while interrupting are cancelled", async () =
     });
   });
 });
+
+test("a turn agy ends normally with only its in-band error line fails with that line", async () => {
+  await withSession(async ({ session, events }) => {
+    await session.sendMessage("inband-error");
+    await waitFor(() => events.some((e) => e.type === "error"));
+    expect(events.filter((e) => e.type === "error")).toEqual([
+      {
+        type: "error",
+        message: "INVALID_ARGUMENT (code 400): Thinking level is unsupported: THINKING_LEVEL_XHIGH",
+      },
+    ]);
+    expect(completed(events).map((e) => e.status)).toEqual(["failed"]);
+  });
+});
+
+test.each(["inband-with-usage", "inband-embedded"])(
+  "a turn whose text only resembles agy's error line (%s) still completes",
+  async (prompt) => {
+    await withSession(async ({ session, events }) => {
+      await session.sendMessage(prompt);
+      await waitFor(() => completed(events).length > 0);
+      expect(events.some((e) => e.type === "error")).toBe(false);
+      expect(completed(events).map((e) => e.status)).toEqual(["completed"]);
+    });
+  },
+);

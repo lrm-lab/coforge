@@ -337,6 +337,26 @@ for await (const line of console) {
         reply({ stopReason: "end_turn" });
         break;
       }
+      const inBand = {
+        "inband-error": [
+          "\n⚠ INVALID_ARGUMENT (code 400): Thinking level is unsupported: THINKING_LEVEL_XHIGH\n",
+        ],
+        "inband-with-usage": ["⚠ INVALID_ARGUMENT (code 400): quoted by the model"],
+        "inband-embedded": [
+          "Here is what failed:\n",
+          "⚠ INVALID_ARGUMENT (code 400): quoted\nand more text",
+        ],
+      }[text as string];
+      if (inBand) {
+        for (const chunk of inBand)
+          update({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: chunk } });
+        reply(
+          text === "inband-with-usage"
+            ? { stopReason: "end_turn", usage: { inputTokens: 1, outputTokens: 1 } }
+            : { stopReason: "end_turn" },
+        );
+        break;
+      }
       reply({ stopReason: text === "refuse" ? "cancelled" : "end_turn" });
       break;
     }

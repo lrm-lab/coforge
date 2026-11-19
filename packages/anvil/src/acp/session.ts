@@ -219,7 +219,14 @@ export class AcpSession implements AgentSession {
               ? ("interrupted" as const)
               : ("failed" as const),
       };
-      if (stop.status === "completed") {
+      const inBand =
+        stop.status === "completed"
+          ? input.updates.inBandFailure?.(asRecord(response) ?? {})
+          : undefined;
+      if (inBand !== undefined) {
+        this.#accept(input);
+        this.#emit({ type: "error", message: inBand }, input.options);
+      } else if (stop.status === "completed") {
         this.#accept(input);
         status = "completed";
       } else if (stop.status === "interrupted") {

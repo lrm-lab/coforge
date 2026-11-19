@@ -17,7 +17,10 @@ function antigravityToolCall(update: Readonly<Record<string, unknown>>) {
   return { name, input: rawInput ? input : update.rawInput };
 }
 
+const IN_BAND_ERROR = /^\s*⚠\s*(\S[^\n]*\(code \d{3}\):[^\n]*)\s*$/;
+
 export class AntigravityAcpTurnEvents {
+  #message = "";
   readonly #started = new Set<string>();
   readonly #ended = new Set<string>();
   readonly #output = new Map<string, string>();
@@ -30,6 +33,12 @@ export class AntigravityAcpTurnEvents {
       case "agent_message_chunk":
       case "agent_thought_chunk": {
         const content = asRecord(update.content);
+        if (
+          update.sessionUpdate === "agent_message_chunk" &&
+          content?.type === "text" &&
+          typeof content.text === "string"
+        )
+          this.#message += content.text;
         return content?.type === "text" && typeof content.text === "string"
           ? [
               {
@@ -89,6 +98,10 @@ export class AntigravityAcpTurnEvents {
       events.push({ type: "tool-end", id, isError: update.status !== "completed" });
     }
     return events;
+  }
+  inBandFailure(answer: Readonly<Record<string, unknown>>): string | undefined {
+    if (answer.usage !== undefined) return undefined;
+    return IN_BAND_ERROR.exec(this.#message)?.[1]?.trim();
   }
   end(): AgentRuntimeEvent[] {
     return this.#scanner.reset().map((id) => ({ type: "reply-intent-retracted", id }));

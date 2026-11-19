@@ -44,6 +44,7 @@ export type AcpRuntimeProfile = Readonly<{
 export type AcpTurnReader = Readonly<{
   read(update: Readonly<Record<string, unknown>>): AgentRuntimeEvent[];
   end(): AgentRuntimeEvent[];
+  inBandFailure?(answer: Readonly<Record<string, unknown>>): string | undefined;
 }>;
 
 /** A turn the runtime started itself: its prompt id when it starts, its end when it stops. */
