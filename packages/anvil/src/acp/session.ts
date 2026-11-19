@@ -9,11 +9,11 @@ import type {
   AgentTurnProcessWindow,
 } from "@coforge/agent";
 import { RequestError } from "@agentclientprotocol/sdk";
-import { asRecord, nonEmptyString } from "#src/json-record";
-import { scrubRuntimeErrorText } from "#src/runtime-error-text";
+import { asRecord } from "#src/json-record";
 import { attachStderrExcerpt } from "#src/stderr-excerpt";
 import type { AcpConnection } from "./connection";
 import type { AcpNativeTurn, AcpSessionProfile } from "./profile";
+import { acpPromptFailure } from "./prompt-failure";
 import {
   type AcpNativeTurnState,
   type AcpSessionInput,
@@ -251,26 +251,10 @@ export class AcpSession implements AgentSession {
       // A terminal RPC failure is an accepted failed turn. Only transport loss leaves delivery
       // unknown; neither outcome permits automatic resending or notice-undelivered.
       if (!rpcFailure && this.#transport) attachStderrExcerpt(this.#transport.process, error);
-      const data = rpcFailure ? asRecord(error.data) : undefined;
-      const detail =
-        nonEmptyString(data?.detail) ??
-        nonEmptyString(data?.message) ??
-        (rpcFailure ? nonEmptyString(error.data) : undefined) ??
-        (error instanceof Error ? error.message : `${this.profile.label} prompt failed`);
-      const named = this.profile.detailMessage?.(detail);
       // A deliberate interrupt kills the transport: the turn reports `interrupted`, not the
       // transport's own "connection closed" complaint.
       if (!this.#disposed && !(this.#interrupting && !rpcFailure))
-        this.#emit(
-          named
-            ? { type: "error", message: named }
-            : {
-                type: "error",
-                message: scrubRuntimeErrorText(detail),
-                ...(rpcFailure ? { providerErrorCode: String(error.code) } : {}),
-              },
-          input.options,
-        );
+        this.#emit(acpPromptFailure(error, this.profile), input.options);
       if (!(error instanceof RequestError))
         if (this.#interrupting) status = "interrupted";
         else this.#failed = true;
