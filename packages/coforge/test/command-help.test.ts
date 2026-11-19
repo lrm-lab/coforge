@@ -18,7 +18,8 @@ test("every command prints its own --help instead of the whole usage", async () 
 
   // The family help answers when the subcommand has no entry of its own.
   const reminder = await run(["reminder", "--help"], transport);
-  expect(reminder).toContain("coforge reminder schedule|list|cancel|update|snooze");
+  expect(reminder).toContain("coforge reminder schedule|list|cancel|log|update|snooze");
+  expect(reminder).toContain("unseal");
 });
 
 test("message read takes its flags in any order", () => {
@@ -214,5 +215,75 @@ test("artifact help hides when the Workspace's features say artifacts are off", 
   } finally {
     if (previous === undefined) delete Bun.env[name];
     else Bun.env[name] = previous;
+  }
+});
+
+test("reminder help names the flags its parser accepts", async () => {
+  const schedule = await run(["reminder", "schedule", "--help"], transport);
+  expect(schedule).toContain("--fire-at <iso>");
+  expect(schedule).toContain("--delay-seconds");
+  expect(schedule).toContain("--msg-id");
+  expect(schedule).toContain("--target");
+  expect(schedule).not.toContain("--at <iso>");
+
+  const update = await run(["reminder", "update", "--help"], transport);
+  expect(update).toContain("--fire-at <iso>");
+  expect(update).toContain("--in <duration>");
+  expect(update).not.toContain("--at <iso>");
+
+  const snooze = await run(["reminder", "snooze", "--help"], transport);
+  expect(snooze).toContain("--by <duration>");
+  expect(snooze).toContain("--fire-at <iso>");
+  expect(snooze).not.toContain("--until <iso>");
+
+  const list = await run(["reminder", "list", "--help"], transport);
+  expect(list).not.toContain("--json");
+
+  for (const command of ["cancel", "log", "ack", "dismiss", "seal", "unseal"]) {
+    const text = await run(["reminder", command, "--help"], transport);
+    expect(text).not.toContain("--json");
+  }
+
+  expect(() =>
+    parseArgs([
+      "reminder",
+      "schedule",
+      "--title",
+      "t",
+      "--target",
+      "@ada",
+      "--msg-id",
+      "abcd1234",
+      "--delay-seconds",
+      "15m",
+    ]),
+  ).not.toThrow();
+  expect(() => parseArgs(["reminder", "update", "--id", "abcd1234", "--in", "15m"])).not.toThrow();
+  expect(() =>
+    parseArgs(["reminder", "update", "--id", "abcd1234", "--cadence", "none"]),
+  ).not.toThrow();
+  expect(() => parseArgs(["reminder", "snooze", "--id", "abcd1234", "--by", "15m"])).not.toThrow();
+});
+
+test("every reminder help example parses as written", () => {
+  const tokenize = (line: string) =>
+    line
+      .replace(/^coforge /, "")
+      .match(/'[^']*'|\S+/g)!
+      .map((token) => token.replace(/^'|'$/g, ""));
+  for (const words of [
+    ["reminder"],
+    ["reminder", "schedule"],
+    ["reminder", "list"],
+    ["reminder", "update"],
+    ["reminder", "snooze"],
+    ["reminder", "seal"],
+    ["reminder", "ack"],
+  ]) {
+    const example = commandHelp(words)
+      ?.split("\n")
+      .find((line) => line.startsWith("Example: "));
+    expect(example).toBeDefined();
+    expect(() => parseArgs(tokenize(example!.slice("Example: ".length)))).not.toThrow();
   }
 });
