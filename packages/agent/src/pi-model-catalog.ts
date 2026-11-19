@@ -3,6 +3,7 @@
 import { createAgentSessionServices, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { join } from "node:path";
 import { getCoforgeAgentDir } from "./paths";
+import { prepareWorkspaceModelsPath } from "./pi-models-guard";
 import { API_KEY_ENV_BY_PROVIDER, configureRuntimeEnvironment } from "./runtime-provider";
 
 export async function discoverPiModels(
@@ -80,12 +81,23 @@ export async function refreshPiModelCatalog(
   }
 }
 
-/** The models a CoForge-runtime launch can resolve, from the SDK's own catalog. */
 export async function discoverModels(cwd: string) {
-  const services = await createAgentSessionServices({
-    cwd,
-    agentDir: getCoforgeAgentDir(cwd),
-    resourceLoaderOptions: { systemPromptOverride: () => "" },
-  });
-  return services.modelRuntime.getAvailableSnapshot();
+  const agentDir = getCoforgeAgentDir(cwd);
+  const preparedModels = await prepareWorkspaceModelsPath(join(agentDir, "models.json"));
+  try {
+    const modelRuntime = await ModelRuntime.create({
+      authPath: join(agentDir, "auth.json"),
+      modelsPath: preparedModels.modelsPath,
+      modelsStorePath: join(agentDir, "models-store.json"),
+    });
+    const services = await createAgentSessionServices({
+      cwd,
+      agentDir,
+      modelRuntime,
+      resourceLoaderOptions: { systemPromptOverride: () => "" },
+    });
+    return services.modelRuntime.getAvailableSnapshot();
+  } finally {
+    await preparedModels.cleanup();
+  }
 }

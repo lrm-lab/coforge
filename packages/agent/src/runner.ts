@@ -34,6 +34,9 @@ import {
   resolvePiSessionRotateBytes,
   rotatePiSessionTranscriptIfOversized,
 } from "./session-rotation";
+import { createHardenedBashOperations } from "./pi-bash-guard";
+import { createCompactionGuardExtension } from "./pi-compaction-guard";
+import { assertBuiltinModelOriginSafe, prepareWorkspaceModelsPath } from "./pi-models-guard";
 import type { CreateSessionOptions } from "./session-options";
 export const createRuntime: CreateAgentSessionRuntimeFactory = async ({
   cwd,
@@ -46,14 +49,34 @@ export const createRuntime: CreateAgentSessionRuntimeFactory = async ({
   const services = await createAgentSessionServices({
     cwd,
     agentDir,
-    resourceLoaderOptions: { systemPromptOverride: () => instructions },
+    resourceLoaderOptions: {
+      systemPromptOverride: () => instructions,
+      extensionFactories: [createCompactionGuardExtension(() => undefined)],
+    },
   });
   const skillDiagnostics = services.resourceLoader.getSkills().diagnostics;
   if (skillDiagnostics.length > 0) {
     throw new Error(`Cannot start with ${skillDiagnostics.length} skill diagnostic(s)`);
   }
+  const extensionDefinesBash = services.resourceLoader
+    .getExtensions()
+    .extensions.some((extension) => extension.tools.has("bash"));
+  const shellPath = services.settingsManager.getShellPath();
+  const customTools = !extensionDefinesBash
+    ? [
+        createBashTool(cwd, {
+          operations: createHardenedBashOperations({ shellPath }),
+          commandPrefix: services.settingsManager.getShellCommandPrefix(),
+        }),
+      ]
+    : [];
   return {
-    ...(await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent })),
+    ...(await createAgentSessionFromServices({
+      services,
+      sessionManager,
+      sessionStartEvent,
+      ...(customTools.length > 0 ? { customTools } : {}),
+    })),
     services,
     diagnostics: services.diagnostics,
   };
@@ -83,144 +106,173 @@ export async function createSession(options: CreateSessionOptions) {
     options.sessionId ?? options.agentId,
     options.sessionMode ?? (options.sessionId ? "resume" : "create"),
   );
-  const modelRuntime =
-    sessionKind === "pi"
-      ? await createPiModelRuntime(agentDir, environment ?? {})
-      : await ModelRuntime.create({
-          authPath: join(agentDir, "auth.json"),
-          modelsPath: join(agentDir, "models.json"),
-        });
-  if (options.modelProvider && options.apiKey)
-    await modelRuntime.setRuntimeApiKey(options.modelProvider, options.apiKey);
-  configureRuntimeEnvironment(modelRuntime, environment);
-  if (sessionKind === "pi") {
-    try {
-      await refreshPiModelCatalog(
-        modelRuntime,
-        environment,
-        options.modelProvider ? [options.modelProvider] : undefined,
-      );
-    } catch (refreshError) {
+  const isWorkspaceBuiltinAgentDir =
+    sessionKind === "coforge" && resolve(agentDir) === resolve(getCoforgeAgentDir(cwd));
+  const preparedModels = isWorkspaceBuiltinAgentDir
+    ? await prepareWorkspaceModelsPath(join(agentDir, "models.json"))
+    : undefined;
+  let created: Awaited<ReturnType<typeof createAgentSessionFromServices>> | undefined;
+  try {
+    const modelRuntime =
+      sessionKind === "pi"
+        ? await createPiModelRuntime(agentDir, environment ?? {})
+        : await ModelRuntime.create({
+            authPath: join(agentDir, "auth.json"),
+            modelsPath: preparedModels ? preparedModels.modelsPath : join(agentDir, "models.json"),
+            modelsStorePath: join(agentDir, "models-store.json"),
+          });
+    if (options.modelProvider && options.apiKey)
+      await modelRuntime.setRuntimeApiKey(options.modelProvider, options.apiKey);
+    configureRuntimeEnvironment(modelRuntime, environment);
+    if (sessionKind === "pi") {
+      try {
+        await refreshPiModelCatalog(
+          modelRuntime,
+          environment,
+          options.modelProvider ? [options.modelProvider] : undefined,
+        );
+      } catch (refreshError) {
+        throw classifyPiLaunchFailure(
+          modelRuntime,
+          options.modelProvider,
+          options.model,
+          refreshError,
+        );
+      }
+    }
+    let resolvedContextWindow: number | undefined;
+    const services = await createAgentSessionServices({
+      cwd,
+      agentDir,
+      modelRuntime,
+      resourceLoaderOptions: resourceLoaderOptionsForSession({
+        instructions: options.instructions,
+        disableHostPiInjection:
+          evalDisablesHostPiInjection(options.environment) || evalDisablesHostPiInjection(),
+        extensionFactories: [createCompactionGuardExtension(() => resolvedContextWindow)],
+      }),
+    });
+    if (sessionKind === "coforge") {
+      const skillDiagnostics = services.resourceLoader.getSkills().diagnostics;
+      if (skillDiagnostics.length > 0)
+        throw new Error(`Cannot start with ${skillDiagnostics.length} skill diagnostic(s)`);
+    }
+    const model =
+      options.modelProvider && options.model
+        ? modelRuntime.getModel(options.modelProvider, options.model)
+        : undefined;
+    if (options.model && !model)
       throw classifyPiLaunchFailure(
         modelRuntime,
         options.modelProvider,
         options.model,
-        refreshError,
+        PI_MODEL_UNAVAILABLE,
       );
-    }
-  }
-  const services = await createAgentSessionServices({
-    cwd,
-    agentDir,
-    modelRuntime,
-    resourceLoaderOptions: resourceLoaderOptionsForSession({
-      instructions: options.instructions,
-      disableHostPiInjection:
-        evalDisablesHostPiInjection(options.environment) || evalDisablesHostPiInjection(),
-    }),
-  });
-  if (sessionKind === "coforge") {
-    const skillDiagnostics = services.resourceLoader.getSkills().diagnostics;
-    if (skillDiagnostics.length > 0)
-      throw new Error(`Cannot start with ${skillDiagnostics.length} skill diagnostic(s)`);
-  }
-  const model =
-    options.modelProvider && options.model
-      ? modelRuntime.getModel(options.modelProvider, options.model)
-      : undefined;
-  if (options.model && !model)
-    throw classifyPiLaunchFailure(
-      modelRuntime,
-      options.modelProvider,
-      options.model,
-      PI_MODEL_UNAVAILABLE,
-    );
-  const launchModel = model && modelWithSizes(model, options);
-  const extensionDefinesBash = services.resourceLoader
-    .getExtensions()
-    .extensions.some((extension) => extension.tools.has("bash"));
-  const customTools =
-    options.environment && !extensionDefinesBash
+    const launchModel = model && modelWithSizes(model, options);
+    if (launchModel && isWorkspaceBuiltinAgentDir) assertBuiltinModelOriginSafe(launchModel);
+    resolvedContextWindow = launchModel?.contextWindow;
+    const extensionDefinesBash = services.resourceLoader
+      .getExtensions()
+      .extensions.some((extension) => extension.tools.has("bash"));
+    const shellPath = services.settingsManager.getShellPath();
+    const customTools = !extensionDefinesBash
       ? [
           createBashTool(cwd, {
-            shellPath: services.settingsManager.getShellPath(),
+            operations: createHardenedBashOperations({ shellPath }),
             commandPrefix: services.settingsManager.getShellCommandPrefix(),
-            spawnHook: ({ env, ...context }) => {
-              const childEnv = { ...env };
-              for (const key of [
-                "COFORGE_AGENT_CONTEXT",
-                "COFORGE_AGENT_CONVERSATION_TARGET",
-                "COFORGE_AGENT_PROXY_URL",
-                "COFORGE_DAEMON_SOCKET",
-                "COFORGE_SUPERVISOR_SOCKET",
-                "COFORGE_CURRENT_AGENT_ID",
-                "COFORGE_CURRENT_AGENT_NAME",
-                "COFORGE_CURRENT_WORKSPACE_ID",
-                "COFORGE_CURRENT_WORKSPACE_SLUG",
-                "COFORGE_CURRENT_WORKSPACE_NAME",
-                "COFORGE_CURRENT_COMPUTER_ID",
-                "COFORGE_CURRENT_COMPUTER_NAME",
-                "COFORGE_CURRENT_COMPUTER_HOSTNAME",
-                "COFORGE_CURRENT_COMPUTER_OS",
-                "COFORGE_CURRENT_COMPUTER_VERSION",
-                "COFORGE_CURRENT_AGENT_WORKSPACE_PATH",
-              ])
-                delete childEnv[key];
-              Object.assign(childEnv, environment);
-              for (const key of [
-                "PI_SESSION_ID",
-                "PI_SESSION_FILE",
-                "PI_PROVIDER",
-                "PI_MODEL",
-                "PI_REASONING_LEVEL",
-              ]) {
-                if (env[key] === undefined) delete childEnv[key];
-                else childEnv[key] = env[key];
-              }
-              return { ...context, env: childEnv };
-            },
+            ...(options.environment
+              ? {
+                  spawnHook: ({ env, ...context }) => {
+                    const childEnv = { ...env };
+                    for (const key of [
+                      "COFORGE_AGENT_CONTEXT",
+                      "COFORGE_AGENT_CONVERSATION_TARGET",
+                      "COFORGE_AGENT_PROXY_URL",
+                      "COFORGE_DAEMON_SOCKET",
+                      "COFORGE_SUPERVISOR_SOCKET",
+                      "COFORGE_CURRENT_AGENT_ID",
+                      "COFORGE_CURRENT_AGENT_NAME",
+                      "COFORGE_CURRENT_WORKSPACE_ID",
+                      "COFORGE_CURRENT_WORKSPACE_SLUG",
+                      "COFORGE_CURRENT_WORKSPACE_NAME",
+                      "COFORGE_CURRENT_COMPUTER_ID",
+                      "COFORGE_CURRENT_COMPUTER_NAME",
+                      "COFORGE_CURRENT_COMPUTER_HOSTNAME",
+                      "COFORGE_CURRENT_COMPUTER_OS",
+                      "COFORGE_CURRENT_COMPUTER_VERSION",
+                      "COFORGE_CURRENT_AGENT_WORKSPACE_PATH",
+                    ])
+                      delete childEnv[key];
+                    Object.assign(childEnv, environment);
+                    for (const key of [
+                      "PI_SESSION_ID",
+                      "PI_SESSION_FILE",
+                      "PI_PROVIDER",
+                      "PI_MODEL",
+                      "PI_REASONING_LEVEL",
+                    ]) {
+                      if (env[key] === undefined) delete childEnv[key];
+                      else childEnv[key] = env[key];
+                    }
+                    return { ...context, env: childEnv };
+                  },
+                }
+              : {}),
           }),
         ]
       : [];
-  const created = await createAgentSessionFromServices({
-    services,
-    sessionManager,
-    ...(launchModel ? { model: launchModel } : {}),
-    ...(options.reasoning ? { thinkingLevel: options.reasoning as never } : {}),
-    ...(customTools.length > 0 ? { customTools } : {}),
-  });
-  const removeChannelTurnPolicy = installChannelTurnPolicy(created.session, {
-    settleMessageSends:
-      (environment.COFORGE_EVAL_SETTLE_SENDS ?? Bun.env.COFORGE_EVAL_SETTLE_SENDS) === "1",
-  });
-  return {
-    ...created,
-    services,
-    replacedSessionId,
-    get sessionId() {
-      return sessionManager.getSessionId();
-    },
-    ...contextViewRequestLogFields(
-      sessionDir,
-      options.contextViewRequestLogDirectory,
-      sessionManager.getSessionId(),
-    ),
-    rotateTranscript: async () => {
-      if (created.session.isStreaming || created.session.isCompacting) return;
-      if (!isPiSessionRotationEnabled(options.environment)) return;
-      const outcome = await rotatePiSessionTranscriptIfOversized(sessionManager, {
-        maxBytes: rotateBytes,
-      }).catch(() => undefined);
-      if (outcome?.rotated) created.session.refreshContext();
-    },
-    dispose: async () => {
-      removeChannelTurnPolicy();
-      created.session.clearQueue();
-      await created.session.abort();
-      await created.session.waitForIdle();
-      created.session.dispose();
-    },
-  };
+    created = await createAgentSessionFromServices({
+      services,
+      sessionManager,
+      ...(launchModel ? { model: launchModel } : {}),
+      ...(options.reasoning ? { thinkingLevel: options.reasoning as never } : {}),
+      ...(customTools.length > 0 ? { customTools } : {}),
+    });
+    if (isWorkspaceBuiltinAgentDir && created.session.model) {
+      assertBuiltinModelOriginSafe(created.session.model);
+    }
+    const activeSession = created;
+    const removeChannelTurnPolicy = installChannelTurnPolicy(activeSession.session, {
+      settleMessageSends:
+        (environment.COFORGE_EVAL_SETTLE_SENDS ?? Bun.env.COFORGE_EVAL_SETTLE_SENDS) === "1",
+    });
+    return {
+      ...activeSession,
+      services,
+      replacedSessionId,
+      get sessionId() {
+        return sessionManager.getSessionId();
+      },
+      ...contextViewRequestLogFields(
+        sessionDir,
+        options.contextViewRequestLogDirectory,
+        sessionManager.getSessionId(),
+      ),
+      rotateTranscript: async () => {
+        if (activeSession.session.isStreaming || activeSession.session.isCompacting) return;
+        if (!isPiSessionRotationEnabled(options.environment)) return;
+        const outcome = await rotatePiSessionTranscriptIfOversized(sessionManager, {
+          maxBytes: rotateBytes,
+        }).catch(() => undefined);
+        if (outcome?.rotated) activeSession.session.refreshContext();
+      },
+      dispose: async () => {
+        try {
+          removeChannelTurnPolicy();
+          activeSession.session.clearQueue();
+          await activeSession.session.abort();
+          await activeSession.session.waitForIdle();
+          activeSession.session.dispose();
+        } finally {
+          await preparedModels?.cleanup();
+        }
+      },
+    };
+  } catch (error) {
+    created?.session.dispose();
+    await preparedModels?.cleanup();
+    throw error;
+  }
 }
 async function sessionManagerFor(
   cwd: string,
