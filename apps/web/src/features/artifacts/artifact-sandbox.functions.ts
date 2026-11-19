@@ -3,12 +3,14 @@ import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
+import { declareNoStore } from "#src/features/no-store-response.server";
 import { artifactInputs } from "./artifact-inputs";
 import {
   productionArtifactAbuseReporter,
   productionArtifactLinkOpen,
   productionArtifactSandbox,
 } from "#src/server/artifacts/artifact-composition.server";
+import { optionalBrowserUser } from "#src/server/auth/require-user.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
 import { clientAddress, publicOrigin } from "#src/server/http/public-origin.server";
 
@@ -39,6 +41,24 @@ export const loadArtifactSandboxLink = createServerFn({ method: "GET" })
       viewer: link.viewer,
       level: link.level,
     };
+  });
+
+export const resolvePublicArtifactAccess = createServerFn({ method: "GET" })
+  .validator(z.object({ artifactId: artifactInputs.id }).strict())
+  .handler(async ({ data }) => {
+    declareNoStore();
+    const user = await optionalBrowserUser(getRequest().headers.get("cookie") ?? undefined);
+    if (!user) return { signedIn: false, memberWorkspaceSlug: null as string | null };
+    const db = requireDatabaseClient();
+    const artifact = await db.artifact.findFirst({
+      where: {
+        id: data.artifactId,
+        deletedAt: null,
+        workspace: { memberships: { some: { userId: user.id } } },
+      },
+      select: { workspace: { select: { slug: true } } },
+    });
+    return { signedIn: true, memberWorkspaceSlug: artifact?.workspace.slug ?? null };
   });
 
 export const openLinkArtifact = createServerFn({ method: "GET" })

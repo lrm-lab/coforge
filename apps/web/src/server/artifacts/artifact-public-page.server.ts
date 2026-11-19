@@ -16,6 +16,7 @@ export type PublicPage = {
   access: string;
   workspaceSlug: string;
   version: number;
+  updatedAt?: string;
 };
 
 type PageArtifact = {
@@ -93,6 +94,7 @@ async function publicPageOf(
       },
       select: {
         entryPath: true,
+        createdAt: true,
         files: {
           where: { path: path ?? artifact.entryPath },
           select: { sha256: true, sizeBytes: true },
@@ -115,5 +117,6 @@ async function publicPageOf(
     access: artifact.access,
     workspaceSlug: artifact.workspace.slug,
     version: artifact.currentVersion,
+    updatedAt: version.createdAt.toISOString(),
   };
 }

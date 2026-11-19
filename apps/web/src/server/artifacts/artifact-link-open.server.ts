@@ -5,7 +5,13 @@ import type { PublicArtifactMissGuard } from "./artifact-public-miss-guard.serve
 import type { LinkLookup } from "./artifact-public-page.server";
 import { artifactPageOrigin } from "./artifact-sandbox-config.server";
 
-export type LinkOpened = { title: string; kind: ArtifactPathKind; url: string; version: number };
+export type LinkOpened = {
+  title: string;
+  kind: ArtifactPathKind;
+  url: string;
+  version: number;
+  updatedAt?: string;
+};
 
 export class ArtifactLinkOpen {
   constructor(
@@ -35,6 +41,7 @@ export class ArtifactLinkOpen {
       kind: page.kind,
       url: `${artifactPageOrigin(origin, input.artifactId)}/l`,
       version: page.version,
+      ...(page.updatedAt ? { updatedAt: page.updatedAt } : {}),
     };
   }
 }

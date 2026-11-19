@@ -1,10 +1,28 @@
 import { useState } from "react";
-import { Link } from "@tanstack/react-router";
-import { Copy01, Flag01, GitBranch01, Link01, LinkExternal01, Stars01 } from "@untitledui/icons";
+import { Link, useNavigate } from "@tanstack/react-router";
+import {
+  Copy01,
+  DotsVertical,
+  FileX02,
+  Flag01,
+  Link01,
+  LinkExternal01,
+  XClose,
+} from "@untitledui/icons";
 
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
+import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "#src/components/ui/empty";
+import { RelativeTime } from "#src/components/ui/relative-time";
 import { useAppToast } from "#src/components/ui/toast";
 import { copyText } from "#src/lib/clipboard";
 import { m } from "#src/paraglide/messages";
@@ -12,35 +30,91 @@ import { buildAiPromptUrl, formatArtifactForAi, type AiProvider } from "./artifa
 import { publicArtifactPath } from "./artifact-short-id";
 import { PublicArtifactForkDialog, PublicArtifactReportDialog } from "./public-artifact-dialogs";
 
+const BANNER_DISMISSED_KEY = "coforge.artifacts.publicBannerDismissed";
+
+function readBannerDismissed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(BANNER_DISMISSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveBannerDismissed(): void {
+  try {
+    window.localStorage.setItem(BANNER_DISMISSED_KEY, "1");
+  } catch {
+    return;
+  }
+}
+
 export type PublicArtifactData = {
   artifactId: string;
   title: string;
   url: string;
   version: number;
+  updatedAt?: string;
 };
+
+type MenuAction = "copy-link" | "copy-for-ai" | AiProvider | "report";
 
 export function PublicArtifactShell({
   artifact,
+  signedIn = false,
   rateLimited = false,
+  returnTo,
 }: {
   artifact: PublicArtifactData | null;
+  signedIn?: boolean;
   rateLimited?: boolean;
+  returnTo?: string;
 }) {
   const toast = useAppToast();
+  const navigate = useNavigate();
   const [forking, setForking] = useState(false);
   const [reporting, setReporting] = useState(false);
+  const [phonePromptOpen, setPhonePromptOpen] = useState(() => !readBannerDismissed());
+
+  const openSignIn = () => {
+    void navigate({
+      to: "/login",
+      search: returnTo ? { returnTo } : {},
+    });
+  };
+
+  const dismissPhonePrompt = () => {
+    saveBannerDismissed();
+    setPhonePromptOpen(false);
+  };
 
   if (!artifact) {
     return (
-      <div className="flex min-h-dvh flex-col items-center justify-center bg-primary px-6 text-center">
-        <h1 className="text-lg font-semibold text-primary">{m.ap_unavailable_title()}</h1>
-        <p className="mt-2 max-w-md text-sm text-secondary">
-          {rateLimited ? m.ap_rate_limited() : m.ap_unavailable_body()}
-        </p>
-        <Link to="/" className="mt-5 text-sm font-medium text-brand-secondary hover:underline">
-          {m.ap_open_in_coforge()}
-        </Link>
-      </div>
+      <main className="flex min-h-dvh flex-col items-center justify-center bg-primary px-6">
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <FileX02 />
+            </EmptyMedia>
+            <EmptyTitle>{m.ap_unavailable_title()}</EmptyTitle>
+            <EmptyDescription>
+              {rateLimited ? m.ap_rate_limited() : m.ap_unavailable_body()}
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <div className="flex flex-wrap items-center justify-center gap-2.5">
+              <Button size="sm" color="secondary" onPress={() => void navigate({ to: "/" })}>
+                {m.ap_open_in_coforge()}
+              </Button>
+              {!signedIn && (
+                <Button size="sm" color="primary" onPress={openSignIn}>
+                  {m.ap_sign_in_to_view()}
+                </Button>
+              )}
+            </div>
+          </EmptyContent>
+        </Empty>
+      </main>
     );
   }
 
@@ -55,7 +129,15 @@ export function PublicArtifactShell({
     else toast.error(m.conversation_copy_failed());
   };
 
-  const onAiAction = async (action: "copy-for-ai" | AiProvider) => {
+  const onMenuAction = async (action: MenuAction) => {
+    if (action === "copy-link") {
+      await copyLink();
+      return;
+    }
+    if (action === "report") {
+      setReporting(true);
+      return;
+    }
     const context = { title, version: artifact.version, url: shareUrl };
     if (action === "copy-for-ai") {
       if (await copyText(formatArtifactForAi(context))) toast.success(m.av_ai_copied());
@@ -66,66 +148,107 @@ export function PublicArtifactShell({
   };
 
   return (
-    <div className="flex h-dvh flex-col bg-primary">
-      <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-secondary bg-primary px-3 sm:px-4">
-        <div className="flex min-w-0 items-center gap-2.5">
+    <main className="flex h-dvh flex-col bg-primary">
+      {!signedIn && (
+        <div className="hidden min-h-12 shrink-0 items-center justify-center gap-5 border-b border-secondary bg-secondary px-5 py-2 text-sm text-primary sm:flex">
+          <p className="min-w-0">{m.ap_visitor_prompt()}</p>
+          <Button size="sm" color="secondary" onPress={openSignIn}>
+            {m.ap_sign_up_or_in()}
+          </Button>
+        </div>
+      )}
+
+      <header className="flex min-h-12 shrink-0 items-center justify-between gap-2.5 border-b border-secondary bg-primary px-3 py-1.5 sm:h-12 sm:px-4 sm:py-0">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
           <Link
             to="/"
-            className="shrink-0 text-sm font-semibold tracking-tight text-primary hover:text-brand-secondary"
+            aria-label="CoForge"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-primary_hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
           >
-            CoForge
+            <CoForgeMark className="h-4.5" />
           </Link>
-          <span aria-hidden="true" className="text-quaternary">
-            /
-          </span>
-          <h1 className="truncate text-sm font-medium text-primary">{title}</h1>
-          <span className="shrink-0 rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium text-tertiary">
-            v{artifact.version}
-          </span>
+
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-2.5">
+            <div className="flex min-w-0 items-center gap-2">
+              <h1 className="truncate text-sm font-semibold text-primary">{title}</h1>
+              <span className="shrink-0 rounded-md bg-secondary px-1.5 py-0.5 text-xs font-medium text-tertiary ring-1 ring-secondary ring-inset">
+                v{artifact.version}
+              </span>
+            </div>
+
+            <div className="flex min-w-0 items-center gap-2 text-xs text-tertiary">
+              <span className="shrink-0">{m.ap_unverified()}</span>
+              {artifact.updatedAt && (
+                <span className="truncate">
+                  {m.ap_updated_prefix()} <RelativeTime value={artifact.updatedAt} plain />
+                </span>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          <ButtonUtility
-            icon={Link01}
-            size="xs"
-            color="tertiary"
-            tooltip={m.doc_copy_link()}
-            onClick={() => void copyLink()}
-          />
+          <Button size="sm" color="primary" onPress={() => setForking(true)}>
+            <span className="hidden sm:inline">{m.ap_fork_in_coforge()}</span>
+            <span className="sm:hidden">{m.ap_fork()}</span>
+          </Button>
+
           <Dropdown.Root>
-            <ButtonUtility icon={Stars01} size="xs" color="tertiary" tooltip={m.av_menu_ai()} />
+            <ButtonUtility
+              icon={DotsVertical}
+              size="sm"
+              color="tertiary"
+              tooltip={m.ap_more_actions()}
+            />
             <Dropdown.Popover placement="bottom end">
               <Dropdown.Menu
-                aria-label={m.av_menu_ai()}
-                onAction={(key) => void onAiAction(key as "copy-for-ai" | AiProvider)}
+                aria-label={m.ap_more_actions()}
+                onAction={(key) => void onMenuAction(key as MenuAction)}
               >
-                <Dropdown.Item id="copy-for-ai" icon={Copy01} label={m.av_menu_copy_for_ai()} />
-                <Dropdown.Item
-                  id="chatgpt"
-                  icon={LinkExternal01}
-                  label={m.av_menu_open_chatgpt()}
-                />
-                <Dropdown.Item id="claude" icon={LinkExternal01} label={m.av_menu_open_claude()} />
+                <Dropdown.Item id="copy-link" icon={Link01} label={m.doc_copy_link()} />
+                {!signedIn && (
+                  <>
+                    <Dropdown.Separator />
+                    <Dropdown.Item id="copy-for-ai" icon={Copy01} label={m.av_menu_copy_for_ai()} />
+                    <Dropdown.Item
+                      id="chatgpt"
+                      icon={LinkExternal01}
+                      label={m.av_menu_open_chatgpt()}
+                    />
+                    <Dropdown.Item
+                      id="claude"
+                      icon={LinkExternal01}
+                      label={m.av_menu_open_claude()}
+                    />
+                  </>
+                )}
+                <Dropdown.Separator />
+                <Dropdown.Item id="report" icon={Flag01} label={m.ap_report()} />
               </Dropdown.Menu>
             </Dropdown.Popover>
           </Dropdown.Root>
-          <Button
-            size="sm"
-            color="secondary"
-            iconLeading={GitBranch01}
-            onPress={() => setForking(true)}
-          >
-            <span className="hidden sm:inline">{m.ap_fork()}</span>
-          </Button>
-          <ButtonUtility
-            icon={Flag01}
-            size="xs"
-            color="tertiary"
-            tooltip={m.ap_report()}
-            onClick={() => setReporting(true)}
-          />
         </div>
       </header>
+
+      {!signedIn && phonePromptOpen && (
+        <div className="shrink-0 border-b border-secondary bg-secondary px-4 py-3 text-sm text-primary sm:hidden">
+          <div className="flex items-start gap-2">
+            <p className="min-w-0 flex-1 pt-0.5">{m.ap_visitor_prompt()}</p>
+            <ButtonUtility
+              icon={XClose}
+              size="xs"
+              color="tertiary"
+              tooltip={m.ap_dismiss_banner()}
+              onClick={dismissPhonePrompt}
+            />
+          </div>
+          <div className="mt-2.5">
+            <Button size="sm" color="secondary" onPress={openSignIn}>
+              {m.ap_sign_up_or_in()}
+            </Button>
+          </div>
+        </div>
+      )}
 
       <iframe
         aria-label={title}
@@ -144,6 +267,6 @@ export function PublicArtifactShell({
           onClose={() => setReporting(false)}
         />
       )}
-    </div>
+    </main>
   );
 }

@@ -69,6 +69,23 @@ test("a shared artifact opens for anyone: its title, kind and its own origin's a
   });
 });
 
+test("a shared artifact forwards updatedAt when the version timestamp is present", async () => {
+  const updatedAt = "2026-11-19T10:00:00.000Z";
+  const withTimestamp: LinkLookup = {
+    shared: true,
+    page: { ...SHARED.page!, updatedAt },
+  };
+  expect(
+    await opener(async () => withTimestamp).open({ artifactId: A, client: "192.0.2.1" }),
+  ).toEqual({
+    title: "Plan",
+    kind: "html",
+    url: `https://a-${A}.sandbox.example/l`,
+    version: 3,
+    updatedAt,
+  });
+});
+
 test("an absent and an unshared artifact are the same NOT_FOUND", async () => {
   for (const lookup of [ABSENT, { shared: true, page: null }])
     await expect(
