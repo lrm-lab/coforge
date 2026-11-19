@@ -7,9 +7,9 @@
     const phone = params.get("view") === "phone";
     const token = params.get("token") || "";
     const proto = location.protocol === "https:" ? "wss" : "ws";
-    const base = location.pathname.replace(/\\/desktop\\.html$/, "").replace(/\\/+$/, "");
-    const query = token ? \`?token=\${encodeURIComponent(token)}\` : "";
-    const url = \`\${proto}://\${location.host}\${base}/websockify\${query}\`;
+    const base = location.pathname.replace(/\/desktop\.html$/, "").replace(/\/+$/, "");
+    const query = token ? `?token=${encodeURIComponent(token)}` : "";
+    const url = `${proto}://${location.host}${base}/websockify${query}`;
     const reconnect = document.getElementById("coforge-desktop-reconnect");
     const phoneBar = document.getElementById("coforge-desktop-phone-bar");
     const phoneFab = document.getElementById("coforge-desktop-phone-fab");
@@ -39,8 +39,8 @@
         const maxY = window.innerHeight - phoneFab.offsetHeight;
         const left = Math.min(maxX, Math.max(0, ev.clientX - drag.ox));
         const top = Math.min(maxY, Math.max(0, ev.clientY - drag.oy));
-        phoneFab.style.left = \`\${left}px\`;
-        phoneFab.style.top = \`\${top}px\`;
+        phoneFab.style.left = `${left}px`;
+        phoneFab.style.top = `${top}px`;
         phoneFab.style.right = "auto";
         phoneFab.style.bottom = "auto";
         if (Math.hypot(left - drag.startLeft, top - drag.startTop) > 8) drag.moved = true;
@@ -364,7 +364,7 @@
       sendKey(code, false);
     });
     function coforgeDesktopPaste(text) {
-      const push = fetch(\`\${base}/clipboard\${query}\`, {
+      const push = fetch(`${base}/clipboard${query}`, {
         method: "POST",
         body: text,
         headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -407,7 +407,7 @@
     }
     function coforgeDesktopCopyOut() {
       const attempt = (left) =>
-        fetch(\`\${base}/clipboard\${query}\`)
+        fetch(`${base}/clipboard${query}`)
           .then((res) => (res.ok ? res.text() : ""))
           .then((text) => {
             if (text) return coforgeWriteLocalClipboard(text);
@@ -473,7 +473,7 @@
       void coforgeDesktopPaste(text);
     });
     connect();
-  </script><style>
+</script><style>
 
 #msg[hidden]{display:none!important}
 #coforge-desktop-reconnect{position:fixed;top:50%;left:50%;z-index:2147483647;display:none;place-items:center;width:4.5rem;height:4.5rem;margin:0;padding:0;border:0;border-radius:50%;transform:translate(-50%,-50%);background:rgba(255,255,255,.18);color:#fff;cursor:pointer}
