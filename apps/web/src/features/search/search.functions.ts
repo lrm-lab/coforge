@@ -2,12 +2,18 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { readDeadline } from "#src/lib/read-deadline";
+import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
+import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { searchMessages } from "#src/server/conversations/message-search.server";
 import { searchTasks } from "#src/server/tasks/task-search.server";
-import { messageSearchInputSchema, taskSearchInputSchema } from "./search.schemas";
+import {
+  artifactSearchInputSchema,
+  messageSearchInputSchema,
+  taskSearchInputSchema,
+} from "./search.schemas";
 
-/** One page of the messages the viewer may read in the current Workspace that match a search. A
- * full-text search of a large Workspace can take longer than other reads. */
+const ARTIFACT_SEARCH_LIMIT = 5;
+
 export const searchWorkspaceMessages = createServerFn({ method: "GET" })
   .middleware([readDeadline(30_000), workspaceUserMiddleware])
   .validator(messageSearchInputSchema)
@@ -22,11 +28,35 @@ export const searchWorkspaceMessages = createServerFn({ method: "GET" })
     });
   });
 
-/** The Tasks a search finds, in the conversations the viewer may read. */
 export const searchWorkspaceTasks = createServerFn({ method: "GET" })
   .middleware([workspaceUserMiddleware])
   .validator(taskSearchInputSchema)
   .handler(async ({ context, data }) => {
     const { user, db, workspaceId } = context;
     return searchTasks(db, { ...data, workspaceId, userId: user.id });
+  });
+
+export const searchWorkspaceArtifacts = createServerFn({ method: "GET" })
+  .middleware([workspaceUserMiddleware])
+  .validator(artifactSearchInputSchema)
+  .handler(async ({ context, data }) => {
+    const { user, db, workspaceId } = context;
+    if (!data.query.trim()) return [];
+    if (!(await artifactsEnabled(db, workspaceId))) return [];
+    const page = await productionArtifacts(db).gallery.page({
+      workspaceId,
+      userId: user.id,
+      query: data.query,
+      scope: data.conversationId
+        ? { kind: "conversation", conversationId: data.conversationId }
+        : undefined,
+      sort: "updated",
+      limit: ARTIFACT_SEARCH_LIMIT,
+    });
+    return page.artifacts.map(({ id, title, entryPath, currentVersion }) => ({
+      id,
+      title,
+      entryPath,
+      currentVersion,
+    }));
   });

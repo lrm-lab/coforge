@@ -4,7 +4,11 @@ import { listComputerNames } from "#src/features/computers/computers.functions";
 import { channelNamesQuery } from "#src/features/conversations/conversation-queries";
 import { loadWorkspaceDirectory } from "#src/features/workspaces/workspaces.functions";
 import { messageSearchParams, type SearchFilters } from "./search-filters";
-import { searchWorkspaceMessages, searchWorkspaceTasks } from "./search.functions";
+import {
+  searchWorkspaceArtifacts,
+  searchWorkspaceMessages,
+  searchWorkspaceTasks,
+} from "./search.functions";
 import { SEARCH_PAGE_SIZE } from "./search.schemas";
 
 /**
@@ -61,7 +65,6 @@ export const messageSearchQuery = (
     staleTime: 60_000,
   });
 
-/** The Tasks a query finds; the viewer's conversation ranks first. */
 export const taskSearchQuery = (
   workspaceId: string,
   query: string,
@@ -72,6 +75,18 @@ export const taskSearchQuery = (
     queryKey: ["task-search", workspaceId, query, conversationId, currentConversationId],
     queryFn: ({ signal }) =>
       searchWorkspaceTasks({ data: { query, conversationId, currentConversationId }, signal }),
+    enabled: Boolean(query),
+    staleTime: 60_000,
+  });
+
+export const artifactSearchQuery = (
+  workspaceId: string,
+  query: string,
+  conversationId: string | undefined,
+) =>
+  queryOptions({
+    queryKey: ["artifact-search", workspaceId, query, conversationId],
+    queryFn: ({ signal }) => searchWorkspaceArtifacts({ data: { query, conversationId }, signal }),
     enabled: Boolean(query),
     staleTime: 60_000,
   });

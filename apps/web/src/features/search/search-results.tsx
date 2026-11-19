@@ -35,15 +35,16 @@ import { matchSearchEntities, type SearchEntity } from "./search-entities";
 import { SEARCH_HEADING_CLASS, SEARCH_ROW_CLASS, SearchEntityList } from "./search-entity-list";
 import { searchEntityKey, type SearchEntityKey } from "./search-memory";
 import { SearchMatches } from "./search-matches";
+import { SearchArtifactList } from "./search-artifact-list";
 import { SearchTaskList } from "./search-task-list";
 import type { SearchFilters } from "./search-filters";
-import { messageSearchQuery, searchDirectoryQuery, taskSearchQuery } from "./search-queries";
+import {
+  artifactSearchQuery,
+  messageSearchQuery,
+  searchDirectoryQuery,
+  taskSearchQuery,
+} from "./search-queries";
 
-/**
- * The results of a committed search: the people, Agents, channels and Computers its query names,
- * then its Tasks, then its messages, each opening where it was said. Who comes before what was said
- * (Frank, task #95).
- */
 export function SearchResults({
   workspaceId,
   timeZone,
@@ -56,22 +57,31 @@ export function SearchResults({
   timeZone: string | null;
   query: string;
   filters: SearchFilters;
-  /** A result is opening: the place it opens, when it is a channel or an Agent. */
   onOpen: (entity: SearchEntityKey | undefined) => void;
-  /** Clears the query, or the filters when there is no query. */
   onClear: () => void;
 }) {
   const search = useMessageSearch(workspaceId, query, filters, timeZone);
   const { entities, pending: entitiesPending } = useSearchEntities(workspaceId, query);
   const { tasks, pending: tasksPending } = useSearchTasks(workspaceId, query, filters.channelId);
+  const { artifacts, pending: artifactsPending } = useSearchArtifacts(
+    workspaceId,
+    query,
+    filters.channelId,
+  );
   const refreshing = search.isFetching && !search.isFetchingNextPage;
   const hits = search.data?.pages.flatMap((page) => page.results) ?? [];
   const terms = searchTerms(query);
 
-  // Nothing matched only once both the messages and the Workspace lists have loaded.
   const nothingMatched =
     hits.length === 0 && !search.isPending && !search.isError && !entitiesPending;
-  if (nothingMatched && entities.length === 0 && tasks.length === 0 && !tasksPending) {
+  if (
+    nothingMatched &&
+    entities.length === 0 &&
+    tasks.length === 0 &&
+    !tasksPending &&
+    artifacts.length === 0 &&
+    !artifactsPending
+  ) {
     return (
       <div className="flex items-start justify-center px-6 py-10">
         <Empty>
@@ -103,6 +113,9 @@ export function SearchResults({
       )}
       {tasks.length > 0 && (
         <SearchTaskList tasks={tasks} terms={terms} onOpen={() => onOpen(undefined)} />
+      )}
+      {artifacts.length > 0 && (
+        <SearchArtifactList artifacts={artifacts} terms={terms} onOpen={() => onOpen(undefined)} />
       )}
       <MessageResults
         workspaceId={workspaceId}
@@ -136,7 +149,6 @@ function rememberedKey(entity: SearchEntity): SearchEntityKey | undefined {
   return entity.dmId ? searchEntityKey({ kind: "dm", id: entity.dmId }) : undefined;
 }
 
-/** The Tasks the query finds; none without a query. */
 function useSearchTasks(workspaceId: string, query: string, conversationId: string | undefined) {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const here = conversationAt(pathname);
@@ -146,8 +158,19 @@ function useSearchTasks(workspaceId: string, query: string, conversationId: stri
     ...taskSearchQuery(workspaceId, query, conversationId, currentConversationId),
     placeholderData: keepPreviousData,
   });
-  // A disabled query still shows its placeholder: without a query there are no Tasks.
   return { tasks: query ? (data ?? []) : [], pending: Boolean(query) && isPending };
+}
+
+function useSearchArtifacts(
+  workspaceId: string,
+  query: string,
+  conversationId: string | undefined,
+) {
+  const { data, isPending } = useQuery({
+    ...artifactSearchQuery(workspaceId, query, conversationId),
+    placeholderData: keepPreviousData,
+  });
+  return { artifacts: query ? (data ?? []) : [], pending: Boolean(query) && isPending };
 }
 
 /** The people (but the viewer), Agents, channels and Computers the query names; none without a

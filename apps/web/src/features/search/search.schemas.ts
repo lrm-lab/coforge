@@ -14,6 +14,11 @@ export const taskSearchInputSchema = z.object({
   currentConversationId: z.uuid().optional(),
 });
 
+export const artifactSearchInputSchema = z.object({
+  query: z.string().max(SEARCH_QUERY_MAX_LENGTH),
+  conversationId: z.uuid().optional(),
+});
+
 /**
  * One page of Workspace message search. Every filter is optional and applies with or without a
  * query; `relevance` falls back to newest first when there is no query to rank against.
