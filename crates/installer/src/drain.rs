@@ -240,7 +240,6 @@ fn plural(count: usize) -> &'static str {
 mod tests {
     use std::cell::Cell;
     use std::fs;
-    use std::path::PathBuf;
     use std::time::Duration;
 
     use super::*;
@@ -459,7 +458,7 @@ mod tests {
 
         let real_dir = scratch.path().join("real-state");
         fs::create_dir(&real_dir).unwrap();
-        let dir_link: PathBuf = scratch.path().join("link-state");
+        let dir_link = scratch.path().join("link-state");
         symlink(&real_dir, &dir_link).unwrap();
         assert!(drain_before_stop(&dir_link, "req-dir-sym", &clock, &mut |_| {}).is_none());
         assert!(!real_dir.join(DRAIN_REQUEST_FILE).exists());
