@@ -174,16 +174,17 @@ export function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: () =>
   }, [toast.revision]);
 
   useLayoutEffect(() => {
-    if (lineRef.current) setLineWidth(lineRef.current.offsetWidth);
+    if (lineRef.current)
+      setLineWidth(Math.max(lineRef.current.offsetWidth, lineRef.current.scrollWidth));
   }, [toast.revision, toast.title, toast.action?.label]);
 
   const width = lineWidth === undefined ? undefined : lineWidth + 2;
 
   return (
     <motion.div
-      layout
       ref={rootRef}
       data-toast
+      style={width === undefined ? undefined : { width }}
       onPointerEnter={() => setPointerOver(true)}
       onPointerLeave={() => setPointerOver(false)}
       onFocus={() => setFocusWithin(true)}
@@ -207,7 +208,6 @@ export function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: () =>
         y: 0,
         scale: 1,
         filter: "blur(0px)",
-        ...(width === undefined ? {} : { width }),
       }}
       exit={
         reduceMotion
@@ -222,15 +222,17 @@ export function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: () =>
       }
       transition={
         reduceMotion
-          ? { ...TOAST_FADE, width: { duration: 0 } }
+          ? TOAST_FADE
           : {
               duration: 0.5,
               ease: SETTLE_EASE,
               opacity: { duration: 0.4, ease: SETTLE_EASE },
-              width: { duration: 0.38, ease: RESIZE_EASE },
             }
       }
-      className="pointer-events-auto relative flex min-h-10 max-w-full touch-pan-y items-start overflow-hidden rounded-2xl border border-secondary bg-linear-to-b from-bg-primary to-bg-secondary shadow-(--toast-shadow) p-2 -m-2"
+      className={cx(
+        "pointer-events-auto relative col-start-1 row-start-1 flex min-h-10 max-w-full touch-pan-y items-start overflow-hidden rounded-2xl border border-secondary bg-linear-to-b from-bg-primary to-bg-secondary shadow-(--toast-shadow)",
+        !reduceMotion && "transition-[width] duration-380 ease-[cubic-bezier(0.32,0.72,0,1)]",
+      )}
     >
       <span className="absolute top-[calc(0.5rem-1px)] left-[calc(0.5rem-1px)] size-6">
         <AnimatePresence initial={false}>
@@ -246,21 +248,27 @@ export function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: () =>
           </motion.span>
         </AnimatePresence>
       </span>
-      <div className="relative min-w-0 flex-1">
-        <AnimatePresence initial={false} mode="popLayout">
+      <div className="relative grid min-w-0 flex-1">
+        <AnimatePresence initial={false}>
           <motion.div
             key={toast.revision}
             ref={lineRef}
             className={cx(
-              "flex min-h-[calc(2.5rem-2px)] w-max max-w-[min(34.5rem,calc(100vw-2.5rem))] items-start gap-1 py-[calc(0.375rem-1px)] pl-[calc(2.5rem-1px)]",
+              "col-start-1 row-start-1 flex min-h-[calc(2.5rem-2px)] w-max max-w-[min(34.5rem,calc(100vw-2.5rem))] items-start justify-self-start gap-1 py-[calc(0.375rem-1px)] pl-[calc(2.5rem-1px)]",
               toast.action ? "pr-[calc(0.375rem-1px)]" : "pr-4",
             )}
             initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 5, filter: "blur(4px)" }}
             animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
             exit={
               reduceMotion
-                ? { opacity: 0 }
-                : { opacity: 0, y: -5, filter: "blur(4px)", transition: { duration: 0.18 } }
+                ? { opacity: 0, pointerEvents: "none" }
+                : {
+                    opacity: 0,
+                    y: -5,
+                    filter: "blur(4px)",
+                    pointerEvents: "none",
+                    transition: { duration: 0.18 },
+                  }
             }
             transition={
               reduceMotion ? TOAST_FADE : { delay: 0.1, duration: 0.3, ease: SETTLE_EASE }

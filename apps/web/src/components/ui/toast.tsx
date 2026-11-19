@@ -37,12 +37,12 @@ function ToastHost() {
     <section
       ref={regionRef}
       aria-label={m.toast_region()}
-      className="pointer-events-none fixed inset-x-0 top-[calc(var(--spacing-safe-top)+3.75rem)] z-60 flex justify-center px-4"
+      className="pointer-events-none fixed inset-x-0 top-[calc(var(--spacing-safe-top)+3.75rem)] z-60 grid justify-items-center px-4"
     >
       <p role="status" className="sr-only">
         {toast?.title}
       </p>
-      <AnimatePresence mode="popLayout">
+      <AnimatePresence>
         {toast ? (
           <ToastView key={toast.id} toast={toast} onDismiss={() => toastStore.dismiss(toast.id)} />
         ) : null}
