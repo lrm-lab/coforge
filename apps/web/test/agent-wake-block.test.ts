@@ -56,19 +56,21 @@ test("a transient block gives up after a day, so a later failure starts from zer
 });
 
 test("a failed Start's waiting messages go once the control record moves on", () => {
+  const now = at.getTime() + 60_000;
   const failed = row({ wakeBlockedReason: "start_failed", wakeBlockedCount: 1 });
-  expect(agentWakeBlock(failed, { stopped: false, controlPhase: "failed" })).not.toBeNull();
-  expect(agentWakeBlock(failed, { stopped: false, controlPhase: "starting" })).toBeNull();
-  expect(agentWakeBlock(failed, { stopped: false, controlPhase: "completed" })).toBeNull();
+  expect(agentWakeBlock(failed, { stopped: false, controlPhase: "failed", now })).not.toBeNull();
+  expect(agentWakeBlock(failed, { stopped: false, controlPhase: "starting", now })).toBeNull();
+  expect(agentWakeBlock(failed, { stopped: false, controlPhase: "completed", now })).toBeNull();
 });
 
 test("messages waiting on a Start in flight are shown while that Start has not settled", () => {
+  const now = at.getTime() + 60_000;
   const inFlight = row({ wakeBlockedReason: "operation_in_flight", wakeBlockedCount: 12 });
   for (const phase of ["starting", "stopping", "clearing", "workspace-reset"])
-    expect(agentWakeBlock(inFlight, { stopped: false, controlPhase: phase })).not.toBeNull();
+    expect(agentWakeBlock(inFlight, { stopped: false, controlPhase: phase, now })).not.toBeNull();
   for (const phase of ["completed", "failed"])
-    expect(agentWakeBlock(inFlight, { stopped: false, controlPhase: phase })).toBeNull();
-  expect(agentWakeBlock(inFlight, { stopped: false, controlPhase: undefined })).toBeNull();
+    expect(agentWakeBlock(inFlight, { stopped: false, controlPhase: phase, now })).toBeNull();
+  expect(agentWakeBlock(inFlight, { stopped: false, controlPhase: undefined, now })).toBeNull();
 });
 
 test("an Agent with no recorded rejection, or a stale one, shows nothing", () => {
