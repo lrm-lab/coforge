@@ -19,6 +19,8 @@ export abstract class DaemonConnectionWorkspaceBindings implements Pick<
   | "onAgentContextView"
   | "onAgentSideAsk"
   | "sendAgentSideAskResult"
+  | "onRuntimeManage"
+  | "sendRuntimeManageResult"
   | "onPiChatRequest"
   | "sendPiChatFrame"
 > {
@@ -69,6 +71,12 @@ export abstract class DaemonConnectionWorkspaceBindings implements Pick<
   }
   get sendAgentSideAskResult() {
     return this.daemonQueries.agentSideAsk.sendResult;
+  }
+  get onRuntimeManage() {
+    return this.daemonQueries.runtimeManage.onRequest;
+  }
+  get sendRuntimeManageResult() {
+    return this.daemonQueries.runtimeManage.sendResult;
   }
   get onPiChatRequest() {
     return this.daemonQueries.piChat.onRequest;

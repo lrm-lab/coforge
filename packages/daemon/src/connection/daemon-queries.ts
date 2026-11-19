@@ -25,6 +25,10 @@ import {
   encodeAgentSideAskResult,
   isAgentSideAskRequest,
   AGENT_SIDE_ASK_RESULT_METHOD,
+  decodeRuntimeManageRequest,
+  encodeRuntimeManageResult,
+  isRuntimeManageRequest,
+  RUNTIME_MANAGE_RESULT_METHOD,
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import {
@@ -90,6 +94,7 @@ export class DaemonQueries {
   readonly deletion;
   readonly agentContextView;
   readonly agentSideAsk;
+  readonly runtimeManage;
   readonly piChat;
   constructor(rpc: Rpc) {
     this.memory = new DaemonQuery(
@@ -152,6 +157,18 @@ export class DaemonQueries {
         });
       },
     );
+    this.runtimeManage = new DaemonQuery(
+      decodeRuntimeManageRequest,
+      encodeRuntimeManageResult,
+      RUNTIME_MANAGE_RESULT_METHOD,
+      rpc,
+      (bytes) => {
+        if (!isRuntimeManageRequest(bytes)) return;
+        logger.error("Runtime manage request invalid", {
+          event: "daemon.runtime_manage.request_invalid",
+        });
+      },
+    );
     this.piChat = new DaemonQuery(
       decodePiChatRequest,
       encodePiChatFrame,
@@ -170,6 +187,7 @@ export class DaemonQueries {
       this.deletion,
       this.agentContextView,
       this.agentSideAsk,
+      this.runtimeManage,
     ].some((query) => query.receive(bytes, scope));
   }
 }

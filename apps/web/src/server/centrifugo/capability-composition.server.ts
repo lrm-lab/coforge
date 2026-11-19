@@ -21,6 +21,7 @@ import {
 import { getResetCreditCapabilityLease } from "#src/server/computers/reset-credit-capability.server";
 import { getAgentContextViewCapabilityLease } from "#src/server/computers/agent-context-view-capability.server";
 import { getAgentSideAskCapabilityLease } from "#src/server/computers/agent-side-ask-capability.server";
+import { getRuntimeManageCapabilityLease } from "#src/server/computers/runtime-manage-capability.server";
 
 export function daemonCapabilityLeases() {
   const reminderLease = getReminderCapabilityLease();
@@ -43,6 +44,7 @@ export function daemonCapabilityLeases() {
     getWorkbenchCodexLease(),
     getAgentContextViewCapabilityLease(),
     getAgentSideAskCapabilityLease(),
+    getRuntimeManageCapabilityLease(),
     getResetCreditCapabilityLease(),
   ];
   return {

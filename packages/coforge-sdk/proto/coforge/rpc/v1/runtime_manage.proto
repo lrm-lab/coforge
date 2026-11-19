@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package coforge.rpc.v1;
+
+message RuntimeManageRequest {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  string provider = 5;
+  string action = 6;
+  string requested_by_user_id = 7;
+  uint32 timeout_ms = 8;
+  string message_type = 9;
+}
+
+message RuntimeManageResult {
+  uint32 protocol_major = 1;
+  string request_id = 2;
+  string workspace_id = 3;
+  string computer_id = 4;
+  string provider = 5;
+  string action = 6;
+  string requested_by_user_id = 7;
+  string status = 8;
+  string reason = 9;
+  string source = 10;
+  repeated string steps = 11;
+  string previous_version = 12;
+  string current_version = 13;
+  optional int32 exit_code = 14;
+  string diagnostic = 15;
+  uint32 duration_ms = 16;
+  string message_type = 17;
+}

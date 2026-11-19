@@ -49,6 +49,7 @@ import { subscribeWorkspaceQueries } from "./workspace-query-handlers";
 import { subscribeContextViewQueries } from "./context-view-query-handlers";
 import type { ProviderQuotaState } from "./provider-quota-state";
 import { subscribeAgentSideAskQueries, type AgentSideAskSource } from "./agent-side-ask-handler";
+import { RuntimeManageRunner, subscribeRuntimeManageQueries } from "./runtime-manage-handler";
 import { SideQuestionRunner } from "#src/agent-runtime/agent-side-ask";
 import type { AgentContextViewService } from "#src/agent-context-view/agent-context-view-service";
 import type { ContextViewIndexEntry } from "#src/agent-context-view/context-view-store";
@@ -129,6 +130,7 @@ export class RuntimeStartup {
   #subscriptions: Array<() => void> = [];
   #piChat?: PiChatRelay;
   #sideAsk?: SideQuestionRunner;
+  #runtimeManage?: RuntimeManageRunner;
   #authControl: RuntimeAuthController | undefined;
   #readyWait: RuntimeReadyWaitWatch | undefined;
   #publications: RuntimePublicationSubscriptions | undefined;
@@ -162,6 +164,8 @@ export class RuntimeStartup {
     this.#authControl = undefined;
     this.#sideAsk?.stopAll();
     this.#sideAsk = undefined;
+    this.#runtimeManage?.stopAll();
+    this.#runtimeManage = undefined;
     const piChat = this.#piChat;
     this.#piChat = undefined;
     const piChatClosed = piChat?.close();
@@ -300,6 +304,23 @@ export class RuntimeStartup {
           }),
         );
       }
+      this.#runtimeManage ??= new RuntimeManageRunner({
+        cacheDirectory: ports.stateDirectory,
+        rescan: async () => {
+          const live = ports.transport();
+          if (ports.isStopping()) return;
+          const report = await ports.codeAgentInventory.reportRuntimes(live);
+          void ports.codeAgentInventory.refreshStaleCatalogs(report, live).catch(() => {});
+        },
+      });
+      this.#subscribe(
+        subscribeRuntimeManageQueries(transport, {
+          connection,
+          runner: this.#runtimeManage,
+          currentTransport: () => ports.transport(),
+          isStopping: () => ports.isStopping(),
+        }),
+      );
       for (const unsubscribe of subscribeProviderScans(transport, {
         connection,
         runtime: {
@@ -382,6 +403,8 @@ export class RuntimeStartup {
       this.#authControl = undefined;
       this.#sideAsk?.stopAll();
       this.#sideAsk = undefined;
+      this.#runtimeManage?.stopAll();
+      this.#runtimeManage = undefined;
       this.unsubscribeAll();
       ports.upgradeResults.stop();
       this.#started = false;

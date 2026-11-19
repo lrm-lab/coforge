@@ -181,3 +181,9 @@ These rules apply to `src/server/computers/`.
   from the server DB (`canSeeAgent`, membership role, owner check) and gates on online +
   `agent-side-ask:v1`; `read` enforces `result.askerUserId === viewer.userId` and re-checks
   Agent visibility before returning an answer.
+- `computer-runtime-manage.server.ts` dispatches `plan`/`install`/`upgrade` requests for
+  allowlisted external Code Agent CLIs over two-call `start`/`read` (`RedisPendingResults`, 660 s
+  pending / 120 s result TTL). `start` authorizes via `PrismaRuntimeAuthAuthorization.canManage`
+  (omitting `provider` so installs work before a runtime row exists, excluding soft-deleted
+  Computers and other members' default cloud Computers) and gates on online + `runtime-manage:v1`;
+  `read` enforces `result.requestedByUserId === viewer.userId` and re-checks authorization.

@@ -90,6 +90,8 @@ import type {
   TaskResponse,
   WeeklyReportRequest,
   WeeklyReportResponse,
+  RuntimeManageRequest,
+  RuntimeManageResult,
 } from "@lrm/coforge-sdk/internal";
 import type { AgentRuntimeProviderConfig } from "@lrm/coforge-anvil";
 import type { AgentLaunchIdentity } from "#src/code-agent/agent-instructions";
@@ -155,6 +157,8 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   onAgentContextView?(callback: (request: AgentContextViewRequest) => Promise<void>): () => void;
   onAgentSideAsk?(callback: (request: AgentSideAskRequest) => Promise<void>): () => void;
   sendAgentSideAskResult?(result: AgentSideAskResult): Promise<void>;
+  onRuntimeManage?(callback: (request: RuntimeManageRequest) => Promise<void>): () => void;
+  sendRuntimeManageResult?(result: RuntimeManageResult): Promise<void>;
   postAgentContextViewResult?(
     result: AgentContextViewResult,
     agentApiKey?: string,
