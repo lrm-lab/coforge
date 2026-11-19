@@ -20,8 +20,8 @@ import {
 } from "#src/server/pi-chat/pi-chat-capability.server";
 import { getResetCreditCapabilityLease } from "#src/server/computers/reset-credit-capability.server";
 import { getAgentContextViewCapabilityLease } from "#src/server/computers/agent-context-view-capability.server";
+import { getAgentSideAskCapabilityLease } from "#src/server/computers/agent-side-ask-capability.server";
 
-/** Every ready and heartbeat updates the same set of feature capability leases. */
 export function daemonCapabilityLeases() {
   const reminderLease = getReminderCapabilityLease();
   const leases = [
@@ -42,6 +42,7 @@ export function daemonCapabilityLeases() {
     getPiChatFilesLease(),
     getWorkbenchCodexLease(),
     getAgentContextViewCapabilityLease(),
+    getAgentSideAskCapabilityLease(),
     getResetCreditCapabilityLease(),
   ];
   return {

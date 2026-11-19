@@ -50,6 +50,7 @@ export const RPC_METHODS = {
   daemonAgentMemoryResult: "daemon:v1:agent_memory:result",
   daemonAgentContextView: "daemon:v1:agent_context:view",
   daemonAgentContextViewResult: "daemon:v1:agent_context:view_result",
+  daemonAgentSideAskResult: "daemon:v1:agent_side_ask:ask_result",
   agentContextViewAvailability: "agent:v1:context:availability",
   computerRestart: "computer:v1:lifecycle:restart",
   computerUpgrade: "computer:v1:lifecycle:upgrade",

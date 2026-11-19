@@ -1,4 +1,5 @@
 import { agentMemoryResultMethods } from "./agent-memory-results.server";
+import { agentSideAskResultMethods } from "./agent-side-ask-results.server";
 import {
   AGENT_SKILLS_LIST_RESULT_METHOD,
   AGENT_WORKSPACE_FILES_LIST_RESULT_METHOD,
@@ -21,6 +22,7 @@ export function workspaceQueryResultMethods(
 ): Record<string, CentrifugoRpcMethod> {
   return {
     ...agentMemoryResultMethods(enabled),
+    ...agentSideAskResultMethods(enabled),
     [AGENT_SKILLS_LIST_RESULT_METHOD]: enabled ? createAgentSkillsListResultMethod() : unavailable,
     [AGENT_WORKSPACE_FILES_LIST_RESULT_METHOD]: enabled
       ? createAgentWorkspaceFilesListResultMethod()

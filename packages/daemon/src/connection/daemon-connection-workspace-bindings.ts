@@ -17,6 +17,8 @@ export abstract class DaemonConnectionWorkspaceBindings implements Pick<
   | "onWorkspaceDelete"
   | "sendWorkspaceDeleteResult"
   | "onAgentContextView"
+  | "onAgentSideAsk"
+  | "sendAgentSideAskResult"
   | "onPiChatRequest"
   | "sendPiChatFrame"
 > {
@@ -61,6 +63,12 @@ export abstract class DaemonConnectionWorkspaceBindings implements Pick<
   }
   get onAgentContextView() {
     return this.daemonQueries.agentContextView.onRequest;
+  }
+  get onAgentSideAsk() {
+    return this.daemonQueries.agentSideAsk.onRequest;
+  }
+  get sendAgentSideAskResult() {
+    return this.daemonQueries.agentSideAsk.sendResult;
   }
   get onPiChatRequest() {
     return this.daemonQueries.piChat.onRequest;

@@ -191,3 +191,8 @@ Rules for Agent lifecycle, control, Session state, and Activity in
   fresh launch — first start, a session the provider lost, an explicit create — gets it; a resume never does.
 - A finished compaction queues no turn. `session-memory-recovery.ts` includes a bounded recovery
   with the next real session input; never start a turn only to reload memory.
+- `agent-side-ask.ts` and `code-agent/claude-code/side-ask-state.ts` serve read-only side queries
+  without touching the main session: `status` runs locally for any live runtime; `question` forks
+  Claude Code once per Agent (`--fork-session --no-session-persistence --tools Read,Grep,Glob`,
+  `--permission-mode dontAsk`, empty MCP config, disabled hooks), strips
+  `COFORGE_*`/`SLOCK_*`/`CLAUDECODE`/`GIT_CONFIG_*`, and cancels on timeout, Agent end, or stop.

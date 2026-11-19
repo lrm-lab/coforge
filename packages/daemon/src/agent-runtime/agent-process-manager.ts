@@ -124,6 +124,7 @@ export class AgentProcessManager {
    * is `(agentId, launchId, clientSeq)` (docs/observability/activity-delivery-and-errors.md). Cleared alongside the restart
    * config on `stop()`/`shutdown()`. */
   readonly #launchClientSeq = new Map<string, number>();
+  readonly #onRuntimeEnd = new Set<(agentId: string) => void>();
   readonly #stopSettings: AgentStopSettings;
 
   constructor(
@@ -135,6 +136,13 @@ export class AgentProcessManager {
     this.#stopSettings = { ...DEFAULT_AGENT_STOP_SETTINGS, ...stopSettings };
     this.#createProvider = createProvider;
     this.#resolveGitHooks = resolveGitHooks;
+  }
+
+  onRuntimeEnd(listener: (agentId: string) => void): () => void {
+    this.#onRuntimeEnd.add(listener);
+    return () => {
+      this.#onRuntimeEnd.delete(listener);
+    };
   }
 
   get size(): number {
@@ -211,6 +219,7 @@ export class AgentProcessManager {
     // already under way fails instead of joining it.
     if (this.#stopping.has(agentId)) throw new Error(`Agent runtime is stopping: ${agentId}`);
     this.#stopping.add(agentId);
+    this.#notifyRuntimeEnd(agentId);
     const releasing = (async () => {
       try {
         await withDeadline(
@@ -331,6 +340,7 @@ export class AgentProcessManager {
       return;
     }
     this.#stopping.add(agentId);
+    this.#notifyRuntimeEnd(agentId);
     try {
       // Never rejects: after the deadline the process tree is forced down and the stop moves on.
       if (!(await stopSession(agentId, runtime.session, this.#stopSettings)))
@@ -448,11 +458,15 @@ export class AgentProcessManager {
     for (const state of this.#states.values()) state.transition("deactivate");
   }
 
-  /** Forgets a runtime whose session is the one that just ended. Another launch's is left alone. */
+  #notifyRuntimeEnd(agentId: string): void {
+    for (const listener of this.#onRuntimeEnd) listener(agentId);
+  }
+
   #forgetRuntime(agentId: string, session: AgentSession): void {
     if (this.#runtimes.get(agentId)?.session !== session) return;
     this.#runtimes.delete(agentId);
     this.#stateFor(agentId).transition("runtime_released");
+    this.#notifyRuntimeEnd(agentId);
   }
 
   #stateFor(agentId: string): AgentStateMachine {

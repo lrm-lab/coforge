@@ -45,6 +45,8 @@ import type {
   AgentContextViewRequest,
   AgentContextViewResult,
   AgentContextViewAvailability,
+  AgentSideAskRequest,
+  AgentSideAskResult,
   ComputerUpgradeResult,
   AgentCredentialRestored,
   AgentMentionDeliveryTransition,
@@ -151,6 +153,8 @@ export interface DaemonConnectionClient extends AgentApiConnectionClient {
   onAgentMemory?(callback: (request: AgentMemoryRequest) => Promise<void>): () => void;
   sendAgentMemoryResult?(result: AgentMemoryResult): Promise<void>;
   onAgentContextView?(callback: (request: AgentContextViewRequest) => Promise<void>): () => void;
+  onAgentSideAsk?(callback: (request: AgentSideAskRequest) => Promise<void>): () => void;
+  sendAgentSideAskResult?(result: AgentSideAskResult): Promise<void>;
   postAgentContextViewResult?(
     result: AgentContextViewResult,
     agentApiKey?: string,

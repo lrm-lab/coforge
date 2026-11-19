@@ -175,3 +175,9 @@ These rules apply to `src/server/computers/`.
   Invalid entries are skipped with one content-free warning count; duplicate providers and
   whole-report limit violations reject the report. All display reads still filter through
   Anvil's current providers and viewer visibility.
+- `computer-agent-side-asks.server.ts` dispatches read-only `status` and forked Claude `question`
+  side queries over the two-call `start`/`read` pattern (`RedisPendingResults`, 75 s TTL) so
+  forked runs up to 60 s never hit production's 10 s HTTP idle timeout. `start` derives `asker`
+  from the server DB (`canSeeAgent`, membership role, owner check) and gates on online +
+  `agent-side-ask:v1`; `read` enforces `result.askerUserId === viewer.userId` and re-checks
+  Agent visibility before returning an answer.

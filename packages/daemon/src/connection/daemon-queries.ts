@@ -21,6 +21,10 @@ import {
   encodeAgentContextViewResult,
   isAgentContextViewRequest,
   AGENT_CONTEXT_VIEW_RESULT_METHOD,
+  decodeAgentSideAskRequest,
+  encodeAgentSideAskResult,
+  isAgentSideAskRequest,
+  AGENT_SIDE_ASK_RESULT_METHOD,
 } from "@lrm/coforge-sdk/internal";
 import { getLogger } from "@logtape/logtape";
 import {
@@ -34,7 +38,6 @@ const logger = getLogger(["coforge", "daemon", "queries"]);
 type Scope = { workspaceId: string; computerId: string };
 type Rpc = (method: string, bytes: Uint8Array) => Promise<unknown>;
 
-/** One replaceable query listener and its versioned reply codec on the existing socket. */
 class DaemonQuery<Request extends Scope, Result> {
   #listener?: (request: Request) => Promise<void>;
   constructor(
@@ -63,8 +66,6 @@ class DaemonQuery<Request extends Scope, Result> {
     }
     if (request.workspaceId === scope.workspaceId && request.computerId === scope.computerId)
       void this.#listener?.(request).catch((error: unknown) => {
-        // A query handler that throws used to vanish: the caller learned nothing and the log
-        // said nothing (task #367).
         logger.warning("Workspace query handler failed", {
           event: "workspace_query:handler_failed",
           workspace_id: request.workspaceId,
@@ -80,7 +81,6 @@ class DaemonQuery<Request extends Scope, Result> {
   }
 }
 
-/** All scoped request/reply query transports share the daemon's single WSS client. */
 export class DaemonQueries {
   readonly memory;
   readonly skills;
@@ -89,6 +89,7 @@ export class DaemonQueries {
   readonly scan;
   readonly deletion;
   readonly agentContextView;
+  readonly agentSideAsk;
   readonly piChat;
   constructor(rpc: Rpc) {
     this.memory = new DaemonQuery(
@@ -132,12 +133,22 @@ export class DaemonQueries {
       encodeAgentContextViewResult,
       AGENT_CONTEXT_VIEW_RESULT_METHOD,
       rpc,
-      // Every publication on this channel passes these decoders in turn, so a decode failure is
-      // ordinary traffic unless the message says it is a context view request (task #34).
       (bytes) => {
         if (!isAgentContextViewRequest(bytes)) return;
         logger.error("Agent context view request invalid", {
           event: "daemon.agent_context_view.request_invalid",
+        });
+      },
+    );
+    this.agentSideAsk = new DaemonQuery(
+      decodeAgentSideAskRequest,
+      encodeAgentSideAskResult,
+      AGENT_SIDE_ASK_RESULT_METHOD,
+      rpc,
+      (bytes) => {
+        if (!isAgentSideAskRequest(bytes)) return;
+        logger.error("Agent side ask request invalid", {
+          event: "daemon.agent_side_ask.request_invalid",
         });
       },
     );
@@ -158,6 +169,7 @@ export class DaemonQueries {
       this.file,
       this.deletion,
       this.agentContextView,
+      this.agentSideAsk,
     ].some((query) => query.receive(bytes, scope));
   }
 }

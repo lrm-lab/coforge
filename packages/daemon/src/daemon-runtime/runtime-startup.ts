@@ -47,6 +47,8 @@ import { subscribeProviderScans } from "./provider-scan-handlers";
 import type { ResetCreditConsumeResult } from "./reset-credit-consume";
 import { subscribeWorkspaceQueries } from "./workspace-query-handlers";
 import { subscribeContextViewQueries } from "./context-view-query-handlers";
+import { subscribeAgentSideAskQueries, type AgentSideAskSource } from "./agent-side-ask-handler";
+import { SideQuestionRunner } from "#src/agent-runtime/agent-side-ask";
 import type { AgentContextViewService } from "#src/agent-context-view/agent-context-view-service";
 import type { ContextViewIndexEntry } from "#src/agent-context-view/context-view-store";
 import {
@@ -57,10 +59,7 @@ import { unsubscribeAll } from "./runtime-transport-lifecycle";
 
 const logger = getLogger(["coforge", "daemon", "runtime"]);
 
-/** What `DaemonRuntime` supplies to one connection's open sequence: the collaborators it starts,
- * and the operations its listeners replay. */
 export type RuntimeStartupPorts = {
-  /** The Workspace's current transport, read at send time; it is replaced on a failed start. */
   transport: () => DaemonConnectionClient;
   replaceTransport: () => Promise<unknown>;
   credentials: Pick<DaemonCredentialStore, "load" | "save"> &
@@ -70,22 +69,18 @@ export type RuntimeStartupPorts = {
   computerVersion?: string;
   releaseChannel?: string;
   isStopping: () => boolean;
-  /** Everything the connection publishes before ready is buffered and replayed by
-   * `RuntimePublicationSubscriptions`; these are the operations it replays. */
   publications: Omit<
     RuntimePublicationSubscriptionPorts,
     "transport" | "workspaceId" | "computerId"
   >;
   agentControl: Pick<AgentControl, "replay">;
   agentSessions: Pick<AgentSessions, "replay">;
-  /** The config revision held per Agent, reported on ready for the Agents running. */
   configApply: Pick<AgentConfigApply, "appliedRevisions">;
   readyRunningAgentIds(): string[];
   operatingSystem: Pick<OperatingSystemInfo, "read" | "current">;
   upgradeResults: Pick<UpgradeResultReporter, "start" | "report" | "stop">;
   runtimeAuth: Pick<RuntimeAuthReporter, "refresh" | "refreshProvider" | "usageScanned">;
-  /** Told when a login signed in, so what a bad login held can go on. */
-  credentialHolds: Pick<CredentialInvalidHolds, "signedIn">;
+  credentialHolds: Pick<CredentialInvalidHolds, "signedIn" | "isHeld">;
   runtimeAuthFactory: (provider: RuntimeAuthProvider) => RuntimeAuthAdapter;
   codeAgentInventory: Pick<
     CodeAgentInventorySync,
@@ -99,12 +94,13 @@ export type RuntimeStartupPorts = {
   workspaceQueries: Pick<AgentWorkspaceQueries, "listSkills" | "listFiles" | "readFile" | "scan">;
   stateDirectory: string;
   contextView: Pick<AgentContextViewService, "find">;
+  sideAsk?: AgentSideAskSource;
   agentApiKey(agentId: string): string | undefined;
   resolveProviderSource?(agentId: string, entry: ContextViewIndexEntry): string | undefined;
   deleteWorkspace(
     request: AgentWorkspaceDeleteRequest,
   ): Promise<Pick<AgentWorkspaceDeleteResult, "status">>;
-  sendPiChatFrame(frame: PiChatFrame): Promise<void>;
+  sendPiChatFrame?(frame: PiChatFrame): Promise<void>;
   lifecycle: {
     requestRestart?(requestId: string): Promise<void>;
     requestUpgrade?(
@@ -118,36 +114,29 @@ export type RuntimeStartupPorts = {
   };
   reminders: Pick<ReminderDueReceiver, "restore">;
   resyncAppConfigs(): void;
-  activityPublisher: Pick<AgentActivityPublisher<ActivityLaunch>, "enable">;
+  activityPublisher: Pick<AgentActivityPublisher<ActivityLaunch>, "enable" | "lastBusy">;
   sweeps: Pick<RuntimeSweeps, "start">;
   machineStatus: Pick<ReturnType<typeof runtimeMachineStatus>, "start">;
   procJobs?: Pick<ProcJobManager, "startSweep" | "purgeWorkspace">;
 };
 
-/** One Workspace connection's open sequence: listeners, transport, the control and session replay,
- * the ready handshake, then the work that must not gate it — and the state it installs. */
 export class RuntimeStartup {
   #promise: Promise<void> | undefined;
-  /** Aborted by `abort`, so a start still waiting for the cloud never holds a stop up. */
   #abort: AbortController | undefined;
   #started = false;
   #subscriptions: Array<() => void> = [];
   #piChat?: PiChatRelay;
+  #sideAsk?: SideQuestionRunner;
   #authControl: RuntimeAuthController | undefined;
-  /** Watches publications held before ready across every start attempt; settled only when they
-   * are released or the runtime is going away. */
   #readyWait: RuntimeReadyWaitWatch | undefined;
-  /** The current attempt's hold, which the watch reads its count from. */
   #publications: RuntimePublicationSubscriptions | undefined;
 
   constructor(private readonly ports: RuntimeStartupPorts) {}
 
-  /** Whether the cloud handshake and recovery replay completed. */
   get started(): boolean {
     return this.#started;
   }
 
-  /** The start still running, if any. */
   pending(): Promise<void> | undefined {
     return this.#promise;
   }
@@ -164,25 +153,23 @@ export class RuntimeStartup {
     return this.#promise;
   }
 
-  /** Closes the connection's local capabilities synchronously; the promise settles once the Pi
-   * chat relay has closed. */
   close(): Promise<void> {
     this.#readyWait?.settle();
     this.#started = false;
     this.#authControl?.stop();
     this.#authControl = undefined;
+    this.#sideAsk?.stopAll();
+    this.#sideAsk = undefined;
     const piChat = this.#piChat;
     this.#piChat = undefined;
     const piChatClosed = piChat?.close();
     return piChatClosed ?? Promise.resolve();
   }
 
-  /** Drops every listener the open sequence installed. */
   unsubscribeAll(): void {
     unsubscribeAll(this.#subscriptions);
   }
 
-  /** Ends a start still waiting for the cloud, so a stop never waits on an unreachable server. */
   abort(): void {
     this.#readyWait?.settle();
     this.#abort?.abort(new DaemonConnectionStoppedError());
@@ -257,7 +244,13 @@ export class RuntimeStartup {
         }),
       );
       const transport = ports.transport();
-      this.#piChat ??= new PiChatRelay(connection, (frame) => ports.sendPiChatFrame(frame));
+      this.#piChat ??= new PiChatRelay(connection, async (frame) => {
+        if (ports.sendPiChatFrame) return ports.sendPiChatFrame(frame);
+        const live = ports.transport();
+        if (ports.isStopping() || !live.sendPiChatFrame)
+          throw new Error("Pi chat connection unavailable");
+        await live.sendPiChatFrame(frame);
+      });
       this.#subscribe(
         transport.onPiChatRequest?.(async (request) => {
           if (
@@ -288,6 +281,22 @@ export class RuntimeStartup {
           isStopping: () => ports.isStopping(),
         }),
       );
+      if (ports.sideAsk) {
+        this.#sideAsk ??= new SideQuestionRunner();
+        const runner = this.#sideAsk;
+        this.#subscribe(ports.sideAsk.onRuntimeEnd((agentId) => runner.stopForAgent(agentId)));
+        this.#subscribe(
+          subscribeAgentSideAskQueries(transport, {
+            connection,
+            source: ports.sideAsk,
+            activityPublisher: ports.activityPublisher,
+            credentialHolds: ports.credentialHolds,
+            runner,
+            currentTransport: () => ports.transport(),
+            isStopping: () => ports.isStopping(),
+          }),
+        );
+      }
       for (const unsubscribe of subscribeProviderScans(transport, {
         connection,
         runtime: {
@@ -300,13 +309,8 @@ export class RuntimeStartup {
         inventory: ports.codeAgentInventory,
       }))
         this.#subscribe(unsubscribe);
-      // Register publication listeners after the auxiliary query/scanning listeners, matching the
-      // original start order; the server may recover persisted Agents immediately at ready.
       for (const unsubscribe of await publications.install()) this.#subscribe(unsubscribe);
       this.#publications = publications;
-      // Publications are held from here until the handshake completes. A start that fails and is
-      // retried installs fresh listeners and holds again, so the watch counts the attempt but
-      // keeps its clock: an outage answers each ready in seconds while the hold lasts hours.
       this.#readyWait ??= new RuntimeReadyWaitWatch({
         heldCount: () => this.#publications?.heldCount() ?? 0,
       });
@@ -323,10 +327,7 @@ export class RuntimeStartup {
       });
       await ports.agentControl.replay();
       await ports.agentSessions.replay();
-      // Off the event loop, once: the OS version only changes with an upgrade.
       await ports.operatingSystem.read();
-      // The connection asks for a fresh request per ready attempt — a retry included — so this
-      // factory is also where the hold learns how many attempts it has outlasted.
       await transport.ready(() => {
         this.#readyWait?.attempt();
         const runningAgentIds = ports.readyRunningAgentIds();
@@ -340,7 +341,6 @@ export class RuntimeStartup {
           requestId: crypto.randomUUID(),
           workspaceId: connection.workspaceId,
           computerId: connection.computerId,
-          // Protocol field retained for compatibility with the existing ready handshake.
           workerInstanceId: ports.runtimeInstanceId,
           startedAt: ports.startedAtMs,
           runningAgentIds,
@@ -369,21 +369,16 @@ export class RuntimeStartup {
       ports.sweeps.start();
       ports.machineStatus.start();
       ports.procJobs?.startSweep();
-      // Kick off optional inventory before flushing buffered publications so immediate probes can
-      // make progress while the first Agent inputs are delivered.
       const codeAgentReport = ports.codeAgentInventory.reportRuntimes(transport);
       await Promise.all(buffered.map((flush) => flush()));
-      // Inventory is optional and may spawn several provider CLIs. Start accepting Agent
-      // traffic as soon as the cloud handshake and recovery replay are complete; a slow probe
-      // must never hold the first reply or a daemon restart hostage.
       void codeAgentReport
         .then((report) => ports.codeAgentInventory.refreshStaleCatalogs(report, transport))
         .catch(() => {});
     } catch (error) {
-      // The hold itself is not settled: a retry installs fresh listeners and holds again, so the
-      // wait keeps running until the publications are released or the runtime goes away.
       this.#authControl?.stop();
       this.#authControl = undefined;
+      this.#sideAsk?.stopAll();
+      this.#sideAsk = undefined;
       this.unsubscribeAll();
       ports.upgradeResults.stop();
       this.#started = false;

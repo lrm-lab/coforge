@@ -768,15 +768,11 @@ export class DaemonRuntime {
       workspaceQueries: this.#workspaceQueries,
       stateDirectory: this.stateDirectory,
       contextView: this.#contextViewService,
+      sideAsk: this,
       agentApiKey: (agentId) => this.agentApiKeys.get(agentId),
       resolveProviderSource: (agentId, entry) =>
         resolveContextViewProviderSource(this, agentId, entry),
       deleteWorkspace: (request) => this.#deleteWorkspace(this.#connection, request),
-      sendPiChatFrame: async (frame) => {
-        if (this.#stopping || !this.#transport.sendPiChatFrame)
-          throw new Error("Pi chat connection unavailable");
-        await this.#transport.sendPiChatFrame(frame);
-      },
       lifecycle: startupLifecycle(
         this.lifecycle,
         this.#services.upgradeResults,
@@ -1169,10 +1165,13 @@ export class DaemonRuntime {
     return this.#currentActivityLaunches.get(agentId);
   }
   stopping(agentId: string): boolean {
-    return this.#stopState.stopping(agentId);
+    return this.#stopState.isStopping(agentId) || this.#agentProcessManager.isStopping(agentId);
   }
   reported(agentId: string) {
     return this.#reported.last(agentId);
+  }
+  onRuntimeEnd(listener: (agentId: string) => void) {
+    return this.#agentProcessManager.onRuntimeEnd(listener);
   }
   #wakeAgent = (
     agentId: string,

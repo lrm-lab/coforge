@@ -495,3 +495,4 @@ export * from "./forwarded-message";
 export * from "./untrusted-text";
 
 export * from "./agent-memory";
+export * from "./agent-side-ask";
