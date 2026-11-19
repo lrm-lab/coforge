@@ -29,6 +29,14 @@ export type AgentLaunchPreparationPorts = Readonly<{
   createProvider: CodeAgentProviderFactory;
   resolveGitHooks: typeof resolveGitHookInjectionForLaunch;
 }>;
+export function platformCriticalRules(
+  platform: NodeJS.Platform = process.platform,
+): readonly string[] {
+  if (platform !== "win32") return [];
+  return [
+    "Windows PowerShell: pipe a single-quoted here-string (`@'\\n...\\n'@ | coforge message send --target '#channel'`), not POSIX `<<'EOF'`.",
+  ];
+}
 export async function prepareAgentLaunch(
   input: AgentLaunchInput,
   ports: AgentLaunchPreparationPorts,
@@ -76,6 +84,7 @@ export async function prepareAgentLaunch(
         provider: config.provider,
       }).PATH,
     );
+  const extraCriticalRules = platformCriticalRules();
   const options: AgentSessionOptions = {
     agentId,
     ...(runtimeId ? { runtimeId } : {}),
@@ -84,6 +93,7 @@ export async function prepareAgentLaunch(
       agentWorkspaceDirectory,
       agentId,
       identity,
+      ...(extraCriticalRules.length > 0 ? { extraCriticalRules } : {}),
       capabilities: {
         cloudDesktop: Boolean(environment?.DISPLAY),
       },

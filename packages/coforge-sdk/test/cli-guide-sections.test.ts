@@ -12,11 +12,16 @@ describe("cli-guide-sections", () => {
       cloudSkillsGuidance: "Cloud skills here.\n",
       extraCriticalRules: ["Extra rule."],
     });
+    expect(sections.communication).toContain("without asking");
+    expect(sections.communication).toContain("native UI/question tools");
     expect(sections.communication).toContain("Or create a unique file in your Agent workspace;");
+    expect(sections.messages).toContain("never pipe, truncate or discard");
+    expect(sections.messages).toContain("coforge message continue <id> a|b|c");
     expect(sections.messages).toContain("A `held` count means the daemon has not shown");
     expect(sections.messages).toContain("`system.reminder` delivers due reminders as App items");
     expect(sections.execution).toContain("Cloud skills here.");
     expect(sections.execution).toContain("Local memory: save decisions/corrections with sources.");
+    expect(sections.safety).toContain("Sub-agents have no CoForge identity");
     expect(sections.safety).toContain("post a `page:fill` action card");
     expect(sections.safety).toContain("Extra rule.");
   });
@@ -34,6 +39,11 @@ describe("cli-guide-sections", () => {
     expect(combined).not.toContain("Cloud skills here.");
     expect(combined).not.toContain("MEMORY.md");
     expect(combined).not.toContain("page:fill");
+    expect(combined).not.toContain("coforge message continue");
+    expect(combined).toContain("without asking");
+    expect(combined).toContain("native UI/question tools");
+    expect(combined).toContain("never pipe, truncate or discard");
+    expect(combined).toContain("Sub-agents have no CoForge identity");
     expect(combined).toContain("coforge message check");
     expect(combined).toContain("coforge task create --target");
     expect(combined).toContain("coforge task list --mine");
