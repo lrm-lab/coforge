@@ -47,11 +47,7 @@ if (
   process.exit(0);
 }
 
-await compile({
-  ...paraglideOptions,
-  outputStructure: "message-modules",
-  messageModuleSize: 512,
-});
+await compile(paraglideOptions);
 
 await mkdir("node_modules/.cache", { recursive: true });
 await Bun.write(STAMP_PATH, `${currentHash}\n`);

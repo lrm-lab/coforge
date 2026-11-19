@@ -8,6 +8,8 @@ const strategy = ["url", "cookie", "preferredLanguage", "baseLocale"] as const;
 export const paraglideOptions = {
   project: "./project.inlang",
   outdir: "./src/paraglide",
+  outputStructure: "message-modules",
+  messageModuleSize: 512,
   emitTsDeclarations: true,
   cookieName: "PARAGLIDE_LOCALE",
   strategy: [...strategy],
