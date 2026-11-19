@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { MemoryPage } from "#src/features/memory/memory-page";
-import { memoryCommand } from "#src/features/memory/memory.functions";
+import { memoryCommand, memoryDetail } from "#src/features/memory/memory.functions";
 import { PageLoadError } from "#src/features/errors/page-load-error";
 import { MemoryPending } from "#src/features/memory/memory-pending";
 import { MemoryVersionPage } from "#src/features/memory/memory-provenance";
@@ -31,14 +31,12 @@ export const Route = createFileRoute("/w/$workspaceSlug/memory")({
           data: { operation: "list", after: deps.after },
         }),
       };
-    if (deps.id && deps.id !== "new" && deps.revision)
-      return {
-        kind: "version" as const,
-        detail: await memoryCommand({
-          data: { operation: "get", id: deps.id, revision: deps.revision },
-        }),
-      };
-    const [list, detail] = await Promise.all([
+    const id = deps.id && deps.id !== "new" ? deps.id : undefined;
+    const detailRead = id ? memoryDetail({ data: { id, revision: deps.revision } }) : undefined;
+    if (detailRead && deps.revision) {
+      return { kind: "version" as const, ...(await detailRead) };
+    }
+    const [list, selected] = await Promise.all([
       memoryCommand({
         data: deps.q
           ? {
@@ -55,11 +53,9 @@ export const Route = createFileRoute("/w/$workspaceSlug/memory")({
               projectId: deps.project,
             },
       }),
-      deps.id && deps.id !== "new"
-        ? memoryCommand({ data: { operation: "get", id: deps.id } })
-        : undefined,
+      detailRead,
     ]);
-    return { kind: "memory" as const, list, detail };
+    return { kind: "memory" as const, list, detail: selected?.detail, graph: selected?.graph };
   },
   pendingComponent: MemoryPending,
   errorComponent: PageLoadError,
@@ -67,11 +63,12 @@ export const Route = createFileRoute("/w/$workspaceSlug/memory")({
     const data = Route.useLoaderData();
     const search = Route.useSearch();
     const { workspaceSlug } = Route.useParams();
-    if (data.kind === "version") return <MemoryVersionPage detail={data.detail} />;
+    if (data.kind === "version")
+      return <MemoryVersionPage detail={data.detail} graph={data.graph} />;
     return data.kind === "review" ? (
       <MemoryReviewPage key={workspaceSlug} suggestions={data.suggestions} />
     ) : (
-      <MemoryPage search={search} list={data.list} detail={data.detail} />
+      <MemoryPage search={search} list={data.list} detail={data.detail} graph={data.graph} />
     );
   },
 });

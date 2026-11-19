@@ -32,7 +32,7 @@ export async function readTarget(db: Database, actor: TeamMemoryActor, id: strin
   return row as Row;
 }
 
-function effectiveSearchHeads(includeHumanAuthors: boolean) {
+export function effectiveSearchHeads(includeHumanAuthors: boolean) {
   return Prisma.sql`
       AND (candidate.effective_at IS NULL OR candidate.effective_at <= CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
       AND NOT EXISTS (

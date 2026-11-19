@@ -1,7 +1,7 @@
 import type { Prisma } from "#src/generated/prisma/client";
 import type { TeamMemoryEvidence } from "@lrm/coforge-sdk/agent";
 
-type Target = { conversationId: string; taskNumber?: number };
+type Target = { conversationId: string; taskNumber?: number; title?: string };
 
 /** Artifact pages resolve their own authorization. Task and message locations are sent only for public channels. */
 export async function memoryEvidenceLinks(
@@ -23,7 +23,7 @@ export async function memoryEvidenceLinks(
     taskIds.length
       ? db.task.findMany({
           where: { id: { in: taskIds }, workspaceId, deletedAt: null, conversation },
-          select: { id: true, conversationId: true, number: true },
+          select: { id: true, conversationId: true, number: true, title: true },
           take: taskIds.length,
         })
       : [],
@@ -37,8 +37,8 @@ export async function memoryEvidenceLinks(
   ]);
   return Object.fromEntries([
     ...tasks.map(
-      ({ id, conversationId, number }) =>
-        [`task:${id}`, { conversationId, taskNumber: number }] as const,
+      ({ id, conversationId, number, title }) =>
+        [`task:${id}`, { conversationId, taskNumber: number, title }] as const,
     ),
     ...messages.map(({ id, conversationId }) => [`message:${id}`, { conversationId }] as const),
   ]);

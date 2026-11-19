@@ -4,6 +4,8 @@ import * as m from "#src/paraglide/messages";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import type { memoryCommand } from "./memory.functions";
 import { memoryError } from "./memory-copy";
+import type { TeamMemoryDecisionGraph } from "#src/server/db/repositories/team-memory-decision-graph.server";
+import { MemoryDecisionGraph } from "./memory-decision-graph";
 import { MemoryScopeLinks } from "./memory-scope-links";
 
 const memoryList = { q: "", archived: false, offset: 0 };
@@ -43,8 +45,10 @@ export function MemorySnapshot({
 
 export function MemoryVersionPage({
   detail,
+  graph,
 }: {
   detail: Awaited<ReturnType<typeof memoryCommand>>;
+  graph?: TeamMemoryDecisionGraph;
 }) {
   const workspaceSlug = useWorkspaceSlug();
   const entry = detail.kind === "ready" ? detail.result.entries[0] : undefined;
@@ -65,6 +69,7 @@ export function MemoryVersionPage({
               {entry.content}
             </p>
             <p className="wrap-anywhere text-sm text-tertiary">{entry.source}</p>
+            <MemoryDecisionGraph graph={graph} />
             <MemoryProvenance
               entry={entry}
               links={detail.kind === "ready" ? detail.evidenceLinks : undefined}

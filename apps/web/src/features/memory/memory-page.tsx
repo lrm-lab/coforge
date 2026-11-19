@@ -14,6 +14,8 @@ import { MemoryEditor, memoryDraft, type MemoryDraft } from "./memory-editor";
 import { MemoryHistory } from "./memory-history";
 import { MemoryProjectPicker } from "./memory-project-picker";
 import { MemoryProvenance } from "./memory-provenance";
+import type { TeamMemoryDecisionGraph } from "#src/server/db/repositories/team-memory-decision-graph.server";
+import { MemoryDecisionGraph } from "./memory-decision-graph";
 
 export type MemorySearch = {
   q: string;
@@ -29,10 +31,12 @@ export function MemoryPage({
   search,
   list,
   detail,
+  graph,
 }: {
   search: MemorySearch;
   list: Response;
   detail?: Response;
+  graph?: TeamMemoryDecisionGraph;
 }) {
   const workspaceSlug = useWorkspaceSlug();
   const navigate = useNavigate({ from: "/w/$workspaceSlug/memory" });
@@ -297,6 +301,7 @@ export function MemoryPage({
                       {names[entry.authorUserId ?? entry.authorAgentId ?? ""] ?? m.memory_unknown()}
                     </dd>
                   </dl>
+                  <MemoryDecisionGraph graph={graph} />
                   <MemoryProvenance
                     entry={entry}
                     links={detail?.kind === "ready" ? detail.evidenceLinks : undefined}
