@@ -116,14 +116,12 @@ export const RELATIVE_PAGE_SCRIPT = `
     const KEYSYMS = {
       Escape: 0xff1b,
       Tab: 0xff09,
-      ControlLeft: 0xffe3,
       ArrowLeft: 0xff51,
       ArrowUp: 0xff52,
       ArrowRight: 0xff53,
       ArrowDown: 0xff54,
     };
     let phoneScale = 0;
-    let ctrlHeld = false;
     let gesturesBound = false;
     function phoneFrameSize() {
       const display = rfb?._display;
@@ -142,15 +140,9 @@ export const RELATIVE_PAGE_SCRIPT = `
       return phoneScale > phoneFitScale() + 0.02;
     }
     function syncPhoneModeButtons() {
-      const fit = phoneFitScale();
-      const nearFit = phoneScale <= fit + 0.03;
-      const nearNative = phoneScale >= 0.97;
-      phoneBar?.querySelectorAll("button[data-mode]").forEach((button) => {
-        const mode = button.dataset.mode;
-        button.classList.toggle(
-          "is-active",
-          (mode === "fit" && nearFit) || (mode === "pan" && nearNative && !nearFit),
-        );
+      const nearFit = phoneScale <= phoneFitScale() + 0.03;
+      phoneBar?.querySelectorAll('button[data-mode="fit"]').forEach((button) => {
+        button.classList.toggle("is-active", nearFit);
       });
     }
     function applyPhoneViewportScale(scale) {
@@ -169,7 +161,7 @@ export const RELATIVE_PAGE_SCRIPT = `
     }
     function applyPhoneMode(mode) {
       if (!rfb || !phone) return;
-      applyPhoneViewportScale(mode === "pan" ? 1 : phoneFitScale());
+      applyPhoneViewportScale(mode === "fit" ? phoneFitScale() : phoneScale || phoneFitScale());
     }
     function sendKey(code, down) {
       if (!rfb) return;
@@ -420,15 +412,11 @@ export const RELATIVE_PAGE_SCRIPT = `
         coforgeAttachPhoneKeyboard();
         coforgeAttachPhoneFab();
         setPhoneTrayOpen(false);
-        if (ctrlHeld) sendKey("ControlLeft", true);
       }
       rfb.addEventListener("connect", () => {
         showReconnect(false);
         if (msg) msg.hidden = true;
-        if (phone) {
-          applyPhoneViewportScale(phoneScale || phoneFitScale());
-          if (ctrlHeld) sendKey("ControlLeft", true);
-        }
+        if (phone) applyPhoneViewportScale(phoneScale || phoneFitScale());
       });
       rfb.addEventListener("desktopresize", () => {
         if (phone) applyPhoneViewportScale(phoneScale || phoneFitScale());
@@ -465,7 +453,7 @@ export const RELATIVE_PAGE_SCRIPT = `
         return;
       }
       const mode = ev.target?.closest?.("button[data-mode]")?.dataset?.mode;
-      if (mode === "fit" || mode === "pan") {
+      if (mode === "fit") {
         applyPhoneMode(mode);
         return;
       }
@@ -473,12 +461,6 @@ export const RELATIVE_PAGE_SCRIPT = `
       const button = ev.target?.closest?.("button[data-key]");
       const code = button?.dataset?.key;
       if (!code || !rfb) return;
-      if (code === "ControlLeft") {
-        ctrlHeld = !ctrlHeld;
-        button.classList.toggle("is-active", ctrlHeld);
-        sendKey("ControlLeft", ctrlHeld);
-        return;
-      }
       sendKey(code, true);
       sendKey(code, false);
     });
