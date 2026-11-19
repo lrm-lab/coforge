@@ -181,6 +181,7 @@ export function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: () =>
 
   return (
     <motion.div
+      layout
       ref={rootRef}
       data-toast
       onPointerEnter={() => setPointerOver(true)}
@@ -229,7 +230,7 @@ export function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: () =>
               width: { duration: 0.38, ease: RESIZE_EASE },
             }
       }
-      className="pointer-events-auto relative flex min-h-10 max-w-full touch-pan-y items-start overflow-hidden rounded-2xl border border-secondary bg-linear-to-b from-bg-primary to-bg-secondary shadow-(--toast-shadow)"
+      className="pointer-events-auto relative flex min-h-10 max-w-full touch-pan-y items-start overflow-hidden rounded-2xl border border-secondary bg-linear-to-b from-bg-primary to-bg-secondary shadow-(--toast-shadow) p-2 -m-2"
     >
       <span className="absolute top-[calc(0.5rem-1px)] left-[calc(0.5rem-1px)] size-6">
         <AnimatePresence initial={false}>
