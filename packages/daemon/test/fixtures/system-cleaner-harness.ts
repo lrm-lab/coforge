@@ -106,6 +106,7 @@ export async function harness() {
     },
     measureDiskSpace: async () => measured.disk,
     measureKnowledgeSize: async () => ({ kind: "measured", bytes: 0 }),
+    scanWorkspaceHeavyPaths: async () => ({ kind: "not_established", reason: "missing" }),
     inbox: {
       upsert: async (agentId, item) => (await inbox(agentId)).upsert(item),
       remove: async (agentId, itemId) => (await inbox(agentId)).remove(itemId),

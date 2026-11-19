@@ -1,6 +1,10 @@
+import type { AgentAppItem, MintAppItem } from "#src/agent-app-inbox/agent-app-inbox";
 import { CLEANER_CONFIG_BOUNDS } from "@lrm/coforge-sdk/internal";
 import { SYSTEM_CLEANER_APP_ID } from "#src/agent-app-inbox/registry";
+import type { ReminderClock } from "#src/agent-reminder/reminder-clock";
 import { isSafePathScope } from "#src/persistence/path-scope";
+import type { DiskMeasurement, MemoryMeasurement } from "./system-cleaner-measure";
+import type { WorkspaceHeavyPathsMeasurement } from "./workspace-heavy-paths";
 
 const CONFIG_KEYS = new Set([
   "appId",
@@ -12,20 +16,42 @@ const CONFIG_KEYS = new Set([
   "revision",
 ]);
 
-/** One owner's applied config: the two file limits, whether it runs, and how often it looks. */
 export type CleanerConfig = Readonly<{
   appId: typeof SYSTEM_CLEANER_APP_ID;
   ownerAgentId: string;
   enabled: boolean;
-  /** MEMORY.md's limit. */
   thresholdBytes: number;
-  /** notes/active-context.md's limit, kept apart from MEMORY.md's so neither borrows the other's. */
   activeContextThresholdBytes: number;
   intervalMs: number;
   revision: number;
 }>;
 
-/** A config envelope as the cloud sent it, or the reason it is refused. */
+export type CleanerConfigResult =
+  | Readonly<{ kind: "applied"; activeSchedules: 0 | 1 }>
+  | Readonly<{ kind: "stale"; currentRevision: number }>
+  | Readonly<{ kind: "removed"; activeSchedules: 0 }>
+  | Readonly<{ kind: "invalid"; reason: string }>;
+
+export type CleanerClock = ReminderClock;
+
+export type CleanerInbox = Readonly<{
+  upsert(ownerAgentId: string, item: MintAppItem): Promise<AgentAppItem>;
+  remove(ownerAgentId: string, itemId: string): Promise<boolean>;
+}>;
+
+export type SystemCleanerOptions = Readonly<{
+  agentsDirectory: string;
+  inbox: CleanerInbox;
+  wake(ownerAgentId: string, itemId: string): Promise<void>;
+  clock?: CleanerClock;
+  measurementTimeoutMs?: number;
+  workspaceHeavyThresholdBytes?: number;
+  measureMemoryFile?(path: string): Promise<MemoryMeasurement>;
+  measureKnowledgeSize?(root: string): Promise<MemoryMeasurement>;
+  measureDiskSpace?(path: string): Promise<DiskMeasurement>;
+  scanWorkspaceHeavyPaths?(workspaceDirectory: string): Promise<WorkspaceHeavyPathsMeasurement>;
+}>;
+
 export function parseCleanerConfig(raw: unknown): CleanerConfig | string {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return "envelope_not_object";
   const row = raw as Record<string, unknown>;
@@ -60,7 +86,6 @@ function withinBounds(value: unknown, bounds: Readonly<{ min: number; max: numbe
   );
 }
 
-/** Whether two configs say the same thing (their revisions are compared by the caller). */
 export function sameConfig(left: CleanerConfig, right: CleanerConfig): boolean {
   return (
     left.enabled === right.enabled &&

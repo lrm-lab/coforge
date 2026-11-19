@@ -7,10 +7,62 @@ import {
 
 const { memory: MEMORY_HINT, activeContext: ACTIVE_CONTEXT_HINT } = SYSTEM_CLEANER_CLASSES;
 const CONFIG_COMMAND = `coforge app config --app ${CLEANER_APP_ID}`;
-const DAY_MS = 24 * 60 * 60 * 1000;
-const WEEK_MS = 7 * DAY_MS;
+export const DAY_MS = 24 * 60 * 60 * 1000;
+export const WEEK_MS = 7 * DAY_MS;
+export const MEMORY_GROWTH_FACTOR = 1.25;
 
 export type FileKind = "memory" | "activeContext" | "knowledge";
+export type MemoryWakeReason = "first" | "cooldown_elapsed" | "grew";
+export type PresentedMark = Readonly<{ atMs: number; bytes: number }>;
+
+export type PeriodFileRow = Readonly<{
+  file: string;
+  threshold_bytes: number;
+  bytes?: number;
+  not_established?: string;
+  due?: MemoryWakeReason;
+  incomplete?: boolean;
+}>;
+
+export type PeriodDiskRow = Readonly<{
+  available_bytes?: number;
+  total_bytes?: number;
+  low?: boolean;
+  due?: boolean;
+  not_established?: string;
+}>;
+
+export type PeriodWorkspaceRow = Readonly<{
+  carried_bytes?: number;
+  threshold_bytes: number;
+  top_paths?: readonly string[];
+  due?: MemoryWakeReason;
+  incomplete?: boolean;
+  not_established?: string;
+}>;
+
+export function fileWakeReason(
+  last: PresentedMark | undefined,
+  nowMs: number,
+  bytes: number,
+): MemoryWakeReason | undefined {
+  if (!last) return "first";
+  if (nowMs - last.atMs >= DAY_MS) return "cooldown_elapsed";
+  if (bytes >= last.bytes * MEMORY_GROWTH_FACTOR) return "grew";
+  return undefined;
+}
+
+export function workspaceWakeReason(
+  last: PresentedMark | undefined,
+  nowMs: number,
+  bytes: number,
+): MemoryWakeReason | undefined {
+  if (!last) return "first";
+  const elapsed = nowMs - last.atMs;
+  if (elapsed >= WEEK_MS) return "cooldown_elapsed";
+  if (elapsed >= DAY_MS && bytes >= last.bytes * MEMORY_GROWTH_FACTOR) return "grew";
+  return undefined;
+}
 
 export type FileHint = Readonly<{
   path: string;
@@ -82,4 +134,31 @@ export function formatInterval(intervalMs: number): string {
   if (intervalMs % 3_600_000 === 0) return `${intervalMs / 3_600_000}h`;
   if (intervalMs % 60_000 === 0) return `${intervalMs / 60_000}m`;
   return `${Math.ceil(intervalMs / 1000)}s`;
+}
+
+export function buildFileHintDraft(
+  kind: FileKind,
+  bytes: number,
+  thresholdBytes: number,
+  intervalMs: number,
+  incomplete?: boolean,
+): Readonly<{ title: string; summary: string }> {
+  const hint = FILE_HINTS[kind];
+  return {
+    title: incomplete
+      ? `${hint.label} inspection reached its file limit; continue in bounded batches`
+      : `${hint.label} has grown to ${formatBytes(bytes)} (limit ${formatBytes(thresholdBytes)}); next check in ${formatInterval(intervalMs)}`,
+    summary:
+      kind === "knowledge"
+        ? hint.guidance
+        : `${hint.guidance} ${raiseLimitAction(hint, thresholdBytes)}`,
+  };
+}
+
+export function fileThresholdForConfig(
+  config: Readonly<{ thresholdBytes: number; activeContextThresholdBytes: number }>,
+  kind: FileKind,
+): number {
+  if (kind === "knowledge") return Math.max(128 * 1024, config.thresholdBytes * 8);
+  return kind === "memory" ? config.thresholdBytes : config.activeContextThresholdBytes;
 }

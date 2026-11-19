@@ -22,8 +22,7 @@ import {
 
 export { AGENT_MIGRATION_IGNORE_FILE };
 
-/** Runtime-owned storage in the workspace root: auth, models and every runtime's Sessions. */
-const RUNTIME_STORAGE: ReadonlySet<string> = new Set([
+export const RUNTIME_STORAGE: ReadonlySet<string> = new Set([
   ...COFORGE_RUNTIME_STORAGE_DIRS,
   PI_SESSION_DIR,
 ]);

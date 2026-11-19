@@ -13,11 +13,57 @@ export type DiskMeasurement =
 const DISK_LOW_MAX_AVAILABLE_BYTES = 20 * 1024 ** 3;
 const DISK_LOW_MAX_AVAILABLE_PERCENT = 10;
 
+export function isValidDiskMeasurement(availableBytes: number, totalBytes: number): boolean {
+  return (
+    Number.isFinite(availableBytes) &&
+    availableBytes >= 0 &&
+    Number.isFinite(totalBytes) &&
+    totalBytes > 0 &&
+    availableBytes <= totalBytes
+  );
+}
+
 export function isDiskLow(availableBytes: number, totalBytes: number): boolean {
   return (
     availableBytes < DISK_LOW_MAX_AVAILABLE_BYTES &&
     (availableBytes / totalBytes) * 100 < DISK_LOW_MAX_AVAILABLE_PERCENT
   );
+}
+
+export function evaluateDiskPeriod(
+  measurement: DiskMeasurement,
+  lowTipped: boolean,
+  lastDiskTipAtMs: number | undefined,
+  nowMs: number,
+  weekMs: number,
+): Readonly<{
+  row: Readonly<{
+    available_bytes?: number;
+    total_bytes?: number;
+    low?: boolean;
+    due?: boolean;
+    not_established?: string;
+  }>;
+  availableBytes?: number;
+  recovered: boolean;
+}> {
+  if (measurement.kind === "not_established")
+    return { row: { not_established: measurement.reason }, recovered: false };
+  const { availableBytes, totalBytes } = measurement;
+  if (!isValidDiskMeasurement(availableBytes, totalBytes))
+    return { row: { not_established: "invalid_measurement" }, recovered: false };
+  if (!isDiskLow(availableBytes, totalBytes)) {
+    return {
+      row: { available_bytes: availableBytes, total_bytes: totalBytes, low: false },
+      recovered: true,
+    };
+  }
+  const due = !lowTipped && (lastDiskTipAtMs === undefined || nowMs - lastDiskTipAtMs >= weekMs);
+  return {
+    row: { available_bytes: availableBytes, total_bytes: totalBytes, low: true, due },
+    ...(due ? { availableBytes } : {}),
+    recovered: false,
+  };
 }
 
 export function withMeasurementTimeout<T extends { kind: string }>(

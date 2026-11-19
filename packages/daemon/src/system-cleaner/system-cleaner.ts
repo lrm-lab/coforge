@@ -7,87 +7,67 @@ import {
   SYSTEM_CLEANER_CLASSES,
   systemCleanerItemId,
 } from "#src/agent-app-inbox/registry";
-import { AGENT_MIGRATION_IGNORE_FILE } from "#src/agent-migration/selection-rules";
-import { defaultClock, type ReminderClock } from "#src/agent-reminder/reminder-clock";
+import { defaultClock } from "#src/agent-reminder/reminder-clock";
 import { isSafePathScope } from "#src/persistence/path-scope";
-import { parseCleanerConfig, sameConfig, type CleanerConfig } from "./system-cleaner-config";
 import {
-  isDiskLow,
+  parseCleanerConfig,
+  sameConfig,
+  type CleanerClock,
+  type CleanerConfig,
+  type CleanerConfigResult,
+  type SystemCleanerOptions,
+} from "./system-cleaner-config";
+import {
+  evaluateDiskPeriod,
   measureDiskSpace,
   measureMemoryFile,
   withMeasurementTimeout,
-  type DiskMeasurement,
   type MemoryMeasurement,
 } from "./system-cleaner-measure";
 import {
+  buildFileHintDraft,
   FILE_HINTS,
   FILE_KINDS,
-  formatBytes,
-  formatInterval,
-  raiseLimitAction,
+  fileThresholdForConfig,
+  fileWakeReason,
+  WEEK_MS,
   type FileKind,
+  type MemoryWakeReason,
+  type PeriodDiskRow,
+  type PeriodFileRow,
+  type PeriodWorkspaceRow,
+  type PresentedMark,
 } from "./system-cleaner-hints";
+import {
+  DEFAULT_HEAVY_WORKSPACE_THRESHOLD_BYTES,
+  evaluateDiskTipAtIdle,
+  evaluateWorkspacePeriod,
+  scanWorkspaceHeavyPaths,
+  type WorkspaceHeavyPathsMeasurement,
+} from "./workspace-heavy-paths";
 
 const logger = getLogger(["coforge", "daemon", "system-cleaner"]);
 
 const { disk: DISK_HINT } = SYSTEM_CLEANER_CLASSES;
 const DEFAULT_MEASUREMENT_TIMEOUT_MS = 10_000;
-const DAY_MS = 24 * 60 * 60 * 1000;
-const WEEK_MS = 7 * DAY_MS;
-const MEMORY_GROWTH_FACTOR = 1.25;
-const CLEANUP_TIP_TITLE =
-  "When it's quiet, remove workspace files you know are unused; check with your owner or creator on anything uncertain";
-const CLEANUP_TIP_SUMMARY = `Only raise files added since your last question, and update ${AGENT_MIGRATION_IGNORE_FILE} as the workspace changes.`;
 
-export type CleanerConfigResult =
-  | Readonly<{ kind: "applied"; activeSchedules: 0 | 1 }>
-  | Readonly<{ kind: "stale"; currentRevision: number }>
-  | Readonly<{ kind: "removed"; activeSchedules: 0 }>
-  | Readonly<{ kind: "invalid"; reason: string }>;
-
+export type {
+  CleanerClock,
+  CleanerConfigResult,
+  CleanerInbox,
+  SystemCleanerOptions,
+} from "./system-cleaner-config";
 export type { DiskMeasurement, MemoryMeasurement } from "./system-cleaner-measure";
-
-export type CleanerClock = ReminderClock;
-
-export type CleanerInbox = Readonly<{
-  upsert(ownerAgentId: string, item: MintAppItem): Promise<AgentAppItem>;
-  remove(ownerAgentId: string, itemId: string): Promise<boolean>;
-}>;
-
-export type SystemCleanerOptions = Readonly<{
-  agentsDirectory: string;
-  inbox: CleanerInbox;
-  wake(ownerAgentId: string, itemId: string): Promise<void>;
-  clock?: CleanerClock;
-  measurementTimeoutMs?: number;
-  measureMemoryFile?(path: string): Promise<MemoryMeasurement>;
-  measureKnowledgeSize?(root: string): Promise<MemoryMeasurement>;
-  measureDiskSpace?(path: string): Promise<DiskMeasurement>;
-}>;
+export type { WorkspaceHeavyPathsMeasurement } from "./workspace-heavy-paths";
 
 type OwnerState = { readonly config: CleanerConfig; timer: unknown };
-type MemoryWakeReason = "first" | "cooldown_elapsed" | "grew";
 type DueHints = {
   memory?: MemoryWakeReason;
   activeContext?: MemoryWakeReason;
   knowledge?: MemoryWakeReason;
   disk?: { availableBytes: number };
+  workspace?: MemoryWakeReason;
 };
-type PeriodFileRow = Readonly<{
-  file: string;
-  threshold_bytes: number;
-  bytes?: number;
-  not_established?: string;
-  due?: MemoryWakeReason;
-  incomplete?: boolean;
-}>;
-type PeriodDiskRow = Readonly<{
-  available_bytes?: number;
-  total_bytes?: number;
-  low?: boolean;
-  due?: boolean;
-  not_established?: string;
-}>;
 
 export class SystemCleaner {
   readonly #states = new Map<string, OwnerState>();
@@ -95,7 +75,7 @@ export class SystemCleaner {
   readonly #memoryChanged = new Set<string>();
   readonly #idleChecks = new Set<string>();
   readonly #idleAgain = new Set<string>();
-  readonly #fileHintPresented: Record<FileKind, Map<string, { atMs: number; bytes: number }>> = {
+  readonly #fileHintPresented: Record<FileKind, Map<string, PresentedMark>> = {
     memory: new Map(),
     activeContext: new Map(),
     knowledge: new Map(),
@@ -103,13 +83,17 @@ export class SystemCleaner {
   readonly #cleanupTipAtMs = new Map<string, number>();
   readonly #diskTipAtMs = new Map<string, number>();
   readonly #diskLowTipped = new Set<string>();
+  readonly #workspaceTip = new Map<string, PresentedMark>();
   readonly #pending = new Set<Promise<void>>();
   readonly #clock: CleanerClock;
   readonly #measurementTimeoutMs: number;
+  readonly #workspaceThresholdBytes: number;
 
   constructor(private readonly options: SystemCleanerOptions) {
     this.#clock = options.clock ?? defaultClock;
     this.#measurementTimeoutMs = options.measurementTimeoutMs ?? DEFAULT_MEASUREMENT_TIMEOUT_MS;
+    this.#workspaceThresholdBytes =
+      options.workspaceHeavyThresholdBytes ?? DEFAULT_HEAVY_WORKSPACE_THRESHOLD_BYTES;
   }
 
   applyConfig(raw: unknown): CleanerConfigResult {
@@ -223,6 +207,7 @@ export class SystemCleaner {
     this.#cleanupTipAtMs.delete(ownerAgentId);
     this.#diskTipAtMs.delete(ownerAgentId);
     this.#diskLowTipped.delete(ownerAgentId);
+    this.#workspaceTip.delete(ownerAgentId);
     this.#due.delete(ownerAgentId);
     this.#memoryChanged.delete(ownerAgentId);
     this.#idleAgain.delete(ownerAgentId);
@@ -269,11 +254,12 @@ export class SystemCleaner {
 
   async #runPeriod(state: OwnerState): Promise<void> {
     const { ownerAgentId } = state.config;
-    if (this.#states.get(ownerAgentId) !== state) return;
+    if (!this.#isCurrent(state)) return;
     this.#arm(state);
-    const [files, disk] = await Promise.all([
+    const [files, disk, workspace] = await Promise.all([
       Promise.all(FILE_KINDS.map((kind) => this.#checkFile(ownerAgentId, state, kind))),
       this.#checkDisk(ownerAgentId, state),
+      this.#checkWorkspace(ownerAgentId, state),
     ]);
     if (!this.#isCurrent(state)) return;
     logger.info("System Cleaner period measured", {
@@ -282,6 +268,10 @@ export class SystemCleaner {
       revision: state.config.revision,
       files: files.filter((row): row is PeriodFileRow => row !== undefined),
       disk: disk ?? { not_established: "stale" },
+      workspace: workspace ?? {
+        threshold_bytes: this.#workspaceThresholdBytes,
+        not_established: "stale",
+      },
     });
   }
 
@@ -305,11 +295,13 @@ export class SystemCleaner {
     );
   }
 
-  #fileThreshold(state: OwnerState, kind: FileKind): number {
-    if (kind === "knowledge") return Math.max(128 * 1024, state.config.thresholdBytes * 8);
-    return kind === "memory"
-      ? state.config.thresholdBytes
-      : state.config.activeContextThresholdBytes;
+  #measureWorkspace(ownerAgentId: string): Promise<WorkspaceHeavyPathsMeasurement> {
+    const dir = join(this.options.agentsDirectory, ownerAgentId);
+    return withMeasurementTimeout(this.#clock, this.#measurementTimeoutMs, () =>
+      this.options.scanWorkspaceHeavyPaths
+        ? this.options.scanWorkspaceHeavyPaths(dir)
+        : scanWorkspaceHeavyPaths(dir, { nowMs: () => this.#clock.now() }),
+    );
   }
 
   async #checkFile(
@@ -318,7 +310,7 @@ export class SystemCleaner {
     kind: FileKind,
   ): Promise<PeriodFileRow | undefined> {
     const hint = FILE_HINTS[kind];
-    const thresholdBytes = this.#fileThreshold(state, kind);
+    const thresholdBytes = fileThresholdForConfig(state.config, kind);
     const measurement = await this.#measureFile(ownerAgentId, hint.path);
     const row: PeriodFileRow = {
       ...(measurement.kind === "measured" && measurement.incomplete ? { incomplete: true } : {}),
@@ -333,52 +325,52 @@ export class SystemCleaner {
         ? { ...row, not_established: measurement.reason }
         : { ...row, bytes: measurement.bytes };
     }
-    const reason = this.#fileWakeReason(kind, ownerAgentId, measurement.bytes);
+    const reason = fileWakeReason(
+      this.#fileHintPresented[kind].get(ownerAgentId),
+      this.#clock.now(),
+      measurement.bytes,
+    );
     if (reason) this.#markDue(ownerAgentId, { [kind]: reason });
     return { ...row, bytes: measurement.bytes, due: reason };
-  }
-
-  #fileWakeReason(
-    kind: FileKind,
-    ownerAgentId: string,
-    bytes: number,
-  ): MemoryWakeReason | undefined {
-    const last = this.#fileHintPresented[kind].get(ownerAgentId);
-    if (!last) return "first";
-    if (this.#clock.now() - last.atMs >= DAY_MS) return "cooldown_elapsed";
-    if (bytes >= last.bytes * MEMORY_GROWTH_FACTOR) return "grew";
-    return undefined;
   }
 
   async #checkDisk(ownerAgentId: string, state: OwnerState): Promise<PeriodDiskRow | undefined> {
     const measurement = await withMeasurementTimeout(this.#clock, this.#measurementTimeoutMs, () =>
       (this.options.measureDiskSpace ?? measureDiskSpace)(this.options.agentsDirectory),
     );
-    if (this.#states.get(ownerAgentId) !== state) return undefined;
-    if (measurement.kind === "not_established") return { not_established: measurement.reason };
-    const { availableBytes, totalBytes } = measurement;
-    if (
-      !Number.isFinite(availableBytes) ||
-      availableBytes < 0 ||
-      !Number.isFinite(totalBytes) ||
-      totalBytes <= 0 ||
-      availableBytes > totalBytes
-    )
-      return { not_established: "invalid_measurement" };
-    if (!isDiskLow(availableBytes, totalBytes)) {
+    if (!this.#isCurrent(state)) return undefined;
+    const outcome = evaluateDiskPeriod(
+      measurement,
+      this.#diskLowTipped.has(ownerAgentId),
+      this.#diskTipAtMs.get(ownerAgentId),
+      this.#clock.now(),
+      WEEK_MS,
+    );
+    if (outcome.recovered) {
       this.#diskLowTipped.delete(ownerAgentId);
       this.#clearDue(ownerAgentId, "disk");
-      return { available_bytes: availableBytes, total_bytes: totalBytes, low: false };
-    }
-    const lastDiskTipAtMs = this.#diskTipAtMs.get(ownerAgentId);
-    const due =
-      !this.#diskLowTipped.has(ownerAgentId) &&
-      (lastDiskTipAtMs === undefined || this.#clock.now() - lastDiskTipAtMs >= WEEK_MS);
-    if (due) {
+    } else if (outcome.availableBytes !== undefined) {
       this.#diskLowTipped.add(ownerAgentId);
-      this.#markDue(ownerAgentId, { disk: { availableBytes } });
+      this.#markDue(ownerAgentId, { disk: { availableBytes: outcome.availableBytes } });
     }
-    return { available_bytes: availableBytes, total_bytes: totalBytes, low: true, due };
+    return outcome.row;
+  }
+
+  async #checkWorkspace(
+    ownerAgentId: string,
+    state: OwnerState,
+  ): Promise<PeriodWorkspaceRow | undefined> {
+    const measurement = await this.#measureWorkspace(ownerAgentId);
+    if (!this.#isCurrent(state)) return undefined;
+    const outcome = evaluateWorkspacePeriod(
+      measurement,
+      this.#workspaceThresholdBytes,
+      this.#workspaceTip.get(ownerAgentId),
+      this.#clock.now(),
+    );
+    if (outcome.clearDue) this.#clearDue(ownerAgentId, "workspace");
+    else if (outcome.due) this.#markDue(ownerAgentId, { workspace: outcome.due });
+    return outcome.row;
   }
 
   async #presentDue(ownerAgentId: string, state: OwnerState, due: DueHints): Promise<void> {
@@ -397,29 +389,53 @@ export class SystemCleaner {
         });
       }
     }
-    const nowMs = this.#clock.now();
     const lastTipAtMs = this.#cleanupTipAtMs.get(ownerAgentId);
-    const weeklyTipAllowed = lastTipAtMs === undefined || nowMs - lastTipAtMs >= WEEK_MS;
-    if (due.disk !== undefined || (minted.length > 0 && weeklyTipAllowed)) {
-      const tip = await this.#mint(ownerAgentId, {
-        appId: SYSTEM_CLEANER_APP_ID,
-        notificationClass: DISK_HINT.notificationClass,
-        sourceRef: {
-          kind: DISK_HINT.sourceKind,
-          id: ownerAgentId,
-          revision: String(state.config.revision),
-        },
-        title: CLEANUP_TIP_TITLE,
-        summary:
-          due.disk === undefined
-            ? CLEANUP_TIP_SUMMARY
-            : `Only ${formatBytes(due.disk.availableBytes)} of disk space is left. ${CLEANUP_TIP_SUMMARY}`,
-      });
+    const weeklyTipAllowed =
+      lastTipAtMs === undefined || this.#clock.now() - lastTipAtMs >= WEEK_MS;
+    let workspaceHeavy = false;
+    if (
+      due.disk !== undefined ||
+      due.workspace !== undefined ||
+      (minted.length > 0 && weeklyTipAllowed)
+    ) {
+      const scanned = await this.#measureWorkspace(ownerAgentId);
       if (!this.#isCurrent(state)) return;
-      if (tip) {
-        minted.push(tip);
-        this.#cleanupTipAtMs.set(ownerAgentId, nowMs);
-        if (due.disk !== undefined) this.#diskTipAtMs.set(ownerAgentId, nowMs);
+      const nowMs = this.#clock.now();
+      const draft = evaluateDiskTipAtIdle({
+        availableBytes: due.disk?.availableBytes,
+        workspaceDue: due.workspace !== undefined,
+        weeklyTipAllowed,
+        hasMintedFileHint: minted.length > 0,
+        scanned,
+        thresholdBytes: this.#workspaceThresholdBytes,
+        lastWorkspaceTip: this.#workspaceTip.get(ownerAgentId),
+        nowMs,
+      });
+      if (draft) {
+        const tip = await this.#mint(ownerAgentId, {
+          appId: SYSTEM_CLEANER_APP_ID,
+          notificationClass: DISK_HINT.notificationClass,
+          sourceRef: {
+            kind: DISK_HINT.sourceKind,
+            id: ownerAgentId,
+            revision: String(state.config.revision),
+          },
+          title: draft.title,
+          summary: draft.summary,
+        });
+        if (!this.#isCurrent(state)) return;
+        if (tip) {
+          minted.push(tip);
+          this.#cleanupTipAtMs.set(ownerAgentId, nowMs);
+          if (due.disk !== undefined) this.#diskTipAtMs.set(ownerAgentId, nowMs);
+          if (draft.recordWorkspaceBytes !== undefined) {
+            workspaceHeavy = true;
+            this.#workspaceTip.set(ownerAgentId, {
+              atMs: nowMs,
+              bytes: draft.recordWorkspaceBytes,
+            });
+          }
+        }
       }
     }
     const first = minted[0];
@@ -437,6 +453,8 @@ export class SystemCleaner {
       active_context_wake_reason: due.activeContext,
       knowledge_wake_reason: due.knowledge,
       disk_low: due.disk !== undefined,
+      workspace_heavy: workspaceHeavy,
+      workspace_wake_reason: due.workspace,
     });
     await this.options.wake(ownerAgentId, first.itemId);
   }
@@ -450,7 +468,7 @@ export class SystemCleaner {
     const measurement = await this.#measureFile(ownerAgentId, hint.path);
     if (!this.#isCurrent(state)) return undefined;
     const { intervalMs, revision } = state.config;
-    const thresholdBytes = this.#fileThreshold(state, kind);
+    const thresholdBytes = fileThresholdForConfig(state.config, kind);
     if (measurement.kind === "not_established" || measurement.bytes <= thresholdBytes) {
       this.#dropItems(ownerAgentId, hint.notificationClass);
       logger.info("System Cleaner due hint not presented", {
@@ -463,18 +481,27 @@ export class SystemCleaner {
       });
       return undefined;
     }
-    if (!this.#fileWakeReason(kind, ownerAgentId, measurement.bytes)) return undefined;
+    if (
+      !fileWakeReason(
+        this.#fileHintPresented[kind].get(ownerAgentId),
+        this.#clock.now(),
+        measurement.bytes,
+      )
+    )
+      return undefined;
+    const draft = buildFileHintDraft(
+      kind,
+      measurement.bytes,
+      thresholdBytes,
+      intervalMs,
+      measurement.incomplete,
+    );
     const item = await this.#mint(ownerAgentId, {
       appId: SYSTEM_CLEANER_APP_ID,
       notificationClass: hint.notificationClass,
       sourceRef: { kind: hint.sourceKind, id: ownerAgentId, revision: String(revision) },
-      title: measurement.incomplete
-        ? `${hint.label} inspection reached its file limit; continue in bounded batches`
-        : `${hint.label} has grown to ${formatBytes(measurement.bytes)} (limit ${formatBytes(thresholdBytes)}); next check in ${formatInterval(intervalMs)}`,
-      summary:
-        kind === "knowledge"
-          ? hint.guidance
-          : `${hint.guidance} ${raiseLimitAction(hint, thresholdBytes)}`,
+      title: draft.title,
+      summary: draft.summary,
     });
     if (!item) return undefined;
     this.#fileHintPresented[kind].set(ownerAgentId, {

@@ -11,8 +11,9 @@ Rules for `src/system-cleaner/`. They extend `packages/daemon/AGENTS.md`.
   a conflict, and a newer one cancels the timer and drops the Agent's items before re-arming.
 - `system-cleaner-config.ts` parses the config envelope; `system-cleaner-hints.ts` holds the
   per-file wording, limits and formatting; `system-cleaner-measure.ts` holds the default
-  file/disk measurers and the disk-low policy. Keep each file's hint data in that table rather
-  than branching on the file name in the class.
+  file/disk measurers and the disk-low policy; `workspace-heavy-paths.ts` runs the bounded
+  workspace heavy-path scan and builds disk/migration-ignore cleanup tips. Keep each file's hint
+  data in that table rather than branching on the file name in the class.
 - The cleaner measures the two files a fresh session carries, each against its own limit
   (`thresholdBytes` for MEMORY.md, `activeContextThresholdBytes` for the Active Context) and
   each with its own hint item, class and wording: what to trim differs between an index and a
@@ -23,11 +24,19 @@ Rules for `src/system-cleaner/`. They extend `packages/daemon/AGENTS.md`.
   Its soft threshold is max(128 KiB, eight times MEMORY.md's configured threshold); inspect no more
   than 512 directory entries, eight file prefixes at once, and report incomplete scans explicitly.
   Incompleteness alone must not trigger a size hint without observed active bytes over the threshold.
+- Each period also runs a bounded workspace carried-bytes scan (`workspace-heavy-paths.ts`: max
+  2,000 entries, depth 6, 2,000 ms budget, never following symlinks) using the migration selection
+  rules (`.coforgemigrateignore`, `regenerableCategory`, runtime storage, and `isSecretName`).
+  Secret paths are never counted or named in hints or logs. When observed carried bytes exceed the
+  soft threshold (default 50% of `AGENT_MIGRATION_MAX_BUNDLE_BYTES`), or when host disk is low, the
+  `disk_space` tip names the largest carried paths (<= 320 chars single-line) and remeasures at
+  `onAgentWorkingToIdle` before minting. Incompleteness alone must not trigger a workspace hint
+  without observed carried bytes over the threshold.
 - A period only measures and marks a hint due, then logs one `system_cleaner:period` record with
-  each file's bytes or `not_established` reason, its threshold and due mark, and the disk
-  reading. Present it only from
+  each file's bytes or `not_established` reason, its threshold and due mark, the disk reading, and
+  the workspace carried-bytes reading. Present it only from
   `onAgentWorkingToIdle`, which `DaemonRuntime` calls when a turn ends and when a process exits
-  without a crash. Remeasure each due file before minting.
+  without a crash. Remeasure each due file and workspace before minting.
 - An Agent whose workspace is deleted here or moved to another Computer is forgotten
   (`replaceOwnerSnapshot(id, null)` from `DaemonRuntime`); its config arrives again with it.
 - Waking never starts an Agent: `DaemonRuntime` notifies only a running Agent that is not
