@@ -154,7 +154,7 @@ function IconTile({
 }
 
 const controlClassName =
-  "h-7 shrink-0 rounded-[0.625rem] outline-focus-ring transition-colors duration-100 ease-linear focus-visible:outline-2 focus-visible:outline-offset-2";
+  "h-7 shrink-0 rounded-lg outline-focus-ring transition-colors duration-100 ease-linear focus-visible:outline-2 focus-visible:outline-offset-2";
 
 export function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {
   const reduceMotion = usePrefersReducedMotion();

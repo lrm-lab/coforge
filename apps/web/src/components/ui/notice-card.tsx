@@ -94,13 +94,13 @@ export function NoticeCardHost() {
             {notices.length > 1 ? (
               <span
                 aria-hidden
-                className="absolute inset-x-3 -bottom-1.5 -z-10 h-6 rounded-b-[1.25rem] border border-t-0 border-secondary bg-secondary"
+                className="absolute inset-x-3 -bottom-1.5 -z-10 h-6 rounded-b-2xl border border-t-0 border-secondary bg-secondary"
               />
             ) : null}
             <AriaButton
               aria-label={m.controls_close()}
               onPress={() => appNotice.dismiss(notice.id)}
-              className="absolute -top-1.5 -left-1.5 z-10 grid size-6 place-items-center rounded-[0.625rem] border border-secondary bg-primary text-fg-quaternary opacity-0 shadow-xs outline-focus-ring transition-opacity duration-150 group-hover:opacity-100 hover:text-fg-quaternary_hover focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 pointer-coarse:opacity-100"
+              className="absolute -top-1.5 -left-1.5 z-10 grid size-6 place-items-center rounded-lg border border-secondary bg-primary text-fg-quaternary opacity-0 shadow-xs outline-focus-ring transition-opacity duration-150 group-hover:opacity-100 hover:text-fg-quaternary_hover focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 pointer-coarse:opacity-100"
             >
               <XClose aria-hidden className="size-3" />
             </AriaButton>
@@ -121,7 +121,7 @@ export function NoticeCardHost() {
                 }
                 transition={reduceMotion ? FADE : { duration: 0.24, ease: SLIDE_EASE }}
               >
-                <div className="flex gap-2.5">
+                <div className="flex gap-3">
                   <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-secondary">
                     <CoForgeMark className="h-3.5" />
                   </span>
@@ -130,9 +130,9 @@ export function NoticeCardHost() {
                     <p className="mt-0.5 line-clamp-3 text-sm text-secondary">{notice.body}</p>
                   </div>
                 </div>
-                <div className="mt-2.5 flex items-center justify-end gap-2">
+                <div className="mt-3 flex items-center justify-end gap-2">
                   {notices.length > 1 ? (
-                    <div className="mr-auto flex items-center gap-0.5 text-xs text-tertiary tabular-nums">
+                    <div className="mr-auto flex items-center gap-1 text-xs text-tertiary tabular-nums">
                       <ButtonUtility
                         size="xs"
                         color="tertiary"

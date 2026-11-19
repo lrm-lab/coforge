@@ -125,7 +125,7 @@ export function Popconfirm({
           placement={placement}
           offset={6}
           className={cx(
-            "w-72 max-w-[calc(100vw-1rem)] origin-(--trigger-anchor-point) rounded-xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none will-change-transform",
+            "w-72 max-w-[calc(100vw-1rem)] origin-(--trigger-anchor-point) rounded-3xl bg-primary shadow-lg ring-1 ring-secondary_alt outline-none will-change-transform",
             POPOVER_MOTION,
           )}
         >

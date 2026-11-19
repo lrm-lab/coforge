@@ -507,3 +507,27 @@ html[data-drag-cursor] [data-drop-blocked] * {
   background-color: var(--color-bg-warning-primary);
   color: var(--color-text-primary);
 }
+
+@supports (corner-shape: superellipse(1.25)) {
+  :where(*) {
+    corner-shape: superellipse(1.25);
+  }
+
+  :where(
+    .rounded-full,
+    .rounded-t-full,
+    .rounded-b-full,
+    .rounded-l-full,
+    .rounded-r-full,
+    [data-avatar].size-6,
+    [data-avatar].size-8,
+    [data-avatar].avatar-dm,
+    [data-avatar].avatar-header,
+    [data-avatar][data-avatar-sticker],
+    [data-avatar].avatar-portrait,
+    .avatar-group,
+    .avatar-group-photo
+  ) {
+    corner-shape: round;
+  }
+}

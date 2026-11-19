@@ -81,7 +81,7 @@ export function Modal({ className, children, ...props }: ComponentProps<typeof O
         {...props}
         className={(state) =>
           cx(
-            "ring-1 ring-modal-edge",
+            "rounded-4xl sm:rounded-4xl ring-1 ring-modal-edge",
             state.isEntering && "sm:fade-in",
             state.isExiting && "fade-out",
             typeof className === "function" ? className(state) : className,
@@ -98,11 +98,11 @@ export function Modal({ className, children, ...props }: ComponentProps<typeof O
       {...props}
       className={(state) =>
         cx(
-          "ring-1 ring-modal-edge",
+          "rounded-4xl sm:rounded-4xl ring-1 ring-modal-edge",
           state.isEntering && "sm:fade-in",
           state.isExiting && "sm:fade-out",
           typeof className === "function" ? className(state) : className,
-          "max-sm:relative max-sm:w-full max-sm:max-w-none max-sm:rounded-t-2xl max-sm:rounded-b-none max-sm:pb-safe-bottom",
+          "max-sm:relative max-sm:w-full max-sm:max-w-none max-sm:rounded-t-4xl max-sm:rounded-b-none max-sm:pb-safe-bottom",
           "max-sm:zoom-in-100 max-sm:zoom-out-100 max-sm:slide-in-from-bottom max-sm:slide-out-to-bottom",
           "max-sm:[&_[data-dialog-close]]:hidden",
           "max-sm:[&_[data-dialog-actions]]:flex-col-reverse max-sm:[&_[data-dialog-actions]]:items-stretch",

@@ -74,7 +74,7 @@ export function Alert({
   return (
     <div
       role={urgent ? "alert" : "status"}
-      className={cn("@container rounded-xl border px-4 py-3.5", colors.container, className)}
+      className={cn("@container rounded-3xl border p-4", colors.container, className)}
     >
       <div className="flex items-start gap-3">
         <div className="flex min-w-0 flex-1 items-start gap-3 @max-md:flex-col">

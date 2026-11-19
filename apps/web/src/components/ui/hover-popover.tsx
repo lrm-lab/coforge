@@ -93,7 +93,7 @@ export function HoverPopover({
         // page (task #154). Animating every close keeps the element mounted until its exit ends.
         shouldSkipAnimation={false}
         className={cn(
-          "z-50 w-80 max-w-[calc(100vw-24px)] origin-(--trigger-anchor-point) overflow-y-auto rounded-xl border border-secondary bg-primary text-primary shadow-lg outline-none",
+          "z-50 w-80 max-w-[calc(100vw-24px)] origin-(--trigger-anchor-point) overflow-y-auto rounded-2xl border border-secondary bg-primary text-primary shadow-lg outline-none",
           "motion-safe:data-[entering]:animate-in motion-safe:data-[entering]:fade-in motion-safe:data-[entering]:motion-enter-sm motion-safe:data-[exiting]:animate-out motion-safe:data-[exiting]:fade-out motion-safe:data-[exiting]:motion-leave-sm",
           className,
         )}
