@@ -120,6 +120,7 @@ jobs:
   deploy:
     name: Deploy and verify Web
     needs: image
+    if: always() && !cancelled() && needs.image.result == 'success'
     runs-on: ubuntu-latest
     environment: staging
     # Covers remote-deploy.sh's bounded waits at their worst (about 22 minutes on the host):

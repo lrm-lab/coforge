@@ -260,6 +260,7 @@ test("release callers select separate tracks and the Web image waits for main CI
   expect(deploy.jobs.image.if).toBe(
     "always() && github.ref == 'refs/heads/main' && !cancelled() && (needs.ci-status.outputs.passed == 'true' || (needs.gates.result == 'success' && needs.gates.outputs.deploy == 'true'))",
   );
+  expect(deploy.jobs.deploy.if).toBe("always() && !cancelled() && needs.image.result == 'success'");
   expect(release.jobs.gates.with.track).toBe("local");
   expect(release.jobs.publish.needs).toEqual(["gates", "notes-check"]);
 });
