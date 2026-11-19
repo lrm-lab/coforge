@@ -36,9 +36,10 @@ Part of [the documentation index](../../README.md). The Antigravity adapter runs
   is `direct`. The steered prompt resolves `end_turn` with the merged turn's usage when the turn
   ends, and the first prompt resolves `end_turn` too — not `cancelled`. A steered turn is one
   merged turn: every prompt's updates join the one turn reader and `completed` fires once when
-  the last prompt resolves. A steer answer with any other `stopReason` (`max_tokens`,
-  `max_turn_requests`) still means the text reached the model; only `cancelled`/`refusal` (or a
-  missing `stopReason`) reports `notice-undelivered`, which lets the daemon redeliver once idle.
+  the last prompt resolves, settled by the latest steered prompt's outcome (so a steered in-band
+  warning, non-`end_turn` stop, or non-`-32602` RPC error fails the merged turn instead of
+  completing silently). Only `cancelled`, `refusal`, a missing `stopReason`, or an invalid-params
+  `-32602` steer error reports `notice-undelivered` so the daemon redelivers once idle.
   A steer whose answer never arrives holds the turn open until interrupt — there is no watchdog
   on the merged turn's length.
 - A terminal RPC failure after prompt submission is an accepted failed turn, not an admission

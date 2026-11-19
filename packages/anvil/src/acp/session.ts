@@ -13,7 +13,7 @@ import { asRecord } from "#src/json-record";
 import { attachStderrExcerpt } from "#src/stderr-excerpt";
 import type { AcpConnection } from "./connection";
 import type { AcpNativeTurn, AcpSessionProfile } from "./profile";
-import { acpPromptFailure } from "./prompt-failure";
+import { acpPromptFailure, acpSteerResponseFailure } from "./prompt-failure";
 import {
   type AcpNativeTurnState,
   type AcpSessionInput,
@@ -84,6 +84,9 @@ export class AcpSession implements AgentSession {
           dispose: () => this.dispose(),
           emit: (event, options) => this.#emit(event, options),
           markResumable: (options) => this.#markResumable(options),
+          turnFailure: (response) =>
+            acpSteerResponseFailure(response, this.profile, this.#active?.updates),
+          rpcFailure: (error) => acpPromptFailure(error, this.profile),
         })
       : undefined;
   }
@@ -263,13 +266,8 @@ export class AcpSession implements AgentSession {
       if (!rpcFailure && this.#transport) attachStderrExcerpt(this.#transport.process, error);
       // A deliberate interrupt kills the transport: the turn reports `interrupted`, not the
       // transport's own "connection closed" complaint.
-      if (!this.#disposed && !(this.#interrupting && !rpcFailure)) {
-        const failure = acpPromptFailure(error, this.profile);
-        this.#emit(
-          this.profile.annotateFailure ? this.profile.annotateFailure(failure, error) : failure,
-          input.options,
-        );
-      }
+      if (!this.#disposed && !(this.#interrupting && !rpcFailure))
+        this.#emit(acpPromptFailure(error, this.profile), input.options);
       if (!(error instanceof RequestError))
         if (this.#interrupting) status = "interrupted";
         else this.#failed = true;
@@ -279,7 +277,10 @@ export class AcpSession implements AgentSession {
         // its end share the turn reader, and `completed` fires once the last prompt resolves.
         // For every other runtime this block must stay synchronous — `completed` is emitted in
         // the same turn that settles the admission, so an awaiting caller never sees it later.
-        if (this.profile.steer?.unboundedRequest) await this.#steering?.drain();
+        if (this.profile.steer?.unboundedRequest) {
+          const steered = await this.#steering?.drain();
+          if (steered) status = steered;
+        }
         this.#active = undefined;
         if (input.promptId) rememberCompletedPrompt(this.#completedPrompts, input.promptId);
         this.#steering?.settle();

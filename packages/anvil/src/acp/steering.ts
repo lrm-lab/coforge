@@ -27,6 +27,8 @@ export type AcpSteeringPorts = Readonly<{
   dispose(): Promise<void>;
   emit(event: AgentRuntimeEvent, options?: AgentNoticeOptions): void;
   markResumable(options?: AgentNoticeOptions): void;
+  turnFailure?(response: unknown): Extract<AgentRuntimeEvent, { type: "error" }> | undefined;
+  rpcFailure?(error: unknown): Extract<AgentRuntimeEvent, { type: "error" }>;
 }>;
 
 /**
@@ -43,6 +45,7 @@ export class AcpSteering {
   readonly #pending = new Set<Admission>();
   readonly #inflight = new Set<Promise<void>>();
   #chain: Promise<void> = Promise.resolve();
+  #turnStatus: "completed" | "failed" | undefined;
 
   constructor(
     private readonly label: string,
@@ -85,8 +88,11 @@ export class AcpSteering {
   /** Resolves when every `session/prompt`-as-steer in flight has settled. Only
    * `unboundedRequest` profiles put inserts here, and a steer offered while a drain waits still
    * joins the turn: keep waiting until the in-flight set stays empty. */
-  async drain(): Promise<void> {
+  async drain(): Promise<"completed" | "failed" | undefined> {
     while (this.#inflight.size > 0) await Promise.all(this.#inflight);
+    const status = this.#turnStatus;
+    this.#turnStatus = undefined;
+    return status;
   }
 
   /** Reads a notification's steer outcome; false when the notification carries none. */
@@ -115,6 +121,7 @@ export class AcpSteering {
       if (!entry.injected) this.#undeliver(entry.text, entry.options);
     this.#steers.clear();
     this.#earlyOutcomes.clear();
+    this.#turnStatus = undefined;
   }
 
   /** Rejects every notice still waiting to be sent, as a cancelled or disposed session does. */
@@ -126,6 +133,7 @@ export class AcpSteering {
   clear(): void {
     this.#steers.clear();
     this.#earlyOutcomes.clear();
+    this.#turnStatus = undefined;
   }
 
   async #insert(
@@ -143,6 +151,10 @@ export class AcpSteering {
       admission.reject(new Error(`${this.label} notice cancelled`));
       return;
     }
+    if (!this.ports.turnIsLive()) {
+      undeliver();
+      return;
+    }
     const request = this.profile.request(text, this.ports.sessionId());
     let response: unknown;
     try {
@@ -151,7 +163,15 @@ export class AcpSteering {
       if (cancelled()) {
         admission.reject(new Error(`${this.label} notice cancelled`));
       } else if (error instanceof RequestError) {
-        undeliver();
+        if (this.profile.settlesTurn && !this.profile.isRefusalError?.(error)) {
+          admission.resolve();
+          this.ports.markResumable(options);
+          const failure = this.ports.rpcFailure?.(error);
+          if (failure) this.ports.emit(failure, options);
+          this.#turnStatus = "failed";
+        } else {
+          undeliver();
+        }
       } else {
         // No answer: the runtime may hold the notice. Close the ambiguous session before
         // rejecting, so neither a late acceptance nor a retry can escape the fence.
@@ -184,6 +204,15 @@ export class AcpSteering {
         return;
       }
       this.#steers.set(taken.id, { text, options, injected: early === "injected" });
+    }
+    if (this.profile.settlesTurn) {
+      const failure = this.ports.turnFailure?.(response);
+      if (failure) {
+        this.ports.emit(failure, options);
+        this.#turnStatus = "failed";
+      } else {
+        this.#turnStatus = "completed";
+      }
     }
     admission.resolve();
     this.ports.markResumable(options);

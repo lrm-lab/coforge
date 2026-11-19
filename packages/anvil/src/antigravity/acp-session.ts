@@ -214,6 +214,8 @@ function antigravitySessionProfile(
     },
     steer: {
       unboundedRequest: true,
+      settlesTurn: true,
+      isRefusalError: (error) => error instanceof RequestError && error.code === -32602,
       request: (text, sessionId) => ({
         method: "session/prompt",
         params: { sessionId, prompt: [{ type: "text", text }] },

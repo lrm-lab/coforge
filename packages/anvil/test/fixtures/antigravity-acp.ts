@@ -273,6 +273,33 @@ for await (const line of console) {
         });
         break;
       }
+      if (text === "held-silent") {
+        hold(() => {
+          reply({ stopReason: "end_turn" });
+        });
+        break;
+      }
+      if (text === "rpc-invalid-params") {
+        fail(-32602, "Invalid params");
+        break;
+      }
+      if (text === "max-tokens") {
+        reply({ stopReason: "max_tokens" });
+        break;
+      }
+      if (text === "inband-quota-delayed") {
+        setTimeout(() => {
+          update({
+            sessionUpdate: "agent_message_chunk",
+            content: {
+              type: "text",
+              text: "\n⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 2h30m.\n",
+            },
+          });
+          reply({ stopReason: "end_turn" });
+        }, 30);
+        break;
+      }
       if (text === "permission-after-turn") {
         reply({ stopReason: "end_turn" });
         setTimeout(() => {

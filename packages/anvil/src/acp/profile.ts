@@ -69,6 +69,8 @@ export type AcpSteerProfile = Readonly<{
   /** The request's answer can arrive only when the turn it steered ends, past the ACP
    * deadline a live request otherwise gets. `session/prompt`-as-steer runtimes set this. */
   unboundedRequest?: boolean;
+  settlesTurn?: boolean;
+  isRefusalError?(error: unknown): boolean;
   /** Reads the request's answer: whether the runtime took the text, and its native id. */
   accepted(response: unknown): { accepted: boolean; id?: string };
   /** Reads a notification's steer outcome, for a runtime that reports delivery itself. */
