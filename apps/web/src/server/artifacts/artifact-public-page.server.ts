@@ -65,7 +65,11 @@ export function linkPageLookup(
 ) {
   return async (artifactId: string, path?: string): Promise<LinkLookup> => {
     const artifact = await db.artifact.findFirst({
-      where: { id: artifactId, access: "link", deletedAt: null },
+      where: {
+        id: artifactId,
+        deletedAt: null,
+        OR: [{ access: "link" }, { publicLinks: { some: { revokedAt: null } } }],
+      },
       select: PAGE_ARTIFACT_SELECT,
     });
     return artifact

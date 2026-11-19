@@ -20,7 +20,12 @@ export function publicFileDrawn(kind: ArtifactPathKind, sizeBytes: number): bool
   return limit !== undefined && sizeBytes <= limit;
 }
 
-type PublicFileRequest = { method: string; title: string; acceptLanguage: string | null };
+type PublicFileRequest = {
+  method: string;
+  title: string;
+  acceptLanguage: string | null;
+  frameAncestor?: string;
+};
 
 export function publicImagePage(input: PublicFileRequest & { path: string }): Response {
   const name = input.path.slice(input.path.lastIndexOf("/") + 1);
@@ -33,6 +38,7 @@ export function publicImagePage(input: PublicFileRequest & { path: string }): Re
       )}" alt="${escapeHtml(input.title)}"></figure>`,
     }),
     "'self'",
+    input.frameAncestor,
   );
 }
 
@@ -45,6 +51,8 @@ export function publicTextPage(
   return publicReadingResponse(
     input.method,
     publicReadingPage({ title: input.title, body: `${heading(input.title)}${drawn}` }),
+    "'none'",
+    input.frameAncestor,
   );
 }
 
@@ -59,6 +67,8 @@ export function publicNoPreviewPage(input: PublicFileRequest): Response {
       )}</p>`,
       lang: locale,
     }),
+    "'none'",
+    input.frameAncestor,
   );
 }
 

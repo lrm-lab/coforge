@@ -251,6 +251,7 @@ export class ArtifactPublicServing {
       method: request.method,
       title: page.title,
       acceptLanguage: request.headers.get("accept-language"),
+      frameAncestor: this.frameAncestorOf(ref),
     };
     if (!drawn) return publicNoPreviewPage(shown);
     if (page.kind === "image") return publicImagePage({ ...shown, path });

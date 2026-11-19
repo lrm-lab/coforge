@@ -48,3 +48,15 @@ test("a revoked public token finds nothing even when its artifact is link-tier a
     version: expect.any(Number),
   });
 });
+
+test("an artifact with an active public link resolves via linkPageLookup until revoked", async () => {
+  const id = await f.make("Link-shared doc");
+  expect(await lookup(id)).toEqual({ shared: false, page: null });
+  const token = `tok-${crypto.randomUUID()}`;
+  await f.db.artifactPublicLink.create({
+    data: { artifactId: id, token, createdByUserId: f.alice },
+  });
+  expect(await lookup(id)).toMatchObject({ shared: true, page: { artifactId: id } });
+  await f.db.artifactPublicLink.update({ where: { token }, data: { revokedAt: new Date() } });
+  expect(await lookup(id)).toEqual({ shared: false, page: null });
+});
