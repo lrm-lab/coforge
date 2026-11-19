@@ -23,8 +23,24 @@ export const initialFilters: GalleryFilters = {
   sort: "opened",
 };
 
-export const hasFilters = (filters: GalleryFilters) =>
-  filters.scope !== undefined || filters.authorAgentIds.length > 0 || filters.related;
+export type EmptyGalleryState =
+  | { kind: "empty" }
+  | { kind: "empty-related" }
+  | { kind: "no-match-search"; clearKind: "search" | "filters" }
+  | { kind: "no-match-filters"; showSeeAll: boolean };
+
+export function emptyGalleryState(filters: GalleryFilters): EmptyGalleryState {
+  const searching = filters.query !== "";
+  const narrowed = filters.scope !== undefined || filters.authorAgentIds.length > 0;
+  if (!searching && !narrowed)
+    return filters.related ? { kind: "empty-related" } : { kind: "empty" };
+  if (searching)
+    return {
+      kind: "no-match-search",
+      clearKind: narrowed || filters.related ? "filters" : "search",
+    };
+  return { kind: "no-match-filters", showSeeAll: filters.related };
+}
 
 const VIEW_KEY = "coforge:artifacts:view";
 

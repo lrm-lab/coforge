@@ -4,7 +4,7 @@ import { z } from "zod";
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { COMMENT_BODY_MAX } from "@lrm/coforge-sdk/agent";
-import { commentBody, commentDraftInput } from "./artifact-comment-inputs";
+import { commentDraftInput, commentFields } from "./artifact-comment-inputs";
 import { artifactInputs } from "./artifact-inputs";
 
 const { id } = artifactInputs;
@@ -72,7 +72,7 @@ export const postArtifactComment = createServerFn({ method: "POST" })
 
 export const editArtifactComment = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])
-  .validator(z.object({ artifactId: id, commentId: id, body: commentBody }).strict())
+  .validator(z.object({ artifactId: id, commentId: id, body: commentFields.body }).strict())
   .handler(({ context, data }) =>
     productionArtifacts(context.db).comments.edit({
       ...placeOf(context, data),

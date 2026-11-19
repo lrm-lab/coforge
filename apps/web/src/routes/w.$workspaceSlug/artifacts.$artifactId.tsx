@@ -2,6 +2,7 @@ import { createFileRoute, useRouterState } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { ArtifactPage } from "#src/features/artifacts/artifact-page";
+import { clearReviewSearch } from "#src/features/artifacts/artifact-search";
 import { useQuery } from "@tanstack/react-query";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
@@ -36,7 +37,9 @@ function ArtifactRoutePage() {
       commentId={comment}
       version={version}
       arrival={arrival}
-      onClearReview={() => void navigate({ search: {}, replace: true, resetScroll: false })}
+      onClearReview={() =>
+        void navigate({ search: clearReviewSearch, replace: true, resetScroll: false })
+      }
     />
   );
 }

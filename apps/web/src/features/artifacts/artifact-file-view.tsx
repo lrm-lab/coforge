@@ -153,7 +153,15 @@ function FileBody({ path, preview }: { path: string; preview: { text: string | n
     return <p className="p-6 text-sm text-tertiary">{m.av_file_no_preview()}</p>;
   if (kind === "markdown") return <ArtifactMarkdown path={path} text={preview.text} />;
   return (
-    <ArtifactCommentSurface path={path} kind="lines">
+    <ArtifactCommentSurface
+      path={path}
+      kind="lines"
+      contentClassName={
+        kind === "csv"
+          ? "mx-auto w-full max-w-[48rem] pb-16"
+          : "mx-auto w-full max-w-[48rem] pt-4 pb-16"
+      }
+    >
       {kind === "csv" ? (
         <CsvTable text={preview.text} selectable={commenting} />
       ) : (
@@ -222,46 +230,52 @@ const CsvTable = memo(function CsvTable({
   const [head, ...body] = records.slice(0, CSV_ROWS_SHOWN + 1);
   const capped = records.length > CSV_ROWS_SHOWN + 1;
   return (
-    <table
-      data-anchor-capped={capped ? "" : undefined}
-      className="w-max min-w-full border-collapse text-sm"
-    >
-      <thead className="sticky top-0 bg-secondary">
-        <tr data-anchor-line={head?.line} data-anchor-end={head?.endLine}>
-          <th className="w-12 border-b border-secondary pr-3 text-right text-xs font-normal">
-            {head && (
-              <LineNumber line={head.line} selectable={selectable} className="text-quaternary" />
-            )}
-          </th>
-          {(head?.cells ?? []).map((cell, index) => (
-            <th
-              key={index}
-              className="border-b border-secondary px-3 py-1.5 text-left font-medium text-secondary"
-            >
-              {cell}
+    <div className="overflow-x-auto">
+      <table
+        data-anchor-capped={capped ? "" : undefined}
+        className="w-max min-w-full border-collapse text-sm"
+      >
+        <thead className="sticky top-0 bg-secondary">
+          <tr data-anchor-line={head?.line} data-anchor-end={head?.endLine}>
+            <th className="w-12 border-b border-secondary pr-3 text-right text-xs font-normal">
+              {head && (
+                <LineNumber line={head.line} selectable={selectable} className="text-quaternary" />
+              )}
             </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {body.map((record) => (
-          <tr
-            key={record.line}
-            data-anchor-line={record.line}
-            data-anchor-end={record.endLine}
-            className="border-b border-secondary"
-          >
-            <td className="pr-3 text-right text-xs">
-              <LineNumber line={record.line} selectable={selectable} className="text-quaternary" />
-            </td>
-            {record.cells.map((cell, column) => (
-              <td key={column} className="px-3 py-1.5 text-primary">
+            {(head?.cells ?? []).map((cell, index) => (
+              <th
+                key={index}
+                className="border-b border-secondary px-3 py-1.5 text-left font-medium text-secondary"
+              >
                 {cell}
-              </td>
+              </th>
             ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {body.map((record) => (
+            <tr
+              key={record.line}
+              data-anchor-line={record.line}
+              data-anchor-end={record.endLine}
+              className="border-b border-secondary"
+            >
+              <td className="pr-3 text-right text-xs">
+                <LineNumber
+                  line={record.line}
+                  selectable={selectable}
+                  className="text-quaternary"
+                />
+              </td>
+              {record.cells.map((cell, column) => (
+                <td key={column} className="px-3 py-1.5 text-primary">
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 });

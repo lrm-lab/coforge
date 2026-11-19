@@ -6,6 +6,7 @@ import { setCssHighlight } from "#src/lib/css-highlight";
 import {
   COMMENT_DRAFT_HIGHLIGHT,
   COMMENT_FOCUS_HIGHLIGHT,
+  computeMarkerLeft,
   type AnchorLocation,
   type AnchorPlace,
   type SurfaceAdapter,
@@ -25,8 +26,6 @@ import { useFlash } from "./use-flash";
 import { useSurfaceIndex } from "./use-surface-index";
 import { useLinesOffer, useTextOffer, type Offer, type OfferInput } from "./use-surface-offers";
 
-const MARGIN_MIN_PX = 44;
-const MARGIN_OFFSET_PX = 4;
 const EMPTY_PLACES: ReadonlyMap<string, AnchorPlace> = new Map();
 
 type Layout = { markerLeft: number | null; revision: number };
@@ -148,10 +147,7 @@ function Surface<Index>({
     const outer = frame.current?.getBoundingClientRect();
     const inner = content.current?.getBoundingClientRect();
     if (!outer || !inner) return;
-    const markerLeft =
-      outer.right - inner.right >= MARGIN_MIN_PX
-        ? inner.right - outer.left + MARGIN_OFFSET_PX
-        : null;
+    const markerLeft = computeMarkerLeft(outer, inner);
     setLayout((current) => ({ markerLeft, revision: current.revision + 1 }));
   }, []);
   useResizeObserver({ ref: frame, onResize: measure });

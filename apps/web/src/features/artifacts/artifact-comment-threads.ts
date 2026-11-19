@@ -82,6 +82,32 @@ export function orderAnchored(
     .map(({ thread }) => thread);
 }
 
+export function findThreadForComment(
+  groups: CommentGroups,
+  commentId: string,
+): { thread: CommentThread; resolved: boolean } | null {
+  const matches = (thread: CommentThread) =>
+    thread.root.id === commentId || thread.replies.some((reply) => reply.id === commentId);
+  for (const thread of groups.resolved) if (matches(thread)) return { thread, resolved: true };
+  for (const thread of groups.whole) if (matches(thread)) return { thread, resolved: false };
+  for (const thread of groups.anchored) if (matches(thread)) return { thread, resolved: false };
+  return null;
+}
+
+export const canSaveCommentEdit = ({
+  body,
+  hasImages,
+  tooLong,
+  hasMentionError,
+  saving,
+}: {
+  body: string;
+  hasImages: boolean;
+  tooLong: boolean;
+  hasMentionError: boolean;
+  saving: boolean;
+}) => (body.trim() !== "" || hasImages) && !tooLong && !hasMentionError && !saving;
+
 export function commentsCap(total: number): string {
   return total > 999 ? "999+" : String(total);
 }

@@ -20,9 +20,10 @@ import {
 } from "./artifact-gallery-filters";
 import { GalleryList } from "./artifact-gallery-list";
 import {
-  hasFilters,
+  emptyGalleryState,
   initialFilters,
   useGalleryView,
+  type EmptyGalleryState,
   type GalleryFilters,
 } from "./artifact-gallery-model";
 import { ArtifactIcon } from "./artifact-parts";
@@ -69,8 +70,7 @@ export function ArtifactGalleryPage() {
     setFilters((previous) => ({ ...previous, ...patch }));
   const gallery = useGallery(filters);
   const cards = gallery.data?.pages.flatMap((page) => page.artifacts) ?? [];
-  const searching = filters.query !== "";
-  const filtering = hasFilters(filters);
+  const emptyState = emptyGalleryState(filters);
   const clearAll = () => {
     setTyped("");
     setFilters({ ...initialFilters, sort: filters.sort });
@@ -112,9 +112,7 @@ export function ArtifactGalleryPage() {
           </Notice>
         ) : cards.length === 0 ? (
           <EmptyGallery
-            searching={searching}
-            filtering={filtering}
-            related={filters.related}
+            state={emptyState}
             onClear={clearAll}
             onSeeAll={() => update({ related: false })}
           />
@@ -181,29 +179,36 @@ function Notice({ title, children }: { title: string; children?: React.ReactNode
 }
 
 function EmptyGallery({
-  searching,
-  filtering,
-  related,
+  state,
   onClear,
   onSeeAll,
 }: {
-  searching: boolean;
-  filtering: boolean;
-  related: boolean;
+  state: EmptyGalleryState;
   onClear: () => void;
   onSeeAll: () => void;
 }) {
-  if (!searching && !filtering) return <Notice title={m.ag_empty()} />;
-  if (related && !searching && !filtering) return <Notice title={m.ag_empty_related()} />;
+  if (state.kind === "empty") return <Notice title={m.ag_empty()} />;
+  if (state.kind === "empty-related")
+    return (
+      <Notice title={m.ag_empty_related()}>
+        <Button size="sm" color="link-color" onClick={onSeeAll}>
+          {m.ag_see_all()}
+        </Button>
+      </Notice>
+    );
   return (
-    <Notice title={searching ? m.ag_no_match_search() : m.ag_no_match_filters()}>
-      {related && !searching && (
+    <Notice
+      title={state.kind === "no-match-search" ? m.ag_no_match_search() : m.ag_no_match_filters()}
+    >
+      {state.kind === "no-match-filters" && state.showSeeAll && (
         <Button size="sm" color="link-color" onClick={onSeeAll}>
           {m.ag_see_all()}
         </Button>
       )}
       <Button size="sm" color="secondary" iconLeading={XClose} onClick={onClear}>
-        {searching && !filtering ? m.ag_clear_search() : m.ag_clear_filters()}
+        {state.kind === "no-match-search" && state.clearKind === "search"
+          ? m.ag_clear_search()
+          : m.ag_clear_filters()}
       </Button>
     </Notice>
   );

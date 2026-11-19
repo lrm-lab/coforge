@@ -77,6 +77,17 @@ declare module "@tanstack/react-router" {
   }
 }
 
+export type ArtifactPageSearch = {
+  review?: string | undefined;
+  comment?: string | undefined;
+  version?: number | undefined;
+};
+
+export const clearReviewSearch = (previous: ArtifactPageSearch): ArtifactPageSearch => ({
+  ...previous,
+  review: undefined,
+});
+
 export const galleryEntryState = { artifactFrom: "gallery" } as const;
 
 export function useArrivedFromGallery(): boolean {

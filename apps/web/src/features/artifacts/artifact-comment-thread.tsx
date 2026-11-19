@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   CornerUpLeft,
@@ -8,16 +8,17 @@ import {
   Trash01,
   CheckCircle,
 } from "@untitledui/icons";
+import { COMMENT_BODY_MAX } from "@lrm/coforge-sdk/agent";
 
 import { Badge } from "#src/components/base/badges/badges";
 import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
-import { TextArea } from "#src/components/base/textarea/textarea";
 import { ConfirmDialog } from "#src/components/ui/confirm-dialog";
 import { submitOnModEnter } from "#src/components/ui/dialog-form-keys";
 import { RelativeTime } from "#src/components/ui/relative-time";
 import { useAppToast } from "#src/components/ui/toast";
+import { ComposerField, focusDraftEnd } from "#src/features/conversations/composer-field";
 import type { ChipMention } from "#src/features/conversations/message-reference-chips";
 import { MessageBody } from "#src/features/conversations/message-body";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
@@ -25,6 +26,7 @@ import { cn } from "#src/lib/utils";
 import {
   COMMENT_AUTHOR_CLASS,
   COMMENT_BODY_CLASS,
+  COMMENT_FIELD_CLASS,
   COMMENT_FLASH_CLASS,
   COMMENT_META_CLASS,
   COMMENT_ROW_CLASS,
@@ -40,8 +42,12 @@ import { commentImageUrl } from "./artifact-comment-images";
 import { syncOwnComments, type ArtifactCommentView } from "./artifact-comment-queries";
 import { CommentAnchorLine } from "./artifact-comment-anchor";
 import { CommentAuthorAvatar } from "./artifact-comment-avatar";
-import type { CommentThread } from "./artifact-comment-threads";
-import type { CommentReplyTarget } from "./artifact-comment-composer";
+import { canSaveCommentEdit, type CommentThread } from "./artifact-comment-threads";
+import {
+  commentWriteFailure,
+  useCommentDraftText,
+  type CommentReplyTarget,
+} from "./artifact-comment-composer";
 
 type Live = Exclude<ArtifactCommentView, { deleted: true }>;
 
@@ -78,11 +84,10 @@ function useCommentActions(artifactId: string) {
         await reopenArtifactComment({ data: { artifactId, commentId } });
         await sync("reopened", commentId);
       }, m.av_cm_reopened_toast()),
-    edit: (commentId: string, body: string) =>
-      attempt(async () => {
-        await editArtifactComment({ data: { artifactId, commentId, body } });
-        await sync("edited", commentId);
-      }),
+    edit: async (commentId: string, body: string) => {
+      await editArtifactComment({ data: { artifactId, commentId, body } });
+      await sync("edited", commentId);
+    },
     remove: async (commentId: string) => {
       await deleteArtifactComment({ data: { artifactId, commentId } });
       await sync("deleted", commentId);
@@ -104,7 +109,7 @@ export function CommentThreadView({
     <li
       data-comment-thread={thread.root.id}
       className={cn(
-        "overflow-hidden rounded-lg border border-secondary bg-primary transition-colors duration-300",
+        "rounded-lg border border-secondary bg-primary transition-colors duration-300 [&>ul>li:first-child>article]:rounded-t-lg [&>ul>li:last-child>article]:rounded-b-lg",
         context.flashId === thread.root.id && COMMENT_FLASH_CLASS,
       )}
     >
@@ -228,7 +233,9 @@ function CommentRow({
         )}
         {editing ? (
           <CommentEditor
+            artifactId={context.artifactId}
             initial={comment.body}
+            hasImages={comment.images.length > 0}
             onCancel={() => setEditing(false)}
             onSave={async (body) => {
               await actions.edit(comment.id, body);
@@ -236,15 +243,13 @@ function CommentRow({
             }}
           />
         ) : (
-          <>
-            {comment.body && (
-              <div className={cn(COMMENT_BODY_CLASS, "message-text min-w-0")}>
-                <MessageBody body={comment.body} plainMentions={context.plainMentions} />
-              </div>
-            )}
-            <CommentImages artifactId={context.artifactId} images={comment.images} />
-          </>
+          comment.body && (
+            <div className={cn(COMMENT_BODY_CLASS, "message-text min-w-0")}>
+              <MessageBody body={comment.body} plainMentions={context.plainMentions} />
+            </div>
+          )
         )}
+        <CommentImages artifactId={context.artifactId} images={comment.images} />
         {resolved && comment.resolvedBy && comment.resolvedAt && (
           <p className="text-xs text-tertiary">
             {m.av_cm_resolved_by({ name: comment.resolvedBy.name })} ·{" "}
@@ -313,59 +318,99 @@ function CommentRow({
 }
 
 export function CommentEditor({
+  artifactId,
   initial,
+  hasImages,
   onCancel,
   onSave,
 }: {
+  artifactId: string;
   initial: string;
+  hasImages: boolean;
   onCancel: () => void;
   onSave: (body: string) => Promise<void>;
 }) {
-  const [text, setText] = useState(initial);
+  const { body, wireBody, changeBody, completion, tooLong, mentionError } = useCommentDraftText(
+    artifactId,
+    initial,
+  );
   const [saving, setSaving] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const { textareaRef } = completion;
+
+  useEffect(() => {
+    focusDraftEnd(textareaRef.current);
+  }, [textareaRef]);
+
+  const canSave = canSaveCommentEdit({
+    body,
+    hasImages,
+    tooLong,
+    hasMentionError: mentionError !== null,
+    saving,
+  });
+
+  async function save() {
+    if (!canSave) return;
+    setSaving(true);
+    setFailure(null);
+    try {
+      await onSave(wireBody);
+    } catch (error) {
+      setFailure(commentWriteFailure(error, m.av_cm_action_failed()));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const error = tooLong
+    ? m.av_cm_err_too_long({ count: COMMENT_BODY_MAX })
+    : (mentionError ?? failure);
+
   return (
     <form
-      onKeyDown={submitOnModEnter}
-      className="flex flex-col gap-2"
-      onSubmit={async (event) => {
-        event.preventDefault();
-        if (!text.trim() || saving) return;
-        setSaving(true);
-        try {
-          await onSave(text);
-        } finally {
-          setSaving(false);
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          onCancel();
+          return;
         }
+        submitOnModEnter(event);
+      }}
+      className="flex flex-col gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save();
       }}
     >
-      <TextArea
-        autoFocus
-        size="sm"
-        value={text}
-        rows={3}
-        maxLength={8000}
-        aria-label={m.av_cm_edit()}
-        isDisabled={saving}
-        onChange={setText}
-        textAreaClassName="resize-y p-2"
-        onTextAreaKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.stopPropagation();
-            onCancel();
-          }
-        }}
-      />
+      <div className={COMMENT_FIELD_CLASS}>
+        <ComposerField
+          completion={completion}
+          value={body}
+          onValueChange={(value) => {
+            changeBody(value);
+            if (failure !== null) setFailure(null);
+          }}
+          label={m.av_cm_edit()}
+          placeholder={m.av_cm_placeholder()}
+          onSubmit={() => void save()}
+          sendDisabled={!canSave}
+          isDisabled={saving}
+          mentionGroups="kind"
+          actions={() => null}
+        />
+      </div>
+      {error && (
+        <p role="alert" className="text-xs text-error-primary">
+          {error}
+        </p>
+      )}
       <div className="flex justify-end gap-2">
         <Button type="button" size="sm" color="secondary" onClick={onCancel}>
           {m.av_cm_edit_cancel()}
         </Button>
-        <Button
-          size="sm"
-          color="primary"
-          type="submit"
-          isDisabled={!text.trim()}
-          isLoading={saving}
-        >
+        <Button size="sm" color="primary" type="submit" isDisabled={!canSave} isLoading={saving}>
           {m.av_cm_edit_save()}
         </Button>
       </div>

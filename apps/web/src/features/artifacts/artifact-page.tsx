@@ -134,7 +134,7 @@ function ArtifactPageFor({
   const [finding, setFinding] = useState(false);
   const [panel, setPanel] = useState<ArtifactPanelName | null>(null);
   const docked = useBreakpoint("sm");
-  const commentMode = useCommentMode(setPanel, docked);
+  const commentMode = useCommentMode(setPanel);
   const [places, setPlaces] = useState<PublishedPlaces>(null);
   const [holds] = useState(createComposerHolds);
   const review = useReviewFilter(artifactId, reviewId, () => onClearReview?.());
@@ -289,6 +289,7 @@ function ArtifactPageFor({
       find: () => setFinding(true),
       "copy-link": () => void copyLink(),
       send: () => setSendingTo(true),
+      comments: () => setPanel("comments"),
       files: () => setPanel("files"),
       delete: () => setDeleting(true),
     },

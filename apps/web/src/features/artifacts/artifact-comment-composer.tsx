@@ -93,6 +93,67 @@ export function useKnownMentionables(artifactId: string) {
   return useMentionables(artifactId).known;
 }
 
+export function useCommentDraftText(artifactId: string, initial = "") {
+  const { offered } = useMentionables(artifactId);
+  const [body, setBody] = useState(initial);
+  const [pins, setPins] = useState<readonly MentionPin[]>([]);
+
+  const changeBody = (value: string) => {
+    setBody(value);
+    setPins((current) => pinsInText(value, current));
+  };
+  const resetBody = (value = "") => {
+    setBody(value);
+    setPins([]);
+  };
+  const completion = useReferenceCompletion({
+    mentionables: offered?.people,
+    mentionOutsiders: offered?.agents,
+    value: body,
+    onChange: changeBody,
+    onPickMention: (mention) =>
+      setPins((current) => addMentionPin(current, mentionPinFor(mention))),
+  });
+
+  const wire = useMemo(() => rewriteMentionPins(body, pins), [body, pins]);
+  const tooLong = wire.body.length > COMMENT_BODY_MAX;
+  const mentions = useMemo(
+    () => [...new Set(readMessageReferences(wire.body).candidates.handles)].sort().join(","),
+    [wire.body],
+  );
+  const settledMentions = useDebouncedValue(mentions, AUDIENCE_DELAY_MS);
+  const audience = useQuery({
+    queryKey: [...ARTIFACTS_KEY, "audience", artifactId, settledMentions],
+    queryFn: () => previewArtifactCommentAudience({ data: { artifactId, body: wire.body } }),
+    enabled: !tooLong && settledMentions === mentions,
+    placeholderData: keepPreviousData,
+    staleTime: 5_000,
+  });
+
+  const blocked =
+    mentions !== "" && audience.data && !audience.isPlaceholderData && settledMentions === mentions
+      ? audience.data
+      : undefined;
+  const mentionError = blocked?.tooMany
+    ? m.av_cm_err_too_many_mentions({ count: COMMENT_MENTIONS_MAX })
+    : blocked && blocked.cannotSee.length > 0
+      ? m.av_cm_err_cannot_see({
+          names: formatList(blocked.cannotSee.map((handle) => `@${handle}`)),
+        })
+      : null;
+
+  return {
+    body,
+    wireBody: wire.body,
+    changeBody,
+    resetBody,
+    completion,
+    audience,
+    tooLong,
+    mentionError,
+  };
+}
+
 const placement = (target: ComposerTarget) => {
   if (target.kind === "reply") return { replyTo: target.id };
   if (target.kind === "anchor") return { path: target.path, anchor: target.anchor };
@@ -115,31 +176,18 @@ export function ArtifactCommentComposer({
 }) {
   const queryClient = useQueryClient();
   const workspaceSlug = useWorkspaceSlug();
-  const { offered } = useMentionables(artifactId);
   const drafts = useCommentDrafts();
   const { create: createDraft } = useCommentDraftActions();
   const { version: shownVersion } = useArtifactCommenting();
   const [saving, setSaving] = useState(false);
-  const [body, setBody] = useState(target.kind === "anchor" ? (target.suggestion ?? "") : "");
-  const [pins, setPins] = useState<readonly MentionPin[]>([]);
+  const { body, wireBody, changeBody, resetBody, completion, audience, tooLong, mentionError } =
+    useCommentDraftText(artifactId, target.kind === "anchor" ? (target.suggestion ?? "") : "");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [sending, setSending] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const attempt = useRef({ signature: "", key: "" });
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const changeBody = (value: string) => {
-    setBody(value);
-    setPins((current) => pinsInText(value, current));
-  };
-  const completion = useReferenceCompletion({
-    mentionables: offered?.people,
-    mentionOutsiders: offered?.agents,
-    value: body,
-    onChange: changeBody,
-    onPickMention: (mention) =>
-      setPins((current) => addMentionPin(current, mentionPinFor(mention))),
-  });
   useEffect(() => {
     if (focusRequest > 0) completion.textareaRef.current?.focus();
   }, [focusRequest, completion.textareaRef]);
@@ -148,30 +196,7 @@ export function ArtifactCommentComposer({
     if (replyId !== null) completion.textareaRef.current?.focus();
   }, [replyId, completion.textareaRef]);
 
-  const wire = useMemo(() => rewriteMentionPins(body, pins), [body, pins]);
-  const tooLong = wire.body.length > COMMENT_BODY_MAX;
-  const mentions = useMemo(
-    () => [...new Set(readMessageReferences(wire.body).candidates.handles)].sort().join(","),
-    [wire.body],
-  );
-  const settledMentions = useDebouncedValue(mentions, AUDIENCE_DELAY_MS);
-  const audience = useQuery({
-    queryKey: [...ARTIFACTS_KEY, "audience", artifactId, settledMentions],
-    queryFn: () => previewArtifactCommentAudience({ data: { artifactId, body: wire.body } }),
-    enabled: !tooLong,
-    placeholderData: keepPreviousData,
-    staleTime: 5_000,
-  });
-
   const uploading = attachments.some((attachment) => attachment.state === "uploading");
-  const blocked = audience.data && settledMentions === mentions ? audience.data : undefined;
-  const mentionError = blocked?.tooMany
-    ? m.av_cm_err_too_many_mentions({ count: COMMENT_MENTIONS_MAX })
-    : blocked && blocked.cannotSee.length > 0
-      ? m.av_cm_err_cannot_see({
-          names: formatList(blocked.cannotSee.map((handle) => `@${handle}`)),
-        })
-      : null;
   const ready = attachments.flatMap((attachment) =>
     attachment.state === "ready" && attachment.sha256 ? [attachment.sha256] : [],
   );
@@ -224,8 +249,7 @@ export function ArtifactCommentComposer({
 
   function clear() {
     for (const attachment of attachments) URL.revokeObjectURL(attachment.previewUrl);
-    setBody("");
-    setPins([]);
+    resetBody();
     setAttachments([]);
   }
 
@@ -236,7 +260,7 @@ export function ArtifactCommentComposer({
     try {
       await createDraft({
         version: target.kind === "reply" ? shownVersion : target.version,
-        body: wire.body,
+        body: wireBody,
         ...placement(target),
         ...(ready.length ? { images: ready } : {}),
       });
@@ -255,7 +279,7 @@ export function ArtifactCommentComposer({
     setSending(true);
     setFailure(null);
     const comment = {
-      body: wire.body,
+      body: wireBody,
       ...placement(target),
       ...(ready.length ? { images: ready } : {}),
     };
@@ -275,7 +299,7 @@ export function ArtifactCommentComposer({
       onPosted();
       await syncOwnComments(queryClient, artifactId, "posted", [id]);
     } catch (error) {
-      setFailure(sendFailure(error));
+      setFailure(commentWriteFailure(error, m.av_cm_err_send()));
     } finally {
       setSending(false);
       completion.textareaRef.current?.focus();
@@ -436,7 +460,7 @@ function ComposerChip({
   );
 }
 
-function sendFailure(error: unknown): string {
+export function commentWriteFailure(error: unknown, fallback: string): string {
   if (isAppError(error)) {
     if (error.errorId === "artifact-too-many-mentions")
       return m.av_cm_err_too_many_mentions({ count: COMMENT_MENTIONS_MAX });
@@ -450,5 +474,5 @@ function sendFailure(error: unknown): string {
     if (error.errorId === ARTIFACT_RATE_LIMITED_ERROR_ID)
       return m.av_cm_err_rate_limited({ seconds: Number(error.details?.retryAfterSeconds ?? 60) });
   }
-  return m.av_cm_err_send();
+  return fallback;
 }

@@ -9,6 +9,7 @@ import {
   Edit03,
   Link01,
   LinkExternal01,
+  MessageSquare01,
   SearchLg,
   Send01,
   Stars01,
@@ -31,6 +32,7 @@ export type MoreAction =
   | "open-chatgpt"
   | "open-claude"
   | "rename"
+  | "comments"
   | "files"
   | "download"
   | "follow"
@@ -68,7 +70,7 @@ export function ArtifactMoreMenu({
             <Dropdown.Item id="find" icon={SearchLg} label={m.doc_page_find()} />
           )}
           {phone && <Dropdown.Item id="copy-link" icon={Link01} label={m.doc_copy_link()} />}
-          {visibility.linkAvailable && (
+          {visibility.canEmbed && (
             <Dropdown.Item id="embed" icon={Code01} label={m.av_menu_embed()} />
           )}
           <Dropdown.Item id="send" icon={Send01} label={m.doc_send_action()} />
@@ -115,6 +117,7 @@ export function ArtifactMoreMenu({
               />
             </Dropdown.SubmenuPopover>
           </Dropdown.SubmenuTrigger>
+          <Dropdown.Item id="comments" icon={MessageSquare01} label={m.av_cm_title()} />
           <Dropdown.Item id="files" icon={Copy01} label={m.av_menu_files()} />
           <Dropdown.Item
             id="download"

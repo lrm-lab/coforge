@@ -20,6 +20,7 @@ import { ArtifactSidePanel } from "./artifact-side-panel";
 import { CommentThreadView, type CommentContext } from "./artifact-comment-thread";
 import { useArtifactCommenting, useCommentPlaces, useCommentRequests } from "./artifact-commenting";
 import {
+  findThreadForComment,
   orderAnchored,
   versionSections,
   type CommentGroups,
@@ -78,14 +79,20 @@ export function ArtifactCommentPanel({
   const empty = sections.length === 0 && groups.resolved.length === 0 && drafts.drafts.length === 0;
   useEffect(() => {
     if (focus === null) return;
+    const match = findThreadForComment(groups, focus);
+    if (match?.resolved && !resolvedOpen) {
+      setResolvedOpen(true);
+      return;
+    }
+    const targetId = match ? match.thread.root.id : focus;
     const thread = listElement.current?.querySelector(
-      `[data-comment-thread="${CSS.escape(focus)}"]`,
+      `[data-comment-thread="${CSS.escape(targetId)}"]`,
     );
     if (!thread) return;
     consumeFocus();
     thread.scrollIntoView({ block: "nearest" });
-    flashThread(focus);
-  }, [focus, groups, consumeFocus, flashThread]);
+    flashThread(targetId);
+  }, [focus, groups, resolvedOpen, consumeFocus, flashThread]);
   const filePath = openPath !== null && fileDismissed !== openPath ? openPath : null;
   const composerTarget: ComposerTarget = replyTo
     ? { kind: "reply", ...replyTo, onCancel: () => setReplyTo(null) }

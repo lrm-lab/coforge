@@ -35,6 +35,16 @@ export function useArtifactLinkSharing(artifactId: string, enabled: boolean): Ar
   };
 }
 
+export const canCopyEmbed = ({
+  linkAvailable,
+  canChange,
+  hasLink,
+}: {
+  linkAvailable: boolean;
+  canChange: boolean;
+  hasLink: boolean;
+}) => linkAvailable && (canChange || hasLink);
+
 const escapeAttribute = (value: string) =>
   value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 

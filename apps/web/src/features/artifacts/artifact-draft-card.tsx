@@ -137,7 +137,9 @@ export function DraftCard({
       )}
       {editing ? (
         <CommentEditor
+          artifactId={artifactId}
           initial={draft.body}
+          hasImages={hasImages(draft)}
           onCancel={() => setEditing(false)}
           onSave={async (body) => {
             await actions.edit(draft, body);
@@ -145,29 +147,27 @@ export function DraftCard({
           }}
         />
       ) : (
-        <>
-          {draft.body && (
-            <div className={cn(COMMENT_BODY_CLASS, "message-text min-w-0")}>
-              <MessageBody body={draft.body} plainMentions={plainMentions} />
-            </div>
-          )}
-          {hasImages(draft) && (
-            <ul className="flex flex-wrap gap-2">
-              {draft.images.map((image) => (
-                <li key={image.position}>
-                  <img
-                    src={commentDraftImageUrl(workspaceSlug, artifactId, draft.id, image.position)}
-                    alt={m.av_cm_image_alt()}
-                    width={image.width}
-                    height={image.height}
-                    loading="lazy"
-                    className="max-h-40 w-auto max-w-full rounded-md border border-secondary object-contain"
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
+        draft.body && (
+          <div className={cn(COMMENT_BODY_CLASS, "message-text min-w-0")}>
+            <MessageBody body={draft.body} plainMentions={plainMentions} />
+          </div>
+        )
+      )}
+      {hasImages(draft) && (
+        <ul className="flex flex-wrap gap-2">
+          {draft.images.map((image) => (
+            <li key={image.position}>
+              <img
+                src={commentDraftImageUrl(workspaceSlug, artifactId, draft.id, image.position)}
+                alt={m.av_cm_image_alt()}
+                width={image.width}
+                height={image.height}
+                loading="lazy"
+                className="max-h-40 w-auto max-w-full rounded-md border border-secondary object-contain"
+              />
+            </li>
+          ))}
+        </ul>
       )}
       {refusal && (
         <p role="alert" className="text-xs text-error-primary">

@@ -9,7 +9,7 @@ import { useWorkspaceName } from "#src/features/workspaces/workspace-route";
 import { lossChanged, narrowRefusalMessage } from "./artifact-narrow-refusal";
 import { ARTIFACTS_KEY } from "./artifact-queries";
 import { useScopeLabels, visibilityIcon, type VisibilityChoice } from "./artifact-scope";
-import type { ArtifactLinkSharing } from "./artifact-link-sharing";
+import { canCopyEmbed, type ArtifactLinkSharing } from "./artifact-link-sharing";
 import { loadArtifactAccessLoss, setArtifactAccess } from "./artifacts.functions";
 
 type Confirmation = { choice: VisibilityChoice; narrowing: boolean; linkOff: boolean };
@@ -180,6 +180,11 @@ export function useArtifactVisibility({
     canChange,
     narrowable,
     linkAvailable: link.available,
+    canEmbed: canCopyEmbed({
+      linkAvailable: link.available,
+      canChange,
+      hasLink: link.url !== null,
+    }),
   };
 }
 
