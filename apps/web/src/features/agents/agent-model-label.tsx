@@ -1,6 +1,5 @@
 import { ClientOnly } from "@tanstack/react-router";
 
-import { Tooltip, TooltipTrigger } from "#src/components/base/tooltip/tooltip";
 import { useShowAgentModel } from "#src/features/settings/show-agent-model";
 import { useAgentDescription, useAgentModel } from "./agent-models";
 import { useCurrentWorkspaceId } from "./workspace-agents-realtime";
@@ -26,7 +25,7 @@ function AgentModelLabelContent({ agentId, seenAt }: { agentId: string; seenAt: 
   return <AgentModelText agentId={agentId} workspaceId={workspaceId} seenAt={seenAt} />;
 }
 
-/** The model itself; a long id is cut, and the full one is in the tooltip on hover or focus. */
+/** The model itself, as plain text; a long id is cut. */
 function AgentModelText({
   agentId,
   workspaceId,
@@ -39,11 +38,7 @@ function AgentModelText({
   const model = useAgentModel(workspaceId, agentId, seenAt);
   if (!model) return null;
   return (
-    <Tooltip title={model}>
-      <TooltipTrigger className="max-w-48 min-w-0 shrink-[8] cursor-default truncate rounded-sm text-xs text-tertiary outline-focus-ring focus-visible:outline-2">
-        {model}
-      </TooltipTrigger>
-    </Tooltip>
+    <span className="max-w-48 min-w-0 shrink-[8] truncate text-xs text-tertiary">{model}</span>
   );
 }
 

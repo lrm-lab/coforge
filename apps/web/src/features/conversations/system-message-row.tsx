@@ -85,8 +85,8 @@ export function SystemMessageRow({
       {/* The trigger is itself the flex item, so `min-w-0` governs it and `truncate` clips;
           a wrapper between this line and the text let the stream scroll sideways on a
           phone. A plain span gives React Aria nothing to hover, so the full text never
-          showed. Out of the tab order, as in `agent-model-label.tsx`: a stop per notice
-          would crowd the stream, and the text is read whole whatever the width cuts. */}
+          showed. Out of the tab order: a stop per notice would crowd the stream, and the
+          text is read whole whatever the width cuts. */}
       <Tooltip title={text}>
         <TooltipTrigger
           excludeFromTabOrder

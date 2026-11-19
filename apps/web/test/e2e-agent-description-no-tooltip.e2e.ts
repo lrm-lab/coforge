@@ -8,9 +8,8 @@ import { devBrowserWorkspace } from "./helpers/browser-e2e";
 import { chromePath, launchHeadlessChrome, until } from "./helpers/headless-chrome";
 
 /**
- * Task #27 (Frank): an Agent's description beside its name in the message stream is plain text,
- * cut to the room it has; hovering it opens no tooltip. The model label beside it keeps its
- * tooltip (only the description lost it), so hovering the model still names it.
+ * Task #27 (Frank): an Agent's description and model beside its name in the message stream are
+ * plain text, cut to the room they have; hovering either opens no tooltip.
  *
  * Opt-in like the other browser E2Es: the real local Web and a headless Chrome over DevTools. The
  * Agent and channel are seeded per run and removed after it. Light, dark and phone frames, with
@@ -132,9 +131,8 @@ test("an Agent's description in the message stream opens no tooltip on hover", a
     }
     await theme(false);
 
-    // The model beside it still names itself on hover.
     await until(() => page.evaluate<boolean>(`${model} != null`));
-    expect(await hoverTooltip(model)).toBe(MODEL);
+    expect(await hoverTooltip(model)).toBeNull();
     await shot("desktop-light-model-hover");
 
     await viewport(390, 844, true);
