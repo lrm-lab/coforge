@@ -2,6 +2,12 @@ import { getLogger } from "@logtape/logtape";
 import { parseRuntimeProvider, thrownMessage } from "@lrm/coforge-sdk/internal";
 import { createCodeAgentProvider } from "#src/code-agent/registry";
 import { AgentContextLedger } from "#src/persistence/agent-context-ledger";
+import {
+  AgentStandingPromptLedger,
+  type StandingPromptRecord,
+  type StandingPromptRecordInput,
+  type StandingPromptWriteResult,
+} from "#src/persistence/agent-standing-prompt-ledger";
 import { readMeta, writeMeta } from "#src/persistence/agent-state-db";
 import type { AgentStateDb } from "#src/persistence/agent-state-db";
 
@@ -145,6 +151,39 @@ export class AgentContexts {
     if (!this.#reportsCompaction.get(agentId)) return undefined;
     // Not kept: the database handle is closed when the Agent stops or is forgotten.
     return new AgentContextLedger(this.stateDb(agentId).database);
+  }
+
+  standingPrompt(agentId: string): StandingPromptRecord | undefined {
+    try {
+      return new AgentStandingPromptLedger(this.stateDb(agentId).database).read();
+    } catch {
+      return undefined;
+    }
+  }
+
+  recordStandingPrompt(
+    agentId: string,
+    input: StandingPromptRecordInput & { resumed?: boolean },
+  ): StandingPromptWriteResult | undefined {
+    try {
+      const result = new AgentStandingPromptLedger(this.stateDb(agentId).database).record(input);
+      if (result.changed && result.previous) {
+        logger.info("Standing prompt changed for Agent session", {
+          event: "agent.runtime.standing_prompt_changed",
+          agent_id: agentId,
+          provider: input.provider,
+          ...(result.record.sessionId ? { session_id: result.record.sessionId } : {}),
+          resumed: input.resumed === true,
+          previous_hash: result.previous.hash,
+          current_hash: result.record.hash,
+          previous_bytes: result.previous.bytes,
+          current_bytes: result.record.bytes,
+        });
+      }
+      return result;
+    } catch {
+      return undefined;
+    }
   }
 
   /** Current context generation from `AgentContextLedger.generation()`, falling back to in-memory

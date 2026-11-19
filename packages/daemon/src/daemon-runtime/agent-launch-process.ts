@@ -162,6 +162,7 @@ export async function launchAgentProcess(
     const earlyCrashWatch = new ResumedEarlyCrashWatch();
     launchTagToken = crypto.randomUUID();
     setAgentLaunchTag(agentId, launchTagToken);
+    let launchedInstructions: string | undefined;
     const runtime = await ports.agentProcessManager.start(
       agentId,
       {
@@ -190,6 +191,9 @@ export async function launchAgentProcess(
         sessionMode: recycled ? "create" : reference.sessionMode,
         assignedSkillPacks: parseAssignedSkillPacks(launchConfig.assignedSkillPacks),
         identity: launchConfig.identity,
+        onInstructions: (instructions) => {
+          launchedInstructions = instructions;
+        },
         serverLaunch: managedScope
           ? {
               requestId: managedScope.requestId,
@@ -200,6 +204,15 @@ export async function launchAgentProcess(
       },
     );
     timing.phase("provider_session");
+    if (launchedInstructions !== undefined) {
+      ports.contexts.recordStandingPrompt(agentId, {
+        instructions: launchedInstructions,
+        provider: config.provider,
+        sessionId: sessionIds.reportedSessionId() ?? requestedSessionId,
+        resumed:
+          resumedSessionId !== undefined && sessionIds.driverReplacedSessionId() === undefined,
+      });
+    }
     if (claimAgentLaunchTagSweep(agentId)) sweepAgentLaunchTagStrays(agentId, "launch");
     await openLaunchSessionMemory({
       agentId,

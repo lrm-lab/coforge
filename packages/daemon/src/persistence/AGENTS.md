@@ -19,4 +19,7 @@ Rules for durable local state in `src/persistence/`. They extend
 - The cursor is written row by row, and the database keeps it monotonic: a snapshot that arrives
   late never lowers a frontier, a review boundary or a read order (a target that moved to another
   conversation resets instead). `meta` holds the schema version — a database a newer build wrote
-  is refused, not migrated — and the marker that says the legacy import already ran.
+  is refused, not migrated — the marker that says the legacy import already ran, and per-Agent
+  runtime ledgers (`compactionFailures`, `contextGeneration`, and `standingPrompt`, which stores
+  only the SHA-256 hash and metadata of the last launched standing instructions, never raw prompt
+  text).

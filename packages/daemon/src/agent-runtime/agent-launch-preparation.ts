@@ -24,6 +24,7 @@ export type AgentLaunchInput = Readonly<{
   onSessionId?: AgentSessionOptions["onSessionId"];
   assignedSkillPacks?: readonly AssignedSkillPack[];
   identity?: AgentLaunchIdentity;
+  onInstructions?: (instructions: string) => void;
 }>;
 export type AgentLaunchPreparationPorts = Readonly<{
   createProvider: CodeAgentProviderFactory;
@@ -53,6 +54,7 @@ export async function prepareAgentLaunch(
     contextViewRequestLogDirectory,
     assignedSkillPacks = [],
     identity,
+    onInstructions,
   } = input;
   await mkdir(agentWorkspaceDirectory, { recursive: true, mode: 0o700 });
   const disableHostPiInjection =
@@ -85,19 +87,21 @@ export async function prepareAgentLaunch(
       }).PATH,
     );
   const extraCriticalRules = platformCriticalRules();
+  const instructions = buildCoforgeAgentInstructions({
+    agentWorkspaceDirectory,
+    agentId,
+    identity,
+    ...(extraCriticalRules.length > 0 ? { extraCriticalRules } : {}),
+    capabilities: {
+      cloudDesktop: Boolean(environment?.DISPLAY),
+    },
+  });
+  onInstructions?.(instructions);
   const options: AgentSessionOptions = {
     agentId,
     ...(runtimeId ? { runtimeId } : {}),
     agentWorkspaceDirectory,
-    instructions: buildCoforgeAgentInstructions({
-      agentWorkspaceDirectory,
-      agentId,
-      identity,
-      ...(extraCriticalRules.length > 0 ? { extraCriticalRules } : {}),
-      capabilities: {
-        cloudDesktop: Boolean(environment?.DISPLAY),
-      },
-    }),
+    instructions,
     sessionId,
     sessionMode,
     contextViewRequestLogDirectory,
