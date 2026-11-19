@@ -219,7 +219,9 @@ export function CascadeMenuProvider({
   );
 
   const getZoneForDepth = useCallback(
-    (depth: number): { parentRect: RectLike; submenuRect: RectLike; zone: SafeZoneTriangle } | null => {
+    (
+      depth: number,
+    ): { parentRect: RectLike; submenuRect: RectLike; zone: SafeZoneTriangle } | null => {
       if (openPathRef.current[depth] === undefined) return null;
       const apex = getSafeZoneApex(pointerTrailRef.current);
       if (!apex) return null;
@@ -291,7 +293,12 @@ export function CascadeMenuProvider({
           const stillInZone =
             current !== null &&
             latestZone !== null &&
-            isPointInSafeZone(current, latestZone.parentRect, latestZone.submenuRect, latestZone.zone);
+            isPointInSafeZone(
+              current,
+              latestZone.parentRect,
+              latestZone.submenuRect,
+              latestZone.zone,
+            );
           const elapsed = Date.now() - pending.startedAt;
           if (!stillInZone || elapsed >= CASCADE_MENU_TIMINGS.SAFE_WINDOW_MAX_MS) {
             clearSafeWindow();

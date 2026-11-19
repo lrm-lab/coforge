@@ -6,8 +6,7 @@
   --cascade-menu-quiet: #7a8491;
   --cascade-menu-chevron: #94a3b8;
   --cascade-menu-shadow:
-    0 18px 34px rgba(15, 23, 42, 0.12),
-    0 2px 4px rgba(15, 23, 42, 0.05),
+    0 18px 34px rgba(15, 23, 42, 0.12), 0 2px 4px rgba(15, 23, 42, 0.05),
     inset 0 1px 0 rgba(255, 255, 255, 0.74);
   --cascade-menu-ease-pop: cubic-bezier(0.2, 1.45, 0.35, 1);
   --cascade-menu-ease-folder: cubic-bezier(0.22, 1, 0.36, 1);
@@ -21,8 +20,7 @@
   --cascade-menu-quiet: #9a9a9a;
   --cascade-menu-chevron: #8a8a8a;
   --cascade-menu-shadow:
-    0 18px 34px rgba(0, 0, 0, 0.42),
-    0 2px 4px rgba(0, 0, 0, 0.2),
+    0 18px 34px rgba(0, 0, 0, 0.42), 0 2px 4px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 

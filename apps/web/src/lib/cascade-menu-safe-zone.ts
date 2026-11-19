@@ -64,10 +64,7 @@ const DEGENERATE_AREA_EPSILON = 1e-6;
 
 export function pointInRect(point: Point, rect: RectLike): boolean {
   return (
-    point.x >= rect.left &&
-    point.x <= rect.right &&
-    point.y >= rect.top &&
-    point.y <= rect.bottom
+    point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom
   );
 }
 
@@ -228,10 +225,7 @@ export function computeSubmenuPosition(
   }
 
   const desiredTop = rowRect.top - LEVEL_PADDING_PX - titleOffsetY;
-  const maxTop = Math.max(
-    VIEWPORT_MARGIN_PX,
-    viewportHeight - VIEWPORT_MARGIN_PX - submenuHeight,
-  );
+  const maxTop = Math.max(VIEWPORT_MARGIN_PX, viewportHeight - VIEWPORT_MARGIN_PX - submenuHeight);
   const top = Math.max(VIEWPORT_MARGIN_PX, Math.min(desiredTop, maxTop));
 
   return { left, top, side };

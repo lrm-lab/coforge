@@ -38,7 +38,9 @@ export function CascadeMenuDebugOverlay({ zones, timer }: CascadeMenuDebugOverla
 
   if (typeof document === "undefined") return null;
 
-  const elapsedMs = timer ? Math.min(timer.durationMs, Math.max(0, Math.round(now - timer.startedAt))) : 0;
+  const elapsedMs = timer
+    ? Math.min(timer.durationMs, Math.max(0, Math.round(now - timer.startedAt)))
+    : 0;
 
   return createPortal(
     <div
@@ -73,7 +75,7 @@ export function CascadeMenuDebugOverlay({ zones, timer }: CascadeMenuDebugOverla
           );
         })}
       </svg>
-      <div className="fixed right-3 bottom-3 rounded-md border border-blue-500/40 bg-neutral-950/85 px-2.5 py-1 font-mono text-[11px] text-blue-100 tabular-nums shadow-md backdrop-blur-sm">
+      <div className="fixed right-3 bottom-3 rounded-md border border-blue-500/40 bg-neutral-950/85 px-2.5 py-1 font-mono text-xs text-blue-100 tabular-nums shadow-md backdrop-blur-sm">
         {timer ? `${timer.kind}: ${elapsedMs}ms / ${timer.durationMs}ms` : "cascade: idle"}
       </div>
     </div>,

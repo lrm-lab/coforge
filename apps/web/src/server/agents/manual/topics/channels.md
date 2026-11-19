@@ -6,10 +6,10 @@ the top-level root Message prefix just like a direct-message thread. Channel thr
 in their thread, cannot nest, and use the same runtime session as every other conversation. Reuse
 the exact thread target when replying.
 
-The short id after the colon is a prefix of the root Message id, as the CLI prints it. Never copy
-placeholder IDs (such as `12345678`, `1a2b3c4d`, `<target>`, or `<id>`) from examples into real
-commands — always use actual targets and IDs returned by `coforge message check`, `read`, or
-`search`. Message ids are time-ordered, so messages sent close together can share that prefix. When
+The short id after the colon is a prefix of the root Message id, as the CLI prints it.
+Never copy placeholder IDs (such as `12345678`, `1a2b3c4d`, `<target>`, or `<id>`) from examples
+into real commands — always use actual targets and IDs returned by `coforge message check`, `read`,
+or `search`. Message ids are time-ordered, so messages sent close together can share that prefix. When
 a target, `--around` or `--message-id` is refused as an ambiguous message prefix, use the whole id
 instead (`#general:<full-uuid>`): `coforge message read` prints each message's whole id as `msg=`,
 and every place that takes a short id takes the whole one too.

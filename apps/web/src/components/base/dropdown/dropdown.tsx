@@ -500,7 +500,6 @@ const DropdownPopover = ({ title, children, ...props }: DropdownPopoverProps) =>
       ref={setLevelRef}
       data-cascade-menu="true"
       data-cascade-level={depth === 0 ? "root" : "submenu"}
-      onKeyDown={handleKeyDown}
       className={(state) =>
         cx(
           "cascade-menu-level",
@@ -509,10 +508,10 @@ const DropdownPopover = ({ title, children, ...props }: DropdownPopoverProps) =>
       }
     >
       {(renderProps) => (
-        <>
+        <div className="contents" onKeyDown={handleKeyDown}>
           {title && <div className="cascade-menu-title">{title}</div>}
           {typeof children === "function" ? children(renderProps) : children}
-        </>
+        </div>
       )}
     </AriaPopover>
   );
@@ -576,14 +575,13 @@ const DropdownSubmenuPopover = ({ className, title, children, ...props }: Dropdo
       crossOffset={wide ? -alignOffset : 0}
       data-cascade-menu="true"
       data-cascade-level="submenu"
-      onKeyDown={handleKeyDown}
       className={cx("cascade-menu-level max-w-[calc(100vw-1.5rem)]", className)}
     >
       {(renderProps) => (
-        <>
+        <div className="contents" onKeyDown={handleKeyDown}>
           {resolvedTitle && <div className="cascade-menu-title">{resolvedTitle}</div>}
           {typeof children === "function" ? children(renderProps) : children}
-        </>
+        </div>
       )}
     </AriaPopover>
   );

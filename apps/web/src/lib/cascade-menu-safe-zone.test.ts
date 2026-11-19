@@ -104,8 +104,22 @@ describe("pointer trail", () => {
 
 describe("safe zone right and left placement", () => {
   const parentRect = { left: 100, right: 320, top: 100, bottom: 300, width: 220, height: 200 };
-  const rightSubmenuRect = { left: 312, right: 532, top: 120, bottom: 280, width: 220, height: 160 };
-  const leftSubmenuRect = { left: -112, right: 108, top: 120, bottom: 280, width: 220, height: 160 };
+  const rightSubmenuRect = {
+    left: 312,
+    right: 532,
+    top: 120,
+    bottom: 280,
+    width: 220,
+    height: 160,
+  };
+  const leftSubmenuRect = {
+    left: -112,
+    right: 108,
+    top: 120,
+    bottom: 280,
+    width: 220,
+    height: 160,
+  };
 
   test("resolves submenu side even with 8px overlap", () => {
     expect(resolveSubmenuSide(parentRect, rightSubmenuRect)).toBe("right");
@@ -167,7 +181,14 @@ describe("computeSubmenuPosition", () => {
   });
 
   test("flips to the left with 8px overlap when right side lacks room", () => {
-    const nearRightParent = { left: 900, right: 1120, top: 100, bottom: 300, width: 220, height: 200 };
+    const nearRightParent = {
+      left: 900,
+      right: 1120,
+      top: 100,
+      bottom: 300,
+      width: 220,
+      height: 200,
+    };
     const nearRightRow = { left: 906, right: 1114, top: 140, bottom: 172, width: 208, height: 32 };
     const pos = computeSubmenuPosition(nearRightParent, nearRightRow, 220, 180, 1280, 800, 22);
     expect(pos.side).toBe("left");
