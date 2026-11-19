@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { artifactIdsInBody } from "#src/features/artifacts/artifact-link";
+import { encodeArtifactShortId } from "#src/features/artifacts/artifact-short-id";
 
 const a = "0b5a1f2e-1111-4a2b-9c3d-000000000001";
 const b = "0b5a1f2e-2222-4a2b-9c3d-000000000002";
@@ -29,4 +30,16 @@ test("an artifact's own page is its link, beside the conversation links before i
   const body = `Plan: https://coforge.cn/zh-CN/w/frank/artifacts/${a} and /w/frank/channel/c1?doc=${b}`;
   expect(artifactIdsInBody(body)).toEqual([a, b]);
   expect(artifactIdsInBody(`/w/frank/artifacts/not-a-uuid`)).toEqual([]);
+});
+
+test("Base58 short artifact links decode to canonical UUIDs and deduplicate against UUID links", () => {
+  const shortA = encodeArtifactShortId(a);
+  const shortB = encodeArtifactShortId(b);
+  const body = [
+    `https://coforge.cn/zh-CN/w/frank/artifacts/${shortA}`,
+    `https://coforge.cn/w/frank/artifacts/${a}`,
+    `/artifacts/${shortB}`,
+    `/a/${shortA}`,
+  ].join("\n");
+  expect(artifactIdsInBody(body)).toEqual([a, b]);
 });

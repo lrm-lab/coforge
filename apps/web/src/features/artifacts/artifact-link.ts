@@ -1,44 +1,46 @@
-const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-const DOC_PARAM = new RegExp(String.raw`(?:[?&]doc=|/w/[^\s/?#]+/artifacts/)(${UUID})\b`, "gi");
-/** A link to a page of this app: `/w/<slug>/…`, with or without a locale or an origin. */
-const APP_LINK =
-  /(?:https?:\/\/[^\s/]+)?(?:\/[a-z]{2}(?:-[A-Z]{2})?)?\/w\/[^\s/?#]+\/[^\s)\]>"']*/g;
+import { ARTIFACT_SHORT_ID_PATTERN, decodeArtifactShortId } from "./artifact-short-id";
 
-/** The documents a message body links to, in order, each once; at most `limit`. */
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const ID_TOKEN = `(?:${UUID}|${ARTIFACT_SHORT_ID_PATTERN})`;
+const DOC_PARAM = new RegExp(
+  String.raw`(?:[?&]doc=|(?:\/w\/[^\s/?#]+)?\/artifacts\/|\/a\/)(${ID_TOKEN})(?=[/?#.,;:!?)\]"'\s]|$)`,
+  "gi",
+);
+const APP_LINK =
+  /(?:https?:\/\/[^\s/]+)?(?:\/[a-z]{2}(?:-[A-Z]{2})?)?(?:\/w\/[^\s/?#]+\/[^\s)\]>"']*|\/(?:artifacts|a)\/[^\s)\]>"']*)/g;
+
+function extractArtifactId(link: string): string | undefined {
+  for (const match of link.matchAll(DOC_PARAM)) {
+    const decoded = decodeArtifactShortId(match[1]!);
+    if (decoded !== null) return decoded;
+  }
+  return undefined;
+}
+
 export function artifactIdsInBody(body: string, limit = 3): string[] {
   const ids: string[] = [];
   for (const link of body.match(APP_LINK) ?? [])
     for (const match of link.matchAll(DOC_PARAM)) {
-      const id = match[1]!.toLowerCase();
-      if (!ids.includes(id)) ids.push(id);
-      if (ids.length >= limit) return ids;
+      const id = decodeArtifactShortId(match[1]!);
+      if (id !== null && !ids.includes(id)) {
+        ids.push(id);
+        if (ids.length >= limit) return ids;
+      }
     }
   return ids;
 }
 
-/** One app link, bare, as a Markdown link's target or in `<…>`, with what stands around it. */
 const LINK_IN_TEXT = new RegExp(String.raw`(\[[^\]]*\]\(|<)?(${APP_LINK.source})(\))?`, "g");
-/** Inline code, whose text is shown as written. */
 const INLINE_CODE = /(`[^`\n]*`)/;
-/** What ends a sentence after a bare link rather than the link itself, as GFM autolinks read it. */
 const TRAILING = /[.,;:!?]+$/;
 
-/**
- * A message body as it reads once its documents' cards show (task #385, #514): a line that is only
- * a document's link says nothing its card below does not, so it reads as nothing (a body of such
- * lines alone, as nothing at all); elsewhere a bare document link reads as the document's title,
- * still a link. `titles` holds the documents whose cards show; `placeholders` those whose card
- * says only that the reader may not open it or that it was deleted: a line of one alone reads as
- * nothing too, but it has no title to read as elsewhere. Any other link, one the writer already
- * named (`[text](link)`, `<link>`), and one in code stay as written.
- */
 export function bodyWithArtifactTitles(
   body: string,
   titles: ReadonlyMap<string, string>,
   placeholders: ReadonlySet<string> = new Set(),
 ): string {
   if (titles.size === 0 && placeholders.size === 0) return body;
-  const idOf = (link: string) => [...link.matchAll(DOC_PARAM)][0]?.[1]?.toLowerCase();
+  const idOf = (link: string) => extractArtifactId(link);
   const titleOf = (link: string) => {
     const id = idOf(link);
     return id === undefined ? undefined : titles.get(id);

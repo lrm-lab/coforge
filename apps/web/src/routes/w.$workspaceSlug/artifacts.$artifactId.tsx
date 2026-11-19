@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { artifactsOnQuery } from "#src/features/artifacts/artifact-queries";
+import { decodeArtifactShortId } from "#src/features/artifacts/artifact-short-id";
 import { NotFoundPage } from "#src/features/errors/not-found-page";
 
 export const Route = createFileRoute("/w/$workspaceSlug/artifacts/$artifactId")({
@@ -20,13 +21,14 @@ export const Route = createFileRoute("/w/$workspaceSlug/artifacts/$artifactId")(
 });
 
 function ArtifactRoutePage() {
-  const { artifactId } = Route.useParams();
+  const { artifactId: rawArtifactId } = Route.useParams();
+  const artifactId = decodeArtifactShortId(rawArtifactId);
   const { review, comment, version } = Route.useSearch();
   const navigate = Route.useNavigate();
   const arrival = useRouterState({ select: (state) => state.location.state.__TSR_key });
   const on = useQuery(artifactsOnQuery(useCurrentWorkspaceId()));
   if (on.isPending) return null;
-  if (on.data === false) return <NotFoundPage />;
+  if (on.data === false || artifactId === null) return <NotFoundPage />;
   return (
     <ArtifactPage
       artifactId={artifactId}

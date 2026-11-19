@@ -1,5 +1,6 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { artifactPresenceChannel } from "#src/features/artifacts/artifact-presence-channel";
+import { encodeArtifactShortId } from "#src/features/artifacts/artifact-short-id";
 import { actorNames } from "./artifact-actor-names.server";
 import { artifactHomeConversationId } from "./artifact-access.server";
 import type { ArtifactOrigin } from "./artifact-reads.server";
@@ -21,7 +22,7 @@ export async function artifactWebUrl(
   });
   if (!workspace?.slug) return null;
   const origin = appOrigin?.() ?? artifactApplicationOrigin() ?? "";
-  return `${origin}/w/${encodeURIComponent(workspace.slug)}/artifacts/${artifactId}`;
+  return `${origin}/w/${encodeURIComponent(workspace.slug)}/artifacts/${encodeArtifactShortId(artifactId)}`;
 }
 
 async function conversationTargetLabel(

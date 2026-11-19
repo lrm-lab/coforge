@@ -8,6 +8,7 @@ import { productionArtifacts } from "#src/server/artifacts/artifact-composition.
 import { agentWrites } from "./helpers/artifact-agent-writes";
 import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { artifactPageOrigin } from "#src/server/artifacts/artifact-sandbox-config.server";
+import { encodeArtifactShortId } from "#src/features/artifacts/artifact-short-id";
 import { artifactChrome, artifactChromeReady } from "./helpers/artifact-chrome";
 import { browserSession, localBrowserE2e } from "./helpers/browser-e2e";
 
@@ -145,7 +146,7 @@ test("an artifact's public link: turned on from the pill, served to a visitor, t
 
     await browser("open", pageOf(doc.id));
     await browser("wait", "--fn", artifactChromeReady);
-    expect(await copiedLink()).toBe(pageOf(doc.id));
+    expect(await copiedLink()).toBe(pageOf(encodeArtifactShortId(doc.id)));
     const docUrl = await turnOn(doc.id);
     expect(await copiedLink()).toBe(docUrl);
     const served = await fetch(docUrl, { redirect: "manual" });
@@ -162,7 +163,7 @@ test("an artifact's public link: turned on from the pill, served to a visitor, t
     await turnOff();
     await gone(docUrl);
     expect(await liveLink(doc.id)).toBeNull();
-    expect(await copiedLink()).toBe(pageOf(doc.id));
+    expect(await copiedLink()).toBe(pageOf(encodeArtifactShortId(doc.id)));
     await visitor.browser("open", docUrl);
     expect(
       await visitor.evaluate<boolean>(

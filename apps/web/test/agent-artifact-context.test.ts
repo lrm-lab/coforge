@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
+import { encodeArtifactShortId } from "#src/features/artifacts/artifact-short-id";
 import {
   artifactReadContext,
   artifactWebUrl,
 } from "#src/server/artifacts/agent-artifact-context.server";
+import { resolveArtifactReference } from "#src/server/artifacts/artifact-reference.server";
 
 const ARTIFACT_ID = "0f8c3b52-6d0e-4f3a-9a51-3c1d2e4f5a6b";
 const WORKSPACE_ID = "11111111-1111-4111-8111-111111111111";
@@ -29,17 +31,34 @@ function fakeDb(options?: {
   } as never;
 }
 
-test("artifactWebUrl builds canonical URL using workspace slug and app origin", async () => {
+test("artifactWebUrl builds canonical short-ID URL using workspace slug and app origin", async () => {
+  const shortId = encodeArtifactShortId(ARTIFACT_ID);
   const url = await artifactWebUrl(
     fakeDb(),
     WORKSPACE_ID,
     ARTIFACT_ID,
     () => "https://coforge.app",
   );
-  expect(url).toBe(`https://coforge.app/w/acme/artifacts/${ARTIFACT_ID}`);
+  expect(url).toBe(`https://coforge.app/w/acme/artifacts/${shortId}`);
+});
+
+test("resolveArtifactReference accepts Base58 short IDs and short URLs", async () => {
+  const shortId = encodeArtifactShortId(ARTIFACT_ID);
+  const none = async () => [];
+  expect(await resolveArtifactReference(shortId, none)).toEqual({ artifactId: ARTIFACT_ID });
+  expect(
+    await resolveArtifactReference(`https://coforge.app/w/acme/artifacts/${shortId}?v=2`, none),
+  ).toEqual({ artifactId: ARTIFACT_ID, version: 2 });
+  expect(await resolveArtifactReference(`/artifacts/${shortId}`, none)).toEqual({
+    artifactId: ARTIFACT_ID,
+  });
+  expect(await resolveArtifactReference(`/a/${shortId}`, none)).toEqual({
+    artifactId: ARTIFACT_ID,
+  });
 });
 
 test("artifactReadContext returns URL, channel home, origin target, and live viewers", async () => {
+  const shortId = encodeArtifactShortId(ARTIFACT_ID);
   const context = await artifactReadContext(
     fakeDb({
       users: [
@@ -61,7 +80,7 @@ test("artifactReadContext returns URL, channel home, origin target, and live vie
     },
   );
   expect(context).toEqual({
-    url: `https://coforge.app/w/acme/artifacts/${ARTIFACT_ID}`,
+    url: `https://coforge.app/w/acme/artifacts/${shortId}`,
     home: "#launch",
     origin: { messageId: "m-1", target: "#launch" },
     viewing: ["Alice", "Bob"],
@@ -84,7 +103,7 @@ test("artifactReadContext formats workspace/link homes and fails open when prese
     },
   });
   expect(context).toEqual({
-    url: `https://coforge.app/w/acme/artifacts/${ARTIFACT_ID}`,
+    url: `https://coforge.app/w/acme/artifacts/${encodeArtifactShortId(ARTIFACT_ID)}`,
     home: "Workspace (anyone with the link)",
     origin: null,
     viewing: [],

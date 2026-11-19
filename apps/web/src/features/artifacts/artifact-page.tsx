@@ -67,6 +67,7 @@ import {
   decodeArtifactVersionPublishedEvent,
 } from "./artifact-realtime";
 import { artifactPageRoute } from "./artifact-search";
+import { encodeArtifactShortId } from "./artifact-short-id";
 import { artifactDataEvents } from "./artifact-page-data-events";
 import { ArtifactWebPage } from "./artifact-web-page";
 import { VisibilityPill } from "./artifact-visibility-pill";
@@ -291,7 +292,7 @@ function ArtifactPageFor({
     if (shared === undefined) return void toast.error(m.conversation_copy_failed());
     await copy(
       shared ??
-        `${window.location.origin}${router.buildLocation(artifactPageRoute(workspaceSlug, artifactId)).publicHref}`,
+        `${window.location.origin}${router.buildLocation(artifactPageRoute(workspaceSlug, encodeArtifactShortId(artifactId))).publicHref}`,
       m.doc_link_copied(),
     );
   };

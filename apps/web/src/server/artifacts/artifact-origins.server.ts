@@ -15,7 +15,12 @@ export class ArtifactOrigins {
     createdAt: Date;
     replaceLater?: boolean;
   }): Promise<number> {
-    if (!input.body.includes("artifacts/") && !input.body.includes("doc=")) return 0;
+    if (
+      !input.body.includes("artifacts/") &&
+      !input.body.includes("/a/") &&
+      !input.body.includes("doc=")
+    )
+      return 0;
     const ids = artifactIdsInBody(input.body, MAX_LINKED);
     if (ids.length === 0) return 0;
     const vacant = input.replaceLater
