@@ -65,17 +65,16 @@ export function ArtifactReviewPill({
           annotating && "ring-2 ring-brand/30",
         )}
       >
-        <Button
+        <ButtonUtility
+          icon={MessageSquare01}
           size="xs"
           color="tertiary"
-          iconLeading={MessageSquare01}
+          tooltip={annotating ? m.av_cm_annotating() : m.av_cm_annotate()}
           aria-pressed={annotating}
           data-annotate-toggle=""
           className={cn(annotating && TOOLBAR_BUTTON_ON_CLASS)}
-          onPress={onToggleAnnotate}
-        >
-          {annotating ? m.av_cm_annotating() : m.av_cm_annotate()}
-        </Button>
+          onClick={onToggleAnnotate}
+        />
         {(hasHistory || count > 0) && (
           <>
             <Divider />
