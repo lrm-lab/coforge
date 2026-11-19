@@ -17,7 +17,11 @@ import {
   type StoredReminder,
 } from "#src/server/reminders/reminders.server";
 import { acknowledgeReminder } from "./reminder-acknowledgement.repository.server";
-import { resolveOwnerDefaultTimezone, summary } from "./reminder-timezone.repositories.server";
+import {
+  resolveOwnerDefaultTimezone,
+  resolveOwnerTimeZone,
+  summary,
+} from "./reminder-timezone.repositories.server";
 
 export { summary };
 
@@ -97,6 +101,13 @@ export class PrismaReminderRepository implements ReminderRepository {
 
   defaultTimezone(scope: Scope, db: Pick<PrismaClient, "agent"> = this.db): Promise<string> {
     return resolveOwnerDefaultTimezone(db, scope.agentId);
+  }
+
+  ownerTimeZone(
+    scope: Scope,
+    db: Pick<PrismaClient, "agent"> = this.db,
+  ): Promise<string | undefined> {
+    return resolveOwnerTimeZone(db, scope.agentId);
   }
 
   async authorize(scope: Scope) {

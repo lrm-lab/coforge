@@ -16,7 +16,7 @@ import {
   type ReminderSummaryRecord,
   type ReminderSync,
 } from "@lrm/coforge-sdk/internal";
-import { dateTimeFormat } from "#src/lib/dates";
+import { dateTimeFormat, isValidTimeZone } from "#src/lib/dates";
 
 export function scheduledMessageId(row: { messageId: string | null }): string {
   if (row.messageId === null) throw new Error("a trigger reminder has no source message");
@@ -60,6 +60,10 @@ type Scope = {
   agentId: string;
   userId: string;
 };
+type ReminderOperationScope = Scope & { idempotencyKey: string };
+
+const needsClockTime = (request: AgentReminderOperationRequest) =>
+  request.operation !== "ack" && request.operation !== "dismiss";
 type DaemonScope = Omit<Scope, "userId">;
 export type StoredReminder = ReminderSummaryRecord & { computerId: string };
 
@@ -67,6 +71,7 @@ export interface ReminderRepository {
   authorize(scope: Scope): Promise<boolean>;
   authorizeDaemon(scope: DaemonScope): Promise<{ userId: string } | undefined>;
   defaultTimezone?(scope: Scope): Promise<string>;
+  ownerTimeZone?(scope: Scope): Promise<string | undefined>;
   replay?(
     scope: Scope,
     requestId: string,
@@ -121,15 +126,6 @@ export interface ReminderCapabilityLease {
 }
 
 export type ReminderPublisher = (sync: ReminderSync) => Promise<void>;
-
-function validTimezone(zone: string) {
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: zone }).format();
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /** The local fields a recurrence match reads. The minute-by-minute scan reads them thousands of
  * times per call, so they are collected in one pass over `formatToParts` with no intermediate parts
@@ -312,7 +308,7 @@ export class Reminders {
         fingerprint,
         request.reminderId,
       );
-      if (replay) return this.response(request, [replay]);
+      if (replay) return this.response(scope, [replay], { showsTime: needsClockTime(request) });
     }
     let reminders: StoredReminder[] = [];
     let events: AgentReminderOperationResponse["events"] = [];
@@ -332,7 +328,7 @@ export class Reminders {
           (await this.repository.defaultTimezone?.(scope)) ??
           DEFAULT_REMINDER_TIMEZONE)
         : undefined;
-      if (zone && !validTimezone(zone))
+      if (zone && !isValidTimeZone(zone))
         throw new ReminderRefusal("INVALID_INPUT", "invalid IANA timezone");
       const now = this.now();
       const first = request.fireAt
@@ -374,8 +370,6 @@ export class Reminders {
         reminders = [changed];
         await this.bestEffort(cancelSync(request, request.idempotencyKey, changed));
       } else if (request.operation === "ack" || request.operation === "dismiss") {
-        const current = await this.repository.get(scope, request.reminderId!);
-        if (!current) throw new ReminderRefusal("NOT_FOUND", "reminder not found");
         reminders = [
           await this.repository.acknowledge(
             scope,
@@ -389,7 +383,7 @@ export class Reminders {
         ];
       } else {
         const zone = request.timezone;
-        if (zone && !validTimezone(zone))
+        if (zone && !isValidTimeZone(zone))
           throw new ReminderRefusal("INVALID_INPUT", "invalid IANA timezone");
         const changed = await this.repository.update(
           scope,
@@ -404,29 +398,32 @@ export class Reminders {
         await this.bestEffort(upsertSync(request, request.idempotencyKey, changed));
       }
     }
-    return {
-      idempotencyKey: request.idempotencyKey,
-      workspaceId: request.workspaceId,
-      computerId: request.computerId,
-      agentId: request.agentId,
-      accepted: true,
-      reminders,
-      events,
-    };
+    return this.response(scope, reminders, { events, showsTime: needsClockTime(request) });
   }
 
-  private response(
-    request: AgentReminderOperationRequest,
+  private async responseTimezone(scope: Scope) {
+    try {
+      const displayTimezone = await this.repository.ownerTimeZone?.(scope);
+      return displayTimezone === undefined ? {} : { displayTimezone };
+    } catch {
+      return {};
+    }
+  }
+
+  private async response(
+    scope: ReminderOperationScope,
     reminders: StoredReminder[],
-  ): AgentReminderOperationResponse {
+    input: { events?: AgentReminderOperationResponse["events"]; showsTime: boolean },
+  ): Promise<AgentReminderOperationResponse> {
     return {
-      idempotencyKey: request.idempotencyKey,
-      workspaceId: request.workspaceId,
-      computerId: request.computerId,
-      agentId: request.agentId,
+      idempotencyKey: scope.idempotencyKey,
+      workspaceId: scope.workspaceId,
+      computerId: scope.computerId,
+      agentId: scope.agentId,
       accepted: true,
+      ...(input.showsTime ? await this.responseTimezone(scope) : {}),
       reminders,
-      events: [],
+      events: input.events ?? [],
     };
   }
 

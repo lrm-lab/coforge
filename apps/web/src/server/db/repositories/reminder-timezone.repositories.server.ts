@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import { isValidTimeZone } from "#src/lib/dates";
 import {
   DEFAULT_REMINDER_TIMEZONE,
   scheduledMessageId,
@@ -27,24 +28,20 @@ export async function resolveOwnerDefaultTimezone(
   db: Pick<PrismaClient, "agent">,
   agentId: string,
 ): Promise<string> {
+  return (await resolveOwnerTimeZone(db, agentId)) ?? DEFAULT_REMINDER_TIMEZONE;
+}
+
+export async function resolveOwnerTimeZone(
+  db: Pick<PrismaClient, "agent">,
+  agentId: string,
+): Promise<string | undefined> {
   const agent = await db.agent.findUnique({
     where: { id: agentId },
     select: {
       owner: { select: { preferences: { select: { timeZone: true, observedTimeZone: true } } } },
     },
   });
-  const candidates = [
-    agent?.owner?.preferences?.timeZone,
-    agent?.owner?.preferences?.observedTimeZone,
-  ];
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-    try {
-      new Intl.DateTimeFormat("en-US", { timeZone: candidate }).format();
-      return candidate;
-    } catch {
-      continue;
-    }
-  }
-  return DEFAULT_REMINDER_TIMEZONE;
+  return [agent?.owner?.preferences?.timeZone, agent?.owner?.preferences?.observedTimeZone].find(
+    (candidate): candidate is string => !!candidate && isValidTimeZone(candidate),
+  );
 }
