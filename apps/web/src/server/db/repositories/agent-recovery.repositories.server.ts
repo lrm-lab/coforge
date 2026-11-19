@@ -15,6 +15,8 @@ import {
   agentDeliveryView,
   cardDeclinedNotice,
   choiceResultBody,
+  desktopTakeoverResultBody,
+  pageFillResultBody,
   questionsResultBody,
   type AgentReadableBody,
 } from "#src/server/conversations/agent-message-view.server";
@@ -62,6 +64,8 @@ function answerBody(
 ) {
   const chooser = card?.committedByUserId ? chooserOf(choosers, card.committedByUserId) : null;
   if (card?.state === "cancelled") return cardDeclinedNotice(card, target, chooser);
+  if (card?.kind === "page:fill") return pageFillResultBody(card, target, chooser);
+  if (card?.kind === "desktop:takeover") return desktopTakeoverResultBody(card, target, chooser);
   if (card?.kind !== "questions") return choiceResultBody(card, target, chooser);
   const answers =
     (

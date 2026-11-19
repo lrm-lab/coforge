@@ -12,7 +12,12 @@ import {
   type MessageMentionRef,
 } from "./mentions.server";
 import type { QuestionsAnswer } from "./action-card-questions.server";
-import { cardAnsweredHead, cardDeclinedBody, cardPerson } from "./action-card-outcome-body.server";
+import {
+  cardAnsweredHead,
+  cardCompletedHead,
+  cardDeclinedBody,
+  cardPerson,
+} from "./action-card-outcome-body.server";
 
 declare const readable: unique symbol;
 
@@ -159,6 +164,37 @@ export function choiceResultBody(
     target,
   });
   return `${head}: ${chosen}` as AgentReadableBody;
+}
+
+/** A filled `page:fill` card as the asking Agent reads it woken or replaying later. */
+export function pageFillResultBody(
+  card: { payload: unknown; result: unknown } | null,
+  target: string,
+  actor?: { handle: string } | null,
+): AgentReadableBody {
+  const payload = card?.payload as { prompt?: string } | null | undefined;
+  const filled = (card?.result as { filled?: string[] } | null | undefined)?.filled ?? [];
+  const head = cardCompletedHead(cardPerson(actor?.handle), {
+    kind: "page:fill",
+    prompt: payload?.prompt,
+    target,
+  });
+  return `${head}: filled ${filled.join(", ")}` as AgentReadableBody;
+}
+
+/** A finished `desktop:takeover` card as the asking Agent reads it woken or replaying later. */
+export function desktopTakeoverResultBody(
+  card: { payload: unknown } | null,
+  target: string,
+  actor?: { handle: string } | null,
+): AgentReadableBody {
+  const payload = card?.payload as { prompt?: string } | null | undefined;
+  const head = cardCompletedHead(cardPerson(actor?.handle), {
+    kind: "desktop:takeover",
+    prompt: payload?.prompt,
+    target,
+  });
+  return `${head}.` as AgentReadableBody;
 }
 
 /** The questions card's answers as the asking Agent reads them, woken or replaying it later: who
