@@ -13,6 +13,7 @@ import type { AntigravityAcpRuntimeHost } from "./acp-host";
 import { antigravityAcpSessionExtraArgs } from "./acp-args";
 import { ANTIGRAVITY_AUTH_REQUIRED_CODE } from "./auth";
 import { AntigravityAcpTurnEvents } from "./acp-update-events";
+import { parseAntigravityQuotaLimit } from "./quota";
 
 export const ANTIGRAVITY_ACP_TIMEOUT_MS = 120_000;
 
@@ -206,6 +207,11 @@ function antigravitySessionProfile(
       return { sessionId: opened, resumable: resuming && !replaced, replacedSessionId: replaced };
     },
     turn: () => new AntigravityAcpTurnEvents(host),
+    annotateFailure: (event, error) => {
+      if (!(error instanceof RequestError)) return event;
+      const providerLimit = parseAntigravityQuotaLimit(event.message);
+      return providerLimit ? { ...event, providerLimit } : event;
+    },
     steer: {
       unboundedRequest: true,
       request: (text, sessionId) => ({

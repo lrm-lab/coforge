@@ -337,9 +337,37 @@ for await (const line of console) {
         reply({ stopReason: "end_turn" });
         break;
       }
+      if (text === "rpc-quota-error") {
+        fail(
+          -32603,
+          "Prompt failed: Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 1h30m15s.",
+        );
+        break;
+      }
+      if (text === "inband-quota-with-tool") {
+        const call = { toolCallId: "t-q", name: "read_file", kind: "read", title: "File a.txt" };
+        update({
+          sessionUpdate: "tool_call",
+          ...call,
+          status: "completed",
+          rawInput: { Path: "/workspace/a.txt" },
+        });
+        update({
+          sessionUpdate: "agent_message_chunk",
+          content: {
+            type: "text",
+            text: "\n⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 2h5m.\n",
+          },
+        });
+        reply({ stopReason: "end_turn" });
+        break;
+      }
       const inBand = {
         "inband-error": [
           "\n⚠ INVALID_ARGUMENT (code 400): Thinking level is unsupported: THINKING_LEVEL_XHIGH\n",
+        ],
+        "inband-quota": [
+          "\n⚠ Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 2h30m.\n",
         ],
         "inband-with-usage": ["⚠ INVALID_ARGUMENT (code 400): quoted by the model"],
         "inband-embedded": [

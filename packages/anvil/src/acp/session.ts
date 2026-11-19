@@ -225,7 +225,10 @@ export class AcpSession implements AgentSession {
           : undefined;
       if (inBand !== undefined) {
         this.#accept(input);
-        this.#emit({ type: "error", message: inBand }, input.options);
+        this.#emit(
+          typeof inBand === "string" ? { type: "error", message: inBand } : inBand,
+          input.options,
+        );
       } else if (stop.status === "completed") {
         this.#accept(input);
         status = "completed";
@@ -260,8 +263,13 @@ export class AcpSession implements AgentSession {
       if (!rpcFailure && this.#transport) attachStderrExcerpt(this.#transport.process, error);
       // A deliberate interrupt kills the transport: the turn reports `interrupted`, not the
       // transport's own "connection closed" complaint.
-      if (!this.#disposed && !(this.#interrupting && !rpcFailure))
-        this.#emit(acpPromptFailure(error, this.profile), input.options);
+      if (!this.#disposed && !(this.#interrupting && !rpcFailure)) {
+        const failure = acpPromptFailure(error, this.profile);
+        this.#emit(
+          this.profile.annotateFailure ? this.profile.annotateFailure(failure, error) : failure,
+          input.options,
+        );
+      }
       if (!(error instanceof RequestError))
         if (this.#interrupting) status = "interrupted";
         else this.#failed = true;

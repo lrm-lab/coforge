@@ -3,6 +3,7 @@ import { acpContextUsage } from "#src/acp-context-usage";
 import { acpToolOutput, acpToolUpdateEnded } from "#src/acp-tool-output";
 import { asRecord, nonEmptyString } from "#src/json-record";
 import type { AntigravityAcpRuntimeHost } from "./acp-host";
+import { parseAntigravityInBandQuota } from "./quota";
 
 function antigravityToolCall(update: Readonly<Record<string, unknown>>) {
   const name = nonEmptyString(update.name) ?? nonEmptyString(update.title);
@@ -21,6 +22,7 @@ const IN_BAND_ERROR = /^\s*⚠\s*(\S[^\n]*\(code \d{3}\):[^\n]*)\s*$/;
 
 export class AntigravityAcpTurnEvents {
   #message = "";
+  #hadTurnActivity = false;
   readonly #started = new Set<string>();
   readonly #ended = new Set<string>();
   readonly #output = new Map<string, string>();
@@ -33,6 +35,7 @@ export class AntigravityAcpTurnEvents {
       case "agent_message_chunk":
       case "agent_thought_chunk": {
         const content = asRecord(update.content);
+        if (update.sessionUpdate === "agent_thought_chunk") this.#hadTurnActivity = true;
         if (
           update.sessionUpdate === "agent_message_chunk" &&
           content?.type === "text" &&
@@ -50,6 +53,7 @@ export class AntigravityAcpTurnEvents {
           : [];
       }
       case "tool_call": {
+        this.#hadTurnActivity = true;
         const id = nonEmptyString(update.toolCallId);
         const call = antigravityToolCall(update);
         if (!id || !call || this.#started.has(id)) return [];
@@ -65,6 +69,7 @@ export class AntigravityAcpTurnEvents {
         return events;
       }
       case "tool_call_update": {
+        this.#hadTurnActivity = true;
         const id = nonEmptyString(update.toolCallId);
         if (!id || !this.#started.has(id) || this.#ended.has(id)) return [];
         const events = this.#progress(id, update);
@@ -99,9 +104,14 @@ export class AntigravityAcpTurnEvents {
     }
     return events;
   }
-  inBandFailure(answer: Readonly<Record<string, unknown>>): string | undefined {
+  inBandFailure(
+    answer: Readonly<Record<string, unknown>>,
+  ): string | Extract<AgentRuntimeEvent, { type: "error" }> | undefined {
     if (answer.usage !== undefined) return undefined;
-    return IN_BAND_ERROR.exec(this.#message)?.[1]?.trim();
+    const errorLine = IN_BAND_ERROR.exec(this.#message)?.[1]?.trim();
+    if (errorLine) return errorLine;
+    if (this.#hadTurnActivity) return undefined;
+    return parseAntigravityInBandQuota(this.#message);
   }
   end(): AgentRuntimeEvent[] {
     return this.#scanner.reset().map((id) => ({ type: "reply-intent-retracted", id }));

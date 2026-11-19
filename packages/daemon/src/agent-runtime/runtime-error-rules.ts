@@ -101,6 +101,7 @@ export const RUNTIME_WINDOW_LIMIT_PATTERNS = [
   // Devin's session/prompt ResourceExhausted (-32011) words its weekly window this way; its
   // organization/monthly cap is balance wording above instead.
   /\bweekly usage quota has been exhausted\b/i,
+  /\bindividual quota reached\b/i,
 ];
 
 /** A sticky model-config failure takes the Agent offline even without a named action — mirrored

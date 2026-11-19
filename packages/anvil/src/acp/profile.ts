@@ -44,7 +44,9 @@ export type AcpRuntimeProfile = Readonly<{
 export type AcpTurnReader = Readonly<{
   read(update: Readonly<Record<string, unknown>>): AgentRuntimeEvent[];
   end(): AgentRuntimeEvent[];
-  inBandFailure?(answer: Readonly<Record<string, unknown>>): string | undefined;
+  inBandFailure?(
+    answer: Readonly<Record<string, unknown>>,
+  ): string | Extract<AgentRuntimeEvent, { type: "error" }> | undefined;
 }>;
 
 /** A turn the runtime started itself: its prompt id when it starts, its end when it stops. */
@@ -138,6 +140,10 @@ export type AcpSessionProfile = Readonly<{
   /** Replaces a failed turn's scrubbed provider detail, for a failure the runtime names itself.
    * Returning a message drops the provider's error code with it. */
   detailMessage?(detail: string): string | undefined;
+  annotateFailure?(
+    event: Extract<AgentRuntimeEvent, { type: "error" }>,
+    error: unknown,
+  ): Extract<AgentRuntimeEvent, { type: "error" }>;
   /** Runs after an interrupt settled the turn, for work the runtime owes at that point. */
   afterInterrupt?(): Promise<void>;
 }>;

@@ -503,3 +503,49 @@ test("GEMINI_HOME lookup is case-insensitive on Windows and exact on POSIX", () 
   ]);
   expect(antigravityGeminiDirArgs({ gemini_home: "/tmp/gemini" }, "linux")).toEqual([]);
 });
+
+test("an in-band individual quota warning fails the turn with a window_limit reset", async () => {
+  await withSession(async ({ session, events }) => {
+    const before = Date.now();
+    await session.sendMessage("inband-quota");
+    await waitFor(() => completed(events).length > 0);
+    const errors = events.filter((e) => e.type === "error");
+    expect(errors).toHaveLength(1);
+    const err = errors[0]!;
+    expect(err.message).toBe(
+      "Individual quota reached. Please upgrade your subscription to increase your limits. Resets in 2h30m.",
+    );
+    expect(err.providerLimit?.kind).toBe("window_limit");
+    const resetMs = Date.parse(err.providerLimit?.resetsAt ?? "");
+    const expectedWaitMs = (2 * 3600 + 30 * 60) * 1000;
+    expect(resetMs).toBeGreaterThanOrEqual(before + expectedWaitMs - 1_000);
+    expect(resetMs).toBeLessThanOrEqual(Date.now() + expectedWaitMs + 1_000);
+    expect(completed(events).map((e) => e.status)).toEqual(["failed"]);
+  });
+});
+
+test("a quota warning line after tool activity completes instead of misclassifying as in-band failure", async () => {
+  await withSession(async ({ session, events }) => {
+    await session.sendMessage("inband-quota-with-tool");
+    await waitFor(() => completed(events).length > 0);
+    expect(events.some((e) => e.type === "error")).toBe(false);
+    expect(completed(events).map((e) => e.status)).toEqual(["completed"]);
+  });
+});
+
+test("an RPC quota error attaches window_limit with the parsed resetsAt instant", async () => {
+  await withSession(async ({ session, events }) => {
+    const before = Date.now();
+    await session.sendMessage("rpc-quota-error");
+    await waitFor(() => completed(events).length > 0);
+    const errors = events.filter((e) => e.type === "error");
+    expect(errors).toHaveLength(1);
+    const err = errors[0]!;
+    expect(err.providerLimit?.kind).toBe("window_limit");
+    const resetMs = Date.parse(err.providerLimit?.resetsAt ?? "");
+    const expectedWaitMs = (3600 + 30 * 60 + 15) * 1000;
+    expect(resetMs).toBeGreaterThanOrEqual(before + expectedWaitMs - 1_000);
+    expect(resetMs).toBeLessThanOrEqual(Date.now() + expectedWaitMs + 1_000);
+    expect(completed(events).map((e) => e.status)).toEqual(["failed"]);
+  });
+});

@@ -42,7 +42,10 @@ Part of [the documentation index](../../README.md). The Antigravity adapter runs
   A steer whose answer never arrives holds the turn open until interrupt — there is no watchdog
   on the merged turn's length.
 - A terminal RPC failure after prompt submission is an accepted failed turn, not an admission
-  refusal.
+  refusal. Both standalone in-band `⚠ Individual quota reached… Resets in …` warnings (with no
+  `usage` and no tool/thought activity) and RPC prompt errors carrying that reset sentence emit a
+  `window_limit` `providerLimit` with the computed `resetsAt` instant so the daemon waits for the
+  reset instead of completing silently.
 - A `tool_call`'s `title` is a description (`ls`, `File a.txt`); the tool name is agy's own
   `name` (`run_command`, `read_file`, `edit_file`), which `TOOL_ALIASES` maps. agy's
   `CommandLine` is also given as `command` and `Path` as `file_path`, the keys Activity and the
