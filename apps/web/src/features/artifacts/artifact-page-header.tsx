@@ -21,6 +21,7 @@ import { cn } from "#src/lib/utils";
 import { PRESSABLE_CHIP_CLASS } from "#src/features/conversations/review-chrome";
 import { m } from "#src/paraglide/messages";
 import { homeConversationOf, homeLinkProps, type ArtifactHome } from "./artifact-home";
+import { RecentArtifactsMenu } from "./artifact-recent-menu";
 import { useArrivedFromGallery } from "./artifact-search";
 import { VersionMenu } from "./artifact-version-menu";
 import {
@@ -31,7 +32,13 @@ import {
 
 export const ARTIFACT_TITLE_ID = "artifact-page-title";
 
-export type ArtifactPaneControls = { full: boolean; onToggleFull: () => void; onClose: () => void };
+export type ArtifactPaneControls = {
+  full: boolean;
+  onToggleFull: () => void;
+  onClose: () => void;
+  conversationId?: string;
+  onSwitchArtifact?: (artifactId: string) => void;
+};
 
 export function ArtifactPageHeader({
   artifactId,
@@ -83,15 +90,25 @@ export function ArtifactPageHeader({
         </span>
       ) : (
         <>
-          <Title
-            id={ARTIFACT_TITLE_ID}
-            style={
-              activeTitleTransition ? { viewTransitionName: ARTIFACT_TITLE_VT_NAME } : undefined
-            }
-            className="min-w-0 truncate text-sm font-medium text-primary"
-          >
-            {title}
-          </Title>
+          {pane?.conversationId && pane.onSwitchArtifact ? (
+            <RecentArtifactsMenu
+              conversationId={pane.conversationId}
+              artifactId={artifactId}
+              titleId={ARTIFACT_TITLE_ID}
+              title={title}
+              onSwitch={pane.onSwitchArtifact}
+            />
+          ) : (
+            <Title
+              id={ARTIFACT_TITLE_ID}
+              style={
+                activeTitleTransition ? { viewTransitionName: ARTIFACT_TITLE_VT_NAME } : undefined
+              }
+              className="min-w-0 truncate text-sm font-medium text-primary"
+            >
+              {title}
+            </Title>
+          )}
           {shownVersion !== undefined && (
             <Dropdown.Root>
               <AriaButton

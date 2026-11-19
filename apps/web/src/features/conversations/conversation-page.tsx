@@ -325,7 +325,12 @@ function ConversationPageBody(props: ConversationPageProps & ConversationPageBod
         >
           <ConversationPageMain {...props} documents={documents} />
         </div>
-        {open && <ConversationArtifactPane search={{ doc, docFull }} />}
+        {open && (
+          <ConversationArtifactPane
+            conversationId={props.page.conversation.conversationId}
+            search={{ doc, docFull }}
+          />
+        )}
       </div>
     </ArtifactsBesideChat>
   );
