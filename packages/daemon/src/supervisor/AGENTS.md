@@ -56,6 +56,11 @@ Rules for the machine Coordinator in `src/supervisor/`. They extend
   second. The contender waits on the lock instead of connecting beside the
   holder; the holder's exit — a terminal cloud refusal parks and stops it —
   releases the lock and the waiter takes over.
+- `computer-key-claim.ts` extends single-instance protection across separate
+  install directories: once a Workspace child holds its per-binding lock, it
+  claims a SQLite process lock keyed by the SHA-256 fingerprint of its daemon
+  API key under `~/.coforge/key-claims/`, refusing a second install directory
+  that shares the same Computer key with the holder's PID and directory.
 - An explicit disabled state always wins over automatic restart or recovery.
 - A Workspace the cloud refused for good (`workspace_deleted`, `computer_unlinked`,
   `credential_revoked`) is parked in its health journal. Recovery, `start`, and `restart` never start

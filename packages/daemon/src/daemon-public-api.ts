@@ -33,6 +33,12 @@ import { WorkspaceParking } from "#src/supervisor/workspace-parking";
 import { guardWorkspaceRunnerStart } from "#src/supervisor/workspace-runner-guard";
 import { writeWorkspaceInstanceRecord } from "#src/supervisor/process-workspace-instance";
 import { holdWorkspaceDaemonLock } from "#src/supervisor/workspace-daemon-lock";
+import {
+  acquireComputerKeyClaim,
+  computerKeyFingerprint,
+  DuplicateComputerKeyError,
+  type ComputerKeyClaim,
+} from "#src/supervisor/computer-key-claim";
 import { requestWorkspaceUpgrade } from "#src/supervisor/request-workspace-upgrade";
 import { operatorRunnerPorts } from "#src/daemon-runtime/operator-runner-identities";
 export { FileBindingStore } from "#src/supervisor/binding-store";
@@ -209,8 +215,6 @@ export async function runDaemon(
         serverHttpUrl: COFORGE_DAEMON_SERVER_URL,
       });
       let config = await configStore.load();
-      // Before any real work (Agent proxy, Workspace connection): let the health journal say
-      // whether the previous run(s) died unexpectedly often enough to stop this restart loop.
       const guard = await guardWorkspaceRunnerStart(healthJournal);
       let runtime: DaemonRuntime | undefined;
       const parking = new WorkspaceParking(
@@ -235,33 +239,70 @@ export async function runDaemon(
         process.exitCode = 0;
         return;
       }
-      // One Workspace daemon per binding: a child outlives its Coordinator, so a restarted
-      // Coordinator can spawn a second child while the first still runs. The second waits on
-      // the binding's lock instead of connecting beside it; the first's exit (a terminal cloud
-      // refusal parks and stops it) releases the lock and the waiter takes over.
       const bindingStop = new AbortController();
       void stopRequested.then(() => bindingStop.abort());
       let bindingLock: { release(): void } | undefined;
+      let keyClaim: ComputerKeyClaim | null = null;
+      const releaseLocks = () => {
+        keyClaim?.release();
+        keyClaim = null;
+        bindingLock?.release();
+        bindingLock = undefined;
+      };
+      const ensureBindingLock = async () => {
+        if (bindingLock) return;
+        bindingLock = await holdWorkspaceDaemonLock(daemonStateDirectory, {
+          signal: bindingStop.signal,
+          waiting: () =>
+            logger.info("Another daemon already owns this Workspace binding; waiting for it", {
+              event: "daemon:binding_lock_wait",
+              outcome: "waiting",
+            }),
+        });
+      };
+      const acquireClaimFor = async (target: DaemonConfig): Promise<ComputerKeyClaim | null> => {
+        const apiKey = await credentials.load(target.workspaceId, target.computerId);
+        if (!apiKey) return null;
+        if (keyClaim && keyClaim.fingerprint === computerKeyFingerprint(apiKey)) return keyClaim;
+        return acquireComputerKeyClaim({
+          apiKey,
+          stateDirectory: daemonStateDirectory,
+          workspaceId: target.workspaceId,
+          computerId: target.computerId,
+          version: COFORGE_DAEMON_VERSION,
+          signal: bindingStop.signal,
+        });
+      };
       if (config?.workspaceId) {
         try {
-          bindingLock = await holdWorkspaceDaemonLock(daemonStateDirectory, {
-            signal: bindingStop.signal,
-            waiting: () =>
-              logger.info("Another daemon already owns this Workspace binding; waiting for it", {
-                event: "daemon:binding_lock_wait",
-                outcome: "waiting",
-              }),
-          });
+          await ensureBindingLock();
+          keyClaim = await acquireClaimFor(config);
         } catch (error) {
-          if (!bindingStop.signal.aborted) throw error;
+          if (error instanceof DuplicateComputerKeyError) {
+            logger.error(error.message, {
+              event: "daemon:duplicate_computer_key",
+              key_fingerprint: error.fingerprint,
+              holder_pid: error.holder?.pid,
+              holder_state_directory: error.holder?.stateDirectory,
+              outcome: "refused",
+            });
+            process.stderr.write(`${error.message}\n`);
+            if (stateDirectoryArg) await healthJournal.markTerminal(error.message);
+            await healthJournal.recordGracefulStop();
+            releaseLocks();
+            await dispose();
+            process.exitCode = 0;
+            return;
+          }
+          releaseLocks();
+          if (!bindingStop.signal.aborted) {
+            await dispose();
+            throw error;
+          }
           await dispose();
           process.exitCode = 0;
           return;
         }
-        // Self-register the OS instance record while holding the binding lock: if the spawning
-        // Coordinator died before its own write, this record is what lets the next Coordinator
-        // adopt this daemon instead of launching a second child beside it. Best effort — the
-        // Coordinator's write already covers the ordinary path.
         const instanceRecordPath = Bun.env.COFORGE_WORKSPACE_INSTANCE_RECORD;
         const instanceInvocationId = Bun.env.COFORGE_WORKSPACE_INVOCATION_ID;
         if (instanceRecordPath && instanceInvocationId) {
@@ -278,158 +319,172 @@ export async function runDaemon(
           }
         }
       }
-      if (process.platform === "linux" && config?.workspaceId)
-        await reapLeftoverAgentProcesses(config.workspaceId, logger);
-      const requireRuntime = (): DaemonRuntime => {
-        if (!runtime) throw new Error("daemon runtime is not running");
-        return runtime;
-      };
-      const agentProxy = startAgentProxy({
-        agentApiKeys: agentApiKeyRegistry(requireRuntime),
-        runtime: daemonAgentProxyRuntime(requireRuntime),
-      });
-      process.env.COFORGE_AGENT_PROXY_URL = agentProxy.url;
-      // `config` was already loaded above, ahead of the health-journal guard.
-      const supervisorSocket = Bun.env.COFORGE_SUPERVISOR_SOCKET;
-      const supervisorControl = (...request: Parameters<LocalDaemonLauncher["control"]>) =>
-        new LocalDaemonLauncher({
-          executablePath: process.execPath,
-          socketPath: supervisorSocket!,
-          spawn: () => {},
-        }).control(...request);
-      const createRuntime = (connection: DaemonConfig) =>
-        new DaemonRuntime(
-          connection,
-          createCodeAgentProvider,
-          credentials,
-          {
-            create: () => new DaemonConnection(daemonConnectionEndpoint(COFORGE_DAEMON_SERVER_URL)),
-          },
-          agentProxy,
-          defaultCodeAgentDiscovery(daemonStateDirectory),
-          daemonStateDirectory,
-          {
-            recoveredRestartRequestIds:
-              (config as { restartRequestIds?: string[] } | null)?.restartRequestIds ?? [],
-            recoveredUpgradeRequestIds:
-              (config as { upgradeRequestIds?: string[] } | null)?.upgradeRequestIds ?? [],
-            recoveredUpgradeResults: upgradeOperationsInConfig(config).results,
-            // The per-Workspace config file the Coordinator wrote before starting this process and
-            // rewrites while it runs (an upgrade recorded, settled, or acknowledged).
-            readUpgradeOperations: async () => upgradeOperationsInConfig(await configStore.load()),
-            acknowledgeUpgradeResult: supervisorSocket
-              ? async (requestId: string) => {
-                  if (!config) throw new Error("Workspace is not configured");
-                  await supervisorControl("upgrade_ack", config.workspaceId, requestId);
-                }
-              : undefined,
-            requestRestart: supervisorSocket
-              ? async (requestId: string) => {
-                  if (!config) throw new Error("Workspace is not configured");
-                  await supervisorControl("restart", config.workspaceId, requestId);
-                }
-              : undefined,
-            connectionRefused: (reason) => void parking.park(reason),
-            installerJournalExists: () => installerJournalExists(),
-            requestUpgrade: (requestId, expectedVersion, releaseChannel) =>
-              requestWorkspaceUpgrade(
-                config,
-                supervisorControl,
-                requestId,
-                expectedVersion,
-                releaseChannel,
-              ),
-          },
-          computerVersion,
-          undefined,
-          undefined,
-          releaseChannel,
-        );
-      const daemon = {
-        async configure(connection: DaemonConfig) {
-          const nextConfig = configStore.bindToServer(connection);
-          // A configure request is the Workspace-page replacement operation. Stop
-          // the old connection and all children before adopting the new identity.
-          await runtime?.stop();
-          config = nextConfig;
-          const next = createRuntime(nextConfig);
-          runtime = next;
-          await parking.start(() => next.start(nextConfig));
-        },
-        async start() {
-          if (!config) return parking.unconfigured();
-          const current = config;
-          const next = (runtime ??= createRuntime(current));
-          await parking.start(() => next.start(current));
-        },
-        cloudConnection: () => parking.cloudConnection,
-        async stopAll() {
-          await runtime?.stop();
-          runtime = undefined;
-        },
-        async restart() {
-          await this.stopAll();
-          await this.start();
-        },
-        inbox: async (context: string, request: LocalInboxRequest) =>
-          requireRuntime().inbox(context, request),
-        ...operatorRunnerPorts(
-          () => runtime,
-          () => config?.workspaceId,
-        ),
-      };
-      // In place before the Coordinator can start the runtime; sessions inherit it via Bun.env.
-      await loginShellEnv;
-      // The Coordinator polls this socket for readiness within a 30s budget after spawning the
-      // Workspace, so it must open before anything that can block on the network (Code Agent
-      // discovery, in particular). The handshake it answers only needs pid/version/serverUrl, so
-      // starting it ahead of `daemon.start()` is safe for both the supervised and standalone paths.
-      const localRpc = await startDaemonLocalRpcServer({
-        socketPath,
-        version: COFORGE_DAEMON_VERSION,
-        validateCredential: (credential) => credential.length > 0,
-        runtime: daemon,
-        credentials,
-        configStore,
-      });
-      let shuttingDown = false;
-      const shutdown = async () => {
-        if (shuttingDown) return;
-        shuttingDown = true;
-        // A SIGTERM/SIGINT shutdown is deliberate - an operator stop, a restart, or an upgrade
-        // (`machine-supervisor.ts`'s `#stop`) - never an unexpected death; clearing the live
-        // marker here is what keeps the next start from counting it as a crash.
-        await healthJournal.recordGracefulStop();
-        bindingLock?.release();
-        await daemon.stopAll();
-        agentProxy.close();
-        await localRpc.close();
-        logger.info("Daemon process stopped", { event: "daemon:stopped", outcome: "ok" });
-        await dispose();
-        resolveShutdown();
-      };
-      let resolveShutdown!: () => void;
-      const shutdownRequested = new Promise<void>((resolve) => {
-        resolveShutdown = resolve;
-      });
-      void stopRequested.then(() => void shutdown());
-      const parked = parking.bindShutdown(shutdown);
+      let agentProxy: ReturnType<typeof startAgentProxy> | undefined;
       try {
-        await daemon.start();
+        if (process.platform === "linux" && config?.workspaceId)
+          await reapLeftoverAgentProcesses(config.workspaceId, logger);
+        const requireRuntime = (): DaemonRuntime => {
+          if (!runtime) throw new Error("daemon runtime is not running");
+          return runtime;
+        };
+        agentProxy = startAgentProxy({
+          agentApiKeys: agentApiKeyRegistry(requireRuntime),
+          runtime: daemonAgentProxyRuntime(requireRuntime),
+        });
+        process.env.COFORGE_AGENT_PROXY_URL = agentProxy.url;
+        const supervisorSocket = Bun.env.COFORGE_SUPERVISOR_SOCKET;
+        const supervisorControl = (...request: Parameters<LocalDaemonLauncher["control"]>) =>
+          new LocalDaemonLauncher({
+            executablePath: process.execPath,
+            socketPath: supervisorSocket!,
+            spawn: () => {},
+          }).control(...request);
+        const createRuntime = (connection: DaemonConfig) =>
+          new DaemonRuntime(
+            connection,
+            createCodeAgentProvider,
+            credentials,
+            {
+              create: () =>
+                new DaemonConnection(daemonConnectionEndpoint(COFORGE_DAEMON_SERVER_URL)),
+            },
+            agentProxy!,
+            defaultCodeAgentDiscovery(daemonStateDirectory),
+            daemonStateDirectory,
+            {
+              recoveredRestartRequestIds:
+                (config as { restartRequestIds?: string[] } | null)?.restartRequestIds ?? [],
+              recoveredUpgradeRequestIds:
+                (config as { upgradeRequestIds?: string[] } | null)?.upgradeRequestIds ?? [],
+              recoveredUpgradeResults: upgradeOperationsInConfig(config).results,
+              readUpgradeOperations: async () =>
+                upgradeOperationsInConfig(await configStore.load()),
+              acknowledgeUpgradeResult: supervisorSocket
+                ? async (requestId: string) => {
+                    if (!config) throw new Error("Workspace is not configured");
+                    await supervisorControl("upgrade_ack", config.workspaceId, requestId);
+                  }
+                : undefined,
+              requestRestart: supervisorSocket
+                ? async (requestId: string) => {
+                    if (!config) throw new Error("Workspace is not configured");
+                    await supervisorControl("restart", config.workspaceId, requestId);
+                  }
+                : undefined,
+              connectionRefused: (reason) => void parking.park(reason),
+              installerJournalExists: () => installerJournalExists(),
+              requestUpgrade: (requestId, expectedVersion, releaseChannel) =>
+                requestWorkspaceUpgrade(
+                  config,
+                  supervisorControl,
+                  requestId,
+                  expectedVersion,
+                  releaseChannel,
+                ),
+            },
+            computerVersion,
+            undefined,
+            undefined,
+            releaseChannel,
+          );
+        const daemon = {
+          async configure(connection: DaemonConfig) {
+            const nextConfig = configStore.bindToServer(connection);
+            if (nextConfig.workspaceId) await ensureBindingLock();
+            const previousClaim = keyClaim;
+            const nextClaim = await acquireClaimFor(nextConfig);
+            const swappedClaim = nextClaim !== previousClaim;
+            await runtime?.stop();
+            config = nextConfig;
+            if (swappedClaim) {
+              previousClaim?.release();
+              keyClaim = nextClaim;
+            }
+            const next = createRuntime(nextConfig);
+            runtime = next;
+            try {
+              await parking.start(() => next.start(nextConfig));
+            } catch (error) {
+              if (swappedClaim && keyClaim === nextClaim) {
+                keyClaim?.release();
+                keyClaim = null;
+              }
+              throw error;
+            }
+          },
+          async start() {
+            if (!config) return parking.unconfigured();
+            const current = config;
+            const next = (runtime ??= createRuntime(current));
+            await parking.start(() => next.start(current));
+          },
+          cloudConnection: () => parking.cloudConnection,
+          async stopAll() {
+            await runtime?.stop();
+            runtime = undefined;
+          },
+          async restart() {
+            await this.stopAll();
+            await this.start();
+          },
+          inbox: async (context: string, request: LocalInboxRequest) =>
+            requireRuntime().inbox(context, request),
+          ...operatorRunnerPorts(
+            () => runtime,
+            () => config?.workspaceId,
+          ),
+        };
+        await loginShellEnv;
+        const localRpc = await startDaemonLocalRpcServer({
+          socketPath,
+          version: COFORGE_DAEMON_VERSION,
+          validateCredential: (credential) => credential.length > 0,
+          runtime: daemon,
+          credentials,
+          configStore,
+        });
+        let shuttingDown = false;
+        const shutdown = async () => {
+          if (shuttingDown) return;
+          shuttingDown = true;
+          await healthJournal.recordGracefulStop();
+          try {
+            await daemon.stopAll();
+          } finally {
+            releaseLocks();
+          }
+          agentProxy?.close();
+          await localRpc.close();
+          logger.info("Daemon process stopped", { event: "daemon:stopped", outcome: "ok" });
+          await dispose();
+          resolveShutdown();
+        };
+        let resolveShutdown!: () => void;
+        const shutdownRequested = new Promise<void>((resolve) => {
+          resolveShutdown = resolve;
+        });
+        void stopRequested.then(() => void shutdown());
+        const parked = parking.bindShutdown(shutdown);
+        try {
+          await daemon.start();
+        } catch (error) {
+          if (
+            parking.cloudConnection.state === "not_connected" &&
+            !(error instanceof DaemonConnectionStoppedError)
+          )
+            logger.error("Daemon failed to recover configured Workspace", {
+              event: "daemon:workspace_recovery_failed",
+              error_code: diagnosticErrorCode(error),
+              outcome: "failed",
+            });
+        }
+        await Promise.all([parked, shutdownRequested]);
       } catch (error) {
-        // A refusal for good is parking the Workspace instead (`WorkspaceParking`). A shutdown
-        // ends a start still waiting for the cloud on purpose.
-        if (
-          parking.cloudConnection.state === "not_connected" &&
-          !(error instanceof DaemonConnectionStoppedError)
-        )
-          logger.error("Daemon failed to recover configured Workspace", {
-            event: "daemon:workspace_recovery_failed",
-            error_code: diagnosticErrorCode(error),
-            outcome: "failed",
-          });
+        releaseLocks();
+        agentProxy?.close();
+        await dispose();
+        throw error;
       }
-      await Promise.all([parked, shutdownRequested]);
     },
   );
 }
