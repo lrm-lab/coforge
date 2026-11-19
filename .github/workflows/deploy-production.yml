@@ -310,9 +310,21 @@ jobs:
         with:
           environment: production
 
-      - name: Update web-production tag
-        if: success() && needs.candidate.outputs.staging_sha != ''
+  tag:
+    name: Update web-production tag
+    needs: [candidate, deploy]
+    if: needs.candidate.outputs.staging_sha != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Point web-production at the deployed commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STAGING_SHA: ${{ needs.candidate.outputs.staging_sha }}
         run: |
-          git fetch --depth=1 origin "${{ needs.candidate.outputs.staging_sha }}"
-          git tag -f web-production "${{ needs.candidate.outputs.staging_sha }}"
-          git push -f origin refs/tags/web-production
+          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/web-production" \
+            -f sha="$STAGING_SHA" -F force=true \
+          || gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref=refs/tags/web-production -f sha="$STAGING_SHA"
