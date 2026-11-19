@@ -30,7 +30,7 @@ describe("a file path in the sandbox's URL", () => {
     expect(decodeSandboxFilePath("index.html")).toBe("index.html");
     expect(decodeSandboxFilePath("css/site.css")).toBe("css/site.css");
     expect(decodeSandboxFilePath("img/%E6%97%A5%E6%9C%AC%20a.png")).toBe("img/日本 a.png");
-    expect(decodeSandboxFilePath("a%25b.txt")).toBe("a%b.txt");
+    expect(decodeSandboxFilePath("a%20b%2Bc.txt")).toBe("a b+c.txt");
   });
 
   test("is refused, before any lookup, when it could leave its prefix or name no file", () => {
@@ -52,6 +52,12 @@ describe("a file path in the sandbox's URL", () => {
       "a%5Cb.css",
       "a\\b.css",
       "a%00b.css",
+      "a%25b.txt",
+      "a%3Fb.txt",
+      "a%23b.txt",
+      ".git/config",
+      "%2egit/config",
+      "git~1/HEAD",
       "%ZZ.css",
       "%E0%A4%A.css",
       "c:x.css",
@@ -62,7 +68,7 @@ describe("a file path in the sandbox's URL", () => {
   test("is written back with every segment percent-encoded", () => {
     expect(sandboxFileUrlPath("index.html")).toBe("index.html");
     expect(sandboxFileUrlPath("img/日本 a?b#c.png")).toBe("img/%E6%97%A5%E6%9C%AC%20a%3Fb%23c.png");
-    for (const path of ["a b/c%d.png", "日本/x y.html", "q?x/y#z.css"])
+    for (const path of ["a b/c+d.png", "日本/x y.html", "q&x/y=z.css"])
       expect(decodeSandboxFilePath(sandboxFileUrlPath(path))).toBe(path);
   });
 });
