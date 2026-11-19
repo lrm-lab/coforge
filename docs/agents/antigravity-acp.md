@@ -28,9 +28,12 @@ Part of [the documentation index](../../README.md). The Antigravity adapter runs
   apply by `category` (`model`, then `thought_level`) through `session/set_config_option`, skipped
   when already current, and the shared ACP rule decides failures. The `thought_level` choices follow the model just applied:
   Hydrogen adds `xhigh`, and Orchestrator and GPT-OSS have no `thought_level` select.
-- Resume is `session/load`; `-32002` means the stored session is gone and is replaced with a
-  fresh one reported as `replaced`, and any other load failure surfaces. agy 1.5.10 answers
-  success for an id it never stored and opens it empty; the adapter does not second-guess that.
+- Resume prefers `session/resume` when `initialize` advertises `sessionCapabilities.resume`
+  (avoiding history replay on reconnect), falling back to `session/load` on `-32601`/`-32602`
+  and using `session/load` directly otherwise; `-32002` means the stored session is gone and is
+  replaced with a fresh one reported as `replaced`, and any other failure surfaces. agy 1.5.10
+  answers success for an id it never stored and opens it empty; the adapter does not second-guess
+  that.
 - Interrupt is the shared `session/cancel`: the running prompt answers `cancelled` and the same
   process takes the next prompt. A session survives the process: a killed `agy acp` resumes
   through `session/load` on a fresh process.

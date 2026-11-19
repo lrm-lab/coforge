@@ -61,6 +61,15 @@ export function antigravitySystemPromptAppendDeclared(response: InitializeRespon
   return systemPrompt?.append === true;
 }
 
+export function antigravitySessionResumeDeclared(response: InitializeResponse): boolean {
+  const capabilities = asRecord(response.agentCapabilities?.sessionCapabilities);
+  return (
+    capabilities?.resume !== undefined &&
+    capabilities.resume !== null &&
+    capabilities.resume !== false
+  );
+}
+
 export class UnsupportedOptionError extends Error {
   constructor(option: string) {
     super(`agy acp does not support required option ${option}`);
@@ -153,23 +162,56 @@ function antigravitySessionProfile(
       let replaced: string | undefined;
       let state: unknown;
       if (resuming) {
-        try {
-          state = await acpBounded(
-            agent.request("session/load", {
-              sessionId,
-              cwd,
-              mcpServers: [],
-              _meta: meta,
-            }),
-            timeoutMs,
-            "agy acp session/load timed out",
-          );
-          opened = sessionId;
-        } catch (error) {
-          if (!(error instanceof RequestError)) throw error;
-          if (error.code === ANTIGRAVITY_AUTH_REQUIRED_CODE) throw antigravitySignInRequired();
-          if (error.code !== ANTIGRAVITY_SESSION_MISSING_CODE) throw error;
-          replaced = sessionId;
+        let tryLoad = true;
+        if (antigravitySessionResumeDeclared(initialized)) {
+          try {
+            state = await acpBounded(
+              agent.request("session/resume", {
+                sessionId,
+                cwd,
+                mcpServers: [],
+                _meta: meta,
+              }),
+              timeoutMs,
+              "agy acp session/resume timed out",
+            );
+            opened = sessionId;
+            tryLoad = false;
+          } catch (error) {
+            if (!(error instanceof RequestError)) throw error;
+            if (error.code === ANTIGRAVITY_AUTH_REQUIRED_CODE) throw antigravitySignInRequired();
+            if (error.code === ANTIGRAVITY_SESSION_MISSING_CODE) {
+              replaced = sessionId;
+              tryLoad = false;
+            } else if (error.code === -32601 || error.code === -32602) {
+              logger.warning(
+                "Antigravity ACP session/resume unsupported; falling back to session/load",
+                { event: "antigravity_acp:session_resume_fallback", code: error.code },
+              );
+            } else {
+              throw error;
+            }
+          }
+        }
+        if (tryLoad) {
+          try {
+            state = await acpBounded(
+              agent.request("session/load", {
+                sessionId,
+                cwd,
+                mcpServers: [],
+                _meta: meta,
+              }),
+              timeoutMs,
+              "agy acp session/load timed out",
+            );
+            opened = sessionId;
+          } catch (error) {
+            if (!(error instanceof RequestError)) throw error;
+            if (error.code === ANTIGRAVITY_AUTH_REQUIRED_CODE) throw antigravitySignInRequired();
+            if (error.code !== ANTIGRAVITY_SESSION_MISSING_CODE) throw error;
+            replaced = sessionId;
+          }
         }
       }
       if (!opened) {

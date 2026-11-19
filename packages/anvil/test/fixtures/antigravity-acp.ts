@@ -141,6 +141,7 @@ for await (const line of console) {
         protocolVersion: 1,
         agentCapabilities: {
           loadSession: true,
+          ...(Bun.env.AGY_ACP_FIXTURE_RESUME_CAP ? { sessionCapabilities: { resume: {} } } : {}),
           _meta: { antigravity: { systemPrompt: { append: true } } },
         },
         authMethods: [{ id: "oauth-personal" }, { id: "oauth-business" }],
@@ -172,6 +173,33 @@ for await (const line of console) {
       break;
     case "session/close":
       reply({});
+      break;
+    case "session/resume":
+      if (!signedIn) {
+        write({
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32000, message: "Authentication required" },
+        });
+        break;
+      }
+      if (Bun.env.AGY_ACP_FIXTURE_RESUME_ERROR) {
+        fail(Number(Bun.env.AGY_ACP_FIXTURE_RESUME_ERROR), "session/resume failed");
+        break;
+      }
+      if (request.params.sessionId === "missing-session") {
+        fail(-32002, "Session not found");
+        break;
+      }
+      currentSessionId = request.params.sessionId ?? sessionId;
+      reply({
+        sessionId: currentSessionId,
+        configOptions,
+        modes: { availableModes: modes },
+        _meta: {
+          antigravity: { tier: { name: "Google AI Ultra", id: "g1-ultra-tier", upgradeUri: "" } },
+        },
+      });
       break;
     case "session/new":
     case "session/load":
