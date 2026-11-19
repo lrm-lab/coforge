@@ -41,7 +41,7 @@ const GROUP_SEPARATOR = "|";
 const idsOf = (joined: string) => (joined ? joined.split(ID_SEPARATOR) : []);
 
 const PILL_CLASS =
-  "h-8 max-w-full rounded-full border border-secondary bg-primary pr-3 pl-1.5 text-xs text-tertiary shadow-xs";
+  "h-8 max-w-full rounded-full bg-primary pr-3 pl-1.5 text-xs text-tertiary shadow-xs ring-1 ring-secondary ring-inset";
 
 /**
  * The line at the foot of a conversation pane: which Agents are about to post in this place (the
@@ -256,7 +256,7 @@ function ComposerAgentsPill({
           <AriaDialogTrigger>
             <Button
               color="tertiary"
-              size="sm"
+              size="xs"
               noTextPadding
               className={cx(
                 PILL_CLASS,
