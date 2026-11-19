@@ -13,8 +13,8 @@ export const DESKTOP_PHONE_FAB_MARKER = "coforge-desktop-phone-fab";
 /** Present once the FAB reclamps into the iframe viewport (fake landscape resize). */
 export const DESKTOP_PHONE_FAB_VIEWPORT_MARKER = "placePhoneFabInViewport";
 
-/** Present once phone modifier keys and touch gestures are in the adapted page. */
-export const DESKTOP_PHONE_GESTURES_MARKER = "coforgeAttachPhoneGestures";
+/** Present once phone modifier keys and continuous viewport gestures are in the adapted page. */
+export const DESKTOP_PHONE_GESTURES_MARKER = "applyPhoneViewportScale";
 
 /** Present once the hidden input that opens the system soft keyboard is in the page. */
 export const DESKTOP_PHONE_KEYBOARD_MARKER = "coforge-desktop-keyboard-input";
