@@ -12,10 +12,10 @@ import { handleAgentArtifactPost } from "#src/routes/api/agent/v1/artifacts";
 
 export type CommentsFixture = Awaited<ReturnType<typeof commentsFixture>>;
 
-export async function commentsFixture(prefix: string) {
+export async function commentsFixture(prefix: string, poolMax?: number) {
   const connectionString = Bun.env.DATABASE_URL;
   if (!connectionString) throw new Error("DATABASE_URL must point to local PostgreSQL");
-  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString, max: poolMax }) });
   const handle = crypto.randomUUID().slice(0, 8);
   const root = await mkdtemp(join(tmpdir(), `${prefix}-`));
   const storage = new LocalFileStorage(root);

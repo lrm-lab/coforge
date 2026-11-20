@@ -163,33 +163,64 @@ test("a duplicate event inside a transaction fails the whole transaction", async
   ).toBe(1);
 });
 
-test("two concurrent sends reach one system conversation with a notice each", async () => {
-  const first = await h.f.make("Race one");
-  const second = await h.f.make("Race two");
-  const reader = await h.nameOf(h.f.agents.reader);
-  await h.create(first, `Race one, @${reader}.`);
-  await h.create(second, `Race two, @${reader}.`);
-  const [a, b] = await Promise.all([h.submit(first), h.submit(second)]);
-  if (a.status !== "sent" || b.status !== "sent") throw new Error("not sent");
-  const events = await h.f.db.systemAgentEvent.findMany({
-    where: {
-      source: "system.artifacts",
-      agentId: h.f.agents.reader,
-      externalEventId: {
-        in: [
-          `${first}:${WEB_DRAFT_REVIEW_MARKER}:${a.reviewId}`,
-          `${second}:${WEB_DRAFT_REVIEW_MARKER}:${b.reviewId}`,
-        ],
-      },
-    },
-    select: { conversationId: true, messageId: true },
-  });
-  expect(events).toHaveLength(2);
-  expect(new Set(events.map((event) => event.conversationId)).size).toBe(1);
-  for (const event of events) {
-    const deliveries = await h.f.db.agentMessageDelivery.count({
-      where: { agentId: h.f.agents.reader, messageId: event.messageId },
+async function coldSubmissions(poolMax: number, count: number) {
+  const cold = await draftsHarness("cold-review", poolMax);
+  const { db, workspaceId, agents } = cold.f;
+  const agentId = agents.reader;
+  try {
+    const reader = await cold.nameOf(agentId);
+    const prepared = [];
+    for (let number = 1; number <= count; number++) {
+      const artifactId = await cold.f.make(`Cold review ${number}`);
+      await cold.create(artifactId, `Cold review for @${reader}.`);
+      prepared.push({
+        ...cold.place(artifactId),
+        draftIds: await cold.idsOf(artifactId),
+        clientKey: cold.f.key(),
+      });
+    }
+    const target = {
+      workspaceId,
+      directKey: `system:system.artifacts|agent:${agentId}`,
+    };
+    expect(await db.conversation.count({ where: target })).toBe(0);
+
+    const results = await Promise.all(prepared.map((input) => cold.drafts.submit(input)));
+    const eventKeys = results.map((sent, index) => {
+      if (sent.status !== "sent") throw new Error("cold submit did not send");
+      return `${prepared[index]!.artifactId}:${WEB_DRAFT_REVIEW_MARKER}:${sent.reviewId}`;
     });
-    expect(deliveries).toBe(1);
+    const conversation = await db.conversation.findFirstOrThrow({ where: target });
+    expect(await db.conversation.count({ where: target })).toBe(1);
+    const events = await db.systemAgentEvent.findMany({
+      where: { agentId, conversationId: conversation.id, externalEventId: { in: eventKeys } },
+      select: { messageId: true },
+    });
+    expect(events).toHaveLength(count);
+    const deliveryIds = [];
+    for (const event of events) {
+      const deliveries = await db.agentMessageDelivery.findMany({
+        where: { agentId, messageId: event.messageId },
+        select: { deliveryId: true },
+      });
+      expect(deliveries).toHaveLength(1);
+      deliveryIds.push(deliveries[0]!.deliveryId);
+    }
+    expect(new Set(deliveryIds).size).toBe(count);
+    for (const { artifactId } of prepared) {
+      expect(await cold.idsOf(artifactId)).toEqual([]);
+      expect(await db.artifactCommentReview.count({ where: { artifactId } })).toBe(1);
+      expect(await db.artifactComment.count({ where: { artifactId } })).toBe(1);
+    }
+  } finally {
+    await cold.f.cleanup();
   }
+}
+
+test("one pool connection can submit the first review and store its notice", async () => {
+  await coldSubmissions(1, 1);
+});
+
+test("two simultaneous cold submissions share one system conversation and keep both deliveries", async () => {
+  await coldSubmissions(10, 2);
 });

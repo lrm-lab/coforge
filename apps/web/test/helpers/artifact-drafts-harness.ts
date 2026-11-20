@@ -6,8 +6,8 @@ import { commentsFixture } from "./artifact-comments-fixture";
 
 export const lines = { type: "lines", data: { start: 1, end: 2 } } as const;
 
-export async function draftsHarness(prefix: string) {
-  const f = await commentsFixture(prefix);
+export async function draftsHarness(prefix: string, poolMax?: number) {
+  const f = await commentsFixture(prefix, poolMax);
   const events: ArtifactSignalEvent[] = [];
   const signals = {
     publish: async (_channel: string, event: ArtifactSignalEvent) => {
