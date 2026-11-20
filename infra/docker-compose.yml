@@ -83,6 +83,35 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  artifact-checker:
+    build:
+      context: ../services/artifact-checker
+    mem_limit: 1g
+    shm_size: 256mb
+    ports:
+      - "127.0.0.1:3100:3100"
+    environment:
+      PORT: "3100"
+      NODE_ENV: development
+      CHECKER_ALLOW_UNAUTHENTICATED: "1"
+      CHECKER_MAX_CONCURRENCY: "1"
+      CHECKER_IDLE_CLOSE_MS: "60000"
+    networks:
+      - centrifugo
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3100/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
 networks:
   centrifugo:
     driver: bridge
