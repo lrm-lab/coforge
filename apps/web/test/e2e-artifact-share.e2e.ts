@@ -108,6 +108,7 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
 
     await browser("open", pageOf(plan.id));
     await browser("wait", "--fn", viewer);
+    expect(await chrome.versionChipText()).toBe("v1");
     expect(
       await evaluate<string>(`document.querySelector("main header a").getAttribute("href")`),
     ).toEndWith(`/channel/${channel.id}`);
