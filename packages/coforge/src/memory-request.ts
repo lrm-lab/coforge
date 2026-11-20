@@ -30,7 +30,9 @@ export function memoryRequests(endpoint: (path: string) => URL, context: string,
         "memory",
         (code) =>
           code === "memory_conflict"
-            ? "Read the current memory and compare before updating it."
+            ? body.operation === "save"
+              ? `Run coforge memory get --key ${body.key}, read the full entry and compare sources. Update it with coforge memory save --key ${body.key} --revision '<returned revision>' and the full --title, --content and --source fields; preserve its kind and applicability. Do not delete the file or retry with a guessed revision.`
+              : "Read the current memory and compare before updating it."
             : undefined,
       ),
   };

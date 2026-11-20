@@ -93,8 +93,14 @@ Keys use lowercase letters, numbers, `_` and `-`. Keep one coherent subject per 
 environments and dates. A statement about staging does not establish production state. A completed
 purchase does not establish that registration or deployment finished.
 
-Save promptly when a person says to remember something, corrects an old fact, or confirms a lasting
-decision. Say it was remembered only after a successful save. Routine chat needs no memory write.
+Save promptly when explicitly asked, or when a correction, lasting decision or non-obvious lesson
+will change future actions. Repeated lookup is a signal, not a quota. Keep a concise conclusion
+with source and applicability; skip task logs and temporary status. Link authoritative rules.
+For corrections, read the existing entry and update it with its revision; do not append a competing
+fact or edit structured knowledge with sed. Keep ordinary reports outside notes/knowledge.
+Consider team scope when the conclusion helps other Agents and is authorized for the whole workspace;
+keep private material local. Share the verified conclusion and permitted sources, not whole notes.
+Say it was remembered only after a successful save. Routine chat needs no memory write.
 
 ```sh
 coforge memory save --key preview-domain --title 'Preview domain' \
@@ -107,7 +113,8 @@ coforge memory save --key preview-domain --revision '<revision returned by get>'
 coforge memory archive --key preview-domain --revision '<current revision>'
 ```
 
-A save without a revision creates only; it cannot replace an existing key. Read the entry before
+Save takes --title, --content and --source, not --summary, --body or --file.
+Without a revision it creates only; it cannot replace an existing key. Read the entry before
 updating it. A stale version is refused: reread and compare, rather than retrying with a guessed
 version. The source is evidence supplied by the writer, not independently verified authority.
 Preserve uncertain contradictions and their applicability instead of merging them into a certainty.
