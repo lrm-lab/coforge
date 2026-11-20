@@ -360,6 +360,13 @@ test("the bot inbox stops handing back a notice once the artifact is gone", asyn
     event.messageId,
   );
   expect(await hinted()).not.toContain(event.messageId);
+  const after = await inbox.check(principal);
+  const decoded = JSON.parse(Buffer.from(after.cursor, "base64url").toString("utf8")) as {
+    groups: { conversationId: string }[];
+    outside: { conversationId: string }[];
+  };
+  const cursored = [...decoded.groups, ...decoded.outside].map((group) => group.conversationId);
+  expect(cursored).not.toContain(event.conversationId);
 });
 
 test("the wake hint drops the notice in the same step its artifact goes", async () => {
@@ -377,7 +384,7 @@ test("the wake hint drops the notice in the same step its artifact goes", async 
         externalEventId: `${artifact}:${WEB_DRAFT_REVIEW_MARKER}:${sent.reviewId}`,
       },
     },
-    select: { messageId: true },
+    select: { messageId: true, conversationId: true },
   });
   const scope = { workspaceId: h.f.workspaceId, agentId: h.f.agents.other };
   const hinted = async () =>
