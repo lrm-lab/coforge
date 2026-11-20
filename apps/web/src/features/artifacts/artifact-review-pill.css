@@ -1,14 +1,48 @@
+.artifact-review-card {
+  transform-origin: bottom right;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--color-border-primary) 55%, transparent),
+    0 12px 32px -6px rgb(0 0 0 / 0.14),
+    0 3px 10px -2px rgb(0 0 0 / 0.06);
+  animation: artifact-review-card-in 200ms var(--ease-out-strong) both;
+}
+
+@keyframes artifact-review-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .artifact-review-fab {
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.12),
+    0 8px 22px -4px rgb(0 0 0 / 0.28),
+    0 2px 6px -1px rgb(0 0 0 / 0.16);
   transition:
     background-color var(--duration-sm) var(--ease-out-strong),
-    border-color var(--duration-sm) var(--ease-out-strong),
     color var(--duration-sm) var(--ease-out-strong),
     box-shadow var(--duration-sm) var(--ease-out-strong),
     transform 120ms var(--ease-out);
 }
 
+.artifact-review-fab[data-picking="true"] {
+  box-shadow:
+    inset 0 0 0 1.5px color-mix(in srgb, var(--color-utility-orange-500) 90%, transparent),
+    0 8px 22px -4px rgb(0 0 0 / 0.28),
+    0 2px 6px -1px rgb(0 0 0 / 0.16);
+}
+
+.artifact-review-fab:hover {
+  transform: scale(1.03);
+}
+
 .artifact-review-fab:active {
-  transform: scale(0.93);
+  transform: scale(0.94);
 }
 
 .artifact-review-fab-icon {
@@ -84,6 +118,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .artifact-review-card {
+    animation: none;
+  }
+  .artifact-review-fab:hover,
+  .artifact-review-fab:active {
+    transform: none;
+  }
   .artifact-review-fab-bubble,
   .artifact-review-fab-pick,
   .artifact-review-fab-badge {

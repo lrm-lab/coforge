@@ -4,7 +4,6 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowUpRight, Lock01, Trash01 } from "@untitledui/icons";
 
-import { rememberSharedRect } from "#src/lib/shared-element-rect";
 import { m } from "#src/paraglide/messages";
 import { loadArtifactMarks } from "./artifact-gallery.functions";
 import { CardBadges } from "./artifact-gallery-card";
@@ -94,11 +93,7 @@ function ArtifactCardView({ artifactId }: { artifactId: string }) {
       title={(title) => (
         <Link
           {...linkTo(card.id)}
-          onClick={(event) => {
-            event.stopPropagation();
-            const cardEl = event.currentTarget.closest("article") ?? event.currentTarget;
-            rememberSharedRect("side-pane-origin", cardEl);
-          }}
+          onClick={(event) => event.stopPropagation()}
           className="min-w-0 truncate text-left text-sm font-semibold text-primary outline-none before:absolute before:inset-0 before:rounded-xl"
         >
           {title}

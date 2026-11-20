@@ -16,7 +16,6 @@ import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Skeleton } from "#src/components/ui/skeleton";
 import { ChannelPlace } from "#src/features/conversations/channel-name";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
-import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
 import { cn } from "#src/lib/utils";
 import { PRESSABLE_CHIP_CLASS } from "#src/features/conversations/review-chrome";
 import { m } from "#src/paraglide/messages";
@@ -24,7 +23,6 @@ import { homeConversationOf, homeLinkProps, type ArtifactHome } from "./artifact
 import { RecentArtifactsMenu } from "./artifact-recent-menu";
 import { useArrivedFromGallery } from "./artifact-search";
 import { VersionMenu } from "./artifact-version-menu";
-import { ARTIFACT_TITLE_VT_NAME, useActiveArtifactTransitionId } from "./artifact-view-transition";
 
 export const ARTIFACT_TITLE_ID = "artifact-page-title";
 
@@ -66,9 +64,6 @@ export function ArtifactPageHeader({
   pane?: ArtifactPaneControls;
 }) {
   const Title = pane ? "h2" : "h1";
-  const reduced = usePrefersReducedMotion();
-  const activeTransitionId = useActiveArtifactTransitionId();
-  const activeTitleTransition = !pane && !reduced && activeTransitionId === artifactId;
   return (
     <header
       className={cn(
@@ -78,10 +73,7 @@ export function ArtifactPageHeader({
     >
       {!pane && <BackToHome home={home} homeName={homeName} />}
       {entryPath === undefined ? (
-        <span
-          style={activeTitleTransition ? { viewTransitionName: ARTIFACT_TITLE_VT_NAME } : undefined}
-          className="inline-flex"
-        >
+        <span className="inline-flex">
           <Skeleton className="h-4 w-40" />
         </span>
       ) : (
@@ -97,9 +89,6 @@ export function ArtifactPageHeader({
           ) : (
             <Title
               id={ARTIFACT_TITLE_ID}
-              style={
-                activeTitleTransition ? { viewTransitionName: ARTIFACT_TITLE_VT_NAME } : undefined
-              }
               className="min-w-0 truncate text-sm font-medium text-primary"
             >
               {title}

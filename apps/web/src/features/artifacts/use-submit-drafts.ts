@@ -96,10 +96,13 @@ export function useSubmitDrafts({
     ],
   );
   const submit = useCallback(async () => {
-    const draftIds = shown.current.map(({ id }) => id);
+    const cached = queryClient.getQueryData<{ drafts?: readonly CommentDraftView[] }>(
+      commentDraftsKey(artifactId),
+    )?.drafts;
+    const draftIds = (cached ?? shown.current).map(({ id }) => id);
     if (draftIds.length === 0) return;
     await exclusive("sending", () => send(draftIds)).catch(() => undefined);
-  }, [exclusive, send]);
+  }, [artifactId, exclusive, queryClient, send]);
 
   return { pending, closePending, clearFlag, submit };
 }

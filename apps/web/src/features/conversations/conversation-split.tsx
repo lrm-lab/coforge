@@ -4,11 +4,6 @@ import { AnimatePresence, motion } from "motion/react";
 
 import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { usePrefersReducedMotion } from "#src/hooks/use-prefers-reduced-motion";
-import {
-  animateFlipFromRect,
-  cancelFlipAnimation,
-  consumeSharedRect,
-} from "#src/lib/shared-element-rect";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import type { ConversationSlot } from "#src/features/agents/profile-panel/profile-panel-slot";
@@ -23,7 +18,8 @@ const MAIN_PANE_MIN_REM = 24;
 const SIDE_PANE_MIN_REM = 22;
 const LIST_COLUMN_DEFAULT_REM = 18;
 
-const SIDE_PANE_ENTER = "animate-in fade-in slide-in-from-right-6 motion-enter";
+const SIDE_PANE_ENTER =
+  "animate-in fade-in slide-in-from-right-3 motion-enter-sm motion-reduce:animate-none";
 
 export function ConversationSplit({
   main,
@@ -47,7 +43,6 @@ export function ConversationSplit({
   const wideViewport = useBreakpoint("md");
   const reduced = usePrefersReducedMotion();
   const splitRef = useRef<HTMLDivElement>(null);
-  const sideWrapRef = useRef<HTMLDivElement>(null);
   const [splitFits, setSplitFits] = useState(true);
   const [listCrowds, setListCrowds] = useState(false);
   useReportChatListCrowd(Boolean(visibleSlot) && listCrowds && !threadAlone);
@@ -83,23 +78,6 @@ export function ConversationSplit({
     return () => observer.disconnect();
   }, [measureSplit, splitShown]);
 
-  useLayoutEffect(() => {
-    if (!splitShown || !visibleSlot || reduced || !sideWrapRef.current) return;
-    const origin = consumeSharedRect("side-pane-origin");
-    if (!origin) return;
-    const node = sideWrapRef.current;
-    node.style.animation = "none";
-    const anim = animateFlipFromRect(node, origin, {
-      duration: 280,
-      mode: "box",
-      includeRadius: true,
-    });
-    return () => {
-      if (anim) cancelFlipAnimation(node);
-      node.style.animation = "";
-    };
-  }, [reduced, splitShown, visibleSlot]);
-
   if (!splitShown || threadAlone) {
     return (
       <div ref={splitRef} className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -116,7 +94,6 @@ export function ConversationSplit({
           {visibleSlot && focused !== "chat" && (
             <motion.div
               key={visibleSlot}
-              ref={sideWrapRef}
               initial={reduced ? { opacity: 0 } : { x: "100%" }}
               animate={reduced ? { opacity: 1 } : { x: 0 }}
               exit={
@@ -174,7 +151,6 @@ export function ConversationSplit({
               className="flex min-h-0 min-w-0 flex-col"
             >
               <div
-                ref={sideWrapRef}
                 className={cn("flex min-h-0 min-w-0 flex-1 flex-col bg-primary", SIDE_PANE_ENTER)}
               >
                 {side}

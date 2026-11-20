@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Button as AriaButton } from "react-aria-components";
 import { Cursor02, Plus } from "@untitledui/icons";
 
+import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { hotkeyKeycaps } from "#src/lib/hotkeys";
 import { isApplePlatform } from "#src/lib/platform";
-import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
 import type { CommentDraftView } from "./artifact-comment-drafts-queries";
@@ -25,7 +25,10 @@ import {
   AnchorChip,
   ArtifactReviewFab,
   ArtifactReviewQueue,
-  KbdHint,
+  PRIMARY_PILL_CLASS,
+  SECONDARY_PILL_CLASS,
+  TooltipShortcutRows,
+  TooltipWithKey,
   formatAnchorTag,
 } from "./artifact-review-chrome";
 import { draftFailure } from "./use-comment-drafts";
@@ -74,7 +77,7 @@ export function ArtifactReviewPill({
     setApple(isApplePlatform());
   }, []);
 
-  const modEnter = hotkeyKeycaps("Mod+Enter", apple).join(apple ? "" : "+");
+  const modEnter = hotkeyKeycaps("Mod+Enter", apple).join(apple ? " " : "+");
   const count = drafts.drafts.length;
   const locked = drafts.busy;
   const editingDraft = editingId
@@ -175,80 +178,110 @@ export function ArtifactReviewPill({
     [locked, pickedAnchor, annotating, onToggleAnnotate, onExitAnnotate],
   );
 
-  const saveForm = useCallback(async () => {
-    if (saving || locked) return;
-    const currentSegments = editorRef.current?.readSegments() ?? segments;
-    const serialized = serializeInlineSegments(currentSegments);
-    const primaryElement = firstElementAnchorFromSegments(currentSegments);
+  const saveForm = useCallback(
+    async (sendAfter = false) => {
+      if (saving || locked) return;
+      const currentSegments = editorRef.current?.readSegments() ?? segments;
+      const serialized = serializeInlineSegments(currentSegments);
+      const primaryElement = firstElementAnchorFromSegments(currentSegments);
 
-    if (editingDraft) {
-      if (!serialized && editingDraft.images.length === 0) return;
+      if (editingDraft) {
+        if (!serialized && editingDraft.images.length === 0) return;
+        setSaving(true);
+        setSaveError(null);
+        let saved = false;
+        try {
+          const canUpdateAnchor =
+            editingDraft.anchor === null || editingDraft.anchor.type === "element";
+          await actions.edit(
+            editingDraft,
+            serialized,
+            canUpdateAnchor
+              ? {
+                  anchor: primaryElement,
+                  ...(primaryElement
+                    ? { path: pickedPathRef.current ?? editingDraft.path ?? activePath ?? null }
+                    : {}),
+                }
+              : undefined,
+          );
+          resetCompose();
+          if (annotating) onExitAnnotate();
+          saved = true;
+        } catch (error) {
+          setSaveError(draftFailure(error));
+        } finally {
+          setSaving(false);
+        }
+        if (saved && sendAfter) {
+          setCardOpen(false);
+          await actions.submit();
+        }
+        return;
+      }
+
+      if (!serialized) {
+        if (sendAfter && count > 0) {
+          resetCompose();
+          pickedAnchor?.onClear();
+          if (annotating) onExitAnnotate();
+          setCardOpen(false);
+          await actions.submit();
+        }
+        return;
+      }
+      if (drafts.atLimit) return;
       setSaving(true);
       setSaveError(null);
+      let saved = false;
       try {
-        const canUpdateAnchor =
-          editingDraft.anchor === null || editingDraft.anchor.type === "element";
-        await actions.edit(
-          editingDraft,
-          serialized,
-          canUpdateAnchor
-            ? {
-                anchor: primaryElement,
-                ...(primaryElement
-                  ? { path: pickedPathRef.current ?? editingDraft.path ?? activePath ?? null }
-                  : {}),
-              }
-            : undefined,
-        );
+        const targetAnchor = nonElementPicked ? nonElementPicked.anchor : primaryElement;
+        const targetPath = nonElementPicked
+          ? nonElementPicked.path
+          : targetAnchor
+            ? (pickedPathRef.current ?? activePath)
+            : activePath;
+        await actions.create({
+          version: nonElementPicked?.version ?? version,
+          body: serialized,
+          ...(targetPath ? { path: targetPath } : {}),
+          ...(targetAnchor ? { anchor: targetAnchor } : {}),
+        });
         resetCompose();
+        pickedAnchor?.onClear();
         if (annotating) onExitAnnotate();
+        saved = true;
       } catch (error) {
         setSaveError(draftFailure(error));
       } finally {
         setSaving(false);
       }
-      return;
-    }
-
-    if (!serialized) return;
-    setSaving(true);
-    setSaveError(null);
-    try {
-      const targetAnchor = nonElementPicked ? nonElementPicked.anchor : primaryElement;
-      const targetPath = nonElementPicked
-        ? nonElementPicked.path
-        : targetAnchor
-          ? (pickedPathRef.current ?? activePath)
-          : activePath;
-      await actions.create({
-        version: nonElementPicked?.version ?? version,
-        body: serialized,
-        ...(targetPath ? { path: targetPath } : {}),
-        ...(targetAnchor ? { anchor: targetAnchor } : {}),
-      });
-      resetCompose();
-      pickedAnchor?.onClear();
-      if (annotating) onExitAnnotate();
-      setCardOpen(true);
-    } catch (error) {
-      setSaveError(draftFailure(error));
-    } finally {
-      setSaving(false);
-    }
-  }, [
-    saving,
-    locked,
-    segments,
-    editingDraft,
-    actions,
-    activePath,
-    resetCompose,
-    annotating,
-    onExitAnnotate,
-    nonElementPicked,
-    version,
-    pickedAnchor,
-  ]);
+      if (saved) {
+        if (sendAfter) {
+          setCardOpen(false);
+          await actions.submit();
+        } else {
+          setCardOpen(true);
+        }
+      }
+    },
+    [
+      saving,
+      locked,
+      segments,
+      editingDraft,
+      actions,
+      activePath,
+      resetCompose,
+      annotating,
+      onExitAnnotate,
+      count,
+      drafts.atLimit,
+      nonElementPicked,
+      version,
+      pickedAnchor,
+    ],
+  );
 
   const keyHandlerRef = useRef<(event: KeyboardEvent) => void>(() => {});
   keyHandlerRef.current = (event: KeyboardEvent) => {
@@ -345,21 +378,22 @@ export function ArtifactReviewPill({
   return (
     <div
       data-artifact-review-pill=""
-      className="pointer-events-none absolute right-4 bottom-4 z-20 flex max-w-[calc(100%-2rem)] flex-col items-end gap-2.5"
+      className="pointer-events-none absolute right-4 bottom-4 z-20 flex max-w-[calc(100%-2rem)] flex-col items-end gap-2"
     >
       {showCard && (
         <div
           data-review-card=""
-          className={cn(
-            "pointer-events-auto w-[26rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-secondary bg-primary shadow-xl",
-            "animate-in fade-in slide-in-from-bottom-1 motion-enter-sm",
-          )}
+          className="artifact-review-card pointer-events-auto w-[23.5rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-[1.125rem] bg-primary"
         >
           {isCompose ? (
             <>
               <div className="px-3.5 pt-3 pb-2.5">
                 <div className="mb-2 flex items-center gap-1.5 text-xs text-tertiary select-none">
-                  <Cursor02 aria-hidden="true" className="size-3.5 shrink-0" />
+                  <Cursor02
+                    aria-hidden="true"
+                    strokeWidth={1.25}
+                    className="size-3 shrink-0 fill-current"
+                  />
                   <span>{m.av_cm_pick_hint()}</span>
                 </div>
                 {nonElementPicked ? (
@@ -383,7 +417,8 @@ export function ArtifactReviewPill({
                   placeholder={m.av_dr_compose_placeholder()}
                   disabled={saving || locked}
                   onSegmentsChange={handleSegmentsChange}
-                  onSubmit={() => void saveForm()}
+                  onSubmit={() => void saveForm(false)}
+                  onSubmitAndSend={() => void saveForm(true)}
                   onCancel={exitComposeToList}
                 />
                 {saveError && (
@@ -392,31 +427,48 @@ export function ArtifactReviewPill({
                   </p>
                 )}
               </div>
-              <div className="flex items-center justify-between gap-2 border-t border-secondary px-3.5 py-2.5">
-                <CoForgeMark className="h-4 shrink-0 opacity-85" />
+              <div className="flex items-center justify-between gap-2 border-t border-secondary/70 px-3.5 py-2.5">
+                <CoForgeMark className="h-3.5 shrink-0 opacity-60 transition-opacity duration-150 hover:opacity-90" />
                 <div className="flex items-center gap-2">
-                  <AriaButton
-                    isDisabled={saving}
-                    onPress={exitComposeToList}
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-secondary bg-secondary px-3 py-1.5 text-xs font-medium text-primary outline-focus-ring transition-colors hover:bg-secondary_hover focus-visible:outline-2 disabled:opacity-50"
+                  <Tooltip
+                    delay={220}
+                    title={<TooltipWithKey label={m.controls_cancel()} shortcut="Esc" />}
                   >
-                    <span>
-                      {!editingDraft && count > 0
-                        ? m.av_dr_back_to_list({ count })
-                        : m.controls_cancel()}
-                    </span>
-                    <KbdHint>Esc</KbdHint>
-                  </AriaButton>
-                  <AriaButton
-                    isDisabled={!canSave}
-                    data-save-draft=""
-                    onPress={() => void saveForm()}
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-alpha-black px-3.5 py-1.5 text-xs font-semibold text-alpha-white outline-focus-ring transition-opacity hover:opacity-90 focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-40"
+                    <AriaButton
+                      isDisabled={saving}
+                      onPress={exitComposeToList}
+                      className={SECONDARY_PILL_CLASS}
+                    >
+                      <span>{m.controls_cancel()}</span>
+                    </AriaButton>
+                  </Tooltip>
+                  <Tooltip
+                    delay={220}
+                    title={
+                      <TooltipShortcutRows
+                        rows={[
+                          {
+                            label: editingDraft ? m.av_dr_save() : m.av_dr_add_tip(),
+                            shortcut: "Enter",
+                          },
+                          {
+                            label: m.av_dr_add_and_send_tip(),
+                            shortcut: modEnter,
+                          },
+                        ]}
+                      />
+                    }
                   >
-                    {!editingDraft && <Plus aria-hidden="true" className="size-3.5" />}
-                    <span>{editingDraft ? m.av_dr_save() : m.av_dr_add()}</span>
-                    <KbdHint tone="primary">{modEnter}</KbdHint>
-                  </AriaButton>
+                    <AriaButton
+                      isDisabled={!canSave}
+                      data-save-draft=""
+                      onPress={() => void saveForm(false)}
+                      className={PRIMARY_PILL_CLASS}
+                    >
+                      {!editingDraft && <Plus aria-hidden="true" className="size-3.5" />}
+                      <span>{editingDraft ? m.av_dr_save() : m.av_dr_add()}</span>
+                    </AriaButton>
+                  </Tooltip>
                 </div>
               </div>
             </>

@@ -20,15 +20,19 @@ import {
 } from "./artifact-inline-refs";
 
 const CHIP_SURFACE_CLASS =
-  "inline-flex max-w-44 items-center gap-1 rounded-md bg-utility-orange-50 px-1.5 py-0.5 align-baseline font-mono text-xs font-medium text-utility-orange-700 whitespace-nowrap select-all";
+  "inline-flex max-w-44 items-center gap-1 rounded-md bg-utility-orange-50 px-1.5 py-0.5 align-baseline font-mono text-xs font-medium text-primary whitespace-nowrap select-all";
 
 const CURSOR_SVG_MARKUP =
-  '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="size-3 shrink-0"><path d="M20.506 10.775c.616-.24.925-.36 1.012-.53a.5.5 0 0 0-.006-.465c-.091-.168-.403-.28-1.026-.503L4.596 3.573c-.51-.183-.764-.275-.93-.217a.5.5 0 0 0-.31.309c-.057.167.034.421.217.931l5.704 15.89c.224.623.335.934.503 1.025a.5.5 0 0 0 .466.006c.17-.086.29-.395.53-1.012l2.596-6.677c.047-.121.07-.181.107-.232a.501.501 0 0 1 .117-.117c.05-.036.111-.06.232-.107l6.678-2.597Z"/></svg>';
+  '<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" stroke="none" aria-hidden="true" class="size-2.5 shrink-0 text-utility-orange-500"><path d="M20.506 10.775c.616-.24.925-.36 1.012-.53a.5.5 0 0 0-.006-.465c-.091-.168-.403-.28-1.026-.503L4.596 3.573c-.51-.183-.764-.275-.93-.217a.5.5 0 0 0-.31.309c-.057.167.034.421.217.931l5.704 15.89c.224.623.335.934.503 1.025a.5.5 0 0 0 .466.006c.17-.086.29-.395.53-1.012l2.596-6.677c.047-.121.07-.181.107-.232a.501.501 0 0 1 .117-.117c.05-.036.111-.06.232-.107l6.678-2.597Z"/></svg>';
 
 export function InlineElementChip({ tag, className }: { tag: string; className?: string }) {
   return (
     <span className={cn(CHIP_SURFACE_CLASS, className)}>
-      <Cursor02 aria-hidden="true" className="size-3 shrink-0" />
+      <Cursor02
+        aria-hidden="true"
+        strokeWidth={1.25}
+        className="size-2.5 shrink-0 fill-current text-utility-orange-500"
+      />
       <span className="truncate">{`<${tag}>`}</span>
     </span>
   );
@@ -200,10 +204,19 @@ export const ArtifactInlineEditor = forwardRef<
     disabled?: boolean;
     onSegmentsChange: (segments: InlineSegment[]) => void;
     onSubmit: () => void;
+    onSubmitAndSend?: () => void;
     onCancel: () => void;
   }
 >(function ArtifactInlineEditor(
-  { label, placeholder = "", disabled = false, onSegmentsChange, onSubmit, onCancel },
+  {
+    label,
+    placeholder = "",
+    disabled = false,
+    onSegmentsChange,
+    onSubmit,
+    onSubmitAndSend,
+    onCancel,
+  },
   ref,
 ) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -321,6 +334,11 @@ export const ArtifactInlineEditor = forwardRef<
     if (event.nativeEvent.isComposing) return;
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
+      (onSubmitAndSend ?? onSubmit)();
+      return;
+    }
+    if (event.key === "Enter" && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
       onSubmit();
       return;
     }
@@ -351,7 +369,7 @@ export const ArtifactInlineEditor = forwardRef<
       onPaste={onPaste}
       onKeyDown={onKeyDown}
       className={cn(
-        "artifact-review-editor min-h-14 max-h-32 w-full overflow-y-auto bg-transparent text-sm leading-relaxed text-primary outline-hidden [overflow-wrap:anywhere]",
+        "artifact-review-editor min-h-11 max-h-32 w-full overflow-y-auto bg-transparent text-sm leading-snug text-primary outline-hidden [overflow-wrap:anywhere]",
         disabled && "pointer-events-none opacity-60",
       )}
     />

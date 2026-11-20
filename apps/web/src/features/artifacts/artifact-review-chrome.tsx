@@ -20,6 +20,12 @@ import type { CommentAnchor } from "./artifact-comment-inputs";
 import { InlineRefText } from "./artifact-inline-editor";
 import { extractElementTag } from "./artifact-inline-refs";
 
+export const SECONDARY_PILL_CLASS =
+  "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full bg-tertiary px-3.5 text-xs font-medium text-primary outline-focus-ring transition-colors duration-150 hover:bg-secondary_hover focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-40";
+
+export const PRIMARY_PILL_CLASS =
+  "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full bg-alpha-black px-3.5 text-xs font-medium text-alpha-white outline-focus-ring transition-opacity duration-150 hover:opacity-88 focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-40";
+
 export function formatAnchorTag(anchor: CommentAnchor | null, path?: string | null): string {
   if (anchor?.type === "element") {
     const selector = typeof anchor.data.selector === "string" ? anchor.data.selector.trim() : "";
@@ -62,17 +68,21 @@ export function AnchorChip({
   return (
     <span
       className={cn(
-        "inline-flex max-w-48 items-center gap-1 rounded-md bg-utility-orange-50 px-1.5 py-0.5 font-mono text-xs font-medium text-utility-orange-700",
+        "inline-flex max-w-48 items-center gap-1 rounded-md bg-utility-orange-50 px-1.5 py-0.5 font-mono text-xs font-medium text-primary",
         className,
       )}
     >
-      <Cursor02 aria-hidden="true" className="size-3 shrink-0" />
+      <Cursor02
+        aria-hidden="true"
+        strokeWidth={1.25}
+        className="size-2.5 shrink-0 fill-current text-utility-orange-500"
+      />
       <span className="truncate">{label}</span>
       {onRemove && (
         <AriaButton
           aria-label={m.controls_cancel()}
           onPress={onRemove}
-          className="ml-0.5 inline-flex size-3.5 shrink-0 cursor-pointer items-center justify-center rounded-sm text-utility-orange-700/75 transition-colors hover:text-utility-orange-700"
+          className="ml-0.5 inline-flex size-3.5 shrink-0 cursor-pointer items-center justify-center rounded-sm text-tertiary transition-colors hover:text-primary"
         >
           <XClose className="size-2.5" />
         </AriaButton>
@@ -81,36 +91,33 @@ export function AnchorChip({
   );
 }
 
-export function KbdHint({
-  children,
-  tone = "secondary",
-}: {
-  children: string;
-  tone?: "secondary" | "primary";
-}) {
+export function TooltipWithKey({ label, shortcut }: { label: string; shortcut: string }) {
   return (
-    <kbd
-      aria-hidden="true"
-      className={cn(
-        "rounded-sm px-1 py-0.5 font-mono text-xs leading-none font-medium",
-        tone === "primary"
-          ? "bg-alpha-white/15 text-alpha-white/85"
-          : "border border-secondary bg-primary/80 text-tertiary",
-      )}
-    >
-      {children}
-    </kbd>
+    <span className="inline-flex items-center gap-2">
+      <span>{label}</span>
+      <kbd className="rounded-sm px-1.5 py-0.5 font-sans text-xs leading-none font-medium text-tooltip-supporting-text ring-1 ring-current/40 ring-inset">
+        {shortcut}
+      </kbd>
+    </span>
   );
 }
 
-export function TooltipWithKey({ label, shortcut }: { label: string; shortcut: string }) {
+export function TooltipShortcutRows({
+  rows,
+}: {
+  rows: ReadonlyArray<{ label: string; shortcut: string }>;
+}) {
   return (
-    <>
-      {label}
-      <kbd className="ml-2 rounded-xs px-1 font-sans text-xs font-medium text-tooltip-supporting-text ring-1 ring-current ring-inset">
-        {shortcut}
-      </kbd>
-    </>
+    <span className="flex flex-col gap-1.5">
+      {rows.map((row) => (
+        <span key={row.label} className="flex items-center justify-between gap-4">
+          <span className="font-medium">{row.label}</span>
+          <kbd className="rounded-sm px-1.5 py-0.5 font-sans text-xs leading-none font-medium text-tooltip-supporting-text ring-1 ring-current/40 ring-inset">
+            {row.shortcut}
+          </kbd>
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -139,7 +146,7 @@ export function ArtifactReviewQueue({
 }) {
   return (
     <>
-      <ul className="max-h-60 divide-y divide-secondary overflow-y-auto">
+      <ul className="max-h-60 divide-y divide-secondary/70 overflow-y-auto">
         {drafts.map((draft, index) => (
           <li
             key={draft.id}
@@ -150,7 +157,7 @@ export function ArtifactReviewQueue({
           >
             <AriaButton
               onPress={() => onOpenDraft(draft)}
-              className="min-w-0 flex-1 cursor-pointer text-left text-sm leading-relaxed text-primary outline-focus-ring focus-visible:outline-2"
+              className="min-w-0 flex-1 cursor-pointer text-left text-sm leading-snug text-primary outline-focus-ring focus-visible:outline-2"
             >
               <InlineRefText body={draft.body} anchor={draft.anchor} path={draft.path} />
             </AriaButton>
@@ -177,28 +184,34 @@ export function ArtifactReviewQueue({
           </li>
         ))}
       </ul>
-      <div className="flex items-center justify-between gap-2 border-t border-secondary px-3.5 py-2.5">
-        <CoForgeMark className="h-4 shrink-0 opacity-85" />
+      <div className="flex items-center justify-between gap-2 border-t border-secondary/70 px-3.5 py-2.5">
+        <CoForgeMark className="h-3.5 shrink-0 opacity-60 transition-opacity duration-150 hover:opacity-90" />
         <div className="flex items-center gap-2">
-          <AriaButton
-            isDisabled={locked || atLimit}
-            onPress={onNewComment}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-secondary bg-secondary px-3 py-1.5 text-xs font-medium text-primary outline-focus-ring transition-colors hover:bg-secondary_hover focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-40"
+          <Tooltip
+            delay={220}
+            title={<TooltipWithKey label={m.av_dr_new_comment()} shortcut="N" />}
           >
-            <Plus aria-hidden="true" className="size-3.5" />
-            <span>{m.av_dr_new_comment()}</span>
-            <KbdHint>N</KbdHint>
-          </AriaButton>
-          <Tooltip title={<TooltipWithKey label={m.av_dr_send_all_tip()} shortcut={modEnter} />}>
+            <AriaButton
+              isDisabled={locked || atLimit}
+              onPress={onNewComment}
+              className={SECONDARY_PILL_CLASS}
+            >
+              <Plus aria-hidden="true" className="size-3.5" />
+              <span>{m.av_dr_new_comment()}</span>
+            </AriaButton>
+          </Tooltip>
+          <Tooltip
+            delay={220}
+            title={<TooltipWithKey label={m.av_dr_send_all_tip()} shortcut={modEnter} />}
+          >
             <AriaButton
               isDisabled={locked}
               data-draft-send=""
               aria-label={m.av_dr_send_all_tip()}
               onPress={onSubmit}
-              className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-alpha-black px-3.5 py-1.5 text-xs font-semibold text-alpha-white ring-1 ring-alpha-black ring-offset-2 ring-offset-primary outline-focus-ring transition-opacity hover:opacity-90 focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-40"
+              className={PRIMARY_PILL_CLASS}
             >
               <span>{m.av_dr_send_all()}</span>
-              <KbdHint tone="primary">{modEnter}</KbdHint>
               <ArrowRight aria-hidden="true" className="size-3.5" />
             </AriaButton>
           </Tooltip>
@@ -219,6 +232,7 @@ export function ArtifactReviewFab({
 }) {
   return (
     <Tooltip
+      delay={220}
       title={
         <TooltipWithKey
           label={annotating ? m.av_cm_annotating() : m.av_cm_annotate()}
@@ -233,22 +247,20 @@ export function ArtifactReviewFab({
         data-picking={String(annotating)}
         onPress={onPress}
         className={cn(
-          "artifact-review-fab pointer-events-auto relative flex size-11 cursor-pointer items-center justify-center rounded-full shadow-lg outline-focus-ring focus-visible:outline-2",
-          annotating
-            ? "border-2 border-utility-orange-500 bg-terminal text-utility-orange-500"
-            : "border border-secondary/30 bg-terminal text-terminal-fg",
+          "artifact-review-fab pointer-events-auto relative flex size-10 cursor-pointer items-center justify-center rounded-full bg-terminal outline-focus-ring focus-visible:outline-2",
+          annotating ? "text-utility-orange-500" : "text-terminal-fg",
         )}
       >
         <span aria-hidden="true" className="artifact-review-fab-icon artifact-review-fab-bubble">
-          <MessageSquare01 className="size-5" />
+          <MessageSquare01 strokeWidth={1.65} className="size-[1.125rem]" />
         </span>
         <span aria-hidden="true" className="artifact-review-fab-icon artifact-review-fab-pick">
-          <CursorBox className="size-5" />
+          <CursorBox strokeWidth={1.65} className="size-[1.125rem]" />
         </span>
         <span
           aria-hidden="true"
-          data-visible={String(count > 0 && !annotating)}
-          className="artifact-review-fab-badge pointer-events-none absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-utility-orange-500 px-1 text-xs leading-none font-semibold text-white tabular-nums shadow-xs"
+          data-visible={String(count > 0)}
+          className="artifact-review-fab-badge pointer-events-none absolute -top-1 -right-1 flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-utility-orange-500 px-1 text-xs leading-none font-semibold text-white tabular-nums shadow-xs"
         >
           {count}
         </span>

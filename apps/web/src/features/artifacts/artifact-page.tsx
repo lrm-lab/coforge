@@ -10,7 +10,6 @@ import { useBreakpoint } from "#src/hooks/use-breakpoint";
 import { copyText } from "#src/lib/clipboard";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
-import { useArtifactPageTransition } from "./use-artifact-page-transition";
 import { deleteArtifact } from "./artifacts.functions";
 import { ArtifactDeleteConfirm } from "./artifact-delete-confirm";
 import { ArtifactFile, ArtifactFileView } from "./artifact-file-view";
@@ -303,11 +302,6 @@ function ArtifactPageFor({
     },
   });
   const phone = !docked;
-  const { frameRef, frameStyle } = useArtifactPageTransition({
-    artifactId,
-    pane: Boolean(pane),
-    phone,
-  });
   const failure = read.error;
   if (isGone(failure) || (failure && !current)) {
     const unavailable = (
@@ -508,12 +502,10 @@ function ArtifactPageFor({
     <PaneFrame full={pane.full}>{body}</PaneFrame>
   ) : (
     <main
-      ref={frameRef}
       data-artifact-page-frame=""
-      style={frameStyle}
       aria-labelledby={current ? ARTIFACT_TITLE_ID : undefined}
       aria-label={current ? undefined : m.doc_pane_label()}
-      className="@container/doc flex h-full min-h-0 min-w-0 flex-1 flex-col bg-primary"
+      className="@container/doc flex h-full min-h-0 min-w-0 flex-1 flex-col bg-primary animate-in fade-in motion-enter-sm motion-reduce:animate-none"
     >
       {body}
     </main>
