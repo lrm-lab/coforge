@@ -21,6 +21,7 @@ import {
   requireRecord,
 } from "./agent-control-fence";
 import { rebindRunning } from "./agent-control-rebind";
+import { resetAgentWorkspace } from "./agent-control-reset-workspace";
 import { replayAgentControlResults, withoutStartPrompts } from "./agent-control-replay";
 import { systemLaunchRetryScheduler, type LaunchRetryScheduler } from "./launch-retry-scheduler";
 
@@ -180,60 +181,7 @@ export class AgentControl {
     });
   }
   resetWorkspace(scope: AgentWorkspaceResetRequest): Promise<void> {
-    return this.#context.state.run(scope.agentId, async () => {
-      let record = await this.#context.state.store.read(scope.agentId);
-      record = await repairStaleRecord(this.#context, scope.agentId, record);
-      fence(record, scope);
-      if (!record || record.scope.epoch !== scope.epoch || record.stopResult?.phase !== "stopped")
-        throw new Error("confirmed_stop_required");
-      this.#known.add(scope.agentId);
-      if (record.workspaceResetResult) {
-        if (record.workspaceResetResult.requestId !== scope.requestId)
-          throw new Error("control_request_mismatch");
-        await this.#context.runtime.result(record.workspaceResetResult).catch(() => {});
-        return;
-      }
-      if (
-        !["stopped", "clearing"].includes(record.phase) ||
-        record.startResult ||
-        this.#context.runtime.running(scope.agentId)
-      )
-        throw new Error("confirmed_stop_required");
-      record.action = "reset-workspace";
-      record.phase = "clearing";
-      await this.#context.state.store.write(scope.agentId, record);
-      // A clear failure is non-fatal (liveness over durable receipts): it never latches the
-      // Agent into a terminal state only an explicit reset retry could leave. The session
-      // association is still cleared locally and the chain still proceeds to Start. The failure
-      // is only logged: there is no result field, state, or anything else that blocks a later
-      // agent:start.
-      let workspaceClearError = false;
-      try {
-        await this.#context.state.store.clearWorkspace(scope.agentId);
-      } catch (error) {
-        workspaceClearError = true;
-        logger.error("Agent workspace clear did not complete", {
-          event: "agent_control:workspace_clear_failed",
-          request_id: scope.requestId,
-          workspace_id: scope.workspaceId,
-          computer_id: scope.computerId,
-          agent_id: scope.agentId,
-          error_code: diagnosticErrorCode(error),
-          outcome: "failed",
-        });
-      }
-      this.#context.sessions.clear(record);
-      record.phase = "workspace-reset";
-      record.workspaceResetResult = {
-        ...scope,
-        phase: "workspace-reset",
-        sequence: ++record.sequence,
-        ...(workspaceClearError ? { errorCode: "workspace_clear_failed" } : {}),
-      };
-      record.lastResult = record.workspaceResetResult;
-      await this.#context.state.store.write(scope.agentId, record);
-      await this.#context.runtime.result(record.lastResult).catch(() => {});
-    });
+    return resetAgentWorkspace(this.#context, this.#known, scope);
   }
   /** Whether a Start is pending for this Agent: from the synchronous `start` call, through every
    * launch attempt and the cooldown before each automatic retry, until it launches or ends;
