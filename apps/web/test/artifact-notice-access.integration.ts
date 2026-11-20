@@ -361,29 +361,22 @@ test("the bot inbox stops handing back a notice once the artifact is gone", asyn
   );
   expect(await hinted()).not.toContain(event.messageId);
   const after = await inbox.check(principal);
-  const decoded = JSON.parse(Buffer.from(after.cursor, "base64url").toString("utf8")) as {
-    groups: [conversationId: string, threadRootId: string | null, sequence: number][];
-    outside: string[];
-  };
-  const cursored = [
-    ...decoded.groups.map(([conversationId]) => conversationId),
-    ...decoded.outside,
-  ];
-  expect(cursored.length).toBeGreaterThan(0);
-  const acked = decoded.groups.find(
-    ([conversationId]) => conversationId === event.conversationId,
-  )?.[2];
-  expect(acked ?? Number.MAX_SAFE_INTEGER).toBeLessThan(event.message.sequence);
-  const receipt = async () =>
+  const readThrough = async () =>
     (
-      await h.f.db.agentMessageDelivery.findFirstOrThrow({
-        where: { agentId: h.f.agents.reader, messageId: event.messageId },
-        select: { receivedAt: true },
+      await h.f.db.conversationMember.findUniqueOrThrow({
+        where: {
+          conversationId_agentId: {
+            conversationId: event.conversationId,
+            agentId: principal.agentId,
+          },
+        },
+        select: { agentReadThroughSequence: true },
       })
-    ).receivedAt;
-  expect(await receipt()).toBeNull();
+    ).agentReadThroughSequence;
+  const before = await readThrough();
+  expect(before).toBeLessThan(event.message.sequence);
   await inbox.check(principal, { since: after.cursor });
-  expect(await receipt()).toBeNull();
+  expect(await readThrough()).toBe(before);
 });
 
 test("the wake hint drops the notice in the same step its artifact goes", async () => {
