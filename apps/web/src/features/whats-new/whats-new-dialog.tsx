@@ -32,7 +32,7 @@ export function WhatsNewDialog({
       }}
       isDismissable
     >
-      <Modal className="w-full max-w-[30rem] overflow-hidden">
+      <Modal className="w-full max-w-[36rem] overflow-hidden">
         <Dialog aria-label={m.whats_new_entry()}>
           {({ close }) => (
             <WhatsNewPages
@@ -80,19 +80,22 @@ function WhatsNewPages({
         aria-label={m.whats_new_close()}
         onClick={onDone}
         className={cx(
-          "absolute top-3.5 right-3.5 z-10 rounded-full",
+          "absolute top-4 right-4 z-10 rounded-full",
           entry.heroTone === "dark" &&
             "bg-overlay/30 text-white/90 ring-1 ring-white/15 backdrop-blur-sm hover:bg-overlay/50 hover:text-white",
         )}
       />
-      <div aria-hidden="true" className="relative h-56 overflow-hidden bg-secondary sm:h-64">
+      <div
+        aria-hidden="true"
+        className="relative h-56 overflow-hidden bg-secondary sm:h-[20.25rem]"
+      >
         <Illustration />
       </div>
-      <div className="px-5 pt-5 pb-5 sm:px-6 sm:pb-6">
-        <Heading slot="title" className="text-lg font-semibold text-primary">
+      <div className="px-5 pt-5 pb-5 sm:px-7 sm:pt-6 sm:pb-7">
+        <Heading slot="title" className="text-lg font-semibold text-primary sm:text-xl">
           {entry.title()}
         </Heading>
-        <p className="mt-1.5 text-md text-tertiary">{entry.body()}</p>
+        <p className="mt-2 text-md text-tertiary">{entry.body()}</p>
         <div className="mt-6 flex items-center gap-2">
           {pages.length > 1 && (
             <div className="flex items-center gap-1.5" aria-hidden="true">
