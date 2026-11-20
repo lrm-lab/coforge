@@ -28,22 +28,11 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { GroupAvatar, type GroupAvatarMember } from "#src/features/conversations/group-avatar";
 
-/**
- * One picker for every "choose a person, an Agent or a Project" in the app (task #415): a channel's
- * coordinator, a channel's Project, a Task's owner, the search page's From, and the like. A row is
- * a face and a name; an Agent adds its `@handle`, since a person and an Agent may share a name.
- * The search field on top finds a row by its name or handle, and a search that matches nothing
- * says so.
- * The fixed choices a place offers ("None", "Anyone", "Unassigned") are rows like any other.
- */
-
-/** What a row shows on its left. */
 export type PickerFace =
   | {
       kind: "identity";
       name: string;
       src?: string | null;
-      /** A person or an Agent: picking among people, each shows its status dot (task #510). */
       userId?: string;
       agentId?: string;
     }
@@ -52,33 +41,21 @@ export type PickerFace =
   | {
       kind: "channel";
       visibility: ChannelVisibility;
-      /** Its group avatar's members: given, the channel shows as the sidebar draws it. */
       members?: readonly GroupAvatarMember[];
     };
 
 export type PickerOption = {
-  /** Unique in the list. Namespace ids by kind (`user:…`, `agent:…`): ids of different kinds may
-   * collide, and so may names. */
   id: string;
   label: string;
   face?: PickerFace;
-  /** Faint at the end of the row: an Agent's `@handle`. */
   addon?: string;
-  /** Faint after the label whatever the other rows are called: why the row is where it is (the
-   * Project a new Task was last filed under, listed first). */
   note?: string;
-  /** The row's accessible name, when its face carries meaning the label lacks (a channel's `#`). */
   ariaLabel?: string;
-  /** How many there are of it (a filter's Tasks), after the addon. */
   count?: number;
-  /** Matched by the search besides the label: an Agent's handle, a Project's slug. */
   keywords?: string;
   isDisabled?: boolean;
 };
 
-/** A person's or Agent's picture (an Agent's mascot drawn whole, not clipped to a tile), a
- * Project's image or folder, a channel's `#` (a lock when it is private), or a glyph for a choice
- * that is not an entity (who can see something). */
 export function Face({ face }: { face: PickerFace }) {
   if (face.kind === "channel" && face.members?.length)
     return <GroupAvatar members={face.members} className="avatar-group-xs" />;
@@ -125,15 +102,12 @@ export function Face({ face }: { face: PickerFace }) {
   );
 }
 
-/** One choice: the popover closes on it. */
 type SingleChoice = { selectedKey: string | null; onSelect: (id: string) => void };
-/** Any number of choices, each a checkbox: the popover stays open while they are ticked. */
 type MultipleChoice = {
   selectedKeys: readonly string[];
   onSelectedKeysChange: (ids: string[]) => void;
 };
 
-/** Choices that read apart: a place's fixed choices beside the entities that fill it. */
 export type PickerSection = {
   id: string;
   label: string;
@@ -141,36 +115,25 @@ export type PickerSection = {
 };
 
 type MenuBase = {
-  /** What is being chosen, as a screen reader hears the list and as the search field reads. */
   label: string;
   options?: readonly PickerOption[];
-  /** The same choices under headings, instead of one list. The search drops a heading left empty. */
   sections?: readonly PickerSection[];
-  /** What the search field asks for. */
   searchPlaceholder?: string;
-  /** The caller searches, for a list too long to send whole: the field is always there, and the
-   * rows are shown as given. Stable; told "" when the menu closes. */
   onSearchChange?: (term: string) => void;
 };
 
-/** What a picker of one choice takes, and what one of several takes. */
 export type PickerSingleProps = MenuBase & SingleChoice;
 export type PickerMultipleProps = MenuBase & MultipleChoice;
 
-/** Every picker's search field and list, so the label picker and the member picker read alike. */
 export const PICKER_SEARCH_INPUT =
   "h-10 w-full border-b border-secondary bg-transparent px-3.5 text-sm text-primary outline-hidden placeholder:text-placeholder max-sm:h-12 max-sm:text-md";
 export const PICKER_LIST =
   "max-h-72 overflow-y-auto p-1 outline-hidden select-none max-sm:max-h-[50dvh]";
-/** A heading between two groups of choices: quieter than every row it names. */
-export const PICKER_SECTION_HEADING =
+const PICKER_SECTION_HEADING =
   "px-2.5 pt-2 pb-1 text-xs font-medium text-quaternary max-sm:pt-2.5 max-sm:text-sm";
 
-/** Up to this many rows are read at a glance: a list inside another menu gets a search field
- * past it. */
 const SEARCH_FROM = 8;
 
-/** The picker's content: a search field, typed into as it opens, then one row per choice. */
 export function PickerMenu({
   label,
   options = [],
@@ -182,11 +145,7 @@ export function PickerMenu({
   ...choice
 }: MenuBase &
   (SingleChoice | MultipleChoice) & {
-    /** Off on a phone, where focus would raise the keyboard over the list. */
     autoFocus?: boolean;
-    /** Closes the picker that holds this menu: after a single choice, and on Esc from the search
-     * field. A menu that has it is a picker of its own and always gets a search field; one inside
-     * another menu (a filter's submenu) gets one only once its list is longer than a glance. */
     onClose?: () => void;
   }) {
   const { contains } = useFilter({ sensitivity: "base" });
@@ -194,10 +153,7 @@ export function PickerMenu({
   useEffect(() => () => onSearchChange?.(""), [onSearchChange]);
   const multiple = "selectedKeys" in choice;
   const all = sections ? sections.flatMap((section) => section.options) : options;
-  // In a list with faces, a row without one ("None", "Unassigned") gets an empty ring in its place,
-  // so every name starts at one edge.
   const faced = all.some((option) => option.face);
-  // A handle tells apart two members of one name, and is noise otherwise (search still finds it).
   const named = new Map<string, number>();
   for (const option of all) named.set(option.label, (named.get(option.label) ?? 0) + 1);
   const textOf = (option: PickerOption) =>
@@ -223,8 +179,6 @@ export function PickerMenu({
       )}
     </PickerRow>
   );
-  // A section whose every row the search drops is dropped with it, as a filter's headings were
-  // before the picker drew them. The caller searches itself when it asked for `onSearchChange`.
   const listed = sections
     ? sections
         .map((section) => ({
@@ -257,10 +211,7 @@ export function PickerMenu({
         : {
             selectionMode: "single" as const,
             selectedKeys: choice.selectedKey === null ? [] : [choice.selectedKey],
-            // A menu given `onClose` closes through it, never by closing the overlay it sits in:
-            // a filter's list inside the search filters goes back to them, the filters stay open.
             shouldCloseOnSelect: !onClose,
-            // Choosing what is already chosen changes nothing, as a select would not.
             onAction: (key: Key) => {
               if (key !== choice.selectedKey) choice.onSelect(String(key));
               onClose?.();
@@ -288,8 +239,6 @@ export function PickerMenu({
       inputValue={search}
       onInputChange={typed}
     >
-      {/* Esc with nothing typed closes the picker (with text, it clears the text first): the
-          search field hands Esc to the list, which keeps it. */}
       <div
         onKeyDownCapture={(event) => {
           if (event.key === "Escape" && !search) onClose?.();
@@ -304,7 +253,6 @@ export function PickerMenu({
   );
 }
 
-/** "No one" where the other rows have a face: an empty dashed ring of the same size. */
 function NoFace() {
   return (
     <span
@@ -314,11 +262,6 @@ function NoFace() {
   );
 }
 
-/**
- * One row of every picker: a face, a name on one line, and a tick at the end on the chosen one
- * (a checkbox in front where several may be chosen). Every row is the same height; the row under
- * the pointer or the arrow keys gets a faint fill, never an outline.
- */
 export function PickerRow({
   leading,
   multiple,
@@ -359,10 +302,6 @@ export function PickerRow({
 
 type MenuProps = PickerSingleProps | PickerMultipleProps;
 
-/**
- * Where a picker opens: under its trigger on a wide screen, and on a phone a sheet from the bottom
- * edge, with rows a thumb can hit and the keyboard down until the search field is tapped.
- */
 export function PickerSurface({
   trigger,
   label,
@@ -373,16 +312,12 @@ export function PickerSurface({
   className,
   children,
 }: {
-  /** A React Aria pressable: it opens the picker. */
   trigger: ReactNode;
-  /** The sheet's accessible name on a phone. */
   label: string;
   placement?: Placement;
-  /** What the popover lines up with when not the trigger itself (a field's whole row). */
   anchorRef?: RefObject<Element | null>;
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** The popover's width on a wide screen. */
   className?: string;
   children: (sheet: { phone: boolean; close: () => void }) => ReactNode;
 }) {
@@ -410,7 +345,6 @@ export function PickerSurface({
   return (
     <DialogTrigger isOpen={open} onOpenChange={setOpen}>
       {trigger}
-      {/* Edge to edge at the bottom: the official overlay's gutter and bottom room are for a card. */}
       <ModalOverlay isDismissable className="px-0 [--modal-pb:0px]">
         <Modal className="w-full rounded-t-2xl rounded-b-none">
           <Dialog aria-label={label} className="pb-safe-bottom outline-hidden">
@@ -426,17 +360,14 @@ export function PickerSurface({
   );
 }
 
-/** A picker opened from a trigger of the caller's (a chip, a Task field). */
 export function EntityPicker({
   trigger,
   placement,
   className,
   ...menu
 }: MenuProps & {
-  /** A React Aria pressable: it opens the picker. */
   trigger: ReactNode;
   placement?: Placement;
-  /** The popover's width on a wide screen. */
   className?: string;
 }) {
   return (
@@ -446,13 +377,10 @@ export function EntityPicker({
   );
 }
 
-/** How an Agent shows and is found in a picker: its `@handle` at the row's end, searched by it. */
 export function agentHandle(handle: string) {
   return { addon: `@${handle}`, keywords: handle };
 }
 
-/** A member as a picker row: keyed `user:<id>` or `agent:<id>`; an Agent shows and is searched by
- * its `@handle`, a person by name only. */
 export function memberOption(member: {
   kind: "user" | "agent";
   id: string;
@@ -473,8 +401,6 @@ export function memberOption(member: {
   };
 }
 
-/** A Project as a picker row, keyed by its id: its image (or a folder), its name, searched by its
- * slug too. */
 export function projectOption(project: {
   id: string;
   name: string;
@@ -489,7 +415,6 @@ export function projectOption(project: {
   };
 }
 
-/** Projects as picker rows. A name two Projects share shows each one's slug, so they read apart. */
 export function projectOptions(
   projects: readonly { id: string; name: string; slug?: string; iconUrl?: string | null }[],
 ): PickerOption[] {
