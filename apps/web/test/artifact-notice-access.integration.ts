@@ -35,6 +35,11 @@ test("a notice stops being readable once the Agent loses the artifact", async ()
       (delivery) => delivery.messageId,
     );
   expect(await pendingIds()).toContain(event.messageId);
+  const recoveryIds = async () =>
+    (
+      await conversations.readAgentRecoveryContext(h.f.workspaceId, h.f.agents.reader)
+    ).resumeMessages.map((message) => message.messageId);
+  expect(await recoveryIds()).toContain(event.messageId);
 
   const home = await h.f.db.artifact.findUniqueOrThrow({
     where: { id: artifact },
@@ -51,6 +56,7 @@ test("a notice stops being readable once the Agent loses the artifact", async ()
   });
 
   expect(await pendingIds()).not.toContain(event.messageId);
+  expect(await recoveryIds()).not.toContain(event.messageId);
   const systemMembership = await h.f.db.conversationMember.findFirst({
     where: { conversationId: event.conversationId, agentId: h.f.agents.reader, leftAt: null },
     select: { id: true },

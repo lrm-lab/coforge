@@ -245,7 +245,7 @@ export async function readAgentRecoveryContext(
     resumeMessages: AgentFacing<AgentRecoveryContext["resumeMessages"][number]>[];
   }
 > {
-  const [rows, openTasks] = await Promise.all([
+  const [ranked, openTasks] = await Promise.all([
     ports.db.$queryRaw<AgentRecoveryRow[]>`
     WITH unread AS (
       ${unreadAgentMessagesFragment(workspaceId, agentId)}
@@ -265,6 +265,13 @@ export async function readAgentRecoveryContext(
     ORDER BY "globalRank"`,
     readAgentStartOpenTasks(ports.db, workspaceId, agentId),
   ]);
+  const blockedNotices = await artifactNoticeBlockedMessages(
+    ports.db,
+    workspaceId,
+    agentId,
+    ranked.map((row) => row.id),
+  );
+  const rows = blockedNotices.size ? ranked.filter((row) => !blockedNotices.has(row.id)) : ranked;
   const resumeMessages: AgentFacing<AgentRecoveryContext["resumeMessages"][number]>[] = [];
   const unreadSummary: Record<string, number> = {};
   const unreadConversationIds: Record<string, string> = {};
