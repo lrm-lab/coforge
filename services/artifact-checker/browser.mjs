@@ -102,6 +102,12 @@ export function createPlaywrightDriver(options = {}) {
             "--disable-dev-shm-usage",
             "--disable-gpu",
             "--disable-extensions",
+            "--disable-background-networking",
+            "--disable-default-apps",
+            "--disable-sync",
+            "--no-first-run",
+            "--renderer-process-limit=1",
+            "--js-flags=--max-old-space-size=256",
           ],
         });
         instance.on("disconnected", () => {
@@ -398,12 +404,12 @@ export function createPlaywrightDriver(options = {}) {
                 perShotTimeout,
                 "inline size read",
               );
-              const measuredHeight = Math.max(
-                diag.inlineOverflow?.contentHeight ?? 0,
-                typeof reported === "number" && Number.isFinite(reported)
+              const reportedHeight =
+                typeof reported === "number" && Number.isFinite(reported) && reported > 0
                   ? Math.round(reported)
-                  : 0,
-              );
+                  : 0;
+              const measuredHeight =
+                reportedHeight > 0 ? reportedHeight : (diag.inlineOverflow?.contentHeight ?? 0);
               inlineOverflow = {
                 contentHeight: measuredHeight,
                 maxHeight: INLINE_MAX_HEIGHT_PX,
@@ -419,7 +425,7 @@ export function createPlaywrightDriver(options = {}) {
                 perShotTimeout,
                 "inline resize",
               );
-              await page.waitForTimeout(100);
+              await page.waitForTimeout(150);
             }
             const png = await page.screenshot({
               type: "png",

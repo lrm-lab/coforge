@@ -177,10 +177,24 @@ export function createHttpArtifactCheckRunner(
         if (error instanceof ArtifactCheckRunnerError) throw error;
         const aborted =
           error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
-        throw new ArtifactCheckRunnerError(
-          aborted ? "worker_timeout" : "worker_unreachable",
-          error instanceof Error ? error.message : String(error),
-        );
+        const errorClass = aborted ? "worker_timeout" : "worker_unreachable";
+        const detail = (error instanceof Error ? error.message : String(error)).slice(0, 300);
+        const errorCode =
+          error && typeof error === "object" && "code" in error && typeof error.code === "string"
+            ? error.code
+            : null;
+        logger.error({
+          event: "artifact_check.worker_network_error",
+          checkId: input.checkId,
+          artifactId: input.artifactId,
+          version: input.version,
+          errorClass,
+          errorName: error instanceof Error ? error.name : null,
+          errorCode,
+          durationMs: Date.now() - startedAt,
+          detail,
+        });
+        throw new ArtifactCheckRunnerError(errorClass, detail);
       } finally {
         clearTimeout(timer);
       }

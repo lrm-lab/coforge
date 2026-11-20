@@ -122,3 +122,65 @@ proxy_diagnostics() {
 	esac
 	return 0
 }
+
+probe_artifact_checker() {
+	[ -n "${checker_image:-}" ] && [ -f "${checker_compose_file:-}" ] || return 0
+	local container result
+	container="$(timeout --kill-after=1s 5s docker ps --filter "label=com.docker.compose.project=$project" \
+		--filter label=com.docker.compose.service=web --format '{{.ID}}' 2>/dev/null | head -n 1)" || true
+	if ! [[ "$container" =~ ^[0-9a-f]{6,64}$ ]]; then
+		result=unavailable
+	else
+		result="$(timeout --kill-after=1s 25s docker exec "$container" bun -e '
+const workerSocket = Bun.env.COFORGE_ARTIFACT_CHECK_WORKER_SOCKET?.trim() ?? "";
+const workerUrl = (Bun.env.COFORGE_ARTIFACT_CHECK_WORKER_URL?.trim() || (workerSocket ? "http://artifact-checker" : "")).replace(/\/+$/, "");
+const secret = Bun.env.COFORGE_ARTIFACT_CHECK_SECRET?.trim() ?? "";
+let result = "env_missing";
+if ((workerSocket || workerUrl) && secret) {
+  try {
+    const html = "<!doctype html><html><body style=\"margin:0\"><canvas id=\"c\" width=\"120\" height=\"80\"></canvas><script>const g=document.getElementById(\"c\").getContext(\"2d\");g.fillStyle=\"#1570ef\";g.fillRect(0,0,120,80);</script></body></html>";
+    const res = await fetch(workerUrl + "/check", {
+      method: "POST",
+      ...(workerSocket ? { unix: workerSocket } : {}),
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + secret },
+      body: JSON.stringify({
+        checkId: "deploy-probe",
+        origin: "https://a-deployprobe.coforge.check",
+        entryPath: "index.html",
+        csp: "",
+        runtimeJs: "",
+        allowedCdnHosts: [],
+        files: [{ path: "index.html", contentType: "text/html; charset=utf-8", base64: Buffer.from(html).toString("base64") }],
+        viewports: [{ shot: "desktop", width: 1280, height: 800, deviceScaleFactor: 1, mode: "panel" }],
+        timeoutMs: 18000,
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) {
+      result = res.status === 408 || res.status === 504 ? "timeout" : res.status >= 500 ? "http_5xx" : "http_4xx";
+      await res.body?.cancel();
+    } else {
+      try {
+        const data = await res.json();
+        result = data && data.findings && !data.findings.blank && Array.isArray(data.screenshots) && data.screenshots.length === 1 ? "ok" : "invalid_response";
+      } catch {
+        result = "invalid_response";
+      }
+    }
+  } catch (error) {
+    result = error?.name === "TimeoutError" || error?.name === "AbortError" ? "timeout" : "unreachable";
+  }
+}
+console.log(result);
+' 2>/dev/null | head -c 64)" || true
+	fi
+	case "$result" in
+	ok | env_missing | http_4xx | http_5xx | invalid_response | timeout | unreachable) ;;
+	*) result=unavailable ;;
+	esac
+	printf 'artifact-checker live probe: %s\n' "$result" >&2
+	if [ "$result" != ok ]; then
+		deploy_warning="${deploy_warning:+$deploy_warning; }artifact-checker live probe returned $result"
+	fi
+	return 0
+}

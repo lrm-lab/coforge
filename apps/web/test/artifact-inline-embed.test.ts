@@ -132,12 +132,26 @@ describe("inline embed bridge and runtime", () => {
     });
   });
 
-  test("runtime source supports displayMode, --coforge-* theme tokens, inline defaults, and post-init sizing", () => {
+  test("runtime source supports displayMode, --coforge-* theme tokens, inline defaults, viewport-stage sizing, and post-init sizing", () => {
     const source = pageRuntimeSource();
     expect(source).toContain("data-display-mode");
     expect(source).toContain("__coforge-inline-defaults");
     expect(source).toContain("--coforge-");
     expect(source).toContain("if (!initialized) return;");
+    expect(source).toContain("detectViewportStage");
+    expect(source).toContain("hasViewportHeightRule");
+    expect(source).not.toContain("\b");
+    expect(() => new Function(source)).not.toThrow();
+    const regexMatch = /var VIEWPORT_UNIT = (\/.+\/[a-z]*);/.exec(source);
+    expect(regexMatch).not.toBeNull();
+    const viewportUnit = new Function(`return ${regexMatch![1]};`)() as RegExp;
+    expect(viewportUnit.test("100%")).toBe(true);
+    expect(viewportUnit.test("100% !important")).toBe(true);
+    expect(viewportUnit.test("calc(100% - 10px)")).toBe(true);
+    expect(viewportUnit.test("100vh")).toBe(true);
+    expect(viewportUnit.test("100dvh")).toBe(true);
+    expect(viewportUnit.test("200px")).toBe(false);
+    expect(viewportUnit.test("50%")).toBe(false);
     expect(source).toContain("ui/notifications/size-changed");
   });
 });

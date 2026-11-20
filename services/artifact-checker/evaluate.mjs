@@ -1,5 +1,6 @@
 export const INLINE_HOST_ORIGIN = "https://host.coforge.check";
 export const INLINE_HOST_PATH = "/__coforge_check_inline_host__";
+export const INLINE_DEFAULT_HEIGHT_PX = 200;
 export const INLINE_MAX_HEIGHT_PX = 800;
 export const INLINE_MIN_HEIGHT_PX = 96;
 
@@ -30,7 +31,7 @@ function safeJsonForScript(value) {
 }
 
 export function clampInlineHeight(height) {
-  if (!Number.isFinite(height) || height <= 0) return 200;
+  if (!Number.isFinite(height) || height <= 0) return INLINE_DEFAULT_HEIGHT_PX;
   return Math.min(INLINE_MAX_HEIGHT_PX, Math.max(INLINE_MIN_HEIGHT_PX, Math.ceil(height)));
 }
 
@@ -50,7 +51,7 @@ export function buildInlineHostHtml({
 <meta charset="utf-8" />
 <style>
   html, body { margin: 0; padding: 0; background: #ffffff; }
-  #artifact-frame { display: block; width: ${Math.round(width)}px; height: ${Math.round(maxHeight)}px; border: 0; background: transparent; }
+  #artifact-frame { display: block; width: ${Math.round(width)}px; height: ${INLINE_DEFAULT_HEIGHT_PX}px; border: 0; background: transparent; }
 </style>
 </head>
 <body>
@@ -60,6 +61,8 @@ export function buildInlineHostHtml({
   var frame = document.getElementById("artifact-frame");
   var targetOrigin = ${safeOrigin};
   var tokens = ${safeTokens};
+  var minH = ${INLINE_MIN_HEIGHT_PX};
+  var maxH = ${Math.round(maxHeight)};
   window.__coforgeInlineSize = null;
   window.addEventListener("message", function (event) {
     if (event.source !== frame.contentWindow || event.origin !== targetOrigin) return;
@@ -78,7 +81,10 @@ export function buildInlineHostHtml({
     }
     if (msg.method === "ui/notifications/size-changed" && msg.params) {
       var h = Number(msg.params.height);
-      if (Number.isFinite(h) && h > 0) window.__coforgeInlineSize = h;
+      if (Number.isFinite(h) && h > 0) {
+        window.__coforgeInlineSize = h;
+        frame.style.height = Math.min(maxH, Math.max(minH, Math.ceil(h))) + "px";
+      }
     }
   });
   frame.src = ${safeSrc};

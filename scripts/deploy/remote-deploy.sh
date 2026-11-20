@@ -500,6 +500,7 @@ fi
 snapshot_release
 
 wait_for_wildcard_certificate
+probe_artifact_checker
 
 printf '%s\n' \
 	"PREVIOUS_WEB_IMAGE=$current_image" \

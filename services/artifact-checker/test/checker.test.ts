@@ -123,12 +123,14 @@ describe("artifact-checker inline host and helpers", () => {
     expect(clampInlineHeight(1500)).toBe(800);
   });
 
-  test("builds sandboxed inline host HTML and escapes script breakouts", () => {
+  test("builds sandboxed inline host HTML starting at 200px, resizing on size-changed, and escaping script breakouts", () => {
     const html = buildInlineHostHtml({
       entryUrl: "https://a-1.coforge.check/</script><script>alert(1)</script>",
       artifactOrigin: "https://a-1.coforge.check",
     });
     expect(html).toContain('sandbox="allow-scripts allow-same-origin"');
+    expect(html).toContain("height: 200px");
+    expect(html).toContain("frame.style.height =");
     expect(html).toContain("ui/initialize");
     expect(html).toContain(INLINE_LIGHT_TOKENS["--coforge-fg"]);
     expect(html).not.toContain("</script><script>alert(1)");

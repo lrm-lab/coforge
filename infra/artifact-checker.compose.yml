@@ -12,16 +12,20 @@ services:
         condition: service_healthy
 
   artifact-checker:
+    logging:
+      driver: journald
+      options:
+        tag: "{{.Name}}"
     image: ${COFORGE_ARTIFACT_CHECKER_IMAGE:?COFORGE_ARTIFACT_CHECKER_IMAGE must resolve to an immutable digest}
     user: "1000:1000"
     init: true
     read_only: true
     cap_drop: [ALL]
-    mem_limit: 1g
-    memswap_limit: 1g
+    mem_limit: 1536m
+    memswap_limit: 1536m
     shm_size: 256mb
     cpus: "1.0"
-    pids_limit: 256
+    pids_limit: 1024
     security_opt:
       - no-new-privileges:true
       - seccomp=../artifact-checker-seccomp.json

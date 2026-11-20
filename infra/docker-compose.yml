@@ -95,7 +95,7 @@ services:
       - seccomp=./artifact-checker-seccomp.json
     tmpfs:
       - /tmp:rw,nosuid,nodev,size=512m,mode=1777
-    mem_limit: 1g
+    mem_limit: 1536m
     shm_size: 256mb
     ports:
       - "127.0.0.1:3100:3100"

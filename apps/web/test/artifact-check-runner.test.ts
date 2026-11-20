@@ -203,4 +203,56 @@ describe("createHttpArtifactCheckRunner", () => {
       events.filter((e) => e.payload.event === "artifact_check.worker_http_error"),
     ).toHaveLength(2);
   });
+
+  test("classifies network errors as worker_unreachable and logs worker_network_error", async () => {
+    const { events, logger } = makeLogger();
+    const networkErr = Object.assign(new Error("The socket connection was closed unexpectedly"), {
+      code: "ECONNRESET",
+    });
+    const runner = createHttpArtifactCheckRunner(
+      {
+        workerUrl: "http://artifact-checker:3100",
+        secret: "super-secret-value",
+        concurrency: 1,
+        timeoutMs: 10_000,
+        dailyCap: 200,
+      },
+      {
+        logger,
+        fetchImpl: (async () => {
+          throw networkErr;
+        }) as unknown as typeof fetch,
+      },
+    );
+
+    const err = await runner
+      .run({
+        checkId: "chk-net",
+        workspaceId: "ws-1",
+        artifactId: "art-1",
+        version: 2,
+        entryPath: "index.html",
+        origin: "https://a-art-1.coforge.check",
+        csp: "",
+        runtimeJs: "",
+        allowedCdnHosts: [],
+        files: [],
+        viewports: [],
+        timeoutMs: 10_000,
+      })
+      .catch((caught) => caught);
+
+    expect(err).toBeInstanceOf(ArtifactCheckRunnerError);
+    expect((err as ArtifactCheckRunnerError).errorClass).toBe("worker_unreachable");
+    const logged = events.find((e) => e.payload.event === "artifact_check.worker_network_error");
+    expect(logged?.level).toBe("error");
+    expect(logged?.payload).toMatchObject({
+      checkId: "chk-net",
+      artifactId: "art-1",
+      version: 2,
+      errorClass: "worker_unreachable",
+      errorCode: "ECONNRESET",
+    });
+    expect(JSON.stringify(logged?.payload)).not.toContain("super-secret-value");
+  });
 });

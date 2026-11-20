@@ -3,6 +3,7 @@ import {
   ANNOTATE_TEXT_SOURCE,
 } from "./artifact-page-annotate-locate-runtime.server";
 import { ANNOTATE_DOM_SOURCE } from "./artifact-page-annotate-runtime.server";
+import { INLINE_SIZE_RUNTIME_SOURCE } from "./artifact-page-inline-size-runtime.server";
 
 export const PAGE_RUNTIME_PATH = "/_coforge/runtime.js";
 
@@ -295,22 +296,7 @@ if (framed) {
     report(event.reason && event.reason.message ? event.reason.message : String(event.reason));
   });
   var scheduled = false;
-  var measureSize = function () {
-    var root = document.documentElement;
-    var body = document.body;
-    if (displayMode === "inline" && body) {
-      var rect = body.getBoundingClientRect();
-      return {
-        width: Math.ceil(Math.max(root.scrollWidth, body.scrollWidth)),
-        height: Math.ceil(Math.max(body.scrollHeight, body.offsetHeight, rect ? rect.height : 0)),
-      };
-    }
-    return {
-      width: Math.ceil(root.scrollWidth),
-      height: Math.ceil(root.scrollHeight),
-    };
-  };
-  scheduleSize = function () {
+${INLINE_SIZE_RUNTIME_SOURCE}  scheduleSize = function () {
     if (scheduled) return;
     scheduled = true;
     requestAnimationFrame(function () {
