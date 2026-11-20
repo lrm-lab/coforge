@@ -19,6 +19,12 @@ import {
   sequenceAnchor,
 } from "./direct-conversation-anchor.server";
 import { readThroughOf } from "./thread-read-position.server";
+import { systemEventSourceFromDirectKey } from "#src/server/app-agent-events/app-event-target.server";
+import {
+  noticePositionIsBlocked,
+  readNoticePage,
+  resolveNoticeAnchor,
+} from "./notice-history.repositories.server";
 import {
   advanceAgentReadPosition,
   type ConversationReadChangedInput,
@@ -74,17 +80,46 @@ export async function readAgentMessagePage(
   if ([page.before, page.after, page.around].filter(Boolean).length > 1)
     throw new Error("use only one range anchor");
   const anchorId = page.before ?? page.after ?? page.around;
-  const [agentMember, anchor] = await Promise.all([
+  const conversationKey = await db.conversation.findUnique({
+    where: { id: conversationId },
+    select: { directKey: true },
+  });
+  const noticesOnly =
+    threadRootId === null &&
+    systemEventSourceFromDirectKey(conversationKey?.directKey) === "system.artifacts";
+  const [agentMember, anchorResolved] = await Promise.all([
     db.conversationMember.findUnique({
       where: { conversationId_agentId: { conversationId, agentId } },
       select: { id: true, agentReadThroughSequence: true },
     }),
-    anchorId
+    anchorId && !noticesOnly
       ? isSequenceAnchor(anchorId)
         ? sequenceAnchor(anchorId, threadRootId)
         : resolveAnchor(anchorId)
       : undefined,
   ]);
+  const noticeAnchorFor = async (value: string) => {
+    if (!isSequenceAnchor(value)) {
+      const resolved = await resolveNoticeAnchor(
+        db,
+        { workspaceId, agentId, conversationId },
+        value,
+      );
+      if (!resolved)
+        throw new AgentMessageValidationError("message anchor not found in this conversation");
+      return resolved;
+    }
+    const position = sequenceAnchor(value, threadRootId);
+    const blocked = await noticePositionIsBlocked(
+      db,
+      { workspaceId, agentId, conversationId },
+      position.sequence,
+    );
+    if (blocked)
+      throw new AgentMessageValidationError("message anchor not found in this conversation");
+    return position;
+  };
+  const anchor = noticesOnly && anchorId ? await noticeAnchorFor(anchorId) : anchorResolved;
   // Only a resolved task discussion reads without its own member row (its seat is a read
   // position convenience); any other conversation still requires the Agent's seat.
   if (!agentMember && !seatOptional) throw new Error("Agent is not a conversation member");
@@ -118,8 +153,9 @@ export async function readAgentMessagePage(
   };
   // An `unread` read starts at the read position. A latest page moves it only when the shared
   // contiguity rule proves that it joins the existing read-through; an anchored page never joins.
-  const window =
-    page.around && anchor
+  const window = noticesOnly
+    ? undefined
+    : page.around && anchor
       ? await readWindowAround(db, scope, anchor.sequence, limit)
       : !page.unread &&
           !isHistoryRead &&
@@ -151,6 +187,44 @@ export async function readAgentMessagePage(
       messages: map(window.rows),
       hasOlder: window.hasOlder,
       hasNewer: window.hasNewer,
+      modelSeenUpToSeq,
+      consumptionScope,
+      ...readPositionReport(page.unread, isHistoryRead, { readThrough }),
+      ...(agentReadThroughSequence ? { readPositionAfter: agentReadThroughSequence } : {}),
+    };
+  }
+  if (noticesOnly) {
+    const notice = await readNoticePage(db, {
+      workspaceId,
+      agentId,
+      conversationId,
+      anchorSequence: anchor?.sequence,
+      before: Boolean(page.before),
+      after: Boolean(page.after),
+      around: Boolean(page.around),
+      limit,
+    });
+    const messages = map(
+      page.unread
+        ? notice.rows.filter((row) => row.sender !== null && row.sender.agentId !== agentId)
+        : notice.rows,
+    );
+    const modelSeenUpToSeq = agentHistoryModelSeenBoundary({
+      anchor: page.before ? "before" : page.after ? "after" : page.around ? undefined : "latest",
+      anchorSequence: anchor?.sequence,
+      fromSequence: page.fromSequence,
+      readThrough,
+      minSequence: notice.rows[0]?.sequence,
+      maxSequence: notice.rows.at(-1)?.sequence,
+      hasOlder: notice.hasOlder,
+    });
+    const agentReadThroughSequence =
+      modelSeenUpToSeq !== null && modelSeenUpToSeq > readThrough ? modelSeenUpToSeq : 0;
+    if (agentReadThroughSequence) await advanceReadThrough(agentReadThroughSequence);
+    return {
+      messages,
+      hasOlder: notice.hasOlder,
+      hasNewer: notice.hasNewer,
       modelSeenUpToSeq,
       consumptionScope,
       ...readPositionReport(page.unread, isHistoryRead, { readThrough }),
