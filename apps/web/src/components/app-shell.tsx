@@ -4,10 +4,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   BookOpen01,
+  CodeBrowser,
   File02 as FileText,
   Folder,
   Keyboard01,
-  LayersThree01,
   LogOut01 as LogOut,
   MessageChatSquare,
   Monitor01 as Monitor,
@@ -149,7 +149,7 @@ function useNavItems(
         label: m.navigation_artifacts(),
         ...item("artifacts"),
         sections: ["artifacts", "artifact"],
-        icon: LayersThree01,
+        icon: CodeBrowser,
       },
       {
         label: m.navigation_agents(),

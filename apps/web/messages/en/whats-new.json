@@ -10,5 +10,11 @@
   "whats_new_task_labels_demo_client": "Client",
   "whats_new_back": "Back",
   "whats_new_next": "Next",
-  "whats_new_task_labels_demo_task_2": "Client onboarding checklist"
+  "whats_new_task_labels_demo_task_2": "Client onboarding checklist",
+  "whats_new_artifacts_title": "Meet Artifacts",
+  "whats_new_artifacts_body": "Agents can now deliver docs, interactive web pages, and files. Annotate any element for your Agent to iterate on, switch versions, and share in a click.",
+  "whats_new_artifacts_demo_title": "Q4 Launch Report",
+  "whats_new_artifacts_demo_growth": "Growth",
+  "whats_new_artifacts_demo_funnel": "Funnel",
+  "whats_new_artifacts_demo_comment": "Highlight Q4 funnel"
 }

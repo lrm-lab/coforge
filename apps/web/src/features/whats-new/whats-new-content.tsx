@@ -2,13 +2,12 @@ import type { ComponentType, ReactNode } from "react";
 import { LABEL_DOT, LABEL_PALETTE } from "#src/features/tasks/label-colors";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
+import { ArtifactsScene } from "./whats-new-artifacts-scene";
 import type { WhatsNewId } from "./whats-new-entries";
 
-/** An entry's words and picture; when and to whom it shows is in `whats-new-entries.ts`. */
 type WhatsNewContent = {
   title: () => string;
   body: () => string;
-  /** A live scene drawn with the app's own tokens, so it follows light and dark. */
   illustration: ComponentType;
 };
 
@@ -57,5 +56,10 @@ export const WHATS_NEW_CONTENT: Record<WhatsNewId, WhatsNewContent> = {
     title: m.whats_new_task_labels_title,
     body: m.whats_new_task_labels_body,
     illustration: LabelsScene,
+  },
+  artifacts: {
+    title: m.whats_new_artifacts_title,
+    body: m.whats_new_artifacts_body,
+    illustration: ArtifactsScene,
   },
 };

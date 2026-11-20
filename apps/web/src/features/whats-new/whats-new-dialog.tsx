@@ -77,7 +77,7 @@ function WhatsNewPages({
         color="tertiary"
         aria-label={m.whats_new_close()}
         onClick={onDone}
-        className="absolute top-6 right-6 z-10"
+        className="absolute top-6 right-6 z-10 bg-primary/80 backdrop-blur-xs hover:bg-primary"
       />
       <div
         aria-hidden="true"
