@@ -1,9 +1,10 @@
 import type { TaskView } from "@lrm/coforge-sdk/internal";
 import { MemberDirectory } from "#src/features/conversations/member-directory";
-import { DotsHorizontal as MoreHorizontal, XClose } from "@untitledui/icons";
+import { ArrowUp, DotsHorizontal as MoreHorizontal, XClose } from "@untitledui/icons";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -28,6 +29,7 @@ import { TaskHistoryPage, TaskSubtasks } from "./task-detail-sections";
 import { TaskDescription } from "./task-description";
 import { TaskSection, type RelationPicker } from "./task-section";
 import { ownsDiscussion, taskFollowMenuItem, useTaskFollow } from "./task-follow";
+import { useTaskLeadScroll } from "./task-lead-scroll";
 import { isTaskStep } from "./task-popup-steps";
 import { statusLabel, taskStatusColor, type TaskControls } from "./task-workflow";
 import { useTaskDialogTransition } from "./use-task-dialog-transition";
@@ -215,6 +217,19 @@ export function TaskDetailDialog({
     onOpenChange,
   });
 
+  const { setTitleElement, scrolledOut, scrollToTop } = useTaskLeadScroll({
+    boundaryRef: modalContentRef,
+    reducedMotion: reduced,
+  });
+  const setTitleNode = useCallback(
+    (node: HTMLHeadingElement | null) => {
+      titleRef.current = node;
+      setTitleElement(node);
+    },
+    [titleRef, setTitleElement],
+  );
+  const canScrollToTop = scrolledOut && !history;
+
   useHotkey(
     "Escape",
     (event) => {
@@ -243,7 +258,7 @@ export function TaskDetailDialog({
     <div className="flex flex-col gap-5 px-4 pt-4 pb-6 sm:px-8 sm:pt-6">
       <div className="flex flex-col gap-3">
         <Heading
-          ref={titleRef}
+          ref={setTitleNode}
           slot="title"
           level={2}
           className="text-xl font-semibold break-words text-primary"
@@ -291,7 +306,19 @@ export function TaskDetailDialog({
                   conversationName={conversationName}
                   onBack={stepBack}
                   onOpenRelated={onOpenRelated}
+                  onScrollToTop={canScrollToTop ? scrollToTop : undefined}
                 />
+                {canScrollToTop && (
+                  <ButtonUtility
+                    tooltip={m.tasks_scroll_to_top()}
+                    tooltipPlacement="bottom"
+                    icon={ArrowUp}
+                    size="sm"
+                    color="tertiary"
+                    onClick={scrollToTop}
+                    className={PHONE_BAR_BUTTON}
+                  />
+                )}
                 <Dropdown.Root>
                   <ButtonUtility
                     tooltip={m.tasks_more_actions({ number: String(task.number) })}

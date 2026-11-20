@@ -3,6 +3,7 @@ import { ArrowLeft, ChevronRight } from "@untitledui/icons";
 import { Button as AriaButton } from "react-aria-components";
 
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
+import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { useChannelMembers } from "#src/features/conversations/channel-members";
 import { GroupAvatar } from "#src/features/conversations/group-avatar";
 import { m } from "#src/paraglide/messages";
@@ -19,11 +20,13 @@ export function TaskTrail({
   conversationName,
   onBack,
   onOpenRelated,
+  onScrollToTop,
 }: {
   task: TaskView;
   conversationName?: string;
   onBack?: () => void;
   onOpenRelated?: (task: VisibleTaskName) => void;
+  onScrollToTop?: () => void;
 }) {
   const parent = task.parent;
   const openParent =
@@ -32,6 +35,13 @@ export function TaskTrail({
   // after it is the Task's.
   const members = useChannelMembers({ id: task.conversationId });
   const place = conversationName?.replace(/^#/, "");
+  const currentTask = (
+    <>
+      {members?.length ? <GroupAvatar members={members} className="avatar-group-xs" /> : null}
+      {place && <span className="max-w-[16em] truncate">{place}</span>}
+      <span className="shrink-0 tabular-nums">#{task.number}</span>
+    </>
+  );
   return (
     <nav
       aria-label={m.tasks_trail()}
@@ -64,11 +74,20 @@ export function TaskTrail({
           <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-fg-quaternary" />
         </>
       )}
-      <span className="flex min-w-0 shrink-0 items-center gap-1.5 px-1 max-sm:shrink">
-        {members?.length ? <GroupAvatar members={members} className="avatar-group-xs" /> : null}
-        {place && <span className="max-w-[16em] truncate">{place}</span>}
-        <span className="shrink-0 tabular-nums">#{task.number}</span>
-      </span>
+      {onScrollToTop ? (
+        <Tooltip title={m.tasks_scroll_to_top()} placement="bottom start">
+          <AriaButton
+            onPress={onScrollToTop}
+            className="flex min-w-0 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 outline-none hover:bg-primary_hover hover:text-secondary focus-visible:ring-2 focus-visible:ring-focus-ring max-sm:shrink"
+          >
+            {currentTask}
+          </AriaButton>
+        </Tooltip>
+      ) : (
+        <span className="flex min-w-0 shrink-0 items-center gap-1.5 px-1 py-0.5 max-sm:shrink">
+          {currentTask}
+        </span>
+      )}
     </nav>
   );
 }
