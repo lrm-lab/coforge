@@ -329,3 +329,35 @@ test("one review tells the writer and the reader, and only the writer survives a
   expect(await pendingFor(h.f.agents.writer)).toContain(writerEvent.messageId);
   expect(await pendingFor(h.f.agents.reader)).not.toContain(readerEvent.messageId);
 });
+
+test("the bot inbox stops handing back a notice once the artifact is gone", async () => {
+  const { AppBotInbox } = await import("#src/server/app-bots/app-bot-inbox.server");
+  const artifact = await h.f.make("Inbox gate");
+  const reader = await h.nameOf(h.f.agents.reader);
+  await h.create(artifact, `Inbox gate, see @${reader}.`);
+  const sent = await h.submit(artifact);
+  if (sent.status !== "sent") throw new Error("not sent");
+  const event = await h.f.db.systemAgentEvent.findUniqueOrThrow({
+    where: {
+      source_agentId_externalEventId: {
+        source: "system.artifacts",
+        agentId: h.f.agents.reader,
+        externalEventId: `${artifact}:${WEB_DRAFT_REVIEW_MARKER}:${sent.reviewId}`,
+      },
+    },
+    select: { messageId: true, conversationId: true },
+  });
+  const principal = { workspaceId: h.f.workspaceId, agentId: h.f.agents.reader };
+  const { listWakeHints } = await import("#src/server/agents/external-wake-hints.server");
+  const hinted = async () =>
+    (await listWakeHints(h.f.db, principal)).map((hint) => hint.firstPendingMsgId);
+  const inbox = new AppBotInbox(h.f.db);
+  expect((await inbox.check(principal)).events.map((item) => item.id)).toContain(event.messageId);
+
+  await h.f.db.artifact.update({ where: { id: artifact }, data: { deletedAt: new Date() } });
+
+  expect((await inbox.check(principal)).events.map((item) => item.id)).not.toContain(
+    event.messageId,
+  );
+  expect(await hinted()).not.toContain(event.messageId);
+});
