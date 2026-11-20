@@ -161,3 +161,29 @@ test("a duplicate event inside a transaction fails the whole transaction", async
     await h.f.db.systemAgentEvent.count({ where: { externalEventId: base.externalEventId } }),
   ).toBe(1);
 });
+
+test("two concurrent sends reach one system conversation with a notice each", async () => {
+  const first = await h.f.make("Race one");
+  const second = await h.f.make("Race two");
+  const reader = await h.nameOf(h.f.agents.reader);
+  await h.create(first, `Race one, @${reader}.`);
+  await h.create(second, `Race two, @${reader}.`);
+  const [a, b] = await Promise.all([h.submit(first), h.submit(second)]);
+  if (a.status !== "sent" || b.status !== "sent") throw new Error("not sent");
+  const events = await h.f.db.systemAgentEvent.findMany({
+    where: {
+      source: "system.artifacts",
+      agentId: h.f.agents.reader,
+      externalEventId: { in: [`${first}:${a.reviewId}`, `${second}:${b.reviewId}`] },
+    },
+    select: { conversationId: true, messageId: true },
+  });
+  expect(events).toHaveLength(2);
+  expect(new Set(events.map((event) => event.conversationId)).size).toBe(1);
+  for (const event of events) {
+    const deliveries = await h.f.db.agentMessageDelivery.count({
+      where: { agentId: h.f.agents.reader, messageId: event.messageId },
+    });
+    expect(deliveries).toBe(1);
+  }
+});
