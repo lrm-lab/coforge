@@ -32,6 +32,7 @@ import {
 import { groupThreads } from "./artifact-comment-threads";
 import { useArtifactComments } from "./artifact-comment-queries";
 import { createComposerHolds } from "./artifact-composer-holds";
+import { createArtifactPickBus } from "./artifact-pick-bus";
 import { useCommentHandoff } from "./use-comment-handoff";
 import { useOpenFile } from "./use-open-file";
 import { useShownVersion } from "./use-shown-version";
@@ -138,6 +139,7 @@ function ArtifactPageFor({
   const commentMode = useCommentMode(setPanel);
   const [places, setPlaces] = useState<PublishedPlaces>(null);
   const [holds] = useState(createComposerHolds);
+  const [pickBus] = useState(createArtifactPickBus);
   const review = useReviewFilter(artifactId, reviewId, () => onClearReview?.());
   useEffect(() => {
     if (reviewId !== undefined) setPanel("comments");
@@ -232,6 +234,7 @@ function ArtifactPageFor({
       openPanel: () => setPanel("comments"),
       publishPlaces,
       holds,
+      pickBus,
     }),
     [
       artifactId,
@@ -245,6 +248,7 @@ function ArtifactPageFor({
       postFocus,
       publishPlaces,
       holds,
+      pickBus,
     ],
   );
   const requests = useMemo<CommentRequests>(
@@ -440,6 +444,7 @@ function ArtifactPageFor({
                   )}
                   {current && (
                     <ArtifactReviewPill
+                      activePath={shownPath}
                       annotating={commentMode.mode}
                       onToggleAnnotate={commentMode.toggleMode}
                       onExitAnnotate={commentMode.exitMode}

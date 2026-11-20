@@ -6,11 +6,11 @@ import {
 export const ANNOTATE_DOM_SOURCE = String.raw`
 var TRAIL_NAME_MAX = ${TRAIL_NAME_MAX};
 var TRAIL_ANCESTORS_MAX = ${TRAIL_ANCESTORS_MAX};
-var ACCENT = "#7f56d9";
-var annotate = { picking: false, selecting: false, showMarks: false, revision: 0, marks: [], draft: null };
+var ACCENT = "#e06d3b";
+var annotate = { picking: false, selecting: false, showMarks: false, revision: 0, marks: [], drafts: [] };
 var BADGE_SIZE = 24;
 var BADGE_SHADOW = "0 1px 3px rgba(0,0,0,.35)";
-var BADGE_FLASH_SHADOW = BADGE_SHADOW + ",0 0 0 5px rgba(127,86,217,.4)";
+var BADGE_FLASH_SHADOW = BADGE_SHADOW + ",0 0 0 5px rgba(224,109,59,.4)";
 var placed = [];
 var placedById = new Map();
 var badges = new Map();
@@ -39,8 +39,10 @@ function paintTarget(parent, target, strong) {
 function drawDraft() {
   var parent = layer("draft");
   parent.textContent = "";
-  var target = annotate.draft && locateAnchor(annotate.draft);
-  if (target) paintTarget(parent, target, true);
+  annotate.drafts.forEach(function (anchor) {
+    var target = locateAnchor(anchor);
+    if (target) paintTarget(parent, target, true);
+  });
 }
 function drawFlash() {
   var parent = layer("flash");
@@ -143,7 +145,7 @@ function relocate() {
   if (document.readyState === "complete") reportFound();
 }
 function scheduleRelocate() {
-  if (relocateTimer || (!annotate.marks.length && !annotate.draft)) return;
+  if (relocateTimer || (!annotate.marks.length && !annotate.drafts.length)) return;
   relocateTimer = setTimeout(relocate, 150);
 }
 function ownRecord(record) {
@@ -152,7 +154,7 @@ function ownRecord(record) {
   return nodes.length > 0 && nodes.every(function (node) { return node === overlay; });
 }
 function syncWatch() {
-  var live = annotate.marks.length > 0 || annotate.draft !== null;
+  var live = annotate.marks.length > 0 || annotate.drafts.length > 0;
   if (!live) {
     if (mutationObserver) mutationObserver.disconnect();
     mutationObserver = null;
@@ -184,8 +186,16 @@ function setMarks(params) {
   relocate();
 }
 function setDraft(params) {
-  annotate.draft = params && params.anchor && params.anchor.data ? params.anchor : null;
-  if (annotate.draft && annotate.draft.type === "text") {
+  var next = [];
+  if (params && Array.isArray(params.anchors)) {
+    params.anchors.slice(0, 20).forEach(function (item) {
+      if (item && item.data) next.push(item);
+    });
+  } else if (params && params.anchor && params.anchor.data) {
+    next.push(params.anchor);
+  }
+  annotate.drafts = next;
+  if (next.some(function (item) { return item.type === "text"; })) {
     var selection = window.getSelection();
     if (selection) selection.removeAllRanges();
     indexDirty = true;
@@ -225,7 +235,7 @@ function drawHover() {
   }
   var rect = hoverElement.getBoundingClientRect();
   if (hoverBox) placeBox(hoverBox, rect);
-  else hoverBox = paintBox(layer("pick-hover"), rect, "border-radius:3px;border:2px solid " + ACCENT + ";background:rgba(127,86,217,.12)");
+  else hoverBox = paintBox(layer("pick-hover"), rect, "border-radius:4px;border:2px solid " + ACCENT + ";background:rgba(224,109,59,.10)");
 }
 function scheduleHover() {
   if (lastPointer && !hoverFrame) hoverFrame = requestAnimationFrame(drawHover);

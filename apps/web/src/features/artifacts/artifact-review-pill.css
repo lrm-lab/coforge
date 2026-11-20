@@ -1,0 +1,94 @@
+.artifact-review-fab {
+  transition:
+    background-color var(--duration-sm) var(--ease-out-strong),
+    border-color var(--duration-sm) var(--ease-out-strong),
+    color var(--duration-sm) var(--ease-out-strong),
+    box-shadow var(--duration-sm) var(--ease-out-strong),
+    transform 120ms var(--ease-out);
+}
+
+.artifact-review-fab:active {
+  transform: scale(0.93);
+}
+
+.artifact-review-fab-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  will-change: transform, opacity, filter;
+}
+
+.artifact-review-fab-bubble {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+  filter: blur(0px);
+  transition:
+    transform 220ms var(--ease-out-strong) 25ms,
+    opacity var(--duration-sm) var(--ease-out-strong) 25ms,
+    filter var(--duration-sm) var(--ease-out-strong) 25ms;
+}
+
+.artifact-review-fab[data-picking="true"] .artifact-review-fab-bubble {
+  opacity: 0;
+  transform: scale(0.62) rotate(-20deg);
+  filter: blur(2px);
+  transition:
+    transform 140ms var(--ease-in) 0ms,
+    opacity 120ms var(--ease-in) 0ms,
+    filter 120ms var(--ease-in) 0ms;
+}
+
+.artifact-review-fab-pick {
+  opacity: 0;
+  transform: scale(0.62) rotate(20deg);
+  filter: blur(2px);
+  transition:
+    transform 140ms var(--ease-in) 0ms,
+    opacity 120ms var(--ease-in) 0ms,
+    filter 120ms var(--ease-in) 0ms;
+}
+
+.artifact-review-fab[data-picking="true"] .artifact-review-fab-pick {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+  filter: blur(0px);
+  transition:
+    transform 220ms var(--ease-out-strong) 25ms,
+    opacity var(--duration-sm) var(--ease-out-strong) 25ms,
+    filter var(--duration-sm) var(--ease-out-strong) 25ms;
+}
+
+.artifact-review-fab-badge {
+  opacity: 0;
+  transform: scale(0.4);
+  transition:
+    transform 140ms var(--ease-in),
+    opacity 120ms var(--ease-in);
+}
+
+.artifact-review-fab-badge[data-visible="true"] {
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    transform 240ms var(--ease-overshoot) 40ms,
+    opacity 180ms var(--ease-out-strong) 40ms;
+}
+
+.artifact-review-editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-placeholder);
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artifact-review-fab-bubble,
+  .artifact-review-fab-pick,
+  .artifact-review-fab-badge {
+    filter: none;
+    transform: none;
+    transition: opacity 120ms linear;
+  }
+}

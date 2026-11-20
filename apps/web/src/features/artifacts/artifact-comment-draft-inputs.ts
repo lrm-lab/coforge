@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { commentFields, emptyComment, hasTextOrImage } from "./artifact-comment-inputs";
+import {
+  commentAnchor,
+  commentFields,
+  emptyComment,
+  hasTextOrImage,
+} from "./artifact-comment-inputs";
 import { artifactInputs } from "./artifact-inputs";
 
 export const COMMENT_DRAFTS_MAX = 50;
@@ -17,7 +22,13 @@ export const draftInputs = {
     .strict()
     .refine(hasTextOrImage, emptyComment),
   edit: z
-    .object({ artifactId: artifactInputs.id, draftId: artifactInputs.id, body: commentFields.body })
+    .object({
+      artifactId: artifactInputs.id,
+      draftId: artifactInputs.id,
+      body: commentFields.body,
+      anchor: commentAnchor.nullable().optional(),
+      path: commentFields.path.nullable().optional(),
+    })
     .strict(),
   target: z.object({ artifactId: artifactInputs.id, draftId: artifactInputs.id }).strict(),
   submit: z

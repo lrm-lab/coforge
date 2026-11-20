@@ -43,6 +43,8 @@ import { syncOwnComments, type ArtifactCommentView } from "./artifact-comment-qu
 import { CommentAnchorLine } from "./artifact-comment-anchor";
 import { CommentAuthorAvatar } from "./artifact-comment-avatar";
 import { canSaveCommentEdit, type CommentThread } from "./artifact-comment-threads";
+import { InlineRefText } from "./artifact-inline-editor";
+import { hasInlineRefs } from "./artifact-inline-refs";
 import {
   commentWriteFailure,
   useCommentDraftText,
@@ -245,7 +247,11 @@ function CommentRow({
         ) : (
           comment.body && (
             <div className={cn(COMMENT_BODY_CLASS, "message-text min-w-0")}>
-              <MessageBody body={comment.body} plainMentions={context.plainMentions} />
+              {hasInlineRefs(comment.body) ? (
+                <InlineRefText body={comment.body} />
+              ) : (
+                <MessageBody body={comment.body} plainMentions={context.plainMentions} />
+              )}
             </div>
           )
         )}

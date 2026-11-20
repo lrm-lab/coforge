@@ -4,6 +4,7 @@ import { useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
 import type { AnchorDraft, DraftTarget } from "./artifact-anchor-places";
 import { useArtifactCommenting } from "./artifact-commenting";
+import { extractElementTag } from "./artifact-inline-refs";
 import type { FrameRect, TrailStep } from "./artifact-page-annotations";
 import type { PageBridge } from "./artifact-page-bridge";
 import type { Offer } from "./use-surface-offers";
@@ -11,15 +12,17 @@ import type { Offer } from "./use-surface-offers";
 export function useFrameOffer({
   bridge,
   frame,
+  path,
   key,
   composing,
 }: {
   bridge: PageBridge;
   frame: RefObject<HTMLIFrameElement | null>;
+  path: string;
   key: string | null;
   composing: RefObject<boolean>;
 }): Offer {
-  const { commenting } = useArtifactCommenting();
+  const { commenting, pickBus } = useArtifactCommenting();
   const toast = useAppToast();
   const [selected, setSelected] = useState<{ key: string; draft: AnchorDraft } | null>(null);
 
@@ -40,6 +43,24 @@ export function useFrameOffer({
       bridge.annotations.listen((event) => {
         switch (event.kind) {
           case "selected": {
+            if (event.anchor.type === "element" && key !== null) {
+              const selector =
+                typeof event.anchor.data.selector === "string" ? event.anchor.data.selector : "";
+              const quote =
+                typeof event.anchor.data.quote === "string" ? event.anchor.data.quote : undefined;
+              const stepName = event.trail?.at(-1)?.name;
+              if (
+                selector &&
+                pickBus.emitPick({
+                  path,
+                  tag: extractElementTag(stepName || selector),
+                  selector,
+                  ...(quote ? { quote } : {}),
+                })
+              ) {
+                return;
+              }
+            }
             const origin = frame.current?.getBoundingClientRect();
             if (key === null || !origin) return;
             const placement: Placement = {
@@ -62,7 +83,7 @@ export function useFrameOffer({
             return;
         }
       }),
-    [bridge, frame, key, composing, toast],
+    [bridge, frame, path, key, composing, pickBus, toast],
   );
 
   const offered = selected && selected.key === key ? selected.draft : null;

@@ -215,7 +215,7 @@ function locateAnchor(anchor) {
       kind: "element",
       node: found,
       rects: function () { return [found.getBoundingClientRect()]; },
-      boxStyle: function (strong) { return "border:2px solid " + ACCENT + ";background:rgba(127,86,217," + (strong ? ".2" : ".1") + ");border-radius:3px"; },
+      boxStyle: function (strong) { return "border:2px solid " + ACCENT + ";background:" + (strong ? "transparent" : "rgba(224,109,59,.10)") + ";border-radius:4px"; },
       badgeAt: function (rect) { return { left: rect.right - 8, top: rect.top - 20 }; }
     };
   }

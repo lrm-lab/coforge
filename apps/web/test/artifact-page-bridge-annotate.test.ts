@@ -398,4 +398,34 @@ describe("the annotation channel", () => {
       { anchor: null },
     ]);
   });
+
+  test("setDrafts clips and sends multiple referenced element anchors and replays them on ready", async () => {
+    const { bridge, sent, frameWindow } = setup();
+    bridge.annotations.setDrafts([
+      { type: "element", data: { selector: "svg > use", quote: "<use>" } },
+      { type: "element", data: { selector: "s".repeat(1200), quote: "q".repeat(200) } },
+    ]);
+    const [first] = sent("coforge/annotate/draft") as [
+      {
+        params: {
+          anchor: { data: Record<string, string> };
+          anchors?: { data: Record<string, string> }[];
+        };
+      },
+    ];
+    expect(first!.params.anchor.data.selector).toBe("svg > use");
+    expect(first!.params.anchors).toHaveLength(2);
+    expect(first!.params.anchors![1]!.data.selector!.length).toBe(1000);
+    expect(first!.params.anchors![1]!.data.quote!.length).toBe(120);
+
+    await bridge.handle({
+      source: frameWindow as unknown as MessageEventSource,
+      origin: ORIGIN,
+      data: { jsonrpc: "2.0", method: "ui/notifications/initialized" },
+    });
+    expect(sent("coforge/annotate/draft")).toHaveLength(2);
+
+    bridge.annotations.setDrafts([]);
+    expect(sent("coforge/annotate/draft").at(-1)?.params).toEqual({ anchor: null });
+  });
 });

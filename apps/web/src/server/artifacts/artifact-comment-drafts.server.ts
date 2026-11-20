@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import {
   COMMENT_DRAFTS_MAX,
   type DraftCreateInput,
@@ -106,7 +106,14 @@ export class ArtifactCommentDrafts {
     return draftView(row);
   }
 
-  async edit(input: Place & { draftId: string; body: string }) {
+  async edit(
+    input: Place & {
+      draftId: string;
+      body: string;
+      anchor?: DraftCreateInput["anchor"] | null;
+      path?: string | null;
+    },
+  ) {
     const artifact = await this.readable(input);
     const row = await this.db.$transaction(
       async (tx) => {
@@ -121,9 +128,37 @@ export class ArtifactCommentDrafts {
         if (!held) throw draftNotFound();
         if (!hasTextOrImage({ body: input.body, images: imagesOf(held) }))
           throw new AppError("INVALID_INPUT", { errorId: "artifact-comment-body" });
+        const nextPath = input.path === undefined ? held.path : input.path;
+        const nextAnchor = input.anchor === undefined ? held.anchor : input.anchor;
+        if (input.anchor !== undefined || input.path !== undefined)
+          await prepareComments(
+            tx,
+            artifact.id,
+            [
+              {
+                body: input.body,
+                ...(nextPath === null ? {} : { path: nextPath }),
+                ...(nextAnchor === null ? {} : { anchor: nextAnchor as never }),
+                ...(held.replyTo === null ? {} : { replyTo: held.replyTo }),
+              },
+            ],
+            { version: held.version },
+          );
         return tx.artifactCommentDraft.update({
           where: { id: held.id },
-          data: { body: input.body, expiresAt: draftExpiryFrom(now) },
+          data: {
+            body: input.body,
+            ...(input.path === undefined ? {} : { path: input.path }),
+            ...(input.anchor === undefined
+              ? {}
+              : {
+                  anchor:
+                    input.anchor === null
+                      ? Prisma.DbNull
+                      : (input.anchor as Prisma.InputJsonObject),
+                }),
+            expiresAt: draftExpiryFrom(now),
+          },
           select: DRAFT_SELECT,
         });
       },

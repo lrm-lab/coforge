@@ -31,7 +31,7 @@ export function createAnnotationChannel(
   let revision = 0;
   let marks: PageMark[] = [];
   let knownIds = new Set<string>();
-  let draft: CommentAnchor | null = null;
+  let draft: CommentAnchor[] = [];
 
   const emit = (event: PageAnnotationEvent) => listeners.forEach((listener) => listener(event));
   const sendMode = () => send({ method: "coforge/annotate/mode", params: mode });
@@ -49,7 +49,12 @@ export function createAnnotationChannel(
         })),
       },
     });
-  const sendDraft = () => send({ method: "coforge/annotate/draft", params: { anchor: draft } });
+  const sendDraft = () =>
+    send({
+      method: "coforge/annotate/draft",
+      params:
+        draft.length > 1 ? { anchor: draft[0]!, anchors: draft } : { anchor: draft[0] ?? null },
+    });
 
   return {
     listen(listener: Listener) {
@@ -78,7 +83,11 @@ export function createAnnotationChannel(
       return revision;
     },
     setDraft(next: CommentAnchor | null) {
-      draft = next && clipAnchor(next);
+      draft = next ? [clipAnchor(next)] : [];
+      sendDraft();
+    },
+    setDrafts(next: readonly CommentAnchor[]) {
+      draft = next.slice(0, 20).map(clipAnchor);
       sendDraft();
     },
     focus(id: string) {
@@ -87,7 +96,7 @@ export function createAnnotationChannel(
     ready() {
       sendMode();
       if (marks.length > 0) sendMarks();
-      if (draft) sendDraft();
+      if (draft.length > 0) sendDraft();
     },
     notify(method: string, params: Params) {
       switch (method) {

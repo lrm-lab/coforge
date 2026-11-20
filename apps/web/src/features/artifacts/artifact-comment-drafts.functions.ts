@@ -34,6 +34,8 @@ export const editCommentDraft = createServerFn({ method: "POST" })
       ...placeOf(context, data),
       draftId: data.draftId,
       body: data.body,
+      ...(data.anchor === undefined ? {} : { anchor: data.anchor }),
+      ...(data.path === undefined ? {} : { path: data.path }),
     }),
   );
 

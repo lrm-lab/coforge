@@ -37,8 +37,8 @@ export function ArtifactDraftsProvider({
   const actions = useMemo<CommentDraftActions>(
     () => ({
       create,
-      edit: async (draft, body) => {
-        await edit(draft, body);
+      edit: async (draft, body, editPatch) => {
+        await edit(draft, body, editPatch);
         clearFlag(draft.id);
       },
       remove: async (draft) => {

@@ -262,6 +262,7 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
       configure: annotations.configure,
       setMarks: annotations.setMarks,
       setDraft: annotations.setDraft,
+      setDrafts: annotations.setDrafts,
       focus: annotations.focus,
     },
   };

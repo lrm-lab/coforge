@@ -1,4 +1,4 @@
-import { useRef, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 import { useArtifactCommenting } from "./artifact-commenting";
 import { DraftAffordance } from "./artifact-draft-affordance";
@@ -21,18 +21,30 @@ export function ArtifactFrameCommentLayer({
   path: string;
   suggestions: RefObject<PageSuggestHandler | null>;
 }) {
-  const { version, commenting } = useArtifactCommenting();
+  const { version, commenting, pickBus } = useArtifactCommenting();
   const key = commenting ? `${path}@${version}` : null;
   const composingRef = useRef(false);
   const offers = useFrameOffer({
     bridge,
     frame,
+    path,
     key,
     composing: composingRef,
   });
   useFrameMarks({ bridge, composing: composingRef, path });
   const draft = useAnchorDraft({ key, frame: container, ...offers });
   composingRef.current = draft.composing !== null;
+
+  useEffect(() => {
+    if (!commenting) {
+      bridge.annotations.setDrafts([]);
+      return;
+    }
+    return pickBus.subscribeHighlightedAnchors((anchors) => {
+      if (!composingRef.current) bridge.annotations.setDrafts(anchors);
+    });
+  }, [bridge, commenting, pickBus]);
+
   return (
     <>
       {commenting && <DraftAffordance draft={draft} path={path} />}

@@ -69,3 +69,21 @@ test("a recreated draft's new id replaces the old one in every remaining step", 
   expect(rebound.past.map((step) => step.id)).toEqual(["new", "other"]);
   expect(rebound.future.map((step) => step.id)).toEqual(["new"]);
 });
+
+test("an edit step retains optional anchor and path transitions across undo, redo, and rebind", () => {
+  const step: DraftStep = {
+    key: "k1",
+    kind: "edit",
+    id: "d1",
+    from: "old",
+    to: "{{<use> svg > use}} new",
+    fromAnchor: null,
+    toAnchor: { type: "element", data: { selector: "svg > use", quote: "<use>" } },
+    fromPath: null,
+    toPath: "index.html",
+  };
+  const undone = run(EMPTY_HISTORY, { type: "record", step }, { type: "undone", key: "k1" });
+  const redone = historyReducer(undone, { type: "redone", key: "k1" });
+  const rebound = historyReducer(redone, { type: "rebind", from: "d1", to: "d2" });
+  expect(rebound.past[0]).toEqual({ ...step, id: "d2" });
+});

@@ -13,6 +13,8 @@ import { m } from "#src/paraglide/messages";
 import { CommentAnchorLine } from "./artifact-comment-anchor";
 import { COMMENT_MENTIONS_MAX } from "./artifact-comment-inputs";
 import { CommentEditor } from "./artifact-comment-thread";
+import { InlineRefText } from "./artifact-inline-editor";
+import { hasInlineRefs } from "./artifact-inline-refs";
 import {
   useCommentDraftActions,
   useCommentDrafts,
@@ -149,7 +151,11 @@ export function DraftCard({
       ) : (
         draft.body && (
           <div className={cn(COMMENT_BODY_CLASS, "message-text min-w-0")}>
-            <MessageBody body={draft.body} plainMentions={plainMentions} />
+            {hasInlineRefs(draft.body) ? (
+              <InlineRefText body={draft.body} />
+            ) : (
+              <MessageBody body={draft.body} plainMentions={plainMentions} />
+            )}
           </div>
         )
       )}

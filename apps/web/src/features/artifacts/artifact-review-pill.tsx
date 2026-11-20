@@ -1,9 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button as AriaButton } from "react-aria-components";
-import { ArrowRight, CursorClick01, Edit03, Plus, Trash01 } from "@untitledui/icons";
+import { Cursor02, Plus } from "@untitledui/icons";
 
-import { ButtonUtility } from "#src/components/base/buttons/button-utility";
-import { Tooltip } from "#src/components/base/tooltip/tooltip";
 import { CoForgeMark } from "#src/components/foundations/logo/coforge-mark";
 import { hotkeyKeycaps } from "#src/lib/hotkeys";
 import { isApplePlatform } from "#src/lib/platform";
@@ -12,8 +10,26 @@ import { m } from "#src/paraglide/messages";
 import { useCommentDraftActions, useCommentDrafts } from "./artifact-comment-drafts-context";
 import type { CommentDraftView } from "./artifact-comment-drafts-queries";
 import { useArtifactCommenting } from "./artifact-commenting";
-import { AnchorChip, KbdHint, TooltipWithKey, formatAnchorTag } from "./artifact-review-chrome";
+import {
+  ArtifactInlineEditor,
+  segmentsFromDraft,
+  type ArtifactInlineEditorHandle,
+} from "./artifact-inline-editor";
+import {
+  elementAnchorsFromSegments,
+  firstElementAnchorFromSegments,
+  serializeInlineSegments,
+  type InlineSegment,
+} from "./artifact-inline-refs";
+import {
+  AnchorChip,
+  ArtifactReviewFab,
+  ArtifactReviewQueue,
+  KbdHint,
+  formatAnchorTag,
+} from "./artifact-review-chrome";
 import { draftFailure } from "./use-comment-drafts";
+import "./artifact-review-pill.css";
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -22,36 +38,43 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return target.closest('[role="dialog"], [aria-modal="true"]') !== null;
 }
 
+function hasContent(segments: readonly InlineSegment[]): boolean {
+  return segments.some((segment) => segment.kind === "element" || segment.text.trim() !== "");
+}
+
 export function ArtifactReviewPill({
+  activePath,
   annotating,
   onToggleAnnotate,
   onExitAnnotate,
   onTogglePanel,
 }: {
+  activePath?: string | undefined;
   annotating: boolean;
   onToggleAnnotate: () => void;
   onExitAnnotate: () => void;
   onTogglePanel: () => void;
 }) {
-  const { version, pickedAnchor } = useArtifactCommenting();
+  const { version, pickedAnchor, pickBus } = useArtifactCommenting();
   const drafts = useCommentDrafts();
   const actions = useCommentDraftActions();
   const [cardOpen, setCardOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [draftBody, setDraftBody] = useState("");
+  const [segments, setSegments] = useState<InlineSegment[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [focusedIdx, setFocusedIdx] = useState(-1);
   const [apple, setApple] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<ArtifactInlineEditorHandle>(null);
+  const pickedPathRef = useRef<string | undefined>(undefined);
   const prevCount = useRef(drafts.drafts.length);
+  const hydratedEditRef = useRef<string | null>(null);
 
   useEffect(() => {
     setApple(isApplePlatform());
   }, []);
 
   const modEnter = hotkeyKeycaps("Mod+Enter", apple).join(apple ? "" : "+");
-
   const count = drafts.drafts.length;
   const locked = drafts.busy;
   const editingDraft = editingId
@@ -59,6 +82,8 @@ export function ArtifactReviewPill({
     : null;
   const isCompose = editingDraft !== null || annotating || pickedAnchor !== null;
   const showCard = cardOpen && (isCompose || count > 0);
+  const nonElementPicked =
+    pickedAnchor && pickedAnchor.anchor.type !== "element" ? pickedAnchor : null;
 
   useEffect(() => {
     if (count > prevCount.current) setCardOpen(true);
@@ -70,48 +95,113 @@ export function ArtifactReviewPill({
   }, [annotating, pickedAnchor]);
 
   useEffect(() => {
-    if (showCard && isCompose) textareaRef.current?.focus();
-  }, [showCard, isCompose, pickedAnchor, editingId]);
+    if (!showCard || !isCompose) {
+      hydratedEditRef.current = null;
+      pickBus.setHighlightedAnchors([]);
+      return;
+    }
+    if (editingDraft && hydratedEditRef.current !== editingDraft.id) {
+      hydratedEditRef.current = editingDraft.id;
+      pickedPathRef.current = editingDraft.path ?? activePath;
+      editorRef.current?.setSegments(segmentsFromDraft(editingDraft));
+      return;
+    }
+    if (!editingDraft) {
+      hydratedEditRef.current = null;
+      editorRef.current?.focus();
+    }
+  }, [showCard, isCompose, editingDraft, activePath, pickBus]);
 
-  const enterCompose = () => {
+  useEffect(() => {
+    if (!showCard || !isCompose) {
+      pickBus.setPickHandler(null);
+      return;
+    }
+    pickBus.setPickHandler((picked) => {
+      pickedPathRef.current = picked.path;
+      editorRef.current?.insertElement({
+        tag: picked.tag,
+        selector: picked.selector,
+        ...(picked.quote ? { quote: picked.quote } : {}),
+      });
+    });
+    return () => pickBus.setPickHandler(null);
+  }, [showCard, isCompose, pickBus]);
+
+  const handleSegmentsChange = useCallback(
+    (next: InlineSegment[]) => {
+      setSegments(next);
+      pickBus.setHighlightedAnchors(elementAnchorsFromSegments(next));
+    },
+    [pickBus],
+  );
+
+  const resetCompose = useCallback(() => {
     setEditingId(null);
-    setDraftBody("");
+    setSegments([]);
     setSaveError(null);
+    pickedPathRef.current = undefined;
+    hydratedEditRef.current = null;
+    editorRef.current?.clear();
+    pickBus.setHighlightedAnchors([]);
+  }, [pickBus]);
+
+  const enterCompose = useCallback(() => {
+    resetCompose();
     setFocusedIdx(-1);
     setCardOpen(true);
     if (!annotating) onToggleAnnotate();
-  };
+  }, [resetCompose, annotating, onToggleAnnotate]);
 
-  const exitComposeToList = () => {
-    setEditingId(null);
-    setDraftBody("");
-    setSaveError(null);
+  const exitComposeToList = useCallback(() => {
+    resetCompose();
     pickedAnchor?.onClear();
     if (annotating) onExitAnnotate();
     if (count === 0) setCardOpen(false);
-  };
+  }, [resetCompose, pickedAnchor, annotating, onExitAnnotate, count]);
 
-  const startEdit = (draft: CommentDraftView) => {
-    if (locked) return;
-    pickedAnchor?.onClear();
-    if (annotating) onExitAnnotate();
-    setEditingId(draft.id);
-    setDraftBody(draft.body);
-    setSaveError(null);
-    setCardOpen(true);
-  };
+  const startEdit = useCallback(
+    (draft: CommentDraftView) => {
+      if (locked) return;
+      pickedAnchor?.onClear();
+      hydratedEditRef.current = null;
+      setEditingId(draft.id);
+      setSaveError(null);
+      setCardOpen(true);
+      const canPickElements = draft.anchor === null || draft.anchor.type === "element";
+      if (canPickElements && !annotating) onToggleAnnotate();
+      else if (!canPickElements && annotating) onExitAnnotate();
+    },
+    [locked, pickedAnchor, annotating, onToggleAnnotate, onExitAnnotate],
+  );
 
-  const saveForm = async () => {
+  const saveForm = useCallback(async () => {
     if (saving || locked) return;
-    const trimmed = draftBody.trim();
+    const currentSegments = editorRef.current?.readSegments() ?? segments;
+    const serialized = serializeInlineSegments(currentSegments);
+    const primaryElement = firstElementAnchorFromSegments(currentSegments);
+
     if (editingDraft) {
-      if (!trimmed && editingDraft.images.length === 0) return;
+      if (!serialized && editingDraft.images.length === 0) return;
       setSaving(true);
       setSaveError(null);
       try {
-        await actions.edit(editingDraft, trimmed);
-        setEditingId(null);
-        setDraftBody("");
+        const canUpdateAnchor =
+          editingDraft.anchor === null || editingDraft.anchor.type === "element";
+        await actions.edit(
+          editingDraft,
+          serialized,
+          canUpdateAnchor
+            ? {
+                anchor: primaryElement,
+                ...(primaryElement
+                  ? { path: pickedPathRef.current ?? editingDraft.path ?? activePath ?? null }
+                  : {}),
+              }
+            : undefined,
+        );
+        resetCompose();
+        if (annotating) onExitAnnotate();
       } catch (error) {
         setSaveError(draftFailure(error));
       } finally {
@@ -120,16 +210,23 @@ export function ArtifactReviewPill({
       return;
     }
 
-    if (!trimmed) return;
+    if (!serialized) return;
     setSaving(true);
     setSaveError(null);
     try {
+      const targetAnchor = nonElementPicked ? nonElementPicked.anchor : primaryElement;
+      const targetPath = nonElementPicked
+        ? nonElementPicked.path
+        : targetAnchor
+          ? (pickedPathRef.current ?? activePath)
+          : activePath;
       await actions.create({
-        version: pickedAnchor?.version ?? version,
-        body: trimmed,
-        ...(pickedAnchor ? { path: pickedAnchor.path, anchor: pickedAnchor.anchor } : {}),
+        version: nonElementPicked?.version ?? version,
+        body: serialized,
+        ...(targetPath ? { path: targetPath } : {}),
+        ...(targetAnchor ? { anchor: targetAnchor } : {}),
       });
-      setDraftBody("");
+      resetCompose();
       pickedAnchor?.onClear();
       if (annotating) onExitAnnotate();
       setCardOpen(true);
@@ -138,96 +235,94 @@ export function ArtifactReviewPill({
     } finally {
       setSaving(false);
     }
+  }, [
+    saving,
+    locked,
+    segments,
+    editingDraft,
+    actions,
+    activePath,
+    resetCompose,
+    annotating,
+    onExitAnnotate,
+    nonElementPicked,
+    version,
+    pickedAnchor,
+  ]);
+
+  const keyHandlerRef = useRef<(event: KeyboardEvent) => void>(() => {});
+  keyHandlerRef.current = (event: KeyboardEvent) => {
+    if (event.defaultPrevented || isEditableTarget(event.target)) return;
+
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      if (showCard && !isCompose && count > 0 && !locked) {
+        event.preventDefault();
+        void actions.submit();
+      }
+      return;
+    }
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+    if (event.shiftKey && (event.key === "C" || event.key === "c")) {
+      event.preventDefault();
+      onTogglePanel();
+      return;
+    }
+
+    if (
+      event.key === "c" ||
+      event.key === "C" ||
+      (showCard && !isCompose && (event.key === "n" || event.key === "N"))
+    ) {
+      event.preventDefault();
+      enterCompose();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      if (isCompose) {
+        event.preventDefault();
+        exitComposeToList();
+      } else if (showCard) {
+        event.preventDefault();
+        setFocusedIdx(-1);
+        setCardOpen(false);
+      }
+      return;
+    }
+
+    if (!showCard || isCompose || count === 0) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setFocusedIdx((index) => (index + 1) % count);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setFocusedIdx((index) => (index <= 0 ? count - 1 : index - 1));
+    } else if ((event.key === "e" || event.key === "E") && focusedIdx >= 0 && focusedIdx < count) {
+      event.preventDefault();
+      const target = drafts.drafts[focusedIdx];
+      if (target) startEdit(target);
+    } else if (
+      (event.key === "Backspace" || event.key === "Delete") &&
+      focusedIdx >= 0 &&
+      focusedIdx < count &&
+      !locked
+    ) {
+      event.preventDefault();
+      const target = drafts.drafts[focusedIdx];
+      if (target) {
+        void actions.remove(target);
+        setFocusedIdx((index) => Math.min(index, count - 2));
+      }
+    }
   };
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
-      if (isEditableTarget(event.target)) return;
-
-      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-        if (showCard && !isCompose && count > 0 && !locked) {
-          event.preventDefault();
-          void actions.submit();
-        }
-        return;
-      }
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-
-      if (event.shiftKey && (event.key === "C" || event.key === "c")) {
-        event.preventDefault();
-        onTogglePanel();
-        return;
-      }
-
-      if (
-        event.key === "c" ||
-        event.key === "C" ||
-        (showCard && !isCompose && (event.key === "n" || event.key === "N"))
-      ) {
-        event.preventDefault();
-        setEditingId(null);
-        setDraftBody("");
-        setSaveError(null);
-        setFocusedIdx(-1);
-        setCardOpen(true);
-        if (!annotating) onToggleAnnotate();
-        return;
-      }
-
-      if (event.key === "Escape") {
-        if (isCompose) {
-          event.preventDefault();
-          setEditingId(null);
-          setDraftBody("");
-          setSaveError(null);
-          pickedAnchor?.onClear();
-          if (annotating) onExitAnnotate();
-          if (count === 0) setCardOpen(false);
-        } else if (showCard) {
-          event.preventDefault();
-          setFocusedIdx(-1);
-          setCardOpen(false);
-        }
-        return;
-      }
-
-      if (!showCard || isCompose || count === 0) return;
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setFocusedIdx((index) => (index + 1) % count);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setFocusedIdx((index) => (index <= 0 ? count - 1 : index - 1));
-        return;
-      }
-      if ((event.key === "e" || event.key === "E") && focusedIdx >= 0 && focusedIdx < count) {
-        event.preventDefault();
-        const target = drafts.drafts[focusedIdx];
-        if (target) startEdit(target);
-        return;
-      }
-      if (
-        (event.key === "Backspace" || event.key === "Delete") &&
-        focusedIdx >= 0 &&
-        focusedIdx < count &&
-        !locked
-      ) {
-        event.preventDefault();
-        const target = drafts.drafts[focusedIdx];
-        if (target) {
-          void actions.remove(target);
-          setFocusedIdx((index) => Math.min(index, count - 2));
-        }
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  });
+    const listener = (event: KeyboardEvent) => keyHandlerRef.current(event);
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, []);
 
   const onOrbPress = () => {
     if (!showCard) {
@@ -235,26 +330,22 @@ export function ArtifactReviewPill({
       if (count === 0 && !annotating) onToggleAnnotate();
       return;
     }
-    if (isCompose && count > 0) {
+    if (isCompose) {
       exitComposeToList();
       return;
     }
-    setEditingId(null);
-    setDraftBody("");
-    setSaveError(null);
-    pickedAnchor?.onClear();
-    if (annotating) onExitAnnotate();
     setCardOpen(false);
   };
 
+  const editorHasContent = hasContent(segments);
   const canSave = editingDraft
-    ? (draftBody.trim() !== "" || editingDraft.images.length > 0) && !saving && !locked
-    : draftBody.trim() !== "" && !saving && !locked && !drafts.atLimit;
+    ? (editorHasContent || editingDraft.images.length > 0) && !saving && !locked
+    : editorHasContent && !saving && !locked && !drafts.atLimit;
 
   return (
     <div
       data-artifact-review-pill=""
-      className="pointer-events-none absolute right-4 bottom-4 z-20 flex flex-col items-end gap-2.5"
+      className="pointer-events-none absolute right-4 bottom-4 z-20 flex max-w-[calc(100%-2rem)] flex-col items-end gap-2.5"
     >
       {showCard && (
         <div
@@ -267,77 +358,47 @@ export function ArtifactReviewPill({
           {isCompose ? (
             <>
               <div className="px-3.5 pt-3 pb-2.5">
-                <div className="mb-2 flex min-h-6 items-center gap-1.5">
-                  {editingDraft ? (
-                    <AnchorChip label={formatAnchorTag(editingDraft.anchor, editingDraft.path)} />
-                  ) : pickedAnchor ? (
-                    <AnchorChip
-                      label={formatAnchorTag(pickedAnchor.anchor, pickedAnchor.path)}
-                      onRemove={pickedAnchor.onClear}
-                    />
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 text-xs text-tertiary">
-                      <CursorClick01
-                        aria-hidden="true"
-                        className="size-3.5 shrink-0 text-warning-solid"
-                      />
-                      <span>{m.av_cm_pick_hint()}</span>
-                    </span>
-                  )}
+                <div className="mb-2 flex items-center gap-1.5 text-xs text-tertiary select-none">
+                  <Cursor02 aria-hidden="true" className="size-3.5 shrink-0" />
+                  <span>{m.av_cm_pick_hint()}</span>
                 </div>
-                <textarea
-                  ref={textareaRef}
-                  rows={3}
-                  value={draftBody}
-                  disabled={saving || locked}
+                {nonElementPicked ? (
+                  <div className="mb-2 flex items-center">
+                    <AnchorChip
+                      label={formatAnchorTag(nonElementPicked.anchor, nonElementPicked.path)}
+                      onRemove={nonElementPicked.onClear}
+                    />
+                  </div>
+                ) : (
+                  editingDraft?.anchor &&
+                  editingDraft.anchor.type !== "element" && (
+                    <div className="mb-2 flex items-center">
+                      <AnchorChip label={formatAnchorTag(editingDraft.anchor, editingDraft.path)} />
+                    </div>
+                  )
+                )}
+                <ArtifactInlineEditor
+                  ref={editorRef}
+                  label={m.av_cm_field_label()}
                   placeholder={m.av_dr_compose_placeholder()}
-                  onChange={(event) => setDraftBody(event.target.value)}
-                  onKeyDown={(event) => {
-                    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                      event.preventDefault();
-                      void saveForm();
-                      return;
-                    }
-                    if (event.key === "Escape") {
-                      event.preventDefault();
-                      exitComposeToList();
-                      return;
-                    }
-                    if (
-                      event.key === "Backspace" &&
-                      draftBody === "" &&
-                      !editingDraft &&
-                      pickedAnchor
-                    ) {
-                      event.preventDefault();
-                      pickedAnchor.onClear();
-                      return;
-                    }
-                    if (
-                      (event.key === "ArrowUp" || event.key === "ArrowDown") &&
-                      draftBody === "" &&
-                      !editingDraft &&
-                      pickedAnchor?.trail
-                    ) {
-                      const step = event.key === "ArrowUp" ? -1 : 1;
-                      const next = pickedAnchor.trail.at + step;
-                      if (next >= 0 && next < pickedAnchor.trail.names.length) {
-                        event.preventDefault();
-                        pickedAnchor.onRetarget?.(pickedAnchor.trail.step(next));
-                      }
-                    }
-                  }}
-                  className="block w-full resize-none border-0 bg-transparent text-sm leading-relaxed text-primary outline-hidden placeholder:text-placeholder"
+                  disabled={saving || locked}
+                  onSegmentsChange={handleSegmentsChange}
+                  onSubmit={() => void saveForm()}
+                  onCancel={exitComposeToList}
                 />
-                {saveError && <p className="mt-1.5 text-xs text-error-primary">{saveError}</p>}
+                {saveError && (
+                  <p role="alert" className="mt-1.5 text-xs text-error-primary">
+                    {saveError}
+                  </p>
+                )}
               </div>
               <div className="flex items-center justify-between gap-2 border-t border-secondary px-3.5 py-2.5">
-                <CoForgeMark className="h-3.5 shrink-0 opacity-70" />
+                <CoForgeMark className="h-4 shrink-0 opacity-85" />
                 <div className="flex items-center gap-2">
                   <AriaButton
                     isDisabled={saving}
                     onPress={exitComposeToList}
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-secondary bg-secondary px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-secondary_hover disabled:opacity-50"
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-secondary bg-secondary px-3 py-1.5 text-xs font-medium text-primary outline-focus-ring transition-colors hover:bg-secondary_hover focus-visible:outline-2 disabled:opacity-50"
                   >
                     <span>
                       {!editingDraft && count > 0
@@ -350,7 +411,7 @@ export function ArtifactReviewPill({
                     isDisabled={!canSave}
                     data-save-draft=""
                     onPress={() => void saveForm()}
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-primary-solid px-3.5 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"
+                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-alpha-black px-3.5 py-1.5 text-xs font-semibold text-alpha-white outline-focus-ring transition-opacity hover:opacity-90 focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {!editingDraft && <Plus aria-hidden="true" className="size-3.5" />}
                     <span>{editingDraft ? m.av_dr_save() : m.av_dr_add()}</span>
@@ -360,113 +421,23 @@ export function ArtifactReviewPill({
               </div>
             </>
           ) : (
-            <>
-              <ul className="max-h-60 divide-y divide-secondary overflow-y-auto">
-                {drafts.drafts.map((draft, index) => (
-                  <li
-                    key={draft.id}
-                    className={cn(
-                      "flex items-start gap-2.5 px-3.5 py-3 transition-colors duration-150",
-                      focusedIdx === index && "bg-secondary/60",
-                    )}
-                  >
-                    <AriaButton
-                      onPress={() => actions.openDraft(draft)}
-                      className="min-w-0 flex-1 cursor-pointer text-left text-sm leading-relaxed text-primary outline-focus-ring focus-visible:outline-2"
-                    >
-                      <AnchorChip
-                        label={formatAnchorTag(draft.anchor, draft.path)}
-                        className="mr-1.5 align-baseline"
-                      />
-                      <span className="break-words">{draft.body}</span>
-                    </AriaButton>
-                    <div className="flex shrink-0 items-center gap-0.5 pt-0.5">
-                      <ButtonUtility
-                        icon={Edit03}
-                        size="xs"
-                        color="tertiary"
-                        tooltip={m.av_cm_edit()}
-                        tooltipShortcut="E"
-                        isDisabled={locked}
-                        onClick={() => startEdit(draft)}
-                      />
-                      <ButtonUtility
-                        icon={Trash01}
-                        size="xs"
-                        color="tertiary"
-                        tooltip={m.av_cm_delete()}
-                        tooltipShortcut="⌫"
-                        isDisabled={locked}
-                        onClick={() => void actions.remove(draft)}
-                      />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              <div className="flex items-center justify-between gap-2 border-t border-secondary px-3.5 py-2.5">
-                <CoForgeMark className="h-3.5 shrink-0 opacity-70" />
-                <div className="flex items-center gap-2">
-                  <AriaButton
-                    isDisabled={locked || drafts.atLimit}
-                    onPress={enterCompose}
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-secondary bg-secondary px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-secondary_hover disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <Plus aria-hidden="true" className="size-3.5" />
-                    <span>{m.av_dr_new_comment()}</span>
-                    <KbdHint>N</KbdHint>
-                  </AriaButton>
-                  <Tooltip
-                    title={<TooltipWithKey label={m.av_dr_send_all_tip()} shortcut={modEnter} />}
-                  >
-                    <AriaButton
-                      isDisabled={locked}
-                      data-draft-send=""
-                      aria-label={m.av_dr_send_all_tip()}
-                      onPress={() => void actions.submit()}
-                      className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-primary-solid px-3.5 py-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-white dark:text-gray-950"
-                    >
-                      <span>{m.av_dr_send_all()}</span>
-                      <KbdHint tone="primary">{modEnter}</KbdHint>
-                      <ArrowRight aria-hidden="true" className="size-3.5" />
-                    </AriaButton>
-                  </Tooltip>
-                </div>
-              </div>
-            </>
+            <ArtifactReviewQueue
+              drafts={drafts.drafts}
+              focusedIdx={focusedIdx}
+              locked={locked}
+              atLimit={drafts.atLimit}
+              modEnter={modEnter}
+              onOpenDraft={actions.openDraft}
+              onEditDraft={startEdit}
+              onRemoveDraft={(draft) => void actions.remove(draft)}
+              onNewComment={enterCompose}
+              onSubmit={() => void actions.submit()}
+            />
           )}
         </div>
       )}
 
-      <Tooltip
-        title={
-          <TooltipWithKey
-            label={annotating ? m.av_cm_annotating() : m.av_cm_annotate()}
-            shortcut={annotating ? "Esc" : "C"}
-          />
-        }
-      >
-        <AriaButton
-          aria-pressed={annotating}
-          aria-label={annotating ? m.av_cm_annotating() : m.av_cm_annotate()}
-          data-annotate-toggle=""
-          onPress={onOrbPress}
-          className={cn(
-            "pointer-events-auto relative flex size-11 cursor-pointer items-center justify-center rounded-full border border-secondary bg-primary text-primary shadow-lg transition-transform duration-150 hover:scale-[1.03] active:scale-[0.97] dark:border-transparent dark:bg-white dark:text-gray-950",
-            annotating &&
-              "ring-2 ring-warning-solid ring-offset-2 ring-offset-primary text-warning-primary dark:text-warning-solid",
-          )}
-        >
-          <CursorClick01 aria-hidden="true" className="size-5" />
-          {count > 0 && (
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full bg-warning-solid text-xs leading-none font-semibold text-white tabular-nums shadow-xs"
-            >
-              {count}
-            </span>
-          )}
-        </AriaButton>
-      </Tooltip>
+      <ArtifactReviewFab annotating={annotating} count={count} onPress={onOrbPress} />
     </div>
   );
 }

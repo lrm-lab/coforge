@@ -1,13 +1,28 @@
 import type { DraftCreateInput } from "./artifact-comment-draft-inputs";
+import type { CommentAnchor } from "./artifact-comment-inputs";
 import type { CommentDraftView } from "./artifact-comment-drafts-queries";
 
 export const DRAFT_HISTORY_MAX = 60;
 
 export type DraftSnapshot = Omit<DraftCreateInput, "artifactId" | "images">;
 
+export type DraftEditPatch = {
+  anchor?: CommentAnchor | null;
+  path?: string | null;
+};
+
 export type DraftStep = { key: string } & (
   | { kind: "create" | "delete"; id: string; snapshot: DraftSnapshot }
-  | { kind: "edit"; id: string; from: string; to: string }
+  | {
+      kind: "edit";
+      id: string;
+      from: string;
+      to: string;
+      fromAnchor?: CommentAnchor | null;
+      toAnchor?: CommentAnchor | null;
+      fromPath?: string | null;
+      toPath?: string | null;
+    }
 );
 
 export type DraftHistory = { past: readonly DraftStep[]; future: readonly DraftStep[] };

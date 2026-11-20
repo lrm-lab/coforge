@@ -101,7 +101,12 @@ function sameDrafts(rows: readonly DraftRow[], shown: readonly DraftRow[]) {
     rows.length === shown.length &&
     rows.every((row, at) => {
       const held = shown[at]!;
-      return row.id === held.id && row.body === held.body;
+      return (
+        row.id === held.id &&
+        row.body === held.body &&
+        row.path === held.path &&
+        JSON.stringify(row.anchor) === JSON.stringify(held.anchor)
+      );
     })
   );
 }
@@ -136,7 +141,7 @@ async function prepareAll(
   rows: readonly DraftRow[],
   mentions: readonly (Refusal | undefined)[],
 ): Promise<{ prepared: PreparedComment[] } | Rejected> {
-  const prepared: PreparedComment[] = new Array(rows.length);
+  const prepared = Array.from<PreparedComment>({ length: rows.length });
   const firstMention = mentions.findIndex((refusal) => refusal !== undefined);
   let refused: { at: number; refusal: Refusal } | undefined =
     firstMention < 0 ? undefined : { at: firstMention, refusal: mentions[firstMention]! };
@@ -202,11 +207,13 @@ export async function submitDrafts(
     select: DRAFT_SELECT,
   });
   if (!sameSet(shown, input.draftIds)) throw draftsChanged();
-  const mentions = await mentionRefusals(notices, input, shown);
-
-  const people = await peopleMentionedIn(db, workspaceId, [
-    "",
-    ...shown.map((draft) => draft.body),
+  const [mentions, people] = await Promise.all([
+    mentionRefusals(notices, input, shown),
+    peopleMentionedIn(
+      db,
+      workspaceId,
+      shown.map((draft) => draft.body),
+    ),
   ]);
   const written = await withCommentLock(db, artifact.id, async (tx) => {
     const raced = await replayOf(tx);

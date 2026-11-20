@@ -23,6 +23,7 @@ import {
   EMPTY_HISTORY,
   historyReducer,
   snapshotOf,
+  type DraftEditPatch,
   type DraftStep,
 } from "./artifact-draft-history";
 
@@ -76,8 +77,16 @@ export function useCommentDraftsStore(artifactId: string, enabled: boolean, onCh
     [artifactId, patch],
   );
   const change = useCallback(
-    async (id: string, body: string) => {
-      const edited = await editCommentDraft({ data: { artifactId, draftId: id, body } });
+    async (id: string, body: string, editPatch?: DraftEditPatch) => {
+      const edited = await editCommentDraft({
+        data: {
+          artifactId,
+          draftId: id,
+          body,
+          ...(editPatch?.anchor === undefined ? {} : { anchor: editPatch.anchor }),
+          ...(editPatch?.path === undefined ? {} : { path: editPatch.path }),
+        },
+      });
       patch((held) => held.map((draft) => (draft.id === id ? edited : draft)));
     },
     [artifactId, patch],
@@ -131,9 +140,9 @@ export function useCommentDraftsStore(artifactId: string, enabled: boolean, onCh
     [exclusive, insert],
   );
   const edit = useCallback(
-    (draft: CommentDraftView, body: string) =>
+    (draft: CommentDraftView, body: string, editPatch?: DraftEditPatch) =>
       exclusive("changing", async () => {
-        await change(draft.id, body);
+        await change(draft.id, body, editPatch);
         if (!hasImages(draft))
           dispatch({
             type: "record",
@@ -143,6 +152,12 @@ export function useCommentDraftsStore(artifactId: string, enabled: boolean, onCh
               id: draft.id,
               from: draft.body,
               to: body,
+              ...(editPatch?.anchor === undefined
+                ? {}
+                : { fromAnchor: draft.anchor, toAnchor: editPatch.anchor }),
+              ...(editPatch?.path === undefined
+                ? {}
+                : { fromPath: draft.path, toPath: editPatch.path }),
             },
           });
       }),
@@ -192,7 +207,17 @@ export function useCommentDraftsStore(artifactId: string, enabled: boolean, onCh
   const replay = useCallback(
     async (step: DraftStep, direction: Direction) => {
       const forward = direction === "redo";
-      if (step.kind === "edit") return change(step.id, forward ? step.to : step.from);
+      if (step.kind === "edit") {
+        const editPatch: DraftEditPatch = {
+          ...(step.toAnchor === undefined
+            ? {}
+            : { anchor: forward ? step.toAnchor : (step.fromAnchor ?? null) }),
+          ...(step.toPath === undefined
+            ? {}
+            : { path: forward ? step.toPath : (step.fromPath ?? null) }),
+        };
+        return change(step.id, forward ? step.to : step.from, editPatch);
+      }
       if ((step.kind === "create") === forward) return recreate(step);
       return drop(step.id);
     },

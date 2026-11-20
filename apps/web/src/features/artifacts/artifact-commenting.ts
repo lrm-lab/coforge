@@ -9,6 +9,7 @@ import type {
 import type { CommentAnchor } from "./artifact-comment-inputs";
 import type { CommentThread } from "./artifact-comment-threads";
 import type { ComposerHolds } from "./artifact-composer-holds";
+import type { ArtifactPickBus } from "./artifact-pick-bus";
 
 export type CommentTarget = { version: number; path: string; anchor: CommentAnchor | null };
 
@@ -37,6 +38,7 @@ export type ArtifactCommenting = {
   openPanel(): void;
   publishPlaces(path: string, places: ThreadPlaces | null): void;
   holds: ComposerHolds;
+  pickBus: ArtifactPickBus;
 };
 
 export type CommentRequests = {

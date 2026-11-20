@@ -19,6 +19,23 @@ function markLabel(anchor: CommentAnchor, count: number) {
   return quote ? m.av_cm_mark_label({ count, quote }) : m.av_cm_mark_unnamed({ count });
 }
 
+function sameMarks(left: readonly PageMark[], right: readonly PageMark[]): boolean {
+  if (left.length !== right.length) return false;
+  for (let i = 0; i < left.length; i += 1) {
+    const a = left[i]!;
+    const b = right[i]!;
+    if (
+      a.id !== b.id ||
+      a.count !== b.count ||
+      a.label !== b.label ||
+      a.draft !== b.draft ||
+      !sameAnchor(a.anchor, b.anchor)
+    )
+      return false;
+  }
+  return true;
+}
+
 export function useFrameMarks({
   bridge,
   composing,
@@ -62,7 +79,7 @@ export function useFrameMarks({
     return [...threads, ...unsent];
   }, [active, anchored, drafts, path, version]);
   const held = useRef(computed);
-  if (JSON.stringify(held.current) !== JSON.stringify(computed)) held.current = computed;
+  if (!sameMarks(held.current, computed)) held.current = computed;
   const marks = held.current;
 
   useEffect(() => {

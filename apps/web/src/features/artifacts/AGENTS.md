@@ -115,13 +115,12 @@ These rules apply to `src/features/artifacts/`. They extend
   path's names as text before the person sends, nothing is posted without the person sending, a page
   cannot start picking, read comments, or send one, and what the frame is sent is only ids, anchors,
   counts and labels built from its own text.
-- Host state for a frame: `use-frame-offer.ts` (picking and text selection follow comment mode; an
-  element pick composes at once through the offer's `autoCompose`, at the click point; the newest
-  gesture replaces an open composer only when it holds nothing (`holds`, in `useAnchorDraft`): an
-  element pick reopens it focused, a text selection closes it and offers the quote, which keeps a
-  double-click on a word working; a pick the page
-  cannot anchor shows a message; the pick's ancestors become the draft's `trail`, whose steps
-  retarget the open composer without moving it, from a path step or ↑/↓ in an empty field),
+- Host state for a frame: `use-frame-offer.ts` (picking and text selection follow comment mode; when
+  the floating review composer is open, element picks route through `pickBus` (`artifact-pick-bus.ts`)
+  to insert inline `{{<tag> selector}}` chips (`artifact-inline-refs.ts`) directly into
+  `ArtifactInlineEditor` and highlight all referenced elements via `bridge.annotations.setDrafts`;
+  text selections and non-HTML offers still flow through `useAnchorDraft` and `DraftAffordance`; a
+  pick the page cannot anchor shows a message),
   `use-frame-marks.ts` (marks, found keyed by the revision the bridge echoes, places through
   `publishPlaces`, reveal; `activated` is ignored while a composer is open) and
   `artifact-frame-comment-layer.tsx`. Reports are provisional until the runtime reports after the
@@ -132,13 +131,13 @@ These rules apply to `src/features/artifacts/`. They extend
   `use-submit-drafts.ts` owns send; both run under the store's one `exclusive` lock and busy state,
   so a send blocks draft edits and the reverse). The provider `artifact-drafts-provider.tsx` splits a
   state context (`useCommentDrafts`) from a stable actions context (`useCommentDraftActions`). The
-  composer always saves a draft by default via a single primary button (`data-save-draft`), and
-  all pending drafts are submitted together from the floating review pill (`ArtifactReviewPill`),
-  which also hosts the canvas annotate toggle, undo and redo (a 60-step
-  reducer, `artifact-draft-history.ts`, replaying server operations; drafts with images are not
-  recorded; a step the server refuses for good is dropped with its toast, a transient failure keeps
-  it; a restored draft keeps its creation time), discard all, send N. Mod+Z, Shift+Mod+Z and Mod+Y
-  act only outside text fields and modal dialogs, ignore handled events, and prevent the default
+  bottom-right `ArtifactReviewPill` owns the 4-state review flow (idle `MessageSquare01` FAB →
+  picking/composing `CursorBox` FAB + inline rich editor → inline `<tag>` chips → queued draft list
+  with edit/delete, `+ New comment`, and `Send →` batch submit). Undo and redo (a 60-step
+  reducer, `artifact-draft-history.ts`, replaying server operations including edited anchor/path;
+  drafts with images are not recorded; a step the server refuses for good is dropped with its toast,
+  a transient failure keeps it; a restored draft keeps its creation time) run via Mod+Z, Shift+Mod+Z
+  and Mod+Y outside text fields and modal dialogs, ignore handled events, and prevent the default
   only when they act. Draft markers are dashed
   and uncounted (`data-draft-marker`; the frame's marks carry `draft: true`); a click opens the draft.
   A refused send opens the pending panel with the failing draft outlined. `?review=<id>` filters the
