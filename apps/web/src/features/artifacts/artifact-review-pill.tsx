@@ -495,10 +495,7 @@ export function ArtifactReviewPill({
               <div className="flex items-center justify-between gap-2 border-t border-secondary/70 px-3.5 py-2.5">
                 <CoForgeMark className="h-3.5 shrink-0 opacity-60 transition-opacity duration-150 hover:opacity-90" />
                 <div className="flex items-center gap-2">
-                  <Tooltip
-                    delay={220}
-                    title={<TooltipWithKey label={m.controls_cancel()} shortcut="Esc" />}
-                  >
+                  <Tooltip title={<TooltipWithKey label={m.controls_cancel()} shortcut="Esc" />}>
                     <AriaButton
                       isDisabled={saving}
                       onPress={exitComposeToList}
@@ -508,7 +505,6 @@ export function ArtifactReviewPill({
                     </AriaButton>
                   </Tooltip>
                   <Tooltip
-                    delay={220}
                     title={
                       <TooltipShortcutRows
                         rows={[

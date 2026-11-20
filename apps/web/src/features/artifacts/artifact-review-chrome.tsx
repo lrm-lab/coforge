@@ -187,10 +187,7 @@ export function ArtifactReviewQueue({
       <div className="flex items-center justify-between gap-2 border-t border-secondary/70 px-3.5 py-2.5">
         <CoForgeMark className="h-3.5 shrink-0 opacity-60 transition-opacity duration-150 hover:opacity-90" />
         <div className="flex items-center gap-2">
-          <Tooltip
-            delay={220}
-            title={<TooltipWithKey label={m.av_dr_new_comment()} shortcut="N" />}
-          >
+          <Tooltip title={<TooltipWithKey label={m.av_dr_new_comment()} shortcut="N" />}>
             <AriaButton
               isDisabled={locked || atLimit}
               onPress={onNewComment}
@@ -200,10 +197,7 @@ export function ArtifactReviewQueue({
               <span>{m.av_dr_new_comment()}</span>
             </AriaButton>
           </Tooltip>
-          <Tooltip
-            delay={220}
-            title={<TooltipWithKey label={m.av_dr_send_all_tip()} shortcut={modEnter} />}
-          >
+          <Tooltip title={<TooltipWithKey label={m.av_dr_send_all_tip()} shortcut={modEnter} />}>
             <AriaButton
               isDisabled={locked}
               data-draft-send=""
@@ -232,7 +226,6 @@ export function ArtifactReviewFab({
 }) {
   return (
     <Tooltip
-      delay={220}
       title={
         annotating ? (
           <TooltipWithKey label={m.av_cm_annotating()} shortcut="Esc" />
