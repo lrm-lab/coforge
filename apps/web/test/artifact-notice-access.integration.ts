@@ -119,3 +119,38 @@ test("a blocked notice does not starve a later readable one in the same conversa
   expect(await recoveryIds()).not.toContain(blocked.messageId);
   expect(await recoveryIds()).toContain(visible.messageId);
 });
+
+test("a notice whose artifact row is gone is not handed back", async () => {
+  const artifact = await h.f.make("Vanished gate");
+  const reader = await h.nameOf(h.f.agents.reader);
+  await h.create(artifact, `Vanished gate, see @${reader}.`);
+  const sent = await h.submit(artifact);
+  if (sent.status !== "sent") throw new Error("not sent");
+  const event = await h.f.db.systemAgentEvent.findUniqueOrThrow({
+    where: {
+      source_agentId_externalEventId: {
+        source: "system.artifacts",
+        agentId: h.f.agents.reader,
+        externalEventId: `${artifact}:${sent.reviewId}`,
+      },
+    },
+    select: { id: true, messageId: true },
+  });
+  const conversations = new PrismaDirectConversationRepository(h.f.db);
+  const pendingIds = async () =>
+    (await conversations.readPendingAgentDeliveries(h.f.workspaceId, h.f.agents.reader)).map(
+      (delivery) => delivery.messageId,
+    );
+  expect(await pendingIds()).toContain(event.messageId);
+
+  await h.f.db.systemAgentEvent.update({
+    where: { id: event.id },
+    data: { externalEventId: `${crypto.randomUUID()}:${sent.reviewId}` },
+  });
+
+  expect(await pendingIds()).not.toContain(event.messageId);
+  const recovery = await conversations.readAgentRecoveryContext(h.f.workspaceId, h.f.agents.reader);
+  expect(recovery.resumeMessages.map((message) => message.messageId)).not.toContain(
+    event.messageId,
+  );
+});

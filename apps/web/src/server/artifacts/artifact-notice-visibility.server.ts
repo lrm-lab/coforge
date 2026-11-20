@@ -9,9 +9,10 @@ export function readableArtifactNoticeSql(
   const readable = agentReadableArtifactSql(workspaceId, agentId);
   return Prisma.sql`NOT EXISTS (
     SELECT 1 FROM "system_agent_events" e
-    JOIN "artifacts" a ON a."id"::text = split_part(e."externalEventId", ':', 1)
+    LEFT JOIN "artifacts" a ON a."id"::text = split_part(e."externalEventId", ':', 1)
     WHERE e."messageId" = ${messageId} AND e."source" = 'system.artifacts'
-      AND (a."deletedAt" IS NOT NULL OR NOT ${readable}))`;
+      AND (a."id" IS NULL OR a."workspaceId" <> ${workspaceId}::uuid
+        OR a."deletedAt" IS NOT NULL OR NOT ${readable}))`;
 }
 
 export async function artifactNoticeBlockedMessages(
