@@ -365,7 +365,7 @@ test("a blocked notice no longer costs the page a row", async () => {
     });
 
     const base = Date.parse("2024-01-01T00:00:00Z");
-    const blockedCount = 5;
+    const blockedCount = AGENT_RECOVERY_MESSAGE_LIMIT;
     const blockedRows = Array.from({ length: blockedCount }, (_, index) => ({
       sequence: 1 + index,
       createdAt: new Date(base + index * 1000),
@@ -420,13 +420,21 @@ test("a blocked notice no longer costs the page a row", async () => {
       select: { id: true, sequence: true },
     });
 
+    const firstTie = "00000000-0000-7000-8000-000000000001";
+    const secondTie = "00000000-0000-7000-8000-000000000002";
     await db.agentMessageDelivery.createMany({
-      data: allowedMessages.map((message) => ({
+      data: allowedMessages.map((message, index) => ({
+        ...(index === 0 ? { deliveryId: secondTie } : {}),
+        ...(index === 1 ? { deliveryId: firstTie } : {}),
         workspaceId: workspace.id,
         conversationId: channel.id,
         messageId: message.id,
         agentId: reader.id,
         sequence: message.sequence,
+        createdAt:
+          index < 2
+            ? (allowedRows[0]?.createdAt ?? new Date(base))
+            : (allowedRows[index]?.createdAt ?? new Date(base)),
       })),
     });
 
@@ -434,7 +442,11 @@ test("a blocked notice no longer costs the page a row", async () => {
     const actual = (await repository.readPendingAgentDeliveries(workspace.id, reader.id)).map(
       (delivery) => delivery.messageId,
     );
-    expect(actual).toEqual(allowedMessages.map((message) => message.id));
+    expect(actual).toEqual([
+      allowedMessages[1]?.id,
+      allowedMessages[0]?.id,
+      ...allowedMessages.slice(2).map((message) => message.id),
+    ]);
   } finally {
     await db.workspace.deleteMany({ where: { id: workspace.id } });
     await db.user.deleteMany({ where: { id: user.id } });
