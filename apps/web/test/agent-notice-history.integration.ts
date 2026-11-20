@@ -234,6 +234,12 @@ test("the notice conversation reads only the notices the Agent can still read", 
     const blockedTail = await read({ after: "9", limit: 2 });
     expect(blockedTail.messages).toEqual([]);
     expect(blockedTail.hasNewer).toBe(false);
+
+    await pinned("01a1f6dc-dddd-7000-8000-000000000001", 20, "notice 20");
+    const bothSides = await read({ around: "15", limit: 1 });
+    expect(bothSides.messages).toEqual([]);
+    expect(bothSides.hasOlder).toBe(true);
+    expect(bothSides.hasNewer).toBe(true);
     expect(fourth!.id).toContain("-");
   } finally {
     await db.workspace.deleteMany({ where: { id: workspace.id } });
