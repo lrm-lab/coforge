@@ -290,3 +290,29 @@ test("a home key without the conversation prefix blocks a non-author", async () 
     .then((rows) => rows.map((delivery) => delivery.messageId));
   expect(pendingIds).not.toContain(event.messageId);
 });
+
+test("the artifact's own writer keeps its notice after the home is gone", async () => {
+  const artifact = await h.f.make("Writer fallback");
+  const writer = await h.nameOf(h.f.agents.writer);
+  await h.create(artifact, `Writer fallback, see @${writer}.`);
+  const sent = await h.submit(artifact);
+  if (sent.status !== "sent") throw new Error("not sent");
+  const event = await h.f.db.systemAgentEvent.findUniqueOrThrow({
+    where: {
+      source_agentId_externalEventId: {
+        source: "system.artifacts",
+        agentId: h.f.agents.writer,
+        externalEventId: `${artifact}:${WEB_DRAFT_REVIEW_MARKER}:${sent.reviewId}`,
+      },
+    },
+    select: { messageId: true },
+  });
+  await h.f.db.artifact.update({
+    where: { id: artifact },
+    data: { access: "conversation", homeKey: `conversation:${crypto.randomUUID()}` },
+  });
+  const pendingIds = await new PrismaDirectConversationRepository(h.f.db)
+    .readPendingAgentDeliveries(h.f.workspaceId, h.f.agents.writer)
+    .then((rows) => rows.map((delivery) => delivery.messageId));
+  expect(pendingIds).toContain(event.messageId);
+});
