@@ -102,26 +102,14 @@ test("converting someone's message makes a task beside it and tells its author i
   expect(notice.body).toContain(`#${task.number}`);
 });
 
-test("a message someone else is working on is taken, unless the person says alongside", async () => {
+test("converting a message someone else is working on creates another task from the same source", async () => {
   const held = await db.task.findFirstOrThrow({ where: { sourceMessageId: sourceId } });
   await db.task.update({
     where: { id: held.id },
     data: { ownerMemberId: people.author.memberId, status: "in_progress" },
   });
-  const refusal = await run({ operation: "convert", messageId: sourceId }).catch((e) => e);
-  expect(refusal).toMatchObject({
-    code: "CONFLICT",
-    errorId: "source_message_taken",
-    details: {
-      taskNumber: held.number,
-      holder: `tcp-author-${suffix}`,
-      holderName: "author",
-    },
-  });
-  // The refusal an Agent reads names the holder by display name and both ways on.
-  expect(refusal.hint).toContain("held by author");
-  expect(refusal.hint).toContain(`coforge task reply "#tcp-${suffix}:#${held.number}"`);
-  expect(refusal.hint).toContain("--alongside");
+  const second = await run({ operation: "convert", messageId: sourceId });
+  expect(second.tasks[0]!.sourceMessageId).toBe(sourceId);
   const beside = await run({ operation: "convert", messageId: sourceId, alongside: true });
   expect(beside.tasks[0]!.sourceMessageId).toBe(sourceId);
 });

@@ -19,6 +19,8 @@ test("Task commands require exact arguments and reject thread targets", () => {
       "create",
       "--target",
       "#general",
+      "--message-id",
+      "abc12345",
       "--title",
       "Ship it",
       "--assignee",
@@ -27,7 +29,13 @@ test("Task commands require exact arguments and reject thread targets", () => {
       "medium",
     ]),
   ).toMatchObject({
-    task: { operation: "create", title: "Ship it", assignee: "@ada", priority: "medium" },
+    task: {
+      operation: "create",
+      messageId: "abc12345",
+      title: "Ship it",
+      assignee: "@ada",
+      priority: "medium",
+    },
   });
   expect(refusal(["task", "claim", "--target", "#general"])).toEqual(
     invalidArg("Provide at least one --number or --message-id"),
@@ -40,13 +48,15 @@ test("Task commands require exact arguments and reject thread targets", () => {
   );
 });
 
-test("Task create takes repeated titles, an @handle assignee and a resource receipt gate", () => {
+test("Task create takes repeated titles, an @handle assignee and required --message-id", () => {
   expect(
     parseArgs([
       "task",
       "create",
       "--target",
       "#general",
+      "--message-id",
+      "abc12345",
       "--title",
       "Draft",
       "--title",
@@ -59,6 +69,7 @@ test("Task create takes repeated titles, an @handle assignee and a resource rece
   ).toMatchObject({
     task: {
       operation: "create",
+      messageId: "abc12345",
       titles: ["Draft", "Review"],
       assignee: "@ada",
       priority: "high",
@@ -69,6 +80,8 @@ test("Task create takes repeated titles, an @handle assignee and a resource rece
     "create",
     "--target",
     "#general",
+    "--message-id",
+    "abc12345",
     "--title",
     "One",
     "--priority",
@@ -79,7 +92,6 @@ test("Task create takes repeated titles, an @handle assignee and a resource rece
   expect(single.task).toMatchObject({ title: "One" });
   expect(single.task).not.toHaveProperty("titles");
   expect(single.task).not.toHaveProperty("createsResource");
-  // No new task is a resource task (task #coforge-backend:#26): the flag is gone.
   expect(() =>
     parseArgs(["task", "create", "--target", "#general", "--title", "One", "--creates-resource"]),
   ).toThrow("Usage:");
@@ -90,18 +102,59 @@ test("Task create takes repeated titles, an @handle assignee and a resource rece
     invalidArg("--title must be nonblank"),
   );
   expect(
-    refusal(["task", "create", "--target", "#general", "--title", "One", "--assignee", "ada"]),
+    refusal([
+      "task",
+      "create",
+      "--target",
+      "#general",
+      "--message-id",
+      "abc12345",
+      "--title",
+      "One",
+      "--assignee",
+      "ada",
+    ]),
   ).toEqual(invalidArg("--assignee must be an @handle"));
   expect(
-    refusal(["task", "create", "--target", "#general", "--title", "One", "--assignee", "@Ada"]),
+    refusal([
+      "task",
+      "create",
+      "--target",
+      "#general",
+      "--message-id",
+      "abc12345",
+      "--title",
+      "One",
+      "--assignee",
+      "@Ada",
+    ]),
   ).toEqual(invalidArg("--assignee must be an @handle"));
   expect(refusal(["task", "create", "--title", "One"])).toEqual(invalidArg("--target is required"));
-  // Task #12: a new task names its priority, one of the four levels — `none` is not a choice.
-  expect(refusal(["task", "create", "--target", "#general", "--title", "One"])).toEqual(
-    invalidArg("--priority is required (urgent, high, medium or low)"),
-  );
   expect(
-    refusal(["task", "create", "--target", "#general", "--title", "One", "--priority", "none"]),
+    parseArgs([
+      "task",
+      "create",
+      "--target",
+      "#general",
+      "--message-id",
+      "abc12345",
+      "--title",
+      "One",
+    ]),
+  ).toMatchObject({ task: { priority: "medium" } });
+  expect(
+    refusal([
+      "task",
+      "create",
+      "--target",
+      "#general",
+      "--message-id",
+      "abc12345",
+      "--title",
+      "One",
+      "--priority",
+      "none",
+    ]),
   ).toEqual(invalidArg("--priority must be one of: urgent, high, medium, low; got none"));
 });
 
@@ -153,7 +206,7 @@ test("Task update, assign, convert, amend and receipt name what is wrong with th
     ),
   );
   expect(refusal([...update, "--number", "1", "--status", "open"])).toEqual(
-    invalidArg("--status must be one of: todo, in_progress, in_review, done, closed; got open"),
+    invalidArg("--status must be one of: backlog, todo, in_progress, done, closed; got open"),
   );
   expect(refusal([...update, "--number", "1"])).toEqual(
     invalidArg("task update needs --status, --priority or --label"),
@@ -182,7 +235,6 @@ test("Task update, assign, convert, amend and receipt name what is wrong with th
   expect(refusal(["task", "convert", "--target", "#general"])).toEqual(
     invalidArg("--message-id is required"),
   );
-  // Task #12: convert names a priority too, from the same four levels as create.
   expect(
     parseArgs([
       "task",
@@ -195,9 +247,9 @@ test("Task update, assign, convert, amend and receipt name what is wrong with th
       "urgent",
     ]),
   ).toMatchObject({ task: { operation: "convert", messageId: "abc12345", priority: "urgent" } });
-  expect(refusal(["task", "convert", "--target", "#general", "--message-id", "abc12345"])).toEqual(
-    invalidArg("--priority is required (urgent, high, medium or low)"),
-  );
+  expect(
+    parseArgs(["task", "convert", "--target", "#general", "--message-id", "abc12345"]),
+  ).toMatchObject({ task: { operation: "convert", messageId: "abc12345", priority: "medium" } });
   expect(
     refusal([
       "task",

@@ -44,11 +44,20 @@ const update = (status: TaskWriteStatus) => ({
 describe("getTaskMoveCommand", () => {
   test("does nothing without membership or when status is unchanged", () => {
     expect(getTaskMoveCommand(task("todo"), null, "in_progress")).toBeUndefined();
-    expect(getTaskMoveCommand(task("in_review", owner("me")), "me", "in_review")).toBeUndefined();
+    expect(
+      getTaskMoveCommand(task("in_progress", owner("me")), "me", "in_progress"),
+    ).toBeUndefined();
+    expect(
+      getTaskMoveCommand(task("todo", owner("me")), "me", "in_review" as never),
+    ).toBeUndefined();
   });
 
-  test("claims an available or self-reserved todo moved to in progress", () => {
+  test("claims an available or self-reserved backlog or todo moved to in progress", () => {
     expect(getTaskMoveCommand(task("todo"), "me", "in_progress")).toEqual({
+      operation: "claim",
+      number: 7,
+    });
+    expect(getTaskMoveCommand(task("backlog"), "me", "in_progress")).toEqual({
       operation: "claim",
       number: 7,
     });
@@ -56,70 +65,28 @@ describe("getTaskMoveCommand", () => {
       operation: "claim",
       number: 7,
     });
-    expect(getTaskMoveCommand(task("todo"), "me", "in_review")).toBeUndefined();
-    expect(getTaskMoveCommand(task("todo"), "me", "done")).toBeUndefined();
+    expect(getTaskMoveCommand(task("todo"), "me", "done")).toEqual(update("done"));
   });
 
-  test("an owner works their Task forward and back, exactly as the server allows", () => {
+  test("any member moves a Task freely between writable statuses, including unowned tasks", () => {
     const mine = owner("me");
-    for (const nextStatus of ["todo", "in_review", "closed"] as const) {
-      expect(getTaskMoveCommand(task("in_progress", mine), "me", nextStatus)).toEqual(
-        update(nextStatus),
-      );
+    const other = owner("other");
+    for (const current of [null, mine, other]) {
+      for (const from of ["backlog", "todo", "in_progress", "in_review", "done", "closed"] as const)
+        for (const to of ["backlog", "todo", "in_progress", "done", "closed"] as const) {
+          if (from === to) continue;
+          const result = getTaskMoveCommand(task(from, current), "me", to);
+          const isClaim =
+            (from === "backlog" || from === "todo") &&
+            to === "in_progress" &&
+            (!current || current.memberId === "me");
+          expect(result).toEqual(isClaim ? { operation: "claim", number: 7 } : update(to));
+        }
     }
-    // In progress does not skip review on the way to Done.
-    expect(getTaskMoveCommand(task("in_progress", mine), "me", "done")).toBeUndefined();
-    for (const nextStatus of ["in_progress", "done", "closed"] as const) {
-      expect(getTaskMoveCommand(task("in_review", mine), "me", nextStatus)).toEqual(
-        update(nextStatus),
-      );
-    }
-  });
-
-  test("leaves in progress and in review to the owner, as the server does", () => {
-    const someoneElses = task("in_review", owner("other"));
-    expect(getTaskMoveCommand(someoneElses, "me", "in_progress")).toBeUndefined();
-    expect(getTaskMoveCommand(task("todo", owner("other")), "me", "in_progress")).toBeUndefined();
-    expect(
-      getTaskMoveCommand(task("in_progress", owner("other")), "me", "in_review"),
-    ).toBeUndefined();
-    expect(getTaskMoveCommand(task("in_review"), "me", "in_progress")).toBeUndefined();
-    // Someone else's In review Task may be finished or closed, not reopened to To do.
-    expect(getTaskMoveCommand(someoneElses, "me", "todo")).toBeUndefined();
-    for (const nextStatus of ["done", "closed"] as const) {
-      expect(getTaskMoveCommand(someoneElses, "me", nextStatus)).toEqual(update(nextStatus));
-    }
-  });
-
-  test("requires an owner for done but permits explicit terminal and todo updates", () => {
-    expect(getTaskMoveCommand(task("in_review"), "me", "done")).toBeUndefined();
-    expect(getTaskMoveCommand(task("in_review"), "me", "closed")).toEqual(update("closed"));
-    expect(getTaskMoveCommand(task("done", owner("other")), "me", "todo")).toEqual(update("todo"));
-  });
-
-  test("a closed Task reopens to To do only, and a finished one may go back for rework", () => {
-    expect(getTaskMoveCommand(task("closed", owner("me")), "me", "todo")).toEqual(update("todo"));
-    expect(getTaskMoveCommand(task("closed", owner("me")), "me", "in_progress")).toBeUndefined();
-    expect(getTaskMoveCommand(task("closed", owner("me")), "me", "done")).toBeUndefined();
-    for (const nextStatus of ["todo", "in_progress", "in_review", "closed"] as const) {
-      expect(getTaskMoveCommand(task("done", owner("me")), "me", nextStatus)).toEqual(
-        update(nextStatus),
-      );
-    }
-  });
-
-  test("a Workspace owner or admin sets any status, on anyone's Task", () => {
-    for (const from of ["todo", "in_progress", "in_review", "done", "closed"] as const)
-      for (const to of ["todo", "in_progress", "in_review", "done", "closed"] as const) {
-        if (from === to) continue;
-        expect(
-          getTaskMoveCommand(task(from, owner("other")), "me", to, { canSetAnyStatus: true }),
-        ).toEqual(update(to));
-      }
   });
 
   test("a Task made to create a resource is not offered Done until its receipt is in", () => {
-    const awaiting = { ...task("in_review", owner("me")), requiresResourceReceipt: true };
+    const awaiting = { ...task("in_progress", owner("me")), requiresResourceReceipt: true };
     expect(getTaskMoveCommand(awaiting, "me", "done")).toBeUndefined();
     expect(getTaskMoveCommand(awaiting, "me", "done", { canSetAnyStatus: true })).toBeUndefined();
     const received: TaskView = {
@@ -136,80 +103,54 @@ describe("getTaskMoveCommand", () => {
     };
     expect(getTaskMoveCommand(received, "me", "done")).toEqual(update("done"));
   });
-
-  test("a Task nobody owns goes only to To do or Closed, a Workspace admin's move included", () => {
-    const manager = { canSetAnyStatus: true };
-    expect(getTaskMoveCommand(task("todo"), "me", "in_review", manager)).toBeUndefined();
-    expect(getTaskMoveCommand(task("todo"), "me", "done", manager)).toBeUndefined();
-    expect(getTaskMoveCommand(task("in_review"), "me", "in_progress", manager)).toBeUndefined();
-    expect(getTaskMoveCommand(task("in_review"), "me", "todo", manager)).toEqual(update("todo"));
-    expect(getTaskMoveCommand(task("todo"), "me", "closed", manager)).toEqual(update("closed"));
-    // Moving it to In progress claims it.
-    expect(getTaskMoveCommand(task("todo"), "me", "in_progress", manager)).toEqual({
-      operation: "claim",
-      number: 7,
-    });
-  });
 });
 
 describe("taskStatusOptions", () => {
-  test("offers the current status first, then the statuses a Task may move to from it", () => {
+  test("offers the current status first, then every other writable status", () => {
     const mine = owner("me");
-    expect(taskStatusOptions(task("todo", mine), "me")).toEqual(["todo", "in_progress", "closed"]);
-    expect(taskStatusOptions(task("in_progress", mine), "me")).toEqual([
-      "in_progress",
+    expect(taskStatusOptions(task("todo", mine), "me")).toEqual([
       "todo",
-      "in_review",
+      "backlog",
+      "in_progress",
+      "done",
+      "closed",
+    ]);
+    expect(taskStatusOptions(task("backlog"), "me")).toEqual([
+      "backlog",
+      "todo",
+      "in_progress",
+      "done",
       "closed",
     ]);
     expect(taskStatusOptions(task("in_review", mine), "me")).toEqual([
       "in_review",
-      "in_progress",
-      "done",
-      "closed",
-    ]);
-    expect(taskStatusOptions(task("done", mine), "me")).toEqual([
-      "done",
+      "backlog",
       "todo",
       "in_progress",
-      "in_review",
+      "done",
       "closed",
     ]);
-    expect(taskStatusOptions(task("closed", mine), "me")).toEqual(["closed", "todo"]);
+    expect(taskStatusOptions(task("closed", owner("other")), "me")).toEqual([
+      "closed",
+      "backlog",
+      "todo",
+      "in_progress",
+      "done",
+    ]);
   });
 
-  test("drops moves the viewer cannot make", () => {
-    expect(taskStatusOptions(task("in_review"), "me")).toEqual(["in_review", "closed"]);
-    expect(taskStatusOptions(task("in_progress", owner("other")), "me")).toEqual([
-      "in_progress",
-      "todo",
-      "closed",
-    ]);
+  test("offers only the current status when the viewer has no membership", () => {
     expect(taskStatusOptions(task("todo"), null)).toEqual(["todo"]);
   });
 
-  test("Backlog shows once on a Backlog Task and is never a choice on any other", () => {
+  test("In Review shows only on a legacy In Review Task and is never a write target", () => {
     expect(
-      taskStatusOptions(task("backlog", owner("me")), "me").filter((s) => s === "backlog"),
-    ).toEqual(["backlog"]);
-    for (const status of ["todo", "in_progress", "in_review", "done", "closed"] as const)
-      expect(taskStatusOptions(task(status, owner("me")), "me")).not.toContain("backlog");
+      taskStatusOptions(task("in_review", owner("me")), "me").filter((s) => s === "in_review"),
+    ).toEqual(["in_review"]);
+    for (const status of ["backlog", "todo", "in_progress", "done", "closed"] as const)
+      expect(taskStatusOptions(task(status, owner("me")), "me")).not.toContain("in_review");
     expect(
       taskStatusOptions(task("todo", owner("me")), "me", { canSetAnyStatus: true }),
-    ).not.toContain("backlog");
+    ).not.toContain("in_review");
   });
-
-  test("a manager's menu lists every other status", () => {
-    expect(
-      taskStatusOptions(task("closed", owner("other")), "me", { canSetAnyStatus: true }),
-    ).toEqual(["closed", "todo", "in_progress", "in_review", "done"]);
-  });
-});
-
-test("Backlog menus read an existing task without offering a Backlog write target", () => {
-  expect(taskStatusOptions(task("backlog"), "me")).toEqual(["backlog", "todo", "closed"]);
-  expect(taskStatusOptions(task("todo"), "me", { canSetAnyStatus: true })).not.toContain("backlog");
-  expect(
-    getTaskMoveCommand(task("todo"), "me", "backlog" as never, { canSetAnyStatus: true }),
-  ).toBeUndefined();
 });

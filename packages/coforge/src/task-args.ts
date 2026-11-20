@@ -1,14 +1,16 @@
 import {
+  TASK_CREATE_STATUSES,
   TASK_PRIORITY_LEVELS,
   TASK_WRITE_STATUSES,
-  isTaskWriteStatus,
+  isTaskCreateStatus,
+  isTaskReadStatus,
   type TaskPriorityLevel,
   type TaskCommandWithout,
 } from "@lrm/coforge-sdk/internal";
 import { unknownCommandError } from "./command-help";
 import { parseTaskListStatus } from "./task-list-status-args";
 import { reviewerIsolationFromEnvironment } from "#src/reviewer-isolation";
-import { parseAssignReason } from "#src/task-assign-reason-arg";
+import { parseAssignReason, parseStatusReason } from "#src/task-assign-reason-arg";
 import {
   blockedByOption,
   dueAtOption,
@@ -73,6 +75,11 @@ export function parseTaskArgs(
   for (let index = 1; index < args.length; index += 1) {
     const name = args[index]!;
     if (!name.startsWith("--") && acceptsPositionalRef) {
+      if (operation === "assign") {
+        if (positionalRefs.length >= 2) throw new Error("Usage:");
+        positionalRefs.push(name);
+        continue;
+      }
       if (positionalRefs.length > 0 && operation !== "claim") throw new Error("Usage:");
       positionalRefs.push(name);
       continue;
@@ -90,6 +97,7 @@ export function parseTaskArgs(
   }
   const one = (flag: string) => values.get(flag)?.[0];
 
+  let positionalAssignee: string | undefined;
   if (positionalRefs.length > 0) {
     if (operation === "claim") {
       const parsed = positionalRefs.map((ref) => resolveTaskRef(ref, undefined, undefined));
@@ -108,6 +116,18 @@ export function parseTaskArgs(
         ...(values.get("--number") ?? []),
       ];
       values.set("--number", [...new Set(combinedNumbers)]);
+    } else if (operation === "assign") {
+      let refArg: string | undefined = positionalRefs[0];
+      positionalAssignee = positionalRefs[1];
+      if (refArg?.startsWith("@") && positionalAssignee === undefined) {
+        positionalAssignee = refArg;
+        refArg = undefined;
+      }
+      if (refArg !== undefined) {
+        const resolved = resolveTaskRef(refArg, one("--target"), one("--number"));
+        values.set("--target", [boardToTarget(resolved.board)]);
+        values.set("--number", [String(resolved.number)]);
+      }
     } else {
       const resolved = resolveTaskRef(positionalRefs[0], one("--target"), one("--number"));
       values.set("--target", [boardToTarget(resolved.board)]);
@@ -160,6 +180,14 @@ export function parseTaskArgs(
     const assignee = one("--assignee");
     if (assignee !== undefined)
       task.assignee = handleOption(assignee, "--assignee must be an @handle");
+    const createStatus = one("--status")?.trim();
+    if (createStatus !== undefined) {
+      if (!isTaskCreateStatus(createStatus))
+        throw invalidTaskArg(
+          `--status must be one of: ${TASK_CREATE_STATUSES.join(", ")}; got ${createStatus} (in_review, done and closed can't be chosen at creation)`,
+        );
+      task.status = createStatus;
+    }
     const description = one("--description");
     if (description !== undefined) {
       if (titles.length !== 1)
@@ -168,8 +196,11 @@ export function parseTaskArgs(
       task.description = description;
     }
     const sourceMessage = one("--message-id")?.trim();
-    if (sourceMessage === "") throw invalidTaskArg("--message-id must not be empty");
-    if (sourceMessage) task.messageId = sourceMessage;
+    if (!sourceMessage)
+      throw invalidTaskArg(
+        "--message-id is required: give the channel message that asked for the work (a thread reply resolves to its thread root). For your own idea, first post a message in the channel saying what and why, then create the task from it.",
+      );
+    task.messageId = sourceMessage;
     if (values.has("--alongside")) task.alongside = true;
     const blockedBy = one("--blocked-by");
     if (blockedBy !== undefined) task.blockedBy = blockedByOption(blockedBy, false);
@@ -232,6 +263,7 @@ export function parseTaskArgs(
       task.labelDescription = labelDescription;
     }
     const status = one("--status");
+    const rawReason = one("--reason");
     if (
       status === undefined &&
       !values.has("--priority") &&
@@ -241,19 +273,22 @@ export function parseTaskArgs(
       throw invalidTaskArg("task update needs --status, --priority or --label");
     if (
       (addedLabels.length || removedLabels.length) &&
-      (status !== undefined || values.has("--priority"))
+      (status !== undefined || values.has("--priority") || rawReason !== undefined)
     )
       throw invalidTaskArg(
         "task update takes --label on its own; run the status or priority change separately",
       );
-    // A label edit is an amendment; the server's update path moves status and priority only.
     if (addedLabels.length || removedLabels.length) task.operation = "amend";
     if (status !== undefined) {
-      if (!isTaskWriteStatus(status))
+      if (!isTaskReadStatus(status))
         throw invalidTaskArg(
           `--status must be one of: ${TASK_WRITE_STATUSES.join(", ")}; got ${status}`,
         );
       task.status = status;
+      const statusReason = parseStatusReason(status, rawReason);
+      if (statusReason !== undefined) task.reason = statusReason;
+    } else if (rawReason !== undefined) {
+      throw invalidTaskArg("--reason is only for moving a task to backlog");
     }
   } else {
     task.number = taskNumber(one("--number"));
@@ -261,8 +296,7 @@ export function parseTaskArgs(
 
   const priority = one("--priority");
   if (priority === undefined) {
-    if (operation === "create" || operation === "convert")
-      throw invalidTaskArg("--priority is required (urgent, high, medium or low)");
+    if (operation === "create" || operation === "convert") task.priority = "medium";
   } else if (!(TASK_PRIORITY_LEVELS as readonly string[]).includes(priority)) {
     throw invalidTaskArg(
       `--priority must be one of: ${TASK_PRIORITY_LEVELS.join(", ")}; got ${priority}`,
@@ -280,16 +314,22 @@ export function parseTaskArgs(
   }
 
   if (operation === "assign") {
-    const assignee = one("--assignee")?.trim();
+    const flagAssignee = one("--assignee")?.trim();
+    const normalize = (raw: string) => (raw.startsWith("@") ? raw : `@${raw}`);
+    if (
+      positionalAssignee &&
+      flagAssignee &&
+      normalize(positionalAssignee) !== normalize(flagAssignee)
+    )
+      throw invalidTaskArg(
+        `${positionalAssignee} and --assignee ${flagAssignee} name different assignees; give one of them.`,
+      );
+    const assignee = (positionalAssignee ?? flagAssignee)?.trim();
     if (!assignee)
       throw invalidTaskArg(
         "--assignee <@who> is required; to clear the assignee use `coforge task unassign`",
       );
-    task.assignee = handleOption(
-      assignee.startsWith("@") ? assignee : `@${assignee}`,
-      "--assignee must be an @handle",
-    );
-    // One line saying what the assignee should do; see `parseAssignReason`.
+    task.assignee = handleOption(normalize(assignee), "--assignee must be an @handle");
     const reason = parseAssignReason(one("--reason"));
     if (reason !== undefined) task.reason = reason;
     if (values.has("--anyway")) task.continueAnyway = true;

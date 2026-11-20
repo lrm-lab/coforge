@@ -467,4 +467,37 @@ describe("idle task reminders for unassigned creator tasks", () => {
     expect(fresh.send).toBe(true);
     expect(fresh.items[0]?.taskNumber).toBe(8);
   });
+
+  test("rulesShown omits the repeating rules paragraph while keeping the task list", async () => {
+    const { db, principal } = createFakeIdleDb({
+      tasks: [
+        {
+          id: "t-rules",
+          number: 9,
+          title: "Check rules deduplication",
+          status: "todo",
+          priority: "high",
+          createdAt: at(-0.1),
+          ownerMemberId: "member-agent-1",
+          ownerAgentId: "agent-1",
+          creatorAgentId: "agent-2",
+        },
+      ],
+    });
+    const first = await idleNudge(db, principal, { freshSession: true }, at(0));
+    expect(first.send).toBe(true);
+    expect(first.rules).toBe(true);
+    expect(first.text).toContain("Pick up the first queued task");
+
+    const repeated = await idleNudge(
+      db,
+      principal,
+      { freshSession: true, rulesShown: true },
+      at(0.1),
+    );
+    expect(repeated.send).toBe(true);
+    expect(repeated.rules).toBe(false);
+    expect(repeated.text).toContain("Check rules deduplication");
+    expect(repeated.text).not.toContain("Pick up the first queued task");
+  });
 });

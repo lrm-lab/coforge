@@ -58,7 +58,7 @@ export type IdleTaskFacts = {
   blockerDone: { ref: string | null; at: Date } | null;
 };
 
-const OPEN_STATUSES = ["todo", "in_progress", "in_review"];
+const OPEN_STATUSES = ["todo", "in_progress"];
 const UNASSIGNED_CREATOR_STATUSES = ["todo", "in_progress"];
 
 const BOARD_SELECT = {

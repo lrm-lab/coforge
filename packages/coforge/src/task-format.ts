@@ -215,7 +215,24 @@ function threadReply(target: string, task: TaskView): string {
     : `coforge task reply "${taskRefForTarget(target, task.number)}"`;
 }
 
-/** What `coforge task create` made: each new Task, the assignee's receipt, and each Task's thread. */
+function dmTimelineTarget(targetOrRef: string): string | undefined {
+  const board = targetOrRef.replace(/:#\d+$/, "");
+  if (board.startsWith("dm:@")) return board.slice(3);
+  if (board.startsWith("@")) return board;
+  return undefined;
+}
+
+function answerWhereTheySpoke(refs: readonly string[]): string {
+  const isDm = refs.length > 0 && refs.every((ref) => dmTimelineTarget(ref) !== undefined);
+  const place = isDm
+    ? "in a 1-on-1 DM, on the DM's own timeline unless they wrote in a thread or the task"
+    : "the source message's thread, or the task if they created it or wrote in it";
+  return [
+    `Answer the person who asked where they spoke (${place}); this shows who created the task and its source:`,
+    ...refs.map((ref) => `coforge task view "${ref}"`),
+  ].join("\n");
+}
+
 export function formatTasksCreated(target: string, result: TaskResult): string {
   const rows = result.tasks.map(
     (task) =>
@@ -233,17 +250,48 @@ export function formatTasksCreated(target: string, result: TaskResult): string {
       "Claim or coordinate in this task's thread before starting work:",
       ...threadReplies(target, result.tasks),
     ].join("\n");
+  const dmTarget = dmTimelineTarget(target);
+  const rootNotes = new Map<string, string>();
+  const sourceTargets = new Map<string, string[]>();
+  for (const task of result.tasks) {
+    const sourceId = task.sourceMessageId ?? task.sourceMessage?.messageId;
+    if (task.sourceThreadReplyId && sourceId) {
+      rootNotes.set(
+        sourceId,
+        `Source: the thread's root message msg=${shortId(sourceId)} (you gave a reply in its thread, msg=${shortId(task.sourceThreadReplyId)}).`,
+      );
+    }
+    if (!task.messageId && sourceId && task.owner && task.status === "in_progress") {
+      const confirmTarget = dmTarget ?? `${target}:${shortId(sourceId)}`;
+      const ref = taskRefForTarget(target, task.number);
+      sourceTargets.set(confirmTarget, [...(sourceTargets.get(confirmTarget) ?? []), ref]);
+    }
+  }
+  const sourceHint =
+    sourceTargets.size > 0
+      ? [
+          "",
+          dmTarget
+            ? "In a 1-on-1 DM, confirm taking this work on the DM's own timeline (what you understood and will do), unless they spoke in a thread or task:"
+            : "The source message's thread now names this task. If you have not confirmed it there yet (what you understood and will do), do it now:",
+          ...[...sourceTargets].map(
+            ([confirmTarget, refs]) =>
+              `${refs.join(", ")} → coforge message send --target "${confirmTarget}"`,
+          ),
+        ]
+      : [];
   return [
     `Created ${result.tasks.length} task(s) in ${target}:`,
     ...rows,
+    ...rootNotes.values(),
     ...receipt,
     "",
     "To follow up in each task's thread:",
     ...threadReplies(target, result.tasks),
+    ...sourceHint,
   ].join("\n");
 }
 
-/** A write the server held until the Agent has seen the conversation's newer messages. */
 export function formatHeldTaskRequest(
   command: TaskCommand,
   result: TaskResult,
@@ -263,7 +311,6 @@ export function formatHeldTaskRequest(
   return `Task request held.${messages ? ` Review newer messages:\n${messages}` : ""}${anyway}`;
 }
 
-/** The Task `coforge task convert` made from a message, and its thread. */
 export function formatTaskConverted(target: string, task: TaskView): string {
   const reply = threadReply(target, task);
   return [
@@ -282,23 +329,33 @@ export function formatTaskUnclaimed(task: TaskView): string {
   return `#${task.number} unclaimed — now open.`;
 }
 
-/** `coforge task assign` and `unassign`: who holds the Task now. */
 export function formatTaskAssigned(task: TaskView): string {
   return task.owner
     ? `#${task.number} assigned to @${task.owner.handle}.`
     : `#${task.number} unassigned — now open.`;
 }
 
-/** `coforge task update`: the status and priority it set, as the server now holds them. */
 export function formatTaskStatusUpdated(
   task: TaskView,
   asked: Pick<TaskCommand, "status" | "priority"> = { status: task.status },
+  target?: string,
 ): string {
   const parts = [
     ...(asked.status !== undefined ? [`moved to ${task.status}`] : []),
     ...(asked.priority !== undefined ? [`priority set to ${task.priority ?? "none"}`] : []),
   ];
-  return `#${task.number} ${parts.join(", ")}.`;
+  const moved = `#${task.number} ${parts.join(", ")}.`;
+  if (asked.status === "in_review" && task.status !== "in_review") {
+    const handoff = target
+      ? ` Hand off with: coforge task assign "${taskRefForTarget(target, task.number)}" @who --reason "<what you need>"`
+      : "";
+    return `${moved}\nin_review is retired — kept ${task.status} instead, assignee unchanged.${handoff}`;
+  }
+  if (asked.status !== undefined && task.status === "done" && target && !task.messageId) {
+    const ref = taskRefForTarget(target, task.number);
+    return `${moved}\n\nNot sent the result yet? ${answerWhereTheySpoke([ref])}`;
+  }
+  return moved;
 }
 
 export function formatTaskDeleted(number: number): string {
@@ -309,7 +366,6 @@ export function formatTaskRestored(number: number): string {
   return `#${number} restored.`;
 }
 
-/** The current title and description of one board Task. */
 export function formatTaskShow(
   task: TaskView,
   relations?: Pick<TaskResult, "blocking" | "subtree">,
@@ -326,7 +382,6 @@ export function formatTaskShow(
   ].join("\n");
 }
 
-/** `coforge task receipt`: the recorded receipt's expiry follow-up and where it is anchored. */
 export function formatResourceReceiptRecorded(target: string, result: TaskResult): string {
   const task = result.tasks[0]!;
   const followup = result.resourceFollowup;
@@ -339,8 +394,6 @@ export function formatResourceReceiptRecorded(target: string, result: TaskResult
   return lines.join("\n");
 }
 
-/** The unread context a task write that proceeded anyway (`unclaim`/`update`/`amend`) attached:
- * withheld mode reports a count, inline mode the messages themselves. */
 function appendTaskRecentContext(
   command: TaskCommand,
   result: TaskResult,
@@ -360,7 +413,6 @@ function appendTaskRecentContext(
   ].join("\n");
 }
 
-/** What a `task` subcommand prints for the server's answer. */
 export function formatTaskResult(command: TaskCommand, result: TaskResult): string {
   const target = command.target!;
   const task = result.tasks[0];
@@ -400,7 +452,11 @@ export function formatTaskResult(command: TaskCommand, result: TaskResult): stri
     case "unassign":
       return formatTaskAssigned(task);
     case "update":
-      return appendTaskRecentContext(command, result, formatTaskStatusUpdated(task, command));
+      return appendTaskRecentContext(
+        command,
+        result,
+        formatTaskStatusUpdated(task, command, target),
+      );
     default:
       throw new Error(`no output is defined for task ${command.operation}`);
   }

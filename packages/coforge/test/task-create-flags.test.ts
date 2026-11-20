@@ -36,13 +36,15 @@ test("task create takes a description, a source message and --alongside", () => 
   });
 });
 
-test("task create without them is as before", () => {
-  expect(parseArgs(create)).toEqual({
+test("task create requires --message-id", () => {
+  expect(() => parseArgs(create)).toThrow("--message-id is required");
+  expect(parseArgs([...create, "--message-id", "m1"])).toEqual({
     command: "task",
     task: {
       operation: "create",
       target: "#general",
       title: "Fix it",
+      messageId: "m1",
       priority: "medium",
     },
   });
@@ -64,18 +66,16 @@ test("one source message may serve every --title, a description only a single on
   expect(parseArgs([...titles, "--message-id", "m1"])).toMatchObject({
     task: { titles: ["A", "B"], messageId: "m1" },
   });
-  expect(() => parseArgs([...titles, "--description", "Why"])).toThrow(
+  expect(() => parseArgs([...titles, "--message-id", "m1", "--description", "Why"])).toThrow(
     "--description can only be used with a single --title",
   );
 });
 
 test("a blank description or message id is refused", () => {
-  expect(() => parseArgs([...create, "--description", "  "])).toThrow(
+  expect(() => parseArgs([...create, "--message-id", "m1", "--description", "  "])).toThrow(
     "--description must not be empty",
   );
-  expect(() => parseArgs([...create, "--message-id", " "])).toThrow(
-    "--message-id must not be empty",
-  );
+  expect(() => parseArgs([...create, "--message-id", " "])).toThrow("--message-id is required");
 });
 
 test("the other task operations do not take them", () => {
@@ -117,6 +117,6 @@ test("the task conversation commands and create's new flags are in the help", as
   const { commandHelp } = await import("../src/command-help");
   for (const command of ["view", "reply", "read", "follow", "unfollow"])
     expect(commandHelp(["task", command, "--help"])).toContain(`coforge task ${command} [<ref>]`);
-  expect(commandHelp(["task", "create", "--help"])).toContain("--alongside");
+  expect(commandHelp(["task", "create", "--help"])).toContain("--status backlog|todo|in_progress");
   expect(commandHelp(["task", "list", "--help"])).toContain("--following");
 });

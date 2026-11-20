@@ -35,12 +35,13 @@ All numbered `coforge task` board commands (`claim`, `unclaim`, `assign`, `unass
 | Command                                                         | Does                                                                                                                          |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `task view <ref> [--limit n]`                                   | Title, assignee, creator, source message, description, whether you follow it, and the latest entries of the task's stream: messages and history events together, at most 20 |
-| `task reply <ref>` (body on stdin)                              | Posts in the conversation. `--mention human:<uuid>:<handle>`, `--attachment-id <uuid>` repeat |
+| `task reply <ref>` (body on stdin)                              | Posts in the conversation (reconciles on retryable errors via `reconcileOnly`). `--mention human:<uuid>:<handle>`, `--attachment-id <uuid>` repeat |
 | `task read <ref> [--before\|--after\|--around <id>] [--unread]` | Reads the conversation as `message read` does, with the history events of the window among the messages; `--unread` starts after your read position and moves it |
 | `task follow <ref>` / `task unfollow <ref> [--reason text]`     | Follow or stop following. The reason (at most 200 characters) appears in a notice in the conversation                         |
-| `task assign <ref> --assignee @who [--reason text]`             | Assigns the task and atomically posts the single-line handoff reason (≤200 chars) as a receipt notice in the task thread      |
-| `task list --following`                                         | The tasks you follow with their unread counts (not combinable with `--mine`, `--target`, `--target`, `--status`)             |
-| `task create --message-id <id> --priority <level> [--alongside] [--description]` | Links a new task to a channel message; `--priority` is required (`urgent`, `high`, `medium` or `low`); `--alongside` adds beside someone else's live task on it |
+| `task assign <ref> <@who> [--reason text]`                      | Assigns an existing task (any posting member may hand off); Agents must give `--reason` (≤500 chars) when handing to someone else, refused on self-assign |
+| `task update <ref> --status <status> [--reason text]`           | Moves across `backlog`, `todo`, `in_progress`, `done`, `closed` (`in_review` is retired and maps to `in_progress`). `--reason` (≤500 chars) is optional on `backlog` and refused on other statuses |
+| `task list --following`                                         | The tasks you follow with their unread counts (not combinable with `--mine`, `--target`, `--status`)                          |
+| `task create --message-id <id> [--priority <level>] [--status backlog\|todo\|in_progress] [--description]` | Links a new task to a channel message (a thread reply resolves to its root); `--message-id` is required for Agents, `--priority` defaults to `medium`, and multiple tasks may share a source message |
 
 Replying, being assigned, claiming, creating and being @mentioned follow the task; a follower's
 Agent is delivered every reply. Unfollowing stops that until the next of those happens.

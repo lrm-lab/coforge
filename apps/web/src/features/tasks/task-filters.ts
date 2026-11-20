@@ -1,9 +1,4 @@
-import {
-  TASK_READ_STATUSES,
-  TASK_WRITE_STATUSES,
-  type TaskMember,
-  type TaskStatus,
-} from "@lrm/coforge-sdk/internal";
+import { TASK_WRITE_STATUSES, type TaskMember, type TaskStatus } from "@lrm/coforge-sdk/internal";
 
 /**
  * A Task board's owner and Project filters, applied to the rows the board shows. Each takes
@@ -167,17 +162,15 @@ export function parseFilterParam(value: string | undefined): string[] {
  */
 export function parseStatusParam(value: string | undefined): TaskStatus[] {
   const picked = new Set(parseFilterParam(value));
-  return TASK_READ_STATUSES.filter((status) => picked.has(status));
+  return TASK_WRITE_STATUSES.filter((status) => picked.has(status));
 }
 
-/** Whether a Task's status passes the pick; an empty pick keeps every Task. */
 export function statusMatches(status: TaskStatus, picked: readonly TaskStatus[]) {
   return picked.length === 0 || picked.includes(status);
 }
 
 export type LabelOption = { id: string; name: string; color: string; count: number };
 
-/** The labels to pick from by name, after "No label", with how many Tasks carry each. */
 export function labelOptions(tasks: readonly FilterableTask[]): LabelOption[] {
   const byId = new Map<string, LabelOption>();
   let unlabelled = 0;
@@ -194,7 +187,6 @@ export function labelOptions(tasks: readonly FilterableTask[]): LabelOption[] {
   return [{ id: NO_LABEL, name: "", color: "gray", count: unlabelled }, ...named];
 }
 
-/** The statuses a board offers: Backlog only once a Task is in it, as it cannot be written. */
-export function availableTaskStatuses(tasks: readonly { status: TaskStatus }[]) {
-  return tasks.some((task) => task.status === "backlog") ? TASK_READ_STATUSES : TASK_WRITE_STATUSES;
+export function availableTaskStatuses(_tasks?: readonly { status: TaskStatus }[]) {
+  return TASK_WRITE_STATUSES;
 }

@@ -1,8 +1,8 @@
 import { LIVE_TASK_WHERE, taskSelection } from "./task-view.server";
 import {
+  normalizeTaskReasonText,
+  normalizeTaskWriteStatus,
   taskStatusAwaitsReceipt,
-  taskStatusMoveAllowed,
-  taskStatusNeedsOwner,
   taskPriorityRank,
   type TaskWriteCommand,
   type TaskHistoryChange,
@@ -12,12 +12,7 @@ import { AppError } from "#src/lib/app-error";
 import { conversationSignalScopes } from "#src/server/conversations/conversation-signal-scope.server";
 import { assigneeMention, noticeActor, noticeText } from "./task-notices.server";
 import { historyEventView } from "./task-history.server";
-import {
-  storedTaskPriority,
-  storedTaskStatus,
-  readTaskText,
-  taskMentions,
-} from "./task-view.server";
+import { storedTaskPriority, readTaskText, taskMentions } from "./task-view.server";
 import { relatedTasks, taskViewOf, taskViewsOf } from "./task-relations.server";
 import {
   applyRelationPlan,
@@ -54,42 +49,38 @@ export async function updateTaskStatus(
   command: TaskWriteCommand,
 ) {
   const { conversationId } = conversation;
-  // A status, a priority, or both.
-  const { status } = command;
+  const status =
+    command.status !== undefined ? normalizeTaskWriteStatus(command.status) : undefined;
   if (status === undefined && command.priority === undefined) throw new AppError("INVALID_INPUT");
+  const statusReason =
+    status === "backlog" && command.reason !== undefined
+      ? normalizeTaskReasonText(command.reason) || undefined
+      : undefined;
   const task = await findTaskByNumber(ports.db, conversationId, command.number!);
   if (!task) throw new AppError("NOT_FOUND");
   assertExpectedRevision(task, command.expectedRevision);
   const priority = command.priority !== task.priority ? command.priority : undefined;
   if (priority !== undefined) await assertCanSetPriority(ports.db, conversation, member, task);
-  // The priority it already has, alone, writes nothing.
   if (status === undefined && priority === undefined)
     return { tasks: [await taskViewOf(ports.db, ports.reader, task)] };
-  // Anyone who may speak in this conversation moves a Task, an Agent included; a Workspace owner
-  // or admin may set any status, everyone else only along the board's own transitions.
   const manager = await isTaskManager(ports.db, conversation.workspaceId, member);
-  if (status !== undefined) {
-    if (!taskStatusMoveAllowed(storedTaskStatus(task.status), status, { manager }))
-      throw new AppError("ACCESS_DENIED");
-    if (taskStatusNeedsOwner(status) && !task.ownerMemberId) throw new AppError("CONFLICT");
-    if (
-      taskStatusAwaitsReceipt(status, {
-        requiresReceipt: task.createsResource,
-        hasReceipt: Boolean(task.resourceReceipt),
-      })
-    )
-      throw new AppError("CONFLICT");
-  }
+  if (
+    status !== undefined &&
+    taskStatusAwaitsReceipt(status, {
+      requiresReceipt: task.createsResource,
+      hasReceipt: Boolean(task.resourceReceipt),
+    })
+  )
+    throw new AppError("CONFLICT");
   const updated = await withNotices(ports, conversation, async (tx, notices) => {
     const previousPriority = storedTaskPriority(task.priority);
-    // Under the conversation lock, so a blocker finishing at the same time is seen either way.
     const { task: updated } = await commitTaskChange(
       tx,
       member,
       task,
       { ownerMemberId: task.ownerMemberId },
       { ...(status !== undefined && { status }), ...(priority !== undefined && { priority }) },
-      { manager },
+      { manager, statusReason },
     );
     if (priority !== undefined) {
       const owner = updated.owner?.leftAt ? null : updated.owner;

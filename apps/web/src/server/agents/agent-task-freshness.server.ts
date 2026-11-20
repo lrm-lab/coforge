@@ -2,15 +2,14 @@ import { HELD_CONTEXT_LIMIT } from "@lrm/coforge-sdk/internal";
 import type { AgentMessageRecord, TaskCommand, TaskResult } from "@lrm/coforge-sdk/internal";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import type { AgentTaskPrincipal } from "#src/server/tasks/task-principal.server";
+import { findSourceMessageRootId } from "#src/server/tasks/task-claims.server";
 import { resolveTaskScope } from "#src/server/tasks/task-scope.server";
 import type { TaskBoard } from "#src/server/tasks/task-board.server";
 import { workspaceAssistantUser } from "./workspace-assistant-authority.server";
 import { agentResolvedTargetFreshness } from "#src/server/db/repositories/agent-target-freshness.repositories.server";
 import type { AgentTargetFreshness } from "./agent-target-freshness.server";
 
-/** Task writes that wait for the Agent to review unread target context first. */
 const FRESHNESS_HELD_OPERATIONS = ["create", "claim", "assign"];
-/** Task writes that go through and report what the Agent had not seen with their result. */
 const FRESHNESS_ATTACH_OPERATIONS = ["unclaim", "update", "amend"];
 
 type FreshnessMessage = Omit<AgentMessageRecord, "createdAt"> & { createdAt: Date };
@@ -18,12 +17,6 @@ type FreshnessMessage = Omit<AgentMessageRecord, "createdAt"> & { createdAt: Dat
 const toWireMessage = (message: FreshnessMessage): AgentMessageRecord =>
   ({ ...message, createdAt: message.createdAt.toISOString() }) as AgentMessageRecord;
 
-/**
- * The board's own scope resolution feeds the freshness gate: the same membership lookup the write
- * will need, never the send path's (which could create a direct conversation or join a channel a
- * task write would be refused on anyway). Without a member row the board decides alone; a
- * Workspace assistant's delegated command keeps no Agent boundary and skips the gate.
- */
 export async function agentTaskBoardFreshness(
   db: PrismaClient,
   principal: AgentTaskPrincipal,
@@ -31,8 +24,6 @@ export async function agentTaskBoardFreshness(
 ): Promise<
   | {
       freshness: AgentTargetFreshness;
-      /** The scope `resolveTaskScope` already produced, handed to the write itself so the board
-       * resolves it once. */
       scope: Awaited<ReturnType<typeof resolveTaskScope>>;
     }
   | undefined
@@ -40,11 +31,22 @@ export async function agentTaskBoardFreshness(
   if (await workspaceAssistantUser(db, principal.workspaceId, principal.agentId)) return undefined;
   const scope = await resolveTaskScope({ db }, principal, command);
   if (!scope.member) return undefined;
+  let threadRootId: string | null = null;
+  let canonicalTarget = command.target!;
+  if (command.operation === "create" && command.messageId) {
+    const rootId = await findSourceMessageRootId(db, scope.conversationId, command.messageId).catch(
+      () => null,
+    );
+    if (rootId) {
+      threadRootId = rootId;
+      canonicalTarget = `${command.target!}:${rootId.slice(0, 13)}`;
+    }
+  }
   return {
     freshness: agentResolvedTargetFreshness({ db }, principal.workspaceId, principal.agentId, {
       conversationId: scope.conversationId,
-      threadRootId: null,
-      canonicalTarget: command.target!,
+      threadRootId,
+      canonicalTarget,
       isChannel: scope.channel,
     }),
     scope,

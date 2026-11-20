@@ -194,7 +194,7 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
         target,
         assignee: `@${unrelated!.name}`,
       }),
-    ).rejects.toThrow("ACCESS_DENIED");
+    ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId: "task_assign_reason_invalid" });
     const changed = await board.execute(principal, {
       operation: "assign",
       idempotencyKey: crypto.randomUUID(),
@@ -205,11 +205,10 @@ test("assignment receipts survive mute and disconnect without waking unrelated A
     expect(changed.assignmentReceipts![0]!.messageId).not.toBe(receipt.messageId);
     await expect(
       board.execute(agentPrincipal, {
-        operation: "assign",
+        operation: "unassign",
         idempotencyKey: crypto.randomUUID(),
         target,
         number: created.tasks[0]!.number,
-        assignee: `@${assigned!.name}`,
       }),
     ).rejects.toThrow("ACCESS_DENIED");
     // An Agent message with no Agent mention never wakes another Agent; an explicit Agent

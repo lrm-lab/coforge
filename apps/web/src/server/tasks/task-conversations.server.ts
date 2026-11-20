@@ -6,7 +6,11 @@ import type { AgentMessagesPage } from "#src/server/agents/agent-messages.server
 
 import { AppError } from "#src/lib/app-error";
 import { ACTIVE_MEMBER_WHERE } from "#src/server/conversations/active-member.server";
-import type { MessageRequestIdempotency } from "#src/server/conversations/message-request-idempotency.server";
+import {
+  MessageRequestInProgressError,
+  type MessageRequestIdempotency,
+  type MessageRequestRecords,
+} from "#src/server/conversations/message-request-idempotency.server";
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
@@ -68,9 +72,10 @@ export class TaskConversations {
   }
 
   async view(principal: TaskPrincipal, ref: TaskConversationRef, options: { limit?: number }) {
-    const { task, member, boardName } = await this.resolve(principal, ref);
+    const { task, scope, member, boardName } = await this.resolve(principal, ref);
     const limit = Math.min(Math.max(options.limit ?? 5, 1), MAX_VIEW_MESSAGES);
-    const [full, follow, timeline] = await Promise.all([
+    const sourceThreadRootId = task.sourceMessageId ?? task.messageId;
+    const [full, follow, timeline, sourceThreadReplyCount] = await Promise.all([
       this.ports.db.task.findUniqueOrThrow({ where: { id: task.id }, select: taskSelection }),
       member
         ? this.ports.db.taskFollow.findUnique({
@@ -79,23 +84,37 @@ export class TaskConversations {
           })
         : null,
       taskTimelinePage(this.ports.db, task, this.ports.reader, taskMentions(task), limit),
+      sourceThreadRootId
+        ? this.ports.db.message.count({
+            where: {
+              conversationId: scope.conversationId,
+              threadRootId: sourceThreadRootId,
+              senderMemberId: { not: null },
+            },
+          })
+        : 0,
     ]);
+    const threadBoard = boardName.startsWith("dm:@") ? boardName.slice(3) : boardName;
+    const earlierDiscussion =
+      sourceThreadRootId && sourceThreadReplyCount > 0
+        ? {
+            target: `${threadBoard}:${sourceThreadRootId.slice(0, 13)}`,
+            replyCount: sourceThreadReplyCount,
+          }
+        : undefined;
     return {
       taskRef: `${boardName}:#${task.number}`,
       task: await taskViewOf(this.ports.db, "agent", full),
       following: follow !== null,
       followReason: follow?.reason ?? null,
       conversation: { exists: timeline.exists, replyCount: timeline.replyCount },
+      ...(earlierDiscussion ? { earlierDiscussion } : {}),
       recentMessages: timeline.messages,
       recentEvents: timeline.events,
       hasOlder: timeline.hasOlder,
     };
   }
 
-  /**
-   * Posts a reply, making the conversation if this is the first. The replier follows the task; the
-   * task's other followers' Agents are delivered the reply.
-   */
   async reply(
     principal: TaskPrincipal,
     ref: TaskConversationRef,
@@ -120,7 +139,6 @@ export class TaskConversations {
           mentions: input.mentions,
         }),
       );
-      // After the commit, and only for the first of a retried reply; a failed push is replayed.
       await publishTaskConversationMessage(this.ports, posted.messageId, posted.messageId).catch(
         () => undefined,
       );
@@ -147,6 +165,28 @@ export class TaskConversations {
           )
         : await post();
     return { messageId: persisted.id, sequence: persisted.sequence };
+  }
+
+  async reconcileReply(principal: TaskPrincipal, ref: TaskConversationRef, idempotencyKey: string) {
+    const { task, scope } = await this.resolve(principal, ref, { member: true });
+    const records = this.idempotency as
+      | (MessageRequestIdempotency & Partial<MessageRequestRecords>)
+      | undefined;
+    if (!records?.find) return { state: "not_found" as const };
+    const found = await records.find({
+      workspaceId: scope.workspaceId,
+      senderKind: principal.agentId ? "agent" : "user",
+      senderId: (principal.agentId ?? principal.userId)!,
+      idempotencyKey: `task:${task.id}:${idempotencyKey}`,
+    });
+    if (found?.state === "processing") throw new MessageRequestInProgressError();
+    if (found?.state === "completed")
+      return {
+        state: "committed" as const,
+        messageId: found.message.id,
+        sequence: found.message.sequence,
+      };
+    return { state: "not_found" as const };
   }
 
   /**
@@ -380,6 +420,7 @@ export class TaskConversations {
         title: true,
         status: true,
         messageId: true,
+        sourceMessageId: true,
         discussionConversationId: true,
         message: { select: { mentions: BROWSER_MESSAGE_MENTIONS_SELECT } },
       },

@@ -12,6 +12,7 @@ test("an admin Agent may reserve a Todo task for another Agent with one personal
     const result = await f.board.execute(f.actor, {
       ...f.command(),
       operation: "create",
+      messageId: f.sourceMessageId,
       title: "Reserved for peer",
       assignee: `@${f.peerAgent.name}`,
     });
@@ -34,10 +35,9 @@ for (const kind of ["user", "agent"] as const) {
   for (const role of kind === "user"
     ? ["owner", "admin", "member"]
     : ["owner", "admin", "member", "unknown"]) {
-    test(`${kind} ${role} moves a Task along the board, or to any status when privileged`, async () => {
+    test(`${kind} ${role} moves a Task freely between writable statuses`, async () => {
       const f = await taskAssignmentFixture(kind, role);
       try {
-        const privileged = role === "owner" || role === "admin";
         const task = (
           await f.board.execute(f.ownerActor, {
             ...f.command("user"),
@@ -46,27 +46,33 @@ for (const kind of ["user", "agent"] as const) {
             assignee: `@${f.peerAgent.name}`,
           })
         ).tasks[0]!;
-        // Whoever may speak in the channel moves a Task, but only along the board's transitions:
-        // Todo does not jump to Done.
-        const jump = f.board.execute(f.actor, {
-          ...f.command(),
-          operation: "update",
-          number: task.number,
-          status: "done",
-        });
-        if (privileged) expect((await jump).tasks[0]!.status).toBe("done");
-        else await expect(jump).rejects.toMatchObject({ code: "ACCESS_DENIED" });
-        if (!privileged)
-          expect(
-            (
-              await f.board.execute(f.actor, {
-                ...f.command(),
-                operation: "update",
-                number: task.number,
-                status: "in_progress",
-              })
-            ).tasks[0]!.status,
-          ).toBe("in_progress");
+        const done = (
+          await f.board.execute(f.actor, {
+            ...f.command(),
+            operation: "update",
+            number: task.number,
+            status: "done",
+          })
+        ).tasks[0]!;
+        expect(done.status).toBe("done");
+        const parked = (
+          await f.board.execute(f.actor, {
+            ...f.command(),
+            operation: "update",
+            number: task.number,
+            status: "backlog",
+          })
+        ).tasks[0]!;
+        expect(parked.status).toBe("backlog");
+        const active = (
+          await f.board.execute(f.actor, {
+            ...f.command(),
+            operation: "update",
+            number: task.number,
+            status: "in_progress",
+          })
+        ).tasks[0]!;
+        expect(active.status).toBe("in_progress");
       } finally {
         await f.close();
       }
@@ -78,13 +84,14 @@ for (const kind of ["user", "agent"] as const) {
   for (const role of kind === "user"
     ? ["owner", "admin", "member"]
     : ["owner", "admin", "member", "unknown"]) {
-    test(`${kind} ${role} uses its current Workspace role to reserve, reassign and unassign others`, async () => {
+    test(`${kind} ${role} uses its Workspace role to reserve on create and unassign others, while any member may hand off`, async () => {
       const f = await taskAssignmentFixture(kind, role);
       try {
         const privileged = role === "owner" || role === "admin";
         const creation = f.board.execute(f.actor, {
           ...f.command(),
           operation: "create",
+          ...(kind === "agent" ? { messageId: f.sourceMessageId } : {}),
           title: "Other assignee",
           assignee: `@${f.peerAgent.name}`,
         });
@@ -98,19 +105,18 @@ for (const kind of ["user", "agent"] as const) {
             assignee: `@${f.peerAgent.name}`,
           })
         ).tasks[0];
-        const messagesBefore = await f.db.message.count({
-          where: { conversationId: f.conversation.id },
-        });
-        const assignment = f.board.execute(f.actor, {
-          ...f.command(),
-          operation: "assign",
-          number: seed.number,
-          assignee: `@${f.peer.username}`,
-          expectedRevision: seed.revision,
-        });
+        const assigned = (
+          await f.board.execute(f.actor, {
+            ...f.command(),
+            operation: "assign",
+            number: seed.number,
+            assignee: `@${f.peer.username}`,
+            ...(kind === "agent" ? { reason: "Handing over to peer" } : {}),
+            expectedRevision: seed.revision,
+          })
+        ).tasks[0];
+        expect(assigned.owner?.id).toBe(f.peer.id);
         if (privileged) {
-          const assigned = (await assignment).tasks[0];
-          expect(assigned.owner?.id).toBe(f.peer.id);
           expect(
             (
               await f.board.execute(f.actor, {
@@ -122,18 +128,14 @@ for (const kind of ["user", "agent"] as const) {
             ).tasks[0].owner,
           ).toBeNull();
         } else {
-          await expect(assignment).rejects.toMatchObject({ code: "ACCESS_DENIED" });
           await expect(
             f.board.execute(f.actor, {
               ...f.command(),
               operation: "unassign",
               number: seed.number,
-              expectedRevision: seed.revision,
+              expectedRevision: assigned.revision,
             }),
           ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
-          expect(await f.db.message.count({ where: { conversationId: f.conversation.id } })).toBe(
-            messagesBefore,
-          );
         }
       } finally {
         await f.close();
@@ -141,7 +143,7 @@ for (const kind of ["user", "agent"] as const) {
     });
   }
 
-  test(`ordinary ${kind} may assign itself and release itself but cannot steal another assignment`, async () => {
+  test(`ordinary ${kind} may assign itself, release itself keeping status, and reassign an existing task`, async () => {
     const f = await taskAssignmentFixture(kind);
     try {
       const self = kind === "user" ? f.user : f.agent;
@@ -149,6 +151,7 @@ for (const kind of ["user", "agent"] as const) {
         await f.board.execute(f.actor, {
           ...f.command(),
           operation: "create",
+          ...(kind === "agent" ? { messageId: f.sourceMessageId } : {}),
           title: "Own task",
           assignee: `@${kind === "user" ? f.user.username : f.agent.name}`,
         })
@@ -163,7 +166,7 @@ for (const kind of ["user", "agent"] as const) {
           expectedRevision: created.revision,
         })
       ).tasks[0];
-      expect(unassigned).toMatchObject({ status: "todo", owner: null, claimedAt: null });
+      expect(unassigned).toMatchObject({ status: "in_progress", owner: null, claimedAt: null });
       const assigned = (
         await f.board.execute(f.actor, {
           ...f.command(),
@@ -174,7 +177,7 @@ for (const kind of ["user", "agent"] as const) {
         })
       ).tasks[0];
       expect(assigned).toMatchObject({
-        status: "todo",
+        status: "in_progress",
         owner: { id: self.id },
         claimedAt: null,
       });
@@ -182,18 +185,19 @@ for (const kind of ["user", "agent"] as const) {
         await f.board.execute(f.ownerActor, {
           ...f.command("user"),
           operation: "create",
-          title: "Not mine",
+          title: "Another task",
           assignee: `@${f.peerAgent.name}`,
         })
       ).tasks[0];
-      await expect(
-        f.board.execute(f.actor, {
+      const taken = (
+        await f.board.execute(f.actor, {
           ...f.command(),
           operation: "assign",
           number: other.number,
           assignee: `@${kind === "user" ? f.user.username : f.agent.name}`,
-        }),
-      ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
+        })
+      ).tasks[0];
+      expect(taken.owner?.id).toBe(self.id);
     } finally {
       await f.close();
     }
@@ -205,6 +209,7 @@ for (const kind of ["user", "agent"] as const) {
       const command = {
         ...f.command(),
         operation: "create" as const,
+        ...(kind === "agent" ? { messageId: f.sourceMessageId } : {}),
         title: "Before demotion",
         assignee: `@${f.peerAgent.name}`,
       };
@@ -215,36 +220,28 @@ for (const kind of ["user", "agent"] as const) {
           data: { role: "member" },
         });
       else await f.db.agent.update({ where: { id: f.agent.id }, data: { role: "member" } });
-      const messagesBefore = await f.db.message.count({
-        where: { conversationId: f.conversation.id },
-      });
-      expect((await f.board.execute(f.actor, command)).tasks[0].messageId).toBe(
-        created.tasks[0].messageId,
-      );
+      expect((await f.board.execute(f.actor, command)).tasks[0].id).toBe(created.tasks[0].id);
       await expect(
         f.board.execute(f.actor, {
           ...f.command(),
-          operation: "assign",
+          operation: "unassign",
           number: created.tasks[0].number,
-          assignee: `@${f.peer.username}`,
         }),
       ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
-      expect(await f.db.message.count({ where: { conversationId: f.conversation.id } })).toBe(
-        messagesBefore,
-      );
     } finally {
       await f.close();
     }
   });
 }
 
-test("a reassigned Agent loses its existing status-update authority and the reserved peer must claim", async () => {
+test("a reassigned Agent loses its claim and the reserved peer must claim", async () => {
   const f = await taskAssignmentFixture("agent");
   try {
     const owned = (
       await f.board.execute(f.actor, {
         ...f.command(),
         operation: "create",
+        messageId: f.sourceMessageId,
         title: "Was mine",
         assignee: `@${f.agent.name}`,
       })
@@ -263,15 +260,6 @@ test("a reassigned Agent loses its existing status-update authority and the rese
       claimedAt: null,
       owner: { id: f.peerAgent.id },
     });
-    await expect(
-      f.board.execute(f.actor, {
-        ...f.command(),
-        operation: "update",
-        number: owned.number,
-        status: "done",
-        expectedRevision: assigned.revision,
-      }),
-    ).rejects.toMatchObject({ code: "ACCESS_DENIED" });
     const refused = await f.board.execute(f.actor, {
       ...f.command(),
       operation: "claim",
@@ -296,13 +284,19 @@ test("admin Agent assignments preserve CAS, one receipt and one personal deliver
   const f = await taskAssignmentFixture("agent", "admin");
   try {
     const seed = (
-      await f.board.execute(f.actor, { ...f.command(), operation: "create", title: "CAS task" })
+      await f.board.execute(f.actor, {
+        ...f.command(),
+        operation: "create",
+        messageId: f.sourceMessageId,
+        title: "CAS task",
+      })
     ).tasks[0];
     const command = {
       ...f.command(),
       operation: "assign" as const,
       number: seed.number,
       assignee: `@${f.peerAgent.name}`,
+      reason: "Please take over this work",
       expectedRevision: seed.revision,
     };
     const first = await f.board.execute(f.actor, command);
@@ -339,6 +333,7 @@ test("assignment refusal explains the Workspace owner/admin requirement through 
         body: JSON.stringify({
           ...f.command(),
           operation: "create",
+          messageId: f.sourceMessageId,
           title: "Forbidden assignment",
           assignee: `@${f.peerAgent.name}`,
         }),
@@ -367,6 +362,7 @@ test("an admin Agent retains its own role when its creator is an ordinary member
         await f.board.execute(f.actor, {
           ...f.command(),
           operation: "create",
+          messageId: f.sourceMessageId,
           title: "Agent authority",
           assignee: `@${f.peerAgent.name}`,
         })
@@ -389,6 +385,7 @@ for (const kind of ["user", "agent"] as const) {
         f.board.execute(f.actor, {
           ...f.command(),
           operation: "create",
+          ...(kind === "agent" ? { messageId: f.sourceMessageId } : {}),
           title: "No channel escalation",
           assignee: `@${f.peerAgent.name}`,
         }),
@@ -416,6 +413,7 @@ for (const kind of ["user", "agent"] as const) {
           f.board.execute(f.actor, {
             ...f.command(),
             operation: "create",
+            ...(kind === "agent" ? { messageId: f.sourceMessageId } : {}),
             title: "No stale manager",
             assignee: `@${f.peerAgent.name}`,
           }),
@@ -449,6 +447,7 @@ for (const cause of ["left", "deleted", "foreign", "missing"] as const) {
         f.board.execute(f.actor, {
           ...f.command(),
           operation: "create",
+          messageId: f.sourceMessageId,
           title: "No stale assignee",
           assignee,
         }),
@@ -470,6 +469,7 @@ test("a platform assistant uses its bound human's current assignment role", asyn
         await f.board.execute(principal, {
           ...f.command("user"),
           operation: "create",
+          messageId: f.sourceMessageId,
           title: "Delegated role",
           assignee: `@${f.peerAgent.name}`,
         })
@@ -483,6 +483,7 @@ test("a platform assistant uses its bound human's current assignment role", asyn
       f.board.execute(principal, {
         ...f.command("user"),
         operation: "create",
+        messageId: f.sourceMessageId,
         title: "No stale delegation",
         assignee: `@${f.peerAgent.name}`,
       }),

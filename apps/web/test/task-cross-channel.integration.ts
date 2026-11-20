@@ -203,7 +203,6 @@ test("finishing a blocker in another channel tells the dependent's owner in the 
     await run("alice", { operation: "assign", number: waiting!, assignee: `agent:${one.id}` });
     // Agent two finishes the blocker in the other channel.
     await run("two", { operation: "claim", number: blocker! }, other.id);
-    await run("two", { operation: "update", number: blocker!, status: "in_review" }, other.id);
     await run("two", { operation: "update", number: blocker!, status: "done" }, other.id);
     const told = (await notices(waiting!)).filter((notice) => notice.kind === "task.unblocked");
     expect(told).toEqual([{ kind: "task.unblocked", agents: [one.id] }]);
@@ -216,7 +215,6 @@ test("finishing a blocker in another channel tells the dependent's owner in the 
     });
     expect(message.body).toContain(`#${other.channelName}:#${blocker}`);
     expect(message.body).toContain(`#${waiting}`);
-    // Nothing was posted in the blocker's channel for it.
     expect(
       await db.message.count({
         where: { conversationId: other.id, systemMessage: { kind: "task.unblocked" } },
@@ -247,15 +245,13 @@ test("a blocker's change announces its dependent to the dependent's own conversa
     });
     await run("alice", { operation: "claim", number: blocker! }, other.id);
     announced.length = 0;
-    await run("alice", { operation: "update", number: blocker!, status: "in_review" }, other.id);
-    // The page open on the dependent's conversation hears of the blocker's change, with the new
-    // status in the dependent's copy: its open detail refreshes without reading its list again.
+    await run("alice", { operation: "update", number: blocker!, status: "backlog" }, other.id);
     const toWaiting = announced.filter((signal) => signal.conversationId === channel.id);
     expect(toWaiting).toHaveLength(1);
     const [view] = toWaiting[0]!.tasks;
     expect(view).toMatchObject({ number: waiting, conversationId: channel.id });
     expect(view!.blockedBy).toMatchObject([
-      { number: blocker, channel: other.channelName, status: "in_review" },
+      { number: blocker, channel: other.channelName, status: "backlog" },
     ]);
   } finally {
     await db.$disconnect();

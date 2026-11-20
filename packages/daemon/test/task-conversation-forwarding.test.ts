@@ -98,6 +98,32 @@ test("the proxy hands each POST route to the runtime with its known fields and c
   ]);
 });
 
+test("the proxy accepts a reconcileOnly reply probe without content and rejects extra reply fields", async () => {
+  const calls: AgentTaskConversationRequest[] = [];
+  const { token, endpoint } = proxyWith(async (_context, request) => {
+    calls.push(request);
+    return Response.json({ state: "not_found" });
+  });
+  const ref = { channel: "#general", task_number: 7 };
+  const ok = await fetch(
+    endpoint(routes.reply.path),
+    post(token, { ...ref, idempotencyKey: "k-reconcile", reconcileOnly: true }),
+  );
+  expect(ok.status).toBe(200);
+  expect(calls).toEqual([
+    {
+      route: "reply",
+      body: { ...ref, idempotencyKey: "k-reconcile", reconcileOnly: true },
+    },
+  ]);
+  for (const body of [
+    { ...ref, reconcileOnly: true },
+    { ...ref, idempotencyKey: "k", reconcileOnly: true, content: "dup" },
+    { ...ref, idempotencyKey: "k", reconcileOnly: "yes" },
+  ])
+    expect((await fetch(endpoint(routes.reply.path), post(token, body))).status).toBe(400);
+});
+
 test("the proxy refuses a request outside the contract, and an unknown caller", async () => {
   const { token, endpoint } = proxyWith(async () => {
     throw new Error("should not be called");

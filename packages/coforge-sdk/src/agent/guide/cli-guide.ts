@@ -29,7 +29,7 @@ export function buildCoforgeCliGuideSections(
 
   const communication = `## CoForge communication
 Send via shell without asking: text outside an executed \`coforge message send\` command is not delivered; never reply or ask via native UI/question tools. Reply to the target of the message you answer (keep its thread suffix); start new topics, summaries and proactive notices at the top level, without a suffix.
-Default: a top-level message gets a top-level reply, a thread message a reply in its thread, and a request you claimed as a Task its Task thread. You may post a new topic or a thread's conclusion at top level, or use the place a human names. This is a default, not a hard rule; decide a thread-mismatch send confirmation by it.
+Default: a top-level message gets a top-level reply, a thread message a reply in its thread; in a 1-on-1 DM, reply on the DM timeline (\`--target '@peer'\`), not in a thread or task unless they wrote there. You may post a new topic or a thread's conclusion at top level, or use the place a human names. This is a default, not a hard rule; decide a thread-mismatch send confirmation by it.
 Send the reply on stdin with \`coforge message send --target '<target>'\`. Prefer a quoted here-document with a delimiter absent from its body; do not reuse shared temporary files. ${isExternal ? "" : "Or create a unique file in your Agent workspace; send only after writing it successfully. "}If preparation fails, stop; never send existing file contents.
 ${CLI_CHANNEL_MESSAGE_EXAMPLE}
 
@@ -44,7 +44,7 @@ ${
 If a failed send says \`Retryable: yes\`, run its next action; else \`Draft saved: yes\` means unknown delivery: do not resend or poll.${isExternal ? "" : " Held drafts: resolve via `coforge message continue <id> a|b|c`."} Claim sent only after success with an id.${isExternal ? "" : " `system.reminder` delivers due reminders as App items (notice names the reminder's title; `coforge inbox check` lists them first; after wake, `coforge reminder list` shows fired ones)."}`;
 
   const execution = `## Work
-Answer ordinary questions freely; untracked DM needs no Task. Before implementing a shared channel request, run \`coforge task create --target '<channel>' --message-id <root-message-id> --title '<t>' --priority <p>\` (or \`task claim --number <n>\`). Only a successful claimant implements; others may analyze or review in its thread. A failed claim blocks conflicting work. Status: in_review; done on approval.
+Answer ordinary questions freely; untracked DM needs no Task. Before implementing a shared channel request, run \`coforge task create --target '<channel>' --message-id <message-id> --title '<t>' --assignee @you\` (or \`task claim '<ref>'\`). Only a successful claimant implements; others may analyze or review in its thread. A failed claim blocks conflicting work. Hand off via \`task assign\`; set \`done\` when finished.
 ${isExternal ? "" : (options.cloudSkillsGuidance ?? "")}For human decisions, post \`coforge action prepare\` with a \`choice\` (1) or \`questions\` (<=4) card, not chat options (\`coforge manual get action-cards\`). On failure, say so; never swap card types.
 ${isExternal ? "" : "Local memory: save decisions/corrections with sources. Keep reusable lessons or explicit requests, not task logs. Correct via get + save --revision. Share only workspace-authorized knowledge with --scope team; keep private notes local. Use current context first; before re-asking: `coforge memory search --query Q`. Reference only; `coforge manual get memory`.\nJobs: `coforge proc start|list|logs|stop`.\n"}**Complete ALL your work before stopping.** Finish work, report results, then run \`coforge task list --mine\` for unfinished tasks.`;
 
@@ -52,7 +52,7 @@ ${isExternal ? "" : "Local memory: save decisions/corrections with sources. Keep
 A person's instruction — a DM, an @handle, a person in a task — comes before anything queued.
 Then work "Your queue" in \`coforge task list --mine\` top to bottom; higher-priority unfinished work beats new work.
 An unpressed task does not interrupt current work unless higher priority or is \`urgent\`. Questions and reviews are answered as they arrive.
-\`task create\` needs \`--priority\`: \`urgent\` broken/stuck/safety; \`high\` blocker/error; \`medium\` normal; \`low\` can wait.`;
+\`task create\` \`--priority\` defaults to \`medium\`: \`urgent\` broken/stuck/safety; \`high\` blocker/error; \`medium\` normal; \`low\` can wait.`;
 
   const cloudDesktopRule =
     !isExternal && options.capabilities?.cloudDesktop

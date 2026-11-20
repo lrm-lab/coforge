@@ -181,6 +181,7 @@ describe("CLI long message auto-attachment (#42)", () => {
     expect(exactOut).not.toContain("超长，已作为文件发送");
 
     let replyCalls = 0;
+    let reconcileCalls = 0;
     const seenKeys: string[] = [];
     let seenAttachments: string[] | undefined;
     const existingId = "44444444-4444-4444-8444-444444444444";
@@ -198,9 +199,18 @@ describe("CLI long message auto-attachment (#42)", () => {
           };
         },
         taskConversation: async (request) => {
-          replyCalls++;
           if (request.route === "reply" && request.body) {
-            const body = request.body as { idempotencyKey: string; attachmentIds?: string[] };
+            const body = request.body as {
+              idempotencyKey: string;
+              attachmentIds?: string[];
+              reconcileOnly?: boolean;
+            };
+            if (body.reconcileOnly) {
+              reconcileCalls++;
+              expect(body.idempotencyKey).toBe(seenKeys[0]!);
+              return { state: "not_found" };
+            }
+            replyCalls++;
             seenKeys.push(body.idempotencyKey);
             seenAttachments = body.attachmentIds;
           }
@@ -220,6 +230,7 @@ describe("CLI long message auto-attachment (#42)", () => {
       async () => "k".repeat(MESSAGE_BODY_MAX_LENGTH + 1),
     );
     expect(uploads).toBe(1);
+    expect(reconcileCalls).toBe(1);
     expect(replyCalls).toBe(2);
     expect(seenKeys[0]).toBe(seenKeys[1]);
     expect(seenAttachments).toEqual([existingId, uploadedId]);

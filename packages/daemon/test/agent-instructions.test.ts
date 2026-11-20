@@ -29,7 +29,7 @@ test("ordinary requests do not require task creation or per-turn memory bookkeep
   expect(instructions).toContain("Answer ordinary questions freely");
   expect(instructions).toContain("Before implementing a shared channel request");
   expect(instructions).toContain(
-    "coforge task create --target '<channel>' --message-id <root-message-id>",
+    "coforge task create --target '<channel>' --message-id <message-id>",
   );
   expect(instructions).toContain("Only a successful claimant implements");
   expect(instructions).toContain("others may analyze or review in its thread");
@@ -84,7 +84,7 @@ test("message preparation avoids shared files and stops before sending stale con
 });
 test("replies where the conversation is, by default rather than as a hard rule", () => {
   expect(instructions).toContain(
-    "a top-level message gets a top-level reply, a thread message a reply in its thread, and a request you claimed as a Task its Task thread",
+    "a top-level message gets a top-level reply, a thread message a reply in its thread; in a 1-on-1 DM, reply on the DM timeline (`--target '@peer'`), not in a thread or task unless they wrote there",
   );
   expect(instructions).toContain(
     "You may post a new topic or a thread's conclusion at top level, or use the place a human names",
@@ -195,7 +195,7 @@ test("the standing guidance says what to work on next, in the queue the CLI now 
   // Every level means what the person who set it meant, and there is no fifth level to hide in.
   for (const level of ["urgent", "high", "medium", "low"])
     expect(instructions).toContain(`\`${level}\``);
-  expect(instructions).toContain("`task create` needs `--priority`");
+  expect(instructions).toContain("`task create` `--priority` defaults to `medium`");
   expect(instructions).not.toContain("`none`");
 });
 test("CLI instructions include a copyable stdin submission example", () => {

@@ -24,32 +24,30 @@ import {
  */
 const VIEWER = "user-viewer";
 
-test("a Backlog URL filter keeps its status", () => {
-  expect(parseStatusParam("backlog,todo")).toEqual(["backlog", "todo"]);
+test("a Backlog URL filter keeps its status and drops retired in_review", () => {
+  expect(parseStatusParam("backlog,todo,in_review")).toEqual(["backlog", "todo"]);
 });
 
-// Backlog read compatibility: invisible until a Task is in it, never offered for writing.
-test("a board offers Backlog only once a Task is in it, and a Backlog pick keeps only those", () => {
+test("a board offers Backlog by default and never offers retired In Review", () => {
   expect(availableTaskStatuses([{ status: "todo" }, { status: "done" }])).toEqual([
-    "todo",
-    "in_progress",
-    "in_review",
-    "done",
-    "closed",
-  ]);
-  expect(availableTaskStatuses([{ status: "todo" }, { status: "backlog" }])).toEqual([
     "backlog",
     "todo",
     "in_progress",
-    "in_review",
+    "done",
+    "closed",
+  ]);
+  expect(availableTaskStatuses([{ status: "todo" }, { status: "in_review" }])).toEqual([
+    "backlog",
+    "todo",
+    "in_progress",
     "done",
     "closed",
   ]);
   const picked = parseStatusParam("backlog");
   expect(statusMatches("backlog", picked)).toBe(true);
   expect(statusMatches("todo", picked)).toBe(false);
-  // Its column has no "Add a task": only write statuses take one.
-  expect(isTaskWriteStatus("backlog")).toBe(false);
+  expect(isTaskWriteStatus("backlog")).toBe(true);
+  expect(isTaskWriteStatus("in_review")).toBe(false);
   expect(isTaskWriteStatus("todo")).toBe(true);
 });
 const person = (id: string, name: string) => ({

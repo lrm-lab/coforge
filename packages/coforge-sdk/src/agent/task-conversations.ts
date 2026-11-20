@@ -75,6 +75,7 @@ export type AgentTaskViewResponse = {
   following: boolean;
   followReason: string | null;
   conversation: { exists: boolean; replyCount: number };
+  earlierDiscussion?: { target: string; replyCount: number } | null;
   recentMessages: AgentTaskViewMessage[];
   /** The Task's history events among the latest entries; absent from an older server. Messages
    * and events together are at most `limit`, and `hasOlder` speaks for the merged stream. */
@@ -92,6 +93,10 @@ export type AgentTaskReplyResponse = {
   sequence: number;
   idempotencyKey?: string;
 };
+
+export type AgentTaskReplyReconcileResponse =
+  | { state: "committed"; messageId: string; sequence: number; idempotencyKey?: string }
+  | { state: "not_found"; idempotencyKey?: string };
 
 /** Response for `POST /api/agent/v1/tasks/follow` and `/unfollow`; `changed` is false when the
  * Agent already was (or was not) following. */
@@ -143,6 +148,16 @@ export function isHistoryEventList(value: unknown): value is TaskHistoryEvent[] 
   return Array.isArray(value) && value.every(isHistoryEvent);
 }
 
+function isEarlierDiscussion(value: unknown): value is { target: string; replyCount: number } {
+  return (
+    isRecord(value) &&
+    isString(value.target) &&
+    typeof value.replyCount === "number" &&
+    Number.isInteger(value.replyCount) &&
+    value.replyCount >= 0
+  );
+}
+
 export function decodeAgentTaskViewResponse(value: unknown): AgentTaskViewResponse {
   if (
     !isRecord(value) ||
@@ -155,6 +170,11 @@ export function decodeAgentTaskViewResponse(value: unknown): AgentTaskViewRespon
     !isRecord(value.conversation) ||
     typeof value.conversation.exists !== "boolean" ||
     typeof value.conversation.replyCount !== "number" ||
+    !(
+      value.earlierDiscussion === undefined ||
+      value.earlierDiscussion === null ||
+      isEarlierDiscussion(value.earlierDiscussion)
+    ) ||
     !Array.isArray(value.recentMessages) ||
     !value.recentMessages.every(isViewMessage) ||
     !(value.recentEvents === undefined || isHistoryEventList(value.recentEvents)) ||
@@ -168,6 +188,20 @@ export function decodeAgentTaskReplyResponse(value: unknown): AgentTaskReplyResp
   if (!isRecord(value) || !isString(value.messageId) || typeof value.sequence !== "number")
     throw new Error("invalid Agent task reply response");
   return value as AgentTaskReplyResponse;
+}
+
+export function decodeAgentTaskReplyReconcileResponse(
+  value: unknown,
+): AgentTaskReplyReconcileResponse {
+  if (!isRecord(value)) throw new Error("invalid Agent task reply reconcile response");
+  if (value.state === "not_found") return value as AgentTaskReplyReconcileResponse;
+  if (
+    value.state === "committed" &&
+    isString(value.messageId) &&
+    typeof value.sequence === "number"
+  )
+    return value as AgentTaskReplyReconcileResponse;
+  throw new Error("invalid Agent task reply reconcile response");
 }
 
 export function decodeAgentTaskFollowResponse(value: unknown): AgentTaskFollowResponse {
@@ -199,12 +233,12 @@ export function decodeAgentTaskFollowingResponse(value: unknown): AgentTaskFollo
   return value as AgentTaskFollowingResponse;
 }
 
-/** Request of `POST /api/agent/v1/tasks/idle-nudge`: a fresh session's first idle, and how many
- * background tasks the Agent still runs (0 to 10000). */
-export type AgentTaskIdleNudgeRequest = { freshSession?: boolean; backgroundTasks?: number };
-/** Why a Task is in an idle reminder. */
+export type AgentTaskIdleNudgeRequest = {
+  freshSession?: boolean;
+  backgroundTasks?: number;
+  rulesShown?: boolean;
+};
 export type AgentTaskIdleReason = "new_session" | "newly_assigned" | "others_acted" | "stale";
-/** Why no idle reminder is sent. */
 export type AgentTaskIdleSkipReason = "disabled" | "no_open_tasks" | "no_change" | "hourly_cap";
 export type AgentTaskIdleItem = {
   ref: string;
@@ -214,16 +248,13 @@ export type AgentTaskIdleItem = {
   status: TaskStatus;
   priority: TaskPriority;
   reason: AgentTaskIdleReason;
-  /** Why, in English, as the text says it. */
   why: string;
-  /** The Task's 1-based number in the Agent's full task queue; absent when it waits outside
-   * the queue (In Review or blocked) or the server predates queue numbering. */
   queuePosition?: number;
 };
-/** Response of `POST /api/agent/v1/tasks/idle-nudge`: with `send`, give the Agent `text`. */
 export type AgentTaskIdleNudgeResponse = {
   send: boolean;
   reason?: AgentTaskIdleSkipReason;
+  rules?: boolean;
   items: AgentTaskIdleItem[];
   backlog: { ref: string; title: string }[];
   text: string;
@@ -242,6 +273,7 @@ const IDLE_SKIP_REASONS: ReadonlySet<string> = new Set<AgentTaskIdleSkipReason>(
   "hourly_cap",
 ]);
 const TASK_STATUS_VALUES: ReadonlySet<string> = new Set<TaskStatus>([
+  "backlog",
   "todo",
   "in_progress",
   "in_review",
@@ -281,11 +313,6 @@ function isIdleBacklogItem(value: unknown): value is { ref: string; title: strin
   return isRecord(value) && isString(value.ref) && isString(value.title);
 }
 
-/**
- * Validates `POST /api/agent/v1/tasks/idle-nudge`'s answer before the daemon writes its `text` as
- * input: an unknown reason or a malformed item would otherwise reach the Agent as a broken
- * reminder.
- */
 export function decodeAgentTaskIdleNudgeResponse(value: unknown): AgentTaskIdleNudgeResponse {
   if (
     !isRecord(value) ||
@@ -295,6 +322,7 @@ export function decodeAgentTaskIdleNudgeResponse(value: unknown): AgentTaskIdleN
     !Array.isArray(value.backlog) ||
     !value.backlog.every(isIdleBacklogItem) ||
     !isString(value.text) ||
+    (value.rules !== undefined && typeof value.rules !== "boolean") ||
     (value.reason !== undefined && !(isString(value.reason) && IDLE_SKIP_REASONS.has(value.reason)))
   )
     throw new Error("invalid Agent task idle-nudge response");

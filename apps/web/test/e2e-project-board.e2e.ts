@@ -132,7 +132,7 @@ test("a Project's board and All tasks show top-level Tasks as cards, the viewer'
     const inOps = run(ops.id);
     type Seed = {
       title: string;
-      status?: "todo" | "in_progress" | "in_review" | "done";
+      status?: "backlog" | "todo" | "in_progress" | "done";
       priority?: "urgent" | "high" | "medium" | "low";
       labels?: string[];
       assignee?: string;
@@ -157,7 +157,6 @@ test("a Project's board and All tasks show top-level Tasks as cards, the viewer'
           { idempotencyKey: crypto.randomUUID(), body: `Note ${at + 1}`, mentions: [] },
         );
       for (const step of steps) {
-        // A Task past To do needs an owner.
         const child = await where({
           operation: "create",
           title: step.title,
@@ -235,7 +234,7 @@ test("a Project's board and All tasks show top-level Tasks as cards, the viewer'
       title: "Launch blog post",
       comments: 2,
       labels: ["Copy"],
-      status: "in_review",
+      status: "backlog",
       assignee: lin,
       priority: "medium",
       steps: steps(3, 3),
@@ -243,7 +242,7 @@ test("a Project's board and All tasks show top-level Tasks as cards, the viewer'
     await seed({
       title: "Accessibility pass on the pricing table",
       labels: ["Design"],
-      status: "in_review",
+      status: "backlog",
       assignee: ines,
       priority: "high",
     });

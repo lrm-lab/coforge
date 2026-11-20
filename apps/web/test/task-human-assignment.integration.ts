@@ -131,18 +131,17 @@ test("TaskBoard limits other-person assignment to Workspace managers and enforce
         },
       ),
     ).rejects.toThrow("ACCESS_DENIED");
-    await expect(
-      board.execute(
-        { workspaceId: workspace.id, userId: bob!.id },
-        {
-          operation: "assign",
-          idempotencyKey: crypto.randomUUID(),
-          conversationId: channel.id,
-          number: taskBNumber,
-          assignee: `@${alice!.username}`,
-        },
-      ),
-    ).rejects.toThrow("ACCESS_DENIED");
+    const handedOff = await board.execute(
+      { workspaceId: workspace.id, userId: bob!.id },
+      {
+        operation: "assign",
+        idempotencyKey: crypto.randomUUID(),
+        conversationId: channel.id,
+        number: taskBNumber,
+        assignee: `@${alice!.username}`,
+      },
+    );
+    expect(handedOff.tasks[0]!.owner?.handle).toBe(alice!.username);
     await expect(
       board.execute(
         { workspaceId: workspace.id, userId: bob!.id },

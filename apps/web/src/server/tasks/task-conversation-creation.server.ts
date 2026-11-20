@@ -1,11 +1,11 @@
-import type {
-  TaskWriteCommand,
-  TaskHistoryChange,
-  TaskPrincipal,
-  TaskPriorityLevel,
-  TaskWriteStatus,
+import {
+  isTaskCreateStatus,
+  type TaskWriteCommand,
+  type TaskHistoryChange,
+  type TaskPrincipal,
+  type TaskPriorityLevel,
+  type TaskWriteStatus,
 } from "@lrm/coforge-sdk/internal";
-import { taskStatusNeedsOwner } from "@lrm/coforge-sdk/internal";
 
 import { AppError } from "#src/lib/app-error";
 import {
@@ -15,6 +15,7 @@ import {
   resolveTaskLabels,
   type LabelRow,
 } from "./labels.server";
+import { TASK_SOURCE_MESSAGE_REQUIRED } from "./task-assign-reason.server";
 import { resolveNewTaskProject, type TaskProjectRef } from "./task-projects.server";
 import { resolveTaskParent } from "./task-relations-write.server";
 import {
@@ -42,41 +43,10 @@ import { createTaskThread, followTask } from "./task-discussion-store.server";
 import { TASK_CREATES_RESOURCE_RETIRED } from "./task-resource-receipt.server";
 import {
   taskSelection,
-  UNFINISHED_TASK_STATUSES,
   readTaskText,
   type SelectedTask,
   LIVE_TASK_WHERE,
 } from "./task-view.server";
-
-/** The message already has someone else's live task. The refusal names the task and who holds it
- * (by display name; the handle is in the details), and the two ways on: add to that task, or say
- * `alongside`. */
-export const SOURCE_MESSAGE_TAKEN = "source_message_taken";
-export class SourceMessageTaken extends AppError {
-  constructor(held: {
-    taskNumber: number;
-    holder: string;
-    holderName: string;
-    board: string | null;
-  }) {
-    const { taskNumber, board } = held;
-    // The name is a person's words placed in a sentence an Agent reads: one short line, no quoting.
-    const holderName =
-      held.holderName
-        .replace(/[\p{Cc}`]+/gu, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 60) || held.holder;
-    const reply = board
-      ? `coforge task reply "${board}:#${taskNumber}"`
-      : `coforge task reply --target <the channel you used> --number ${taskNumber}`;
-    super("CONFLICT", {
-      errorId: SOURCE_MESSAGE_TAKEN,
-      details: { taskNumber, holder: held.holder, holderName },
-      hint: `this message is already task #${taskNumber}, held by ${holderName}. Add to that task with \`${reply}\`, or create yours beside it with --alongside.`,
-    });
-  }
-}
 
 /**
  * Creates tasks under task conversations: no message is posted in the channel. Each task gets its
@@ -106,11 +76,15 @@ export async function createConversationTasks(
       hint: "new tasks no longer track resources: drop --creates-resource. `coforge task receipt` still records the receipt of a task created with it before",
     });
   if (command.alongside && !command.messageId) throw new AppError("INVALID_INPUT");
+  if (_principal.agentId && !convert && !command.messageId)
+    throw new AppError("INVALID_INPUT", {
+      errorId: TASK_SOURCE_MESSAGE_REQUIRED,
+      hint: "Creating a task requires --message-id <id> (the channel message that asked for the work; a thread reply resolves to its thread root). For your own idea, first post a message in the channel saying what and why, then create the task from it.",
+    });
   const requestIds = await Promise.all(
     titles.map((_, index) => indexedRequestId(command.idempotencyKey, index)),
   );
   const result = await ports.db.$transaction(async (tx) => {
-    // Task conversations are on, so this is a Tasks v2 write: the Workspace's lock comes first.
     await lockWorkspaceTaskWrites(tx, scope.workspaceId);
     await lockConversation(tx, scope.conversationId);
     const retried = await tx.task.findMany({
@@ -125,25 +99,20 @@ export async function createConversationTasks(
     });
     if (retried.length) {
       if (retried.length !== titles.length) throw new AppError("CONFLICT");
-      return { tasks: retried, created: false, notices: [] };
+      return { tasks: retried, created: false, notices: [], sourceThreadReplyId: undefined };
     }
     const source = command.messageId
       ? await findSourceMessage(tx, scope.conversationId, command.messageId)
       : null;
-    if (source && !command.alongside) await assertSourceFree(tx, source.id, memberId(member));
     const assignee = command.assignee
       ? await assigneeMember(tx, scope.conversationId, scope.workspaceId, command.assignee)
       : null;
     if (command.assignee && !assignee) throw new AppError("NOT_FOUND");
     if (assignee && assignee.id !== member.id)
       await assertCanAssignOther(tx, scope.workspaceId, member);
-    // An initial status that needs a hand to hold it (task #61): to do and closed may be
-    // nobody's, the rest may not.
+    if (command.status !== undefined && !isTaskCreateStatus(command.status))
+      throw new AppError("INVALID_INPUT");
     const initial = command.status;
-    if (initial && taskStatusNeedsOwner(initial) && !assignee)
-      throw new AppError("CONFLICT", {
-        hint: `a Task in ${initial} needs an owner; assign it or create it in todo`,
-      });
     const labels = await resolveTaskLabels(
       tx,
       scope.workspaceId,
@@ -168,8 +137,6 @@ export async function createConversationTasks(
         errorId: "task-label-limit",
         hint: `a task carries at most ${LABELS_PER_TASK_MAX} labels`,
       });
-    // The Project the new Tasks are filed under (task #484): the one named, a sub-task's
-    // parent's, else this member's last-used one here.
     const parent = await resolveTaskParent(tx, scope, member, command.parent, []);
     const project = await resolveNewTaskProject(tx, scope, member, command, parent);
     const written = convert ? [sourceTitle(source!)] : titles;
@@ -178,13 +145,14 @@ export async function createConversationTasks(
     const first = await allocateTaskNumbers(tx, scope.conversationId, written.length);
     const tasks: SelectedTask[] = [];
     const notices: PostedNotice[] = [];
+    const priority = command.priority ?? "medium";
     for (const [index, title] of written.entries()) {
       const { task, notice } = await insertConversationTask(tx, scope, member, {
         number: first + index,
         title,
         description: command.description,
         createsResource: command.createsResource ?? false,
-        priority: command.priority,
+        priority,
         dueAt: command.dueAt ? new Date(command.dueAt) : null,
         dueHasTime: command.dueAt ? (command.dueHasTime ?? true) : false,
         status: initial,
@@ -193,16 +161,12 @@ export async function createConversationTasks(
         source,
         labels,
         project,
-        // The assignee's notice waits for the new Tasks' relations: its queue note reads them.
         deferAssignedNotice: true,
       });
       tasks.push(task);
       if (notice) notices.push(notice);
     }
     await linkCreatedTasks(tx, scope, member, tasks, command);
-    // The assignee's notice, one per Task, carries the queue note `assign` would give it
-    // (task #716): a person's create-and-assign is the same direct instruction. Each notice is
-    // posted in the task's conversation, so the task is read again to carry its unread state.
     if (assignee && assignee.id !== member.id) {
       const queueNotes = assignee.agentId
         ? await assignmentQueueNotes(
@@ -224,8 +188,6 @@ export async function createConversationTasks(
             params: {
               actor: noticeActor(member),
               task: { taskId: task.id, number: task.number, title: task.title },
-              // The body says "you" to the assignee it is delivered to; the conversation shows
-              // everyone who it went to (task #92).
               assignee: noticeAssignee(assignee),
             },
           },
@@ -237,7 +199,12 @@ export async function createConversationTasks(
         });
       }
     }
-    return { tasks, created: true, notices };
+    return {
+      tasks,
+      created: true,
+      notices,
+      sourceThreadReplyId: source?.sourceThreadReplyId,
+    };
   });
   if (result.created) {
     await signalNotices(ports, result.notices);
@@ -246,9 +213,6 @@ export async function createConversationTasks(
       scope.conversationId,
       scope.workspaceId,
     );
-    // A Task made under a parent changes the parent's own view (its sub-task progress), so the
-    // parent's new copy is announced with the new Tasks': in this conversation with them, in
-    // another to its own audience, as an amendment's neighbours are.
     const parents = command.parent ? await parentTasksOf(ports.db, result.tasks) : [];
     const here = parents.filter((parent) => parent.conversationId === scope.conversationId);
     await announceTasks(ports, scope, async () => scopes.task, {
@@ -266,7 +230,12 @@ export async function createConversationTasks(
         `${result.tasks[0]!.id}:task-created`,
       ).catch(() => undefined);
   }
-  return { tasks: await taskViewsOf(ports.db, ports.reader, result.tasks, NEW_TASK_COUNTS) };
+  const views = await taskViewsOf(ports.db, ports.reader, result.tasks, NEW_TASK_COUNTS);
+  return {
+    tasks: result.sourceThreadReplyId
+      ? views.map((view) => ({ ...view, sourceThreadReplyId: result.sourceThreadReplyId }))
+      : views,
+  };
 }
 
 /** The numbers a conversation's next `count` tasks take; the caller holds its lock. */
@@ -280,7 +249,10 @@ export async function allocateTaskNumbers(tx: Transaction, conversationId: strin
   return allocated.first;
 }
 
-type SourceMessage = Awaited<ReturnType<typeof findSourceMessage>>;
+type SourceMessage = Pick<
+  Awaited<ReturnType<typeof findSourceMessage>>,
+  "id" | "senderMemberId" | "body" | "mentions"
+> & { sourceThreadReplyId?: string };
 
 /** A task's title made from a message: its text as people read it (mentions as names). */
 export function sourceTitle(source: Pick<SourceMessage, "body" | "mentions">) {
@@ -336,7 +308,7 @@ export async function insertConversationTask(
       title: input.title,
       description: input.description,
       createsResource: input.createsResource ?? false,
-      priority: input.priority,
+      priority: input.priority ?? "medium",
       dueAt: input.dueAt ?? null,
       dueHasTime: input.dueAt ? (input.dueHasTime ?? true) : false,
       ownerMemberId: assignee?.id,
@@ -410,36 +382,3 @@ export async function insertConversationTask(
 
 const actorHandle = (member: Member) =>
   `@${member.agent?.name ?? member.user?.username ?? "someone"}`;
-
-/**
- * A message may carry several tasks, but not someone else's live one unless the creator says they
- * mean to work beside it (`alongside`): the holder is named so the creator can add to that task.
- */
-async function assertSourceFree(tx: Transaction, sourceMessageId: string, creatorMemberId: string) {
-  const live = await tx.task.findFirst({
-    where: {
-      sourceMessageId,
-      ...LIVE_TASK_WHERE,
-      status: { in: UNFINISHED_TASK_STATUSES },
-      ownerMemberId: { not: null, notIn: [creatorMemberId] },
-    },
-    select: {
-      number: true,
-      conversation: { select: { channelName: true } },
-      owner: {
-        select: {
-          user: { select: { username: true, displayName: true } },
-          agent: { select: { name: true, displayName: true } },
-        },
-      },
-    },
-  });
-  if (!live) return;
-  const holder = live.owner?.agent?.name ?? live.owner?.user?.username ?? "someone";
-  throw new SourceMessageTaken({
-    taskNumber: live.number,
-    holder,
-    holderName: live.owner?.agent?.displayName ?? live.owner?.user?.displayName ?? holder,
-    board: live.conversation.channelName ? `#${live.conversation.channelName}` : null,
-  });
-}

@@ -1,6 +1,11 @@
 import { assertCanAssignOther } from "./task-assignment-authority.server";
-import type { TaskCommand, TaskResult } from "@lrm/coforge-sdk/internal";
+import {
+  normalizeTaskReasonText,
+  type TaskCommand,
+  type TaskResult,
+} from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
+import { refuseAssignReason } from "./task-assign-reason.server";
 import { assigneeMention, noticeActor, noticeAssignee, noticeText } from "./task-notices.server";
 import { taskViewOf } from "./task-relations.server";
 import type { TaskBoardPorts, Member, ConversationRef } from "./task-board-ports.server";
@@ -112,11 +117,15 @@ export async function assignTask(
     if (command.assignee && !owner) throw new AppError("NOT_FOUND");
     const current = await findTaskByNumber(tx, conversationId, command.number!);
     if (!current) throw new AppError("NOT_FOUND");
-    if (
-      (owner && owner.id !== member.id) ||
-      (current.ownerMemberId && current.ownerMemberId !== member.id)
-    )
-      await assertCanAssignOther(tx, workspaceId, member);
+    const clearingOther = !owner && current.ownerMemberId && current.ownerMemberId !== member.id;
+    if (clearingOther) await assertCanAssignOther(tx, workspaceId, member);
+    const reason =
+      command.reason !== undefined
+        ? normalizeTaskReasonText(command.reason) || undefined
+        : undefined;
+    const handoffToOther = Boolean(owner && owner.id !== member.id);
+    if (reason && !handoffToOther) refuseAssignReason("self_assign");
+    if (handoffToOther && member.agentId && !reason) refuseAssignReason("required");
     assertExpectedRevision(current, command.expectedRevision);
     if (current.ownerMemberId === (owner?.id ?? null))
       return { task: current, receipt: null, assigneeHandle: null, changed: false };
@@ -137,8 +146,7 @@ export async function assignTask(
       owner,
       [task],
       [receiptId],
-      // Stored as one line, the way the CLI would have sent it (task #36).
-      command.reason?.trim(),
+      reason,
     );
     return { task, changed: true, assigneeHandle: assigneeMention(owner), receipt: posted };
   });

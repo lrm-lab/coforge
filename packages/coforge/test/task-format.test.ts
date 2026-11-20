@@ -175,6 +175,63 @@ test("Single-Task writes confirm what the server now holds", () => {
   expect(formatTaskAssigned(task(4, { owner: person("ada") }))).toBe("#4 assigned to @ada.");
   expect(formatTaskAssigned(task(4))).toBe("#4 unassigned — now open.");
   expect(formatTaskStatusUpdated(task(4, { status: "in_review" }))).toBe("#4 moved to in_review.");
+  expect(
+    formatTaskStatusUpdated(
+      task(4, { status: "in_progress", owner: person("ada") }),
+      { status: "in_review" },
+      "#general",
+    ),
+  ).toContain("in_review is retired — kept in_progress instead");
+  expect(
+    formatTaskStatusUpdated(
+      task(4, { status: "done", messageId: null }),
+      { status: "done" },
+      "#general",
+    ),
+  ).toContain("Not sent the result yet? Answer the person who asked where they spoke");
+  expect(
+    formatTaskStatusUpdated(
+      task(4, { status: "done", messageId: null }),
+      { status: "done" },
+      "@ada",
+    ),
+  ).toContain("in a 1-on-1 DM, on the DM's own timeline");
+  const createdOutput = formatTasksCreated("#general", {
+    tasks: [
+      task(9, {
+        messageId: null,
+        status: "in_progress",
+        owner: person("ada"),
+        claimedAt: "2026-09-23T06:00:00.000Z",
+        sourceMessage: {
+          messageId: "01a18ee9-cfb2-7c3a-9d11-aaaaaaaaaaaa",
+          senderName: "Ada",
+          preview: "please fix",
+        },
+        sourceThreadReplyId: "02b29ff0-cfb2-7c3a-9d11-bbbbbbbbbbbb",
+      }),
+    ],
+  } as TaskResult);
+  expect(createdOutput).toContain("Source: the thread's root message msg=01a18ee9-cfb2");
+  expect(createdOutput).toContain("msg=02b29ff0-cfb2");
+  expect(createdOutput).toContain("The source message's thread now names this task");
+  const dmCreatedOutput = formatTasksCreated("@ada", {
+    tasks: [
+      task(10, {
+        messageId: null,
+        status: "in_progress",
+        owner: person("ada"),
+        claimedAt: "2026-09-23T06:00:00.000Z",
+        sourceMessage: {
+          messageId: "01a18ee9-cfb2-7c3a-9d11-aaaaaaaaaaaa",
+          senderName: "Ada",
+          preview: "please fix",
+        },
+      }),
+    ],
+  } as TaskResult);
+  expect(dmCreatedOutput).toContain('dm:@ada:#10 → coforge message send --target "@ada"');
+  expect(dmCreatedOutput).not.toContain('"@ada:01a18ee9-cfb2"');
   expect(formatTaskDeleted(4)).toBe(
     "#4 deleted. Undo within 1 minute: coforge task restore --number 4",
   );

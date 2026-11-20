@@ -1,7 +1,6 @@
 import {
   TASK_WRITE_STATUSES,
   isTaskWriteStatus,
-  TASK_READ_STATUSES,
   compareTaskOrder,
   type TaskStatus,
   type TaskWriteStatus,
@@ -59,9 +58,7 @@ const POINTER_SENSOR_OPTIONS = { activationConstraint: { distance: 6 } };
 export function TaskWorkflow<T extends TaskView>({
   tasks,
   layout,
-  statuses = tasks.some((task) => task.status === "backlog")
-    ? TASK_READ_STATUSES
-    : TASK_WRITE_STATUSES,
+  statuses = TASK_WRITE_STATUSES,
   currentMemberId,
   canSetAnyStatus = false,
   disabled,

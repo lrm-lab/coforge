@@ -133,4 +133,16 @@ test("a view's events are checked for their minimal shape", () => {
       recentEvents: [{ seq: 1, createdAt: "t", eventType: "created", payload: {} }],
     }).recentEvents,
   ).toHaveLength(1);
+  expect(
+    decodeAgentTaskViewResponse({
+      ...VIEW,
+      earlierDiscussion: { target: "#general:01a16c6c-1c03", replyCount: 2 },
+    }).earlierDiscussion,
+  ).toEqual({ target: "#general:01a16c6c-1c03", replyCount: 2 });
+  expect(() =>
+    decodeAgentTaskViewResponse({
+      ...VIEW,
+      earlierDiscussion: { target: "#general:01a16c6c-1c03", replyCount: -1 },
+    }),
+  ).toThrow("invalid Agent task view response");
 });

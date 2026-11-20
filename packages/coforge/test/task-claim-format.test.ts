@@ -129,4 +129,5 @@ test("A claimed task without a source message still names its ref and a reply co
     claims: [{ number: 9, success: true }],
   });
   expect(text).toContain('dm:@ada:#9 → coforge task reply "dm:@ada:#9"');
+  expect(text).toContain("in a 1-on-1 DM, on the DM's own timeline");
 });

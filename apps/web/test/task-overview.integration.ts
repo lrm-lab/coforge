@@ -183,8 +183,8 @@ test("TaskBoard overview leaves finished Tasks out", async () => {
       status: "todo",
       projectSlug: f.project.slug,
     });
-    await f.task(f.channel, f.viewer.id, "In review work", {
-      status: "in_review",
+    await f.task(f.channel, f.viewer.id, "Backlog work", {
+      status: "backlog",
       projectSlug: f.project.slug,
     });
     await f.task(f.channel, f.viewer.id, "Finished work", {
@@ -197,7 +197,7 @@ test("TaskBoard overview leaves finished Tasks out", async () => {
     });
 
     const result = await f.board.overview(f.workspace.id, f.viewer.id);
-    expect(result.tasks.map(({ title }) => title).sort()).toEqual(["In review work", "Open work"]);
+    expect(result.tasks.map(({ title }) => title).sort()).toEqual(["Backlog work", "Open work"]);
   } finally {
     await f.cleanup();
   }

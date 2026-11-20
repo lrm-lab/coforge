@@ -123,7 +123,7 @@ test("a conversation's Tasks are read by status, message window and number, neve
   const titlesOf = (result: Awaited<ReturnType<typeof read>>) =>
     result.tasks.map((task) => task.title);
 
-  const unfinished = await read({ statuses: ["todo", "in_progress", "in_review"] });
+  const unfinished = await read({ statuses: ["todo", "in_progress"] });
   expect(titlesOf(unfinished)).toEqual(["One", "Three", "Five"]);
   // The same copy an Agent's `list` returns, plus the message's sequence.
   const listed = await run({ operation: "list" });

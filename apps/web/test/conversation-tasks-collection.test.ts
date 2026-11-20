@@ -111,7 +111,7 @@ test("each live query reads only its own subset; the collection holds what they 
   await Promise.all([board.preload(), window.preload(), references.preload()]);
 
   expect(reads).toEqual([
-    { statuses: ["backlog", "todo", "in_progress", "in_review"] },
+    { statuses: ["backlog", "todo", "in_progress"] },
     { sequenceFrom: 40 },
     { numbers: [2] },
   ]);

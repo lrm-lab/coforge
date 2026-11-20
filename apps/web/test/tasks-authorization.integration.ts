@@ -404,21 +404,16 @@ test("TaskBoard enforces conversation authorization, idempotency, and ownership 
       status: reclaimed.tasks[0]!.status,
       owner: reclaimed.tasks[0]!.owner,
     });
-    // In progress → In review → Done: a direct jump is refused.
-    const move = (status: "in_review" | "done") =>
-      board.execute(
-        { workspaceId: workspace.id, agentId: agent!.id },
-        {
-          operation: "update",
-          idempotencyKey: crypto.randomUUID(),
-          target: `#${publicChannel.channelName}`,
-          number: ownership.number,
-          status,
-        },
-      );
-    await expect(move("done")).rejects.toThrow("ACCESS_DENIED");
-    await move("in_review");
-    const done = await move("done");
+    const done = await board.execute(
+      { workspaceId: workspace.id, agentId: agent!.id },
+      {
+        operation: "update",
+        idempotencyKey: crypto.randomUUID(),
+        target: `#${publicChannel.channelName}`,
+        number: ownership.number,
+        status: "done",
+      },
+    );
     for (const expectedRevision of [reclaimed.tasks[0]!.revision, done.tasks[0]!.revision]) {
       await expect(
         board.execute(

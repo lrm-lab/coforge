@@ -98,6 +98,28 @@ export async function setup({ dependencies }: { dependencies?: TaskBoardDependen
       members: { create: [{ userId: bob.id }, { agentId: one.id }] },
     },
   });
+  const sourceMessages = new Map<string, string>();
+  const ownerMember = await db.conversationMember.findFirstOrThrow({
+    where: { conversationId: channel.id, userId: alice.id },
+  });
+  for (const conv of [channel, other, secret, admin, secretAdmin]) {
+    const sender =
+      conv.id === channel.id
+        ? ownerMember
+        : await db.conversationMember.findFirstOrThrow({
+            where: { conversationId: conv.id, userId: { not: null } },
+          });
+    const message = await db.message.create({
+      data: {
+        workspaceId: workspace.id,
+        conversationId: conv.id,
+        sequence: 1,
+        senderMemberId: sender.id,
+        body: `Seed request ${handle}`,
+      },
+    });
+    sourceMessages.set(conv.id, message.id);
+  }
   const board = new TaskBoard(db, dependencies);
   const principals = {
     alice: { workspaceId: workspace.id, userId: alice.id } as TaskPrincipal,
@@ -112,7 +134,6 @@ export async function setup({ dependencies }: { dependencies?: TaskBoardDependen
     [admin.id, `#${admin.channelName}`],
     [secretAdmin.id, `#${secretAdmin.channelName}`],
   ]);
-  // An Agent names its board by target; a person by conversation id.
   const run = (
     who: keyof typeof principals,
     command: TaskCommandWithout<"idempotencyKey" | "conversationId" | "target">,
@@ -136,7 +157,7 @@ export async function setup({ dependencies }: { dependencies?: TaskBoardDependen
   const make = async (
     who: keyof typeof principals,
     count: number,
-    extra: Partial<TaskWriteCommand> = {},
+    extra: Partial<Extract<TaskWriteCommand, { operation: "create" }>> = {},
     conversationId = channel.id,
   ) =>
     (
@@ -145,6 +166,9 @@ export async function setup({ dependencies }: { dependencies?: TaskBoardDependen
         {
           operation: "create",
           titles: Array.from({ length: count }, (_, index) => `Task ${index + 1} ${handle}`),
+          ...((who === "one" || who === "two") && extra.messageId === undefined
+            ? { messageId: sourceMessages.get(conversationId) }
+            : {}),
           ...extra,
         },
         conversationId,
@@ -152,13 +176,11 @@ export async function setup({ dependencies }: { dependencies?: TaskBoardDependen
     ).tasks.map((task) => task.number);
   const show = async (number: number, conversationId = channel.id) =>
     run("alice", { operation: "show", number }, conversationId);
-  /** The server notices in a task's thread, with the Agents each was delivered to. */
   const notices = async (number: number) => {
     const task = await db.task.findFirstOrThrow({
       where: { conversationId: channel.id, number },
       select: { messageId: true, discussionConversationId: true },
     });
-    // A task with its own conversation has one only once something was posted in it.
     if (!task.messageId && !task.discussionConversationId) return [];
     const messages = await db.message.findMany({
       where: task.messageId
@@ -179,10 +201,8 @@ export async function setup({ dependencies }: { dependencies?: TaskBoardDependen
       agents: message.deliveries.map((delivery) => delivery.agentId),
     }));
   };
-  /** An Agent takes a task through review to done, as an ordinary member may. */
   const finish = async (who: "one" | "two", number: number) => {
     await run(who, { operation: "claim", number });
-    await run(who, { operation: "update", number, status: "in_review" });
     await run(who, { operation: "update", number, status: "done" });
   };
   return {

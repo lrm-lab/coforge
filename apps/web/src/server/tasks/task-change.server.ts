@@ -26,18 +26,12 @@ export function assertExpectedRevision(task: { revision: number }, expectedRevis
     throw new AppError("CONFLICT");
 }
 
-/**
- * The columns that take a Task's assignee away. A Task in progress or in review with nobody on it
- * is work nobody is doing, so it is open again; a closed one stays as it is. A done one keeps its
- * owner — only To do and Closed may be nobody's (taskStatusNeedsOwner), so the write is refused.
- */
 export function withoutAssignee(task: { status: string; number: number }) {
   if (task.status === "done")
     throw new AppError("CONFLICT", {
       hint: `task #${task.number} is done; change its status before removing its owner`,
     });
-  const reopened = task.status === "in_progress" || task.status === "in_review";
-  return { ownerMemberId: null, claimedAt: null, ...(reopened ? { status: "todo" as const } : {}) };
+  return { ownerMemberId: null, claimedAt: null };
 }
 
 /**
@@ -51,13 +45,11 @@ export async function commitTaskChange(
   guard: Prisma.TaskWhereInput,
   data: Omit<Prisma.TaskUncheckedUpdateManyInput, "status"> & { status?: TaskWriteStatus },
   options: {
-    /** Changes beyond the Task's own columns (its blockers, its parent), recorded after them. */
     relationChanges?: readonly TaskHistoryChange[];
-    /** Whether the actor manages Tasks, when the caller already knows; read here otherwise. */
     manager?: boolean;
+    statusReason?: string;
   } = {},
 ) {
-  // Every status write passes here, so what blockers and subtasks hold back is decided once.
   if (typeof data.status === "string" && data.status !== before.status)
     await assertMayEnter(
       tx,
@@ -93,11 +85,6 @@ export async function commitTaskChange(
       data: { status: "completed", finishedAt: new Date() },
     });
   }
-  // In Progress with an Agent owner needs a live session: a finished Task's session was completed,
-  // however many hops the reopen took, and a failed one may never have started. An ownership change
-  // opens one only while the Task is being worked — assigning an Agent to a Task that is not In
-  // Progress reserves it without starting it (task #709).
-  // ensureTaskExecutionSession no-ops on a live session, so this only restarts terminal ones.
   const enteringInProgress = before.status !== "in_progress" && task.status === "in_progress";
   if (
     task.owner?.agentId &&
@@ -105,14 +92,15 @@ export async function commitTaskChange(
     (task.ownerMemberId !== before.ownerMemberId || enteringInProgress)
   ) {
     await ensureTaskExecutionSession(tx, task, task.owner.agentId);
-    // Read the row again so the result names the session every later read of this Task shows
-    // (a restarted session keeps its older createdAt, so patching it in could disagree).
     task = await tx.task.findUniqueOrThrow({
       where: { id: before.id },
       select: taskSelection,
     });
   }
-  const changes = [...taskChanges(before, task), ...(options.relationChanges ?? [])];
+  const changes = [
+    ...taskChanges(before, task, { statusReason: options.statusReason }),
+    ...(options.relationChanges ?? []),
+  ];
   if (!changes.length) return { task, events: [] };
   const latest = await tx.taskHistoryEvent.findFirst({
     where: { taskId: task.id },

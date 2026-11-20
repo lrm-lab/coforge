@@ -11,10 +11,10 @@ test("nothing stored, or nothing readable, hides no column", () => {
   expect([...parseHiddenColumns("future_state,,")]).toEqual([]);
 });
 
-test("hidden columns round-trip in board order, unknown names ignored", () => {
-  const hidden = parseHiddenColumns("closed,in_review,priority");
-  expect([...hidden]).toEqual(["in_review", "closed"]);
-  expect(serializeHiddenColumns(hidden)).toBe("in_review,closed");
+test("hidden columns round-trip in board order, unknown and retired names ignored", () => {
+  const hidden = parseHiddenColumns("closed,in_progress,in_review,priority");
+  expect([...hidden]).toEqual(["in_progress", "closed"]);
+  expect(serializeHiddenColumns(hidden)).toBe("in_progress,closed");
 });
 
 test("an existing Backlog column can be hidden and restored", () => {

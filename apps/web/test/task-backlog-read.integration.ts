@@ -1,58 +1,44 @@
 import { expect, test } from "bun:test";
-import type { PrismaClient } from "#src/generated/prisma/client";
-import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { setup } from "./fixtures/task-dependencies";
 
-test("unfinished reads include Backlog while ready excludes it and writes stay closed", async () => {
-  const { db, principals, channel, run: fixtureRun } = await setup();
-  const rollback = new Error("rollback Backlog fixture");
+test("Backlog is writable with optional reason, included in unfinished reads, and excluded from ready", async () => {
+  const { db, board, principals, run } = await setup();
   try {
-    const parked = (await fixtureRun("alice", { operation: "create", title: "Parked fixture" }))
+    const created = (await run("alice", { operation: "create", title: "Parked fixture" }))
       .tasks[0]!;
-    await expect(
-      db.$transaction(
-        async (tx) => {
-          await tx.$executeRawUnsafe("SET LOCAL lock_timeout = '5s'");
-          await tx.$executeRawUnsafe('ALTER TABLE "tasks" DROP CONSTRAINT "tasks_status_check"');
-          await tx.task.update({ where: { id: parked.id }, data: { status: "backlog" } });
-          const board = new TaskBoard(tx as PrismaClient);
-          const run = (fields: object) =>
-            board.execute(principals.alice, {
-              operation: "list",
-              conversationId: channel.id,
-              idempotencyKey: crypto.randomUUID(),
-              ...fields,
-            });
-          expect((await run({})).tasks.some((task) => task.id === parked.id)).toBe(true);
-          expect(
-            (
-              await board.overview(
-                principals.alice.workspaceId,
-                (principals.alice as { userId: string }).userId,
-              )
-            ).tasks.some((task) => task.id === parked.id),
-          ).toBe(true);
-          expect((await run({ status: "backlog" })).tasks.map((task) => task.id)).toEqual([
-            parked.id,
-          ]);
-          expect((await run({ ready: true })).tasks.some((task) => task.id === parked.id)).toBe(
-            false,
-          );
-          await expect(
-            board.execute(principals.alice, {
-              operation: "update",
-              conversationId: channel.id,
-              idempotencyKey: crypto.randomUUID(),
-              number: parked.number,
-              status: "backlog" as never,
-            }),
-          ).rejects.toMatchObject({ code: "INVALID_INPUT" });
-          throw rollback;
-        },
-        { timeout: 20_000 },
+    const parked = (
+      await run("alice", {
+        operation: "update",
+        number: created.number,
+        status: "backlog",
+        reason: "Waiting for next milestone",
+      })
+    ).tasks[0]!;
+    expect(parked.status).toBe("backlog");
+    expect(
+      (await run("alice", { operation: "list" })).tasks.some((task) => task.id === parked.id),
+    ).toBe(true);
+    expect(
+      (
+        await board.overview(
+          principals.alice.workspaceId,
+          (principals.alice as { userId: string }).userId,
+        )
+      ).tasks.some((task) => task.id === parked.id),
+    ).toBe(true);
+    expect(
+      (await run("alice", { operation: "list", status: "backlog" })).tasks.map((task) => task.id),
+    ).toEqual([parked.id]);
+    expect(
+      (await run("alice", { operation: "list", ready: true })).tasks.some(
+        (task) => task.id === parked.id,
       ),
-    ).rejects.toBe(rollback);
-    expect((await db.task.findUniqueOrThrow({ where: { id: parked.id } })).status).toBe("todo");
+    ).toBe(false);
+    const history = (await run("alice", { operation: "history", number: parked.number })).history;
+    expect(history?.at(-1)).toMatchObject({
+      eventType: "status_changed",
+      payload: { from: "todo", to: "backlog", reason: "Waiting for next milestone" },
+    });
   } finally {
     try {
       await db.workspace.delete({ where: { id: principals.alice.workspaceId } });

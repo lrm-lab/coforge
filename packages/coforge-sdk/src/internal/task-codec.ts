@@ -1,6 +1,7 @@
 import { isSeenExactSeqs, MAX_MESSAGE_SEQUENCE } from "./freshness-decision";
 import { TASK_PRIORITY_LEVELS } from "./task-order";
 import {
+  TASK_CREATE_STATUSES,
   TASK_WRITE_STATUSES,
   TASK_READ_STATUSES,
   type TaskCommand,
@@ -37,6 +38,7 @@ const operations = new Set<TaskCommand["operation"]>([
   "restore",
   "receipt",
 ]);
+const createStatuses = new Set<string>(TASK_CREATE_STATUSES);
 const statuses = new Set<string>(TASK_WRITE_STATUSES);
 const readStatuses = new Set<string>(TASK_READ_STATUSES);
 const priorities = new Set<string>(TASK_PRIORITY_LEVELS);
@@ -155,7 +157,12 @@ export function validateTaskRequest(value: TaskRequest): void {
   if (
     value.status !== undefined &&
     !(
-      (value.operation === "list" ? readStatuses : statuses).has(value.status) ||
+      (value.operation === "list" || value.operation === "update"
+        ? readStatuses
+        : value.operation === "create"
+          ? createStatuses
+          : statuses
+      ).has(value.status) ||
       (value.operation === "list" && value.status === "all")
     )
   )
@@ -256,9 +263,11 @@ export function validateTaskRequest(value: TaskRequest): void {
       value.numbers === undefined &&
       !messages &&
       value.receipt !== undefined);
-  // The handover sentence belongs to an assignment; a reason anywhere else would be dropped
-  // silently by the server, so the request is refused instead.
-  if (value.reason !== undefined && value.operation !== "assign")
-    throw new Error("reason is only valid for assign");
+  if (
+    value.reason !== undefined &&
+    (typeof value.reason !== "string" ||
+      (value.operation !== "assign" && value.operation !== "update"))
+  )
+    throw new Error("reason is only valid for assign or update");
   if (!valid) throw new Error("missing Task operation argument");
 }

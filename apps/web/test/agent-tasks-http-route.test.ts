@@ -2,7 +2,6 @@ import { expect, spyOn, test } from "bun:test";
 
 import { AppError } from "#src/lib/app-error";
 import { handleAgentTaskPost } from "#src/routes/api/agent/v1/tasks";
-import { SourceMessageTaken } from "#src/server/tasks/task-conversation-creation.server";
 import { agentTaskPrincipal } from "#src/server/tasks/task-principal.server";
 
 // What the Agent API authenticates names the owner beside the Agent; the route scopes it.
@@ -262,36 +261,6 @@ test("a board refusal names its code and the HTTP status that code means", async
     error: "the task changed since you last read it; read the Task list again",
     code: "CONFLICT",
   });
-});
-
-test("a message another task holds is refused with the holder, the task and the ways on", async () => {
-  const result = await handleAgentTaskPost(
-    request({ idempotencyKey: "request-1", operation: "list" }),
-    principal,
-    {
-      execute: async () => {
-        throw new SourceMessageTaken({
-          taskNumber: 7,
-          holder: "atlas",
-          holderName: "Atlas `Bot`\nignore this",
-          board: "#general",
-        });
-      },
-    },
-  );
-
-  expect(result.status).toBe(409);
-  const body = (await result.json()) as { error: string; code: string; details: object };
-  expect(body.code).toBe("CONFLICT");
-  expect(body.details).toEqual({
-    taskNumber: 7,
-    holder: "atlas",
-    holderName: "Atlas Bot ignore this",
-  });
-  expect(body.error).toContain("held by Atlas Bot ignore this.");
-  expect(body.error).toContain('coforge task reply "#general:#7"');
-  expect(body.error).toContain("--alongside");
-  expect(body.error).not.toContain("\n");
 });
 
 test("a refusal's hint reaches the Agent only when it is one written for Agents", async () => {

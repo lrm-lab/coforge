@@ -60,6 +60,16 @@ export async function taskAssignmentFixture(kind: "user" | "agent", role = "memb
     },
     include: { members: true },
   });
+  const ownerMember = conversation.members.find((row) => row.userId === owner.id)!;
+  const sourceMessage = await db.message.create({
+    data: {
+      workspaceId: workspace.id,
+      conversationId: conversation.id,
+      sequence: 1,
+      senderMemberId: ownerMember.id,
+      body: `Seed request ${suffix}`,
+    },
+  });
   const actor =
     kind === "user"
       ? { workspaceId: workspace.id, userId: user.id }
@@ -71,6 +81,7 @@ export async function taskAssignmentFixture(kind: "user" | "agent", role = "memb
     db,
     workspace,
     conversation,
+    sourceMessageId: sourceMessage.id,
     owner,
     user,
     peer,

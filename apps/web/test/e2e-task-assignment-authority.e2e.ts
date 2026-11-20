@@ -96,14 +96,13 @@ afterAll(async () => {
   await db.$disconnect();
   await browser("close").catch(() => undefined);
 });
-test("ordinary members can select only themselves, while Workspace admins can reserve another member", async () => {
+test("ordinary members can hand off existing tasks without unassigning others, while admins can unassign too", async () => {
   const owner = (name: string) =>
     `document.querySelector('[role="dialog"] button[aria-label="Change owner: ${name}"]')`;
   const menu = `document.querySelector('[role="menu"][aria-label="Change owner"]')`;
   const settled = `[...document.querySelectorAll('[role="dialog"], [role="menu"]')].every((element) => !element.closest("[data-entering]") && !element.getAnimations({ subtree: true }).some((animation) => animation.playState === "running"))`;
   await browser("set", "viewport", "1440", "1000");
 
-  // An ordinary member is offered only themselves, and cannot change a Task held by another.
   await browser("open", url);
   await waitFor(`${pageHydrated} && ${owner("Unassigned")} != null`, 60_000);
   await browser("eval", `${owner("Unassigned")}.click()`);
@@ -112,12 +111,16 @@ test("ordinary members can select only themselves, while Workspace admins can re
   const offered = await evaluate<string>(`${menu}.innerText`);
   await browser("screenshot", join(artifacts, "member-light.png"));
   expect(offered).toContain("Dev User");
-  expect(offered).not.toContain("Delegation peer");
-  expect(offered).not.toContain("Assignment owner");
-  await browser("open", reservedUrl);
-  await waitFor(`${pageHydrated} && ${owner("Delegation peer")}?.disabled === true`, 60_000);
+  expect(offered).toContain("Delegation peer");
+  expect(offered).toContain("Assignment owner");
 
-  // A Workspace admin may give it to another member.
+  await browser("open", reservedUrl);
+  await waitFor(`${pageHydrated} && ${owner("Delegation peer")}?.disabled === false`, 60_000);
+  await browser("eval", `${owner("Delegation peer")}.click()`);
+  await waitFor(`${menu} != null`);
+  const reservedMenu = await evaluate<string>(`${menu}.innerText`);
+  expect(reservedMenu).not.toContain("Unassigned");
+
   await db.workspaceMembership.update({
     where: { workspaceId_userId: { workspaceId, userId: DEV_BROWSER_USER.id } },
     data: { role: "admin" },
@@ -125,7 +128,7 @@ test("ordinary members can select only themselves, while Workspace admins can re
   await browser("open", reservedUrl);
   await waitFor(`${pageHydrated} && ${owner("Delegation peer")}?.disabled === false`, 60_000);
   await browser("eval", `${owner("Delegation peer")}.click()`);
-  await waitFor(`(${menu}?.innerText ?? "").includes("Delegation peer")`);
+  await waitFor(`(${menu}?.innerText ?? "").includes("Unassigned")`);
   await evaluate(
     `(document.documentElement.classList.remove("light-mode"), document.documentElement.classList.add("dark-mode"), true)`,
   );

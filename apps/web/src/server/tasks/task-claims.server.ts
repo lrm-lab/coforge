@@ -10,7 +10,7 @@ import {
   type TaskResult,
   type TaskView,
 } from "@lrm/coforge-sdk/internal";
-import { channelThreadRootWhere } from "#src/server/db/message-anchor.server";
+import { messageAnchorWhere } from "#src/server/db/message-anchor.server";
 import { AppError } from "#src/lib/app-error";
 import { storedTaskStatus, taskMember, taskSelection, type SelectedTask } from "./task-view.server";
 import { taskViewOf } from "./task-relations.server";
@@ -92,32 +92,55 @@ export function refuseUnclaimed(result: TaskResult): void {
   );
 }
 
-/** The top-level message `messageId` names (a full id or its short anchor) in the conversation. */
+export async function findSourceMessageRootId(
+  tx: Pick<Transaction, "message">,
+  conversationId: string,
+  messageId: string,
+): Promise<string | null> {
+  const anchor = MESSAGE_ANCHOR.test(messageId) ? messageId : undefined;
+  if (!anchor && !UUID_LIKE_PATTERN.test(messageId)) return null;
+  const messages = await tx.message.findMany({
+    where: anchor
+      ? { conversationId, id: messageAnchorWhere(anchor) }
+      : { conversationId, id: messageId },
+    take: 2,
+    select: { id: true, threadRootId: true },
+  });
+  if (messages.length !== 1) return null;
+  const matched = messages[0]!;
+  return matched.threadRootId ?? matched.id;
+}
+
 export async function findSourceMessage(
-  tx: Transaction,
+  tx: Pick<Transaction, "message">,
   conversationId: string,
   messageId: string,
 ) {
-  // A short anchor (eight hex, or the dashed twelve-hex display form from #88) is the uuid range
-  // it names, so the lookup stays an index range on the message id instead of reading every
-  // top-level message in the conversation.
   const anchor = MESSAGE_ANCHOR.test(messageId) ? messageId : undefined;
-  // Neither an anchor nor a whole id names no message; the id column would refuse the text.
   if (!anchor && !UUID_LIKE_PATTERN.test(messageId)) throw new AppError("NOT_FOUND");
+  const select = {
+    id: true,
+    body: true,
+    senderMemberId: true,
+    threadRootId: true,
+    mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
+  } as const;
   const messages = await tx.message.findMany({
     where: anchor
-      ? channelThreadRootWhere(conversationId, anchor)
-      : { conversationId, threadRootId: null, id: messageId },
+      ? { conversationId, id: messageAnchorWhere(anchor) }
+      : { conversationId, id: messageId },
     take: 2,
-    select: {
-      id: true,
-      body: true,
-      senderMemberId: true,
-      mentions: BROWSER_MESSAGE_MENTIONS_SELECT,
-    },
+    select,
   });
   if (messages.length !== 1) throw new AppError(messages.length ? "CONFLICT" : "NOT_FOUND");
-  return messages[0]!;
+  const matched = messages[0]!;
+  if (!matched.threadRootId) return { ...matched, sourceThreadReplyId: undefined };
+  const root = await tx.message.findFirst({
+    where: { conversationId, id: matched.threadRootId, threadRootId: null },
+    select,
+  });
+  if (!root) throw new AppError("NOT_FOUND");
+  return { ...root, sourceThreadReplyId: matched.id };
 }
 
 async function claimTask(
@@ -133,7 +156,7 @@ async function claimTask(
     if (
       existing.ownerMemberId === member.id &&
       existing.claimedAt !== null &&
-      (existing.status === "in_progress" || existing.status === "in_review")
+      existing.status === "in_progress"
     ) {
       if (member.agentId && existing.status === "in_progress" && !existing.executionSessions[0]) {
         await ensureTaskExecutionSession(tx, existing, member.agentId);
@@ -156,7 +179,9 @@ async function claimTask(
       {
         ownerMemberId: memberId(member),
         claimedAt: new Date(),
-        ...(existing.status === "todo" && { status: "in_progress" as const }),
+        ...((existing.status === "todo" || existing.status === "backlog") && {
+          status: "in_progress" as const,
+        }),
       },
     );
     return claimed;

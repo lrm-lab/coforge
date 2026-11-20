@@ -29,34 +29,35 @@ export async function taskWriteWithFreshness(
 ): Promise<TaskResult | undefined> {
   const heldOperation = FRESHNESS_HELD_OPERATIONS.includes(command.operation);
   if (!heldOperation && !FRESHNESS_ATTACH_OPERATIONS.includes(command.operation)) return undefined;
+  const sourceThreadCreate = command.operation === "create" && Boolean(command.messageId);
+  const holdKey = sourceThreadCreate ? `${target}:${command.messageId}` : target;
   if (heldOperation) {
-    // `--anyway` is only an exit from a hold that was actually offered for this target: without a
-    // prior hold it is refused, so the review cannot be skipped preemptively.
-    if (command.continueAnyway === true && !taskHoldOffered(agentId, target))
+    if (command.continueAnyway === true && !taskHoldOffered(agentId, holdKey))
       throw new AgentPreflightError(
         "No freshness hold was suggested for this target, so there is nothing to confirm: " +
           "review the messages with `coforge message read` first.",
         "INVALID_INPUT",
         { retryable: false },
       );
-    if (command.continueAnyway !== true) {
+    if (command.continueAnyway !== true && !sourceThreadCreate) {
       const held = await heldTaskResult(ports, agentId, command, target, agentApiKey);
       if (held) {
-        recordTaskHoldOffered(agentId, target);
+        recordTaskHoldOffered(agentId, holdKey);
         return held;
       }
     }
   }
   const { messageAttention } = ports;
-  const seenUpToSeq = Math.max(
-    messageAttention.modelSeenSequence(agentId, target),
-    command.seenUpToSeq ?? 0,
-  );
-  const seenExactSeqs = mergeSeenExactSeqs(
-    0,
-    command.seenExactSeqs ?? [],
-    messageAttention.seenExactSequences(agentId, target),
-  );
+  const seenUpToSeq = sourceThreadCreate
+    ? (command.seenUpToSeq ?? 0)
+    : Math.max(messageAttention.modelSeenSequence(agentId, target), command.seenUpToSeq ?? 0);
+  const seenExactSeqs = sourceThreadCreate
+    ? (command.seenExactSeqs ?? [])
+    : mergeSeenExactSeqs(
+        0,
+        command.seenExactSeqs ?? [],
+        messageAttention.seenExactSequences(agentId, target),
+      );
   const result = await ports.agentTask(
     {
       ...command,
@@ -66,12 +67,27 @@ export async function taskWriteWithFreshness(
     agentApiKey,
   );
   const shown = result.state === "held" ? (result.heldMessages ?? []) : (result.recentUnread ?? []);
-  if (result.state === "held") recordTaskHoldOffered(agentId, target);
-  if (shown.length > 0)
-    messageAttention.recordModelSeen(
-      agentId,
-      target,
-      Math.max(...shown.map(({ sequence }) => sequence)),
-    );
+  if (result.state === "held") recordTaskHoldOffered(agentId, holdKey);
+  if (shown.length > 0) {
+    if (sourceThreadCreate) {
+      const maxByTarget = new Map<string, number>();
+      for (const message of shown) {
+        const messageTarget = message.target;
+        if (!messageTarget) continue;
+        maxByTarget.set(
+          messageTarget,
+          Math.max(maxByTarget.get(messageTarget) ?? 0, message.sequence),
+        );
+      }
+      for (const [messageTarget, seq] of maxByTarget)
+        messageAttention.recordModelSeen(agentId, messageTarget, seq);
+    } else {
+      messageAttention.recordModelSeen(
+        agentId,
+        target,
+        Math.max(...shown.map(({ sequence }) => sequence)),
+      );
+    }
+  }
   return result;
 }

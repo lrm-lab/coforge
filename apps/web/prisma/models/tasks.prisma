@@ -17,6 +17,7 @@ model Task {
   resourceReceiptRecordedAt    DateTime?
   resourceTeardownOwnerAgentId String?             @db.Uuid
   resourceExpiryFollowupId     String?             @db.Uuid
+  /// backlog | todo | in_progress | done | closed (`tasks_status_check`).
   status                       String              @default("todo")
   revision                     Int                 @default(0)
   ownerMemberId                String?             @db.Uuid

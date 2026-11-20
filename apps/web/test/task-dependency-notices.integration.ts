@@ -56,17 +56,16 @@ test("a parent cannot go to review while a subtask is open, and its owner is tol
     });
     await run("one", { operation: "claim", number: parent! });
     const early = await refusal(
-      run("one", { operation: "update", number: parent!, status: "in_review" }),
+      run("one", { operation: "update", number: parent!, status: "done" }),
     );
     expect(early.code).toBe("CONFLICT");
     expect(early.errorId).toBe("task_subtasks_open");
     expect(early.hint).toContain(`#${first}`);
     expect(early.hint).toContain(`#${second}`);
-    // A manager moves it regardless, and back.
     await run("alice", {
       operation: "update",
       number: parent!,
-      status: "in_review",
+      status: "done",
     });
     await run("alice", {
       operation: "update",
@@ -83,7 +82,7 @@ test("a parent cannot go to review while a subtask is open, and its owner is tol
     await run("one", {
       operation: "update",
       number: parent!,
-      status: "in_review",
+      status: "done",
     });
   } finally {
     await db.$disconnect();

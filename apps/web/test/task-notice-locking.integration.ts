@@ -18,7 +18,6 @@ test("concurrent task writes in two channels neither deadlock nor lose a cross-c
       });
       await run("alice", { operation: "assign", number: a3!, assignee: `agent:${one.id}` });
       await run("two", { operation: "claim", number: b2! }, other.id);
-      await run("two", { operation: "update", number: b2!, status: "in_review" }, other.id);
 
       // Amending A#1 to wait for B#1 while B#2 is marked done, which unblocks A#3 in channel A.
       const both = Promise.all([

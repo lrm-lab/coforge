@@ -4,7 +4,7 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { handleAgentTaskPost } from "#src/routes/api/agent/v1/tasks";
 import { TaskBoard } from "#src/server/tasks/task-board.server";
 import { agentTaskPrincipal } from "#src/server/tasks/task-principal.server";
-import { SourceMessageTaken } from "#src/server/tasks/task-conversation-creation.server";
+import { TASK_SOURCE_MESSAGE_REQUIRED } from "#src/server/tasks/task-assign-reason.server";
 import {
   TASK_CREATES_RESOURCE_RETIRED,
   TASK_NOT_RESOURCE,
@@ -140,18 +140,34 @@ test("create makes a task with no message in the channel, followed by its creato
 });
 
 test("a retried create answers with the first task", async () => {
-  const command = { operation: "create", title: "Once", idempotencyKey: crypto.randomUUID() };
+  const command = {
+    operation: "create",
+    title: "Once",
+    messageId: sourceId,
+    idempotencyKey: crypto.randomUUID(),
+  };
   const first = await run("maker", command);
   const retry = await run("maker", command);
-  expect(retry.tasks[0]!.messageId).toBe(first.tasks[0]!.messageId);
+  expect(retry.tasks[0]!.id).toBe(first.tasks[0]!.id);
   expect(await db.task.count({ where: { workspaceId, title: "Once" } })).toBe(1);
 });
 
-test("someone else's live task on the message is named, and alongside makes another", async () => {
+test("an Agent create without --message-id is refused with TASK_SOURCE_MESSAGE_REQUIRED", async () => {
   await expect(
-    run("maker", { operation: "create", title: "Same message", messageId: sourceId }),
-  ).rejects.toBeInstanceOf(SourceMessageTaken);
-  // The holder building on their own message is not blocked.
+    run("maker", { operation: "create", title: "Missing source" }),
+  ).rejects.toMatchObject({
+    code: "INVALID_INPUT",
+    errorId: TASK_SOURCE_MESSAGE_REQUIRED,
+  });
+});
+
+test("multiple tasks can be created from the same source message with or without alongside", async () => {
+  const second = await run("maker", {
+    operation: "create",
+    title: "Same message",
+    messageId: sourceId,
+  });
+  expect(second.tasks).toHaveLength(1);
   const mine = await run("worker", { operation: "create", title: "Mine too", messageId: sourceId });
   expect(mine.tasks).toHaveLength(1);
   const beside = await run("maker", {
@@ -161,7 +177,7 @@ test("someone else's live task on the message is named, and alongside makes anot
     alongside: true,
   });
   expect(beside.tasks).toHaveLength(1);
-  expect(await db.task.count({ where: { sourceMessageId: sourceId } })).toBe(3);
+  expect(await db.task.count({ where: { sourceMessageId: sourceId } })).toBe(5);
 });
 
 test("claim by message and convert are refused, pointing at create", async () => {
@@ -173,8 +189,11 @@ test("claim by message and convert are refused, pointing at create", async () =>
       code: "CONFLICT",
       errorId: "task_v2_use_create",
     });
-  // Claiming a task by its number is unchanged.
-  const created = await run("maker", { operation: "create", title: "By number" });
+  const created = await run("maker", {
+    operation: "create",
+    title: "By number",
+    messageId: sourceId,
+  });
   const claimed = await run("worker", { operation: "claim", number: created.tasks[0]!.number });
   expect(claimed.tasks[0]!.owner?.handle).toBe(agents.worker.name);
 });
@@ -196,10 +215,15 @@ test("a source message from another channel is not found", async () => {
 });
 
 test("the assignee's queue note reads the new task's links: a blocked task gets none", async () => {
-  const blocker = await run("maker", { operation: "create", title: "Queue blocker" });
+  const blocker = await run("maker", {
+    operation: "create",
+    title: "Queue blocker",
+    messageId: sourceId,
+  });
   const blocked = await run("maker", {
     operation: "create",
     title: "Queue blocked",
+    messageId: sourceId,
     assignee: `@${agents.worker.name}`,
     blockedBy: [{ number: blocker.tasks[0]!.number }],
   });
@@ -211,10 +235,10 @@ test("the assignee's queue note reads the new task's links: a blocked task gets 
   });
   expect(notice.body).not.toContain("queue #");
   expect(notice.body).not.toContain("do it first");
-  // An unblocked sibling still names its place and who is ahead.
   const queued = await run("maker", {
     operation: "create",
     title: "Queue third",
+    messageId: sourceId,
     assignee: `@${agents.worker.name}`,
   });
   const queuedTask = await db.task.findUniqueOrThrow({ where: { id: queued.tasks[0]!.id } });
@@ -230,7 +254,7 @@ test("alongside needs a source message, and a create cannot create a resource", 
     run("maker", { operation: "create", title: "x", alongside: true }),
   ).rejects.toMatchObject({ code: "INVALID_INPUT" });
   await expect(
-    run("maker", { operation: "create", title: "x", createsResource: true }),
+    run("maker", { operation: "create", title: "x", messageId: sourceId, createsResource: true }),
   ).rejects.toMatchObject({ code: "INVALID_INPUT", errorId: TASK_CREATES_RESOURCE_RETIRED });
 });
 
@@ -238,6 +262,7 @@ test("a receipt on a task that is not a resource task says so instead of failing
   const created = await run("maker", {
     operation: "create",
     title: "No resource",
+    messageId: sourceId,
     priority: "low",
   });
   await expect(
@@ -330,9 +355,14 @@ test("createConversationTasks files a Task under an explicit Project and default
   const filed = await run("maker", {
     operation: "create",
     title: "Filed",
+    messageId: sourceId,
     project: project.slug,
   });
-  const unfiled = await run("maker", { operation: "create", title: "Unfiled" });
+  const unfiled = await run("maker", {
+    operation: "create",
+    title: "Unfiled",
+    messageId: sourceId,
+  });
   const tasks = await db.task.findMany({
     where: { workspaceId },
     select: { title: true, projectId: true },

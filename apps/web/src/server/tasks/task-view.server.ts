@@ -8,7 +8,7 @@ import {
   isRecord,
   TASK_BLOCKER_SATISFIED_STATUSES,
   TASK_PRIORITIES,
-  TASK_READ_STATUSES,
+  TASK_WRITE_STATUSES,
   taskDueState,
   type TaskConversationKind,
   type TaskMember,
@@ -152,12 +152,7 @@ export function taskMentions(task: {
 /** The statuses a Task finishes in. The board counts and pages them apart from the work in flight. */
 export const FINISHED_TASK_STATUSES = TASK_BLOCKER_SATISFIED_STATUSES;
 export type FinishedTaskStatus = (typeof FINISHED_TASK_STATUSES)[number];
-/**
- * The statuses of work in flight. Reads of unfinished Tasks match these rather than excluding the
- * finished ones: PostgreSQL ranges an `IN` list over a Task index, but must read every finished
- * Task in the Workspace to discard a `NOT IN`.
- */
-export const UNFINISHED_TASK_STATUSES = TASK_READ_STATUSES.filter(
+export const UNFINISHED_TASK_STATUSES = TASK_WRITE_STATUSES.filter(
   (status) => !(FINISHED_TASK_STATUSES as readonly string[]).includes(status),
 );
 

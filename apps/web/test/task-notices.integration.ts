@@ -141,7 +141,7 @@ test("claims, moves and unassignment write history and post no notice in the Tas
   const own = (body: string) => ({ body, thread: null });
 
   await run(asAgent, { operation: "claim", number: shipTask!.number });
-  await run(asAgent, { operation: "update", number: shipTask!.number, status: "in_review" });
+  await run(asAgent, { operation: "update", number: shipTask!.number, status: "backlog" });
   await run(asAlice, { operation: "update", number: shipTask!.number, status: "done" });
   await run(asAlice, { operation: "update", number: shipTask!.number, status: "closed" });
   expect(await noticesOf(shipTask!)).toEqual([]);
@@ -164,7 +164,7 @@ test("claims, moves and unassignment write history and post no notice in the Tas
   expect(await noticesOf(docsTask!)).toEqual([assigned, assigned]);
 
   await run(asBob, { operation: "claim", number: testsTask!.number });
-  await run(asBob, { operation: "update", number: testsTask!.number, status: "in_review" });
+  await run(asBob, { operation: "update", number: testsTask!.number, status: "backlog" });
   expect(await noticesOf(testsTask!)).toEqual([]);
 
   const duplicates = await db.systemMessage.count({

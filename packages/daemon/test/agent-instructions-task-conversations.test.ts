@@ -11,10 +11,11 @@ test("the prompt always carries the task conversations block with the quoted-ref
   expect(prompt).toContain("ALWAYS quote refs (an unquoted # starts a shell comment)");
   expect(prompt).toContain("coforge task view|read|reply|follow '<ref>'");
   expect(prompt).toContain("--message-id");
-  expect(prompt).toContain("--alongside");
+  expect(prompt).toContain("--status backlog|todo|in_progress");
+  expect(prompt).toContain("`in_review` retired");
+  expect(prompt).toContain("1-on-1 DM");
   expect(prompt).toContain("--blocked-by");
   expect(prompt).toContain("--parent");
-  // A task belongs to a Project when its creator can tell which one; the manual's rule.
   expect(prompt).toContain("--project <slug>");
   expect(prompt).toContain("workspace info --projects");
   expect(prompt).toContain("else ask in the task");

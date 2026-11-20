@@ -46,21 +46,50 @@ test("An Agent's own Task list covers its channels and DMs and says what it leav
   const archived = await channel("old");
   const hidden = await channel("hidden");
   const left = await channel("left");
-  await db.conversation.create({
+  const direct = await db.conversation.create({
     data: {
       workspaceId: workspace.id,
       directKey: [alice.id, agent.id].sort().join(":"),
       members: { create: [{ userId: alice.id }, { agentId: agent.id }] },
     },
   });
+  const sourceByTarget = new Map<string, string>();
+  for (const [target, conv] of [
+    [`#${work.channelName}`, work],
+    [`#${archived.channelName}`, archived],
+    [`#${hidden.channelName}`, hidden],
+    [`#${left.channelName}`, left],
+    [`@${alice.username}`, direct],
+  ] as const) {
+    const sender = await db.conversationMember.findFirstOrThrow({
+      where: { conversationId: conv.id, userId: alice.id },
+    });
+    const message = await db.message.create({
+      data: {
+        workspaceId: workspace.id,
+        conversationId: conv.id,
+        sequence: 1,
+        senderMemberId: sender.id,
+        body: `Seed ${target}`,
+      },
+    });
+    sourceByTarget.set(target, message.id);
+  }
   const board = new TaskBoard(db);
   const asAlice: TaskPrincipal = { workspaceId: workspace.id, userId: alice.id };
   const asAgent: TaskPrincipal = { workspaceId: workspace.id, agentId: agent.id };
   const run = (principal: TaskPrincipal, command: TaskCommandWithout<"idempotencyKey">) =>
     board.execute(principal, { idempotencyKey: crypto.randomUUID(), ...command });
   const selfAssigned = async (target: string, title: string) =>
-    (await run(asAgent, { operation: "create", target, title, assignee: `@${agent.name}` }))
-      .tasks[0]!;
+    (
+      await run(asAgent, {
+        operation: "create",
+        target,
+        messageId: sourceByTarget.get(target),
+        title,
+        assignee: `@${agent.name}`,
+      })
+    ).tasks[0]!;
   const summary = (task: TaskView) => ({
     channelRef: task.channelRef,
     number: task.number,
@@ -76,7 +105,6 @@ test("An Agent's own Task list covers its channels and DMs and says what it leav
       assignee: `@${agent.name}`,
     });
     const reserved = reservedResult.tasks[0]!;
-    // A person's assignment of an Agent is a direct instruction: "do it first", never a number.
     expect((await assignmentNotice(db, reserved.id)).body).toBe(
       `@${alice.username} assigned you task #${reserved.number}: Reserved for the Agent — do it first`,
     );
@@ -86,13 +114,13 @@ test("An Agent's own Task list covers its channels and DMs and says what it leav
     const startedResult = await run(asAgent, {
       operation: "create",
       target: `#${work.channelName}`,
+      messageId: sourceByTarget.get(`#${work.channelName}`),
       title: "Started by the Agent",
       assignee: `@${agent.name}`,
     });
     const started = startedResult.tasks[0]!;
     const finished = await selfAssigned(`#${work.channelName}`, "Finished");
-    // A Task moves forward through the board, so Done is reached through In Review.
-    for (const status of ["in_progress", "in_review", "done"] as const)
+    for (const status of ["in_progress", "done"] as const)
       await run(asAgent, {
         operation: "update",
         target: `#${work.channelName}`,
@@ -102,6 +130,7 @@ test("An Agent's own Task list covers its channels and DMs and says what it leav
     const inDirectResult = await run(asAgent, {
       operation: "create",
       target: `@${alice.username}`,
+      messageId: sourceByTarget.get(`@${alice.username}`),
       title: "Direct work",
       assignee: `@${agent.name}`,
     });

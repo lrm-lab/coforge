@@ -91,9 +91,11 @@ export function creationChanges(task: SelectedTask): TaskHistoryChange[] {
   return changes;
 }
 
-/** What one write changed on a Task's own columns, in the order history lists it. Its blockers and
- * parent are not columns: `planRelationAmend` plans those events and `commitTaskChange` appends them. */
-export function taskChanges(before: SelectedTask, after: SelectedTask): TaskHistoryChange[] {
+export function taskChanges(
+  before: SelectedTask,
+  after: SelectedTask,
+  options: { statusReason?: string } = {},
+): TaskHistoryChange[] {
   const changes: TaskHistoryChange[] = [];
   if (before.ownerMemberId !== after.ownerMemberId) changes.push(assigneeChange(after));
   if (before.status !== after.status)
@@ -102,6 +104,7 @@ export function taskChanges(before: SelectedTask, after: SelectedTask): TaskHist
       payload: {
         from: storedTaskStatus(before.status, { number: before.number }),
         to: storedTaskStatus(after.status, { number: after.number }),
+        ...(options.statusReason ? { reason: options.statusReason } : {}),
       },
     });
   if (before.priority !== after.priority)

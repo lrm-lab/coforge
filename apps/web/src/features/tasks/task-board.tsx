@@ -1,7 +1,7 @@
 import {
-  TASK_READ_STATUSES,
+  TASK_CREATE_STATUSES,
   TASK_WRITE_STATUSES,
-  type TaskWriteStatus,
+  type TaskCreateStatus,
   type TaskView,
 } from "@lrm/coforge-sdk/internal";
 
@@ -85,13 +85,11 @@ export function TaskBoard<T extends BoardTask>({
   const runCommand = useLatestCallback((task: T, command: OverviewTaskCommand) =>
     onCommand ? onCommand(task, command) : Promise.resolve(),
   );
-  const availableStatuses = tasks.some((task) => task.status === "backlog")
-    ? TASK_READ_STATUSES
-    : TASK_WRITE_STATUSES;
+  const availableStatuses = TASK_WRITE_STATUSES;
   const showTree = tree !== undefined;
   const [hiddenColumns, setColumnHidden] = useTaskHiddenColumns();
   const [createOpen, setCreateOpen] = useState(false);
-  const [creating, setCreating] = useState<TaskWriteStatus | null>(null);
+  const [creating, setCreating] = useState<TaskCreateStatus | null>(null);
   const filtered =
     statuses.length > 0 ||
     filter.owners.length > 0 ||
@@ -216,7 +214,12 @@ export function TaskBoard<T extends BoardTask>({
             showMoveError={!conversation}
             adding={
               newTaskChoice && (onCommand || commandsPending) && canFile
-                ? { statuses: TASK_WRITE_STATUSES.filter(canCreateIn), onAdd: setCreating }
+                ? {
+                    statuses: TASK_CREATE_STATUSES,
+                    onAdd: (next) => {
+                      if (canCreateIn(next)) setCreating(next);
+                    },
+                  }
                 : undefined
             }
             currentMemberId={(task) => task.currentMemberId ?? null}

@@ -7,20 +7,39 @@ const base = {
   target: "#general",
 } as const;
 
-test("Backlog is readable but cannot be written during compatibility rollout", () => {
-  expect(() => validateTaskRequest({ ...base, status: "backlog" as never })).not.toThrow();
-  expect(() => validateTaskRequest({ ...base, statuses: ["backlog" as never] })).not.toThrow();
+test("Backlog is readable and writable; create accepts only backlog, todo, or in_progress", () => {
+  expect(() => validateTaskRequest({ ...base, status: "backlog" })).not.toThrow();
+  expect(() => validateTaskRequest({ ...base, statuses: ["backlog"] })).not.toThrow();
   expect(() =>
     validateTaskRequest({
       ...base,
       operation: "create",
       title: "Park",
-      status: "backlog" as never,
+      status: "backlog",
     }),
-  ).toThrow();
+  ).not.toThrow();
   expect(() =>
-    validateTaskRequest({ ...base, operation: "update", number: 1, status: "backlog" as never }),
-  ).toThrow();
+    validateTaskRequest({
+      ...base,
+      operation: "create",
+      title: "Done",
+      status: "done" as never,
+    }),
+  ).toThrow("invalid Task status");
+  expect(() =>
+    validateTaskRequest({
+      ...base,
+      operation: "create",
+      title: "Review",
+      status: "in_review" as never,
+    }),
+  ).toThrow("invalid Task status");
+  expect(() =>
+    validateTaskRequest({ ...base, operation: "update", number: 1, status: "backlog" }),
+  ).not.toThrow();
+  expect(() =>
+    validateTaskRequest({ ...base, operation: "update", number: 1, status: "in_review" }),
+  ).not.toThrow();
 });
 
 test("validateTaskRequest accepts a well-formed list command", () => {
@@ -146,6 +165,15 @@ test("validateTaskRequest accepts a priority on create, convert and update, and 
   expect(() =>
     validateTaskRequest({ ...update, priority: "low", status: "in_review" }),
   ).not.toThrow();
+  expect(() =>
+    validateTaskRequest({ ...update, status: "backlog", reason: "Waiting on spec" }),
+  ).not.toThrow();
+  expect(() => validateTaskRequest({ ...update, status: "backlog", reason: 123 as never })).toThrow(
+    "reason is only valid for assign or update",
+  );
+  expect(() =>
+    validateTaskRequest({ ...base, operation: "create", title: "x", reason: "nope" } as never),
+  ).toThrow("reason is only valid for assign or update");
   expect(() =>
     validateTaskRequest({ ...base, operation: "create", title: "x", priority: "urgent" }),
   ).not.toThrow();

@@ -2,6 +2,7 @@ import type { AgentTaskConversationRequest } from "@lrm/coforge-sdk/agent";
 import {
   decodeAgentTaskFollowResponse,
   decodeAgentTaskFollowingResponse,
+  decodeAgentTaskReplyReconcileResponse,
   decodeAgentTaskReplyResponse,
   decodeAgentTaskViewResponse,
   isHistoryEventList,
@@ -30,7 +31,6 @@ export type TaskConversationTransport = {
 
 const HEREDOC_DELIMITER = "COFORGE_MESSAGE";
 
-/** A server answer that does not have the shape its route promises. */
 function decoded<T>(decode: (value: unknown) => T, value: unknown): T {
   try {
     return decode(value);
@@ -53,17 +53,41 @@ function decodeReadWindow(value: unknown): ReadWindowResponse {
   return value as ReadWindowResponse;
 }
 
-/** A reply that failed in transit, or at a 5xx, may or may not have been posted: the server
- * answers a repeat of the same key with the first reply, so one repeat cannot post it twice. */
 async function sendReply(
   send: (request: AgentTaskConversationRequest) => Promise<unknown>,
-  request: AgentTaskConversationRequest,
-): Promise<unknown> {
+  body: Record<string, unknown>,
+): Promise<{ raw: unknown; reconciled: boolean }> {
   try {
-    return await send(request);
+    return { raw: await send({ route: "reply", body }), reconciled: false };
   } catch (error) {
     if (!(error instanceof CliError && error.retryable)) throw error;
-    return send(request);
+    let probe: unknown;
+    try {
+      probe = await send({
+        route: "reply",
+        body: {
+          channel: body.channel,
+          task_number: body.task_number,
+          idempotencyKey: body.idempotencyKey,
+          reconcileOnly: true,
+        },
+      });
+    } catch (probeError) {
+      if (probeError instanceof CliError && probeError.code === "INVALID_INPUT")
+        return { raw: await send({ route: "reply", body }), reconciled: false };
+      throw probeError;
+    }
+    const reconciled = (() => {
+      try {
+        return decodeAgentTaskReplyReconcileResponse(probe);
+      } catch {
+        return undefined;
+      }
+    })();
+    if (reconciled?.state === "committed") return { raw: reconciled, reconciled: true };
+    if (reconciled?.state === "not_found")
+      return { raw: await send({ route: "reply", body }), reconciled: false };
+    return { raw: probe, reconciled: false };
   }
 }
 
@@ -116,19 +140,21 @@ async function runReply(
       ...(mentions ? { mentions } : {}),
       ...(converted.attachmentIds ? { attachmentIds: converted.attachmentIds } : {}),
     };
-    const reply = decoded(
-      decodeAgentTaskReplyResponse,
-      await sendReply(send, { route: "reply", body }),
-    );
-    return json
-      ? JSON.stringify({
-          ok: true,
-          data: reply,
-          ...(converted.convertedAttachmentId
-            ? { convertedToAttachmentId: converted.convertedAttachmentId }
-            : {}),
-        })
-      : `${formatTaskReply(task.ref, reply)}${formatLongMessageConvertedSuffix(converted.convertedAttachmentId)}`;
+    const outcome = await sendReply(send, body);
+    const reply = decoded(decodeAgentTaskReplyResponse, outcome.raw);
+    if (json) {
+      return JSON.stringify({
+        ok: true,
+        data: reply,
+        ...(converted.convertedAttachmentId
+          ? { convertedToAttachmentId: converted.convertedAttachmentId }
+          : {}),
+      });
+    }
+    const base = `${formatTaskReply(task.ref, reply)}${formatLongMessageConvertedSuffix(converted.convertedAttachmentId)}`;
+    return outcome.reconciled
+      ? `${base}\nThe original response was lost, so delivery details are unavailable; the reply was not sent twice.`
+      : base;
   } catch (error) {
     throw error instanceof CliError && json ? withOutputMode(error, "json") : error;
   }

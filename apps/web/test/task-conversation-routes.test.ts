@@ -119,11 +119,16 @@ test("follow and unfollow answer ok with what changed; an unfollow reason is bou
   expect(tooLong.status).toBe(400);
 });
 
-test("a refusal keeps its status", async () => {
+test("a refusal keeps its status and in-progress reconcile returns 409 retryable", async () => {
+  const { MessageRequestInProgressError } =
+    await import("#src/server/conversations/message-request-idempotency.server");
   const refusing = {
     ...service,
     follow: async () => {
       throw new AppError("NOT_FOUND");
+    },
+    reconcileReply: async () => {
+      throw new MessageRequestInProgressError();
     },
   };
   const response = await handleTaskFollowPost(
@@ -132,6 +137,16 @@ test("a refusal keeps its status", async () => {
     refusing as never,
   );
   expect(response.status).toBe(404);
+  const inProgress = await handleTaskReplyPost(
+    post({ channel: "#c", task_number: 7, idempotencyKey: "k-busy", reconcileOnly: true }),
+    principal,
+    refusing as never,
+  );
+  expect(inProgress.status).toBe(409);
+  expect(await inProgress.json()).toMatchObject({
+    code: "MESSAGE_REQUEST_IN_PROGRESS",
+    retryable: true,
+  });
 });
 
 test("following lists the tasks the Agent follows", async () => {
@@ -172,9 +187,44 @@ test("idle-nudge passes the request on; an empty body is no options, a bad one i
     send: false,
     reason: "no_change",
   });
-  await handleTaskIdleNudgePost(post({ freshSession: true, backgroundTasks: 2 }), nudge);
-  expect(asked).toEqual([{}, { freshSession: true, backgroundTasks: 2 }]);
+  await handleTaskIdleNudgePost(
+    post({ freshSession: true, backgroundTasks: 2, rulesShown: true }),
+    nudge,
+  );
+  expect(asked).toEqual([{}, { freshSession: true, backgroundTasks: 2, rulesShown: true }]);
   for (const body of [{ backgroundTasks: 10_001 }, { backgroundTasks: -1 }, { fresh: true }])
     expect((await handleTaskIdleNudgePost(post(body), nudge)).status).toBe(400);
   expect(asked).toHaveLength(2);
+});
+
+test("reply with reconcileOnly probes reconcileReply and requires idempotencyKey", async () => {
+  const reconciler = {
+    ...service,
+    reconcileReply: record("reconcileReply", {
+      state: "committed",
+      messageId: "m-reconciled",
+      sequence: 9,
+      idempotencyKey: "k-1",
+    }),
+  };
+  const ok = await handleTaskReplyPost(
+    post({ channel: "#c", task_number: 7, idempotencyKey: "k-1", reconcileOnly: true }),
+    principal,
+    reconciler as never,
+  );
+  expect(ok.status).toBe(200);
+  expect(await ok.json()).toEqual({
+    state: "committed",
+    messageId: "m-reconciled",
+    sequence: 9,
+    idempotencyKey: "k-1",
+  });
+  expect(calls.at(-1)).toEqual(["reconcileReply", principal, { target: "#c", number: 7 }, "k-1"]);
+
+  const missingKey = await handleTaskReplyPost(
+    post({ channel: "#c", task_number: 7, reconcileOnly: true }),
+    principal,
+    reconciler as never,
+  );
+  expect(missingKey.status).toBe(400);
 });

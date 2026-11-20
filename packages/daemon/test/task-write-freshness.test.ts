@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -121,10 +121,54 @@ test("--anyway right after a hold executes the write", async () => {
 });
 
 test("--anyway without a prior hold is refused as a local precondition", async () => {
-  // A different Agent: the offer store is process-wide, and the earlier tests offered for agent-1.
   const fresh = freshDeps("agent-2");
   fresh.markRead(9);
   expect(
     taskWriteWithFreshness(fresh.deps, "agent-2", command({ continueAnyway: true }), "#c", "key"),
   ).rejects.toThrow(AgentPreflightError);
+});
+
+test("a create with --message-id bypasses channel top-level freshness and records thread holds on the thread target", async () => {
+  const fresh = freshDeps("agent-3");
+  fresh.attention.bindConversation("agent-3", "#c:msg-1234", "conversation-1");
+  fresh.attention.recordModelSeen("agent-3", "#c", 50);
+  fresh.markRead(60);
+  const sent: TaskCommand[] = [];
+  const deps = {
+    ...fresh.deps,
+    agentTask: async (cmd: TaskCommand) => {
+      sent.push(cmd);
+      return {
+        idempotencyKey: cmd.idempotencyKey,
+        tasks: [],
+        state: "held" as const,
+        heldMessages: [
+          {
+            id: "r1",
+            sequence: 55,
+            target: "#c:msg-1234",
+            senderKind: "human" as const,
+            senderHandle: "ada",
+            senderDescription: "",
+            body: "thread reply",
+            createdAt: "now",
+            attachments: [],
+          },
+        ],
+      };
+    },
+  };
+  const result = await taskWriteWithFreshness(
+    deps,
+    "agent-3",
+    command({ messageId: "msg-1234" }),
+    "#c",
+    "key",
+  );
+  expect(result).toMatchObject({ state: "held" });
+  expect(sent).toHaveLength(1);
+  expect(sent[0]!.seenUpToSeq).toBeUndefined();
+  expect(fresh.attention.modelSeenSequence("agent-3", "#c")).toBe(50);
+  expect(fresh.attention.modelSeenSequence("agent-3", "#c:msg-1234")).toBe(55);
+  expect(taskHoldOffered("agent-3", "#c:msg-1234")).toBe(true);
 });

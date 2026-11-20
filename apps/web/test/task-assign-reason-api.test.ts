@@ -43,28 +43,26 @@ async function post(command: Record<string, unknown>) {
   return { response, received, body: (await response.json()) as { error?: string; code?: string } };
 }
 
-test("an API assignment carries a 200-character single line as given", async () => {
-  const reason = "x".repeat(200);
+test("an API assignment carries a 500-character reason and folds whitespace/newlines", async () => {
+  const reason = "x".repeat(500);
   const { response, received } = await post({ ...assignCommand, reason });
   expect(response.status).toBe(200);
   expect(received?.reason).toBe(reason);
+
+  const wrapped = await post({
+    ...assignCommand,
+    reason: "  finish the daemon side first\n  and then say so  ",
+  });
+  expect(wrapped.response.status).toBe(200);
+  expect(wrapped.received?.reason).toBe("  finish the daemon side first\n  and then say so  ");
 });
 
-test("an API assignment refuses a reason longer than the one line may be", async () => {
-  const { response, body, received } = await post({ ...assignCommand, reason: "x".repeat(201) });
+test("an API assignment refuses a reason longer than 500 characters", async () => {
+  const { response, body, received } = await post({ ...assignCommand, reason: "x".repeat(501) });
   expect(response.status).toBe(400);
   expect(body.code).toBe("INVALID_INPUT");
-  expect(body.error).toBe("an assignment's reason must be at most 200 characters");
+  expect(body.error).toBe("an assignment's reason must be at most 500 characters");
   expect(received).toBeUndefined();
-});
-
-test("an API assignment refuses a reason that wraps", async () => {
-  const { response, body } = await post({
-    ...assignCommand,
-    reason: "finish the daemon side first\nand then say so",
-  });
-  expect(response.status).toBe(400);
-  expect(body.error).toBe("an assignment's reason must be a single line");
 });
 
 test("an API assignment refuses a reason that says nothing", async () => {
@@ -73,24 +71,41 @@ test("an API assignment refuses a reason that says nothing", async () => {
   expect(body.error).toBe("an assignment's reason must say something");
 });
 
-test("only an assignment takes a reason", async () => {
-  const { response } = await post({
+test("only an assignment or a backlog status update takes a reason", async () => {
+  const unassign = await post({
     ...assignCommand,
     operation: "unassign",
     assignee: undefined,
     reason: "why not",
   });
-  expect(response.status).toBe(400);
+  expect(unassign.response.status).toBe(400);
+
+  const backlog = await post({
+    ...assignCommand,
+    operation: "update",
+    assignee: undefined,
+    status: "backlog",
+    reason: "waiting for upstream API",
+  });
+  expect(backlog.response.status).toBe(200);
+
+  const nonBacklog = await post({
+    ...assignCommand,
+    operation: "update",
+    assignee: undefined,
+    status: "done",
+    reason: "not allowed here",
+  });
+  expect(nonBacklog.response.status).toBe(400);
 });
 
 test("the board's own gate names the reason refusal for an Agent to read", () => {
-  // The route returns a hint only for the ids written for Agents; this one is.
   try {
-    validateTaskCommand({ ...assignCommand, reason: "x".repeat(201) } as never);
+    validateTaskCommand({ ...assignCommand, reason: "x".repeat(501) } as never);
     throw new Error("the over-long reason should have been refused");
   } catch (error) {
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).errorId).toBe(TASK_ASSIGN_REASON_INVALID);
-    expect((error as AppError).hint).toContain("200 characters");
+    expect((error as AppError).hint).toContain("500 characters");
   }
 });

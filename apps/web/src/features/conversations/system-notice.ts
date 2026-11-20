@@ -197,7 +197,7 @@ const changed = <T>(value: unknown, check: (value: unknown) => value is T) =>
 const listOf = <T>(value: unknown, check: (value: unknown) => value is T) =>
   Array.isArray(value) && value.every(check);
 
-const STATUSES = new Set(["todo", "in_progress", "in_review", "done", "closed"]);
+const STATUSES = new Set(["backlog", "todo", "in_progress", "in_review", "done", "closed"]);
 const PRIORITIES = new Set(["urgent", "high", "medium", "low", "none"]);
 
 /** Whether a stored `kind`/`params` pair is one a renderer can trust. The backfill test runs it

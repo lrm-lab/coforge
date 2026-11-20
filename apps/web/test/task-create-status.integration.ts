@@ -51,29 +51,31 @@ const run = (command: Record<string, unknown>) =>
     ...command,
   } as Parameters<TaskBoard["execute"]>[1]);
 
-test("a create opens the Task in the column it was made from", async () => {
-  // A column whose status needs a hand takes the create with the assignee the form named; the
-  // Task waits there without being started (only a self-assign into In progress starts it).
-  const [inReview] = (
+test("a create opens the Task in backlog, todo, or in_progress", async () => {
+  const [backlog] = (
     await run({
       operation: "create",
-      title: "Waiting",
+      title: "Parked idea",
       assignee: `@${ada.username}`,
-      status: "in_review",
+      status: "backlog",
     })
   ).tasks;
-  expect(inReview).toMatchObject({ status: "in_review" });
-  const row = await db.task.findUniqueOrThrow({ where: { id: inReview!.id } });
+  expect(backlog).toMatchObject({ status: "backlog" });
+  const row = await db.task.findUniqueOrThrow({ where: { id: backlog!.id } });
   expect(row.claimedAt).toBeNull();
-  // To do and Closed may be nobody's, so a column of theirs takes an ownerless create.
-  const [closed] = (await run({ operation: "create", title: "Dropped", status: "closed" })).tasks;
-  expect(closed).toMatchObject({ status: "closed" });
+
+  const [inProgress] = (
+    await run({ operation: "create", title: "Ownerless active", status: "in_progress" })
+  ).tasks;
+  expect(inProgress).toMatchObject({ status: "in_progress", owner: null });
 });
 
-test("a create into a status nobody may hold is refused", async () => {
-  await expect(
-    run({ operation: "create", title: "Ownerless", status: "in_progress" }),
-  ).rejects.toMatchObject({ code: "CONFLICT" });
+test("a create refuses non-create statuses such as in_review, done, and closed", async () => {
+  for (const status of ["in_review", "done", "closed"]) {
+    await expect(
+      run({ operation: "create", title: `Bad ${status}`, status }),
+    ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  }
 });
 
 test("the defaults stay: a self-assign starts, an assigneeless create waits in todo", async () => {

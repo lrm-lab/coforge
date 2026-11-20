@@ -3,7 +3,7 @@ import type { AgentMessageRecord } from "./local-daemon";
 import { CHANNEL_NAME_PATTERN } from "./channel-references";
 import type { TaskPriority, TaskPriorityLevel } from "./task-order";
 
-import type { TaskStatus, TaskWriteStatus } from "./task-status";
+import type { TaskCreateStatus, TaskStatus, TaskWriteStatus } from "./task-status";
 export * from "./task-status";
 
 export type TaskPeerKind = "human" | "agent";
@@ -77,9 +77,7 @@ export function isBlockerSatisfied(status: string): boolean {
 export const MAX_TASK_BLOCKERS = 20;
 /** The deepest a subtask tree may nest: a top-level Task is level 1. */
 export const MAX_TASK_TREE_DEPTH = 5;
-/** The longest handover sentence an assignment may carry: it is shown next to the assignment, so
- * it stays one readable line rather than a description. */
-export const TASK_ASSIGN_REASON_MAX_LENGTH = 200;
+export const TASK_ASSIGN_REASON_MAX_LENGTH = 500;
 
 /** One node of a Task's subtask tree as `task show` reads it. A hidden node has no children read. */
 export type TaskTreeNode =
@@ -161,6 +159,7 @@ export type TaskView = {
   earlierDiscussion?: { threadRootId: string; replyCount: number };
   /** The channel message the task was made from (`create --message-id`). */
   sourceMessageId?: string | null;
+  sourceThreadReplyId?: string | null;
   /** The channel message the task was made from, as a card or `task show` shows it; null when it
    * was made from none. `threadRootId` is set when that message is a reply. */
   sourceMessage?: {
@@ -196,7 +195,7 @@ export type TaskClaimResult = {
 /** One Task change as history records it: `payload` carries the facts its `eventType` names. */
 export type TaskHistoryChange =
   | { eventType: "created"; payload: { taskNumber: number; status: TaskStatus } }
-  | { eventType: "status_changed"; payload: { from: TaskStatus; to: TaskStatus } }
+  | { eventType: "status_changed"; payload: { from: TaskStatus; to: TaskStatus; reason?: string } }
   | {
       eventType: "assignee_changed";
       /** A User or Agent id, both null when the Task was unassigned. */
@@ -268,7 +267,9 @@ export type TaskOperation =
 export type TaskCommand = TaskCommandFields &
   (
     | { operation: "list"; status?: TaskStatus | "all" }
-    | { operation: Exclude<TaskOperation, "list">; status?: TaskWriteStatus }
+    | { operation: "create"; status?: TaskCreateStatus }
+    | { operation: "update"; status?: TaskStatus }
+    | { operation: Exclude<TaskOperation, "list" | "create" | "update">; status?: TaskWriteStatus }
   );
 export type TaskWriteCommand = Extract<TaskCommand, { operation: Exclude<TaskOperation, "list"> }>;
 

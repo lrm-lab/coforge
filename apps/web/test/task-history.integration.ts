@@ -58,6 +58,15 @@ test("Task changes record history events with their before and after state", asy
     },
     include: { members: true },
   });
+  const sourceMessage = await db.message.create({
+    data: {
+      workspaceId: workspace.id,
+      conversationId: channel.id,
+      senderMemberId: channel.members.find((member) => member.userId === alice.id)!.id,
+      body: "History seed",
+      sequence: 1,
+    },
+  });
   const board = new TaskBoard(db);
   const asAlice = { workspaceId: workspace.id, userId: alice.id };
   const asBob = { workspaceId: workspace.id, userId: bob.id };
@@ -84,15 +93,14 @@ test("Task changes record history events with their before and after state", asy
     const task = created.tasks[0]!;
     await run(asBob, { operation: "update", number: task.number, status: "in_progress" });
     await run(asBob, { operation: "update", number: task.number, status: "in_progress" });
-    await run(asBob, { operation: "update", number: task.number, status: "in_review" });
+    await run(asBob, { operation: "update", number: task.number, status: "backlog" });
     await run(asAlice, {
       operation: "amend",
       number: task.number,
       title: "Ship task history",
     });
     await run(asAlice, { operation: "update", number: task.number, status: "done" });
-    // A done Task keeps its owner; it reopens before the assignee can be removed.
-    await run(asAlice, { operation: "update", number: task.number, status: "in_review" });
+    await run(asAlice, { operation: "update", number: task.number, status: "todo" });
     await run(asAlice, { operation: "unassign", number: task.number });
 
     expect(
@@ -128,7 +136,7 @@ test("Task changes record history events with their before and after state", asy
         seq: 4,
         eventType: "status_changed",
         ...byBob,
-        payload: { from: "in_progress", to: "in_review" },
+        payload: { from: "in_progress", to: "backlog" },
       },
       {
         seq: 5,
@@ -143,25 +151,19 @@ test("Task changes record history events with their before and after state", asy
         seq: 6,
         eventType: "status_changed",
         ...byAlice,
-        payload: { from: "in_review", to: "done" },
+        payload: { from: "backlog", to: "done" },
       },
       {
         seq: 7,
         eventType: "status_changed",
         ...byAlice,
-        payload: { from: "done", to: "in_review" },
+        payload: { from: "done", to: "todo" },
       },
       {
         seq: 8,
         eventType: "assignee_changed",
         ...byAlice,
         payload: { assigneeId: null, assigneeType: null },
-      },
-      {
-        seq: 9,
-        eventType: "status_changed",
-        ...byAlice,
-        payload: { from: "in_review", to: "todo" },
       },
     ]);
 
@@ -201,12 +203,6 @@ test("Task changes record history events with their before and after state", asy
       },
       {
         seq: 5,
-        eventType: "status_changed",
-        ...byAgent,
-        payload: { from: "in_progress", to: "todo" },
-      },
-      {
-        seq: 6,
         eventType: "assignee_changed",
         ...byAlice,
         payload: agentAssignee,
@@ -216,6 +212,7 @@ test("Task changes record history events with their before and after state", asy
     const started = (
       await run(asAgent, {
         operation: "create",
+        messageId: sourceMessage.id,
         title: "Started by me",
         assignee: `@${agent.name}`,
       })

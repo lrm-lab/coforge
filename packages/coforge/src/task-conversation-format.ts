@@ -69,6 +69,11 @@ export function formatTaskView(view: AgentTaskViewResponse): string {
         ]
       : []),
     ...(view.task.sourceMessage ? [sourceLine(view)] : []),
+    ...(view.earlierDiscussion && view.earlierDiscussion.replyCount > 0
+      ? [
+          `Source thread discussion: ${view.earlierDiscussion.target} - ${view.earlierDiscussion.replyCount} ${view.earlierDiscussion.replyCount === 1 ? "reply" : "replies"}; read with: coforge message read --target "${view.earlierDiscussion.target}"`,
+        ]
+      : []),
     followingLine(view),
     view.task.description
       ? `Current description: ${fenceMessageBody(view.task.description)}`
@@ -78,6 +83,11 @@ export function formatTaskView(view: AgentTaskViewResponse): string {
     ...formatRelatedTaskMemory(view.relatedMemory),
     "",
     "Next:",
+    ...(ref.startsWith("dm:@")
+      ? [
+          `  Answer on the DM timeline (1-on-1 DM, unless they wrote in this task): coforge message send --target "${ref.replace(/^dm:/, "").replace(/:#\d+$/, "")}"`,
+        ]
+      : []),
     `  Reply (the body is read from stdin): coforge task reply "${ref}"`,
     `  Read the discussion: coforge task read "${ref}"${older}`,
     ...(view.hasOlder && view.recentEvents

@@ -176,12 +176,12 @@ test("a multi-hop reopen to In Progress also restarts the Agent's session", asyn
         expectedRevision: started.revision,
       })
     ).tasks[0]!;
-    const inReview = (
+    const parked = (
       await f.board.execute(f.actor, {
         ...f.command(),
         operation: "update",
         number: done.number,
-        status: "in_review",
+        status: "backlog",
         expectedRevision: done.revision,
       })
     ).tasks[0]!;
@@ -190,9 +190,9 @@ test("a multi-hop reopen to In Progress also restarts the Agent's session", asyn
     await f.board.execute(f.actor, {
       ...f.command(),
       operation: "update",
-      number: inReview.number,
+      number: parked.number,
       status: "in_progress",
-      expectedRevision: inReview.revision,
+      expectedRevision: parked.revision,
     });
     const session = await sessionOf();
     expect(session.status).toBe("starting");
@@ -367,7 +367,7 @@ test("assigning an Agent outside In Progress opens no execution session", async 
   }
 });
 
-test("reassigning an In Review Task cancels the old Agent's session and opens none", async () => {
+test("reassigning a Backlog Task cancels the old Agent's session and opens none", async () => {
   const f = await taskAssignmentFixture("user", "owner");
   try {
     const created = (
@@ -390,12 +390,12 @@ test("reassigning an In Review Task cancels the old Agent's session and opens no
         expectedRevision: created.revision,
       })
     ).tasks[0]!;
-    const inReview = (
+    const parked = (
       await f.board.execute(f.actor, {
         ...f.command(),
         operation: "update",
         number: started.number,
-        status: "in_review",
+        status: "backlog",
         expectedRevision: started.revision,
       })
     ).tasks[0]!;
@@ -403,9 +403,9 @@ test("reassigning an In Review Task cancels the old Agent's session and opens no
     await f.board.execute(f.actor, {
       ...f.command(),
       operation: "assign",
-      number: inReview.number,
+      number: parked.number,
       assignee: `@${f.peerAgent.name}`,
-      expectedRevision: inReview.revision,
+      expectedRevision: parked.revision,
     });
     const oldSession = await f.db.taskExecutionSession.findUniqueOrThrow({
       where: { taskId_agentId: { taskId: row.id, agentId: f.agent.id } },
@@ -421,39 +421,40 @@ test("reassigning an In Review Task cancels the old Agent's session and opens no
   }
 });
 
-test("an Agent re-claiming its In Review Task repairs no execution session", async () => {
+test("an Agent claiming its Backlog Task starts it in_progress and opens an execution session", async () => {
   const f = await taskAssignmentFixture("agent", "owner");
   try {
     const created = (
       await f.board.execute(f.actor, {
         ...f.command(),
         operation: "create",
-        title: "Reviewing work",
+        messageId: f.sourceMessageId,
+        title: "Parked work",
         assignee: `@${f.agent.name}`,
+        status: "backlog",
       })
     ).tasks[0]!;
-    expect(created.status).toBe("in_progress");
+    expect(created.status).toBe("backlog");
     const row = await f.db.task.findFirstOrThrow({
       where: { conversationId: f.conversation.id, number: created.number },
     });
-    const inReview = (
+    expect(await f.db.taskExecutionSession.findMany({ where: { taskId: row.id } })).toHaveLength(0);
+
+    const claimed = (
       await f.board.execute(f.actor, {
         ...f.command(),
-        operation: "update",
+        operation: "claim",
         number: created.number,
-        status: "in_review",
-        expectedRevision: created.revision,
       })
     ).tasks[0]!;
-    // A session that never existed (or was swept) is only repaired while the Task is In Progress.
-    await f.db.taskExecutionSession.deleteMany({ where: { taskId: row.id } });
-
-    await f.board.execute(f.actor, {
-      ...f.command(),
-      operation: "claim",
-      number: inReview.number,
-    });
-    expect(await f.db.taskExecutionSession.findMany({ where: { taskId: row.id } })).toHaveLength(0);
+    expect(claimed.status).toBe("in_progress");
+    expect(
+      (
+        await f.db.taskExecutionSession.findUniqueOrThrow({
+          where: { taskId_agentId: { taskId: row.id, agentId: f.agent.id } },
+        })
+      ).status,
+    ).toBe("starting");
   } finally {
     await f.close();
   }

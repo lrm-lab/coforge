@@ -1,8 +1,9 @@
-import type {
-  TaskProjectRef,
-  TaskStatus,
-  TaskWriteStatus,
-  TaskView,
+import {
+  TASK_CREATE_STATUSES,
+  type TaskCreateStatus,
+  type TaskProjectRef,
+  type TaskStatus,
+  type TaskView,
 } from "@lrm/coforge-sdk/internal";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
@@ -14,12 +15,10 @@ import { BoardAssignTo, useAssignTargets } from "./board-assign-to";
 import { CreateTaskDialog } from "./create-task-dialog";
 import { executeTask } from "./tasks.functions";
 
-/** A channel a new Task can go in. */
 export type NewTaskPlace = { conversationId: string; label: string };
 
-/** The columns a new Task can start in; Closed is for work that was dropped. */
-const STATUSES = ["todo", "in_progress", "in_review", "done"] as const satisfies TaskWriteStatus[];
-export const canCreateIn = (status: TaskStatus): status is (typeof STATUSES)[number] =>
+const STATUSES = TASK_CREATE_STATUSES;
+export const canCreateIn = (status: TaskStatus): status is TaskCreateStatus =>
   (STATUSES as readonly TaskStatus[]).includes(status);
 
 /** Who has a Task assigned to `target`; a channel's has no owner yet. */
@@ -43,7 +42,7 @@ export function BoardNewTaskDialog({
 }: {
   open: boolean;
   /** The column it was opened from. */
-  status: TaskWriteStatus;
+  status: TaskCreateStatus;
   places: readonly NewTaskPlace[];
   /** The Project of the board it was opened on. */
   boardProject?: TaskProjectRef;
@@ -56,7 +55,7 @@ export function BoardNewTaskDialog({
   const reach = useAssignTargets();
   /** Whom the viewer picked, until which it is the channel the board last filed in. */
   const [picked, setPicked] = useState<ForwardTarget>();
-  const [column, setColumn] = useState<TaskWriteStatus>(status);
+  const [column, setColumn] = useState<TaskCreateStatus>(status);
   useEffect(() => {
     if (open) setColumn(status);
   }, [open, status]);
@@ -95,7 +94,9 @@ export function BoardNewTaskDialog({
         ),
         status: column,
         statuses: STATUSES,
-        onStatusChange: setColumn,
+        onStatusChange: (next) => {
+          if (canCreateIn(next)) setColumn(next);
+        },
         project: boardProject,
       }}
       onCreate={async (draft, idempotencyKey, { more }) => {

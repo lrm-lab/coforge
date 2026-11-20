@@ -138,45 +138,6 @@ test("a quiet Task is stale after 24 hours, once a day, and never while backgrou
   }
 });
 
-test("in review: the Agent's own submission waits for others; someone else's is like todo", async () => {
-  const { db, make, assign, run, nudge, reply } = await world();
-  try {
-    const [own, given] = await make("alice", 2);
-    await run("one", { operation: "claim", number: own! });
-    await run("one", { operation: "update", number: own!, status: "in_review" });
-    await assign(given!);
-    await run("alice", { operation: "update", number: given!, status: "in_review" });
-
-    // Only the Task someone else put in review is named, newly assigned. In Review waits
-    // outside the queue, so it carries no position (task #716) — and with nothing queued the
-    // reminder does not tell the Agent to pick a first queued task.
-    const sent = await nudge();
-    expect(sent).toMatchObject({ send: true, items: [{ taskNumber: given }] });
-    expect(sent.items[0]).not.toHaveProperty("queuePosition");
-    expect(sent.text).toContain("None of these can start yet");
-    expect(sent.text).not.toContain("Pick up the first queued task");
-    // A fresh session does not name the Agent's own submission either.
-    const fresh = await nudge({ freshSession: true }, 0.1);
-    expect(fresh.items.map((item) => item.taskNumber)).toEqual([given]);
-    expect(fresh.items[0]).not.toHaveProperty("queuePosition");
-
-    // A reviewer's reply on its own submission names it — still outside the queue.
-    await reply("two", own!);
-    const replied = await nudge({}, 1.5);
-    expect(replied).toMatchObject({
-      send: true,
-      items: [{ taskNumber: own, status: "in_review", reason: "others_acted" }],
-    });
-    expect(replied.items[0]).not.toHaveProperty("queuePosition");
-
-    // A day later only the other one is stale.
-    const later = await nudge({}, 26.5);
-    expect(later.items.map((item) => [item.taskNumber, item.reason])).toEqual([[given, "stale"]]);
-  } finally {
-    await db.$disconnect();
-  }
-});
-
 test("a blocked Task is never stale; its blocker finishing names it once", async () => {
   const { db, make, assign, run, nudge, finish, ref } = await world();
   try {
@@ -268,19 +229,20 @@ test("highest priority first, oldest first within one; five listed, the rest in 
 test("queued work lists before what waits outside the queue, whatever its priority", async () => {
   const { db, make, assign, run, nudge } = await world();
   try {
-    const [low] = await make("alice", 1, { priority: "low" });
-    const [urgent] = await make("alice", 1, { priority: "urgent" });
+    const [low, blocker] = await make("alice", 2, { priority: "low" });
+    const [urgent] = await make("alice", 1, {
+      priority: "urgent",
+      blockedBy: [{ number: blocker! }],
+    });
     await assign(low!);
     await assign(urgent!);
-    await run("alice", { operation: "update", number: urgent!, status: "in_review" });
     const sent = await nudge();
-    // The low-priority Task that can start comes first and carries its place; the urgent one
-    // waiting on review follows without one, though priority alone would have reversed them.
     expect(sent.items.map((item) => [item.taskNumber, item.queuePosition ?? null])).toEqual([
       [low, 1],
       [urgent, null],
     ]);
     expect(sent.text).toContain("Pick up the first queued task");
+    void run;
   } finally {
     await db.$disconnect();
   }

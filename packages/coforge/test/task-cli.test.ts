@@ -91,6 +91,8 @@ test("Task create sends every title and prints each new Task with its thread", a
       "create",
       "--target",
       "@ada",
+      "--message-id",
+      "abc12345",
       "--title",
       "Draft",
       "--title",

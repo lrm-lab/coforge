@@ -82,11 +82,8 @@ export function TaskSection({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<{ kind: SectionError; subject?: string } | null>(null);
   const access = useTaskAssignmentAccess();
-  const canEditAssignment =
+  const canUnassign =
     access.canAssignOthers || !task.owner || task.owner.memberId === currentMemberId;
-  const assignableMembers = access.canAssignOthers
-    ? members
-    : members?.filter((member) => member.kind === "user" && member.id === access.userId);
   /** `subject` is the picked Task a relation change is about, named if the server refuses it. */
   async function run(command: DetailCommand, subject?: string) {
     if (pending) return;
@@ -164,8 +161,9 @@ export function TaskSection({
           <AssigneeMenu
             placement="left top"
             task={task}
-            members={assignableMembers}
-            disabled={pending || !currentMemberId || !canEditAssignment}
+            members={members}
+            canUnassign={canUnassign}
+            disabled={pending || !currentMemberId}
             onSelect={(assignee) =>
               void run(
                 assignee

@@ -22,7 +22,7 @@ import {
 /** How many of the Project's latest finished Tasks its overview lists. */
 const RECENTLY_DONE = 5;
 
-const ACTIVE = new Set<string>(["in_progress", "in_review"]);
+const ACTIVE = new Set<string>(["in_progress"]);
 
 /**
  * What the Project's overview and its phone Tasks list read (task #504): the unfinished Tasks as a

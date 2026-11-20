@@ -197,6 +197,24 @@ test("compaction during the first turn of a resumed session re-arms freshSession
   expect(h.asks.map((ask) => ask.request)).toEqual([{ freshSession: true }, {}]);
 });
 
+test("rulesShown is set after a delivered nudge with rules in the same context and resets after compaction", async () => {
+  const h = harness({ respond: async () => ({ send: true, rules: true, text: "idle reminder" }) });
+  h.setSession("session-rules", true);
+  h.setContextGeneration(1);
+  h.nudge.maybeAsk("agent-a");
+  await settle();
+  h.nudge.maybeAsk("agent-a");
+  await settle();
+  h.setContextGeneration(2);
+  h.nudge.maybeAsk("agent-a");
+  await settle();
+  expect(h.asks.map((ask) => ask.request)).toEqual([
+    { freshSession: true },
+    { rulesShown: true },
+    { freshSession: true },
+  ]);
+});
+
 test("an unanswered ask neither writes nor disables the route", async () => {
   const h = harness({ respond: () => new Promise(() => {}), timeoutMs: 10 });
   h.nudge.maybeAsk("agent-a");

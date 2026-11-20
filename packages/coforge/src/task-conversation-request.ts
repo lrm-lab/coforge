@@ -12,13 +12,13 @@ const OPERATION: Record<AgentTaskConversationRequest["route"], string> = {
   following: "list",
 };
 
-/** The server's own words for a refusal: its `{ error, code? }` body, or just the status. */
 async function refusalOf(response: Response) {
   const body: unknown = await response.json().catch(() => undefined);
   const record = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
   return {
     message: typeof record.error === "string" ? record.error : `HTTP ${response.status}`,
     code: typeof record.code === "string" ? record.code : undefined,
+    retryable: record.retryable === true,
     uploadTo:
       record.details && typeof record.details === "object"
         ? (record.details as Record<string, unknown>).uploadTo
@@ -32,13 +32,6 @@ function reuploadAction(uploadTo: unknown) {
     : "Upload the file again to this task's conversation, then reply with the new attachment id.";
 }
 
-/**
- * One task conversation route through the local Proxy, answered as the server's JSON. The Proxy
- * forwards the server's own status and `{ error, code? }` body: a 404 is `NOT_FOUND`, a 5xx
- * `SERVER_5XX`, and any other refusal keeps the server's code or is `<COMMAND>_FAILED`. A 5xx or a
- * transport failure is retryable: a reply carries one key throughout, so repeating it cannot post
- * twice.
- */
 export async function taskConversationRequest(
   proxyEndpoint: (path: string) => URL,
   context: string,
@@ -70,19 +63,19 @@ export async function taskConversationRequest(
     });
   }
   if (!response.ok) {
-    const { message, code, uploadTo } = await refusalOf(response);
-    const failure = (name: string, retryable: boolean) =>
+    const { message, code, retryable, uploadTo } = await refusalOf(response);
+    const failure = (name: string, isRetryable: boolean) =>
       new CliError({
         code: name,
         message,
-        retryable,
+        retryable: isRetryable,
         ...(name === "ATTACHMENT_IN_OTHER_CONVERSATION"
           ? { suggestedNextAction: reuploadAction(uploadTo) }
           : {}),
       });
     if (response.status >= 500) throw failure("SERVER_5XX", true);
     if (response.status === 404 && !code) throw failure("NOT_FOUND", false);
-    throw failure(code ? code.toUpperCase() : operationFailedCode(operation), false);
+    throw failure(code ? code.toUpperCase() : operationFailedCode(operation), retryable);
   }
   try {
     return await response.json();

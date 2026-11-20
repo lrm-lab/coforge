@@ -96,7 +96,7 @@ test("a Task's popup on a phone has a top bar, and its properties are one row of
     });
     await db.task.updateMany({
       where: { conversationId: channel.id, number },
-      data: { status: "in_review", priority: "urgent", ownerMemberId: owner.id },
+      data: { status: "in_progress", priority: "urgent", ownerMemberId: owner.id },
     });
     await mkdir(artifacts, { recursive: true });
     const open = async (width: string, height: string) => {

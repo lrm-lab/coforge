@@ -9,7 +9,6 @@ import type { ConversationRef, Member, Transaction } from "./task-board-ports.se
 import { loadTaskRelations, relationsOf } from "./task-relations.server";
 import {
   NAMED_CONVERSATION_SELECT,
-  UNFINISHED_TASK_STATUSES,
   storedTaskPriority,
   storedTaskStatus,
   taskName,
@@ -92,7 +91,7 @@ export async function readOwnQueueTasks(
       workspaceId,
       owner: actor,
       deletedAt: null,
-      status: { in: UNFINISHED_TASK_STATUSES },
+      status: { in: ["todo", "in_progress"] },
       conversation: conversations,
     },
     select: {

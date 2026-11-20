@@ -9,6 +9,7 @@ const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 const suffix = crypto.randomUUID().slice(0, 8);
 let workspaceId: string;
 let channelName: string;
+let sourceId: string;
 let agent: { id: string; name: string };
 const board = new TaskBoard(db);
 
@@ -20,7 +21,14 @@ const run = (command: Record<string, unknown>) =>
     ...command,
   } as Parameters<TaskBoard["execute"]>[1]);
 const started = async (title: string) =>
-  (await run({ operation: "create", title, assignee: `@${agent.name}` })).tasks[0]!;
+  (
+    await run({
+      operation: "create",
+      messageId: sourceId,
+      title,
+      assignee: `@${agent.name}`,
+    })
+  ).tasks[0]!;
 
 beforeAll(async () => {
   const owner = await db.user.create({
@@ -45,9 +53,20 @@ beforeAll(async () => {
   });
   workspaceId = workspace.id;
   agent = workspace.agents[0]!;
-  await db.conversation.create({
+  const channel = await db.conversation.create({
     data: { workspaceId, channelName, members: { create: [{ agentId: agent.id }] } },
+    include: { members: true },
   });
+  const source = await db.message.create({
+    data: {
+      workspaceId,
+      conversationId: channel.id,
+      senderMemberId: channel.members[0]!.id,
+      body: "work request",
+      sequence: 1,
+    },
+  });
+  sourceId = source.id;
 });
 
 afterAll(async () => {
@@ -63,15 +82,15 @@ test("an Agent withdraws a task it started by mistake: back to todo, still its o
   expect(withdrawn).toMatchObject({ status: "todo", owner: { kind: "agent" } });
 });
 
-test("releasing the assignee leaves no unowned task in progress or in review", async () => {
+test("releasing the assignee keeps the task's current status", async () => {
   const inProgress = await started("Release while in progress");
   const released = (await run({ operation: "unclaim", number: inProgress.number })).tasks[0]!;
-  expect(released).toMatchObject({ status: "todo", owner: null, claimedAt: null });
+  expect(released).toMatchObject({ status: "in_progress", owner: null, claimedAt: null });
 
-  const inReview = await started("Unassign while in review");
-  await run({ operation: "update", number: inReview.number, status: "in_review" });
-  const unassigned = (await run({ operation: "unassign", number: inReview.number })).tasks[0]!;
-  expect(unassigned).toMatchObject({ status: "todo", owner: null });
+  const parked = await started("Unassign while in backlog");
+  await run({ operation: "update", number: parked.number, status: "backlog" });
+  const unassigned = (await run({ operation: "unassign", number: parked.number })).tasks[0]!;
+  expect(unassigned).toMatchObject({ status: "backlog", owner: null });
 });
 
 test("a closed task stays closed when its assignee is released", async () => {

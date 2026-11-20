@@ -9,11 +9,12 @@ export const taskHelp: Readonly<Record<string, HelpEntry>> = {
   },
   "task list": {
     syntax:
-      "coforge task list (--target <channel> | --mine | --following) [--status all|todo|in_progress|in_review|done|closed (or several, comma-separated)] [--ready] [--label <name>]... [--json]",
+      "coforge task list (--target <channel> | --mine | --following) [--status all|backlog|todo|in_progress|done|closed (or several, comma-separated)] [--ready] [--label <name>]... [--json]",
     flags: [
       "--label  only tasks carrying every named label (repeatable)",
       "--ready  todo tasks nobody holds and no open blocker waits on (with --target)",
       "--following  the task conversations you follow, with their unread counts (no other flag combines with it)",
+      "--status  all|backlog|todo|in_progress|done|closed (--mine defaults to unfinished, leaving backlog out)",
     ],
     guidance:
       "Tasks are listed highest priority first (prio=urgent, high, medium, low, none), then earliest due first (a task with no due waits behind dated ones of its level), oldest first within that. --mine leads with 'Your queue': the tasks that can start now (todo/in_progress, unblocked) numbered from 1; each row's queue=N is its place in the full queue even under --status or --label filters. A row's due= field marks (overdue) and (due soon).",
@@ -74,52 +75,55 @@ export const taskHelp: Readonly<Record<string, HelpEntry>> = {
   },
   "task create": {
     syntax:
-      "coforge task create --target <channel> [--peer-kind human|agent] --title <title>... [--assignee @handle] [--description <text>] [--message-id <id>] [--alongside] [--blocked-by <task>,...] [--parent <task>] [--label <name>]... --priority urgent|high|medium|low [--due <date|datetime>] [--project <slug>] [--anyway] [--json]",
+      "coforge task create --target <channel> --message-id <id> --title <title>... [--peer-kind human|agent] [--assignee @handle] [--status backlog|todo|in_progress] [--description <text>] [--blocked-by <task>,...] [--parent <task>] [--label <name>]... [--priority urgent|high|medium|low] [--due <date|datetime>] [--project <slug>] [--anyway] [--json]",
     flags: [
-      "--anyway  create even when the target has messages you have not reviewed (the hold lists them)",
+      "--message-id  required: the channel message that asked for the work (full or short id; a thread reply resolves to its thread's root). For your own idea, post a channel message first",
+      "--status  starting status: backlog, todo, or in_progress (default: in_progress when assigning yourself, otherwise todo)",
+      "--priority  urgent, high, medium or low (default: medium)",
+      "--anyway  create even when the source thread has messages you have not reviewed (the hold lists them)",
       "--blocked-by  tasks that must be done or closed before this one can start; --parent  the parent task this one is a sub-task of. A <task> is a number in --target's conversation, or #channel/<n> in another channel of the Workspace",
       "--description  details for the task; only with a single --title",
       "--label  a Workspace label to attach (repeatable, at most five); the label must already exist",
       "--project  file the Task under this Project by slug (otherwise under no Project, or its parent's with --parent)",
       "--label-description  the description a label this command creates gets; without it an unknown label is refused",
-      "--message-id  the channel message the task is made from (full id or its short form); applies to every --title",
-      "--alongside  with --message-id, create beside someone else's live task on that message",
-      "--priority  urgent, high, medium or low (required); every --title gets it",
       "--due  the due instant, a date like 2026-11-20 (local midnight) or a datetime; change or clear it later with `task amend --due|--clear-due`",
     ],
     guidance: [
       "Atomic assignment:",
-      "  --assignee applies to every --title. Self-assignment starts work; owner/admin assignment to someone else reserves todo work for them.",
-      "  To undo an accidental self-start, run `coforge task update --target <channel> --number <N> --status todo`; the task stays assigned to you.",
-      "  The handle must resolve uniquely and be able to claim in the target channel.",
+      "  Self-assignment starts work (in_progress); assigning someone else reserves todo work (requires owner/admin). Applies to every --title.",
+      "  --status overrides that: `--status todo --assignee @you` reserves it without starting; `--status backlog` parks it.",
+      "  Undo a self-start: `coforge task update --target <channel> --number <N> --status todo`; the task stays assigned to you.",
       "  If handle resolution or channel authorization fails, no task is created.",
     ].join("\n"),
     example:
-      "coforge task create --target '#general' --title 'Fix the flaky test' --priority medium",
+      "coforge task create --target '#general' --message-id abc12345 --title 'Fix the flaky test'",
   },
   "task claim": {
     syntax:
-      "coforge task claim --target <channel> [--peer-kind human|agent] (--number <n> | --message-id <id>)... [--reviewer-isolation] [--json]",
-    example: "coforge task claim --target '#general' --number 42",
+      "coforge task claim [<ref>] [--target <channel> --number <n>...] [--peer-kind human|agent] [--reviewer-isolation] [--json]",
+    example: "coforge task claim '#general:#42'",
   },
   "task assign": {
     syntax:
-      "coforge task assign --target <channel> [--peer-kind human|agent] --number <n> --assignee @handle [--reason <text>] [--expected-revision <n>] [--json]",
+      "coforge task assign [<ref>] [@handle] [--target <channel> --number <n>] [--assignee @handle] [--reason <text>] [--expected-revision <n>] [--peer-kind human|agent] [--json]",
     flags: [
-      "--reason  one line saying what the assignee should do; it is shown with the assignment (max 200 characters, single line)",
+      "--reason  handing the task to someone else: one line on what it waits on them for (max 500 characters; required from an Agent handing a task to someone else, refused when assigning yourself)",
     ],
+    example: "coforge task assign '#general:#42' @alice --reason 'Ready for your review'",
   },
   "task unassign": {
     syntax:
-      "coforge task unassign --target <channel> [--peer-kind human|agent] --number <n> [--expected-revision <n>] [--json]",
+      "coforge task unassign [<ref>] [--target <channel> --number <n>] [--peer-kind human|agent] [--expected-revision <n>] [--json]",
   },
   "task update": {
     syntax:
-      "coforge task update --target <channel> [--peer-kind human|agent] --number <n> (--status <status> | --priority <level> | --label <name> | --label -<name> | any of them) [--label-description <text>] [--reviewer-isolation] [--json]",
+      "coforge task update [<ref>] [--target <channel> --number <n>] (--status backlog|todo|in_progress|done|closed [--reason <text>] | --priority <level> | --label <name> | --label -<name>) [--label-description <text>] [--reviewer-isolation] [--peer-kind human|agent] [--json]",
     flags: [
+      "--status  backlog, todo, in_progress, done, or closed (any status can move to any other; in_review is retired and maps to in_progress)",
+      "--reason  with --status backlog only: what would bring the task back (optional, max 500 characters)",
       "--priority  urgent, high, medium or low. People set any task's; an Agent only a task it created, or in a channel it coordinates",
       "--label  adds a label by name; --label -name takes one off (repeatable). --label-description lets an unknown label be created",
     ],
-    example: "coforge task update --target '#general' --number 42 --status in_review",
+    example: "coforge task update '#general:#42' --status done",
   },
 };

@@ -101,7 +101,7 @@ test("TaskBoard creates, converts, claims and revision-checks Tasks", async () =
         idempotencyKey: crypto.randomUUID(),
         target: `#${channel.channelName}`,
         number: 2,
-        status: "in_review",
+        status: "backlog",
         expectedRevision: 1,
       },
     );
@@ -233,6 +233,7 @@ test("TaskBoard creates, converts, claims and revision-checks Tasks", async () =
         operation: "create",
         idempotencyKey: crypto.randomUUID(),
         target: `#${channel.channelName}`,
+        messageId: ordinary.id,
         titles: ["batch one", "batch two"],
         assignee: `@${agent.name}`,
       },
@@ -286,7 +287,7 @@ test("TaskBoard creates, converts, claims and revision-checks Tasks", async () =
         idempotencyKey: crypto.randomUUID(),
         target: `#${channel.channelName}`,
         number: batch.tasks[0]!.number,
-        status: "in_review",
+        status: "backlog",
       },
     );
     await board.execute(
@@ -422,19 +423,16 @@ test("TaskBoard creates, converts, claims and revision-checks Tasks", async () =
       ],
     };
     await db.task.update({ where: { id: resource.tasks[0]!.id }, data: { createsResource: true } });
-    // Work moves forward one step at a time, so the Task reaches In review before Done, where the
-    // missing resource receipt is what refuses it.
-    for (const status of ["in_progress", "in_review"] as const)
-      await board.execute(
-        { workspaceId: workspace.id, agentId: agent.id },
-        {
-          operation: "update",
-          idempotencyKey: crypto.randomUUID(),
-          target: `#${channel.channelName}`,
-          number: resource.tasks[0]!.number,
-          status,
-        },
-      );
+    await board.execute(
+      { workspaceId: workspace.id, agentId: agent.id },
+      {
+        operation: "update",
+        idempotencyKey: crypto.randomUUID(),
+        target: `#${channel.channelName}`,
+        number: resource.tasks[0]!.number,
+        status: "in_progress",
+      },
+    );
     await expect(
       board.execute(
         { workspaceId: workspace.id, agentId: agent.id },

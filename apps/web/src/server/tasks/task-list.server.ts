@@ -72,14 +72,11 @@ export function ownTaskScope(actor: { agentId: string } | { userId: string }): {
   };
 }
 
-const UNFINISHED = new Set<string>(UNFINISHED_TASK_STATUSES);
+const UNFINISHED_OWN_TASK_STATUSES = UNFINISHED_TASK_STATUSES.filter(
+  (status) => status !== "backlog",
+);
+const UNFINISHED = new Set<string>(UNFINISHED_OWN_TASK_STATUSES);
 
-/**
- * The Tasks the queue numbers: every unfinished Task `actor` holds in `scope`, whether or not the
- * list's own filters show them — a filtered list still reports each row's true queue rank. When
- * the list's filters already cover the whole unfinished set its views are reused; otherwise the
- * set is read again, lean (no discussion counts, no card fields the queue never reads).
- */
 async function queueCandidates(
   ports: TaskBoardPorts,
   workspaceId: string,
@@ -96,7 +93,6 @@ async function queueCandidates(
   return readOwnQueueTasks(ports.db, ports.reader, workspaceId, actor, scope.conversations);
 }
 
-/** An Agent's (or person's) own list: every Task they hold in the conversations they may read. */
 export async function listOwnTasks(
   ports: TaskBoardPorts,
   principal: TaskPrincipal,
@@ -116,7 +112,7 @@ export async function listOwnTasks(
         ? { in: command.statuses }
         : command.status === "all"
           ? undefined
-          : (command.status ?? { in: UNFINISHED_TASK_STATUSES }),
+          : (command.status ?? { in: UNFINISHED_OWN_TASK_STATUSES }),
       conversation: scope.conversations,
       ...labels,
     },

@@ -1,13 +1,67 @@
 import { expect, test } from "bun:test";
 import { parseTaskArgs } from "../src/task-args";
 
-test("Backlog is a list filter but not a writable status", () => {
+test("Backlog is a writable status, a create status, and takes an optional --reason on update", () => {
   expect(parseTaskArgs(["list", "--target", "#general", "--status", "backlog"])).toMatchObject({
     task: { status: "backlog" },
   });
-  expect(() =>
+  expect(
     parseTaskArgs(["update", "--target", "#general", "--number", "7", "--status", "backlog"]),
-  ).toThrow();
+  ).toMatchObject({ task: { operation: "update", status: "backlog" } });
+  expect(
+    parseTaskArgs([
+      "update",
+      "--target",
+      "#general",
+      "--number",
+      "7",
+      "--status",
+      "backlog",
+      "--reason",
+      "  wait for\n  upstream API  ",
+    ]),
+  ).toMatchObject({
+    task: { operation: "update", status: "backlog", reason: "wait for upstream API" },
+  });
+  expect(() =>
+    parseTaskArgs([
+      "update",
+      "--target",
+      "#general",
+      "--number",
+      "7",
+      "--status",
+      "done",
+      "--reason",
+      "why",
+    ]),
+  ).toThrow("--reason is only for moving a task to backlog");
+  expect(
+    parseTaskArgs([
+      "create",
+      "--target",
+      "#general",
+      "--message-id",
+      "abc12345",
+      "--title",
+      "Later",
+      "--status",
+      "backlog",
+    ]),
+  ).toMatchObject({ task: { operation: "create", status: "backlog", priority: "medium" } });
+  expect(() =>
+    parseTaskArgs([
+      "create",
+      "--target",
+      "#general",
+      "--message-id",
+      "abc12345",
+      "--title",
+      "Bad",
+      "--status",
+      "done",
+    ]),
+  ).toThrow("--status must be one of: backlog, todo, in_progress; got done");
 });
 
 test("task show is the board command", () => {
@@ -41,7 +95,7 @@ test("board task commands use --target, peer kind and JSON output", () => {
   });
 });
 
-test("convert requires the source message id and a priority", () => {
+test("convert requires the source message id and defaults priority to medium", () => {
   expect(
     parseTaskArgs([
       "convert",
@@ -56,17 +110,20 @@ test("convert requires the source message id and a priority", () => {
     command: "task",
     task: { operation: "convert", target: "#general", messageId: "abc12345", priority: "high" },
   });
-  expect(() =>
-    parseTaskArgs(["convert", "--target", "#general", "--message-id", "abc12345"]),
-  ).toThrow("--priority is required");
+  expect(parseTaskArgs(["convert", "--target", "#general", "--message-id", "abc12345"])).toEqual({
+    command: "task",
+    task: { operation: "convert", target: "#general", messageId: "abc12345", priority: "medium" },
+  });
 });
 
 test("create and amend take --blocked-by and --parent; list takes --ready", () => {
   const target = ["--target", "#general"];
+  const src = ["--message-id", "abc12345"];
   expect(
     parseTaskArgs([
       "create",
       ...target,
+      ...src,
       "--title",
       "A",
       "--priority",
@@ -81,6 +138,7 @@ test("create and amend take --blocked-by and --parent; list takes --ready", () =
     parseTaskArgs([
       "create",
       ...target,
+      ...src,
       "--title",
       "A",
       "--priority",
@@ -98,21 +156,24 @@ test("create and amend take --blocked-by and --parent; list takes --ready", () =
   });
   for (const raw of ["#Bad Name:#3", "#coforge/3", "coforge/", "/3", "a/b/3", "coforge/x"])
     expect(() =>
-      parseTaskArgs(["create", ...target, "--title", "A", "--blocked-by", raw]),
+      parseTaskArgs(["create", ...target, ...src, "--title", "A", "--blocked-by", raw]),
     ).toThrow();
   expect(
     parseTaskArgs(["amend", ...target, "--number", "2", "--blocked-by", "", "--parent", ""]),
   ).toMatchObject({ task: { number: 2, blockedBy: [], parent: null } });
   expect(parseTaskArgs(["list", ...target, "--ready"])).toMatchObject({ task: { ready: true } });
-  expect(() => parseTaskArgs(["create", ...target, "--title", "A", "--blocked-by", ""])).toThrow();
-  expect(() => parseTaskArgs(["create", ...target, "--title", "A", "--parent", "x"])).toThrow();
+  expect(() =>
+    parseTaskArgs(["create", ...target, ...src, "--title", "A", "--blocked-by", ""]),
+  ).toThrow();
+  expect(() =>
+    parseTaskArgs(["create", ...target, ...src, "--title", "A", "--parent", "x"]),
+  ).toThrow();
   expect(() =>
     parseTaskArgs(["amend", ...target, "--number", "2", "--blocked-by", "1,x"]),
   ).toThrow();
   expect(() => parseTaskArgs(["list", ...target, "--ready", "--status", "todo"])).toThrow();
 });
 
-// Task #506: `task list --status` takes several statuses, comma-separated, as the board does.
 test("task list --status takes one status, all, or several comma-separated", () => {
   const target = ["--target", "#general"];
   expect(parseTaskArgs(["list", ...target, "--status", "todo"])).toMatchObject({
@@ -125,19 +186,27 @@ test("task list --status takes one status, all, or several comma-separated", () 
     expect(() => parseTaskArgs(["list", ...target, "--status", raw])).toThrow();
 });
 
-test("assign takes one handover line and refuses anything that is not one", () => {
+test("assign folds whitespace in --reason up to 500 chars and accepts a positional assignee", () => {
   const target = ["--target", "#general"];
   const assign = (...extra: string[]) =>
     parseTaskArgs(["assign", ...target, "--number", "7", "--assignee", "@ada", ...extra]);
-  expect(assign("--reason", "  finish the daemon side  ")).toMatchObject({
+  expect(assign("--reason", "  finish the\ndaemon side  ")).toMatchObject({
     task: { reason: "finish the daemon side" },
   });
-  // No reason at all is still a plain assignment.
   expect(assign()).not.toHaveProperty("task.reason");
+  expect(
+    parseTaskArgs(["assign", "#general:#7", "@ada", "--reason", "Take over review"]),
+  ).toMatchObject({
+    task: {
+      operation: "assign",
+      target: "#general",
+      number: 7,
+      assignee: "@ada",
+      reason: "Take over review",
+    },
+  });
   expect(() => assign("--reason", "   ")).toThrow(/must say something/);
-  expect(() => assign("--reason", "first line\nsecond line")).toThrow(/single line/);
-  expect(() => assign("--reason", "x".repeat(201))).toThrow(/longer than 200/);
-  // The sentence belongs to an assignment, not to other task writes.
+  expect(() => assign("--reason", "x".repeat(501))).toThrow(/longer than 500/);
   expect(() =>
     parseTaskArgs(["update", ...target, "--number", "7", "--status", "done", "--reason", "why"]),
   ).toThrow();
@@ -145,8 +214,9 @@ test("assign takes one handover line and refuses anything that is not one", () =
 
 test("create, claim and assign take --anyway to confirm a held review", () => {
   const target = ["--target", "#general"];
+  const src = ["--message-id", "abc12345"];
   expect(
-    parseTaskArgs(["create", ...target, "--title", "A", "--priority", "high", "--anyway"]),
+    parseTaskArgs(["create", ...target, ...src, "--title", "A", "--priority", "high", "--anyway"]),
   ).toMatchObject({
     task: { continueAnyway: true },
   });
@@ -157,7 +227,7 @@ test("create, claim and assign take --anyway to confirm a held review", () => {
     parseTaskArgs(["assign", ...target, "--number", "7", "--assignee", "@ada", "--anyway"]),
   ).toMatchObject({ task: { continueAnyway: true } });
   expect(
-    parseTaskArgs(["create", ...target, "--title", "A", "--priority", "medium"]),
+    parseTaskArgs(["create", ...target, ...src, "--title", "A", "--priority", "medium"]),
   ).not.toHaveProperty("task.continueAnyway");
   expect(() =>
     parseTaskArgs(["update", ...target, "--number", "7", "--status", "done", "--anyway"]),
@@ -180,10 +250,12 @@ test("task numbers are plain digits: exponent, hex and decimal forms are refused
 
 test("labels: create attaches, amend adds and takes off, list filters", () => {
   const target = ["--target", "#general"];
+  const src = ["--message-id", "abc12345"];
   expect(
     parseTaskArgs([
       "create",
       ...target,
+      ...src,
       "--title",
       "A",
       "--priority",
@@ -200,17 +272,17 @@ test("labels: create attaches, amend adds and takes off, list filters", () => {
   expect(parseTaskArgs(["list", ...target, "--label", "Design", "--label", "Bug"])).toMatchObject({
     task: { labels: ["Design", "Bug"] },
   });
-  // Create has nothing to take off, and an empty name is a mistake either way.
-  expect(() => parseTaskArgs(["create", ...target, "--title", "A", "--label", "-Bug"])).toThrow();
+  expect(() =>
+    parseTaskArgs(["create", ...target, ...src, "--title", "A", "--label", "-Bug"]),
+  ).toThrow();
   expect(() => parseTaskArgs(["amend", ...target, "--number", "7", "--label", "-"])).toThrow();
 });
 
-// Task #470: a priority on create, and an update of the priority, the status, or both.
-// Task #12: create and convert must name one of the four levels; `none` stays a stored value only.
 test("--priority sets a new task's priority and an update's, with or without --status", () => {
   const target = ["--target", "#general"];
+  const src = ["--message-id", "abc12345"];
   expect(
-    parseTaskArgs(["create", ...target, "--title", "A", "--priority", "urgent"]),
+    parseTaskArgs(["create", ...target, ...src, "--title", "A", "--priority", "urgent"]),
   ).toMatchObject({ task: { operation: "create", priority: "urgent" } });
   expect(parseTaskArgs(["update", ...target, "--number", "7", "--priority", "low"])).toEqual({
     command: "task",
@@ -234,45 +306,46 @@ test("--priority sets a new task's priority and an update's, with or without --s
   expect(() => parseTaskArgs(["update", ...target, "--number", "7", "--priority", "asap"])).toThrow(
     "--priority must be one of: urgent, high, medium, low; got asap",
   );
-  expect(() => parseTaskArgs(["create", ...target, "--title", "A", "--priority", "p1"])).toThrow(
-    "--priority must be one of: urgent, high, medium, low; got p1",
-  );
+  expect(() =>
+    parseTaskArgs(["create", ...target, ...src, "--title", "A", "--priority", "p1"]),
+  ).toThrow("--priority must be one of: urgent, high, medium, low; got p1");
   expect(() =>
     parseTaskArgs(["amend", ...target, "--number", "7", "--title", "B", "--priority", "high"]),
   ).toThrow();
 });
 
-test("create and convert require --priority, and none is never a choice", () => {
+test("create and convert default --priority to medium, and none is never a choice", () => {
   const target = ["--target", "#general"];
+  const src = ["--message-id", "abc12345"];
   const levels = "--priority must be one of: urgent, high, medium, low";
-  expect(() => parseTaskArgs(["create", ...target, "--title", "A"])).toThrow(
-    "--priority is required (urgent, high, medium or low)",
-  );
-  expect(() => parseTaskArgs(["create", ...target, "--title", "A", "--priority", "none"])).toThrow(
-    `${levels}; got none`,
-  );
+  expect(parseTaskArgs(["create", ...target, ...src, "--title", "A"])).toMatchObject({
+    task: { operation: "create", priority: "medium" },
+  });
+  expect(() =>
+    parseTaskArgs(["create", ...target, ...src, "--title", "A", "--priority", "none"]),
+  ).toThrow(`${levels}; got none`);
   expect(() =>
     parseTaskArgs(["convert", ...target, "--message-id", "abc12345", "--priority", "none"]),
   ).toThrow(`${levels}; got none`);
   expect(() => parseTaskArgs(["update", ...target, "--number", "7", "--priority", "none"])).toThrow(
     `${levels}; got none`,
   );
-  // Every other operation still refuses the flag outright.
   for (const operation of ["list", "show", "claim", "amend", "history"])
     expect(() =>
       parseTaskArgs([operation, ...target, "--number", "7", "--priority", "high"]),
     ).toThrow("Usage:");
 });
 
-// Task #13: an optional due instant on create, set or cleared on amend.
 test("--due sets a new task's due instant; a bare date means end of local day with dueHasTime=false", () => {
   const target = ["--target", "#general"];
+  const src = ["--message-id", "abc12345"];
   const endOfDay = new Date("2026-11-21T00:00:00").toISOString();
   const localEvening = new Date("2026-11-20T17:30").toISOString();
   expect(
     parseTaskArgs([
       "create",
       ...target,
+      ...src,
       "--title",
       "A",
       "--priority",
@@ -285,6 +358,7 @@ test("--due sets a new task's due instant; a bare date means end of local day wi
     parseTaskArgs([
       "create",
       ...target,
+      ...src,
       "--title",
       "A",
       "--priority",
@@ -294,10 +368,30 @@ test("--due sets a new task's due instant; a bare date means end of local day wi
     ]),
   ).toMatchObject({ task: { dueAt: localEvening, dueHasTime: true } });
   expect(() =>
-    parseTaskArgs(["create", ...target, "--title", "A", "--priority", "high", "--due", "friday"]),
+    parseTaskArgs([
+      "create",
+      ...target,
+      ...src,
+      "--title",
+      "A",
+      "--priority",
+      "high",
+      "--due",
+      "friday",
+    ]),
   ).toThrow("--due must be a date or datetime");
   expect(() =>
-    parseTaskArgs(["create", ...target, "--title", "A", "--priority", "high", "--due", " "]),
+    parseTaskArgs([
+      "create",
+      ...target,
+      ...src,
+      "--title",
+      "A",
+      "--priority",
+      "high",
+      "--due",
+      " ",
+    ]),
   ).toThrow("--due must be a date or datetime");
 });
 

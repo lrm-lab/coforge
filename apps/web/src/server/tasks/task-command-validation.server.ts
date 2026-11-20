@@ -1,21 +1,18 @@
 import {
   isTaskRef,
+  TASK_CREATE_STATUSES,
   TASK_PRIORITY_LEVELS,
   TASK_WRITE_STATUSES,
   TASK_READ_STATUSES,
   taskAssignReasonProblem,
+  taskStatusReasonProblem,
   type TaskCommand,
 } from "@lrm/coforge-sdk/internal";
 import { AppError } from "#src/lib/app-error";
 import { LABEL_NAME_MAX, LABELS_PER_TASK_MAX } from "./labels.server";
-import { refuseAssignReason } from "./task-assign-reason.server";
+import { refuseAssignReason, refuseStatusReason } from "./task-assign-reason.server";
 import { TASK_PRIORITY_INVALID } from "./task-priority.server";
 
-/**
- * The shape a Task command must have before `TaskBoard.execute` reads anything: its operation,
- * exactly one of a conversation, a target or `mine`, and the fields that operation takes. A
- * malformed command is `INVALID_INPUT`; who may act on which conversation is TaskBoard's.
- */
 export function validateTaskCommand(command: TaskCommand) {
   const operations = [
     "list",
@@ -49,15 +46,15 @@ export function validateTaskCommand(command: TaskCommand) {
     command.status !== undefined &&
     command.status !== "all" &&
     !(
-      (command.operation === "list"
+      (command.operation === "list" || command.operation === "update"
         ? TASK_READ_STATUSES
-        : TASK_WRITE_STATUSES) as readonly unknown[]
+        : command.operation === "create"
+          ? TASK_CREATE_STATUSES
+          : TASK_WRITE_STATUSES) as readonly unknown[]
     ).includes(command.status)
   )
     throw new AppError("INVALID_INPUT");
   if (command.status === "all" && command.operation !== "list") throw new AppError("INVALID_INPUT");
-  // A create may open the Task in a chosen column (task #61); every other non-update read may
-  // name a status only to pick what it reads.
   if (
     command.status !== undefined &&
     command.operation !== "update" &&
@@ -65,7 +62,6 @@ export function validateTaskCommand(command: TaskCommand) {
     command.operation !== "create"
   )
     throw new AppError("INVALID_INPUT");
-  // A Task made to create a resource starts in To do: its receipt is what moves it to Done.
   if (
     command.operation === "create" &&
     command.status !== undefined &&
@@ -75,7 +71,6 @@ export function validateTaskCommand(command: TaskCommand) {
     throw new AppError("INVALID_INPUT", {
       hint: "a Task made to create a resource starts in todo; its receipt moves it to done",
     });
-  // Several statuses are a list's pick only (task #506), of known statuses, never with `status`.
   if (
     command.statuses !== undefined &&
     (command.operation !== "list" ||
@@ -96,14 +91,17 @@ export function validateTaskCommand(command: TaskCommand) {
     throw new AppError("INVALID_INPUT");
   if (command.messageIds?.some((messageId) => !messageId.trim()))
     throw new AppError("INVALID_INPUT");
-  // An assignment's handover sentence obeys the same rules as `assign --reason` (task #36): the
-  // notice shows it next to the assignment, so a blank, wrapped or over-long one is refused here
-  // rather than stored as whatever an API caller sent.
   if (command.reason !== undefined) {
-    if (command.operation !== "assign" || typeof command.reason !== "string")
+    if (typeof command.reason !== "string") throw new AppError("INVALID_INPUT");
+    if (command.operation === "assign") {
+      const problem = taskAssignReasonProblem(command.reason);
+      if (problem) refuseAssignReason(problem);
+    } else if (command.operation === "update") {
+      const problem = taskStatusReasonProblem(command.status ?? "todo", command.reason);
+      if (problem) refuseStatusReason(problem);
+    } else {
       throw new AppError("INVALID_INPUT");
-    const problem = taskAssignReasonProblem(command.reason);
-    if (problem) refuseAssignReason(problem);
+    }
   }
   if (
     command.operation !== "update" &&

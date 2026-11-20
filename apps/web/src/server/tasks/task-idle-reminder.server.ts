@@ -94,7 +94,9 @@ export function idleReminderText(
   items: AgentTaskIdleItem[],
   backlog: { ref: string }[],
   unassignedSummary?: { hasUnassigned: boolean; hasActionableUnassigned: boolean },
+  options: { includeGuidance?: boolean } = {},
 ) {
+  const includeGuidance = options.includeGuidance ?? true;
   const queued = items.some((item) => item.queuePosition !== undefined);
   const hasUnassigned =
     unassignedSummary?.hasUnassigned ?? items.some((item) => item.why.includes("no assignee"));
@@ -118,14 +120,13 @@ export function idleReminderText(
       (item) =>
         `- ${item.queuePosition === undefined ? "" : `#${item.queuePosition} `}${item.ref} [${item.status}] prio=${item.priority} "${item.title}" — ${item.why}`,
     ),
-    guidance,
+    ...(includeGuidance ? [guidance] : []),
     ...(backlog.length > 0
       ? [`(${backlog.length} more: ${backlog.map((item) => item.ref).join(", ")})`]
       : []),
   ].join("\n");
 }
 
-/** Decide, and record, one idle reminder for the Agent `principal`. */
 export async function idleNudge(
   db: PrismaClient,
   principal: { workspaceId: string; agentId: string },
@@ -137,8 +138,6 @@ export async function idleNudge(
     select: { name: true },
   });
   if (!agent) throw new AppError("NOT_FOUND");
-  // The cap first: most idle turns inside the hour then cost three reads. It reads the newest row,
-  // which goes with its Task: deleting the Task reminded last lifts the cap early.
   if (!input.freshSession) {
     const last = await db.taskIdleReminder.findFirst({
       where: { agentId: principal.agentId },
@@ -162,8 +161,6 @@ export async function idleNudge(
   });
   if (due.length === 0) return skip("no_change");
 
-  // The queue orders assigned work that can start now; actionable unassigned creator Tasks follow,
-  // then what waits on others (In Review, a blocker), each in shared priority-due-age order.
   const { positions } = ownTaskQueue(tasks.filter((task) => !task.unassigned));
   const toOrderable = <T extends { task: IdleTaskFacts }>(entry: T) => ({
     ...entry,
@@ -199,7 +196,6 @@ export async function idleNudge(
   const backlog = ordered
     .slice(LISTED_ITEMS)
     .map(({ task }) => ({ ref: task.ref, title: task.title }));
-  // Only the listed Tasks count as reminded: the backlog comes up again next time.
   await db.$transaction(
     listed.map(({ task, reason }) =>
       db.taskIdleReminder.upsert({
@@ -216,13 +212,22 @@ export async function idleNudge(
       }),
     ),
   );
+  const includeGuidance = input.rulesShown !== true;
   return {
     send: true,
+    rules: includeGuidance,
     items,
     backlog,
-    text: idleReminderText(items, backlog, {
-      hasUnassigned: listed.some(({ task }) => task.unassigned),
-      hasActionableUnassigned: listed.some(({ task }) => task.unassigned && queueActionable(task)),
-    }),
+    text: idleReminderText(
+      items,
+      backlog,
+      {
+        hasUnassigned: listed.some(({ task }) => task.unassigned),
+        hasActionableUnassigned: listed.some(
+          ({ task }) => task.unassigned && queueActionable(task),
+        ),
+      },
+      { includeGuidance },
+    ),
   };
 }

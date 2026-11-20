@@ -1,56 +1,40 @@
 import { expect, test } from "bun:test";
 
-import { ordinaryTaskStatusMove, taskStatusMoveAllowed } from "@lrm/coforge-sdk/internal";
+import {
+  TASK_READ_STATUSES,
+  TASK_WRITE_STATUSES,
+  ordinaryTaskStatusMove,
+  taskStatusMoveAllowed,
+  taskStatusNeedsOwner,
+} from "@lrm/coforge-sdk/internal";
 
-test("an existing Backlog task can return to Todo without a missing transition table", () => {
-  expect(ordinaryTaskStatusMove("backlog" as never, "todo")).toBe(true);
-});
+import { withoutAssignee } from "#src/server/tasks/task-change.server";
 
-/** The whole table, so a change to it is a change here on purpose. */
-const TABLE: Record<string, string[]> = {
-  todo: ["in_progress", "closed"],
-  in_progress: ["todo", "in_review", "closed"],
-  in_review: ["in_progress", "done", "closed"],
-  done: ["todo", "in_progress", "in_review", "closed"],
-  closed: ["todo"],
-};
-
-const STATUSES = ["todo", "in_progress", "in_review", "done", "closed"] as const;
-
-test("an ordinary member moves a Task forward, back for rework, and reopens a finished one", () => {
-  for (const from of STATUSES)
-    for (const to of STATUSES) {
-      const allowed = to === from || TABLE[from]!.includes(to);
-      expect(ordinaryTaskStatusMove(from, to)).toBe(allowed);
-    }
-});
-
-test("a Task started by mistake goes back to Todo", () => {
-  expect(ordinaryTaskStatusMove("in_progress", "todo")).toBe(true);
-});
-
-test("In Review goes back to In Progress for more work", () => {
-  expect(ordinaryTaskStatusMove("in_review", "in_progress")).toBe(true);
-});
-
-test("work does not skip ahead, and a closed Task reopens only to Todo", () => {
-  expect(ordinaryTaskStatusMove("todo", "in_review")).toBe(false);
-  expect(ordinaryTaskStatusMove("todo", "done")).toBe(false);
-  expect(ordinaryTaskStatusMove("in_progress", "done")).toBe(false);
-  expect(ordinaryTaskStatusMove("closed", "in_progress")).toBe(false);
-  expect(ordinaryTaskStatusMove("closed", "done")).toBe(false);
-});
-
-test("the same status is not a move", () => {
-  for (const status of STATUSES) expect(ordinaryTaskStatusMove(status, status)).toBe(true);
-});
-
-test("a Workspace owner or admin sets any status; everyone else follows the table", () => {
-  for (const from of STATUSES)
-    for (const to of STATUSES) {
+test("any status can move freely to any writable status, and never to retired in_review", () => {
+  for (const from of TASK_READ_STATUSES)
+    for (const to of TASK_WRITE_STATUSES) {
+      expect(ordinaryTaskStatusMove(from, to)).toBe(true);
+      expect(taskStatusMoveAllowed(from, to, { manager: false })).toBe(true);
       expect(taskStatusMoveAllowed(from, to, { manager: true })).toBe(true);
-      expect(taskStatusMoveAllowed(from, to, { manager: false })).toBe(
-        ordinaryTaskStatusMove(from, to),
-      );
     }
+  for (const from of TASK_READ_STATUSES) {
+    expect(ordinaryTaskStatusMove(from, "in_review" as never)).toBe(false);
+    expect(taskStatusMoveAllowed(from, "in_review" as never, { manager: false })).toBe(false);
+    expect(taskStatusMoveAllowed(from, "in_review" as never, { manager: true })).toBe(false);
+  }
+});
+
+test("status is decoupled from ownership", () => {
+  for (const status of TASK_WRITE_STATUSES) expect(taskStatusNeedsOwner(status)).toBe(false);
+  for (const status of ["backlog", "todo", "in_progress", "closed"] as const)
+    expect(withoutAssignee({ status, number: 1 })).toEqual({
+      ownerMemberId: null,
+      claimedAt: null,
+    });
+  try {
+    withoutAssignee({ status: "done", number: 1 });
+    expect.unreachable();
+  } catch (error) {
+    expect(error).toMatchObject({ code: "CONFLICT", hint: expect.stringContaining("done") });
+  }
 });

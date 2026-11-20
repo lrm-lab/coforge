@@ -99,6 +99,27 @@ test("the task's assignee, creator, source message and description head the view
   expect(text).toContain("Created by: @ada at 2026-10-30 09:00:00Z");
   expect(text).toContain("Source: msg=01a16c6c-1c03 in #general - bob: the flaky test again");
   expect(text).toContain("Current description: See the CI log");
+  const dmText = formatTaskView(view({ taskRef: "dm:@ada:#7" }));
+  expect(dmText).toContain(
+    'Answer on the DM timeline (1-on-1 DM, unless they wrote in this task): coforge message send --target "@ada"',
+  );
+  const withReplies = formatTaskView(
+    view({ earlierDiscussion: { target: "#general:01a16c6c-1c03", replyCount: 3 } }),
+  );
+  expect(withReplies).toContain(
+    'Source thread discussion: #general:01a16c6c-1c03 - 3 replies; read with: coforge message read --target "#general:01a16c6c-1c03"',
+  );
+  const withOneReply = formatTaskView(
+    view({ earlierDiscussion: { target: "@ada:01a16c6c-1c03", replyCount: 1 } }),
+  );
+  expect(withOneReply).toContain(
+    'Source thread discussion: @ada:01a16c6c-1c03 - 1 reply; read with: coforge message read --target "@ada:01a16c6c-1c03"',
+  );
+  expect(
+    formatTaskView(
+      view({ earlierDiscussion: { target: "#general:01a16c6c-1c03", replyCount: 0 } }),
+    ),
+  ).not.toContain("Source thread discussion:");
 });
 
 test("older messages are counted and point the read at the oldest shown", () => {

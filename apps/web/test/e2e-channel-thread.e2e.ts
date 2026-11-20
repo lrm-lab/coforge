@@ -278,7 +278,16 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
           ["message", "read", "--target", "#general"],
           ["message", "read", "--target", taskTarget],
           ["task", "claim", "--target", "#general", "--message-id", task.messageId!],
-          ["task", "create", "--target", "#general", "--title", "Independent follow-up"],
+          [
+            "task",
+            "create",
+            "--target",
+            "#general",
+            "--message-id",
+            task.messageId!,
+            "--title",
+            "Independent follow-up",
+          ],
           [
             "task",
             "update",
@@ -287,7 +296,7 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
             "--number",
             String(task.number),
             "--status",
-            "in_review",
+            "backlog",
           ],
         ],
         operations: [{ operation: "send", target: taskTarget, body: "Ready for your acceptance" }],
@@ -307,7 +316,7 @@ test("channel threads cross real WSS and Agent HTTP transport without notificati
     expect(reviewOutputs[2]).toContain(`#${task.number}`);
     expect(reviewOutputs[2]).toContain("claimed");
     expect(reviewOutputs[3]).toContain("Independent follow-up");
-    expect(reviewOutputs[4]).toContain("in_review");
+    expect(reviewOutputs[4]).toContain("backlog");
     expect(reviewOutputs[5]).toMatchObject({ accepted: true });
 
     await Bun.write(

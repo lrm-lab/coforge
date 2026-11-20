@@ -11,6 +11,7 @@ import {
   readAgentJsonBody,
   agentRouteDomainErrorResponse,
 } from "#src/server/agents/agent-http-routes.server";
+import { MessageRequestInProgressError } from "#src/server/conversations/message-request-idempotency.server";
 import type { TaskConversations } from "./task-conversations.server";
 import type {
   AgentTaskIdleNudgeRequest,
@@ -19,31 +20,34 @@ import type {
 } from "@lrm/coforge-sdk/agent";
 import type { AgentTaskPrincipal } from "./task-principal.server";
 
-/**
- * The Agent HTTP adapters for task conversations. They validate the request's shape and map a
- * refusal to its status; the service owns authorization (the reader sees the task's channel).
- */
 type Principal = AgentTaskPrincipal;
 
 type Service = Pick<
   TaskConversations,
   "view" | "read" | "reply" | "follow" | "unfollow" | "following"
->;
+> &
+  Partial<Pick<TaskConversations, "reconcileReply">>;
 
 const refSchema = z.object({
   channel: z.string().min(1),
   task_number: z.number().int().positive(),
 });
-const replySchema = refSchema.extend({
-  content: z.string().min(1).max(50_000),
-  idempotencyKey: z.string().min(1),
-  mentions: mentionSelectorsSchema,
-  attachmentIds: attachmentIdsSchema,
-});
+const replySchema = z.union([
+  refSchema.extend({
+    reconcileOnly: z.literal(true),
+    idempotencyKey: z.string().min(1),
+  }),
+  refSchema.extend({
+    reconcileOnly: z.literal(false).optional(),
+    content: z.string().min(1).max(50_000),
+    idempotencyKey: z.string().min(1),
+    mentions: mentionSelectorsSchema,
+    attachmentIds: attachmentIdsSchema,
+  }),
+]);
 const limitSchema = z.coerce.number().int().min(1).max(20).optional();
 const unfollowSchema = refSchema.extend({ reason: z.string().trim().min(1).max(200).optional() });
 
-/** A direct board is named `dm:@peer` on the wire; the board resolves it as `@peer`. */
 const asRef = (body: { channel: string; task_number: number }) => ({
   target: body.channel.replace(/^dm:/, ""),
   number: body.task_number,
@@ -52,6 +56,7 @@ const asRef = (body: { channel: string; task_number: number }) => ({
 function failure(error: unknown) {
   if (error instanceof z.ZodError)
     return Response.json({ error: "invalid task request", code: "INVALID_INPUT" }, { status: 400 });
+  if (error instanceof MessageRequestInProgressError) return agentErrorResponse(error);
   if (error instanceof AppError && error.code === "ATTACHMENT_IN_OTHER_CONVERSATION")
     return agentErrorResponse(error);
   if (error instanceof AppError)
@@ -131,6 +136,14 @@ export async function handleTaskReplyPost(
 ) {
   try {
     const body = replySchema.parse(await readAgentJsonBody(request));
+    if (body.reconcileOnly === true) {
+      if (!service.reconcileReply)
+        return Response.json({ state: "not_found", idempotencyKey: body.idempotencyKey });
+      return Response.json({
+        ...(await service.reconcileReply(principal, asRef(body), body.idempotencyKey)),
+        idempotencyKey: body.idempotencyKey,
+      });
+    }
     return Response.json({
       ...(await service.reply(principal, asRef(body), {
         body: body.content,
@@ -178,10 +191,10 @@ const idleNudgeSchema = z
   .object({
     freshSession: z.boolean().optional(),
     backgroundTasks: z.number().int().min(0).max(10_000).optional(),
+    rulesShown: z.boolean().optional(),
   })
   .strict();
 
-/** The idle task reminder. */
 export async function handleTaskIdleNudgePost(
   request: Request,
   nudge: (input: AgentTaskIdleNudgeRequest) => Promise<AgentTaskIdleNudgeResponse>,

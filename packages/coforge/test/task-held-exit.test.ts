@@ -39,7 +39,18 @@ const heldError = async (args: readonly string[], result: TaskResult): Promise<C
 
 test("a held Task write fails with a typed error and keeps the held messages", async () => {
   const error = await heldError(
-    ["task", "create", "--target", "#general", "--title", "Ship it", "--priority", "high"],
+    [
+      "task",
+      "create",
+      "--target",
+      "#general",
+      "--message-id",
+      "abc12345",
+      "--title",
+      "Ship it",
+      "--priority",
+      "high",
+    ],
     held({ newMessageCount: 1, heldMessages: [message("VISIBLE_CONTEXT")] }),
   );
   expect(error.code).toBe("TASK_REQUEST_HELD");
@@ -60,6 +71,8 @@ test("a held Task write in --json mode is one error object that carries the held
       "create",
       "--target",
       "#general",
+      "--message-id",
+      "abc12345",
       "--title",
       "Ship it",
       "--priority",

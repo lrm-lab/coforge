@@ -144,11 +144,16 @@ function EventDetail({ event, names }: { event: TaskHistoryEvent; names: Timelin
       );
     case "status_changed":
       return (
-        <div className="mt-1 flex items-center gap-1.5">
-          <StatusBadge status={event.payload.from} />
-          <ArrowRight aria-hidden="true" className="size-3.5 text-fg-quaternary" />
-          <StatusBadge status={event.payload.to} />
-        </div>
+        <>
+          <div className="mt-1 flex items-center gap-1.5">
+            <StatusBadge status={event.payload.from} />
+            <ArrowRight aria-hidden="true" className="size-3.5 text-fg-quaternary" />
+            <StatusBadge status={event.payload.to} />
+          </div>
+          {event.payload.reason && (
+            <p className={cn(detail, "break-words")}>{event.payload.reason}</p>
+          )}
+        </>
       );
     case "assignee_changed": {
       const { assigneeId, assigneeType } = event.payload;

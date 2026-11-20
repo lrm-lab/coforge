@@ -5,11 +5,11 @@ import { validateTaskCommand } from "#src/server/tasks/task-command-validation.s
 import type { z } from "zod";
 
 type MustBeNever<Value extends never> = Value;
-export type BrowserWriteRejectsBacklog = MustBeNever<
+export type BrowserWriteRejectsInReview = MustBeNever<
   Extract<
     {
       operation: "update";
-      status: "backlog";
+      status: "in_review";
       number: number;
       idempotencyKey: string;
       conversationId: string;
@@ -25,18 +25,37 @@ const amend = {
   number: 7,
 } as const;
 
-test("Backlog commands permit reads while refusing writes", () => {
+test("Backlog commands permit reads and writes; retired in_review is read-only in browser schema", () => {
   const list = { ...amend, operation: "list", status: "backlog" };
   expect(() => taskCommand.parse(list)).not.toThrow();
   expect(() => validateTaskCommand(list as never)).not.toThrow();
   expect(() =>
     validateTaskCommand({ ...list, status: undefined, statuses: ["backlog"] } as never),
   ).not.toThrow();
-  for (const operation of ["create", "update"] as const) {
-    const write = { ...list, operation, title: "Park" };
-    expect(() => taskCommand.parse(write)).toThrow();
-    expect(() => validateTaskCommand(write as never)).toThrow();
-  }
+  expect(() =>
+    taskCommand.parse({
+      operation: "create",
+      idempotencyKey: amend.idempotencyKey,
+      conversationId: amend.conversationId,
+      title: "Park",
+      status: "backlog",
+    }),
+  ).not.toThrow();
+  expect(() =>
+    taskCommand.parse({ ...amend, operation: "update", status: "backlog", reason: "later" }),
+  ).not.toThrow();
+  expect(() =>
+    validateTaskCommand({
+      ...amend,
+      operation: "update",
+      status: "backlog",
+      reason: "later",
+    } as never),
+  ).not.toThrow();
+  expect(() =>
+    taskCommand.parse({ ...amend, operation: "list", status: "in_review" }),
+  ).not.toThrow();
+  expect(() => taskCommand.parse({ ...amend, operation: "update", status: "in_review" })).toThrow();
 });
 
 test("a person's amend may file the Task under a Project by slug, or clear it with null", () => {

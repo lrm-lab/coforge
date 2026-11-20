@@ -60,18 +60,33 @@ function bodyRequest(
     if (typeof value !== "string") return badRequest();
     body[field] = value;
   }
-  if (route === "reply" && fields.attachmentIds !== undefined) {
-    const ids = fields.attachmentIds;
-    if (!Array.isArray(ids) || ids.length > 10 || ids.some((id) => typeof id !== "string"))
-      return badRequest();
-    body.attachmentIds = ids;
+  if (route === "reply") {
+    if (fields.reconcileOnly !== undefined) {
+      if (typeof fields.reconcileOnly !== "boolean") return badRequest();
+      body.reconcileOnly = fields.reconcileOnly;
+    }
+    if (body.reconcileOnly === true) {
+      if (
+        typeof body.idempotencyKey !== "string" ||
+        body.content !== undefined ||
+        fields.attachmentIds !== undefined ||
+        fields.mentions !== undefined
+      )
+        return badRequest();
+      return { route, body };
+    }
+    if (fields.attachmentIds !== undefined) {
+      const ids = fields.attachmentIds;
+      if (!Array.isArray(ids) || ids.length > 10 || ids.some((id) => typeof id !== "string"))
+        return badRequest();
+      body.attachmentIds = ids;
+    }
+    if (fields.mentions !== undefined) {
+      if (!isValidMentionSelectorArray(fields.mentions)) return badRequest();
+      body.mentions = fields.mentions;
+    }
+    if (!REPLY_STRINGS.every((field) => typeof body[field] === "string")) return badRequest();
   }
-  if (route === "reply" && fields.mentions !== undefined) {
-    if (!isValidMentionSelectorArray(fields.mentions)) return badRequest();
-    body.mentions = fields.mentions;
-  }
-  if (route === "reply" && !REPLY_STRINGS.every((field) => typeof body[field] === "string"))
-    return badRequest();
   return { route, body };
 }
 

@@ -107,17 +107,43 @@ test("reply without a body is refused before anything is sent, with the heredoc 
   expect(transport.requests).toEqual([]);
 });
 
-test("a reply is retried once, with the same key, after a transport failure or a 5xx", async () => {
+test("a reply probes reconcileOnly after a retryable error and recovers if already committed", async () => {
   for (const failure of [retryable("REPLY_FAILED"), retryable("SERVER_5XX")]) {
-    const transport = transportAnswering(failure, { messageId: "m2", sequence: 5 });
+    const transport = transportAnswering(failure, {
+      state: "committed",
+      messageId: "m2",
+      sequence: 5,
+    });
     const text = await runTaskConversation(transport, invoke(["reply", REF]), async () => "hi");
-    expect(text).toBe("Reply sent to #general:#7. Message ID: m2");
+    expect(text).toBe(
+      "Reply sent to #general:#7. Message ID: m2\nThe original response was lost, so delivery details are unavailable; the reply was not sent twice.",
+    );
     expect(transport.requests).toHaveLength(2);
-    expect(transport.requests[1]).toEqual(transport.requests[0]!);
+    expect(transport.requests[1]).toEqual({
+      route: "reply",
+      body: {
+        channel: "#general",
+        task_number: 7,
+        idempotencyKey: (transport.requests[0]!.body as { idempotencyKey: string }).idempotencyKey,
+        reconcileOnly: true,
+      },
+    });
   }
 });
 
-test("a reply that fails again, or is refused, is not sent a third time", async () => {
+test("a reply resends once with the same key when reconcileOnly reports not_found", async () => {
+  const transport = transportAnswering(
+    retryable("SERVER_5XX"),
+    { state: "not_found" },
+    { messageId: "m3", sequence: 6 },
+  );
+  const text = await runTaskConversation(transport, invoke(["reply", REF]), async () => "hi");
+  expect(text).toBe("Reply sent to #general:#7. Message ID: m3");
+  expect(transport.requests).toHaveLength(3);
+  expect(transport.requests[2]).toEqual(transport.requests[0]!);
+});
+
+test("a reply stops on retryable or auth reconcileOnly errors, falls back on old-server INVALID_INPUT, and never retries a non-retryable refusal", async () => {
   const twice = transportAnswering(retryable("SERVER_5XX"), retryable("SERVER_5XX"), {
     messageId: "m",
   });
@@ -125,6 +151,31 @@ test("a reply that fails again, or is refused, is not sent a third time", async 
     runTaskConversation(twice, invoke(["reply", REF]), async () => "hi"),
   ).rejects.toThrow("down");
   expect(twice.requests).toHaveLength(2);
+
+  const inProgress = transportAnswering(
+    retryable("SERVER_5XX"),
+    new CliError({
+      code: "MESSAGE_REQUEST_IN_PROGRESS",
+      message: "still processing",
+      retryable: true,
+    }),
+    { messageId: "m" },
+  );
+  await expect(
+    runTaskConversation(inProgress, invoke(["reply", REF]), async () => "hi"),
+  ).rejects.toThrow("still processing");
+  expect(inProgress.requests).toHaveLength(2);
+
+  const olderServer = transportAnswering(
+    retryable("SERVER_5XX"),
+    new CliError({ code: "INVALID_INPUT", message: "invalid task request", retryable: false }),
+    { messageId: "m4", sequence: 8 },
+  );
+  expect(await runTaskConversation(olderServer, invoke(["reply", REF]), async () => "hi")).toBe(
+    "Reply sent to #general:#7. Message ID: m4",
+  );
+  expect(olderServer.requests).toHaveLength(3);
+
   const refused = transportAnswering(new CliError({ code: "NOT_FOUND", message: "not found" }));
   await expect(
     runTaskConversation(refused, invoke(["reply", REF]), async () => "hi"),

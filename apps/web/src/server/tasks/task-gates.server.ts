@@ -17,7 +17,11 @@ import {
 import { TASK_RELATION_INVALID } from "./task-relation-graph.server";
 import { isTaskManager } from "./task-assignees.server";
 import { TASK_PRIORITY_DENIED, TASK_PRIORITY_INVALID } from "./task-priority.server";
-import { TASK_ASSIGN_REASON_INVALID } from "./task-assign-reason.server";
+import {
+  TASK_ASSIGN_REASON_INVALID,
+  TASK_SOURCE_MESSAGE_REQUIRED,
+  TASK_STATUS_REASON_INVALID,
+} from "./task-assign-reason.server";
 import type { NoticeSubject, NoticeWriter } from "./task-notice-posting.server";
 import {
   assigneeMention,
@@ -56,6 +60,8 @@ export const AGENT_FACING_ERROR_IDS: ReadonlySet<string> = new Set([
   // A handover sentence the board will not store: the CLI caller learns which rule it broke
   // (task #36).
   TASK_ASSIGN_REASON_INVALID,
+  TASK_STATUS_REASON_INVALID,
+  TASK_SOURCE_MESSAGE_REQUIRED,
   // Label refusals: an Agent needs the Workspace's own names, the archived fact and the group
   // rule, not a shapeless INVALID_INPUT (task #455).
   "task-label-unknown",
@@ -130,11 +136,6 @@ export function subtasksOpenRefusal(
   });
 }
 
-/**
- * Refuse a move into `to` that a Task's blockers or subtasks hold back, unless the actor manages
- * Tasks: a blocked Task does not start, go to review or finish, and a Task with open subtasks does
- * not go to review, finish or close. Every status write passes through here (`commitTaskChange`).
- */
 export async function assertMayEnter(
   tx: Transaction,
   task: { id: string; number: number; status: string; conversationId: string },
@@ -142,11 +143,11 @@ export async function assertMayEnter(
   manager: boolean,
 ) {
   if (manager || to === task.status) return;
-  if (to === "in_progress" || to === "in_review" || to === "done") {
+  if (to === "in_progress" || to === "done") {
     const open = await openBlockers(tx, task);
     if (open.length) throw blockedRefusal(task, open, `move it to ${to}`);
   }
-  if (to === "in_review" || to === "done" || to === "closed") {
+  if (to === "done" || to === "closed") {
     const open = await openSubtasks(tx, task);
     if (open.length) throw subtasksOpenRefusal(task, open, to);
   }
@@ -249,7 +250,7 @@ export async function noticeStatusFollowUps(
         AND: [
           { dependencies: { some: { blockedByTaskId: after.id } } },
           wasFinished
-            ? { status: { in: ["in_progress", "in_review"] } }
+            ? { status: "in_progress" }
             : { status: { in: UNFINISHED_TASK_STATUSES }, AND: [NOT_BLOCKED_WHERE] },
         ],
         ownerMemberId: { not: null },
@@ -395,7 +396,7 @@ export async function noticeNowBlocked(
   plan: Pick<RelationPlan, "newlyOpenBlockers">,
 ) {
   if (!plan.newlyOpenBlockers.length || !addressable(task, actor)) return;
-  if (task.status !== "in_progress" && task.status !== "in_review") return;
+  if (task.status !== "in_progress") return;
   const blockers = await tx.task.findMany({
     where: { id: { in: plan.newlyOpenBlockers } },
     select: { id: true, messageId: true, number: true, title: true, conversationId: true },

@@ -125,19 +125,17 @@ test("a channel's Task writes announce each changed Task to the Workspace, once 
   ]);
 
   const claimed = (await run({ operation: "claim", number: first!.number })).tasks[0]!;
-  await run({ operation: "update", number: first!.number, status: "in_review" });
-  // A move to the status the Task already has still takes a new revision, which the page needs
-  // for its next move, so it is announced too.
-  await run({ operation: "update", number: first!.number, status: "in_review" });
+  await run({ operation: "update", number: first!.number, status: "backlog" });
+  await run({ operation: "update", number: first!.number, status: "backlog" });
   expect(drain()).toEqual([
     { tasks: [[first!.number, "in_progress", claimed.revision]], deleted: [], userId: undefined },
     {
-      tasks: [[first!.number, "in_review", claimed.revision + 1]],
+      tasks: [[first!.number, "backlog", claimed.revision + 1]],
       deleted: [],
       userId: undefined,
     },
     {
-      tasks: [[first!.number, "in_review", claimed.revision + 2]],
+      tasks: [[first!.number, "backlog", claimed.revision + 2]],
       deleted: [],
       userId: undefined,
     },
@@ -166,8 +164,6 @@ test("a Task made under a parent announces the parent's new copy with it", async
   );
   expect(change).toBeDefined();
   const copies = new Map(change!.tasks.map((task) => [task.number, task]));
-  // The parent's own row did not change, but its sub-task progress did: its copy rides the
-  // same announcement at the same revision, as a neighbour's does on an amendment.
   expect(copies.get(parent!.number)).toMatchObject({
     revision: parent!.revision,
     subtasks: { total: 1, finished: 0 },
@@ -191,9 +187,6 @@ test("a failed announcement does not fail the create that committed", async () =
     },
   );
   const [parent] = (await parentRun({ operation: "create", titles: ["Parent"] })).tasks;
-  // The parent sits in another conversation, so its copy goes through announceNeighbours;
-  // publication is best-effort and must never turn a committed create into a failure a
-  // caller would retry into a duplicate.
   const created = await run({
     operation: "create",
     title: "Child",
@@ -215,7 +208,7 @@ test("a private channel's Task writes are announced only to its people, never th
   const [task] = (await run({ operation: "create", titles: ["Secret"] })).tasks;
   await run({ operation: "claim", number: task!.number });
   await run({ operation: "amend", number: task!.number, title: "Still secret" });
-  await run({ operation: "update", number: task!.number, status: "in_review" });
+  await run({ operation: "update", number: task!.number, status: "backlog" });
   await run({ operation: "delete", number: task!.number });
   expect(announced.length).toBeGreaterThanOrEqual(5);
   for (const signal of announced)

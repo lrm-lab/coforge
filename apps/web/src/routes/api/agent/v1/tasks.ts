@@ -4,6 +4,7 @@ import {
   CHANNEL_NAME_PATTERN,
   MAX_MESSAGE_SEQUENCE,
   SEEN_EXACT_SEQS_LIMIT,
+  TASK_CREATE_STATUSES,
   TASK_PRIORITY_LEVELS,
   TASK_WRITE_STATUSES,
   TASK_READ_STATUSES,
@@ -21,16 +22,12 @@ import {
 import { z } from "zod";
 import { AppError } from "#src/lib/app-error";
 import { PROJECT_SLUG_MAX_LENGTH } from "#src/features/projects/projects.schemas";
-import {
-  agentAuthMiddleware,
-  agentErrorResponse,
-} from "#src/server/agents/agent-http-middleware.server";
+import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
 import { createCentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { TASK_V2_USE_CREATE, TaskBoard } from "#src/server/tasks/task-board.server";
 import { AGENT_FACING_ERROR_IDS } from "#src/server/tasks/task-gates.server";
 import { taskComputerRefusal } from "#src/server/tasks/task-computer-gate.server";
-import { SourceMessageTaken } from "#src/server/tasks/task-conversation-creation.server";
 import { TASK_ASSIGNMENT_MANAGER_REQUIRED } from "#src/features/tasks/task-assignment";
 import { readAgentJsonBody } from "#src/server/agents/agent-http-routes.server";
 import { isExternalAgentPrincipal } from "#src/server/agents/external-agent-credentials.server";
@@ -142,7 +139,19 @@ const taskRequestFields = z
 export const taskRequestSchema = z.discriminatedUnion("operation", [
   taskRequestFields.extend({ operation: z.literal("list") }),
   taskRequestFields.extend({
-    operation: z.enum(taskOperations.filter((operation) => operation !== "list")),
+    operation: z.literal("create"),
+    status: z.enum(TASK_CREATE_STATUSES).optional(),
+  }),
+  taskRequestFields.extend({
+    operation: z.literal("update"),
+    status: z.enum(TASK_READ_STATUSES).optional(),
+  }),
+  taskRequestFields.extend({
+    operation: z.enum(
+      taskOperations.filter(
+        (operation) => operation !== "list" && operation !== "create" && operation !== "update",
+      ),
+    ),
     status: z.enum(TASK_WRITE_STATUSES).optional(),
   }),
 ]);
@@ -195,7 +204,6 @@ export async function handleAgentTaskPost(
       idempotencyKey: command.idempotencyKey,
     });
   } catch (error) {
-    if (error instanceof SourceMessageTaken) return agentErrorResponse(error);
     if (error instanceof AppError && error.errorId === TASK_V2_USE_CREATE)
       return Response.json(
         {

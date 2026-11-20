@@ -1,7 +1,7 @@
 import {
+  TASK_WRITE_STATUSES,
   taskStatusAwaitsReceipt,
   taskStatusMoveAllowed,
-  taskStatusNeedsOwner,
   type TaskStatus,
   type TaskWriteStatus,
   type TaskView,
@@ -16,12 +16,6 @@ export type TaskMoveCommand =
       expectedRevision: number;
     };
 
-/**
- * Browser movement policy mirroring TaskBoard's claim and update authorization: which command, if
- * any, moves this Task to `nextStatus`. The status rule is the shared one (`taskStatusMoveAllowed`
- * in the SDK), so the board never offers a move the server refuses; `canSetAnyStatus` is the
- * viewer's Workspace role, which lets an owner or admin set any status.
- */
 export function getTaskMoveCommand(
   task: TaskView,
   currentMemberId: string | null,
@@ -33,21 +27,20 @@ export function getTaskMoveCommand(
     return undefined;
   const own = task.owner?.memberId === currentMemberId;
 
-  if (task.status === "todo" && (!task.owner || own) && nextStatus === "in_progress") {
+  if (
+    (task.status === "todo" || task.status === "backlog") &&
+    (!task.owner || own) &&
+    nextStatus === "in_progress"
+  ) {
     return { operation: "claim", number: task.number };
   }
 
-  if (!task.owner && taskStatusNeedsOwner(nextStatus)) return undefined;
   if (
     taskStatusAwaitsReceipt(nextStatus, {
       requiresReceipt: Boolean(task.requiresResourceReceipt),
       hasReceipt: Boolean(task.resourceReceipt),
     })
   )
-    return undefined;
-  // Only the owner works a task: anyone else may reopen it, finish it or close it. A Workspace
-  // owner or admin may work it too, as the server lets them set any status.
-  if (!canSetAnyStatus && !own && (nextStatus === "in_progress" || nextStatus === "in_review"))
     return undefined;
 
   return {
@@ -58,16 +51,8 @@ export function getTaskMoveCommand(
   };
 }
 
-/** The status menu's order: forward first, then back for rework, then Closed. */
-const MENU_ORDER: readonly TaskWriteStatus[] = [
-  "todo",
-  "in_progress",
-  "in_review",
-  "done",
-  "closed",
-];
+const MENU_ORDER: readonly TaskWriteStatus[] = TASK_WRITE_STATUSES;
 
-/** The status menu's choices: the current status, then each move the viewer can make. */
 export function taskStatusOptions(
   task: TaskView,
   currentMemberId: string | null,

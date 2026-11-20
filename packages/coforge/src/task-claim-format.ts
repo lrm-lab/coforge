@@ -46,7 +46,14 @@ export function formatClaimResults(target: string, result: TaskResult): string {
     `Claim results (${claims.length - failed} claimed${failed ? `, ${failed} failed` : ""}):`,
     ...claims.map(claimRow),
   ];
-  if (claimed.length)
+  if (claimed.length) {
+    const taskConversationRefs = claimed
+      .filter((claim) => !claim.messageId)
+      .map((claim) => taskRefForTarget(target, claim.number!));
+    const isDm = target.startsWith("@") || target.startsWith("dm:@");
+    const where = isDm
+      ? "in a 1-on-1 DM, on the DM's own timeline unless they wrote in a thread or the task"
+      : "the source message's thread, or the task if they created it or wrote in it";
     lines.push(
       "",
       "Follow up in each task's thread:",
@@ -57,7 +64,15 @@ export function formatClaimResults(target: string, result: TaskResult): string {
           : `coforge task reply "${ref}"`;
         return `${ref} → ${reply}`;
       }),
+      ...(taskConversationRefs.length
+        ? [
+            "",
+            `Answer the person who asked where they spoke (${where}); this shows who created the task and its source:`,
+            ...taskConversationRefs.map((ref) => `coforge task view "${ref}"`),
+          ]
+        : []),
     );
+  }
   return lines.join("\n");
 }
 
