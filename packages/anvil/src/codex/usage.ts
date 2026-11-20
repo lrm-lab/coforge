@@ -75,30 +75,42 @@ function toSnapshot(
   const nestedLimits = asRecord(result?.rateLimits);
   const limits = nestedLimits ? { ...result, ...nestedLimits } : result;
   if (!limits) return null;
-  const primary = toWindow(limits, "primary", 0);
-  const secondary = toWindow(limits, "secondary", 1);
-  const credits = asRecord(limits.credits);
-  const hasCredits =
-    credits && typeof credits.hasCredits === "boolean" && typeof credits.unlimited === "boolean";
+  const limitId = label(limits.limitId);
+  const isCodexLimit = !limitId || limitId === RUNTIME_PROVIDER.CODEX;
+  const codexGroup = isCodexLimit
+    ? asRecord(asRecord(limits.rateLimitsByLimitId)?.[RUNTIME_PROVIDER.CODEX])
+    : undefined;
+  const credits = asRecord(codexGroup?.credits) ?? asRecord(limits.credits);
+  const hasCreditSnapshot =
+    typeof credits?.hasCredits === "boolean" && typeof credits.unlimited === "boolean";
   const balance =
     typeof credits?.balance === "string" &&
     credits.balance.trim().length > 0 &&
     credits.balance.trim().length <= 40
       ? credits.balance.trim()
       : undefined;
-  const officialGroups = officialLimits(limits);
+  const balanceAmount = Number(balance);
+  const explicitLimit = hasExplicitLimit(limits) || hasExplicitLimit(codexGroup);
+  const weeklyCreditsAvailable =
+    isCodexLimit &&
+    !explicitLimit &&
+    hasCreditSnapshot &&
+    (credits?.unlimited === true ||
+      (credits?.hasCredits === true &&
+        (balance === undefined || (Number.isFinite(balanceAmount) && balanceAmount > 0))));
+  const primary = toWindow(limits, "primary", 0, weeklyCreditsAvailable);
+  const secondary = toWindow(limits, "secondary", 1, weeklyCreditsAvailable);
+  const officialGroups = officialLimits(limits, weeklyCreditsAvailable);
   const resetCredits = resetCreditsAvailable(result);
   if (!primary && !secondary && officialGroups.length === 0) {
     // A signed-in subscription account that yields no usable window is an error; without an
     // account (an app-server predating `account/read`) keep the old `null` answer unless the
     // reading still carries plan or credits information.
     if (account) throw new UsageUnavailableError();
-    if (!hasCredits && typeof limits.planType !== "string") return null;
+    if (!hasCreditSnapshot && typeof limits.planType !== "string") return null;
   }
   const rateLimited =
-    (limits.rateLimitReachedType !== null && limits.rateLimitReachedType !== undefined) ||
-    primary?.status === "limit_reached" ||
-    secondary?.status === "limit_reached";
+    explicitLimit || primary?.status === "limit_reached" || secondary?.status === "limit_reached";
   const accountRecord = asRecord(account?.account);
   const email =
     accountRecord?.type === "chatgpt" && typeof accountRecord.email === "string"
@@ -110,7 +122,7 @@ function toSnapshot(
     ...(primary ? { primary } : {}),
     ...(secondary ? { secondary } : {}),
     ...(officialGroups.length > 0 ? { officialGroups } : {}),
-    ...(hasCredits
+    ...(hasCreditSnapshot
       ? {
           credits: {
             hasCredits: credits!.hasCredits as boolean,
@@ -123,6 +135,17 @@ function toSnapshot(
     ...(resetCredits !== undefined ? { resetCreditsAvailable: resetCredits } : {}),
     health: rateLimited ? "rate_limited" : "ok",
   };
+}
+
+function hasExplicitLimit(limits: Record<string, unknown> | undefined): boolean {
+  return (
+    (limits?.rateLimitReachedType !== null && limits?.rateLimitReachedType !== undefined) ||
+    limits?.spendControlReached === true
+  );
+}
+
+function windowStatus(usedPercent: number, minutes: number | undefined, weeklyCredits: boolean) {
+  return usedPercent >= 100 && !(weeklyCredits && minutes === 7 * 24 * 60) ? "limit_reached" : "ok";
 }
 
 /** `rateLimitResetCredits.availableCount`, a sibling of `rateLimits` in the read. Anything but a
@@ -180,7 +203,10 @@ function windowId(label: string, index: number): string {
 
 /** `rateLimits` is the single historical bucket. `rateLimitsByLimitId` is every extra limit
  * in this schema. A limit id that appears in both is kept once, from the map. */
-function officialLimits(limits: Record<string, unknown>): UsageOfficialGroup[] {
+function officialLimits(
+  limits: Record<string, unknown>,
+  weeklyCreditsAvailable: boolean,
+): UsageOfficialGroup[] {
   const map = asRecord(limits.rateLimitsByLimitId);
   const entries: { id?: string; limits: Record<string, unknown> }[] = [];
   if (map) {
@@ -194,7 +220,12 @@ function officialLimits(limits: Record<string, unknown>): UsageOfficialGroup[] {
   if (entries.length === 0 || !singleId || !covered.has(singleId))
     entries.unshift({ ...(singleId ? { id: singleId } : {}), limits });
   return entries.flatMap((entry) => {
-    const group = officialLimit(entry.limits, entry.id);
+    const id = label(entry.limits.limitId) ?? entry.id;
+    const useWeeklyCredits =
+      weeklyCreditsAvailable &&
+      (entry.limits === limits || id === RUNTIME_PROVIDER.CODEX) &&
+      !hasExplicitLimit(entry.limits);
+    const group = officialLimit(entry.limits, entry.id, useWeeklyCredits);
     return group ? [group] : [];
   });
 }
@@ -202,10 +233,11 @@ function officialLimits(limits: Record<string, unknown>): UsageOfficialGroup[] {
 function officialLimit(
   limits: Record<string, unknown>,
   fallbackId: string | undefined,
+  weeklyCredits: boolean,
 ): UsageOfficialGroup | undefined {
   const buckets = [
-    officialWindow(limits, "primary"),
-    officialWindow(limits, "secondary"),
+    officialWindow(limits, "primary", weeklyCredits),
+    officialWindow(limits, "secondary", weeklyCredits),
     officialIndividual(limits.individualLimit),
   ].filter((bucket): bucket is UsageOfficialBucket => bucket !== undefined);
   if (buckets.length === 0) return undefined;
@@ -216,6 +248,7 @@ function officialLimit(
 function officialWindow(
   limits: Record<string, unknown>,
   kind: "primary" | "secondary",
+  weeklyCredits: boolean,
 ): UsageOfficialBucket | undefined {
   const item = asRecord(limits[kind]);
   if (!item) return undefined;
@@ -236,7 +269,7 @@ function officialWindow(
     window: kind,
     ...(minutes !== undefined ? { windowDurationMinutes: minutes } : {}),
     ...(used !== undefined
-      ? { usedPercent: used, status: used >= 100 ? "limit_reached" : "ok" }
+      ? { usedPercent: used, status: windowStatus(used, minutes, weeklyCredits) }
       : { status: "parse_unavailable" as const }),
     ...(resetsAt ? { resetsAt } : {}),
   };
@@ -277,6 +310,7 @@ function toWindow(
   limits: Record<string, unknown>,
   kind: "primary" | "secondary",
   index: number,
+  weeklyCredits: boolean,
 ): UsageWindow | undefined {
   const item = asRecord(limits[kind]);
   if (!item || typeof item.windowDurationMins !== "number" || item.windowDurationMins <= 0)
@@ -292,7 +326,7 @@ function toWindow(
   return {
     id,
     usedPercent: item.usedPercent,
-    status: item.usedPercent >= 100 ? "limit_reached" : "ok",
+    status: windowStatus(item.usedPercent, item.windowDurationMins, weeklyCredits),
     windowDurationMinutes: item.windowDurationMins,
     ...(resetsAt ? { resetsAt } : {}),
   };

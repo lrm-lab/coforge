@@ -6,6 +6,7 @@ import { Button as AriaButton, Dialog, DialogTrigger, Popover } from "react-aria
 import type { RuntimeAuthStatus } from "@lrm/coforge-anvil";
 
 import {
+  RUNTIME_PROVIDER,
   RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN,
   type RuntimeProvider,
 } from "@lrm/coforge-sdk/internal";
@@ -283,13 +284,15 @@ export function RuntimeUsagePopoverContent({
   const planType = snapshot?.planType ?? auth?.account?.planLabel;
   const plan = planType ? formatPlan(planType) : undefined;
   const accountLabel = snapshot?.accountLabel ?? auth?.account?.maskedLabel;
-  // Codex reports whether credits exist and whether they are unlimited. Its balance string is
-  // not shown: Raft leaves it out, and with no credits it reads a bare "0".
-  const credits = snapshot?.credits?.unlimited
+  const usageCredits = snapshot?.credits;
+  const balance = runtime.provider === RUNTIME_PROVIDER.CODEX ? usageCredits?.balance : undefined;
+  const credits = usageCredits?.unlimited
     ? m.computer_usage_credits_unlimited()
-    : snapshot?.credits?.hasCredits
-      ? m.computer_usage_credits_available()
-      : undefined;
+    : balance
+      ? m.computer_usage_credits_balance({ balance })
+      : usageCredits?.hasCredits
+        ? m.computer_usage_credits_available()
+        : undefined;
   const accountNote = [plan && accountLabel, credits].filter(Boolean).join(" · ");
   const title = plan || accountLabel;
   const refreshLabel = scanning ? m.computer_usage_refreshing() : m.computer_usage_refresh();
@@ -380,7 +383,16 @@ export function RuntimeUsagePopoverContent({
                     {title && (
                       <h3 className="truncate text-sm font-medium text-primary">{title}</h3>
                     )}
-                    {accountNote && <p className="truncate text-xs text-tertiary">{accountNote}</p>}
+                    {accountNote && (
+                      <p
+                        className={cn(
+                          "text-xs text-tertiary",
+                          balance ? "wrap-anywhere" : "truncate",
+                        )}
+                      >
+                        {accountNote}
+                      </p>
+                    )}
                   </div>
                 )}
                 {/* The sign-out button takes the badge's place: the usage below already shows a

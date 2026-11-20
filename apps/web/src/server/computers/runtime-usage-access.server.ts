@@ -93,13 +93,6 @@ export class RuntimeUsageAccess {
   }
 }
 
-/**
- * A reading cut to what the popover draws, built from the named fields so a field a newer Computer
- * reports reaches no viewer until the popover draws it. Not drawn for anyone: the Codex credit
- * balance (the popover shows only whether credits exist and whether they are unlimited), the time
- * of the last attempt, the snapshot's own copy of its time, and a failure's message except the one
- * line the popover compares it with. A new object, never the cache's own.
- */
 function drawnReading(reading: UsageReadResult): UsageReadResult {
   const result = reading.result;
   if (!result) return reading;

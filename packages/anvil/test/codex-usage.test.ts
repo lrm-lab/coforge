@@ -124,6 +124,91 @@ test("reports a limit-reached window and rate_limited account health", async () 
   expect(result?.health).toBe("rate_limited");
 });
 
+test("Codex credits cover an exhausted weekly allowance while preserving other limits", async () => {
+  const directory = await scratchDirectory();
+  const weekly = { usedPercent: 100, windowDurationMins: 10_080 };
+  const short = { usedPercent: 100, windowDurationMins: 300 };
+  const credits = { hasCredits: true, unlimited: false, balance: "12.50" };
+  const base = { limitId: "codex", planType: "plus", primary: weekly, credits };
+  const read = (
+    overrides: Record<string, unknown> = {},
+    codexGroupOverrides: Record<string, unknown> = {},
+  ) => {
+    const rateLimits = { ...base, ...overrides };
+    const scenario = {
+      rateLimits,
+      rateLimitsByLimitId: {
+        codex: { ...rateLimits, ...codexGroupOverrides },
+        "other-model": { primary: weekly },
+      },
+      rateLimitResetCredits: { availableCount: 2 },
+    };
+    return readCodexUsage(directory, {
+      host: fixtureCodexHost,
+      command: [process.execPath, fixture, `usage-snapshot=${JSON.stringify(scenario)}`],
+    });
+  };
+  const funded = await read();
+  expect(funded).toMatchObject({
+    health: "ok",
+    primary: { usedPercent: 100, status: "ok" },
+    credits,
+    resetCreditsAvailable: 2,
+  });
+  expect(funded?.officialGroups?.[0]?.buckets[0]).toMatchObject({
+    usedPercent: 100,
+    status: "ok",
+  });
+  expect(funded?.officialGroups?.[1]?.buckets[0]?.status).toBe("limit_reached");
+
+  for (const overrides of [
+    { credits: { hasCredits: false, unlimited: false, balance: "0" } },
+    { credits: { ...credits, balance: "0.00" } },
+    { secondary: short },
+    { rateLimitReachedType: "workspace_owner_usage_limit_reached" },
+    { spendControlReached: true },
+  ]) {
+    expect(await read(overrides)).toMatchObject({
+      health: "rate_limited",
+      resetCreditsAvailable: 2,
+    });
+  }
+  expect(await read({ primary: undefined, secondary: weekly })).toMatchObject({
+    health: "ok",
+    secondary: { usedPercent: 100, status: "ok" },
+  });
+  const explicitGroupLimit = await read(
+    {},
+    {
+      primary: { ...weekly, usedPercent: 60 },
+      rateLimitReachedType: "workspace_owner_usage_limit_reached",
+    },
+  );
+  expect(explicitGroupLimit).toMatchObject({
+    health: "rate_limited",
+    primary: { usedPercent: 100, status: "limit_reached" },
+    resetCreditsAvailable: 2,
+  });
+  expect(explicitGroupLimit?.officialGroups?.[0]?.buckets[0]).toMatchObject({ usedPercent: 60 });
+
+  const emptyCredits = { hasCredits: false, unlimited: false, balance: "0" };
+  expect(await read({}, { credits: emptyCredits })).toMatchObject({
+    health: "rate_limited",
+    credits: emptyCredits,
+    primary: { status: "limit_reached", usedPercent: 100 },
+  });
+  expect(await read({ credits: emptyCredits }, { credits })).toMatchObject({
+    health: "ok",
+    credits,
+    primary: { status: "ok", usedPercent: 100 },
+  });
+  expect(await read({}, { credits: undefined })).toMatchObject({
+    health: "ok",
+    credits,
+    primary: { status: "ok", usedPercent: 100 },
+  });
+});
+
 test("errors clearly when a signed-in account yields no usable window", async () => {
   const directory = await scratchDirectory();
   await expect(

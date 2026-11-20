@@ -11,6 +11,8 @@ import {
   usageScanReading,
   usageScanResult,
 } from "#src/daemon-runtime/usage-scan-response";
+import { scanUsage } from "#src/daemon-runtime/runtime-agent-flows";
+import { ProviderQuotaState } from "#src/daemon-runtime/provider-quota-state";
 
 const now = () => new Date("2026-10-12T01:00:00.000Z");
 const fresh = { provider: "claude-code" } as unknown as UsageSnapshot;
@@ -57,6 +59,36 @@ describe("usageScanReading", () => {
 });
 
 describe("usageScanFailure", () => {
+  test("a failed Codex scan cannot fall back to observed Claude usage", async () => {
+    const quota = new ProviderQuotaState({ now: () => now().getTime() });
+    quota.observe("claude-agent", {
+      ...observed,
+      primary: {
+        usedPercent: 40,
+        status: "ok",
+        windowDurationMinutes: 300,
+        resetsAt: "2026-10-12T05:30:00.000Z",
+      },
+    });
+    expect(quota.observedUsage("claude-code")).toBeDefined();
+
+    const answer = await scanUsage(
+      {
+        assertRunning() {},
+        workspaceRoot: "/unused",
+        createProvider: () => ({
+          async readUsage() {
+            throw new UsageUnavailableError();
+          },
+        }),
+        observedUsage: (provider) => quota.observedUsage(provider),
+      },
+      "codex",
+    );
+    expect(answer.status).toBe("unavailable");
+    expect(answer.snapshotJson).toBeUndefined();
+  });
+
   test("an unsupported account wins over an observed snapshot, which is not even read", () => {
     let reads = 0;
     const answer = usageScanFailure(

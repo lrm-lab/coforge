@@ -99,6 +99,11 @@ export function handleCodexMetadata(
       });
       return true;
     }
+    const usageSnapshot = argumentValue("usage-snapshot");
+    if (usageSnapshot !== undefined) {
+      write({ id: request.id, result: JSON.parse(usageSnapshot) });
+      return true;
+    }
     const primary = {
       usedPercent: usageRatelimited ? 100 : 25,
       windowDurationMins: 300,

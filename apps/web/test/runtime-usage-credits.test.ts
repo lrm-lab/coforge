@@ -155,6 +155,38 @@ test("a login state that needs saying outranks usage on the chip, and never leav
   expect(chipStatus("unavailable", undefined)).toBeUndefined();
 });
 
+test("Codex usage reflects the new snapshot and preserves a legacy rate limit", () => {
+  const weekly = { windowDurationMinutes: 10_080, usedPercent: 100, status: "ok" } as const;
+  const result = {
+    workspaceId: "w",
+    computerId: "c",
+    provider: "codex",
+    scanId: "usage",
+    status: "available",
+    collectedAt: "2026-11-20T00:00:00Z",
+    snapshot: {
+      provider: "codex",
+      primary: weekly,
+      officialGroups: [{ name: "Codex", buckets: [{ window: "primary", ...weekly }] }],
+      credits: { hasCredits: true, unlimited: false, balance: "12.50" },
+      health: "ok",
+    },
+  } satisfies NonNullable<UsageReadResult["result"]>;
+  expect(usageStatus(result)?.ok).toBe(true);
+  expect(usageHealth({ state: "fresh", result })?.ok).toBe(true);
+  const legacy = {
+    ...result,
+    snapshot: {
+      ...result.snapshot,
+      health: "rate_limited",
+      primary: { usedPercent: 100, windowDurationMinutes: 10_080 },
+      officialGroups: undefined,
+    },
+  } as const;
+  expect(usageStatus(legacy)?.ok).toBe(false);
+  expect(usageHealth({ state: "stale", result: legacy })?.ok).toBe(false);
+});
+
 test("a failed login check reads as signed in while usage reads, else as signed out", () => {
   const read = (status: string) =>
     ({
