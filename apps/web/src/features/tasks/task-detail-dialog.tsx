@@ -15,6 +15,7 @@ import {
 import { Heading } from "react-aria-components";
 
 import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { Button } from "#src/components/base/buttons/button";
 import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import type { Mentionable } from "#src/features/conversations/mention-text";
@@ -221,6 +222,7 @@ export function TaskDetailDialog({
     boundaryRef: modalContentRef,
     reducedMotion: reduced,
   });
+  const showBackToTop = canScrollToTop && !history;
   const setTitleNode = useCallback(
     (node: HTMLHeadingElement | null) => {
       titleRef.current = node;
@@ -307,17 +309,17 @@ export function TaskDetailDialog({
                   onOpenRelated={onOpenRelated}
                   onScrollToTop={scrolledOut && !history ? scrollToTop : undefined}
                 />
-                {!history && (
-                  <ButtonUtility
-                    tooltip={m.tasks_scroll_to_top()}
-                    tooltipPlacement="bottom"
-                    icon={ArrowUp}
-                    size="sm"
+                {showBackToTop && (
+                  <Button
+                    aria-label={m.tasks_scroll_to_top()}
                     color="tertiary"
-                    isDisabled={!canScrollToTop}
-                    onClick={scrollToTop}
-                    className={PHONE_BAR_BUTTON}
-                  />
+                    size="sm"
+                    iconLeading={ArrowUp}
+                    onPress={scrollToTop}
+                    className="shrink-0 gap-1 px-1.5 text-xs font-medium whitespace-nowrap max-sm:h-11 max-sm:w-24 max-[360px]:w-18 max-[360px]:flex-col max-[360px]:gap-0 *:data-icon:size-4"
+                  >
+                    {m.tasks_scroll_to_top()}
+                  </Button>
                 )}
                 <Dropdown.Root>
                   <ButtonUtility
@@ -361,7 +363,11 @@ export function TaskDetailDialog({
                   color="tertiary"
                   aria-label={m.tasks_close()}
                   onClick={requestClose}
-                  className={cn(PHONE_BAR_BUTTON, "max-sm:order-first", !history && "max-sm:mr-11")}
+                  className={cn(
+                    PHONE_BAR_BUTTON,
+                    "max-sm:order-first",
+                    showBackToTop && "max-sm:mr-24 max-[360px]:mr-18",
+                  )}
                 />
               </div>
               <div

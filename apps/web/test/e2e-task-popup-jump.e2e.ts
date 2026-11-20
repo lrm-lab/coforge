@@ -92,15 +92,16 @@ test("a Task popup offers no Jump to latest when nothing is unread", async () =>
     await browser("wait", "--fn", `${pageHydrated} && ${history}?.textContent.includes("${tail}")`);
     // A short discussion, at the latest: nothing to go back to.
     expect(await evaluate<boolean>(`${backToBottom} === null`)).toBe(true);
-    expect(await evaluate<boolean>(`${backToTop}?.disabled`)).toBe(true);
+    expect(await evaluate<boolean>(`${backToTop} === null`)).toBe(true);
     // The pane narrows until it overflows (a long draft, a status bar) and the reader goes up.
     await evaluate(`(${history}.style.maxHeight = "60px", true)`);
     await browser("wait", "--fn", `${history}.scrollHeight > ${history}.clientHeight + 48`);
     await evaluate(`(${history}.scrollTop = 8, true)`);
     await browser("wait", "--fn", `${backToTop}?.disabled === false`);
+    expect(await evaluate<string>(`${backToTop}.innerText.trim()`)).toBe("Back to top");
     await evaluate(`(${backToTop}.focus(), true)`);
     await browser("press", "Enter");
-    await browser("wait", "--fn", `${history}.scrollTop === 0 && ${backToTop}.disabled`);
+    await browser("wait", "--fn", `${history}.scrollTop === 0 && ${backToTop} === null`);
     await evaluate(`(${history}.scrollTop = ${history}.scrollHeight, true)`);
     await browser("wait", "--fn", `${history}.scrollTop > 48`);
     await evaluate(
