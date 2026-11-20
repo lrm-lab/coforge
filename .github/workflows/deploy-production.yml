@@ -91,7 +91,8 @@ jobs:
           if printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
             echo "image=${repo}@${digest}" >> "$GITHUB_OUTPUT"
           else
-            echo "image=" >> "$GITHUB_OUTPUT"
+            echo "missing Artifact Checker image ${repo}:sha-${STAGING_SHA} for staging commit ${STAGING_SHA}" >&2
+            exit 1
           fi
 
       # web-e2e and web-integration never block a deploy; their latest main

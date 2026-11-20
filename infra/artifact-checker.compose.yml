@@ -7,12 +7,16 @@ services:
       COFORGE_ARTIFACT_CHECK_WORKER_URL: ${COFORGE_ARTIFACT_CHECK_WORKER_URL:-http://artifact-checker:3100}
       COFORGE_ARTIFACT_CHECK_SECRET: ${COFORGE_ARTIFACT_CHECK_SECRET:?artifact-checker requires a shared secret}
       COFORGE_ARTIFACT_CHECK_CONCURRENCY: ${COFORGE_ARTIFACT_CHECK_CONCURRENCY:-1}
+      COFORGE_ARTIFACT_CHECK_DAILY_CAP: ${COFORGE_ARTIFACT_CHECK_DAILY_CAP:-200}
 
   artifact-checker:
     image: ${COFORGE_ARTIFACT_CHECKER_IMAGE:?COFORGE_ARTIFACT_CHECKER_IMAGE must resolve to an immutable digest}
     mem_limit: 1g
     shm_size: 256mb
     cpus: "1.0"
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
     environment:
       PORT: "3100"
       COFORGE_ARTIFACT_CHECK_SECRET: ${COFORGE_ARTIFACT_CHECK_SECRET:?artifact-checker requires a shared secret}

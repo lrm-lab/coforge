@@ -35,6 +35,9 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          filter: blob:none
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
@@ -48,8 +51,24 @@ jobs:
         with:
           cache-binary: false
 
+      - name: Check for existing Artifact Checker image for this source tree
+        id: existing
+        run: |
+          checker_sha="$(git log -n 1 --format=%H -- services/artifact-checker)"
+          echo "checker_sha=$checker_sha" >> "$GITHUB_OUTPUT"
+          repo="ghcr.io/${IMAGE_REPOSITORY}"
+          digest="$(docker buildx imagetools inspect "${repo}:sha-${checker_sha}" --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"' || true)"
+          if printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo "digest=$digest" >> "$GITHUB_OUTPUT"
+            echo "hit=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "digest=" >> "$GITHUB_OUTPUT"
+            echo "hit=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build and push Docker image
         id: push
+        if: steps.existing.outputs.hit != 'true'
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: services/artifact-checker
@@ -61,15 +80,36 @@ jobs:
 
       - name: Record image digest
         id: identity
+        env:
+          EXISTING_DIGEST: ${{ steps.existing.outputs.digest }}
+          BUILT_DIGEST: ${{ steps.push.outputs.digest }}
         run: |
-          echo "image=ghcr.io/${{ env.IMAGE_REPOSITORY }}@${{ steps.push.outputs.digest }}" >> "$GITHUB_OUTPUT"
+          digest="${EXISTING_DIGEST:-$BUILT_DIGEST}"
+          if ! printf '%s' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo "failed to resolve Artifact Checker image digest" >&2
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${{ env.IMAGE_REPOSITORY }}@${digest}" >> "$GITHUB_OUTPUT"
 
-      - name: Tag image with source commit
+      - name: Tag image with checker tree commit and source commit
+        env:
+          CHECKER_SHA: ${{ steps.existing.outputs.checker_sha }}
+          HIT: ${{ steps.existing.outputs.hit }}
+          DIGEST: ${{ steps.identity.outputs.digest }}
+          SOURCE_SHA: ${{ github.sha }}
         run: |
-          docker buildx imagetools create \
-            -t "ghcr.io/${{ env.IMAGE_REPOSITORY }}:sha-${{ github.sha }}" \
-            "ghcr.io/${{ env.IMAGE_REPOSITORY }}@${{ steps.push.outputs.digest }}"
+          repo="ghcr.io/${IMAGE_REPOSITORY}"
+          if [ "$HIT" != "true" ] && [ -n "$CHECKER_SHA" ]; then
+            docker buildx imagetools create -t "${repo}:sha-${CHECKER_SHA}" "${repo}@${DIGEST}"
+          fi
+          if [ "$CHECKER_SHA" != "$SOURCE_SHA" ]; then
+            docker buildx imagetools create -t "${repo}:sha-${SOURCE_SHA}" "${repo}@${DIGEST}"
+          fi
 
       - name: Print image digest
+        env:
+          REUSED: ${{ steps.existing.outputs.hit }}
+          DIGEST: ${{ steps.identity.outputs.digest }}
         run: |
-          echo "ghcr.io/${{ env.IMAGE_REPOSITORY }}@${{ steps.push.outputs.digest }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "ghcr.io/${IMAGE_REPOSITORY}@${DIGEST} (reused=${REUSED})" >> "$GITHUB_STEP_SUMMARY"
