@@ -17,7 +17,7 @@ var badges = new Map();
 var marksParent = null;
 var textCache = null;
 var indexDirty = true;
-var flashId = null;
+var flashMark = null;
 var flashTimer = 0;
 var relocateTimer = 0;
 var lastReported = null;
@@ -47,8 +47,8 @@ function drawDraft() {
 function drawFlash() {
   var parent = layer("flash");
   parent.textContent = "";
-  var entry = flashId === null ? null : placedById.get(flashId);
-  if (entry) paintTarget(parent, entry.target, true);
+  var target = flashMark && locateAnchor(flashMark.anchor);
+  if (target) paintTarget(parent, target, true);
 }
 function showOutline(id) {
   var outline = layer("outline");
@@ -111,7 +111,7 @@ function drawMarks() {
     if (mark.draft) badge.setAttribute("data-draft", "");
     var look = mark.draft ? "border:2px dashed #fff;background:" + ACCENT + ";opacity:.75" : "border:2px solid #fff;background:" + ACCENT;
     badge.style.cssText = "position:absolute;pointer-events:auto;cursor:pointer;margin:0;padding:0;width:" + BADGE_SIZE + "px;height:" + BADGE_SIZE + "px;border-radius:" + BADGE_SIZE / 2 + "px;" + look + ";color:#fff;font:600 11px/20px system-ui,sans-serif;text-align:center;left:" + left + "px;top:" + top + "px";
-    badge.style.boxShadow = mark.id === flashId ? BADGE_FLASH_SHADOW : BADGE_SHADOW;
+    badge.style.boxShadow = flashMark && mark.id === flashMark.id ? BADGE_FLASH_SHADOW : BADGE_SHADOW;
     badges.set(mark.id, badge);
     parent.appendChild(badge);
   });
@@ -145,7 +145,7 @@ function relocate() {
   if (document.readyState === "complete") reportFound();
 }
 function scheduleRelocate() {
-  if (relocateTimer || (!annotate.marks.length && !annotate.drafts.length)) return;
+  if (relocateTimer || (!annotate.marks.length && !annotate.drafts.length && !flashMark)) return;
   relocateTimer = setTimeout(relocate, 150);
 }
 function ownRecord(record) {
@@ -154,7 +154,7 @@ function ownRecord(record) {
   return nodes.length > 0 && nodes.every(function (node) { return node === overlay; });
 }
 function syncWatch() {
-  var live = annotate.marks.length > 0 || annotate.drafts.length > 0;
+  var live = annotate.marks.length > 0 || annotate.drafts.length > 0 || flashMark;
   if (!live) {
     if (mutationObserver) mutationObserver.disconnect();
     mutationObserver = null;
@@ -203,11 +203,12 @@ function setDraft(params) {
   syncWatch();
   drawDraft();
 }
-function setFlash(id) {
-  var previous = flashId === null ? null : badges.get(flashId);
+function setFlash(mark) {
+  var previous = flashMark && badges.get(flashMark.id);
   if (previous) previous.style.boxShadow = BADGE_SHADOW;
-  flashId = id;
-  var next = id === null ? null : badges.get(id);
+  flashMark = mark;
+  syncWatch();
+  var next = mark && badges.get(mark.id);
   if (next) next.style.boxShadow = BADGE_FLASH_SHADOW;
   drawFlash();
 }
@@ -217,7 +218,7 @@ function focusMark(params) {
   var node = entry.target.node;
   var element = node.nodeType === 1 ? node : node.parentElement;
   if (element) element.scrollIntoView({ block: "center", inline: "nearest", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
-  setFlash(entry.mark.id);
+  setFlash(entry.mark);
   clearTimeout(flashTimer);
   flashTimer = setTimeout(function () { setFlash(null); }, 1600);
 }
