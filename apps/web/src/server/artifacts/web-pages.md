@@ -2,9 +2,10 @@
 
 - A page of artifact `<uuid>` is served only from `a-<uuid>.<sandbox host>`, matched by host name
   alone (`artifact-sandbox-config.server.ts`). Every name under the sandbox host belongs to the
-  sandbox and anything but an artifact's origin is refused, so the application's host must never
-  be the sandbox host or under it (a boot rule). Locally the sandbox is `http://localhost:<port>`
-  and the application runs on `127.0.0.1`.
+  sandbox. The bare sandbox host accepts only legacy `GET` and `HEAD` requests to `/p/<token>`.
+  A valid token redirects to the application's public reader without the token or query string.
+  The application host must be outside the sandbox domain (a boot rule). Locally the sandbox is
+  `http://localhost:<port>` and the application runs on `127.0.0.1`.
 - Opening is two signed values (`artifact-sandbox-ticket.server.ts`): a ticket, single use (its
   nonce is spent through `TicketNonces`: Redis `SET NX EX`, an in-process map only without Redis;
   an unspendable nonce refuses the ticket, never opens it), then a file token in the path

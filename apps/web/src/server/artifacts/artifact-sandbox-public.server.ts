@@ -72,15 +72,28 @@ export class ArtifactPublicServing {
       : null;
   }
 
-  private tokenRef(token: string): PublicRef | null {
+  private tokenRef(token: string, guarded = false): PublicRef | null {
     const publicPage = this.deps.publicPage;
     return publicPage
       ? {
           base: `/p/${token}`,
-          load: async (path) => ({ page: await publicPage(token, path), miss: false }),
-          guarded: false,
+          load: async (path) => {
+            const page = await publicPage(token, path);
+            return { page, miss: guarded && !page };
+          },
+          guarded,
         }
       : null;
+  }
+
+  async redirectLegacyToken(request: Request, token: string): Promise<Response> {
+    const ref = this.tokenRef(token, true);
+    if (!ref) return sandboxRefusal(404, "Not found.");
+    const refused = await this.admitPublic(request, null);
+    if (refused) return refused;
+    const page = await this.loadPublic(request, ref, undefined);
+    if (page instanceof Response) return page;
+    return page ? this.redirectToApp(page, undefined) : sandboxRefusal(404, "Not found.");
   }
 
   servePublic(

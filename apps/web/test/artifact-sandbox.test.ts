@@ -168,7 +168,7 @@ describe("the sandbox's answer", () => {
     return { ...box, url };
   }
 
-  test("the bare host and any other name under it serve nothing but a refusal", async () => {
+  test("the bare host refuses the root and another name under it refuses an artifact path", async () => {
     const { service, url } = await opened();
     const ticket = new URL(url).search;
     for (const base of [

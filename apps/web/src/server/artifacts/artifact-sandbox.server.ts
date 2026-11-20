@@ -38,6 +38,8 @@ import {
 
 export const SANDBOX_OPEN_PATH = "/_coforge/open";
 
+const PUBLIC_PAGE_PATH = /^\/p\/([A-Za-z0-9_-]{43})(?:\/page\/(.+))?$/;
+
 export type SandboxDependencies = {
   reads: Pick<ArtifactReads, "read" | "file" | "fileInVersion">;
   readBlob(workspaceId: string, sha256: string): Promise<Uint8Array | null>;
@@ -130,13 +132,19 @@ export class ArtifactSandbox {
     const origin = this.deps.origin;
     if (!origin) return sandboxRefusal(404, "Not found.");
     const target = sandboxTarget(request, origin);
-    if (target.kind !== "artifact") return sandboxRefusal(404, "Not found.");
+    if (target.kind === "other") return sandboxRefusal(404, "Not found.");
+    const pathname = new URL(request.url).pathname;
+    if (target.kind === "bare") {
+      const legacy = PUBLIC_PAGE_PATH.exec(pathname);
+      if (legacy && legacy[2] === undefined)
+        return this.#public.redirectLegacyToken(request, legacy[1]!);
+      return sandboxRefusal(404, "Not found.");
+    }
     const host: ArtifactHost = {
       origin,
       artifactId: target.artifactId,
       pageOrigin: artifactPageOrigin(origin, target.artifactId),
     };
-    const pathname = new URL(request.url).pathname;
     if (pathname === PAGE_RUNTIME_PATH) return sandboxRuntimeResponse(method);
     if (pathname === SANDBOX_OPEN_PATH) return this.open(request, host);
     const linkFile = /^\/l\/file\/(.+)$/.exec(pathname);
@@ -150,7 +158,7 @@ export class ArtifactSandbox {
     const publicFile = /^\/p\/([A-Za-z0-9_-]{43})\/file\/(.+)$/.exec(pathname);
     if (publicFile)
       return this.#public.servePublicFile(request, host, publicFile[1]!, publicFile[2]!);
-    const publicPage = /^\/p\/([A-Za-z0-9_-]{43})(?:\/page\/(.+))?$/.exec(pathname);
+    const publicPage = PUBLIC_PAGE_PATH.exec(pathname);
     if (publicPage) return this.#public.servePublic(request, host, publicPage[1]!, publicPage[2]);
     return sandboxRefusal(404, "Not found.");
   }

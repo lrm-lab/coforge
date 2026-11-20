@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
+import { publicArtifactPath } from "#src/features/artifacts/artifact-short-id";
+import { ArtifactSandbox } from "#src/server/artifacts/artifact-sandbox.server";
+import { MemoryTicketNonces } from "#src/server/artifacts/artifact-sandbox-nonces.server";
 import { ArtifactPublicLinks } from "#src/server/artifacts/artifact-public-links.server";
 import {
   linkPageLookup,
@@ -222,6 +225,23 @@ test("a public link shows the current version's entry and any one file of it", a
   const token = set.enabled ? set.url.slice(set.url.lastIndexOf("/") + 1) : "";
   const lookup = publicPageLookup(db);
   const lookupById = linkPageLookup(db);
+  const appOrigin = "http://127.0.0.1:5173";
+  const sandbox = new ArtifactSandbox({
+    reads: {} as never,
+    readBlob: async () => {
+      throw new Error("Redirects must not read file bytes");
+    },
+    origin: ORIGIN,
+    nonces: new MemoryTicketNonces(),
+    secret: async () => "test-secret",
+    now: () => new Date(),
+    publicPage: lookup,
+    appOrigin: () => appOrigin,
+  });
+  const bare = () => sandbox.serve(new Request(`${ORIGIN}/p/${token}`));
+  const active = await bare();
+  expect(active.status).toBe(302);
+  expect(active.headers.get("location")).toBe(`${appOrigin}${publicArtifactPath(made.id)}`);
 
   expect(await lookup(token)).toEqual({
     workspaceId,
@@ -248,7 +268,28 @@ test("a public link shows the current version's entry and any one file of it", a
     shared: true,
     page: { sha256: "css" },
   });
+  await db.conversation.update({
+    where: { id: channelId },
+    data: { hiddenFromWorkspaceAt: new Date() },
+  });
+  try {
+    expect((await bare()).status).toBe(404);
+  } finally {
+    await db.conversation.update({
+      where: { id: channelId },
+      data: { hiddenFromWorkspaceAt: null },
+    });
+  }
+
+  await db.artifact.update({ where: { id: made.id }, data: { deletedAt: new Date() } });
+  try {
+    expect((await bare()).status).toBe(404);
+  } finally {
+    await db.artifact.update({ where: { id: made.id }, data: { deletedAt: null } });
+  }
+
   await links.set({ workspaceId, artifactId: made.id, userId: owner, enabled: false });
+  expect((await bare()).status).toBe(404);
   expect(await lookup(token, "site.css")).toBeNull();
   expect(await lookupById(made.id)).toEqual({ shared: false, page: null });
   expect(await lookupById(made.id, "site.css")).toEqual({ shared: false, page: null });
@@ -256,6 +297,13 @@ test("a public link shows the current version's entry and any one file of it", a
     await db.artifact.findUniqueOrThrow({ where: { id: made.id }, select: { access: true } }),
   ).toEqual({ access: "conversation" });
   expect(await db.artifactAccessEvent.count({ where: { artifactId: made.id } })).toBe(0);
+
+  await db.artifact.update({ where: { id: made.id }, data: { access: "link" } });
+  expect((await bare()).status).toBe(404);
+  expect(await lookupById(made.id)).toMatchObject({
+    shared: true,
+    page: { artifactId: made.id, access: "link" },
+  });
 });
 
 test("a public link to a file entry is looked up with its kind and size", async () => {
