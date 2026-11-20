@@ -196,6 +196,7 @@ test("an around page measures each side against its own rows, not the whole page
     });
     expect(unread.messages).toEqual([]);
     expect(unread.moreUnread).toBe(true);
+    expect(unread.readPositionAfter).toBe(9);
   } finally {
     await db.workspace.delete({ where: { id: workspace.id } });
     await db.user.delete({ where: { id: user.id } });
