@@ -38,7 +38,7 @@ describe("same-image deploy runs image retention and still reports", () => {
 echo "$*" >> "$FIXTURE_ROOT/calls"
 case "$1" in
   images) cat "$FIXTURE_ROOT/images.txt" ;;
-  ps) [ -n "$PS_FAILS" ] && exit 1; printf 'c1\\n' ;;
+  ps) [[ "$*" = *service=artifact-checker* ]] && exit 0; [ -n "$PS_FAILS" ] && exit 1; printf 'c1\\n' ;;
   inspect) printf 'sha256:img-fff\\n' ;;
   image) printf 'sha256:img-fff\\n' ;;
   rmi) exit 0 ;;

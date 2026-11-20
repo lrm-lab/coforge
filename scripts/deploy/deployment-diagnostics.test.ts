@@ -76,6 +76,8 @@ if [[ "$1" = compose ]]; then
     up) if [[ ! -f "$FIXTURE_ROOT/candidate-failed" ]]; then touch "$FIXTURE_ROOT/candidate-failed"; exit 1; fi ;;
     ps) echo abc123 ;;
   esac
+elif [[ "$1" = ps && "$*" = *service=artifact-checker* ]]; then
+  exit 0
 elif [[ "$1" = ps || "$1" = logs ]]; then
   if [[ "$DIAGNOSTICS_MODE" = unavailable ]]; then echo fixture-private-value >&2; exit 1; fi
   if [[ "$1" = ps ]]; then
