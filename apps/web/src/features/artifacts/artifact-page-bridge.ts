@@ -23,6 +23,7 @@ import {
   offeredNamespaces,
   type PageLevel,
 } from "./artifact-page-levels";
+import type { PageDisplayMode, PageThemeTokens } from "./artifact-page-theme";
 
 export { PageHostError } from "./artifact-page-bridge-core";
 export type { PageAnnotationEvent } from "./artifact-page-bridge-annotate";
@@ -33,6 +34,7 @@ export type {
   PageDataCall,
   PageDataPort,
 } from "./artifact-page-bridge-core";
+export type { PageDisplayMode, PageThemeTokens } from "./artifact-page-theme";
 
 export type PageTheme = "light" | "dark";
 
@@ -42,13 +44,17 @@ export type PageArtifact = { id: string; title: string; version: number; entryPa
 
 export type PageFrameStatus = { state: "blocked"; reason: string; status: number };
 
+export type PageFrameSize = { width: number; height: number };
+
 export type PageBridgeHost = {
   viewer: PageViewer;
   artifact: PageArtifact;
   level: PageLevel;
+  displayMode?: PageDisplayMode;
   data: PageDataPort;
   assets: PageAssetsPort;
   theme(): PageTheme;
+  themeTokens?(): PageThemeTokens;
   userActive(): boolean;
   copyText(text: string): Promise<boolean>;
   downloadFile(file: Blob, name: string): void;
@@ -58,6 +64,8 @@ export type PageBridgeHost = {
   reportError(message: string): void;
   reportFind(result: { total: number; active: number }): void;
   frameStatus(status: PageFrameStatus): void;
+  onInitialized?(): void;
+  onSizeChanged?(size: PageFrameSize): void;
   now(): number;
 };
 
@@ -72,6 +80,8 @@ export const BRIDGE_DATA_RATE_LIMIT_PER_MINUTE = 600;
 export const BRIDGE_DECLINES_BEFORE_MUTE = 3;
 export const BRIDGE_ERROR_REPORTS = 5;
 
+const MAX_REPORTED_DIMENSION = 20_000;
+
 export const FRAME_STATUS = "coforge/notifications/frame-status";
 
 export function blockedFrameStatus(params: unknown): PageFrameStatus | null {
@@ -81,9 +91,26 @@ export function blockedFrameStatus(params: unknown): PageFrameStatus | null {
   return { state, reason, status: Number.isSafeInteger(status) ? Number(status) : 0 };
 }
 
+function validFrameSize(params: Params): PageFrameSize | null {
+  const { width, height } = params;
+  if (
+    typeof width !== "number" ||
+    typeof height !== "number" ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width < 0 ||
+    height < 0 ||
+    width > MAX_REPORTED_DIMENSION ||
+    height > MAX_REPORTED_DIMENSION
+  )
+    return null;
+  return { width: Math.ceil(width), height: Math.ceil(height) };
+}
+
 export type PageBridge = ReturnType<typeof createPageBridge>;
 
 export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
+  const displayMode: PageDisplayMode = host.displayMode ?? "panel";
   const hits = new Map<string, number[]>();
   const declines = new Map<ConfirmGate, number>();
   const consents = new Set<ConfirmGate>();
@@ -92,11 +119,23 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
   const send = (message: object) =>
     frame.window()?.postMessage({ jsonrpc: "2.0", ...message }, frame.origin);
 
+  const hostContext = () => {
+    const tokens = host.themeTokens?.();
+    const hasTokens = tokens && Object.keys(tokens).length > 0;
+    return {
+      theme: host.theme(),
+      displayMode,
+      ...(hasTokens ? { tokens } : {}),
+    };
+  };
+
   const admit = (key: string) => {
     const now = host.now();
     const recent = (hits.get(key) ?? []).filter((at) => now - at < 60_000);
     const limit =
-      key.startsWith("db.") || key.startsWith("annotate.")
+      key.startsWith("db.") ||
+      key.startsWith("annotate.") ||
+      key === "ui/notifications/size-changed"
         ? BRIDGE_DATA_RATE_LIMIT_PER_MINUTE
         : BRIDGE_RATE_LIMIT_PER_MINUTE;
     if (recent.length >= limit) {
@@ -151,8 +190,13 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
       return { copied: await host.copyText(args.text) };
     },
     ...createDownloadCalls(host),
-    ...createCommentCalls(host),
+    ...(displayMode === "inline" ? {} : createCommentCalls(host)),
   };
+
+  const namespaces = () =>
+    displayMode === "inline"
+      ? offeredNamespaces(host.level).filter((namespace) => namespace !== "comments")
+      : offeredNamespaces(host.level);
 
   const call = async (params: Params) => {
     const key = `${String(params.namespace)}.${String(params.method)}`;
@@ -172,8 +216,8 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
           protocolVersion: BRIDGE_PROTOCOL_VERSION,
           hostInfo: { name: "coforge", version: "1" },
           hostCapabilities: { openLinks: {} },
-          hostContext: { theme: host.theme() },
-          experimental: { "coforge/runtime": { namespaces: offeredNamespaces(host.level) } },
+          hostContext: hostContext(),
+          experimental: { "coforge/runtime": { namespaces: namespaces() } },
         };
       case "ui/open-link":
         return openLink(params);
@@ -186,6 +230,7 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
 
   const notify = (method: string, params: Params) => {
     if (method.startsWith("coforge/notifications/annotate-")) {
+      if (displayMode === "inline") return;
       try {
         admit("annotate.notify");
       } catch {
@@ -202,7 +247,18 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
           return;
         }
         annotations.ready();
+        host.onInitialized?.();
         return;
+      case "ui/notifications/size-changed": {
+        try {
+          admit("ui/notifications/size-changed");
+        } catch {
+          return;
+        }
+        const size = validFrameSize(params);
+        if (size) host.onSizeChanged?.(size);
+        return;
+      }
       case "coforge/notifications/error":
         if (errorReports < BRIDGE_ERROR_REPORTS && typeof params.message === "string") {
           errorReports += 1;
@@ -252,7 +308,7 @@ export function createPageBridge(host: PageBridgeHost, frame: PageBridgeFrame) {
       dataCalls.dispose();
     },
     notifyTheme() {
-      send({ method: "ui/notifications/host-context-changed", params: { theme: host.theme() } });
+      send({ method: "ui/notifications/host-context-changed", params: hostContext() });
     },
     find(params: { query: string; step: number }) {
       send({ method: "coforge/find", params });

@@ -23,6 +23,13 @@ token's path (`/_f/<token>/<path>`), so relative references (`css/site.css`, `im
   `apps/web/src/server/artifacts/artifact-sandbox-cdns.server.ts`.
 - It makes no other network requests (no WebSocket, no form, no window, no nested frame), and has no
   cookies of ours; `localStorage` and IndexedDB belong to its artifact's origin.
-- The page runtime exposes `window.coforge.use(name)`: `user`, `artifact`, `clipboard`, `links`
-  and `comments`, answered by the app's page over `postMessage` (the Manual's `artifacts` topic
-  lists them). An `.html` file is read whole by the sandbox and may be at most 2 MiB to be shown.
+- The page runtime exposes `window.coforge.use(name)`: `user`, `artifact`, `clipboard`, `links`,
+  `downloads`, `db`, `assets`, and (in `panel` mode) `comments`, answered by the app's page over
+  `postMessage` (the Manual's `artifact-pages` topic lists them). An `.html` file is read whole by
+  the sandbox and may be at most 2 MiB to be shown.
+- Linking an `.html` artifact in a chat message with `?embed=1` (and optional `&version=N`) renders
+  it flush inline inside the message stream on the same isolated `a-<uuid>.<sandbox host>` origin.
+  The runtime sets `data-display-mode="inline"`, applies host `--coforge-*` theme variables and
+  transparent defaults, and reports content height (`ui/notifications/size-changed`, clamped to
+  96px–800px). Active inline frames are lazily activated in the viewport and bounded per
+  conversation by an LRU pool.

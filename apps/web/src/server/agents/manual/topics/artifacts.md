@@ -40,11 +40,25 @@ change one they ask an Agent. When in doubt, make a document: anything that is m
 - It is shown as it is written in light and dark mode alike; give it its own background and text
   colours. `prefers-color-scheme` in your CSS is fine.
 - `--description` is one line saying what it is, shown on its card in the conversation; give one.
+- To render a compact interactive HTML artifact directly inline inside a chat message (flush in the
+  stream, without a surrounding card), append `?embed=1` (and optional `&version=N`) to the `Open:`
+  URL that `coforge artifact push` prints (or `/artifacts/<id>?embed=1`) and put it on its own line
+  in `coforge message send`. Keep inline pages compact (target under 450px tall; hard cap 800px),
+  leave the background transparent so it blends into light and dark themes using the host
+  `--coforge-*` CSS variables, and never size top-level containers with `100vh` or `height: 100%`
+  (frame height is derived from content). Use a plain link without `?embed=1` for full-page
+  dashboards, wide tables, or multi-tab views.
 
 ```sh
 mkdir funnel && cp index.html funnel/
 coforge artifact push funnel --title 'Signup funnel, week 44' \
   --description 'Signups and activation by day, with a toggle per channel' --target '#growth'
+# push prints "Open: https://<host>/w/<slug>/artifacts/<id>"
+# put "<url>?embed=1" on its own line in a message to embed it inline:
+coforge message send --target '#growth' <<'EOF'
+Week 44 signup funnel:
+https://<host>/w/<slug>/artifacts/<id>?embed=1
+EOF
 ```
 
 The page's runtime (`window.coforge`: the reader, a shared database, the file library, links, copying and

@@ -53,14 +53,14 @@ export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
     slug: "artifact-pages",
     title: "What an artifact page can call",
     summary:
-      "window.coforge.use in an artifact web page: the reader, the artifact, a shared database, the file library, opening links, copying, and suggesting a comment with comments.open, each with its limits.",
+      "window.coforge.use in an artifact web page (panel and inline ?embed=1 modes): the reader, the artifact, a shared database, the file library, opening links, copying, --coforge-* theme tokens, and suggesting a comment with comments.open.",
     body: artifactPagesBody,
   },
   {
     slug: "artifacts",
     title: "Artifacts",
     summary:
-      "coforge artifact: when to make a document (a .md entry) or a web page (an .html entry, no network requests), pulling and pushing an artifact as a directory without losing others' changes, moving it to the Workspace, deleting it, and reading, writing and resolving comments on one.",
+      "coforge artifact: when to make a document (a .md entry) or a web page (an .html entry, linked with ?embed=1 to render inline in chat), pulling and pushing an artifact as a directory without losing others' changes, moving it to the Workspace, deleting it, and reading, writing and resolving comments on one.",
     body: artifactsBody,
   },
   {

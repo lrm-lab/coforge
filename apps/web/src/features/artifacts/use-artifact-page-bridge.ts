@@ -7,6 +7,8 @@ import {
   createPageBridge,
   type PageArtifact,
   type PageConfirm,
+  type PageDisplayMode,
+  type PageFrameSize,
   type PageSuggestHandler,
   type PageTheme,
   type PageViewer,
@@ -14,6 +16,7 @@ import {
 import type { PageConfirmation } from "./artifact-page-confirm";
 import type { PageLevel } from "./artifact-page-levels";
 import { pageAssetsPort, pageDataPort } from "./artifact-page-ports";
+import { readHostThemeTokens } from "./artifact-page-theme";
 
 const currentTheme = (): PageTheme =>
   document.documentElement.classList.contains("dark-mode") ? "dark" : "light";
@@ -25,14 +28,21 @@ export function useArtifactPageBridge(input: {
   level: PageLevel;
   artifact: PageArtifact;
   suggestions: RefObject<PageSuggestHandler | null>;
+  displayMode?: PageDisplayMode;
+  onInitialized?: () => void;
+  onSizeChanged?: (size: PageFrameSize) => void;
 }) {
-  const { frame, origin, viewer, level, artifact, suggestions } = input;
+  const { frame, origin, viewer, level, artifact, suggestions, displayMode = "panel" } = input;
   const toast = useAppToast();
   const [confirmation, setConfirmation] = useState<PageConfirmation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false);
   const [found, setFound] = useState({ total: 0, active: 0 });
   const pending = useRef<PageConfirmation | null>(null);
+  const onInitializedRef = useRef(input.onInitialized);
+  onInitializedRef.current = input.onInitialized;
+  const onSizeChangedRef = useRef(input.onSizeChanged);
+  onSizeChangedRef.current = input.onSizeChanged;
 
   const bridge = useMemo(
     () =>
@@ -41,9 +51,11 @@ export function useArtifactPageBridge(input: {
           viewer,
           artifact,
           level,
+          displayMode,
           data: pageDataPort(artifact.id),
           assets: pageAssetsPort(artifact.id),
           theme: currentTheme,
+          themeTokens: readHostThemeTokens,
           userActive: () => navigator.userActivation?.isActive ?? false,
           copyText: async (text) => {
             const copied = await copyText(text);
@@ -88,11 +100,13 @@ export function useArtifactPageBridge(input: {
           reportError: setError,
           reportFind: setFound,
           frameStatus: () => setBlocked(true),
+          onInitialized: () => onInitializedRef.current?.(),
+          onSizeChanged: (size) => onSizeChangedRef.current?.(size),
           now: () => Date.now(),
         },
         { origin, window: () => frame.current?.contentWindow ?? null },
       ),
-    [origin, viewer, level, artifact, frame, suggestions, toast],
+    [origin, viewer, level, displayMode, artifact, frame, suggestions, toast],
   );
 
   useEffect(() => {
@@ -105,7 +119,13 @@ export function useArtifactPageBridge(input: {
   }, [bridge]);
 
   useEffect(() => {
-    const observer = new MutationObserver(() => bridge.notifyTheme());
+    let lastTheme = currentTheme();
+    const observer = new MutationObserver(() => {
+      const nextTheme = currentTheme();
+      if (nextTheme === lastTheme) return;
+      lastTheme = nextTheme;
+      bridge.notifyTheme();
+    });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     return () => observer.disconnect();
   }, [bridge]);

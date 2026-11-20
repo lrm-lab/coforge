@@ -22,6 +22,7 @@ import { groupSystemMessages } from "./system-message-groups";
 import { usePaneOutbox } from "./use-pane-outbox";
 import { ComposerEdgeOverlay } from "./composer-edge-overlay";
 import { useComposerHost } from "./composer-host";
+import { InlineEmbedPoolProvider } from "#src/features/artifacts/inline-embed-pool-context";
 import { ConversationMessageList } from "./conversation-message-list";
 import { NewerSentinel } from "./conversation-newer-sentinel";
 import { isViewerMessage } from "./own-message";
@@ -243,78 +244,86 @@ export function ConversationPane({
               className="h-full overflow-y-auto pb-9 [scrollbar-width:thin]"
             >
               <div className={column ? MESSAGE_COLUMN_CLASS : undefined}>
-                {lead && <div data-scroll-lead>{lead}</div>}
-                {root && !inTaskPopup && root.weeklyReportHidden !== true && (
-                  <ThreadRootMessage
-                    conversationId={conversation.conversationId}
-                    message={root}
-                    own={isOwn(root)}
-                    expanded={expandedMessages.has(root.id)}
-                    onToggleExpanded={toggleExpandedMessage}
-                    collapsible={collapsible}
-                    dateLocale={dateLocale}
-                    onToggleReaction={toggleReaction}
-                    onToggleSave={onToggleSave}
-                    onOpenAgentProfile={openAgentProfile}
-                    onOpenPersonProfile={openPersonProfile}
-                    viewerId={conversation.viewerId}
-                    plainMentions={plainMentions}
-                    onOpenTask={openTaskReference}
-                    channelNames={channelNames}
-                    onQuoteSelection={canCompose ? quoteSelection : undefined}
-                  />
-                )}
-                {threadMarker && (
-                  <ThreadRepliesMarker count={visibleMessages.length + shownOutbox.length} />
-                )}
-                {!root && conversation.hasOlder && onLoadOlder && (
-                  <OlderMessagesRow
-                    rootRef={historyRef}
-                    loadedCount={conversation.messages.length}
-                    load={olderLoad}
-                    onLoad={() => void loadOlder()}
-                  />
-                )}
-                {streamLoading || (visibleMessages.length === 0 && shownOutbox.length === 0) ? (
-                  <ConversationStreamPlaceholder
-                    loading={streamLoading}
-                    narrow={narrow}
-                    emptyState={emptyState}
-                  />
-                ) : (
-                  <ConversationMessageList
-                    conversation={conversation}
-                    root={root}
-                    messageListRef={messageListRef}
-                    threadMarker={threadMarker}
-                    streamItems={streamItems}
-                    openedSystemMessages={openedSystemMessages}
-                    toggleSystemGroup={toggleSystemGroup}
-                    openBoundary={openBoundary}
-                    jumpHighlightId={jumpHighlightId}
-                    expandedMessages={expandedMessages}
-                    toggleExpandedMessage={toggleExpandedMessage}
-                    collapsible={collapsible}
-                    dateLocale={dateLocale}
-                    timeZone={timeZone}
-                    isOwn={isOwn}
-                    openThread={openThread}
-                    toggleReaction={toggleReaction}
-                    onToggleSave={onToggleSave}
-                    openAgentProfile={openAgentProfile}
-                    openPersonProfile={openPersonProfile}
-                    plainMentions={plainMentions}
-                    openTaskReference={openTaskReference}
-                    channelNames={channelNames}
-                    canCompose={canCompose}
-                    quoteSelection={quoteSelection}
-                    readTicks={readTicks}
-                    threadSeenBy={Boolean(root && conversation.readTicks)}
-                    shownOutbox={shownOutbox}
-                    outbox={outbox}
-                    outboxContinues={outboxContinues}
-                  />
-                )}
+                <InlineEmbedPoolProvider
+                  conversationKey={
+                    root
+                      ? `${conversation.conversationId}:thread:${root.id}`
+                      : conversation.conversationId
+                  }
+                >
+                  {lead && <div data-scroll-lead>{lead}</div>}
+                  {root && !inTaskPopup && root.weeklyReportHidden !== true && (
+                    <ThreadRootMessage
+                      conversationId={conversation.conversationId}
+                      message={root}
+                      own={isOwn(root)}
+                      expanded={expandedMessages.has(root.id)}
+                      onToggleExpanded={toggleExpandedMessage}
+                      collapsible={collapsible}
+                      dateLocale={dateLocale}
+                      onToggleReaction={toggleReaction}
+                      onToggleSave={onToggleSave}
+                      onOpenAgentProfile={openAgentProfile}
+                      onOpenPersonProfile={openPersonProfile}
+                      viewerId={conversation.viewerId}
+                      plainMentions={plainMentions}
+                      onOpenTask={openTaskReference}
+                      channelNames={channelNames}
+                      onQuoteSelection={canCompose ? quoteSelection : undefined}
+                    />
+                  )}
+                  {threadMarker && (
+                    <ThreadRepliesMarker count={visibleMessages.length + shownOutbox.length} />
+                  )}
+                  {!root && conversation.hasOlder && onLoadOlder && (
+                    <OlderMessagesRow
+                      rootRef={historyRef}
+                      loadedCount={conversation.messages.length}
+                      load={olderLoad}
+                      onLoad={() => void loadOlder()}
+                    />
+                  )}
+                  {streamLoading || (visibleMessages.length === 0 && shownOutbox.length === 0) ? (
+                    <ConversationStreamPlaceholder
+                      loading={streamLoading}
+                      narrow={narrow}
+                      emptyState={emptyState}
+                    />
+                  ) : (
+                    <ConversationMessageList
+                      conversation={conversation}
+                      root={root}
+                      messageListRef={messageListRef}
+                      threadMarker={threadMarker}
+                      streamItems={streamItems}
+                      openedSystemMessages={openedSystemMessages}
+                      toggleSystemGroup={toggleSystemGroup}
+                      openBoundary={openBoundary}
+                      jumpHighlightId={jumpHighlightId}
+                      expandedMessages={expandedMessages}
+                      toggleExpandedMessage={toggleExpandedMessage}
+                      collapsible={collapsible}
+                      dateLocale={dateLocale}
+                      timeZone={timeZone}
+                      isOwn={isOwn}
+                      openThread={openThread}
+                      toggleReaction={toggleReaction}
+                      onToggleSave={onToggleSave}
+                      openAgentProfile={openAgentProfile}
+                      openPersonProfile={openPersonProfile}
+                      plainMentions={plainMentions}
+                      openTaskReference={openTaskReference}
+                      channelNames={channelNames}
+                      canCompose={canCompose}
+                      quoteSelection={quoteSelection}
+                      readTicks={readTicks}
+                      threadSeenBy={Boolean(root && conversation.readTicks)}
+                      shownOutbox={shownOutbox}
+                      outbox={outbox}
+                      outboxContinues={outboxContinues}
+                    />
+                  )}
+                </InlineEmbedPoolProvider>
                 {!root && canCompose && (
                   <WorkspaceAssistantWelcome
                     conversation={conversation}
