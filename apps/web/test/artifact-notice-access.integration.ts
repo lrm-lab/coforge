@@ -316,3 +316,31 @@ test("the artifact's own writer keeps its notice after the home is gone", async 
     .then((rows) => rows.map((delivery) => delivery.messageId));
   expect(pendingIds).toContain(event.messageId);
 });
+
+test("the bot inbox stops handing back a notice once the artifact is gone", async () => {
+  const { AppBotInbox } = await import("#src/server/app-bots/app-bot-inbox.server");
+  const artifact = await h.f.make("Inbox gate");
+  const reader = await h.nameOf(h.f.agents.reader);
+  await h.create(artifact, `Inbox gate, see @${reader}.`);
+  const sent = await h.submit(artifact);
+  if (sent.status !== "sent") throw new Error("not sent");
+  const event = await h.f.db.systemAgentEvent.findUniqueOrThrow({
+    where: {
+      source_agentId_externalEventId: {
+        source: "system.artifacts",
+        agentId: h.f.agents.reader,
+        externalEventId: `${artifact}:${WEB_DRAFT_REVIEW_MARKER}:${sent.reviewId}`,
+      },
+    },
+    select: { messageId: true, conversationId: true },
+  });
+  const principal = { workspaceId: h.f.workspaceId, agentId: h.f.agents.reader };
+  const inbox = new AppBotInbox(h.f.db);
+  expect((await inbox.check(principal)).events.map((item) => item.id)).toContain(event.messageId);
+
+  await h.f.db.artifact.update({ where: { id: artifact }, data: { deletedAt: new Date() } });
+
+  expect((await inbox.check(principal)).events.map((item) => item.id)).not.toContain(
+    event.messageId,
+  );
+});
