@@ -35,7 +35,7 @@
 - 工作目录：`/workspace`（另有 `/workspace/uploads`、`/workspace/browser-shots`）。内容落在 Computer 卷上，**换镜像仍保留**
 - 图形桌面：任务注入的 `DISPLAY` + `XAUTHORITY`（**每 agent 独占一路屏幕**，常见为 `:20` 起，**不是**默认 `:0`）
 - 浏览器：系统 Chromium（`chromium` / `coforge-chromium`）；CDP 经 **token 门控**；用 `coforge-cdp-endpoint` 取本路 URL
-- 联想内网：系统已信任联想 CA；出网经宿主机代理（`SANDBOX_PROXY_URL` / `LENOVO_PROXY`，启动时写入 Chromium 策略）。**不要**把账号密码写进镜像；需要权限的网页用用户自己的账号在浏览器里登录（向用户索取用户名/密码或验证码即可）
+- 联想内网：系统已信任联想 CA；出网经宿主机代理（`SANDBOX_PROXY_URL` / `LENOVO_PROXY`，启动时写入 Chromium 策略）。常用入口：联想内网门户 `https://home.lenovo.com/home`；国内模型工厂 `https://modelfactory.lenovo.com/`；巴西模型工厂 `https://braimaster.lenovo.com/`。**不要**把账号密码写进镜像；需要权限的网页用用户自己的账号在浏览器里登录（向用户索取用户名/密码或验证码即可）
 - 辅助工具：`rg`、`fd`、`python3`、Node/npm、以及镜像内已有的桌面/填表脚本（如 `page-fill.py`）
 - Python 包：默认用卷上 venv（`/root/.coforge/venv`；`pip`/`python` 应指向它）。镜像**不**预装 Playwright；需要时用镜像源安装，例如
   `pip install -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com playwright`
