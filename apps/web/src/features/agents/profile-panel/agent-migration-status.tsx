@@ -11,14 +11,8 @@ import {
 } from "#src/features/agents/agent-migration";
 import { getAgentMigration } from "#src/features/agents/agent-migrations.functions";
 
-/** How often a move in progress is read again; each stage takes seconds to minutes. */
 const PROGRESS_POLL_MS = 3_000;
 
-/**
- * The Agent's latest move and where it can be moved from, read again every few seconds while a
- * move is going. The Profile reads it too, to lead with the move when the Agent's Computer was
- * revoked; both share the one query.
- */
 export function useAgentMigrationStatus(agentId: string, enabled = true) {
   const readMigration = useServerFn(getAgentMigration);
   return useQuery({
@@ -32,7 +26,6 @@ export function useAgentMigrationStatus(agentId: string, enabled = true) {
   });
 }
 
-/** One line on where the Agent's latest move stands, with a cancel while it is going. */
 export function AgentMigrationStatus({
   migration,
   targetName,
@@ -106,7 +99,6 @@ export function AgentMigrationStatus({
   );
 }
 
-/** What canceling does, which depends on whether the Agent has already switched Computers. */
 export function AgentMigrationCancelBody({ switched }: { switched: boolean }) {
   return (
     <p className="px-6 pt-4 text-sm text-secondary">
@@ -117,11 +109,6 @@ export function AgentMigrationCancelBody({ switched }: { switched: boolean }) {
   );
 }
 
-/**
- * Where a direct placement (#coforge:#732) left the Agent unstarted: the target's name when the
- * move placed it but its start did not go out (`startPublished: false`), so the Profile says to
- * start it rather than reading the move as done; else null.
- */
 export function notStartedAfterMove(
   moved:
     | {
@@ -148,11 +135,6 @@ export function writeAgentMigrationNotStarted(
   queryClient.setQueryData(notStartedKey(agentId), value);
 }
 
-/**
- * A placement's not-started result, kept in the Query cache rather than component state: the
- * Profile moves the migration section between its INFO and ACTIONS slots once the placement
- * lands, which remounts it, and the "start it manually" note must survive that.
- */
 export function useAgentMigrationNotStarted(agentId: string) {
   const queryClient = useQueryClient();
   const query = useQuery({
@@ -167,13 +149,11 @@ export function useAgentMigrationNotStarted(agentId: string) {
   };
 }
 
-/** A direct placement that did not start: what happened and what to press. */
 export function AgentMigrationNotStarted({
   computerName,
   assigned,
 }: {
   computerName: string;
-  /** The Agent had no Computer before (a first assignment), not a revoked one it left. */
   assigned: boolean;
 }) {
   return (
@@ -188,7 +168,6 @@ export function AgentMigrationNotStarted({
   );
 }
 
-/** Why the move was refused, with a link to the page where it can be fixed. */
 export function AgentMigrationRefusalNotice({
   message,
   link,

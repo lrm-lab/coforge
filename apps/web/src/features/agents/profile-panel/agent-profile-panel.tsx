@@ -114,9 +114,6 @@ export function AgentProfilePanel({
   const deleted = Boolean(profile?.deletedAt);
   const canManage = profile && !deleted ? canManageAgent(profile) : false;
   usePrefetchAgentActivityFeed(agentId, canManage);
-  // An Agent that manages Computers itself (assistants, app bots, external runtimes) is never
-  // offered a move; every other managed Agent can be placed directly when it has no reachable
-  // source (#coforge:#732).
   const placeable = Boolean(
     profile &&
     canManage &&
@@ -126,7 +123,6 @@ export function AgentProfilePanel({
     !profile.isWeeklyReportAssistant,
   );
   const migrationStatus = useAgentMigrationStatus(agentId, placeable).data;
-  // A revoked or missing Computer leaves the Agent unable to work: the move leads the Profile then.
   const migrationLeads = migrationStatus?.directPlacement === true;
   const owned = Boolean(profile?.ownedByCurrentUser) && !deleted;
   const migrationRuntime = agentMigrationRuntime(profile?.runtimeConfig);
@@ -164,11 +160,12 @@ export function AgentProfilePanel({
     : undefined;
 
   const executeControl = useServerFn(executeAgentControl);
+  const agentIsOnline = agentDisplay(display, { stopped: profile?.stopped }).isOnline;
   const controls = useAgentRuntimeControls({
     agentId,
     agentName: knownName || agentId,
     canFullReset: profile?.canFullResetAgent ?? false,
-    isOnline: agentDisplay(display, { stopped: profile?.stopped }).isOnline,
+    isOnline: agentIsOnline,
     computerOnline: profile?.computer?.online,
     computerLabel: profile?.computer?.label,
     onExecute: async (request) => {
@@ -387,6 +384,7 @@ export function AgentProfilePanel({
                   canMove={canManage}
                   runtime={migrationRuntime.runtime}
                   model={migrationRuntime.model}
+                  agentOnline={agentIsOnline === true}
                 />
               ) : undefined
             }

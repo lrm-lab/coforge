@@ -55,7 +55,6 @@ type DetailAgent = {
   wakeBlockedCount?: number;
   wakeBlockedAt?: Date | null;
   hosting?: string;
-  /** Server-owned execution identity (`workspace-assistant`, `app-bot`); null for ordinary Agents. */
   systemKind?: string | null;
   /** Who can see this Agent; optional so a caller that has not started selecting it
    * yet still satisfies this type. */

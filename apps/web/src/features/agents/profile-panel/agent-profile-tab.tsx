@@ -108,13 +108,8 @@ function AgentProfileTabBody({
   } | null;
   /** What the launch actually observed for its Fast service tier, when the Agent asks for it. */
   fastMode?: AgentFastModeReading | null;
-  /** The Agent's moves between Computers (`AgentMigrationSection`), shown under ACTIONS. */
   migration?: ReactNode;
-  /** The Agent has no reachable Computer (revoked or none): its move notice sits in INFO,
-   * right after the Computer row, not under ACTIONS. */
   migrationLeads?: boolean;
-  /** The Agent's Computer is still recorded but no longer linked to this Workspace: the
-   * Computer row says access was revoked rather than that it is offline. */
   computerAccessRevoked?: boolean;
   /** An archived Agent's ARCHIVE section (`AgentArchiveSection`), for those who managed it. */
   archive?: ReactNode;

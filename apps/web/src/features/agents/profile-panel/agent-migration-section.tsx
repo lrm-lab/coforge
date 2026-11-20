@@ -37,6 +37,7 @@ import {
   notStartedAfterMove,
   useAgentMigrationNotStarted,
   useAgentMigrationStatus,
+  writeAgentMigrationNotStarted,
 } from "./agent-migration-status";
 import {
   cancelAgentMigration,
@@ -59,9 +60,7 @@ export function AgentMigrationForm({
   selected: string | null;
   onSelect: (computerId: string) => void;
   disabled?: boolean;
-  /** The Agent is placed on the target with nothing copied from where it was (#coforge:#732): its
-   * Computer's access was revoked. What it leaves behind is all the dialog says. */
-  direct?: { sourceName: string | null; agentName: string };
+  direct?: { sourceName: string | null };
 }) {
   const controlSize = useDialogControlSize();
   return (
@@ -89,25 +88,24 @@ export function AgentMigrationForm({
           ))}
         </Select>
       )}
-      <div className="flex items-start gap-3">
-        <FeaturedIcon color="warning" theme="light" size="sm" icon={AlertCircle} />
-        {direct ? (
-          <p className="min-w-0 pt-1 text-sm text-secondary">
-            {direct.sourceName
-              ? m.agent_migration_direct_left_behind({
-                  computer: direct.sourceName,
-                  name: direct.agentName,
-                })
-              : m.agent_migration_direct_fresh_note({ name: direct.agentName })}
-          </p>
-        ) : (
+      {!direct && (
+        <div className="flex items-start gap-3">
+          <FeaturedIcon color="warning" theme="light" size="sm" icon={AlertCircle} />
           <ul className="min-w-0 list-disc space-y-1 pl-5 text-sm text-secondary">
             <li>{m.agent_migration_dialog_session()}</li>
             <li>{m.agent_migration_dialog_stops()}</li>
             <li>{m.agent_migration_dialog_left_behind()}</li>
           </ul>
-        )}
-      </div>
+        </div>
+      )}
+      {direct?.sourceName && (
+        <div className="flex items-start gap-3">
+          <FeaturedIcon color="warning" theme="light" size="sm" icon={AlertCircle} />
+          <p className="min-w-0 pt-1 text-sm text-secondary">
+            {m.agent_migration_direct_left_behind({ computer: direct.sourceName })}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -124,6 +122,7 @@ export function AgentMigrationSection({
   canMove,
   runtime,
   model,
+  agentOnline,
 }: {
   agentId: string;
   agentName: string;
@@ -133,6 +132,7 @@ export function AgentMigrationSection({
   /** The Agent's runtime and model, which a refusal of the target names. */
   runtime: RuntimeProvider;
   model: string;
+  agentOnline: boolean;
 }) {
   const queryClient = useQueryClient();
   const workspaceSlug = useWorkspaceSlug();
@@ -154,6 +154,10 @@ export function AgentMigrationSection({
   const [submitting, guardSubmit] = useSubmitGuard();
   const [canceling, guardCancel] = useSubmitGuard();
 
+  useEffect(() => {
+    if (agentOnline && notStartedOn) writeAgentMigrationNotStarted(queryClient, agentId, null);
+  }, [agentOnline, notStartedOn, queryClient, agentId]);
+
   const statusKey = ["agent-migration", agentId] as const;
   const status = useAgentMigrationStatus(agentId);
   const computers = useQuery({
@@ -174,7 +178,14 @@ export function AgentMigrationSection({
     wasInProgress.current = inProgress;
   }, [inProgress, invalidateProfile]);
 
-  if (!status.data || (!status.data.available && !migration)) return null;
+  if (!status.data || (!status.data.available && !migration)) {
+    return notStartedOn && !agentOnline ? (
+      <AgentMigrationNotStarted
+        computerName={notStartedOn.computerName}
+        assigned={notStartedOn.assigned}
+      />
+    ) : null;
+  }
   const direct = status.data.directPlacement === true;
   const revoked = status.data.computerAccessRevoked === true;
   const sourceName = status.data.sourceComputerName || null;
@@ -253,16 +264,11 @@ export function AgentMigrationSection({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-secondary bg-secondary px-3 py-2.5">
           <FeaturedIcon color="warning" theme="light" size="sm" icon={AlertCircle} />
           <p className="min-w-0 flex-1 basis-52 text-sm text-secondary">
-            <span className="font-medium text-primary">
-              {revoked
-                ? m.agent_migration_revoked_title({
-                    computer: sourceName || m.agent_computer_unnamed(),
-                  })
-                : m.agent_migration_no_computer_title()}
-            </span>{" "}
             {revoked
-              ? m.agent_migration_revoked_body({ name: agentName })
-              : m.agent_migration_no_computer_body({ name: agentName })}
+              ? m.agent_migration_revoked_title({
+                  computer: sourceName || m.agent_computer_unnamed(),
+                })
+              : m.agent_migration_no_computer_title()}
           </p>
           {canMove && status.data.available && (
             <Button
@@ -278,13 +284,13 @@ export function AgentMigrationSection({
               {migration?.state === "failed" || migration?.state === "canceled"
                 ? m.agent_migration_retry()
                 : revoked
-                  ? m.agent_migration_action()
+                  ? m.agent_migration_action_change()
                   : m.agent_migration_action_fresh()}
             </Button>
           )}
         </div>
       )}
-      {notStartedOn && (
+      {notStartedOn && !agentOnline && (
         <AgentMigrationNotStarted
           computerName={notStartedOn.computerName}
           assigned={notStartedOn.assigned}
@@ -387,7 +393,7 @@ export function AgentMigrationSection({
                   selected={selected}
                   onSelect={setSelected}
                   disabled={submitting}
-                  direct={direct ? { sourceName, agentName } : undefined}
+                  direct={direct ? { sourceName } : undefined}
                 />
                 {refusal && (
                   <AgentMigrationRefusalNotice

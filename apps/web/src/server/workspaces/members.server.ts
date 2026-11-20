@@ -183,8 +183,6 @@ export class WorkspaceMembers {
         computerName: agent.computer
           ? agent.computer.displayName.trim() || agent.computer.name.trim()
           : null,
-        /** The Agent's Computer is recorded but no longer linked to this Workspace: the card
-         * says access was revoked rather than that no Computer was ever assigned. */
         computerRevoked: Boolean(agent.computer && agent.computer.workspaces.length === 0),
         createdAt: agent.createdAt,
         owner: {

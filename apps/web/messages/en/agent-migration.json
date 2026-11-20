@@ -2,6 +2,7 @@
   "$schema": "https://inlang.com/schema/inlang-message-format",
   "agent_migration_action": "Move to another Computer",
   "agent_migration_action_fresh": "Choose a Computer",
+  "agent_migration_action_change": "Change Computer",
   "agent_migration_dialog_title": "Move {name} to another Computer",
   "agent_migration_dialog_title_fresh": "Choose a Computer for {name}",
   "agent_migration_dialog_target_placeholder": "Choose a Computer",
@@ -60,12 +61,9 @@
   "agent_migration_open_computer": "Open Computer settings",
   "agent_migration_open_computers": "Open Computers",
   "agent_migration_try_again": "Try again",
-  "agent_migration_revoked_title": "Disconnected from {computer}",
+  "agent_migration_revoked_title": "Workspace disconnected from {computer}",
   "agent_migration_no_computer_title": "No Computer assigned",
-  "agent_migration_revoked_body": "This Computer is no longer available to this Workspace. Move {name} to another Computer to keep running.",
-  "agent_migration_no_computer_body": "{name} doesn't have a Computer yet. Choose one to get started.",
-  "agent_migration_direct_left_behind": "Files and local memory on {computer} won't come along. {name} will start fresh on the new Computer.",
-  "agent_migration_direct_fresh_note": "Once bound, it can start on the Computer you choose.",
+  "agent_migration_direct_left_behind": "Files and local memory on {computer} won't come along.",
   "agent_migration_direct_not_started_moved": "Moved to {computer}. Start the Agent manually.",
   "agent_migration_direct_not_started_assigned": "Assigned to {computer}. Start the Agent manually."
 }
