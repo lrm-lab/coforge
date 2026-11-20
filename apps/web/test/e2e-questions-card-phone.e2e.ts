@@ -262,9 +262,9 @@ test("a questions card on a phone: looked through or answered in the stream, not
     );
     await tap(scoped(mine.id, '[data-question-option="r1"]'));
     await wait(onQuestion(mine.id, 1));
-    expect(
-      await page.evaluate<number>(`${card(mine.id)}.getBoundingClientRect().height`),
-    ).toBe(heightBeforeTurn);
+    expect(await page.evaluate<number>(`${card(mine.id)}.getBoundingClientRect().height`)).toBe(
+      heightBeforeTurn,
+    );
     expect(await noSheet()).toBe(true);
     await tap(scoped(mine.id, '[data-question-option="c0"]'));
     await tap(scoped(mine.id, '[data-question-option="c1"]'));

@@ -76,13 +76,7 @@ export function QuestionCard({ card, asker }: { card: AskingView; asker: string 
             renderSizer={(each) => (
               <>
                 <p className={promptClass}>{each.prompt}</p>
-                <QuestionOptions
-                  id=""
-                  question={each}
-                  draft={answers[each.id]}
-                  mode={mode}
-                  sizer
-                />
+                <QuestionOptions id="" question={each} draft={answers[each.id]} mode={mode} sizer />
               </>
             )}
           >
