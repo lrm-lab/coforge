@@ -126,6 +126,11 @@ test("the notice conversation reads only the notices the Agent can still read", 
     expect(afterPage.hasNewer).toBe(true);
     expect(afterPage.hasOlder).toBe(true);
 
+    const hollowAround = await read({ around: "11", limit: 1 });
+    expect(hollowAround.messages).toEqual([]);
+    expect(hollowAround.hasOlder).toBe(true);
+    expect(hollowAround.hasNewer).toBe(false);
+
     const aroundPage = await read({ around: second!.id, limit: 2 });
     expect(aroundPage.messages.map((message) => message.sequence)).toEqual([2, 4]);
     expect(aroundPage.hasOlder).toBe(true);
