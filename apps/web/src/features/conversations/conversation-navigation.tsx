@@ -82,12 +82,6 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   const shellShowsList = useContext(ChatListShownContext);
   const router = useRouter();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const openThreadRootId = useRouterState({
-    select: (state) => {
-      const raw = (state.location.search as { threadRootId?: unknown }).threadRootId;
-      return typeof raw === "string" && raw.length > 0 ? raw : undefined;
-    },
-  });
   const [browsing, setBrowsing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [listCrowded, setListCrowded] = useState(false);
@@ -125,6 +119,10 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
   }, [workspaceId, workspaceSlug, pathname]);
 
   const visibleChannels = useMemo(() => channels.filter((listed) => !listed.archived), [channels]);
+  const threadChannelIds = useMemo(
+    () => visibleChannels.filter((channel) => channel.joined).map((channel) => channel.id),
+    [visibleChannels],
+  );
   const listedConversationIds = useMemo(
     () => new Set([...visibleChannels.map((row) => row.id), ...listedDirectIds(directs, agents)]),
     [visibleChannels, directs, agents],
@@ -141,7 +139,7 @@ export function ConversationNavigation({ children }: { children: ReactNode }) {
     userId: viewerId,
     channels: visibleChannels,
     openConversationId: channel?.channelId ?? openDm?.dmId,
-    openThreadRootId,
+    threadChannelIds,
     listedConversationIds,
     onClosedConversationActivity: (lists, event) => {
       void refreshSidebar(lists);

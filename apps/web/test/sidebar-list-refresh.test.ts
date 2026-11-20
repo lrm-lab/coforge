@@ -97,6 +97,10 @@ describe("the viewer's own channel events", () => {
   test("names the one list each event makes stale, and none for a read", () => {
     const ids = { workspaceId: "workspace-a", conversationId: "channel-a" };
     expect(sidebarListsChangedBy(marked("channel-a", 0))).toEqual([]);
+    // A topic count is re-read, not carried: the invalidation makes no list stale.
+    expect(
+      sidebarListsChangedBy({ type: "conversation.thread-unread.invalidated.v1", ...ids }),
+    ).toEqual([]);
     for (const type of ["channel.closed.v1", "channel.opened.v1"] as const)
       expect(sidebarListsChangedBy({ type, ...ids })).toEqual(["channels"]);
     // A section keeps a left channel's place and lists it again once its member is back in it.

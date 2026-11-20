@@ -73,12 +73,10 @@ export function directHasAnyUnread(row: { unreadCount?: number; markedUnread?: b
   return (row.unreadCount ?? 0) > 0 || row.markedUnread === true;
 }
 
-export type ChannelUnreadRowFields = {
+type ChannelUnreadRowFields = {
   unreadCount: number;
   mentioned: boolean;
   markedUnread: boolean;
-  unreadThreadCount: number;
-  threadMentioned: boolean;
 };
 
 export type MarkedEventUnreadPayload = {
@@ -94,57 +92,21 @@ export type MarkedEventUnreadPayload = {
 };
 
 export function applyMarkedUnreadFields(
-  _current: ChannelUnreadRowFields,
   event: MarkedEventUnreadPayload,
   options: { isOpenChannel: boolean },
 ): ChannelUnreadRowFields {
-  const unreadThreadCount = event.unreadThreadCount ?? 0;
-  const threadMentioned = event.threadMentioned === true;
-  if (options.isOpenChannel) {
-    return {
-      unreadCount: 0,
-      mentioned: false,
-      markedUnread: false,
-      unreadThreadCount,
-      threadMentioned,
-    };
-  }
+  if (options.isOpenChannel) return { unreadCount: 0, mentioned: false, markedUnread: false };
   return {
     unreadCount: event.unreadCount,
     mentioned: event.mentioned === true,
     markedUnread: event.markedUnread === true,
-    unreadThreadCount,
-    threadMentioned,
   };
 }
 
 export function applyActivityUnreadFields(
-  current: Pick<ChannelUnreadRowFields, "mentioned" | "unreadThreadCount" | "threadMentioned">,
-  event: {
-    conversationId: string;
-    threadRootId?: string;
-    mentioned?: boolean;
-    unreadThreadCount?: number;
-    threadMentioned?: boolean;
-  },
-  options: {
-    isOpenChannel: boolean;
-    openThreadRootId?: string;
-    isOwnMessage: boolean;
-  },
-): Pick<ChannelUnreadRowFields, "mentioned" | "unreadThreadCount" | "threadMentioned"> {
-  if (event.threadRootId) {
-    if (event.unreadThreadCount === undefined) return current;
-    if (options.isOpenChannel && options.openThreadRootId === event.threadRootId) return current;
-    return {
-      mentioned: current.mentioned,
-      unreadThreadCount: event.unreadThreadCount,
-      threadMentioned: event.threadMentioned === true,
-    };
-  }
-  if (options.isOpenChannel || options.isOwnMessage || !event.mentioned) return current;
-  return {
-    ...current,
-    mentioned: true,
-  };
+  mentioned: boolean,
+  event: { mentioned?: boolean },
+  options: { isOpenChannel: boolean; isOwnMessage: boolean },
+): boolean {
+  return mentioned || (!options.isOpenChannel && !options.isOwnMessage && event.mentioned === true);
 }

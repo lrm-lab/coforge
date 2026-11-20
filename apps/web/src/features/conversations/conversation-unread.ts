@@ -2,6 +2,7 @@ import {
   publicationDataOrUndefined,
   publicationType,
 } from "#src/features/realtime/publication-data";
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import type { ChannelSignal } from "./channel-signals";
 import {
   streamMovedSince,
@@ -205,6 +206,7 @@ export type ChatList = "channels" | "dms" | "channelNames" | "saved" | "sections
  */
 export function sidebarListsChangedBy(event: ViewerEvent): readonly ChatList[] {
   if ("unreadCount" in event) return [];
+  if (event.type === REALTIME_EVENTS.channelThreadUnreadInvalidated) return [];
   if (event.type.startsWith("saved.")) return ["saved"];
   if (event.type === "pref.changed.v1")
     return event.name === "sections" ? ["sections", "sectionOrder"] : ["channels", "dms"];

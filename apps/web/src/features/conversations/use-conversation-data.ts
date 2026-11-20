@@ -1,7 +1,9 @@
+import { useContext } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, useRouter } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 
+import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { useEndReplyIntentsOnArrival } from "#src/features/agents/agent-post-clearing";
 import { useConversationTasks } from "#src/features/tasks/use-conversation-tasks";
 import { joinPublicChannel, sendPublicChannelMessage } from "./channels.functions";
@@ -28,6 +30,7 @@ import {
   toggleChannelMessageReactionVersioned,
   toggleDirectMessageReactionVersioned,
 } from "./message-reactions.functions";
+import { UnreadStoreContext } from "./unread-store";
 import type { DirectConversationView } from "./conversation-types";
 
 const appRoute = getRouteApi("/w/$workspaceSlug");
@@ -51,6 +54,8 @@ export function useChannelConversation(channelId: string) {
   const toggleReaction = useServerFn(toggleChannelMessageReactionVersioned);
   const join = useServerFn(joinPublicChannel);
   const markRead = useServerFn(markPublicChannelThreadRead);
+  const workspaceId = useCurrentWorkspaceId();
+  const unread = useContext(UnreadStoreContext);
   const setThreadFollowed = useServerFn(setPublicChannelThreadFollowed);
   const endReplyIntents = useEndReplyIntentsOnArrival();
   const page = useConversationQuery({
@@ -129,10 +134,12 @@ export function useChannelConversation(channelId: string) {
       onChanged: refreshChannelAndSidebar,
       onReadThread: async (threadRootId: string, throughSequence: number) => {
         await markRead({ data: { channelId, threadRootId, throughSequence } });
+        unread?.invalidateThreadUnread(workspaceId, channelId);
         page.applyThreadRead(threadRootId, throughSequence);
       },
       onThreadFollowedChange: async (threadRootId: string, followed: boolean) => {
         await setThreadFollowed({ data: { channelId, threadRootId, followed } });
+        unread?.invalidateThreadUnread(workspaceId, channelId);
         page.setThreadFollowed(threadRootId, followed);
       },
       onLoadMessageAround: page.loadMessageAround,

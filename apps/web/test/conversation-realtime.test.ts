@@ -170,6 +170,13 @@ describe("conversation realtime", () => {
       expect(
         decodeViewerEvent({ type: "pref.changed.v1", workspaceId: "workspace-a", name }),
       ).toEqual({ type: "pref.changed.v1", workspaceId: "workspace-a", name });
+    // A channel's followed threads may have unread replies: the viewer re-reads its topic count.
+    expect(
+      decodeViewerEvent({ type: "conversation.thread-unread.invalidated.v1", ...ids }),
+    ).toEqual({ type: "conversation.thread-unread.invalidated.v1", ...ids });
+    expect(
+      decodeViewerEvent({ type: "conversation.thread-unread.invalidated.v1", workspaceId: "w" }),
+    ).toBeUndefined();
 
     expect(decodeViewerEvent({ ...marked, unreadCount: -1 })).toBeUndefined();
     expect(decodeViewerEvent({ ...marked, unreadCount: 1.5 })).toBeUndefined();

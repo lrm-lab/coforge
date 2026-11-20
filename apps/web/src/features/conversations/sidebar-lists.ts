@@ -318,14 +318,10 @@ export function useApplyConversationActivity() {
   const refresh = useRefreshSidebar();
   const viewerId = useViewerId();
   return useMemo(
-    () =>
-      (
-        event: ConversationActivityEvent,
-        options?: { openConversationId?: string; openThreadRootId?: string },
-      ) => {
-        if (!applyConversationActivityToRow(sidebar, event, viewerId, options))
-          void refresh([event.kind === "channel" ? "channels" : "dms"]);
-      },
+    () => (event: ConversationActivityEvent, options?: { openConversationId?: string }) => {
+      if (!applyConversationActivityToRow(sidebar, event, viewerId, options))
+        void refresh([event.kind === "channel" ? "channels" : "dms"]);
+    },
     [sidebar, refresh, viewerId],
   );
 }

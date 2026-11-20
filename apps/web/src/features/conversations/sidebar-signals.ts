@@ -69,43 +69,22 @@ export function applyConversationActivityToRow(
   sidebar: Sidebar | undefined,
   event: ConversationActivityEvent,
   viewerId: string | undefined,
-  options?: { openConversationId?: string; openThreadRootId?: string },
+  options?: { openConversationId?: string },
 ): boolean {
+  if (event.kind === "channel" && !countsOnRow(event)) return true;
   if (!sidebar || sidebar.savesRetrying.count() > 0) return false;
   const id = event.conversationId;
   if (event.kind === "channel") {
     if (sidebar.channels.status !== "ready" || !sidebar.channels.has(id)) return false;
     const current = sidebar.channels.get(id);
     const isOwnMessage = viewerId !== undefined && event.senderUserId === viewerId;
-    const nextUnread = applyActivityUnreadFields(
-      {
-        mentioned: current?.mentioned === true,
-        unreadThreadCount: current?.unreadThreadCount ?? 0,
-        threadMentioned: current?.threadMentioned === true,
-      },
-      event,
-      {
-        isOpenChannel: options?.openConversationId === id,
-        openThreadRootId: options?.openThreadRootId,
-        isOwnMessage,
-      },
-    );
-    if (!countsOnRow(event)) {
-      if (
-        (current?.unreadThreadCount ?? 0) !== nextUnread.unreadThreadCount ||
-        Boolean(current?.threadMentioned) !== nextUnread.threadMentioned
-      ) {
-        sidebar.channels.utils.writeUpdate({
-          id,
-          unreadThreadCount: nextUnread.unreadThreadCount,
-          threadMentioned: nextUnread.threadMentioned,
-        });
-      }
-      return true;
-    }
+    const mentioned = applyActivityUnreadFields(current?.mentioned === true, event, {
+      isOpenChannel: options?.openConversationId === id,
+      isOwnMessage,
+    });
     sidebar.channels.utils.writeUpdate({
       id,
-      mentioned: nextUnread.mentioned,
+      mentioned,
       lastMessage: {
         createdAt: event.createdAt,
         preview: event.preview,
@@ -141,18 +120,7 @@ export function applyMarkedEventToSidebar(
   const isOpen = options.openConversationId === id;
   if (event.type === "channel.marked.v1") {
     if (sidebar.channels.status !== "ready" || !sidebar.channels.has(id)) return;
-    const current = sidebar.channels.get(id);
-    const next = applyMarkedUnreadFields(
-      {
-        unreadCount: current?.unreadCount ?? 0,
-        mentioned: current?.mentioned === true,
-        markedUnread: current?.markedUnread === true,
-        unreadThreadCount: current?.unreadThreadCount ?? 0,
-        threadMentioned: current?.threadMentioned === true,
-      },
-      event,
-      { isOpenChannel: isOpen },
-    );
+    const next = applyMarkedUnreadFields(event, { isOpenChannel: isOpen });
     sidebar.channels.utils.writeUpdate({ id, ...next });
     return;
   }

@@ -1,7 +1,8 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { useRealtimeSubscription } from "#src/features/realtime/browser-realtime";
+import { REALTIME_EVENTS } from "#src/features/realtime/realtime-events";
 import { publicationDataOrUndefined } from "#src/features/realtime/publication-data";
 import type { StreamPosition, SubscribedRecovery } from "#src/features/realtime/subscription-gap";
 import {
@@ -47,7 +48,7 @@ export function useChannelUnread({
   userId,
   channels,
   openConversationId,
-  openThreadRootId,
+  threadChannelIds,
   listedConversationIds,
   onClosedConversationActivity,
   onChannelSignal,
@@ -60,7 +61,7 @@ export function useChannelUnread({
   userId?: string;
   channels: readonly UnreadChannel[];
   openConversationId?: string;
-  openThreadRootId?: string;
+  threadChannelIds: readonly string[];
   listedConversationIds: ReadonlySet<string>;
   onClosedConversationActivity: (lists: readonly ChatList[], event: UnreadEventInput) => void;
   onChannelSignal: (signal: ChannelSignal) => void;
@@ -71,7 +72,7 @@ export function useChannelUnread({
   ) => Promise<StreamPosition | undefined> | undefined;
   onConversationActivity: (
     event: ConversationActivityEvent,
-    options?: { openConversationId?: string; openThreadRootId?: string },
+    options?: { openConversationId?: string },
   ) => void;
   onConversationMarked?: (
     event: MarkedEventUnreadPayload,
@@ -80,12 +81,19 @@ export function useChannelUnread({
 }): UnreadState {
   const [store] = useState(() => new UnreadStore());
   const queryClient = useQueryClient();
+  useEffect(() => {
+    store.setThreadWorkspace(userId ? workspaceId : undefined);
+    return () => store.setThreadWorkspace(undefined);
+  }, [store, userId, workspaceId]);
+  useEffect(() => {
+    store.setThreadChannels(threadChannelIds);
+  }, [store, threadChannelIds, userId, workspaceId]);
+
   const refs = useRef({
     workspaceId,
     userId,
     channels,
     openConversationId,
-    openThreadRootId,
     listedConversationIds,
     onClosedConversationActivity,
     onChannelSignal,
@@ -99,7 +107,6 @@ export function useChannelUnread({
     userId,
     channels,
     openConversationId,
-    openThreadRootId,
     listedConversationIds,
     onClosedConversationActivity,
     onChannelSignal,
@@ -142,6 +149,10 @@ export function useChannelUnread({
       const data = publicationDataOrUndefined(publication.data);
       const event = decodeViewerEvent(data);
       if (event) {
+        if (event.type === REALTIME_EVENTS.channelThreadUnreadInvalidated) {
+          store.invalidateThreadUnread(event.workspaceId, event.conversationId);
+          return;
+        }
         if ("unreadCount" in event) {
           const open = refs.current.openConversationId;
           store.update((current) => applyMarked(current, event, { openConversationId: open }));
@@ -175,7 +186,6 @@ export function useChannelUnread({
       const {
         channels: channelRows,
         openConversationId: open,
-        openThreadRootId: openThread,
         listedConversationIds: listed,
         onClosedConversationActivity: reopenFromActivity,
         onConversationActivity: writeRow,
@@ -184,7 +194,7 @@ export function useChannelUnread({
       const viewerId = refs.current.userId;
       const stale = closedConversationLists(message, listed, viewerId);
       if (stale.length > 0) reopenFromActivity(stale, message);
-      else writeRow(activity, { openConversationId: open, openThreadRootId: openThread });
+      else writeRow(activity, { openConversationId: open });
       store.update((current) =>
         applyUnreadEvent(current, message, {
           conversations,
@@ -193,13 +203,16 @@ export function useChannelUnread({
         }),
       );
     },
-    [queryClient],
+    [queryClient, store],
   );
   useRealtimeSubscription({
     channel: userId ? userConversationChannel(userId) : undefined,
     onPublication: onUserPublication,
     onSubscribed: (recovery) => {
-      if (userId) void rereadMissed("user", userConversationChannel(userId), recovery);
+      if (userId) {
+        store.refreshThreadUnreads();
+        void rereadMissed("user", userConversationChannel(userId), recovery);
+      }
     },
   });
 

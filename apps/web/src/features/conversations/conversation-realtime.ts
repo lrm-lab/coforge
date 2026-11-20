@@ -311,6 +311,10 @@ const viewerEvent = z.discriminatedUnion("type", [
     ...viewerEventIds,
   }),
   z.object({
+    type: z.literal(REALTIME_EVENTS.channelThreadUnreadInvalidated),
+    ...viewerEventIds,
+  }),
+  z.object({
     type: z.enum(["saved.added.v1", "saved.removed.v1"]),
     ...viewerEventIds,
     messageId: z.string().min(1),

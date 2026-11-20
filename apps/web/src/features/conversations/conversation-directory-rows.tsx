@@ -27,7 +27,7 @@ import {
   directHasAnyUnread,
   sidebarRowIndicators,
 } from "./sidebar-unread-state";
-import { useUnreadCount } from "./unread-store";
+import { useThreadUnread, useUnreadCount } from "./unread-store";
 import { useHasConversationDraft } from "./use-drafts";
 
 export type DirectoryChannel = {
@@ -50,8 +50,6 @@ export type DirectoryChannel = {
   /** The viewer is @mentioned in this channel. */
   mentioned: boolean;
   markedUnread?: boolean;
-  unreadThreadCount?: number;
-  threadMentioned?: boolean;
 };
 
 /** A DM row as the directory shows it: its row, the name it goes by, and its live Agent when it is
@@ -102,8 +100,9 @@ export const ChannelDirectoryRow = memo(function ChannelDirectoryRow({
   const lastMessage = live?.lastMessage;
   const mentioned = (live ?? channel).mentioned;
   const markedUnread = (live ?? channel).markedUnread;
-  const unreadThreadCount = channel.joined ? ((live ?? channel).unreadThreadCount ?? 0) : 0;
-  const threadMentioned = (live ?? channel).threadMentioned;
+  const threadUnread = useThreadUnread(channel.id);
+  const unreadThreadCount = channel.joined ? (threadUnread?.unreadThreadCount ?? 0) : 0;
+  const threadMentioned = threadUnread?.threadMentioned;
   const hasDraft = useHasConversationDraft(channel.id);
   const indicators = sidebarRowIndicators({
     kind: "channel",

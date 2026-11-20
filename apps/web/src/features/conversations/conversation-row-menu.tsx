@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useContext, useState, type ReactNode } from "react";
 import {
   Bell01,
   BellOff01,
@@ -10,12 +10,13 @@ import {
   XClose,
 } from "@untitledui/icons";
 
+import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
 import type { PinRef } from "./pinned-conversations";
 import { useSidebarActions } from "./sidebar-lists";
-import { useMarkConversationSeen } from "./unread-store";
+import { UnreadStoreContext, useMarkConversationSeen } from "./unread-store";
 import type { ChatSection } from "./chat-section.schemas";
 import { ChatSectionDialog } from "./chat-section-dialog";
 import {
@@ -98,6 +99,8 @@ export function ConversationRowMenu({
   const toast = useAppToast();
   const actions = useSidebarActions();
   const markSeen = useMarkConversationSeen();
+  const unread = useContext(UnreadStoreContext);
+  const workspaceId = useCurrentWorkspaceId();
   const items = conversationRowMenuItems(target);
   const conversationId = target.kind === "channel" ? target.id : target.conversationId;
   const row: PinRef =
@@ -143,9 +146,10 @@ export function ConversationRowMenu({
       });
     };
     const run = {
-      "mark-read": () => {
+      "mark-read": async () => {
         markSeen(conversationId);
-        return actions.markRead(row);
+        await actions.markRead(row);
+        if (row.kind === "channel") unread?.invalidateThreadUnread(workspaceId, row.channelId);
       },
       "mark-unread": () => actions.markUnread(row),
       pin: () => actions.setPinned(row, !target.pinned),

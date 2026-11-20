@@ -47,8 +47,6 @@ type SidebarFields = {
   notificationLevel?: ChannelNotificationLevel;
   markedUnread?: boolean;
   mentioned?: boolean;
-  unreadThreadCount?: number;
-  threadMentioned?: boolean;
 };
 
 /**
@@ -209,11 +207,7 @@ export function createSidebar(
       edit(target, (row) => {
         row.unreadCount = 0;
         row.markedUnread = false;
-        if (target.kind === "channel") {
-          row.mentioned = false;
-          row.unreadThreadCount = 0;
-          row.threadMentioned = false;
-        }
+        if (target.kind === "channel") row.mentioned = false;
       }),
     mutationFn: async (target, { transaction }) => {
       await api.markRead?.(target);

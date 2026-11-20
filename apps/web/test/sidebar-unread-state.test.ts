@@ -204,98 +204,44 @@ describe("right-click menu mark-read / mark-unread toggle", () => {
   });
 });
 
-describe("realtime partial updates treat omitted fields as 0/false", () => {
-  test("reading the last unread thread clears unreadThreadCount from 1 to 0 and removes @ when omitted on channel.marked.v1", () => {
-    const before = {
-      unreadCount: 0,
-      mentioned: false,
-      markedUnread: false,
-      unreadThreadCount: 1,
-      threadMentioned: true,
-    };
-    const afterThreadRead = applyMarkedUnreadFields(
-      before,
-      {
-        type: "channel.marked.v1",
-        workspaceId: "w1",
-        conversationId: "c1",
-        unreadCount: 0,
-        readThroughSequence: 10,
-      },
-      { isOpenChannel: false },
-    );
-    expect(afterThreadRead).toEqual({
-      unreadCount: 0,
-      mentioned: false,
-      markedUnread: false,
-      unreadThreadCount: 0,
-      threadMentioned: false,
-    });
-  });
+describe("sidebar message unread updates", () => {
+  const marked = {
+    type: "channel.marked.v1",
+    workspaceId: "w1",
+    conversationId: "c1",
+    unreadCount: 3,
+    readThroughSequence: 15,
+    unreadThreadCount: 2,
+    threadMentioned: true,
+  } as const;
 
-  test("opening a channel clears top-level unread/mention/markedUnread while keeping thread unread and thread @", () => {
-    const before = {
+  test("a channel marked event updates message fields without applying its thread snapshot", () => {
+    expect(applyMarkedUnreadFields(marked, { isOpenChannel: false })).toEqual({
       unreadCount: 3,
-      mentioned: true,
-      markedUnread: true,
-      unreadThreadCount: 2,
-      threadMentioned: true,
-    };
-    const afterChannelOpen = applyMarkedUnreadFields(
-      before,
-      {
-        type: "channel.marked.v1",
-        workspaceId: "w1",
-        conversationId: "c1",
-        unreadCount: 0,
-        readThroughSequence: 15,
-        unreadThreadCount: 2,
-        threadMentioned: true,
-      },
-      { isOpenChannel: true },
-    );
-    expect(afterChannelOpen).toEqual({
-      unreadCount: 0,
       mentioned: false,
       markedUnread: false,
-      unreadThreadCount: 2,
-      threadMentioned: true,
     });
   });
 
-  test("conversation.activity.v1 updates top-level @ and thread counts, treating omitted threadMentioned as false", () => {
-    const base = {
-      mentioned: false,
-      unreadThreadCount: 1,
-      threadMentioned: true,
-    };
-    const afterThreadEventWithoutMention = applyActivityUnreadFields(
-      base,
-      {
-        conversationId: "c1",
-        threadRootId: "r2",
-        unreadThreadCount: 0,
-      },
-      { isOpenChannel: false, openThreadRootId: undefined, isOwnMessage: false },
-    );
-    expect(afterThreadEventWithoutMention).toEqual({
-      mentioned: false,
-      unreadThreadCount: 0,
-      threadMentioned: false,
-    });
+  test("opening a channel clears its message unread count, mention and manual mark", () => {
+    expect(
+      applyMarkedUnreadFields(
+        { ...marked, mentioned: true, markedUnread: true },
+        { isOpenChannel: true },
+      ),
+    ).toEqual({ unreadCount: 0, mentioned: false, markedUnread: false });
+  });
 
-    const afterTopLevelMention = applyActivityUnreadFields(
-      { mentioned: false, unreadThreadCount: 2, threadMentioned: false },
-      {
-        conversationId: "c1",
-        mentioned: true,
-      },
-      { isOpenChannel: false, openThreadRootId: undefined, isOwnMessage: false },
-    );
-    expect(afterTopLevelMention).toEqual({
-      mentioned: true,
-      unreadThreadCount: 2,
-      threadMentioned: false,
-    });
+  test("a new mention marks a closed channel when another member sent it", () => {
+    const mention = { mentioned: true };
+    expect(
+      applyActivityUnreadFields(false, mention, { isOpenChannel: false, isOwnMessage: false }),
+    ).toBe(true);
+    expect(
+      applyActivityUnreadFields(false, mention, { isOpenChannel: true, isOwnMessage: false }),
+    ).toBe(false);
+    expect(
+      applyActivityUnreadFields(false, mention, { isOpenChannel: false, isOwnMessage: true }),
+    ).toBe(false);
   });
 });
