@@ -10,6 +10,7 @@ import { registerArtifactCheckJobRunner } from "#src/server/artifacts/artifact-c
 import { productionArtifactChecks } from "#src/server/artifacts/artifact-composition.server";
 import { requireDatabaseClient } from "#src/server/db/client.server";
 import { publicOrigin } from "#src/server/http/public-origin.server";
+import { textResponse } from "#src/server/http/text-response.server";
 import {
   artifactSandboxOrigin,
   isSandboxRequest,
@@ -85,7 +86,7 @@ export default {
     // the application's pages or APIs ever answer on it.
     if (isSandboxRequest(request, artifactSandboxOrigin())) return serveArtifactSandbox(request);
     if (!channelThreadUnreadQueueReady() && new URL(request.url).pathname === "/health")
-      return new Response("Service unavailable", { status: 503 });
+      return textResponse("Service unavailable", { status: 503 });
     return isNonLocalizedRequest(request)
       ? handler.fetch(request)
       : paraglideMiddleware(request, () => handler.fetch(request), {
