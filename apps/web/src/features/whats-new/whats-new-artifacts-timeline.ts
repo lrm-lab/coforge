@@ -33,7 +33,7 @@ export type SceneRefs = {
   sendPill: HTMLDivElement | null;
   fab: HTMLDivElement | null;
   fabBadge: HTMLSpanElement | null;
-  cursor: HTMLDivElement | null;
+  pointer: HTMLDivElement | null;
   agentCursor: HTMLDivElement | null;
 };
 
@@ -65,7 +65,7 @@ export function createSceneRefs(): SceneRefs {
     sendPill: null,
     fab: null,
     fabBadge: null,
-    cursor: null,
+    pointer: null,
     agentCursor: null,
   };
 }
@@ -80,19 +80,19 @@ export function applySceneFrame(refs: SceneRefs, t: number, comment: string, amb
     refs.aurora.style.transform = `translate(${(-wave * 8).toFixed(2)}px, ${(wave * 6).toFixed(2)}px) scale(${(1 + (wave + 1) * 0.025).toFixed(4)})`;
   }
 
-  if (refs.cursor) {
+  if (refs.pointer) {
     if (t < 1800) {
-      refs.cursor.style.opacity = "0";
-      refs.cursor.style.transform = "translate(374px, 210px)";
+      refs.pointer.style.opacity = "0";
+      refs.pointer.style.transform = "translate(374px, 210px)";
     } else if (t < 5200) {
-      refs.cursor.style.opacity = "1";
-      refs.cursor.style.transform = "translate(278px, 198px)";
+      refs.pointer.style.opacity = "1";
+      refs.pointer.style.transform = "translate(278px, 198px)";
     } else if (t < 6150) {
-      refs.cursor.style.opacity = "1";
-      refs.cursor.style.transform = "translate(442px, 206px)";
+      refs.pointer.style.opacity = "1";
+      refs.pointer.style.transform = "translate(442px, 206px)";
     } else {
-      refs.cursor.style.opacity = "0";
-      refs.cursor.style.transform = "translate(454px, 218px)";
+      refs.pointer.style.opacity = "0";
+      refs.pointer.style.transform = "translate(454px, 218px)";
     }
   }
 

@@ -312,7 +312,7 @@ export function ArtifactsScene() {
         </div>
 
         <div
-          ref={bind("cursor")}
+          ref={bind("pointer")}
           className="wna-cursor"
           style={{ transform: "translate(374px, 210px)", opacity: 0 }}
         >
