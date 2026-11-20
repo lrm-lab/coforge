@@ -125,7 +125,7 @@ export function ComputerLayout({
                         computer,
                         latestComputerVersions?.get(computer.releaseChannel ?? "latest"),
                       )}
-                      upgrading={upgradeRunning(computer.upgrade)}
+                      upgrading={computer.ownedByCurrentUser && upgradeRunning(computer.upgrade)}
                     />
                     <span className="flex min-w-0 flex-1 flex-col gap-1">
                       <span className="truncate text-sm font-semibold">

@@ -95,15 +95,16 @@ export function availableUpdateVersion(
     : undefined;
 }
 
-/** What the list badge names: a newer runtime, or for a cloud Computer a newer image when the runtime is current. */
 export function computerListUpdateVersion(
   computer: {
     kind: string;
+    ownedByCurrentUser: boolean;
     computerVersion?: string | null;
     imageUpdate?: { version: string } | null;
   },
   latestComputerVersion: string | null | undefined,
 ): string | undefined {
+  if (!computer.ownedByCurrentUser) return undefined;
   const runtime = availableUpdateVersion(computer, latestComputerVersion);
   if (runtime) return runtime;
   if (computerKind(computer.kind) === "cloud") return computer.imageUpdate?.version || undefined;

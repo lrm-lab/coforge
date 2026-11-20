@@ -43,6 +43,7 @@ test("a cloud Computer offers a newer runtime, and the list names the image when
     kind: "cloud",
     computerVersion: "0.1.7-dev.1",
     imageUpdate: { version: "0.1.8-dev.3" },
+    ownedByCurrentUser: true,
   };
 
   expect(availableUpdateVersion(cloud, "0.1.8-dev.3")).toBe("0.1.8-dev.3");
@@ -52,11 +53,19 @@ test("a cloud Computer offers a newer runtime, and the list names the image when
 });
 
 test("a local Computer's update is a newer runtime release", () => {
-  const local = { kind: "local", computerVersion: "0.1.7-dev.1" };
+  const local = { kind: "local", computerVersion: "0.1.7-dev.1", ownedByCurrentUser: true };
 
   expect(availableUpdateVersion(local, "0.1.8-dev.3")).toBe("0.1.8-dev.3");
   expect(computerListUpdateVersion(local, "0.1.8-dev.3")).toBe("0.1.8-dev.3");
   expect(availableUpdateVersion(local, "0.1.7-dev.1")).toBeUndefined();
+});
+
+test("the Computer list hides runtime and image update offers from nonowners", () => {
+  const local = { kind: "local", computerVersion: "0.1.7-dev.1", ownedByCurrentUser: false };
+  const cloud = { ...local, kind: "cloud", imageUpdate: { version: "0.1.8-dev.3" } };
+
+  expect(computerListUpdateVersion(local, "0.1.8-dev.3")).toBeUndefined();
+  expect(computerListUpdateVersion(cloud, "0.1.7-dev.1")).toBeUndefined();
 });
 
 test("a system the Computer has not reported is left out rather than read as Unknown", () => {

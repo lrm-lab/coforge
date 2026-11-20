@@ -199,8 +199,8 @@ export function ComputerDetail({
               isCloud={isCloud}
               currentVersion={currentVersion}
               currentImageVersion={currentImageVersion}
-              runtimeSlot={runtimeSlot}
-              imageSlot={imageSlot}
+              runtimeSlot={computer.ownedByCurrentUser ? runtimeSlot : null}
+              imageSlot={computer.ownedByCurrentUser ? imageSlot : null}
               canUpgrade={canUpgrade}
               upgradeInFlight={upgrading}
               onRuntimeUpgrade={() => setUpgradeConfirmOpen(true)}
