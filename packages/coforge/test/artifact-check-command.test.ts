@@ -310,3 +310,48 @@ describe("formatArtifactCheck", () => {
     expect(text).not.toContain("COFORGE_ARTIFACT_CHECK_WORKER_URL");
   });
 });
+
+describe("artifact push Publish check hint", () => {
+  test("prints pending publish check command right after Open URL on HTML create", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "coforge-push-check-hint-"));
+    try {
+      await Bun.write(join(dir, "index.html"), "<!doctype html><p>hi</p>");
+      const { runPush } = await import("#src/artifact-push");
+      const out = await runPush(
+        {
+          command: "artifact",
+          directory: {
+            operation: "push",
+            dir,
+            target: "#growth",
+            title: "Funnel",
+          },
+        },
+        {
+          operation: "push",
+          dir,
+          target: "#growth",
+          title: "Funnel",
+        },
+        {
+          artifact: async () => ({
+            id: "art-10",
+            name: "funnel",
+            title: "Funnel",
+            currentVersion: 1,
+            url: "https://coforge.cn/w/demo/artifacts/art-10",
+            check: { status: "pending" },
+          }),
+        },
+        dir,
+      );
+      expect(typeof out).toBe("string");
+      expect(out as string).toContain("Open: https://coforge.cn/w/demo/artifacts/art-10");
+      expect(out as string).toContain(
+        "Publish check: pending. Wait for findings and screenshots: coforge artifact check art-10 --rev 1 --wait",
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

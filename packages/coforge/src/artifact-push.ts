@@ -26,7 +26,11 @@ import { CliError, invalidArg, withOutputMode } from "#src/cli-error";
 import { invalidArgument } from "#src/command-help/index";
 import { inPool } from "#src/pool";
 
-/** What a manifest save answers. */
+type PushCheckHint = {
+  status: string;
+  skipReason?: string;
+};
+
 type SaveAnswer = TellingAnswer & {
   status?: string;
   unchanged?: boolean;
@@ -35,7 +39,30 @@ type SaveAnswer = TellingAnswer & {
   merged?: string[];
   missing?: string[];
   url?: string | null;
+  check?: PushCheckHint;
 };
+
+function formatPushCheckHint(
+  check: PushCheckHint | undefined,
+  artifactId: string,
+  version: number,
+): string[] {
+  if (!check) return [];
+  if (check.status === "pending") {
+    return [
+      `Publish check: pending. Wait for findings and screenshots: coforge artifact check ${artifactId} --rev ${version} --wait`,
+    ];
+  }
+  if (check.status === "skipped" && check.skipReason === "unchanged_files" && version > 1) {
+    return [
+      `Publish check: skipped (files unchanged from v${version - 1}). Read previous check: coforge artifact check ${artifactId} --rev ${version - 1}`,
+    ];
+  }
+  if (check.status === "skipped") {
+    return [`Publish check: skipped (${check.skipReason ?? "unknown"}).`];
+  }
+  return [];
+}
 
 type PushRequest = Extract<AgentArtifactRequest, { operation: "push"; artifact: string }>;
 type CreateRequest = Extract<AgentArtifactRequest, { operation: "push"; artifact?: undefined }>;
@@ -96,6 +123,7 @@ export async function runPush(
       [
         `Created artifact "${created.title}" (id ${created.id}, name ${created.name}), version ${created.currentVersion}, from ${local.size} file${local.size === 1 ? "" : "s"}.`,
         ...(created.url ? [`Open: ${created.url}`] : []),
+        ...formatPushCheckHint(created.check, created.id, created.currentVersion),
         ...formatTelling(created.id, created),
         `Read it: coforge artifact read ${created.id}`,
         `Send changes later: coforge artifact push ${shellWord(draft.dir)}`,
@@ -162,6 +190,7 @@ export async function runPush(
   const message = [
     `${answer.status === "replayed" ? "Already pushed as" : "Pushed"} version ${version}${pushed.length ? `: ${pushed.join("; ")}` : ""}.`,
     ...(answer.url ? [`Open: ${answer.url}`] : []),
+    ...formatPushCheckHint(answer.check, state.artifact, version),
     ...(merged.length > 0
       ? [
           `Merged with what others saved since version ${state.version}: ${merged.join(", ")}. Their files are now in the directory.`,
@@ -178,6 +207,7 @@ type Created = TellingAnswer & {
   title: string;
   currentVersion: number;
   url?: string | null;
+  check?: PushCheckHint;
 };
 
 async function createFromDirectory(

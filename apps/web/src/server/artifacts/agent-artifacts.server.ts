@@ -260,7 +260,7 @@ export async function runAgentArtifactOperation(
         });
         if (created.currentVersion > 0)
           await noteReadPosition(services.db, { artifactId: created.id, agentId, version: 1 });
-        const [followed, url] = await Promise.all([
+        const [followed, url, scheduledCheck] = await Promise.all([
           followedByCreate(writes, principal, created),
           artifactWebUrl(services.db, workspaceId, created.id, services.appOrigin),
           created.currentVersion > 0
@@ -272,10 +272,22 @@ export async function runAgentArtifactOperation(
                   entryPath: created.entryPath,
                   filesChanged: true,
                 })
-                .catch(() => {})
-            : Promise.resolve(),
+                .catch(() => undefined)
+            : Promise.resolve(undefined),
         ]);
-        return { ...created, ...followed, ...(url ? { url } : {}) };
+        const checkSummary =
+          scheduledCheck?.status && scheduledCheck.skipReason !== "checker_disabled"
+            ? {
+                status: scheduledCheck.status,
+                ...(scheduledCheck.skipReason ? { skipReason: scheduledCheck.skipReason } : {}),
+              }
+            : undefined;
+        return {
+          ...created,
+          ...followed,
+          ...(url ? { url } : {}),
+          ...(checkSummary ? { check: checkSummary } : {}),
+        };
       }
       const {
         artifact,
@@ -297,7 +309,7 @@ export async function runAgentArtifactOperation(
             noteReadPosition(services.db, { artifactId: artifact, agentId, version: number }),
         },
       );
-      const [followed, url] = await Promise.all([
+      const [followed, url, scheduledCheck] = await Promise.all([
         followedByPush(writes, principal, artifact, saved, input),
         saved.status === "missing"
           ? null
@@ -314,15 +326,23 @@ export async function runAgentArtifactOperation(
                   fileManifest?.entryPath !== undefined,
                 ),
               })
-              .catch(() => {})
-          : Promise.resolve(),
+              .catch(() => undefined)
+          : Promise.resolve(undefined),
       ]);
+      const checkSummary =
+        scheduledCheck?.status && scheduledCheck.skipReason !== "checker_disabled"
+          ? {
+              status: scheduledCheck.status,
+              ...(scheduledCheck.skipReason ? { skipReason: scheduledCheck.skipReason } : {}),
+            }
+          : undefined;
       return {
         ...saved,
         ...(saved.status === "nothing" ? { unchanged: true } : {}),
         ...(saved.status === "replayed" ? { replayed: true } : {}),
         ...followed,
         ...(url ? { url } : {}),
+        ...(checkSummary ? { check: checkSummary } : {}),
       };
     }
     case "check": {
