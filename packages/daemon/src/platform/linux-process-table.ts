@@ -14,24 +14,26 @@ import type { OwnedProcessIdentity } from "@lrm/coforge-anvil";
 const TICKS_PER_SECOND = 100;
 const TICK_MS = 1_000 / TICKS_PER_SECOND;
 
-export type ProcStat = Readonly<{ ppid: number; pgid: number; startTicks: number }>;
+export type ProcStat = Readonly<{ state: string; ppid: number; pgid: number; startTicks: number }>;
 
-/**
- * The parent, process group and start time of one `/proc/<pid>/stat` line. The second field is the
- * command, which may hold spaces and parentheses, so the fields are read after its last `)`.
- * There, index 0 is the state (field 3), so `ppid` is field 4, `pgrp` field 5 and `starttime`
- * field 22 at index 19.
- */
 export function parseProcStat(stat: string): ProcStat | undefined {
+  const endOfCommand = stat.lastIndexOf(")");
+  if (endOfCommand < 0) return undefined;
   const fields = stat
-    .slice(stat.lastIndexOf(")") + 1)
+    .slice(endOfCommand + 1)
     .trim()
     .split(/\s+/);
+  const state = fields[0];
   const ppid = Number(fields[1]);
   const pgid = Number(fields[2]);
   const startTicks = Number(fields[19]);
-  if (![ppid, pgid, startTicks].every(Number.isSafeInteger)) return undefined;
-  return { ppid, pgid, startTicks };
+  if (state?.length !== 1 || ![ppid, pgid, startTicks].every(Number.isSafeInteger))
+    return undefined;
+  return { state, ppid, pgid, startTicks };
+}
+
+export function isExitedProcState(state: string | undefined): boolean {
+  return state === "Z" || state === "X" || state === "x";
 }
 
 async function readEntry(pid: number): Promise<OwnedProcessIdentity | undefined> {

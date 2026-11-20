@@ -1,7 +1,7 @@
 import { closeSync, openSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
-import { parseProcStat } from "./linux-process-table";
+import { isExitedProcState, parseProcStat } from "./linux-process-table";
 
 export type ProcJobIdentity = {
   pgid: number | null;
@@ -30,19 +30,12 @@ export async function readProcJobIdentity(
   if (!Number.isSafeInteger(pid) || pid <= 0) return null;
   if (platform === "linux") {
     try {
-      const text = await Bun.file(`/proc/${pid}/stat`).text();
-      const close = text.lastIndexOf(")");
-      if (close === -1) return null;
-      const state = text
-        .slice(close + 1)
-        .trim()
-        .split(/\s+/)[0];
-      const parsed = parseProcStat(text);
+      const parsed = parseProcStat(await Bun.file(`/proc/${pid}/stat`).text());
       if (!parsed) return null;
       return {
         pgid: parsed.pgid > 0 ? parsed.pgid : null,
         startIdentity: `linux-starttime:${parsed.startTicks}`,
-        zombie: state === "Z",
+        zombie: isExitedProcState(parsed.state),
       };
     } catch {
       return null;

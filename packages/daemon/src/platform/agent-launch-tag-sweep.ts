@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { getLogger } from "@logtape/logtape";
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { AGENT_LAUNCH_TAG_ENV, AGENT_LAUNCH_TAG_VALUE } from "./agent-launch-tag";
+import { isPidAlive } from "./process-liveness";
 
 const logger = getLogger(["coforge", "daemon", "platform"]);
 
@@ -157,8 +158,7 @@ export function extractAgentLaunchTag(
   let at = environment.indexOf(marker);
   // The name must start a variable: at the text's start or after a NUL/space separator, so a
   // longer name like XCOFORGE_AGENT_LAUNCH_TAG or an argument's `--flag=` prefix cannot match.
-  while (at >= 0 && at > 0 && !/[\s\0]/.test(environment[at - 1]!))
-    at = environment.indexOf(marker, at + 1);
+  while (at > 0 && !/[\s\0]/.test(environment[at - 1]!)) at = environment.indexOf(marker, at + 1);
   if (at < 0) return undefined;
   const rest = environment.slice(at + marker.length);
   const end = rest.search(/[\s\0]/);
@@ -205,12 +205,7 @@ const procAgentLaunchTagTable: AgentLaunchTagTable = {
   },
   startStamp: procStartStamp,
   async alive(pid) {
-    try {
-      process.kill(pid, 0);
-      return true;
-    } catch {
-      return false;
-    }
+    return isPidAlive(pid);
   },
   signal(pid, signal) {
     process.kill(pid, signal);
@@ -271,12 +266,7 @@ const psAgentLaunchTagTable: AgentLaunchTagTable = {
     return output;
   },
   async alive(pid) {
-    try {
-      process.kill(pid, 0);
-      return true;
-    } catch {
-      return false;
-    }
+    return isPidAlive(pid);
   },
   signal(pid, signal) {
     process.kill(pid, signal);

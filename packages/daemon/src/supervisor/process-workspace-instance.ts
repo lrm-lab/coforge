@@ -1,5 +1,6 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { isPidAlive } from "#src/platform/process-liveness";
 
 import { WorkspaceHealthJournal, workspaceHealthJournalPath } from "./workspace-health-journal";
 import { CONTAINER_BINDING_ENV_KEYS } from "./container-binding-env";
@@ -51,7 +52,7 @@ export class ProcessWorkspaceInstance implements WorkspaceInstance {
   constructor(
     private readonly config: WorkspaceInstanceConfig,
     private readonly spawnChild: ProcessWorkspaceSpawn = defaultSpawn,
-    private readonly isAlive: ProcessProbe = defaultIsAlive,
+    private readonly isAlive: ProcessProbe = isPidAlive,
     private readonly signalProcess: ProcessSignal = defaultSignal,
     private readonly stopTiming: ProcessStopTiming = DEFAULT_STOP_TIMING,
   ) {
@@ -233,15 +234,6 @@ async function defaultSpawn(input: {
   const pid = child.pid;
   if (pid === undefined) throw new Error("Workspace child did not report a PID");
   return { pid };
-}
-
-function defaultIsAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function defaultSignal(pid: number, signal?: NodeJS.Signals): void {

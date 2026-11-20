@@ -6,6 +6,8 @@ import type {
   ProcessTreeSpawnOptions,
 } from "@lrm/coforge-anvil";
 import { spawnOwnedChild } from "./process-transport";
+import { isExitedProcState, parseProcStat } from "./linux-process-table";
+import { isPidAlive } from "./process-liveness";
 import { spawnRuntime } from "./runtime-executable-not-found";
 import {
   hostProcessTable,
@@ -217,7 +219,8 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
               return true;
           }
           return turnScoped
-            ? (await this.#processExists(pid)) || (await turnSurvivors()).length > 0
+            ? isPidAlive(pid, { platform: this.platform, probeError: "throw" }) ||
+                (await turnSurvivors()).length > 0
             : await this.#treeExists(pid);
         };
         while (await alive()) {
@@ -236,11 +239,8 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
       })) {
         if (!/^\d+$/.test(entry)) continue;
         try {
-          const stat = await Bun.file(`/proc/${entry}/stat`).text();
-          const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-          const state = fields[0];
-          const processGroup = Number(fields[2]);
-          if (processGroup === pid && state !== "Z") return true;
+          const stat = parseProcStat(await Bun.file(`/proc/${entry}/stat`).text());
+          if (stat?.pgid === pid && !isExitedProcState(stat.state)) return true;
         } catch (error) {
           if ((error as { code?: string }).code !== "ENOENT") throw error;
         }
@@ -261,8 +261,7 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
    * `ESRCH` says the group is gone. macOS answers `EPERM` instead while the group's only remaining
    * member is a zombie: the child has exited but its owner has not reaped it yet, and `kill`
    * refuses a group with nothing signalable left in it. A group that still holds a live process
-   * answers 0, so `EPERM` means no live member - the same condition the linux branch states
-   * explicitly as `state !== "Z"`. Every other failure is real and must propagate. */
+   * answers 0, so `EPERM` means no live member. Every other failure must propagate. */
   #groupIsGone(error: unknown): boolean {
     const code = (error as { code?: string }).code;
     return code === "ESRCH" || (this.platform === "darwin" && code === "EPERM");
@@ -286,16 +285,6 @@ export class PosixProcessOwner implements ProcessTreeSpawner {
       } catch (error) {
         if (!this.#processGone(error)) throw error;
       }
-    }
-  }
-
-  async #processExists(pid: number): Promise<boolean> {
-    try {
-      globalThis.process.kill(pid, 0);
-      return true;
-    } catch (error) {
-      if (this.#processGone(error)) return false;
-      throw error;
     }
   }
 

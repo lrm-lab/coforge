@@ -9,6 +9,7 @@ import {
 import { diagnosticErrorCode } from "@lrm/coforge-sdk/internal";
 import { agentWorkspaceDirectory } from "#src/agent-runtime/agent-workspace-path";
 import { readProcJobIdentity, spawnDetachedProcJob } from "#src/platform/proc-job-process";
+import { isPidAlive } from "#src/platform/process-liveness";
 import { runtimeAllowsProcJobs, sanitizeProcJobEnvironment } from "./proc-job-environment";
 import { ProcJobError } from "./proc-job-error";
 import { markProcJobExited, toPublicProcJob, type StoredProcJob } from "./proc-job-ledger";
@@ -183,13 +184,7 @@ export async function launchAgentProcJob(input: {
     if (!exitedEarly) identity = await readIdentity(pid, input.platform).catch(() => null);
   }
   if (!exitedEarly && !identity) {
-    let aliveAfterMiss = true;
-    try {
-      process.kill(pid, 0);
-    } catch (error) {
-      if ((error as { code?: string }).code === "ESRCH") aliveAfterMiss = false;
-    }
-    if (!aliveAfterMiss) {
+    if (!isPidAlive(pid, { platform: input.platform, probeError: "alive" })) {
       const exited = markProcJobExited({ ...pendingRecord, pid, pgid: pid }, "exited", null, null);
       spawnSucceeded = true;
       return exited;
