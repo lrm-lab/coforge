@@ -149,6 +149,7 @@ export async function readNoticePage(
     before: boolean;
     after: boolean;
     around: boolean;
+    unread: boolean;
     limit: number;
   },
 ): Promise<{ rows: DirectConversationMessageRow[]; hasOlder: boolean; hasNewer: boolean }> {
@@ -164,8 +165,11 @@ export async function readNoticePage(
   const around = input.around && anchorSequence !== undefined;
   const beforeCount = Math.floor((limit - 1) / 2);
   const afterCount = limit - 1 - beforeCount;
-  const pageIds =
-    around && anchorSequence !== undefined
+  const unreadFromStart =
+    input.unread && anchorSequence === undefined && !input.before && !input.after;
+  const pageIds = unreadFromStart
+    ? (await ids(db, scope, {}, "asc", limit + 1)).slice(0, limit)
+    : around && anchorSequence !== undefined
       ? [
           ...(await ids(db, scope, { below: anchorSequence }, "desc", beforeCount + 1)).slice(
             0,
@@ -213,7 +217,7 @@ export async function readNoticePage(
   const readable = rows.filter((row) => confirmed.has(row.id));
   return {
     rows: readable,
-    hasOlder: parts.some((row) => row.part === "older"),
+    hasOlder: unreadFromStart ? false : parts.some((row) => row.part === "older"),
     hasNewer: parts.some((row) => row.part === "newer"),
   };
 }

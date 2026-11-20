@@ -201,6 +201,7 @@ export async function readAgentMessagePage(
       anchorSequence: anchor?.sequence,
       before: Boolean(page.before),
       after: Boolean(page.after),
+      unread: Boolean(page.unread),
       around: Boolean(page.around),
       fromSequence: page.unread ? (page.fromSequence ?? readThrough + 1) : page.fromSequence,
       throughSequence: page.throughSequence,
@@ -208,7 +209,7 @@ export async function readAgentMessagePage(
     });
     const messages = map(
       page.unread
-        ? notice.rows.filter((row) => row.sender !== null && row.sender.agentId !== agentId)
+        ? notice.rows.filter((row) => row.sender === null || row.sender.agentId !== agentId)
         : notice.rows,
     );
     const modelSeenUpToSeq = agentHistoryModelSeenBoundary({
@@ -229,8 +230,8 @@ export async function readAgentMessagePage(
       hasNewer: notice.hasNewer,
       modelSeenUpToSeq,
       consumptionScope,
-      ...(page.unread && notice.hasNewer ? { moreUnread: true } : {}),
       ...readPositionReport(page.unread, isHistoryRead, { readThrough }),
+      ...(page.unread && notice.hasNewer ? { moreUnread: true } : {}),
       ...(agentReadThroughSequence ? { readPositionAfter: agentReadThroughSequence } : {}),
     };
   }
