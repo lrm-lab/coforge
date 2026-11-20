@@ -154,3 +154,43 @@ test("a notice whose artifact row is gone is not handed back", async () => {
     event.messageId,
   );
 });
+
+test("the JavaScript rule and the SQL predicate agree on an artifact whose home is gone", async () => {
+  const { agentsReadingArtifact } = await import("#src/server/artifacts/artifact-access.server");
+  const { artifactNoticeBlockedMessages } =
+    await import("#src/server/artifacts/artifact-notice-visibility.server");
+  const artifact = await h.f.make("Divergence gate");
+  const reader = await h.nameOf(h.f.agents.reader);
+  await h.create(artifact, `Divergence gate, see @${reader}.`);
+  const sent = await h.submit(artifact);
+  if (sent.status !== "sent") throw new Error("not sent");
+  const event = await h.f.db.systemAgentEvent.findUniqueOrThrow({
+    where: {
+      source_agentId_externalEventId: {
+        source: "system.artifacts",
+        agentId: h.f.agents.reader,
+        externalEventId: `${artifact}:${sent.reviewId}`,
+      },
+    },
+    select: { messageId: true },
+  });
+  await h.f.db.artifact.update({
+    where: { id: artifact },
+    data: { access: "conversation", homeKey: `conversation:${crypto.randomUUID()}` },
+  });
+  const row = await h.f.db.artifact.findUniqueOrThrow({
+    where: { id: artifact },
+    select: { id: true, homeKey: true, access: true, authorAgentId: true, deletedAt: true },
+  });
+  expect(row.homeKey).toMatch(/^conversation:[0-9a-f-]{36}$/);
+  expect(row.authorAgentId).not.toBe(h.f.agents.reader);
+
+  const byRule = await agentsReadingArtifact(h.f.db, h.f.workspaceId, row, [h.f.agents.reader]);
+  const blocked = await artifactNoticeBlockedMessages(h.f.db, h.f.workspaceId, h.f.agents.reader, [
+    event.messageId,
+  ]);
+  expect({ rule: byRule.has(h.f.agents.reader), blocked: blocked.has(event.messageId) }).toEqual({
+    rule: false,
+    blocked: true,
+  });
+});
