@@ -17,6 +17,9 @@ snapshot_release() {
 		mkdir -p "$(dirname "$dest")"
 		cp -pf "$source" "$dest"
 	done
+	if [ -n "${checker_compose_file:-}" ] && [ -f "$checker_compose_file" ]; then
+		cp -pf "$checker_compose_file" "$tmp_dir/artifact-checker.compose.yml"
+	fi
 	rm -rf "${release_snapshot_dir}.previous"
 	if [ -d "$release_snapshot_dir" ]; then
 		mv "$release_snapshot_dir" "${release_snapshot_dir}.previous"
@@ -39,4 +42,7 @@ restore_release_snapshot() {
 		mkdir -p "$(dirname "$dest")"
 		cp -pf "$source" "$dest"
 	done
+	if [ -n "${checker_compose_file:-}" ] && [ -f "$release_snapshot_dir/artifact-checker.compose.yml" ]; then
+		cp -pf "$release_snapshot_dir/artifact-checker.compose.yml" "$checker_compose_file"
+	fi
 }

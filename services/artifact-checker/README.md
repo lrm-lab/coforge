@@ -7,12 +7,13 @@ viewports, captures screenshots, and collects layout and console findings.
 ## Why a sidecar
 
 - Keeps Chromium out of the `apps/web` image and memory space.
-- Enforces hard container limits (`mem_limit: 1g`, `shm_size: 256m`, default concurrency `1`).
+- Enforces hard container limits (`mem_limit: 1g`, `shm_size: 256m`, `pids_limit: 256`,
+  `no-new-privileges:true`, default concurrency `1`).
 - Closes Chromium automatically after 60 seconds of idle time (`CHECKER_IDLE_CLOSE_MS`), dropping
   resident memory to ~35 MB between pushes.
 - Serves artifact files purely from memory on synthetic `https://a-<artifactId>.coforge.check`
-  via Playwright `context.route`, allowing only that origin plus the configured public CDNs and
-  aborting all other network requests (SSRF-safe without wildcard DNS or TLS).
+  via Playwright `context.route`, caching allowed public CDN fetches per check job and aborting
+  all other network requests (SSRF-safe without wildcard DNS or TLS).
 
 ## Endpoints
 
@@ -29,6 +30,7 @@ viewports, captures screenshots, and collects layout and console findings.
 | `COFORGE_ARTIFACT_CHECK_SECRET` | `""` | Shared Bearer secret matching `apps/web` |
 | `CHECKER_MAX_CONCURRENCY` | `1` | Max simultaneous browser checks (`1`–`4`) |
 | `CHECKER_IDLE_CLOSE_MS` | `60000` | Idle milliseconds before closing Chromium |
+| `COFORGE_ARTIFACT_CHECK_DAILY_CAP` (on `web`) | `200` | Rolling 24-hour checks per workspace (`0` = unlimited) |
 
 ## Structured logs
 
@@ -43,10 +45,12 @@ Emits one-line JSON events to stdout/stderr:
 
 Enabled by default in local Compose ([`infra/docker-compose.yml`](../../infra/docker-compose.yml)),
 staging (`.github/workflows/deploy-staging.yml`), and production
-(`.github/workflows/deploy-production.yml`). Staging builds the sidecar via
-`.github/workflows/artifact-checker-image.yml`, passes its immutable digest to
-`scripts/deploy/remote-deploy.sh --checker-image`, attaches `infra/artifact-checker.compose.yml`,
-and derives `COFORGE_ARTIFACT_CHECK_SECRET` automatically when no explicit host secret file exists.
+(`.github/workflows/deploy-production.yml`). Staging runs
+`.github/workflows/artifact-checker-image.yml`, which reuses the existing GHCR immutable digest
+whenever `services/artifact-checker/` has not changed, passes `--checker-image` to
+`scripts/deploy/remote-deploy.sh`, attaches `infra/artifact-checker.compose.yml` (snapshotted for
+rollback), tracks `checker-state.env`, prunes old checker images, and derives
+`COFORGE_ARTIFACT_CHECK_SECRET` automatically when no explicit host secret file exists.
 
 Standalone smoke test:
 

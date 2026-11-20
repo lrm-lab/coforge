@@ -44,9 +44,13 @@ allowlist, and `coforge artifact push` prints the next `coforge artifact check` 
 after `Open:`:
 
 - `coforge artifact check <id> [--rev <n>] [--wait] [--output <dir>] [--json]` prints findings
-  (console errors, blocked requests, blank page, phone horizontal overflow, inline height clipping
-  above 800px, and CSS scroll locks) and downloads PNG screenshots into `.coforge-check/`.
+  (console errors, blocked requests, broken images, missing artifact 404 assets, blank page, phone
+  horizontal overflow, inline height clipping above 800px, and CSS scroll locks) and downloads PNG
+  screenshots into `.coforge-check/`.
 - Screenshots are retained in `artifact-blobs` for the newest 3 completed versions per artifact;
   older versions keep their findings while older screenshot blobs are released.
+- Workspaces default to a rolling 24-hour cap of 200 publish checks
+  (`COFORGE_ARTIFACT_CHECK_DAILY_CAP`, `0` for unlimited); pushes beyond the cap record
+  `skipped (workspace_daily_cap)`.
 - In custom setups where `COFORGE_ARTIFACT_CHECK_WORKER_URL` is unset, checks degrade cleanly to
   disabled and Agent prompts omit the check step.
