@@ -164,6 +164,7 @@ test("the notice conversation reads only the notices the Agent can still read", 
     await pinned("01a1f6da-bbbb-7000-8000-000000000002", 9, "notice 9");
 
     const wideAround = await read({ around: "6", limit: 10 });
+    expect(wideAround.messages.map((message) => message.sequence)).toEqual([1, 2, 4, 5, 6, 8, 9]);
     expect(wideAround.hasOlder).toBe(false);
     expect(wideAround.hasNewer).toBe(false);
 
