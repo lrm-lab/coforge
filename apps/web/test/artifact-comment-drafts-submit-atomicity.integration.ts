@@ -169,7 +169,7 @@ async function coldSubmissions(poolMax: number, count: number) {
   const agentId = agents.reader;
   try {
     const reader = await cold.nameOf(agentId);
-    const prepared = [];
+    const prepared: Parameters<ArtifactCommentDrafts["submit"]>[0][] = [];
     for (let number = 1; number <= count; number++) {
       const artifactId = await cold.f.make(`Cold review ${number}`);
       await cold.create(artifactId, `Cold review for @${reader}.`);
