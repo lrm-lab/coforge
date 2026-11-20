@@ -241,6 +241,14 @@ test("an around page measures each side against its own rows, not the whole page
     });
     expect(following.messages.map((message) => message.sequence)).toEqual([11]);
     expect(following.readPositionAfter).toBe(11);
+    expect(
+      (
+        await db.conversationMember.findUniqueOrThrow({
+          where: { id: seat.id },
+          select: { agentReadThroughSequence: true },
+        })
+      ).agentReadThroughSequence,
+    ).toBe(11);
   } finally {
     await db.workspace.delete({ where: { id: workspace.id } });
     await db.user.delete({ where: { id: user.id } });
