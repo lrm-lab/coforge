@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { WEB_DRAFT_REVIEW_MARKER } from "#src/server/artifacts/artifact-notice-visibility.server";
+import { advanceAgentReadPosition } from "#src/server/db/repositories/agent-read-position.repositories.server";
 import { readAgentMessagePage } from "#src/server/db/repositories/agent-message-history.repositories.server";
 
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
@@ -35,8 +36,9 @@ test("an around page measures each side against its own rows, not the whole page
       data: { workspaceId: workspace.id, directKey: `system:system.artifacts|agent:${agent.id}` },
       select: { id: true },
     });
-    await db.conversationMember.create({
+    const seat = await db.conversationMember.create({
       data: { workspaceId: workspace.id, conversationId: conversation.id, agentId: agent.id },
+      select: { id: true },
     });
     const readable = await db.artifact.create({
       data: {
@@ -140,6 +142,7 @@ test("an around page measures each side against its own rows, not the whole page
     expect(page.messages.map((message) => message.sequence)).toEqual([9]);
     expect(page.hasOlder).toBe(false);
     expect(page.hasNewer).toBe(false);
+    expect(page.modelSeenUpToSeq).toBeNull();
 
     const spare = await db.artifact.create({
       data: {
@@ -180,6 +183,16 @@ test("an around page measures each side against its own rows, not the whole page
         data: { access: "conversation", homeKey: `conversation:${crypto.randomUUID()}` },
       });
     };
+
+    await advanceAgentReadPosition({
+      db,
+      memberId: seat.id,
+      conversationId: conversation.id,
+      workspaceId: workspace.id,
+      agentId: agent.id,
+      sequence: 9,
+      publishConversationRead: false,
+    });
 
     const unread = await readAgentMessagePage(revokingUnread, {
       workspaceId: workspace.id,

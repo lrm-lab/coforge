@@ -208,15 +208,17 @@ export async function readAgentMessagePage(
       limit,
     });
     const messages = map(notice.rows);
-    const modelSeenUpToSeq = agentHistoryModelSeenBoundary({
-      anchor: page.before ? "before" : page.after ? "after" : page.around ? undefined : "latest",
-      anchorSequence: anchor?.sequence,
-      fromSequence: page.fromSequence,
-      readThrough,
-      minSequence: notice.rows[0]?.sequence,
-      maxSequence: notice.rows.at(-1)?.sequence,
-      hasOlder: notice.hasOlder,
-    });
+    const modelSeenUpToSeq = page.around
+      ? null
+      : agentHistoryModelSeenBoundary({
+          anchor: page.before ? "before" : page.after ? "after" : "latest",
+          anchorSequence: anchor?.sequence,
+          fromSequence: page.fromSequence,
+          readThrough,
+          minSequence: notice.rows[0]?.sequence,
+          maxSequence: notice.rows.at(-1)?.sequence,
+          hasOlder: notice.hasOlder,
+        });
     const agentReadThroughSequence =
       modelSeenUpToSeq !== null && modelSeenUpToSeq > readThrough ? modelSeenUpToSeq : 0;
     if (agentReadThroughSequence) await advanceReadThrough(agentReadThroughSequence);

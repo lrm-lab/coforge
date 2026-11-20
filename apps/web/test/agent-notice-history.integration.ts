@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { WEB_DRAFT_REVIEW_MARKER } from "#src/server/artifacts/artifact-notice-visibility.server";
+import { advanceAgentReadPosition } from "#src/server/db/repositories/agent-read-position.repositories.server";
 import { readAgentMessagePage } from "#src/server/db/repositories/agent-message-history.repositories.server";
 
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
@@ -35,8 +36,9 @@ test("the notice conversation reads only the notices the Agent can still read", 
       data: { workspaceId: workspace.id, directKey: `system:system.artifacts|agent:${agent.id}` },
       select: { id: true },
     });
-    await db.conversationMember.create({
+    const seat = await db.conversationMember.create({
       data: { workspaceId: workspace.id, conversationId: conversation.id, agentId: agent.id },
+      select: { id: true },
     });
     const artifact = await db.artifact.create({
       data: {
@@ -259,6 +261,16 @@ test("the notice conversation reads only the notices the Agent can still read", 
     expect(fourth!.id).toContain("-");
     await pinned(crypto.randomUUID(), 22, "notice 22");
     await pinned(crypto.randomUUID(), 23, "notice 23");
+    await advanceAgentReadPosition({
+      db,
+      memberId: seat.id,
+      conversationId: conversation.id,
+      workspaceId: workspace.id,
+      agentId: agent.id,
+      sequence: 19,
+      publishConversationRead: false,
+    });
+
     const firstUnread = await read({ unread: true, limit: 1 } as never);
     expect(firstUnread.messages.map((message) => message.sequence)).toEqual([20]);
     expect(firstUnread.moreUnread).toBe(true);
