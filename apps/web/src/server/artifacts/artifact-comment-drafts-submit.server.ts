@@ -142,7 +142,7 @@ async function prepareAll(
   rows: readonly DraftRow[],
   mentions: readonly (Refusal | undefined)[],
 ): Promise<{ prepared: PreparedComment[] } | Rejected> {
-  const prepared = Array.from<PreparedComment>({ length: rows.length });
+  const prepared: PreparedComment[] = Array.from<PreparedComment>({ length: rows.length });
   const firstMention = mentions.findIndex((refusal) => refusal !== undefined);
   let refused: { at: number; refusal: Refusal } | undefined =
     firstMention < 0 ? undefined : { at: firstMention, refusal: mentions[firstMention]! };
