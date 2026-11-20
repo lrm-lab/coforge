@@ -81,6 +81,7 @@ export class GitHubUserTokens {
           token: tokens.access_token,
           githubUserId: row.githubUserId,
           row: current,
+          refreshStored: stage === "store",
         };
       } catch (error) {
         if (error instanceof GitHubUnauthorized) {
@@ -117,6 +118,7 @@ export class GitHubUserTokens {
         this.logCleared(userId, "refresh", prepared.cleared.reason, prepared.cleared.row);
       return prepared;
     }
+    if (prepared.refreshStored) console.info(JSON.stringify({ event: "github.refresh_committed" }));
     // The advisory lock only covers the token read/refresh above. GitHub reads run here,
     // outside any transaction, so a slow API call never blocks a concurrent disconnect().
     try {

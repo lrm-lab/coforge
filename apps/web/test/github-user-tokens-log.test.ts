@@ -27,24 +27,30 @@ function tokens(
   exchange: () => Promise<unknown>,
   clock: { now: number } = { now: NOW },
   counts = { transactions: 0 },
+  failure?: "write" | "commit",
 ) {
   let queue: Promise<unknown> = Promise.resolve();
   const state = { row: stored };
   const db = {
     $transaction: (fn: (tx: unknown) => unknown) => {
       counts.transactions++;
-      const run = queue.then(() =>
-        fn({
+      const run = queue.then(async () => {
+        let next = state.row;
+        const result = await fn({
           $queryRaw: async () => [],
           gitHubConnection: {
             findUnique: async () => state.row,
             update: async ({ data }: { data: Record<string, unknown> }) => {
-              state.row = { ...state.row, ...data } as typeof state.row;
-              return state.row;
+              if (failure === "write") throw new Error("write failed");
+              next = { ...next, ...data };
+              return next;
             },
           },
-        }),
-      );
+        });
+        if (failure === "commit") throw new Error("commit failed");
+        state.row = next;
+        return result;
+      });
       queue = run.catch(() => {});
       return run;
     },
@@ -236,3 +242,53 @@ test("a transaction that does not commit logs no cleared credential", async () =
   await t.withToken("u1", async () => 1).catch(() => {});
   expect(events(warn)).toEqual([]);
 });
+
+test("a committed refresh logs only the event, even if the downstream call fails, and reuse adds nothing", async () => {
+  const info = spyOn(console, "info").mockImplementation(() => {});
+  try {
+    let exchanges = 0;
+    const t = tokens(row(), () => {
+      exchanges++;
+      return fresh();
+    });
+    const expected = [{ event: "github.refresh_committed" }];
+    const downstreamError = new AppError("TEMPORARILY_UNAVAILABLE");
+    let observedByAction: ReturnType<typeof events> | undefined;
+    await expect(
+      t.withToken("u1", async () => {
+        observedByAction = events(info);
+        throw downstreamError;
+      }),
+    ).rejects.toBe(downstreamError);
+    expect(observedByAction).toEqual(expected);
+    expect(await t.withToken("u1", async () => 1)).toEqual({ ok: true, data: 1 });
+    expect(exchanges).toBe(1);
+    expect(events(info)).toEqual(expected);
+  } finally {
+    info.mockRestore();
+  }
+});
+
+test.each(["write", "commit"] as const)(
+  "a refresh that fails at %s logs no committed event",
+  async (failure) => {
+    const info = spyOn(console, "info").mockImplementation(() => {});
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const t = tokens(row(), fresh, { now: NOW }, { transactions: 0 }, failure);
+      const expectedError = failure === "write" ? "TEMPORARILY_UNAVAILABLE" : "commit failed";
+      let called = false;
+      await expect(
+        t.withToken("u1", async () => {
+          called = true;
+          return 1;
+        }),
+      ).rejects.toThrow(expectedError);
+      expect(events(info)).toEqual([]);
+      expect(called).toBe(false);
+    } finally {
+      warn.mockRestore();
+      info.mockRestore();
+    }
+  },
+);

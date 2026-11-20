@@ -30,6 +30,8 @@ These rules apply to `src/server/integrations/`.
   `github.credential_failed`, with the reason, once. A failure reason lives only in a log line, never on the thrown
   error (no `errorId`, no own property): what an error carries can reach the
   browser.
+- `github.refresh_committed` records a refresh only after the credential transaction commits,
+  before any downstream GitHub request. Its payload contains only the event name.
 - The Agent commit `Co-authored-by` trailer names only the regular GitHub user
   account configured in `COFORGE_COMMIT_COAUTHOR` (`readCommitCoAuthor`), never
   the GitHub App's `[bot]` account, which GitHub shows without a profile or
