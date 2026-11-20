@@ -155,7 +155,9 @@ export function selectChecks(paths: string[], track: "changes" | "web" | "local"
       if (path.startsWith("packages/coforge/")) affected.push("coforge");
     } else if (path.startsWith("scripts/release/")) {
       affected = ["computer", "daemon", "macos-lifecycle", "release", "windows-release"];
-    } else if (/^(scripts\/(deploy|migration-safety)\/|infra\/)/.test(path)) {
+    } else if (
+      /^(scripts\/(deploy|migration-safety)\/|infra\/|services\/artifact-checker\/)/.test(path)
+    ) {
       // Staging's image digests are also pinned in the scheduled Web integration workflow, and the
       // scripts/ci test that keeps the two equal runs only under the `ci` check.
       affected =

@@ -132,3 +132,18 @@ test("prune_deploy_images is a no-op when nothing is stale", async () => {
   expect(result.rmiLog).toBe("");
   expect(result.stdout.trim()).toBe("done");
 });
+
+test("deploy_images_to_remove prunes stale coforge-artifact-checker images independently and protects container refs", async () => {
+  const CHECKER = "ghcr.io/lrm-lab/coforge/coforge-artifact-checker";
+  const images = [
+    img("sha256:web-1", WEB, "2026-11-16 10:00:00 +0000 UTC"),
+    img("sha256:chk-1", CHECKER, "2026-11-16 10:00:00 +0000 UTC"),
+    img("sha256:chk-2", CHECKER, "2026-11-15 10:00:00 +0000 UTC"),
+    img("sha256:chk-3", CHECKER, "2026-11-14 10:00:00 +0000 UTC"),
+    img("sha256:img-zzz", CHECKER, "2026-11-13 10:00:00 +0000 UTC"),
+  ].join("\n");
+  const result = await runRetention("deploy_image_retention=2; deploy_images_to_remove", images);
+  expect(result.code).toBe(0);
+  const removed = result.stdout.trim().split("\n").filter(Boolean);
+  expect(removed).toEqual(["sha256:chk-3"]);
+});

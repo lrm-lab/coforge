@@ -16,9 +16,18 @@ deploy_image_retention=5
 # canonical {{.Id}} that container_image_ids collects. Digest-only pulls show
 # tag <none> but keep the repository name under --digests, and the pattern
 # matches any org prefix so pre-rename lrm-teams copies are covered as well.
-deploy_web_images() {
+deploy_repo_images() {
+	local pattern="$1"
 	docker images --no-trunc --digests --format '{{.ID}}|{{.Repository}}|{{.CreatedAt}}' |
-		awk -F'|' '$2 ~ /(^|\/)coforge\/coforge-web$/'
+		awk -F'|' -v pat="$pattern" '$2 ~ pat'
+}
+
+deploy_web_images() {
+	deploy_repo_images '(^|\/)coforge\/coforge-web$'
+}
+
+deploy_checker_images() {
+	deploy_repo_images '(^|\/)coforge\/coforge-artifact-checker$'
 }
 
 # Prints the canonical image ID of every container, running or stopped, so a
@@ -37,17 +46,23 @@ container_image_ids() {
 	done | sort -u
 }
 
-# Prints the IDs of in-scope web images to remove: everything older than the
-# newest $deploy_image_retention unique image IDs, minus container references.
+# Prints the IDs of in-scope web and checker images to remove: everything older than the
+# newest $deploy_image_retention unique image IDs per repository, minus container references.
 deploy_images_to_remove() {
 	local protected
 	protected="$(container_image_ids)" || return 1
-	deploy_web_images |
-		sort -t'|' -k3,3 -r |
-		awk -F'|' '!seen[$1]++' |
-		tail -n "+$((deploy_image_retention + 1))" |
-		cut -d'|' -f1 |
-		grep -vxF -f <(printf '%s\n' "$protected") || true
+	{
+		deploy_web_images |
+			sort -t'|' -k3,3 -r |
+			awk -F'|' '!seen[$1]++' |
+			tail -n "+$((deploy_image_retention + 1))" |
+			cut -d'|' -f1
+		deploy_checker_images |
+			sort -t'|' -k3,3 -r |
+			awk -F'|' '!seen[$1]++' |
+			tail -n "+$((deploy_image_retention + 1))" |
+			cut -d'|' -f1
+	} | sort -u | grep -vxF -f <(printf '%s\n' "$protected") || true
 }
 
 # Removes stale web images after a verified outcome. Every docker call is

@@ -63,6 +63,8 @@ wildcard_probe_host=
 # seen: every layer, cold, in 3m06s on 2026-10-12.
 web_pull_attempts=3
 web_pull_deadline=210
+checker_pull_attempts=2
+checker_pull_deadline=120
 image=
 checker_image=
 compose_file=
@@ -137,9 +139,9 @@ done
 
 checker_compose_file="$(dirname "$compose_file")/../artifact-checker.compose.yml"
 if [ -n "$checker_image" ] && [ -f "$checker_compose_file" ]; then
-	readonly COMPOSE_ARGS=(-p "$project" -f "$compose_file" -f "$checker_compose_file")
+	COMPOSE_ARGS=(-p "$project" -f "$compose_file" -f "$checker_compose_file")
 else
-	readonly COMPOSE_ARGS=(-p "$project" -f "$compose_file")
+	COMPOSE_ARGS=(-p "$project" -f "$compose_file")
 fi
 
 # The last healthy release: the shipped Compose file, Caddyfile, and Centrifugo
@@ -199,8 +201,14 @@ fi
 
 # The rollback target is the last known healthy image, not the one before it.
 last_healthy="$current_image"
+checker_state_file="$(dirname "$state_file")/checker-state.env"
+current_checker_image=""
+if [ -f "$checker_state_file" ]; then
+	current_checker_image="$(grep -E '^CURRENT_CHECKER_IMAGE=' "$checker_state_file" 2>/dev/null | head -n 1 | cut -d= -f2- || true)"
+fi
+last_healthy_checker="$current_checker_image"
 
-if [ -n "$current_image" ] && [ "$current_image" = "$image" ]; then
+if [ -n "$current_image" ] && [ "$current_image" = "$image" ] && [ "$current_checker_image" = "$checker_image" ]; then
 	prune_deploy_images
 	printf 'previous_web_image=%s\nhealth_result=healthy\noutcome=healthy\nrollback_target=\n' "$current_image"
 	[ -z "$deploy_warning" ] || printf 'warning=%s\n' "$deploy_warning"
@@ -270,15 +278,22 @@ verify_running_digest() {
 rollback() {
 	local target="$1"
 	if [ -n "$target" ]; then
+		if [ -z "$last_healthy_checker" ]; then
+			COMPOSE_ARGS=(-p "$project" -f "$compose_file")
+		fi
 		if [ -d "$release_snapshot_dir" ]; then
 			restore_release_snapshot
 			printf 'restored the last healthy release configuration\n' >&2
-			write_deploy_env "$target" "$checker_image"
+			write_deploy_env "$target" "$last_healthy_checker"
 			compose up -d --remove-orphans --wait --wait-timeout "$timeout" >/dev/null
 		else
 			printf 'no last healthy release snapshot; rolling back the image only\n' >&2
-			write_deploy_env "$target" "$checker_image"
-			compose up -d --wait --wait-timeout "$timeout" web >/dev/null
+			write_deploy_env "$target" "$last_healthy_checker"
+			if [ -n "$last_healthy_checker" ] && [ -f "$checker_compose_file" ]; then
+				compose up -d --wait --wait-timeout "$timeout" web artifact-checker >/dev/null
+			else
+				compose up -d --remove-orphans --wait --wait-timeout "$timeout" web >/dev/null
+			fi
 		fi
 		if wait_for_health; then
 			printf 'rolled back to the previous healthy digest\n' >&2
@@ -326,7 +341,7 @@ discard_candidate_configuration() {
 	[ -d "$release_snapshot_dir" ] || return 0
 	restore_release_snapshot
 	if [ -n "$current_image" ]; then
-		write_deploy_env "$current_image" "$checker_image"
+		write_deploy_env "$current_image" "$last_healthy_checker"
 	fi
 }
 
@@ -383,28 +398,26 @@ if ! compose run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfi
 	exit 0
 fi
 
-# Pulls the candidate by its digest with `docker pull`, which needs none of the Compose secrets.
-# `--quiet` still prints the reference on stdout, which carries the report. On failure,
-# `web_pull_failure` says how the last attempt ended.
-pull_web_image() {
-	local attempt status started detail
-	for ((attempt = 1; attempt <= web_pull_attempts; attempt++)); do
+# Pulls a candidate image by its digest with `docker pull`, which needs none of the Compose secrets.
+pull_digest_image() {
+	local label="$1" target_image="$2" attempts="$3" deadline="$4" attempt status started detail
+	pull_failure=failed
+	for ((attempt = 1; attempt <= attempts; attempt++)); do
 		started=$SECONDS
 		status=0
-		timeout --kill-after=10s "${web_pull_deadline}s" docker pull --quiet "$image" >/dev/null || status=$?
+		timeout --kill-after=10s "${deadline}s" docker pull --quiet "$target_image" >/dev/null || status=$?
 		case "$status" in
 		0) detail="succeeded in $((SECONDS - started))s" ;;
-		# GNU timeout's statuses for a command it timed out, and for one it then had to KILL.
 		124 | 137)
-			web_pull_failure="timed out"
-			detail="timed out after ${web_pull_deadline}s"
+			pull_failure="timed out"
+			detail="timed out after ${deadline}s"
 			;;
 		*)
-			web_pull_failure=failed
+			pull_failure=failed
 			detail="failed with exit status $status"
 			;;
 		esac
-		printf 'Web image pull attempt %d of %d %s\n' "$attempt" "$web_pull_attempts" "$detail" >&2
+		printf '%s image pull attempt %d of %d %s\n' "$label" "$attempt" "$attempts" "$detail" >&2
 		if [ "$status" -eq 0 ]; then
 			return 0
 		fi
@@ -412,9 +425,15 @@ pull_web_image() {
 	return 1
 }
 
-if ! pull_web_image; then
+if ! pull_digest_image "Web" "$image" "$web_pull_attempts" "$web_pull_deadline"; then
 	discard_candidate_configuration
-	report "$current_image" "failed: Web image pull $web_pull_failure" "failed" ""
+	report "$current_image" "failed: Web image pull $pull_failure" "failed" ""
+	exit 0
+fi
+
+if [ -n "$checker_image" ] && ! pull_digest_image "Artifact Checker" "$checker_image" "$checker_pull_attempts" "$checker_pull_deadline"; then
+	discard_candidate_configuration
+	report "$current_image" "failed: Artifact Checker image pull $pull_failure" "failed" ""
 	exit 0
 fi
 
@@ -444,6 +463,14 @@ printf '%s\n' \
 	"CURRENT_WEB_IMAGE=$image" >"$state_file.tmp"
 chmod 600 "$state_file.tmp"
 mv "$state_file.tmp" "$state_file"
+
+if [ -n "$checker_image" ]; then
+	printf '%s\n' \
+		"PREVIOUS_CHECKER_IMAGE=$current_checker_image" \
+		"CURRENT_CHECKER_IMAGE=$checker_image" >"$checker_state_file.tmp"
+	chmod 600 "$checker_state_file.tmp"
+	mv "$checker_state_file.tmp" "$checker_state_file"
+fi
 
 prune_deploy_images
 
