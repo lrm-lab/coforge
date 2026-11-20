@@ -30,6 +30,7 @@ import {
 } from "#src/server/agents/agent-runtime-context.server";
 import type { AgentLaunchApp } from "@lrm/coforge-sdk/internal/agent-launch-apps";
 import { agentLaunchApps } from "#src/server/app-agent-access/app-agent-access-composition.server";
+import { artifactChecksEnabled } from "#src/server/artifacts/artifact-check-config.server";
 import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 
 const createAgentApiKeyInputSchema = z.object({
@@ -71,7 +72,12 @@ function buildAgentLaunchIdentity(agent: {
   computer: LaunchIdentityComputer;
   apps: AgentLaunchApp[];
   /** The Workspace's features as of this launch; a daemon older than the field ignores it. */
-  features: { taskConversations: boolean; artifacts: boolean; agentContextView: boolean };
+  features: {
+    taskConversations: boolean;
+    artifacts: boolean;
+    artifactChecks: boolean;
+    agentContextView: boolean;
+  };
 }) {
   const runtimeContext = buildAgentRuntimeContext(agent);
   const identity = {
@@ -225,7 +231,12 @@ export const Route = createFileRoute("/api/agent-api-keys")({
           computerId: principal.computerId,
           computer: agent.computer,
           apps: await agentLaunchApps(db, agent.workspaceId),
-          features: { taskConversations: true, artifacts: true, agentContextView },
+          features: {
+            taskConversations: true,
+            artifacts: true,
+            artifactChecks: artifactChecksEnabled(),
+            agentContextView,
+          },
         });
         const assignedSkillPacks = agent.weeklyReportAssistant
           ? (["weekly-report"] as const)

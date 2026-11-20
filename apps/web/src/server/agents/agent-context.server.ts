@@ -1,5 +1,6 @@
 import { buildExternalAgentGuide, type AgentContextResponse } from "@lrm/coforge-sdk/agent";
 import type { PrismaClient } from "#src/generated/prisma/client";
+import { artifactChecksEnabled } from "#src/server/artifacts/artifact-check-config.server";
 import { resolveActorServerRole } from "#src/server/conversations/channel-authority.server";
 import { ACTIVE_AGENT_WHERE } from "./active-agent.server";
 import { externalAgentFeatures } from "./external-agent-capabilities.server";
@@ -33,7 +34,13 @@ export async function readAgentContext(
     credential: principal.credentialId ? { id: principal.credentialId } : null,
     capabilities: principal.external ? [...EXTERNAL_FEATURES] : null,
     prompt: principal.external
-      ? { text: buildExternalAgentGuide({ agent: resolvedAgent, workspace }) }
+      ? {
+          text: buildExternalAgentGuide({
+            agent: resolvedAgent,
+            workspace,
+            features: { artifacts: true, artifactChecks: artifactChecksEnabled() },
+          }),
+        }
       : null,
   };
 }

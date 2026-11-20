@@ -60,6 +60,7 @@ model Artifact {
   pageDocuments   ArtifactPageDocument[]
   pageAssets      ArtifactPageAsset[]
   viewerPositions ArtifactViewerPosition[]
+  versionChecks   ArtifactVersionCheck[]
 
   @@index([workspaceId, homeKey])
   /// The live name is unique per home (`deletedAt IS NULL`), so a soft delete releases it at once.

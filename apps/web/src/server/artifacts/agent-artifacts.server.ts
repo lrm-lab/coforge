@@ -39,6 +39,7 @@ import {
   artifactWebUrl,
   type ArtifactPresencePort,
 } from "./agent-artifact-context.server";
+import type { ArtifactChecks } from "./artifact-checks.server";
 
 export type AgentArtifactServices = {
   db: PrismaClient;
@@ -55,6 +56,7 @@ export type AgentArtifactServices = {
     | "moveToWorkspace"
   >;
   blobs: Pick<StoredArtifactBlobs, "allowed" | "use" | "read" | "upload">;
+  checks?: Pick<ArtifactChecks, "scheduleAfterPush" | "readCheck" | "readCheckShot"> | undefined;
   notices?: ArtifactNoticePort | undefined;
   signals?: ArtifactSignals | undefined;
   attachments?: ArtifactAttachmentPort | undefined;
@@ -110,6 +112,12 @@ const RULES = {
     limit: z.number().int().min(1).max(50).optional(),
   }),
   read: z.object({ artifact: id, version: version.optional() }),
+  check: z.object({ artifact: id, version: version.optional() }),
+  "check-shot": z.object({
+    artifact: id,
+    version: version.optional(),
+    shot: z.enum(["desktop", "phone", "inline"]),
+  }),
   push: PUSH_OVER,
   move: z.object({ artifact: id, to: z.string().max(40) }),
   delete: z.object({ artifact: id }),
@@ -123,7 +131,7 @@ const RULES = {
 export { ArtifactRateLimited } from "./agent-artifact-rate-limit.server";
 
 const REFERENCE_MAX_CHARS = 2000;
-const VERSIONED = new Set(["read", "comment", "review"]);
+const VERSIONED = new Set(["read", "check", "check-shot", "comment", "review"]);
 
 async function resolvedReference(
   services: AgentArtifactServices,
@@ -255,6 +263,17 @@ export async function runAgentArtifactOperation(
         const [followed, url] = await Promise.all([
           followedByCreate(writes, principal, created),
           artifactWebUrl(services.db, workspaceId, created.id, services.appOrigin),
+          created.currentVersion > 0
+            ? services.checks
+                ?.scheduleAfterPush({
+                  workspaceId,
+                  artifactId: created.id,
+                  version: created.currentVersion,
+                  entryPath: created.entryPath,
+                  filesChanged: true,
+                })
+                .catch(() => {})
+            : Promise.resolve(),
         ]);
         return { ...created, ...followed, ...(url ? { url } : {}) };
       }
@@ -283,6 +302,20 @@ export async function runAgentArtifactOperation(
         saved.status === "missing"
           ? null
           : artifactWebUrl(services.db, workspaceId, artifact, services.appOrigin),
+        saved.status === "created"
+          ? services.checks
+              ?.scheduleAfterPush({
+                workspaceId,
+                artifactId: artifact,
+                version: saved.number,
+                filesChanged: Boolean(
+                  (fileManifest?.files?.length ?? 0) > 0 ||
+                  (fileManifest?.deletedPaths?.length ?? 0) > 0 ||
+                  fileManifest?.entryPath !== undefined,
+                ),
+              })
+              .catch(() => {})
+          : Promise.resolve(),
       ]);
       return {
         ...saved,
@@ -291,6 +324,29 @@ export async function runAgentArtifactOperation(
         ...followed,
         ...(url ? { url } : {}),
       };
+    }
+    case "check": {
+      if (!services.checks) throw new AppError("TEMPORARILY_UNAVAILABLE");
+      const input = parsed.data as z.infer<typeof RULES.check>;
+      return services.checks.readCheck(
+        { workspaceId, actor: readActor },
+        {
+          artifactId: input.artifact,
+          ...(input.version !== undefined ? { version: input.version } : {}),
+        },
+      );
+    }
+    case "check-shot": {
+      if (!services.checks) throw new AppError("TEMPORARILY_UNAVAILABLE");
+      const input = parsed.data as z.infer<(typeof RULES)["check-shot"]>;
+      return services.checks.readCheckShot(
+        { workspaceId, actor: readActor },
+        {
+          artifactId: input.artifact,
+          ...(input.version !== undefined ? { version: input.version } : {}),
+          shot: input.shot,
+        },
+      );
     }
     case "move": {
       const input = parsed.data as z.infer<typeof RULES.move>;

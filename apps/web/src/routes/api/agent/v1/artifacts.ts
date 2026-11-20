@@ -13,6 +13,7 @@ import {
 } from "#src/server/artifacts/agent-artifacts.server";
 import {
   productionArtifactAttachments,
+  productionArtifactChecks,
   productionArtifactNotices,
   productionArtifactSignals,
   productionArtifacts,
@@ -62,6 +63,7 @@ export const Route = createFileRoute("/api/agent/v1/artifacts")({
           db,
           documents,
           blobs,
+          checks: productionArtifactChecks(db),
           notices: productionArtifactNotices(db),
           signals: productionArtifactSignals(),
           attachments: productionArtifactAttachments(db),

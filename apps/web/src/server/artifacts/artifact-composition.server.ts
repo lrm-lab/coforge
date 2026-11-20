@@ -39,6 +39,10 @@ import {
 import { AppError, isAppError } from "#src/lib/app-error";
 import { readAuthorizedAttachment } from "#src/server/attachments/attachment.server";
 import { createSystemAgentEvents } from "#src/server/app-agent-events/app-agent-events-composition.server";
+import { artifactCheckConfig, artifactChecksEnabled } from "./artifact-check-config.server";
+import { enqueueArtifactVersionCheckFromActiveQueue } from "./artifact-check-queue.server";
+import { createHttpArtifactCheckRunner } from "./artifact-check-runner.server";
+import { ArtifactChecks } from "./artifact-checks.server";
 export type { ArtifactMessageCard } from "./artifact-reads.server";
 export { memberArtifactWorkspaceSlug } from "./artifact-public-page.server";
 
@@ -222,4 +226,21 @@ export function artifactMessageCards(
   },
 ): Promise<ArtifactMessageCard[][]> {
   return productionArtifacts(db).artifacts.reads.messageCards(input);
+}
+
+export function productionArtifactChecks(db: PrismaClient) {
+  const blobs = new StoredArtifactBlobs(db, getFileStorage);
+  const reads = new ArtifactReads(db);
+  return new ArtifactChecks({
+    db,
+    reads,
+    blobs,
+    enabled: () => artifactChecksEnabled(),
+    runner: () => {
+      const config = artifactCheckConfig();
+      return config ? createHttpArtifactCheckRunner(config) : null;
+    },
+    enqueue: enqueueArtifactVersionCheckFromActiveQueue,
+    timeoutMs: () => artifactCheckConfig()?.timeoutMs ?? 45_000,
+  });
 }

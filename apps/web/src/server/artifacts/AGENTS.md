@@ -20,13 +20,15 @@ out" a move, not a split:
 ## Public entries
 
 - `artifact-composition.server.ts` — production wiring: `productionArtifacts`,
-  `productionArtifactSandbox`.
+  `productionArtifactSandbox`, `productionArtifactChecks`.
 - `artifact-access.server.ts` — the home access predicates external callers need.
 - `agent-artifacts.server.ts` — the Agent HTTPS API surface.
 - `agent-artifact-files.server.ts` — the Agent API's file bytes: upload by sha256 and download by
   path.
 - `artifact-sandbox-config.server.ts`, `artifact-sandbox-http.server.ts` — the
   sandbox origin and its HTTP serving.
+- `artifact-check-config.server.ts`, `artifact-check-queue.server.ts` — publish-check worker config
+  (`COFORGE_ARTIFACT_CHECK_WORKER_URL`) and `pg-boss` queue contract.
 - `artifact-blob-sweep.server.ts` — the hourly blob sweep registration.
 - `artifact-origins.server.ts` — `ArtifactOrigins`, which needs only the database and no
   storage, so the origin backfill and the message hook build it directly.
@@ -39,7 +41,7 @@ out" a move, not a split:
   slot; Every read of a notice's body asks it, the app conversation's history included.
 
 Everything else is internal: `artifacts.server.ts` (the `Artifacts` use
-cases), the merge/read/write/signals/documents/public-links/blobs
+cases), the merge/read/write/signals/documents/public-links/blobs/checks
 modules, and the sandbox implementation.
 
 ## Model
@@ -162,3 +164,18 @@ The rules are in `docs/agent-cli/artifact-follows.md`. Their modules:
   when recipients cannot read it elsewhere; `unseen: "send"` overrides the hold. The caller passes
   the sender's post check (`mayPost`) with `send`, and the hold runs it on every target before
   counting anyone, since this module reaches conversations only through `channel-read-access`.
+
+## Publish checks
+
+- Creating or pushing an `.html` artifact schedules an asynchronous `artifact_version_checks` row on
+  the `pg-boss` `artifact-version-check` queue (`artifact-checks.server.ts`), best effort and never
+  blocking the push. Earlier `pending` rows for the same artifact are marked `skipped` (`superseded`);
+  pushes without file changes record `skipped` (`unchanged_files`).
+- Execution runs in an isolated Playwright sidecar (`services/artifact-checker/`, configured via
+  `COFORGE_ARTIFACT_CHECK_WORKER_URL` and `COFORGE_ARTIFACT_CHECK_SECRET`) over authenticated HTTP
+  with `withPageRuntime`, production CSP, and `SANDBOX_PUBLIC_CDNS` allowlisting. When unset, checks
+  stay disabled and Agent prompts omit the `check` step.
+- Screenshots (`desktop`, `phone`, `inline`) are stored in `artifact-blobs`, protected from sweep by
+  `NO_OTHER_REFERENCE`, and pruned to the newest 3 `done` versions per artifact (`blobs.release`).
+  Every stage emits structured `artifact_check.*` JSON logs for queue wait, duration, findings, and
+  worker RSS observability.
