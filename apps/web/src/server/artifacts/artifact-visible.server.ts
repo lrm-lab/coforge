@@ -21,6 +21,10 @@ export function visibleToReaderSql(input: {
   return readableSql(workspaceId, reader, goneHomeReach(workspaceId, reader, viewer));
 }
 
+export function agentReadableArtifactSql(workspaceId: string, agentId: string): Prisma.Sql {
+  return readableSql(workspaceId, { agentId }, Prisma.sql`a."authorAgentId" = ${agentId}::uuid`);
+}
+
 export function visibleToMemberSql(workspaceId: string, userId: string): Prisma.Sql {
   const adminRoles = Prisma.join(WORKSPACE_ADMIN_ROLES);
   return readableSql(
