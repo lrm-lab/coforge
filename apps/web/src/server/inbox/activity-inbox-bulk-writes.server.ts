@@ -1,3 +1,4 @@
+import { recordChannelThreadUnread } from "#src/server/conversations/channel-thread-unread-events.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { requireWorkspaceMember } from "#src/server/workspaces/workspace-membership.server";
 import type { ActivityDoneUndo } from "#src/features/inbox/activity-inbox.schemas";
@@ -62,7 +63,7 @@ function undoOf(
 }
 
 function dismissMentions(
-  db: PrismaClient,
+  db: Pick<PrismaClient, "$queryRaw">,
   workspaceId: string,
   userId: string,
   before: Date,
@@ -102,16 +103,24 @@ export async function markActivityAllDone(
   await requireWorkspaceMember(db, workspaceId, userId);
   const { before } = options;
   const at = new Date();
-  const [conversations, threads, mentions, artifacts] = await db.$transaction([
-    db.$queryRaw<ConversationDoneRow[]>(
+  const { conversations, threads, mentions, artifacts } = await db.$transaction(async (tx) => {
+    const conversations = await tx.$queryRaw<ConversationDoneRow[]>(
       conversationsDoneSql(allConversationsTargetSql(workspaceId, userId, before)),
-    ),
-    db.$queryRaw<ThreadDoneRow[]>(
+    );
+    const threads = await tx.$queryRaw<ThreadDoneRow[]>(
       threadsDoneSql(workspaceId, allThreadsTargetSql(workspaceId, userId, before)),
-    ),
-    dismissMentions(db, workspaceId, userId, before, at),
-    db.$queryRaw<ArtifactDoneRow[]>(doneArtifactsSql(workspaceId, userId, { through: before })),
-  ]);
+    );
+    const mentions = await dismissMentions(tx, workspaceId, userId, before, at);
+    const artifacts = await tx.$queryRaw<ArtifactDoneRow[]>(
+      doneArtifactsSql(workspaceId, userId, { through: before }),
+    );
+    const channels = new Set(threads.filter((row) => row.channel).map((row) => row.conversationId));
+    await recordChannelThreadUnread(
+      tx,
+      ...[...channels].map((conversationId) => ({ workspaceId, conversationId, userId })),
+    );
+    return { conversations, threads, mentions, artifacts };
+  });
   await announceDone(db, realtime, workspaceId, userId, conversations);
   const ids = mentions.map((row) => row.id);
   return {

@@ -1,3 +1,4 @@
+import { recordChannelThreadUnread } from "./channel-thread-unread-events.server";
 import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
 import { AppError } from "#src/lib/app-error";
 import { APP_BOT_LOGO_SELECT, agentFaceUrl } from "#src/server/apps/app-logo.server";
@@ -82,6 +83,7 @@ export async function enrollThreadReplyFollowers(
       },
       data: { unfollowedAt: null },
     });
+  await recordChannelThreadUnread(tx, { workspaceId, conversationId, rootMessageId: root.id });
 }
 
 async function setThreadFollowed(
@@ -91,10 +93,15 @@ async function setThreadFollowed(
   conversationId: string,
   rootMessageId: string,
   followed: boolean,
-  unfollowNotice?: { body: string; agentId: string },
+  options: { unfollowNotice?: { body: string; agentId: string }; userId?: string } = {},
 ) {
   await db.$transaction(async (tx) => {
     await lockConversation(tx, conversationId);
+    const { unfollowNotice, userId } = options;
+    const existing = await tx.threadFollow.findUnique({
+      where: { memberId_rootMessageId: { memberId, rootMessageId } },
+      select: { unfollowedAt: true },
+    });
     if (followed) {
       await tx.threadFollow.upsert({
         where: { memberId_rootMessageId: { memberId, rootMessageId } },
@@ -103,10 +110,6 @@ async function setThreadFollowed(
       });
     } else {
       const now = new Date();
-      const existing = await tx.threadFollow.findUnique({
-        where: { memberId_rootMessageId: { memberId, rootMessageId } },
-        select: { unfollowedAt: true },
-      });
       if (existing) {
         await tx.threadFollow.update({
           where: { memberId_rootMessageId: { memberId, rootMessageId } },
@@ -137,6 +140,9 @@ async function setThreadFollowed(
         });
       }
     }
+    const wasFollowed = existing?.unfollowedAt === null;
+    if (userId && followed !== wasFollowed)
+      await recordChannelThreadUnread(tx, { workspaceId, conversationId, userId });
   });
 }
 
@@ -180,7 +186,9 @@ export async function setAgentThreadFollowed(
     followed === false
       ? { body: agentUnfollowNotice(agent.displayName, agent.name, reason), agentId }
       : undefined;
-  await setThreadFollowed(db, member.id, workspaceId, channel.id, root.id, followed, notice);
+  await setThreadFollowed(db, member.id, workspaceId, channel.id, root.id, followed, {
+    unfollowNotice: notice,
+  });
   return { followed };
 }
 
@@ -198,7 +206,7 @@ export async function setUserThreadFollowed(
   const member = await activeUserMember(db, channelId, userId);
   if (!member) throw new AppError("ACCESS_DENIED");
   const root = await resolveChannelThreadRoot(db, channelId, rootMessageId);
-  await setThreadFollowed(db, member.id, workspaceId, channelId, root.id, followed);
+  await setThreadFollowed(db, member.id, workspaceId, channelId, root.id, followed, { userId });
   return { followed };
 }
 
@@ -341,5 +349,17 @@ export async function markThreadReadForUser(
     }),
   ]);
   if (!member || !latest) return false;
-  return advanceThreadRead(db, member.id, channelId, workspaceId, root.id, latest.sequence);
+  return db.$transaction(async (tx) => {
+    const moved = await advanceThreadRead(
+      tx,
+      member.id,
+      channelId,
+      workspaceId,
+      root.id,
+      latest.sequence,
+    );
+    if (moved)
+      await recordChannelThreadUnread(tx, { workspaceId, conversationId: channelId, userId });
+    return moved;
+  });
 }

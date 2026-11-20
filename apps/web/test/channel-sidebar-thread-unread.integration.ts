@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { PgBoss } from "pg-boss";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { RedisClient } from "bun";
 import { Prisma, PrismaClient } from "#src/generated/prisma/client";
@@ -9,7 +10,18 @@ import { DirectConversations } from "#src/server/conversations/direct-conversati
 import type { ConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { RedisMessageRequestIdempotency } from "#src/server/conversations/redis-message-request-idempotency.server";
 import { TaskConversations } from "#src/server/tasks/task-conversations.server";
-import { workspaceChannelThreadUnreadsSql } from "#src/server/conversations/channel-thread-unread.server";
+import {
+  listChannelThreadUnreads,
+  workspaceChannelThreadUnreadsSql,
+} from "#src/server/conversations/channel-thread-unread.server";
+import {
+  CHANNEL_THREAD_UNREAD_QUEUE,
+  publishChannelThreadUnread,
+  recordChannelThreadUnread,
+  registerChannelThreadUnreadQueue,
+  type ChannelThreadUnreadJob,
+} from "#src/server/conversations/channel-thread-unread-events.server";
+import { startedAppNotificationQueue } from "#src/server/app-notifications/app-notification-queue.server";
 import { enrollGeneral } from "./helpers/general-channel-fixture";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
 
@@ -113,6 +125,25 @@ test("channel sidebar thread unreads: counts distinct followed non-task threads,
     expect(bobRowBeforeOpen.unreadThreadCount).toBe(2);
     expect(bobRowBeforeOpen.threadMentioned).toBe(true);
 
+    const hidden = await channels.create(workspace.id, ada.id, `private-${suffix}`, {
+      visibility: "private",
+    });
+    const empty = await channels.create(workspace.id, ada.id, `empty-${suffix}`);
+    const list = (ids: readonly string[]) =>
+      listChannelThreadUnreads(db, workspace.id, bob.id, ids);
+    const batch = await list([team.id, hidden.id, empty.id, team.id, crypto.randomUUID()]);
+    expect(batch.channels).toHaveLength(2);
+    expect(batch.channels).toContainEqual({
+      conversationId: team.id,
+      unreadThreadCount: 2,
+      threadMentioned: true,
+    });
+    expect(batch.channels).toContainEqual({
+      conversationId: empty.id,
+      unreadThreadCount: 0,
+      threadMentioned: false,
+    });
+
     const carolRow = await rowFor(carol.id);
     expect(carolRow.muted).toBe(true);
     expect(carolRow.unreadThreadCount).toBe(1);
@@ -167,6 +198,9 @@ test("channel sidebar thread unreads: counts distinct followed non-task threads,
 
     viewerEvents.length = 0;
     await channels.markThreadReadForUser(workspace.id, bob.id, team.id, root2.id, r2First.sequence);
+    expect((await list([team.id])).channels).toEqual([
+      { conversationId: team.id, unreadThreadCount: 0, threadMentioned: false },
+    ]);
     const bobAllThreadsRead = await rowFor(bob.id);
     expect(bobAllThreadsRead.unreadThreadCount ?? 0).toBe(0);
     expect(bobAllThreadsRead.threadMentioned ?? false).toBe(false);
@@ -290,6 +324,105 @@ test("channel sidebar thread unreads: counts distinct followed non-task threads,
     };
     walkPlan(explainRows);
     expect(seqScans.filter((rel) => rel === "messages" || rel === "message_mentions")).toEqual([]);
+
+    await channels.join(workspace.id, bob.id, empty.id);
+    const sendInB = (userId: string, body: string, threadRootId?: string) =>
+      channels.send({
+        workspaceId: workspace.id,
+        userId,
+        channelId: empty.id,
+        body,
+        threadRootId,
+        idempotencyKey: crypto.randomUUID(),
+      });
+    const rootInB = await sendInB(bob.id, "thread in channel B");
+    await Promise.all([
+      channels.markAllRead(workspace.id, bob.id, team.id),
+      sendInB(ada.id, "reply in channel B", rootInB.id),
+    ]);
+    const afterConcurrentChanges = await list([team.id, empty.id]);
+    expect(afterConcurrentChanges.channels).toContainEqual({
+      conversationId: team.id,
+      unreadThreadCount: 0,
+      threadMentioned: false,
+    });
+    expect(afterConcurrentChanges.channels).toContainEqual({
+      conversationId: empty.id,
+      unreadThreadCount: 1,
+      threadMentioned: false,
+    });
+
+    const boss = new PgBoss({ connectionString });
+    const previousUrl = Bun.env.COFORGE_CENTRIFUGO_API_URL;
+    const previousKey = Bun.env.COFORGE_CENTRIFUGO_API_KEY;
+    try {
+      await boss.start();
+      await boss.createQueue(CHANNEL_THREAD_UNREAD_QUEUE, { retryLimit: 1, retryDelay: 0 });
+      registerChannelThreadUnreadQueue(() => boss);
+      Bun.env.COFORGE_CENTRIFUGO_API_URL = "http://127.0.0.1:1";
+      Bun.env.COFORGE_CENTRIFUGO_API_KEY = "synthetic-channel-unread-test";
+      const data = { workspaceId: workspace.id, conversationId: empty.id, userId: bob.id };
+      await expect(
+        db.$transaction(async (tx) => {
+          await recordChannelThreadUnread(tx, data);
+          throw new Error("rollback invalidation");
+        }),
+      ).rejects.toThrow("rollback invalidation");
+      expect(await boss.fetch(CHANNEL_THREAD_UNREAD_QUEUE)).toEqual([]);
+
+      await channels.setUserThreadFollowed(workspace.id, bob.id, empty.id, rootInB.id, false);
+      expect((await list([empty.id])).channels).toEqual([
+        { conversationId: empty.id, unreadThreadCount: 0, threadMentioned: false },
+      ]);
+      const [job] = await boss.fetch<ChannelThreadUnreadJob>(CHANNEL_THREAD_UNREAD_QUEUE);
+      expect(job?.data).toEqual(data);
+      const unavailable = {
+        async broadcast() {
+          throw new Error("synthetic publish failure");
+        },
+      };
+      await expect(publishChannelThreadUnread(db, unavailable, job!.data, job!.id)).rejects.toThrow(
+        "synthetic publish failure",
+      );
+      await boss.fail(CHANNEL_THREAD_UNREAD_QUEUE, job!.id);
+      const [retry] = await boss.fetch<ChannelThreadUnreadJob>(CHANNEL_THREAD_UNREAD_QUEUE);
+      expect(retry).toMatchObject({ id: job!.id, data });
+
+      const deliveries: { channels: readonly string[]; data: unknown }[] = [];
+      const publisher = {
+        async broadcast(channels: string[], data: unknown) {
+          if (channels.length) deliveries.push({ channels, data });
+        },
+      };
+      await publishChannelThreadUnread(db, publisher, retry!.data, retry!.id);
+      await publishChannelThreadUnread(db, publisher, retry!.data, retry!.id);
+      expect(deliveries).toEqual(
+        Array.from({ length: 2 }, () => ({
+          channels: [`chat:user:${bob.id}`],
+          data: {
+            type: "conversation.thread-unread.invalidated.v1",
+            workspaceId: workspace.id,
+            conversationId: empty.id,
+          },
+        })),
+      );
+      await db.conversation.update({ where: { id: empty.id }, data: { visibility: "private" } });
+      await db.conversationMember.updateMany({
+        where: { conversationId: empty.id, userId: bob.id },
+        data: { leftAt: new Date() },
+      });
+      expect(await list([empty.id])).toEqual({ channels: [] });
+      await publishChannelThreadUnread(db, publisher, retry!.data, retry!.id);
+      expect(deliveries).toHaveLength(2);
+      await boss.complete(CHANNEL_THREAD_UNREAD_QUEUE, job!.id);
+    } finally {
+      if (previousUrl === undefined) delete Bun.env.COFORGE_CENTRIFUGO_API_URL;
+      else Bun.env.COFORGE_CENTRIFUGO_API_URL = previousUrl;
+      if (previousKey === undefined) delete Bun.env.COFORGE_CENTRIFUGO_API_KEY;
+      else Bun.env.COFORGE_CENTRIFUGO_API_KEY = previousKey;
+      registerChannelThreadUnreadQueue(startedAppNotificationQueue);
+      await boss.stop();
+    }
   } finally {
     await db.workspace.deleteMany({ where: { id: workspace.id } });
     await db.user.deleteMany({ where: { id: { in: [ada.id, bob.id, carol.id] } } });

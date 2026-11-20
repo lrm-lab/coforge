@@ -29,6 +29,8 @@ export type ConversationDoneRow = {
 
 /** What a thread Done statement returns for each thread row it touched. */
 export type ThreadDoneRow = {
+  conversationId: string;
+  channel: boolean;
   memberId: string;
   rootMessageId: string;
   previous: number | null;
@@ -76,7 +78,9 @@ export function threadsDoneSql(workspaceId: string, target: Prisma.Sql) {
       "readThroughSequence" = GREATEST("thread_reads"."readThroughSequence", EXCLUDED."readThroughSequence"),
       "doneThroughSequence" =
         GREATEST(COALESCE("thread_reads"."doneThroughSequence", 0), EXCLUDED."doneThroughSequence")
-    RETURNING "memberId", "rootMessageId", "doneThroughSequence" AS "through",
+    RETURNING "memberId", "conversationId", "rootMessageId", "doneThroughSequence" AS "through",
+      EXISTS (SELECT 1 FROM "conversations" c
+        WHERE c."id" = "thread_reads"."conversationId" AND c."channelName" IS NOT NULL) AS "channel",
       (SELECT t."previous" FROM target t
         WHERE t."memberId" = "thread_reads"."memberId"
           AND t."rootMessageId" = "thread_reads"."rootMessageId") AS "previous"`;

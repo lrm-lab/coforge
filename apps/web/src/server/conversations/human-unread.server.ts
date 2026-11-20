@@ -319,7 +319,9 @@ export function markThreadsReadSql(workspaceId: string, threads: Prisma.Sql, bef
       ORDER BY m."sequence" DESC LIMIT 1
     ) latest
     ON CONFLICT ("memberId", "rootMessageId") DO UPDATE SET "readThroughSequence" =
-      GREATEST("thread_reads"."readThroughSequence", EXCLUDED."readThroughSequence")`;
+      EXCLUDED."readThroughSequence"
+    WHERE EXCLUDED."readThroughSequence" > "thread_reads"."readThroughSequence"
+    RETURNING "conversationId"`;
 }
 
 /** The channel threads one person follows, as `markThreadsReadSql` rows. */

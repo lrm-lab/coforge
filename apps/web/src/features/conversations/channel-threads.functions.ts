@@ -4,6 +4,8 @@ import {
   workspaceUserMiddleware,
   type WorkspaceUserContext,
 } from "#src/features/auth/function-auth";
+import { AppError } from "#src/lib/app-error";
+import { listChannelThreadUnreads as readChannelThreadUnreads } from "#src/server/conversations/channel-thread-unread.server";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
 
 // A member's place in a channel's threads: read, followed, and the Agents following one.
@@ -21,6 +23,24 @@ const channelThreadFollowInput = channelInput.extend({
   threadRootId: z.uuid(),
   followed: z.boolean(),
 });
+
+export const channelThreadUnreadsInput = z.object({
+  workspaceId: z.uuid(),
+  conversationIds: z.array(z.uuid()).max(100),
+});
+
+export const listChannelThreadUnreads = createServerFn({ method: "POST" })
+  .middleware([workspaceUserMiddleware])
+  .validator(channelThreadUnreadsInput)
+  .handler(({ data, context }) => {
+    if (data.workspaceId !== context.workspaceId) throw new AppError("ACCESS_DENIED");
+    return readChannelThreadUnreads(
+      context.db,
+      context.workspaceId,
+      context.user.id,
+      data.conversationIds,
+    );
+  });
 
 export const markPublicChannelThreadRead = createServerFn({ method: "POST" })
   .middleware([workspaceUserMiddleware])

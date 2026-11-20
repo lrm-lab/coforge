@@ -9,6 +9,16 @@ import {
   isFeatureDefined,
   onFeatureFlagsChanged,
 } from "#src/server/feature-flags/feature-flags.server";
+import {
+  centrifugoServerApiConfigured,
+  createCentrifugoServerApi,
+} from "#src/server/centrifugo/server-api.server";
+import {
+  CHANNEL_THREAD_UNREAD_QUEUE,
+  publishChannelThreadUnread,
+  registerChannelThreadUnreadQueue,
+  type ChannelThreadUnreadJob,
+} from "#src/server/conversations/channel-thread-unread-events.server";
 import { onServerShutdown } from "#src/server/runtime/server-lifecycle.server";
 import type { AppNotificationEvent } from "./app-notification-event";
 import {
@@ -99,6 +109,7 @@ export function startAppNotificationQueue(
       await boss.createQueue(APP_NOTIFICATION_DELIVERY_QUEUE, DELIVERY_QUEUE_OPTIONS);
       await boss.createQueue(EXTERNAL_INBOX_NOTICE_QUEUE, EXTERNAL_INBOX_NOTICE_QUEUE_OPTIONS);
       await boss.createQueue(ARTIFACT_VERSION_CHECK_QUEUE, ARTIFACT_VERSION_CHECK_QUEUE_OPTIONS);
+      await boss.createQueue(CHANNEL_THREAD_UNREAD_QUEUE, EVENT_QUEUE_OPTIONS);
       const polling = { pollingIntervalSeconds: APP_NOTIFICATION_POLLING_INTERVAL_SECONDS };
       await boss.work<AppNotificationEvent>(APP_NOTIFICATION_EVENT_QUEUE, polling, (jobs) =>
         fanOutAppNotificationEvents(boss, jobs),
@@ -111,6 +122,19 @@ export function startAppNotificationQueue(
       await boss.work<ExternalInboxNoticeJob>(EXTERNAL_INBOX_NOTICE_QUEUE, polling, (jobs) =>
         deliverExternalInboxNotices(boss, jobs),
       );
+      if (centrifugoServerApiConfigured()) {
+        const publisher = createCentrifugoServerApi();
+        await boss.work<ChannelThreadUnreadJob>(
+          CHANNEL_THREAD_UNREAD_QUEUE,
+          polling,
+          async (jobs) => {
+            const db = getDatabaseClient();
+            if (!db) throw new AppError("TEMPORARILY_UNAVAILABLE");
+            for (const job of jobs)
+              await publishChannelThreadUnread(db, publisher, job.data, job.id);
+          },
+        );
+      }
       const checkConfig = artifactCheckConfig();
       if (checkConfig) {
         await boss.work<ArtifactVersionCheckJob>(
@@ -164,6 +188,7 @@ export function startedAppNotificationQueue(): PgBoss | undefined {
 }
 
 registerArtifactCheckQueueAccessor(startedAppNotificationQueue);
+registerChannelThreadUnreadQueue(startedAppNotificationQueue);
 
 /** Whether the queue is running in this process. */
 export function isAppNotificationQueueStarted(): boolean {
@@ -193,6 +218,7 @@ export async function startAppNotificationQueueIfNeeded(
   const needed =
     isFeatureDefined("app-notifications") ||
     artifactChecksEnabled() ||
+    centrifugoServerApiConfigured() ||
     (await new PrismaAppNotificationQueueSchema(db).exists()) ||
     (await anyExternalPushWebhook(db));
   if (!needed) return false;

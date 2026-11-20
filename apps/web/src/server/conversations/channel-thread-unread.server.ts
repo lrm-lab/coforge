@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
+import { visibleChannelWhere } from "./channel-read-access.server";
 
 export type ChannelThreadUnreadSummary = {
   unreadThreadCount: number;
@@ -18,7 +19,14 @@ const nonTaskThreadRootSql = Prisma.sql`NOT EXISTS (
     AND t."deletedAt" IS NULL
 )`;
 
-export function workspaceChannelThreadUnreadsSql(workspaceId: string, userId: string) {
+export function workspaceChannelThreadUnreadsSql(
+  workspaceId: string,
+  userId: string,
+  conversationIds?: readonly string[],
+) {
+  const requested = conversationIds
+    ? Prisma.sql`AND cm."conversationId" = ANY(${[...conversationIds]}::uuid[])`
+    : Prisma.empty;
   return Prisma.sql`
     SELECT cm."conversationId" AS "conversationId",
       COUNT(*)::int AS "unreadThreadCount",
@@ -51,6 +59,7 @@ export function workspaceChannelThreadUnreadsSql(workspaceId: string, userId: st
     WHERE cm."userId" = ${userId}::uuid
       AND cm."leftAt" IS NULL
       AND cm."workspaceId" = ${workspaceId}::uuid
+      ${requested}
       AND ${nonTaskThreadRootSql}
     GROUP BY cm."conversationId"`;
 }
@@ -59,16 +68,52 @@ export async function workspaceChannelThreadUnreads(
   db: Pick<Prisma.TransactionClient, "$queryRaw">,
   workspaceId: string,
   userId: string,
+  conversationIds?: readonly string[],
 ): Promise<Map<string, ChannelThreadUnreadSummary>> {
   const rows = await db.$queryRaw<
     { conversationId: string; unreadThreadCount: number; threadMentioned: boolean }[]
-  >(workspaceChannelThreadUnreadsSql(workspaceId, userId));
+  >(workspaceChannelThreadUnreadsSql(workspaceId, userId, conversationIds));
   return new Map(
     rows.map((row) => [
       row.conversationId,
       { unreadThreadCount: row.unreadThreadCount, threadMentioned: row.threadMentioned },
     ]),
   );
+}
+
+export async function listChannelThreadUnreads(
+  db: PrismaClient,
+  workspaceId: string,
+  userId: string,
+  conversationIds: readonly string[],
+) {
+  const channels = await db.$transaction(
+    async (tx) => {
+      const visible = await tx.conversation.findMany({
+        where: {
+          ...visibleChannelWhere(workspaceId, { userId }),
+          id: { in: [...new Set(conversationIds)] },
+          workspace: { members: { some: { userId } } },
+        },
+        select: { id: true },
+        orderBy: { id: "asc" },
+      });
+      if (visible.length === 0) return [];
+      const summaries = await workspaceChannelThreadUnreads(
+        tx,
+        workspaceId,
+        userId,
+        visible.map(({ id }) => id),
+      );
+      return visible.map(({ id }) => ({
+        conversationId: id,
+        unreadThreadCount: summaries.get(id)?.unreadThreadCount ?? 0,
+        threadMentioned: summaries.get(id)?.threadMentioned ?? false,
+      }));
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+  );
+  return { channels };
 }
 
 export async function channelThreadUnreadsForMembers(

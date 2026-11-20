@@ -1,3 +1,4 @@
+import { recordChannelThreadUnread } from "./channel-thread-unread-events.server";
 import type { PrismaClient } from "#src/generated/prisma/client";
 import { announceReadMoved } from "#src/server/inbox/activity-attention.server";
 import { ACTIVE_MEMBER_WHERE } from "./active-member.server";
@@ -52,6 +53,8 @@ export async function markChannelAndThreadsRead(
       ON CONFLICT ("memberId", "rootMessageId") DO UPDATE SET
         "readThroughSequence" = EXCLUDED."readThroughSequence"
       WHERE EXCLUDED."readThroughSequence" > "thread_reads"."readThroughSequence"`;
+    if (threadsAdvanced > 0)
+      await recordChannelThreadUnread(tx, { workspaceId, conversationId: channel.id, userId });
     if (!readThroughAdvanced && !markerCleared && threadsAdvanced === 0) return undefined;
     return { memberId: member.id, readThroughAdvanced, nextReadThrough };
   });
