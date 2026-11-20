@@ -6,6 +6,8 @@ import {
   retryableAgentConfigFailure,
 } from "#src/connection/agent-config-request";
 
+import { parseAgentLaunchConfig } from "#src/connection/agent-launch-response";
+
 const base = {
   what: "Agent launch config",
   method: "POST" as const,
@@ -40,9 +42,7 @@ describe("obtaining the Agent launch configuration", () => {
     expect(response.ok).toBe(true);
     expect(calls).toHaveLength(1);
     expect(calls[0]!.init?.method).toBe("POST");
-    expect((calls[0]!.init?.headers as Record<string, string>).authorization).toBe(
-      "Bearer daemon-token",
-    );
+    expect(new Headers(calls[0]?.init?.headers).get("authorization")).toBe("Bearer daemon-token");
   });
 
   test("a dropped connection is retried three times in all, then reported as network", async () => {
@@ -125,4 +125,20 @@ describe("obtaining the Agent launch configuration", () => {
       "https://server-2.example/api/agent-api-keys",
     ]);
   });
+});
+
+test("launch config keeps zero and valid revisions, and ignores absent or malformed proof", () => {
+  const apiKey = `sk_agent_${"a".repeat(43)}`;
+  const envVars = { CODEX_HOME: "/fixture/home" };
+  for (const revision of [0, 9, 2 ** 32 - 1])
+    expect(parseAgentLaunchConfig({ apiKey, envVars, runtimeConfigRevision: revision })).toEqual({
+      agentApiKey: apiKey,
+      envVars,
+      runtimeConfigRevision: revision,
+    });
+  for (const revision of [undefined, null, "9", -1, 3.5, 2 ** 32])
+    expect(parseAgentLaunchConfig({ apiKey, envVars, runtimeConfigRevision: revision })).toEqual({
+      agentApiKey: apiKey,
+      envVars,
+    });
 });

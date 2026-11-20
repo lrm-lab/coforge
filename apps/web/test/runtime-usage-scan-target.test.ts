@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { MutationObserver, QueryClient } from "@tanstack/react-query";
-import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
+import { RUNTIME_PROVIDER, type RuntimeProvider } from "@lrm/coforge-sdk/internal";
 
 import {
   runtimeUsageQueryKey,
@@ -42,4 +42,50 @@ test("a scan that returns after the popup moved to another runtime fills its own
 
   expect(queryClient.getQueryData(runtimeUsageQueryKey("computer", "kiro"))).toBe(kiro);
   expect(queryClient.getQueryData(runtimeUsageQueryKey("computer", "claude-code"))).toBeUndefined();
+});
+
+test("two Codex Agents and a new configuration do not share the Computer usage query", async () => {
+  const queryClient = new QueryClient();
+  const options = runtimeUsageScanOptions(
+    queryClient,
+    async () => {
+      throw new Error("Agent usage must never scan the Computer");
+    },
+    async () => {},
+    async () => ({ state: "missing" }),
+  );
+  const base = { computerId: "computer", provider: RUNTIME_PROVIDER.CODEX };
+  const alpha = { ...base, agent: { agentId: "a", runtimeConfigRevision: 1 } };
+  const beta = { ...base, agent: { agentId: "b", runtimeConfigRevision: 1 } };
+  const revised = { ...alpha, agent: { ...alpha.agent, runtimeConfigRevision: 2 } };
+  const mark = (pendingScanId: string, runtimeConfigRevision = 1): Read => ({
+    state: "missing",
+    pendingScanId,
+    target: { computerId: "computer", runtimeConfigRevision },
+  });
+
+  await options.onSuccess(mark("beta"), beta);
+  await options.onSuccess(mark("new alpha", 2), revised);
+  await options.onSuccess(mark("old alpha"), alpha);
+  expect(queryClient.getQueryData(["agent-runtime-usage", "computer", "a", 1])).toEqual(
+    mark("old alpha"),
+  );
+  expect(queryClient.getQueryData(["agent-runtime-usage", "computer", "a", 2])).toEqual(
+    mark("new alpha", 2),
+  );
+  expect(queryClient.getQueryData(["agent-runtime-usage", "computer", "b", 1])).toEqual(
+    mark("beta"),
+  );
+  expect(
+    queryClient.getQueryData(runtimeUsageQueryKey("computer", RUNTIME_PROVIDER.CODEX)),
+  ).toBeUndefined();
+  expect(await options.mutationFn(alpha)).toEqual({ state: "missing" });
+  await options.onSuccess(mark("unexpected revision", 2), alpha);
+  expect(queryClient.getQueryData(["agent-runtime-usage", "computer", "a", 1])).toEqual({
+    state: "fresh",
+    unavailable: true,
+  });
+  expect(queryClient.getQueryData(["agent-runtime-usage", "computer", "a", 2])).toEqual(
+    mark("new alpha", 2),
+  );
 });

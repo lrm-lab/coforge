@@ -12,6 +12,8 @@ let runtimeConfig: AgentRuntimeConfig = {
   modelProvider: "",
   reasoning: "",
 };
+let runtimeConfigRevision = 0;
+let onAuthorizeLaunch: (() => void) | undefined;
 let allowed = true;
 /** How `authorizeLaunch` refuses: not at all, an uncoded error, or the coded refusal a refused
  * relaunch has to be able to name (task #14). */
@@ -51,6 +53,7 @@ const db = {
           computerId: "computer-1",
           owner: { memberships: { some: { workspaceId: "workspace-1" } } },
         },
+        select: { runtimeConfig: true, runtimeConfigRevision: true },
       });
       return allowed
         ? {
@@ -58,6 +61,7 @@ const db = {
             workspaceId: "workspace-1",
             ownerId: "owner-1",
             runtimeConfig,
+            runtimeConfigRevision,
             name: "scout",
             displayName: "Scout",
             description: "Reviews pull requests.",
@@ -98,6 +102,7 @@ await mockModuleForFile("#src/server/agents/agent-runtime-lock.server", () => ({
 await mockModuleForFile("#src/server/agents/agent-control.server", () => ({
   AgentControl: class {
     async authorizeLaunch() {
+      onAuthorizeLaunch?.();
       if (launchRefusal === "plain") throw new Error("stale launch");
       if (launchRefusal === "coded")
         throw new AgentLaunchRefusalError("AGENT_LAUNCH_SUPERSEDED", "Stale Agent launch", {
@@ -157,6 +162,7 @@ test("authorized launch HTTP response contains decrypted explicit env only, no-s
       findOwnedAgent: async () => ({ runtimeConfig }),
       updateRuntimeConfig: async (_id, config) => {
         runtimeConfig = config;
+        runtimeConfigRevision++;
         return { runtimeConfig: config };
       },
     },
@@ -180,11 +186,26 @@ test("authorized launch HTTP response contains decrypted explicit env only, no-s
     OPENROUTER_API_KEY: "explicit-secret",
     EMPTY: "",
   });
+  const previousConfig = runtimeConfig;
+  const previousRevision = runtimeConfigRevision;
+  await environment.save(principal, "agent-1", { OPENROUTER_API_KEY: "updated-fixture" });
+  const savedConfig = runtimeConfig;
+  const savedRevision = runtimeConfigRevision;
+  runtimeConfig = previousConfig;
+  runtimeConfigRevision = previousRevision;
+  onAuthorizeLaunch = () => {
+    runtimeConfig = savedConfig;
+    runtimeConfigRevision = savedRevision;
+    onAuthorizeLaunch = undefined;
+  };
+
   const response = (await request("valid")) as Response;
   expect(response.status).toBe(200);
   expect(response.headers.get("cache-control")).toBe("no-store");
   const payload = await response.json();
   expect(payload.envVars).toEqual({ OPENROUTER_API_KEY: "explicit-secret", EMPTY: "" });
+  expect(payload.runtimeConfigRevision).toBe(previousRevision);
+  expect(runtimeConfigRevision).toBe(savedRevision);
   expect(payload.apiKey).toMatch(/^sk_agent_/);
   expect(payload.identity).toEqual({
     name: "scout",
@@ -202,7 +223,7 @@ test("authorized launch HTTP response contains decrypted explicit env only, no-s
     },
     features: { taskConversations: true, artifacts: false, agentContextView: false },
   });
-  expect(JSON.stringify(payload)).not.toContain(runtimeConfig.environment!.ciphertext);
+  expect(JSON.stringify(payload)).not.toContain(previousConfig.environment!.ciphertext);
   const queried = lookups;
   expect(((await request()) as Response).status).toBe(401);
   expect(((await request("invalid")) as Response).status).toBe(401);

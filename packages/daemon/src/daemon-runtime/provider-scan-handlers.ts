@@ -9,6 +9,7 @@ import type { ResetCreditConsumeResult } from "./reset-credit-consume";
 import type { DaemonConnectionClient } from "#src/connection/daemon-connection-client";
 import type { CodeAgentInventorySync } from "./code-agent-inventory-sync";
 import type { RuntimeAuthReporter } from "./runtime-auth-reporter";
+import type { AgentUsageScanResult, AgentUsageScanScope } from "./agent-usage-scan";
 
 const logger = getLogger(["coforge", "daemon", "daemon-runtime"]);
 
@@ -17,6 +18,7 @@ export type ProviderScans = {
   connection: { workspaceId: string; computerId: string };
   runtime: {
     scanUsage(provider: RuntimeProvider): Promise<UsageScanResponse>;
+    scanAgentUsage?(scope: AgentUsageScanScope): Promise<AgentUsageScanResult | undefined>;
     /** Spends a reset credit and reads usage again. */
     consumeResetCredit(
       provider: RuntimeProvider,
@@ -47,7 +49,48 @@ export function subscribeProviderScans(
   const { connection, runtime } = scans;
   return [
     transport.onUsageScan?.(async (request) => {
-      if (request.computerId !== connection.computerId) return;
+      if (
+        request.computerId !== connection.computerId ||
+        request.workspaceId !== connection.workspaceId
+      )
+        return;
+      const { agentId, expectedRuntimeConfigRevision } = request;
+      if (agentId !== undefined) {
+        if (scans.isStopping() || expectedRuntimeConfigRevision === undefined) return;
+        try {
+          const reading = await runtime.scanAgentUsage?.({
+            agentId,
+            expectedRuntimeConfigRevision,
+          });
+          if (!reading || scans.isStopping()) return;
+          const {
+            protocolMajor,
+            accepted,
+            status,
+            message,
+            snapshotJson,
+            effectiveRuntimeConfigRevision,
+          } = reading;
+          await transport.sendUsageScanResult?.({
+            ...connection,
+            protocolMajor,
+            requestId: request.requestId,
+            provider: request.provider,
+            agentId,
+            effectiveRuntimeConfigRevision,
+            accepted,
+            status,
+            message,
+            snapshotJson,
+          });
+        } catch (error) {
+          logger.warning("Agent usage answer could not be delivered", {
+            event: "daemon_runtime:agent_usage_answer_failed",
+            error_code: diagnosticErrorCode(error),
+          });
+        }
+        return;
+      }
       let result = await runtime.scanUsage(request.provider);
       try {
         await scans.runtimeAuth.usageScanned(request.provider, result.status);

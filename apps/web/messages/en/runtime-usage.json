@@ -1,4 +1,5 @@
 {
+  "computer_agent_usage_unavailable": "Agent usage is temporarily unavailable.",
   "computer_usage_percent_left": "{percent} left",
   "computer_usage_used_up": "Used up",
   "computer_runtime_account_visibility": "Only this Computer's owner and Workspace owners and admins can see the account.",

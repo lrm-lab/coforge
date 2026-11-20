@@ -45,6 +45,7 @@ import { subscribeRuntimeAuth } from "./runtime-auth-subscription";
 import { subscribeRuntimeReconnect } from "./runtime-reconnect";
 import type { ReminderDueReceiver } from "#src/agent-reminder/reminder-due-receiver";
 import { subscribeProviderScans } from "./provider-scan-handlers";
+import type { AgentUsageScanResult, AgentUsageScanScope } from "./agent-usage-scan";
 import type { ResetCreditConsumeResult } from "./reset-credit-consume";
 import { subscribeWorkspaceQueries } from "./workspace-query-handlers";
 import { subscribeContextViewQueries } from "./context-view-query-handlers";
@@ -91,6 +92,7 @@ export type RuntimeStartupPorts = {
     "reportRuntimes" | "refreshStaleCatalogs" | "refreshModels" | "readCommandCodeEfforts"
   >;
   scanUsage(provider: RuntimeProvider): Promise<UsageScanResponse>;
+  scanAgentUsage?(scope: AgentUsageScanScope): Promise<AgentUsageScanResult | undefined>;
   consumeResetCredit(
     provider: RuntimeProvider,
     idempotencyKey: string,
@@ -330,6 +332,7 @@ export class RuntimeStartup {
         connection,
         runtime: {
           scanUsage: (provider) => ports.scanUsage(provider),
+          scanAgentUsage: ports.scanAgentUsage,
           consumeResetCredit: (provider, key) => ports.consumeResetCredit(provider, key),
         },
         currentTransport: () => ports.transport(),

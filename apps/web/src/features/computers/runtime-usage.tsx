@@ -21,7 +21,7 @@ import { m } from "#src/paraglide/messages";
 import { RuntimeProviderMark } from "#src/features/agents/runtime-provider-mark";
 import { isSignableRuntimeProvider } from "./runtime-login-chip";
 import { requestRuntimeAuthStatus } from "./runtime-auth.functions";
-import { useRuntimeUsage } from "./use-runtime-usage";
+import { useRuntimeUsage, type AgentUsageQueryScope } from "./use-runtime-usage";
 import { RuntimeUsageWindows } from "./runtime-usage-windows-list";
 import {
   accountBand,
@@ -98,6 +98,7 @@ const DEFAULT_TRIGGER_CLASS_NAME =
  */
 export function RuntimeUsage({
   computerId,
+  agentUsage,
   runtime,
   computerOnline,
   timeZone = null,
@@ -113,6 +114,7 @@ export function RuntimeUsage({
   notice,
 }: {
   computerId: string;
+  agentUsage?: AgentUsageQueryScope;
   runtime: Runtime;
   /** `undefined` means "not known", treated like online for the purpose of auto-scanning. */
   computerOnline?: boolean;
@@ -150,13 +152,14 @@ export function RuntimeUsage({
     enabled: supportsUsage,
     computerOnline,
     signedIn: account === "logged_in",
+    agent: agentUsage,
   });
   // Opening the popover asks the Computer to read this runtime's login status again: it may have
   // been signed in or out on the Computer itself, which nothing else tells us. The Computer's
   // report reaches this page on the caller's channel, like any other.
   const requestStatus = useServerFn(requestRuntimeAuthStatus);
   const rereadLogin = () => {
-    if (!isSignableRuntimeProvider(runtime.provider)) return;
+    if (agentUsage || !isSignableRuntimeProvider(runtime.provider)) return;
     void requestStatus({ data: { computerId, provider: runtime.provider } }).catch(() => {});
   };
 
@@ -200,6 +203,7 @@ export function RuntimeUsage({
           {({ close }) => (
             <RuntimeUsagePopoverContent
               runtime={runtime}
+              agentUsageUnavailable={usage.data?.unavailable}
               showUsage={supportsUsage}
               data={usageRead}
               scanning={usage.scanning}
@@ -235,6 +239,7 @@ export function RuntimeUsagePopoverContent({
   data,
   scanning,
   scanFailed = false,
+  agentUsageUnavailable,
   computerOnline,
   timeZone = null,
   onRefresh,
@@ -252,6 +257,7 @@ export function RuntimeUsagePopoverContent({
   data?: UsageReadResult;
   scanning: boolean;
   scanFailed?: boolean;
+  agentUsageUnavailable?: boolean;
   computerOnline?: boolean;
   timeZone?: string | null;
   onRefresh: () => void;
@@ -273,7 +279,9 @@ export function RuntimeUsagePopoverContent({
       ? m.computer_usage_offline()
       : scanFailed
         ? m.computer_usage_read_failed_retry()
-        : usageFailureDescription(data?.result);
+        : agentUsageUnavailable
+          ? m.computer_agent_usage_unavailable()
+          : usageFailureDescription(data?.result);
   const reading =
     !reason && (!data || (data.state === "missing" && (scanning || data.pendingScanId)));
   // A signed-out runtime has no account to show: its band says so instead, beside Sign In. A login

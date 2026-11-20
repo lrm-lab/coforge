@@ -1,7 +1,7 @@
 import { useState, type ComponentProps, type ReactNode } from "react";
 import { DeletedAgentBadge } from "#src/features/agents/deleted-agent";
 import { Camera01, Edit01 } from "@untitledui/icons";
-import { RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN } from "@lrm/coforge-sdk/internal";
+import { RUNTIME_PROVIDER, RUNTIME_PROVIDER_SUPPORTS_USAGE_SCAN } from "@lrm/coforge-sdk/internal";
 import { AgentAvatarDialog } from "#src/features/agents/agent-avatar-dialog";
 import type { AgentMascot } from "#src/features/agents/agent-mascot";
 import { AgentMascotAvatar } from "#src/features/agents/agent-mascot-avatar";
@@ -366,6 +366,14 @@ function AgentProfileTabBody({
                         computerOnline={usageComputer.online}
                         timeZone={timeZone}
                         showUsage={profile.runtimeUsageVisible}
+                        agentUsage={
+                          runtimeConfig.runtime === RUNTIME_PROVIDER.CODEX
+                            ? {
+                                agentId: profile.id,
+                                runtimeConfigRevision: profile.runtimeUsageRevision ?? 0,
+                              }
+                            : undefined
+                        }
                         trigger={(health) => (
                           <>
                             {runtimeIcon}

@@ -19,12 +19,14 @@ import {
   getWorkbenchCodexLease,
 } from "#src/server/pi-chat/pi-chat-capability.server";
 import { getResetCreditCapabilityLease } from "#src/server/computers/reset-credit-capability.server";
+import { getAgentUsageCapabilityLease } from "#src/server/computers/agent-usage-capability.server";
 import { getAgentContextViewCapabilityLease } from "#src/server/computers/agent-context-view-capability.server";
 import { getAgentSideAskCapabilityLease } from "#src/server/computers/agent-side-ask-capability.server";
 import { getRuntimeManageCapabilityLease } from "#src/server/computers/runtime-manage-capability.server";
 
 export function daemonCapabilityLeases() {
   const reminderLease = getReminderCapabilityLease();
+  const agentUsageLease = getAgentUsageCapabilityLease();
   const leases = [
     reminderLease,
     getAgentMemoryCapabilityLease(),
@@ -57,14 +59,17 @@ export function daemonCapabilityLeases() {
         identity: { workerInstanceId: string; startedAt: number },
       ) =>
         Promise.all(
-          leases.map((lease) => lease.record(workspaceId, computerId, capabilities, identity)),
+          [...leases, agentUsageLease].map((lease) =>
+            lease.record(workspaceId, computerId, capabilities, identity),
+          ),
         ),
       refresh: async (
         workspaceId: string,
         computerId: string,
         identity?: { workerInstanceId: string; startedAt: number },
       ) => {
-        await Promise.all(leases.map((lease) => lease.refresh(workspaceId, computerId, identity)));
+        const active = identity ? [...leases, agentUsageLease] : leases;
+        await Promise.all(active.map((lease) => lease.refresh(workspaceId, computerId, identity)));
       },
     },
   };

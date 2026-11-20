@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 
-import { waitForUsageScanResult } from "#src/features/computers/usage-poll";
+import {
+  waitForAgentUsageScanResult,
+  waitForUsageScanResult,
+} from "#src/features/computers/usage-poll";
 
 test("usage polling waits until the new scan's own result replaces the previous one", async () => {
   const reads = [
@@ -111,4 +114,21 @@ test("a read that looks ended once, and then shows the scan's own result, is not
   expect(await waitForUsageScanResult("new-scan", source.read, async () => undefined)).toEqual({
     result: { scanId: "new-scan" },
   });
+});
+
+test("missing Agent usage capability does not poll or report a retryable failure", async () => {
+  const result = await waitForAgentUsageScanResult({ status: "unavailable" }, async () => {
+    throw new Error("no scan should be pending");
+  });
+  expect(result).toEqual({ state: "fresh", unavailable: true });
+});
+
+test("a supported Agent scan that ends without its result fails so the caller can retry", async () => {
+  await expect(
+    waitForAgentUsageScanResult(
+      { status: "pending", scanId: "agent-scan" },
+      async () => ({ state: "missing" }),
+      async () => {},
+    ),
+  ).rejects.toThrow("Agent usage scan ended without a result");
 });

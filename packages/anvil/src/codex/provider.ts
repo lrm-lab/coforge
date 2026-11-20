@@ -9,7 +9,7 @@ import { openCodexThread } from "./thread-open";
 import { codexReasoningSummary } from "./reasoning-summary";
 import { readCodexRecycleBriefing } from "./recycle-briefing";
 import { CODEX_IDLE_RECYCLE_MIN_COLD_GAP_MS, readCodexSessionResumeFacts } from "./session-rollout";
-import { readCodexUsage } from "./usage";
+import { readCodexLiveUsage, readCodexUsage } from "./usage";
 import { consumeCodexResetCredit } from "./reset-credit";
 import type { CodexRuntimeHost } from "./host";
 import { RUNTIME_PROVIDER, utf8Encoder, type ResetCreditOutcome } from "@lrm/coforge-sdk/internal";
@@ -115,6 +115,8 @@ export class CodexProvider implements CodeAgentProvider {
         options.runtime?.fastMode ? codexServiceTierState(result?.serviceTier) : undefined,
         replacementWarning,
         model,
+        (timeoutMs) =>
+          readCodexLiveUsage(process, (label) => this.#host.maskAccountLabel(label), timeoutMs),
       );
     } catch (error) {
       await process.dispose();

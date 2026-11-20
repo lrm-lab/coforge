@@ -7,8 +7,8 @@ import {
   UsageUnsupportedError,
   asRecord,
 } from "@lrm/coforge-anvil";
-
-import { openCodexAppServer } from "./app-server-session";
+import type { JsonlProcess } from "@lrm/coforge-anvil/execution";
+import { openCodexAppServer, readCodexAccount, type CodexAppServer } from "./app-server-session";
 import type { CodexUsageHost } from "./host";
 import { RESET_CREDITS_MAX, RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 
@@ -36,10 +36,7 @@ export async function readCodexUsage(
     const server = await session.start();
     // Best-effort: an app-server that predates `account/read` (or any account failure) still
     // scans, just without the account label.
-    const account = await server.readAccount();
-    if (isNonSubscription(account)) throw new UsageUnsupportedError();
-    const response = await server.request("account/rateLimits/read", {});
-    return toSnapshot(response, account, (label) => options.host.maskAccountLabel(label));
+    return await readServerUsage(server, (label) => options.host.maskAccountLabel(label));
   } catch (error) {
     if (
       error instanceof UsageTimeoutError ||
@@ -51,6 +48,36 @@ export async function readCodexUsage(
   } finally {
     await session.dispose();
   }
+}
+
+export function readCodexLiveUsage(
+  process: JsonlProcess,
+  maskAccountLabel: CodexUsageHost["maskAccountLabel"],
+  timeoutMs: number,
+): Promise<UsageSnapshot | null> {
+  const deadline = performance.now() + timeoutMs;
+  const request: CodexAppServer["request"] = (method, params) => {
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) return Promise.reject(new UsageTimeoutError());
+    return process.request(
+      { method, params },
+      { timeoutMs: remaining, timeoutError: () => new UsageTimeoutError() },
+    );
+  };
+  return readServerUsage(
+    { request, readAccount: () => readCodexAccount(request) },
+    maskAccountLabel,
+  );
+}
+
+async function readServerUsage(
+  server: Pick<CodexAppServer, "readAccount" | "request">,
+  maskAccountLabel: CodexUsageHost["maskAccountLabel"],
+): Promise<UsageSnapshot | null> {
+  const account = await server.readAccount();
+  if (isNonSubscription(account)) throw new UsageUnsupportedError();
+  const response = await server.request("account/rateLimits/read", {});
+  return toSnapshot(response, account, maskAccountLabel);
 }
 
 class UsageTimeoutError extends Error {

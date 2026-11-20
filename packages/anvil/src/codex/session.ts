@@ -58,6 +58,7 @@ export class CodexAgentSession implements AgentSession {
     serviceTier?: AgentServiceTierObserved,
     replacementWarning?: string,
     model?: string,
+    readonly readUsage?: AgentSession["readUsage"],
   ) {
     this.#process = process;
     this.#threadId = threadId;

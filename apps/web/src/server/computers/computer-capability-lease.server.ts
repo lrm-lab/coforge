@@ -67,6 +67,11 @@ export class RedisComputerCapabilityLease {
     );
   }
 
+  async supportedWorker(workspaceId: string, computerId: string): Promise<string | undefined> {
+    const value = this.read(await this.redis.get(this.key(workspaceId, computerId)));
+    return value?.state === "supported" ? value.workerInstanceId || undefined : undefined;
+  }
+
   async refresh(workspaceId: string, computerId: string, identity?: CapabilityIdentity) {
     const key = this.key(workspaceId, computerId);
     const raw = await this.redis.get(key);
@@ -102,7 +107,7 @@ export class RedisComputerCapabilityLease {
     }
   }
 
-  private key(workspaceId: string, computerId: string) {
+  key(workspaceId: string, computerId: string) {
     return workspaceRedisKey({ workspaceId, computerId, name: this.name, version: "v1" });
   }
 }

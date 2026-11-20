@@ -180,6 +180,7 @@ async function requireAuthenticatedCentrifugoUser(
   }
   const workspaceId = request.meta?.workspace_id;
   const computerId = request.meta?.computer_id;
+  const workerInstanceId = request.meta?.worker_instance_id;
   if (
     request.user &&
     typeof workspaceId === "string" &&
@@ -187,7 +188,12 @@ async function requireAuthenticatedCentrifugoUser(
     workspaceId &&
     computerId
   )
-    return { userId: request.user, workspaceId, computerId };
+    return {
+      userId: request.user,
+      workspaceId,
+      computerId,
+      ...(typeof workerInstanceId === "string" && workerInstanceId && { workerInstanceId }),
+    };
   // User-facing calls use Centrifugo's verified user subject. Daemon-scoped
   // methods still fail closed because their required claims are empty.
   if (!request.user) throw new CentrifugoRpcAuthenticationError();

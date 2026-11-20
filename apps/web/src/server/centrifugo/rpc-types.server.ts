@@ -25,6 +25,7 @@ export type AuthenticatedDaemonPrincipal = {
   workspaceId: string;
   computerId: string;
   agentId?: string;
+  workerInstanceId?: string;
   /** A `Bearer at_…` attach token carries the session it is consumed against (task #417). */
   attachSessionId?: string;
 };

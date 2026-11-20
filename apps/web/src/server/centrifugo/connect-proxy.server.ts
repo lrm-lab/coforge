@@ -205,6 +205,7 @@ export async function authenticateCentrifugoConnect(
         meta: {
           workspace_id: principal.workspaceId,
           computer_id: principal.computerId,
+          ...(instanceId && { worker_instance_id: instanceId }),
         },
         subs: {
           [`daemon:${principal.workspaceId}:${principal.computerId}`]: {},

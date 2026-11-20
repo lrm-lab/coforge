@@ -109,6 +109,76 @@ test("an auth-report failure answers error rather than a successful usage-only r
   ]);
 });
 
+test("Agent usage never reads Computer usage or refreshes the shared login", async () => {
+  let receive!: Parameters<NonNullable<DaemonConnectionClient["onUsageScan"]>>[0];
+  const results: unknown[] = [];
+  const scans: unknown[] = [];
+  const transport = {
+    onUsageScan: (handler: typeof receive) => {
+      receive = handler;
+      return () => {};
+    },
+    sendUsageScanResult: async (result: unknown) => {
+      results.push(result);
+    },
+  } as unknown as DaemonConnectionClient;
+  const connection = { workspaceId: "workspace-a", computerId: "computer-a" };
+  subscribeProviderScans(transport, {
+    connection,
+    runtime: {
+      consumeResetCredit: async () => ({ outcome: "unsupported" }),
+      scanUsage: async () => {
+        throw new Error("misrouted Computer usage");
+      },
+      scanAgentUsage: async (scope) => {
+        scans.push(scope);
+        return scope.expectedRuntimeConfigRevision === 0
+          ? {
+              protocolMajor: 1,
+              requestId: "",
+              status: "unavailable",
+              accepted: false,
+              effectiveRuntimeConfigRevision: 0,
+            }
+          : undefined;
+      },
+    },
+    currentTransport: () => transport,
+    isStopping: () => false,
+    runtimeAuth: {
+      usageScanned: async () => {
+        throw new Error("misrouted Computer login");
+      },
+    },
+    inventory: { refreshModels: async () => {} },
+  });
+  const request = {
+    ...connection,
+    protocolMajor: 1,
+    requestId: "scan-a",
+    provider: "codex" as const,
+    agentId: "agent-a",
+    expectedRuntimeConfigRevision: 0,
+  };
+  await receive({ ...request, workspaceId: "foreign" });
+  expect(scans).toEqual([]);
+  await receive(request);
+  await receive({ ...request, requestId: "new-config", expectedRuntimeConfigRevision: 1 });
+  expect(scans).toHaveLength(2);
+  expect(results).toEqual([
+    {
+      ...connection,
+      protocolMajor: 1,
+      requestId: "scan-a",
+      provider: "codex",
+      agentId: "agent-a",
+      effectiveRuntimeConfigRevision: 0,
+      status: "unavailable",
+      accepted: false,
+    },
+  ]);
+});
+
 test("an effort read is answered only for this Computer while it is running", async () => {
   let receive!: Parameters<NonNullable<DaemonConnectionClient["onCommandCodeEffortRead"]>>[0];
   const seen: string[] = [];

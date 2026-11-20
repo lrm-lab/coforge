@@ -151,8 +151,14 @@ export type DaemonRuntimeUsageScanRequest = {
   computerId: string;
   provider: RuntimeProvider;
   messageType?: DaemonRuntimeMessageType;
+  agentId?: string;
+  expectedRuntimeConfigRevision?: number;
 };
-export type DaemonRuntimeUsageScanResponse = DaemonRuntimeUsageScanRequest & {
+export type DaemonRuntimeUsageScanResponse = Omit<
+  DaemonRuntimeUsageScanRequest,
+  "expectedRuntimeConfigRevision"
+> & {
+  effectiveRuntimeConfigRevision?: number;
   accepted: boolean;
   status: string;
   message?: string;

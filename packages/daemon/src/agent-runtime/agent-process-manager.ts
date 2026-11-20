@@ -51,6 +51,7 @@ export type { AgentStatus } from "./agent-state-machine";
 export type AgentRuntime = Readonly<{
   config: AgentRuntimeConfig;
   session: AgentSession;
+  effectiveConfigRevision?: number;
 }>;
 
 export type AgentRestartConfig = Readonly<{
@@ -96,6 +97,7 @@ export type ServerLaunchIdentity = Readonly<{
 /** What a launch is handed: the launch itself, less what only the provider is asked with, plus
  * the server-minted scope it was authorized under. */
 export type AgentProcessStartOptions = Omit<AgentLaunchInput, "agentId" | "config"> & {
+  effectiveConfigRevision?: number;
   /** The already-authorized launch identity to remember only if the runtime starts. */
   serverLaunch?: ServerLaunchIdentity;
 };
@@ -184,7 +186,12 @@ export class AgentProcessManager {
       if (error instanceof AgentProcessCleanupError) this.#unswept.add(agentId);
       throw error;
     }
-    const runtime: AgentRuntime = Object.freeze({ config, session });
+    const { effectiveConfigRevision } = options;
+    const runtime: AgentRuntime = Object.freeze({
+      config,
+      session,
+      ...(effectiveConfigRevision !== undefined && { effectiveConfigRevision }),
+    });
     this.#restartConfigs.set(agentId, {
       config,
       sessionId,

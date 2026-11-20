@@ -93,7 +93,7 @@ export class RuntimeUsageAccess {
   }
 }
 
-function drawnReading(reading: UsageReadResult): UsageReadResult {
+export function drawnReading(reading: UsageReadResult): UsageReadResult {
   const result = reading.result;
   if (!result) return reading;
   const { workspaceId, computerId, provider, scanId, status, message, collectedAt, snapshot } =

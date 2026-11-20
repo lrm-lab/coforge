@@ -38,6 +38,7 @@ type DetailAgent = {
     avatarObjectKey?: string | null;
   };
   runtimeConfig: Prisma.JsonValue;
+  runtimeConfigRevision?: number;
   controlState?: Prisma.JsonValue | null;
   activity?: {
     detailKind: string;
@@ -168,6 +169,9 @@ export class AgentDetailQuery {
       computerId: agent.computerId,
       owner: agent.owner,
       runtimeConfig: agent.runtimeConfig,
+      ...(agent.runtimeConfigRevision !== undefined && {
+        runtimeConfigRevision: agent.runtimeConfigRevision,
+      }),
       isWeeklyReportAssistant: Boolean(agent.weeklyReportAssistant),
       stopped: Boolean(agent.stoppedAt),
       wakeBlock: agentWakeBlock(

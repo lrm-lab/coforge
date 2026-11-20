@@ -69,7 +69,6 @@ import {
   type LocalAgentMessageRequest,
   type LocalInboxRequest,
   type RuntimeProvider,
-  type UsageScanResponse,
   type LocalReminderRequest,
   type TaskCommand,
   type TaskResult,
@@ -135,6 +134,7 @@ import { assembleRuntimeErrorDeliveryHold } from "./assemble-runtime-error-hold"
 import { assembleCredentialHolds } from "./assemble-credential-holds";
 import { AgentLifecycle } from "./agent-lifecycle";
 import { consumeResetCredit } from "./reset-credit-consume";
+import { scanAgentUsage } from "./agent-usage-scan";
 import type { ActivityLaunch } from "./activity-launch";
 import { AgentOfflineResidency } from "./agent-offline-residency";
 import { AgentExitedDelivery } from "./agent-exited-delivery";
@@ -757,6 +757,7 @@ export class DaemonRuntime {
       runtimeAuthFactory: this.runtimeAuthFactory,
       codeAgentInventory: this.#codeAgentInventory,
       scanUsage: (provider) => this.scanUsage(provider),
+      scanAgentUsage: (scope) => scanAgentUsage(this.#agentProcessManager, scope),
       consumeResetCredit: (provider, key) => this.consumeResetCredit(provider, key),
       workspaceQueries: this.#workspaceQueries,
       stateDirectory: this.stateDirectory,
@@ -873,24 +874,23 @@ export class DaemonRuntime {
   authorizedAgent(context: string, agentApiKey: string | undefined): string {
     return this.#authorizedAgent(context, agentApiKey);
   }
-  async scanUsage(provider: RuntimeProvider): Promise<UsageScanResponse> {
-    return scanUsage(
-      {
-        assertRunning: () => this.#assertRunning(),
-        workspaceRoot: this.#connection.workspaceRoot,
-        createProvider: (provider) => this.#createProvider(provider),
-        observedUsage: (provider) => this.#services.quotaState.observedUsage(provider),
-      },
-      provider,
-    );
+  #usagePorts() {
+    return {
+      assertRunning: () => this.#assertRunning(),
+      workspaceRoot: this.#connection.workspaceRoot,
+      createProvider: (provider: RuntimeProvider) => this.#createProvider(provider),
+      observedUsage: (provider: RuntimeProvider) =>
+        this.#services.quotaState.observedUsage(provider),
+    };
+  }
+  scanUsage(provider: RuntimeProvider) {
+    return scanUsage(this.#usagePorts(), provider);
   }
 
   consumeResetCredit(provider: RuntimeProvider, idempotencyKey: string) {
     return consumeResetCredit(
       {
-        assertRunning: () => this.#assertRunning(),
-        workspaceRoot: this.#connection.workspaceRoot,
-        createProvider: (provider) => this.#createProvider(provider),
+        ...this.#usagePorts(),
         agents: this.#agentProcessManager,
         hold: this.#runtimeErrorHold,
         launchRetries: this.#agentControl,

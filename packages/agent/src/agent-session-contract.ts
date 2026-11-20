@@ -1,4 +1,9 @@
-import type { AgentConversationScope, AgentRuntimeEvent, AgentSessionIdentity } from "./contract";
+import type {
+  AgentConversationScope,
+  AgentRuntimeEvent,
+  AgentSessionIdentity,
+  UsageSnapshot,
+} from "./contract";
 
 /** What the daemon says about a notice beyond its text. `deliveryIds` names the tracked
  * deliveries the notice carries; a provider only echoes them on `notice-undelivered`. */
@@ -35,6 +40,7 @@ export interface AgentSession {
   compact?(): Promise<void>;
   cancelPendingNotices?(): void;
   readSessionIdentity?(): Promise<AgentSessionIdentity | undefined>;
+  readUsage?(timeoutMs: number): Promise<UsageSnapshot | null>;
   /**
    * Accept a notification in this session, including while work is in progress.
    * Resolve at the adapter's delivery boundary, not after the whole run.

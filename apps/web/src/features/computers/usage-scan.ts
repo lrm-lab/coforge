@@ -1,7 +1,8 @@
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 
 import { readUsage, scanUsage } from "./computer-usage.functions";
-import { waitForUsageScanResult } from "./usage-poll";
+import { readAgentUsage, scanAgentUsage } from "./agent-usage.functions";
+import { waitForAgentUsageScanResult, waitForUsageScanResult } from "./usage-poll";
 
 /**
  * Asks a Computer for a fresh usage snapshot and waits for that scan's own result (or for the read
@@ -13,4 +14,10 @@ export function scanRuntimeUsage(computerId: string, provider: RuntimeProvider) 
     const { scanId } = await scanUsage({ data: { computerId, provider } });
     return waitForUsageScanResult(scanId, () => readUsage({ data: { computerId, provider } }));
   })();
+}
+
+export async function scanAgentRuntimeUsage(agentId: string) {
+  const input = { data: { agentId } };
+  const scan = await scanAgentUsage(input);
+  return waitForAgentUsageScanResult(scan, () => readAgentUsage(input));
 }

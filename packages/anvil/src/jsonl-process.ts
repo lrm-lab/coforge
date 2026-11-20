@@ -208,14 +208,17 @@ export class JsonlProcess {
       });
   }
 
-  async request(command: JsonRecord): Promise<JsonRecord> {
+  async request(
+    command: JsonRecord,
+    deadline?: { timeoutMs: number; timeoutError: () => Error },
+  ): Promise<JsonRecord> {
     this.#assertOpen();
     const id = `coforge-${this.#nextRequestId++}`;
     const response = new Promise<JsonRecord>((resolve, reject) => {
       this.#pending.set(id, { resolve, reject });
     });
-    try {
-      await this.send({ ...command, id });
+    void response.catch(() => undefined);
+    const request = this.send({ ...command, id }).then(() => {
       this.#logger.info("Sent code agent request", {
         event: "code_agent.request.sent",
         pid: this.#child.pid,
@@ -223,12 +226,15 @@ export class JsonlProcess {
         method: typeof command.method === "string" ? command.method : "unknown",
         outcome: "ok",
       });
-    } catch (error) {
+      return response;
+    });
+    try {
+      return await (deadline
+        ? withDeadline(request, deadline.timeoutMs, deadline.timeoutError)
+        : request);
+    } finally {
       this.#pending.delete(id);
-      void response.catch(() => undefined);
-      throw error;
     }
-    return response;
   }
 
   async dispose(options?: ProcessTreeCleanupOptions): Promise<void> {

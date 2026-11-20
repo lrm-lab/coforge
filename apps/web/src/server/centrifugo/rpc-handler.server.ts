@@ -15,6 +15,8 @@ import {
 } from "@lrm/coforge-sdk/internal";
 import { getUsageCache, type UsageCache } from "./usage-cache.server";
 import { decodeUsageSnapshot } from "./usage-snapshot-decode.server";
+import { acceptAgentUsageResult } from "./agent-usage-result.server";
+import { AGENT_USAGE_SCAN_PREFIX } from "../computers/agent-usage-scope.server";
 import { PublishAgentRuntimeControl } from "#src/server/agents/agent-runtime-control.server";
 import {
   AgentDeliveryRejectionScopeError,
@@ -324,19 +326,26 @@ export function createDaemonRuntimeUsageScanResultMethod(
     const response = decodeDaemonRuntimeUsageScanResponse(payload);
     const denied = requireDaemonPrincipal(metadata, response);
     if (denied) return denied;
-    if (response.protocolMajor !== 1 || !response.requestId || !response.provider)
+    if (
+      response.protocolMajor !== 1 ||
+      !response.requestId ||
+      !response.provider ||
+      (!response.agentId && response.requestId.startsWith(AGENT_USAGE_SCAN_PREFIX))
+    )
       return { code: 400, message: "invalid usage scan result" };
     const snapshot = response.snapshotJson
       ? decodeUsageSnapshot(response.snapshotJson, response.provider)
       : undefined;
-    const cache = usageCache ?? getUsageCache();
     if (response.snapshotJson && !snapshot) {
       // The scan is over though its reading is refused: end it, or a Refresh would join it and
       // wait for a result that is not coming.
-      await cache.releaseScan(response, response.requestId).catch(() => undefined);
+      if (!response.agentId)
+        await (usageCache ?? getUsageCache())
+          .releaseScan(response, response.requestId)
+          .catch(() => undefined);
       return { code: 400, message: "invalid usage scan result" };
     }
-    await cache.putResult({
+    const reading = {
       workspaceId: response.workspaceId,
       computerId: response.computerId,
       provider: response.provider,
@@ -347,7 +356,9 @@ export function createDaemonRuntimeUsageScanResultMethod(
       // The snapshot's own observation time when the Computer reported one, otherwise this
       // result is only as fresh as the moment the server received it.
       collectedAt: snapshot?.collectedAt ?? new Date().toISOString(),
-    });
+    };
+    if (response.agentId) return acceptAgentUsageResult(response, metadata, reading);
+    await (usageCache ?? getUsageCache()).putResult(reading);
     return new Uint8Array();
   };
 }

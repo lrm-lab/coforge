@@ -143,6 +143,8 @@ message DaemonRuntimeUsageScanRequest {
   string computer_id = 4;
   string provider = 5;
   string message_type = 6;
+  optional string agent_id = 7;
+  optional uint32 expected_runtime_config_revision = 8;
 }
 
 message DaemonRuntimeUsageScanResponse {
@@ -156,6 +158,8 @@ message DaemonRuntimeUsageScanResponse {
   string message = 8;
   bytes snapshot_json = 9;
   string message_type = 10;
+  optional string agent_id = 11;
+  optional uint32 effective_runtime_config_revision = 12;
 }
 
 // Server -> daemon, on the daemon control channel beside `DaemonRuntimeUsageScanRequest`: spend one

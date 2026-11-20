@@ -419,7 +419,11 @@ describe("Centrifugo Connect Proxy", () => {
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      result: { user: "user-1", info: "instance-1" },
+      result: {
+        user: "user-1",
+        info: "instance-1",
+        meta: { worker_instance_id: "instance-1" },
+      },
     });
   });
 

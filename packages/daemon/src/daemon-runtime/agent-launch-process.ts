@@ -192,6 +192,7 @@ export async function launchAgentProcess(
           COFORGE_AGENT_LAUNCH_ID: launch.launchId,
         },
         runtimeId: launch.launchId,
+        effectiveConfigRevision: launchConfig.runtimeConfigRevision,
         onSessionId: async (sessionId, replacedSessionId) => {
           if (
             sessionId &&

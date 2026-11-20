@@ -62,13 +62,7 @@ export function openCodexAppServer(
       return {
         userAgent: asRecord(initialized.result)?.userAgent,
         request,
-        readAccount: async () => {
-          try {
-            return asRecord((await request("account/read", {})).result);
-          } catch {
-            return undefined;
-          }
-        },
+        readAccount: () => readCodexAccount(request),
       };
     },
     dispose: () => process.dispose().catch(() => undefined),
@@ -79,4 +73,12 @@ export function codexVersion(userAgent: unknown): string | undefined {
   return typeof userAgent === "string"
     ? userAgent.match(/^[^/\s]+\/(\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?)/u)?.[1]
     : undefined;
+}
+
+export async function readCodexAccount(request: CodexAppServer["request"]) {
+  try {
+    return asRecord((await request("account/read", {})).result);
+  } catch {
+    return undefined;
+  }
 }

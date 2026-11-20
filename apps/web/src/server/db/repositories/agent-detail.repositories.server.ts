@@ -46,6 +46,7 @@ export class PrismaAgentDetailSource implements AgentDetailSource {
           },
         },
         runtimeConfig: true,
+        runtimeConfigRevision: true,
         controlState: true,
         activity: {
           orderBy: { occurredAt: "desc" },

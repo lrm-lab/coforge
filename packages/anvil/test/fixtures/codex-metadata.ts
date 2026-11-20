@@ -28,7 +28,11 @@ export function handleCodexMetadata(
   usageClient: boolean,
   write: (record: unknown) => void,
 ): boolean {
-  if (request.method === "account/read" && request.id && usageClient) {
+  if (
+    request.method === "account/read" &&
+    request.id &&
+    (usageClient || process.argv.includes("live-home-usage"))
+  ) {
     if (usageLegacyAccount) {
       write({ id: request.id, error: { code: -32601, message: "method not found" } });
       return true;
@@ -51,10 +55,10 @@ export function handleCodexMetadata(
       });
       return true;
     }
-    write({
-      id: request.id,
-      result: { account: { type: "chatgpt", email: "codexuser@example.com" } },
-    });
+    const email = process.argv.includes("live-home-usage")
+      ? `${Bun.env.CODEX_HOME?.split(/[\\/]/u).at(-1)}@example.com`
+      : "codexuser@example.com";
+    write({ id: request.id, result: { account: { type: "chatgpt", email } } });
     return true;
   }
   if (request.method === "account/rateLimitResetCredit/consume" && request.id && usageClient) {

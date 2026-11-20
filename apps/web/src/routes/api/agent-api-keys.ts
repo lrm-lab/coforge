@@ -117,6 +117,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
             workspaceId: true,
             ownerId: true,
             runtimeConfig: true,
+            runtimeConfigRevision: true,
             name: true,
             displayName: true,
             description: true,
@@ -239,6 +240,7 @@ export const Route = createFileRoute("/api/agent-api-keys")({
             apiKey,
             providerConfig,
             envVars,
+            runtimeConfigRevision: agent.runtimeConfigRevision,
             ...(assignedSkillPacks.length > 0
               ? { assignedSkillPacks: [...assignedSkillPacks] }
               : {}),

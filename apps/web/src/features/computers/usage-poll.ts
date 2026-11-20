@@ -1,3 +1,5 @@
+import type { AgentUsageReadResult } from "#src/server/computers/agent-usage-access.server";
+
 /**
  * Polls `read` until it reports the exact scan this call started — never a stale one already in
  * the cache, and never the "pending" placeholder for a scan that hasn't finished yet. The previous
@@ -36,4 +38,15 @@ export async function waitForUsageScanResult<
   }
   if (current.result?.scanId !== scanId) throw new Error("usage scan timed out");
   return current;
+}
+
+export async function waitForAgentUsageScanResult(
+  scan: { status: "unavailable" } | { status: "pending"; scanId: string },
+  read: () => Promise<AgentUsageReadResult>,
+  sleep?: (milliseconds: number) => Promise<void>,
+): Promise<AgentUsageReadResult> {
+  if (scan.status === "unavailable") return { state: "fresh", unavailable: true };
+  const reading = await waitForUsageScanResult(scan.scanId, read, sleep);
+  if (reading.unavailable || reading.result?.scanId === scan.scanId) return reading;
+  throw new Error("Agent usage scan ended without a result");
 }

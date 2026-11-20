@@ -106,6 +106,7 @@ export type AgentLaunchConfig = {
   agentApiKey: string;
   providerConfig?: AgentRuntimeProviderConfig;
   envVars?: Record<string, string>;
+  runtimeConfigRevision?: number;
   assignedSkillPacks?: string[];
   identity?: AgentLaunchIdentity;
 };

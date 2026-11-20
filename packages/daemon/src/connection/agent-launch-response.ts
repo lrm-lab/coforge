@@ -59,6 +59,7 @@ export function parseAgentLaunchConfig(response: unknown): AgentLaunchConfig {
     apiKey?: unknown;
     providerConfig?: unknown;
     envVars?: unknown;
+    runtimeConfigRevision?: unknown;
     assignedSkillPacks?: unknown;
     identity?: unknown;
   };
@@ -67,10 +68,15 @@ export function parseAgentLaunchConfig(response: unknown): AgentLaunchConfig {
     ? value.assignedSkillPacks.filter((entry): entry is string => typeof entry === "string")
     : [];
   const identity = parseAgentLaunchIdentity(value.identity);
+  const { runtimeConfigRevision } = value;
   return {
     agentApiKey: parseAgentApiKey(value.apiKey),
     ...(providerConfig ? { providerConfig } : {}),
     envVars: parseAgentEnvironment(value.envVars),
+    ...(typeof runtimeConfigRevision === "number" &&
+      Number.isInteger(runtimeConfigRevision) &&
+      runtimeConfigRevision >= 0 &&
+      runtimeConfigRevision <= 2 ** 32 - 1 && { runtimeConfigRevision }),
     ...(assignedSkillPacks.length > 0 ? { assignedSkillPacks } : {}),
     ...(identity ? { identity } : {}),
   };

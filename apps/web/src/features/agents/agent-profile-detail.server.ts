@@ -1,3 +1,4 @@
+import { RUNTIME_PROVIDER } from "@lrm/coforge-sdk/internal";
 import type { WorkspaceUserContext } from "#src/features/auth/function-auth";
 import { AgentDetailQuery } from "#src/server/agents/agent-detail.server";
 import { PrismaAgentDetailSource } from "#src/server/db/repositories/agent-detail.repositories.server";
@@ -141,8 +142,13 @@ export async function loadAgentProfileDetail(context: WorkspaceUserContext, agen
     stopReason: result.display?.stopReason ?? null,
     failureReason: result.failureReason,
   });
+  const { runtimeConfigRevision, ...profile } = result;
+  const codexUsage = runtimeConfig?.runtime === RUNTIME_PROVIDER.CODEX;
+  const runtimeUsageVisible =
+    !!usage?.offered &&
+    (!codexUsage || (ownedByCurrentUser && live && result.hosting === "managed"));
   return {
-    ...result,
+    ...profile,
     readiness,
     owner: {
       ...result.owner,
@@ -163,7 +169,11 @@ export async function loadAgentProfileDetail(context: WorkspaceUserContext, agen
     canDeleteAgent,
     visibility: normalizeAgentVisibility(result.visibility),
     canChangeVisibility,
-    runtimeUsageVisible: usage?.offered ?? false,
+    runtimeUsageVisible,
+    ...(codexUsage &&
+      runtimeUsageVisible && {
+        runtimeUsageRevision: runtimeConfigRevision ?? 0,
+      }),
     runtimeVersion: usage?.runtime?.version,
     ...(externalDisplay ? { display: externalDisplay } : {}),
     externalCredentials: externalCredentials ?? [],

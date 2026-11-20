@@ -76,6 +76,7 @@ export const AGENT_MESSAGE_DELIVERY_REJECTION_REASONS = ["no_process"] as const;
 export type AgentDeliveryRejectionReason =
   (typeof AGENT_MESSAGE_DELIVERY_REJECTION_REASONS)[number];
 export const USAGE_SCAN_MESSAGE_TYPE = "coforge.rpc.v1.DaemonRuntimeUsageScanRequest" as const;
+export const DAEMON_AGENT_USAGE_SCAN_CAPABILITY = "agent-usage-scan:v1" as const;
 export const USAGE_SCAN_RESPONSE_MESSAGE_TYPE =
   "coforge.rpc.v1.DaemonRuntimeUsageScanResponse" as const;
 export const MODEL_REFRESH_MESSAGE_TYPE =

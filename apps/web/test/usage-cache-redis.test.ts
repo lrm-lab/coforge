@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { RedisClient } from "bun";
 import { RedisUsageCache } from "#src/server/centrifugo/usage-cache.server";
+import { RedisAgentUsageCache } from "#src/server/centrifugo/agent-usage-cache.server";
+import { RedisComputerCapabilityLease } from "#src/server/computers/computer-capability-lease.server";
+import { DAEMON_AGENT_USAGE_SCAN_CAPABILITY } from "@lrm/coforge-sdk/internal";
 
 // The cache's Lua scripts, run by a real Redis: a fake cannot say whether a claim is atomic or
 // which results end which scan. Skipped when no `redis-server` is installed.
@@ -99,5 +102,63 @@ describe.skipIf(!redisServer)("RedisUsageCache scans against a real Redis", () =
     await redis.set(scanKey("garbage"), "not json", "EX", "60");
     await cache.putResult(finished("garbage", "any", "error"));
     expect(await redis.get(scanKey("garbage"))).toBeNull();
+  });
+
+  test("Agent usage binds the current worker, exact pending request, Agent and revision", async () => {
+    const computer = "agent-usage";
+    const capability = DAEMON_AGENT_USAGE_SCAN_CAPABILITY;
+    const lease = new RedisComputerCapabilityLease(redis, capability, "agent-usage-test");
+    const usage = new RedisAgentUsageCache(redis, lease);
+    const current = {
+      ...key(computer),
+      agentId: "alpha",
+      runtimeConfigRevision: 1,
+      workerInstanceId: "worker-1",
+    };
+    const other = { ...current, agentId: "beta" };
+    const updated = { ...current, runtimeConfigRevision: 2 };
+    const nextWorker = { ...updated, workerInstanceId: "worker-2" };
+    const reading = (scanId: string, accountLabel: string) => ({
+      ...finished(computer, scanId, "available"),
+      snapshot: { provider: "codex" as const, accountLabel },
+    });
+
+    expect(await usage.claim(current, "old-computer")).toBeUndefined();
+    await lease.record(current.workspaceId, computer, [capability], {
+      workerInstanceId: current.workerInstanceId,
+      startedAt: 1,
+    });
+    expect(await lease.supportedWorker(current.workspaceId, computer)).toBe(
+      current.workerInstanceId,
+    );
+    expect(await Promise.all([usage.claim(current, "a"), usage.claim(other, "b")])).toEqual([
+      "a",
+      "b",
+    ]);
+    expect(await usage.claim(current, "duplicate")).toBe("a");
+    expect(await usage.complete(current, reading("b", "beta"))).toBe(false);
+    expect(await usage.complete(updated, reading("a", "old revision"))).toBe(false);
+    expect(await usage.complete(other, reading("b", "beta"))).toBe(true);
+    expect(await usage.complete(current, reading("a", "alpha"))).toBe(true);
+    expect(await usage.complete(current, reading("a", "duplicate"))).toBe(false);
+    expect((await usage.read(current))?.result?.snapshot?.accountLabel).toBe("alpha");
+    expect((await usage.read(other))?.result?.snapshot?.accountLabel).toBe("beta");
+    expect(await usage.read(updated)).toEqual({ state: "missing", pendingScanId: undefined });
+    expect(await usage.claim(updated, "stale-worker")).toBe("stale-worker");
+
+    await lease.record(current.workspaceId, computer, [capability], {
+      workerInstanceId: nextWorker.workerInstanceId,
+      startedAt: 2,
+    });
+    expect(await usage.claim(nextWorker, "current-worker")).toBe("current-worker");
+    expect(await usage.complete(updated, reading("stale-worker", "old process"))).toBe(false);
+    expect(await usage.read(updated)).toBeUndefined();
+    expect((await usage.read(nextWorker))?.pendingScanId).toBe("current-worker");
+    await redis.del(lease.key(current.workspaceId, computer));
+    expect(await usage.complete(nextWorker, reading("current-worker", "expired capability"))).toBe(
+      false,
+    );
+    expect(await usage.read(nextWorker)).toBeUndefined();
+    expect((await cache.read(key(computer))).result).toBeUndefined();
   });
 });
