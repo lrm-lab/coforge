@@ -154,6 +154,11 @@ test("the notice conversation reads only the notices the Agent can still read", 
 
     await pinned("01a1f6da-bbbb-7000-8000-000000000001", 8, "notice 8");
     await pinned("01a1f6da-bbbb-7000-8000-000000000002", 9, "notice 9");
+
+    const fullAround = await read({ around: "6", limit: 4 });
+    expect(fullAround.messages.map((message) => message.sequence)).toEqual([5, 6, 8, 9]);
+    expect(fullAround.hasNewer).toBe(false);
+    expect(fullAround.hasOlder).toBe(true);
     await expect(read({ after: "01a1f6da-bbbb-7000-8000-0000000000", limit: 1 })).rejects.toThrow(
       "ambiguous message prefix",
     );
