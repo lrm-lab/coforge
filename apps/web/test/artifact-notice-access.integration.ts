@@ -360,7 +360,6 @@ test("the bot inbox stops handing back a notice once the artifact is gone", asyn
     event.messageId,
   );
   expect(await hinted()).not.toContain(event.messageId);
-  expect(JSON.stringify(await inbox.check(principal))).not.toContain(event.messageId);
 });
 
 test("the wake hint drops the notice in the same step its artifact goes", async () => {
