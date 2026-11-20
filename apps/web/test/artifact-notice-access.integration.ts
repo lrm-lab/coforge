@@ -440,11 +440,15 @@ test("a revocation while the bodies load keeps the readable rows", async () => {
   const returned = pending.map((delivery) => delivery.messageId);
 
   const pageDeliveries = assembled.flat();
-  const doomedDelivery = await h.f.db.agentMessageDelivery.findFirstOrThrow({
-    where: { messageId: doomedEvent.messageId },
-    select: { deliveryId: true },
-  });
-  expect(pageDeliveries).toContain(doomedDelivery.deliveryId);
+  const deliveryOf = async (messageId: string) =>
+    (
+      await h.f.db.agentMessageDelivery.findFirstOrThrow({
+        where: { messageId },
+        select: { deliveryId: true },
+      })
+    ).deliveryId;
+  expect(pageDeliveries).toContain(await deliveryOf(doomedEvent.messageId));
+  expect(pageDeliveries).toContain(await deliveryOf(keptEvent.messageId));
   expect(returned).toContain(keptEvent.messageId);
   expect(returned).not.toContain(doomedEvent.messageId);
 });
