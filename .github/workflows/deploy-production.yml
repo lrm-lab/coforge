@@ -19,6 +19,10 @@ on:
         description: "Staging-healthy image, ghcr.io/lrm-lab/coforge/coforge-web@sha256:..."
         required: true
         type: string
+      enable_artifact_checker:
+        description: "Deploy the isolated Artifact publish checker"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -82,6 +86,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Resolve matching Artifact Checker image digest
+        if: inputs.enable_artifact_checker
         id: find_checker
         env:
           STAGING_SHA: ${{ steps.find_staging.outputs.staging_sha }}
@@ -213,6 +218,7 @@ jobs:
         run: |
           tar -czf "$REMOTE_ASSETS" \
             infra/artifact-checker.compose.yml \
+            infra/artifact-checker-seccomp.json \
             infra/production/docker-compose.yml \
             infra/production/caddy/Caddyfile \
             infra/production/centrifugo/config.yaml \

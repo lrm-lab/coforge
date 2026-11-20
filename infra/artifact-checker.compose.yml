@@ -1,27 +1,81 @@
-# Optional Docker Compose overlay to enable the isolated HTML artifact publish-check sidecar.
-# Combine with staging or production compose:
-#   docker compose -f infra/staging/docker-compose.yml -f infra/artifact-checker.compose.yml up -d
 services:
   web:
     environment:
-      COFORGE_ARTIFACT_CHECK_WORKER_URL: ${COFORGE_ARTIFACT_CHECK_WORKER_URL:-http://artifact-checker:3100}
+      COFORGE_ARTIFACT_CHECK_WORKER_SOCKET: /run/artifact-checker/checker.sock
       COFORGE_ARTIFACT_CHECK_SECRET: ${COFORGE_ARTIFACT_CHECK_SECRET:?artifact-checker requires a shared secret}
       COFORGE_ARTIFACT_CHECK_CONCURRENCY: ${COFORGE_ARTIFACT_CHECK_CONCURRENCY:-1}
       COFORGE_ARTIFACT_CHECK_DAILY_CAP: ${COFORGE_ARTIFACT_CHECK_DAILY_CAP:-200}
+    volumes:
+      - artifact-checker-socket:/run/artifact-checker:ro
+    depends_on:
+      artifact-checker:
+        condition: service_healthy
 
   artifact-checker:
     image: ${COFORGE_ARTIFACT_CHECKER_IMAGE:?COFORGE_ARTIFACT_CHECKER_IMAGE must resolve to an immutable digest}
+    user: "1000:1000"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
     mem_limit: 1g
+    memswap_limit: 1g
     shm_size: 256mb
     cpus: "1.0"
     pids_limit: 256
     security_opt:
       - no-new-privileges:true
+      - seccomp=../artifact-checker-seccomp.json
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=512m,mode=1777
     environment:
-      PORT: "3100"
+      COFORGE_ARTIFACT_CHECK_WORKER_SOCKET: /run/artifact-checker/checker.sock
+      COFORGE_ARTIFACT_CHECK_EGRESS_PROXY: http://artifact-checker-proxy:3128
       COFORGE_ARTIFACT_CHECK_SECRET: ${COFORGE_ARTIFACT_CHECK_SECRET:?artifact-checker requires a shared secret}
       CHECKER_MAX_CONCURRENCY: ${COFORGE_ARTIFACT_CHECK_CONCURRENCY:-1}
       CHECKER_IDLE_CLOSE_MS: "60000"
+    volumes:
+      - artifact-checker-socket:/run/artifact-checker
     networks:
-      - coforge
+      - artifact-checker-egress
+    depends_on:
+      artifact-checker-proxy:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bun", "-e", "const response = await fetch('http://artifact-checker/health', {unix:'/run/artifact-checker/checker.sock'}); process.exit(response.ok ? 0 : 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
     restart: unless-stopped
+
+  artifact-checker-proxy:
+    image: ${COFORGE_ARTIFACT_CHECKER_IMAGE:?COFORGE_ARTIFACT_CHECKER_IMAGE must resolve to an immutable digest}
+    user: proxy
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    mem_limit: 256m
+    pids_limit: 64
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=64m,mode=1777
+    command: ["squid", "-N", "-f", "/etc/squid/artifact-checker.conf"]
+    healthcheck:
+      test: ["CMD", "bun", "-e", "const s = await Bun.connect({hostname:'127.0.0.1',port:3128,socket:{data(){}}}); s.end()"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - artifact-checker-egress
+      - artifact-checker-uplink
+    restart: unless-stopped
+
+volumes:
+  artifact-checker-socket: {}
+
+networks:
+  artifact-checker-egress:
+    internal: true
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: isolated
+  artifact-checker-uplink: {}

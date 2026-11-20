@@ -84,20 +84,30 @@ services:
     restart: unless-stopped
 
   artifact-checker:
+    profiles: [artifact-checker]
     build:
-      context: ../services/artifact-checker
+      context: ..
+      dockerfile: services/artifact-checker/Dockerfile
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=./artifact-checker-seccomp.json
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=512m,mode=1777
     mem_limit: 1g
     shm_size: 256mb
     ports:
       - "127.0.0.1:3100:3100"
     environment:
       PORT: "3100"
+      HOST: "0.0.0.0"
       NODE_ENV: development
       CHECKER_ALLOW_UNAUTHENTICATED: "1"
       CHECKER_MAX_CONCURRENCY: "1"
       CHECKER_IDLE_CLOSE_MS: "60000"
     networks:
-      - centrifugo
+      - artifact-checker-dev
     healthcheck:
       test:
         [
@@ -113,6 +123,8 @@ services:
     restart: unless-stopped
 
 networks:
+  artifact-checker-dev:
+    internal: true
   centrifugo:
     driver: bridge
     name: coforge_network

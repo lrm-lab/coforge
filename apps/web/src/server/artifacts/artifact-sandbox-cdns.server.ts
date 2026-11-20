@@ -11,6 +11,10 @@ export const SANDBOX_PUBLIC_CDNS = [
 const FONT_STYLES = "https://fonts.googleapis.com";
 const FONT_FILES = "https://fonts.gstatic.com";
 
+export const SANDBOX_CDN_HOSTS = [...SANDBOX_PUBLIC_CDNS, FONT_STYLES, FONT_FILES].map(
+  (url) => new URL(url).hostname,
+);
+
 /** A page's CSP directives with the public hosts added to the ones that load from them. */
 export function withPublicCdns(directives: readonly string[]): string[] {
   const extra: Record<string, readonly string[]> = {

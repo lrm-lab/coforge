@@ -46,6 +46,8 @@ export function createPlaywrightDriver(options = {}) {
     error: (payload) => console.error(JSON.stringify(payload)),
   };
 
+  const proxy = options.proxy;
+  const executablePath = process.env.CHECKER_CHROMIUM_EXECUTABLE;
   let browser = null;
   let launchPromise = null;
   let activeJobs = 0;
@@ -92,8 +94,11 @@ export function createPlaywrightDriver(options = {}) {
         const { chromium } = await import("playwright-core");
         const instance = await chromium.launch({
           headless: true,
+          chromiumSandbox: true,
+          ...(executablePath ? { executablePath } : {}),
+          ...(proxy ? { proxy: { server: proxy, bypass: "<-loopback>" } } : {}),
           args: [
-            "--no-sandbox",
+            "--disable-quic",
             "--disable-dev-shm-usage",
             "--disable-gpu",
             "--disable-extensions",
@@ -281,6 +286,7 @@ export function createPlaywrightDriver(options = {}) {
                   artifactOrigin: origin,
                   hostOrigin,
                   allowedCdnHosts,
+                  proxy,
                   method,
                   signal,
                 }).catch(() => ({ ok: false, blockedUrl: url }));

@@ -19,18 +19,14 @@ import {
   type ArtifactCheckBundleFile,
 } from "./artifact-check-runner.server";
 import { withPageRuntime } from "./artifact-page-runtime.server";
-import { SANDBOX_PUBLIC_CDNS } from "./artifact-sandbox-cdns.server";
+import { SANDBOX_CDN_HOSTS } from "./artifact-sandbox-cdns.server";
 import { sandboxPageHeaders } from "./artifact-sandbox-response.server";
 
 export const MAX_CHECK_BUNDLE_BYTES = 16 * 1024 * 1024;
 export const INLINE_HOST_ORIGIN = "https://host.coforge.check";
 const BLOB_READ_CONCURRENCY = 4;
 
-export const ALLOWED_CDN_HOSTS = [
-  ...SANDBOX_PUBLIC_CDNS.map((url) => new URL(url).hostname),
-  "fonts.googleapis.com",
-  "fonts.gstatic.com",
-];
+export const ALLOWED_CDN_HOSTS = SANDBOX_CDN_HOSTS;
 
 export type StoredScreenshot = {
   shot: ArtifactCheckShot;

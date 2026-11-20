@@ -1,5 +1,6 @@
 export type ArtifactCheckConfig = {
   workerUrl: string;
+  workerSocket?: string;
   secret: string;
   concurrency: number;
   timeoutMs: number;
@@ -41,8 +42,16 @@ function isLoopbackHost(hostname: string): boolean {
 export function artifactCheckConfig(
   env: Record<string, string | undefined> = process.env,
 ): ArtifactCheckConfig | null {
-  const rawUrl = env.COFORGE_ARTIFACT_CHECK_WORKER_URL?.trim();
-  if (!rawUrl) return null;
+  const workerSocket = env.COFORGE_ARTIFACT_CHECK_WORKER_SOCKET?.trim();
+  const rawUrl = workerSocket
+    ? "http://artifact-checker"
+    : env.COFORGE_ARTIFACT_CHECK_WORKER_URL?.trim();
+  if (
+    !rawUrl ||
+    (workerSocket && !workerSocket.startsWith("/")) ||
+    (env.NODE_ENV === "production" && !workerSocket)
+  )
+    return null;
   let parsed: URL;
   try {
     parsed = new URL(rawUrl);
@@ -54,6 +63,7 @@ export function artifactCheckConfig(
   if (!secret && !isLoopbackHost(parsed.hostname)) return null;
   return {
     workerUrl: parsed.toString().replace(/\/+$/, ""),
+    ...(workerSocket ? { workerSocket } : {}),
     secret,
     concurrency: parseBoundedInt(
       env.COFORGE_ARTIFACT_CHECK_CONCURRENCY,

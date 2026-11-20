@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, test } from "bun:test";
 import {
   buildInlineHostHtml,
@@ -7,6 +10,7 @@ import {
 } from "../evaluate.mjs";
 import { createCheckerServer, isAuthorizedBearer } from "../server.mjs";
 import {
+  fetchCdnSafely,
   isAllowedRequestUrl,
   isPublicIpAddress,
   isValidArtifactOrigin,
@@ -238,4 +242,55 @@ describe("artifact-checker HTTP server", () => {
       server.stop(true);
     }
   });
+});
+
+test("the checker accepts authorized requests through its private Unix socket", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "checker-sock-"));
+  const socket = join(directory, "checker.sock");
+  const checker = createCheckerServer({
+    secret: crypto.randomUUID(),
+    logger: { info() {}, warn() {}, error() {} },
+  });
+  const server = checker.start({ socket });
+  try {
+    const response = await fetch("http://artifact-checker/health", { unix: socket });
+    expect(response.status).toBe(200);
+    const denied = await fetch("http://artifact-checker/check", { unix: socket, method: "POST", body: "{}" });
+    expect(denied.status).toBe(401);
+  } finally {
+    server.stop(true);
+    await checker.driver.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("allowed CDN requests without the configured proxy are blocked", async () => {
+  const url = "https://fixture.invalid/style.css";
+  expect(await fetchCdnSafely(url, { allowedCdnHosts: ["fixture.invalid"] })).toEqual({
+    ok: false,
+    blockedUrl: url,
+  });
+});
+
+test("Bun sends an allowed CDN request through the configured CONNECT proxy", async () => {
+  const received: string[] = [];
+  const listener = Bun.listen({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: {
+      data(socket, chunk) {
+        received.push(chunk.toString().split("\r\n")[0]!);
+        socket.end("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n");
+      },
+    },
+  });
+  try {
+    await fetchCdnSafely("https://fixture.invalid/style.css", {
+      allowedCdnHosts: ["fixture.invalid"],
+      proxy: `http://127.0.0.1:${listener.port}`,
+    }).catch(() => undefined);
+    expect(received).toEqual(["CONNECT fixture.invalid:443 HTTP/1.1"]);
+  } finally {
+    listener.stop(true);
+  }
 });

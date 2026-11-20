@@ -4,6 +4,11 @@ name: Deploy Web (staging)
 # (docs/release/main-to-staging.md). Do not add a `push:` trigger here.
 on:
   workflow_dispatch:
+    inputs:
+      enable_artifact_checker:
+        description: "Deploy the isolated Artifact publish checker"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -118,7 +123,7 @@ jobs:
   checker-image:
     name: Build and push Artifact Checker image
     needs: [ci-status, gates]
-    if: always() && github.ref == 'refs/heads/main' && !cancelled() && (needs.ci-status.outputs.passed == 'true' || (needs.gates.result == 'success' && needs.gates.outputs.deploy == 'true'))
+    if: always() && inputs.enable_artifact_checker && github.ref == 'refs/heads/main' && !cancelled() && (needs.ci-status.outputs.passed == 'true' || (needs.gates.result == 'success' && needs.gates.outputs.deploy == 'true'))
     permissions:
       contents: read
       packages: write
@@ -127,7 +132,7 @@ jobs:
   deploy:
     name: Deploy and verify Web
     needs: [image, checker-image]
-    if: always() && !cancelled() && needs.image.result == 'success' && needs.checker-image.result == 'success'
+    if: always() && !cancelled() && needs.image.result == 'success' && (!inputs.enable_artifact_checker || needs.checker-image.result == 'success')
     runs-on: ubuntu-latest
     environment: staging
     timeout-minutes: 30
@@ -235,6 +240,7 @@ jobs:
         run: |
           tar -czf "$REMOTE_ASSETS" \
             infra/artifact-checker.compose.yml \
+            infra/artifact-checker-seccomp.json \
             infra/staging/docker-compose.yml \
             infra/staging/caddy/Caddyfile \
             infra/staging/centrifugo/config.yaml \

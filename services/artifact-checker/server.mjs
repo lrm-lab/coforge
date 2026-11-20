@@ -1,3 +1,4 @@
+import { chmodSync } from "node:fs";
 import { timingSafeEqual } from "node:crypto";
 import { createPlaywrightDriver } from "./browser.mjs";
 import { isValidArtifactOrigin } from "./ssrf.mjs";
@@ -81,6 +82,7 @@ export function createCheckerServer(options = {}) {
   const driver =
     options.driver ??
     createPlaywrightDriver({
+      proxy: options.proxy,
       idleCloseMs: Number.parseInt(process.env.CHECKER_IDLE_CLOSE_MS ?? "60000", 10) || 60_000,
       logger,
     });
@@ -261,12 +263,20 @@ export function createCheckerServer(options = {}) {
   function start(listenOptions = {}) {
     const port = listenOptions.port ?? DEFAULT_PORT;
     const hostname = listenOptions.hostname ?? "0.0.0.0";
+    if (listenOptions.socket) {
+      const server = Bun.serve({
+        unix: listenOptions.socket,
+        maxRequestBodySize: maxBodyBytes,
+        fetch(request, listener) {
+          listener.timeout(request, 130);
+          return handleRequest(request);
+        },
+      });
+      chmodSync(listenOptions.socket, 0o660);
+      return server;
+    }
     return Bun.serve({
-      hostname,
-      port,
-      maxRequestBodySize: maxBodyBytes,
-      idleTimeout: 130,
-      fetch: handleRequest,
+      hostname, port, maxRequestBodySize: maxBodyBytes, idleTimeout: 130, fetch: handleRequest,
     });
   }
 
@@ -275,7 +285,10 @@ export function createCheckerServer(options = {}) {
 
 if (import.meta.main) {
   const port = Number.parseInt(process.env.PORT ?? String(DEFAULT_PORT), 10) || DEFAULT_PORT;
-  const hostname = process.env.HOST ?? "0.0.0.0";
+  const hostname = process.env.HOST ?? "127.0.0.1";
+  const socket = process.env.COFORGE_ARTIFACT_CHECK_WORKER_SOCKET;
+  const proxy = process.env.COFORGE_ARTIFACT_CHECK_EGRESS_PROXY;
+  const proxyUrl = proxy ? URL.parse(proxy) : null;
   const secret = process.env.COFORGE_ARTIFACT_CHECK_SECRET?.trim() ?? "";
   const allowUnauthenticated =
     process.env.NODE_ENV !== "production" && process.env.CHECKER_ALLOW_UNAUTHENTICATED === "1";
@@ -288,12 +301,16 @@ if (import.meta.main) {
     });
     process.exit(1);
   }
-  const checker = createCheckerServer({ logger, secret, allowUnauthenticated });
-  const server = checker.start({ hostname, port });
+  if (process.env.NODE_ENV === "production" &&
+      (!socket?.startsWith("/") || proxyUrl?.protocol !== "http:" || proxyUrl.origin !== proxy)) {
+    throw new Error("The checker requires a private socket and an HTTP egress proxy");
+  }
+  const checker = createCheckerServer({ logger, secret, allowUnauthenticated, proxy });
+  const server = checker.start({ hostname, port, socket });
   logger.info({
     event: "artifact_checker.started",
-    host: hostname,
-    port: server.port,
+    transport: socket ? "unix" : "http",
+    ...(!socket ? { host: hostname, port: server.port } : {}),
     authEnabled: Boolean(secret),
     rssMb: rssMb(),
   });

@@ -21,6 +21,17 @@ function makeLogger() {
 }
 
 describe("artifactCheckConfig", () => {
+  test("requires bearer authentication for the production socket", () => {
+    const socket = "/run/artifact-checker/checker.sock";
+    expect(artifactCheckConfig({ COFORGE_ARTIFACT_CHECK_WORKER_SOCKET: socket })).toBeNull();
+    expect(
+      artifactCheckConfig({
+        COFORGE_ARTIFACT_CHECK_WORKER_SOCKET: socket,
+        COFORGE_ARTIFACT_CHECK_SECRET: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ workerSocket: socket, workerUrl: "http://artifact-checker" });
+  });
+
   test("returns null when URL is missing, malformed, non-http, or non-loopback without secret", () => {
     expect(artifactCheckConfig({})).toBeNull();
     expect(artifactCheckConfig({ COFORGE_ARTIFACT_CHECK_WORKER_URL: "not-a-url" })).toBeNull();

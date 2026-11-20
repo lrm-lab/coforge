@@ -1,58 +1,33 @@
-FROM oven/bun:1.4.4-slim
+FROM oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d
 
 ENV NODE_ENV=production \
-    PORT=3100 \
-    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    CHECKER_CHROMIUM_EXECUTABLE=/usr/bin/chromium \
+    XDG_CONFIG_HOME=/tmp/chromium-config \
+    XDG_CACHE_HOME=/tmp/chromium-cache
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    fonts-liberation \
-    fonts-noto-cjk \
-    fonts-noto-color-emoji \
-    libasound2t64 \
-    libatk-bridge2.0-0t64 \
-    libatk1.0-0t64 \
-    libatspi2.0-0t64 \
-    libcairo2 \
-    libcups2t64 \
-    libdbus-1-3 \
-    libdrm2 \
-    libexpat1 \
-    libgbm1 \
-    libglib2.0-0t64 \
-    libnspr4 \
-    libnss3 \
-    libpango-1.0-0 \
-    libx11-6 \
-    libx11-xcb1 \
-    libxcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxext6 \
-    libxfixes3 \
-    libxkbcommon0 \
-    libxrandr2 \
-    libxshmfence1 \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends chromium fonts-noto-core ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && install -d -o bun -g bun -m 0750 /run/artifact-renderer
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends squid fonts-liberation fonts-noto-cjk fonts-noto-color-emoji \
+    && rm -rf /var/lib/apt/lists/* \
+    && rmdir /run/artifact-renderer \
+    && install -d -o bun -g bun -m 0750 /run/artifact-checker
 
 WORKDIR /app
 
-COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile --production \
-    && bunx --bun playwright-core install chromium \
-    && rm -rf /root/.bun/install/cache
+COPY services/artifact-checker/package.json services/artifact-checker/bun.lock ./
+RUN bun install --frozen-lockfile --production
 
-COPY browser.mjs evaluate.mjs server.mjs ssrf.mjs ./
-
-RUN chown -R bun:bun /app /ms-playwright
+COPY services/artifact-checker/browser.mjs services/artifact-checker/evaluate.mjs services/artifact-checker/server.mjs services/artifact-checker/ssrf.mjs ./
+COPY services/artifact-checker/squid.conf /etc/squid/artifact-checker.conf
+COPY apps/web/src/server/artifacts/artifact-sandbox-cdns.server.ts /app/cdn.ts
+RUN bun -e 'import { SANDBOX_CDN_HOSTS } from "./cdn.ts"; process.stdout.write(SANDBOX_CDN_HOSTS.join("\n") + "\n")' > /app/cdn-hosts.txt
 
 USER bun
 
-RUN bun -e "import { chromium } from 'playwright-core'; const b = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] }); await b.close();"
-
-EXPOSE 3100
-
-HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
-  CMD bun -e "fetch('http://127.0.0.1:3100/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+RUN chromium --version && squid -v >/dev/null
 
 CMD ["bun", "server.mjs"]

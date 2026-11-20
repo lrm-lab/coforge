@@ -260,8 +260,13 @@ test("release callers select separate tracks and the Web image waits for main CI
   expect(deploy.jobs.image.if).toBe(
     "always() && github.ref == 'refs/heads/main' && !cancelled() && (needs.ci-status.outputs.passed == 'true' || (needs.gates.result == 'success' && needs.gates.outputs.deploy == 'true'))",
   );
+  expect(deploy.on.workflow_dispatch.inputs.enable_artifact_checker).toMatchObject({
+    type: "boolean",
+    default: false,
+  });
+  expect(deploy.jobs["checker-image"].if).toContain("inputs.enable_artifact_checker");
   expect(deploy.jobs.deploy.if).toBe(
-    "always() && !cancelled() && needs.image.result == 'success' && needs.checker-image.result == 'success'",
+    "always() && !cancelled() && needs.image.result == 'success' && (!inputs.enable_artifact_checker || needs.checker-image.result == 'success')",
   );
   expect(release.jobs.gates.with.track).toBe("local");
   expect(release.jobs.publish.needs).toEqual(["gates", "notes-check"]);

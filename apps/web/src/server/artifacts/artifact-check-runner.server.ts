@@ -109,6 +109,7 @@ export function createHttpArtifactCheckRunner(
         if (config.secret) headers.Authorization = `Bearer ${config.secret}`;
         const response = await fetchImpl(`${config.workerUrl}/check`, {
           method: "POST",
+          ...(config.workerSocket ? { unix: config.workerSocket } : {}),
           headers,
           body: JSON.stringify({
             checkId: input.checkId,

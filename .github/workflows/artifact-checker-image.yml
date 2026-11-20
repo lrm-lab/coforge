@@ -50,7 +50,7 @@ jobs:
       - name: Check for existing Artifact Checker image for this source tree
         id: existing
         run: |
-          checker_sha="$(git log -n 1 --format=%H -- services/artifact-checker)"
+          checker_sha="$(git log -n 1 --format=%H -- services/artifact-checker apps/web/src/server/artifacts/artifact-sandbox-cdns.server.ts)"
           echo "checker_sha=$checker_sha" >> "$GITHUB_OUTPUT"
           repo="ghcr.io/${IMAGE_REPOSITORY}"
           digest="$(docker buildx imagetools inspect "${repo}:sha-${checker_sha}" --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"' || true)"
@@ -67,7 +67,8 @@ jobs:
         if: steps.existing.outputs.hit != 'true'
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
-          context: services/artifact-checker
+          context: .
+          file: services/artifact-checker/Dockerfile
           platforms: linux/amd64
           push: true
           outputs: type=image,name=ghcr.io/${{ env.IMAGE_REPOSITORY }},push-by-digest=true,name-canonical=true,rewrite-timestamp=true

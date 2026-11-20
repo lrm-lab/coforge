@@ -218,7 +218,7 @@ fi
 compose_all_healthy() {
 	local service container services
 	services="$(compose config --services)" || return 1
-	for service in web centrifugo redis postgres artifact-checker; do
+	for service in web centrifugo redis postgres artifact-checker artifact-checker-proxy; do
 		# Managed datastores (production) have no Compose service to check.
 		grep -qx "$service" <<<"$services" || continue
 		container="$(compose ps -q "$service")"
@@ -278,8 +278,9 @@ verify_running_digest() {
 rollback() {
 	local target="$1"
 	if [ -n "$target" ]; then
-		if [ -z "$last_healthy_checker" ]; then
-			COMPOSE_ARGS=(-p "$project" -f "$compose_file")
+		COMPOSE_ARGS=(-p "$project" -f "$compose_file")
+		if [ -n "$last_healthy_checker" ]; then
+			COMPOSE_ARGS+=(-f "$checker_compose_file")
 		fi
 		if [ -d "$release_snapshot_dir" ]; then
 			restore_release_snapshot
@@ -464,7 +465,7 @@ printf '%s\n' \
 chmod 600 "$state_file.tmp"
 mv "$state_file.tmp" "$state_file"
 
-if [ -n "$checker_image" ]; then
+if [ -n "$checker_image" ] || [ -f "$checker_state_file" ]; then
 	printf '%s\n' \
 		"PREVIOUS_CHECKER_IMAGE=$current_checker_image" \
 		"CURRENT_CHECKER_IMAGE=$checker_image" >"$checker_state_file.tmp"

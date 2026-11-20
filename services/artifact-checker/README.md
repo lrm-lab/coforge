@@ -7,8 +7,12 @@ viewports, captures screenshots, and collects layout and console findings.
 ## Why a sidecar
 
 - Keeps Chromium out of the `apps/web` image and memory space.
-- Enforces hard container limits (`mem_limit: 1g`, `shm_size: 256m`, `pids_limit: 256`,
-  `no-new-privileges:true`, default concurrency `1`).
+- Runs Chromium's namespace and Seccomp-BPF sandboxes as UID/GID 1000. The container is
+  read-only, drops capabilities and caps memory, CPU, shared memory, and processes.
+- Separates the checker from Web and data services with an internal network. Web calls it over
+  a read-only mount of the private Unix socket. Chromium and Bun send CDN traffic through Squid.
+  Squid allows HTTPS CONNECT to the CDN hosts in the sandbox CSP and rejects non-public
+  destination addresses.
 - Closes Chromium automatically after 60 seconds of idle time (`CHECKER_IDLE_CLOSE_MS`), dropping
   resident memory to ~35 MB between pushes.
 - Serves artifact files purely from memory on synthetic `https://a-<artifactId>.coforge.check`
@@ -16,6 +20,8 @@ viewports, captures screenshots, and collects layout and console findings.
   all other network requests (SSRF-safe without wildcard DNS or TLS).
 
 ## Endpoints
+
+Production serves these endpoints on the private Unix socket.
 
 - `GET /health` — readiness status, active/queued job count, Chromium state, RSS MB, and uptime.
 - `POST /check` — requires `Authorization: Bearer <COFORGE_ARTIFACT_CHECK_SECRET>` when the secret
@@ -26,7 +32,9 @@ viewports, captures screenshots, and collects layout and console findings.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `PORT` | `3100` | Listen port |
+| `COFORGE_ARTIFACT_CHECK_WORKER_SOCKET` | unset | Absolute Unix socket path required in production |
+| `COFORGE_ARTIFACT_CHECK_EGRESS_PROXY` | unset | HTTP proxy origin required in production |
+| `PORT` | `3100` | Development TCP port |
 | `COFORGE_ARTIFACT_CHECK_SECRET` | `""` | Shared Bearer secret matching `apps/web` |
 | `CHECKER_MAX_CONCURRENCY` | `1` | Max simultaneous browser checks (`1`–`4`) |
 | `CHECKER_IDLE_CLOSE_MS` | `60000` | Idle milliseconds before closing Chromium |
@@ -43,21 +51,15 @@ Emits one-line JSON events to stdout/stderr:
 
 ## Local build and deployment
 
-Enabled by default in local Compose ([`infra/docker-compose.yml`](../../infra/docker-compose.yml)),
-staging (`.github/workflows/deploy-staging.yml`), and production
-(`.github/workflows/deploy-production.yml`). Staging runs
-`.github/workflows/artifact-checker-image.yml`, which reuses the existing GHCR immutable digest
-whenever `services/artifact-checker/` has not changed, passes `--checker-image` to
-`scripts/deploy/remote-deploy.sh`, attaches `infra/artifact-checker.compose.yml` (snapshotted for
-rollback), tracks `checker-state.env`, prunes old checker images, and derives
-`COFORGE_ARTIFACT_CHECK_SECRET` automatically when no explicit host secret file exists.
+Local Compose exposes the checker only when started with the `artifact-checker` profile.
+Staging and production attach the checker overlay when the operator selects
+`enable_artifact_checker` in the deployment workflow. Releases keep the checker image by immutable digest.
+The deploy snapshot retains the overlay and Chromium's container seccomp profile for rollback.
 
-Standalone smoke test:
+The renderer profile is based on the [Moby default seccomp profile](https://github.com/moby/profiles/blob/2ab3e516a3b49550c35b5e4511a0a7d136a02c8d/seccomp/default.json).
+It allows Chromium to use `clone`, `setns`, `unshare`, and `chroot` inside its container.
+Only the browser container uses this profile.
 
-```bash
-docker build -t coforge-artifact-checker services/artifact-checker
-docker run --rm -p 3100:3100 --shm-size=256m --memory=1g \
-  -e COFORGE_ARTIFACT_CHECK_SECRET=dev-secret \
-  coforge-artifact-checker
-curl -s http://127.0.0.1:3100/health
-```
+Build the image from the repository root with
+`docker build -f services/artifact-checker/Dockerfile .`. The image generates the proxy
+allowlist from the Web sandbox CSP's CDN list.

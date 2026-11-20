@@ -1,5 +1,3 @@
-import { lookup } from "node:dns/promises";
-
 const ARTIFACT_ORIGIN_PATTERN = /^https:\/\/a-[a-zA-Z0-9-]{1,64}\.coforge\.check$/;
 const MAX_CDN_REDIRECTS = 3;
 const MAX_CDN_RESPONSE_BYTES = 10 * 1024 * 1024;
@@ -168,21 +166,12 @@ export function normalizeBundlePath(pathname) {
   return segments.join("/");
 }
 
-async function resolvePublicHost(hostname) {
-  const records = await lookup(hostname, { all: true });
-  if (!Array.isArray(records) || records.length === 0) return false;
-  return records.every((rec) => isPublicIpAddress(rec.address));
-}
-
 export async function fetchCdnSafely(rawUrl, options) {
+  if (!options.proxy) return { ok: false, blockedUrl: rawUrl };
   let currentUrl = rawUrl;
   for (let hop = 0; hop <= MAX_CDN_REDIRECTS; hop += 1) {
     const verdict = isAllowedRequestUrl(currentUrl, options);
     if (!verdict.allowed || verdict.kind !== "cdn") {
-      return { ok: false, blockedUrl: currentUrl };
-    }
-    const isPublic = await resolvePublicHost(verdict.hostname).catch(() => false);
-    if (!isPublic) {
       return { ok: false, blockedUrl: currentUrl };
     }
     const controller = new AbortController();
@@ -194,6 +183,7 @@ export async function fetchCdnSafely(rawUrl, options) {
       response = await fetch(currentUrl, {
         method: options.method === "HEAD" ? "HEAD" : "GET",
         redirect: "manual",
+        proxy: options.proxy,
         signal: controller.signal,
       });
     } finally {

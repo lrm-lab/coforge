@@ -126,7 +126,7 @@ write_deploy_env() {
 				check_secret="$(printf 'artifact-check:%s' "$COFORGE_SESSION_SECRET" | sha256sum | awk '{print $1}')"
 			fi
 			printf 'COFORGE_ARTIFACT_CHECKER_IMAGE=%s\n' "$checker_image"
-			printf 'COFORGE_ARTIFACT_CHECK_WORKER_URL=http://artifact-checker:3100\n'
+			printf 'COFORGE_ARTIFACT_CHECK_WORKER_SOCKET=/run/artifact-checker/checker.sock\n'
 			printf 'COFORGE_ARTIFACT_CHECK_SECRET=%s\n' "$check_secret"
 			printf 'COFORGE_ARTIFACT_CHECK_CONCURRENCY=%s\n' "${COFORGE_ARTIFACT_CHECK_CONCURRENCY:-1}"
 		fi
