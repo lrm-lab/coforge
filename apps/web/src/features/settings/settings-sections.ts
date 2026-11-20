@@ -2,6 +2,7 @@ import {
   Beaker01,
   BellRinging01,
   Building07,
+  Keyboard01,
   Link03,
   Server01,
   Share01,
@@ -14,11 +15,6 @@ import {
 
 import { m } from "#src/paraglide/messages";
 
-/**
- * The one list of Settings sections, by navigation group: the route's `section` search param, the
- * navigation, the page header and the loading placeholder all read it. Small and free of feature
- * views, because the route's search validation and pending component import it.
- */
 export const SETTINGS_SECTION_GROUPS = [
   {
     label: () => m.settings_personal_group(),
@@ -26,6 +22,7 @@ export const SETTINGS_SECTION_GROUPS = [
       { id: "account", label: () => m.settings_account(), icon: UserCircle },
       { id: "language-region", label: () => m.settings_language_region(), icon: Translate01 },
       { id: "preferences", label: () => m.settings_preferences(), icon: Sliders01 },
+      { id: "shortcuts", label: () => m.settings_shortcuts(), icon: Keyboard01 },
       { id: "notifications", label: () => m.settings_notifications(), icon: BellRinging01 },
       { id: "integrations", label: () => m.settings_integrations(), icon: Share01 },
     ],

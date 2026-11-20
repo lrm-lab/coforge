@@ -65,7 +65,8 @@ import {
   KeyboardShortcutsHost,
   useOpenKeyboardShortcuts,
 } from "#src/features/shortcuts/keyboard-shortcuts-host";
-import { HOTKEYS, hotkeyLabel } from "#src/lib/hotkeys";
+import { useShortcutBindings } from "#src/features/shortcuts/shortcut-bindings";
+import { hotkeyLabel } from "#src/lib/hotkeys";
 import { isApplePlatform } from "#src/lib/platform";
 
 export type AppUser = {
@@ -199,7 +200,7 @@ export function AppShell(props: AppShellProps) {
       enabled={props.canSeeUsageLimits ?? false}
     >
       <WhatsNewAnnouncer />
-      <KeyboardShortcutsHost>
+      <KeyboardShortcutsHost workspaceSlug={props.currentWorkspace.slug}>
         {chromeMounted ? (
           <WorkspaceChrome {...props} standalone={standalone} />
         ) : (
@@ -442,6 +443,7 @@ function UserMenuCard({
     />
   );
   const openShortcuts = useOpenKeyboardShortcuts();
+  const shortcutsBinding = useShortcutBindings("shortcuts")[0];
   return (
     <Dropdown.Root>
       {compact ? (
@@ -482,7 +484,7 @@ function UserMenuCard({
           <Dropdown.Item
             id="shortcuts"
             label={m.shortcuts_title()}
-            addon={hotkeyLabel(HOTKEYS.shortcuts, isApplePlatform())}
+            addon={shortcutsBinding ? hotkeyLabel(shortcutsBinding, isApplePlatform()) : undefined}
             icon={Keyboard01}
           />
           <Dropdown.Separator />

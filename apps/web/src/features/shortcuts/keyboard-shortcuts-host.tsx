@@ -1,7 +1,8 @@
 import { createContext, lazy, Suspense, useContext, useState, type ReactNode } from "react";
-import { useHotkey } from "@tanstack/react-hotkeys";
+import { useHotkeys, type HotkeyChord } from "@tanstack/react-hotkeys";
 
-import { HOTKEYS } from "#src/lib/hotkeys";
+import { hasPrimaryModifier } from "#src/lib/hotkeys";
+import { useIsRecordingShortcut, useShortcutBindings } from "./shortcut-bindings";
 
 const KeyboardShortcutsDialog = lazy(() =>
   import("./keyboard-shortcuts-dialog").then((module) => ({
@@ -15,18 +16,39 @@ export function useOpenKeyboardShortcuts() {
   return useContext(OpenShortcutsContext);
 }
 
-export function KeyboardShortcutsHost({ children }: { children: ReactNode }) {
+export function KeyboardShortcutsHost({
+  workspaceSlug,
+  children,
+}: {
+  workspaceSlug?: string;
+  children: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
-  useHotkey(HOTKEYS.shortcuts, () => setOpen((current) => !current), {
-    ignoreInputs: false,
-    requireReset: true,
-  });
+  const bindings = useShortcutBindings("shortcuts");
+  const recording = useIsRecordingShortcut();
+
+  useHotkeys(
+    bindings.map((hotkey) => ({
+      hotkey: hotkey as HotkeyChord,
+      callback: () => setOpen((current) => !current),
+      options: {
+        enabled: !recording,
+        ignoreInputs: !hasPrimaryModifier(hotkey),
+        requireReset: true,
+      },
+    })),
+  );
+
   return (
     <OpenShortcutsContext value={() => setOpen(true)}>
       {children}
       {open && (
         <Suspense fallback={null}>
-          <KeyboardShortcutsDialog open={open} onOpenChange={setOpen} />
+          <KeyboardShortcutsDialog
+            open={open}
+            onOpenChange={setOpen}
+            workspaceSlug={workspaceSlug}
+          />
         </Suspense>
       )}
     </OpenShortcutsContext>

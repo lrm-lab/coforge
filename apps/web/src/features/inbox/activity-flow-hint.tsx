@@ -1,6 +1,10 @@
 import { createContext, type RefObject, useContext, useEffect, useState } from "react";
+import { useHydrated } from "@tanstack/react-router";
 
 import { SEARCH_KEY } from "#src/features/search/search-key-hints";
+import { useShortcutBindings } from "#src/features/shortcuts/shortcut-bindings";
+import { hotkeyKeycaps } from "#src/lib/hotkeys";
+import { isApplePlatform } from "#src/lib/platform";
 import { m } from "#src/paraglide/messages";
 
 export const ActivityFlowHintContext = createContext<{
@@ -11,6 +15,10 @@ export const ActivityFlowHintContext = createContext<{
 export function ActivityFlowHint() {
   const flow = useContext(ActivityFlowHintContext);
   const composerRef = flow?.composerRef;
+  const nextKeys = useShortcutBindings("activityNext");
+  const prevKeys = useShortcutBindings("activityPrev");
+  const doneKeys = useShortcutBindings("activityDone");
+  const hydrated = useHydrated();
   const [typing, setTyping] = useState(false);
   useEffect(() => {
     if (!composerRef) return;
@@ -26,6 +34,11 @@ export function ActivityFlowHint() {
       document.removeEventListener("focusout", onFocusOut);
     };
   }, [composerRef]);
+  const apple = hydrated && isApplePlatform();
+  const switchKeycaps = [nextKeys[0], prevKeys[0]]
+    .filter((key): key is string => Boolean(key))
+    .map((key) => hotkeyKeycaps(key, apple).join(apple ? "" : "+"));
+  const doneKeycap = doneKeys[0] ? hotkeyKeycaps(doneKeys[0], apple).join(apple ? "" : "+") : null;
   return (
     <div
       aria-hidden
@@ -36,8 +49,12 @@ export function ActivityFlowHint() {
         <Keys keys={["Esc"]} label={m.activity_flow_back()} />
       ) : (
         <>
-          <Keys keys={["J", "K"]} label={m.activity_flow_switch()} />
-          {flow?.done && <Keys keys={["E"]} label={m.activity_inbox_menu_done()} />}
+          {switchKeycaps.length > 0 && (
+            <Keys keys={switchKeycaps} label={m.activity_flow_switch()} />
+          )}
+          {flow?.done && doneKeycap && (
+            <Keys keys={[doneKeycap]} label={m.activity_inbox_menu_done()} />
+          )}
         </>
       )}
     </div>

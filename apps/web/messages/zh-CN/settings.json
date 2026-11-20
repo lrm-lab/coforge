@@ -64,6 +64,7 @@
   "settings_delete_workspace_memory_error": "工作区记忆没能删除，请稍后再试。",
   "settings_delete_workspace_error": "删除工作区失败，请稍后重试。",
   "settings_preferences": "偏好设置",
+  "settings_shortcuts": "快捷键",
   "settings_notifications": "通知",
   "settings_integrations": "集成",
   "settings_system_group": "系统",

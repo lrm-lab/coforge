@@ -9,7 +9,9 @@ import {
   type ReactNode,
 } from "react";
 
+import { readShortcutBindings } from "#src/features/shortcuts/shortcut-bindings";
 import { useResizeObserver } from "#src/hooks/use-resize-observer";
+import { isApplePlatform } from "#src/lib/platform";
 import { cx } from "#src/utils/cx";
 import {
   forcesStackedLayout,
@@ -98,12 +100,22 @@ export function ComposerField({
     const composition = { lastCompositionEndAt: lastCompositionEndAtRef.current, now: Date.now() };
     const key = {
       key: event.key,
+      code: event.code,
       shiftKey: event.shiftKey,
       metaKey: event.metaKey,
       ctrlKey: event.ctrlKey,
+      altKey: event.altKey,
       isComposing: event.nativeEvent.isComposing || isComposingRef.current,
     };
-    if (taskMode && shouldSendAsTaskOnEnter(key, composition)) {
+    if (
+      taskMode &&
+      shouldSendAsTaskOnEnter(
+        key,
+        composition,
+        readShortcutBindings("sendAsTask"),
+        isApplePlatform(),
+      )
+    ) {
       event.preventDefault();
       if (onTaskMode) onTaskMode(true);
       else onSubmit(true);

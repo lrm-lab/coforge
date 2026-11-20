@@ -3,7 +3,8 @@ import { CheckSquare, ChevronDown, Send01 } from "@untitledui/icons";
 import { Button } from "#src/components/base/buttons/button";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Tooltip } from "#src/components/base/tooltip/tooltip";
-import { HOTKEYS, hotkeyLabel } from "#src/lib/hotkeys";
+import { useShortcutBindings } from "#src/features/shortcuts/shortcut-bindings";
+import { hotkeyLabel } from "#src/lib/hotkeys";
 import { isApplePlatform } from "#src/lib/platform";
 import { m } from "#src/paraglide/messages";
 import { cx } from "#src/utils/cx";
@@ -31,13 +32,17 @@ export function ComposerSendButton({
   onChoose: (asTask: boolean) => void;
   className?: string;
 }) {
+  const sendAsTaskBindings = useShortcutBindings("sendAsTask");
+  const sendAsTaskShortcut = sendAsTaskBindings[0];
   const label = labelOverride ?? (asTask ? m.conversation_send_as_task() : m.conversation_send());
   const other = asTask
     ? { label: m.conversation_send(), description: m.conversation_send_plain_description() }
     : {
         label: m.conversation_send_as_task(),
         description: m.conversation_send_as_task_description(),
-        shortcut: hotkeyLabel(HOTKEYS.sendAsTask, isApplePlatform()),
+        shortcut: sendAsTaskShortcut
+          ? hotkeyLabel(sendAsTaskShortcut, isApplePlatform())
+          : undefined,
       };
   const look = isDisabled
     ? ({ color: "secondary" } as const)

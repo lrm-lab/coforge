@@ -1,48 +1,31 @@
+import { DEFAULT_HOTKEY_BINDINGS, hotkeyMatchesEvent } from "#src/lib/hotkeys";
 import { m } from "#src/paraglide/messages";
 
-/**
- * Pure decision functions for the message composer's Enter-to-send and
- * paste-to-upload behaviour, kept free of React and DOM types so they can be
- * unit tested with plain objects.
- *
- * React Aria's `useKeyboard` (https://react-aria.adobe.com/useKeyboard) is a
- * thin passthrough over native keyboard events with no IME awareness, and
- * `useClipboard` (https://react-aria.adobe.com/useClipboard) unconditionally
- * calls `preventDefault()` on every paste once an `onPaste` handler is given
- * (see its `dnd/useClipboard` implementation), which would also swallow
- * plain-text pastes into this textarea. Neither hook fits a live-editing
- * native `<textarea>`, so the composer wires the standard
- * `onKeyDown`/`onCompositionStart`/`onCompositionEnd`/`onPaste` DOM props
- * directly, same as its existing `onKeyDown`/`onChange` handlers, and the
- * decisions below are the pure logic behind them.
- */
-
-/** How long after `compositionend` an Enter keydown is still treated as part of the same IME confirmation (Safari fires it after compositionend with `isComposing` already false). */
 export const IME_ENTER_GUARD_MS = 50;
 
 export type EnterKeyLikeEvent = {
   key: string;
+  code?: string;
   shiftKey: boolean;
   ctrlKey?: boolean;
   metaKey?: boolean;
-  /** `event.nativeEvent.isComposing` OR'd with the composer's own compositionstart/compositionend tracking. */
+  altKey?: boolean;
   isComposing: boolean;
 };
 
 export type EnterSendOptions = {
-  /**
-   * Modifier that keeps Enter as a newline instead of send.
-   * Channel composer: Shift+Enter. Records side chat: Ctrl/Cmd+Enter.
-   */
   newlineModifier?: "shift" | "ctrl";
 };
 
-/**
- * Whether a keydown on the composer textarea should submit the message.
- * Plain Enter sends; the configured newline modifier stays a newline; Enter is
- * ignored entirely while (or immediately after) an IME composition is being
- * confirmed.
- */
+function isConfirmingIme(
+  event: EnterKeyLikeEvent,
+  composition: { lastCompositionEndAt: number | null; now: number },
+): boolean {
+  if (event.isComposing) return true;
+  const { lastCompositionEndAt, now } = composition;
+  return lastCompositionEndAt !== null && now - lastCompositionEndAt < IME_ENTER_GUARD_MS;
+}
+
 export function shouldSendOnEnter(
   event: EnterKeyLikeEvent,
   composition: { lastCompositionEndAt: number | null; now: number },
@@ -52,29 +35,21 @@ export function shouldSendOnEnter(
   const newlineModifier = options?.newlineModifier ?? "shift";
   if (newlineModifier === "shift" && event.shiftKey) return false;
   if (newlineModifier === "ctrl" && (event.ctrlKey || event.metaKey)) return false;
-  // Composing is `isComposing` and the composer's own compositionstart/compositionend tracking,
-  // never keyCode 229 alone: Chrome on macOS with a Chinese input method marks the Enter after a
-  // sent message (the field cleared under the IME) 229 with no composition, and ignoring it left
-  // Cmd+Enter the only way to send again (task #98). Safari's confirming Enter, which comes just
-  // after compositionend, is the guard below.
-  if (event.isComposing) return false;
-  const { lastCompositionEndAt, now } = composition;
-  if (lastCompositionEndAt !== null && now - lastCompositionEndAt < IME_ENTER_GUARD_MS)
-    return false;
-  return true;
+  return !isConfirmingIme(event, composition);
 }
 
-/**
- * Whether a keydown on the composer textarea is "send as task": Cmd/Ctrl+Shift+Enter, as Raft's
- * composer binds it. It is the keyboard twin of "Send as task" in the send button's menu, and stays
- * ignored while (or just after) an IME composition is being confirmed, as Enter does.
- */
 export function shouldSendAsTaskOnEnter(
   event: EnterKeyLikeEvent,
   composition: { lastCompositionEndAt: number | null; now: number },
+  bindings: readonly string[] = DEFAULT_HOTKEY_BINDINGS.sendAsTask,
+  apple?: boolean,
 ): boolean {
-  if (event.key !== "Enter" || !event.shiftKey || !(event.metaKey || event.ctrlKey)) return false;
-  return shouldSendOnEnter({ ...event, shiftKey: false }, composition);
+  if (isConfirmingIme(event, composition)) return false;
+  return bindings.some((hotkey) =>
+    apple !== undefined
+      ? hotkeyMatchesEvent(hotkey, event, apple)
+      : hotkeyMatchesEvent(hotkey, event, true) || hotkeyMatchesEvent(hotkey, event, false),
+  );
 }
 
 /** The empty composer's placeholder: the thread's, or "Message #channel" / "Message …". */

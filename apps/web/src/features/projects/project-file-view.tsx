@@ -30,6 +30,9 @@ import { sharedLowlight } from "#src/features/records/report-editor/lowlight";
 import { formatFileSize, getFileExtension } from "#src/features/files/file-meta";
 import { extensionToLanguage } from "#src/features/files/preview";
 import "#src/features/records/report-editor/styles/code.css";
+import { readShortcutBindings } from "#src/features/shortcuts/shortcut-bindings";
+import { hotkeyMatchesEvent } from "#src/lib/hotkeys";
+import { isApplePlatform } from "#src/lib/platform";
 import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { splitHighlightedLines, type HastRoot } from "./split-highlighted-lines";
@@ -141,7 +144,10 @@ export function ProjectFileView({
   // toolbar, the find bar, or the now-focusable code scroller).
   const { keyboardProps } = useKeyboard({
     onKeyDown(event) {
-      const isFindShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f";
+      const apple = isApplePlatform();
+      const isFindShortcut = readShortcutBindings("previewFind").some((hotkey) =>
+        hotkeyMatchesEvent(hotkey, event, apple),
+      );
       if (isFindShortcut) {
         if (!find.findSupported) {
           // The Highlight API this feature depends on isn't available:

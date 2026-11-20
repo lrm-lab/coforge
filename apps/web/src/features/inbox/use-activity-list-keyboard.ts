@@ -7,6 +7,16 @@ import {
   useState,
 } from "react";
 
+import {
+  isRecordingShortcut,
+  readShortcutBindings,
+} from "#src/features/shortcuts/shortcut-bindings";
+import {
+  hotkeyMatchesEvent,
+  type ConfigurableShortcutId,
+  type KeyLikeEvent,
+} from "#src/lib/hotkeys";
+import { isApplePlatform } from "#src/lib/platform";
 import type { ActivityInboxItem } from "#src/server/inbox/activity-inbox.server";
 import { canMarkUnread } from "./activity-item-kind";
 import type { ActivityItemActions } from "./use-activity-item-actions";
@@ -23,6 +33,12 @@ export type ActivityListFlow = {
   onEnter: (key: string) => boolean;
   onType: () => void;
 };
+
+type ActivityKeyEvent = KeyLikeEvent & { repeat?: boolean };
+
+function matchesAction(id: ConfigurableShortcutId, event: KeyLikeEvent, apple: boolean): boolean {
+  return readShortcutBindings(id).some((hotkey) => hotkeyMatchesEvent(hotkey, event, apple));
+}
 
 export function useActivityListKeyboard(
   keys: readonly string[],
@@ -58,11 +74,7 @@ export function useActivityListKeyboard(
   flowRef.current = flow;
 
   const act = useCallback(
-    (
-      event: Pick<KeyboardEvent, "key" | "shiftKey" | "repeat">,
-      row: HTMLElement,
-      list: ParentNode,
-    ) => {
+    (event: ActivityKeyEvent, row: HTMLElement, list: ParentNode) => {
       const laidOut = [...list.querySelectorAll<HTMLElement>(`[${ACTIVITY_ROW_ATTRIBUTE}]`)];
       const at = laidOut.indexOf(row);
       const moveTo = (next: HTMLElement | undefined) => {
@@ -73,30 +85,34 @@ export function useActivityListKeyboard(
       };
       const key = row.getAttribute(ACTIVITY_ROW_ATTRIBUTE);
       const item = itemsRef.current.find((candidate) => candidate.key === key);
-      switch (event.key) {
-        case "ArrowDown":
-        case "j":
-          moveTo(laidOut[at + 1]);
-          return true;
-        case "ArrowUp":
-        case "k":
-          moveTo(laidOut[at - 1]);
-          return true;
-        case "e":
-        case "E":
-          if (!item || event.shiftKey || event.repeat) return false;
-          moveTo(laidOut[at + 1] ?? laidOut[at - 1]);
-          actions.done(item);
-          return true;
-        case "r":
-        case "R":
-          if (!item || event.shiftKey || event.repeat) return false;
-          if (item.unreadCount > 0) actions.read(item);
-          else if (canMarkUnread(item)) actions.unread(item);
-          return true;
-        default:
-          return false;
+      const apple = isApplePlatform();
+      if (
+        (event.key === "ArrowDown" && !event.metaKey && !event.ctrlKey && !event.altKey) ||
+        matchesAction("activityNext", event, apple)
+      ) {
+        moveTo(laidOut[at + 1]);
+        return true;
       }
+      if (
+        (event.key === "ArrowUp" && !event.metaKey && !event.ctrlKey && !event.altKey) ||
+        matchesAction("activityPrev", event, apple)
+      ) {
+        moveTo(laidOut[at - 1]);
+        return true;
+      }
+      if (matchesAction("activityDone", event, apple)) {
+        if (!item || event.repeat) return false;
+        moveTo(laidOut[at + 1] ?? laidOut[at - 1]);
+        actions.done(item);
+        return true;
+      }
+      if (matchesAction("activityRead", event, apple)) {
+        if (!item || event.repeat) return false;
+        if (item.unreadCount > 0) actions.read(item);
+        else if (canMarkUnread(item)) actions.unread(item);
+        return true;
+      }
+      return false;
     },
     [actions],
   );
@@ -106,7 +122,7 @@ export function useActivityListKeyboard(
       const target = event.target as HTMLElement;
       const row = rowOf(target);
       if (!row || !event.currentTarget.contains(row)) return;
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.defaultPrevented || isRecordingShortcut()) return;
       if (isTyping(target)) return;
       if (act(event, row, event.currentTarget)) event.preventDefault();
       else startMessage(event);
@@ -137,7 +153,7 @@ export function useActivityListKeyboard(
   );
 
   const actOnSelected = useCallback(
-    (event: Pick<KeyboardEvent, "key" | "shiftKey" | "repeat">) => {
+    (event: ActivityKeyEvent) => {
       const row = selectedRow(document, tabStop.current);
       const list = row?.closest(`[${ACTIVITY_ROWS_ATTRIBUTE}]`);
       if (row && list) act(event, row, list);
@@ -152,7 +168,7 @@ export function useActivityListKeyboard(
 
   useEffect(() => {
     const onDocumentKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.target !== document.body) return;
+      if (event.target !== document.body || isRecordingShortcut()) return;
       if (enterList(event, document, tabStop.current)) event.preventDefault();
       else startMessage(event);
     };
@@ -177,17 +193,27 @@ export function useActivityListKeyboard(
   };
 }
 
-const LIST_LETTERS = new Set(["j", "k", "e", "r"]);
+const RESERVED_SHORTCUT_IDS: readonly ConfigurableShortcutId[] = [
+  "shortcuts",
+  "search",
+  "sidebar",
+  "activityNext",
+  "activityPrev",
+  "activityDone",
+  "activityRead",
+];
 
 function startsMessage(
   event: Pick<
     globalThis.KeyboardEvent,
-    "key" | "defaultPrevented" | "metaKey" | "ctrlKey" | "altKey"
+    "key" | "code" | "defaultPrevented" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey"
   >,
 ) {
   if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return false;
   const { key } = event;
-  return key.length === 1 && key.trim() !== "" && !LIST_LETTERS.has(key.toLowerCase());
+  if (key.length !== 1 || key.trim() === "") return false;
+  const apple = isApplePlatform();
+  return !RESERVED_SHORTCUT_IDS.some((id) => matchesAction(id, event, apple));
 }
 
 const POPUP_ROLES = '[role="menu"], [role="listbox"], [role="dialog"], [role="alertdialog"]';
@@ -203,13 +229,17 @@ function selectedRow(scope: ParentNode, key: string | undefined) {
 function enterList(
   event: Pick<
     globalThis.KeyboardEvent,
-    "key" | "defaultPrevented" | "metaKey" | "ctrlKey" | "altKey"
+    "key" | "code" | "defaultPrevented" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey"
   >,
   scope: ParentNode,
   key: string | undefined,
 ) {
-  if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return false;
-  if (event.key !== "ArrowDown" && event.key !== "j") return false;
+  if (event.defaultPrevented) return false;
+  const apple = isApplePlatform();
+  const matchesNext =
+    (event.key === "ArrowDown" && !event.metaKey && !event.ctrlKey && !event.altKey) ||
+    matchesAction("activityNext", event, apple);
+  if (!matchesNext) return false;
   const link = selectedRow(scope, key)?.querySelector<HTMLElement>("a");
   if (!link) return false;
   link.focus();

@@ -1,5 +1,12 @@
 import { useEffect } from "react";
 
+import {
+  isRecordingShortcut,
+  readShortcutBindings,
+} from "#src/features/shortcuts/shortcut-bindings";
+import { hotkeyMatchesEvent } from "#src/lib/hotkeys";
+import { isApplePlatform } from "#src/lib/platform";
+
 const MODAL_OPEN = '[role="dialog"]:not([data-comment-popover]), [role="alertdialog"]';
 
 const isTextField = (target: EventTarget | null) =>
@@ -17,12 +24,19 @@ export function useDraftUndoKeys({
 }) {
   useEffect(() => {
     if (!enabled) return;
+    const apple = isApplePlatform();
     const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || !(event.metaKey || event.ctrlKey) || event.altKey) return;
+      if (event.defaultPrevented || isRecordingShortcut()) return;
       if (isTextField(event.target) || document.querySelector(MODAL_OPEN)) return;
-      const key = event.key.toLowerCase();
-      const acted =
-        key === "z" ? (event.shiftKey ? redo() : undo()) : key === "y" && !event.shiftKey && redo();
+      const isRedo = readShortcutBindings("draftRedo").some((hotkey) =>
+        hotkeyMatchesEvent(hotkey, event, apple),
+      );
+      const isUndo =
+        !isRedo &&
+        readShortcutBindings("draftUndo").some((hotkey) =>
+          hotkeyMatchesEvent(hotkey, event, apple),
+        );
+      const acted = isRedo ? redo() : isUndo ? undo() : false;
       if (acted) event.preventDefault();
     };
     window.addEventListener("keydown", onKey);

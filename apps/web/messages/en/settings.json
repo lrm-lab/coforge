@@ -64,6 +64,7 @@
   "settings_delete_workspace_memory_error": "The Workspace's memory could not be deleted. Try again in a moment.",
   "settings_delete_workspace_error": "Could not delete the Workspace. Try again in a moment.",
   "settings_preferences": "Preferences",
+  "settings_shortcuts": "Keyboard shortcuts",
   "settings_notifications": "Notifications",
   "settings_integrations": "Integrations",
   "settings_system_group": "System",

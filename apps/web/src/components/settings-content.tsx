@@ -38,6 +38,7 @@ import { AccountSettings, type AccountProfile } from "./settings-account";
 import { PreferencesSettings } from "./settings-preferences";
 import { WorkspaceProfileSettings } from "./settings-workspace-profile";
 import { LanguageRegionSettings } from "./settings-language-region";
+import { ShortcutsSettings } from "#src/features/shortcuts/shortcuts-settings";
 import type { TestDelivery } from "#src/server/notifications/web-push-notifications.server";
 
 export type Locale = "en" | "zh-CN";
@@ -110,7 +111,12 @@ export function SettingsContent(props: SettingsContentProps) {
   const [internalSection, setInternalSection] = useState<SettingsSection>("account");
   const experiments = useWorkspaceExperiments();
   const section = props.section ?? internalSection;
-  const [showList, setShowList] = useState(props.section !== "integrations");
+  const [showList, setShowList] = useState(
+    props.section !== "integrations" && props.section !== "shortcuts",
+  );
+  useEffect(() => {
+    if (props.section === "shortcuts") setShowList(false);
+  }, [props.section]);
   const current = settingsSection(section);
   const sectionLabel = current.label();
 
@@ -212,6 +218,8 @@ export function SettingsContent(props: SettingsContentProps) {
               <AppsSettings actorRole={props.members.actorRole} />
             ) : section === "preferences" ? (
               <PreferencesSettings {...props} />
+            ) : section === "shortcuts" ? (
+              <ShortcutsSettings />
             ) : section === "server-connection" ? (
               <ServerConnectionSettings />
             ) : section === "integrations" ? (

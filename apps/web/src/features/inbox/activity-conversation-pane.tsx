@@ -1,5 +1,5 @@
 import { type KeyboardEvent, type RefObject, useCallback, useMemo, useRef } from "react";
-import { useHotkeys } from "@tanstack/react-hotkeys";
+import { useHotkeys, type HotkeyChord } from "@tanstack/react-hotkeys";
 import { getRouteApi } from "@tanstack/react-router";
 
 import {
@@ -15,6 +15,10 @@ import { keepsLandingForReview } from "#src/features/conversations/attachment-re
 import { HostedConversationPane } from "#src/features/conversations/hosted-conversation-pane";
 import { StandaloneThreadContext } from "#src/features/conversations/standalone-thread";
 import { ComposerHostContext } from "#src/features/conversations/composer-host";
+import {
+  useIsRecordingShortcut,
+  useShortcutBindings,
+} from "#src/features/shortcuts/shortcut-bindings";
 import { m } from "#src/paraglide/messages";
 import { ActivityFlowHint, ActivityFlowHintContext } from "./activity-flow-hint";
 
@@ -107,13 +111,18 @@ export function ActivityConversationPane({
   );
   const done = flow?.done ?? false;
   const hint = useMemo(() => (composerRef ? { done, composerRef } : null), [done, composerRef]);
-  // j, k and E act on the list from anywhere in the conversation but its fields; a popup opened
-  // from it is portalled out of this element, so its keys stay its own.
   const pane = useRef<HTMLDivElement>(null);
+  const nextKeys = useShortcutBindings("activityNext");
+  const prevKeys = useShortcutBindings("activityPrev");
+  const doneKeys = useShortcutBindings("activityDone");
+  const recording = useIsRecordingShortcut();
   const onListKey = (event: globalThis.KeyboardEvent) => flow?.onListKey(event);
   useHotkeys(
-    (["J", "K", "E"] as const).map((hotkey) => ({ hotkey, callback: onListKey })),
-    { target: pane, enabled: flow !== undefined, ignoreInputs: true },
+    [...nextKeys, ...prevKeys, ...doneKeys].map((hotkey) => ({
+      hotkey: hotkey as HotkeyChord,
+      callback: onListKey,
+    })),
+    { target: pane, enabled: flow !== undefined && !recording, ignoreInputs: true },
   );
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (!flow) return;
