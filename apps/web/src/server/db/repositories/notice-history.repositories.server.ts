@@ -105,17 +105,11 @@ async function confirmPageAndProbeEdges(
   db: PrismaClient,
   scope: Scope,
   pageIds: string[],
-  older: { bound: number | null; fromPage: boolean },
-  newer: { bound: number | null; fromPage: boolean },
+  olderRow: Prisma.Sql,
+  newerRow: Prisma.Sql,
 ) {
   const pageRows =
     pageIds.length === 0 ? Prisma.sql`FALSE` : Prisma.sql`r."id" IN (${Prisma.join(pageIds)})`;
-  const olderRow = older.fromPage
-    ? Prisma.sql`r."sequence" < COALESCE((SELECT min(page."sequence") FROM "page" page), ${older.bound}::int)`
-    : Prisma.sql`r."sequence" < ${older.bound}::int`;
-  const newerRow = newer.fromPage
-    ? Prisma.sql`r."sequence" > COALESCE((SELECT max(page."sequence") FROM "page" page), ${newer.bound}::int)`
-    : Prisma.sql`r."sequence" > ${newer.bound}::int`;
   return db.$queryRaw<EdgePart[]>`
     WITH "readable" AS (
       SELECT msg."id", msg."sequence"
@@ -182,15 +176,20 @@ export async function readNoticePage(
           : await ids(db, scope, {}, "desc", limit);
   const rows = (await hydrate(db, pageIds)).sort((a, b) => a.sequence - b.sequence);
   const anchor = anchorSequence ?? null;
+  const anchorAt = (comparison: "atOrBelow" | "atOrAbove") =>
+    anchor === null
+      ? Prisma.sql`FALSE`
+      : Prisma.sql`r."sequence" ${Prisma.raw(comparison === "atOrBelow" ? "<=" : ">=")} ${anchor}::int`;
   const parts = await confirmPageAndProbeEdges(
     db,
     scope,
     pageIds,
-    { bound: input.after ? (anchor === null ? null : anchor + 1) : anchor, fromPage: !input.after },
-    {
-      bound: input.before ? (anchor === null ? null : anchor - 1) : anchor,
-      fromPage: !input.before,
-    },
+    input.after
+      ? anchorAt("atOrBelow")
+      : Prisma.sql`r."sequence" < COALESCE((SELECT min(edge."sequence") FROM "page" edge), ${anchor}::int)`,
+    input.before
+      ? anchorAt("atOrAbove")
+      : Prisma.sql`r."sequence" > COALESCE((SELECT max(edge."sequence") FROM "page" edge), ${anchor}::int)`,
   );
   const confirmed = new Set(parts.filter((row) => row.part === "page").map((row) => row.id));
   const readable = rows.filter((row) => confirmed.has(row.id));
