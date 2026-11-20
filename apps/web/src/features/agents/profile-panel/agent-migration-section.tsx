@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import type { RuntimeProvider } from "@lrm/coforge-sdk/internal";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, SwitchHorizontal01 } from "@untitledui/icons";
+import { AlertCircle, Check, SwitchHorizontal01 } from "@untitledui/icons";
+import { Radio, RadioGroup } from "react-aria-components";
 
 import { Button } from "#src/components/base/buttons/button";
+import { Label } from "#src/components/base/input/label";
 import { Select } from "#src/components/base/select/select";
-import { Dialog, Modal, ModalOverlay } from "#src/components/ui/modal";
+import { Dialog, Modal, ModalOverlay, useConfirmationSheet } from "#src/components/ui/modal";
 import {
   DialogAction,
   DialogActions,
@@ -18,6 +20,7 @@ import { FeaturedIcon } from "#src/components/foundations/featured-icon/featured
 import { useSubmitGuard } from "#src/hooks/use-submit-guard";
 import { m } from "#src/paraglide/messages";
 import { localizeHref } from "#src/paraglide/runtime";
+import { cx } from "#src/utils/cx";
 import { useWorkspaceSlug } from "#src/features/workspaces/workspace-route";
 import { workspacePath } from "#src/features/workspaces/workspace-url";
 import {
@@ -40,14 +43,31 @@ import {
   writeAgentMigrationNotStarted,
 } from "./agent-migration-status";
 import {
+  ComputerStatusIcon,
+  computerOptionClassName,
+} from "#src/features/computers/computer-status-icon";
+import {
   cancelAgentMigration,
   listAgentMigrationTargets,
   requestAgentMigration,
 } from "#src/features/agents/agent-migrations.functions";
 
-type ComputerOption = { id: string; name: string };
+type ComputerOption = {
+  id: string;
+  name: string;
+  displayName: string;
+  kind: string;
+  online: boolean;
+};
 
-/** The move dialog's body: the target Computer, then what moves and what stays. */
+function targetComputerLabel(computer: ComputerOption) {
+  return computer.displayName.trim() || computer.name.trim() || m.agent_computer_unnamed();
+}
+
+function targetComputerAriaLabel(computer: ComputerOption, label: string) {
+  return `${label}, ${computer.online ? m.computer_status_online() : m.computer_status_offline()}`;
+}
+
 export function AgentMigrationForm({
   computers,
   selected,
@@ -55,7 +75,6 @@ export function AgentMigrationForm({
   disabled,
   direct,
 }: {
-  /** The Workspace's other Computers; whether one can take the Agent is checked on Move. */
   computers: readonly ComputerOption[];
   selected: string | null;
   onSelect: (computerId: string) => void;
@@ -63,10 +82,65 @@ export function AgentMigrationForm({
   direct?: boolean;
 }) {
   const controlSize = useDialogControlSize();
+  const isSheet = useConfirmationSheet();
   return (
-    <div className="grid gap-4 px-6 pt-4">
+    <div className="grid gap-4 px-6 pt-4 max-sm:px-4">
       {computers.length === 0 ? (
         <p className="text-sm text-tertiary">{m.agent_migration_dialog_no_targets()}</p>
+      ) : isSheet ? (
+        <RadioGroup
+          isRequired
+          isDisabled={disabled}
+          value={selected ?? ""}
+          onChange={onSelect}
+          className="flex min-w-0 flex-col gap-1.5"
+        >
+          <Label isRequired>{m.agent_migration_dialog_target()}</Label>
+          <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto rounded-xl border border-secondary bg-primary p-1">
+            {computers.map((computer) => {
+              const label = targetComputerLabel(computer);
+              return (
+                <Radio
+                  key={computer.id}
+                  value={computer.id}
+                  aria-label={targetComputerAriaLabel(computer, label)}
+                  className={({ isSelected, isFocusVisible, isDisabled }) =>
+                    cx(
+                      "flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-md outline-hidden select-none",
+                      isSelected && "bg-primary_hover",
+                      isFocusVisible && "ring-2 ring-focus-ring ring-inset",
+                      isDisabled && "cursor-not-allowed opacity-50",
+                    )
+                  }
+                >
+                  {({ isSelected }) => (
+                    <>
+                      <ComputerStatusIcon
+                        computer={computer}
+                        online={computer.online}
+                        className="size-5"
+                      />
+                      <span
+                        className={cx(
+                          "min-w-0 flex-1 truncate font-medium",
+                          computer.online ? "text-primary" : "text-quaternary",
+                        )}
+                      >
+                        {label}
+                      </span>
+                      {isSelected && (
+                        <Check
+                          aria-hidden="true"
+                          className="ml-auto size-5 shrink-0 text-fg-brand-primary"
+                        />
+                      )}
+                    </>
+                  )}
+                </Radio>
+              );
+            })}
+          </div>
+        </RadioGroup>
       ) : (
         <Select
           isRequired
@@ -74,18 +148,25 @@ export function AgentMigrationForm({
           size={controlSize}
           label={m.agent_migration_dialog_target()}
           placeholder={m.agent_migration_dialog_target_placeholder()}
+          className="min-w-0"
           selectedKey={selected}
           onSelectionChange={(key) => {
             if (key !== null) onSelect(String(key));
           }}
         >
-          {computers.map((computer) => (
-            <Select.Item
-              key={computer.id}
-              id={computer.id}
-              label={computer.name || m.agent_computer_unnamed()}
-            />
-          ))}
+          {computers.map((computer) => {
+            const label = targetComputerLabel(computer);
+            return (
+              <Select.Item
+                key={computer.id}
+                id={computer.id}
+                label={label}
+                aria-label={targetComputerAriaLabel(computer, label)}
+                icon={<ComputerStatusIcon computer={computer} online={computer.online} />}
+                className={computerOptionClassName(computer.online)}
+              />
+            );
+          })}
         </Select>
       )}
       {!direct && (
@@ -156,6 +237,7 @@ export function AgentMigrationSection({
     queryKey: ["agent-migration-targets", agentId, currentComputerId],
     queryFn: () => loadTargets({ data: { agentId } }),
     enabled: open,
+    staleTime: 0,
   });
   const targets: ComputerOption[] = computers.data ?? [];
 
@@ -163,7 +245,6 @@ export function AgentMigrationSection({
   const migration = latest && isAgentMigrationShown(latest) ? latest : undefined;
   const inProgress = migration ? isAgentMigrationInProgress(migration.state) : false;
 
-  // A move that just finished changed the Agent's Computer: the profile shows the new one.
   const wasInProgress = useRef(inProgress);
   useEffect(() => {
     if (wasInProgress.current && !inProgress) void invalidateProfile();
@@ -188,32 +269,25 @@ export function AgentMigrationSection({
   function submit() {
     if (!selected || submitting) return;
     const targetComputerId = selected;
+    const target = targets.find(({ id }) => id === targetComputerId);
+    const targetName = target ? targetComputerLabel(target) : m.agent_computer_unnamed();
     setRefusal(null);
     setNotStartedOn(null);
     void guardSubmit(async () => {
       try {
         const moved = await requestMove({ data: { agentId, targetComputerId } });
         setOpen(false);
-        setNotStartedOn(
-          notStartedAfterMove(
-            moved,
-            targets.find(({ id }) => id === targetComputerId)?.name || m.agent_computer_unnamed(),
-          ),
-        );
+        setNotStartedOn(notStartedAfterMove(moved, targetName));
         await refresh();
       } catch (cause) {
-        // The dialog stays open: it says why, links to where to fix it, and offers to try again.
         setRefusal({
           ...agentMigrationRefusal(cause, {
-            computer:
-              targets.find(({ id }) => id === targetComputerId)?.name || m.agent_computer_unnamed(),
+            computer: targetName,
             runtime: runtimeProviderLabel(runtime),
             model,
           }),
           targetComputerId,
         });
-        // A Stop can succeed and the response still fail. Refresh so an active move
-        // shows its progress and Cancel instead of the stale idle status.
         await refresh().catch(() => undefined);
       }
     });
@@ -336,6 +410,7 @@ export function AgentMigrationSection({
         </Modal>
       </ModalOverlay>
       <ModalOverlay
+        confirmation
         isOpen={open}
         onOpenChange={(next: boolean) => {
           if (submitting) return;

@@ -214,18 +214,27 @@ export function agentMigrationRequests(db: PrismaClient) {
       if (supported) return "ready";
       return online ? "outdated" : "offline";
     },
-    otherComputers: async (workspaceId, exceptComputerId) =>
-      (
-        await db.workspaceComputer.findMany({
-          where: {
-            workspaceId,
-            computer: { deletedAt: null },
-            ...(exceptComputerId ? { computerId: { not: exceptComputerId } } : {}),
-          },
-          select: { computer: { select: { id: true, name: true, displayName: true } } },
-          orderBy: { computer: { name: "asc" } },
-        })
-      ).map(({ computer }) => ({ id: computer.id, name: computer.displayName || computer.name })),
+    otherComputers: async (workspaceId, exceptComputerId) => {
+      const connections = await db.workspaceComputer.findMany({
+        where: {
+          workspaceId,
+          computer: { deletedAt: null },
+          ...(exceptComputerId ? { computerId: { not: exceptComputerId } } : {}),
+        },
+        select: { computer: { select: { id: true, name: true, displayName: true, kind: true } } },
+        orderBy: { computer: { name: "asc" } },
+      });
+      const statuses = await getComputerStatusCache()
+        .getMany(connections.map(({ computer }) => ({ workspaceId, computerId: computer.id })))
+        .catch(() => connections.map(() => false));
+      return connections.map(({ computer }, index) => ({
+        id: computer.id,
+        name: computer.name,
+        displayName: computer.displayName,
+        kind: computer.kind,
+        online: statuses[index] === true,
+      }));
+    },
     // A misconfigured bucket reads as "not set up" here; the daemons' route reports the error.
     available: async () =>
       (await readAgentMigrationStorageConfig(process.env).catch(() => null)) !== null,

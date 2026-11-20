@@ -29,6 +29,14 @@ type Principal = { userId: string; workspaceId: string };
  */
 export type AgentMigrationReadiness = "ready" | "outdated" | "offline";
 
+export type AgentMigrationTarget = {
+  id: string;
+  name: string;
+  displayName: string;
+  kind: string;
+  online: boolean;
+};
+
 const READINESS_REFUSALS = {
   source: {
     outdated: "agent-migration-source-outdated",
@@ -115,11 +123,10 @@ export class AgentMigrationRequests {
         requestedByUserId: string;
       }): Promise<boolean>;
       computerReadiness(workspaceId: string, computerId: string): Promise<AgentMigrationReadiness>;
-      /** The Workspace's Computers other than this one, by name. */
       otherComputers(
         workspaceId: string,
         exceptComputerId: string | null,
-      ): Promise<{ id: string; name: string }[]>;
+      ): Promise<AgentMigrationTarget[]>;
       /** Whether this deployment has the migration bucket a move needs. */
       available(): Promise<boolean>;
     },

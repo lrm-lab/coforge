@@ -54,8 +54,20 @@ function setup(
     computerReadiness: async (_workspaceId, computerId) =>
       options.readiness?.[computerId] ?? "ready",
     otherComputers: async () => [
-      { id: "computer-b", name: "Studio Mac" },
-      { id: "computer-c", name: "Old Laptop" },
+      {
+        id: "computer-b",
+        name: "studio-mac",
+        displayName: "Studio Mac",
+        kind: "local",
+        online: true,
+      },
+      {
+        id: "computer-c",
+        name: "old-laptop",
+        displayName: "Old Laptop",
+        kind: "cloud",
+        online: false,
+      },
     ],
     available: async () => options.available ?? true,
   });
@@ -92,8 +104,20 @@ test("the owner moves the Agent; the owner and Workspace admins see the move, no
 test("a Workspace admin moves and cancels another member's Agent, as the reference does", async () => {
   const { requests, requested } = setup();
   expect(await requests.targets(admin, "agent-1")).toEqual([
-    { id: "computer-b", name: "Studio Mac" },
-    { id: "computer-c", name: "Old Laptop" },
+    {
+      id: "computer-b",
+      name: "studio-mac",
+      displayName: "Studio Mac",
+      kind: "local",
+      online: true,
+    },
+    {
+      id: "computer-c",
+      name: "old-laptop",
+      displayName: "Old Laptop",
+      kind: "cloud",
+      online: false,
+    },
   ]);
   const moved = await requests.request(admin, {
     agentId: "agent-1",
@@ -326,8 +350,20 @@ test("the dialog lists every other Computer, ready or not; the request says whic
     runtimeRefusal: "runtime_missing",
   });
   expect(await requests.targets(owner, "agent-1")).toEqual([
-    { id: "computer-b", name: "Studio Mac" },
-    { id: "computer-c", name: "Old Laptop" },
+    {
+      id: "computer-b",
+      name: "studio-mac",
+      displayName: "Studio Mac",
+      kind: "local",
+      online: true,
+    },
+    {
+      id: "computer-c",
+      name: "old-laptop",
+      displayName: "Old Laptop",
+      kind: "cloud",
+      online: false,
+    },
   ]);
   await expect(requests.targets(stranger, "agent-1")).rejects.toMatchObject({
     code: "ACCESS_DENIED",
