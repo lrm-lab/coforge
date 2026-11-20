@@ -290,7 +290,7 @@ export function AgentProfilePanel({
       {profile?.computerAccessRevoked && !deleted ? (
         <p
           role="status"
-          className="flex shrink-0 items-start gap-2 px-5 pb-2 text-sm text-secondary"
+          className="flex shrink-0 items-start gap-3 border-b border-secondary bg-warning-primary py-2.5 pr-3.5 pl-5 text-sm text-primary"
         >
           <AlertTriangle
             aria-hidden="true"
