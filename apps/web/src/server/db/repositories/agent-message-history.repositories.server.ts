@@ -202,6 +202,8 @@ export async function readAgentMessagePage(
       before: Boolean(page.before),
       after: Boolean(page.after),
       around: Boolean(page.around),
+      fromSequence: page.fromSequence,
+      throughSequence: page.throughSequence,
       limit,
     });
     const messages = map(
@@ -227,6 +229,7 @@ export async function readAgentMessagePage(
       hasNewer: notice.hasNewer,
       modelSeenUpToSeq,
       consumptionScope,
+      ...(page.unread && notice.hasNewer ? { moreUnread: true } : {}),
       ...readPositionReport(page.unread, isHistoryRead, { readThrough }),
       ...(agentReadThroughSequence ? { readPositionAfter: agentReadThroughSequence } : {}),
     };

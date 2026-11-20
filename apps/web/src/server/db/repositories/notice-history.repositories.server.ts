@@ -7,7 +7,17 @@ import {
   type DirectConversationMessageRow,
 } from "./direct-conversation-agent-message.server";
 
-type Scope = { workspaceId: string; agentId: string; conversationId: string };
+type Scope = {
+  workspaceId: string;
+  agentId: string;
+  conversationId: string;
+  fromSequence?: number;
+  throughSequence?: number;
+};
+
+const rangeSql = (scope: Scope) => Prisma.sql`
+  ${scope.fromSequence === undefined ? Prisma.empty : Prisma.sql`AND msg."sequence" >= ${scope.fromSequence}`}
+  ${scope.throughSequence === undefined ? Prisma.empty : Prisma.sql`AND msg."sequence" <= ${scope.throughSequence}`}`;
 
 type Bound = {
   atOrBelow?: number;
@@ -36,6 +46,7 @@ function noticeIdsSql(
     WHERE msg."conversationId" = ${scope.conversationId}::uuid
       AND msg."workspaceId" = ${scope.workspaceId}::uuid
       AND msg."threadRootId" IS NULL
+      ${rangeSql(scope)}
       ${boundSql(bound)}
       AND ${readableArtifactNoticeSql(scope.workspaceId, scope.agentId, Prisma.sql`msg."id"`)}
     ORDER BY msg."sequence" ${Prisma.raw(direction.toUpperCase())}
@@ -117,6 +128,7 @@ async function confirmPageAndProbeEdges(
       WHERE msg."conversationId" = ${scope.conversationId}::uuid
         AND msg."workspaceId" = ${scope.workspaceId}::uuid
         AND msg."threadRootId" IS NULL
+        ${rangeSql(scope)}
         AND ${readableArtifactNoticeSql(scope.workspaceId, scope.agentId, Prisma.sql`msg."id"`)}
     ), "page" AS (
       SELECT r."id", r."sequence" FROM "readable" r WHERE ${pageRows}
@@ -140,10 +152,12 @@ export async function readNoticePage(
     limit: number;
   },
 ): Promise<{ rows: DirectConversationMessageRow[]; hasOlder: boolean; hasNewer: boolean }> {
-  const scope = {
+  const scope: Scope = {
     workspaceId: input.workspaceId,
     agentId: input.agentId,
     conversationId: input.conversationId,
+    ...(input.fromSequence === undefined ? {} : { fromSequence: input.fromSequence }),
+    ...(input.throughSequence === undefined ? {} : { throughSequence: input.throughSequence }),
   };
   const { anchorSequence, limit } = input;
   const older = anchorSequence === undefined ? undefined : { below: anchorSequence };

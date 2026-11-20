@@ -104,6 +104,9 @@ test("the notice conversation reads only the notices the Agent can still read", 
     const sequences = async (page: Record<string, string | number>) =>
       (await read(page)).messages.map((message) => message.sequence);
 
+    const bounded = await read({ limit: 5, throughSequence: 4 });
+    expect(bounded.messages.map((message) => message.sequence)).toEqual([1, 2, 4]);
+
     const latest = await read({ limit: 2 });
     expect(latest.messages.map((message) => message.sequence)).toEqual([4, 5]);
     expect(latest.hasOlder).toBe(true);
