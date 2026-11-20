@@ -140,6 +140,62 @@ test("an around page measures each side against its own rows, not the whole page
     expect(page.messages.map((message) => message.sequence)).toEqual([9]);
     expect(page.hasOlder).toBe(false);
     expect(page.hasNewer).toBe(false);
+
+    const spare = await db.artifact.create({
+      data: {
+        workspaceId: workspace.id,
+        homeKey: `conversation:${conversation.id}`,
+        access: "workspace",
+        name: `interleave-spare-${suffix}`,
+        entryPath: "index.html",
+      },
+      select: { id: true },
+    });
+    const revoked = await notice(10);
+    await reviewed(revoked.id, spare.id);
+    const follower = await notice(11);
+    await reviewed(follower.id, readable.id);
+
+    let revokeInner = async () => {};
+    const revokingUnread = new Proxy(db, {
+      get(target, property, receiver) {
+        const value = Reflect.get(target, property, receiver);
+        if (property !== "message" || typeof value !== "object" || value === null) return value;
+        const message = value as { findMany: (...args: unknown[]) => Promise<unknown> };
+        return {
+          ...message,
+          findMany: async (...args: unknown[]) => {
+            const rows = await message.findMany(...args);
+            const pending = revokeInner;
+            revokeInner = async () => {};
+            await pending();
+            return rows;
+          },
+        };
+      },
+    });
+    revokeInner = async () => {
+      await db.artifact.update({
+        where: { id: spare.id },
+        data: { access: "conversation", homeKey: `conversation:${crypto.randomUUID()}` },
+      });
+    };
+
+    const unread = await readAgentMessagePage(revokingUnread, {
+      workspaceId: workspace.id,
+      agentId: agent.id,
+      conversationId: conversation.id,
+      threadRootId: null,
+      canonicalTarget: "@app.system.artifacts",
+      isChannel: false,
+      isUserAgentDirectConversation: false,
+      page: { unread: true, limit: 1 } as never,
+      resolveAnchor: async () => {
+        throw new Error("an unread page needs no anchor");
+      },
+    });
+    expect(unread.messages).toEqual([]);
+    expect(unread.moreUnread).toBe(true);
   } finally {
     await db.workspace.delete({ where: { id: workspace.id } });
     await db.user.delete({ where: { id: user.id } });
