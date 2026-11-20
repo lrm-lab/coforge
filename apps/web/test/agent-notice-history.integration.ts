@@ -182,10 +182,13 @@ test("the notice conversation reads only the notices the Agent can still read", 
         return {
           ...message,
           findMany: async (...args: unknown[]) => {
+            const input = args[0] as { where: { id: { in: string[] } } };
+            expect(input.where.id.in).toEqual([second!.id, first!.id]);
+            const rows = await message.findMany(...args);
             const pending = revoke;
             revoke = async () => {};
             await pending();
-            return message.findMany(...args);
+            return rows;
           },
         };
       },
