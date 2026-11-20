@@ -218,6 +218,29 @@ test("an around page measures each side against its own rows, not the whole page
     expect(unread.messages).toEqual([]);
     expect(unread.moreUnread).toBe(true);
     expect(unread.readPositionAfter).toBe(9);
+    expect(
+      (
+        await db.conversationMember.findUnique({
+          where: { id: seat.id },
+          select: { agentReadThroughSequence: true },
+        })
+      )?.agentReadThroughSequence,
+    ).toBe(9);
+    const following = await readAgentMessagePage(db, {
+      workspaceId: workspace.id,
+      agentId: agent.id,
+      conversationId: conversation.id,
+      threadRootId: null,
+      canonicalTarget: "@app.system.artifacts",
+      isChannel: false,
+      isUserAgentDirectConversation: false,
+      page: { unread: true, limit: 1 } as never,
+      resolveAnchor: async () => {
+        throw new Error("an unread page needs no anchor");
+      },
+    });
+    expect(following.messages.map((message) => message.sequence)).toEqual([11]);
+    expect(following.readPositionAfter).toBe(11);
   } finally {
     await db.workspace.delete({ where: { id: workspace.id } });
     await db.user.delete({ where: { id: user.id } });
