@@ -23,6 +23,7 @@ import {
 import { PreviewSeen } from "./inbox-preview-rows";
 import {
   logAttentionDecision,
+  logRecoveryNoticeAccepted,
   type AttentionDecisionMessage,
   type AttentionDecisionOutcome,
   type AttentionDedupBasis,
@@ -267,14 +268,7 @@ export class AgentMessageAttentionIndex {
     }
     if (this.#generations.get(agentId) !== generation) return announced;
     if (!recordAccepted(acceptedMessages)) return announced;
-    logger.info("Agent accepted recovery notice", {
-      event: "agent.message.recovery_notice_accepted",
-      workspace_id: this.#workspaceId,
-      agent_id: agentId,
-      daemon_pid: process.pid,
-      recovered_message_count: plan.recoveredMessageCount,
-      summary_unread_count: plan.summaryUnreadCount,
-    });
+    logRecoveryNoticeAccepted(this.#workspaceId, agentId, plan);
     options?.accepted(acceptedMessages);
     this.#attention.set(agentId, byTarget);
     for (const message of recoveredMessages) {

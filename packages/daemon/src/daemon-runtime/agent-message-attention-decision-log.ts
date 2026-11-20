@@ -60,3 +60,18 @@ export function logAttentionDecision(
     exact_seen: exactSeen,
   });
 }
+
+export function logRecoveryNoticeAccepted(
+  workspaceId: string,
+  agentId: string,
+  counts: { recoveredMessageCount: number; summaryUnreadCount: number },
+): void {
+  logger.info("Agent accepted recovery notice", {
+    event: "agent.message.recovery_notice_accepted",
+    workspace_id: workspaceId,
+    agent_id: agentId,
+    daemon_pid: process.pid,
+    recovered_message_count: counts.recoveredMessageCount,
+    summary_unread_count: counts.summaryUnreadCount,
+  });
+}
