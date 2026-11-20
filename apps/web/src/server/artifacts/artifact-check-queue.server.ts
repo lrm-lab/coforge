@@ -17,12 +17,32 @@ export const ARTIFACT_VERSION_CHECK_QUEUE_OPTIONS: Partial<Queue> & { retryLimit
   expireInSeconds: 180,
 };
 
+export type ArtifactCheckJobRunner = (
+  job: ArtifactVersionCheckJob,
+  options: { retryable: boolean },
+) => Promise<void>;
+
 let activeBossAccessor: (() => Pick<PgBoss, "send"> | undefined) | null = null;
+let activeJobRunner: ArtifactCheckJobRunner | null = null;
 
 export function registerArtifactCheckQueueAccessor(
   accessor: () => Pick<PgBoss, "send"> | undefined,
 ): void {
   activeBossAccessor = accessor;
+}
+
+export function registerArtifactCheckJobRunner(runner: ArtifactCheckJobRunner): void {
+  activeJobRunner = runner;
+}
+
+export async function runRegisteredArtifactCheckJob(
+  job: ArtifactVersionCheckJob,
+  options: { retryable: boolean },
+): Promise<void> {
+  if (!activeJobRunner) {
+    throw new Error("Artifact publish check job runner is not registered");
+  }
+  await activeJobRunner(job, options);
 }
 
 export async function enqueueArtifactVersionCheck(

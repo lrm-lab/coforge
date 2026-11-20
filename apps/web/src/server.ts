@@ -3,6 +3,9 @@ import handler from "@tanstack/react-start/server-entry";
 import { isRawHttpPath } from "#src/lib/non-localized-path";
 import { paraglideMiddleware } from "#src/paraglide/server";
 import { startAppNotificationQueueAtServerStartFromEnv } from "#src/server/app-notifications/app-notification-queue.server";
+import { registerArtifactCheckJobRunner } from "#src/server/artifacts/artifact-check-queue.server";
+import { productionArtifactChecks } from "#src/server/artifacts/artifact-composition.server";
+import { requireDatabaseClient } from "#src/server/db/client.server";
 import { publicOrigin } from "#src/server/http/public-origin.server";
 import {
   artifactSandboxOrigin,
@@ -38,6 +41,9 @@ startMessageReadRetentionTickFromEnv();
 startWorkspaceAssistantOnboarding();
 // The first Marketplace operators, from the deployment's config; only when none exists yet.
 startPlatformOperatorSeedingFromEnv();
+registerArtifactCheckJobRunner((job, options) =>
+  productionArtifactChecks(requireDatabaseClient()).runJob(job, options),
+);
 // The app notification outbox's pg-boss workers run in the process that serves requests. This
 // entry loads on the first request, which the deployment's health check makes at start.
 startAppNotificationQueueAtServerStartFromEnv();

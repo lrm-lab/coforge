@@ -30,9 +30,9 @@ import {
   ARTIFACT_VERSION_CHECK_QUEUE,
   ARTIFACT_VERSION_CHECK_QUEUE_OPTIONS,
   registerArtifactCheckQueueAccessor,
+  runRegisteredArtifactCheckJob,
   type ArtifactVersionCheckJob,
 } from "#src/server/artifacts/artifact-check-queue.server";
-import { productionArtifactChecks } from "#src/server/artifacts/artifact-composition.server";
 import { anyExternalPushWebhook } from "#src/server/db/repositories/external-agent-push-webhook.repositories.server";
 import {
   APP_NOTIFICATION_DELIVERY_QUEUE,
@@ -121,12 +121,9 @@ export function startAppNotificationQueue(
             includeMetadata: true,
           },
           async (jobs) => {
-            const db = getDatabaseClient();
-            if (!db) throw new Error("Database client unavailable for artifact publish check");
-            const checks = productionArtifactChecks(db);
             for (const job of jobs) {
               const retriesDone = (job as { retryCount?: number }).retryCount ?? 0;
-              await checks.runJob(job.data, {
+              await runRegisteredArtifactCheckJob(job.data, {
                 retryable: retriesDone < ARTIFACT_VERSION_CHECK_QUEUE_OPTIONS.retryLimit,
               });
             }
