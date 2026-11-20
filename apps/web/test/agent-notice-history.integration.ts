@@ -124,6 +124,11 @@ test("the notice conversation reads only the notices the Agent can still read", 
     expect(afterPage.hasNewer).toBe(true);
     expect(afterPage.hasOlder).toBe(true);
 
+    const zeroAround = await read({ around: "0", limit: 2 });
+    expect(zeroAround.messages.map((message) => message.sequence)).toEqual([1]);
+    expect(zeroAround.hasOlder).toBe(false);
+    expect(zeroAround.hasNewer).toBe(true);
+
     const hollowAround = await read({ around: "11", limit: 1 });
     expect(hollowAround.messages).toEqual([]);
     expect(hollowAround.hasOlder).toBe(true);
@@ -152,6 +157,10 @@ test("the notice conversation reads only the notices the Agent can still read", 
 
     await pinned("01a1f6da-bbbb-7000-8000-000000000001", 8, "notice 8");
     await pinned("01a1f6da-bbbb-7000-8000-000000000002", 9, "notice 9");
+
+    const wideAround = await read({ around: "6", limit: 10 });
+    expect(wideAround.hasOlder).toBe(false);
+    expect(wideAround.hasNewer).toBe(false);
 
     const fullAround = await read({ around: "6", limit: 4 });
     expect(fullAround.messages.map((message) => message.sequence)).toEqual([5, 6, 8, 9]);
