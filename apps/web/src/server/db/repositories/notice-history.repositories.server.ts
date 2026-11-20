@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "#src/generated/prisma/client";
 import { readableArtifactNoticeSql } from "#src/server/artifacts/artifact-notice-visibility.server";
 import { AgentMessageValidationError } from "#src/server/conversations/agent-message-validation-error.server";
+import { assertMessageAnchor } from "./direct-conversation-anchor.server";
 import {
   AGENT_MESSAGE_INCLUDE,
   type DirectConversationMessageRow,
@@ -53,6 +54,7 @@ async function ids(
 }
 
 export async function resolveNoticeAnchor(db: PrismaClient, scope: Scope, anchor: string) {
+  assertMessageAnchor(anchor);
   const rows = await db.$queryRaw<{ id: string; sequence: number }[]>`
     SELECT msg."id", msg."sequence"
     FROM "messages" msg

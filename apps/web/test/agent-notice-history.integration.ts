@@ -147,10 +147,8 @@ test("the notice conversation reads only the notices the Agent can still read", 
     await pinned(blockedId, 7, "notice 7");
     await reviewed(blockedId, crypto.randomUUID());
 
-    expect(await sequences({ before: "01a1f6d9-aaaa-7000-8000-0000000000", limit: 2 })).toEqual([
-      4, 5,
-    ]);
-    expect(await sequences({ after: "01a1f6d9-aaaa-7000-8000-0000000000", limit: 1 })).toEqual([]);
+    expect(await sequences({ before: "01a1f6d9-aaaa", limit: 2 })).toEqual([4, 5]);
+    expect(await sequences({ after: "01a1f6d9-aaaa", limit: 1 })).toEqual([]);
     await expect(read({ after: blockedId, limit: 1 })).rejects.toThrow(
       "message anchor not found in this conversation",
     );
@@ -166,7 +164,7 @@ test("the notice conversation reads only the notices the Agent can still read", 
     expect(fullAround.messages.map((message) => message.sequence)).toEqual([5, 6, 8, 9]);
     expect(fullAround.hasNewer).toBe(false);
     expect(fullAround.hasOlder).toBe(true);
-    await expect(read({ after: "01a1f6da-bbbb-7000-8000-0000000000", limit: 1 })).rejects.toThrow(
+    await expect(read({ after: "01a1f6da-bbbb", limit: 1 })).rejects.toThrow(
       "ambiguous message prefix",
     );
 
