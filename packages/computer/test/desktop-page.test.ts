@@ -57,7 +57,7 @@ describe("desktop page adaptation", () => {
     expect(html).not.toContain("msg.remove()");
   });
 
-  test("a reconnect page that already has phone gestures, keyboard, clipboard push, fab viewport and copy-out is left alone", () => {
+  test("a reconnect page that already has phone gestures, keyboard, OSK, clipboard push, fab viewport and copy-out is left alone", () => {
     const current = `<!DOCTYPE html>
 <script type="module">
     import RFB from "./core/rfb.js";
@@ -67,17 +67,19 @@ describe("desktop page adaptation", () => {
     function coforgeDesktopCopyOut() {}
     function applyPhoneViewportScale() {}
     function placePhoneFabInViewport() {}
+    function setPhoneOskOpen() {}
     const phone = params.get("view") === "phone";
 </script>
 <button type="button" id="coforge-desktop-phone-fab"></button>
-<div id="coforge-desktop-phone-bar"><div id="coforge-desktop-key-pad"></div></div>
+<div id="coforge-desktop-phone-bar" data-tray="icons-only"></div>
+<div id="coforge-desktop-osk"></div>
 <textarea id="coforge-desktop-keyboard-input"></textarea>
 <button type="button" id="coforge-desktop-reconnect"></button>
 `;
     expect(adaptDesktopHtml(current)).toBe(current);
   });
 
-  test("a page with the old text tray is rewritten for the compact icon pad", () => {
+  test("a page with the old text tray is rewritten for the compact icon tray", () => {
     const stale = `<!DOCTYPE html>
 <script type="module">
     import RFB from "./core/rfb.js";
@@ -94,9 +96,10 @@ describe("desktop page adaptation", () => {
 <button type="button" id="coforge-desktop-reconnect"></button>
 `;
     const html = adaptDesktopHtml(stale);
-    expect(html).toContain("coforge-desktop-key-pad");
+    expect(html).toContain('data-tray="icons-only"');
     expect(html).toContain('aria-label="适应屏幕"');
     expect(html).not.toContain("实际大小");
+    expect(html).not.toContain('id="coforge-desktop-key-pad"');
     expect(html).not.toContain('data-key="ControlLeft"');
     expect(html).not.toBe(stale);
   });
@@ -155,7 +158,8 @@ describe("desktop page adaptation", () => {
 `;
     const html = adaptDesktopHtml(stale);
     expect(html).toContain("coforgeAttachPhoneGestures");
-    expect(html).toContain('id="coforge-desktop-key-pad"');
+    expect(html).toContain('data-tray="icons-only"');
+    expect(html).not.toContain('id="coforge-desktop-key-pad"');
   });
 
   test("a focused paste sends the local plain text into the remote clipboard", () => {
@@ -212,15 +216,27 @@ describe("desktop page adaptation", () => {
     expect(html).toContain("coforgeAttachPhoneFab");
   });
 
+  test("phone FAB and tray swallow pointer events so the remote desktop under them is not clicked", () => {
+    const html = adaptDesktopHtml(oldPage);
+    expect(html).toContain("blockPhoneChromePointer");
+    expect(html).toContain("stopPhoneChromeBubble");
+    expect(html).toMatch(
+      /phoneFab\.addEventListener\("pointerdown"[\s\S]*?blockPhoneChromePointer\(ev\)/,
+    );
+    expect(html).toContain('phoneFab.addEventListener("touchstart", blockPhoneChromePointer');
+    expect(html).toContain('phoneFab.addEventListener("click", blockPhoneChromePointer');
+    expect(html).toContain('phoneBar?.addEventListener("pointerdown", stopPhoneChromeBubble');
+    expect(html).toContain('phoneBar?.addEventListener("touchstart", stopPhoneChromeBubble');
+    expect(html).toContain("passive: false");
+  });
+
   test("a phone viewer gets continuous pinch zoom, one-finger pan, and wheel when fitted", () => {
     const html = adaptDesktopHtml(oldPage);
-    expect(html).toContain('id="coforge-desktop-key-pad"');
-    expect(html).toContain('id="coforge-desktop-arrows"');
-    expect(html).toContain('data-key="Escape"');
-    expect(html).toContain('data-key="Tab"');
-    expect(html).toContain('data-key="ArrowUp"');
-    expect(html).toContain('data-key="ArrowDown"');
-    expect(html).not.toContain('data-key="ControlLeft"');
+    expect(html).toContain('data-tray="icons-only"');
+    expect(html).not.toContain('id="coforge-desktop-key-pad"');
+    expect(html).not.toContain('id="coforge-desktop-arrows"');
+    expect(html).not.toContain('data-key="Escape"');
+    expect(html).not.toContain('data-key="ArrowUp"');
     expect(html).toContain("coforgeAttachPhoneGestures");
     expect(html).toContain("applyPhoneViewportScale");
     expect(html).toContain("viewportChangeSize");
@@ -236,16 +252,52 @@ describe("desktop page adaptation", () => {
     expect(html).toContain("0xff1b");
   });
 
-  test("a phone viewer can open the system soft keyboard", () => {
+  test("a phone viewer opens a browser OSK with sticky modifiers and compose fallback", () => {
     const html = adaptDesktopHtml(oldPage);
-    expect(html).toContain('id="coforge-desktop-keyboard-input"');
+    expect(html).toContain('id="coforge-desktop-osk"');
+    expect(html).toContain("setPhoneOskOpen");
+    expect(html).toContain("coforgeAttachPhoneOsk");
     expect(html).toContain('data-action="keyboard"');
-    expect(html).toContain('aria-label="键盘"');
-    expect(html).toContain("coforgeAttachPhoneKeyboard");
-    expect(html).toContain("0x01000000");
+    expect(html).toContain('data-osk-mod="ControlLeft"');
+    expect(html).toContain('data-osk-mod="AltLeft"');
+    expect(html).toContain('data-osk-mod="MetaLeft"');
+    expect(html).toContain('data-osk-action="compose"');
+    expect(html).toContain('data-osk-char="a"');
+    expect(html).toContain("stickyMods");
+    expect(html).toContain("sendTypedCharacter");
     expect(html).toContain("0xff08");
+    expect(html).toContain("0xff0d");
+    expect(html).toContain('id="coforge-desktop-keyboard-input"');
     expect(html).toContain("placePhoneFabInViewport");
-    expect(html).toMatch(/openKeyboard\(\);\s*setPhoneTrayOpen\(false\)/);
+    expect(html).toContain("setPhoneOskOpen(!phoneOskOpen)");
+    expect(html).toContain("setPhoneOskOpen(false)");
+    expect(html).toContain("openComposeInput");
+    expect(html).not.toMatch(/openKeyboard\(\);\s*setPhoneTrayOpen\(false\)/);
+  });
+
+  test("a phone OSK caps landscape height, keeps open on blank tap, and uses Chinese system IME compose", () => {
+    const html = adaptDesktopHtml(oldPage);
+    expect(html).toContain("is-landscape");
+    expect(html).toContain("max-height:50vh");
+    expect(html).toContain("syncOskLandscape");
+    expect(html).not.toContain("dismissPhoneOskOnOutside");
+    expect(html).toContain('aria-label="收起键盘"');
+    expect(html).toContain('data-osk-action="close"');
+    expect(html).toContain('title="收起键盘"');
+    expect(html).toMatch(/data-osk-action="close"[\s\S]*?<path d="M6 9l6 6 6-6"/);
+    expect(html).not.toMatch(/data-osk-action="close"[^>]*>\s*[∨⌃]/);
+    expect(html).toContain(">中文<");
+    expect(html).toContain('lang="zh-CN"');
+    expect(html).toContain("oskComposeActive");
+  });
+
+  test("Chinese compose waits for compositionend and focusing the OSK focuses the RFB session", () => {
+    const html = adaptDesktopHtml(oldPage);
+    expect(html).toContain("flushComposeInput");
+    expect(html).toContain('addEventListener("compositionend"');
+    expect(html).toContain("ev.isComposing");
+    expect(html).toContain("rfb.focus(");
+    expect(html).toContain("oskPauseViewport");
   });
 
   test("a phone long-press warms the cloud clipboard before the right-click menu", () => {

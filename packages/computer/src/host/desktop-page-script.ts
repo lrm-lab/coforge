@@ -1,6 +1,7 @@
 /** Injected noVNC page script for desktop proxy adaptation. */
 
 import { DESKTOP_PAGE_CLIPBOARD_SCRIPT } from "./desktop-page-script-clipboard";
+import { DESKTOP_PAGE_OSK_SCRIPT } from "./desktop-page-script-osk";
 
 export const RELATIVE_PAGE_SCRIPT = `
     import RFB from "./core/rfb.js";
@@ -58,6 +59,13 @@ export const RELATIVE_PAGE_SCRIPT = `
       } catch {
       }
     }
+    function blockPhoneChromePointer(ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+    function stopPhoneChromeBubble(ev) {
+      ev.stopPropagation();
+    }
     function coforgeAttachPhoneFab() {
       if (!phone || !phoneFab || phoneFab.dataset.bound === "1") return;
       phoneFab.dataset.bound = "1";
@@ -76,8 +84,9 @@ export const RELATIVE_PAGE_SCRIPT = `
         phoneFab.style.bottom = "auto";
         if (Math.hypot(left - drag.startLeft, top - drag.startTop) > 8) drag.moved = true;
       };
-      const onUp = () => {
+      const onUp = (ev) => {
         if (!drag) return;
+        blockPhoneChromePointer(ev);
         const moved = drag.moved;
         drag = null;
         window.removeEventListener("pointermove", onMove);
@@ -85,7 +94,9 @@ export const RELATIVE_PAGE_SCRIPT = `
         if (!moved) setPhoneTrayOpen(true);
         else placePhoneFabInViewport();
       };
+      const chromeTouchOpts = { passive: false, capture: true };
       phoneFab.addEventListener("pointerdown", (ev) => {
+        blockPhoneChromePointer(ev);
         if (phoneTrayOpen) return;
         const rect = phoneFab.getBoundingClientRect();
         drag = {
@@ -97,7 +108,11 @@ export const RELATIVE_PAGE_SCRIPT = `
         };
         window.addEventListener("pointermove", onMove);
         window.addEventListener("pointerup", onUp);
-      });
+      }, chromeTouchOpts);
+      phoneFab.addEventListener("touchstart", blockPhoneChromePointer, chromeTouchOpts);
+      phoneFab.addEventListener("click", blockPhoneChromePointer, true);
+      phoneBar?.addEventListener("pointerdown", stopPhoneChromeBubble, true);
+      phoneBar?.addEventListener("touchstart", stopPhoneChromeBubble, chromeTouchOpts);
       document.addEventListener(
         "pointerdown",
         (ev) => {
@@ -122,6 +137,7 @@ export const RELATIVE_PAGE_SCRIPT = `
       ArrowDown: 0xff54,
     };
     let phoneScale = 0;
+    let oskPauseViewport = false;
     let gesturesBound = false;
     function phoneFrameSize() {
       const display = rfb?._display;
@@ -176,8 +192,10 @@ export const RELATIVE_PAGE_SCRIPT = `
       return true;
     }
     function schedulePhoneViewportApply(scale) {
+      if (oskPauseViewport) return;
       const target = () => (Number.isFinite(scale) && scale > 0 ? scale : phoneScale || phoneFitScale());
       const attempt = (left) => {
+        if (oskPauseViewport) return;
         if (applyPhoneViewportScale(target())) return;
         if (left <= 0) return;
         requestAnimationFrame(() => attempt(left - 1));
@@ -213,51 +231,7 @@ export const RELATIVE_PAGE_SCRIPT = `
       if (cp === undefined) return;
       sendKeysym(cp < 0x100 ? cp : 0x01000000 + cp);
     }
-    function coforgeAttachPhoneKeyboard() {
-      const kbInput = document.getElementById("coforge-desktop-keyboard-input");
-      const kbButton = phoneBar?.querySelector('button[data-action="keyboard"]');
-      if (!phone || !kbInput || !kbButton || kbInput.dataset.bound === "1") return;
-      kbInput.dataset.bound = "1";
-      const openKeyboard = () => {
-        try {
-          kbInput.focus({ preventScroll: true });
-        } catch {
-          kbInput.focus();
-        }
-        kbButton.classList.add("is-active");
-      };
-      kbButton.addEventListener("click", (ev) => {
-        ev.preventDefault();
-        openKeyboard();
-        setPhoneTrayOpen(false);
-      });
-      kbInput.addEventListener("focus", () => kbButton.classList.add("is-active"));
-      kbInput.addEventListener("blur", () => kbButton.classList.remove("is-active"));
-      kbInput.addEventListener("keydown", (ev) => {
-        if (!rfb) return;
-        if (ev.key === "Backspace") {
-          ev.preventDefault();
-          sendKeysym(0xff08, "Backspace");
-          return;
-        }
-        if (ev.key === "Enter") {
-          ev.preventDefault();
-          sendKeysym(0xff0d, "Enter");
-          return;
-        }
-        if (ev.key === "Tab") {
-          ev.preventDefault();
-          sendKey("Tab", true);
-          sendKey("Tab", false);
-        }
-      });
-      kbInput.addEventListener("input", () => {
-        const text = kbInput.value;
-        if (!text) return;
-        kbInput.value = "";
-        for (const ch of text) sendTypedCharacter(ch);
-      });
-    }
+${DESKTOP_PAGE_OSK_SCRIPT}
     function remotePoint(clientX, clientY) {
       const canvas = screen?.querySelector("canvas");
       if (!canvas || !rfb) return null;
@@ -453,6 +427,7 @@ export const RELATIVE_PAGE_SCRIPT = `
       if (phone) {
         applyPhoneMode("fit");
         coforgeAttachPhoneGestures();
+        coforgeAttachPhoneOsk();
         coforgeAttachPhoneKeyboard();
         coforgeAttachPhoneFab();
         setPhoneTrayOpen(false);

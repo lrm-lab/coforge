@@ -6,6 +6,8 @@ import {
   DESKTOP_PHONE_FAB_VIEWPORT_MARKER,
   DESKTOP_PHONE_GESTURES_MARKER,
   DESKTOP_PHONE_KEYBOARD_MARKER,
+  DESKTOP_PHONE_OSK_MARKER,
+  DESKTOP_PHONE_OSK_SCRIPT_MARKER,
   DESKTOP_PHONE_PASTE_MARKER,
   DESKTOP_PHONE_TRAY_LAYOUT_MARKER,
   DESKTOP_PHONE_VIEW_MARKER,
@@ -19,6 +21,8 @@ export {
   DESKTOP_PHONE_FAB_VIEWPORT_MARKER,
   DESKTOP_PHONE_GESTURES_MARKER,
   DESKTOP_PHONE_KEYBOARD_MARKER,
+  DESKTOP_PHONE_OSK_MARKER,
+  DESKTOP_PHONE_OSK_SCRIPT_MARKER,
   DESKTOP_PHONE_PASTE_MARKER,
   DESKTOP_PHONE_TRAY_LAYOUT_MARKER,
   DESKTOP_PHONE_VIEW_MARKER,
@@ -49,8 +53,8 @@ export function withDesktopTitle(html: string, title: string | undefined): strin
 
 /** Older images require a token in the address and load noVNC from the site root.
  * Current images already use a relative RFB import; both get reconnect, phone view,
- * keys, gestures, soft keyboard, long-press clipboard warm and UTF-8 clipboard copy-out.
- * A page missing paste, copy-out, phone view, gestures, keyboard or remote clipboard push is rewritten. */
+ * keys, gestures, browser OSK, compose fallback, long-press clipboard warm and UTF-8 clipboard copy-out.
+ * A page missing paste, copy-out, phone view, gestures, keyboard, OSK or remote clipboard push is rewritten. */
 export function adaptDesktopHtml(html: string): string {
   if (
     !html.includes('from "/core/rfb.js"') &&
@@ -68,6 +72,8 @@ export function adaptDesktopHtml(html: string): string {
     html.includes(DESKTOP_PHONE_GESTURES_MARKER) &&
     html.includes(DESKTOP_PHONE_TRAY_LAYOUT_MARKER) &&
     html.includes(DESKTOP_PHONE_KEYBOARD_MARKER) &&
+    html.includes(DESKTOP_PHONE_OSK_MARKER) &&
+    html.includes(DESKTOP_PHONE_OSK_SCRIPT_MARKER) &&
     html.includes(DESKTOP_PHONE_PASTE_MARKER)
   )
     return html;

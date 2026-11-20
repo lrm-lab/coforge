@@ -1,3 +1,7 @@
+import { DESKTOP_PHONE_OSK_MARKUP, DESKTOP_PHONE_OSK_STYLE } from "./desktop-page-osk";
+
+export { DESKTOP_PHONE_OSK_MARKER, DESKTOP_PHONE_OSK_SCRIPT_MARKER } from "./desktop-page-osk";
+
 /** Present once office→cloud paste sets the UTF-8 clipboard then sends Ctrl+V. */
 export const DESKTOP_PASTE_CLASSIC_MARKER = "coforgeDesktopPaste";
 
@@ -16,8 +20,8 @@ export const DESKTOP_PHONE_FAB_VIEWPORT_MARKER = "placePhoneFabInViewport";
 /** Present once phone modifier keys and continuous viewport gestures are in the adapted page. */
 export const DESKTOP_PHONE_GESTURES_MARKER = "applyPhoneViewportScale";
 
-/** Present once the compact icon tray (fit/landscape/keyboard + Esc/Tab + inverted-T arrows) is in the page. */
-export const DESKTOP_PHONE_TRAY_LAYOUT_MARKER = "coforge-desktop-key-pad";
+/** Present once the compact icon tray (fit/landscape/keyboard + window actions, no Esc/Tab/arrows) is in the page. */
+export const DESKTOP_PHONE_TRAY_LAYOUT_MARKER = 'data-tray="icons-only"';
 
 /** Present once the hidden input that opens the system soft keyboard is in the page. */
 export const DESKTOP_PHONE_KEYBOARD_MARKER = "coforge-desktop-keyboard-input";
@@ -45,23 +49,20 @@ const DESKTOP_CONTROLS = `<style>
 #coforge-desktop-phone-bar button.coforge-desktop-icon{width:44px;min-width:44px;height:44px;min-height:44px;padding:0;display:grid;place-items:center}
 #coforge-desktop-phone-bar button.coforge-desktop-icon svg{display:block}
 #coforge-desktop-phone-bar button.coforge-desktop-danger{color:#7a1f1f}
-#coforge-desktop-key-pad{display:grid;grid-template-columns:auto auto;gap:28px;align-items:center;justify-content:center;margin:0 auto}
-#coforge-desktop-side-keys{display:flex;flex-direction:column;gap:10px}
-#coforge-desktop-arrows{display:grid;grid-template-columns:42px 42px 42px;grid-template-rows:38px 38px;gap:2px}
-#coforge-desktop-arrows button,#coforge-desktop-side-keys button{min-width:42px;min-height:38px;padding:0}
-#coforge-desktop-arrows .up{grid-column:2;grid-row:1}
-#coforge-desktop-arrows .left{grid-column:1;grid-row:2}
-#coforge-desktop-arrows .down{grid-column:2;grid-row:2}
-#coforge-desktop-arrows .right{grid-column:3;grid-row:2}
 #coforge-desktop-keyboard-input{position:fixed;left:-100vw;top:0;width:1px;height:1px;opacity:0;border:0;padding:0;margin:0}
-</style><button type="button" id="coforge-desktop-phone-fab" aria-label="手机桌面工具">工具</button><div id="coforge-desktop-phone-bar" role="toolbar" aria-label="手机桌面控制"><div class="coforge-desktop-tray-row"><button type="button" data-mode="fit" class="coforge-desktop-icon is-active" aria-label="适应屏幕" title="适应屏幕">${ICON_FIT}</button><button type="button" data-shell="toggle-landscape" class="coforge-desktop-icon" aria-label="横竖屏" title="横竖屏">${ICON_LANDSCAPE}</button><button type="button" data-action="keyboard" class="coforge-desktop-icon" aria-label="键盘" title="键盘">${ICON_KEYBOARD}</button></div><div id="coforge-desktop-key-pad"><div id="coforge-desktop-side-keys"><button type="button" data-key="Escape">Esc</button><button type="button" data-key="Tab">Tab</button></div><div id="coforge-desktop-arrows" role="group" aria-label="方向键"><button type="button" class="up" data-key="ArrowUp">↑</button><button type="button" class="left" data-key="ArrowLeft">←</button><button type="button" class="down" data-key="ArrowDown">↓</button><button type="button" class="right" data-key="ArrowRight">→</button></div></div><div class="coforge-desktop-tray-row"><button type="button" data-shell="minimize" class="coforge-desktop-icon" aria-label="最小化" title="最小化">${ICON_MINIMIZE}</button><button type="button" data-shell="sleep" class="coforge-desktop-icon coforge-desktop-danger" aria-label="关闭" title="关闭">${ICON_CLOSE}</button></div></div><textarea id="coforge-desktop-keyboard-input" enterkeyhint="enter" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="手机输入"></textarea><button type="button" id="coforge-desktop-reconnect" aria-label="重新连接"><svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true"><path fill="currentColor" d="M12 6V3L8 7l4 4V8c2.76 0 5 2.24 5 5a5 5 0 0 1-8.9 3.1L6.68 17.5A7 7 0 0 0 19 13c0-3.87-3.13-7-7-7z"/></svg></button>`;
+${DESKTOP_PHONE_OSK_STYLE}
+</style><button type="button" id="coforge-desktop-phone-fab" aria-label="手机桌面工具">工具</button><div id="coforge-desktop-phone-bar" data-tray="icons-only" role="toolbar" aria-label="手机桌面控制"><div class="coforge-desktop-tray-row"><button type="button" data-mode="fit" class="coforge-desktop-icon is-active" aria-label="适应屏幕" title="适应屏幕">${ICON_FIT}</button><button type="button" data-shell="toggle-landscape" class="coforge-desktop-icon" aria-label="横竖屏" title="横竖屏">${ICON_LANDSCAPE}</button><button type="button" data-action="keyboard" class="coforge-desktop-icon" aria-label="键盘" title="键盘">${ICON_KEYBOARD}</button></div><div class="coforge-desktop-tray-row"><button type="button" data-shell="minimize" class="coforge-desktop-icon" aria-label="最小化" title="最小化">${ICON_MINIMIZE}</button><button type="button" data-shell="sleep" class="coforge-desktop-icon coforge-desktop-danger" aria-label="关闭" title="关闭">${ICON_CLOSE}</button></div></div>${DESKTOP_PHONE_OSK_MARKUP}<textarea id="coforge-desktop-keyboard-input" lang="zh-CN" inputmode="text" enterkeyhint="done" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="中文输入"></textarea><button type="button" id="coforge-desktop-reconnect" aria-label="重新连接"><svg viewBox="0 0 24 24" width="32" height="32" aria-hidden="true"><path fill="currentColor" d="M12 6V3L8 7l4 4V8c2.76 0 5 2.24 5 5a5 5 0 0 1-8.9 3.1L6.68 17.5A7 7 0 0 0 19 13c0-3.87-3.13-7-7-7z"/></svg></button>`;
 
 function stripDesktopControls(html: string): string {
   return html
     .replace(/<style>\s*#msg\[hidden\][\s\S]*?<\/style>/g, "")
     .replace(/<button type="button" id="coforge-desktop-phone-fab"[\s\S]*?<\/button>/g, "")
     .replace(
-      /<div id="coforge-desktop-phone-bar"[\s\S]*?(?=<textarea id="coforge-desktop-keyboard-input"|<button type="button" id="coforge-desktop-reconnect"|$)/g,
+      /<div id="coforge-desktop-phone-bar"[\s\S]*?(?=<div id="coforge-desktop-osk"|<textarea id="coforge-desktop-keyboard-input"|<button type="button" id="coforge-desktop-reconnect"|$)/g,
+      "",
+    )
+    .replace(
+      /<div id="coforge-desktop-osk"[\s\S]*?(?=<textarea id="coforge-desktop-keyboard-input"|<button type="button" id="coforge-desktop-reconnect"|$)/g,
       "",
     )
     .replace(/<textarea id="coforge-desktop-keyboard-input"[\s\S]*?<\/textarea>/g, "")
