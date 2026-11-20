@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type ComponentProps } from "react";
+import { useEffectEvent, useLayoutEffect, useRef, type ComponentProps } from "react";
 import { FocusScope, UNSAFE_PortalProvider, useFocusManager } from "react-aria";
 
 import { OPEN_OVERLAY_SELECTOR } from "#src/lib/open-overlay";
@@ -13,6 +13,14 @@ export function ArtifactPreviewFrame({
 }: ComponentProps<"dialog"> & { full: boolean; onExit: () => void }) {
   const frame = useRef<HTMLDialogElement>(null);
 
+  const exitPreview = useEffectEvent(() => {
+    const dialog = frame.current;
+    if (!dialog?.matches(":modal") || dialog.querySelector(OPEN_OVERLAY_SELECTOR)) return false;
+    focusExpandButton(dialog);
+    onExit();
+    return true;
+  });
+
   useLayoutEffect(() => {
     const dialog = frame.current;
     if (!dialog) return;
@@ -23,9 +31,17 @@ export function ArtifactPreviewFrame({
     dialog.open = false;
     dialog.showModal();
     focusExpandButton(dialog);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing || event.repeat)
+        return;
+      if (exitPreview()) event.preventDefault();
+    };
+    window.addEventListener("keydown", onKeyDown);
     return () => {
+      window.removeEventListener("keydown", onKeyDown);
       dialog.close();
       dialog.open = true;
+      focusExpandButton(dialog);
     };
   }, [full]);
 
