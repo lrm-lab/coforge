@@ -35,6 +35,7 @@ import {
   AgentMigrationRefusalNotice,
   AgentMigrationStatus,
   notStartedAfterMove,
+  useAgentMigrationNotStarted,
   useAgentMigrationStatus,
 } from "./agent-migration-status";
 import {
@@ -148,11 +149,8 @@ export function AgentMigrationSection({
     targetComputerId: string;
   } | null>(null);
   const [cancelError, setCancelError] = useState("");
-  /** The Computer a direct placement put the Agent on, when its start did not go out. */
-  const [notStartedOn, setNotStartedOn] = useState<{
-    computerName: string;
-    assigned: boolean;
-  } | null>(null);
+  const { notStarted: notStartedOn, setNotStarted: setNotStartedOn } =
+    useAgentMigrationNotStarted(agentId);
   const [submitting, guardSubmit] = useSubmitGuard();
   const [canceling, guardCancel] = useSubmitGuard();
 
@@ -193,7 +191,6 @@ export function AgentMigrationSection({
       try {
         const moved = await requestMove({ data: { agentId, targetComputerId } });
         setOpen(false);
-        // Placed but not started: say so, rather than let the move read as done.
         setNotStartedOn(
           notStartedAfterMove(
             moved,
@@ -412,7 +409,9 @@ export function AgentMigrationSection({
                       ? m.agent_migration_submit_pending()
                       : refusal
                         ? m.agent_migration_try_again()
-                        : m.agent_migration_submit()}
+                        : direct && !sourceName
+                          ? m.agent_migration_submit_fresh()
+                          : m.agent_migration_submit()}
                   </DialogAction>
                 </DialogActions>
               </>

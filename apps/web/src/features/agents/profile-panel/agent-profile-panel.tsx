@@ -377,7 +377,7 @@ export function AgentProfilePanel({
               ) : undefined
             }
             migrationLeads={migrationLeads}
-            computerAccessRevoked={migrationStatus?.computerAccessRevoked === true}
+            computerAccessRevoked={profile.computerAccessRevoked === true}
             migration={
               (profile.computer || placeable) && !deleted && migrationRuntime ? (
                 <AgentMigrationSection

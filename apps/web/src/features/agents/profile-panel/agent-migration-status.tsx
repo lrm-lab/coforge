@@ -1,5 +1,5 @@
 import { useServerFn } from "@tanstack/react-start";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { Button } from "#src/components/base/buttons/button";
 import { Alert } from "#src/components/ui/alert";
@@ -136,6 +136,35 @@ export function notStartedAfterMove(
   return moved?.direct === true && moved.startPublished === false
     ? { computerName: targetName, assigned: moved.computerAccessRevoked !== true }
     : null;
+}
+
+const notStartedKey = (agentId: string) => ["agent-migration-not-started", agentId] as const;
+
+export function writeAgentMigrationNotStarted(
+  queryClient: QueryClient,
+  agentId: string,
+  value: { computerName: string; assigned: boolean } | null,
+) {
+  queryClient.setQueryData(notStartedKey(agentId), value);
+}
+
+/**
+ * A placement's not-started result, kept in the Query cache rather than component state: the
+ * Profile moves the migration section between its INFO and ACTIONS slots once the placement
+ * lands, which remounts it, and the "start it manually" note must survive that.
+ */
+export function useAgentMigrationNotStarted(agentId: string) {
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: notStartedKey(agentId),
+    queryFn: () => null as { computerName: string; assigned: boolean } | null,
+    enabled: false,
+  });
+  return {
+    notStarted: query.data ?? null,
+    setNotStarted: (value: { computerName: string; assigned: boolean } | null) =>
+      writeAgentMigrationNotStarted(queryClient, agentId, value),
+  };
 }
 
 /** A direct placement that did not start: what happened and what to press. */

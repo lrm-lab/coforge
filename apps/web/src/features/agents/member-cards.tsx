@@ -223,13 +223,20 @@ export function AgentCard({
       <div className="mt-auto flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2 pt-1 text-sm text-tertiary">
         <span className="flex max-w-full min-w-0 items-center gap-1.5 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-tertiary ring-1 ring-secondary ring-inset">
           <Monitor aria-hidden="true" className="size-3.5 shrink-0" />
-          <span className="truncate">
-            {member.computerRevoked
-              ? `${member.computerName || m.agent_computer_unnamed()} · ${m.member_computer_access_revoked()}`
-              : member.computerId === null
+          {member.computerRevoked ? (
+            <>
+              <span className="min-w-0 truncate">
+                {member.computerName || m.agent_computer_unnamed()}
+              </span>
+              <span className="shrink-0">· {m.member_computer_access_revoked()}</span>
+            </>
+          ) : (
+            <span className="truncate">
+              {member.computerId === null
                 ? m.member_no_computer()
                 : member.computerName || m.agent_computer_unnamed()}
-          </span>
+            </span>
+          )}
         </span>
         <Tooltip title={m.member_created_by()} arrow>
           <TooltipTrigger className="flex min-w-0 cursor-default items-center gap-2 rounded-sm outline-focus-ring focus-visible:outline-2">

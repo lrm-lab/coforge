@@ -97,6 +97,7 @@ export async function loadAgentProfileDetail(context: WorkspaceUserContext, agen
     externalSetup,
     externalDisplay,
     externalConnectTarget,
+    computerAccessRevoked,
   ] = await Promise.all([
     computer
       ? getComputerStatusCache()
@@ -134,6 +135,16 @@ export async function loadAgentProfileDetail(context: WorkspaceUserContext, agen
     })
       ? humanRef(db, workspaceId, agentId, user.username)
       : null,
+    result.computerId
+      ? db.workspaceComputer
+          .findUnique({
+            where: {
+              workspaceId_computerId: { workspaceId, computerId: result.computerId },
+            },
+            select: { id: true },
+          })
+          .then((link) => !link)
+      : false,
   ]);
   const readiness = agentReadinessOf(await readinessReads, {
     nowMs: Date.now(),
@@ -180,6 +191,7 @@ export async function loadAgentProfileDetail(context: WorkspaceUserContext, agen
     externalSetup: externalSetup ?? null,
     externalConnectTarget: externalConnectTarget ?? null,
     workspaceSlug: workspace?.slug ?? null,
+    computerAccessRevoked,
     computer: result.computer
       ? {
           ...result.computer,

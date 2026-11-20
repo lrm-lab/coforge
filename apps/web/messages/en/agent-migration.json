@@ -11,6 +11,7 @@
   "agent_migration_dialog_left_behind": "Secret files (.env, keys, tokens, credentials) stay on this Computer; copy them again on the new one. Edit .coforgemigrateignore in the workspace to choose what else stays.",
   "agent_migration_dialog_stops": "The Agent stops here while it moves, and messages wait until it starts on the new Computer.",
   "agent_migration_submit": "Move",
+  "agent_migration_submit_fresh": "Assign",
   "agent_migration_submit_pending": "Starting the move…",
   "agent_migration_cancel": "Cancel move",
   "agent_migration_status_stopping": "Moving to {computer}: stopping the Agent here",

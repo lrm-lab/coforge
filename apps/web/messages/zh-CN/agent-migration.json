@@ -11,6 +11,7 @@
   "agent_migration_dialog_left_behind": "密钥类文件（.env、密钥、token、凭据）不会迁移，需要在新电脑上重新复制。可在工作区的 .coforgemigrateignore 中设置还有哪些内容不迁移。",
   "agent_migration_dialog_stops": "迁移期间 Agent 会在当前电脑上停止，消息会等到它在新电脑上启动后再处理。",
   "agent_migration_submit": "开始迁移",
+  "agent_migration_submit_fresh": "分配",
   "agent_migration_submit_pending": "正在发起迁移…",
   "agent_migration_cancel": "取消迁移",
   "agent_migration_status_stopping": "正在迁移到 {computer}：正在停止当前电脑上的 Agent",
