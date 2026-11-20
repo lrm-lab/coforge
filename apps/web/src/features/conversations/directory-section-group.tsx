@@ -35,25 +35,18 @@ export function DirectorySection({
   onToggle,
   headingProps,
   wrapTitle,
+  trailing,
   children,
 }: {
   label: string;
-  /** Conversations in this section, including zero. Stays beside the title when the section is folded. */
   count: number;
-  /** Nothing to list: the body is the empty note alone, without the avatar-to-title padding. */
   empty?: boolean;
-  /** A non-collapsible section's own mark, in the gutter a collapsible one gives its chevron —
-   * the way the Saved entry carries a bookmark. Ignored on a collapsible section: the mockup
-   * gives Channels and Direct messages a chevron and no second mark. */
   icon?: FC<{ className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
   expanded?: boolean;
-  /** Absent on a section that cannot collapse: its rows are always shown, and its title row is
-   * not a control at all, so it draws no chevron and takes no hover highlight. */
   onToggle?: () => void;
-  /** The title row's drag activation, when the section can be dragged to a new place. */
   headingProps?: DirectoryDragActivation;
-  /** Wraps the title's toggle, e.g. in the section's context menu (`ChatSectionMenu`). */
   wrapTitle?: (toggle: ReactNode) => ReactNode;
+  trailing?: ReactNode;
   children: ReactNode;
 }) {
   const listId = useId();
@@ -66,9 +59,6 @@ export function DirectorySection({
     )
       setEasesAfterToggle(false);
   };
-  // The title carries its own size, weight and colour, so it reads as a title of the list rather
-  // than a caption above it (and beats the Button's own `font-semibold`, which belongs to a real
-  // button).
   const title = (
     <span className="flex w-full min-w-0 items-center gap-2">
       <span className="min-w-0 truncate text-sm font-medium text-primary">{label}</span>
@@ -78,23 +68,16 @@ export function DirectorySection({
   );
   return (
     <>
-      {/* One unified hover surface for the whole header row: the row itself carries the
-          `hover:bg-primary_hover` (like a channel/DM row), and the toggle and the trailing `+`
-          are transparent so they never paint a second, differently-shaped highlight. They stay
-          independent click targets. `h-9` is the 2.25rem title row the list is built on: with no
-          margin between the sections, consecutive titles land exactly 2.25rem apart. */}
       <div className={cx(DIRECTORY_INSET, "group/section")}>
         <div
           className={cx(
-            "flex h-9 items-center gap-1 rounded-md pr-2 pl-2 transition-colors duration-100 ease-out",
+            "flex h-9 items-center gap-1 rounded-md pl-2 transition-colors duration-100 ease-out",
+            trailing ? "pr-1" : "pr-2",
             onToggle ? "group-hover/section:bg-primary_hover" : "cursor-pointer",
           )}
         >
           {onToggle ? (
             wrap(
-              // The whole caption row is the toggle, and `flex-1` fills the row width, so the hit
-              // area is large both ways (the user reported the old target was too small);
-              // `justify-start pl-0` puts the chevron on the same x as a row's own icon.
               <Button
                 {...headingProps}
                 color="tertiary"
@@ -120,29 +103,17 @@ export function DirectorySection({
               </Button>,
             )
           ) : (
-            // Nothing to press: the mark takes the chevron's gutter and the title keeps its x.
-            // The row still uses the hand cursor, the same as the other section titles.
-            // `gap-1.5`, not the Button's own `gap-1`: the Button's label span adds 2px of its
-            // own, so 6px here is what puts this title on the same x as a collapsible section's
-            // (measured in the browser, both at 262px in the 1440 layout).
             <span
               {...headingProps}
               className="flex h-full min-w-0 flex-1 items-center gap-1.5 pr-2"
             >
-              {Icon ? (
-                // Same ink as the Saved bookmark: text colour, #101319 in light mode.
-                <Icon aria-hidden="true" className="size-4 shrink-0 text-primary" />
-              ) : null}
+              {Icon ? <Icon aria-hidden="true" className="size-4 shrink-0 text-primary" /> : null}
               {title}
             </span>
           )}
+          {trailing}
         </div>
       </div>
-      {/* Design spec: 36px from the last row's avatar to the next section's title. A row pads its
-          avatar by 0.5rem and its list item by 1px, so the list adds the 27px left (1.6875rem);
-          when the last row is a bordered card (a channel or direct message), its 1px border takes
-          one of those (1.625rem). An empty section is the 2.25rem note alone. A folded section
-          adds nothing: folded titles stay one 2.25rem row apart. */}
       <div onTransitionEnd={stopEasingWhenFoldEnds}>
         <Fold
           open={expanded !== false}

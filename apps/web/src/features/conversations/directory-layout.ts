@@ -6,6 +6,11 @@ import type { ChatSection } from "./chat-section.schemas";
 import { sortSectionRows, type SortableRow } from "./chat-section-sort";
 import type { DirectEntry, DirectoryChannel } from "./conversation-directory-rows";
 import {
+  DEFAULT_BUILT_IN_SORT_MODES,
+  type BuiltInSectionSortModes,
+  type NaturalSectionSortMode,
+} from "./directory-sections";
+import {
   channelRowKey,
   directRowKey,
   splitPinnedConversations,
@@ -14,22 +19,61 @@ import {
 import type { ListedDirect } from "./sidebar-rows";
 import { useLastMessageTimes } from "./sidebar-lists";
 
-/** What the directory lays out: its lists, the live Agents its DMs are with, and its sections. */
 type LayoutInput = {
   channels: readonly DirectoryChannel[];
   agents: readonly AgentDirectoryEntry[];
   directRows: readonly ListedDirect[];
   viewerId?: string;
   sections: readonly ChatSection[];
+  builtInSortModes?: BuiltInSectionSortModes;
 };
 
-/** The directory's layout, derived again only when its lists, sections or a Recent-sorted row's
- * last message time change. */
+export function recentConversationIds({
+  channels,
+  directRows,
+  sections,
+  builtInSortModes = DEFAULT_BUILT_IN_SORT_MODES,
+}: {
+  channels: readonly Pick<DirectoryChannel, "id" | "pinned">[];
+  directRows: readonly Pick<ListedDirect, "conversationId" | "pinned" | "hidden">[];
+  sections: readonly Pick<ChatSection, "sortMode" | "conversationIds">[];
+  builtInSortModes?: BuiltInSectionSortModes;
+}): string[] {
+  const ids = new Set<string>();
+  for (const section of sections) {
+    if (section.sortMode === "recent") {
+      for (const id of section.conversationIds) ids.add(id);
+    }
+  }
+  if (builtInSortModes.pinned === "recent") {
+    for (const channel of channels) if (channel.pinned) ids.add(channel.id);
+    for (const direct of directRows) if (direct.pinned) ids.add(direct.conversationId);
+  }
+  if (builtInSortModes.channels === "recent") {
+    for (const channel of channels) ids.add(channel.id);
+  }
+  if (builtInSortModes.agents === "recent") {
+    for (const direct of directRows) {
+      if (direct.pinned || !direct.hidden) ids.add(direct.conversationId);
+    }
+  }
+  return [...ids];
+}
+
 export function useDirectoryLayout(input: LayoutInput) {
-  const { channels, agents, directRows, viewerId, sections } = input;
-  const lastMessageTimes = useLastMessageTimes(
-    sections.flatMap((section) => (section.sortMode === "recent" ? section.conversationIds : [])),
+  const {
+    channels,
+    agents,
+    directRows,
+    viewerId,
+    sections,
+    builtInSortModes = DEFAULT_BUILT_IN_SORT_MODES,
+  } = input;
+  const recentIds = useMemo(
+    () => recentConversationIds({ channels, directRows, sections, builtInSortModes }),
+    [channels, directRows, sections, builtInSortModes],
   );
+  const lastMessageTimes = useLastMessageTimes(recentIds);
   return useMemo(
     () =>
       directoryLayout({
@@ -38,18 +82,14 @@ export function useDirectoryLayout(input: LayoutInput) {
         directRows,
         viewerId,
         sections,
+        builtInSortModes,
         lastMessageTimes,
         locale: getLocale(),
       }),
-    [channels, agents, directRows, viewerId, sections, lastMessageTimes],
+    [channels, agents, directRows, viewerId, sections, builtInSortModes, lastMessageTimes],
   );
 }
 
-/**
- * One entry per existing DM (an Agent or member the viewer never wrote to has none), Agents and
- * members mixed in the list's order, each with the name it goes by. A DM with an Agent that is
- * gone is left out. The sidebar and the Drafts page both read their DMs this way.
- */
 export function directEntries(
   directRows: readonly ListedDirect[],
   agents: readonly AgentDirectoryEntry[],
@@ -64,47 +104,86 @@ export function directEntries(
   });
 }
 
-/**
- * Where every row of the Chat directory goes: the channels (joined first), one entry per DM with
- * its name and live Agent, each section's rows by key (`base`), and the order a row dragged out of
- * Pinned returns to (`natural`). Derived once per list change (`useDirectoryLayout`), not per
- * render: the drag reads `base` and `natural` on every pointer move.
- */
+function sortChannelGroup(
+  channels: readonly DirectoryChannel[],
+  mode: NaturalSectionSortMode,
+  lastMessageTimes: ReadonlyMap<string, string | null>,
+  locale?: string,
+): string[] {
+  const toSortable = (list: readonly DirectoryChannel[]): SortableRow[] =>
+    list.map((channel) => ({
+      key: channelRowKey(channel.id),
+      name: channel.name,
+      lastMessageAt: lastMessageTimes.get(channel.id) ?? null,
+    }));
+  const joined = channels.filter((channel) => channel.joined);
+  const unjoined = channels.filter((channel) => !channel.joined);
+  return [
+    ...sortSectionRows(toSortable(joined), mode, locale),
+    ...sortSectionRows(toSortable(unjoined), mode, locale),
+  ];
+}
+
+function sortDirectGroup(
+  directs: readonly DirectEntry[],
+  mode: NaturalSectionSortMode,
+  lastMessageTimes: ReadonlyMap<string, string | null>,
+  locale?: string,
+): string[] {
+  const rows: SortableRow[] = directs.map((direct) => ({
+    key: directRowKey(direct.conversationId),
+    name: direct.name,
+    lastMessageAt: lastMessageTimes.get(direct.conversationId) ?? null,
+  }));
+  return sortSectionRows(rows, mode, locale);
+}
+
 export function directoryLayout({
   channels,
   agents,
   directRows: directRowList,
   viewerId,
   sections,
+  builtInSortModes = DEFAULT_BUILT_IN_SORT_MODES,
   lastMessageTimes,
   locale,
 }: LayoutInput & {
-  /** When the rows of the sections sorted by Recent last had a message (`useLastMessageTimes`). */
   lastMessageTimes: ReadonlyMap<string, string | null>;
   locale?: string;
 }) {
   const sortedChannels = [...channels].sort((left, right) =>
     left.joined === right.joined ? 0 : left.joined ? -1 : 1,
   );
-  // A closed DM is left out of its section by the split.
   const directRows = directEntries(directRowList, agents, viewerId);
   const split = splitPinnedConversations(sortedChannels, directRows);
-  const base: DirectoryLayout = {
-    pinned: split.pinned.map((entry) =>
-      entry.kind === "channel" ? channelRowKey(entry.id) : directRowKey(entry.id),
-    ),
-    channels: split.channels.map((channel) => channelRowKey(channel.id)),
-    agents: split.directs.map((direct) => directRowKey(direct.conversationId)),
-  };
-  // A closed DM that is still pinned is included, so it can be seen while it is dragged.
+  const pinnedRows: SortableRow[] = split.pinned.map((entry) =>
+    entry.kind === "channel"
+      ? {
+          key: channelRowKey(entry.id),
+          name: entry.channel.name,
+          lastMessageAt: lastMessageTimes.get(entry.id) ?? null,
+        }
+      : {
+          key: directRowKey(entry.id),
+          name: entry.direct.name,
+          lastMessageAt: lastMessageTimes.get(entry.id) ?? null,
+        },
+  );
+  const pinnedKeys = new Set(pinnedRows.map((row) => row.key));
   const natural = {
-    channels: sortedChannels.map((channel) => channelRowKey(channel.id)),
-    agents: directRows
-      .filter((direct) => direct.pinned || !direct.hidden)
-      .map((direct) => directRowKey(direct.conversationId)),
+    channels: sortChannelGroup(sortedChannels, builtInSortModes.channels, lastMessageTimes, locale),
+    agents: sortDirectGroup(
+      directRows.filter((direct) => direct.pinned || !direct.hidden),
+      builtInSortModes.agents,
+      lastMessageTimes,
+      locale,
+    ),
   };
-  // What a custom section's sort reads from each row it may hold, by conversation id: a row in no
-  // built-in section (a channel the viewer is not in, a closed DM) is in none of these either.
+  const base: DirectoryLayout = {
+    pinned: sortSectionRows(pinnedRows, builtInSortModes.pinned, locale),
+    channels: natural.channels.filter((key) => !pinnedKeys.has(key)),
+    agents: natural.agents.filter((key) => !pinnedKeys.has(key)),
+  };
   const available = new Set([...base.channels, ...base.agents]);
   const sortable = new Map<string, SortableRow>();
   for (const channel of sortedChannels) {

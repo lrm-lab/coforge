@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { Check, Edit01, FolderPlus, Plus, Trash01 } from "@untitledui/icons";
+import { useState, type ReactNode } from "react";
+import { Check, Edit01, FolderPlus, Plus, SwitchVertical02, Trash01 } from "@untitledui/icons";
 import type { Selection } from "react-aria-components";
 import { Dropdown } from "#src/components/base/dropdown/dropdown";
 import { Button } from "#src/components/base/buttons/button";
@@ -17,8 +17,6 @@ function sortLabel(mode: ChatSectionSortMode): string {
   return m.chat_section_sort_manual();
 }
 
-/** A menu choice's own check, at the item's end as the design draws it (the Dropdown item puts
- * its built-in indicator before an icon-less label). */
 function Choice({ label, selected }: { label: string; selected: boolean }) {
   return (
     <span className="flex min-w-0 items-center gap-2">
@@ -42,13 +40,58 @@ function onlyKey(selection: Selection): string | undefined {
   return key === undefined ? undefined : String(key);
 }
 
-/**
- * A custom section's menu: its title row is the trigger of a React Aria context menu
- * (`MenuTrigger trigger="contextMenu"`, as a conversation row's is), so it opens on right click,
- * long-press on touch and the platform's keyboard shortcut (Shift+F10 / the Menu key), at that
- * point; a left click still collapses the section. Sort is the section's own (saved with it);
- * Display is this device's "Hide empty sidebar sections" setting.
- */
+export function SectionSortMenu<Mode extends ChatSectionSortMode>({
+  name,
+  mode,
+  modes,
+  onSort,
+}: {
+  name: string;
+  mode: Mode;
+  modes: readonly Mode[];
+  onSort: (mode: Mode) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const label = m.chat_section_sort_for({ name });
+  return (
+    <Dropdown.Root isOpen={open} onOpenChange={setOpen}>
+      <Button
+        color="tertiary"
+        size="xs"
+        aria-label={label}
+        iconLeading={SwitchVertical02}
+        className={cx(
+          "relative shrink-0 rounded-md data-icon-only:p-1.5 *:data-icon:stroke-[1.75px] hover:bg-active hover:*:data-icon:text-fg-secondary after:absolute after:-inset-2 after:hidden pointer-coarse:after:block",
+          open && "bg-active *:data-icon:text-fg-secondary",
+        )}
+      />
+      <Dropdown.Popover placement="bottom end">
+        <Dropdown.Menu
+          aria-label={label}
+          selectionMode="single"
+          disallowEmptySelection
+          selectedKeys={[mode]}
+          onSelectionChange={(selection) => {
+            const next = modes.find((entry) => entry === onlyKey(selection));
+            if (next && next !== mode) onSort(next);
+          }}
+        >
+          {modes.map((entry) => (
+            <Dropdown.Item
+              key={entry}
+              id={entry}
+              textValue={sortLabel(entry)}
+              selectionIndicator="none"
+            >
+              <Choice label={sortLabel(entry)} selected={mode === entry} />
+            </Dropdown.Item>
+          ))}
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown.Root>
+  );
+}
+
 export function ChatSectionMenu({
   section,
   hideEmpty,
@@ -66,8 +109,6 @@ export function ChatSectionMenu({
   onEdit: () => void;
   onCreate: () => void;
   onDelete: () => void;
-  /** The section's title row, whose toggle must be a React Aria button: the trigger attaches to
-   * the first pressable inside it. */
   children: ReactNode;
 }) {
   const label = m.chat_section_menu({ name: section.name });
@@ -153,7 +194,6 @@ export function ChatSectionMenu({
   );
 }
 
-/** Creation belongs to the list's blank space, independent of any existing section. */
 export function ChatSectionCreateMenu({
   onCreate,
   disabled,
@@ -171,7 +211,6 @@ export function ChatSectionCreateMenu({
         onPress={(event) => {
           if (event.pointerType === "keyboard") onCreate();
         }}
-        // Blank space, not a button: a plain pointer, as nothing happens on a click.
         className="min-h-24 w-full flex-1 cursor-default rounded-none hover:bg-transparent! disabled:cursor-default"
       >
         <span className="sr-only">{m.chat_section_create()}</span>

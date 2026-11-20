@@ -20,9 +20,13 @@ import { SavedDirectoryRow } from "./saved-directory-row";
 import { conversationRowMenuEnabled } from "./conversation-row-menu-model";
 import { useChatSections, useSidebarActions } from "./sidebar-lists";
 import { ChatSectionDialog } from "./chat-section-dialog";
-import { ChatSectionCreateMenu, ChatSectionMenu } from "./chat-section-menu";
+import { ChatSectionCreateMenu, ChatSectionMenu, SectionSortMenu } from "./chat-section-menu";
 import { directorySectionOrder, storedSectionOrder } from "./directory-section-order";
-import type { ChatSection } from "./chat-section.schemas";
+import {
+  chatSectionSortModes,
+  type ChatSection,
+  type ChatSectionSortMode,
+} from "./chat-section.schemas";
 import type { ListedDirect } from "./sidebar-rows";
 import {
   DirectoryDragOverlay,
@@ -35,11 +39,13 @@ import {
 import { channelRowKey, directRowKey } from "./pinned-conversations";
 import {
   directorySectionHideable,
+  naturalSectionSortModes,
   readCollapsedSections,
   writeCollapsedSections,
   type CollapsibleSectionId,
   type DirectorySectionId,
 } from "./directory-sections";
+import { useBuiltInSectionSortModes } from "./use-built-in-section-sort";
 import { DraftsDirectoryRow } from "./drafts-directory-row";
 import {
   EMPTY_SECTION_HIDDEN_CLASS,
@@ -67,12 +73,15 @@ export function ConversationDirectory({
   selectedDrafts?: boolean;
 }) {
   const groups = useChatSections();
+  const { sortModes: builtInSortModes, setSortMode: changeBuiltInSortMode } =
+    useBuiltInSectionSortModes();
   const { sortedChannels, directRows, base, natural } = useDirectoryLayout({
     channels,
     agents,
     directRows: directRowList,
     viewerId,
     sections: groups.sections,
+    builtInSortModes,
   });
   const toast = useAppToast();
   const actions = useSidebarActions();
@@ -142,6 +151,13 @@ export function ConversationDirectory({
     natural,
     sectionIds: sectionOrder,
     commitPins: (change) => {
+      if (
+        builtInSortModes.pinned !== "manual" &&
+        change.unpinned.length === 0 &&
+        change.pins.length === base.pinned.length
+      ) {
+        changeBuiltInSortMode("pinned", "manual");
+      }
       actions.arrange(change).catch((cause: unknown) => {
         console.error("pinned conversations could not be saved", cause);
         toast.error(m.conversation_menu_action_error());
@@ -224,6 +240,16 @@ export function ConversationDirectory({
         </DirectoryDragRow>
       );
     });
+  const sortControl = <Mode extends ChatSectionSortMode>(
+    count: number,
+    name: string,
+    mode: Mode,
+    modes: readonly Mode[],
+    onSort: (next: Mode) => void,
+  ) =>
+    count > 0 ? (
+      <SectionSortMenu name={name} mode={mode} modes={modes} onSort={onSort} />
+    ) : undefined;
   const pinnedEmpty = base.pinned.length === 0;
 
   return (
@@ -275,6 +301,13 @@ export function ConversationDirectory({
                       icon={Pin01}
                       headingProps={headingProps}
                       expanded={drag.sortingSections ? false : undefined}
+                      trailing={sortControl(
+                        base.pinned.length,
+                        m.conversation_pinned_section(),
+                        builtInSortModes.pinned,
+                        chatSectionSortModes,
+                        (mode) => changeBuiltInSortMode("pinned", mode),
+                      )}
                     >
                       <div className={DIRECTORY_INSET}>
                         <DirectoryDropList
@@ -313,6 +346,13 @@ export function ConversationDirectory({
                       headingProps={headingProps}
                       expanded={!drag.sortingSections && !collapsed.includes("channels")}
                       onToggle={() => toggle("channels")}
+                      trailing={sortControl(
+                        base.channels.length,
+                        m.channels_title(),
+                        builtInSortModes.channels,
+                        naturalSectionSortModes,
+                        (mode) => changeBuiltInSortMode("channels", mode),
+                      )}
                     >
                       <div className={DIRECTORY_INSET}>
                         <DirectoryDropList
@@ -349,6 +389,13 @@ export function ConversationDirectory({
                       headingProps={headingProps}
                       expanded={!drag.sortingSections && !collapsed.includes("agents")}
                       onToggle={() => toggle("agents")}
+                      trailing={sortControl(
+                        base.agents.length,
+                        m.messages_agents_action(),
+                        builtInSortModes.agents,
+                        naturalSectionSortModes,
+                        (mode) => changeBuiltInSortMode("agents", mode),
+                      )}
                     >
                       <div className={DIRECTORY_INSET}>
                         <DirectoryDropList
@@ -373,6 +420,8 @@ export function ConversationDirectory({
             const keys = base[key] ?? [];
             const label = `${section.emoji ? `${section.emoji} ` : ""}${section.name}`;
             const saving = savingSections.has(section.id);
+            const sortSection = (sortMode: ChatSectionSortMode) =>
+              changeSection(() => actions.updateSection(section.id, { sortMode }), section.id);
             return (
               <DirectorySortableSection
                 ripple={drag.ripple}
@@ -405,16 +454,18 @@ export function ConversationDirectory({
                         section.id,
                       )
                     }
+                    trailing={sortControl(
+                      keys.length,
+                      section.name,
+                      section.sortMode,
+                      chatSectionSortModes,
+                      sortSection,
+                    )}
                     wrapTitle={(toggle) => (
                       <ChatSectionMenu
                         section={section}
                         hideEmpty={hideEmpty}
-                        onSort={(sortMode) =>
-                          changeSection(
-                            () => actions.updateSection(section.id, { sortMode }),
-                            section.id,
-                          )
-                        }
+                        onSort={sortSection}
                         onHideEmptyChange={changeHideEmpty}
                         onEdit={() => setEditingSection(section)}
                         onCreate={newSection}
