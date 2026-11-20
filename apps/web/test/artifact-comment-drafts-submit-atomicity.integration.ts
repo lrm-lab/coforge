@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { WEB_DRAFT_REVIEW_MARKER } from "#src/server/artifacts/artifact-notice-visibility.server";
 import { ArtifactCommentDrafts } from "#src/server/artifacts/artifact-comment-drafts.server";
 import { draftsHarness, type DraftsHarness } from "./helpers/artifact-drafts-harness";
 
@@ -58,7 +59,7 @@ test("two sends with the same key write one review and one notice per recipient"
       source_agentId_externalEventId: {
         source: "system.artifacts",
         agentId: h.f.agents.reader,
-        externalEventId: `${artifact}:web-draft-review:${reviewId}`,
+        externalEventId: `${artifact}:${WEB_DRAFT_REVIEW_MARKER}:${reviewId}`,
       },
     },
     select: { id: true },
@@ -103,7 +104,7 @@ test("a first push that fails leaves the delivery stored for recovery under the 
       source_agentId_externalEventId: {
         source: "system.artifacts",
         agentId: h.f.agents.reader,
-        externalEventId: `${artifact}:web-draft-review:${sent.reviewId}`,
+        externalEventId: `${artifact}:${WEB_DRAFT_REVIEW_MARKER}:${sent.reviewId}`,
       },
     },
     select: { messageId: true, agentId: true },
@@ -175,7 +176,10 @@ test("two concurrent sends reach one system conversation with a notice each", as
       source: "system.artifacts",
       agentId: h.f.agents.reader,
       externalEventId: {
-        in: [`${first}:web-draft-review:${a.reviewId}`, `${second}:web-draft-review:${b.reviewId}`],
+        in: [
+          `${first}:${WEB_DRAFT_REVIEW_MARKER}:${a.reviewId}`,
+          `${second}:${WEB_DRAFT_REVIEW_MARKER}:${b.reviewId}`,
+        ],
       },
     },
     select: { conversationId: true, messageId: true },

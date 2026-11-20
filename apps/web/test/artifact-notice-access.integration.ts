@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { WEB_DRAFT_REVIEW_MARKER } from "#src/server/artifacts/artifact-notice-visibility.server";
 import { PrismaDirectConversationRepository } from "#src/server/db/repositories/direct-conversation.repositories.server";
 import { draftsHarness, type DraftsHarness } from "./helpers/artifact-drafts-harness";
 
@@ -20,7 +21,7 @@ test("a notice stops being readable once the Agent loses the artifact", async ()
       source_agentId_externalEventId: {
         source: "system.artifacts",
         agentId: h.f.agents.reader,
-        externalEventId: `${artifact}:web-draft-review:${sent.reviewId}`,
+        externalEventId: `${artifact}:${WEB_DRAFT_REVIEW_MARKER}:${sent.reviewId}`,
       },
     },
     select: { messageId: true, conversationId: true },
@@ -89,7 +90,7 @@ test("a blocked notice does not starve a later readable one in the same conversa
           source_agentId_externalEventId: {
             source: "system.artifacts",
             agentId: h.f.agents.reader,
-            externalEventId: `${artifact}:web-draft-review:${reviewId}`,
+            externalEventId: `${artifact}:${WEB_DRAFT_REVIEW_MARKER}:${reviewId}`,
           },
         },
         select: { messageId: true, conversationId: true },
@@ -131,7 +132,7 @@ test("a notice whose artifact row is gone is not handed back", async () => {
       source_agentId_externalEventId: {
         source: "system.artifacts",
         agentId: h.f.agents.reader,
-        externalEventId: `${artifact}:web-draft-review:${sent.reviewId}`,
+        externalEventId: `${artifact}:${WEB_DRAFT_REVIEW_MARKER}:${sent.reviewId}`,
       },
     },
     select: { id: true, messageId: true },
@@ -145,7 +146,7 @@ test("a notice whose artifact row is gone is not handed back", async () => {
 
   await h.f.db.systemAgentEvent.update({
     where: { id: event.id },
-    data: { externalEventId: `${crypto.randomUUID()}:web-draft-review:${sent.reviewId}` },
+    data: { externalEventId: `${crypto.randomUUID()}:${WEB_DRAFT_REVIEW_MARKER}:${sent.reviewId}` },
   });
 
   expect(await pendingIds()).not.toContain(event.messageId);
@@ -169,7 +170,7 @@ test("the JavaScript rule and the SQL predicate agree on an artifact whose home 
       source_agentId_externalEventId: {
         source: "system.artifacts",
         agentId: h.f.agents.reader,
-        externalEventId: `${artifact}:web-draft-review:${sent.reviewId}`,
+        externalEventId: `${artifact}:${WEB_DRAFT_REVIEW_MARKER}:${sent.reviewId}`,
       },
     },
     select: { messageId: true },
@@ -206,7 +207,7 @@ test("an event without the web marker keeps its old behaviour", async () => {
       source_agentId_externalEventId: {
         source: "system.artifacts",
         agentId: h.f.agents.reader,
-        externalEventId: `${artifact}:web-draft-review:${sent.reviewId}`,
+        externalEventId: `${artifact}:${WEB_DRAFT_REVIEW_MARKER}:${sent.reviewId}`,
       },
     },
     select: { id: true, messageId: true },
@@ -242,7 +243,7 @@ test("an author still reads its own notice after the home conversation is gone",
     source: "system.artifacts",
     workspaceId: h.f.workspaceId,
     agentId: row.authorAgentId,
-    externalEventId: `${artifact}:web-draft-review:${crypto.randomUUID()}`,
+    externalEventId: `${artifact}:${WEB_DRAFT_REVIEW_MARKER}:${crypto.randomUUID()}`,
     expiresAt: await store.expiryAfter(600),
     body: "Author fallback notice.",
   });
@@ -267,7 +268,7 @@ test("a home key without the conversation prefix blocks a non-author", async () 
       source_agentId_externalEventId: {
         source: "system.artifacts",
         agentId: h.f.agents.reader,
-        externalEventId: `${artifact}:web-draft-review:${sent.reviewId}`,
+        externalEventId: `${artifact}:${WEB_DRAFT_REVIEW_MARKER}:${sent.reviewId}`,
       },
     },
     select: { messageId: true },

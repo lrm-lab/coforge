@@ -8,6 +8,7 @@ import {
   peopleReadingArtifact,
   type ArtifactAccessRow,
 } from "./artifact-access.server";
+import { WEB_DRAFT_REVIEW_MARKER } from "./artifact-notice-visibility.server";
 import { followerIds } from "./artifact-follows.server";
 import { lastChangers, versionChanges } from "./artifact-file-authors.server";
 import {
@@ -129,7 +130,7 @@ export class ArtifactNotices {
     const staged: StagedArtifactNotice[] = [];
     const report = await this.tell(
       input,
-      { ...reviewPlan(input), key: `web-draft-review:${input.reviewId}` },
+      { ...reviewPlan(input), key: `${WEB_DRAFT_REVIEW_MARKER}:${input.reviewId}` },
       undefined,
       { scope, staged },
     );
