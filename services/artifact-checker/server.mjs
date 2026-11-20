@@ -1,6 +1,4 @@
 import { timingSafeEqual } from "node:crypto";
-import { createServer } from "node:http";
-import { fileURLToPath } from "node:url";
 import { createPlaywrightDriver } from "./browser.mjs";
 import { isValidArtifactOrigin } from "./ssrf.mjs";
 
@@ -30,37 +28,28 @@ export function isAuthorizedBearer(headerValue, expectedSecret, options = {}) {
   return timingSafeEqual(presented, expected);
 }
 
-function sendJson(res, status, payload) {
-  if (res.writableEnded) return;
-  const body = JSON.stringify(payload);
-  res.writeHead(status, {
-    "Content-Type": "application/json",
-    "Content-Length": Buffer.byteLength(body),
+function jsonResponse(status, payload) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "Content-Type": "application/json" },
   });
-  res.end(body);
 }
 
 async function readJsonBody(req, maxBytes) {
-  const declared = Number.parseInt(String(req.headers["content-length"] ?? ""), 10);
+  const declared = Number.parseInt(req.headers.get("content-length") ?? "", 10);
   if (Number.isFinite(declared) && declared > maxBytes) {
     const error = new Error("Payload too large");
     error.statusCode = 413;
     throw error;
   }
-  const chunks = [];
-  let total = 0;
-  for await (const chunk of req) {
-    total += chunk.length;
-    if (total > maxBytes) {
-      const error = new Error("Payload too large");
-      error.statusCode = 413;
-      throw error;
-    }
-    chunks.push(chunk);
+  const bytes = new Uint8Array(await req.arrayBuffer());
+  if (bytes.byteLength > maxBytes) {
+    const error = new Error("Payload too large");
+    error.statusCode = 413;
+    throw error;
   }
-  const raw = Buffer.concat(chunks).toString("utf8");
   try {
-    return JSON.parse(raw);
+    return JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     const error = new Error("Invalid JSON body");
     error.statusCode = 400;
@@ -100,7 +89,8 @@ export function createCheckerServer(options = {}) {
   let activeJobs = 0;
   const waiters = [];
 
-  async function acquireSlot(req) {
+  async function acquireSlot(signal) {
+    if (signal?.aborted) return "aborted";
     if (activeJobs < maxConcurrency) {
       activeJobs += 1;
       return "acquired";
@@ -109,17 +99,17 @@ export function createCheckerServer(options = {}) {
     return new Promise((resolve) => {
       const entry = {
         resolve: () => {
-          req.off("close", onClose);
+          signal?.removeEventListener("abort", onAbort);
           activeJobs += 1;
           resolve("acquired");
         },
       };
-      const onClose = () => {
+      const onAbort = () => {
         const index = waiters.indexOf(entry);
         if (index >= 0) waiters.splice(index, 1);
         resolve("aborted");
       };
-      req.once("close", onClose);
+      signal?.addEventListener("abort", onAbort, { once: true });
       waiters.push(entry);
     });
   }
@@ -130,10 +120,10 @@ export function createCheckerServer(options = {}) {
     if (next) next.resolve();
   }
 
-  const server = createServer(async (req, res) => {
-    const url = req.url || "/";
-    if (req.method === "GET" && url === "/health") {
-      sendJson(res, 200, {
+  async function handleRequest(req, server) {
+    const pathname = new URL(req.url).pathname;
+    if (req.method === "GET" && pathname === "/health") {
+      return jsonResponse(200, {
         ok: true,
         status: "ready",
         activeJobs,
@@ -143,54 +133,47 @@ export function createCheckerServer(options = {}) {
         rssMb: rssMb(),
         uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
       });
-      return;
     }
 
-    if (req.method !== "POST" || url !== "/check") {
-      sendJson(res, 404, { error: "Not found" });
-      return;
+    if (req.method !== "POST" || pathname !== "/check") {
+      return jsonResponse(404, { error: "Not found" });
     }
 
-    if (!isAuthorizedBearer(req.headers.authorization, secret, { allowUnauthenticated })) {
+    if (!isAuthorizedBearer(req.headers.get("authorization") ?? undefined, secret, { allowUnauthenticated })) {
+      const remoteAddress = server?.requestIP?.(req)?.address ?? null;
       logger.warn({
         event: "artifact_checker.auth_rejected",
-        remoteAddress: req.socket.remoteAddress ?? null,
+        remoteAddress,
       });
-      sendJson(res, 401, { error: "Unauthorized" });
-      return;
+      return jsonResponse(401, { error: "Unauthorized" });
     }
 
-    const declaredLength = Number.parseInt(String(req.headers["content-length"] ?? ""), 10);
+    const declaredLength = Number.parseInt(req.headers.get("content-length") ?? "", 10);
     if (Number.isFinite(declaredLength) && declaredLength > maxBodyBytes) {
-      sendJson(res, 413, { error: "Payload too large" });
-      return;
+      return jsonResponse(413, { error: "Payload too large" });
     }
 
-    const slotState = await acquireSlot(req);
+    const slotState = await acquireSlot(req.signal);
     if (slotState === "full") {
       logger.warn({
         event: "artifact_checker.queue_full",
         activeJobs,
         queuedJobs: waiters.length,
       });
-      sendJson(res, 503, { error: "Checker busy" });
-      return;
+      return jsonResponse(503, { error: "Checker busy" });
     }
-    if (slotState === "aborted") return;
+    if (slotState === "aborted") return new Response(null, { status: 499 });
 
     const controller = new AbortController();
-    const onResponseClose = () => {
-      if (!res.writableEnded) controller.abort();
-    };
-    res.once("close", onResponseClose);
+    const onRequestAbort = () => controller.abort();
+    req.signal.addEventListener("abort", onRequestAbort, { once: true });
     let timer;
     try {
       let payload;
       try {
         payload = await readJsonBody(req, maxBodyBytes);
       } catch (error) {
-        sendJson(res, error.statusCode || 400, { error: error.message });
-        return;
+        return jsonResponse(error.statusCode || 400, { error: error.message });
       }
 
       if (
@@ -199,8 +182,7 @@ export function createCheckerServer(options = {}) {
         !isValidArtifactOrigin(payload.origin) ||
         !Array.isArray(payload.files)
       ) {
-        sendJson(res, 400, { error: "Invalid or missing required fields: origin, files" });
-        return;
+        return jsonResponse(400, { error: "Invalid or missing required fields: origin, files" });
       }
 
       const jobStart = Date.now();
@@ -245,7 +227,7 @@ export function createCheckerServer(options = {}) {
           blank: Boolean(result.findings?.blank),
           rssMb: rssMb(),
         });
-        sendJson(res, 200, result);
+        return jsonResponse(200, result);
       } catch (error) {
         controller.abort();
         await Promise.race([
@@ -265,22 +247,35 @@ export function createCheckerServer(options = {}) {
             error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300),
           rssMb: rssMb(),
         });
-        sendJson(res, status, { error: error instanceof Error ? error.message : "Check failed" });
+        return jsonResponse(status, {
+          error: error instanceof Error ? error.message : "Check failed",
+        });
       }
     } finally {
-      res.off("close", onResponseClose);
+      req.signal.removeEventListener("abort", onRequestAbort);
       clearTimeout(timer);
       releaseSlot();
     }
-  });
+  }
 
-  return { server, driver };
+  function start(listenOptions = {}) {
+    const port = listenOptions.port ?? DEFAULT_PORT;
+    const hostname = listenOptions.hostname ?? "0.0.0.0";
+    return Bun.serve({
+      hostname,
+      port,
+      maxRequestBodySize: maxBodyBytes,
+      idleTimeout: 130,
+      fetch: handleRequest,
+    });
+  }
+
+  return { start, fetch: handleRequest, driver };
 }
 
-const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
-if (isMain) {
+if (import.meta.main) {
   const port = Number.parseInt(process.env.PORT ?? String(DEFAULT_PORT), 10) || DEFAULT_PORT;
-  const host = process.env.HOST ?? "0.0.0.0";
+  const hostname = process.env.HOST ?? "0.0.0.0";
   const secret = process.env.COFORGE_ARTIFACT_CHECK_SECRET?.trim() ?? "";
   const allowUnauthenticated =
     process.env.NODE_ENV !== "production" && process.env.CHECKER_ALLOW_UNAUTHENTICATED === "1";
@@ -288,23 +283,23 @@ if (isMain) {
   if (!secret && !allowUnauthenticated) {
     logger.error({
       event: "artifact_checker.missing_secret",
-      detail: "COFORGE_ARTIFACT_CHECK_SECRET is required unless CHECKER_ALLOW_UNAUTHENTICATED=1 in non-production",
+      detail:
+        "COFORGE_ARTIFACT_CHECK_SECRET is required unless CHECKER_ALLOW_UNAUTHENTICATED=1 in non-production",
     });
     process.exit(1);
   }
-  const { server, driver } = createCheckerServer({ logger, secret, allowUnauthenticated });
-  server.listen(port, host, () => {
-    logger.info({
-      event: "artifact_checker.started",
-      host,
-      port,
-      authEnabled: Boolean(secret),
-      rssMb: rssMb(),
-    });
+  const checker = createCheckerServer({ logger, secret, allowUnauthenticated });
+  const server = checker.start({ hostname, port });
+  logger.info({
+    event: "artifact_checker.started",
+    host: hostname,
+    port: server.port,
+    authEnabled: Boolean(secret),
+    rssMb: rssMb(),
   });
   const shutdown = async () => {
-    server.close();
-    await driver.close();
+    server.stop();
+    await checker.driver.close();
     process.exit(0);
   };
   process.on("SIGINT", shutdown);

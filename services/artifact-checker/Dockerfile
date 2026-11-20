@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim
+FROM oven/bun:1.4.4-slim
 
 ENV NODE_ENV=production \
     PORT=3100 \
@@ -6,20 +6,20 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --no-audit --no-fund \
-    && npx playwright-core install chromium --with-deps \
-    && rm -rf /var/lib/apt/lists/* /root/.npm
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production \
+    && bunx --bun playwright-core install chromium --with-deps \
+    && rm -rf /var/lib/apt/lists/* /root/.bun/install/cache
 
 COPY browser.mjs evaluate.mjs server.mjs ssrf.mjs ./
 
-RUN chown -R node:node /app /ms-playwright
+RUN chown -R bun:bun /app /ms-playwright
 
-USER node
+USER bun
 
 EXPOSE 3100
 
 HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:3100/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD bun -e "fetch('http://127.0.0.1:3100/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "server.mjs"]
+CMD ["bun", "server.mjs"]

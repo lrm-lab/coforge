@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import type { AddressInfo } from "node:net";
 import {
   buildInlineHostHtml,
   clampInlineHeight,
@@ -149,7 +148,7 @@ describe("artifact-checker HTTP server", () => {
       warn: (p: Record<string, unknown>) => logs.push(p),
       error: (p: Record<string, unknown>) => logs.push(p),
     };
-    const { server } = createCheckerServer({
+    const checker = createCheckerServer({
       secret: "worker-secret",
       maxConcurrency: 1,
       logger,
@@ -176,9 +175,8 @@ describe("artifact-checker HTTP server", () => {
       },
     });
 
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-    const port = (server.address() as AddressInfo).port;
-    const base = `http://127.0.0.1:${port}`;
+    const server = checker.start({ hostname: "127.0.0.1", port: 0 });
+    const base = `http://127.0.0.1:${server.port}`;
 
     try {
       const healthRes = await fetch(`${base}/health`);
@@ -237,7 +235,7 @@ describe("artifact-checker HTTP server", () => {
       expect(completedLog?.phoneOverflow).toBe(false);
       expect(completedLog?.inlineClipped).toBe(false);
     } finally {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      server.stop(true);
     }
   });
 });

@@ -7,10 +7,6 @@ on:
       image:
         description: "Immutable digest reference for coforge-artifact-checker"
         value: ${{ jobs.image.outputs.image }}
-  push:
-    branches: [main]
-    paths:
-      - services/artifact-checker/**
 
 permissions:
   contents: read

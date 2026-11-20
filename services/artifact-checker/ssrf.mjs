@@ -1,23 +1,60 @@
 import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
 
 const ARTIFACT_ORIGIN_PATTERN = /^https:\/\/a-[a-zA-Z0-9-]{1,64}\.coforge\.check$/;
 const MAX_CDN_REDIRECTS = 3;
 const MAX_CDN_RESPONSE_BYTES = 10 * 1024 * 1024;
 const CDN_FETCH_TIMEOUT_MS = 5_000;
+const HEX_GROUP = /^[0-9a-f]{1,4}$/i;
 
 function parseIpv4Octets(ip) {
   const parts = ip.split(".");
   if (parts.length !== 4) return null;
-  const nums = parts.map((p) => Number.parseInt(p, 10));
-  if (nums.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+  const nums = [];
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) return null;
+    if (part.length > 1 && part.startsWith("0")) return null;
+    const n = Number.parseInt(part, 10);
+    if (n < 0 || n > 255) return null;
+    nums.push(n);
+  }
   return nums;
+}
+
+function isIpv6Address(raw) {
+  if (!raw.includes(":")) return false;
+  const ip = raw.toLowerCase();
+  if (ip === "::") return true;
+  if (ip.split("::").length > 2) return false;
+  const hasDouble = ip.includes("::");
+  const [leftRaw, rightRaw = ""] = ip.split("::");
+  const left = leftRaw ? leftRaw.split(":") : [];
+  const right = rightRaw ? rightRaw.split(":") : [];
+  const checkTail = (parts) => {
+    if (parts.length > 0 && parts[parts.length - 1].includes(".")) {
+      if (!parseIpv4Octets(parts[parts.length - 1])) return null;
+      return parts.slice(0, -1).every((g) => HEX_GROUP.test(g)) ? parts.length + 1 : null;
+    }
+    return parts.every((g) => HEX_GROUP.test(g)) ? parts.length : null;
+  };
+  if (!hasDouble) {
+    return checkTail(left) === 8;
+  }
+  if (!left.every((g) => HEX_GROUP.test(g))) return false;
+  const rightCount = checkTail(right);
+  if (rightCount === null) return false;
+  return left.length + rightCount < 8;
+}
+
+function ipVersion(raw) {
+  if (parseIpv4Octets(raw)) return 4;
+  if (isIpv6Address(raw)) return 6;
+  return 0;
 }
 
 export function isPublicIpAddress(rawIp) {
   if (typeof rawIp !== "string" || !rawIp) return false;
   const ip = rawIp.trim().toLowerCase().replace(/^\[|\]$/g, "");
-  const version = isIP(ip);
+  const version = ipVersion(ip);
   if (version === 4) {
     const octets = parseIpv4Octets(ip);
     if (!octets) return false;
@@ -49,7 +86,7 @@ export function isPublicIpAddress(rawIp) {
 function isDisallowedHostname(hostname) {
   if (!hostname) return true;
   if (hostname.startsWith("[") || hostname.includes(":")) return true;
-  if (isIP(hostname) !== 0) return true;
+  if (ipVersion(hostname) !== 0) return true;
   if (!hostname.includes(".")) return true;
   if (
     hostname === "localhost" ||

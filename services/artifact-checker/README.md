@@ -1,6 +1,6 @@
 # Artifact Checker Sidecar
 
-Isolated Node + Playwright (Chromium-only) HTTP worker that renders published HTML artifacts across
+Isolated Bun + Playwright (Chromium-only) HTTP worker that renders published HTML artifacts across
 `desktop` (1280×800), `phone` (390×844 @2x), and `inline` (672×800 with `--coforge-*` tokens)
 viewports, captures screenshots, and collects layout and console findings.
 
