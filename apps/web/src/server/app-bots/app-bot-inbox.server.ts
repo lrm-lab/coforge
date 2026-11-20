@@ -1,7 +1,6 @@
 import { UUID_LIKE_PATTERN } from "@lrm/coforge-sdk/internal";
 
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { firstBlockedArtifactNoticeSequence } from "#src/server/artifacts/artifact-notice-visibility.server";
 import { readChannelCoordination } from "#src/server/conversations/channel-coordination.server";
 import { clampPageLimit } from "#src/server/db/page-limit.server";
 import { directTargets } from "#src/server/db/repositories/agent-peer-direct.repositories.server";
@@ -151,21 +150,11 @@ export class AppBotInbox {
   ) {
     await this.db.$transaction(async (tx) => {
       const channels = cursor.groups.filter(([, threadRootId]) => !threadRootId);
-      for (const [conversationId, , sequence] of channels) {
-        const blockedFrom = await firstBlockedArtifactNoticeSequence(
-          this.db,
-          workspaceId,
-          agentId,
-          conversationId,
-          sequence,
-        );
-        const through = blockedFrom === null ? sequence : Math.min(sequence, blockedFrom - 1);
-        if (through <= 0) continue;
+      for (const [conversationId, , sequence] of channels)
         await tx.conversationMember.updateMany({
-          where: { conversationId, agentId, agentReadThroughSequence: { lt: through } },
-          data: { agentReadThroughSequence: through },
+          where: { conversationId, agentId, agentReadThroughSequence: { lt: sequence } },
+          data: { agentReadThroughSequence: sequence },
         });
-      }
       const threads = cursor.groups.filter(([, threadRootId]) => threadRootId);
       if (threads.length) {
         // One lookup of the bot's memberships and one upsert for every thread; the position only
