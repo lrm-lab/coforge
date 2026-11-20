@@ -60,7 +60,7 @@ export function AgentMigrationForm({
   selected: string | null;
   onSelect: (computerId: string) => void;
   disabled?: boolean;
-  direct?: { sourceName: string | null };
+  direct?: boolean;
 }) {
   const controlSize = useDialogControlSize();
   return (
@@ -96,14 +96,6 @@ export function AgentMigrationForm({
             <li>{m.agent_migration_dialog_stops()}</li>
             <li>{m.agent_migration_dialog_left_behind()}</li>
           </ul>
-        </div>
-      )}
-      {direct?.sourceName && (
-        <div className="flex items-start gap-3">
-          <FeaturedIcon color="warning" theme="light" size="sm" icon={AlertCircle} />
-          <p className="min-w-0 pt-1 text-sm text-secondary">
-            {m.agent_migration_direct_left_behind({ computer: direct.sourceName })}
-          </p>
         </div>
       )}
     </div>
@@ -188,7 +180,6 @@ export function AgentMigrationSection({
   }
   const direct = status.data.directPlacement === true;
   const revoked = status.data.computerAccessRevoked === true;
-  const sourceName = status.data.sourceComputerName || null;
   const freshDirect = direct && !revoked;
 
   const refresh = () =>
@@ -370,13 +361,7 @@ export function AgentMigrationSection({
                   selected={selected}
                   onSelect={setSelected}
                   disabled={submitting}
-                  direct={
-                    direct
-                      ? {
-                          sourceName: revoked ? (sourceName ?? m.agent_computer_unnamed()) : null,
-                        }
-                      : undefined
-                  }
+                  direct={direct}
                 />
                 {refusal && (
                   <AgentMigrationRefusalNotice

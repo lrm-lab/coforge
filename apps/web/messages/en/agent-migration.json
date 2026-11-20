@@ -65,7 +65,6 @@
   "agent_migration_try_again": "Try again",
   "agent_migration_revoked_title": "Disconnected from {computer}",
   "agent_migration_no_computer_title": "No Computer",
-  "agent_migration_direct_left_behind": "Files and local memory on {computer} won't transfer.",
   "agent_migration_direct_not_started_moved": "Moved to {computer}. Start manually.",
   "agent_migration_direct_not_started_assigned": "Assigned to {computer}. Start manually."
 }
