@@ -55,8 +55,10 @@ export function DirectorySection({
   );
   const caption = (
     <span className="flex w-full min-w-0 items-center gap-2">
-      {mark}
-      <span className="min-w-0 truncate text-sm font-medium text-primary">{label}</span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        {mark}
+        <span className="min-w-0 truncate text-sm font-medium text-primary">{label}</span>
+      </span>
       <span className="sr-only">, </span>
       <span className="shrink-0 text-sm font-normal text-quaternary tabular-nums">{count}</span>
     </span>
@@ -103,6 +105,7 @@ export function DirectorySection({
                 {...headingProps}
                 color="tertiary"
                 size="sm"
+                noTextPadding
                 aria-expanded={expanded}
                 aria-controls={listId}
                 onPress={toggle}
