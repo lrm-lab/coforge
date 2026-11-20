@@ -23,6 +23,7 @@ export function readableArtifactNoticeSql(
             AND a."workspaceId" = ${workspaceId}::uuid
             AND a."deletedAt" IS NULL
             AND ${readable})
+      OFFSET 0
     )
   )`;
 }
