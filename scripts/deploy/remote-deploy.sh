@@ -138,7 +138,11 @@ done
 [ -n "$public_health_url" ] || usage
 
 checker_compose_file="$(dirname "$compose_file")/../artifact-checker.compose.yml"
-if [ -n "$checker_image" ] && [ -f "$checker_compose_file" ]; then
+if [ -n "$checker_image" ]; then
+	if [ ! -f "$checker_compose_file" ] || [ ! -f "${checker_compose_file%.compose.yml}-seccomp.json" ]; then
+		printf 'outcome=failed\nhealth_result=missing checker isolation configuration\nrollback_target=\nprevious_web_image=\n'
+		exit 0
+	fi
 	COMPOSE_ARGS=(-p "$project" -f "$compose_file" -f "$checker_compose_file")
 else
 	COMPOSE_ARGS=(-p "$project" -f "$compose_file")
@@ -206,9 +210,41 @@ current_checker_image=""
 if [ -f "$checker_state_file" ]; then
 	current_checker_image="$(grep -E '^CURRENT_CHECKER_IMAGE=' "$checker_state_file" 2>/dev/null | head -n 1 | cut -d= -f2- || true)"
 fi
-last_healthy_checker="$current_checker_image"
+last_healthy_checker=""
+if [ -f "$release_snapshot_dir/artifact-checker.compose.yml" ] && [ -f "$release_snapshot_dir/artifact-checker-seccomp.json" ]; then
+	last_healthy_checker="$current_checker_image"
+fi
 
-if [ -n "$current_image" ] && [ "$current_image" = "$image" ] && [ "$current_checker_image" = "$checker_image" ]; then
+checker_containers() {
+	local service
+	for service in artifact-checker artifact-checker-proxy; do
+		docker ps -aq --filter "label=com.docker.compose.project=$project" \
+			--filter "label=com.docker.compose.service=$service" || return 1
+	done
+}
+
+remove_checker_containers() {
+	local containers container
+	containers="$(checker_containers)" || return 1
+	while IFS= read -r container; do
+		[ -n "$container" ] || continue
+		docker rm -f "$container" >/dev/null || return 1
+	done <<<"$containers"
+	containers="$(checker_containers)" && [ -z "$containers" ]
+}
+
+record_checker_release() {
+	local target="$1"
+	if [ -n "$target" ] || [ -f "$checker_state_file" ]; then
+		printf 'PREVIOUS_CHECKER_IMAGE=%s\nCURRENT_CHECKER_IMAGE=%s\n' \
+			"$current_checker_image" "$target" >"$checker_state_file.tmp" &&
+			chmod 600 "$checker_state_file.tmp" &&
+			mv "$checker_state_file.tmp" "$checker_state_file"
+	fi
+}
+
+if [ -n "$current_image" ] && [ "$current_image" = "$image" ] && [ "$current_checker_image" = "$checker_image" ] &&
+	{ [ -n "$checker_image" ] || { surviving_checker_containers="$(checker_containers)" && [ -z "$surviving_checker_containers" ]; }; }; then
 	prune_deploy_images
 	printf 'previous_web_image=%s\nhealth_result=healthy\noutcome=healthy\nrollback_target=\n' "$current_image"
 	[ -z "$deploy_warning" ] || printf 'warning=%s\n' "$deploy_warning"
@@ -290,13 +326,15 @@ rollback() {
 		else
 			printf 'no last healthy release snapshot; rolling back the image only\n' >&2
 			write_deploy_env "$target" "$last_healthy_checker"
-			if [ -n "$last_healthy_checker" ] && [ -f "$checker_compose_file" ]; then
-				compose up -d --wait --wait-timeout "$timeout" web artifact-checker >/dev/null
-			else
-				compose up -d --remove-orphans --wait --wait-timeout "$timeout" web >/dev/null
-			fi
+			compose up -d --remove-orphans --wait --wait-timeout "$timeout" web >/dev/null
+		fi
+		if [ -z "$last_healthy_checker" ]; then
+			remove_checker_containers || return 1
 		fi
 		if wait_for_health; then
+			if [ "$current_checker_image" != "$last_healthy_checker" ]; then
+				record_checker_release "$last_healthy_checker" || return 1
+			fi
 			printf 'rolled back to the previous healthy digest\n' >&2
 			return 0
 		fi
@@ -447,6 +485,10 @@ if ! compose up -d --wait --wait-timeout "$timeout" >/dev/null; then
 	fail_deployment "failed: candidate failed health verification"
 fi
 
+if [ -z "$checker_image" ] && ! remove_checker_containers; then
+	fail_deployment "failed: checker containers still present"
+fi
+
 if ! verify_running_digest; then
 	fail_deployment "failed: running container digest mismatch"
 fi
@@ -465,13 +507,7 @@ printf '%s\n' \
 chmod 600 "$state_file.tmp"
 mv "$state_file.tmp" "$state_file"
 
-if [ -n "$checker_image" ] || [ -f "$checker_state_file" ]; then
-	printf '%s\n' \
-		"PREVIOUS_CHECKER_IMAGE=$current_checker_image" \
-		"CURRENT_CHECKER_IMAGE=$checker_image" >"$checker_state_file.tmp"
-	chmod 600 "$checker_state_file.tmp"
-	mv "$checker_state_file.tmp" "$checker_state_file"
-fi
+record_checker_release "$checker_image"
 
 prune_deploy_images
 

@@ -235,7 +235,7 @@ exit 0
     }
   });
 
-  test("rollback restores the last healthy release configuration together with the image", async () => {
+  test.each([false, true])("rollback restores only an isolated checker", async (isolated) => {
     const root = await mkdtemp(join(tmpdir(), "coforge-deploy-rollback-snapshot-"));
     try {
       await mkdir(join(root, "bin"));
@@ -259,6 +259,11 @@ exit 0
       }
       const previous = `coforge/web@sha256:${"c".repeat(64)}`;
       const state = `CURRENT_WEB_IMAGE=${previous}\nPREVIOUS_WEB_IMAGE=\n`;
+      const checker = `coforge/checker@sha256:${"d".repeat(64)}`;
+      await Bun.write(join(root, "checker-state.env"), `CURRENT_CHECKER_IMAGE=${checker}\n`);
+      await Bun.write(join(root, "last-healthy/artifact-checker.compose.yml"), "services: {}\n");
+      if (isolated)
+        await Bun.write(join(root, "last-healthy/artifact-checker-seccomp.json"), "{}\n");
       await Bun.write(join(root, "state.env"), state);
       await writeFile(join(root, "bin/timeout"), timeoutShim(), { mode: 0o700 });
       await writeFile(join(root, "bin/ip"), ipShim(), { mode: 0o700 });
@@ -268,6 +273,7 @@ exit 0
 echo "$*" >> "$FIXTURE_ROOT/calls"
 if [[ "$1" = compose ]]; then
   shift 5
+  while [[ "$1" = -f ]]; do shift 2; done
   case "$1" in
     up)
       if [[ ! -f "$FIXTURE_ROOT/up-failed-once" ]]; then
@@ -341,7 +347,21 @@ exit 0
       // --remove-orphans and a filter on "up -d --wait" would miss it.
       const upCalls = calls.split("\n").filter((line) => / up -d/.test(line));
       expect(upCalls).toHaveLength(2);
+      expect(upCalls[0]).not.toContain("artifact-checker.compose.yml");
       expect(upCalls[1]?.trim().endsWith(" web")).toBe(false);
+      if (isolated) {
+        expect(upCalls[1]).toContain("artifact-checker.compose.yml");
+        expect(env).toContain(`COFORGE_ARTIFACT_CHECKER_IMAGE=${checker}`);
+        expect(env).toContain(
+          "COFORGE_ARTIFACT_CHECK_WORKER_SOCKET=/run/artifact-checker/checker.sock",
+        );
+      } else {
+        expect(upCalls[1]).not.toContain("artifact-checker.compose.yml");
+        expect(env).not.toContain("COFORGE_ARTIFACT_CHECK_WORKER_SOCKET");
+      }
+      expect(await Bun.file(join(root, "checker-state.env")).text()).toContain(
+        `CURRENT_CHECKER_IMAGE=${isolated ? checker : ""}\n`,
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -361,9 +381,11 @@ exit 0
       for (const name of requiredSecretNames) {
         await Bun.write(join(root, "secrets", name), "fixture-private-value");
       }
-      const previous = `coforge/web@sha256:${"c".repeat(64)}`;
+      const previous = registryImage;
       const state = `CURRENT_WEB_IMAGE=${previous}\nPREVIOUS_WEB_IMAGE=\n`;
       await Bun.write(join(root, "state.env"), state);
+      const checker = `coforge/checker@sha256:${"d".repeat(64)}`;
+      await Bun.write(join(root, "checker-state.env"), `CURRENT_CHECKER_IMAGE=${checker}\n`);
       await writeFile(join(root, "bin/timeout"), timeoutShim({ record: false }), { mode: 0o700 });
       await writeFile(join(root, "bin/ip"), ipShim(), { mode: 0o700 });
       await writeFile(
@@ -385,40 +407,48 @@ elif [[ "$1" = inspect ]]; then
   exit 0
 elif [[ "$1" = image ]]; then
   exit 0
+elif [[ "$1" = ps && "$*" = *com.docker.compose.project=* && "$*" = *com.docker.compose.service=* ]]; then
+  service="$(cut -d= -f3 <<< "$6")"
+  [[ ! -f "$FIXTURE_ROOT/removed-$service" ]] && echo "$service"
+elif [[ "$1" = rm && "$2" = -f ]]; then
+  cp "$FIXTURE_ROOT/checker-state.env" "$FIXTURE_ROOT/state-at-removal"
+  touch "$FIXTURE_ROOT/removed-$3"
 fi
 exit 0
 `,
         { mode: 0o700 },
       );
       await writeFile(join(root, "bin/curl"), "#!/bin/bash\nexit 0\n", { mode: 0o700 });
-      const proc = Bun.spawn(
-        [
-          "bash",
-          new URL("./remote-deploy.sh", import.meta.url).pathname,
-          "--image",
-          registryImage,
-          "--compose-file",
-          join(root, "docker-compose.yml"),
-          "--secrets-dir",
-          join(root, "secrets"),
-          "--state-file",
-          join(root, "state.env"),
-          "--web-health-url",
-          "http://127.0.0.1/health",
-          "--public-health-url",
-          "https://example.test/health",
-        ],
-        {
-          env: {
-            ...Bun.env,
-            PATH: `${join(root, "bin")}:${Bun.env.PATH}`,
-            FIXTURE_ROOT: root,
-            IMAGE_REF: registryImage,
+      const deploy = () =>
+        Bun.spawn(
+          [
+            "bash",
+            new URL("./remote-deploy.sh", import.meta.url).pathname,
+            "--image",
+            registryImage,
+            "--compose-file",
+            join(root, "docker-compose.yml"),
+            "--secrets-dir",
+            join(root, "secrets"),
+            "--state-file",
+            join(root, "state.env"),
+            "--web-health-url",
+            "http://127.0.0.1/health",
+            "--public-health-url",
+            "https://example.test/health",
+          ],
+          {
+            env: {
+              ...Bun.env,
+              PATH: `${join(root, "bin")}:${Bun.env.PATH}`,
+              FIXTURE_ROOT: root,
+              IMAGE_REF: registryImage,
+            },
+            stdout: "pipe",
+            stderr: "pipe",
           },
-          stdout: "pipe",
-          stderr: "pipe",
-        },
-      );
+        );
+      const proc = deploy();
       const [stdout, stderr, code] = await Promise.all([
         new Response(proc.stdout).text(),
         new Response(proc.stderr).text(),
@@ -426,9 +456,29 @@ exit 0
       ]);
       expect(code, stderr).toBe(0);
       expect(parseRemoteOutputs(stdout).outcome).toBe("healthy");
+      expect(await Bun.file(join(root, "removed-artifact-checker")).exists()).toBe(true);
+      expect(await Bun.file(join(root, "removed-artifact-checker-proxy")).exists()).toBe(true);
+      expect(await Bun.file(join(root, "state-at-removal")).text()).toContain(
+        `CURRENT_CHECKER_IMAGE=${checker}\n`,
+      );
+      expect(await Bun.file(join(root, "checker-state.env")).text()).toContain(
+        "CURRENT_CHECKER_IMAGE=\n",
+      );
+      expect(await Bun.file(join(root, ".env")).text()).not.toContain(
+        "COFORGE_ARTIFACT_CHECK_WORKER_SOCKET",
+      );
       expect(await Bun.file(join(root, "last-healthy/centrifugo/config.yaml")).text()).toBe(
         shipped,
       );
+      const repeat = deploy();
+      const [repeatedOutput, repeatedCode] = await Promise.all([
+        new Response(repeat.stdout).text(),
+        repeat.exited,
+      ]);
+      expect(repeatedCode).toBe(0);
+      expect(parseRemoteOutputs(repeatedOutput).outcome).toBe("healthy");
+      const calls = await Bun.file(join(root, "calls")).text();
+      expect(calls.split("\n").filter((line) => / up -d/.test(line))).toHaveLength(1);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
