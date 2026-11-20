@@ -6,6 +6,7 @@ import {
 import type { StoredAgentEvent } from "#src/server/app-agent-events/agent-events.server";
 import type { SystemAgentEventStore } from "#src/server/app-agent-events/system-agent-events.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
+import { inTransaction, type DatabaseScope } from "#src/server/db/transaction.server";
 import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
 import {
   eventConversation,
@@ -22,9 +23,14 @@ export class PrismaSystemAgentEventStore implements SystemAgentEventStore {
     return row!.expiresAt;
   }
 
-  async exists(source: SystemEventSource, agentId: string, externalEventId: string) {
+  async exists(
+    source: SystemEventSource,
+    agentId: string,
+    externalEventId: string,
+    scope: DatabaseScope = this.db,
+  ) {
     return (
-      (await this.db.systemAgentEvent.findUnique({
+      (await scope.systemAgentEvent.findUnique({
         where: { source_agentId_externalEventId: { source, agentId, externalEventId } },
         select: { id: true },
       })) !== null
@@ -33,14 +39,15 @@ export class PrismaSystemAgentEventStore implements SystemAgentEventStore {
 
   async write(
     input: Parameters<SystemAgentEventStore["write"]>[0],
+    scope: DatabaseScope = this.db,
   ): Promise<StoredAgentEvent | undefined> {
-    const conversationId = await eventConversation(
-      this.db,
-      input.workspaceId,
-      systemEventDirectKey(input.source, input.agentId),
-    );
     try {
-      return await this.db.$transaction(async (tx) => {
+      return await inTransaction(scope, async (tx) => {
+        const conversationId = await eventConversation(
+          tx,
+          input.workspaceId,
+          systemEventDirectKey(input.source, input.agentId),
+        );
         const agent = await tx.agent.findUniqueOrThrow({
           where: { id: input.agentId },
           select: { computerId: true, stoppedAt: true },
@@ -93,5 +100,9 @@ export class PrismaSystemAgentEventStore implements SystemAgentEventStore {
       if (isUniqueViolation(error)) return undefined;
       throw error;
     }
+  }
+
+  scope(): DatabaseScope {
+    return this.db;
   }
 }

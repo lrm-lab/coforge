@@ -1,21 +1,32 @@
-import type { Prisma, PrismaClient } from "#src/generated/prisma/client";
+import type { Prisma } from "#src/generated/prisma/client";
 import { APP_EVENTS_KIND } from "#src/server/app-agent-events/app-event-target.server";
 import { isUniqueViolation } from "#src/server/db/unique-violation.server";
+import { isDatabaseClient, type DatabaseScope } from "#src/server/db/transaction.server";
 
-export async function eventConversation(db: PrismaClient, workspaceId: string, directKey: string) {
+const createEventConversation = (scope: DatabaseScope, workspaceId: string, directKey: string) =>
+  scope.conversation.create({
+    data: { workspaceId, directKey, kind: APP_EVENTS_KIND },
+    select: { id: true },
+  });
+
+export async function eventConversation(
+  scope: DatabaseScope,
+  workspaceId: string,
+  directKey: string,
+) {
   const where = { workspaceId_directKey: { workspaceId, directKey } };
-  const found = await db.conversation.findUnique({ where, select: { id: true } });
+  const root = isDatabaseClient(scope) ? scope : undefined;
+  if (!root)
+    await (scope as Prisma.TransactionClient).$executeRaw`
+      SELECT pg_advisory_xact_lock(hashtextextended(${`event-conversation:${workspaceId}:${directKey}`}, 0))`;
+  const found = await scope.conversation.findUnique({ where, select: { id: true } });
   if (found) return found.id;
+  if (!root) return (await createEventConversation(scope, workspaceId, directKey)).id;
   try {
-    return (
-      await db.conversation.create({
-        data: { workspaceId, directKey, kind: APP_EVENTS_KIND },
-        select: { id: true },
-      })
-    ).id;
+    return (await createEventConversation(scope, workspaceId, directKey)).id;
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
-    return (await db.conversation.findUniqueOrThrow({ where, select: { id: true } })).id;
+    return (await scope.conversation.findUniqueOrThrow({ where, select: { id: true } })).id;
   }
 }
 

@@ -31,7 +31,7 @@ import { ArtifactPersonFollows } from "./artifact-person-follows.server";
 import { ArtifactRenames } from "./artifact-rename.server";
 import { ArtifactVersionHistory } from "./artifact-version-history.server";
 import { ArtifactViewerPositions } from "./artifact-viewer-positions.server";
-import type { ArtifactNoticePort } from "./artifact-notice-port.server";
+import type { ArtifactNotice, ArtifactNoticePort } from "./artifact-notice-port.server";
 import {
   saveAttachmentAsArtifact,
   type ArtifactAttachmentPort,
@@ -145,16 +145,17 @@ export function productionArtifactPage(db: PrismaClient) {
 
 export function productionArtifactNotices(db: PrismaClient): ArtifactNoticePort {
   const events = createSystemAgentEvents(db);
+  const notice = ({ workspaceId, agentId, key, content }: ArtifactNotice) => ({
+    source: "system.artifacts" as const,
+    sourceName: "CoForge artifacts",
+    workspaceId,
+    agentId,
+    key,
+    message: content,
+  });
   return {
-    deliver: ({ workspaceId, agentId, key, content }) =>
-      events.deliver({
-        source: "system.artifacts",
-        sourceName: "CoForge artifacts",
-        workspaceId,
-        agentId,
-        key,
-        message: content,
-      }),
+    deliver: (input) => events.deliver(notice(input)),
+    stage: (scope, input) => events.stage(scope, notice(input)),
   };
 }
 

@@ -17,7 +17,8 @@ import {
   type NoticeReason,
 } from "./artifact-notice-content.server";
 import { mentionedIn, type MentionedAgent } from "./artifact-notice-mentions.server";
-import type { ArtifactNoticePort } from "./artifact-notice-port.server";
+import type { DatabaseScope } from "#src/server/db/transaction.server";
+import type { ArtifactNoticePort, StagedArtifactNotice } from "./artifact-notice-port.server";
 
 export type NoticedArtifact = ArtifactAccessRow & { id: string; name: string; title: string };
 
@@ -114,20 +115,20 @@ export class ArtifactNotices {
       comments: ReviewEvent["comments"];
     },
   ) {
-    return this.guarded(() =>
-      this.tell(input, {
-        key: input.reviewId,
-        texts: [input.review.body ?? "", ...input.comments.map((comment) => comment.body)],
-        event: (by, _agentId, byKind) => ({
-          kind: "review",
-          by,
-          byKind,
-          review: { id: input.reviewId, ...input.review },
-          comments: input.comments,
-        }),
-        followers: "subscribed",
-      }),
-    );
+    return this.guarded(() => this.tell(input, reviewPlan(input)));
+  }
+
+  async reviewStaged(
+    scope: DatabaseScope,
+    input: (Context | PersonContext) & {
+      reviewId: string;
+      review: Omit<ReviewEvent["review"], "id">;
+      comments: ReviewEvent["comments"];
+    },
+  ): Promise<{ report: NoticeReport; staged: StagedArtifactNotice[] }> {
+    const staged: StagedArtifactNotice[] = [];
+    const report = await this.tell(input, reviewPlan(input), undefined, { scope, staged });
+    return { report, staged };
   }
 
   resolve(
@@ -280,6 +281,7 @@ export class ArtifactNotices {
     input: Context | PersonContext,
     plan: Plan,
     resolved?: Recipients,
+    staging?: { scope: DatabaseScope; staged: StagedArtifactNotice[] },
   ): Promise<NoticeReport> {
     const { artifact, workspaceId } = input;
     const { told, notTold } = resolved ?? (await this.recipients(input, plan));
@@ -291,6 +293,24 @@ export class ArtifactNotices {
             select: { name: true },
           })
         : { name: input.writerName };
+    const noticeOf = (entry: { id: string; name: string; reason: string }) => ({
+      workspaceId,
+      agentId: entry.id,
+      key: `${artifact.id}:${plan.key}`,
+      content: noticeContent(
+        artifact,
+        entry.reason as never,
+        plan.event(writer.name, entry.id, byKind),
+      ),
+    });
+    if (staging) {
+      const ordered = [...told].sort((left, right) => left.id.localeCompare(right.id));
+      for (const entry of ordered) {
+        const staged = await this.port.stage(staging.scope, noticeOf(entry));
+        if (staged) staging.staged.push(staged);
+      }
+      return { notified: told.map(({ name, reason }) => ({ name, reason })), notNotified: notTold };
+    }
     const outcomes = await inBatches(told, DELIVERIES_AT_ONCE, async ({ id, name, reason }) => {
       try {
         await this.port.deliver({
@@ -313,6 +333,23 @@ export class ArtifactNotices {
     };
   }
 }
+
+const reviewPlan = (input: {
+  reviewId: string;
+  review: Omit<ReviewEvent["review"], "id">;
+  comments: ReviewEvent["comments"];
+}): Plan => ({
+  key: input.reviewId,
+  texts: [input.review.body ?? "", ...input.comments.map((comment) => comment.body)],
+  event: (by, _agentId, byKind) => ({
+    kind: "review",
+    by,
+    byKind,
+    review: { id: input.reviewId, ...input.review },
+    comments: input.comments,
+  }),
+  followers: "subscribed",
+});
 
 export const commentAudience = (body: string, handlesPerText?: number): AudiencePlan => ({
   texts: [body],

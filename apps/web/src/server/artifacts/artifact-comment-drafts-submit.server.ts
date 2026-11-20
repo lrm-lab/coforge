@@ -3,6 +3,7 @@ import { COMMENT_HANDLES_RESOLVED_MAX } from "#src/features/artifacts/artifact-c
 import type { DraftRefusalReason } from "#src/features/artifacts/artifact-comment-draft-inputs";
 import { isAppError } from "#src/lib/app-error";
 import { payloadHash } from "#src/server/canonical-hash.server";
+import { errorType } from "#src/server/errors/error-type.server";
 import type { CommentedArtifact } from "./artifact-comment-access.server";
 import {
   DRAFT_SELECT,
@@ -250,21 +251,50 @@ export async function submitDrafts(
     });
     const roots = new Set(prepared.prepared.flatMap((entry) => entry.rootId ?? []));
     if (roots.size) await reopenThreads(tx, [...roots]);
-    await tx.artifactCommentDraft.deleteMany({ where: { id: { in: rows.map((row) => row.id) } } });
     const place = { workspaceId, artifact };
     const readers = await writeMentions(tx, place, commentMentions(inserted, people));
     await startFollowing(tx, artifact.id, [{ userId }]);
-    return { kind: "written" as const, review, inserted, readers };
+    const views = await reviewViews(tx, workspaceId, review, inserted);
+    const { report, staged } = await notices.reviewStaged(tx, {
+      workspaceId,
+      artifact,
+      writerName: views.review.author.name,
+      reviewId: review.id,
+      review: { version: review.version, body: review.body },
+      comments: views.comments.flatMap((comment) =>
+        "deleted" in comment ? [] : [{ path: comment.path, body: comment.body }],
+      ),
+    });
+    await tx.artifactCommentDraft.deleteMany({ where: { id: { in: rows.map((row) => row.id) } } });
+    return { kind: "written" as const, review, inserted, readers, report, staged };
+  }).catch((error: unknown) => {
+    console.warn(
+      JSON.stringify({
+        event: "artifacts:review_storage_rollback",
+        request_key: clientKey,
+        artifact_id: artifact.id,
+        error_type: errorType(error),
+      }),
+    );
+    throw error;
   });
   if (written.kind === "replayed") return written.sent;
   if (written.kind === "rejected") return written.rejected;
 
-  const { review, inserted, readers } = written;
+  const { review, inserted, readers, report, staged } = written;
   const sent = {
     status: "sent" as const,
     reviewId: review.id,
     commentIds: inserted.map(({ id }) => id),
   };
+  console.log(
+    JSON.stringify({
+      event: "artifacts:review_committed",
+      review_id: review.id,
+      artifact_id: artifact.id,
+      recipients: staged.length,
+    }),
+  );
   await announceArtifactComments(deps.signals, workspaceId, artifact, {
     change: "posted",
     commentIds: sent.commentIds,
@@ -275,16 +305,17 @@ export async function submitDrafts(
     writerUserId: userId,
     alsoUserIds: readers,
   });
-  const views = await reviewViews(db, workspaceId, review, inserted);
-  const told = await notices.review({
-    workspaceId,
-    artifact,
-    writerName: views.review.author.name,
-    reviewId: review.id,
-    review: { version: review.version, body: review.body },
-    comments: views.comments.flatMap((comment) =>
-      "deleted" in comment ? [] : [{ path: comment.path, body: comment.body }],
-    ),
-  });
-  return { ...sent, notified: told.notified };
+  for (const one of staged)
+    await one.push().catch((error: unknown) => {
+      console.warn(
+        JSON.stringify({
+          event: "artifacts:review_push_failed",
+          review_id: review.id,
+          agent_id: one.agentId,
+          delivery_id: one.deliveryId,
+          error_type: errorType(error),
+        }),
+      );
+    });
+  return { ...sent, notified: report.notified };
 }

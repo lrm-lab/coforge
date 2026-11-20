@@ -92,6 +92,13 @@ export async function commentsFixture(prefix: string) {
       if (noticeDelivery.down) return Promise.reject(new Error("notices are down"));
       return deliveredNotices.deliver(notice);
     },
+    stage: (
+      scope: Parameters<typeof deliveredNotices.stage>[0],
+      notice: Parameters<typeof deliveredNotices.stage>[1],
+    ) => {
+      if (noticeDelivery.down) return Promise.reject(new Error("notices are down"));
+      return deliveredNotices.stage(scope, notice);
+    },
   };
 
   async function post(
