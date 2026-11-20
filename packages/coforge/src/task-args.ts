@@ -23,6 +23,13 @@ import {
   parseTaskConversationArgs,
   type TaskConversationInvocation,
 } from "#src/task-conversation-args";
+import {
+  TASK_FLAGS,
+  TASK_OPERATIONS,
+  TASK_REPEATABLE_FLAGS,
+  TASK_SWITCHES,
+  type TaskOperation,
+} from "#src/task-args-flags";
 import { resolveTaskRef } from "#src/task-ref";
 
 export type TaskInvocation = {
@@ -30,139 +37,6 @@ export type TaskInvocation = {
   task: TaskCommandWithout<"idempotencyKey">;
   json?: boolean;
 };
-
-const TASK_OPERATIONS = [
-  "list",
-  "show",
-  "create",
-  "convert",
-  "claim",
-  "unclaim",
-  "assign",
-  "unassign",
-  "update",
-  "amend",
-  "history",
-  "delete",
-  "restore",
-  "receipt",
-] as const;
-type TaskOperation = (typeof TASK_OPERATIONS)[number];
-
-/** The flags each `task` subcommand takes. */
-const TASK_FLAGS: Record<TaskOperation, readonly string[]> = {
-  list: ["--target", "--mine", "--status", "--ready", "--label", "--json"],
-  show: ["--target", "--peer-kind", "--number", "--json"],
-  create: [
-    "--target",
-    "--peer-kind",
-    "--title",
-    "--assignee",
-    "--description",
-    "--message-id",
-    "--alongside",
-    "--blocked-by",
-    "--parent",
-    "--label",
-    "--label-description",
-    "--project",
-    "--anyway",
-    "--priority",
-    "--due",
-    "--json",
-  ],
-  convert: ["--target", "--peer-kind", "--message-id", "--priority", "--json"],
-  claim: [
-    "--target",
-    "--peer-kind",
-    "--number",
-    "--message-id",
-    "--reviewer-isolation",
-    "--anyway",
-    "--json",
-  ],
-  unclaim: ["--target", "--peer-kind", "--number", "--expected-revision", "--json"],
-  assign: [
-    "--target",
-    "--peer-kind",
-    "--number",
-    "--assignee",
-    "--reason",
-    "--expected-revision",
-    "--anyway",
-    "--json",
-  ],
-  unassign: ["--target", "--peer-kind", "--number", "--expected-revision", "--json"],
-  update: [
-    "--target",
-    "--peer-kind",
-    "--number",
-    "--status",
-    "--priority",
-    "--label",
-    "--label-description",
-    "--expected-revision",
-    "--reviewer-isolation",
-    "--json",
-  ],
-  amend: [
-    "--target",
-    "--peer-kind",
-    "--number",
-    "--title",
-    "--description",
-    "--clear-description",
-    "--clear-project",
-    "--blocked-by",
-    "--parent",
-    "--label",
-    "--label-description",
-    "--project",
-    "--clear-project",
-    "--due",
-    "--clear-due",
-    "--expected-revision",
-    "--reviewer-isolation",
-    "--json",
-  ],
-  history: ["--target", "--peer-kind", "--number", "--json"],
-  delete: ["--target", "--peer-kind", "--number", "--json"],
-  restore: ["--target", "--peer-kind", "--number", "--json"],
-  receipt: [
-    "--target",
-    "--peer-kind",
-    "--number",
-    "--object",
-    "--purpose",
-    "--teardown-owner",
-    "--security-privacy",
-    "--expiry",
-    "--runbook",
-    "--tracking",
-    "--json",
-  ],
-};
-
-/** Flags a subcommand accepts more than once. `update` counts its `--number`s only to refuse
- * more than one by name. */
-const TASK_REPEATABLE_FLAGS: Partial<Record<TaskOperation, readonly string[]>> = {
-  create: ["--title", "--label"],
-  list: ["--label"],
-  claim: ["--number", "--message-id"],
-  update: ["--number"],
-  amend: ["--label"],
-};
-
-const TASK_SWITCHES = new Set([
-  "--clear-description",
-  "--clear-due",
-  "--reviewer-isolation",
-  "--mine",
-  "--ready",
-  "--alongside",
-  "--anyway",
-  "--json",
-]);
 
 const TASK_TARGET = /^(?:#[a-z0-9][a-z0-9_-]{0,31}|@[a-z0-9][a-z0-9_-]{0,63})$/;
 

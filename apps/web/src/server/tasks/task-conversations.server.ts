@@ -10,15 +10,13 @@ import type { MessageRequestIdempotency } from "#src/server/conversations/messag
 import type { CentrifugoServerApi } from "#src/server/centrifugo/server-api.server";
 import { CentrifugoConversationRealtime } from "#src/server/conversations/conversation-realtime.server";
 import { lockConversation } from "#src/server/conversations/conversation-lock.server";
-import { allocateSequence } from "#src/server/db/repositories/sequence-allocation.server";
-import type { Prisma } from "#src/generated/prisma/client";
-import type { Transaction, TaskBoardPorts } from "./task-board-ports.server";
+import type { TaskBoardPorts } from "./task-board-ports.server";
 import { memberId } from "./task-board-ports.server";
 import { publishTaskConversationMessage } from "./task-publication.server";
 import { taskDiscussionDeliveryTarget } from "./task-discussion-target.server";
 import { markHumanRead } from "#src/server/conversations/human-unread.server";
 import { postUnfollowNotice } from "./task-unfollow-notice.server";
-import type { SystemNotice } from "#src/features/conversations/system-notice";
+import { boardLabel } from "./task-conversation-notice.server";
 import { postTaskMessage } from "./task-discussion-send.server";
 import {
   discussionOf,
@@ -396,62 +394,7 @@ export class TaskConversations {
   }
 }
 
-/** `#channel`, or `dm:@peer` for a task on a direct board. */
-export function boardLabel(channelName: string | null, peer?: string | null) {
-  return channelName ? `#${channelName}` : `dm:@${peer ?? "?"}`;
-}
-
-/**
- * A server notice in a task's conversation (an assignment, a follower leaving): no sender,
- * delivered to `deliverToAgentId` when it names one. The caller holds the board's lock.
- */
-export async function postTaskNotice(
-  tx: Transaction,
-  scope: { conversationId: string; workspaceId: string },
-  taskId: string,
-  notice: { id?: string; body: string; system?: SystemNotice; deliverToAgentId?: string | null },
-) {
-  const task = await tx.task.findUniqueOrThrow({
-    where: { id: taskId },
-    select: { id: true, discussionConversationId: true },
-  });
-  const conversationId = await discussionOf(tx, task, scope.workspaceId);
-  await lockConversation(tx, conversationId);
-  const sequence = await allocateSequence(tx, conversationId);
-  const message = await tx.message.create({
-    data: {
-      id: notice.id,
-      workspaceId: scope.workspaceId,
-      conversationId,
-      body: notice.body,
-      sequence,
-      deliveries: notice.deliverToAgentId
-        ? {
-            create: [
-              {
-                workspaceId: scope.workspaceId,
-                conversationId,
-                agentId: notice.deliverToAgentId,
-                sequence,
-              },
-            ],
-          }
-        : undefined,
-    },
-    select: { id: true, sequence: true, conversationId: true, workspaceId: true, body: true },
-  });
-  if (notice.system)
-    await tx.systemMessage.create({
-      data: {
-        messageId: message.id,
-        conversationId,
-        workspaceId: scope.workspaceId,
-        kind: notice.system.kind,
-        params: notice.system.params as Prisma.InputJsonObject,
-      },
-    });
-  return message;
-}
+export { boardLabel, postTaskNotice } from "./task-conversation-notice.server";
 
 /**
  * The task conversations an Agent's writes go through: a reply's delivery reaches the followers'
