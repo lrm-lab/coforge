@@ -1,7 +1,8 @@
-import { expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { PublicChannels } from "#src/server/conversations/public-channels.server";
+import { createMigratedScratchDatabase, type ScratchDatabase } from "./support/scratch-database";
 
 /**
  * The composer's @-completion scores each candidate by the viewer's own recent mentions in the
@@ -11,11 +12,18 @@ import { PublicChannels } from "#src/server/conversations/public-channels.server
  * newer mentions and the viewer 10,000 messages, of which only the oldest 5 mention anyone; each
  * read `mentionDirectory` issues runs once to record its SQL, which is then executed under
  * `EXPLAIN ANALYZE` to count the `message_mentions` rows it touched.
- *
- * Skipped unless `CHANNEL_TEST_DATABASE_URL` points at local PostgreSQL, matching
- * `direct-open-thread-reads-plan.integration.test.ts`.
  */
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
+
+let scratch: ScratchDatabase | undefined;
+beforeAll(async () => {
+  if (!connectionString) return;
+  scratch = await createMigratedScratchDatabase(connectionString, "channel_mention_affinity_plan");
+}, 120_000);
+
+afterAll(async () => {
+  await scratch?.drop();
+});
 
 type PlanNode = {
   "Actual Rows"?: number;
@@ -39,39 +47,39 @@ test.skipIf(!connectionString)(
   "scoring @-completion reads the viewer's mentions without walking the channel's",
   async () => {
     const db = new PrismaClient({
-      adapter: new PrismaPg({ connectionString: connectionString! }),
+      adapter: new PrismaPg({ connectionString: scratch!.url }),
       log: [{ emit: "event", level: "query" }],
     });
-    const reads: { query: string; params: unknown[] }[] = [];
-    let recording = false;
-    db.$on("query", (event) => {
-      if (recording && event.query.trimStart().startsWith("SELECT"))
-        reads.push({ query: event.query, params: JSON.parse(event.params) });
-    });
-    const handle = crypto.randomUUID().slice(0, 8);
-    const viewer = await db.user.create({
-      data: { displayName: `affinity-viewer-${handle}`, username: `affinity-viewer-${handle}` },
-    });
-    const talker = await db.user.create({
-      data: { displayName: `affinity-talker-${handle}`, username: `affinity-talker-${handle}` },
-    });
-    const target = await db.user.create({
-      data: { displayName: `affinity-target-${handle}`, username: `affinity-target-${handle}` },
-    });
-    const workspace = await db.workspace.create({
-      data: {
-        slug: `affinity-${handle}`,
-        name: "Mention affinity",
-        members: {
-          create: [
-            { userId: viewer.id, role: "owner" },
-            { userId: talker.id },
-            { userId: target.id },
-          ],
-        },
-      },
-    });
     try {
+      const reads: { query: string; params: unknown[] }[] = [];
+      let recording = false;
+      db.$on("query", (event) => {
+        if (recording && event.query.trimStart().startsWith("SELECT"))
+          reads.push({ query: event.query, params: JSON.parse(event.params) });
+      });
+      const handle = crypto.randomUUID().slice(0, 8);
+      const viewer = await db.user.create({
+        data: { displayName: `affinity-viewer-${handle}`, username: `affinity-viewer-${handle}` },
+      });
+      const talker = await db.user.create({
+        data: { displayName: `affinity-talker-${handle}`, username: `affinity-talker-${handle}` },
+      });
+      const target = await db.user.create({
+        data: { displayName: `affinity-target-${handle}`, username: `affinity-target-${handle}` },
+      });
+      const workspace = await db.workspace.create({
+        data: {
+          slug: `affinity-${handle}`,
+          name: "Mention affinity",
+          members: {
+            create: [
+              { userId: viewer.id, role: "owner" },
+              { userId: talker.id },
+              { userId: target.id },
+            ],
+          },
+        },
+      });
       const channel = await db.conversation.create({
         data: {
           workspaceId: workspace.id,
@@ -134,8 +142,6 @@ test.skipIf(!connectionString)(
       // The viewer's 5 mentions, far below the talker's 50,000.
       expect(touched).toBeLessThan(100);
     } finally {
-      await db.workspace.delete({ where: { id: workspace.id } });
-      await db.user.deleteMany({ where: { id: { in: [viewer.id, talker.id, target.id] } } });
       await db.$disconnect();
     }
   },
@@ -152,36 +158,36 @@ test.skipIf(!connectionString)(
   "scoring @-completion reads only the viewer's newest mentions, not the database's",
   async () => {
     const db = new PrismaClient({
-      adapter: new PrismaPg({ connectionString: connectionString! }),
+      adapter: new PrismaPg({ connectionString: scratch!.url }),
       log: [{ emit: "event", level: "query" }],
     });
-    const reads: { query: string; params: unknown[] }[] = [];
-    let recording = false;
-    db.$on("query", (event) => {
-      if (recording && event.query.trimStart().startsWith("SELECT"))
-        reads.push({ query: event.query, params: JSON.parse(event.params) });
-    });
-    const handle = crypto.randomUUID().slice(0, 8);
-    const viewer = await db.user.create({
-      data: {
-        displayName: `affinity-mentioner-${handle}`,
-        username: `affinity-mentioner-${handle}`,
-      },
-    });
-    const target = await db.user.create({
-      data: {
-        displayName: `affinity-mentioned-${handle}`,
-        username: `affinity-mentioned-${handle}`,
-      },
-    });
-    const workspace = await db.workspace.create({
-      data: {
-        slug: `affinity-mentioner-${handle}`,
-        name: "Mention affinity",
-        members: { create: [{ userId: viewer.id, role: "owner" }, { userId: target.id }] },
-      },
-    });
     try {
+      const reads: { query: string; params: unknown[] }[] = [];
+      let recording = false;
+      db.$on("query", (event) => {
+        if (recording && event.query.trimStart().startsWith("SELECT"))
+          reads.push({ query: event.query, params: JSON.parse(event.params) });
+      });
+      const handle = crypto.randomUUID().slice(0, 8);
+      const viewer = await db.user.create({
+        data: {
+          displayName: `affinity-mentioner-${handle}`,
+          username: `affinity-mentioner-${handle}`,
+        },
+      });
+      const target = await db.user.create({
+        data: {
+          displayName: `affinity-mentioned-${handle}`,
+          username: `affinity-mentioned-${handle}`,
+        },
+      });
+      const workspace = await db.workspace.create({
+        data: {
+          slug: `affinity-mentioner-${handle}`,
+          name: "Mention affinity",
+          members: { create: [{ userId: viewer.id, role: "owner" }, { userId: target.id }] },
+        },
+      });
       const channel = (name: string) =>
         db.conversation.create({
           data: {
@@ -246,8 +252,6 @@ test.skipIf(!connectionString)(
       // The viewer's newest 50 mentions (and the channel's own reads), far below the 30,300 rows.
       expect(touched).toBeLessThan(1_000);
     } finally {
-      await db.workspace.delete({ where: { id: workspace.id } });
-      await db.user.deleteMany({ where: { id: { in: [viewer.id, target.id] } } });
       await db.$disconnect();
     }
   },
