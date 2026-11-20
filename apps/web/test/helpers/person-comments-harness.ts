@@ -45,7 +45,7 @@ export function personCommentsHarness(
         .then((buffer) => new Uint8Array(buffer) as Uint8Array<ArrayBuffer>),
     setUp: async () => {
       f = await commentsFixture(prefix);
-      comments = new ArtifactPersonComments(f.db, f.blobs, async () => true, f.notices, {
+      comments = new ArtifactPersonComments(f.db, f.blobs, f.notices, {
         publish: async (_channel, event) => {
           events.push(event);
         },

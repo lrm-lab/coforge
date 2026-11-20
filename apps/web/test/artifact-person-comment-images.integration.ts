@@ -157,12 +157,7 @@ test("an upload is cleaned once: only the clean bytes are stored, and posting st
   const stored = await f.blobs.read(f.workspaceId, sha256);
   expect((await sharp(Buffer.from(stored!)).metadata()).exif).toBeUndefined();
   const counts = { uploads: 0 };
-  const counting = new ArtifactPersonComments(
-    f.db,
-    withCounted(counts),
-    async () => true,
-    f.notices,
-  );
+  const counting = new ArtifactPersonComments(f.db, withCounted(counts), f.notices);
   await counting.post({ ...place(artifact), comment: draft("Clean.", { images: [sha256] }) });
   expect(counts.uploads).toBe(0);
   const [image] = await f.db.artifactCommentImage.findMany({ where: { artifactId: artifact } });

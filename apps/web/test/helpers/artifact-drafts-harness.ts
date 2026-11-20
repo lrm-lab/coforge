@@ -14,8 +14,8 @@ export async function draftsHarness(prefix: string) {
       events.push(event);
     },
   };
-  const drafts = new ArtifactCommentDrafts(f.db, f.blobs, async () => true, f.notices, signals);
-  const comments = new ArtifactPersonComments(f.db, f.blobs, async () => true, f.notices, signals);
+  const drafts = new ArtifactCommentDrafts(f.db, f.blobs, f.notices, signals);
+  const comments = new ArtifactPersonComments(f.db, f.blobs, f.notices, signals);
 
   const place = (artifactId: string, userId = f.alice) => ({
     workspaceId: f.workspaceId,

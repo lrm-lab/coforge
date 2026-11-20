@@ -31,7 +31,7 @@ beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "artifact-merge-"));
   const storage = new LocalFileStorage(root);
   blobs = new StoredArtifactBlobs(db, async () => storage);
-  artifacts = new Artifacts(db, blobs, { enabled: async () => true });
+  artifacts = new Artifacts(db, blobs);
   userId = (await db.user.create({ data: { username: `am-${handle}`, displayName: "Merge" } })).id;
   workspaceId = (
     await db.workspace.create({

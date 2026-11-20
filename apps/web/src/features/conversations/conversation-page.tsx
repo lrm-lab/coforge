@@ -8,7 +8,6 @@ import { ACTIVITY_INBOX_LISTS_KEY } from "#src/features/inbox/activity-inbox-que
 import { ConversationTaskBoard } from "#src/features/tasks/conversation-task-board";
 import { ArtifactsBesideChat } from "#src/features/artifacts/artifact-beside-chat";
 import { ConversationArtifactPane } from "#src/features/artifacts/artifact-side-pane";
-import { useArtifactsOn } from "#src/features/artifacts/artifact-queries";
 import { ConversationFilesWithDocuments } from "#src/features/artifacts/artifact-files";
 import { activityItemKey } from "#src/features/inbox/activity-unread-count";
 import { useReportViewingItem } from "#src/features/inbox/viewing-items";
@@ -17,7 +16,6 @@ import { cn } from "#src/lib/utils";
 import { m } from "#src/paraglide/messages";
 import { markPublicChannelRead } from "./channels.functions";
 import { ChannelConversation, ChannelConversationHeader } from "./channel-conversation";
-import { ConversationFilesPanel } from "./conversation-files";
 import type { HeaderTabs } from "./conversation-header-tabs";
 import { channelLabel } from "./channel-visibility";
 import { useMarkConversationSeen } from "./unread-store";
@@ -302,17 +300,9 @@ type ConversationPageBodyProps = {
   ) => ReactNode;
 };
 
-/**
- * The page both kinds share: the tab in view, reading the conversation, the Files and Tasks tabs,
- * and the chat with its thread, Task popup and Agent profile. Each kind supplies its data, header,
- * conversation and read cursor.
- */
 function ConversationPageBody(props: ConversationPageProps & ConversationPageBodyProps) {
   const { doc, docFull } = props.search;
-  const documents = useArtifactsOn() === true;
-  const open = documents && doc !== undefined;
-  // The chat keeps one place in the tree whether an artifact is open or not, so opening one or
-  // going full screen only hides the chat: its scroll, open thread and draft stay.
+  const open = doc !== undefined;
   return (
     <ArtifactsBesideChat>
       <div className="@container/page flex min-h-0 min-w-0 flex-1">
@@ -323,7 +313,7 @@ function ConversationPageBody(props: ConversationPageProps & ConversationPageBod
             open && docFull && "hidden",
           )}
         >
-          <ConversationPageMain {...props} documents={documents} />
+          <ConversationPageMain {...props} />
         </div>
         {open && (
           <ConversationArtifactPane
@@ -351,8 +341,7 @@ function ConversationPageMain({
   readCursor,
   header,
   conversation: renderConversation,
-  documents,
-}: ConversationPageProps & ConversationPageBodyProps & { documents: boolean }) {
+}: ConversationPageProps & ConversationPageBodyProps) {
   const {
     view: requestedView,
     profile,
@@ -442,17 +431,10 @@ function ConversationPageMain({
           { active: "files", onShowChat: showChat, onShowTasks: showTasks },
           onOpenAgentProfile,
         )}
-        {documents ? (
-          <ConversationFilesWithDocuments
-            conversationId={conversation.conversationId}
-            onOpenMessage={openMessage}
-          />
-        ) : (
-          <ConversationFilesPanel
-            conversationId={conversation.conversationId}
-            onOpenMessage={openMessage}
-          />
-        )}
+        <ConversationFilesWithDocuments
+          conversationId={conversation.conversationId}
+          onOpenMessage={openMessage}
+        />
       </div>
     );
   // The Tasks tab sits in the conversation's main pane, so a Task opened from it shows the

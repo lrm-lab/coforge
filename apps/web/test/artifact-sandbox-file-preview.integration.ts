@@ -30,8 +30,7 @@ const store: ArtifactBlobStore = {
   read: async (_workspaceId, sha256) => bytes.get(sha256) ?? null,
   allowed: async (_workspaceId, _artifactId, _actor, sha256s) => new Set(sha256s),
 };
-let switchedOn = true;
-const artifacts = new Artifacts(db, store, { enabled: async () => switchedOn });
+const artifacts = new Artifacts(db, store);
 const sandbox = new ArtifactSandbox({
   reads: artifacts.reads,
   readBlob: (workspaceId, sha256) => store.read(workspaceId, sha256),
@@ -133,16 +132,10 @@ test("a PDF opens as a frame document of its bytes and its read rule holds", asy
   const { response, filesUrl } = await openPage(sandbox, url);
   expect(response.headers.get("content-type")).toBe("application/pdf");
   expect(await response.text()).toBe("%PDF-1.4 paper");
-  switchedOn = false;
-  try {
-    const refused = await sandbox.serve(
-      new Request(`${filesUrl}docs/paper.pdf`, { headers: FRAME }),
-    );
-    expect(refused.status).toBe(404);
-    await expect(sandbox.link(input)).rejects.toMatchObject({ code: "ACCESS_DENIED" });
-  } finally {
-    switchedOn = true;
-  }
+  await db.artifact.update({ where: { id: page.id }, data: { deletedAt: new Date() } });
+  const refused = await sandbox.serve(new Request(`${filesUrl}docs/paper.pdf`, { headers: FRAME }));
+  expect(refused.status).toBe(404);
+  await expect(sandbox.link(input)).rejects.toMatchObject({ code: "NOT_FOUND" });
 });
 
 test("a path the version lacks, or that is neither a page nor a PDF, refuses", async () => {

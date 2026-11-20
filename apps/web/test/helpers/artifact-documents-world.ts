@@ -11,7 +11,7 @@ export async function artifactDocumentsWorld(db: PrismaClient, handle: string) {
   const root = await mkdtemp(join(tmpdir(), "artifact-documents-"));
   const storage = new LocalFileStorage(root);
   const blobs = new StoredArtifactBlobs(db, async () => storage);
-  const artifacts = new Artifacts(db, blobs, { enabled: async () => true });
+  const artifacts = new Artifacts(db, blobs);
   const documents = new ArtifactDocuments(db, artifacts, blobs);
   const alice = (
     await db.user.create({ data: { username: `ad-a-${handle}`, displayName: "Alice" } })

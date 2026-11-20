@@ -35,7 +35,7 @@ beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "agent-artifact-manifest-"));
   const storage = new LocalFileStorage(root);
   blobs = new StoredArtifactBlobs(db, async () => storage);
-  artifacts = new Artifacts(db, blobs, { enabled: async () => true });
+  artifacts = new Artifacts(db, blobs);
   documents = new ArtifactDocuments(db, artifacts, blobs);
   alice = (await db.user.create({ data: { username: `mf-a-${handle}`, displayName: "Alice" } })).id;
   workspaceId = (
@@ -92,7 +92,6 @@ const services = () => ({
   artifacts,
   documents,
   blobs,
-  enabled: async () => true,
 });
 
 /** A push with no artifact makes one; this names its fields, with a fresh idempotency key. */

@@ -9,7 +9,6 @@ import { membersWithoutOtherConversationRead } from "#src/server/conversations/c
 import {
   artifactHomeConversationId,
   artifactTier,
-  artifactsDisabled,
   requireArtifactRead,
 } from "./artifact-access.server";
 
@@ -60,7 +59,6 @@ export class ArtifactShares {
       | "agent"
       | "conversation"
     >,
-    private readonly enabled: (workspaceId: string) => Promise<boolean>,
   ) {}
 
   async share(input: {
@@ -74,7 +72,6 @@ export class ArtifactShares {
     send: ArtifactShareSender;
     mayPost: (target: string) => Promise<void>;
   }): Promise<ArtifactShareResult> {
-    if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     const targets = [...new Set(input.targets)];
     if (!targets.length || !input.requestId.trim())
       throw new AppError("INVALID_INPUT", {

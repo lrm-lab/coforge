@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
-import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
 import { PrismaAgentManualEventRepository } from "#src/server/db/repositories/agent-manual-event.repositories.server";
 import {
   recordManualEvent,
@@ -11,9 +10,6 @@ import type { AgentManualExperiments } from "#src/server/agents/manual/manual-re
 
 export type AgentManualGetPrincipal = { workspaceId: string; agentId: string };
 
-/** `GET /api/agent/v1/manual` — Agent Manual `get`: topic content, or the generated
- * `index` catalog. The response shape is `ok`, `docId`, `topicOrPath`, `docVersion`, `docState`,
- * `contentType`, `content`. */
 export async function handleAgentManualGet(
   request: Request,
   principal: AgentManualGetPrincipal,
@@ -46,15 +42,8 @@ export const Route = createFileRoute("/api/agent/v1/manual")({
   server: {
     middleware: [agentAuthMiddleware],
     handlers: {
-      GET: async ({ request, context: { principal, db } }) =>
-        handleAgentManualGet(
-          request,
-          principal,
-          new PrismaAgentManualEventRepository(db),
-          // A Workspace whose switch cannot be read keeps the full Manual: the artifact commands
-          // themselves still refuse server-side, so hiding their docs would only mislead.
-          { artifacts: await artifactsEnabled(db, principal.workspaceId).catch(() => undefined) },
-        ),
+      GET: ({ request, context: { principal, db } }) =>
+        handleAgentManualGet(request, principal, new PrismaAgentManualEventRepository(db)),
     },
   },
 });

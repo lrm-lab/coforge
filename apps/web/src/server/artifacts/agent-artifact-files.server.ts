@@ -8,7 +8,7 @@ import { errorResponse } from "#src/server/agents/agent-http-error.server";
 import { agentErrorResponse } from "#src/server/agents/agent-http-middleware.server";
 import type { AppRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
 import { admitArtifactUpload, ArtifactRateLimited } from "./agent-artifact-rate-limit.server";
-import { artifactsDisabled, type ArtifactActor } from "./artifact-access.server";
+import { type ArtifactActor } from "./artifact-access.server";
 import { resolveArtifactReference } from "./artifact-reference.server";
 import { ArtifactStorageFull, type StoredArtifactBlobs } from "./artifact-blobs.server";
 import { artifactContentType } from "./artifact-content-types.server";
@@ -17,7 +17,6 @@ import type { Artifacts } from "./artifacts.server";
 export type AgentArtifactFileServices = {
   artifacts: Pick<Artifacts, "reads">;
   blobs: Pick<StoredArtifactBlobs, "upload" | "open">;
-  enabled: (workspaceId: string) => Promise<boolean>;
   readActor?: ArtifactActor | undefined;
   uploadLimit?: AppRateLimit | undefined;
 };
@@ -34,7 +33,6 @@ export async function handleAgentArtifactUpload(
 ): Promise<Response> {
   try {
     const { workspaceId, agentId } = principal;
-    if (!(await services.enabled(workspaceId))) throw artifactsDisabled();
     await admitArtifactUpload(services.uploadLimit, agentId);
     if (!ARTIFACT_SHA256_PATTERN.test(sha256))
       throw new AppError("INVALID_INPUT", {
@@ -74,7 +72,6 @@ export async function handleAgentArtifactDownload(
 ): Promise<Response> {
   try {
     const { workspaceId, agentId } = principal;
-    if (!(await services.enabled(workspaceId))) throw artifactsDisabled();
     const requested = new URL(request.url).searchParams.get("version");
     if (requested !== null && !/^[1-9]\d{0,8}$/.test(requested))
       throw new AppError("INVALID_INPUT", {

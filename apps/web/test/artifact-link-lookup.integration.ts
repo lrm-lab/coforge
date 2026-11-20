@@ -11,7 +11,7 @@ let lookup: ReturnType<typeof linkPageLookup>;
 
 beforeAll(async () => {
   f = await commentsFixture("ll");
-  lookup = linkPageLookup(f.db, async () => true);
+  lookup = linkPageLookup(f.db);
 });
 afterAll(() => f.cleanup());
 
@@ -41,9 +41,9 @@ test("a revoked public token finds nothing even when its artifact is link-tier a
   await f.db.artifactPublicLink.create({
     data: { artifactId: id, token, createdByUserId: f.alice, revokedAt: new Date() },
   });
-  expect(await publicPageLookup(f.db, async () => true)(token)).toBeNull();
+  expect(await publicPageLookup(f.db)(token)).toBeNull();
   await f.db.artifactPublicLink.update({ where: { token }, data: { revokedAt: null } });
-  expect(await publicPageLookup(f.db, async () => true)(token)).toMatchObject({
+  expect(await publicPageLookup(f.db)(token)).toMatchObject({
     access: "link",
     artifactId: id,
     version: expect.any(Number),

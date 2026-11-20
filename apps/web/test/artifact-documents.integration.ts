@@ -284,27 +284,6 @@ test("a create whose bytes are missing writes no artifact row: the row and versi
   expect(await db.artifact.count({ where: { workspaceId } })).toBe(before);
 });
 
-test("with artifacts off, a push stores nothing", async () => {
-  const off = new ArtifactDocuments(
-    db,
-    new Artifacts(db, blobs, { enabled: async () => false }),
-    blobs,
-  );
-  const doc = await documents.create(writing(writer), {
-    conversationId: channelId,
-    title: "Off",
-    manifest: await manifest(writer, { "off.md": "off\n" }),
-  });
-  await expect(
-    off.push(writing(writer), {
-      artifactId: doc.id,
-      baseVersion: 1,
-      title: "Changed",
-      idempotencyKey: crypto.randomUUID(),
-    }),
-  ).rejects.toMatchObject({ errorId: "artifacts-disabled" });
-});
-
 test("a push refreshes the preview only when what it draws changed, and its tail runs beside the Agent's bookkeeping", async () => {
   let reads = 0;
   const counting = new ArtifactDocuments(db, artifacts, {

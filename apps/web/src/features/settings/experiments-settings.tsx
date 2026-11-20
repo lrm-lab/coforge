@@ -24,10 +24,6 @@ const EXPERIMENT_TEXT: Record<
     name: () => m.experiments_drafts(),
     description: () => m.experiments_drafts_description(),
   },
-  artifacts: {
-    name: () => m.experiments_artifacts(),
-    description: () => m.experiments_artifacts_description(),
-  },
   aiWorkbench: {
     name: () => m.experiments_ai_workbench(),
     description: () => m.experiments_ai_workbench_description(),

@@ -4,8 +4,6 @@ import { artifactPageOrigin, artifactSandboxOrigin } from "./artifact-sandbox-co
 import { announceAccessChange, type ArtifactSignals } from "./artifact-signals.server";
 import {
   artifactAuthorOwnerId,
-  artifactsDisabled,
-  artifactsEnabled,
   artifactTier,
   canManageArtifactSharing,
   requireArtifactRead,
@@ -33,13 +31,10 @@ export async function revokeArtifactPublicLinks(
 export class ArtifactPublicLinks {
   constructor(
     private readonly db: PrismaClient,
-    private readonly enabled: (workspaceId: string) => Promise<boolean> = (workspaceId) =>
-      artifactsEnabled(db, workspaceId),
     private readonly signals?: ArtifactSignals,
   ) {}
 
   async read(input: { workspaceId: string; artifactId: string; userId: string }) {
-    if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     const artifact = await this.db.artifact.findFirst({
       where: { id: input.artifactId, workspaceId: input.workspaceId, deletedAt: null },
       select: {

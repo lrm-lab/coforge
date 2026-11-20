@@ -34,7 +34,7 @@ const store: ArtifactBlobStore = {
   read: async () => null,
   allowed: async (_workspaceId, _artifactId, _actor, sha256s) => new Set(sha256s),
 };
-const artifacts = new Artifacts(db, store, { enabled: async () => true });
+const artifacts = new Artifacts(db, store);
 const documents = new ArtifactDocuments(db, artifacts, store);
 
 let workspaceId: string;
@@ -294,7 +294,6 @@ test("a hidden home leaves its artifact to the author, the author's owner and th
 test("widening tells the home's pages and the Workspace's, narrowing only the home's", async () => {
   const published: string[] = [];
   const signalled = new Artifacts(db, store, {
-    enabled: async () => true,
     signals: { publish: async (channel) => void published.push(channel) },
   });
   const shared = await create(inConversation(privateChannel), { agentId: agents.helper });
@@ -334,7 +333,7 @@ test("a list with no home shows exactly what a read of each artifact allows, in 
     log: [{ emit: "event", level: "query" }],
   });
   countingDb.$on("query", (event) => counted.push(event.query));
-  const listing = new Artifacts(countingDb, store, { enabled: async () => true });
+  const listing = new Artifacts(countingDb, store);
   try {
     const helper = { agentId: agents.helper };
     const seat = async (

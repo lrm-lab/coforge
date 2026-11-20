@@ -14,7 +14,7 @@ const entries: WhatsNewEntryData[] = [
   {
     id: "documents",
     releasedAt: "2026-11-04T07:00:00Z",
-    experiment: "artifacts",
+    experiment: "teamMemory",
   },
   { id: "task-labels", releasedAt: "2026-11-04T07:01:00Z" },
 ];
@@ -38,7 +38,7 @@ async function setup() {
     data: {
       slug: `whats-new-${handle}`,
       name: "What's new",
-      experiments: { artifacts: true },
+      experiments: { teamMemory: true },
       members: {
         create: [{ userId: veteran.id, role: "owner" }, { userId: newcomer.id }],
       },
@@ -76,10 +76,8 @@ test("dismissing one shows the next, and the dismissal follows the person to ano
   try {
     expect(await whatsNew.pending(veteran.id, workspaceId)).toEqual(["documents", "task-labels"]);
     await whatsNew.dismiss(veteran.id, "documents");
-    // Twice is still once.
     await whatsNew.dismiss(veteran.id, "documents");
     expect(await whatsNew.pending(veteran.id, workspaceId)).toEqual(["task-labels"]);
-    // Another device is another reader of the same stored row.
     const elsewhere = new WhatsNew(db, entries, now);
     expect(await elsewhere.pending(veteran.id, workspaceId)).toEqual(["task-labels"]);
     expect(
@@ -99,14 +97,14 @@ test("documents wait while the experiment is off, uncounted, and show once it is
   try {
     await db.workspace.update({
       where: { id: workspaceId },
-      data: { experiments: {} },
+      data: { experiments: { teamMemory: false } },
     });
     expect(await whatsNew.pending(veteran.id, workspaceId)).toEqual(["task-labels"]);
     await whatsNew.dismiss(veteran.id, "task-labels");
     expect(await whatsNew.pending(veteran.id, workspaceId)).toEqual([]);
     await db.workspace.update({
       where: { id: workspaceId },
-      data: { experiments: { artifacts: true } },
+      data: { experiments: { teamMemory: true } },
     });
     expect(await whatsNew.pending(veteran.id, workspaceId)).toEqual(["documents"]);
   } finally {

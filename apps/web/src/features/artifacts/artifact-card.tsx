@@ -16,7 +16,6 @@ import {
   artifactCardQuery,
   artifactMarksQuery,
   useArtifactActor,
-  useArtifactsOn,
   type ArtifactCard,
 } from "./artifact-queries";
 import { useArtifactLink } from "./artifact-beside-chat";
@@ -33,8 +32,7 @@ export function MessageArtifactCards({
   body: string;
   states?: readonly ArtifactCardState[];
 }) {
-  const on = useArtifactsOn();
-  const ids = on ? artifactIdsInBody(body) : [];
+  const ids = artifactIdsInBody(body);
   if (ids.length === 0) return null;
   return (
     <div className="mt-1.5 flex flex-col gap-1.5">
@@ -54,21 +52,18 @@ export function useBodyWithArtifactTitles(
   body: string,
   states?: readonly ArtifactCardState[],
 ): string {
-  const on = useArtifactsOn();
   const cards = useQueries({
-    queries: (on ? artifactIdsInBody(body) : []).map((id) => artifactCardQuery(id)),
+    queries: artifactIdsInBody(body).map((id) => artifactCardQuery(id)),
   });
   const shown = cards.flatMap(({ data }) =>
     data ? [[data.id, data.title || m.doc_untitled()] as const] : [],
   );
   const titles = JSON.stringify(shown);
-  const placeholders = on
-    ? JSON.stringify(
-        (states ?? []).flatMap((entry) =>
-          entry.state === "open" ? [] : [entry.artifactId.toLowerCase()],
-        ),
-      )
-    : "[]";
+  const placeholders = JSON.stringify(
+    (states ?? []).flatMap((entry) =>
+      entry.state === "open" ? [] : [entry.artifactId.toLowerCase()],
+    ),
+  );
   return useMemo(
     () =>
       bodyWithArtifactTitles(

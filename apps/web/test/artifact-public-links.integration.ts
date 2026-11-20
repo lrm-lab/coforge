@@ -15,8 +15,7 @@ const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 const handle = crypto.randomUUID().slice(0, 8);
 const ORIGIN = "http://127.0.0.1:5199";
 
-let switchedOn = true;
-const links = new ArtifactPublicLinks(db, async () => switchedOn);
+const links = new ArtifactPublicLinks(db);
 let workspaceId: string;
 let owner: string;
 let reader: string;
@@ -92,7 +91,7 @@ test("one who can read it sees the link, on and after it is off", async () => {
 
 test("turning the link on or off tells the pages that show the artifact, and a no-op tells none", async () => {
   const published: string[] = [];
-  const signalled = new ArtifactPublicLinks(db, async () => true, {
+  const signalled = new ArtifactPublicLinks(db, {
     publish: async (channel) => void published.push(channel),
   });
   const { id: artifactId } = await artifact("md");
@@ -182,18 +181,6 @@ test("a home the Workspace hides takes its link state and link from all but the 
   }
 });
 
-test("nothing is read while the Workspace has artifacts off", async () => {
-  const { id: artifactId } = await artifact("md");
-  switchedOn = false;
-  try {
-    expect(await refusal(links.read({ workspaceId, artifactId, userId: owner }))).toBe(
-      "ACCESS_DENIED",
-    );
-  } finally {
-    switchedOn = true;
-  }
-});
-
 test("a public link shows the current version's entry and any one file of it", async () => {
   const made = await db.artifact.create({
     data: {
@@ -233,9 +220,8 @@ test("a public link shows the current version's entry and any one file of it", a
   });
   const set = await links.set({ workspaceId, artifactId: made.id, userId: owner, enabled: true });
   const token = set.enabled ? set.url.slice(set.url.lastIndexOf("/") + 1) : "";
-  let enabled = true;
-  const lookup = publicPageLookup(db, async () => enabled);
-  const lookupById = linkPageLookup(db, async () => enabled);
+  const lookup = publicPageLookup(db);
+  const lookupById = linkPageLookup(db);
 
   expect(await lookup(token)).toEqual({
     workspaceId,
@@ -254,9 +240,6 @@ test("a public link shows the current version's entry and any one file of it", a
   expect(await lookup(token, "old.css")).toBeNull();
   expect(await lookup(token, "nope.css")).toBeNull();
   expect(await lookup("x".repeat(43))).toBeNull();
-  enabled = false;
-  expect(await lookup(token, "site.css")).toBeNull();
-  enabled = true;
   expect(await lookupById(made.id)).toMatchObject({
     shared: true,
     page: { artifactId: made.id, access: "conversation", sha256: "home" },
@@ -306,7 +289,7 @@ test("a public link to a file entry is looked up with its kind and size", async 
   });
   const set = await links.set({ workspaceId, artifactId: made.id, userId: owner, enabled: true });
   const token = set.enabled ? set.url.slice(set.url.lastIndexOf("/") + 1) : "";
-  expect(await publicPageLookup(db, async () => true)(token, "paper.pdf")).toMatchObject({
+  expect(await publicPageLookup(db)(token, "paper.pdf")).toMatchObject({
     kind: "pdf",
     entryPath: "paper.pdf",
     sha256: "pdf",

@@ -2,7 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
-import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
 import {
   productionArtifactShares,
   productionArtifacts,
@@ -138,7 +137,7 @@ export const shareArtifact = createServerFn({ method: "POST" })
           (input) => productionCloudComputers(db).ensureDefault(input),
         ),
     };
-    return productionArtifactShares(db, (workspace) => artifactsEnabled(db, workspace)).share({
+    return productionArtifactShares(db).share({
       workspaceId,
       actor: { userId: user.id },
       artifactId: data.artifactId,

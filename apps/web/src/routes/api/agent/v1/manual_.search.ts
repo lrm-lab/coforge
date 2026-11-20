@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { agentAuthMiddleware } from "#src/server/agents/agent-http-middleware.server";
-import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
 import { PrismaAgentManualEventRepository } from "#src/server/db/repositories/agent-manual-event.repositories.server";
 import {
   recordManualEvent,
@@ -11,9 +10,6 @@ import type { AgentManualExperiments } from "#src/server/agents/manual/manual-re
 
 export type AgentManualSearchPrincipal = { workspaceId: string; agentId: string };
 
-/** `GET /api/agent/v1/manual/search` — Agent Manual `search`: plain keyword scoring
- * over the topic registry (v1, no embeddings). The response shape is `ok`, `query`,
- * `scope: null`, `results`. */
 export async function handleAgentManualSearchGet(
   request: Request,
   principal: AgentManualSearchPrincipal,
@@ -46,10 +42,8 @@ export const Route = createFileRoute("/api/agent/v1/manual_/search")({
   server: {
     middleware: [agentAuthMiddleware],
     handlers: {
-      GET: async ({ request, context: { principal, db } }) =>
-        handleAgentManualSearchGet(request, principal, new PrismaAgentManualEventRepository(db), {
-          artifacts: await artifactsEnabled(db, principal.workspaceId).catch(() => undefined),
-        }),
+      GET: ({ request, context: { principal, db } }) =>
+        handleAgentManualSearchGet(request, principal, new PrismaAgentManualEventRepository(db)),
     },
   },
 });

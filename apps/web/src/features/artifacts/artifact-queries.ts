@@ -1,6 +1,5 @@
-import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query";
+import { queryOptions, type QueryClient } from "@tanstack/react-query";
 
-import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
 import { useWorkspaceDirectory } from "#src/features/conversations/workspace-directory-query";
 import { loadArtifactMarksBatched } from "./artifact-marks-batch";
 import {
@@ -15,23 +14,11 @@ import {
   loadArtifactDocument,
   loadArtifactLinkSharing,
 } from "./artifacts.functions";
-import { loadArtifactsOn } from "./artifacts-on.functions";
 
 export type ArtifactCard = Awaited<ReturnType<typeof listArtifacts>>[number];
 type ArtifactActorRef = { agentId: string } | null;
 
 export const ARTIFACTS_KEY = ["artifacts"] as const;
-
-export const artifactsOnQuery = (workspaceId: string | undefined) =>
-  queryOptions({
-    queryKey: [...ARTIFACTS_KEY, "on", workspaceId],
-    queryFn: async () => (await loadArtifactsOn()).on,
-    staleTime: 60_000,
-  });
-
-export function useArtifactsOn(): boolean | undefined {
-  return useQuery(artifactsOnQuery(useCurrentWorkspaceId())).data;
-}
 
 export const artifactListQuery = (conversationId: string) =>
   queryOptions({

@@ -34,9 +34,8 @@ const rooms = {
   bobCarol: "", // a DM Alice is not in
 };
 let artifactId: string;
-let enabled = true;
 
-const shares = new ArtifactShares(db, async () => enabled);
+const shares = new ArtifactShares(db);
 const ports = {
   db,
   idempotency: { execute: (_scope: unknown, persist: () => Promise<never>) => persist() },
@@ -119,7 +118,7 @@ beforeAll(async () => {
   rooms.aliceBob = await direct(people.alice, people.bob);
   rooms.bobCarol = await direct(people.bob, people.carol);
 
-  const artifacts = new Artifacts(db, store, { enabled: async () => true });
+  const artifacts = new Artifacts(db, store);
   const writer = await db.agent.create({
     data: {
       workspaceId,
@@ -204,18 +203,6 @@ test("each destination the person may not post in fails with its reason; the res
   const posted = new Set((await linkMessages()).map((message) => message.conversationId));
   for (const room of [rooms.archived, rooms.unjoined, rooms.hidden, rooms.bobCarol])
     expect(posted.has(room)).toBe(false);
-});
-
-test("with documents off, nothing is shared", async () => {
-  enabled = false;
-  try {
-    const before = (await linkMessages()).length;
-    const refused = await share(people.alice, [rooms.open]).catch((error: unknown) => error);
-    expect(isAppError(refused) && refused.errorId).toBe("artifacts-disabled");
-    expect((await linkMessages()).length).toBe(before);
-  } finally {
-    enabled = true;
-  }
 });
 
 test("the service refuses more targets than its cap", async () => {

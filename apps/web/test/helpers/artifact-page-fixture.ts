@@ -16,7 +16,7 @@ export async function startPageFixture(label: string) {
   const handle = crypto.randomUUID().slice(0, 8);
   const root = await mkdtemp(join(tmpdir(), `${label}-`));
   const blobs = new StoredArtifactBlobs(db, async () => new LocalFileStorage(root));
-  const artifacts = new Artifacts(db, blobs, { enabled: async () => true });
+  const artifacts = new Artifacts(db, blobs);
   const person = async (name: string) =>
     (await db.user.create({ data: { username: `${label}-${name}-${handle}`, displayName: name } }))
       .id;

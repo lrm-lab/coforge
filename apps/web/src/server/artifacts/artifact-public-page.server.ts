@@ -1,5 +1,5 @@
 import type { PrismaClient } from "#src/generated/prisma/client";
-import { artifactHomeHidden, artifactsEnabled } from "./artifact-access.server";
+import { artifactHomeHidden } from "./artifact-access.server";
 import {
   artifactKindOfPath,
   type ArtifactPathKind,
@@ -40,27 +40,19 @@ const PAGE_ARTIFACT_SELECT = {
   access: true,
 } as const;
 
-export function publicPageLookup(
-  db: PrismaClient,
-  enabled: (workspaceId: string) => Promise<boolean> = (workspaceId) =>
-    artifactsEnabled(db, workspaceId),
-) {
+export function publicPageLookup(db: PrismaClient) {
   return async (token: string, path?: string): Promise<PublicPage | null> => {
     const link = await db.artifactPublicLink.findFirst({
       where: { token, revokedAt: null },
       select: { artifact: { select: PAGE_ARTIFACT_SELECT } },
     });
-    return link?.artifact ? publicPageOf(db, enabled, link.artifact, path) : null;
+    return link?.artifact ? publicPageOf(db, link.artifact, path) : null;
   };
 }
 
 export type LinkLookup = { shared: boolean; page: PublicPage | null };
 
-export function linkPageLookup(
-  db: PrismaClient,
-  enabled: (workspaceId: string) => Promise<boolean> = (workspaceId) =>
-    artifactsEnabled(db, workspaceId),
-) {
+export function linkPageLookup(db: PrismaClient) {
   return async (artifactId: string, path?: string): Promise<LinkLookup> => {
     const artifact = await db.artifact.findFirst({
       where: {
@@ -71,7 +63,7 @@ export function linkPageLookup(
       select: PAGE_ARTIFACT_SELECT,
     });
     return artifact
-      ? { shared: true, page: await publicPageOf(db, enabled, artifact, path) }
+      ? { shared: true, page: await publicPageOf(db, artifact, path) }
       : { shared: false, page: null };
   };
 }
@@ -94,13 +86,11 @@ export async function memberArtifactWorkspaceSlug(
 
 async function publicPageOf(
   db: PrismaClient,
-  enabled: (workspaceId: string) => Promise<boolean>,
   artifact: PageArtifact,
   path?: string,
 ): Promise<PublicPage | null> {
   if (artifact.deletedAt || artifact.currentVersion <= 0) return null;
-  const [on, version, homeHidden] = await Promise.all([
-    enabled(artifact.workspaceId),
+  const [version, homeHidden] = await Promise.all([
     db.artifactVersion.findUnique({
       where: {
         artifactId_number: { artifactId: artifact.id, number: artifact.currentVersion },
@@ -117,8 +107,7 @@ async function publicPageOf(
     artifactHomeHidden(db, artifact.workspaceId, artifact),
   ]);
   const file = version?.files[0];
-  if (!on || homeHidden || !version || version.entryPath !== artifact.entryPath || !file)
-    return null;
+  if (homeHidden || !version || version.entryPath !== artifact.entryPath || !file) return null;
   return {
     workspaceId: artifact.workspaceId,
     artifactId: artifact.id,

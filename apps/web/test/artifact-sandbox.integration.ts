@@ -39,10 +39,8 @@ const store: ArtifactBlobStore = {
   read: async (_workspaceId, sha256) => bytes.get(sha256) ?? null,
   allowed: async (_workspaceId, _artifactId, _actor, sha256s) => new Set(sha256s),
 };
-/** Seconds are added to the sandbox's clock by the test that ages a link. */
 let clockOffsetMs = 0;
-let switchedOn = true;
-const artifacts = new Artifacts(db, store, { enabled: async () => switchedOn });
+const artifacts = new Artifacts(db, store);
 const sandbox = new ArtifactSandbox({
   reads: artifacts.reads,
   readBlob: (workspaceId, sha256) => store.read(workspaceId, sha256),
@@ -405,11 +403,8 @@ test("fileInVersion's real queries refuse a deleted artifact, another workspace,
     await db.artifact.update({ where: { id: page.id }, data: { deletedAt: new Date() } });
     expect(await file({})).toBeNull();
     await db.artifact.update({ where: { id: page.id }, data: { deletedAt: null } });
-    switchedOn = false;
-    await expect(file({})).rejects.toMatchObject({ errorId: "artifacts-disabled" });
-    switchedOn = true;
+    expect(await file({})).not.toBeNull();
   } finally {
-    switchedOn = true;
     await db.workspace.delete({ where: { id: other.id } }).catch(() => undefined);
   }
 });

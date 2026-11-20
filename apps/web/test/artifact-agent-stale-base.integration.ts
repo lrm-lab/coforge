@@ -35,7 +35,7 @@ beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "artifact-agent-base-"));
   const storage = new LocalFileStorage(root);
   blobs = new StoredArtifactBlobs(db, async () => storage);
-  artifacts = new Artifacts(db, blobs, { enabled: async () => true });
+  artifacts = new Artifacts(db, blobs);
   documents = new ArtifactDocuments(db, artifacts, blobs);
   userId = (await db.user.create({ data: { username: `ab-${handle}`, displayName: "Base" } })).id;
   workspaceId = (

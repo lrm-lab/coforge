@@ -34,8 +34,8 @@ beforeAll(async () => {
       pending.push(work());
     },
   };
-  comments = new ArtifactPersonComments(f.db, f.blobs, async () => true, f.notices, signals);
-  drafts = new ArtifactCommentDrafts(f.db, f.blobs, async () => true, f.notices, signals);
+  comments = new ArtifactPersonComments(f.db, f.blobs, f.notices, signals);
+  drafts = new ArtifactCommentDrafts(f.db, f.blobs, f.notices, signals);
   inbox = new ActivityInbox(f.db, {});
 });
 afterAll(() => f.cleanup());

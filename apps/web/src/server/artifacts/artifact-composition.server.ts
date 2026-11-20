@@ -18,7 +18,7 @@ import { ArtifactAbuseReporter } from "./artifact-public-abuse.server";
 import { ArtifactLinkOpen } from "./artifact-link-open.server";
 import { PublicArtifactMissGuard } from "./artifact-public-miss-guard.server";
 import { getAppRateLimits } from "#src/server/app-rate-limits/app-rate-limits-composition.server";
-import { artifactsEnabled, type ArtifactActor } from "./artifact-access.server";
+import { type ArtifactActor } from "./artifact-access.server";
 import { ArtifactReads, type ArtifactMessageCard } from "./artifact-reads.server";
 import { ArtifactShares } from "./artifact-shares.server";
 import { artifactDownload, artifactFilePreview } from "./artifact-download.server";
@@ -46,7 +46,7 @@ export const productionArtifactSignals = () =>
   centrifugoArtifactSignals(() => createCentrifugoServerApi());
 
 export function productionArtifactReads(db: PrismaClient) {
-  return new ArtifactReads(db, (workspaceId) => artifactsEnabled(db, workspaceId));
+  return new ArtifactReads(db);
 }
 
 export function productionArtifacts(db: PrismaClient) {
@@ -55,7 +55,6 @@ export function productionArtifacts(db: PrismaClient) {
   const comments = new ArtifactPersonComments(
     db,
     blobs,
-    (workspaceId) => artifactsEnabled(db, workspaceId),
     productionArtifactNotices(db),
     productionArtifactSignals(),
     getAppRateLimits().artifactPersonComment,
@@ -63,7 +62,6 @@ export function productionArtifacts(db: PrismaClient) {
   const drafts = new ArtifactCommentDrafts(
     db,
     blobs,
-    (workspaceId) => artifactsEnabled(db, workspaceId),
     productionArtifactNotices(db),
     productionArtifactSignals(),
     getAppRateLimits().artifactPersonComment,
@@ -75,16 +73,8 @@ export function productionArtifacts(db: PrismaClient) {
     drafts,
     documents,
     visibility: artifacts.visibility,
-    publicLinks: new ArtifactPublicLinks(
-      db,
-      (workspaceId) => artifactsEnabled(db, workspaceId),
-      productionArtifactSignals(),
-    ),
-    gallery: new ArtifactGallery(
-      db,
-      (workspaceId) => artifactsEnabled(db, workspaceId),
-      artifacts.reads,
-    ),
+    publicLinks: new ArtifactPublicLinks(db, productionArtifactSignals()),
+    gallery: new ArtifactGallery(db, artifacts.reads),
     renames: new ArtifactRenames(db, artifacts.reads, productionArtifactNotices(db)),
     personFollows: new ArtifactPersonFollows(db, artifacts.reads),
     comments,
@@ -103,19 +93,12 @@ export function productionArtifacts(db: PrismaClient) {
       artifactFilePreview({ reads: artifacts.reads, blobs }, input),
     thumbnail: (input: Parameters<typeof artifactThumbnail>[1]) =>
       artifactThumbnail({ reads: artifacts.reads, blobs }, input),
-    saveAttachment: async (input: {
-      workspaceId: string;
-      userId: string;
-      attachmentId: string;
-    }) => {
-      if (!(await artifactsEnabled(db, input.workspaceId)))
-        throw new AppError("NOT_FOUND", { errorId: "artifacts-disabled" });
-      return saveAttachmentAsArtifact(
+    saveAttachment: async (input: { workspaceId: string; userId: string; attachmentId: string }) =>
+      saveAttachmentAsArtifact(
         { db, documents, blobs, attachments: productionArtifactAttachments(db) },
         { workspaceId: input.workspaceId, userId: input.userId },
         input.attachmentId,
-      );
-    },
+      ),
   };
 }
 
@@ -175,11 +158,8 @@ export function productionArtifactNotices(db: PrismaClient): ArtifactNoticePort 
   };
 }
 
-export function productionArtifactShares(
-  db: PrismaClient,
-  enabled: (workspaceId: string) => Promise<boolean>,
-) {
-  return new ArtifactShares(db, enabled);
+export function productionArtifactShares(db: PrismaClient) {
+  return new ArtifactShares(db);
 }
 
 let linkMissGuard: PublicArtifactMissGuard | undefined;

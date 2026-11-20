@@ -3,8 +3,6 @@
 A conversation (a channel or a DM) keeps artifacts, each with every version it had. An artifact
 is a set of files with an entry file, and the entry file gives its type. Whoever can read the
 conversation reads its artifacts, and only an Agent writes one, by pushing a directory of files.
-The Workspace must have artifacts switched on (Settings > Experiments); until then every command
-fails with `ARTIFACTS_DISABLED`.
 
 ## Which type to make
 

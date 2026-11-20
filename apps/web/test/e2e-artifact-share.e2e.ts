@@ -6,7 +6,6 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { agentWrites } from "./helpers/artifact-agent-writes";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { artifactChrome, artifactViewerReady } from "./helpers/artifact-chrome";
 import {
   browserSession,
@@ -23,14 +22,12 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
   const session = browserSession(browserPath, `artifact-share-${process.pid}`);
   const { browser, evaluate } = session;
   const chrome = artifactChrome(session);
-  const experiments = new PrismaExperimentsRepository(db);
   const services = productionArtifacts(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const workspaceName = (
     await db.workspace.findUniqueOrThrow({ where: { id: workspaceId }, select: { name: true } })
   ).name;
   const everyone = `Everyone in ${workspaceName}`;
-  const before = (await experiments.read(workspaceId)).artifacts;
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   const agent = await db.agent.create({
     data: {
@@ -95,7 +92,6 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
   const text = (needle: string) => `document.body.textContent.includes(${JSON.stringify(needle)})`;
   const pageOf = (id: string) => `${origin}/en/w/${workspace.slug}/artifacts/${id}`;
   try {
-    await experiments.write(workspaceId, "artifacts", true);
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1280", "860");
     const bot = agentWrites(services, workspaceId, agent.id);
@@ -195,7 +191,6 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
     ).toEqual([everyone, "Anyone with the link"]);
     await chrome.closeMenus();
 
-    await experiments.write(other.id, "artifacts", true);
     const noorChannel = await db.conversation.create({
       data: {
         workspaceId: other.id,
@@ -251,7 +246,6 @@ test("an artifact's who-can-see: the home, the Workspace, and who loses access",
       .catch(() => undefined);
     await db.workspaceMembership.deleteMany({ where: { userId: lin.id } }).catch(() => undefined);
     await db.user.delete({ where: { id: lin.id } }).catch(() => undefined);
-    await experiments.write(workspaceId, "artifacts", before).catch(() => undefined);
     await db.$disconnect();
   }
 }, 120_000);

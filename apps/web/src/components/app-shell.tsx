@@ -32,7 +32,6 @@ import { ShellLinks } from "#src/components/layout/shell-links";
 import { useIsStandalonePage } from "#src/components/layout/standalone-page";
 import { CHAT_SECTIONS, sectionOf, tabHomeOf } from "#src/components/layout/tab-home";
 import { UnreadBadge, UnreadDot } from "#src/components/ui/unread-marker";
-import { artifactsOnQuery } from "#src/features/artifacts/artifact-queries";
 import { rememberRecordsLastPath, recordsNavHref } from "#src/features/records/records-last-path";
 import {
   activityNavAttentionQuery,
@@ -110,7 +109,6 @@ function useNavItems(
   const unreadCount =
     activity.unreadCount && activity.unreadCount > 0 ? activity.unreadCount : undefined;
   const { hasUnread } = activity;
-  const artifactsOn = useQuery(artifactsOnQuery(workspaceId)).data === true;
   const recordsHref = recordsNavHref(workspaceId);
   return useMemo(() => {
     const recordsDot = recordsPreview ? <UnreadDot className="ml-auto" /> : undefined;
@@ -147,16 +145,12 @@ function useNavItems(
       ...(aiWorkbench ? [{ label: m.pi_chat_title(), ...item("pi-chat"), icon: Stars01 }] : []),
       { label: m.memory_title(), ...item("memory"), icon: BookOpen01 },
       { label: m.projects_title(), ...item("projects"), icon: Folder },
-      ...(artifactsOn
-        ? [
-            {
-              label: m.navigation_artifacts(),
-              ...item("artifacts"),
-              sections: ["artifacts", "artifact"],
-              icon: LayersThree01,
-            },
-          ]
-        : []),
+      {
+        label: m.navigation_artifacts(),
+        ...item("artifacts"),
+        sections: ["artifacts", "artifact"],
+        icon: LayersThree01,
+      },
       {
         label: m.navigation_agents(),
         ...item("members"),
@@ -177,7 +171,7 @@ function useNavItems(
         icon: Monitor,
       },
     ];
-  }, [base, recordsPreview, aiWorkbench, artifactsOn, unreadCount, hasUnread, recordsHref]);
+  }, [base, recordsPreview, aiWorkbench, unreadCount, hasUnread, recordsHref]);
 }
 
 type AppShellProps = {

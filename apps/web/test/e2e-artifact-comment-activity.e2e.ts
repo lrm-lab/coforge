@@ -5,7 +5,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import { agentWrites } from "./helpers/artifact-agent-writes";
@@ -37,10 +36,8 @@ test("a person's Activity shows a second person's comment and review live and op
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = browserSession(browserPath, `artifact-activity-${process.pid}`);
   const { browser, evaluate, waitFor } = session;
-  const experiments = new PrismaExperimentsRepository(db);
   const services = productionArtifacts(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
-  const before = (await experiments.read(workspaceId)).artifacts;
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   const agent = await db.agent.create({
     data: {
@@ -71,7 +68,6 @@ test("a person's Activity shows a second person's comment and review live and op
   const rows = `[...document.querySelectorAll("[data-activity-artifact]")]`;
   const result: Record<string, unknown> = {};
   try {
-    await experiments.write(workspaceId, "artifacts", true);
     await mkdir(shots, { recursive: true });
     await browser("set", "viewport", width!, height!);
     const artifact = await bot.create({
@@ -224,7 +220,6 @@ test("a person's Activity shows a second person's comment and review live and op
   } finally {
     await browser("close").catch(() => undefined);
     proxy.stop();
-    await experiments.write(workspaceId, "artifacts", before);
     await db.artifact
       .deleteMany({ where: { homeKey: `conversation:${channel.id}` } })
       .catch(() => undefined);

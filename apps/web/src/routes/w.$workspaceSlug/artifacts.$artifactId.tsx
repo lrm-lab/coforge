@@ -3,10 +3,6 @@ import { z } from "zod";
 
 import { ArtifactPage } from "#src/features/artifacts/artifact-page";
 import { clearReviewSearch } from "#src/features/artifacts/artifact-search";
-import { useQuery } from "@tanstack/react-query";
-
-import { useCurrentWorkspaceId } from "#src/features/agents/workspace-agents-realtime";
-import { artifactsOnQuery } from "#src/features/artifacts/artifact-queries";
 import { decodeArtifactShortId } from "#src/features/artifacts/artifact-short-id";
 import { NotFoundPage } from "#src/features/errors/not-found-page";
 import { PageLoadError } from "#src/features/errors/page-load-error";
@@ -34,9 +30,6 @@ function ArtifactRoutePage() {
   const { review, comment, version } = Route.useSearch();
   const navigate = Route.useNavigate();
   const arrival = useRouterState({ select: (state) => state.location.state.__TSR_key });
-  const on = useQuery(artifactsOnQuery(useCurrentWorkspaceId()));
-  if (on.isPending) return null;
-  if (on.data === false) return <NotFoundPage />;
   return (
     <ArtifactPage
       artifactId={artifactId}

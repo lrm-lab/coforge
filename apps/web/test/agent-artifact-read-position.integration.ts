@@ -43,7 +43,7 @@ beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "agent-read-position-"));
   const storage = new LocalFileStorage(root);
   blobs = new StoredArtifactBlobs(db, async () => storage);
-  artifacts = new Artifacts(db, blobs, { enabled: async () => true });
+  artifacts = new Artifacts(db, blobs);
   documents = new ArtifactDocuments(db, artifacts, blobs);
   alice = (await db.user.create({ data: { username: `rp-a-${handle}`, displayName: "Alice" } })).id;
   workspaceId = (
@@ -114,7 +114,7 @@ async function post(agentId: string, body: unknown, services: { db: typeof db } 
       body: JSON.stringify(body),
     }),
     { workspaceId, agentId },
-    { db: services.db, documents, blobs, enabled: async () => true },
+    { db: services.db, documents, blobs },
   );
   return { status: response.status, body: (await response.json()) as Record<string, any> };
 }

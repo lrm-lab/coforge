@@ -24,7 +24,6 @@ const handle = crypto.randomUUID().slice(0, 8);
 const BASE = "http://local/api/agent/v1/artifacts";
 
 let root: string;
-let enabled = true;
 let blobs: StoredArtifactBlobs;
 let artifacts: Artifacts;
 let documents: ArtifactDocuments;
@@ -39,7 +38,7 @@ beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "agent-artifact-bytes-"));
   const storage = new LocalFileStorage(root);
   blobs = new StoredArtifactBlobs(db, async () => storage);
-  artifacts = new Artifacts(db, blobs, { enabled: async () => enabled });
+  artifacts = new Artifacts(db, blobs);
   documents = new ArtifactDocuments(db, artifacts, blobs);
   alice = (await db.user.create({ data: { username: `ab-a-${handle}`, displayName: "Alice" } })).id;
   workspaceId = (
@@ -105,7 +104,6 @@ const services = () => ({
   artifacts,
   documents,
   blobs,
-  enabled: async () => enabled,
 });
 const sha256 = (bytes: Uint8Array<ArrayBuffer>) =>
   new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
@@ -266,20 +264,6 @@ test("uploads use a dedicated per-Agent rate limit above the artifact file cap w
     { ...services(), uploadLimit },
   );
   expect(download.status).toBe(200);
-});
-
-test("an upload takes a Workspace without the experiment as every artifact call does", async () => {
-  enabled = false;
-  try {
-    const bytes = text("gated");
-    const answer = await upload(bytes);
-    expect(answer.status).toBe(403);
-    expect(JSON.parse(answer.text)).toMatchObject({ code: "ACCESS_DENIED" });
-    expect(JSON.parse(answer.text).error).toContain("artifacts-disabled");
-    expect(await db.artifactBlob.count({ where: { workspaceId, sha256: sha256(bytes) } })).toBe(0);
-  } finally {
-    enabled = true;
-  }
 });
 
 test("bytes no version uses yet are held up to 1 GiB; one more is refused, and held bytes always answer 204", async () => {
@@ -453,16 +437,4 @@ test("a download of a missing file, version or artifact is not found, as a read 
   const readable = await get(secret.id, "hush.md");
   expect(readable.status).toBe(200);
   expect(await readable.text()).toBe("hush\n");
-});
-
-test("a download takes a Workspace without the experiment as every artifact call does", async () => {
-  const id = await made({ "a.md": text("# Gated\n") });
-  enabled = false;
-  try {
-    const response = await get(id, "a.md");
-    expect(response.status).toBe(403);
-    expect(((await response.json()) as { error: string }).error).toContain("artifacts-disabled");
-  } finally {
-    enabled = true;
-  }
 });

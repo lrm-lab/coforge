@@ -25,7 +25,7 @@ const entries: WhatsNewEntryData[] = [
   {
     id: "needs-docs",
     releasedAt: "2026-11-04T07:00:00Z",
-    experiment: "artifacts",
+    experiment: "teamMemory",
   },
   { id: "labels", releasedAt: "2026-11-04T07:01:00Z" },
 ];

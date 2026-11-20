@@ -15,8 +15,6 @@ import {
   requireArtifactRead,
   requireConversationHome,
   artifactTier,
-  artifactsDisabled,
-  artifactsEnabled,
   canDeleteArtifact,
   type ArtifactActor,
   type ArtifactPublisher,
@@ -54,7 +52,6 @@ function invalid(errorId: string): never {
 }
 
 export class Artifacts {
-  private readonly enabled: (workspaceId: string) => Promise<boolean>;
   readonly reads: ArtifactReads;
   readonly visibility: ArtifactVisibility;
   private readonly signals?: ArtifactSignals;
@@ -63,18 +60,15 @@ export class Artifacts {
     private readonly db: PrismaClient,
     private readonly blobs: ArtifactBlobStore,
     options: {
-      enabled?: (workspaceId: string) => Promise<boolean>;
       signals?: ArtifactSignals;
     } = {},
   ) {
-    this.enabled = options.enabled ?? ((workspaceId) => artifactsEnabled(db, workspaceId));
-    this.reads = new ArtifactReads(db, this.enabled);
+    this.reads = new ArtifactReads(db);
     this.signals = options.signals;
-    this.visibility = new ArtifactVisibility(db, this.enabled, options.signals);
+    this.visibility = new ArtifactVisibility(db, options.signals);
   }
 
   private async live(workspaceId: string, artifactId: string) {
-    if (!(await this.enabled(workspaceId))) throw artifactsDisabled();
     const artifact = await this.db.artifact.findFirst({
       where: { id: artifactId, workspaceId, deletedAt: null },
       select: {
@@ -106,7 +100,6 @@ export class Artifacts {
     version?: { files: readonly ArtifactFileInput[]; idempotencyKey: string };
     beforeAnnounce?: (artifactId: string) => Promise<unknown>;
   }) {
-    if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     if (input.home.kind === "public") invalid("artifact-home");
     const homeKey = artifactHomeKey(input.home);
     await requireConversationHome(

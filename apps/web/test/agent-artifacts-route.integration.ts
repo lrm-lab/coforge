@@ -23,7 +23,6 @@ const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 const handle = crypto.randomUUID().slice(0, 8);
 
 let root: string;
-let enabled = true;
 let blobs: StoredArtifactBlobs;
 let documents: ArtifactDocuments;
 let artifacts: Artifacts;
@@ -37,7 +36,7 @@ beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "agent-artifacts-"));
   const storage = new LocalFileStorage(root);
   blobs = new StoredArtifactBlobs(db, async () => storage);
-  artifacts = new Artifacts(db, blobs, { enabled: async () => enabled });
+  artifacts = new Artifacts(db, blobs);
   documents = new ArtifactDocuments(db, artifacts, blobs);
   alice = (await db.user.create({ data: { username: `ag-a-${handle}`, displayName: "Alice" } })).id;
   workspaceId = (
@@ -115,7 +114,7 @@ async function post(body: unknown) {
       body: JSON.stringify(body),
     }),
     { workspaceId, agentId },
-    { db, documents, blobs, enabled: async () => enabled },
+    { db, documents, blobs },
   );
   return { status: response.status, body: (await response.json()) as Record<string, any> };
 }
@@ -416,21 +415,4 @@ test("a request outside the web page's rules is refused", async () => {
   expect(
     await post(await make("Plan", { "plan.md": "p\n" }, { target: `#launch-${handle}:#abc` })),
   ).toMatchObject({ status: 400, body: { error: expect.stringContaining("artifact-target") } });
-});
-
-test("a Workspace without the Artifacts experiment says so, whatever was asked", async () => {
-  enabled = false;
-  try {
-    for (const body of [
-      await make("Plan", { "plan.md": "p\n" }, { target: "#nowhere" }),
-      { operation: "push", title: "Page", idempotencyKey: key(), files: [] },
-      { operation: "read", artifact: key() },
-    ])
-      expect(await post(body)).toMatchObject({
-        status: 403,
-        body: { code: "ACCESS_DENIED", error: expect.stringContaining("artifacts-disabled") },
-      });
-  } finally {
-    enabled = true;
-  }
 });

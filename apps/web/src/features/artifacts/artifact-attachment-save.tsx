@@ -6,7 +6,7 @@ import { ButtonUtility } from "#src/components/base/buttons/button-utility";
 import { useAppToast } from "#src/components/ui/toast";
 import { m } from "#src/paraglide/messages";
 import { useArtifactLink } from "./artifact-beside-chat";
-import { ARTIFACTS_KEY, useArtifactsOn } from "./artifact-queries";
+import { ARTIFACTS_KEY } from "./artifact-queries";
 import { saveAttachmentAsArtifact } from "./artifacts.functions";
 
 const MAX_SAVE_BYTES = 16 * 1024 * 1024;
@@ -18,7 +18,6 @@ export function SaveAttachmentAsArtifactButton({
   attachmentId: string;
   sizeBytes: number;
 }) {
-  const enabled = useArtifactsOn() === true;
   const queryClient = useQueryClient();
   const router = useRouter();
   const linkTo = useArtifactLink();
@@ -36,7 +35,7 @@ export function SaveAttachmentAsArtifactButton({
     },
   });
 
-  if (!enabled || sizeBytes > MAX_SAVE_BYTES) return null;
+  if (sizeBytes > MAX_SAVE_BYTES) return null;
 
   return (
     <ButtonUtility

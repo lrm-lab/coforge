@@ -70,7 +70,6 @@ test("Workspace assistant delegates list and title-resolved read to owner readAc
       },
     } as never,
     blobs: {} as never,
-    enabled: async () => true,
     readActor: { userId: OWNER_USER_ID },
   };
 
@@ -120,7 +119,6 @@ test("handleAgentArtifactDownload delegates file read visibility to readActor", 
           sizeBytes: 5,
         }),
       },
-      enabled: async () => true,
       readActor: { userId: OWNER_USER_ID },
     },
   );

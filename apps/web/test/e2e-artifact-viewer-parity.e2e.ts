@@ -8,7 +8,6 @@ import { artifactPresenceChannel } from "#src/features/artifacts/artifact-presen
 import { issueBrowserRealtimeToken } from "#src/server/auth/browser-realtime-token.server";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import { agentWrites } from "./helpers/artifact-agent-writes";
@@ -49,13 +48,11 @@ test("the viewer's own window and header, its presence list, the gallery's visib
   const session = browserSession(browserPath, `artifact-viewer-parity-${process.pid}`);
   const { browser, evaluate } = session;
   const chrome = artifactChrome(session);
-  const experiments = new PrismaExperimentsRepository(db);
   const services = productionArtifacts(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
   const workspaceName = (
     await db.workspace.findUniqueOrThrow({ where: { id: workspaceId }, select: { name: true } })
   ).name;
-  const before = (await experiments.read(workspaceId)).artifacts;
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   const agent = await db.agent.create({
     data: {
@@ -90,7 +87,6 @@ test("the viewer's own window and header, its presence list, the gallery's visib
     `document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect().left ?? -1`;
   let linPage: Centrifuge | undefined;
   try {
-    await experiments.write(workspaceId, "artifacts", true);
     await mkdir(shots, { recursive: true });
     await browser("set", "viewport", "1280", "860");
     const doc = await bot.create({
@@ -237,7 +233,6 @@ test("the viewer's own window and header, its presence list, the gallery's visib
     await db.agent.deleteMany({ where: { id: agent.id } }).catch(() => undefined);
     await db.workspaceMembership.deleteMany({ where: { userId: lin.id } }).catch(() => undefined);
     await db.user.delete({ where: { id: lin.id } }).catch(() => undefined);
-    await experiments.write(workspaceId, "artifacts", before).catch(() => undefined);
     await db.$disconnect();
   }
 }, 240_000);

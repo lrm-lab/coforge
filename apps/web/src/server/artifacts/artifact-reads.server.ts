@@ -18,7 +18,6 @@ import {
   artifactReadableFromHome,
   artifactTier,
   artifactAccessTier,
-  artifactsDisabled,
   artifactViewer,
   canManageArtifactSharingWithRole,
   homeStands,
@@ -125,10 +124,7 @@ export type ArtifactOrigin =
   | { hidden: true };
 
 export class ArtifactReads {
-  constructor(
-    private readonly db: PrismaClient,
-    private readonly enabled: (workspaceId: string) => Promise<boolean>,
-  ) {}
+  constructor(private readonly db: PrismaClient) {}
 
   async #origin(
     messageId: string | null,
@@ -150,7 +146,6 @@ export class ArtifactReads {
   }
 
   async artifact(workspaceId: string, artifactId: string, reader: ArtifactActor) {
-    if (!(await this.enabled(workspaceId))) throw artifactsDisabled();
     const [artifact, viewer] = await Promise.all([
       this.db.artifact.findFirst({
         where: { id: artifactId, workspaceId, deletedAt: null },
@@ -277,7 +272,6 @@ export class ArtifactReads {
     version: number;
     path: string;
   }) {
-    if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     return this.db.artifactFile.findFirst({
       where: {
         artifactId: input.artifactId,
@@ -304,7 +298,6 @@ export class ArtifactReads {
     cursor?: string;
     limit: number;
   }) {
-    if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     const viewer = await artifactViewer(this.db, input.workspaceId, input.reader);
     if (!viewer.member) throw new AppError("NOT_FOUND");
     if (input.conversationId)
@@ -342,7 +335,6 @@ export class ArtifactReads {
     reader: ArtifactActor;
     artifactIds: readonly string[];
   }) {
-    if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     const ids = [...new Set(input.artifactIds.map((id) => id.toLowerCase()))]
       .filter((id) => UUID.test(id))
       .slice(0, LIST_LIMIT);
@@ -394,7 +386,6 @@ export class ArtifactReads {
       ...new Set(input.messages.flatMap((message) => artifactIdsInBody(message.body, 100))),
     ];
     if (ids.length === 0) return input.messages.map(() => []);
-    if (!(await this.enabled(input.workspaceId))) return input.messages.map(() => []);
     const rows = await this.db.artifact.findMany({
       where: { workspaceId: input.workspaceId, id: { in: ids } },
       select: {

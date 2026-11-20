@@ -13,7 +13,7 @@ let inbox: ActivityInbox;
 
 beforeAll(async () => {
   f = await commentsFixture("pm");
-  comments = new ArtifactPersonComments(f.db, f.blobs, async () => true, f.notices);
+  comments = new ArtifactPersonComments(f.db, f.blobs, f.notices);
   follows = new ArtifactPersonFollows(f.db, f.artifacts.reads);
   inbox = new ActivityInbox(f.db, {});
 });

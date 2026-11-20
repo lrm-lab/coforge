@@ -11,7 +11,6 @@ import {
   runAgentArtifactOperation,
   type AgentArtifactServices,
 } from "#src/server/artifacts/agent-artifacts.server";
-import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
 import {
   productionArtifactAttachments,
   productionArtifactNotices,
@@ -63,7 +62,6 @@ export const Route = createFileRoute("/api/agent/v1/artifacts")({
           db,
           documents,
           blobs,
-          enabled: (workspaceId) => artifactsEnabled(db, workspaceId),
           notices: productionArtifactNotices(db),
           signals: productionArtifactSignals(),
           attachments: productionArtifactAttachments(db),

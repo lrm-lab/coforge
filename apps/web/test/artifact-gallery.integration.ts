@@ -16,7 +16,7 @@ let docsId: string;
 
 beforeAll(async () => {
   f = await commentsFixture("gl");
-  gallery = new ArtifactGallery(f.db, async () => true, f.artifacts.reads);
+  gallery = new ArtifactGallery(f.db, f.artifacts.reads);
   positions = new ArtifactViewerPositions(f.db, f.artifacts.reads, now);
   docsId = (
     await f.db.conversation.findFirstOrThrow({
@@ -235,7 +235,7 @@ test("marks cost the same queries for one artifact or many", async () => {
     log: [{ emit: "event", level: "query" }],
   });
   countingDb.$on("query", (event) => counted.push(event.query));
-  const counting = new ArtifactGallery(countingDb, async () => true, f.artifacts.reads);
+  const counting = new ArtifactGallery(countingDb, f.artifacts.reads);
   const queriesFor = async (artifactIds: string[]) => {
     counted.length = 0;
     await counting.marks({ workspaceId: f.workspaceId, userId: f.bob, artifactIds });
@@ -256,7 +256,7 @@ test("a gallery page costs a fixed number of queries however many artifacts the 
     log: [{ emit: "event", level: "query" }],
   });
   countingDb.$on("query", (event) => counted.push(event.query));
-  const counting = new ArtifactGallery(countingDb, async () => true, f.artifacts.reads);
+  const counting = new ArtifactGallery(countingDb, f.artifacts.reads);
   const queriesOf = async (extra: Partial<Parameters<ArtifactGallery["page"]>[0]>) => {
     counted.length = 0;
     await counting.page({

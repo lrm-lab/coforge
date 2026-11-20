@@ -6,7 +6,6 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { agentWrites } from "./helpers/artifact-agent-writes";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { artifactPageOrigin } from "#src/server/artifacts/artifact-sandbox-config.server";
 import {
   encodeArtifactShortId,
@@ -26,14 +25,12 @@ test("an artifact's public link: turned on from the pill, served to a visitor, t
   const { browser, evaluate } = session;
   const chrome = artifactChrome(session);
   const visitor = browserSession(browserPath, `artifact-link-visitor-${process.pid}`);
-  const experiments = new PrismaExperimentsRepository(db);
   const services = productionArtifacts(db);
   const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id, role: "owner" },
     orderBy: { createdAt: "asc" },
     include: { workspace: { select: { slug: true, name: true } } },
   });
-  const before = (await experiments.read(workspaceId)).artifacts;
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   const agent = await db.agent.create({
     data: {
@@ -104,7 +101,6 @@ test("an artifact's public link: turned on from the pill, served to a visitor, t
     await chrome.untilPillScope(`Everyone in ${workspace.name}`);
   };
   try {
-    await experiments.write(workspaceId, "artifacts", true);
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1280", "860");
     const bot = agentWrites(services, workspaceId, agent.id);
@@ -257,7 +253,6 @@ test("an artifact's public link: turned on from the pill, served to a visitor, t
       .catch(() => undefined);
     await db.conversation.delete({ where: { id: channel.id } }).catch(() => undefined);
     await db.agent.delete({ where: { id: agent.id } }).catch(() => undefined);
-    await experiments.write(workspaceId, "artifacts", before).catch(() => undefined);
     await db.$disconnect();
   }
 }, 180_000);

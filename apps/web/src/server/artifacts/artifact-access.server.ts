@@ -10,9 +10,6 @@ import {
   conversationHiddenFromWorkspace,
   type ActorConversationHomeRead,
 } from "#src/server/conversations/channel-read-access.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
-import { Experiments } from "#src/server/experiments/experiments.server";
-import { isFeatureEnabled } from "#src/server/feature-flags/feature-flags.server";
 
 export type ArtifactActor =
   | { userId: string; agentId?: undefined }
@@ -361,21 +358,3 @@ export function canDeleteArtifactWithRole(
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export const artifactsDisabled = () =>
-  new AppError("ACCESS_DENIED", {
-    errorId: "artifacts-disabled",
-    hint: "this Workspace has not enabled Artifacts (Settings > Experiments, switched on by a Workspace owner or admin)",
-  });
-
-export async function artifactsEnabled(db: PrismaClient, workspaceId: string): Promise<boolean> {
-  const workspace = await db.workspace.findUnique({
-    where: { id: workspaceId },
-    select: { slug: true },
-  });
-  if (!workspace) return false;
-  return new Experiments(new PrismaExperimentsRepository(db), isFeatureEnabled).enabled(
-    "artifacts",
-    { workspaceId, workspaceSlug: workspace.slug },
-  );
-}

@@ -5,7 +5,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import { agentWrites } from "./helpers/artifact-agent-writes";
@@ -35,9 +34,7 @@ test("a non-entry page runs on the artifact's origin and a PDF shows from it", a
     browserPath,
     `file-preview-${process.pid}`,
   );
-  const experiments = new PrismaExperimentsRepository(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
-  const before = (await experiments.read(workspaceId)).artifacts;
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   const agent = await db.agent.create({
     data: {
@@ -58,7 +55,6 @@ test("a non-entry page runs on the artifact's origin and a PDF shows from it", a
   });
   const bot = agentWrites(productionArtifacts(db), workspaceId, agent.id);
   try {
-    await experiments.write(workspaceId, "artifacts", true);
     await mkdir(shots, { recursive: true });
     await browser("set", "viewport", "1920", "898");
     const created = await bot.create({
@@ -104,7 +100,6 @@ test("a non-entry page runs on the artifact's origin and a PDF shows from it", a
       `!document.body.textContent.includes("这个视图已失效") && document.querySelector("main iframe")?.src !== ${JSON.stringify(pdf.src)}`,
     );
   } finally {
-    await experiments.write(workspaceId, "artifacts", before);
     await db.conversation.delete({ where: { id: channel.id } }).catch(() => undefined);
     await db.agent.delete({ where: { id: agent.id } }).catch(() => undefined);
     await db.$disconnect();

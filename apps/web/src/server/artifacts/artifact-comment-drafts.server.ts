@@ -6,7 +6,6 @@ import {
 import { hasTextOrImage } from "#src/features/artifacts/artifact-comment-inputs";
 import { AppError } from "#src/lib/app-error";
 import type { AppRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
-import { artifactsDisabled } from "./artifact-access.server";
 import { requireReadableArtifact } from "./artifact-comment-access.server";
 import {
   COMMENT_DRAFT_TTL_MS,
@@ -40,7 +39,6 @@ export class ArtifactCommentDrafts {
   constructor(
     private readonly db: PrismaClient,
     private readonly blobs: Blobs,
-    private readonly enabled: (workspaceId: string) => Promise<boolean>,
     private readonly port: ArtifactNoticePort,
     private readonly signals?: ArtifactSignals,
     private readonly limit?: AppRateLimit,
@@ -254,7 +252,6 @@ export class ArtifactCommentDrafts {
   }
 
   private async readable(input: Place) {
-    if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     return requireReadableArtifact(
       this.db,
       input.workspaceId,

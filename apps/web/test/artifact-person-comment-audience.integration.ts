@@ -96,16 +96,9 @@ test("the will-notify preview names exactly the Agents the comment then tells", 
 });
 
 test("people's posts, uploads and previews are rate limited like Agent writes", async () => {
-  const limited = new ArtifactPersonComments(
-    f.db,
-    f.blobs,
-    async () => true,
-    f.notices,
-    undefined,
-    {
-      admit: async () => ({ allowed: false, retryAfterSeconds: 7 }),
-    },
-  );
+  const limited = new ArtifactPersonComments(f.db, f.blobs, f.notices, undefined, {
+    admit: async () => ({ allowed: false, retryAfterSeconds: 7 }),
+  });
   const artifact = await f.make("Rate limited");
   const refused = { errorId: "artifact-rate-limited", details: { retryAfterSeconds: 7 } };
   await expect(

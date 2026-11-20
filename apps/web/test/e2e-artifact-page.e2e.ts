@@ -8,7 +8,6 @@ import { productionArtifacts } from "#src/server/artifacts/artifact-composition.
 import { agentWrites } from "./helpers/artifact-agent-writes";
 import { artifactChrome } from "./helpers/artifact-chrome";
 import { versionChromeSteps } from "./helpers/artifact-version-steps";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import {
@@ -69,10 +68,8 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
   const session = browserSession(browserPath, `artifact-page-${process.pid}`);
   const { browser, evaluate } = session;
   const chrome = artifactChrome(session);
-  const experiments = new PrismaExperimentsRepository(db);
   const services = productionArtifacts(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
-  const before = (await experiments.read(workspaceId)).artifacts;
   const devRole = (
     await db.workspaceMembership.findFirstOrThrow({
       where: { workspaceId, userId: DEV_BROWSER_USER.id },
@@ -146,7 +143,6 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
   const pageOf = (id: string, query = "") =>
     `${origin}/en/w/${workspace.slug}/artifacts/${id}${query}`;
   try {
-    await experiments.write(workspaceId, "artifacts", true);
     await mkdir(artifacts, { recursive: true });
     await browser("set", "viewport", "1280", "860");
     const html = (heading: string) =>
@@ -279,17 +275,6 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
     await browser("open", `${origin}/en/w/${workspace.slug}/activity?doc=${web.id}`);
     await browser("wait", "--fn", `location.pathname.endsWith("/artifacts/${web.id}")`);
 
-    // Where artifacts are off, a link from before opens the conversation, without the document.
-    await experiments.write(workspaceId, "artifacts", false);
-    await browser("open", `${origin}/en/w/${workspace.slug}/channel/${channel.id}?doc=${web.id}`);
-    await browser(
-      "wait",
-      "--fn",
-      `${pageHydrated} && location.pathname.endsWith("/channel/${channel.id}")`,
-    );
-    expect(await evaluate<string>("location.search")).not.toContain("doc");
-    await experiments.write(workspaceId, "artifacts", true);
-
     // A web page beside the chat: the Agent's message with its card, and the page itself.
     const chat = `${origin}/en/w/${workspace.slug}/channel/${channel.id}`;
     const sender = await db.conversationMember.findFirstOrThrow({
@@ -407,7 +392,6 @@ test("an artifact's page: a web page, the page that is not there, an old link, a
       .catch(() => undefined);
     await db.workspaceMembership.deleteMany({ where: { userId: lin.id } }).catch(() => undefined);
     await db.user.delete({ where: { id: lin.id } }).catch(() => undefined);
-    await experiments.write(workspaceId, "artifacts", before).catch(() => undefined);
     await db.$disconnect();
   }
 }, 240_000);

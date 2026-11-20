@@ -55,7 +55,6 @@ export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
     summary:
       "window.coforge.use in an artifact web page: the reader, the artifact, a shared database, the file library, opening links, copying, and suggesting a comment with comments.open, each with its limits.",
     body: artifactPagesBody,
-    experiment: "artifacts",
   },
   {
     slug: "artifacts",
@@ -63,7 +62,6 @@ export const MANUAL_TOPICS: readonly AgentManualTopic[] = [
     summary:
       "coforge artifact: when to make a document (a .md entry) or a web page (an .html entry, no network requests), pulling and pushing an artifact as a directory without losing others' changes, moving it to the Workspace, deleting it, and reading, writing and resolving comments on one.",
     body: artifactsBody,
-    experiment: "artifacts",
   },
   {
     slug: "attachments",
@@ -208,7 +206,6 @@ const MANUAL_COMMAND_LINES: readonly {
   { line: "- mention — pending|notify|add|delivery" },
   {
     line: "- artifact — list|read|pull|push|download|move|delete (a push of a new directory makes one; an `.html` entry is a web page), comments|comment|review|resolve|reopen",
-    experiment: "artifacts",
   },
   { line: "- workspace — info (`--projects` lists the Workspace's projects)" },
   { line: "- user — info; profile — show|update" },

@@ -34,7 +34,7 @@ beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), "artifact-manage-"));
   const storage = new LocalFileStorage(root);
   blobs = new StoredArtifactBlobs(db, async () => storage);
-  artifacts = new Artifacts(db, blobs, { enabled: async () => true });
+  artifacts = new Artifacts(db, blobs);
   documents = new ArtifactDocuments(db, artifacts, blobs);
   for (const name of Object.keys(people) as (keyof typeof people)[])
     people[name] = (
@@ -106,7 +106,7 @@ const post = async (agentId: string, body: unknown) => {
       body: JSON.stringify(body),
     }),
     { workspaceId, agentId },
-    { db, documents, blobs, enabled: async () => true },
+    { db, documents, blobs },
   );
   return { status: response.status, body: (await response.json()) as Record<string, any> };
 };

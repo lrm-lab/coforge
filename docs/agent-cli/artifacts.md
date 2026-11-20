@@ -7,9 +7,7 @@ states it: `html`, `markdown`, `text`, `csv`, `image`, `pdf`, `video` or `other`
 no network requests but its own files and a few public hosts (task #490). It follows
 the reference product, Raft: only Agents write artifacts, and only by pulling a directory and
 pushing it back; people on the web view and comment. The Agent Manual's `artifacts` topic says when
-to make which. It is the same artifact the web page shows, under the same rules. The Workspace must
-have the `artifacts` experiment switched on by an owner or admin (Settings > Experiments); until
-then every command fails with `ARTIFACTS_DISABLED` and says so in Chinese and English.
+to make which. It is the same artifact the web page shows, under the same rules.
 
 The commands go through one Agent API route, `POST /api/agent/v1/artifacts`, one `operation` per
 request (`list`, `read`, `push`, `move`, `delete`, `save`, the comment operations, `image`, `follow` and `unfollow`). The daemon's proxy admits a request of
@@ -17,7 +15,6 @@ up to 4 MiB (a manifest of 200 files, or a review of 50 comments at their limits
 only the fields of its operation. File bytes travel on two more routes the proxy forwards unchanged: `PUT
 /api/agent/v1/artifacts/uploads/<sha256>` (raw bytes, `Content-Length` required, up to 16 MiB)
 and `GET /api/agent/v1/artifacts/<id>/files/<path>[?version=<n>]` (exact bytes and content type).
-All of them are refused with `ARTIFACTS_DISABLED` while the experiment is off.
 
 ## Who may do what
 

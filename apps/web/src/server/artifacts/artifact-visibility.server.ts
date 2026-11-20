@@ -14,7 +14,6 @@ import {
   artifactAccessTier,
   artifactTier,
   artifactViewer,
-  artifactsDisabled,
   canManageArtifactSharing,
   canManageArtifactSharingWithRole,
   homeStands,
@@ -86,7 +85,6 @@ const moveRefusal = (reason: "no-owner" | "owner-cannot-see" | "owner-cannot-mov
 export class ArtifactVisibility {
   constructor(
     private readonly db: PrismaClient,
-    private readonly enabled: (workspaceId: string) => Promise<boolean>,
     private readonly signals?: ArtifactSignals,
   ) {}
 
@@ -97,7 +95,6 @@ export class ArtifactVisibility {
     tier: ArtifactAccessTier;
     expectedLost?: number;
   }) {
-    if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     const actor = { userId: input.userId };
     const changed = await this.db.$transaction(async (tx) => {
       const artifact = await lockArtifact(tx, input);
@@ -127,7 +124,6 @@ export class ArtifactVisibility {
   }
 
   async loss(input: { workspaceId: string; artifactId: string; userId: string }) {
-    if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     const actor = { userId: input.userId };
     const artifact = await readArtifact(this.db, input);
     const authorAgentOwnerId = await artifactAuthorOwnerId(this.db, artifact.authorAgentId);
@@ -140,7 +136,6 @@ export class ArtifactVisibility {
   }
 
   async moveToWorkspace(input: { workspaceId: string; artifactId: string; agentId: string }) {
-    if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     const actor = { agentId: input.agentId };
     const moved = await this.db.$transaction(async (tx) => {
       const artifact = await lockArtifact(tx, input);

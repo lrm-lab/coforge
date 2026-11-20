@@ -5,7 +5,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import { agentWrites } from "./helpers/artifact-agent-writes";
@@ -35,9 +34,7 @@ test("an artifact whose entry is a PDF, a CSV or an image opens as that file", a
   );
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const { browser, evaluate, waitFor } = browserSession(browserPath, `file-entry-${process.pid}`);
-  const experiments = new PrismaExperimentsRepository(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
-  const before = (await experiments.read(workspaceId)).artifacts;
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   const agent = await db.agent.create({
     data: {
@@ -59,7 +56,6 @@ test("an artifact whose entry is a PDF, a CSV or an image opens as that file", a
   const bot = agentWrites(productionArtifacts(db), workspaceId, agent.id);
   const page = (id: string) => `${webOrigin}/zh-CN/w/${workspace.slug}/artifacts/${id}`;
   try {
-    await experiments.write(workspaceId, "artifacts", true);
     await mkdir(shots, { recursive: true });
     await browser("set", "viewport", "1920", "898");
     const make = (title: string, entry: string, content: string | Uint8Array) =>
@@ -173,7 +169,6 @@ test("an artifact whose entry is a PDF, a CSV or an image opens as that file", a
     expect(facts).toEqual(["共 1 页", "2 行 × 2 列 · name、team", "120 × 60 像素"]);
     await browser("screenshot", join(shots, "94-chat-card-facts.png"));
   } finally {
-    await experiments.write(workspaceId, "artifacts", before);
     await db.conversation.delete({ where: { id: channel.id } }).catch(() => undefined);
     await db.agent.delete({ where: { id: agent.id } }).catch(() => undefined);
     await db.$disconnect();

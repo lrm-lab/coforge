@@ -20,7 +20,7 @@ export async function commentsFixture(prefix: string) {
   const root = await mkdtemp(join(tmpdir(), `${prefix}-`));
   const storage = new LocalFileStorage(root);
   const blobs = new StoredArtifactBlobs(db, async () => storage);
-  const artifacts = new Artifacts(db, blobs, { enabled: async () => true });
+  const artifacts = new Artifacts(db, blobs);
   const documents = new ArtifactDocuments(db, artifacts, blobs);
 
   const alice = (
@@ -105,7 +105,7 @@ export async function commentsFixture(prefix: string) {
         body: JSON.stringify(body),
       }),
       { workspaceId, agentId },
-      { db, documents, blobs, enabled: async () => true, notices, ...overrides },
+      { db, documents, blobs, notices, ...overrides },
     );
     return { status: response.status, body: (await response.json()) as Record<string, any> };
   }

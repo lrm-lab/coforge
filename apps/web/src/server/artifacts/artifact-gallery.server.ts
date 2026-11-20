@@ -5,7 +5,6 @@ import {
   artifactAccessTier,
   artifactViewer,
   type ArtifactViewer,
-  artifactsDisabled,
   requireConversationHome,
 } from "./artifact-access.server";
 import type { ArtifactReads } from "./artifact-reads.server";
@@ -68,7 +67,6 @@ const CARD_SELECT = {
 export class ArtifactGallery {
   constructor(
     private readonly db: PrismaClient,
-    private readonly enabled: (workspaceId: string) => Promise<boolean>,
     private readonly reads: Pick<ArtifactReads, "cards">,
   ) {}
 
@@ -96,7 +94,6 @@ export class ArtifactGallery {
   }
 
   async page(input: GalleryInput) {
-    if (!(await this.enabled(input.workspaceId))) throw artifactsDisabled();
     const reader = { userId: input.userId };
     const viewer = await artifactViewer(this.db, input.workspaceId, reader);
     if (!viewer.member) throw new AppError("NOT_FOUND");

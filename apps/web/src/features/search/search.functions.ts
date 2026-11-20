@@ -2,7 +2,6 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { workspaceUserMiddleware } from "#src/features/auth/function-auth";
 import { readDeadline } from "#src/lib/read-deadline";
-import { artifactsEnabled } from "#src/server/artifacts/artifact-access.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
 import { searchMessages } from "#src/server/conversations/message-search.server";
 import { searchTasks } from "#src/server/tasks/task-search.server";
@@ -42,7 +41,6 @@ export const searchWorkspaceArtifacts = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const { user, db, workspaceId } = context;
     if (!data.query.trim()) return [];
-    if (!(await artifactsEnabled(db, workspaceId))) return [];
     const page = await productionArtifacts(db).gallery.page({
       workspaceId,
       userId: user.id,

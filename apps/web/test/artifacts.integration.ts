@@ -36,7 +36,7 @@ const store: ArtifactBlobStore = {
   read: async () => null,
   allowed: async (_workspaceId, _artifactId, _actor, sha256s) => new Set(sha256s),
 };
-const artifacts = new Artifacts(db, store, { enabled: async () => true });
+const artifacts = new Artifacts(db, store);
 
 const blob = (sha256: string, kind = "text", sizeBytes = 10) =>
   blobs.set(sha256, { kind, sizeBytes });

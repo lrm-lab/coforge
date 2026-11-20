@@ -10,7 +10,6 @@ import {
 } from "#src/server/artifacts/artifact-composition.server";
 import { postUserMessage } from "#src/server/conversations/user-message-post.server";
 import { assertUserMayPost } from "#src/server/conversations/user-post-access.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { agentWrites } from "./helpers/artifact-agent-writes";
 import { quietCentrifugo } from "./helpers/fake-centrifugo";
 import { browserSession, localBrowserE2e, pageHydrated } from "./helpers/browser-e2e";
@@ -34,7 +33,6 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
     browserPath,
     `artifact-send-${process.pid}`,
   );
-  const experiments = new PrismaExperimentsRepository(db);
   const services = productionArtifacts(db);
   const { workspaceId, workspace } = await db.workspaceMembership.findFirstOrThrow({
     where: { userId: DEV_BROWSER_USER.id },
@@ -42,7 +40,6 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
     orderBy: { workspace: { createdAt: "asc" } },
     include: { workspace: { select: { slug: true } } },
   });
-  const before = (await experiments.read(workspaceId)).artifacts;
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   const agent = await db.agent.create({
     data: {
@@ -135,7 +132,7 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
   };
   // Noor's share: as a person, under her own send, as the web's does.
   const shareAsNoor = (artifactId: string) =>
-    productionArtifactShares(db, async () => true).share({
+    productionArtifactShares(db).share({
       workspaceId,
       actor: { userId: noor.id },
       artifactId,
@@ -154,7 +151,6 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
       mayPost: (conversationId) => assertUserMayPost(db, workspaceId, noor.id, conversationId),
     });
   try {
-    await experiments.write(workspaceId, "artifacts", true);
     await mkdir(artifacts, { recursive: true });
     const bot = agentWrites(services, workspaceId, agent.id);
     const plan = await bot.create({
@@ -272,7 +268,6 @@ test("an artifact sent to a channel arrives as its card; shut and deleted ones s
     await shoot("4-phone-sheet");
   } finally {
     await browser("close").catch(() => {});
-    await experiments.write(workspaceId, "artifacts", before);
     await db.conversation.deleteMany({
       where: { id: { in: [home.id, target.id, closed.id, quiet.id] } },
     });

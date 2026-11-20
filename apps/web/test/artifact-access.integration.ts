@@ -33,8 +33,7 @@ const store: ArtifactBlobStore = {
   read: async () => null,
   allowed: async (_workspaceId, _artifactId, _actor, sha256s) => new Set(sha256s),
 };
-let switchedOn = true;
-const artifacts = new Artifacts(db, store, { enabled: async () => switchedOn });
+const artifacts = new Artifacts(db, store);
 
 let workspaceId: string;
 let otherWorkspaceId: string;
@@ -187,19 +186,6 @@ const stranger = {
     return agents.stranger;
   },
 };
-
-test("with the experiment off, nothing is created, saved or read", async () => {
-  const artifact = await create(inConversation(publicChannel), helper);
-  switchedOn = false;
-  try {
-    const off = { code: "ACCESS_DENIED", errorId: "artifacts-disabled" };
-    await expect(create(inConversation(publicChannel), helper)).rejects.toMatchObject(off);
-    await expect(push(artifact.id, helper)).rejects.toMatchObject(off);
-    await expect(read(artifact.id, { userId: people.alice })).rejects.toMatchObject(off);
-  } finally {
-    switchedOn = true;
-  }
-});
 
 test("a public channel's artifact: every member reads, and any Agent that reads it pushes", async () => {
   const artifact = await create(inConversation(publicChannel), helper);
@@ -444,26 +430,4 @@ test("a list with no home names every artifact the reader can see, and a list of
     code: "NOT_FOUND",
   });
   await expect(ids({ userId: people.outsider })).rejects.toMatchObject({ code: "NOT_FOUND" });
-});
-
-test("with the experiment off, a bad request and a delete hear only that it is off", async () => {
-  const artifact = await createLegacy(helper);
-  switchedOn = false;
-  try {
-    const off = { code: "ACCESS_DENIED", errorId: "artifacts-disabled" };
-    await expect(
-      artifacts.create({
-        workspaceId,
-        home: inConversation(publicChannel),
-        name: "Not A Valid Name",
-        entryPath: "document.md",
-        author: helper,
-      }),
-    ).rejects.toMatchObject(off);
-    await expect(
-      artifacts.delete({ workspaceId, artifactId: artifact.id, actor: { userId: people.owner } }),
-    ).rejects.toMatchObject(off);
-  } finally {
-    switchedOn = true;
-  }
 });

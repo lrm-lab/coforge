@@ -7,7 +7,6 @@ import { PrismaClient } from "#src/generated/prisma/client";
 import { defaultPersonPictureId } from "#src/lib/person-picture";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import { agentWrites } from "./helpers/artifact-agent-writes";
@@ -38,10 +37,8 @@ test("people comment on a selection and on lines; markers show beside the text o
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = browserSession(browserPath, `artifact-anchors-${process.pid}`);
   const { browser, evaluate, waitFor } = session;
-  const experiments = new PrismaExperimentsRepository(db);
   const services = productionArtifacts(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
-  const before = (await experiments.read(workspaceId)).artifacts;
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   const agent = await db.agent.create({
     data: {
@@ -114,7 +111,6 @@ test("people comment on a selection and on lines; markers show beside the text o
           avatarContentType: null,
         },
       });
-    await experiments.write(workspaceId, "artifacts", true);
     await mkdir(shots, { recursive: true });
     await browser("set", "viewport", width!, height!);
     const artifact = await bot.create({
@@ -301,7 +297,6 @@ test("people comment on a selection and on lines; markers show beside the text o
       .catch(() => undefined);
     await browser("close").catch(() => undefined);
     proxy.stop();
-    await experiments.write(workspaceId, "artifacts", before);
     await db.artifact
       .deleteMany({ where: { homeKey: `conversation:${channel.id}` } })
       .catch(() => undefined);

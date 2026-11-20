@@ -14,7 +14,7 @@ test("artifact share posts one live-link message per target with derived keys, t
     agent: { findFirst: async () => ({ id: "agent-owner" }) },
     conversation: { findFirst: async () => null },
   };
-  const shares = new ArtifactShares(db as never, async () => true);
+  const shares = new ArtifactShares(db as never);
   const result = await shares.share({
     workspaceId: "workspace-1",
     actor: { userId: "user-1" },
@@ -46,7 +46,7 @@ test("artifact share refuses a non-member's artifact before sending", async () =
     workspaceMembership: { findUnique: async () => null },
     agent: { findFirst: async () => null },
   };
-  const shares = new ArtifactShares(db as never, async () => true);
+  const shares = new ArtifactShares(db as never);
   await expect(
     shares.share({
       workspaceId: "workspace-1",
@@ -90,7 +90,7 @@ test("a home the Workspace hides is not shared", async () => {
       ],
     },
   };
-  const shares = new ArtifactShares(db as never, async () => true);
+  const shares = new ArtifactShares(db as never);
   await expect(
     shares.share({
       workspaceId: "workspace-1",
@@ -109,7 +109,7 @@ test("a home the Workspace hides is not shared", async () => {
 });
 
 test("artifact sharing rejects more than twenty targets", async () => {
-  const shares = new ArtifactShares({} as never, async () => true);
+  const shares = new ArtifactShares({} as never);
   const send = async () => ({ id: "message", sequence: 1 });
   const base = {
     workspaceId: "workspace-1",

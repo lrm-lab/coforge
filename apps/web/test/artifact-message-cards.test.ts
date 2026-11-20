@@ -59,7 +59,7 @@ test("a message page projects twenty artifact links with three batch reads", asy
       },
     },
   };
-  const reads = new ArtifactReads(db as never, async () => true);
+  const reads = new ArtifactReads(db as never);
   const result = await reads.messageCards({
     workspaceId: "workspace-1",
     reader: { userId: "user-1" },
@@ -110,7 +110,7 @@ test("a member of the private home reads the card with the home as its source, a
       ],
     },
   };
-  const reads = new ArtifactReads(db as never, async () => true);
+  const reads = new ArtifactReads(db as never);
   const [refused] = (
     await reads.messageCards({
       workspaceId: "workspace-1",
@@ -180,7 +180,7 @@ test("a non-member's card stays forbidden", async () => {
       ],
     },
   };
-  const reads = new ArtifactReads(db as never, async () => true);
+  const reads = new ArtifactReads(db as never);
   const [card] = (
     await reads.messageCards({
       workspaceId: "workspace-1",
@@ -222,7 +222,7 @@ test("a non-member's card of a public channel's artifact stays forbidden too", a
       ],
     },
   };
-  const reads = new ArtifactReads(db as never, async () => true);
+  const reads = new ArtifactReads(db as never);
   const [card] = (
     await reads.messageCards({
       workspaceId: "workspace-1",
@@ -279,7 +279,7 @@ test("message cards show a member the deletion state of the artifacts they can s
       ],
     },
   };
-  const reads = new ArtifactReads(db as never, async () => true);
+  const reads = new ArtifactReads(db as never);
   const [hidden, visible] = (
     await reads.messageCards({
       workspaceId: "workspace-1",
@@ -305,12 +305,8 @@ test("message cards show a member the deletion state of the artifacts they can s
   });
 });
 
-test("a page without artifact links does not read the artifacts experiment", async () => {
-  let enabledCalls = 0;
-  const reads = new ArtifactReads({} as never, async () => {
-    enabledCalls += 1;
-    return true;
-  });
+test("a page without artifact links does not query the database", async () => {
+  const reads = new ArtifactReads({} as never);
   expect(
     await reads.messageCards({
       workspaceId: "workspace-1",
@@ -318,7 +314,6 @@ test("a page without artifact links does not read the artifacts experiment", asy
       messages: [{ body: "ordinary message" }],
     }),
   ).toEqual([[]]);
-  expect(enabledCalls).toBe(0);
 });
 
 test("a hidden channel's artifact is forbidden even to a member", async () => {
@@ -352,7 +347,7 @@ test("a hidden channel's artifact is forbidden even to a member", async () => {
       ],
     },
   };
-  const reads = new ArtifactReads(db as never, async () => true);
+  const reads = new ArtifactReads(db as never);
   const [card] = (
     await reads.messageCards({
       workspaceId: "workspace-1",
@@ -394,7 +389,7 @@ test("an Agent reads the card of a home it is a member of", async () => {
       ],
     },
   };
-  const reads = new ArtifactReads(db as never, async () => true);
+  const reads = new ArtifactReads(db as never);
   const [card] = (
     await reads.messageCards({
       workspaceId: "workspace-1",

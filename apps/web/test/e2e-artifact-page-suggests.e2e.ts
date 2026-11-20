@@ -5,7 +5,6 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { DEV_BROWSER_USER } from "#src/server/auth/dev-skip-auth.server";
 import { productionArtifacts } from "#src/server/artifacts/artifact-composition.server";
-import { PrismaExperimentsRepository } from "#src/server/experiments/experiments.repositories.server";
 import { readFeatureFlagsConfiguration } from "#src/server/feature-flags/configuration.server";
 import { installFeatureFlags } from "#src/server/feature-flags/feature-flags.server";
 import { agentWrites } from "./helpers/artifact-agent-writes";
@@ -61,10 +60,8 @@ test("a page suggests a comment from a click: the box opens with the page's text
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const session = browserSession(browserPath, `artifact-page-suggests-${process.pid}`);
   const { browser, evaluate, waitFor } = session;
-  const experiments = new PrismaExperimentsRepository(db);
   const services = productionArtifacts(db);
   const { workspaceId, workspace } = await devBrowserWorkspace(db);
-  const before = (await experiments.read(workspaceId)).artifacts;
   const tail = `${process.pid}-${Date.now()}`.slice(-6);
   const agent = await db.agent.create({
     data: {
@@ -98,7 +95,6 @@ test("a page suggests a comment from a click: the box opens with the page's text
     `(document.querySelector("main iframe")?.contentWindow.postMessage({ ping: true }, "*"), (window.__e2e ?? []).includes(${JSON.stringify(word)}))`;
   const hasPopover = `document.querySelector("[data-comment-popover]") != null`;
   try {
-    await experiments.write(workspaceId, "artifacts", true);
     await mkdir(shots, { recursive: true });
     await browser("set", "viewport", width!, height!);
     artifact = await bot.create({
@@ -158,7 +154,6 @@ test("a page suggests a comment from a click: the box opens with the page's text
   } finally {
     await browser("close").catch(() => undefined);
     proxy.stop();
-    await experiments.write(workspaceId, "artifacts", before);
     await db.artifact
       .deleteMany({ where: { homeKey: `conversation:${channel.id}` } })
       .catch(() => undefined);

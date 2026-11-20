@@ -6,7 +6,7 @@ import { artifactInputs } from "#src/features/artifacts/artifact-inputs";
 import { AppError } from "#src/lib/app-error";
 import { errorType } from "#src/server/errors/error-type.server";
 import type { AppRateLimit } from "#src/server/app-rate-limits/app-rate-limit.server";
-import { artifactsDisabled, type ArtifactActor } from "./artifact-access.server";
+import { type ArtifactActor } from "./artifact-access.server";
 import { admitArtifactWrite } from "./agent-artifact-rate-limit.server";
 import { resolveArtifactTarget } from "./agent-artifact-target.server";
 import {
@@ -55,7 +55,6 @@ export type AgentArtifactServices = {
     | "moveToWorkspace"
   >;
   blobs: Pick<StoredArtifactBlobs, "allowed" | "use" | "read" | "upload">;
-  enabled: (workspaceId: string) => Promise<boolean>;
   notices?: ArtifactNoticePort | undefined;
   signals?: ArtifactSignals | undefined;
   attachments?: ArtifactAttachmentPort | undefined;
@@ -160,7 +159,6 @@ export async function runAgentArtifactOperation(
   asked: AgentArtifactRequest,
 ) {
   const { workspaceId, agentId } = principal;
-  if (!(await services.enabled(workspaceId))) throw artifactsDisabled();
   await admitArtifactWrite(services.writeLimit, agentId, asked.operation);
   const request = await resolvedReference(services, principal, asked);
   const rule =
