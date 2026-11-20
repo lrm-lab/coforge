@@ -127,7 +127,12 @@ export class ArtifactNotices {
     },
   ): Promise<{ report: NoticeReport; staged: StagedArtifactNotice[] }> {
     const staged: StagedArtifactNotice[] = [];
-    const report = await this.tell(input, reviewPlan(input), undefined, { scope, staged });
+    const report = await this.tell(
+      input,
+      { ...reviewPlan(input), key: `web-draft-review:${input.reviewId}` },
+      undefined,
+      { scope, staged },
+    );
     return { report, staged };
   }
 

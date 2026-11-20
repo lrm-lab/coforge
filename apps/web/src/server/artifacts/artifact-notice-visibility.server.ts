@@ -12,6 +12,7 @@ export function readableArtifactNoticeSql(
       SELECT 1 FROM "system_agent_events" e
       WHERE e."messageId" = ${messageId}
         AND e."source" = 'system.artifacts'
+        AND e."externalEventId" LIKE '%:web-draft-review:%'
         AND e."workspaceId" = ${workspaceId}::uuid
         AND e."agentId" = ${agentId}::uuid
         AND NOT EXISTS (

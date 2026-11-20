@@ -20,7 +20,7 @@ test("a notice stops being readable once the Agent loses the artifact", async ()
       source_agentId_externalEventId: {
         source: "system.artifacts",
         agentId: h.f.agents.reader,
-        externalEventId: `${artifact}:${sent.reviewId}`,
+        externalEventId: `${artifact}:web-draft-review:${sent.reviewId}`,
       },
     },
     select: { messageId: true, conversationId: true },
@@ -89,7 +89,7 @@ test("a blocked notice does not starve a later readable one in the same conversa
           source_agentId_externalEventId: {
             source: "system.artifacts",
             agentId: h.f.agents.reader,
-            externalEventId: `${artifact}:${reviewId}`,
+            externalEventId: `${artifact}:web-draft-review:${reviewId}`,
           },
         },
         select: { messageId: true, conversationId: true },
@@ -131,7 +131,7 @@ test("a notice whose artifact row is gone is not handed back", async () => {
       source_agentId_externalEventId: {
         source: "system.artifacts",
         agentId: h.f.agents.reader,
-        externalEventId: `${artifact}:${sent.reviewId}`,
+        externalEventId: `${artifact}:web-draft-review:${sent.reviewId}`,
       },
     },
     select: { id: true, messageId: true },
@@ -145,7 +145,7 @@ test("a notice whose artifact row is gone is not handed back", async () => {
 
   await h.f.db.systemAgentEvent.update({
     where: { id: event.id },
-    data: { externalEventId: `${crypto.randomUUID()}:${sent.reviewId}` },
+    data: { externalEventId: `${crypto.randomUUID()}:web-draft-review:${sent.reviewId}` },
   });
 
   expect(await pendingIds()).not.toContain(event.messageId);
@@ -169,7 +169,7 @@ test("the JavaScript rule and the SQL predicate agree on an artifact whose home 
       source_agentId_externalEventId: {
         source: "system.artifacts",
         agentId: h.f.agents.reader,
-        externalEventId: `${artifact}:${sent.reviewId}`,
+        externalEventId: `${artifact}:web-draft-review:${sent.reviewId}`,
       },
     },
     select: { messageId: true },

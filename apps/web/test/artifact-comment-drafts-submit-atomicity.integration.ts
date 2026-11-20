@@ -58,7 +58,7 @@ test("two sends with the same key write one review and one notice per recipient"
       source_agentId_externalEventId: {
         source: "system.artifacts",
         agentId: h.f.agents.reader,
-        externalEventId: `${artifact}:${reviewId}`,
+        externalEventId: `${artifact}:web-draft-review:${reviewId}`,
       },
     },
     select: { id: true },
@@ -103,7 +103,7 @@ test("a first push that fails leaves the delivery stored for recovery under the 
       source_agentId_externalEventId: {
         source: "system.artifacts",
         agentId: h.f.agents.reader,
-        externalEventId: `${artifact}:${sent.reviewId}`,
+        externalEventId: `${artifact}:web-draft-review:${sent.reviewId}`,
       },
     },
     select: { messageId: true, agentId: true },
@@ -174,7 +174,9 @@ test("two concurrent sends reach one system conversation with a notice each", as
     where: {
       source: "system.artifacts",
       agentId: h.f.agents.reader,
-      externalEventId: { in: [`${first}:${a.reviewId}`, `${second}:${b.reviewId}`] },
+      externalEventId: {
+        in: [`${first}:web-draft-review:${a.reviewId}`, `${second}:web-draft-review:${b.reviewId}`],
+      },
     },
     select: { conversationId: true, messageId: true },
   });
