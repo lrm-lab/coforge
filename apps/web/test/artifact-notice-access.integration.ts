@@ -367,6 +367,8 @@ test("the bot inbox stops handing back a notice once the artifact is gone", asyn
   };
   const cursored = [...decoded.groups, ...decoded.outside].map((group) => group.conversationId);
   expect(cursored).not.toContain(event.conversationId);
+  const resumed = await inbox.check(principal, { since: after.cursor });
+  expect(JSON.stringify(resumed.events)).not.toContain("Inbox gate");
 });
 
 test("the wake hint drops the notice in the same step its artifact goes", async () => {
