@@ -1,0 +1,23 @@
+# Optional Docker Compose overlay to enable the isolated HTML artifact publish-check sidecar.
+# Combine with staging or production compose:
+#   docker compose -f infra/staging/docker-compose.yml -f infra/artifact-checker.compose.yml up -d
+services:
+  web:
+    environment:
+      COFORGE_ARTIFACT_CHECK_WORKER_URL: ${COFORGE_ARTIFACT_CHECK_WORKER_URL:-http://artifact-checker:3100}
+      COFORGE_ARTIFACT_CHECK_SECRET: ${COFORGE_ARTIFACT_CHECK_SECRET:?artifact-checker requires a shared secret}
+      COFORGE_ARTIFACT_CHECK_CONCURRENCY: ${COFORGE_ARTIFACT_CHECK_CONCURRENCY:-1}
+
+  artifact-checker:
+    image: ${COFORGE_ARTIFACT_CHECKER_IMAGE:?COFORGE_ARTIFACT_CHECKER_IMAGE must resolve to an immutable digest}
+    mem_limit: 1g
+    shm_size: 256mb
+    cpus: "1.0"
+    environment:
+      PORT: "3100"
+      COFORGE_ARTIFACT_CHECK_SECRET: ${COFORGE_ARTIFACT_CHECK_SECRET:?artifact-checker requires a shared secret}
+      CHECKER_MAX_CONCURRENCY: ${COFORGE_ARTIFACT_CHECK_CONCURRENCY:-1}
+      CHECKER_IDLE_CLOSE_MS: "60000"
+    networks:
+      - coforge
+    restart: unless-stopped

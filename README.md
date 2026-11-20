@@ -111,6 +111,7 @@ The architecture invariants every change must respect are in
 | [infra/caddy/README.md](infra/caddy/README.md) | Caddy image with the Alibaba Cloud DNS provider |
 | [docs/operations/usercontent-certificate/](docs/operations/usercontent-certificate/README.md) | User-content wildcard certificate: DNS-01 issuer, RAM users, secrets, rotation |
 | [infra/production/README.md](infra/production/README.md) | Production Compose environment (points to its runbook) |
+| [services/artifact-checker/README.md](services/artifact-checker/README.md) | Isolated Playwright sidecar for HTML artifact publish checks |
 
 Project skills live in `.agents/skills`; `skills-lock.json` pins the upstream ones.
 
@@ -126,6 +127,7 @@ packages/agent          Independently packable built-in Agent runtime using Pi S
 packages/coforge        Agent CLI
 packages/coforge-sdk    Shared protocol and Agent SDK
 crates/installer        Rust installer (coforge-installer) for Computer installations
+services/artifact-checker Isolated Playwright sidecar for HTML artifact publish checks
 docs                    Project documentation
 infra                   Local and staging deployment
 ```
