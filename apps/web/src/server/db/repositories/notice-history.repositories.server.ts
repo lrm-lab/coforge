@@ -61,7 +61,7 @@ export async function resolveNoticeAnchor(db: PrismaClient, scope: Scope, anchor
     WHERE msg."conversationId" = ${scope.conversationId}::uuid
       AND msg."workspaceId" = ${scope.workspaceId}::uuid
       AND msg."threadRootId" IS NULL
-      AND msg."id"::text LIKE ${`${anchor}%`}
+      AND msg."id"::text LIKE ${`${anchor.toLowerCase()}%`}
       AND ${readableArtifactNoticeSql(scope.workspaceId, scope.agentId, Prisma.sql`msg."id"`)}
     ORDER BY msg."sequence" ASC
     LIMIT 2`;
