@@ -370,3 +370,58 @@ test("a revocation between selecting the page and loading it drops the notice", 
   expect(statements).toBeGreaterThanOrEqual(2);
   expect(pending.map((delivery) => delivery.messageId)).not.toContain(event.messageId);
 });
+
+test("a revocation while the bodies load keeps the readable rows", async () => {
+  const doomed = await h.f.make("Assembly gate one");
+  const kept = await h.f.make("Assembly gate two");
+  const reader = await h.nameOf(h.f.agents.reader);
+  await h.create(doomed, `Assembly gate one, see @${reader}.`);
+  await h.create(kept, `Assembly gate two, see @${reader}.`);
+  const first = await h.submit(doomed);
+  const second = await h.submit(kept);
+  if (first.status !== "sent" || second.status !== "sent") throw new Error("not sent");
+  const eventOf = (artifactId: string, reviewId: string) =>
+    h.f.db.systemAgentEvent.findUniqueOrThrow({
+      where: {
+        source_agentId_externalEventId: {
+          source: "system.artifacts",
+          agentId: h.f.agents.reader,
+          externalEventId: `${artifactId}:${WEB_DRAFT_REVIEW_MARKER}:${reviewId}`,
+        },
+      },
+      select: { messageId: true },
+    });
+  const doomedEvent = await eventOf(doomed, first.reviewId);
+  const keptEvent = await eventOf(kept, second.reviewId);
+
+  const racing = new Proxy(h.f.db, {
+    get(target, property, receiver) {
+      if (property !== "agentMessageDelivery") return Reflect.get(target, property, receiver);
+      const model = Reflect.get(target, property, receiver) as object;
+      return new Proxy(model, {
+        get(inner, method, innerReceiver) {
+          if (method !== "findMany") return Reflect.get(inner, method, innerReceiver);
+          const read = Reflect.get(inner, method, innerReceiver) as (
+            ...args: unknown[]
+          ) => Promise<unknown>;
+          return async (...args: unknown[]) => {
+            await h.f.db.artifact.update({
+              where: { id: doomed },
+              data: { deletedAt: new Date() },
+            });
+            return read.apply(inner, args);
+          };
+        },
+      });
+    },
+  }) as typeof h.f.db;
+
+  const pending = await new PrismaDirectConversationRepository(racing).readPendingAgentDeliveries(
+    h.f.workspaceId,
+    h.f.agents.reader,
+  );
+  const returned = pending.map((delivery) => delivery.messageId);
+
+  expect(returned).toContain(keptEvent.messageId);
+  expect(returned).not.toContain(doomedEvent.messageId);
+});

@@ -188,22 +188,11 @@ export async function readPendingAgentDeliveries(
       pendingDeliveryPageSql(workspaceId, agentId, selected),
     )
   ).map((row) => row.deliveryId);
-  const page =
+  const fetched =
     candidates.length === 0
       ? []
-      : await ports.db.$queryRaw<{ deliveryId: string }[]>(
-          pendingDeliveryPageSql(
-            workspaceId,
-            agentId,
-            Prisma.sql`(${selected}) AND d."deliveryId" IN (${Prisma.join(candidates)})`,
-          ),
-        );
-  const pageIds = page.map((row) => row.deliveryId);
-  const fetched =
-    pageIds.length === 0
-      ? []
       : await ports.db.agentMessageDelivery.findMany({
-          where: { deliveryId: { in: pageIds } },
+          where: { deliveryId: { in: candidates } },
           select: {
             deliveryId: true,
             messageId: true,
@@ -240,10 +229,23 @@ export async function readPendingAgentDeliveries(
             },
           },
         });
+  const still = new Set(
+    candidates.length === 0
+      ? []
+      : (
+          await ports.db.$queryRaw<{ deliveryId: string }[]>(
+            pendingDeliveryPageSql(
+              workspaceId,
+              agentId,
+              Prisma.sql`(${selected}) AND d."deliveryId" IN (${Prisma.join(candidates)})`,
+            ),
+          )
+        ).map((row) => row.deliveryId),
+  );
   const deliveryById = new Map(fetched.map((delivery) => [delivery.deliveryId, delivery] as const));
-  const deliveries = page.flatMap((row) => {
-    const delivery = deliveryById.get(row.deliveryId);
-    return delivery ? [delivery] : [];
+  const deliveries = candidates.flatMap((deliveryId) => {
+    const delivery = deliveryById.get(deliveryId);
+    return delivery && still.has(deliveryId) ? [delivery] : [];
   });
   const chooserIds = [
     ...new Set(
