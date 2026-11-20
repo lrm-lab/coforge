@@ -2,8 +2,6 @@ import { expect, test } from "bun:test";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "#src/generated/prisma/client";
 import { WEB_DRAFT_REVIEW_MARKER } from "#src/server/artifacts/artifact-notice-visibility.server";
-import { Prisma } from "#src/generated/prisma/client";
-import { readableArtifactNoticeSql } from "#src/server/artifacts/artifact-notice-visibility.server";
 import { readAgentMessagePage } from "#src/server/db/repositories/agent-message-history.repositories.server";
 
 const connectionString = Bun.env.CHANNEL_TEST_DATABASE_URL;
@@ -189,7 +187,8 @@ test("the notice conversation reads only the notices the Agent can still read", 
           findMany: async (...args: unknown[]) => {
             const input = args[0] as { where: { id: { in: string[] } } };
             expect(input.where.id.in).toEqual([second!.id, first!.id]);
-            const rows = await message.findMany(...args);
+            const rows = (await message.findMany(...args)) as { id: string }[];
+            expect(new Set(rows.map((row) => row.id))).toEqual(new Set([first!.id, second!.id]));
             const pending = revoke;
             revoke = async () => {};
             await pending();
@@ -204,13 +203,6 @@ test("the notice conversation reads only the notices the Agent can still read", 
         data: { access: "conversation", homeKey: `conversation:${crypto.randomUUID()}` },
       });
     };
-    const candidatesBefore = (
-      await db.$queryRaw<{ id: string }[]>`
-        SELECT msg."id" FROM "messages" msg
-        WHERE msg."conversationId" = ${conversation.id}::uuid AND msg."sequence" < 4
-          AND ${readableArtifactNoticeSql(workspace.id, agent.id, Prisma.sql`msg."id"`)}`
-    ).length;
-    expect(candidatesBefore).toBe(2);
     const revoked = await readAgentMessagePage(revoking, {
       workspaceId: workspace.id,
       agentId: agent.id,
