@@ -8,19 +8,20 @@ when_to_use: "apps/web UI change, frontend component or CSS edit, before/after s
 
 Use this skill for every visual, layout, style or interaction change under `apps/web/src/`. Read [`apps/web/AGENTS.md`](../../../apps/web/AGENTS.md), [`docs/design/README.md`](../../../docs/design/README.md), [`docs/design/ui-hard-rules.md`](../../../docs/design/ui-hard-rules.md) and [`docs/design/ui-principles.md`](../../../docs/design/ui-principles.md) before editing UI code.
 
-## 1. Design gate before coding
+## 1. Pick the right track before coding
 
-- **设计改动先出示意图，jing/Frank 确认后再写代码。** Any change to layout, information hierarchy, visual treatment or interaction flow must first post a mockup or visual prototype comparison (desktop + `390px` phone, light + dark) and wait for confirmation from jing (`@qq971766802`) or Frank (`@user`) before writing production code.
-- Only bug fixes with an already-settled visual spec or implementing parameters already confirmed by jing/Frank proceed directly to code.
+- **Visual, layout, style, or hierarchy change (full track)**: **设计改动先出示意图，jing/Frank 确认后再写代码。** Post a mockup or visual prototype comparison (desktop + `390px` phone, light + dark) and wait for confirmation from jing (`@qq971766802`) or Frank (`@user`) before writing production code.
+- **Settled-spec bug fix or confirmed parameters**: proceed directly to code, still completing the visual checklist below.
+- **Pure interaction, state, or plumbing fix in `.tsx`** (zero layout, spacing, typography, or color delta — e.g. Escape/focus handler, resize guard, aria label, query wiring): skip the design mockup and `modern-web-guidance`; cover the logic with pure unit or integration tests and declare the non-visual reason in `UI-Evidence: exempt — <reason>`.
 
 ## 2. Pre-implementation checks
 
 - Follow [`docs/design/ui-hard-rules.md`](../../../docs/design/ui-hard-rules.md): unmodified official Untitled UI primitives, `rem` layout/type sizing, semantic color tokens only (never raw hex or `dark:` color overrides), `humanLabel` for people, and avatars on every conversation or target row (never `#`).
-- Run `modern-web-guidance` (`search` then `retrieve`) before writing custom HTML, CSS or DOM JS; our design rules win on conflict, and any conflict is noted in the delivery report.
+- Run `modern-web-guidance` (`search` then `retrieve`) when authoring or changing custom HTML, CSS, or browser DOM APIs (skip it for routine React state, query hooks, or composing existing Untitled UI primitives); our design rules win on conflict, and any conflict is noted in the delivery report.
 
 ## 3. Pre-delivery checklist
 
-Every item below must be completed before committing a `feat` or `fix` UI change and requesting review:
+Every item below must be completed before committing a visual `feat` or `fix` UI change and requesting review:
 
 1. **Same-size, same-data before/after screenshots with labels**:
    - Render `origin/main` (`改动前`) and the branch (`改动后`) against identical seed data, viewport size and scroll/crop coordinates.
@@ -53,7 +54,7 @@ UI-Evidence:
 Revert-effect: channel rows revert to top-level unread count only
 ```
 
-**When screenshots genuinely cannot be captured** — limited to a small tweak pushed directly from Frank's own session, a single-classname fix with no layout or color delta, or an urgent rollback/hotfix — declare an explicit, non-empty reason with `UI-Evidence: exempt — <reason>`:
+**When screenshots genuinely cannot be captured or add no signal** — a pure interaction/state/aria fix with zero visual delta, a small tweak pushed directly from Frank's own session, an urgent rollback/hotfix, or a remote sandbox without Docker/PostgreSQL to run `verify-web` (paired with unit/build verification and staging visual confirmation) — declare an explicit, non-empty reason with `UI-Evidence: exempt — <reason>`:
 
 ```text
 UI-Evidence: exempt — single aria-label typo fix with zero visual or layout change
