@@ -22,6 +22,9 @@ export const DESKTOP_PHONE_TRAY_LAYOUT_MARKER = "coforge-desktop-key-pad";
 /** Present once the hidden input that opens the system soft keyboard is in the page. */
 export const DESKTOP_PHONE_KEYBOARD_MARKER = "coforge-desktop-keyboard-input";
 
+/** Present once a long-press right-click warms the cloud clipboard from the phone. */
+export const DESKTOP_PHONE_PASTE_MARKER = "coforgePushRemoteClipboard";
+
 const ICON_FIT = `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4"/><path d="M15 3h4a2 2 0 0 1 2 2v4"/><path d="M9 21H5a2 2 0 0 1-2-2v-4"/><path d="M15 21h4a2 2 0 0 0 2-2v-4"/><rect x="8" y="8" width="8" height="8" rx="1"/></svg>`;
 const ICON_LANDSCAPE = `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="10" height="7" rx="1.2"/><rect x="12" y="4" width="7" height="10" rx="1.2"/><path d="M19.5 16.5a6 6 0 0 1-8 2"/><path d="M12 20.5h2.5v-2.5"/></svg>`;
 const ICON_KEYBOARD = `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg>`;

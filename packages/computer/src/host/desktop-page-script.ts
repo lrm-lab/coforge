@@ -291,6 +291,7 @@ export const RELATIVE_PAGE_SCRIPT = `
       let longPressFired = false;
       let oneFinger = null;
       let pinch = null;
+      let phoneClipboardRead = Promise.resolve("");
       const touchOpts = { passive: false, capture: true };
       const clearLongPress = () => {
         if (longPressTimer) {
@@ -336,11 +337,20 @@ export const RELATIVE_PAGE_SCRIPT = `
             panning: false,
             scrolling: false,
           };
+          const read = navigator.clipboard?.readText?.();
+          phoneClipboardRead = read ? read.catch(() => "") : Promise.resolve("");
           clearLongPress();
           longPressTimer = window.setTimeout(() => {
             if (!oneFinger || oneFinger.moved) return;
             longPressFired = true;
-            sendMouse(oneFinger.startX, oneFinger.startY, 0x4);
+            const x = oneFinger.startX;
+            const y = oneFinger.startY;
+            void phoneClipboardRead.then((text) => {
+              const ready = text ? coforgePushRemoteClipboard(text) : Promise.resolve(false);
+              return ready.finally(() => {
+                sendMouse(x, y, 0x4);
+              });
+            });
           }, 450);
         },
         touchOpts,

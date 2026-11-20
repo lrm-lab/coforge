@@ -57,11 +57,12 @@ describe("desktop page adaptation", () => {
     expect(html).not.toContain("msg.remove()");
   });
 
-  test("a reconnect page that already has phone gestures, keyboard, fab viewport and copy-out is left alone", () => {
+  test("a reconnect page that already has phone gestures, keyboard, clipboard push, fab viewport and copy-out is left alone", () => {
     const current = `<!DOCTYPE html>
 <script type="module">
     import RFB from "./core/rfb.js";
     function coforgeDesktopPaste(text) {}
+    function coforgePushRemoteClipboard(text) {}
     function coforgeWriteLocalClipboard(text) {}
     function coforgeDesktopCopyOut() {}
     function applyPhoneViewportScale() {}
@@ -245,6 +246,15 @@ describe("desktop page adaptation", () => {
     expect(html).toContain("0xff08");
     expect(html).toContain("placePhoneFabInViewport");
     expect(html).toMatch(/openKeyboard\(\);\s*setPhoneTrayOpen\(false\)/);
+  });
+
+  test("a phone long-press warms the cloud clipboard before the right-click menu", () => {
+    const html = adaptDesktopHtml(oldPage);
+    expect(html).not.toContain('data-action="paste"');
+    expect(html).toContain("coforgePushRemoteClipboard");
+    expect(html).toContain("navigator.clipboard?.readText");
+    expect(html).toContain("phoneClipboardRead");
+    expect(html).toContain("sendMouse(x, y, 0x4)");
   });
 
   test("a reconnect page that still uses extended clipboard paste is rewritten", () => {
