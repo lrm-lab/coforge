@@ -4,7 +4,7 @@ const DIRECTORY_SECTION_IDS = ["pinned", "channels", "agents"] as const;
 export type BuiltInSectionId = (typeof DIRECTORY_SECTION_IDS)[number];
 export type DirectorySectionId = BuiltInSectionId | `custom:${string}`;
 
-const COLLAPSIBLE_SECTION_IDS = ["channels", "agents"] as const;
+const COLLAPSIBLE_SECTION_IDS = ["pinned", "channels", "agents"] as const;
 export type CollapsibleSectionId = (typeof COLLAPSIBLE_SECTION_IDS)[number];
 
 export const naturalSectionSortModes = ["recent", "alpha"] as const;

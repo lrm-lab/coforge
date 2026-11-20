@@ -300,7 +300,8 @@ export function ConversationDirectory({
                       empty={pinnedEmpty}
                       icon={Pin01}
                       headingProps={headingProps}
-                      expanded={drag.sortingSections ? false : undefined}
+                      expanded={!drag.sortingSections && !collapsed.includes("pinned")}
+                      onToggle={() => toggle("pinned")}
                       trailing={sortControl(
                         base.pinned.length,
                         m.conversation_pinned_section(),

@@ -5,19 +5,8 @@ import { Fold } from "#src/components/ui/fold";
 import { cx } from "#src/utils/cx";
 import type { DirectoryDragActivation } from "./directory-drag";
 
-/** Every row, title and list in the directory shares one inset, so a title's chevron, the Saved
- * entry's bookmark and a channel row's avatar all start on the same x: 0.75rem here plus the
- * 0.5rem a row pads itself by is the 1.25rem the design asks for. */
 export const DIRECTORY_INSET = "px-3";
 
-/**
- * A sidebar group's title and its rows. A group that can collapse (Channels, Direct messages)
- * makes the whole caption its toggle, like Slack's sidebar sections, and draws a chevron in the
- * leading 20px gutter. A group that cannot (Pinned, per the design mockup) draws its own mark in
- * that same gutter instead, so every title in the list keeps the same x either way.
- */
-/** The line an expanded section shows when it has no conversations. One 2.25rem row, so the
- * next title sits 36px below this one. */
 export function DirectoryEmptyNote({ children }: { children: ReactNode }) {
   return (
     <li className="flex h-9 items-center px-2 text-xs text-quaternary">
@@ -59,20 +48,39 @@ export function DirectorySection({
     )
       setEasesAfterToggle(false);
   };
-  const title = (
+  const mark = Icon ? (
+    <Icon aria-hidden="true" className="size-4 shrink-0 text-primary" />
+  ) : (
+    <span aria-hidden="true" className="size-4 shrink-0" />
+  );
+  const caption = (
     <span className="flex w-full min-w-0 items-center gap-2">
+      {mark}
       <span className="min-w-0 truncate text-sm font-medium text-primary">{label}</span>
       <span className="sr-only">, </span>
       <span className="shrink-0 text-sm font-normal text-quaternary tabular-nums">{count}</span>
+      {onToggle ? (
+        <span className="ml-auto flex size-4 shrink-0 items-center justify-center">
+          <ChevronRight
+            aria-hidden="true"
+            className={cx(
+              "size-4 shrink-0 transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
+              expanded && "rotate-90",
+            )}
+          />
+        </span>
+      ) : null}
     </span>
   );
+  const trailingSlot =
+    trailing ?? (onToggle ? <span aria-hidden="true" className="w-7 shrink-0" /> : null);
   return (
     <>
       <div className={cx(DIRECTORY_INSET, "group/section")}>
         <div
           className={cx(
             "flex h-9 items-center gap-1 rounded-md pl-2 transition-colors duration-100 ease-out",
-            trailing ? "pr-1" : "pr-2",
+            trailingSlot ? "pr-1" : "pr-2",
             onToggle ? "group-hover/section:bg-primary_hover" : "cursor-pointer",
           )}
         >
@@ -89,29 +97,16 @@ export function DirectorySection({
                   onToggle?.();
                 }}
                 className="min-w-0 flex-1 justify-start pr-2 pl-0 hover:bg-transparent! [&_[data-text]]:min-w-0 [&_[data-text]]:flex-1 [&_[data-text]]:text-left"
-                iconLeading={
-                  <ChevronRight
-                    aria-hidden="true"
-                    className={cx(
-                      "size-4 shrink-0 transition-transform duration-(--duration-sm) ease-in-out motion-reduce:transition-none",
-                      expanded && "rotate-90",
-                    )}
-                  />
-                }
               >
-                {title}
+                {caption}
               </Button>,
             )
           ) : (
-            <span
-              {...headingProps}
-              className="flex h-full min-w-0 flex-1 items-center gap-1.5 pr-2"
-            >
-              {Icon ? <Icon aria-hidden="true" className="size-4 shrink-0 text-primary" /> : null}
-              {title}
+            <span {...headingProps} className="flex h-full min-w-0 flex-1 items-center pr-2">
+              {caption}
             </span>
           )}
-          {trailing}
+          {trailingSlot}
         </div>
       </div>
       <div onTransitionEnd={stopEasingWhenFoldEnds}>
