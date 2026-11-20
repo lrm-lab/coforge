@@ -12,6 +12,9 @@
 			wrap json
 			fields {
 				request>headers>X-Coforge-Agent-Api-Key delete
+				request>uri regexp "(?i)(?:/|%2f)+(?:p|%70)(?:/|%2f)+[^?#[:space:]]*" "/p/REDACTED"
+				request>headers>Referer regexp "(?i)(?:/|%2f)+(?:p|%70)(?:/|%2f)+[^?#[:space:]]*" "/p/REDACTED"
+				resp_headers>Location regexp "(?i)(?:/|%2f)+(?:p|%70)(?:/|%2f)+[^?#[:space:]]*" "/p/REDACTED"
 			}
 		}
 	}
@@ -78,8 +81,8 @@ coforge.cn {
 # Web-page artifacts' sandbox (task #544): the web app tells sandbox requests
 # apart by Host alone, so these sites need only the app's proxy — no realtime or
 # desktop routes. A page of artifact <uuid> is served only from
-# a-<uuid>.coforgeusercontent.com (the wildcard site below); the bare host answers not
-# found.
+# a-<uuid>.coforgeusercontent.com (the wildcard site below); the bare host redirects legacy
+# /p/<token> links and otherwise answers not found.
 (usercontent) {
 	log {
 		output file /data/access.log {
@@ -90,6 +93,9 @@ coforge.cn {
 			wrap json
 			fields {
 				request>headers>X-Coforge-Agent-Api-Key delete
+				request>uri delete
+				request>headers>Referer delete
+				resp_headers>Location delete
 			}
 		}
 	}
@@ -116,4 +122,29 @@ coforgeusercontent.com {
 	}
 
 	import usercontent
+}
+
+usercontent.coforge.cn {
+	log {
+		output file /data/access.log {
+			roll_size 50mb
+			roll_keep 5
+		}
+		format filter {
+			wrap json
+			fields {
+				request>headers>X-Coforge-Agent-Api-Key delete
+				request>uri delete
+				request>headers>Referer delete
+				resp_headers>Location delete
+			}
+		}
+	}
+
+	@legacy_public {
+		method GET HEAD
+		path_regexp ^/p/[A-Za-z0-9_-]{43}$
+	}
+	redir @legacy_public https://coforgeusercontent.com{path} permanent
+	respond 404
 }
