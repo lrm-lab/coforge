@@ -172,8 +172,15 @@ test("provider-specific rules remain available once when supplied", () => {
   });
   expect(rendered.split("- This runtime uses PowerShell.")).toHaveLength(2);
 });
-test("the shared standing guidance stays within a 5800-byte budget", () => {
-  expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(5800);
+test("the shared standing guidance stays within a 6500-byte budget", () => {
+  expect(new TextEncoder().encode(instructions).byteLength).toBeLessThanOrEqual(6500);
+});
+test("the standing prompt teaches when to use Artifacts and how to embed compact HTML pages inline", () => {
+  expect(instructions).toContain("## Artifacts\n");
+  expect(instructions).toContain("coforge artifact push <dir>");
+  expect(instructions).toContain("?embed=1");
+  expect(instructions).toContain("--coforge-*");
+  expect(instructions).toContain("coforge manual get artifacts");
 });
 test("the standing guidance says what to work on next, in the queue the CLI now prints", () => {
   expect(instructions).toContain(

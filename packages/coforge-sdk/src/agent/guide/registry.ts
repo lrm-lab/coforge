@@ -1,7 +1,11 @@
+import { ARTIFACTS_GUIDE_ENTRY } from "./entries/artifacts";
 import { TASKS_GUIDE_ENTRY } from "./entries/tasks";
 import type { FeatureGuideContext, FeatureGuideEntry, ResolvedFeatureGuide } from "./types";
 
-export const FIRST_PARTY_GUIDE_ENTRIES: readonly FeatureGuideEntry[] = [TASKS_GUIDE_ENTRY];
+export const FIRST_PARTY_GUIDE_ENTRIES: readonly FeatureGuideEntry[] = [
+  TASKS_GUIDE_ENTRY,
+  ARTIFACTS_GUIDE_ENTRY,
+];
 
 export function resolveFeatureGuides(
   context: FeatureGuideContext,

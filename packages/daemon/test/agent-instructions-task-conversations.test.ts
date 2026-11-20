@@ -20,12 +20,16 @@ test("the prompt always carries the task conversations block with the quoted-ref
   expect(prompt).toContain("else ask in the task");
 });
 
-test("the launch feature value does not change the prompt", () => {
+test("taskConversations stays invariant while artifacts: false omits the Artifacts guide", () => {
   const plain = build();
-  for (const taskConversations of [true, false])
-    for (const artifacts of [true, false])
-      expect(build({ features: { taskConversations, artifacts } })).toBe(
-        build({ features: { taskConversations: true, artifacts } }),
-      );
-  expect(build({ features: { taskConversations: false, artifacts: false } })).toBe(plain);
+  expect(plain).toContain("## Artifacts\n");
+  for (const artifacts of [true, false]) {
+    expect(build({ features: { taskConversations: false, artifacts } })).toBe(
+      build({ features: { taskConversations: true, artifacts } }),
+    );
+  }
+  expect(build({ features: { taskConversations: false, artifacts: true } })).toBe(plain);
+  const withoutArtifacts = build({ features: { taskConversations: false, artifacts: false } });
+  expect(withoutArtifacts).toContain("## Tasks\n");
+  expect(withoutArtifacts).not.toContain("## Artifacts\n");
 });
