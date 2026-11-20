@@ -18,6 +18,7 @@ import { claudeAssistantEvents, claudeToolResults } from "./message-events";
 import { ClaudeSubagentLineage } from "./subagent-lineage";
 import { ClaudeRateLimitState } from "./rate-limit";
 import { ClaudeSessionObservations } from "./observations";
+import { isClaudeMissingSessionLine, isClaudeMissingSessionResult } from "./resume-diagnostics";
 import { relayTaskLifecycle, taskProgressEvent, type TrackedTask } from "./task-lifecycle";
 import { SessionExit } from "#src/session-exit";
 
@@ -88,12 +89,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
     let otherDiagnostic = false;
     let failure: Error | undefined;
     process.onStderr((line) => {
-      // This native diagnostic is used rather than an SDK existence query. Match the entire
-      // selected-ID line, never arbitrary provider/model output.
-      if (
-        this.expectedSessionId &&
-        line.trim() === `No conversation found with session ID: ${this.expectedSessionId}`
-      )
+      if (this.expectedSessionId && isClaudeMissingSessionLine(line, this.expectedSessionId))
         missing = true;
       else if (line.trim()) otherDiagnostic = true;
     });
@@ -103,12 +99,7 @@ export class ClaudeCodeAgentSession implements AgentSession {
         this.expectedSessionId &&
         !this.#progressObserved &&
         !this.#recoveryFailed &&
-        record.type === "result" &&
-        record.subtype === "error_during_execution" &&
-        record.is_error === true &&
-        Array.isArray(record.errors) &&
-        record.errors.length === 1 &&
-        record.errors[0] === `No conversation found with session ID: ${this.expectedSessionId}`
+        isClaudeMissingSessionResult(record, this.expectedSessionId)
       ) {
         missing = true;
         return;
