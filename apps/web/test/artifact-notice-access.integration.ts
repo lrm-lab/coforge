@@ -374,8 +374,16 @@ test("the bot inbox stops handing back a notice once the artifact is gone", asyn
     ([conversationId]) => conversationId === event.conversationId,
   )?.[2];
   expect(acked ?? Number.MAX_SAFE_INTEGER).toBeLessThan(event.message.sequence);
-  const resumed = await inbox.check(principal, { since: after.cursor });
-  expect(JSON.stringify(resumed.events)).not.toContain("Inbox gate");
+  const receipt = async () =>
+    (
+      await h.f.db.agentMessageDelivery.findFirstOrThrow({
+        where: { agentId: h.f.agents.reader, messageId: event.messageId },
+        select: { receivedAt: true },
+      })
+    ).receivedAt;
+  expect(await receipt()).toBeNull();
+  await inbox.check(principal, { since: after.cursor });
+  expect(await receipt()).toBeNull();
 });
 
 test("the wake hint drops the notice in the same step its artifact goes", async () => {
