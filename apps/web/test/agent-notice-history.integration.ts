@@ -112,7 +112,7 @@ test("the notice conversation reads only the notices the Agent can still read", 
     const beforePage = await read({ before: fifth!.id, limit: 2 });
     expect(beforePage.messages.map((message) => message.sequence)).toEqual([2, 4]);
     expect(beforePage.hasOlder).toBe(true);
-    expect(beforePage.hasNewer).toBe(false);
+    expect(beforePage.hasNewer).toBe(true);
 
     const belowAnchor = await read({ before: fourth!.id, limit: 2 });
     expect(belowAnchor.messages.map((message) => message.sequence)).toEqual([1, 2]);
@@ -122,7 +122,7 @@ test("the notice conversation reads only the notices the Agent can still read", 
     const afterPage = await read({ after: first!.id, limit: 2 });
     expect(afterPage.messages.map((message) => message.sequence)).toEqual([2, 4]);
     expect(afterPage.hasNewer).toBe(true);
-    expect(afterPage.hasOlder).toBe(false);
+    expect(afterPage.hasOlder).toBe(true);
 
     const aroundPage = await read({ around: second!.id, limit: 2 });
     expect(aroundPage.messages.map((message) => message.sequence)).toEqual([2, 4]);

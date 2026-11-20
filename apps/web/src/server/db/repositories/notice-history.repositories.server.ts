@@ -8,11 +8,18 @@ import {
 
 type Scope = { workspaceId: string; agentId: string; conversationId: string };
 
-type Bound = { atOrBelow?: number; below?: number; above?: number; restrictedTo?: string[] };
+type Bound = {
+  atOrBelow?: number;
+  below?: number;
+  atOrAbove?: number;
+  above?: number;
+  restrictedTo?: string[];
+};
 
 const boundSql = (bound: Bound) => Prisma.sql`
   ${bound.atOrBelow === undefined ? Prisma.empty : Prisma.sql`AND msg."sequence" <= ${bound.atOrBelow}`}
   ${bound.below === undefined ? Prisma.empty : Prisma.sql`AND msg."sequence" < ${bound.below}`}
+  ${bound.atOrAbove === undefined ? Prisma.empty : Prisma.sql`AND msg."sequence" >= ${bound.atOrAbove}`}
   ${bound.above === undefined ? Prisma.empty : Prisma.sql`AND msg."sequence" > ${bound.above}`}
   ${bound.restrictedTo === undefined ? Prisma.empty : Prisma.sql`AND msg."id" IN (${Prisma.join(bound.restrictedTo)})`}`;
 
@@ -108,15 +115,26 @@ export async function readNoticePage(
   const { anchorSequence, limit } = input;
   const older = anchorSequence === undefined ? undefined : { below: anchorSequence };
   const around = input.around && anchorSequence !== undefined;
+  const beforeCount = Math.floor((limit - 1) / 2);
+  const afterCount = limit - 1 - beforeCount;
   const pageIds =
     around && anchorSequence !== undefined
       ? [
-          ...(
-            await ids(db, scope, { atOrBelow: anchorSequence }, "desc", Math.ceil(limit / 2) + 1)
-          ).slice(0, Math.ceil(limit / 2)),
-          ...(
-            await ids(db, scope, { above: anchorSequence }, "asc", Math.ceil(limit / 2) + 1)
-          ).slice(0, Math.floor(limit / 2)),
+          ...(await ids(db, scope, { below: anchorSequence }, "desc", beforeCount + 1)).slice(
+            0,
+            beforeCount,
+          ),
+          ...(await ids(
+            db,
+            scope,
+            { atOrBelow: anchorSequence, atOrAbove: anchorSequence },
+            "asc",
+            1,
+          )),
+          ...(await ids(db, scope, { above: anchorSequence }, "asc", afterCount + 1)).slice(
+            0,
+            afterCount,
+          ),
         ]
       : input.before && older
         ? (await ids(db, scope, older, "desc", limit + 1)).slice(0, limit)
@@ -141,11 +159,11 @@ export async function readNoticePage(
   const olderThanAnchor =
     anchorSequence === undefined
       ? false
-      : (await ids(db, scope, { below: anchorSequence }, "desc", 1)).length > 0;
+      : (await ids(db, scope, { atOrBelow: anchorSequence }, "desc", 1)).length > 0;
   const newerThanAnchor =
     anchorSequence === undefined
       ? false
-      : (await ids(db, scope, { above: anchorSequence }, "asc", 1)).length > 0;
+      : (await ids(db, scope, { atOrAbove: anchorSequence }, "asc", 1)).length > 0;
   return {
     rows: readable,
     hasOlder: input.after ? olderThanAnchor : olderThanPage,
