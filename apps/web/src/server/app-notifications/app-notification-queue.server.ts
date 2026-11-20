@@ -22,6 +22,17 @@ import {
   type ExternalInboxNoticeJob,
 } from "#src/server/agents/external-inbox-notice-queue.server";
 import { resumeExternalPushProbes } from "#src/server/agents/external-inbox-notice-delivery-composition.server";
+import {
+  artifactCheckConfig,
+  artifactChecksEnabled,
+} from "#src/server/artifacts/artifact-check-config.server";
+import {
+  ARTIFACT_VERSION_CHECK_QUEUE,
+  ARTIFACT_VERSION_CHECK_QUEUE_OPTIONS,
+  registerArtifactCheckQueueAccessor,
+  type ArtifactVersionCheckJob,
+} from "#src/server/artifacts/artifact-check-queue.server";
+import { productionArtifactChecks } from "#src/server/artifacts/artifact-composition.server";
 import { anyExternalPushWebhook } from "#src/server/db/repositories/external-agent-push-webhook.repositories.server";
 import {
   APP_NOTIFICATION_DELIVERY_QUEUE,
@@ -87,6 +98,7 @@ export function startAppNotificationQueue(
       await boss.createQueue(APP_NOTIFICATION_EVENT_QUEUE, EVENT_QUEUE_OPTIONS);
       await boss.createQueue(APP_NOTIFICATION_DELIVERY_QUEUE, DELIVERY_QUEUE_OPTIONS);
       await boss.createQueue(EXTERNAL_INBOX_NOTICE_QUEUE, EXTERNAL_INBOX_NOTICE_QUEUE_OPTIONS);
+      await boss.createQueue(ARTIFACT_VERSION_CHECK_QUEUE, ARTIFACT_VERSION_CHECK_QUEUE_OPTIONS);
       const polling = { pollingIntervalSeconds: APP_NOTIFICATION_POLLING_INTERVAL_SECONDS };
       await boss.work<AppNotificationEvent>(APP_NOTIFICATION_EVENT_QUEUE, polling, (jobs) =>
         fanOutAppNotificationEvents(boss, jobs),
@@ -99,6 +111,27 @@ export function startAppNotificationQueue(
       await boss.work<ExternalInboxNoticeJob>(EXTERNAL_INBOX_NOTICE_QUEUE, polling, (jobs) =>
         deliverExternalInboxNotices(boss, jobs),
       );
+      const checkConfig = artifactCheckConfig();
+      if (checkConfig) {
+        await boss.work<ArtifactVersionCheckJob>(
+          ARTIFACT_VERSION_CHECK_QUEUE,
+          {
+            pollingIntervalSeconds: APP_NOTIFICATION_POLLING_INTERVAL_SECONDS,
+            localConcurrency: checkConfig.concurrency,
+          },
+          async (jobs) => {
+            const db = getDatabaseClient();
+            if (!db) throw new Error("Database client unavailable for artifact publish check");
+            const checks = productionArtifactChecks(db);
+            for (const job of jobs) {
+              const retriesDone = (job as { retryCount?: number }).retryCount ?? 0;
+              await checks.runJob(job.data, {
+                retryable: retriesDone < ARTIFACT_VERSION_CHECK_QUEUE_OPTIONS.retryLimit,
+              });
+            }
+          },
+        );
+      }
       await resumeExternalPushProbes(boss).catch(() =>
         console.error(JSON.stringify({ event: "app_notifications:probe_resume_failed" })),
       );
@@ -107,6 +140,7 @@ export function startAppNotificationQueue(
       throw error;
     }
     running = boss;
+    registerArtifactCheckQueueAccessor(startedAppNotificationQueue);
     return boss;
   })().catch((error: unknown) => {
     starting = undefined;
@@ -130,6 +164,8 @@ export async function stopAppNotificationQueue(): Promise<void> {
 export function startedAppNotificationQueue(): PgBoss | undefined {
   return running;
 }
+
+registerArtifactCheckQueueAccessor(startedAppNotificationQueue);
 
 /** Whether the queue is running in this process. */
 export function isAppNotificationQueueStarted(): boolean {
@@ -158,6 +194,7 @@ export async function startAppNotificationQueueIfNeeded(
   if (running) return true;
   const needed =
     isFeatureDefined("app-notifications") ||
+    artifactChecksEnabled() ||
     (await new PrismaAppNotificationQueueSchema(db).exists()) ||
     (await anyExternalPushWebhook(db));
   if (!needed) return false;

@@ -11,6 +11,8 @@ const PUBLIC_ENTRIES = new Set([
   "artifact-activity.server",
   "artifact-access.server",
   "artifact-blob-sweep.server",
+  "artifact-check-config.server",
+  "artifact-check-queue.server",
   "artifact-composition.server",
   "artifact-origins.server",
   "artifact-link-access-migration.server",

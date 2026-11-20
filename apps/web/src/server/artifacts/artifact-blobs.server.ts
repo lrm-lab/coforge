@@ -235,7 +235,12 @@ const NO_OTHER_REFERENCE = Prisma.sql`
   AND NOT EXISTS (
     SELECT 1 FROM "artifact_page_assets" p
     JOIN "artifacts" a ON a."id" = p."artifactId"
-    WHERE p."sha256" = b."sha256" AND a."workspaceId" = b."workspaceId")`;
+    WHERE p."sha256" = b."sha256" AND a."workspaceId" = b."workspaceId")
+  AND NOT EXISTS (
+    SELECT 1 FROM "artifact_version_checks" c
+    JOIN "artifacts" a ON a."id" = c."artifactId"
+    WHERE c."screenshots" @> jsonb_build_array(jsonb_build_object('sha256', b."sha256"))
+      AND a."workspaceId" = b."workspaceId")`;
 
 function isText(bytes: Uint8Array): boolean {
   if (bytes.includes(0)) return false;

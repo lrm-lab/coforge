@@ -1,0 +1,20 @@
+model ArtifactVersionCheck {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  artifactId  String    @db.Uuid
+  version     Int
+  status      String    @default("pending")
+  skipReason  String?
+  errorClass  String?
+  findings    Json?
+  screenshots Json      @default("[]")
+  durationMs  Int?
+  createdAt   DateTime  @default(now())
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  artifact    Artifact  @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@unique([artifactId, version])
+  @@index([status, createdAt])
+  @@index([screenshots(ops: JsonbPathOps)], type: Gin)
+  @@map("artifact_version_checks")
+}
