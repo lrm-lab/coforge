@@ -33,3 +33,19 @@ token's path (`/_f/<token>/<path>`), so relative references (`css/site.css`, `im
   transparent defaults, and reports content height (`ui/notifications/size-changed`, clamped to
   96px–800px). Active inline frames are lazily activated in the viewport and bounded per
   conversation by an LRU pool.
+
+## Publish check
+
+When the isolated Playwright sidecar (`services/artifact-checker/`, configured via
+`COFORGE_ARTIFACT_CHECK_WORKER_URL` and `COFORGE_ARTIFACT_CHECK_SECRET`) is enabled, pushing an
+`.html` artifact schedules an asynchronous `pg-boss` job that renders the version across three
+viewports (`desktop` 1280×800, `phone` 390×844 @2x, and `inline` 672×800 with light `--coforge-*`
+tokens) under the same CSP and CDN allowlist:
+
+- `coforge artifact check <id> [--rev <n>] [--wait] [--output <dir>] [--json]` prints findings
+  (console errors, blocked requests, blank page, phone horizontal overflow, inline height clipping
+  above 800px, and CSS scroll locks) and downloads PNG screenshots into `.coforge-check/`.
+- Screenshots are retained in `artifact-blobs` for the newest 3 completed versions per artifact;
+  older versions keep their findings while older screenshot blobs are released.
+- When `COFORGE_ARTIFACT_CHECK_WORKER_URL` is unset, checks stay disabled and Agent prompts omit
+  the check step.

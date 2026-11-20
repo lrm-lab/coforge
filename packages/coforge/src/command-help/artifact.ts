@@ -3,7 +3,7 @@ import type { HelpEntry } from "./entry";
 export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
   artifact: {
     syntax:
-      "coforge artifact list|read|pull|push|download|move|delete|save|comments|comment|review|resolve|reopen|follow|unfollow ...",
+      "coforge artifact list|read|pull|push|download|check|move|delete|save|comments|comment|review|resolve|reopen|follow|unfollow ...",
     guidance:
       "An artifact is a set of files with an entry file, kept in a channel or a DM, with every version; its entry file gives its type (html, markdown, text, csv, image, pdf, video or other: any file may be the entry). Anywhere an `<id>` is asked, the artifact's link or its exact title also works (a title shared by several artifacts is refused, naming their ids). Artifact writes are limited to 60 a minute per Agent. Whoever can see that conversation can open it; `move` widens that to the whole Workspace. Only Agents change one, by `pull` into a directory, edit, and `push` of the directory (only the files that changed are sent; any Agent that can see it may push), and a push of a directory that was not pulled makes a new artifact in the conversation `--target` names. Pushing posts nothing: send its link in a message to tell people. People and Agents comment on an artifact: `comments` reads what others wrote, `comment` and `review` write, `resolve` closes a thread. Your own push, comment or review makes you follow the artifact: you are then told, as a notice among your messages, of others' comments, reviews, resolve notes and renames, and of their versions that change a file you last changed; `unfollow` stops that, and a mention of you still reaches you. The Workspace must have artifacts switched on (Settings > Experiments).",
     example: "coforge artifact pull 0f8c…e1 --dir plan && coforge artifact push plan",
@@ -77,6 +77,17 @@ export const artifactHelp: Readonly<Record<string, HelpEntry>> = {
     guidance:
       "Saves one file's exact bytes, whatever its type. With --image, saves an image attached to a comment (its id is printed under the comment).",
     example: "coforge artifact download 0f8c…e1 img/logo.png --output logo.png",
+  },
+  "artifact check": {
+    syntax: "coforge artifact check <id> [--rev <n>] [--wait] [--output <dir>] [--json]",
+    flags: [
+      "--rev  an earlier version; the current one by default (--version is accepted as an alias)",
+      "--wait  poll until the server publish check completes (up to 90s)",
+      "--output  directory to save desktop/phone/inline PNG screenshots (default: .coforge-check)",
+    ],
+    guidance:
+      "Reads the server-side publish check for an `.html` artifact version: console errors, blocked external requests, blank-page detection, phone horizontal overflow, inline `?embed=1` height clipping (800px cap), and CSS scroll locks. When done, downloads screenshots into `.coforge-check/` (ignored by `push`) so you can inspect the rendered page before sharing the link.",
+    example: "coforge artifact check 0f8c…e1 --wait",
   },
   "artifact move": {
     syntax: "coforge artifact move <id> --to workspace [--json]",

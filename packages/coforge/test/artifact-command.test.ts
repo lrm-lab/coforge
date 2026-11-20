@@ -92,10 +92,11 @@ test("an artifact command missing what it needs, or removed, names its help", ()
 test("artifact --help describes the family and each command", async () => {
   const transport = {} as MessageTransport;
   const family = await run(["artifact", "--help"], transport);
-  expect(family).toContain("coforge artifact list|read|pull|push|download|move|delete");
+  expect(family).toContain("coforge artifact list|read|pull|push|download|check|move|delete");
   for (const removed of ["create", "history", "revert", "share"])
     expect(family).not.toContain(`artifact ${removed}`);
   expect(await run(["artifact", "push", "--help"], transport)).toContain("artifact-base-moved");
+  expect(await run(["artifact", "check", "--help"], transport)).toContain("coforge artifact check");
   expect(await run(["artifact", "list", "--help"], transport)).toContain("coforge artifact list");
 });
 
