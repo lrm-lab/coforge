@@ -33,6 +33,9 @@ out" a move, not a split:
 - `artifact-link-access-migration.server.ts` — the one-off link-access migration that
   `scripts/artifact-link-access-migration.ts` runs: plan, apply with a journal, and a
   rollback that acts only on the journal's own events.
+- `artifact-notice-visibility.server.ts` — `artifactNoticeBlockedMessages`: which of an Agent's
+  stored notices name an artifact it can no longer read. The reads that hand a notice's body
+  back to it ask this first (`readPendingAgentDeliveries` today).
 
 Everything else is internal: `artifacts.server.ts` (the `Artifacts` use
 cases), the merge/read/write/signals/documents/public-links/blobs

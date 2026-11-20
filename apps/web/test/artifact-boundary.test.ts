@@ -14,6 +14,7 @@ const PUBLIC_ENTRIES = new Set([
   "artifact-composition.server",
   "artifact-origins.server",
   "artifact-link-access-migration.server",
+  "artifact-notice-visibility.server",
   "agent-artifacts.server",
   "agent-artifact-files.server",
   "artifact-sandbox-config.server",

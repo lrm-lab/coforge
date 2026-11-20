@@ -1,4 +1,5 @@
 import type { DirectConversationPorts } from "./agent-targets.repositories.server";
+import { artifactNoticeBlockedMessages } from "#src/server/artifacts/artifact-notice-visibility.server";
 import { isRecoverableAgentTarget } from "@lrm/coforge-sdk/internal";
 import type { QuestionsAnswer } from "#src/server/conversations/action-card-questions.server";
 import {
@@ -100,7 +101,7 @@ export async function readPendingAgentDeliveries(
   const selected = !select
     ? unreceived
     : { AND: [select.orUnreceived ? { OR: [unreceived, chosen] } : chosen] };
-  const deliveries = await ports.db.agentMessageDelivery.findMany({
+  const fetched = await ports.db.agentMessageDelivery.findMany({
     where: await pendingDeliveryWhere(ports.db, { workspaceId, agentId }, selected),
     orderBy: [{ createdAt: "asc" }, { deliveryId: "asc" }],
     take: AGENT_RECOVERY_MESSAGE_LIMIT,
@@ -137,6 +138,15 @@ export async function readPendingAgentDeliveries(
       },
     },
   });
+  const blocked = await artifactNoticeBlockedMessages(
+    ports.db,
+    workspaceId,
+    agentId,
+    fetched.map((delivery) => delivery.messageId),
+  );
+  const deliveries = blocked.size
+    ? fetched.filter((delivery) => !blocked.has(delivery.messageId))
+    : fetched;
   const chooserIds = [
     ...new Set(
       deliveries.flatMap((delivery) =>
