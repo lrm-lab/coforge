@@ -1,5 +1,5 @@
 import type { DirectConversationPorts } from "./agent-targets.repositories.server";
-import { artifactNoticeBlockedMessages } from "#src/server/artifacts/artifact-notice-visibility.server";
+import { unreadBlockedArtifactNotices } from "#src/server/artifacts/artifact-notice-visibility.server";
 import { isRecoverableAgentTarget } from "@lrm/coforge-sdk/internal";
 import type { QuestionsAnswer } from "#src/server/conversations/action-card-questions.server";
 import {
@@ -101,8 +101,12 @@ export async function readPendingAgentDeliveries(
   const selected = !select
     ? unreceived
     : { AND: [select.orUnreceived ? { OR: [unreceived, chosen] } : chosen] };
+  const blocked = await unreadBlockedArtifactNotices(ports.db, workspaceId, agentId);
+  const pendingWhere = await pendingDeliveryWhere(ports.db, { workspaceId, agentId }, selected);
   const fetched = await ports.db.agentMessageDelivery.findMany({
-    where: await pendingDeliveryWhere(ports.db, { workspaceId, agentId }, selected),
+    where: blocked.length
+      ? { AND: [pendingWhere, { messageId: { notIn: blocked } }] }
+      : pendingWhere,
     orderBy: [{ createdAt: "asc" }, { deliveryId: "asc" }],
     take: AGENT_RECOVERY_MESSAGE_LIMIT,
     select: {
@@ -138,15 +142,7 @@ export async function readPendingAgentDeliveries(
       },
     },
   });
-  const blocked = await artifactNoticeBlockedMessages(
-    ports.db,
-    workspaceId,
-    agentId,
-    fetched.map((delivery) => delivery.messageId),
-  );
-  const deliveries = blocked.size
-    ? fetched.filter((delivery) => !blocked.has(delivery.messageId))
-    : fetched;
+  const deliveries = fetched;
   const chooserIds = [
     ...new Set(
       deliveries.flatMap((delivery) =>
@@ -245,10 +241,14 @@ export async function readAgentRecoveryContext(
     resumeMessages: AgentFacing<AgentRecoveryContext["resumeMessages"][number]>[];
   }
 > {
+  const blockedNotices = await unreadBlockedArtifactNotices(ports.db, workspaceId, agentId);
+  const hideBlocked = blockedNotices.length
+    ? Prisma.sql`WHERE u."id" NOT IN (${Prisma.join(blockedNotices)})`
+    : Prisma.empty;
   const [ranked, openTasks] = await Promise.all([
     ports.db.$queryRaw<AgentRecoveryRow[]>`
     WITH unread AS (
-      ${unreadAgentMessagesFragment(workspaceId, agentId)}
+      SELECT u.* FROM (${unreadAgentMessagesFragment(workspaceId, agentId)}) u ${hideBlocked}
     ), ranked AS (
       SELECT u.*,
         (COUNT(*) OVER (PARTITION BY "conversationId", "threadRootId"))::int AS "unreadCount",
@@ -265,13 +265,7 @@ export async function readAgentRecoveryContext(
     ORDER BY "globalRank"`,
     readAgentStartOpenTasks(ports.db, workspaceId, agentId),
   ]);
-  const blockedNotices = await artifactNoticeBlockedMessages(
-    ports.db,
-    workspaceId,
-    agentId,
-    ranked.map((row) => row.id),
-  );
-  const rows = blockedNotices.size ? ranked.filter((row) => !blockedNotices.has(row.id)) : ranked;
+  const rows = ranked;
   const resumeMessages: AgentFacing<AgentRecoveryContext["resumeMessages"][number]>[] = [];
   const unreadSummary: Record<string, number> = {};
   const unreadConversationIds: Record<string, string> = {};

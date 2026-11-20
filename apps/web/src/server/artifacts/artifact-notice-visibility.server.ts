@@ -48,3 +48,31 @@ export async function artifactNoticeBlockedMessages(
       .map((event) => event.messageId),
   );
 }
+
+const UNREAD_NOTICES_LIMIT = 200;
+
+export async function unreadBlockedArtifactNotices(
+  db: PrismaClient,
+  workspaceId: string,
+  agentId: string,
+): Promise<string[]> {
+  const unread = await db.systemAgentEvent.findMany({
+    where: {
+      workspaceId,
+      agentId,
+      source: "system.artifacts",
+      message: { deliveries: { some: { agentId, receivedAt: null } } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: UNREAD_NOTICES_LIMIT,
+    select: { messageId: true },
+  });
+  if (unread.length === 0) return [];
+  const blocked = await artifactNoticeBlockedMessages(
+    db,
+    workspaceId,
+    agentId,
+    unread.map((event) => event.messageId),
+  );
+  return unread.flatMap((event) => (blocked.has(event.messageId) ? [event.messageId] : []));
+}
