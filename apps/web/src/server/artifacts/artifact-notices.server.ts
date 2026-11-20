@@ -240,19 +240,19 @@ export class ArtifactNotices {
     };
   }
 
-  async recipients(input: Reach, plan: AudiencePlan) {
+  async recipients(input: Reach, plan: AudiencePlan, scope: DatabaseScope = this.db) {
     const { artifact, workspaceId } = input;
     const { agents, people, mentioned } = await this.audience(input, plan);
-    const named = await this.db.agent.findMany({
+    const named = await scope.agent.findMany({
       where: { id: { in: [...agents.keys()] }, workspaceId, ...ACTIVE_AGENT_WHERE },
       select: { id: true, name: true, displayName: true },
     });
     const [readers, peopleReading] = await Promise.all([
-      this.readers(this.db, workspaceId, artifact, [
+      this.readers(scope, workspaceId, artifact, [
         ...new Set([...named.map(({ id }) => id), ...mentioned.agents.map(({ id }) => id)]),
       ]),
       peopleReadingArtifact(
-        this.db,
+        scope,
         workspaceId,
         artifact,
         mentioned.people.map(({ id }) => id),
@@ -284,7 +284,7 @@ export class ArtifactNotices {
     staging?: { scope: DatabaseScope; staged: StagedArtifactNotice[] },
   ): Promise<NoticeReport> {
     const { artifact, workspaceId } = input;
-    const { told, notTold } = resolved ?? (await this.recipients(input, plan));
+    const { told, notTold } = resolved ?? (await this.recipients(input, plan, staging?.scope));
     const byKind: NoticeActorKind = "writerId" in input ? "agent" : "person";
     const writer =
       "writerId" in input
